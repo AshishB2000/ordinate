@@ -1,0 +1,25 @@
+name: Format check
+
+# Reports Prettier formatting drift on every push/PR. Non-blocking for now
+# (continue-on-error) — it surfaces the list of files that aren't formatted
+# without failing the build on the existing codebase. Tighten later by
+# removing continue-on-error once the tree is normalized.
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+jobs:
+  prettier:
+    name: Prettier --check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Check formatting (non-blocking)
+        continue-on-error: true
+        run: npx --yes prettier@3 --check .

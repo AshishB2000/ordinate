@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Screenchart — Interface Design</title>
+<link rel="stylesheet" href="canvas.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<header class="doc-head">
+  <div class="doc-mark">
+    <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2 6 6 2-6 2-2 6-2-6-6-2 6-2z" fill="#fff"/></svg>
+  </div>
+  <div>
+    <div class="doc-title">Screenchart</div>
+    <div class="doc-sub">Desktop app UI · static hi-fi mockups · light + dark from shared tokens</div>
+  </div>
+  <div class="spacer"></div>
+  <div class="doc-legend">
+    <div class="grp">Accent
+      <span class="sw"><i style="background:#2563EB"></i><i style="background:#3B82F6"></i></span>
+    </div>
+    <div class="grp">Chart
+      <span class="sw"><i style="background:#3B82F6"></i><i style="background:#14B8A6"></i><i style="background:#F59E0B"></i><i style="background:#8B5CF6"></i><i style="background:#F43F5E"></i></span>
+    </div>
+  </div>
+</header>
+
+<main class="canvas">
+
+  <!-- token reference -->
+  <div class="tokens">
+    <div class="tok-grp">
+      <h4>Light theme</h4>
+      <div class="tok-row">
+        <div class="tok"><span class="ch" style="background:#F7F7F8"></span><span class="nm">bg</span></div>
+        <div class="tok"><span class="ch" style="background:#FFFFFF"></span><span class="nm">surface</span></div>
+        <div class="tok"><span class="ch" style="background:#18181B"></span><span class="nm">text</span></div>
+        <div class="tok"><span class="ch" style="background:#6B7280"></span><span class="nm">muted</span></div>
+        <div class="tok"><span class="ch" style="background:#E5E7EB"></span><span class="nm">border</span></div>
+        <div class="tok"><span class="ch" style="background:#2563EB"></span><span class="nm">accent</span></div>
+      </div>
+    </div>
+    <div class="tok-grp">
+      <h4>Dark theme</h4>
+      <div class="tok-row">
+        <div class="tok"><span class="ch" style="background:#18181B"></span><span class="nm">bg</span></div>
+        <div class="tok"><span class="ch" style="background:#232327"></span><span class="nm">surface</span></div>
+        <div class="tok"><span class="ch" style="background:#ECECEE"></span><span class="nm">text</span></div>
+        <div class="tok"><span class="ch" style="background:#9CA3AF"></span><span class="nm">muted</span></div>
+        <div class="tok"><span class="ch" style="background:#2E2E33"></span><span class="nm">border</span></div>
+        <div class="tok"><span class="ch" style="background:#3B82F6"></span><span class="nm">accent</span></div>
+      </div>
+    </div>
+    <div class="tok-grp">
+      <h4>Chart palette</h4>
+      <div class="tok-row">
+        <div class="tok"><span class="ch" style="background:#3B82F6"></span><span class="nm">blue</span></div>
+        <div class="tok"><span class="ch" style="background:#14B8A6"></span><span class="nm">teal</span></div>
+        <div class="tok"><span class="ch" style="background:#F59E0B"></span><span class="nm">amber</span></div>
+        <div class="tok"><span class="ch" style="background:#8B5CF6"></span><span class="nm">violet</span></div>
+        <div class="tok"><span class="ch" style="background:#F43F5E"></span><span class="nm">rose</span></div>
+      </div>
+    </div>
+    <div class="tok-grp">
+      <h4>System</h4>
+      <p class="note">system-ui sans · 8px corner radius · one accent + one error red, both swapped per theme · charts read on either background.</p>
+    </div>
+  </div>
+
+  <div id="sections"></div>
+
+</main>
+
+<script src="data.js"></script>
+<script src="screens.js"></script>
+<script src="build.js"></script>
+</body>
+</html>

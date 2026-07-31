@@ -1,0 +1,242 @@
+// Shared cross-file globals for the hub renderer. The hub is many classic
+// <script> files sharing ONE global scope (no modules) — every symbol defined
+// in one hub file and consumed in another is declared here so each file
+// type-checks standalone. Vendor globals (Chart.js, Leaflet, pdfmake, pptxgenjs,
+// docx) and the preload bridge (window.hub) are typed loosely on purpose.
+
+export {}; // make this a module so `declare global` works
+
+// ── Shared shapes ───────────────────────────────────────────────────────────
+
+/** makeDropdown() options (see customDropdown.js header comment). */
+interface DropdownOpts {
+  className?: string;
+  listClassName?: string;
+  ariaLabel?: string;
+  placeholder?: string;
+  onChange?: (value: string) => void;
+}
+
+/** The custom-dropdown widget API returned by makeDropdown(). */
+interface DropdownApi {
+  el: HTMLElement;
+  setOptions(items: Array<{ value: any; label?: any }> | null | undefined, value?: any): DropdownApi;
+  getValue(): string;
+  open(): void;
+  close(): void;
+  value: any; // string in practice; setter coerces null/undefined to ''
+  disabled: boolean;
+  hidden: boolean;
+  placeholder: string;
+}
+
+declare global {
+  // ── Preload bridge (preload/hubPreload.js) ────────────────────────────────
+  // Methods mirror the contextBridge surface 1:1. Payloads/results are typed
+  // loosely (any) — ponytail: big IPC envelopes, tighten per-method as needed.
+  interface Window {
+    hub: {
+      takeScreenshot(): void;
+      getKeyStatus(): Promise<any>;
+      saveKey(provider: string, key: string): Promise<any>;
+      saveLocalEndpoint(endpoint: string): Promise<any>;
+      clearKey(provider: string): Promise<any>;
+      validateKey(provider: string, key: string, endpoint?: string): Promise<any>;
+      getModels(provider: string): Promise<any>;
+      saveModel(provider: string, model: string): Promise<any>;
+      activateProvider(provider: string): Promise<any>;
+      setExecutionMode(mode: string): Promise<any>;
+      setMemoryModel(fields: any): Promise<any>;
+      setGlobalRules(text: string): Promise<any>;
+      setNotifications(fields: any): Promise<any>;
+      bootstrapNotifications(): Promise<any>;
+      deleteData(scope: string): Promise<any>;
+      saveByokProvider(provider: string, fields: any): Promise<any>;
+      activateByokProvider(provider: string): Promise<any>;
+      testByokProvider(provider: string): Promise<any>;
+      revealByokKey(provider: string): Promise<any>;
+      detectLocalClis(): Promise<any>;
+      detectOneCli(id: string): Promise<any>;
+      setLocalCli(id: string): Promise<any>;
+      testLocalCli(id: string): Promise<any>;
+      listCliModels(id: string): Promise<any>;
+      saveCliModel(id: string, model: string): Promise<any>;
+      listModels(target: any, force?: boolean): Promise<any>;
+      onKeyChanged(cb: () => void): void;
+      onOpenSettings(cb: (cat?: string) => void): void;
+      openExternal(url: string): void;
+      openSystemSettings(): Promise<any>;
+      onShowPermission(cb: () => void): void;
+      loadGeo(level: string): Promise<any>;
+      getHotkeyLabel(): Promise<any>;
+      saveHotkey(accelerator: string): Promise<any>;
+      onHotkeyState(cb: (data: any) => void): void;
+      openInputMonitoringSettings(): void;
+      onNewEntry(cb: (data: any) => void): void;
+      onEntryResult(cb: (data: any) => void): void;
+      retry(entryId: string): void;
+      followup(entryId: string, text: string): void;
+      onFollowupResult(cb: (data: any) => void): void;
+      onHistory(cb: (data: any) => void): void;
+      loadThread(entryId: string): Promise<any>;
+      deleteThread(entryId: string): Promise<any>;
+      copyText(text: string): void;
+      copyImage(dataUrl: string): void;
+      saveImage(src: string, defaultName?: string): Promise<any>;
+      savePdf(base64: string, defaultName: string): Promise<any>;
+      savePptx(base64: string, defaultName: string): Promise<any>;
+      saveDocx(base64: string, defaultName: string): Promise<any>;
+      captureRegion(rect: { x: number; y: number; width: number; height: number }): Promise<any>;
+      captureReport(html: string, width: number): Promise<any>;
+      getThemePreference(): Promise<any>;
+      setThemePreference(preference: string): Promise<any>;
+      onThemeApply(cb: (data: any) => void): void;
+      saveChartOverrides(entryId: string, key: string, overrides: any): Promise<any>;
+      // ── Projects (workspace shell) ──
+      listProjects(): Promise<any[]>;
+      createProject(name: string): Promise<any>;
+      renameProject(id: string, name: string): Promise<any>;
+      deleteProject(id: string): Promise<{ ok: boolean }>;
+      openProject(id: string): Promise<any>;
+      // ── Datasets (file-based data sources) ──
+      pickAndParseDataset(sheetName?: string, filePath?: string): Promise<any>;
+      parsePasteDataset(text: string): Promise<any>;
+      saveDataset(payload: { projectId: string; name: string; sourceKind: string; columns: any[]; rows: any[] }): Promise<any>;
+      listDatasets(projectId: string): Promise<any[]>;
+      // ── Capture → dataset (Week 13) ──
+      captureToDatasetDraft(extractedTable: any): Promise<any>;
+      saveCaptureDataset(payload: {
+        projectId: string;
+        name: string;
+        entryId: any;
+        columns: any[];
+        rows: any[];
+        target?: { datasetId: string; mode: 'replace' | 'append' };
+      }): Promise<any>;
+      getDataset(projectId: string, id: string): Promise<any>;
+      deleteDataset(projectId: string, id: string): Promise<{ ok: boolean }>;
+      datasetStats(projectId: string, datasetId: string): Promise<any>;
+      updateDataset(projectId: string, datasetId: string, columns: any[]): Promise<any>;
+      explainDataset(projectId: string, datasetId: string): Promise<any>;
+      // ── Data preparation (reversible transform pipeline) ──
+      addDatasetStep(projectId: string, datasetId: string, step: any): Promise<any>;
+      updateDatasetStep(projectId: string, datasetId: string, index: number, step: any): Promise<any>;
+      removeDatasetStep(projectId: string, datasetId: string, index: number): Promise<any>;
+      reorderDatasetSteps(projectId: string, datasetId: string, order: number[]): Promise<any>;
+      setDatasetSteps(projectId: string, datasetId: string, steps: any[]): Promise<any>;
+      combineDatasets(
+        projectId: string,
+        datasetId: string,
+        otherDatasetId: string,
+        mode: 'append' | 'join',
+        on?: { left: string; right: string },
+      ): Promise<any>;
+      suggestDatasetSteps(projectId: string, datasetId: string): Promise<any>;
+      suggestCalcField(projectId: string, datasetId: string): Promise<any>;
+      // ── Connected data sources (Postgres + read-only URL/API JSON) ──
+      listConnections(projectId: string): Promise<any[]>;
+      testAndSaveConnection(projectId: string, kind: string, config: any, secret: any): Promise<any>;
+      listConnectionTables(projectId: string, connId: string): Promise<any>;
+      runConnection(projectId: string, connId: string, tableOrQuery: any): Promise<any>;
+      refreshConnection(projectId: string, connId: string, datasetId: string): Promise<any>;
+      deleteConnection(projectId: string, connId: string): Promise<{ ok: boolean }>;
+      // ── Visuals (saved charts/maps from a dataset + an encoding) ──
+      listVisuals(projectId: string): Promise<any[]>;
+      getVisual(projectId: string, id: string): Promise<any>;
+      saveVisual(payload: {
+        projectId: string;
+        datasetId: string;
+        name: string;
+        chartType: string;
+        encoding: any;
+        overrides?: any;
+        filters?: any;
+      }): Promise<any>;
+      updateVisual(
+        projectId: string,
+        id: string,
+        patch: { name?: string; chartType?: string; encoding?: any; overrides?: any; filters?: any },
+      ): Promise<any>;
+      deleteVisual(projectId: string, id: string): Promise<{ ok: boolean }>;
+      duplicateVisual(projectId: string, id: string): Promise<any>;
+      suggestVisual(projectId: string, datasetId: string): Promise<any>;
+      computeVisualData(projectId: string, datasetId: string, encoding: any, filters?: any): Promise<any>;
+      // ── Dashboards (a grid of cards — visual/text/metric — across pages) ──
+      listDashboards(projectId: string): Promise<any[]>;
+      getDashboard(projectId: string, id: string): Promise<any>;
+      saveDashboard(payload: { projectId: string; name: string; pages?: any; filters?: any }): Promise<any>;
+      updateDashboard(
+        projectId: string,
+        id: string,
+        patch: { name?: string; pages?: any; filters?: any },
+      ): Promise<any>;
+      deleteDashboard(projectId: string, id: string): Promise<{ ok: boolean }>;
+      draftDashboard(projectId: string): Promise<any>;
+      summarizeDashboard(projectId: string, id: string): Promise<any>;
+      explainDashboardAnomalies(projectId: string, id: string): Promise<any>;
+      computeMetric(
+        projectId: string,
+        datasetId: string,
+        column: string,
+        aggregation: string,
+        filters?: any,
+      ): Promise<any>;
+      exportDashboardHtml(bundle: any, defaultName?: string): Promise<any>;
+      exportDashboardPng(html: string, width: number, defaultName?: string): Promise<any>;
+      exportDashboardPdf(html: string, width: number, defaultName?: string): Promise<any>;
+      revealProjectFolder(projectId: string): Promise<any>;
+      // ── AI Copilot (Week 11) ──
+      copilotHistory(projectId: string): Promise<any>;
+      copilotAsk(projectId: string, context: { kind?: string; id?: string }, question: string): Promise<any>;
+      copilotClear(projectId: string): Promise<any>;
+      setCopilotEnabled(enabled: boolean): Promise<any>;
+      providerLogos: Record<string, { path: string; color: string; title: string }>;
+      agentLogos: Record<string, string>;
+      appVersion: string;
+    };
+
+    // ── Vendor libraries loaded via <script> tags in index.html ────────────
+    Chart: any; // ponytail: Chart.js UMD global, typing the full API isn't worth it
+    ChartBoxPlot: any; // ponytail: @sgratzl/chartjs-chart-boxplot UMD global
+    pdfMake: any; // ponytail: pdfmake UMD global
+    PptxGenJS: any; // ponytail: pptxgenjs UMD global (constructor)
+    docx: any; // ponytail: docx IIFE global
+    // Baked GeoJSON payloads (assets/geo/*.js, generated by scripts/download-geo.js).
+    __GEO_WORLD__: any; // ponytail: GeoJSON FeatureCollection
+    __GEO_US_STATES__: any; // ponytail: GeoJSON FeatureCollection
+    // customDropdown.js attaches its factory to window.
+    makeDropdown: (opts?: DropdownOpts) => DropdownApi;
+    // Safari/legacy-prefixed AudioContext probed by playCompletionSound() in hub.js.
+    webkitAudioContext?: typeof AudioContext;
+  }
+
+  /** Leaflet UMD global (leaflet.js script tag). */
+  const L: any; // ponytail: Leaflet API, typing it fully isn't worth it
+
+  // HTMLElement carries the dropdown API after makeDropdown() (root._dd = api).
+  interface HTMLElement {
+    _dd?: DropdownApi;
+  }
+
+  // These three are defined INSIDE an IIFE and exposed via window./global.
+  // assignment (not as top-level declarations), so — unlike the rest of the
+  // renderer's shared symbols — script-global sharing doesn't reach them and
+  // they need an ambient declaration here. Callers use the bare name.
+  function makeDropdown(opts?: DropdownOpts): DropdownApi; // customDropdown.js
+  function normalizeName(n: string | null | undefined): string; // geoMatch.js
+  function matchGeoItem(geoItems: any[], featProps: any): any | undefined; // geoMatch.js
+
+  // PRE-EXISTING BUG (present in the original hub.js): called in the stpTestPerm
+  // click handler but defined nowhere, so it throws at runtime. Declared here to
+  // preserve that exact behavior through the migration; fix separately.
+  function showPermissionPanel(): void;
+}
+
+// NOTE: hub-INTERNAL symbols (execBtn, entries, buildChart, makeDropdown, the
+// cm* menu refs, exec* state, the per-file render helpers, …) are intentionally
+// NOT declared here. The renderer is a set of classic global-scope <script>s in
+// one shared scope, so TypeScript already shares every top-level const/let/
+// function across the sibling files in this program — declaring them here too
+// would just double-declare them (TS2451). Only genuinely EXTERNAL globals
+// belong above: the preload bridge (window.hub), vendor UMD libs loaded via
+// <script> (Chart/L/pdfMake/…), and the baked geo payloads.

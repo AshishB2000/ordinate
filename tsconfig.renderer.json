@@ -1,0 +1,21 @@
+{
+  // Renderer world: sandboxed windows (hub/overlay/status/about/permission).
+  // DOM lib, NO Node types. Renderer files are classic global-scope <script>s
+  // sharing one scope — converted files must stay import/export-free so they
+  // remain scripts, not modules. Shared cross-file globals live in
+  // renderer/hub/globals.d.ts. No outDir: each .ts emits its sibling .js.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": [],
+    // Legacy global-scope <script> layer, incrementally typed: noImplicitAny and
+    // strictNullChecks are relaxed HERE ONLY so the DOM-heavy renderer compiles
+    // without hundreds of noise casts. The main world (tsconfig.main.json) stays
+    // fully strict. Tighten these back as renderer files get real types.
+    "strict": false,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "tsBuildInfoFile": "node_modules/.cache/tsc/renderer.tsbuildinfo"
+  },
+  "include": ["renderer/**/*.ts"]
+}

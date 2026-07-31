@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self';"
+    />
+    <link rel="stylesheet" href="../theme.css" />
+    <link rel="stylesheet" href="about.css" />
+    <title>About Screenchart</title>
+  </head>
+  <body>
+    <!-- Slim titlebar -->
+    <header class="titlebar">
+      <span class="tb-mark" aria-hidden="true">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <path d="M4 8.2V5.6A1.6 1.6 0 0 1 5.6 4H8.2M15.8 4h2.6A1.6 1.6 0 0 1 20 5.6V8.2M20 15.8v2.6a1.6 1.6 0 0 1-1.6 1.6H15.8M8.2 20H5.6A1.6 1.6 0 0 1 4 18.4V15.8"
+            stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+          <rect x="7.6" y="13" width="2.3" height="4.2" rx="0.6" fill="white"/>
+          <rect x="10.85" y="10.4" width="2.3" height="6.8" rx="0.6" fill="white"/>
+          <rect x="14.1" y="7.6" width="2.3" height="9.6" rx="0.6" fill="white"/>
+        </svg>
+      </span>
+      <span class="tb-title">About</span>
+      <span class="spacer"></span>
+    </header>
+
+    <!-- Scrollable body -->
+    <div class="form-body">
+
+      <!-- App icon -->
+      <div class="app-icon" aria-hidden="true">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+          <path d="M4 8.2V5.6A1.6 1.6 0 0 1 5.6 4H8.2M15.8 4h2.6A1.6 1.6 0 0 1 20 5.6V8.2M20 15.8v2.6a1.6 1.6 0 0 1-1.6 1.6H15.8M8.2 20H5.6A1.6 1.6 0 0 1 4 18.4V15.8"
+            stroke="white" stroke-width="1.6" stroke-linecap="round"/>
+          <rect x="7.6" y="13" width="2.3" height="4.2" rx="0.6" fill="white"/>
+          <rect x="10.85" y="10.4" width="2.3" height="6.8" rx="0.6" fill="white"/>
+          <rect x="14.1" y="7.6" width="2.3" height="9.6" rx="0.6" fill="white"/>
+        </svg>
+      </div>
+
+      <h1 class="app-name">Screenchart</h1>
+      <div class="app-version">Version 1.0.0</div>
+
+      <p class="app-desc">
+        Screenshot any chart or table and get a clear, plain-English read —
+        powered by your own AI key.
+      </p>
+
+      <!-- Chip links -->
+      <div class="chip-row">
+        <button class="chip" id="link-website" type="button">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.7"/>
+            <path d="M12 2.5C12 2.5 8 7 8 12s4 9.5 4 9.5M12 2.5C12 2.5 16 7 16 12s-4 9.5-4 9.5M2.5 12h19"
+              stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+          Website
+        </button>
+        <button class="chip" id="link-privacy" type="button">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"
+              stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Privacy
+        </button>
+        <button class="chip" id="link-support" type="button">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+              stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Support
+        </button>
+      </div>
+
+      <!-- Troubleshooting section -->
+      <div class="section-label">Troubleshooting</div>
+      <div class="trouble-list">
+
+        <div class="trouble-row">
+          <span class="trouble-icon" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.7"/>
+              <line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              <line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <div>
+            <div class="trouble-title">Capture comes back black</div>
+            <div class="trouble-detail">Grant Screen Recording permission in System Settings.</div>
+          </div>
+        </div>
+
+        <div class="trouble-row">
+          <span class="trouble-icon" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.7"/>
+              <line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              <line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <div>
+            <div class="trouble-title">"Key was rejected"</div>
+            <div class="trouble-detail">Re-paste your API key under Settings → Execution mode.</div>
+          </div>
+        </div>
+
+        <div class="trouble-row">
+          <span class="trouble-icon" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.7"/>
+              <line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              <line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <div>
+            <div class="trouble-title">A number looks wrong</div>
+            <div class="trouble-detail">Re-capture tighter around the table so text stays crisp.</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="spacer"></div>
+      <div class="tagline">Made for people who live in dashboards and spreadsheets.</div>
+
+    </div>
+
+    <script src="about.js"></script>
+  </body>
+</html>

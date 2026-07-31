@@ -1,0 +1,119 @@
+// Workspace / project view router (SHELL). Classic global-scope renderer
+// <script> — NO import/export; symbols are shared with the other hub scripts
+// (projects.ts owns the gallery, hub.ts the capture/result surface).
+//
+// Drives HOME (project gallery) vs WORKSPACE (5-section left nav) purely by
+// flipping data-attributes; hub.css does all showing/hiding:
+//   .win[data-view]            → home vs workspace
+//   .hub-body[data-section]    → which workspace section body is visible
+// This keeps the existing capture→result surface (the Sources section) byte-for
+// -byte unchanged.
+
+// ── Session state (renderer-only; launch always starts on HOME) ──────────────
+let currentProjectId: string | null = null;
+let currentSection = 'sources';
+
+function wsWinEl(): HTMLElement | null {
+  return document.querySelector('.win');
+}
+
+function wsBodyEl(): HTMLElement | null {
+  return document.querySelector('.hub-body');
+}
+
+function setView(view: 'home' | 'workspace'): void {
+  const win = wsWinEl();
+  if (win) win.setAttribute('data-view', view);
+}
+
+// Return to the project gallery and refresh it.
+function showHome(): void {
+  currentProjectId = null;
+  setView('home');
+  renderHomeGallery(); // defined in projects.ts
+}
+
+// Enter a project's workspace. Validates via main first; if the project is gone
+// (deleted/corrupt), fall back to HOME rather than showing an empty workspace.
+async function openWorkspace(id: string): Promise<void> {
+  const project = await window.hub.openProject(id);
+  if (!project) {
+    console.warn('[workspace] openProject returned null for', id);
+    showHome();
+    return;
+  }
+  currentProjectId = project.id;
+  const nameEl = document.getElementById('ws-project-name');
+  if (nameEl) nameEl.textContent = project.name || 'Untitled project';
+  setView('workspace');
+  selectSection('sources');
+}
+
+// Switch which workspace section is visible. Flips the .hub-body[data-section]
+// attribute (CSS shows exactly one body) and toggles nav + placeholder state.
+function selectSection(section: string): void {
+  currentSection = section;
+  const body = wsBodyEl();
+  if (body) body.dataset.section = section;
+  document.querySelectorAll('.ws-nav-item').forEach((item) => {
+    (item as HTMLElement).classList.toggle('active', (item as HTMLElement).dataset.section === section);
+  });
+  // Only the matching non-Sources placeholder is shown; Sources uses the
+  // existing sidebar+main (handled entirely in CSS off [data-section]).
+  document.querySelectorAll('.ws-panel').forEach((panel) => {
+    (panel as HTMLElement).hidden = (panel as HTMLElement).dataset.section !== section;
+  });
+  // Refresh the datasets list when its section becomes active (datasets.ts).
+  if (section === 'datasets' && typeof refreshDatasetList === 'function') refreshDatasetList();
+  // Refresh the saved-connections list when Sources becomes active (connections.ts).
+  if (section === 'sources' && typeof refreshConnectionList === 'function') refreshConnectionList();
+  // Refresh the saved-visuals list when the Visuals section becomes active (visuals.ts).
+  if (section === 'visuals' && typeof refreshVisualList === 'function') refreshVisualList();
+  // Refresh the saved-dashboards list when the Dashboards section becomes active (dashboards.ts).
+  if (section === 'dashboards' && typeof refreshDashboardList === 'function') refreshDashboardList();
+  // Refresh the AI Copilot chat when the AI section becomes active (copilot.ts).
+  if (section === 'ai' && typeof refreshCopilot === 'function') refreshCopilot();
+}
+
+// Wire the back-to-projects button and the section nav items (once, on boot).
+function initWorkspaceRouter(): void {
+  const back = document.getElementById('ws-back-home');
+  if (back) back.addEventListener('click', () => showHome());
+  document.querySelectorAll('.ws-nav-item').forEach((item) => {
+    item.addEventListener('click', () => selectSection((item as HTMLElement).dataset.section || 'sources'));
+  });
+}
+
+// Quick-capture guarantee: a capture fired from HOME (or before any project
+// exists) transparently lands the user in a workspace with the Sources surface
+// showing the fresh analysis. Uses only list/create/open — no new IPC, and the
+// main capture pipeline is untouched. A default project is auto-created once
+// then reused (most-recent first), never spammed.
+async function ensureWorkspaceForCapture(): Promise<void> {
+  // Project setup is best-effort and must NEVER throw or drop to HOME: a
+  // failure in the project layer must not suppress the captured result. So we
+  // resolve/create the project defensively, then ALWAYS force the workspace +
+  // Sources surface visible so the fresh analysis renders (even if setup below
+  // failed and currentProjectId is still null).
+  try {
+    if (!currentProjectId) {
+      let proj: any = null;
+      try {
+        const list = await window.hub.listProjects();
+        proj = (Array.isArray(list) && list[0]) || null;
+      } catch (_) { /* ignore — fall through to create */ }
+      if (!proj) {
+        try { proj = await window.hub.createProject('My workspace'); } catch (_) { /* ignore */ }
+      }
+      if (proj && proj.id) {
+        currentProjectId = String(proj.id);
+        const nameEl = document.getElementById('ws-project-name');
+        if (nameEl) nameEl.textContent = proj.name || 'Untitled project';
+      }
+    }
+  } catch (_) { /* never let project setup abort the capture render */ }
+  // Do NOT call openWorkspace()/showHome() here — openWorkspace falls back to
+  // HOME on failure, which hides the result surface. Force it visible directly.
+  setView('workspace');
+  selectSection('sources');
+}

@@ -1,0 +1,1471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'none'; style-src 'self'; script-src 'self'; img-src data: file: https://a.tile.openstreetmap.org https://b.tile.openstreetmap.org https://c.tile.openstreetmap.org;"/>
+  <link rel="stylesheet" href="../theme.css"/>
+  <link rel="stylesheet" href="hub.css"/>
+  <link rel="stylesheet" href="../../node_modules/leaflet/dist/leaflet.css"/>
+  <title>Screenchart</title>
+</head>
+<body>
+
+<!-- ── launch splash — plays once on window load, then fades into the hub ── -->
+<div class="splash" id="splash" aria-hidden="true">
+  <div class="splash-stack">
+    <div class="app-tile">
+      <svg width="62" height="62" viewBox="0 0 24 24" fill="none">
+        <path d="M4 8.2V5.6A1.6 1.6 0 0 1 5.6 4H8.2M15.8 4h2.6A1.6 1.6 0 0 1 20 5.6V8.2M20 15.8v2.6a1.6 1.6 0 0 1-1.6 1.6H15.8M8.2 20H5.6A1.6 1.6 0 0 1 4 18.4V15.8"
+          stroke="var(--text-strong)" stroke-width="1.4" stroke-linecap="round"/>
+        <rect x="7.6" y="13" width="2.3" height="4.2" rx="0.6" fill="var(--accent)"/>
+        <rect x="10.85" y="10.4" width="2.3" height="6.8" rx="0.6" fill="var(--accent)"/>
+        <rect x="14.1" y="7.6" width="2.3" height="9.6" rx="0.6" fill="var(--accent)"/>
+      </svg>
+    </div>
+    <div class="splash-word">Screenchart</div>
+    <div class="splash-tag">Screenshot any data, get AI analysis</div>
+    <div class="splash-progress"><i></i></div>
+  </div>
+</div>
+
+<div class="win" data-view="home">
+
+  <!-- ── titlebar ─────────────────────────────────────────────────── -->
+  <div class="titlebar">
+    <span class="glyph" aria-hidden="true">
+      <!-- capture-frame + ascending bars logo -->
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+        <path d="M4 8.2V5.6A1.6 1.6 0 0 1 5.6 4H8.2M15.8 4h2.6A1.6 1.6 0 0 1 20 5.6V8.2M20 15.8v2.6a1.6 1.6 0 0 1-1.6 1.6H15.8M8.2 20H5.6A1.6 1.6 0 0 1 4 18.4V15.8"
+          stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        <rect x="7.6" y="13" width="2.3" height="4.2" rx="0.6" fill="var(--accent)"/>
+        <rect x="10.85" y="10.4" width="2.3" height="6.8" rx="0.6" fill="var(--accent)"/>
+        <rect x="14.1" y="7.6" width="2.3" height="9.6" rx="0.6" fill="var(--accent)"/>
+      </svg>
+    </span>
+    <span class="tb-title">Screenchart</span>
+    <div class="tb-spacer"></div>
+    <button id="exec-mode-btn" class="btn btn-ghost tb-gear" type="button"
+      aria-haspopup="true" aria-expanded="false" aria-label="Execution mode">
+      <!-- lucide `cpu` icon — neutral default; JS swaps to the active logo when connected -->
+      <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect width="16" height="16" x="4" y="4" rx="2"/>
+        <rect width="6" height="6" x="9" y="9" rx="1"/>
+        <path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/>
+        <path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/>
+      </svg>
+    </button>
+    <button id="settings-gear" class="btn btn-ghost tb-gear" type="button"
+      aria-haspopup="true" aria-expanded="false" aria-label="Settings menu">
+      <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
+          stroke="currentColor" stroke-width="1.7"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- ── home view (project gallery) ──────────────────────────────── -->
+  <section id="home-view" class="home-view">
+    <div class="home-head">
+      <div>
+        <h1 class="home-title">Projects</h1>
+        <p class="home-sub">Open a project or start a new one.</p>
+      </div>
+      <button id="home-new-project" class="btn btn-primary" type="button">New project</button>
+    </div>
+
+    <!-- populated by projects.js renderHomeGallery(); one .project-card per project -->
+    <div id="home-gallery" class="home-gallery"></div>
+
+    <!-- empty state, shown only when zero projects (toggled via [hidden]) -->
+    <div id="home-empty" class="home-empty" hidden>
+      <div class="home-empty-mark" aria-hidden="true">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none">
+          <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2.2H19.5A1.5 1.5 0 0 1 21 9.7V18a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18z"
+            stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <h2 class="home-empty-h">No projects yet</h2>
+      <p class="home-empty-sub">Create a project to organize your captures and analysis.</p>
+      <button id="home-empty-new" class="btn btn-primary" type="button">New project</button>
+    </div>
+  </section>
+
+  <!-- ── hub body ──────────────────────────────────────────────────── -->
+  <div class="hub-body" data-section="sources">
+
+    <!-- ── workspace left nav ───────────────────────────────────── -->
+    <nav id="workspace-nav" class="ws-nav" aria-label="Project sections">
+      <button id="ws-back-home" class="ws-back" type="button" aria-label="Back to projects">
+        <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Projects
+      </button>
+      <div id="ws-project-name" class="ws-project-name">Project name</div>
+      <div class="ws-nav-list">
+        <button class="ws-nav-item active" type="button" data-section="sources">Sources</button>
+        <button class="ws-nav-item"        type="button" data-section="datasets">Datasets</button>
+        <button class="ws-nav-item"        type="button" data-section="visuals">Visuals</button>
+        <button class="ws-nav-item"        type="button" data-section="dashboards">Dashboards</button>
+        <button class="ws-nav-item"        type="button" data-section="ai">AI <span class="ws-badge">optional</span></button>
+      </div>
+    </nav>
+
+    <!-- ── sidebar ──────────────────────────────────────────────── -->
+    <aside class="sidebar">
+
+      <div class="side-top">
+        <!-- search -->
+        <div class="side-search">
+          <svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M20 20l-3.6-3.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          <input id="cap-search" class="side-search-input" type="text"
+            placeholder="Search captures" aria-label="Search captures" autocomplete="off" spellcheck="false" />
+        </div>
+      </div>
+
+      <!-- session capture history (JS populates; hidden until first entry) -->
+      <div id="capture-history" class="cap-history"></div>
+
+      <!-- empty history -->
+      <div class="side-empty" aria-label="No captures yet">
+        <div class="side-empty-icon" aria-hidden="true">
+          <svg class="ic" width="17" height="17" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.7"/>
+            <path d="M12 7.5V12l3 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="side-empty-title">No captures yet</div>
+        <div class="side-empty-sub">Your analyzed charts and tables will show up here.</div>
+      </div>
+
+      <!-- footer: key badge + help menu button -->
+      <div class="side-bottom">
+        <span id="key-badge" class="api-chip key-missing" aria-live="polite">
+          <span class="key-dot" aria-hidden="true"></span>
+          <span id="key-badge-label">AI not connected</span>
+        </span>
+        <button id="help-btn" class="side-gear" type="button"
+          aria-haspopup="true" aria-expanded="false" aria-label="Help menu">
+          <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/>
+            <path d="M9.5 9.2a2.5 2.5 0 0 1 4.86.8c0 1.7-2.5 2.2-2.5 3.7"
+              stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            <circle cx="12" cy="17" r="0.9" fill="currentColor"/>
+          </svg>
+          Help
+        </button>
+      </div>
+
+    </aside>
+
+    <!-- ── main area ─────────────────────────────────────────────── -->
+    <section class="main">
+
+      <!-- main header -->
+      <div class="main-top">
+        <div class="main-title">
+          <h2 id="main-title-h">Welcome</h2>
+          <p id="main-title-sub">Capture any chart, table, or data to begin</p>
+        </div>
+        <div class="tb-spacer"></div>
+        <div class="hotkey-hint" aria-label="Keyboard shortcut">
+          <span class="kbd" id="hotkey-hint">⌘ ⌥ S</span>
+        </div>
+        <button id="conn-connect-btn" class="btn" type="button">Connect data</button>
+        <button id="new-capture" class="btn btn-primary" type="button">
+          <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M3 8.5A2 2 0 0 1 5 6.5h1.2l.8-1.4A1.5 1.5 0 0 1 8.3 4.3h7.4a1.5 1.5 0 0 1 1.3.8l.8 1.4H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
+              stroke="currentColor" stroke-width="1.7"/>
+            <circle cx="12" cy="13" r="3.4" stroke="currentColor" stroke-width="1.7"/>
+            <path d="M12 8.5v-3M10.5 7H13.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+          New capture
+        </button>
+      </div>
+
+      <!-- Hotkey registration failure — shown when globalShortcut.register() returns false -->
+      <div id="hotkey-fail-banner" class="hotkey-fail-banner" style="display:none">
+        <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.7"/>
+          <line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          <line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        <span id="hotkey-fail-msg" class="hotkey-fail-text">Couldn't register the shortcut — it may already be in use by another app.</span>
+        <button id="hotkey-fail-change" class="api-banner-link" type="button">Change shortcut</button>
+        <button id="hotkey-fail-dismiss" class="hotkey-fail-dismiss" type="button" aria-label="Dismiss">✕</button>
+      </div>
+
+      <div class="main-body">
+
+      <!-- empty state body -->
+      <div class="conv">
+        <div class="state-pad">
+          <div class="state-narrow">
+
+            <!-- camera icon -->
+            <div class="empty-mark" aria-hidden="true">
+              <svg class="ic" width="28" height="28" viewBox="0 0 24 24" fill="none">
+                <path d="M3 8.5A2 2 0 0 1 5 6.5h1.2l.8-1.4A1.5 1.5 0 0 1 8.3 4.3h7.4a1.5 1.5 0 0 1 1.3.8l.8 1.4H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
+                  stroke="currentColor" stroke-width="1.6"/>
+                <circle cx="12" cy="13" r="3.4" stroke="currentColor" stroke-width="1.6"/>
+              </svg>
+            </div>
+
+            <h1 class="empty-h">See what your data is really saying</h1>
+            <p class="empty-sub">
+              Screenshot any data and get instant AI analysis with visualizations
+              that make it clearer.
+            </p>
+
+            <div class="steps">
+              <div class="step">
+                <div class="step-n">1</div>
+                <div class="step-t">
+                  Press <span id="step-hotkey-keys"><kbd>⌘</kbd> <kbd>⌥</kbd> <kbd>S</kbd></span>
+                  or click <strong>New capture</strong>.
+                </div>
+              </div>
+              <div class="step">
+                <div class="step-n">2</div>
+                <div class="step-t">Drag a box around any <strong>chart, table, or data</strong> on your screen.</div>
+              </div>
+              <div class="step">
+                <div class="step-n">3</div>
+                <div class="step-t">
+                  Get instant AI analysis in plain English, plus
+                  visualizations that make it clearer.
+                </div>
+              </div>
+            </div>
+
+            <button id="take-shot-main" class="btn btn-primary btn-block btn-lg" type="button">
+              <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M3 8.5A2 2 0 0 1 5 6.5h1.2l.8-1.4A1.5 1.5 0 0 1 8.3 4.3h7.4a1.5 1.5 0 0 1 1.3.8l.8 1.4H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
+                  stroke="currentColor" stroke-width="1.7"/>
+                <circle cx="12" cy="13" r="3.4" stroke="currentColor" stroke-width="1.7"/>
+              </svg>
+              New capture
+            </button>
+
+            <!-- Readiness banner — shown only when NOT ready (no Local CLI and no BYOK provider) -->
+            <div id="api-banner" class="api-banner" style="display:none">
+              <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="8" cy="14" r="3.5" stroke="currentColor" stroke-width="1.7"/>
+                <path d="M10.5 11.5L20 2M16 6l2.5 2.5M18 8l1.8 1.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              </svg>
+              <span class="api-banner-text">Connect a Local CLI or add an API key (BYOK) to get started.</span>
+              <button id="open-settings-banner" class="api-banner-link" type="button">Open Settings</button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- capture view (shown after a hub-triggered capture, overlays the empty state) -->
+      <div id="capture-view" class="cap-view cap-view-hidden" data-cv-state="loading" aria-live="polite">
+
+        <!-- Analysis panel (full scroll area) -->
+        <div class="cv-analysis">
+
+          <!-- Screenshot thumbnail -->
+          <div class="cv-thumb-section">
+            <div class="cv-section-label">Your screenshot</div>
+            <div class="cv-thumb-wrap" id="cv-thumb-wrap" role="button" tabindex="0" aria-label="Image options">
+              <img id="cap-view-img" class="cv-img" alt="Your capture"/>
+            </div>
+            <div class="cv-thumb-meta" id="cv-thumb-meta"></div>
+          </div>
+
+          <!-- Loading -->
+          <div class="cv-loading-panel">
+            <div class="cv-loading-head">
+              <span class="cv-spin-icon" aria-hidden="true"><span class="cv-spinner"></span></span>
+              <div>
+                <div class="cv-loading-title">Analyzing your capture…</div>
+                <div class="cv-loading-sub">Reading what's on screen. This usually takes a few seconds.</div>
+              </div>
+            </div>
+            <div class="cv-steps" id="cv-steps">
+              <div class="cv-step" data-status="active">
+                <span class="cv-step-icon" aria-hidden="true"></span>
+                <span class="cv-step-label">Reading your capture…</span>
+              </div>
+              <div class="cv-step" data-status="pending">
+                <span class="cv-step-icon" aria-hidden="true"></span>
+                <span class="cv-step-label">Analyzing content…</span>
+              </div>
+              <div class="cv-step" data-status="pending">
+                <span class="cv-step-icon" aria-hidden="true"></span>
+                <span class="cv-step-label">Processing data…</span>
+              </div>
+              <div class="cv-step" data-status="pending">
+                <span class="cv-step-icon" aria-hidden="true"></span>
+                <span class="cv-step-label">Writing response…</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Result -->
+          <div class="cv-result-panel">
+            <div id="cv-thread" class="cv-thread"></div>
+          </div>
+
+          <!-- Error -->
+          <div class="cv-error-panel">
+            <div id="cve-badge" class="cve-icon-wrap" aria-hidden="true"></div>
+            <div id="cve-title" class="cve-error-title">Something went wrong</div>
+            <p id="cve-msg" class="cve-error-msg"></p>
+            <div id="cve-detail-pill" class="cve-detail-pill cve-detail-pill-hidden">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" stroke-width="1.8"/>
+                <line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                <line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              </svg>
+              <span id="cve-detail-text"></span>
+            </div>
+            <div class="cve-btns">
+              <button id="cve-settings-btn" class="btn btn-primary btn-sm" type="button" hidden>Open Settings</button>
+              <button id="cve-retry-btn" class="btn btn-soft btn-sm" type="button">Retry</button>
+            </div>
+          </div>
+
+        </div><!-- /.cv-analysis -->
+
+        <!-- Follow-up input -->
+        <div class="cv-followup">
+          <div id="cv-chips" class="cv-chips"></div>
+          <div class="cv-input-row">
+            <svg class="cv-input-icon" width="15" height="15" viewBox="0 0 24 24" fill="none"
+              aria-hidden="true" stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+            </svg>
+            <input id="cv-followup-input" class="cv-followup-inp" type="text" placeholder="Ask a follow-up…" disabled/>
+            <button id="cv-followup-send" class="cv-followup-btn" type="button" disabled aria-label="Send">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"/>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="cv-foot">
+          <button id="cap-view-new" class="btn btn-soft btn-sm" type="button">
+            <svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M19 12H5M12 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            New capture
+          </button>
+          <button id="cv-save-dataset" class="btn btn-soft btn-sm" type="button" hidden>
+            <svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <ellipse cx="12" cy="5" rx="8" ry="3" stroke="currentColor" stroke-width="2"/>
+              <path d="M4 5v14c0 1.657 3.582 3 8 3s8-1.343 8-3V5M4 12c0 1.657 3.582 3 8 3s8-1.343 8-3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            Save as dataset
+          </button>
+        </div>
+
+      </div>
+
+      <!-- ── Connect data panel (own overlay container; capture surface underneath is untouched) ── -->
+      <section class="conn-panel" id="conn-panel" hidden aria-label="Connect a data source">
+        <div class="conn-head">
+          <h3 class="conn-h">Connect data</h3>
+          <button class="btn btn-sm" type="button" id="conn-close-btn">Close</button>
+        </div>
+        <p class="conn-sub">Pull structured data from a Postgres database or a JSON URL/API into this project as a dataset.</p>
+
+        <div class="conn-error" id="conn-error" hidden></div>
+
+        <div class="conn-form" id="conn-form">
+          <div class="conn-field-row">
+            <label class="conn-label" for="conn-kind-select">Type</label>
+            <select class="conn-input" id="conn-kind-select">
+              <option value="postgres">Postgres</option>
+              <option value="url">URL / API (JSON)</option>
+            </select>
+          </div>
+          <div class="conn-field-row">
+            <label class="conn-label" for="conn-name">Name</label>
+            <input class="conn-input" id="conn-name" type="text" placeholder="Optional connection name" autocomplete="off" />
+          </div>
+
+          <!-- Postgres fields -->
+          <div id="conn-pg-fields">
+            <div class="conn-field-row">
+              <label class="conn-label" for="conn-host">Host</label>
+              <input class="conn-input" id="conn-host" type="text" placeholder="localhost" autocomplete="off" />
+            </div>
+            <div class="conn-field-row">
+              <label class="conn-label" for="conn-port">Port</label>
+              <input class="conn-input" id="conn-port" type="text" placeholder="5432" autocomplete="off" />
+            </div>
+            <div class="conn-field-row">
+              <label class="conn-label" for="conn-db">Database</label>
+              <input class="conn-input" id="conn-db" type="text" placeholder="mydb" autocomplete="off" />
+            </div>
+            <div class="conn-field-row">
+              <label class="conn-label" for="conn-user">User</label>
+              <input class="conn-input" id="conn-user" type="text" placeholder="postgres" autocomplete="off" />
+            </div>
+            <div class="conn-field-row">
+              <label class="conn-label" for="conn-password">Password</label>
+              <input class="conn-input" id="conn-password" type="password" placeholder="••••••••" autocomplete="off" />
+            </div>
+            <div class="conn-field-row">
+              <label class="conn-label" for="conn-ssl">SSL</label>
+              <input id="conn-ssl" type="checkbox" />
+            </div>
+            <p class="conn-hint">Optional: save a specific table or a SQL query to pull from. You can also pick a table after connecting.</p>
+            <div class="conn-field-row">
+              <label class="conn-label" for="conn-table">Table</label>
+              <input class="conn-input" id="conn-table" type="text" placeholder="schema.table (optional)" autocomplete="off" />
+            </div>
+            <div class="conn-field-row conn-field-row-wide">
+              <label class="conn-label" for="conn-query">Query</label>
+              <textarea class="conn-input conn-query" id="conn-query" placeholder="select … (optional; overrides table)"></textarea>
+            </div>
+          </div>
+
+          <!-- URL fields -->
+          <div id="conn-url-fields" hidden>
+            <div class="conn-field-row conn-field-row-wide">
+              <label class="conn-label" for="conn-url">URL</label>
+              <input class="conn-input" id="conn-url" type="text" placeholder="https://api.example.com/data.json" autocomplete="off" />
+            </div>
+            <div class="conn-field-row">
+              <label class="conn-label" for="conn-token">Auth token</label>
+              <input class="conn-input" id="conn-token" type="password" placeholder="Optional Bearer token" autocomplete="off" />
+            </div>
+          </div>
+
+          <div class="conn-form-actions">
+            <button class="btn btn-primary" type="button" id="conn-test-btn">Test &amp; Save</button>
+          </div>
+        </div>
+
+        <!-- Run area (shown when a saved connection's Run is clicked) -->
+        <div class="conn-run" id="conn-run-area" hidden>
+          <div class="conn-run-head">
+            <span class="conn-run-title" id="conn-run-title">Run</span>
+            <button class="btn btn-sm" type="button" id="conn-run-close">✕</button>
+          </div>
+          <div class="conn-field-row" id="conn-run-table-row" hidden>
+            <label class="conn-label" for="conn-table-select">Table</label>
+            <select class="conn-input" id="conn-table-select"></select>
+          </div>
+          <div class="conn-field-row conn-field-row-wide" id="conn-run-query-row" hidden>
+            <label class="conn-label" for="conn-run-query">Query</label>
+            <textarea class="conn-input conn-query" id="conn-run-query" placeholder="select … (optional; overrides the table)"></textarea>
+          </div>
+          <div class="conn-form-actions">
+            <button class="btn btn-primary" type="button" id="conn-run-btn">Run</button>
+          </div>
+          <div class="ds-warnings" id="conn-run-warnings" hidden></div>
+          <div class="conn-preview" id="conn-run-preview" hidden>
+            <p class="ds-preview-note" id="conn-run-note" hidden></p>
+            <div class="ds-table-scroll" id="conn-run-table-scroll"></div>
+          </div>
+          <div class="ds-save-bar" id="conn-save-bar" hidden>
+            <input class="ds-name-input" id="conn-ds-name" type="text" placeholder="Dataset name" />
+            <button class="btn btn-primary" type="button" id="conn-save-ds-btn">Save as dataset</button>
+          </div>
+        </div>
+
+        <!-- Saved connections -->
+        <div class="conn-saved">
+          <h4 class="conn-saved-h">Saved connections</h4>
+          <div class="conn-saved-list" id="conn-saved-list"></div>
+          <p class="conn-saved-empty" id="conn-saved-empty" hidden>No connections yet.</p>
+        </div>
+      </section>
+
+      </div><!-- /.main-body -->
+
+    </section>
+
+    <!-- ── workspace section placeholders (SHELL — content in later weeks) ── -->
+    <section class="ws-panel" id="ws-datasets" data-section="datasets" hidden>
+      <div class="ds-panel">
+        <h2 class="ds-h">Datasets</h2>
+        <p class="ds-sub">Import CSV, JSON, or Excel — or paste data — to save a structured dataset in this project.</p>
+
+        <div class="ds-toolbar">
+          <button class="btn" type="button" id="ds-import-btn">Import file</button>
+          <button class="btn" type="button" id="ds-paste-toggle">Paste data</button>
+        </div>
+
+        <div class="ds-paste-wrap" id="ds-paste-wrap" hidden>
+          <textarea class="ds-paste-input" id="ds-paste-input" placeholder="Paste CSV, TSV, or JSON here…"></textarea>
+          <div class="ds-paste-actions">
+            <button class="btn btn-primary" type="button" id="ds-paste-parse">Parse</button>
+          </div>
+        </div>
+
+        <div class="ds-sheet-wrap" id="ds-sheet-wrap" hidden>
+          <label class="ds-sheet-label" for="ds-sheet-select">Sheet</label>
+          <select class="ds-sheet-select" id="ds-sheet-select"></select>
+        </div>
+
+        <div class="ds-warnings" id="ds-warnings" hidden></div>
+
+        <div class="ds-preview" id="ds-preview" hidden>
+          <p class="ds-preview-note" id="ds-preview-note" hidden></p>
+          <div class="ds-table-scroll" id="ds-table-scroll"></div>
+        </div>
+
+        <div class="ds-save-bar" id="ds-save-bar" hidden>
+          <input class="ds-name-input" id="ds-name-input" type="text" placeholder="Dataset name" />
+          <button class="btn btn-primary" type="button" id="ds-save-btn">Save dataset</button>
+        </div>
+
+        <!-- ── Saved-dataset explorer (sort / filter / show-hide / rename / retype / stats / quality / AI explain) ── -->
+        <div class="ds-explorer" id="ds-explorer" hidden>
+          <div class="ds-explorer-head">
+            <h3 class="ds-explorer-title" id="ds-explorer-title"></h3>
+            <button class="btn" type="button" id="ds-explorer-close">Close</button>
+          </div>
+
+          <!-- Week 13 — capture provenance: thumbnail + view-original + recapture. -->
+          <div class="ds-cap-strip" id="ds-cap-strip" hidden></div>
+
+          <div class="ds-quality" id="ds-quality" hidden></div>
+
+          <div class="ds-explorer-toolbar">
+            <input class="ds-search" id="ds-search" type="search" placeholder="Search rows…" />
+            <div class="ds-cols-wrap">
+              <button class="btn" type="button" id="ds-cols-btn">Columns</button>
+              <div class="ds-cols-menu" id="ds-cols-menu" hidden></div>
+            </div>
+            <button class="btn" type="button" id="ds-explain-btn">Explain this dataset</button>
+            <button class="btn" type="button" id="ds-prepare-btn">Prepare data</button>
+          </div>
+
+          <div class="ds-explain-out" id="ds-explain-out" hidden></div>
+
+          <!-- ── Prepare: reversible transform pipeline over the immutable source ── -->
+          <div class="ds-prepare-panel" id="ds-prepare-panel" hidden>
+            <div class="ds-prepare-warnings" id="ds-prepare-warnings" hidden></div>
+            <div class="ds-steps-list" id="ds-steps-list"></div>
+
+            <div class="ds-prepare-controls">
+              <div class="ds-step-add-wrap">
+                <button class="btn" type="button" id="ds-step-add">+ Add step</button>
+                <div class="ds-step-type-menu" id="ds-step-type-menu" hidden></div>
+              </div>
+              <button class="btn" type="button" id="ds-suggest-btn">AI suggest steps</button>
+              <button class="btn" type="button" id="ds-calc-suggest-btn">✨ Suggest calculated field</button>
+            </div>
+
+            <div class="ai-interp" id="ds-calc-suggest-out" hidden></div>
+
+            <div class="ds-step-editor" id="ds-step-editor" hidden></div>
+
+            <div class="ds-suggest-out" id="ds-suggest-out" hidden>
+              <div class="ds-suggest-list" id="ds-suggest-list"></div>
+              <div class="ds-suggest-actions">
+                <button class="btn btn-primary" type="button" id="ds-suggest-apply">Apply steps</button>
+                <button class="btn" type="button" id="ds-suggest-dismiss">Dismiss</button>
+              </div>
+            </div>
+
+            <div class="ds-combine-wrap">
+              <h4 class="ds-combine-h">Combine with another dataset</h4>
+              <div class="ds-combine-row">
+                <select class="ds-combine-select" id="ds-combine-select" aria-label="Other dataset"></select>
+                <select class="ds-combine-mode" id="ds-combine-mode" aria-label="Combine mode">
+                  <option value="append">Append rows</option>
+                  <option value="join">Join on key</option>
+                </select>
+              </div>
+              <div class="ds-combine-row" id="ds-combine-on" hidden>
+                <select class="ds-combine-key" id="ds-combine-on-left" aria-label="This dataset key"></select>
+                <span class="ds-combine-eq">=</span>
+                <select class="ds-combine-key" id="ds-combine-on-right" aria-label="Other dataset key"></select>
+              </div>
+              <button class="btn" type="button" id="ds-combine-btn">Combine</button>
+              <div class="ds-combine-note ds-explain-hint" id="ds-combine-note" hidden></div>
+            </div>
+          </div>
+
+          <p class="ds-preview-note" id="ds-explorer-note" hidden></p>
+          <div class="ds-table-scroll" id="ds-explorer-scroll"></div>
+        </div>
+
+        <div class="ds-saved" id="ds-saved">
+          <h3 class="ds-saved-h">Saved datasets</h3>
+          <div class="ds-saved-list" id="ds-saved-list"></div>
+          <p class="ds-saved-empty" id="ds-saved-empty" hidden>No datasets yet.</p>
+        </div>
+      </div>
+    </section>
+    <section class="ws-panel" id="ws-visuals" data-section="visuals" hidden>
+      <div class="viz-panel">
+        <h2 class="viz-h">Visuals</h2>
+        <p class="viz-sub">Build a chart or map from a saved dataset. Every number is computed by the app — nothing is invented.</p>
+
+        <!-- Editor (hidden until "New visual" or opening a saved visual) -->
+        <div class="viz-builder" id="viz-builder" hidden>
+          <div class="viz-build-row">
+            <label class="viz-field-label" for="viz-dataset-select">Dataset</label>
+            <select class="viz-select" id="viz-dataset-select" aria-label="Dataset"></select>
+            <button class="btn btn-sm viz-suggest-btn" type="button" id="viz-suggest-btn">✨ Suggest chart</button>
+          </div>
+          <div class="viz-suggest-hint" id="viz-suggest-hint" hidden></div>
+
+          <div class="viz-encoding" id="viz-encoding" hidden>
+            <div class="viz-build-row">
+              <label class="viz-field-label" for="viz-category-select">Category</label>
+              <select class="viz-select" id="viz-category-select" aria-label="Category (dimension)"></select>
+            </div>
+
+            <div class="viz-build-row viz-values-row">
+              <label class="viz-field-label">Measures</label>
+              <div class="viz-values-list" id="viz-values-list"></div>
+              <button class="btn btn-sm" type="button" id="viz-add-value">+ Add measure</button>
+            </div>
+
+            <div class="viz-build-row">
+              <label class="viz-field-label" for="viz-series-select">Split by</label>
+              <select class="viz-select" id="viz-series-select" aria-label="Split/series column"></select>
+            </div>
+
+            <div class="viz-build-row" id="viz-geo-wrap">
+              <label class="viz-field-label" for="viz-geo-level">Map regions</label>
+              <select class="viz-select" id="viz-geo-level" aria-label="Geographic level">
+                <option value="">Off</option>
+                <option value="country">Countries</option>
+                <option value="us_state">US states</option>
+                <option value="us_county">US counties</option>
+                <option value="us_city">US cities</option>
+                <option value="us_zip">US ZIP codes</option>
+              </select>
+            </div>
+
+            <div class="viz-build-row viz-values-row" id="viz-filters-row">
+              <label class="viz-field-label">Filters</label>
+              <div class="viz-filters-list" id="viz-filters-list"></div>
+              <button class="btn btn-sm" type="button" id="viz-add-filter">＋ Add filter</button>
+            </div>
+          </div>
+
+          <div class="viz-warnings" id="viz-warnings" hidden></div>
+          <div class="viz-switcher-mount" id="viz-switcher-mount"></div>
+          <div class="cv-viz-area viz-area" id="viz-area"></div>
+
+          <div class="viz-build-actions">
+            <button class="btn btn-primary" type="button" id="viz-save-btn">Save visual</button>
+            <button class="btn" type="button" id="viz-cancel-btn">Cancel</button>
+          </div>
+        </div>
+
+        <div class="viz-saved" id="viz-saved">
+          <div class="viz-saved-head">
+            <h3 class="viz-saved-h">Saved visuals</h3>
+            <button class="btn btn-primary" type="button" id="viz-new-btn">New visual</button>
+          </div>
+          <div class="viz-saved-list" id="viz-saved-list"></div>
+          <p class="viz-saved-empty" id="viz-saved-empty" hidden>No visuals yet.</p>
+        </div>
+      </div>
+    </section>
+    <section class="ws-panel" id="ws-dashboards" data-section="dashboards" hidden>
+      <!-- List view: saved dashboards + New button -->
+      <div class="dash-panel" id="dash-list-view">
+        <div class="dash-list-head">
+          <div>
+            <h2 class="viz-h">Dashboards</h2>
+            <p class="viz-sub">Arrange saved visuals, computed metrics, and notes onto a grid across one or more pages. Every number is computed by the app.</p>
+          </div>
+          <div class="dash-list-head-actions">
+            <button class="btn" type="button" id="dash-draft-btn">✨ AI draft dashboard</button>
+            <button class="btn btn-primary" type="button" id="dash-new-btn">New dashboard</button>
+          </div>
+        </div>
+        <div class="dash-list" id="dash-list"></div>
+        <p class="dash-list-empty" id="dash-list-empty" hidden>No dashboards yet.</p>
+      </div>
+
+      <!-- Editor view: page tabs + toolbar + grid canvas -->
+      <div class="dash-editor" id="dash-editor" hidden>
+        <div class="dash-editor-head">
+          <button class="btn btn-sm" type="button" id="dash-back-btn">‹ Back</button>
+          <span class="dash-name" id="dash-name"></span>
+          <button class="btn btn-sm" type="button" id="dash-rename-btn">Rename</button>
+          <span class="dash-editor-spacer"></span>
+          <button class="btn btn-sm" type="button" id="dash-add-visual">+ Visual</button>
+          <button class="btn btn-sm" type="button" id="dash-add-metric">+ Metric</button>
+          <button class="btn btn-sm" type="button" id="dash-add-text">+ Text</button>
+          <button class="btn btn-primary btn-sm" type="button" id="dash-save-btn">Save</button>
+        </div>
+
+        <!-- Toolbar: dashboard-wide filters + quick controls + present/export/share -->
+        <div class="dash-toolbar" id="dash-toolbar">
+          <div class="dash-filter-bar">
+            <span class="dash-toolbar-label">Filters</span>
+            <div class="dash-filter-chips" id="dash-filter-chips"></div>
+            <button class="btn btn-sm" type="button" id="dash-add-filter">+ Filter</button>
+            <button class="btn btn-sm" type="button" id="dash-clear-filters" hidden>Clear all</button>
+          </div>
+          <div class="dash-toolbar-quick">
+            <button class="btn btn-sm dash-ctrl" type="button" id="dash-category-select">Category…</button>
+            <button class="btn btn-sm dash-ctrl" type="button" id="dash-period-select">Period…</button>
+          </div>
+          <span class="dash-editor-spacer"></span>
+          <div class="dash-toolbar-actions">
+            <button class="btn btn-sm" type="button" id="dash-summary-btn">✨ Summary</button>
+            <button class="btn btn-sm" type="button" id="dash-anomalies-btn">✨ Explain anomalies</button>
+            <button class="btn btn-sm" type="button" id="dash-present-btn">Present</button>
+            <button class="btn btn-sm" type="button" id="dash-export-btn">Export…</button>
+            <button class="btn btn-sm" type="button" id="dash-share-btn">Share</button>
+          </div>
+        </div>
+
+        <!-- Exit affordance shown only in presentation mode -->
+        <button class="dash-present-exit" type="button" id="dash-present-exit" hidden aria-label="Exit presentation (Esc)">✕ Exit</button>
+
+        <!-- AI interpretation panel (summary / anomaly explanation) — above the grid -->
+        <div class="ai-interp" id="dash-ai-out" hidden></div>
+
+        <div class="dash-pages" id="dash-pages"></div>
+
+        <div class="dash-grid" id="dash-grid"></div>
+
+        <div class="dash-starters" id="dash-starters">
+          <span class="dash-starter-label">This page is empty. Start from a layout:</span>
+          <button class="btn btn-sm dash-starter" type="button" id="dash-starter-kpis">KPIs + chart</button>
+          <button class="btn btn-sm dash-starter" type="button" id="dash-starter-twoup">Two-up</button>
+        </div>
+      </div>
+    </section>
+    <section class="ws-panel" id="ws-ai" data-section="ai" hidden>
+      <div class="ai-panel">
+        <div class="ai-head">
+          <h2 class="ai-title">Copilot <span class="ws-badge">optional</span></h2>
+          <div class="ai-head-actions">
+            <button class="btn btn-sm ai-toggle" type="button" id="ai-toggle" aria-pressed="true">Copilot: On</button>
+            <button class="btn btn-sm" type="button" id="ai-clear">Clear</button>
+          </div>
+        </div>
+        <div class="ds-explain-out ds-explain-hint ai-hint" id="ai-hint" hidden></div>
+        <div class="ai-context" id="ai-context" hidden></div>
+        <div class="ai-messages" id="ai-messages">
+          <div class="ai-empty" id="ai-empty">Ask a question about the dataset, visual, or dashboard you have open. Every figure is computed by the app — Copilot only explains it.</div>
+        </div>
+        <div class="ai-composer" id="ai-composer">
+          <textarea class="ai-input" id="ai-input" rows="2" placeholder="Ask about your data…" aria-label="Ask Copilot"></textarea>
+          <button class="btn btn-primary ai-send" type="button" id="ai-send">Send</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ── image lightbox ───────────────────────────────────────────── -->
+  <div id="img-lightbox" class="lightbox" aria-modal="true" role="dialog" hidden>
+    <div class="lightbox-backdrop"></div>
+    <div class="lightbox-box">
+      <button class="lightbox-close" id="lightbox-close" aria-label="Close">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <img id="lightbox-img" class="lightbox-img" alt="Full screenshot"/>
+    </div>
+  </div>
+
+  <!-- ── settings panel (full-window overlay) ─────────────────────── -->
+  <div id="settings-panel" class="settings-backdrop">
+    <div class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="stp-title">
+
+      <!-- header -->
+      <div class="settings-modal-head">
+        <div class="settings-modal-headtext">
+          <div class="settings-modal-eyebrow">SETTINGS</div>
+          <h2 id="stp-title" class="settings-modal-title">Execution mode</h2>
+        </div>
+        <button id="stp-close" class="settings-modal-x" type="button" aria-label="Close settings">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- body: category sidebar + content -->
+      <div class="settings-modal-body">
+        <nav class="settings-cats" role="tablist" aria-label="Settings categories">
+          <button class="settings-cat active" type="button" role="tab" data-cat="exec">Execution mode</button>
+          <button class="settings-cat" type="button" role="tab" data-cat="hotkey">Hotkey</button>
+          <button class="settings-cat" type="button" role="tab" data-cat="prompt">Instructions / Rules</button>
+          <button class="settings-cat" type="button" role="tab" data-cat="appearance">Appearance</button>
+          <button class="settings-cat" type="button" role="tab" data-cat="notifications">Notifications</button>
+          <button class="settings-cat" type="button" role="tab" data-cat="general">General</button>
+          <button class="settings-cat" type="button" role="tab" data-cat="about">About</button>
+        </nav>
+
+        <div class="settings-content">
+
+          <!-- Execution mode -->
+          <section class="settings-pane" data-cat="exec">
+
+            <!-- Local CLI / BYOK toggle -->
+            <div class="stp-row">
+              <div class="stp-rl">
+                <div class="stp-rt">Execution mode</div>
+                <div class="stp-rd">Run captures through a local CLI agent, or your own API key</div>
+              </div>
+              <div class="stp-rr">
+                <div class="stp-seg" id="ex-mode-seg" role="group" aria-label="Execution mode">
+                  <button class="stp-seg-opt" data-mode="local" type="button">Local CLI</button>
+                  <button class="stp-seg-opt" data-mode="byok" type="button">Cloud</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── LOCAL CLI panel — detection (Milestone 2) ── -->
+            <div id="ex-local-panel" class="ex-panel" hidden>
+
+              <!-- heading + rescan -->
+              <div class="stp-row">
+                <div class="stp-rl">
+                  <div class="stp-rt">Pick the CLI that runs your prompts</div>
+                  <div class="stp-rd" id="ex-local-sub">Detected on your PATH. Selecting one only stores the choice for now.</div>
+                </div>
+                <div class="stp-rr">
+                  <button id="ex-rescan" class="btn btn-sm" type="button">
+                    <svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 0 1 3.51 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Rescan
+                  </button>
+                </div>
+              </div>
+
+              <!-- scanning state -->
+              <div id="ex-local-scanning" class="ex-local-scanning" hidden>
+                <span class="cap-spinner" role="status" aria-label="Scanning"></span>
+                Scanning your PATH…
+              </div>
+
+              <!-- Your CLIs (installed) -->
+              <div id="ex-installed-group" class="ex-cli-group" hidden>
+                <div class="ex-cli-grouphead">Your CLIs (<span id="ex-installed-count">0</span>)</div>
+                <div id="ex-installed-list" class="ex-cli-list"></div>
+              </div>
+
+              <!-- empty installed -->
+              <div id="ex-installed-empty" class="ex-cli-empty" hidden>
+                No supported CLIs found on your PATH. Install one below to use Local CLI.
+              </div>
+
+              <!-- Available to install (collapsible) -->
+              <div class="ex-cli-group">
+                <button id="ex-avail-toggle" class="ex-cli-grouphead ex-collapse open" type="button" aria-expanded="true">
+                  <span class="ex-collapse-caret" aria-hidden="true">▸</span>
+                  Available to install (<span id="ex-avail-count">0</span>)
+                </button>
+                <div id="ex-avail-list" class="ex-cli-list"></div>
+              </div>
+
+              <!-- Memory model controls removed from the UI: no memory/summary
+                   feature consumes config.memoryModel yet, so they only confused.
+                   The underlying config value + setter + analyze.js integration
+                   point are kept so the feature can be revived later. -->
+
+            </div>
+
+            <!-- ── BYOK panel — mirrors the Local CLI layout: connected
+                 providers on top, available-to-connect below. Cards are built
+                 in JS (renderByokProviders). A provider is "connected" only
+                 after a successful Test (config.verified), which promotes it
+                 from Available into Your connected providers. -->
+            <div id="ex-byok-panel" class="ex-panel" hidden>
+
+              <!-- Your connected providers -->
+              <div id="ex-byok-conn-group" class="ex-cli-group" hidden>
+                <div class="ex-cli-grouphead">Your connected providers (<span id="ex-byok-conn-count">0</span>)</div>
+                <div id="ex-byok-conn-list" class="ex-cli-list"></div>
+              </div>
+
+              <!-- empty connected -->
+              <div id="ex-byok-conn-empty" class="ex-cli-empty" hidden>
+                No connected providers yet. Add a key below and Test it to connect.
+              </div>
+
+              <!-- Available to connect (collapsible) -->
+              <div class="ex-cli-group">
+                <button id="ex-byok-avail-toggle" class="ex-cli-grouphead ex-collapse open" type="button" aria-expanded="true">
+                  <span class="ex-collapse-caret" aria-hidden="true">▸</span>
+                  Available to connect (<span id="ex-byok-avail-count">0</span>)
+                </button>
+                <div id="ex-byok-avail-list" class="ex-cli-list"></div>
+              </div>
+
+            </div>
+          </section>
+
+          <!-- Hotkey -->
+          <section class="settings-pane" data-cat="hotkey" hidden>
+            <div class="stp-row">
+              <div class="stp-rl">
+                <div class="stp-rt">Global hotkey</div>
+                <div class="stp-rd">Trigger a capture from anywhere</div>
+              </div>
+              <div class="stp-rr stp-hotkey" id="stp-hotkey">
+                <!-- populated by JS -->
+              </div>
+            </div>
+          </section>
+
+          <!-- Instructions / Rules — bound to config.globalRules, appended
+               additively to the system prompt for every analysis. -->
+          <section class="settings-pane" data-cat="prompt" hidden>
+            <div class="stp-row stp-prompt-row">
+              <div class="stp-rl">
+                <div class="stp-rt">Global rules</div>
+                <div class="stp-rd">Fixed instructions Screenchart applies to every capture. The required
+                  output format always wins if your rules conflict with it.</div>
+              </div>
+              <textarea id="stp-prompt" class="stp-textarea" rows="4"
+                placeholder="e.g. Focus on the bottom line. Flag any risks. Keep it under 3 sentences."></textarea>
+            </div>
+          </section>
+
+          <!-- Appearance -->
+          <section class="settings-pane" data-cat="appearance" hidden>
+            <div class="stp-row">
+              <div class="stp-rl">
+                <div class="stp-rt">Theme</div>
+                <div class="stp-rd">Follow the system, or force light/dark</div>
+              </div>
+              <div class="stp-rr">
+                <div class="stp-seg" id="stp-theme-seg">
+                  <button class="stp-seg-opt" data-theme="system">System</button>
+                  <button class="stp-seg-opt" data-theme="light">Light</button>
+                  <button class="stp-seg-opt" data-theme="dark">Dark</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Notifications -->
+          <section class="settings-pane" data-cat="notifications" hidden>
+            <div class="stp-row">
+              <div class="stp-rl">
+                <div class="stp-rt">Completion sound</div>
+                <div class="stp-rd">Play a short sound when an analysis finishes.</div>
+              </div>
+              <div class="stp-rr">
+                <button id="stp-notif-sound" class="stp-switch" type="button" role="switch"
+                  aria-checked="false" aria-label="Completion sound">
+                  <span class="stp-switch-thumb"></span>
+                </button>
+              </div>
+            </div>
+            <div class="stp-row">
+              <div class="stp-rl">
+                <div class="stp-rt">Desktop notification</div>
+                <div class="stp-rd">Sent when the window isn't focused.</div>
+              </div>
+              <div class="stp-rr">
+                <button id="stp-notif-desktop" class="stp-switch" type="button" role="switch"
+                  aria-checked="false" aria-label="Desktop notification">
+                  <span class="stp-switch-thumb"></span>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <!-- General -->
+          <section class="settings-pane" data-cat="general" hidden>
+            <div class="stp-row">
+              <div class="stp-rl">
+                <div class="stp-rt">Launch at login</div>
+                <div class="stp-rd">Start Screenchart when you sign in</div>
+              </div>
+              <div class="stp-rr">
+                <button id="stp-login-toggle" class="stp-switch stp-switch-on"
+                  type="button" role="switch" aria-checked="true" aria-label="Launch at login">
+                  <span class="stp-switch-thumb"></span>
+                </button>
+              </div>
+            </div>
+
+            <div class="stp-row">
+              <div class="stp-rl">
+                <div class="stp-rt">Screen recording permission</div>
+                <div class="stp-rd">Preview the permission prompt</div>
+              </div>
+              <div class="stp-rr">
+                <button id="stp-test-perm" class="btn btn-sm" type="button">Test permission screen</button>
+              </div>
+            </div>
+
+            <!-- Privacy: delete my data (destructive, confirmed before acting) -->
+            <div class="stp-row stp-danger-head">
+              <div class="stp-rl">
+                <div class="stp-rt">Delete my data</div>
+                <div class="stp-rd">Permanently remove local data on this device. This can't be undone, and
+                  it does NOT touch anything on the provider's servers.</div>
+              </div>
+            </div>
+            <div class="stp-danger-grid">
+              <button class="btn btn-sm btn-danger" type="button" data-delete="history">Delete capture history</button>
+              <button class="btn btn-sm btn-danger" type="button" data-delete="credentials">Delete saved API keys</button>
+              <button class="btn btn-sm btn-danger" type="button" data-delete="settings">Reset all settings</button>
+              <button class="btn btn-sm btn-danger" type="button" data-delete="everything">Delete everything</button>
+            </div>
+            <div id="stp-delete-result" class="stp-delete-result" hidden></div>
+          </section>
+
+          <!-- About -->
+          <section class="settings-pane" data-cat="about" hidden>
+            <div class="stp-row">
+              <div class="stp-rl">
+                <div class="stp-rt">Version</div>
+                <div class="stp-rd">Screenchart: local-first, model-agnostic</div>
+              </div>
+              <div class="stp-rr">
+                <span class="stp-version">Screenchart</span>
+              </div>
+            </div>
+
+            <div class="stp-row">
+              <div class="stp-rl">
+                <div class="stp-rt">Links</div>
+                <div class="stp-rd">Project page and full about</div>
+              </div>
+              <div class="stp-rr">
+                <button id="stp-github-link" class="btn btn-sm" type="button">GitHub</button>
+                <button id="stp-about" class="btn btn-sm" type="button">Website</button>
+              </div>
+            </div>
+          </section>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── About panel (full-window overlay) ──────────────────────────── -->
+  <div id="about-panel" class="sp-overlay" aria-modal="true" role="dialog">
+
+    <div class="sp-brand">
+      <span class="glyph" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <path d="M4 8.2V5.6A1.6 1.6 0 0 1 5.6 4H8.2M15.8 4h2.6A1.6 1.6 0 0 1 20 5.6V8.2M20 15.8v2.6a1.6 1.6 0 0 1-1.6 1.6H15.8M8.2 20H5.6A1.6 1.6 0 0 1 4 18.4V15.8"
+            stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          <rect x="7.6" y="13" width="2.3" height="4.2" rx="0.6" fill="var(--accent)"/>
+          <rect x="10.85" y="10.4" width="2.3" height="6.8" rx="0.6" fill="var(--accent)"/>
+          <rect x="14.1" y="7.6" width="2.3" height="9.6" rx="0.6" fill="var(--accent)"/>
+        </svg>
+      </span>
+      <span class="tb-title">Screenchart</span>
+      <span class="tb-doc">/ About</span>
+      <div class="tb-spacer"></div>
+      <button id="about-close" class="btn btn-sm btn-ghost sp-close-btn" type="button" aria-label="Back">
+        <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <path d="M19 12H5M12 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Back
+      </button>
+    </div>
+
+    <div class="sp-body about-body">
+
+      <div class="about-icon" aria-hidden="true">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+          <path d="M4 8.2V5.6A1.6 1.6 0 0 1 5.6 4H8.2M15.8 4h2.6A1.6 1.6 0 0 1 20 5.6V8.2M20 15.8v2.6a1.6 1.6 0 0 1-1.6 1.6H15.8M8.2 20H5.6A1.6 1.6 0 0 1 4 18.4V15.8"
+            stroke="white" stroke-width="1.6" stroke-linecap="round"/>
+          <rect x="7.6" y="13" width="2.3" height="4.2" rx="0.6" fill="white"/>
+          <rect x="10.85" y="10.4" width="2.3" height="6.8" rx="0.6" fill="white"/>
+          <rect x="14.1" y="7.6" width="2.3" height="9.6" rx="0.6" fill="white"/>
+        </svg>
+      </div>
+
+      <h1 class="about-name">Screenchart</h1>
+      <div class="about-version">Version 1.0.0</div>
+      <p class="about-desc">Screenshot any chart, table, or data and get instant AI analysis in plain English, powered by your own AI key.</p>
+
+      <div class="about-chips">
+        <button class="about-chip" id="about-link-website" type="button">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.7"/>
+            <path d="M12 2.5C12 2.5 8 7 8 12s4 9.5 4 9.5M12 2.5C12 2.5 16 7 16 12s-4 9.5-4 9.5M2.5 12h19"
+              stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+          Website
+        </button>
+        <button class="about-chip" id="about-link-privacy" type="button">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"
+              stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Privacy
+        </button>
+        <button class="about-chip" id="about-link-support" type="button">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+              stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Support
+        </button>
+      </div>
+
+      <div class="about-section-label">Troubleshooting</div>
+      <div class="about-trouble">
+        <div class="about-trouble-row">
+          <span class="about-trouble-icon" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.7"/>
+              <line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              <line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <div>
+            <div class="about-trouble-title">Capture comes back black</div>
+            <div class="about-trouble-detail">Grant Screen Recording permission in System Settings.</div>
+          </div>
+        </div>
+        <div class="about-trouble-row">
+          <span class="about-trouble-icon" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.7"/>
+              <line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              <line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <div>
+            <div class="about-trouble-title">"Key was rejected"</div>
+            <div class="about-trouble-detail">Re-paste your API key under Settings → Execution mode.</div>
+          </div>
+        </div>
+        <div class="about-trouble-row">
+          <span class="about-trouble-icon" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.7"/>
+              <line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              <line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <div>
+            <div class="about-trouble-title">A number looks wrong</div>
+            <div class="about-trouble-detail">Re-capture tighter around the table so text stays crisp.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="about-tagline">Made for people who live in dashboards and spreadsheets.</div>
+
+    </div>
+  </div>
+
+  <!-- ── Permission panel (full-window overlay) ──────────────────────── -->
+  <div id="permission-panel" class="sp-overlay" aria-modal="true" role="dialog">
+
+    <div class="sp-brand">
+      <span class="glyph" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <path d="M4 8.2V5.6A1.6 1.6 0 0 1 5.6 4H8.2M15.8 4h2.6A1.6 1.6 0 0 1 20 5.6V8.2M20 15.8v2.6a1.6 1.6 0 0 1-1.6 1.6H15.8M8.2 20H5.6A1.6 1.6 0 0 1 4 18.4V15.8"
+            stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          <rect x="7.6" y="13" width="2.3" height="4.2" rx="0.6" fill="var(--accent)"/>
+          <rect x="10.85" y="10.4" width="2.3" height="6.8" rx="0.6" fill="var(--accent)"/>
+          <rect x="14.1" y="7.6" width="2.3" height="9.6" rx="0.6" fill="var(--accent)"/>
+        </svg>
+      </span>
+      <span class="tb-title">Screenchart</span>
+      <span class="tb-doc">/ Permission</span>
+      <div class="tb-spacer"></div>
+      <button id="permission-close" class="btn btn-sm btn-ghost sp-close-btn" type="button" aria-label="Back">
+        <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <path d="M19 12H5M12 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Back
+      </button>
+    </div>
+
+    <div class="sp-body perm-body">
+
+      <div class="perm-icon" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" stroke-width="1.7"/>
+          <path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        </svg>
+      </div>
+
+      <h1 class="perm-h">Screenchart can't record the screen</h1>
+      <p class="perm-sub">macOS is blocking screen capture. If <strong>Screenchart is already listed</strong> in Screen Recording, that entry is from a previous version and no longer matches this build — <strong>remove it and let macOS ask again</strong>.</p>
+
+      <ol class="perm-steps" aria-label="Steps to grant permission">
+        <li class="perm-step">
+          <span class="perm-step-n" aria-hidden="true">1</span>
+          <span class="perm-step-t">Click <strong>Open System Settings</strong> below (jumps to <strong>Screen &amp; System Audio Recording</strong>).</span>
+        </li>
+        <li class="perm-step">
+          <span class="perm-step-n" aria-hidden="true">2</span>
+          <span class="perm-step-t">If <strong>Screenchart</strong> is in the list, select it and click the <strong>–</strong> (minus) button to remove the old entry.</span>
+        </li>
+        <li class="perm-step">
+          <span class="perm-step-n" aria-hidden="true">3</span>
+          <span class="perm-step-t">Quit Screenchart completely — <strong>⌘Q</strong>.</span>
+        </li>
+        <li class="perm-step">
+          <span class="perm-step-n" aria-hidden="true">4</span>
+          <span class="perm-step-t">Reopen Screenchart and press <strong>New capture</strong>. macOS will ask to record the screen — click <strong>Allow</strong>.</span>
+        </li>
+      </ol>
+
+      <div class="perm-actions">
+        <button id="perm-open-settings" class="btn btn-primary" type="button">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
+              stroke="currentColor" stroke-width="1.7"/>
+          </svg>
+          Open System Settings
+        </button>
+        <button id="perm-done" class="btn btn-soft" type="button">Done</button>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+  <!-- ── toast notification ──────────────────────────────────────────── -->
+  <div id="hub-toast" class="hub-toast" hidden></div>
+
+  <!-- ── image action menu (copy / save / download / view full size) ─── -->
+  <div id="img-action-menu" class="img-action-menu" hidden>
+    <button id="img-act-copy" class="img-act-btn" type="button">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"
+        stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2"/>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+      </svg>
+      Copy
+    </button>
+    <button id="img-act-download" class="img-act-btn" type="button">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"
+        stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+        <polyline points="17 21 17 13 7 13 7 21"/>
+        <polyline points="7 3 7 8 15 8"/>
+      </svg>
+      Download as…
+    </button>
+  </div>
+
+  <!-- ── execution mode menu (anchored under the chip button) ── -->
+  <div id="exec-menu" class="settings-menu exec-menu" role="menu" aria-label="Execution mode" hidden>
+
+    <!-- a. Mode -->
+    <div class="sm-section">
+      <div class="sm-label">Mode</div>
+      <div class="sm-seg" id="exec-mode-seg" role="group" aria-label="Execution mode">
+        <button class="menu-seg-opt" type="button" data-mode="local">Local CLI</button>
+        <button class="menu-seg-opt" type="button" data-mode="byok">Cloud</button>
+      </div>
+    </div>
+
+    <!-- b. Agent -->
+    <div class="sm-section">
+      <div class="sm-label">Agent</div>
+      <div class="exec-agent-list" id="exec-agent-list"></div>
+    </div>
+
+    <!-- c. Model (editable: pick a suggestion or type any model id) -->
+    <div class="sm-section">
+      <div class="sm-label exec-model-label">
+        <span>Model</span>
+        <button id="exec-model-refresh" class="exec-refresh" type="button"
+                title="Refresh model list" aria-label="Refresh model list">↻</button>
+      </div>
+      <!-- BYOK: free-text + suggestions. Local CLI list: a real select (below). -->
+      <input id="exec-model-sel" class="exec-model-sel model-picker" list="exec-model-dl"
+             autocomplete="off" spellcheck="false" aria-label="Model" />
+      <datalist id="exec-model-dl"></datalist>
+      <!-- Local CLI / BYOK model list: a custom dropdown (makeDropdown), mounted
+           here by hub.js. Replaces a native <select>, whose OS-rendered popup
+           can't be height-capped or scrolled for long model lists. -->
+      <div id="exec-model-hint" class="exec-model-hint" hidden></div>
+    </div>
+
+    <div class="sm-sep"></div>
+
+    <!-- d. Open execution settings -->
+    <button class="sm-row" id="exec-open-settings" type="button" role="menuitem">
+      <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" stroke="currentColor" stroke-width="1.7"/>
+      </svg>
+      <span>Open execution settings</span>
+    </button>
+  </div>
+
+  <!-- ── settings menu (anchored under the top-right gear) ── -->
+  <div id="settings-menu" class="settings-menu" role="menu" aria-label="Settings" hidden>
+
+    <!-- a. Theme -->
+    <div class="sm-section">
+      <div class="sm-label">Appearance</div>
+      <div class="sm-seg" id="menu-theme-seg" role="group" aria-label="Theme">
+        <button class="menu-seg-opt" type="button" data-theme="system">System</button>
+        <button class="menu-seg-opt" type="button" data-theme="light">Light</button>
+        <button class="menu-seg-opt" type="button" data-theme="dark">Dark</button>
+      </div>
+    </div>
+
+    <!-- b. Share -->
+    <div class="sm-section">
+      <div class="sm-label">Share Screenchart</div>
+      <div class="sm-share-grid">
+        <button class="sm-share" type="button" data-share="x">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2H21.5l-7.5 8.57L23 22h-6.8l-5.32-6.96L4.8 22H1.54l8.02-9.17L1 2h6.97l4.81 6.36L18.244 2Zm-1.19 18h1.88L7.03 4H5.02l12.034 16Z"/></svg>
+          X
+        </button>
+        <button class="sm-share" type="button" data-share="linkedin">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5ZM3 9h4v12H3V9Zm6 0h3.8v1.7h.05c.53-1 1.83-2.05 3.77-2.05 4.03 0 4.78 2.65 4.78 6.1V21h-4v-5.4c0-1.3 0-2.96-1.8-2.96-1.8 0-2.08 1.4-2.08 2.86V21H9V9Z"/></svg>
+          LinkedIn
+        </button>
+        <button class="sm-share" type="button" data-share="facebook">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M22 12a10 10 0 1 0-11.56 9.88v-6.99H7.9V12h2.54V9.8c0-2.5 1.49-3.89 3.77-3.89 1.09 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56V12h2.78l-.44 2.89h-2.34v6.99A10 10 0 0 0 22 12Z"/></svg>
+          Facebook
+        </button>
+        <button class="sm-share" type="button" data-share="reddit">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M22 12.06c0-1.2-.98-2.16-2.18-2.16-.58 0-1.1.22-1.49.59-1.46-.98-3.45-1.6-5.66-1.68l.97-4.32 3.02.68a1.56 1.56 0 1 0 .16-.93l-3.39-.76a.4.4 0 0 0-.48.3l-1.07 4.78c-2.24.07-4.26.69-5.74 1.68a2.15 2.15 0 0 0-1.49-.6A2.17 2.17 0 0 0 2 12.06c0 .85.49 1.58 1.2 1.94a3.9 3.9 0 0 0-.05.6c0 3.04 3.54 5.5 7.9 5.5s7.9-2.46 7.9-5.5c0-.2-.02-.4-.05-.59A2.17 2.17 0 0 0 22 12.06ZM7.5 13.6a1.56 1.56 0 1 1 3.12 0 1.56 1.56 0 0 1-3.12 0Zm8.74 3.7c-1.07 1.07-3.13 1.15-3.74 1.15-.6 0-2.66-.08-3.73-1.15a.4.4 0 0 1 .57-.57c.68.68 2.13.92 3.16.92 1.04 0 2.49-.24 3.17-.92a.4.4 0 1 1 .57.57Zm-.29-2.14a1.56 1.56 0 1 1 0-3.12 1.56 1.56 0 0 1 0 3.12Z"/></svg>
+          Reddit
+        </button>
+        <button class="sm-share" type="button" data-share="telegram">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.04 15.47 8.9 19.3c.4 0 .57-.17.78-.38l1.87-1.79 3.88 2.84c.71.39 1.22.18 1.41-.66l2.56-12.02c.25-1.16-.42-1.62-1.11-1.36L3.6 9.59c-1.13.44-1.11 1.07-.19 1.35l3.8 1.18 8.83-5.56c.41-.27.79-.12.48.18l-7.28 6.73Z"/></svg>
+          Telegram
+        </button>
+        <button class="sm-share" type="button" data-share="whatsapp">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.5 14.4c-.3-.15-1.77-.87-2.04-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.17-.17.2-.35.22-.65.07-.3-.15-1.26-.46-2.4-1.48-.89-.79-1.49-1.77-1.66-2.07-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.07-.15-.67-1.62-.92-2.22-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48 0 1.46 1.06 2.88 1.21 3.08.15.2 2.09 3.2 5.07 4.48.71.31 1.26.49 1.69.63.71.22 1.36.19 1.87.12.57-.09 1.77-.72 2.02-1.42.25-.7.25-1.3.17-1.42-.07-.12-.27-.2-.57-.35ZM12 2a10 10 0 0 0-8.5 15.3L2 22l4.8-1.5A10 10 0 1 0 12 2Z"/></svg>
+          WhatsApp
+        </button>
+      </div>
+    </div>
+
+    <div class="sm-sep"></div>
+
+    <!-- c. GitHub -->
+    <button class="sm-row" id="sm-github" type="button" role="menuitem">
+      <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2A10 10 0 0 0 8.84 21.5c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/></svg>
+      <span>GitHub</span>
+      <svg class="sm-row-ext" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+
+    <div class="sm-sep"></div>
+
+    <!-- d. Settings -->
+    <button class="sm-row" id="sm-settings" type="button" role="menuitem">
+      <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" stroke="currentColor" stroke-width="1.7"/>
+      </svg>
+      <span>Settings</span>
+    </button>
+  </div>
+
+  <!-- ── help menu (anchored above the bottom-left Help button) ── -->
+  <div id="help-menu" class="settings-menu" role="menu" aria-label="Help" hidden>
+
+    <!-- 1. Get help -->
+    <button class="sm-row" id="help-get" type="button" role="menuitem" data-help="help">
+      <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/>
+        <path d="M9.5 9.2a2.5 2.5 0 0 1 4.86.8c0 1.7-2.5 2.2-2.5 3.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        <circle cx="12" cy="17" r="0.9" fill="currentColor"/>
+      </svg>
+      <span>Get help</span>
+      <svg class="sm-row-ext" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+
+    <!-- 2. Request a feature -->
+    <button class="sm-row" id="help-feature" type="button" role="menuitem" data-help="feature">
+      <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 3a6 6 0 0 0-3.5 10.9c.5.4.8.9.8 1.5v.6h5.4v-.6c0-.6.3-1.1.8-1.5A6 6 0 0 0 12 3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M9.7 19h4.6M10.2 21h3.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+      </svg>
+      <span>Request a feature</span>
+      <svg class="sm-row-ext" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+
+    <!-- 3. What's new -->
+    <button class="sm-row" id="help-whatsnew" type="button" role="menuitem" data-help="whatsnew">
+      <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="m12 3 1.9 4.7L19 9.3l-4 3.3 1.3 5L12 15.2 7.7 17.6 9 12.6l-4-3.3 5.1-.6L12 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+      </svg>
+      <span>What's new</span>
+      <svg class="sm-row-ext" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+
+    <!-- 4. Website -->
+    <button class="sm-row" id="help-website" type="button" role="menuitem" data-help="website">
+      <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/>
+        <path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18" stroke="currentColor" stroke-width="1.5"/>
+      </svg>
+      <span>Website</span>
+      <svg class="sm-row-ext" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+
+    <div class="sm-sep"></div>
+
+    <!-- 5. GitHub -->
+    <button class="sm-row" id="help-github" type="button" role="menuitem" data-help="github">
+      <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2A10 10 0 0 0 8.84 21.5c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/></svg>
+      <span>GitHub</span>
+      <svg class="sm-row-ext" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+
+<script src="../../node_modules/chart.js/dist/chart.umd.js"></script>
+<script src="../../node_modules/chartjs-chart-treemap/dist/chartjs-chart-treemap.min.js"></script>
+<script src="../../node_modules/chartjs-chart-matrix/dist/chartjs-chart-matrix.min.js"></script>
+<script src="../../node_modules/chartjs-chart-sankey/dist/chartjs-chart-sankey.min.js"></script>
+<script src="../../node_modules/chartjs-chart-financial/dist/chartjs-chart-financial.min.js"></script>
+<script src="../../node_modules/@sgratzl/chartjs-chart-boxplot/build/index.umd.min.js"></script>
+<script src="../../node_modules/leaflet/dist/leaflet.js"></script>
+<!-- PDF report export: pdfmake + its bundled fonts (vfs_fonts auto-attaches to
+     window.pdfMake). Loaded the same node_modules way as chart.js, so it packs
+     into the asar identically. -->
+<script src="../../node_modules/pdfmake/build/pdfmake.min.js"></script>
+<script src="../../node_modules/pdfmake/build/vfs_fonts.js"></script>
+<!-- PowerPoint report export: pptxgenjs (UMD bundle exposes window.PptxGenJS,
+     JSZip included). Same node_modules load as chart.js → packs into the asar. -->
+<script src="../../node_modules/pptxgenjs/dist/pptxgen.bundle.js"></script>
+<!-- Word report export: docx IIFE bundle exposes window.docx (JSZip included).
+     Same node_modules load as the others → packs into the asar identically. -->
+<script src="../../node_modules/docx/dist/index.iife.js"></script>
+<script src="../../assets/geo/world-countries.js"></script>
+<script src="../../assets/geo/us-states.js"></script>
+<script src="geoMatch.js"></script>
+<script src="chartRender.js"></script>
+<script src="reportExport.js"></script>
+<script src="mapRender.js"></script>
+<script src="renderResult.js"></script>
+<script src="chartControls.js"></script>
+<script src="customDropdown.js"></script>
+<script src="execMenu.js"></script>
+<script src="settingsPanels.js"></script>
+<script src="projects.js"></script>
+<script src="workspace.js"></script>
+<script src="datasets.js"></script>
+<script src="captureDataset.js"></script>
+<script src="prepare.js"></script>
+<script src="connections.js"></script>
+<script src="visuals.js"></script>
+<script src="dashboards.js"></script>
+<script src="copilot.js"></script>
+<script src="hub.js"></script>
+</body>
+</html>

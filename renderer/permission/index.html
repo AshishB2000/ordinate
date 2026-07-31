@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self';"
+    />
+    <link rel="stylesheet" href="../theme.css" />
+    <link rel="stylesheet" href="permission.css" />
+    <title>Screen Recording Permission</title>
+  </head>
+  <body>
+    <!-- Slim titlebar -->
+    <header class="titlebar">
+      <span class="tb-mark" aria-hidden="true">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <path d="M4 8.2V5.6A1.6 1.6 0 0 1 5.6 4H8.2M15.8 4h2.6A1.6 1.6 0 0 1 20 5.6V8.2M20 15.8v2.6a1.6 1.6 0 0 1-1.6 1.6H15.8M8.2 20H5.6A1.6 1.6 0 0 1 4 18.4V15.8"
+            stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+          <rect x="7.6" y="13" width="2.3" height="4.2" rx="0.6" fill="white"/>
+          <rect x="10.85" y="10.4" width="2.3" height="6.8" rx="0.6" fill="white"/>
+          <rect x="14.1" y="7.6" width="2.3" height="9.6" rx="0.6" fill="white"/>
+        </svg>
+      </span>
+      <span class="tb-title">Permission</span>
+      <span class="spacer"></span>
+    </header>
+
+    <!-- Body -->
+    <div class="form-body">
+
+      <!-- Monitor icon in accent circle -->
+      <div class="perm-icon" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" stroke-width="1.7"/>
+          <path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        </svg>
+      </div>
+
+      <h1 class="perm-h">Screenchart can't see your screen</h1>
+      <p class="perm-sub">
+        Your last capture came back black. macOS needs your permission before
+        Screenchart can read what's on screen.
+      </p>
+
+      <!-- Numbered steps -->
+      <ol class="steps" aria-label="Steps to grant permission">
+        <li class="step">
+          <span class="step-n" aria-hidden="true">1</span>
+          <span class="step-t">Open <strong>System Settings → Privacy &amp; Security</strong>.</span>
+        </li>
+        <li class="step">
+          <span class="step-n" aria-hidden="true">2</span>
+          <span class="step-t">Select <strong>Screen &amp; System Audio Recording</strong>.</span>
+        </li>
+        <li class="step">
+          <span class="step-n" aria-hidden="true">3</span>
+          <span class="step-t">Turn on the switch next to <strong>Screenchart</strong>.</span>
+        </li>
+        <li class="step">
+          <span class="step-n" aria-hidden="true">4</span>
+          <span class="step-t">Quit and reopen Screenchart.</span>
+        </li>
+      </ol>
+
+      <!-- Actions -->
+      <div class="perm-actions">
+        <button id="open-settings-btn" class="btn btn-primary btn-block" type="button">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
+              stroke="currentColor" stroke-width="1.7"/>
+          </svg>
+          Open System Settings
+        </button>
+        <button id="done-btn" class="btn btn-soft" type="button">Done</button>
+      </div>
+
+    </div>
+
+    <script src="permission.js"></script>
+  </body>
+</html>

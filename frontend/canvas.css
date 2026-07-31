@@ -1,0 +1,90 @@
+/* ============================================================
+   Screenchart — deliverable canvas (the page that holds the
+   mockups). Neutral gray backdrop, section headers, framed
+   light/dark pairs. This is NOT app chrome.
+   ============================================================ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background:
+    radial-gradient(120% 120% at 0% 0%, #efeff1 0%, #e7e7ea 55%, #e3e3e6 100%) fixed;
+  color: #18181b;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- top bar of the deliverable ---- */
+.doc-head {
+  position: sticky; top: 0; z-index: 50;
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 40px;
+  background: rgba(244,244,246,0.82);
+  backdrop-filter: saturate(140%) blur(10px);
+  border-bottom: 1px solid #dcdce0;
+}
+.doc-mark {
+  width: 28px; height: 28px; border-radius: 8px; background: #2563EB;
+  display: grid; place-items: center; flex: 0 0 auto;
+}
+.doc-title { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+.doc-sub { font-size: 12.5px; color: #6b7280; }
+.doc-head .spacer { flex: 1; }
+.doc-legend { display:flex; align-items:center; gap: 16px; }
+.doc-legend .grp { display:flex; align-items:center; gap: 7px; font-size: 11.5px; color:#6b7280; font-weight: 500; }
+.doc-legend .sw { display:flex; gap: 3px; }
+.doc-legend .sw i { width: 13px; height: 13px; border-radius: 4px; display:inline-block; border: 1px solid rgba(0,0,0,.08); }
+
+.canvas { padding: 40px 40px 120px; width: max-content; min-width: 100%; }
+
+/* ---- token reference strip ---- */
+.tokens {
+  display: flex; gap: 28px; flex-wrap: wrap;
+  background: #fff; border: 1px solid #e2e2e6; border-radius: 14px;
+  padding: 18px 22px; margin-bottom: 44px; width: max-content; max-width: 1180px;
+  box-shadow: 0 1px 2px rgba(16,18,27,.04);
+}
+.tok-grp { display:flex; flex-direction: column; gap: 9px; }
+.tok-grp h4 { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color:#9aa0aa; }
+.tok-row { display:flex; gap: 8px; }
+.tok { display:flex; flex-direction:column; align-items:center; gap: 5px; }
+.tok .ch { width: 30px; height: 30px; border-radius: 8px; border: 1px solid rgba(0,0,0,.10); }
+.tok .nm { font-size: 9.5px; color:#9aa0aa; font-weight: 600; letter-spacing: .02em; }
+.tok-grp .note { font-size: 11px; color:#8b90a0; max-width: 190px; line-height: 1.5; }
+
+/* ---- sections ---- */
+.section { margin-bottom: 58px; width: max-content; }
+.sec-head { margin-bottom: 18px; max-width: 760px; }
+.sec-num {
+  display:inline-flex; align-items:center; justify-content:center;
+  height: 22px; padding: 0 9px; border-radius: 999px; margin-bottom: 10px;
+  background: #18181b; color:#fff; font-size: 11px; font-weight: 700; letter-spacing: .04em;
+}
+.sec-head h2 { margin: 0 0 6px; font-size: 22px; font-weight: 750; letter-spacing: -.02em; }
+.sec-head p { margin: 0; font-size: 13.5px; color: #5b606b; line-height: 1.55; }
+.sec-head .star {
+  display:inline-flex; align-items:center; gap:6px; margin-top: 9px;
+  padding: 4px 10px; border-radius: 7px; background: #fef0d9; color: #9a6500;
+  font-size: 11.5px; font-weight: 600;
+}
+
+/* a labelled variant (one state shown light + dark) */
+.variants { display: flex; flex-direction: column; gap: 30px; }
+.variant-row { display: flex; flex-wrap: wrap; gap: 30px; }
+.variant { display: flex; flex-direction: column; gap: 11px; }
+.var-label { display:flex; align-items:center; gap: 9px; }
+.var-label .nm { font-size: 13px; font-weight: 650; color:#2a2e38; }
+.var-label .desc { font-size: 12px; color:#8b90a0; }
+.pair { display: flex; gap: 22px; align-items: flex-start; }
+.frame { display:flex; flex-direction: column; gap: 9px; }
+.frame .tname {
+  display:flex; align-items:center; gap: 7px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color:#9aa0aa;
+}
+.frame .tname i { width: 11px; height: 11px; border-radius: 3px; border: 1px solid rgba(0,0,0,.12); display:inline-block; }
+.frame.dark .tname i { background:#18181b; border-color:#000; }
+.frame.light .tname i { background:#ffffff; }
+
+/* the placeholder canvas backdrop chips for tiny notes */
+.note-flag {
+  display:inline-flex; align-items:center; gap:6px; font-size: 11.5px; color:#8b90a0;
+}

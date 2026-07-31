@@ -1,0 +1,7 @@
+{
+  // Editor solution file: points tooling at the two real configs. The build is
+  // `npm run build:ts` (tsc -p each config). See tsconfig.base.json for the
+  // in-place sibling-emit migration scheme.
+  "files": [],
+  "references": [{ "path": "./tsconfig.main.json" }, { "path": "./tsconfig.renderer.json" }]
+}

@@ -1,0 +1,29 @@
+name: CI build check
+
+# Fast per-push sanity gate: install deps, type-check + compile the TypeScript
+# tree, run the node self-checks. Catches a broken commit immediately. The
+# heavy installer build lives in build.yml (tags only) — this stays light.
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+jobs:
+  check:
+    name: Install + parse + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm install
+      - name: Type-check + compile TypeScript
+        # The whole tree is .ts (in-place sibling emit) — tsc strict is the
+        # parse+type gate; there are no tracked runtime .js files left to check.
+        run: npm run build:ts
+      - name: Run self-checks
+        run: npm test

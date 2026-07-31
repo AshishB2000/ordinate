@@ -1,0 +1,116 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Screenchart — shared theme tokens
+   Light is the default on :root; [data-theme="dark"] overrides for dark.
+   Set document.documentElement.dataset.theme to switch.
+
+   The seven semantic tokens the app contract guarantees are:
+     --bg --surface --text --muted --border --accent --error
+   plus the chart palette --chart-1..--chart-5.
+   The remaining tokens (surface-2, text-strong, etc.) are supporting shades
+   derived to stay consistent with those, so components never hardcode colors.
+   Fonts use system stacks (no remote fetch — the app is local-first).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* chart palette — shared across themes (blue, teal, amber, violet, rose) */
+  /* Restrained, accent-led categorical palette (cool, harmonious — not a rainbow) */
+  --chart-1: #2563eb;  /* accent blue  */
+  --chart-2: #0e7490;  /* cyan-700     */
+  --chart-3: #14b8a6;  /* teal-500     */
+  --chart-4: #6366f1;  /* indigo-500   */
+  --chart-5: #64748b;  /* slate-500    */
+  --chart-accent: #2563eb;
+
+  /* type + shape */
+  --font-ui: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
+  --r-sm: 6px;
+  --r-md: 9px;
+  --r-lg: 13px;
+  --r-xl: 18px;
+  --r-full: 999px;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ── Light (default) ── */
+  --bg: #f7f7f8;
+  --surface: #ffffff;
+  --surface-2: #f3f4f6;
+  --surface-3: #eaecf0;
+  --inset: #f2f4f7;
+
+  --text: #18181b;
+  --text-strong: #0f1117;
+  --muted: #6b7280;
+  --text-dim: #8a909c;
+  --text-faint: #aeb4bf;
+
+  --border: #e5e7eb;
+  --border-2: #d6dae1;
+  --border-3: #bfc5cf;
+
+  --accent: #2563eb;
+  --accent-2: #1d4fd0;
+  --accent-soft: rgba(37, 99, 235, 0.08);
+  --accent-line: rgba(37, 99, 235, 0.22);
+  --accent-ink: #ffffff;
+
+  --error: #e11d48;
+  --error-soft: rgba(225, 29, 72, 0.09);
+  --ok: #059669;
+  --ok-soft: rgba(5, 150, 105, 0.1);
+  --warn: #c77d11;
+  --warn-soft: rgba(199, 125, 17, 0.12);
+
+  --titlebar: #fafbfc;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 10px 28px -12px rgba(15, 23, 42, 0.18);
+  --shadow-lg: 0 30px 70px -24px rgba(15, 23, 42, 0.28);
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --bg: #18181b;
+  --surface: #232327;
+  --surface-2: #2a2a30;
+  --surface-3: #313139;
+  --inset: #1d1d21;
+
+  --text: #ececee;
+  --text-strong: #ffffff;
+  --muted: #9ca3af;
+  --text-dim: #6b7280;
+  --text-faint: #52525b;
+
+  --border: #2e2e33;
+  --border-2: #3a3a42;
+  --border-3: #4a4a55;
+
+  --accent: #3b82f6;
+  --accent-2: #2f6fe0;
+  --accent-soft: rgba(59, 130, 246, 0.16);
+  --accent-line: rgba(59, 130, 246, 0.32);
+  --accent-ink: #ffffff;
+
+  /* Same hues lifted in lightness/saturation so they read on the dark surface */
+  --chart-1: #3b82f6;  /* accent blue */
+  --chart-2: #22d3ee;  /* cyan-400    */
+  --chart-3: #2dd4bf;  /* teal-400    */
+  --chart-4: #818cf8;  /* indigo-400  */
+  --chart-5: #94a3b8;  /* slate-400   */
+  --chart-accent: #3b82f6;
+
+  --error: #f87171;
+  --error-soft: rgba(248, 113, 113, 0.13);
+  --ok: #34d399;
+  --ok-soft: rgba(52, 211, 153, 0.13);
+  --warn: #f5b53d;
+  --warn-soft: rgba(245, 181, 61, 0.14);
+
+  --titlebar: #1d1d21;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px -8px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 28px 64px -20px rgba(0, 0, 0, 0.65);
+  color-scheme: dark;
+}

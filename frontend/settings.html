@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Screenchart — Settings</title>
+<link rel="stylesheet" href="app.css" />
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    min-height: 100vh; padding: 40px; display: grid; place-items: center;
+    background: radial-gradient(120% 120% at 0% 0%, #efeff1 0%, #e7e7ea 55%, #e3e3e6 100%) fixed;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  #app {
+    width: 720px; min-height: 700px;
+    max-width: 100%;
+  }
+  .theme-toggle {
+    position: fixed; right: 18px; bottom: 18px; z-index: 99;
+    height: 36px; padding: 0 14px; border-radius: 999px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px;
+    background: #18181b; color: #fff; border: none; font: 600 12.5px system-ui, sans-serif;
+    box-shadow: 0 8px 24px rgba(16,18,27,.22);
+  }
+</style>
+</head>
+<body>
+  <div class="window theme-dark" id="app"></div>
+  <button class="theme-toggle" onclick="toggleTheme()" title="Toggle light / dark"><span id="tt-label">Light</span></button>
+
+  <script src="data.js"></script>
+  <script src="screens.js"></script>
+  <script>
+    var app = document.getElementById('app');
+    app.innerHTML = settingsScreen();
+    function toggleTheme() {
+      var dark = app.classList.toggle('theme-dark');
+      app.classList.toggle('theme-light', !dark);
+      document.getElementById('tt-label').textContent = dark ? 'Light' : 'Dark';
+    }
+  </script>
+</body>
+</html>

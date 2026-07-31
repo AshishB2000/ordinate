@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Screenchart</title>
+<!-- Full-window app shell for the Electron hub. Same design as the
+     index.html mockup, rendered to fill the OS window. -->
+<link rel="stylesheet" href="app.css" />
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: #f7f7f8; }
+  #app.window {
+    width: 100vw; height: 100vh;
+    border: none; border-radius: 0; box-shadow: none;
+  }
+</style>
+</head>
+<body>
+  <div class="window theme-light" id="app"></div>
+
+  <script src="data.js"></script>
+  <script src="screens.js"></script>
+  <script>
+    var app = document.getElementById('app');
+    var view = 'empty';
+
+    // Swap the whole window between the hub (empty state) and settings.
+    function render(next) {
+      view = next;
+      app.innerHTML = next === 'settings' ? settingsScreen() : hubEmpty();
+    }
+    render('empty');
+
+    function capture() {
+      if (window.hub && window.hub.takeScreenshot) window.hub.takeScreenshot();
+    }
+
+    app.addEventListener('click', function (e) {
+      // Settings affordances: sidebar gear + the "Open Settings" link/button.
+      if (e.target.closest('.side-gear') ||
+          (view !== 'settings' && (e.target.closest('.lk') || e.target.closest('.btn-primary') && e.target.closest('.api-banner, .err-actions')))) {
+        render('settings');
+        return;
+      }
+      // Settings "Done" button → back to the hub.
+      if (view === 'settings' && e.target.closest('.form-foot .btn-primary')) {
+        render('empty');
+        return;
+      }
+      // Capture affordances (only on the hub view).
+      if (view !== 'settings' &&
+          (e.target.closest('.btn-primary') || e.target.closest('.side-top .btn'))) {
+        capture();
+      }
+    });
+  </script>
+</body>
+</html>

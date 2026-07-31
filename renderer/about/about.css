@@ -1,0 +1,176 @@
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+body { display: flex; flex-direction: column; }
+
+/* ── Titlebar ──────────────────────────────────────────────────────────── */
+.titlebar {
+  flex: 0 0 38px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 14px;
+  background: var(--titlebar);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.tb-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: var(--accent);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.tb-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.spacer { flex: 1; }
+
+/* ── Form body ─────────────────────────────────────────────────────────── */
+.form-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 28px 24px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+/* ── App icon ──────────────────────────────────────────────────────────── */
+.app-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 15px;
+  background: var(--accent);
+  display: grid;
+  place-items: center;
+  margin-bottom: 16px;
+  flex: 0 0 auto;
+}
+
+/* ── Headings & description ────────────────────────────────────────────── */
+.app-name {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 4px;
+}
+
+.app-version {
+  font-size: 12.5px;
+  color: var(--text-faint);
+  margin-bottom: 14px;
+}
+
+.app-desc {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.55;
+  max-width: 320px;
+  margin: 0 auto 20px;
+}
+
+/* ── Chip links ────────────────────────────────────────────────────────── */
+.chip-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 26px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chip:hover { background: var(--surface-2); color: var(--text); }
+
+/* ── Troubleshooting ───────────────────────────────────────────────────── */
+.section-label {
+  width: 100%;
+  max-width: 360px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
+}
+
+.trouble-list {
+  width: 100%;
+  max-width: 360px;
+  text-align: left;
+}
+
+.trouble-row {
+  display: flex;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.trouble-row:last-child { border-bottom: none; }
+
+.trouble-icon {
+  color: var(--text-faint);
+  flex: 0 0 auto;
+  margin-top: 1px;
+  display: flex;
+}
+
+.trouble-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.trouble-detail {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* ── Tagline ───────────────────────────────────────────────────────────── */
+.tagline {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  margin-top: 20px;
+  padding-top: 16px;
+}

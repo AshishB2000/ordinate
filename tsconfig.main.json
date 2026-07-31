@@ -1,0 +1,15 @@
+{
+  // Main-process world: main.ts (once converted), src/ modules, preload
+  // bridges, scripts/. NodeNext resolves + emits CommonJS here (package.json
+  // has no "type": "module"), Node types, no DOM. Electron's own electron.d.ts
+  // provides the 'electron' module types (no @types/electron). No outDir: each
+  // .ts emits its sibling .js in place.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "tsBuildInfoFile": "node_modules/.cache/tsc/main.tsbuildinfo"
+  },
+  "include": ["main.ts", "src/**/*.ts", "preload/**/*.ts", "scripts/**/*.ts"]
+}

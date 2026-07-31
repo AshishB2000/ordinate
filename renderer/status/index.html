@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self'; img-src data:;"
+    />
+    <link rel="stylesheet" href="../theme.css" />
+    <link rel="stylesheet" href="status.css" />
+    <title>Screenchart</title>
+  </head>
+  <body>
+    <main class="card">
+      <header class="brand">
+        <span class="glyph">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+            <path d="M4 8.2V5.6A1.6 1.6 0 0 1 5.6 4H8.2M15.8 4h2.6A1.6 1.6 0 0 1 20 5.6V8.2M20 15.8v2.6a1.6 1.6 0 0 1-1.6 1.6H15.8M8.2 20H5.6A1.6 1.6 0 0 1 4 18.4V15.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <rect x="7.6" y="13" width="2.3" height="4.2" rx="0.6" fill="var(--accent)"/>
+            <rect x="10.85" y="10.4" width="2.3" height="6.8" rx="0.6" fill="var(--accent)"/>
+            <rect x="14.1" y="7.6" width="2.3" height="9.6" rx="0.6" fill="var(--accent)"/>
+          </svg>
+        </span>
+        <span class="name">Screenchart</span>
+      </header>
+
+      <p class="lead">Press the shortcut from any app, then drag a box around a chart or table.</p>
+
+      <div class="shortcut">
+        <span class="eyebrow">Capture a region</span>
+        <p class="hotkey" id="hotkey">…</p>
+      </div>
+
+      <button id="open-hub" class="btn btn-primary" type="button">
+        <svg class="ico" width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="3" width="7" height="7" rx="1.6" stroke="currentColor" stroke-width="1.7"/>
+          <rect x="14" y="3" width="7" height="7" rx="1.6" stroke="currentColor" stroke-width="1.7"/>
+          <rect x="3" y="14" width="7" height="7" rx="1.6" stroke="currentColor" stroke-width="1.7"/>
+          <rect x="14" y="14" width="7" height="7" rx="1.6" stroke="currentColor" stroke-width="1.7"/>
+        </svg>
+        Open Screenchart
+      </button>
+
+      <p class="note" id="note"></p>
+    </main>
+    <script src="status.js"></script>
+  </body>
+</html>

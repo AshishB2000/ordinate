@@ -1,0 +1,100 @@
+# Claude Code — personal, machine-specific overrides (never commit)
+.claude/settings.local.json
+
+# OS junk
+.DS_Store
+
+# Node / Electron
+node_modules/
+
+# Build output
+dist/
+out/
+build/*
+# …but DO track the code-signing entitlements (a source file, not build output).
+!build/entitlements.mac.plist
+
+# Local config / secrets (never commit API keys)
+.env
+config.json
+
+# Claude Code agent worktrees (transient)
+.claude/worktrees/
+
+# TypeScript: ALL runtime .js is compiled output of a sibling .ts source
+# (in-place emit) — sources are the .ts files, never commit emitted .js.
+/main.js
+src/**/*.js
+preload/**/*.js
+renderer/**/*.js
+scripts/**/*.js
+# Week 2 workspace/projects data layer — emitted siblings (also covered by the
+# globs above; listed explicitly per the in-place-emit convention).
+/src/projects.js
+/src/ipc/projects.js
+/scripts/test-projects.js
+/renderer/hub/projects.js
+/renderer/hub/workspace.js
+# Week 3 file-based data sources — emitted siblings.
+/src/parse.js
+/src/parseXlsx.js
+/src/datasets.js
+/src/ipc/datasets.js
+/scripts/test-parse.js
+/scripts/test-datasets.js
+/renderer/hub/datasets.js
+# Week 4 connected data sources — emitted siblings.
+/src/connections.js
+/src/connectionRun.js
+/src/ipc/connections.js
+/scripts/test-connections.js
+/renderer/hub/connections.js
+# Week 5 dataset exploration — emitted siblings.
+/src/datasetStats.js
+/scripts/test-datasetStats.js
+# Week 6 data preparation — emitted siblings.
+/src/formula.js
+/src/transforms.js
+/scripts/test-formula.js
+/scripts/test-transforms.js
+/renderer/hub/prepare.js
+# Week 7 manual visualization — emitted siblings.
+/src/vizData.js
+/src/visuals.js
+/src/ipc/visuals.js
+/scripts/test-vizData.js
+/scripts/test-visuals.js
+/scripts/test-viz-filter.js
+/renderer/hub/visuals.js
+# Week 9 dashboards — emitted siblings.
+/src/dashboards.js
+/src/metricValue.js
+/src/ipc/dashboards.js
+/renderer/hub/dashboards.js
+/scripts/test-metricValue.js
+/scripts/test-dashboards.js
+# Week 10 dashboard filters — emitted siblings.
+/src/dashboardFilters.js
+/scripts/test-dashboardFilters.js
+# Week 10 dashboard export + share — emitted siblings.
+/src/dashboardExport.js
+/src/reportCapture.js
+/src/ipc/dashboardExport.js
+/scripts/test-dashboardExport.js
+# Week 11 persistent AI Copilot — emitted siblings.
+/src/copilot.js
+/src/ipc/copilot.js
+/scripts/test-copilot.js
+/renderer/hub/copilot.js
+
+# Week 12 embedded AI actions — emitted siblings.
+/src/anomalies.js
+/scripts/test-anomalies.js
+# Week 13 capture → reusable dataset — emitted siblings.
+/src/captureDataset.js
+/src/ipc/captureDataset.js
+/scripts/test-captureDataset.js
+/renderer/hub/captureDataset.js
+# Hardening self-check — emitted sibling (also covered by scripts/**/*.js).
+/scripts/test-history.js
+*.tsbuildinfo
