@@ -97,4 +97,16 @@ scripts/**/*.js
 /renderer/hub/captureDataset.js
 # Hardening self-check — emitted sibling (also covered by scripts/**/*.js).
 /scripts/test-history.js
+# Phase 1 DuckDB synchronous bridge — emitted siblings.
+/src/duckdb.js
+/src/duckdbWorker.js
+/scripts/test-duckdb.js
+# Phase 1 compute benchmark — emitted sibling.
+/scripts/bench-pipeline.js
 *.tsbuildinfo
+
+# Phase 1 DuckDB SQL generator — emitted siblings.
+/src/sqlGen.js
+/scripts/test-sqlGen.js
+/src/pipelineDuck.js
+/scripts/test-pipelineDuck.js
