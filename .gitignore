@@ -115,3 +115,8 @@ scripts/**/*.js
 /src/parquetStore.js
 /scripts/test-parquetStore.js
 /scripts/test-datasetsMigration.js
+
+# Phase 3 resident Parquet query — emitted siblings.
+/src/residentQuery.js
+/scripts/test-residentQuery.js
+/scripts/bench-resident.js

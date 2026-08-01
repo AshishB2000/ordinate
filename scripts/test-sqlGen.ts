@@ -136,7 +136,14 @@ function cteCount(sql: string): number {
   ok('group: outer ORDER BY __ord reproduces first-seen group order', s.includes('FROM s1 ORDER BY __ord'));
   ok('group: GROUP BY uses the physical key', s.includes('GROUP BY c0'));
   ok('group: sum wrapped in CAST(... AS DOUBLE) (no HUGEINT/BigInt)', s.includes('CAST(sum(CASE WHEN isfinite(TRY_CAST(c2 AS DOUBLE))'));
-  ok('group: avg wrapped in CAST(... AS DOUBLE)', s.includes('CAST(avg(CASE WHEN isfinite(TRY_CAST(c3 AS DOUBLE))'));
+  // DELIBERATE CHANGE (Phase 3): avg is emitted as sum/count, NOT bare avg().
+  // DuckDB's avg and the JS fold's sum-then-divide disagree in the last ULPs —
+  // measured on (0.1 … 0.7), avg(x) = 0.4 while JS and sum/count both give
+  // 0.39999999999999997. This assertion previously pinned bare avg(), and passed
+  // only because the fixture is integer-valued.
+  ok('group: avg emitted as sum/count, not bare avg (float parity with the JS fold)',
+    s.includes('CAST(sum(CASE WHEN isfinite(TRY_CAST(c3 AS DOUBLE))') &&
+    s.includes('/ nullif(count(') && !s.includes('CAST(avg('));
   ok('group: count uses the non-empty FILTER form, not count(col)', s.includes('CAST(count(*) FILTER (WHERE NOT (c1 IS NULL OR regexp_full_match'));
   ok('group: min over a TEXT column → CAST(NULL AS DOUBLE), never min(VARCHAR)', s.includes('CAST(NULL AS DOUBLE) AS c8') && !s.includes('min(c1)'));
   ok('group: no HAVING when there are group keys', !s.includes('HAVING'));

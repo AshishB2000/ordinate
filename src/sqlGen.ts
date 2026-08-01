@@ -305,6 +305,14 @@ export function generateSql(relation: string, columns: SqlColumn[], steps: Trans
             // so a text column aggregates to null. sum(VARCHAR) is a DuckDB binder
             // error (06 §1), so this both matches and avoids a hard failure.
             expr = 'CAST(NULL AS DOUBLE)';
+          } else if (fn === 'avg') {
+            // NOT bare avg(): DuckDB's avg and JS's sum-then-divide disagree in
+            // the last ULPs. Measured on (0.1 … 0.7): avg(x) = 0.4, while both
+            // JS and sum/count give 0.39999999999999997. The differential tests
+            // use integer fixtures, so bare avg() passed while being wrong on
+            // real decimal data. Emitting sum/count matches the JS fold's shape.
+            const n = sqlNum(cols[ci].physical);
+            expr = `CAST(sum(${n}) / nullif(count(${n}), 0) AS DOUBLE)`;
           } else {
             expr = `CAST(${fn}(${sqlNum(cols[ci].physical)}) AS DOUBLE)`;
           }
