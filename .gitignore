@@ -130,3 +130,7 @@ scripts/**/*.js
 
 # Phase 2.5 metric rewire (dashboard:metric off Parquet) — emitted sibling.
 /scripts/test-metricRewire.js
+
+# Resident dataset stats (dataset:stats / dataset:explain off Parquet) — emitted siblings.
+/src/statsResident.js
+/scripts/test-statsResident.js

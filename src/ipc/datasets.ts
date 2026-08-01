@@ -6,6 +6,12 @@ import { parseXlsx } from '../parseXlsx';
 import * as datasets from '../datasets';
 import * as transforms from '../transforms';
 import { computeColumnSummary, findQualityIssues, ColumnSummary, QualityIssue } from '../datasetStats';
+import {
+  computeColumnSummariesResident,
+  findQualityIssuesResident,
+  sampleRowsResident,
+  StatsSource,
+} from '../statsResident';
 import { explainText, suggestSteps, suggestCalcField } from '../analyze';
 import { compile } from '../formula';
 
@@ -109,6 +115,46 @@ async function parseFile(filePath: string, kind: SourceKind, sheetName?: string)
   return kind === 'json' ? parseJson(text) : parseCsv(text);
 }
 
+// ── Stats without hydrating the table ────────────────────────────────────────
+//
+// `dataset:stats` runs on EVERY Explore-tab open. It loaded the whole table into
+// `Cell[][]` and then folded it once PER COLUMN — N passes over a materialised
+// table on top of the hydration. `src/statsResident.ts` answers the same two
+// questions in one query each, straight off the stored `.parquet`, reading no
+// rows into JS. Measured THROUGH THIS HANDLER on a 6-column fixture:
+//
+//     rows          hydrate + N-pass fold        resident
+//     100                  1.9 ms                 6.0 ms    0.3x
+//     1,000                3.7 ms                 6.3 ms    0.6x
+//     10,000              23.0 ms                 8.6 ms    2.7x
+//     100,000            195.2 ms                27.8 ms    7.0x
+//     1,000,000        2,226.7 ms                73.1 ms     30x
+//
+// There IS a crossover here, unlike the metric rewire: two bridge round trips
+// cost a flat ~5 ms, so a table under ~5,000 rows is a few ms SLOWER. It is
+// deliberately not gated on a row count — the regression is 4 ms on a one-shot
+// panel open (a quarter of a frame), and the alternative is an extra metadata
+// read plus a second code path to keep tested. If that trade ever stops being
+// right, the gate is `getDatasetMeta(...).rowCount` here, not inside the module.
+//
+// A resident `null` ALWAYS means "fall back" and never "no data" — an all-empty
+// column has a perfectly good summary — so `datasetStats` stays the reference
+// implementation and any failure, missing Parquet or v2 record lands there
+// unchanged. `scripts/test-statsResident.ts` asserts the two agree cell for
+// cell, and spies on `datasets.getDataset` to prove the table was never read.
+async function residentStats(
+  projectId: string,
+  datasetId: string,
+): Promise<{ src: StatsSource; summaries: ColumnSummary[]; issues: QualityIssue[] } | null> {
+  const src = await datasets.residentSource(projectId, datasetId);
+  if (!src) return null;
+  const summaries = computeColumnSummariesResident(src);
+  if (!summaries) return null;
+  const issues = findQualityIssuesResident(src);
+  if (!issues) return null;
+  return { src, summaries, issues };
+}
+
 export function register() {
   // Open the native file picker (or, when given { filePath } from a prior pick,
   // skip the dialog and re-parse that file with a chosen sheetName). Returns the
@@ -202,6 +248,10 @@ export function register() {
   // stored rows, and runs the PURE datasetStats helpers.
   ipcMain.handle('dataset:stats', async (_e, { projectId, datasetId }: any = {}) => {
     try {
+      // Fast path: both answers straight off the .parquet, no rows hydrated.
+      const fast = await residentStats(projectId, datasetId);
+      if (fast) return { ok: true, summaries: fast.summaries, issues: fast.issues };
+
       const ds = await datasets.getDataset(projectId, datasetId);
       if (!ds) return { ok: false, error: 'Dataset not found' };
       const summaries = ds.columns.map((col, c) =>
@@ -235,13 +285,35 @@ export function register() {
   ipcMain.handle('dataset:explain', async (_e, { payload }: any = {}) => {
     try {
       const { projectId, datasetId } = payload || {};
-      const ds = await datasets.getDataset(projectId, datasetId);
-      if (!ds) return { ok: false, error: 'Dataset not found' };
-      const summaries = ds.columns.map((col, c) =>
-        computeColumnSummary(col, ds.rows.map((row) => (row ? row[c] ?? null : null))),
-      );
-      const issues = findQualityIssues(ds.columns, ds.rows);
-      const summaryText = buildDatasetSummaryText(ds, summaries, issues);
+
+      // Fast path: the same FACTS block, built from resident stats plus a
+      // LIMIT-ed sample read, so a 1M-row dataset is not materialised to quote
+      // five rows of it. Every piece must succeed or the whole thing falls back
+      // — a half-resident prompt is not worth the branch.
+      let summaryText: string | null = null;
+      const fast = await residentStats(projectId, datasetId);
+      if (fast) {
+        const meta = await datasets.getDatasetMeta(projectId, datasetId);
+        const sample = sampleRowsResident(fast.src, EXPLAIN_SAMPLE_ROWS);
+        if (meta && sample) {
+          summaryText = buildDatasetSummaryText(
+            { ...meta, rows: sample } as datasets.Dataset,
+            fast.summaries,
+            fast.issues,
+          );
+        }
+      }
+
+      if (summaryText === null) {
+        const ds = await datasets.getDataset(projectId, datasetId);
+        if (!ds) return { ok: false, error: 'Dataset not found' };
+        const summaries = ds.columns.map((col, c) =>
+          computeColumnSummary(col, ds.rows.map((row) => (row ? row[c] ?? null : null))),
+        );
+        const issues = findQualityIssues(ds.columns, ds.rows);
+        summaryText = buildDatasetSummaryText(ds, summaries, issues);
+      }
+
       const res = await explainText(summaryText);
       if (res.ok) return { ok: true, text: res.text };
       if (res.errorType === 'not_ready') return { ok: false, notReady: true };
