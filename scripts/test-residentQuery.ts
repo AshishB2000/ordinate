@@ -499,12 +499,27 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
   ok('60k: label order === first-seen order, identical on all 5 runs', allSame);
   ok('60k: first label is the first row\'s group, not the lexically-first', want.labels[0] === `g${G - 1}`);
 
-  // A bare GROUP BY really does disagree — proof the ordinal is load-bearing
-  // rather than ceremonial.
+  // Whether a BARE GROUP BY reorders is INFORMATIONAL, never an assertion.
+  //
+  // This was previously asserted as `bare[0] !== want.labels[0]` — "a bare GROUP
+  // BY does NOT preserve first-seen order" — and it failed on a CI runner while
+  // passing locally. That test was wrong by construction: SQL does not guarantee
+  // that GROUP BY reorders, only that it does not guarantee order. A quieter
+  // machine, a different core count, or a smaller morsel can return groups in
+  // arrival order by luck, and the assertion then fails while nothing is broken.
+  //
+  // The property worth pinning is the POSITIVE one, and it is already asserted
+  // above: our ordinal-based query reproduces first-seen order, identically on
+  // five consecutive runs. That holds whether or not the bare form happens to
+  // agree on a given machine.
   const bare = duck.query(
     `SELECT c0 FROM ${pq.relationSql(f.src.parquetPath)} GROUP BY c0 LIMIT ${G};`,
   ).map((r) => String(r.c0));
-  ok('60k: a bare GROUP BY does NOT preserve first-seen order', bare[0] !== String(want.labels[0]));
+  console.log(
+    `     (informational: a bare GROUP BY returned ${
+      bare[0] === String(want.labels[0]) ? 'first-seen order on this machine — luck, not a guarantee' : 'a DIFFERENT order, as usual'
+    })`,
+  );
 
   diffMetric('60k table', f, 'v');
   diffAggregate('60k leading-zero categories', f, 'code', [{ column: 'v', aggregation: 'count' }]);
