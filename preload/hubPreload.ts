@@ -186,6 +186,18 @@ contextBridge.exposeInMainWorld('hub', {
   // Per-column summaries + quality issues for an opened dataset (computed once in main).
   datasetStats: (projectId: string, datasetId: string) =>
     ipcRenderer.invoke('dataset:stats', { projectId, datasetId }),
+  // Open a dataset WITHOUT its rows — metadata only. The grid fetches the window
+  // it draws through datasetPage, so nothing needs the full table clone.
+  getDatasetMeta: (projectId: string, id: string) =>
+    ipcRenderer.invoke('dataset:meta', { projectId, id }),
+  // One window of rows for the Explore grid, paged/searched/sorted in main against
+  // the stored .parquet. The grid used to hold the WHOLE table in renderer memory
+  // and re-copy it on every keystroke, which is what capped datasets at 50k rows.
+  datasetPage: (
+    projectId: string,
+    datasetId: string,
+    req: { offset: number; limit: number; search?: string; sortColumn?: string; sortDir?: 'asc' | 'desc' },
+  ) => ipcRenderer.invoke('dataset:page', { projectId, datasetId, ...req }),
   // Rename columns / correct types; main re-coerces cells on a type change. Returns
   // { ok, dataset } | { ok:false, error }.
   updateDataset: (projectId: string, datasetId: string, columns: any[]) =>

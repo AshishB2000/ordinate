@@ -12,6 +12,7 @@ import {
   sampleRowsResident,
   StatsSource,
 } from '../statsResident';
+import { readPage, pageRowsJs, PageRequest } from '../datasetPage';
 import { explainText, suggestSteps, suggestCalcField } from '../analyze';
 import { compile } from '../formula';
 
@@ -26,13 +27,18 @@ import { compile } from '../formula';
 // hand-built rows. The 500-row preview slice is display-only and lives in the
 // renderer, so pickAndParse/parsePaste return the FULL capped ParseResult — one
 // parse, one transfer.
-const MAX_ROWS = 50_000;
+// Mirrors parse.ts's MAX_ROWS, raised with it (2026-08). Note line 489 also
+// uses this to bound a JOIN's OUTPUT during the build — a join is inherently
+// m×n, so this is the guard that stops two large inputs producing an
+// unbounded product. It is deliberately the same number: a join result is a
+// dataset like any other and must obey the same ceiling.
+const MAX_ROWS = 1_000_000;
 
 // Byte ceiling enforced BEFORE any file is read into memory — the real anti-OOM
 // guard (parse.ts's MAX_ROWS only trims the output after the whole file is
 // already tokenized). A file over this is rejected with a clear error rather
 // than freezing/crashing the main process.
-const MAX_FILE_BYTES = 100 * 1024 * 1024; // 100 MB
+const MAX_FILE_BYTES = 512 * 1024 * 1024; // 512 MB (raised with MAX_ROWS)
 
 // Paths main handed out from the native open dialog. The re-parse (sheet-switch)
 // branch of dataset:pickAndParse accepts a renderer-supplied filePath ONLY if it
@@ -238,6 +244,16 @@ export function register() {
 
   ipcMain.handle('dataset:get', async (_e, { projectId, id }: any = {}) => datasets.getDataset(projectId, id));
 
+  // Rows-free open. `dataset:get` structured-clones the ENTIRE table to the
+  // renderer — 4,083 ms at 1M rows — and that one-time clone is what still
+  // capped datasets after the Explore grid moved to paging. The grid now asks
+  // for the window it draws via `dataset:page`, so opening a dataset needs only
+  // its metadata. No fallback buffer is needed in the renderer either: for a v2
+  // (rows-inline) record `dataset:page` already falls back to hydrate-and-page
+  // in main, where the memory is bounded by the page size.
+  ipcMain.handle('dataset:meta', async (_e, { projectId, id }: any = {}) =>
+    datasets.getDatasetMeta(projectId, id));
+
   ipcMain.handle('dataset:delete', async (_e, { projectId, id }: any = {}) => ({
     ok: await datasets.deleteDataset(projectId, id),
   }));
@@ -261,6 +277,39 @@ export function register() {
       return { ok: true, summaries, issues };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute dataset stats' };
+    }
+  });
+
+  // ── One WINDOW of a dataset's rows, for the Explore grid ──────────────────
+  //
+  // The grid used to receive the WHOLE table (`dataset:get` → `expRows = ds.rows`)
+  // and then re-copy it in the renderer on every keystroke and header click. That
+  // is the last consumer that materialises everything, and it is what forced the
+  // 50,000-row import cap. This handler answers "the 100 rows you are about to
+  // draw, and how many there are in total" — search, sort and slice all run in
+  // DuckDB against the stored .parquet, and only the window crosses the bridge.
+  //
+  // `readPage` returning null ALWAYS means "fall back", never "no rows", so a v2
+  // (rows-inline) record, a missing .parquet or an unavailable bridge lands on
+  // `pageRowsJs` — the SAME reference implementation `readPage` is asserted
+  // against, applied to the hydrated table. One definition of what the grid
+  // shows, two ways of getting there.
+  ipcMain.handle('dataset:page', async (_e, { projectId, datasetId, offset, limit, search, sortColumn, sortDir }: any = {}) => {
+    try {
+      const req: PageRequest = { offset, limit, search, sortColumn, sortDir };
+
+      const src = await datasets.residentSource(projectId, datasetId);
+      if (src) {
+        const fast = readPage(src, req);
+        if (fast) return { ok: true, rows: fast.rows, total: fast.total, offset: fast.offset };
+      }
+
+      const ds = await datasets.getDataset(projectId, datasetId);
+      if (!ds) return { ok: false, error: 'Dataset not found' };
+      const page = pageRowsJs(ds.columns, ds.rows, req);
+      return { ok: true, rows: page.rows, total: page.total, offset: page.offset };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Failed to read the dataset page' };
     }
   });
 

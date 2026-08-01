@@ -18,7 +18,7 @@ import { finalizeTable, ParseResult } from './parse';
 
 // Mirror of parse.ts's MAX_ROWS (not exported there). Only used to bound our own
 // row materialization; finalizeTable re-applies the authoritative cap + warning.
-const MAX_ROWS = 50_000;
+const MAX_ROWS = 1_000_000; // mirror of parse.ts
 
 // Convert a single exceljs cell to a lossless display string. cell.text renders
 // numbers, dates (per the sheet's format), and formula results as the user sees

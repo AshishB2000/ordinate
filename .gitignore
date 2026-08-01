@@ -135,3 +135,7 @@ scripts/**/*.js
 /src/statsResident.js
 /scripts/test-statsResident.js
 /scripts/smoke-app.js
+
+# Server-side paged read for the Explore grid — emitted siblings.
+/src/datasetPage.js
+/scripts/test-datasetPage.js

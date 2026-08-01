@@ -19,7 +19,7 @@
 import { Client } from 'pg';
 import { finalizeTable, parseJson, ParseResult } from './parse';
 
-const ROW_LIMIT = 50_000; // reuse the file path's MAX_ROWS cap
+const ROW_LIMIT = 1_000_000; // reuse the file path's MAX_ROWS cap
 const MAX_BYTES = 100 * 1024 * 1024; // reuse the 100MB byte ceiling for the URL source
 const CONNECT_TIMEOUT_MS = 10_000;
 const QUERY_TIMEOUT_MS = 30_000;
