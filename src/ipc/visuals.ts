@@ -8,7 +8,9 @@ import type { ResidentMeasure } from '../residentQuery';
 import { sanitizeEncoding, sanitizeChartType } from '../visuals';
 import type { VizEncoding } from '../visuals';
 import type { FilterStep } from '../transforms';
+import { computeColumnSummariesResident } from '../statsResident';
 import { computeColumnSummary } from '../datasetStats';
+import type { ColumnSummary } from '../datasetStats';
 import { suggestChart } from '../analyze';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus
@@ -26,12 +28,20 @@ import { suggestChart } from '../analyze';
 // Compact, plain-text column summary for the OPTIONAL AI chart suggestion. Every
 // stat is app-computed (datasetStats) and embedded as a FACT — the model proposes
 // chart STRUCTURE referencing these column names and never a data value/number.
-function buildColumnSummaryText(ds: datasets.Dataset): string {
+// Takes metadata + ALREADY-COMPUTED summaries: it never needed the table, only
+// one summary per column. The caller decides where those come from — Parquet-side
+// (statsResident) or a hydrated fold — so a 1M-row dataset is no longer
+// materialised to write a dozen lines of prompt.
+function buildColumnSummaryText(
+  ds: { name: string; rowCount: number; columns: datasets.Dataset['columns'] },
+  summaries: ColumnSummary[],
+): string {
   const lines: string[] = [];
   lines.push(`Dataset: "${ds.name}" (${ds.rowCount} rows, ${ds.columns.length} columns).`);
   lines.push('Columns:');
   ds.columns.forEach((col, c) => {
-    const s = computeColumnSummary(col, ds.rows.map((row) => (row ? row[c] ?? null : null)));
+    const s = summaries[c];
+    if (!s) return;
     if (s.type === 'number') {
       lines.push(`- ${s.name} (number): ${s.count ?? 0} numeric values, ${s.nonEmpty} non-empty`);
     } else {
@@ -208,9 +218,25 @@ export function register() {
   // No model configured → { ok:false, notReady:true } for a gentle hint.
   ipcMain.handle('visual:suggest', async (_e, { projectId, datasetId }: any = {}) => {
     try {
-      const ds = await datasets.getDataset(projectId, datasetId);
-      if (!ds) return { ok: false, error: 'Dataset not found' };
-      const res = await suggestChart(buildColumnSummaryText(ds));
+      // Fast path: metadata + Parquet-side summaries, no table hydrated. This
+      // prompt is a dozen lines of column stats — it never justified loading a
+      // million rows. Falls back whole, never half.
+      let summaryText: string | null = null;
+      const meta = await datasets.getDatasetMeta(projectId, datasetId);
+      const src = await datasets.residentSource(projectId, datasetId);
+      if (meta && src) {
+        const summaries = computeColumnSummariesResident(src);
+        if (summaries) summaryText = buildColumnSummaryText(meta, summaries);
+      }
+      if (summaryText === null) {
+        const ds = await datasets.getDataset(projectId, datasetId);
+        if (!ds) return { ok: false, error: 'Dataset not found' };
+        const summaries = ds.columns.map((col, c) =>
+          computeColumnSummary(col, ds.rows.map((row) => (row ? row[c] ?? null : null))),
+        );
+        summaryText = buildColumnSummaryText(ds, summaries);
+      }
+      const res = await suggestChart(summaryText);
       if (res.ok) {
         return { ok: true, encoding: sanitizeEncoding(res.encoding), chartType: sanitizeChartType(res.chartType) };
       }
