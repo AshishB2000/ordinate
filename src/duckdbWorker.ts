@@ -1,9 +1,22 @@
-// DuckDB worker thread — the async half of the synchronous bridge in src/duckdb.ts.
-// Runs in a worker_threads Worker; owns the only DuckDB connection. Never
-// imports Electron and never touches the filesystem beyond the database path it
-// is handed.
+// DuckDB worker thread — serves BOTH bridges in src/duckdb.ts from one
+// connection. Runs in a worker_threads Worker; owns the only DuckDB connection.
+// Never imports Electron and never touches the filesystem beyond the database
+// path it is handed.
 //
-// Protocol (mirror of src/duckdb.ts):
+// TWO REPLY CHANNELS, chosen per message by whether it carries an `id`:
+//
+//   no `id`  → SYNCHRONOUS caller, parked in `Atomics.wait`. Reply by writing
+//              the payload into the shared buffer and moving the control block.
+//              `postMessage` is useless to it: the caller never reaches its
+//              event loop, so a posted reply would sit in the port forever.
+//   has `id` → ASYNCHRONOUS caller, waiting on a `message` event. Reply by
+//              `postMessage({ id, … })` and DO NOT TOUCH THE CONTROL BLOCK OR
+//              THE PAYLOAD BUFFER. That separation is what makes the two paths
+//              safe to interleave: there is exactly one control block, so if an
+//              async completion could write it, an async reply landing while a
+//              sync caller is parked would forge that caller's signal.
+//
+// Control protocol (mirror of src/duckdb.ts), sync path only:
 //   control: Int32Array(4) over a SharedArrayBuffer
 //     [0] signal  0 = pending, 1 = ok, 2 = error, 3 = overflow
 //     [1] payload byte length
@@ -11,10 +24,12 @@
 //     [3] worker-side elapsed microseconds (diagnostic)
 //   payload: growable SharedArrayBuffer holding the UTF-8 JSON result
 //
-// The main thread is blocked in `Atomics.wait` while we work, so EVERY exit path
-// from `handle()` must end in exactly one `finish()` — a missed signal hangs the
-// app until the caller's timeout fires. Messages are serialized through a
-// promise queue: the single control block cannot serve two calls at once.
+// The main thread is blocked in `Atomics.wait` while we serve a sync call, so
+// EVERY exit path from `handleSync()` must end in exactly one `finish()` — a
+// missed signal hangs the app until the caller's timeout fires. Messages are
+// serialized through a promise queue (the single control block cannot serve two
+// sync calls at once) and the queue is chained off the init handshake, so a
+// message can never reach `handle()` before the connection exists.
 
 import { parentPort, workerData } from 'worker_threads';
 import type { DuckDBConnection, DuckDBResultReader } from '@duckdb/node-api';
@@ -25,13 +40,23 @@ interface WorkerInit {
   control: SharedArrayBuffer;
   payload: SharedArrayBuffer;
   dbPath: string;
+  /** Result ceiling. The async path has no shared buffer, so it needs this told. */
+  maxBytes: number;
 }
 
 interface CallMessage {
   kind: 'query' | 'exec';
   sql: string;
   params: Scalar[];
+  /** Present ⇒ reply by postMessage, never through the shared buffer. */
+  id?: number;
 }
+
+/** Async reply. Mirrors `WorkerReply` in src/duckdb.ts — change both together. */
+type AsyncReply =
+  | { id: number; ok: true; text: string; micros: number }
+  | { id: number; ok: false; code: 'query'; message: string; micros: number }
+  | { id: number; ok: false; code: 'overflow'; need: number; micros: number };
 
 // ES2024 growable SharedArrayBuffer — not in this project's ES2022 lib, so its
 // shape is declared locally (see the same declaration in src/duckdb.ts).
@@ -60,6 +85,16 @@ function finish(signal: number, bytes: number): void {
   Atomics.store(ctl, LEN, bytes);
   Atomics.store(ctl, SIG, signal);
   Atomics.notify(ctl, SIG);
+}
+
+/**
+ * Async reply. `postMessage` is non-blocking on this side even when the main
+ * thread is parked in `Atomics.wait` — the message lands in the port's queue and
+ * is delivered whenever the main thread next reaches its event loop, which the
+ * sync signal above is what eventually lets it do.
+ */
+function reply(msg: AsyncReply): void {
+  if (parentPort) parentPort.postMessage(msg);
 }
 
 /**
@@ -137,7 +172,14 @@ function converterFor(typeId: number): Converter {
   return toJson; // INTERVAL, LIST, STRUCT, MAP, UNION, ARRAY, GEOMETRY, VARIANT, unknown
 }
 
-function encodeRows(reader: DuckDBResultReader): Buffer {
+/**
+ * Shape a result into the wire JSON. Both transports carry these exact bytes —
+ * the sync path memcpys them into the shared buffer, the async path posts the
+ * string — so a result cannot differ between the two paths by construction.
+ * (Why a string and not a transferred ArrayBuffer on the async path: measured,
+ * see the transport note in src/duckdb.ts.)
+ */
+function encodeText(reader: DuckDBResultReader): string {
   const columns = reader.deduplicatedColumnNames();
   const converters = reader.columnTypes().map((t) => converterFor(t.typeId));
   // getRowsJson(): row-major, already JSON-safe, BIGINT/HUGEINT as exact strings.
@@ -149,12 +191,17 @@ function encodeRows(reader: DuckDBResultReader): Buffer {
     for (let c = 0; c < columns.length; c++) out[c] = converters[c](src[c]);
     rows[r] = out;
   }
-  return Buffer.from(JSON.stringify({ columns, rows }), 'utf8');
+  return JSON.stringify({ columns, rows });
 }
 
 // ── Message loop ─────────────────────────────────────────────────────────────
 
-async function handle(msg: CallMessage): Promise<void> {
+function handle(msg: CallMessage): Promise<void> {
+  return msg.id === undefined ? handleSync(msg) : handleAsync(msg, msg.id);
+}
+
+/** Reply through the control block. The caller is parked in `Atomics.wait`. */
+async function handleSync(msg: CallMessage): Promise<void> {
   const t0 = process.hrtime.bigint();
   try {
     if (!connection) throw new Error('DuckDB connection is not open');
@@ -167,7 +214,7 @@ async function handle(msg: CallMessage): Promise<void> {
     }
     // Values are BOUND here — never concatenated into the SQL text.
     const reader = await connection.runAndReadAll(msg.sql, msg.params as (string | number | null)[]);
-    const bytes = encodeRows(reader);
+    const bytes = Buffer.from(encodeText(reader), 'utf8');
     Atomics.store(ctl, MICROS, elapsedMicros(t0));
     if (writePayload(bytes)) finish(OK, bytes.length);
   } catch (err) {
@@ -176,21 +223,43 @@ async function handle(msg: CallMessage): Promise<void> {
   }
 }
 
+/**
+ * Reply by `postMessage`. Touches NEITHER the control block nor the payload
+ * buffer — see the header. The result ceiling is still applied (and reported as
+ * the same `overflow` code) so the two paths agree on what "too big" means even
+ * though only one of them has a buffer to overflow; `Buffer.byteLength` costs
+ * ~1.3 ms on an 11 MB payload (~9 GB/s), i.e. nothing next to the query.
+ */
+async function handleAsync(msg: CallMessage, id: number): Promise<void> {
+  const t0 = process.hrtime.bigint();
+  try {
+    if (!connection) throw new Error('DuckDB connection is not open');
+    if (msg.kind === 'exec') {
+      await connection.run(msg.sql);
+      reply({ id, ok: true, text: '', micros: elapsedMicros(t0) });
+      return;
+    }
+    const reader = await connection.runAndReadAll(msg.sql, msg.params as (string | number | null)[]);
+    const text = encodeText(reader);
+    const need = Buffer.byteLength(text, 'utf8');
+    const micros = elapsedMicros(t0);
+    if (need > init.maxBytes) reply({ id, ok: false, code: 'overflow', need, micros });
+    else reply({ id, ok: true, text, micros });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    reply({ id, ok: false, code: 'query', message, micros: elapsedMicros(t0) });
+  }
+}
+
 function elapsedMicros(t0: bigint): number {
   return Number((process.hrtime.bigint() - t0) / 1000n);
 }
 
-// Serialize calls: concurrent postMessages would race on the single control block.
-let queue: Promise<void> = Promise.resolve();
-if (parentPort) {
-  parentPort.on('message', (msg: CallMessage) => {
-    queue = queue.then(() => handle(msg));
-  });
-}
-
 // Ready handshake. A failure here (native module missing, unreadable database)
-// must still SIGNAL, otherwise the blocked main thread waits for its timeout.
-(async () => {
+// must still SIGNAL — a blocked main thread would otherwise wait for its
+// timeout — and must ALSO post, because an async first-caller is watching the
+// message channel rather than the control block.
+const ready = (async () => {
   // Required lazily so that a load failure lands in this catch rather than
   // killing the worker before any handler exists.
   const { DuckDBInstance } = await import('@duckdb/node-api');
@@ -198,6 +267,35 @@ if (parentPort) {
   connection = await instance.connect();
   await connection.run('SELECT 1'); // warm the engine before reporting ready
   finish(OK, 0);
+  if (parentPort) parentPort.postMessage({ type: 'ready' });
 })().catch((err: unknown) => {
-  fail(err instanceof Error ? new Error('DuckDB init failed: ' + err.message) : err);
+  const message = err instanceof Error ? err.message : String(err);
+  fail(new Error('DuckDB init failed: ' + message));
+  if (parentPort) parentPort.postMessage({ type: 'init-error', message });
 });
+
+// Serialize calls: concurrent sync postMessages would race on the single control
+// block, and DuckDB's own connection is not re-entrant either. The chain starts
+// at `ready`, so no message can be handled before the connection exists — an
+// async caller is admitted the moment `ready` resolves, with no blocking
+// handshake to wait on. A rejected `handle()` must not poison the chain: every
+// exit path already replies, and the `catch` here only keeps the queue alive.
+let queue: Promise<void> = ready;
+if (parentPort) {
+  parentPort.on('message', (msg: CallMessage | { kind: 'close' }) => {
+    queue = queue.then(() => (msg.kind === 'close' ? closeNow() : handle(msg as CallMessage))).catch(() => undefined);
+  });
+}
+
+/**
+ * Voluntary shutdown, requested by src/duckdb.ts instead of `Worker.terminate()`
+ * when a call may still be running. It arrives through the SAME serialized
+ * queue, so by the time it executes every queued call has settled and no native
+ * DuckDB call is outstanding — which is exactly the condition `terminate()`
+ * cannot guarantee, and violating it aborts the whole process. See the note on
+ * `closeWorker` in src/duckdb.ts for the reproduction.
+ */
+async function closeNow(): Promise<void> {
+  connection = null;
+  process.exit(0); // exits this worker thread, not the app
+}

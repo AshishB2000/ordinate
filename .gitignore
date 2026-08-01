@@ -120,3 +120,7 @@ scripts/**/*.js
 /src/residentQuery.js
 /scripts/test-residentQuery.js
 /scripts/bench-resident.js
+
+# Phase 3b typed dataset VIEW over the Parquet store — emitted siblings.
+/src/datasetView.js
+/scripts/test-datasetView.js
