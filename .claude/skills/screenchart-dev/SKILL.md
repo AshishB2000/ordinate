@@ -1,12 +1,12 @@
 ---
 name: screenchart-dev
-description: Use when working on the Screenchart repo — setting up the dev environment, checking build prerequisites (Node/npm/gh/electron-builder), opening a pull request into main, or filing a GitHub issue. Provides the helper scripts and the repo's branch/PR workflow so every change follows it.
+description: Use when working on the Ordinate repo — setting up the dev environment, checking build prerequisites (Node/npm/gh/electron-builder), opening a pull request into main, or filing a GitHub issue. Provides the helper scripts and the repo's branch/PR workflow so every change follows it.
 ---
 
-# Screenchart dev workflow
+# Ordinate dev workflow
 
-Helper scripts and the standing workflow for developing Screenchart
-(`AshishB2000/screenchart`). The scripts are location-independent — they resolve
+Helper scripts and the standing workflow for developing Ordinate
+(`AshishB2000/ordinate`). The scripts are location-independent — they resolve
 the repo root themselves, so they run from any directory.
 
 ## Standing workflow — follow this for every change
@@ -36,7 +36,7 @@ Run any of them directly, or let them run as part of the flow above.
 | `scripts/check-prereqs.sh` | Verifies the build environment: Node 18+, npm, `gh` installed **and** authenticated, electron-builder. Prints ✓/✗ per check; exits non-zero if any required check fails. | Before a build, or to diagnose "why won't it build/PR". |
 | `scripts/setup-workspace.sh` | Bootstraps a fresh clone: runs the prereq check, `npm install` (which runs `postinstall`/`download-geo.js`), then prints next steps. | Right after cloning, or after dependency changes. |
 | `scripts/create-pr.sh` | Pushes the current branch and opens a PR into `main` via `gh`. Refuses on `main`. Does **not** merge. | Step 3 of the workflow — after commits are approved and made. |
-| `scripts/create-issue.sh` | Opens a GitHub issue in `AshishB2000/screenchart` via `gh`. | To file a bug/task from the terminal. |
+| `scripts/create-issue.sh` | Opens a GitHub issue in `AshishB2000/ordinate` via `gh`. | To file a bug/task from the terminal. |
 
 ### Usage
 

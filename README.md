@@ -1,4 +1,4 @@
-<h1 align="center">Screenchart</h1>
+<h1 align="center">Ordinate</h1>
 
 <p align="center"><b>A local-first, open-source personal BI workspace. Bring in your data (files, paste, Excel, Postgres, a URL, or a screenshot), prepare it, visualize it across 28 chart &amp; map types, assemble dashboards, and share. Optional AI on top; the app does the math.</b></p>
 
@@ -6,18 +6,18 @@
 
 <p align="center">
   <!-- TODO(ashish): replace assets/images/hero.png with a wide hero banner showing the workspace (data → prepare → visualize → dashboard). -->
-  <img src="assets/images/hero.png" alt="Screenchart - a local-first personal BI workspace" width="640" />
+  <img src="assets/images/hero.png" alt="Ordinate - a local-first personal BI workspace" width="640" />
 </p>
 
 <p align="center">
   <a href="https://screenchart.app">Website</a> ·
-  <a href="https://github.com/AshishB2000/screenchart/releases">Download</a> ·
-  <a href="https://github.com/AshishB2000/screenchart/discussions">Discussions</a> ·
-  <a href="https://github.com/AshishB2000/screenchart/issues">Issues</a>
+  <a href="https://github.com/AshishB2000/ordinate/releases">Download</a> ·
+  <a href="https://github.com/AshishB2000/ordinate/discussions">Discussions</a> ·
+  <a href="https://github.com/AshishB2000/ordinate/issues">Issues</a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/AshishB2000/screenchart/releases"><img alt="release" src="https://img.shields.io/github/v/release/AshishB2000/screenchart?style=flat&include_prereleases&color=blueviolet&label=release" /></a>
+  <a href="https://github.com/AshishB2000/ordinate/releases"><img alt="release" src="https://img.shields.io/github/v/release/AshishB2000/ordinate?style=flat&include_prereleases&color=blueviolet&label=release" /></a>
   <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat" /></a>
   <img alt="platform" src="https://img.shields.io/badge/platform-macOS%20%C2%B7%20Windows-lightgrey?style=flat" />
   <img alt="status" src="https://img.shields.io/badge/status-beta-orange?style=flat" />
@@ -25,9 +25,9 @@
 
 ---
 
-## What is Screenchart
+## What is Ordinate
 
-Screenchart is a **personal business-intelligence workspace that runs entirely on your machine.** You organize work into **projects**, bring **data** in from many sources, **prepare** it with a reversible transform pipeline, build **visuals** and **dashboards**, and **share** them offline. AI is available at every step but is **completely optional**, and even when it is on, **the app computes every number itself.**
+Ordinate is a **personal business-intelligence workspace that runs entirely on your machine.** You organize work into **projects**, bring **data** in from many sources, **prepare** it with a reversible transform pipeline, build **visuals** and **dashboards**, and **share** them offline. AI is available at every step but is **completely optional**, and even when it is on, **the app computes every number itself.**
 
 📥 **Bring in data** from CSV, JSON, or Excel files; from pasted text (TSV/CSV/JSON, auto-sniffed); from a **Postgres** database; from a **URL / JSON API**; or by **screenshotting** anything on screen and turning it into a table.
 
@@ -86,7 +86,7 @@ https://github.com/user-attachments/assets/8d0a13db-bc9f-463f-a849-7ca74f77af54
 
 ## Visualizations
 
-Screenchart picks a visual that fits your data, and you can switch types from the `⋯` menu. Grouped data supports Values/Periods toggles and small multiples where they fit. There are **28 chart &amp; map types** in total: **25 chart types, 2 maps, and a table view.**
+Ordinate picks a visual that fits your data, and you can switch types from the `⋯` menu. Grouped data supports Values/Periods toggles and small multiples where they fit. There are **28 chart &amp; map types** in total: **25 chart types, 2 maps, and a table view.**
 
 | Group | Types |
 |---|---|
@@ -107,7 +107,7 @@ Charts render with **Chart.js 4** (plus treemap, sankey, matrix, financial, and 
 | Source | What it does |
 |---|---|
 | **File import** | Native file picker for **CSV, JSON, or XLSX**. CSV uses a real RFC-4180 parser (quoted fields, embedded commas/newlines, CRLF/LF). XLSX is **read-only, one sheet at a time**, with a sheet picker. 100 MB / 50,000-row ceilings apply. |
-| **Paste** | Paste a table and Screenchart auto-detects JSON vs delimited and sniffs tab vs comma, so **TSV works via paste** (there is no `.tsv` file-open option). |
+| **Paste** | Paste a table and Ordinate auto-detects JSON vs delimited and sniffs tab vs comma, so **TSV works via paste** (there is no `.tsv` file-open option). |
 | **Postgres** | Connect with a timeout, browse tables, and run either a whitelisted table read or your own read-only SQL (wrapped with a row limit and a statement timeout). Read-only. |
 | **URL / JSON API** | Fetch an **https-only** URL (byte-capped, timeout-bounded), with an optional bearer token, and parse the JSON body. Read-only. |
 | **Screenshot capture** | Press the hotkey (**⌘⌥S** on macOS, **Ctrl+Alt+S** on Windows, configurable), drag a box around on-screen data, and a vision model extracts a table you review, edit, and save, with a link back to the crop. |
@@ -132,7 +132,7 @@ Every AI action is gated on a configured model and returns "not ready" when none
 
 ## Two ways to run a model
 
-When you want AI, Screenchart never ships or installs a model. It **runs a local CLI you already have**, or calls a **cloud API with your own key.** Pick per your privacy/latency needs in **Settings → Execution.**
+When you want AI, Ordinate never ships or installs a model. It **runs a local CLI you already have**, or calls a **cloud API with your own key.** Pick per your privacy/latency needs in **Settings → Execution.**
 
 <table>
 <tr>
@@ -145,7 +145,7 @@ When you want AI, Screenchart never ships or installs a model. It **runs a local
 
 ### 🖥️ Local CLI (default) - detect &amp; run only, never install
 
-Screenchart detects agent CLIs already on your `PATH` and runs them in read-only mode. It **never** runs `npm/brew/curl install`; the "Install" button only opens the vendor's page.
+Ordinate detects agent CLIs already on your `PATH` and runs them in read-only mode. It **never** runs `npm/brew/curl install`; the "Install" button only opens the vendor's page.
 
 | Local CLI | Vendor |
 |---|---|
@@ -173,11 +173,11 @@ Stored per-provider on your machine (plaintext in `userData/config.json`, gitign
 
 ---
 
-## Why Screenchart
+## Why Ordinate
 
 Your data lives in a dozen places: a CSV export, a spreadsheet, a Postgres table, an internal API, a chart trapped in a slide. The usual options are all bad. A cloud BI tool wants your data on its servers and a subscription. A cloud chatbot may invent the numbers. Re-typing into a spreadsheet is slow and error-prone.
 
-Screenchart is the local-first, number-honest alternative:
+Ordinate is the local-first, number-honest alternative:
 
 - 🔒 **Local &amp; private.** Everything runs on your machine. No accounts, no telemetry, no surprise network calls. The only declared external fetches are the model endpoint you chose (or a fully local CLI) and OpenStreetMap tiles, and tiles only when a map is shown.
 - 🧮 **Number-accurate by design.** All aggregation, statistics, metrics, and anomaly math live in pure code. A model may extract structure or narrate app-computed facts, but it is **forbidden** from writing computed numbers, so the figure you read is the figure the app calculated.
@@ -187,7 +187,7 @@ Screenchart is the local-first, number-honest alternative:
 
 ### Comparison
 
-| | Spreadsheet | Cloud BI tool | Cloud AI chatbot | **Screenchart** |
+| | Spreadsheet | Cloud BI tool | Cloud AI chatbot | **Ordinate** |
 |---|:---:|:---:|:---:|:---:|
 | Runs locally / private | ✅ | ❌ | ❌ | **✅ (local CLI)** |
 | Numbers computed by the app (not guessed) | you do it | ✅ | ❌ (model may invent) | **✅** |
@@ -202,15 +202,15 @@ Screenchart is the local-first, number-honest alternative:
 
 ## Quick start
 
-> **Why does my OS warn about this app?** Screenchart is free and open source and isn't signed with a paid code-signing certificate, so macOS and Windows show a one-time security prompt on first launch. This reflects the missing certificate, not the app's safety. The full source and build pipeline are public, and checksums are published with every release. See the first-launch steps below, or skip the prompt entirely by [running from source](#-run-from-source).
+> **Why does my OS warn about this app?** Ordinate is free and open source and isn't signed with a paid code-signing certificate, so macOS and Windows show a one-time security prompt on first launch. This reflects the missing certificate, not the app's safety. The full source and build pipeline are public, and checksums are published with every release. See the first-launch steps below, or skip the prompt entirely by [running from source](#-run-from-source).
 
 ### 🧑‍💻 Run from source
 
 Recommended if you have git: no installer and no first-launch security prompt.
 
 ```bash
-git clone https://github.com/AshishB2000/screenchart.git
-cd screenchart
+git clone https://github.com/AshishB2000/ordinate.git
+cd ordinate
 npm install          # postinstall fetches map GeoJSON
 npm start
 ```
@@ -226,7 +226,7 @@ Requirements: [Node.js](https://nodejs.org/) 20+ and npm. `npm start` compiles t
 <details>
 <summary><b>macOS - first launch (unsigned build)</b></summary>
 
-Screenchart is a free, open-source build not signed with a paid Apple certificate, so macOS blocks it on first open. To allow it (you only do this once):
+Ordinate is a free, open-source build not signed with a paid Apple certificate, so macOS blocks it on first open. To allow it (you only do this once):
 
 1. Double-click **Screenchart**; you'll see "could not verify." Click **Done**.
 2. Open **System Settings → Privacy & Security**.
@@ -261,6 +261,25 @@ Prepare, stats, metrics, aggregation, and anomaly detection all run as pure main
 
 Architecture and internals → [CLAUDE.md](CLAUDE.md).
 
+### Where this is going
+
+Today the data layer is ~2,500 lines of TypeScript: a table is `{ columns, rows }`, and prepare is an ordered list of steps folded over an immutable copy of the source. That design is why removing a step is free — the result simply recomputes. It is comfortable with thousands of rows.
+
+A migration to a columnar engine is planned, to make cross-filtered dashboards interactive on millions of rows:
+
+| Layer | Today | Planned |
+|---|---|---|
+| Engine | TypeScript fold over `Cell[][]` | **DuckDB**, embedded |
+| Memory format | JS arrays of boxed cells | **Apache Arrow** (zero-copy) |
+| Storage | JSON per record | **Parquet** for table data |
+| Cross-filtering | Filters merged per card, re-folded | **[Mosaic](https://github.com/uwdata/mosaic)** coordinator with data cube indexes |
+| Charts | Chart.js 4 (Canvas 2D) | **vgplot / deck.gl** (WebGL) |
+| Maps | Leaflet + raster tiles | **MapLibre GL** (vector, GPU) |
+| UI | Vanilla global-scope scripts | **Svelte** or **SolidJS** |
+| Shell | Electron | **Tauri** (Rust + system WebView) |
+
+**None of this has landed yet** — everything described above and below is the app as it exists. The staged plan, its invariants, and the known pitfalls are in [`.claude/plans/rewrite-to-duckdb-stack.md`](.claude/plans/rewrite-to-duckdb-stack.md).
+
 ---
 
 ## Platform notes
@@ -287,7 +306,7 @@ Full details → [PRIVACY.md](PRIVACY.md).
 
 ## Contributing
 
-Issues and PRs welcome. New work goes on a branch off `main` and merges via PR; see [CLAUDE.md](CLAUDE.md) for conventions. File bugs and feature requests through the [issue templates](https://github.com/AshishB2000/screenchart/issues/new/choose); ask questions in [Discussions](https://github.com/AshishB2000/screenchart/discussions).
+Issues and PRs welcome. New work goes on a branch off `main` and merges via PR; see [CLAUDE.md](CLAUDE.md) for conventions. File bugs and feature requests through the [issue templates](https://github.com/AshishB2000/ordinate/issues/new/choose); ask questions in [Discussions](https://github.com/AshishB2000/ordinate/discussions).
 
 ### Developer scripts
 Helper scripts live in the **screenchart-dev skill** at [`.claude/skills/screenchart-dev/scripts/`](.claude/skills/screenchart-dev/scripts/) (POSIX bash):
@@ -297,7 +316,7 @@ Helper scripts live in the **screenchart-dev skill** at [`.claude/skills/screenc
 | `check-prereqs.sh` | Verify the build env: Node 20+, npm, authenticated `gh`, electron-builder. |
 | `setup-workspace.sh` | Bootstrap a fresh clone (prereqs + `npm install`). |
 | `create-pr.sh` | Push the current branch and open a PR into `main` (refuses on `main`). |
-| `create-issue.sh` | Open a GitHub issue in `AshishB2000/screenchart`. |
+| `create-issue.sh` | Open a GitHub issue in `AshishB2000/ordinate`. |
 
 ```bash
 bash .claude/skills/screenchart-dev/scripts/setup-workspace.sh
@@ -307,4 +326,4 @@ bash .claude/skills/screenchart-dev/scripts/setup-workspace.sh
 
 ## License
 
-[MIT](LICENSE) © Screenchart contributors.
+[MIT](LICENSE) © Ordinate contributors.

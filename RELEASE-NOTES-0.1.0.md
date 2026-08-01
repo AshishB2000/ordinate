@@ -1,7 +1,7 @@
-# Screenchart 0.1.0
+# Ordinate 0.1.0
 
 **Screenshot any data, get instant AI analysis.** Press a hotkey, drag a box around any chart,
-table, or on-screen data, and Screenchart explains it in plain English and turns it into a clean
+table, or on-screen data, and Ordinate explains it in plain English and turns it into a clean
 visualization — without leaving what you're doing.
 
 ## Highlights
@@ -14,7 +14,7 @@ visualization — without leaving what you're doing.
   captured image to the provider you choose; see PRIVACY.md.
 
 ## Install
-macOS build on the [Releases page](https://github.com/AshishB2000/screenchart/releases). The
+macOS build on the [Releases page](https://github.com/AshishB2000/ordinate/releases). The
 build isn't code-signed yet, so on first launch macOS shows "Apple could not verify…" —
 right-click the app → **Open** to get past it. Full setup in QUICKSTART.md.
 

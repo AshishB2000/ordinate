@@ -1,4 +1,4 @@
-# Screenchart
+# Ordinate
 
 A **local-first, open-source personal BI workspace.** Bring data in (files, paste, Excel, Postgres,
 URL/API, or a screenshot capture) → **prepare** it with a reversible transform pipeline → **visualize**
@@ -10,6 +10,18 @@ run in pure main-process code (deterministic, auditable); a model only *extracts
 table from a screenshot) or *narrates figures the app already computed* — it **never** writes a
 computed number. For the vision-capture path, the intelligence is in the prompt — invest in prompt
 quality before adding code.
+
+> **Naming.** The project was renamed **Screenchart → Ordinate**. Screenchart is now the name of one
+> data source (screenshot capture), not the product. `package.json` still carries `name:
+> "screenchart"` / `productName: "Screenchart"` — changing those moves Electron's `userData`
+> directory and orphans existing config, history, and projects, so it needs a migration, not a
+> find-and-replace. Docs use Ordinate; the built macOS bundle is still `Screenchart.app`.
+
+> **Architecture direction (planned — NOT built).** A migration to DuckDB + Apache Arrow + Mosaic +
+> WebGL charts + Tauri is specified in [`.claude/plans/rewrite-to-duckdb-stack.md`](.claude/plans/rewrite-to-duckdb-stack.md).
+> **Everything below this line describes the code as it exists today** and remains the source of
+> truth until a migration phase lands. Update this file as each phase completes — do not describe
+> the target stack here before it is real.
 
 ## Project Overview
 - **What:** a project-based BI workspace. A **project** holds datasets, visuals, and dashboards, all

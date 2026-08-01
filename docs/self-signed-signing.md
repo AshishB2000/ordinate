@@ -16,7 +16,7 @@ rebuild with the same cert) → still granted → capture works.
 Self-signed is **stable** but **not notarized** and **not an Apple Developer ID**. So:
 
 - ✅ Screen Recording permission **sticks** across rebuilds — capture works.
-- ❌ Gatekeeper still shows **“Apple could not verify ‘Screenchart’ is free of malware.”**
+- ❌ Gatekeeper still shows **“Apple could not verify ‘Ordinate’ is free of malware.”**
   Users must **right-click → Open** (or System Settings → Privacy & Security → *Open Anyway*)
   the first time. This is expected and documented on the download page.
 
@@ -30,14 +30,14 @@ No paid Apple account, no notarization, no `Developer ID` — just a stable sign
 bash scripts/make-signing-cert.sh
 ```
 
-Creates a self-signed **“Screenchart Code Signing”** certificate, imports it into your
+Creates a self-signed **“Ordinate Code Signing”** certificate, imports it into your
 login keychain, trusts it for code signing, and verifies it. Idempotent — safe to re-run
 (it won't create a second cert).
 
 ### Option B — Keychain Access GUI
 
 1. Open **Keychain Access** → menu **Certificate Assistant → Create a Certificate…**
-2. **Name:** `Screenchart Code Signing`
+2. **Name:** `Ordinate Code Signing`
 3. **Identity Type:** `Self Signed Root`
 4. **Certificate Type:** `Code Signing`
 5. Create. It lands in your **login** keychain with its private key.
@@ -45,7 +45,7 @@ login keychain, trusts it for code signing, and verifies it. Idempotent — safe
 Verify either way:
 
 ```bash
-security find-identity -v -p codesigning   # should list "Screenchart Code Signing"
+security find-identity -v -p codesigning   # should list "Ordinate Code Signing"
 ```
 
 The name **must exactly match** `build.mac.identity` in `package.json`.
@@ -53,7 +53,7 @@ The name **must exactly match** `build.mac.identity` in `package.json`.
 ## Build
 
 ```bash
-npm run dist:mac          # signs with "Screenchart Code Signing"
+npm run dist:mac          # signs with "Ordinate Code Signing"
 ```
 
 - If macOS prompts to let `codesign` use the key on the first build, click **Always Allow**.
@@ -78,7 +78,7 @@ release build stays unsigned without needing the cert.
 codesign -dvvv "dist/mac-universal/Screenchart.app" 2>&1 | grep -E 'Authority|Identifier'
 ```
 
-Two builds from the same cert should show the **same Authority** (`Screenchart Code Signing`)
+Two builds from the same cert should show the **same Authority** (`Ordinate Code Signing`)
 and identifier — that stable identity is what makes TCC remember the grant.
 
 ## Test that the permission sticks

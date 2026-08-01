@@ -1,4 +1,4 @@
-# Four-Month Screenchart Expansion Plan
+# Four-Month Ordinate Expansion Plan
 
 This plan assumes one founder working full-time with AI agents. The outcome is a complete, usable
 v1 product across all seven areas—not feature parity with Power BI, which would require a much
@@ -90,7 +90,7 @@ Users can ask AI to:
 - Suggest follow-up questions.
 
 Before changing data or a dashboard, AI shows the proposed action and asks for confirmation.
-Screenchart performs the actual calculations.
+Ordinate performs the actual calculations.
 
 ### 6. Screen Capture
 
@@ -121,11 +121,11 @@ serverless tiers, each for a different recipient:
 
 - A project (source config, dataset steps, visuals, dashboard layout) saves as human-readable
   text (JSON/YAML), so it is diffable and reviewable.
-- A user puts the project in a git repo; a teammate clones it, opens it in their own Screenchart,
+- A user puts the project in a git repo; a teammate clones it, opens it in their own Ordinate,
   points it at the data source, and refreshes — queries run live against *their* data access, not
   a frozen snapshot.
 - Collaboration comes free from GitHub/GitLab: versioning, pull requests, comments, and who-can-
-  see-it (private repos). Screenchart builds none of that.
+  see-it (private repos). Ordinate builds none of that.
 - **Secrets never enter the repo.** The project stores connection *config* (host, database, the
   query) but never the password or API key; those stay local and gitignored, exactly like today's
   BYOK keys. Each teammate supplies their own credential once. An optional committed cache lets a
@@ -156,7 +156,7 @@ Goals:
 
 Brand work:
 
-- Decide whether Screenchart remains the final name.
+- Decide whether Ordinate remains the final name.
 - Create a shortlist if rebranding.
 - Check names, repositories, domains, and possible conflicts.
 - Do not purchase a new domain until a final choice is validated.
@@ -246,7 +246,7 @@ Goals:
 - Let users select dimensions and measures.
 - Recommend compatible chart types.
 - Support filtering and aggregation.
-- Reuse Screenchart's existing chart and map library.
+- Reuse Ordinate's existing chart and map library.
 - Prevent unsuitable chart choices or explain why they may be misleading.
 - Make creating the first visualization fast and understandable.
 
@@ -340,7 +340,7 @@ Month 3 milestone:
 
 Goals:
 
-- Integrate the original Screenchart workflow into projects.
+- Integrate the original Ordinate workflow into projects.
 - Improve extraction review and correction.
 - Let captured data become a reusable dataset.
 - Preserve links between screenshots and extracted values.
@@ -474,7 +474,7 @@ The product is ready when a new user can:
 
 - Install and begin without assistance.
 - Import or connect real data.
-- Prepare that data without leaving Screenchart.
+- Prepare that data without leaving Ordinate.
 - Create a visualization manually.
 - Create another visualization using AI.
 - Build an interactive dashboard.
@@ -487,4 +487,4 @@ The product is ready when a new user can:
 - Complete the full workflow without enabling AI.
 
 The most important measure is not the number of features. It is whether users can complete the
-full journey reliably and want to use Screenchart for their next dataset.
+full journey reliably and want to use Ordinate for their next dataset.

@@ -1,10 +1,18 @@
 # Changelog
 
-All notable changes to Screenchart are documented here. Format based on
+All notable changes to Ordinate are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning per
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+> **Note:** the project was renamed from **Screenchart** to **Ordinate**. Releases up to and
+> including 0.1.0 shipped under the Screenchart name; entries below use the current name.
+
 ## [Unreleased]
+
+### Changed
+- Renamed the project from Screenchart to Ordinate. Screenchart is now the name of one data source
+  (screenshot capture) rather than the product. The application bundle and `userData` directory are
+  unchanged pending a migration.
 
 ### Fixed
 - First-run capture no longer shows a redundant "Capture failed" card window before macOS
@@ -32,5 +40,5 @@ Initial public release.
 - Some CLI agents (e.g. Cursor) trigger a macOS Automation prompt that is safe to deny.
 - API keys are stored in plaintext on disk (not encrypted) — see PRIVACY.md.
 
-<!-- [Unreleased]: https://github.com/AshishB2000/screenchart/compare/v0.1.0...HEAD
-     [0.1.0]: https://github.com/AshishB2000/screenchart/releases/tag/v0.1.0 -->
+<!-- [Unreleased]: https://github.com/AshishB2000/ordinate/compare/v0.1.0...HEAD
+     [0.1.0]: https://github.com/AshishB2000/ordinate/releases/tag/v0.1.0 -->

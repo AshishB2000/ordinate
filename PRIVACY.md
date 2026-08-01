@@ -1,6 +1,6 @@
 # Privacy
 
-Screenchart is a desktop app that keeps your work on your machine, with one important
+Ordinate is a desktop app that keeps your work on your machine, with one important
 exception: AI analysis. This explains exactly what stays local and what leaves.
 
 ## What stays on your machine
@@ -19,13 +19,13 @@ believe the file was exposed.
 
 ## What leaves your machine
 
-Screenchart's core feature is AI analysis, which requires sending data off your machine:
+Ordinate's core feature is AI analysis, which requires sending data off your machine:
 
 - **When you run an analysis with a provider key (BYOK):** the cropped image you captured is
   uploaded (base64, inline) over HTTPS to the provider you configured — Anthropic, OpenAI,
   Gemini, or a gateway (any OpenAI-compatible endpoint, e.g. OpenRouter, Ollama, or a custom
   one) — along with the prompt text. The request goes directly from your machine to that
-  provider using your key; it does not pass through any Screenchart server. That data is handled
+  provider using your key; it does not pass through any Ordinate server. That data is handled
   under **the provider's own privacy policy and terms**.
 - **When you run an analysis via a local CLI agent:** the cropped image is written to a temporary
   file on your machine and the local agent process reads it. The agent runs locally, but whatever
@@ -38,7 +38,7 @@ If you never run an analysis (and never render a map), nothing is sent.
 
 ## Screen Recording permission (macOS)
 
-Screenchart requests macOS Screen Recording permission because capturing a screen region requires
+Ordinate requests macOS Screen Recording permission because capturing a screen region requires
 it. It captures **only the region you select, only when you trigger a capture** — it does not
 continuously record, stream, or monitor your screen.
 

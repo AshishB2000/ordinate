@@ -1,6 +1,6 @@
 # Quickstart
 
-Run Screenchart from source and understand how the pieces fit. Screenchart is a **local-first
+Run Ordinate from source and understand how the pieces fit. Ordinate is a **local-first
 personal BI workspace**: you create a **project**, bring **data** in (files, paste, Excel, Postgres,
 a URL, or a screenshot capture), **prepare** it, build **visuals** and **dashboards**, and **share**
 them offline. AI is optional at every step, and the app computes every number itself.
@@ -11,14 +11,14 @@ them offline. AI is optional at every step, and the app computes every number it
 - **Electron 42** — installed as a dev dependency; you don't install it globally.
 - **macOS** (primary) or **Windows**. Linux runs in dev but isn't a build target yet.
 - **Optional — a Local CLI agent** already on your `PATH` (Claude Code, Codex, Cursor,
-  Antigravity, Grok, OpenCode). Screenchart detects and runs these; it never installs them.
+  Antigravity, Grok, OpenCode). Ordinate detects and runs these; it never installs them.
   No CLI? Use **BYOK** with an Anthropic / OpenAI / Gemini / gateway key instead.
 
 ## Quickstart
 
 ```bash
-git clone https://github.com/AshishB2000/screenchart.git
-cd screenchart
+git clone https://github.com/AshishB2000/ordinate.git
+cd ordinate
 npm install        # also runs postinstall → downloads map GeoJSON
 npm start          # compiles TypeScript (build:ts), then launches the app
 ```
@@ -123,13 +123,13 @@ Each capture is a stateless call; the intelligence lives in the prompt (`src/ana
 ## Troubleshooting
 
 - **Capture fails / "failed to get sources":** Screen Recording permission isn't granted — enable
-  Screenchart under **Privacy & Security → Screen Recording** and relaunch.
+  Ordinate under **Privacy & Security → Screen Recording** and relaunch.
 - **Capture won't start:** no Local CLI detected and no BYOK key set — the hub opens Execution
   settings. Add one, then capture.
 - **Provider error (BYOK):** re-check the key in Settings and that the provider has quota (some
   free tiers have daily limits).
 - **Local CLI not detected:** confirm the binary is on your `PATH` (`which claude`), then rescan
-  in **Settings → Execution**. Screenchart resolves PATH + known user bin dirs.
+  in **Settings → Execution**. Ordinate resolves PATH + known user bin dirs.
 - **An Automation / "controlling" prompt appears:** it's from a CLI agent (e.g. Cursor) and is
   safe to deny.
 - **Maps look blank:** map tiles are the one external fetch (OpenStreetMap) — check your network.

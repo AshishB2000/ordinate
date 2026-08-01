@@ -25,7 +25,7 @@ Expanded the safe formula evaluator from **15 → 70 functions** with row-level 
 - Operators unchanged: `+ - * / %`, `= == != > < >= <=`, `AND OR NOT`, `[Col Name]` refs.
 
 ### Key design decisions / fidelity notes
-- **Dates are TEXT cells** — Screenchart has no date *type*. Date fns parse a string → JS `Date` (LOCAL time, so it agrees with TODAY/NOW), compute, return an integer (YEAR, DATEDIFF…) or an ISO-ish string (DATEADD → `YYYY-MM-DD`, time parts → `YYYY-MM-DD HH:MM:SS`). Unparseable → `null`.
+- **Dates are TEXT cells** — Ordinate has no date *type*. Date fns parse a string → JS `Date` (LOCAL time, so it agrees with TODAY/NOW), compute, return an integer (YEAR, DATEDIFF…) or an ISO-ish string (DATEADD → `YYYY-MM-DD`, time parts → `YYYY-MM-DD HH:MM:SS`). Unparseable → `null`.
 - `DATE(number)` returns `null` (no serial-date guessing — ambiguous across engines).
 - `date_part` strings: year quarter month dayofyear day weekday week hour minute second iso-year iso-quarter iso-week iso-weekday.
 - DATEDIFF counts **boundary crossings** (Tableau semantics), day/week via DST-safe integer day counts (`Date.UTC`-based `dayNumber`).
@@ -35,7 +35,7 @@ Expanded the safe formula evaluator from **15 → 70 functions** with row-level 
 - `weekday` = 1=Sun…7=Sat; `iso-weekday` = 1=Mon…7=Sun.
 
 ## What Tableau has that we DON'T (and why) — already explained to user
-- **Aggregates (~17: SUM AVG COUNT COUNTD MEDIAN PERCENTILE STDEV VAR CORR ATTR COLLECT…):** not row-level. Screenchart ALREADY does these in the group/aggregate prepare step + chart/metric aggregation. Not a formula gap.
+- **Aggregates (~17: SUM AVG COUNT COUNTD MEDIAN PERCENTILE STDEV VAR CORR ATTR COLLECT…):** not row-level. Ordinate ALREADY does these in the group/aggregate prepare step + chart/metric aggregation. Not a formula gap.
 - **Table calcs (~30: WINDOW_* RUNNING_* RANK* INDEX SIZE FIRST LAST LOOKUP TOTAL PREVIOUS_VALUE):** run across a laid-out, sorted, partitioned result — no row-level equivalent. **Real gap** (running totals / rankings).
 - **LOD `{FIXED/INCLUDE/EXCLUDE}`:** separate granularity-scoping engine.
 - **Spatial (~10: MAKEPOINT MAKELINE DISTANCE BUFFER AREA LENGTH INTERSECTS SHAPETYPE HEXBINX HEXBINY):** no spatial data type (maps join place names to GeoJSON).
