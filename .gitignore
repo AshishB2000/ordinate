@@ -124,3 +124,9 @@ scripts/**/*.js
 # Phase 3b typed dataset VIEW over the Parquet store — emitted siblings.
 /src/datasetView.js
 /scripts/test-datasetView.js
+
+# Phase 2.5 visual:data resident rewire — emitted sibling.
+/scripts/test-vizRewire.js
+
+# Phase 2.5 metric rewire (dashboard:metric off Parquet) — emitted sibling.
+/scripts/test-metricRewire.js

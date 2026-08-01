@@ -290,6 +290,64 @@ export async function listDatasets(projectId: string): Promise<DatasetSummary[]>
 
 // Load a single dataset. Returns null if either id is invalid, or the file is
 // missing/corrupt.
+// ── Phase 2.5: metadata-only load, and the resident-query source ────────────
+//
+// `getDataset` hydrates the whole table into Cell[][]. That is the right shape
+// for anything that needs the rows, and the wrong one for the many callers that
+// only want columns/name/rowCount — `dashboard:draft` loads EVERY dataset in a
+// project just to read `ds.columns`, and the renderer's column pickers pay for a
+// full structured-clone over IPC to populate a dropdown.
+
+/** Everything in a Dataset except the tables. Cheap: one small JSON read. */
+export type DatasetMeta = Omit<Dataset, 'rows' | 'source'> & {
+  /** Column metadata of the immutable source, when the record has one. */
+  sourceColumns?: ParsedColumn[];
+  /** True when the table lives in a sibling .parquet (v3), i.e. resident-queryable. */
+  resident: boolean;
+};
+
+export async function getDatasetMeta(projectId: string, id: string): Promise<DatasetMeta | null> {
+  if (!isValidId(projectId) || !isValidId(id)) return null;
+  try {
+    const raw = await fs.promises.readFile(datasetFilePath(projectId, id), 'utf8');
+    const data = JSON.parse(raw);
+    if (!isValidDataset(data)) return null;
+    // Deliberately does NOT hydrate and does NOT migrate. Migration is a write,
+    // and a metadata read must stay a read — otherwise every column-picker open
+    // could trigger a table rewrite.
+    const ds = normalize({ ...data, rows: Array.isArray(data.rows) ? data.rows : [] }, projectId);
+    const meta: DatasetMeta = {
+      ...ds,
+      rowCount: typeof data.rowCount === 'number' ? data.rowCount : ds.rowCount,
+      resident: !Array.isArray(data.rows) && fs.existsSync(parquetPath(projectId, id)),
+    } as DatasetMeta;
+    delete (meta as Partial<Dataset>).rows;
+    delete (meta as Partial<Dataset>).source;
+    if (data.source && Array.isArray(data.source.columns)) meta.sourceColumns = data.source.columns;
+    return meta;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * The stored derived table, addressable by SQL without materialising it.
+ *
+ * Returns null for a v2 record (table still inline in the JSON), a missing
+ * Parquet, or an unavailable bridge — the caller must then fall back to
+ * `getDataset` + the JS path. Note the `.parquet` holds the table AFTER the
+ * prepare pipeline, so a resident query needs no step replay.
+ */
+export async function residentSource(
+  projectId: string,
+  id: string,
+): Promise<{ parquetPath: string; columns: ParsedColumn[] } | null> {
+  if (!parquetStore.isSupported()) return null;
+  const meta = await getDatasetMeta(projectId, id);
+  if (!meta || !meta.resident) return null;
+  return { parquetPath: parquetPath(projectId, id), columns: meta.columns };
+}
+
 export async function getDataset(projectId: string, id: string): Promise<Dataset | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   try {
