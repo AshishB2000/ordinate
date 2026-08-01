@@ -17,6 +17,7 @@ import type { ParsedColumn } from './parse';
 import { detectColumnType, coerceValue } from './parse';
 import { compile } from './formula';
 import type { FValue } from './formula';
+import { runOnDuckDb } from './pipelineDuck';
 
 // ── Shared shapes ────────────────────────────────────────────────────────────
 
@@ -156,6 +157,13 @@ function skip(t: TableData, warning: string): StepResult {
 // Fold each step left→right over a deep copy of `source`, accumulating warnings.
 // A step referencing a missing column is skipped with a warning (never throws).
 export function applyPipeline(source: TableData, steps: TransformStep[]): ApplyResult {
+  // Phase 1: try the DuckDB path first. It returns null — and we fall through to
+  // the fold below — whenever the pipeline is not faithfully expressible in SQL,
+  // the bridge is unavailable, or the table is small enough that the round-trip
+  // costs more than the fold. The fold remains the reference implementation.
+  const viaSql = runOnDuckDb(source, steps);
+  if (viaSql) return viaSql;
+
   let table = cloneTable(source);
   const warnings: string[] = [];
   const list = Array.isArray(steps) ? steps : [];
