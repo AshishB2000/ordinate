@@ -110,3 +110,8 @@ scripts/**/*.js
 /scripts/test-sqlGen.js
 /src/pipelineDuck.js
 /scripts/test-pipelineDuck.js
+
+# Phase 2 Parquet storage — emitted siblings.
+/src/parquetStore.js
+/scripts/test-parquetStore.js
+/scripts/test-datasetsMigration.js

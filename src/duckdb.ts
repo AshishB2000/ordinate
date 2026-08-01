@@ -13,6 +13,21 @@
 //        ⟵ unblocks ⟵                    ctl[0] = OK; Atomics.notify(ctl, 0)
 //   read bytes out of the SAB, parse
 //
+// ⚠ KNOWN LIMITATION — a leading U+FEFF (BOM) is LOST on every returned string.
+//   `SELECT chr(65279) || 'x'` has length 2 inside DuckDB and arrives here as
+//   'x'. This is NOT this module's doing: every accessor the binding exposes
+//   (getRowsJson, getRows, getColumnsJS, getRowObjects) strips it identically,
+//   so the loss is below the JS layer in @duckdb/node-api and cannot be fixed
+//   by switching accessor or by post-processing — by the time a string reaches
+//   JS there is no way to know a BOM was ever there. Only a BOM at position 0
+//   is affected; one anywhere else survives.
+//   The only correct fix is at projection time, in SQL, before the value
+//   crosses: double a leading BOM so the transport's strip is an exact inverse.
+//   `parquetStore.readTable` does this (`bomSafe`) because storage fidelity is
+//   non-negotiable. `pipelineDuck` does NOT, so a text cell beginning with a
+//   BOM would round-trip lossily through the (default-off) SQL pipeline path.
+//   Pinned by a test in scripts/test-duckdb.ts so it stays visible.
+//
 // Facts this design rests on (all measured in a spike, not assumed):
 //   • `Atomics.wait` IS permitted on Electron's/Node's main thread (it is only
 //     banned on a *browser* main thread). SharedArrayBuffer needs no flags.

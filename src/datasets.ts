@@ -16,6 +16,7 @@ import { app } from 'electron';
 import type { ParsedColumn } from './parse';
 import { coerceValue } from './parse';
 import * as projects from './projects';
+import * as parquetStore from './parquetStore';
 import * as transforms from './transforms';
 import type { TableData, TransformStep, ApplyResult } from './transforms';
 
@@ -29,7 +30,9 @@ export interface Dataset {
   rowCount: number;
   createdAt: string;
   updatedAt: string;
-  schemaVersion: 2;
+  // 2 = table inline in this JSON; 3 = table in a sibling .parquet. The
+  // in-memory value is always 2 once rows are hydrated — 3 describes the FILE.
+  schemaVersion: 2 | 3;
   // Week 13 — screenshot provenance for a `sourceKind: 'capture'` dataset. OPTIONAL
   // so every pre-Week-13 dataset stays valid untouched. `cropPath` is the absolute
   // path to the crop already on disk under userData/history/<entryId>/crop.png
@@ -111,14 +114,94 @@ async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
   await fs.promises.rename(tmp, file); // atomic on same fs
 }
 
+// ── Phase 2: Parquet table storage ──────────────────────────────────────────
+//
+// v2 record: <id>.json holds metadata AND both tables inline.
+// v3 record: <id>.json holds metadata only; <id>.parquet holds the derived
+//            table and <id>.source.parquet the immutable source.
+//
+// Migration is one-way and LAZY (on write, and on read of a v2 record). It is
+// gated on duck.isAvailable(): on a machine where the native binding fails to
+// load we keep writing v2 inline, so the app degrades to "exactly as before"
+// rather than to "your data is gone".
+//
+// The source parquet is keyed on `source !== undefined`, NOT on steps.length:
+// updateSteps snapshots a source even when the step list is empty, and
+// test-datasets.ts:232-238 asserts that source survives clearing all steps.
+// Keying on steps would silently discard it.
+
+function parquetPath(projectId: string, id: string): string {
+  return path.join(datasetsDir(projectId), id + '.parquet');
+}
+function sourceParquetPath(projectId: string, id: string): string {
+  return path.join(datasetsDir(projectId), id + '.source.parquet');
+}
+
+// Write a dataset's tables to Parquet and its metadata to JSON, or fall back to
+// a v2 inline write when DuckDB is unavailable. Parquet first, JSON second: if
+// the JSON write fails we are left with a stale parquet and a v2 record that
+// still has its rows, and the next load re-migrates over it. The reverse order
+// would lose the rows outright.
+async function persist(projectId: string, dataset: Dataset): Promise<void> {
+  const file = datasetFilePath(projectId, dataset.id);
+  if (!parquetStore.isSupported()) {
+    await writeJsonAtomic(file, dataset); // v2, rows inline
+    return;
+  }
+  parquetStore.writeTable(parquetPath(projectId, dataset.id), dataset.columns, dataset.rows);
+  if (dataset.source) {
+    parquetStore.writeTable(
+      sourceParquetPath(projectId, dataset.id),
+      dataset.source.columns,
+      dataset.source.rows,
+    );
+  }
+  // rowCount and columns are written in the SAME operation as the table they
+  // describe, always derived from what was just written — they are printed as
+  // app-computed facts into model prompts, so a stale value is a number-accuracy
+  // violation, not a cosmetic bug.
+  const meta: Record<string, unknown> = {
+    ...dataset,
+    rows: undefined,
+    source: dataset.source ? { columns: dataset.source.columns } : undefined,
+    rowCount: dataset.rows.length,
+    schemaVersion: 3,
+  };
+  delete meta.rows;
+  if (!dataset.source) delete meta.source;
+  await writeJsonAtomic(file, meta);
+}
+
+// Load the tables for a v3 record. Returns false when the data cannot be read —
+// the caller must then fail VISIBLY rather than silently yielding an empty
+// table, because updateSteps snapshots whatever rows it is handed and an empty
+// snapshot would destroy the dataset.
+function hydrate(projectId: string, data: any): boolean {
+  if (Array.isArray(data.rows)) return true; // v2, already inline
+  const derived = parquetStore.readTable(parquetPath(projectId, data.id), data.columns);
+  if (!derived) return false;
+  data.rows = derived.rows;
+  if (data.source && Array.isArray(data.source.columns)) {
+    const src = parquetStore.readTable(
+      sourceParquetPath(projectId, data.id),
+      data.source.columns,
+    );
+    if (!src) return false;
+    data.source = { columns: data.source.columns, rows: src.rows };
+  }
+  return true;
+}
+
 // Basic shape validation for a parsed dataset.json (skips corrupt files).
+// `rows` is NOT required: a v3 record keeps its table in a sibling .parquet and
+// legitimately has no rows key. Requiring it here would make every migrated
+// dataset fail validation and silently vanish from the sidebar.
 function isValidDataset(data: any): data is Dataset {
   return (
     Boolean(data) &&
     typeof data.id === 'string' &&
     data.id.length > 0 &&
-    Array.isArray(data.columns) &&
-    Array.isArray(data.rows)
+    Array.isArray(data.columns)
   );
 }
 
@@ -213,7 +296,22 @@ export async function getDataset(projectId: string, id: string): Promise<Dataset
     const raw = await fs.promises.readFile(datasetFilePath(projectId, id), 'utf8');
     const data = JSON.parse(raw);
     if (!isValidDataset(data)) return null;
-    return normalize(data, projectId);
+    const wasInline = Array.isArray(data.rows);
+    if (!hydrate(projectId, data)) return null;
+    const ds = normalize(data, projectId);
+    // Lazy one-way migration: a v2 record read on a machine with a working
+    // bridge is rewritten as v3. Deterministic from the same input, and every
+    // write is temp-then-rename, so two concurrent readers racing here degrade
+    // to last-writer-wins with identical bytes.
+    if (wasInline && parquetStore.isSupported()) {
+      try {
+        await persist(projectId, ds);
+      } catch (_) {
+        /* migration is best-effort: the record is still valid as v2 and will be
+           retried on the next read. Never fail a load because of it. */
+      }
+    }
+    return ds;
   } catch (_) {
     return null;
   }
@@ -257,7 +355,7 @@ export async function saveDataset(
   const capture = sanitizeCapture(input.capture);
   if (capture) dataset.capture = capture;
   await fs.promises.mkdir(datasetsDir(projectId), { recursive: true });
-  await writeJsonAtomic(datasetFilePath(projectId, id), dataset);
+  await persist(projectId, dataset);
   return dataset;
 }
 
@@ -297,7 +395,7 @@ export async function updateDatasetData(
   const cap = sanitizeCapture(capture);
   if (cap) updated.capture = cap;
   await fs.promises.mkdir(datasetsDir(projectId), { recursive: true });
-  await writeJsonAtomic(datasetFilePath(projectId, id), updated);
+  await persist(projectId, updated);
   return updated;
 }
 
@@ -366,7 +464,7 @@ export async function updateDataset(
     updated = { ...existing, columns: newColumns, rows: baseRows, rowCount: baseRows.length, updatedAt: now };
   }
   await fs.promises.mkdir(datasetsDir(projectId), { recursive: true });
-  await writeJsonAtomic(datasetFilePath(projectId, id), updated);
+  await persist(projectId, updated);
   return updated;
 }
 
@@ -410,7 +508,7 @@ export async function updateSteps(
     updatedAt: new Date().toISOString(),
   };
   await fs.promises.mkdir(datasetsDir(projectId), { recursive: true });
-  await writeJsonAtomic(datasetFilePath(projectId, id), updated);
+  await persist(projectId, updated);
   return { dataset: updated, output };
 }
 
@@ -418,7 +516,12 @@ export async function updateSteps(
 export async function deleteDataset(projectId: string, id: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
   try {
+    // All three files, or a delete orphans the table data forever: listDatasets
+    // filters on `.json`, so an abandoned .parquet is invisible but never
+    // reclaimed. Both paths are built from ids already validated above.
     await fs.promises.rm(datasetFilePath(projectId, id), { force: true });
+    await fs.promises.rm(parquetPath(projectId, id), { force: true });
+    await fs.promises.rm(sourceParquetPath(projectId, id), { force: true });
     return true;
   } catch (_) {
     return false;
