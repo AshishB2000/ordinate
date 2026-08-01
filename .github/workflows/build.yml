@@ -10,6 +10,15 @@ name: Build installers
 # NOTE: assets/icons/icon.icns and assets/icons/icon.ico must be committed for
 # these to pass — electron-builder errors if the icon is missing (we never ship
 # the default icon).
+#
+# DUCKDB NATIVE BINDING. @duckdb/node-bindings ships one prebuilt N-API binary
+# per platform, declared as optionalDependencies gated on os/cpu, so npm installs
+# only the one matching the runner — linux-x64 here would be wrong, but each job
+# runs on its real target OS, so macOS gets darwin-* and Windows gets win32-x64.
+# No electron-rebuild is needed: N-API is ABI-stable across Node and Electron.
+# The macOS UNIVERSAL build additionally needs the darwin-x64 binary alongside
+# darwin-arm64, which `predist:mac` force-installs — see package.json and
+# docs/phase-1. Node 24 matches what Electron 42 bundles and ci.yml uses.
 
 on:
   push:
@@ -25,8 +34,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      - run: npm install
+          node-version: '24'
+      - run: npm ci
       - name: Build (unsigned)
         run: npm run dist:mac
         env:
@@ -45,8 +54,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      - run: npm install
+          node-version: '24'
+      - run: npm ci
       - name: Build (unsigned)
         run: npm run dist:win
       - uses: actions/upload-artifact@v4
