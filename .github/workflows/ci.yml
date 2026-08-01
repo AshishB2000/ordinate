@@ -36,3 +36,33 @@ jobs:
         run: npm run build:ts
       - name: Run self-checks
         run: npm test
+
+  smoke:
+    name: App smoke test (real Electron)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - run: npm ci
+      # Electron needs the same shared libraries Chromium does (libnss3, libgbm,
+      # libasound2, …). Playwright ships the exact list, so borrow it rather than
+      # hand-maintaining an apt-get line that rots with each ubuntu image bump.
+      - name: Install Electron's system libraries
+        run: npx playwright install-deps chromium
+      # No display on a CI runner, and Electron will not start without one.
+      - name: Run the smoke test under a virtual display
+        run: xvfb-run -a npm run smoke
+        env:
+          SMOKE_ARTIFACT_DIR: ${{ runner.temp }}
+      # Upload the screenshot ALWAYS — on a failure it is the only way to see
+      # what the app actually looked like when it broke.
+      - name: Upload the window screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-window-screenshot
+          path: ${{ runner.temp }}/app-window.png
+          if-no-files-found: warn

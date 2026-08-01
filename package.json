@@ -20,7 +20,8 @@
     "predist:win": "npm run build:ts",
     "dist:win": "electron-builder --win --publish never",
     "bench:pipeline": "npm run build:ts && node scripts/bench-pipeline.js",
-    "bench:resident": "npm run build:ts && node scripts/bench-resident.js"
+    "bench:resident": "npm run build:ts && node scripts/bench-resident.js",
+    "smoke": "npm run build:ts && node scripts/smoke-app.js"
   },
   "license": "MIT",
   "devDependencies": {
@@ -29,6 +30,7 @@
     "cross-env": "^10.1.0",
     "electron": "^42.4.0",
     "electron-builder": "^26.0.12",
+    "playwright": "^1.62.1",
     "typescript": "^7.0.2"
   },
   "dependencies": {

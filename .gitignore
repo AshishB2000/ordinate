@@ -134,3 +134,4 @@ scripts/**/*.js
 # Resident dataset stats (dataset:stats / dataset:explain off Parquet) — emitted siblings.
 /src/statsResident.js
 /scripts/test-statsResident.js
+/scripts/smoke-app.js
