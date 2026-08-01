@@ -296,7 +296,9 @@ export async function saveVisual(
   if (!isValidId(projectId) || !isValidId(input.datasetId)) return null;
   const parent = await projects.getProject(projectId);
   if (!parent) return null;
-  const ds = await datasets.getDataset(projectId, input.datasetId);
+  // Existence check only — nothing below reads a row, so don't hydrate a table
+  // to answer "does this dataset exist".
+  const ds = await datasets.getDatasetMeta(projectId, input.datasetId);
   if (!ds) return null;
 
   const id = randomUUID();

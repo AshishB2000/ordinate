@@ -4,9 +4,11 @@ import * as datasets from '../datasets';
 import * as visuals from '../visuals';
 import * as copilot from '../copilot';
 import * as anomalies from '../anomalies';
+import * as residentQuery from '../residentQuery';
 import { computeMetric } from '../metricValue';
 import type { MetricAggregation } from '../metricValue';
 import { applyPipeline } from '../transforms';
+import type { FilterStep } from '../transforms';
 import { draftDashboard, summarizeDashboard, explainAnomalies } from '../analyze';
 
 // Dashboards IPC — list/get/save/update/delete a Dashboard, plus `dashboard:metric`
@@ -20,6 +22,136 @@ import { draftDashboard, summarizeDashboard, explainAnomalies } from '../analyze
 // (strict number rule) — the renderer never computes a figure and no model is
 // involved. Visual cards REUSE the existing `visual:data` channel; there is no new
 // charting IPC here.
+
+// ── Phase 2.5: the resident metric path ─────────────────────────────────────
+//
+// `datasets.getDataset` hydrates the WHOLE stored table into `Cell[][]` before
+// this file computes one scalar off one column. Measured (docs/phase-3 §1): at
+// 1M rows that hydration is 1,173 ms of the 1,110–1,532 ms a metric card costs,
+// while the same answer read straight off the Parquet file is 1.75–4.00 ms.
+// `residentQuery.computeMetricResident` is a proven-equivalent (357 differential
+// assertions) implementation of `metricValue.computeMetric`, so this handler now
+// asks it FIRST and keeps the hydrate-and-fold path as the reference.
+//
+// THE JS PATH REMAINS THE REFERENCE IMPLEMENTATION. Anything the resident path
+// cannot answer — no Parquet (a v2 record), no bridge, a query failure, or a
+// `null` result, which is indistinguishable from a legitimate null — falls back
+// to it SILENTLY. A resident failure is a performance event, never a user-facing
+// error.
+//
+// ONE ANSWER CAN DIFFER, and it is documented rather than hidden: `sum`/`avg`
+// over NON-INTEGER floats. JS folds left-to-right in row order, DuckDB combines
+// vectorised partial sums, so the two disagree in the last ULPs — measured here
+// at 1M rows, 487417204.09997433 (JS) against 487417204.1000064 (resident),
+// 6.6e-14 relative. That is inherent to parallel reduction, is bounded and
+// pinned by scripts/test-residentQuery.ts (relErr < 1e-12), and sits ~5 orders
+// of magnitude below anything a formatted metric card renders. Integer-valued
+// data — which is most dashboard data — is exact.
+//
+// ── The threshold ───────────────────────────────────────────────────────────
+// Resident is not free: every query pays the ~0.5 ms SharedArrayBuffer handshake
+// in src/duckdb.ts. docs/phase-3 §1 records the one negative result and says a
+// metric card therefore "wants a row-count threshold" — a scalar metric over 10k
+// rows costs 0.56 ms resident against 0.06 ms in JS. But that 0.06 ms is §1's
+// column (a2), COMPUTE ONLY, with the table already hydrated. THIS HANDLER NEVER
+// STARTS THERE: it begins at a dataset id, so its real JS cost is §1's column
+// (a) — hydration included, 11.5 ms at 10k. Re-measured end to end through the
+// shipped handler on this repo's own fixtures (sum over a numeric column, median
+// of 41):
+//
+//     rows      100    250    500   1,000   2,000   5,000   10,000   20,000
+//     JS   ms  1.02   1.08   1.26    1.85    2.66    5.88    10.73    20.05
+//     res. ms  0.41   0.43   0.42    0.45    0.46    0.54     0.68     0.77
+//
+// There is no crossover. Resident is ahead by 2.5× at ONE HUNDRED rows, because
+// the JS path pays a whole-file read plus a `Cell[][]` allocation that the query
+// simply never makes. §1's threshold advice was correct for the numbers §1 was
+// comparing and does not survive contact with the hydration this handler pays.
+//
+// The one place the (a2) comparison does apply is `computeMetricCards`, which
+// hydrates a dataset ONCE and answers every card on it from that table: N cards
+// cost `hydrate + 0.06N` ms in JS against `0.5N` ms resident. Measured at 4
+// cards on one dataset, JS wins below ~1,000 rows (1.7 ms vs 1.9 ms at 1,000)
+// and loses from there (10.9 vs 2.6 at 10k, 1,183 vs 15 at 1M).
+//
+// 1,000 is therefore the threshold, and it is deliberately low. Below it both
+// paths finish inside ~2 ms, the difference is unobservable, and the tie goes to
+// the shipped reference implementation. At and above it resident wins the
+// single-card path outright and stops losing the multi-card one, and the gap
+// then grows linearly with rows — 44× at 100k, 249× at 1M — because the JS side
+// is hydration and the resident side is flat.
+//
+// `rowCount` comes from `getDatasetMeta`, which reads it out of the JSON record
+// without touching the table, so consulting the threshold costs nothing.
+const RESIDENT_MIN_ROWS = 1_000;
+
+/**
+ * One dataset, resolved for metric computation and cached per call.
+ *
+ * `src` non-null ⇒ the table can be queried in place. `ds` is loaded LAZILY and
+ * only when the JS path is actually needed: `undefined` = never attempted,
+ * `null` = missing/unreadable. Keeping both on one entry is what stops a
+ * resident-then-fallback card from hydrating a dataset a second time.
+ */
+interface MetricTarget {
+  src: residentQuery.ResidentSource | null;
+  ds?: datasets.Dataset | null;
+}
+
+/**
+ * Decide, for one dataset, whether the resident path is available AND worth it.
+ * Never throws: every failure resolves to `{ src: null }`, i.e. "use the JS
+ * path". `isResident()` is checked first so a machine without a working bridge
+ * skips the metadata read entirely rather than parsing a v2 record's JSON (rows
+ * and all) once here and again in `getDataset`.
+ */
+async function loadMetricTarget(projectId: string, datasetId: string): Promise<MetricTarget> {
+  try {
+    if (!residentQuery.isResident()) return { src: null };
+    const meta = await datasets.getDatasetMeta(projectId, datasetId);
+    if (!meta || !meta.resident || meta.rowCount < RESIDENT_MIN_ROWS) return { src: null };
+    const src = await datasets.residentSource(projectId, datasetId);
+    return { src: src ?? null };
+  } catch (_) {
+    return { src: null };
+  }
+}
+
+/**
+ * The ONE app-computed number for a metric card. Tries the resident query, then
+ * falls back to hydrate-and-fold.
+ *
+ * `filters` are the ALREADY-SANITIZED dashboard filter steps. Both paths skip a
+ * filter naming a column the dataset lacks and compute the metric over the rest
+ * (`transforms` skips it with a warning; `residentQuery.filterPredicate` omits
+ * the predicate) — which is what lets one dashboard filter span heterogeneous
+ * datasets, so the resident path needs no special case for it.
+ *
+ * `ok:false` means the dataset itself could not be loaded. A `null` VALUE is a
+ * real answer (unknown column, non-numeric column, no numeric cells) — but it is
+ * also what `computeMetricResident` returns on failure, and the two are
+ * indistinguishable, so a resident null always falls through to the reference
+ * path rather than being trusted.
+ */
+async function metricFor(
+  projectId: string,
+  datasetId: string,
+  spec: { column: string; aggregation: MetricAggregation },
+  filters: FilterStep[],
+  target: MetricTarget,
+): Promise<{ ok: boolean; value: number | null }> {
+  if (target.src) {
+    const resident = residentQuery.computeMetricResident(target.src, spec, filters);
+    if (resident !== null) return { ok: true, value: resident };
+  }
+  if (target.ds === undefined) target.ds = await datasets.getDataset(projectId, datasetId);
+  const ds = target.ds;
+  if (!ds) return { ok: false, value: null };
+  const table = filters.length
+    ? applyPipeline({ columns: ds.columns, rows: ds.rows }, filters)
+    : { columns: ds.columns, rows: ds.rows };
+  return { ok: true, value: computeMetric(table.columns, table.rows, spec) };
+}
 
 export function register() {
   ipcMain.handle('dashboard:list', async (_e, { projectId }: any = {}) =>
@@ -61,19 +193,20 @@ export function register() {
   // dataset lacks is skipped with a warning (never throws), so one dashboard filter
   // safely spans heterogeneous datasets. Still 100% app-computed (strict-number
   // rule intact); no model involved. Dataset missing → { ok:false }.
+  //
+  // Phase 2.5: `metricFor` answers this off the Parquet file when it can (see
+  // RESIDENT_MIN_ROWS above) and hydrates otherwise. sanitizeDashboardFilters
+  // still runs FIRST and unchanged — it is the security control that keeps
+  // untrusted renderer input to filter-only steps, not a formatter, and BOTH
+  // paths consume its output. The response shape is byte-identical either way.
   ipcMain.handle('dashboard:metric', async (_e, { projectId, datasetId, column, aggregation, filters }: any = {}) => {
     try {
-      const ds = await datasets.getDataset(projectId, datasetId);
-      if (!ds) return { ok: false, error: 'Dataset not found' };
       const steps = dashboards.sanitizeDashboardFilters(filters);
-      const table = steps.length
-        ? applyPipeline({ columns: ds.columns, rows: ds.rows }, steps)
-        : { columns: ds.columns, rows: ds.rows };
-      const value = computeMetric(table.columns, table.rows, {
-        column,
-        aggregation: aggregation as MetricAggregation,
-      });
-      return { ok: true, value };
+      const spec = { column, aggregation: aggregation as MetricAggregation };
+      const target = await loadMetricTarget(projectId, datasetId);
+      const res = await metricFor(projectId, datasetId, spec, steps, target);
+      if (!res.ok) return { ok: false, error: 'Dataset not found' };
+      return { ok: true, value: res.value };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute the metric' };
     }
@@ -87,20 +220,28 @@ export function register() {
   // Compute each metric card's ONE app-computed number for a dashboard, caching
   // each referenced dataset (reuses the exact logic of ipc/copilot.buildFacts's
   // dashboard branch — the model never sees a raw dataset, only these figures).
+  //
+  // Phase 2.5: the cache now holds a MetricTarget rather than a hydrated
+  // Dataset, so a dataset is resolved ONCE per call and every card on it reuses
+  // that decision — a resident dataset is never hydrated, and a dataset that
+  // does fall back is hydrated exactly once (lazily, inside metricFor) no matter
+  // how many cards read it. No dashboard filters here, matching the previous
+  // behaviour: this feeds the AI summary's FACTS block, which describes the
+  // dashboard's stored cards, not a transient filter selection.
   async function computeMetricCards(projectId: string, d: dashboards.Dashboard): Promise<{ label: string; value: number | null }[]> {
-    const dsCache = new Map<string, Awaited<ReturnType<typeof datasets.getDataset>>>();
+    const targets = new Map<string, MetricTarget>();
     const computed: { label: string; value: number | null }[] = [];
     for (const page of d.pages || []) {
       for (const card of page.cards || []) {
         if (card.type !== 'metric' || !card.metric) continue;
         const m = card.metric;
-        let ds = dsCache.get(m.datasetId);
-        if (ds === undefined) {
-          ds = await datasets.getDataset(projectId, m.datasetId);
-          dsCache.set(m.datasetId, ds);
+        let target = targets.get(m.datasetId);
+        if (!target) {
+          target = await loadMetricTarget(projectId, m.datasetId);
+          targets.set(m.datasetId, target);
         }
-        const value = ds ? computeMetric(ds.columns, ds.rows, { column: m.column, aggregation: m.aggregation }) : null;
-        computed.push({ label: m.label || `${m.aggregation}(${m.column})`, value });
+        const res = await metricFor(projectId, m.datasetId, { column: m.column, aggregation: m.aggregation }, [], target);
+        computed.push({ label: m.label || `${m.aggregation}(${m.column})`, value: res.ok ? res.value : null });
       }
     }
     return computed;
@@ -122,10 +263,15 @@ export function register() {
       }
 
       // Load each dataset's columns for the inventory + name→(id, columns) lookup.
-      const dsByName = new Map<string, datasets.Dataset>();
+      // METADATA ONLY — this loop reads name/columns/id and nothing else, so it
+      // uses getDatasetMeta. It previously hydrated EVERY dataset in the project
+      // (both the derived table and the immutable source) to build a prompt
+      // listing column names: at the 50k row cap that is tens of MB parsed per
+      // draft, for data that is never looked at.
+      const dsByName = new Map<string, datasets.DatasetMeta>();
       const invLines: string[] = ['Datasets and their columns:'];
       for (const s of dsSummaries) {
-        const ds = await datasets.getDataset(projectId, s.id);
+        const ds = await datasets.getDatasetMeta(projectId, s.id);
         if (!ds) continue;
         dsByName.set(ds.name, ds);
         invLines.push(`- "${ds.name}": ${ds.columns.map((c) => `${c.name} (${c.type})`).join(', ') || '(no columns)'}`);

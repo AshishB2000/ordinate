@@ -1,8 +1,13 @@
 import { ipcMain } from 'electron';
 import * as visuals from '../visuals';
 import * as datasets from '../datasets';
-import { buildVizData } from '../vizData';
+import { buildVizData, recommendChartType } from '../vizData';
+import type { VizDataResult } from '../vizData';
+import { aggregateResident } from '../residentQuery';
+import type { ResidentMeasure } from '../residentQuery';
 import { sanitizeEncoding, sanitizeChartType } from '../visuals';
+import type { VizEncoding } from '../visuals';
+import type { FilterStep } from '../transforms';
 import { computeColumnSummary } from '../datasetStats';
 import { suggestChart } from '../analyze';
 
@@ -34,6 +39,103 @@ function buildColumnSummaryText(ds: datasets.Dataset): string {
     }
   });
   return lines.join('\n');
+}
+
+// ── Phase 2.5: the resident fast path for `visual:data` ─────────────────────
+//
+// `visual:data` runs on every chart render and every cross-filter change, and
+// until now it began by hydrating the WHOLE table into `Cell[][]` — measured at
+// 1,173 ms for 1M rows, against 6.6 ms for the equivalent aggregate computed in
+// place off the stored Parquet. So: when the answer is provably identical, ask
+// DuckDB; otherwise keep hydrating.
+//
+// ONLY branch (A) of `buildVizData` — no split, at least one real aggregation,
+// no geo — is rewired, because that is the only branch `aggregateResident`
+// reproduces. (B) pivot and (C) raw have no resident equivalent and fall back
+// verbatim. `buildVizData` stays the reference implementation: every rejection
+// below, and every throw, silently returns null and the JS path runs.
+//
+// The subtle precondition is WARNINGS. `aggregateResident` returns numbers, not
+// warnings, so the fast path may only be taken when `buildVizData` would have
+// produced NONE. In branch (A) exactly three things warn, and all three are
+// decidable from column METADATA alone, with no rows:
+//   1. `transforms.stepFilter`  — unknown filter column / unknown filter op
+//   2. `transforms.stepGroupAggregate` — unknown group (category) column
+//   3. `transforms.aggregate`   — unknown measure column
+// Check all three against the stored `ParsedColumn[]` and a warning is
+// impossible; fail any and we fall back so the user still sees the warning.
+// (The four guard-rail early returns each carry a warning too, so they are
+// likewise left to `buildVizData`.)
+
+// Mirrors the private set at transforms.ts:101. `visuals.sanitizeFilters`
+// already guarantees a valid op, so this is defence against a future divergence,
+// not a live case — an unknown op would make transforms warn, and a warning is
+// exactly what disqualifies the fast path.
+const FILTER_OPS: ReadonlySet<string> = new Set([
+  '=', '!=', '>', '<', '>=', '<=', 'contains', 'is_empty', 'not_empty',
+]);
+
+/**
+ * The aggregated (branch A) `visual:data` answer computed straight off Parquet,
+ * or `null` meaning "not provably equivalent — use `buildVizData`".
+ *
+ * Takes ALREADY-SANITIZED encoding/filters: sanitisation is a security control
+ * over untrusted renderer input and must run before anything else, including
+ * this. Never throws.
+ */
+export async function residentVizData(
+  projectId: string,
+  datasetId: string,
+  encoding: VizEncoding,
+  filters: FilterStep[],
+): Promise<VizDataResult | null> {
+  try {
+    if (!encoding) return null;
+    // Geo derives its region items from the finished series, and a split or an
+    // all-'none' encoding is branch (B)/(C). None are reproducible here.
+    if (encoding.geo) return null;
+    if (typeof encoding.series === 'string' && encoding.series.length > 0) return null;
+    if (typeof encoding.category !== 'string' || encoding.category === '') return null;
+    const values = Array.isArray(encoding.values) ? encoding.values : [];
+    if (values.length === 0) return null;
+    if (values.every((v) => v.aggregation === 'none')) return null;
+
+    // v2 record, missing .parquet, or no working bridge → the JS path.
+    const src = await datasets.residentSource(projectId, datasetId);
+    if (!src) return null;
+
+    // The warning-freedom proof (see above). Column identity is exact and
+    // case-sensitive, matching `transforms.colIndex`.
+    const names = new Set<string>();
+    for (const c of src.columns) if (c && typeof c.name === 'string') names.add(c.name);
+    if (!names.has(encoding.category)) return null;
+    for (const v of values) if (!names.has(v.column)) return null;
+    for (const f of filters) {
+      if (!f || f.type !== 'filter' || !names.has(f.column) || !FILTER_OPS.has(f.op)) return null;
+    }
+
+    // In an aggregated build `buildVizData` coerces a 'none' measure to 'sum'
+    // AND relabels it ("sum of price", vizData.ts:133) so the legend never
+    // understates the value. Coercing here reproduces both at once, because
+    // `residentQuery.measureLabel` derives the name from the same aggregation.
+    const measures: ResidentMeasure[] = values.map((v) => ({
+      column: v.column,
+      aggregation: v.aggregation === 'none' ? 'sum' : v.aggregation,
+    }));
+
+    const chart = aggregateResident(src, encoding.category, measures, filters);
+    if (!chart) return null; // bridge down / query failed → JS path
+
+    return {
+      data: { labels: chart.labels, series: chart.series },
+      // Pure, cheap, and needs only columns — call the real thing rather than
+      // reimplementing the classification.
+      recommendedShape: recommendChartType(src.columns, encoding).shape,
+      warnings: [],
+    };
+  } catch (_) {
+    return null;
+  }
 }
 
 export function register() {
@@ -80,9 +182,19 @@ export function register() {
   // filters (transforms filter steps) are applied to rows BEFORE aggregation.
   ipcMain.handle('visual:data', async (_e, { projectId, datasetId, encoding, filters }: any = {}) => {
     try {
+      // Sanitisation FIRST, always — the encoding and the filters are untrusted
+      // renderer input, and both paths below consume the sanitized values.
+      const enc = sanitizeEncoding(encoding);
+      const flt = visuals.sanitizeFilters(filters);
+
+      // Fast path: an aggregated chart over a resident (v3) dataset, answered
+      // without hydrating a single row. Returns null unless provably identical.
+      const fast = await residentVizData(projectId, datasetId, enc, flt);
+      if (fast) return { ok: true, data: fast.data, recommendedShape: fast.recommendedShape, warnings: fast.warnings };
+
       const ds = await datasets.getDataset(projectId, datasetId);
       if (!ds) return { ok: false, error: 'Dataset not found' };
-      const result = buildVizData(ds.columns, ds.rows, sanitizeEncoding(encoding), visuals.sanitizeFilters(filters));
+      const result = buildVizData(ds.columns, ds.rows, enc, flt);
       return { ok: true, data: result.data, recommendedShape: result.recommendedShape, warnings: result.warnings };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute the visual data' };
