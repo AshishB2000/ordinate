@@ -3,7 +3,7 @@
 **Status:** complete. No product code was changed.
 **Gate:** ✅ `npm install` clean · `npm run build:ts` → 0 errors · `npm test` → **964 ok / 0 fail**.
 **Baseline commit:** `d70a143` on `devops`.
-**DuckDB is not installed in this repo.** Every DuckDB claim in these documents is either high-confidence from the documented API surface or explicitly marked **NEEDS VERIFICATION** with the experiment that settles it. Nothing was verified by execution. §7 below is the consolidated experiment script — **run it before Phase 1 starts.**
+**✅ VERIFIED.** The §7 experiment script has been run against **DuckDB 1.5.5** — measured results are in [06-duckdb-verification.md](06-duckdb-verification.md), which supersedes every `NEEDS VERIFICATION` marker in documents 01–05. **Six predictions were wrong**; four in the migration's favour, two against. Where this document and 06 disagree, **06 wins** — it was measured, this was inferred. The revised Tier 1 list is in §5 of 06.
 
 ## Documents
 
@@ -14,6 +14,7 @@
 | [03-transforms.md](03-transforms.md) | `transforms.ts` — the prepare pipeline, `combineTables` | 64 |
 | [04-stats-metrics-anomalies.md](04-stats-metrics-anomalies.md) | `datasetStats.ts`, `metricValue.ts`, `anomalies.ts` | 31 + 26 + 30 |
 | [05-vizdata-dashboardfilters-charts.md](05-vizdata-dashboardfilters-charts.md) | `vizData.ts`, `dashboardFilters.ts`, the 28-type chart parity matrix | ~90 |
+| [06-duckdb-verification.md](06-duckdb-verification.md) | **Measured DuckDB 1.5.5 results — resolves every open question in 01–05** | — |
 
 Two brief figures were wrong and are corrected here: `formula.ts` has **82** functions, not 70, and **174** assertions, not ~130.
 
@@ -86,15 +87,15 @@ Ranked by damage. 🔴 = **silent wrongness**: renders fine, wrong number. 🟠 
 
 | # | Behaviour | Naive SQL result | Where |
 |---|---|---|---|
-| 1 | **`sum` of a text column → `null`** | DuckDB implicitly casts VARCHAR→DOUBLE: `'007'` → **7**, `'012'` → **12**. A metric card shows a plausible wrong total. This is invariant 6 violated at the aggregate. | `metricValue` R-METRIC-06 |
+| 1 | ~~**`sum` of a text column → `null`**~~ **REFUTED by measurement** — `sum(VARCHAR)` is a **Binder Error**, not an implicit cast. Demoted to Tier 2. See [06 §1](06-duckdb-verification.md). | — | `metricValue` R-METRIC-06 |
 | 2 | **`SUM(INTEGER)` returns HUGEINT/BIGINT** | Surfaces through Arrow as a **`BigInt`**; every renderer path tests `typeof v === 'number'`, and `JSON.stringify(BigInt)` throws at the IPC boundary | `vizData`, `metricValue`, `datasetStats` |
-| 3 | **`007` read as integer `7`** | The CSV sniffer types the column BIGINT. Kills every leading-zero, zip, and >15-digit guarantee **at load time, before any query runs** | `parse` R-PARSE-13 (landmine 6.1) |
+| 3 | **`007` read as integer `7`** | **Measured: conditional.** A small file is safe (1.5.5's sniffer rejects leading-zero integer candidates), but a `007` beyond the 20,480-row sample window silently becomes `7`. Position-dependent, so **every small test fixture passes.** `all_varchar=true` or `sample_size=-1` fixes it. | `parse` R-PARSE-13 (landmine 6.1) |
 | 4 | **`count` counts `''` and `'   '`** | `count(col)` excludes NULL only; the current rule excludes all three empties. `test-metricValue` `:46` expects 2, naive SQL gives 4 | `transforms` T12, `metricValue` R-METRIC-04, `datasetStats` R-STATS-01/07/10 |
 | 5 | **`max` of a column containing `NaN`** | DuckDB sorts `NaN` **greater than all values** → `max` returns `NaN` → serialises to `null` → the UI shows a blank | `datasetStats` R-STATS-03 |
 | 6 | **`mostCommon` ties** | Currently first occurrence in row order; DuckDB's `mode()` tie-break is unspecified and can flip between runs | `datasetStats` R-STATS-08 |
 | 7 | **Text `!=` against a NULL cell** | Currently `'' !== 'US'` → **row kept**; SQL NULL → **row dropped**. Inverts a row's fate. | `transforms` T5, `vizData` filters |
 | 8 | **`join` on NULL keys** | Currently `null` matches `null` *and* matches `''` (stringified keys). SQL NULL never joins. (Arguably a bug — but it is current behaviour, uncovered by tests.) | `transforms` T26 |
-| 9 | **Float summation identity** | JS is a strict left-to-right fold; DuckDB may use Kahan/parallel reduction. Last-ULP drift is normally harmless — **except** a `0.30000000000000004`-shaped result flips the retype pass from `number` to `text`, turning a numeric column into strings. It also leaks raw into the AI prompt at `ipc/datasets.ts:73`. | `transforms` T14, `datasetStats` R-STATS-04, `metricValue` R-METRIC-02 |
+| 9 | ~~**Float summation identity**~~ **REFUTED by measurement** — DuckDB does **not** use Kahan; `sum` matched the JS left-fold bit-for-bit on both probes, and `sum/count = avg` exactly. See [06 §1](06-duckdb-verification.md). | — | `transforms` T14, `datasetStats` R-STATS-04, `metricValue` R-METRIC-02 |
 | 10 | **`min`/`max` of a text column** | Currently `null` (return type is `number \| null`); SQL returns the **string** `'007'`, which flows through `{ok:true, value}` into a metric card | `metricValue` R-METRIC-03 |
 
 ### Tier 2 — loud failure (obvious break; cheap to fix once known)
@@ -105,7 +106,7 @@ Ranked by damage. 🔴 = **silent wrongness**: renders fine, wrong number. 🟠 
 | 12 | **Unknown column / unknown aggregation → `null`** | Binder / catalog error. Today the card shows "—" (`ok: true`); with SQL it shows an error state. | `metricValue` R-METRIC-07 |
 | 13 | **Non-numeric measure → an all-`null` series** | `sum(text_col)` is a binder error, not a null series | `vizData` R-VIZ-08 |
 | 14 | **`min`/`max`/`mean` absent when count is 0** | SQL returns `NULL`; if the adapter writes `summary.min = row.min` the JSON carries `min: null` and `renderer/hub/datasets.ts:530` silently drops it — **the loud failure becomes silent** | `datasetStats` R-STATS-05 |
-| 15 | **Ragged rows: short padded, long truncated, one warning** | DuckDB errors; `null_padding=true` pads short rows; **there is no truncate mode for long rows**, and `ignore_errors=true` likely drops the whole row | `parse` R-PARSE-03 |
+| 15 | **Ragged rows: short padded, long truncated, one warning** | **Measured — worse than predicted, and it belongs in Tier 1.** The *default* read silently **discards the header row and the short data row**, keeping only the widest line with synthesized `column0..N` names. With `null_padding` the header survives but the overflow field becomes a **phantom extra column** instead of being truncated. No `read_csv` configuration reproduces truncate-and-warn. | `parse` R-PARSE-03 |
 | 16 | **`drop_column` can produce zero columns with N rows** | `SELECT` with an empty select-list is a syntax error | `transforms` T21 |
 | 17 | **Empty table + `groupBy: []`** | Currently 0 rows; SQL global aggregation returns **1 row of NULLs** | `transforms` T11, `datasetStats` R-STATS-12 |
 | 18 | **Malformed JSON / empty file → a warning** | DuckDB throws | `parse` R-PARSE-04/07 |
@@ -245,9 +246,10 @@ SELECT * FROM (VALUES (1)) t(x) UNION ALL BY NAME SELECT * FROM (VALUES ('a')) u
 
 ## 8. Recommended next step
 
-**Do not open Phase 1 yet.** Two things first, in order:
+~~Run §7~~ — **done**, see [06-duckdb-verification.md](06-duckdb-verification.md).
 
-1. **Run §7** and fill the real DuckDB column into each module's breakage table. Roughly a third of the mitigations above are written against *expected* DuckDB behaviour.
-2. **Answer decision 1 (sync vs async)** with a one-day spike. It is the only finding that invalidates the Phase 1 gate as written, and everything else is downstream of it.
+**One thing remains before Phase 1 opens: answer decision 1 (sync vs async)** with a one-day spike. It is the only finding that invalidates the Phase 1 gate as written, and everything else is downstream of it.
+
+The measured results also justify the migration on their own terms: a full scan, filter, 50-group aggregation and sort over **1,000,000 rows of raw CSV completed in ~0.07 s** — before any Parquet storage or indexing.
 
 Then Phase 1 in the order the evidence suggests, which is **not** the order the brief lists: ingest + `__ord` + the VARCHAR schema decision → `transforms` (the CTE chain) → `vizData` → `datasetStats` → **`metricValue` last, or deferred to Phase 2**, since moving it before the storage move is a measurable regression.
