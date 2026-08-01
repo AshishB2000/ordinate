@@ -312,22 +312,64 @@ function makeSavedItem(d: any): HTMLElement {
   return row;
 }
 
-// ── Saved-dataset explorer (sort / filter / show-hide / rename / retype / stats /
-// quality / AI explain). All interaction is CLIENT-SIDE on the already-loaded rows
-// — the ONLY IPC is one datasetStats fetch on open and an updateDataset call on a
-// rename/retype (which re-coerces cells in main). No IPC per keystroke. ────────
+// ── Saved-dataset explorer (page / sort / search / show-hide / rename / retype /
+// stats / quality / AI explain).
+//
+// PAGED, NOT HYDRATED. This grid used to hold the whole table in renderer memory
+// (`expRows = ds.rows`) and re-copy it — filter + sort + slice — on every
+// keystroke and every header click. That made it the last consumer that
+// materialises everything, which is what forced parse.ts's 50,000-row cap.
+//
+// Now search, sort and slice run in main against the stored .parquet
+// (`window.hub.datasetPage` → src/datasetPage.ts) and only the ~500-row window
+// the grid is about to draw crosses the bridge. Round-trips to main: opening a
+// dataset, a debounced search keystroke, a header sort click, a page step, and a
+// pipeline/retype change. Column show/hide and the summary chips repaint from
+// the window already in hand — no IPC.
+//
+// `expRows` is kept as the FALLBACK table: a v2 (rows-inline) record, a dead
+// bridge or a failed query lands on `explorerDisplayRows()`, the identical
+// client-side search+sort this file has always used, sliced to the same window.
+// `{ok:false}` NEVER means "no rows" — an empty page is a real result.
 type ExpCol = { name: string; type: string };
 type ExpCell = string | number | null;
+
+/** One page of the grid. Also the fallback slice size and the old preview cap. */
+const DS_PAGE_ROWS = DS_PREVIEW_ROWS;
+/** A full-scan search in main costs ~55 ms at 200k rows — never per character. */
+const DS_SEARCH_DEBOUNCE_MS = 250;
 
 let expId = ''; // open dataset's id (empty when no explorer open)
 let expName = '';
 let expColumns: ExpCol[] = [];
-let expRows: ExpCell[][] = []; // full rows — never mutated in place (sort keeps an index)
+let expRows: ExpCell[][] = []; // FALLBACK ONLY — never rendered directly (see above)
 let expSummaries: any[] = []; // per-column ColumnSummary from dataset:stats
 let expHidden: Set<number> = new Set();
 let expSearch = '';
 let expSortCol = -1;
 let expSortDir = 1; // 1 asc, -1 desc
+
+let expPageRows: ExpCell[][] = []; // the window currently drawn
+let expTotal = 0; // rows matching the search, BEFORE paging (comes back with the page)
+let expOffset = 0; // first row of the drawn window, 0-based
+let expPageSeq = 0; // request generation — a late reply for an older query is dropped
+let expSearchTimer = 0; // pending debounced search (window.setTimeout handle)
+
+// `datasetPage` is on the preload bridge (preload/hubPreload.ts) but not in
+// globals.d.ts's Window['hub'] shape, which this file may not edit. Resolve it
+// through one narrow cast rather than sprinkling `any` at the call site; an
+// absent method simply reads as undefined and takes the fallback path.
+type DatasetPageReq = {
+  offset: number;
+  limit: number;
+  search?: string;
+  sortColumn?: string;
+  sortDir?: 'asc' | 'desc';
+};
+function datasetPageBridge(): ((p: string, d: string, r: DatasetPageReq) => Promise<any>) | undefined {
+  return (window.hub as unknown as { datasetPage?: (p: string, d: string, r: DatasetPageReq) => Promise<any> })
+    .datasetPage;
+}
 
 function normalizeCols(cols: any): ExpCol[] {
   return Array.isArray(cols)
@@ -342,7 +384,10 @@ async function openSavedDataset(id: string): Promise<void> {
   if (!currentProjectId) return;
   let ds: any;
   try {
-    ds = await window.hub.getDataset(currentProjectId, id);
+    // Metadata only — the grid pulls the window it draws through datasetPage,
+    // so the whole table never crosses IPC. This is what lets a dataset be
+    // larger than the renderer could hold.
+    ds = await (window.hub as any).getDatasetMeta(currentProjectId, id);
   } catch (_) {
     return;
   }
@@ -358,13 +403,25 @@ async function openSavedDataset(id: string): Promise<void> {
   expId = String(ds.id || id);
   expName = ds.name ? String(ds.name) : 'Untitled dataset';
   expColumns = normalizeCols(ds.columns);
-  expRows = Array.isArray(ds.rows) ? ds.rows : [];
+  // Intentionally empty: rows are never hydrated into the renderer any more.
+  // The client-side fallback in explorerDisplayRows() operates on this buffer,
+  // so it now yields nothing — which is correct, because main's dataset:page
+  // handler already falls back to hydrate-and-page for a v2 record. There is no
+  // case where the renderer needs its own copy of the table.
+  expRows = [];
   expSteps = Array.isArray(ds.steps) ? ds.steps : []; // prepare.ts pipeline state
   expSummaries = [];
   expHidden = new Set();
   expSearch = '';
   expSortCol = -1;
   expSortDir = 1;
+  expPageRows = [];
+  expTotal = 0;
+  expOffset = 0;
+  if (expSearchTimer) {
+    window.clearTimeout(expSearchTimer);
+    expSearchTimer = 0;
+  }
 
   const searchInput = dsEl('ds-search') as HTMLInputElement | null;
   if (searchInput) searchInput.value = '';
@@ -388,7 +445,7 @@ async function openSavedDataset(id: string): Promise<void> {
 
   dsShow('ds-explorer', true);
   resetPreparePanel(); // prepare.ts — collapse editor/suggest/menu, render steps + combine
-  renderExplorerTable();
+  await refreshExplorerPage(); // awaited so the grid never paints blank first
   await loadExplorerStats();
 }
 
@@ -464,7 +521,7 @@ async function loadExplorerStats(): Promise<void> {
   if (!res || !res.ok) return;
   expSummaries = Array.isArray(res.summaries) ? res.summaries : [];
   renderQuality(Array.isArray(res.issues) ? res.issues : []);
-  renderExplorerTable(); // headers now carry summary chips
+  paintExplorerTable(); // headers now carry summary chips — same rows, no refetch
 }
 
 function renderQuality(issues: any[]): void {
@@ -498,7 +555,11 @@ function sortCompare(a: ExpCell, b: ExpCell, type: string, dir: number): number 
   return c * dir;
 }
 
-// Apply search + sort to a copy (index-preserving); never mutates expRows.
+// FALLBACK PATH ONLY. Apply search + sort to a copy of the rows the renderer
+// already has; never mutates expRows. Used when `datasetPage` cannot serve the
+// window (v2 record, dead bridge, failed query) — deliberately still the exact
+// semantics src/datasetPage.ts's `pageRowsJs` was transcribed from, so the
+// fallback and the fast path agree.
 function explorerDisplayRows(): ExpCell[][] {
   const q = expSearch.trim().toLowerCase();
   let rows = expRows.map((row) => (Array.isArray(row) ? row : []));
@@ -549,7 +610,21 @@ function toggleSort(c: number): void {
     expSortCol = c;
     expSortDir = 1;
   }
+  expOffset = 0; // a new order invalidates the page you were on
   renderExplorerTable();
+}
+
+// The clicked column's NAME — what `datasetPage` takes (it resolves the name to
+// an index against the stored schema). The header UI still tracks the clicked
+// INDEX, so the arrow lands where you clicked.
+//
+// BEHAVIOUR CHANGE, duplicate column names only: main resolves the FIRST column
+// with this name, so clicking the second "Total" of two now sorts by the first
+// "Total". The old client-side path sorted by the exact index. It only bites a
+// dataset with two identically-named columns; the fallback path below is still
+// index-exact, so the two paths disagree in that one case.
+function expSortColumnName(): string {
+  return expSortCol >= 0 && expSortCol < expColumns.length ? expColumns[expSortCol].name : '';
 }
 
 function makeExplorerTh(col: ExpCol, c: number): HTMLElement {
@@ -610,7 +685,80 @@ function makeExplorerTh(col: ExpCol, c: number): HTMLElement {
   return th;
 }
 
+/**
+ * Fetch the window the grid should be showing and paint it.
+ *
+ * One round-trip to main per call. Search, sort and slice all happen there,
+ * against the .parquet — nothing outside the window is hydrated. `total` comes
+ * back with the page, so the row-count label costs no extra read.
+ *
+ * A stale reply (the user typed or clicked again while this was in flight, or
+ * closed the dataset) is dropped on the `expPageSeq`/`expId` check rather than
+ * repainting over a newer window.
+ */
+async function refreshExplorerPage(retried?: boolean): Promise<void> {
+  if (!expId) return;
+  const seq = ++expPageSeq;
+  const wantId = expId;
+  const req: DatasetPageReq = {
+    offset: expOffset,
+    limit: DS_PAGE_ROWS,
+    search: expSearch.trim(),
+    sortColumn: expSortColumnName(),
+    sortDir: expSortDir === 1 ? 'asc' : 'desc',
+  };
+
+  let res: any = null;
+  try {
+    const page = datasetPageBridge();
+    if (page && currentProjectId) res = await page(currentProjectId, wantId, req);
+  } catch (_) {
+    res = null; // dead bridge — fall through to the client-side path
+  }
+  if (seq !== expPageSeq || wantId !== expId) return; // a newer request already won
+
+  if (res && res.ok === true) {
+    // An EMPTY page is a real answer (search matched nothing, or you paged past
+    // the end) — only `ok === true` is trusted, never row-count truthiness.
+    expPageRows = Array.isArray(res.rows) ? res.rows : [];
+    expTotal = typeof res.total === 'number' ? res.total : expPageRows.length;
+    expOffset = typeof res.offset === 'number' ? res.offset : expOffset;
+    // The table shrank under us (a prepare step dropped rows while you were on a
+    // later page) — an offset past the end is a legitimately empty page, but a
+    // blank grid is not what the user asked for. Snap to the top, once.
+    if (expPageRows.length === 0 && expTotal > 0 && expOffset > 0 && !retried) {
+      expOffset = 0;
+      await refreshExplorerPage(true);
+      return;
+    }
+  } else {
+    // Fallback: the rows the renderer already has, same search + sort + slice.
+    const all = explorerDisplayRows();
+    expTotal = all.length;
+    if (expOffset >= expTotal) expOffset = 0;
+    expPageRows = all.slice(expOffset, expOffset + DS_PAGE_ROWS);
+  }
+  paintExplorerTable();
+}
+
+// Public entry for "the underlying data or its order changed" — used by
+// prepare.ts after a pipeline step, and by sort/search/paging here. Painting is
+// left to the fetch so a stale window is never shown between the two.
 function renderExplorerTable(): void {
+  void refreshExplorerPage();
+}
+
+function stepExplorerPage(delta: number): void {
+  const next = expOffset + delta * DS_PAGE_ROWS;
+  if (next < 0 || next >= expTotal) return;
+  expOffset = next;
+  renderExplorerTable();
+}
+
+// Draw the window currently in hand. NO filtering, NO sorting, NO IPC — those
+// happened in main. Cheap enough to call for a column show/hide or a summary
+// chip arriving.
+function paintExplorerTable(): void {
   const scroll = dsEl('ds-explorer-scroll');
   if (!scroll) return;
   scroll.innerHTML = '';
@@ -627,8 +775,7 @@ function renderExplorerTable(): void {
   table.appendChild(thead);
 
   const tbody = document.createElement('tbody');
-  const display = explorerDisplayRows();
-  display.slice(0, DS_PREVIEW_ROWS).forEach((rowArr) => {
+  expPageRows.forEach((rowArr) => {
     const tr = document.createElement('tr');
     const cells: any[] = Array.isArray(rowArr) ? rowArr : [];
     expColumns.forEach((_, c) => {
@@ -644,15 +791,44 @@ function renderExplorerTable(): void {
   table.appendChild(tbody);
   scroll.appendChild(table);
 
+  paintExplorerPager();
+}
+
+// Row count + Prev/Next, built into the existing #ds-explorer-note. The grid
+// only ever drew the first 500 rows, so paging is a strict gain: the rows past
+// 500 were previously unreachable. Chose explicit pages over a virtual scroll —
+// same 500-row draw, no scroll-position bookkeeping, no new markup or CSS (this
+// file is the only one that may change). No inline style= anywhere: CSP would
+// silently drop it, so spacing is set through element.style from JS.
+function paintExplorerPager(): void {
   const note = dsEl('ds-explorer-note');
-  if (note) {
-    const total = display.length;
-    note.textContent =
-      total > DS_PREVIEW_ROWS
-        ? 'Showing first ' + DS_PREVIEW_ROWS + ' of ' + total + ' rows'
-        : total + (total === 1 ? ' row' : ' rows');
-    note.hidden = false;
-  }
+  if (!note) return;
+  note.innerHTML = '';
+  note.hidden = false;
+
+  const first = expTotal === 0 ? 0 : expOffset + 1;
+  const last = Math.min(expOffset + expPageRows.length, expTotal);
+  const label = document.createElement('span');
+  label.textContent =
+    expTotal > expPageRows.length
+      ? 'Rows ' + first + '–' + last + ' of ' + expTotal
+      : expTotal + (expTotal === 1 ? ' row' : ' rows');
+  note.appendChild(label);
+
+  if (expTotal <= DS_PAGE_ROWS) return; // one page — no controls to show
+
+  const mkPageBtn = (text: string, delta: number, disabled: boolean): void => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-sm';
+    btn.textContent = text;
+    btn.disabled = disabled;
+    btn.style.marginLeft = '8px';
+    btn.addEventListener('click', () => stepExplorerPage(delta));
+    note.appendChild(btn);
+  };
+  mkPageBtn('‹ Prev', -1, expOffset <= 0);
+  mkPageBtn('Next ›', 1, expOffset + DS_PAGE_ROWS >= expTotal);
 }
 
 // Column show/hide menu (checkbox per column).
@@ -669,7 +845,7 @@ function renderColsMenu(): void {
     cb.addEventListener('change', () => {
       if (cb.checked) expHidden.delete(c);
       else expHidden.add(c);
-      renderExplorerTable();
+      paintExplorerTable(); // pure display — the window in hand is unchanged
     });
     const span = document.createElement('span');
     span.textContent = col.name || 'Column ' + (c + 1);
@@ -697,7 +873,8 @@ async function persistColumns(newCols: ExpCol[]): Promise<void> {
   const ds = res.dataset || {};
   expColumns = normalizeCols(ds.columns);
   if (Array.isArray(ds.rows)) expRows = ds.rows;
-  await loadExplorerStats(); // recompute summaries/quality + re-render
+  await refreshExplorerPage(); // a retype re-coerced cells and changed sort semantics
+  await loadExplorerStats(); // recompute summaries/quality + repaint the headers
   await refreshDatasetList(); // updatedAt changed in the saved list
 }
 
@@ -783,11 +960,19 @@ function initDatasets(): void {
   if (sheetSel) sheetSel.addEventListener('change', () => handleSheetChange());
 
   // ── Explorer controls ──
+  // DEBOUNCED. A search is a full scan in main (~55 ms at 200k rows, two
+  // statements) — the old client-side filter was free once hydrated, this one is
+  // not, so a keystroke must not fire a query per character.
   const search = dsEl('ds-search') as HTMLInputElement | null;
   if (search) {
     search.addEventListener('input', () => {
-      expSearch = search.value;
-      renderExplorerTable();
+      if (expSearchTimer) window.clearTimeout(expSearchTimer);
+      expSearchTimer = window.setTimeout(() => {
+        expSearchTimer = 0;
+        expSearch = search.value;
+        expOffset = 0; // a new result set starts at the top
+        renderExplorerTable();
+      }, DS_SEARCH_DEBOUNCE_MS);
     });
   }
 
@@ -814,7 +999,11 @@ function initDatasets(): void {
   const closeBtn = dsEl('ds-explorer-close');
   if (closeBtn) {
     closeBtn.addEventListener('click', () => {
-      expId = '';
+      expId = ''; // also makes any in-flight page reply drop itself
+      if (expSearchTimer) {
+        window.clearTimeout(expSearchTimer);
+        expSearchTimer = 0;
+      }
       dsShow('ds-explorer', false);
     });
   }

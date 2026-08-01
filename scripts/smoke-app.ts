@@ -71,7 +71,7 @@ async function main(): Promise<void> {
 
     // The correctness-sensitive shapes: leading zeros, '', negatives.
     const rows: any[][] = [];
-    for (let i = 0; i < 25_000; i++) {
+    for (let i = 0; i < 500_000; i++) {
       rows.push([
         'region' + (i % 7),
         String(i % 500).padStart(3, '0'),
@@ -95,6 +95,8 @@ async function main(): Promise<void> {
     const meta = await datasets.getDatasetMeta(proj.id, ds.id);
     out.resident = meta && meta.resident;
 
+    // NOTE: still the hydrating path, deliberately — this asserts the chart
+    // math itself, and is the one place the smoke test pays for a full load.
     const full = await datasets.getDataset(proj.id, ds.id);
     const viz = vizData.buildVizData(full.columns, full.rows, {
       category: 'region',
@@ -121,7 +123,7 @@ async function main(): Promise<void> {
   });
 
   ok('project created', !!r.projectId);
-  ok('25k-row dataset saved', r.rowCount === 25_000, `rowCount=${r.rowCount}`);
+  ok('500k-row dataset saved — 10x the old 50k cap', r.rowCount === 500_000, `rowCount=${r.rowCount}`);
   ok('dataset is Parquet-backed', r.resident === true);
   ok('chart data computed', Array.isArray(r.labels) && r.labels.length === 7,
      `labels=${JSON.stringify(r.labels)}`);
@@ -181,7 +183,7 @@ async function main(): Promise<void> {
   // what proves the Parquet store reaches the screen, not just the API.
   const listed: string | null = await win.evaluate(() => {
     const el = [...document.querySelectorAll('*')].find(
-      (e) => e.children.length === 0 && /25000 rows/.test(e.textContent || ''),
+      (e) => e.children.length === 0 && /500000 rows/.test(e.textContent || ''),
     );
     return el ? (el.textContent || '').trim().slice(0, 60) : null;
   });

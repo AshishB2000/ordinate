@@ -33,7 +33,15 @@ export interface ParseResult {
 // anti-OOM guard is the byte-size ceiling enforced BEFORE readFile in
 // src/ipc/datasets.ts (MAX_FILE_BYTES); this cap just keeps the saved dataset and
 // preview a sane size. ponytail: two guards, byte-ceiling upstream + row-cap here.
-const MAX_ROWS = 50_000;
+// Raised from 50,000 (2026-08). The old cap existed because every consumer
+// materialised the whole table into Cell[][]: the JS fold, the IPC clone to the
+// renderer, and the Explore grid, which re-copied the array on every keystroke.
+// None of that is true any more — datasets are stored as Parquet, charts,
+// metrics and stats query it in place, and the grid pulls one 500-row page at a
+// time (src/datasetPage.ts). Parsing still materialises once, which is why this
+// is 1,000,000 rather than unbounded; MAX_FILE_BYTES in src/ipc/datasets.ts is
+// the real anti-OOM guard and is enforced before a byte is read.
+const MAX_ROWS = 1_000_000;
 
 // ── Public API ───────────────────────────────────────────────────────────────
 

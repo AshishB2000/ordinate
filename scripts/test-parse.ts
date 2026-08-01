@@ -96,7 +96,12 @@ function ok(label: string, cond: boolean): void {
   const wide = '[' + Array.from({ length: 70_000 }, () => '[1,2]').join(',') + ']';
   const rWide = parse.parseJson(wide);
   ok('json 2d no header: large row count does not throw (loop width)', rWide.columns.length === 2);
-  ok('json 2d no header: row cap applied not error', rWide.rowCount === 50_000);
+  // DELIBERATE CHANGE (2026-08): MAX_ROWS went 50,000 -> 1,000,000, so 70,000
+  // rows are now UNDER the cap and must all survive. This assertion previously
+  // read `=== 50_000`; it was pinning the cap, but what this block actually
+  // guards is the loop-vs-arg-spread width detection above. The cap itself is
+  // tested in its own block below, against the new number.
+  ok('json 2d no header: 70k rows are now under the cap and all kept', rWide.rowCount === 70_000);
 }
 
 // ── Paste auto-detect: JSON vs CSV vs TSV ────────────────────────────────────
@@ -145,12 +150,20 @@ function ok(label: string, cond: boolean): void {
 
 // ── Row cap (anti-freeze) ────────────────────────────────────────────────────
 {
+  // DELIBERATE CHANGE (2026-08): the cap is now 1,000,000, raised because no
+  // consumer materialises a whole table any more — Parquet storage, in-place
+  // queries, and a paged Explore grid replaced the JS fold, the full IPC clone
+  // and the renderer-side copy. The behaviour under test is unchanged: trim to
+  // the cap and warn. Only the number moved.
+  const CAP = 1_000_000;
   const header = 'n';
   const bodyLines: string[] = [];
-  for (let i = 0; i < 50_005; i++) bodyLines.push(String(i));
+  for (let i = 0; i < CAP + 5; i++) bodyLines.push(String(i));
   const r = parse.parseCsv(header + '\n' + bodyLines.join('\n'));
-  ok('cap: rowCount clamped to 50000', r.rowCount === 50_000);
+  ok('cap: rowCount clamped to 1,000,000', r.rowCount === CAP);
   ok('cap: warning emitted', r.warnings.some((w) => w.startsWith('Row cap reached')));
+  ok('cap: the warning names the true total, not the capped one',
+     r.warnings.some((w) => w.includes(String(CAP + 5))));
 }
 
 if (failures) {
