@@ -1487,6 +1487,14 @@ html[data-os="win"] .titlebar { padding-right: 146px; }
 /* ── hub capture view (shown when a hub-triggered capture lands) ─────── */
 .cap-view-hidden { display: none !important; }
 
+/* Initial-paint hiding for elements JS later toggles via element.style.display.
+   MUST be a class, not style="display:none" in the HTML: the hub CSP is
+   `style-src 'self'`, which blocks inline style ATTRIBUTES outright — the
+   attribute silently does nothing and the element paints visible until JS runs.
+   (JS `element.style.x = ...` is a different thing and is allowed; an inline
+   value set that way still wins over this class, so showing works unchanged.) */
+.is-hidden { display: none; }
+
 .cap-view {
   position: absolute;
   inset: 0;
