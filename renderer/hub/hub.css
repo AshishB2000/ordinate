@@ -2486,55 +2486,144 @@ html[data-os="win"] .titlebar { padding-right: 146px; }
 
 .lightbox-close:hover { background: rgba(0,0,0,0.8); }
 
-/* ── Map visualizations (Leaflet) ─────────────────────────────────── */
+/* ── Map visualizations (MapLibre GL) ─────────────────────────────── */
+/* MapLibre's own stylesheet is hard-coded for a light page: #fff panels, black
+   text, and control icons baked in as dark SVG data URIs. Everything below
+   re-skins that chrome onto the hub's theme vars so maps read correctly under
+   both [data-theme="light"] and [data-theme="dark"]. */
 .cv-map-container {
   width: 100%;
   height: 100%;
   min-height: 220px;
   border-radius: var(--r-md);
   overflow: hidden;
-  /* Leaflet sets z-index internally; ensure it sits below hub panels */
+  /* MapLibre sets z-index internally; ensure it sits below hub panels */
   position: relative;
   z-index: 0;
 }
 
-/* Adapt Leaflet controls to theme */
-.leaflet-bar a,
-.leaflet-bar a:hover {
-  background: var(--surface);
-  color: var(--text);
-  border-color: var(--border);
-}
-
-.leaflet-bar a:hover {
-  background: var(--surface-2);
-}
-
-.leaflet-container {
+.maplibregl-map {
   background: var(--surface-2);
   font-family: var(--font-ui);
   font-size: 12px;
+  line-height: 20px;
   color: var(--text);
 }
 
-.leaflet-popup-content-wrapper,
-.leaflet-popup-tip {
+/* The WebGL canvas has no themed backdrop of its own — the map's "no data yet"
+   colour is whatever shows through, so tie it to the surface. */
+.maplibregl-canvas-container,
+.maplibregl-canvas { background: transparent; }
+
+/* ── Controls (zoom / compass / fullscreen …) ─────────────────────── */
+.maplibregl-ctrl-group {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+
+/* MapLibre fakes its control border with a 2px spread box-shadow (and a
+   ButtonText fallback for forced-colors). We draw a real 1px border instead, so
+   drop the shadow and use the hub's elevation token. */
+.maplibregl-ctrl-group:not(:empty) { box-shadow: var(--shadow-md); }
+
+.maplibregl-ctrl-group button {
+  background-color: transparent;
+  color: var(--text);
+}
+
+.maplibregl-ctrl-group button + button { border-top: 1px solid var(--border); }
+
+.maplibregl-ctrl button:not(:disabled):hover { background-color: var(--surface-2); }
+
+.maplibregl-ctrl-group button:focus,
+.maplibregl-ctrl-group button:focus:focus-visible,
+.maplibregl-ctrl-attrib-button:focus {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* The control glyphs are dark-on-transparent SVG data URIs inside MapLibre's
+   own CSS — unreadable on a dark surface and not restyleable from here, so flip
+   their luminance in dark mode. Scoped to the icon element only, never the
+   canvas or a popup, so real map colours are untouched. */
+[data-theme="dark"] .maplibregl-ctrl-icon,
+[data-theme="dark"] .maplibregl-ctrl-attrib-button,
+[data-theme="dark"] .maplibregl-ctrl-attrib.maplibregl-compact::after {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* ── Attribution (OpenStreetMap credit — required by the tile licence) ── */
+.maplibregl-ctrl.maplibregl-ctrl-attrib {
+  background-color: color-mix(in srgb, var(--surface) 70%, transparent);
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.maplibregl-ctrl-attrib.maplibregl-compact {
+  background-color: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.maplibregl-ctrl-attrib a { color: var(--accent); }
+.maplibregl-ctrl-attrib a:hover { color: var(--accent-2); }
+
+.maplibregl-ctrl-attrib-button { background-color: transparent; }
+
+.maplibregl-ctrl-scale {
+  background-color: color-mix(in srgb, var(--surface) 75%, transparent);
+  border-color: var(--border-3);
+  color: var(--text);
+}
+
+/* ── Popups ───────────────────────────────────────────────────────── */
+.maplibregl-popup-content {
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--border);
-  box-shadow: var(--shadow-md);
   border-radius: var(--r-sm);
-}
-
-.leaflet-popup-content {
+  box-shadow: var(--shadow-md);
+  padding: 8px 10px;
   font-size: 12px;
   line-height: 1.6;
 }
 
-.leaflet-popup-content strong {
+.maplibregl-popup-content strong {
   color: var(--text-strong);
   font-size: 12.5px;
 }
+
+.maplibregl-popup-close-button {
+  color: var(--muted);
+  width: 22px;
+  height: 22px;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 0 var(--r-sm) 0 0;
+}
+
+.maplibregl-popup-close-button:hover {
+  background-color: var(--surface-2);
+  color: var(--text);
+}
+
+/* The popup tip is a CSS triangle: MapLibre colours it #fff on whichever border
+   edge faces the content, so each anchor needs its own override. */
+.maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+.maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: var(--surface);
+}
+
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: var(--surface);
+}
+
+.maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: var(--surface); }
+.maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: var(--surface); }
 
 /* Map legend */
 .cv-map-legend {
@@ -2592,16 +2681,7 @@ html[data-os="win"] .titlebar { padding-right: 146px; }
   pointer-events: none;
 }
 
-/* Override leaflet attribution to match theme */
-.leaflet-control-attribution {
-  background: var(--surface) !important;
-  color: var(--muted) !important;
-  font-size: 9px !important;
-}
-
-.leaflet-control-attribution a {
-  color: var(--accent) !important;
-}
+/* (Attribution theming now lives with the other .maplibregl-* overrides above.) */
 
 .cv-map-legend-range {
   display: flex;
@@ -2682,8 +2762,11 @@ html[data-os="win"] .titlebar { padding-right: 146px; }
   font-size: 12px;
 }
 
-/* Permanent ABBR + value labels on the map — override Leaflet's tooltip chrome */
-.leaflet-tooltip.cv-map-value-label {
+/* Permanent ABBR + value labels on the map. Under Leaflet this had to override
+   `.leaflet-tooltip`; MapLibre has no tooltip primitive, so the class is now
+   self-contained and works on whatever host mapRender picks (a Marker's custom
+   element, or a Popup given this className). */
+.cv-map-value-label {
   background: var(--surface);
   color: var(--text-strong);
   border: 1px solid var(--border);
@@ -2697,7 +2780,19 @@ html[data-os="win"] .titlebar { padding-right: 146px; }
   opacity: 0.92;
   pointer-events: none;
 }
-.leaflet-tooltip.cv-map-value-label::before { display: none; border: none; }
+.cv-map-value-label::before { display: none; border: none; }
+
+/* If it is mounted as a MapLibre Popup, strip the popup chrome MapLibre wraps
+   around it — the label IS the chrome. */
+.cv-map-value-label .maplibregl-popup-content {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+}
+.cv-map-value-label .maplibregl-popup-tip { display: none; }
 
 /* ── Toast notification ──────────────────────────────────────────────── */
 .hub-toast {

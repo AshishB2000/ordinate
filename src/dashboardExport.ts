@@ -10,6 +10,16 @@
 // the existing report-capture path) so the file is fully offline — no network, no plugin
 // bundles, no new dependency.
 //
+// WHY MAPLIBRE IS NOT INLINED (Phase 4). A map card stays a static `data:` PNG; the
+// MapLibre bundle is deliberately NOT embedded the way Chart.js is. Measured, v4.7.1:
+// maplibre-gl.js 803 KB + maplibre-gl.css 66 KB = ~869 KB, against 209 KB for the whole
+// Chart.js UMD — a 4.2x jump in the floor size of EVERY export, map card or not. And it
+// would not even buy a working map: MapLibre spins up a Web Worker (a second 352 KB
+// file that a single-file export would have to smuggle in through a blob URL) and its
+// tiles come from the network, so a "live" map in a file whose entire point is offline
+// self-containment is a contradiction. The PNG is one image, already captured, already
+// whitelisted by sanitizePng below, and it renders with the network off.
+//
 // SECRET-EXCLUSION GUARANTEE. The bundle is untrusted renderer input. `sanitizeBundle`
 // WHITELISTS it field-by-field to a fixed primitive schema (labels/numbers/strings +
 // `data:image` URIs only) — any key that is not part of that schema is DROPPED, so a
@@ -138,7 +148,9 @@ function sanitizeChartData(raw: unknown): ExportChartData {
 }
 
 // Only a `data:image/...;base64,...` URI is accepted for an embedded PNG — never an
-// http(s) URL (keeps the file offline) and never arbitrary text.
+// http(s) URL (keeps the file offline) and never arbitrary text. A MapLibre map card
+// arrives here as `nativeImage.toDataURL()` output ("data:image/png;base64,…"), so it
+// passes unchanged — the WebGL migration needed NO loosening of this gate.
 function sanitizePng(v: unknown): string {
   return typeof v === 'string' && /^data:image\/[a-z0-9.+-]+;base64,/i.test(v) ? v : '';
 }

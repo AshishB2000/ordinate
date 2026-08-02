@@ -161,3 +161,5 @@ scripts/**/*.js
 # Phase 3c Mosaic/vgplot renderer — emitted siblings.
 /renderer/hub/plotRender.js
 /scripts/test-plotSpec.js
+# Phase 4 MapLibre GL — emitted sibling.
+/renderer/hub/mapWorker.js

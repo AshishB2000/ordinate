@@ -1,7 +1,7 @@
 // Shared cross-file globals for the hub renderer. The hub is many classic
 // <script> files sharing ONE global scope (no modules) — every symbol defined
 // in one hub file and consumed in another is declared here so each file
-// type-checks standalone. Vendor globals (Chart.js, Leaflet, pdfmake, pptxgenjs,
+// type-checks standalone. Vendor globals (Chart.js, MapLibre GL, pdfmake, pptxgenjs,
 // docx) and the preload bridge (window.hub) are typed loosely on purpose.
 
 export {}; // make this a module so `declare global` works
@@ -231,8 +231,13 @@ declare global {
     webkitAudioContext?: typeof AudioContext;
   }
 
-  /** Leaflet UMD global (leaflet.js script tag). */
-  const L: any; // ponytail: Leaflet API, typing it fully isn't worth it
+  /**
+   * MapLibre GL UMD global (maplibre-gl-csp.js script tag) — the map engine.
+   * maplibre-gl ships real types in its own `maplibre-gl.d.ts`, but pulling
+   * them in would need an `import`, and renderer files must stay classic
+   * global-scope scripts (see the header comment).
+   */
+  const maplibregl: any; // ponytail: MapLibre API, can't import its .d.ts from a script
 
   // HTMLElement carries the dropdown API after makeDropdown() (root._dd = api).
   interface HTMLElement {
