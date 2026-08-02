@@ -1,5 +1,6 @@
 import {
   app,
+  dialog,
   globalShortcut,
   ipcMain,
   systemPreferences,
@@ -89,13 +90,11 @@ if (app.isPackaged) {
   console.log('[userPath] recovered PATH —', recovered.split(':').length, 'dirs');
 }
 
-import { createStatusWindow } from './src/windows/statusWindow';
 import { createOverlayWindow } from './src/windows/overlayWindow';
 import { createHubWindow } from './src/windows/hubWindow';
 
 import { platformDefaultHotkey, hotkeyLabel } from './src/hotkey';
 
-let statusWindow: BrowserWindow | null = null;
 let overlayWindow: BrowserWindow | null = null;
 let hubWindow: BrowserWindow | null = null;
 
@@ -119,27 +118,6 @@ const entryData = new Map<number, any>();
 // ponytail: summary rows come straight from disk JSON.
 let historySummaries: any[] = [];
 
-function ensureStatusWindow(): BrowserWindow {
-  if (statusWindow && !statusWindow.isDestroyed()) return statusWindow;
-  statusWindow = createStatusWindow();
-  statusWindow.on('closed', () => {
-    statusWindow = null;
-  });
-  return statusWindow;
-}
-
-function pushStatus(note?: string): void {
-  const win = ensureStatusWindow();
-  const send = () => {
-    if (!win || win.isDestroyed()) return;
-    win.webContents.send('status:state', { hotkey: hotkeyLabel(config.get().hotkey), note: note || '' });
-  };
-  if (win.webContents.isLoading()) {
-    win.webContents.once('did-finish-load', send);
-  } else {
-    send();
-  }
-}
 
 function isWayland(): boolean {
   return process.platform === 'linux' && process.env.XDG_SESSION_TYPE === 'wayland';
@@ -208,7 +186,10 @@ async function startCapture(): Promise<void> {
     });
     overlayWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
       console.error('[capture] overlay did-fail-load', code, desc, url);
-      pushStatus('Capture overlay failed to load: ' + desc);
+      // A native dialog, not a window: this is a rare terminal error and the hub
+      // may not be open. The Status window that used to carry this message was a
+      // 400x320 BrowserWindow reachable from nowhere else — see CLAUDE.md.
+      dialog.showErrorBox('Capture failed', 'The capture overlay failed to load.\n\n' + desc);
       endCapture();
     });
     overlayWindow.webContents.once('did-finish-load', () => {

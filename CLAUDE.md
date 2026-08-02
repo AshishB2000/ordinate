@@ -22,9 +22,24 @@ quality before adding code.
 > — no table is materialised into `Cell[][]` to answer a question. The row cap is **1,000,000**
 > (was 50,000). See [`docs/phase-0/`](docs/phase-0/) … [`docs/phase-3c/`](docs/phase-3c/) for the
 > measured basis of every decision, and `.claude/plans/rewrite-to-duckdb-stack.md` for the original
-> brief. **Not** built, and argued against on measured grounds in
-> [`docs/phase-3/README.md`](docs/phase-3/README.md): deck.gl and the Tauri shell. Apache Arrow is
-> **not** achievable with the current binding — `@duckdb/node-api` ships no Arrow support.
+> brief. **Not** built: deck.gl, argued against on measured grounds in
+> [`docs/phase-3/README.md`](docs/phase-3/README.md), and the Tauri shell, costed separately in
+> [`docs/phase-6/`](docs/phase-6/). Apache Arrow is **not** achievable with the current binding —
+> `@duckdb/node-api` ships no Arrow support.
+>
+> **Phase 6 (Tauri) was costed and the recommendation is to CLOSE it**
+> ([`docs/phase-6/`](docs/phase-6/), PR #27). This file previously claimed Tauri had been "argued
+> against on measured grounds in `docs/phase-3/README.md`" — it had not; the word appears zero times
+> there. It has now. Removing `@duckdb/node-api` and re-running all 43 suites stops **1,648 of 3,285
+> assertions (50.2%)** from executing; ~1,100 of those are *differential*, asserting a resident SQL
+> path byte-identical against a pure-JS original — and those JS originals are not test scaffolding,
+> they are the **shipped fallback** every resident entry point returns `null` into. A Rust port
+> deletes their oracle. Measured against that: a stdio sidecar costs **0.08 ms** on a real 90 KB
+> Explore page (and is *faster* than today's `Atomics` handshake on a metric card), while the
+> webview↔Rust boundary a Tauri port would **keep** costs ~6.7 ms at 64 KB, against queries of
+> 2–12 ms. `Atomics.wait` is also spec-prohibited on a webview main thread, so the sync bridge could
+> only be deleted, never ported. **The one worthwhile idea in Phase 6 needs neither Rust nor Tauri:**
+> move DuckDB into a sidecar process as an *Electron* refactor.
 >
 > **Phase 5 (Svelte) is a TOOLCHAIN SPIKE, not a migration** ([`docs/phase-5/`](docs/phase-5/), PR
 > #22). `svelte` + `esbuild` are devDependencies; `scripts/build-svelte.js` compiles
@@ -234,13 +249,20 @@ the bridge returns — an upstream `@duckdb/node-api` bug, worked around in `par
 |--------|----------|------------------|--------------------------|
 | Hub | `renderer/hub/` | `hubPreload` → `window.hub` | `hubWindow.js` |
 | Overlay | `renderer/overlay/` | `overlayPreload` → `window.overlay` | `overlayWindow.js` |
-| Status | `renderer/status/` | `statusPreload` → `window.screenchart` | `statusWindow.js` |
 
-**Three windows, not five.** About and Permission were separate `BrowserWindow`s once; the
+**Two windows, not five.** About and Permission were separate `BrowserWindow`s once; the
 single-window redesign replaced them with inline hub panels and their factories, preloads and
 renderers were never instantiated again. All of it (`renderer/about/`, `renderer/permission/`,
 `src/windows/{about,permission}Window.ts`, `preload/{about,permission}Preload.ts` — 683 lines)
 was deleted. `main.ts`'s `openPermission()` has always driven the hub panel, not a window.
+
+**Status went the same way.** It was documented as a "small always-present window that tells the
+user the hotkey", but after the single-window redesign nothing opened it except one path: the
+capture overlay's `did-fail-load` handler, via a `pushStatus()` with exactly one caller. A 400×320
+`BrowserWindow` plus a preload and a renderer (261 lines) existed to show one error string. That
+error is now `dialog.showErrorBox` in `main.ts` — native, needs no window, and works when the hub
+is closed, which was the only real argument for a separate window. `renderer/status/`,
+`src/windows/statusWindow.ts`, `preload/statusPreload.ts` and the `status:state` channel are gone.
 
 Settings/About/Permission are fixed full-window overlay panels inside the hub (`#settings-panel`
 with `#ex-local-panel`/`#ex-byok-panel`, `#about-panel`, `#permission-panel`), shown via
@@ -291,7 +313,7 @@ Renderer→main: `invoke` (reply) or `send` (fire-and-forget); main→renderer: 
 | Exec/BYOK | `exec:setMode`, `byok:saveProvider`/`:test`/`:activate`/`:revealKey`, `key:status`/`:save`/`:clear`/`:validate`/`:models`, `local:save`, `provider:activate`, `model:save`, `rules:set`, `memory:setModel` |
 | Local CLI | `cli:detect`/`:detectOne`/`:setActive`/`:test`/`:models`/`:saveModel`, `models:list` |
 | History/export | `history:load`/`:delete`, `data:delete`, `hub:history`, `hub:saveImage`/`:savePdf`/`:saveDocx`/`:savePptx`/`:captureReport`, `hub:copy`/`:copyText` |
-| Theme/notif/hotkey | `theme:getPreference`/`:setPreference`/apply, `notifications:bootstrap`/`:set`, `hotkey:save`/`:label`, `hub:hotkey-state`, `hub:open`/`:open-settings`/`:show-permission`, `status:state`, `shell:open`, `provider:logos`/`agent:logos`, `permission:open-settings` |
+| Theme/notif/hotkey | `theme:getPreference`/`:setPreference`/apply, `notifications:bootstrap`/`:set`, `hotkey:save`/`:label`, `hub:hotkey-state`, `hub:open`/`:open-settings`/`:show-permission`, `shell:open`, `provider:logos`/`agent:logos`, `permission:open-settings` |
 
 ### Config (`src/config.js`) — main process only, schema v2
 `DEFAULTS` is the source of truth: `executionMode`, `activeProvider`, `byok` (per-provider
@@ -419,7 +441,16 @@ unconverted JS loads directly. The only other "build" is packaging installers.
 **From the DuckDB brief, deliberately not built** — each argued from measurements in
 [`docs/phase-3/README.md`](docs/phase-3/README.md), so re-litigate with numbers, not opinion:
 deck.gl (`@loaders.gl` defaults to fetching workers from unpkg.com — MapLibre avoids this and shipped
-in Phase 4, PR #18) and the Tauri shell. Apache Arrow is not achievable with the current binding.
+in Phase 4, PR #18). Apache Arrow is not achievable with the current binding.
+
+**The Tauri shell was costed in [`docs/phase-6/`](docs/phase-6/) (PR #27) and the recommendation is
+to CLOSE it** — not deferred, closed. Re-litigate only with new numbers: the size case is weaker than
+it looks (Electron is 48% of a 561 MB install; a stripped single-arch `libduckdb.dylib` is 45.7 MiB
+against 112 MiB fat), security comes out net negative for this app (2 invariants strengthened, 4
+weakened; `contextIsolation` has no equivalent and `app.emit()` broadcasts to all windows), and half
+the test suite loses its oracle. The Local CLI path would have to bypass Tauri's capability system
+entirely. **Its one good idea — DuckDB in a sidecar — is an Electron refactor and does not need
+Tauri.**
 The **Svelte renderer** moved out of this list in Phase 5 — but only as far as a *spike*: porting a
 real panel, or letting a component render unflagged, is still a new decision needing a measured
 case ([`docs/phase-5/`](docs/phase-5/)).
