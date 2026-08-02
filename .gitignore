@@ -143,3 +143,4 @@ scripts/**/*.js
 # Resident anomaly detection (dashboard:explainAnomalies off Parquet) — emitted siblings.
 /src/anomaliesResident.js
 /scripts/test-anomaliesResident.js
+/scripts/test-wideTables.js
