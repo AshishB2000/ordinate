@@ -23,9 +23,20 @@ quality before adding code.
 > (was 50,000). See [`docs/phase-0/`](docs/phase-0/) … [`docs/phase-3c/`](docs/phase-3c/) for the
 > measured basis of every decision, and `.claude/plans/rewrite-to-duckdb-stack.md` for the original
 > brief. **Not** built, and argued against on measured grounds in
-> [`docs/phase-3/README.md`](docs/phase-3/README.md): deck.gl, the Svelte renderer, and the Tauri
-> shell. Apache Arrow is **not** achievable with the current binding — `@duckdb/node-api` ships no
-> Arrow support.
+> [`docs/phase-3/README.md`](docs/phase-3/README.md): deck.gl and the Tauri shell. Apache Arrow is
+> **not** achievable with the current binding — `@duckdb/node-api` ships no Arrow support.
+>
+> **Phase 5 (Svelte) is a TOOLCHAIN SPIKE, not a migration** ([`docs/phase-5/`](docs/phase-5/), PR
+> #22). `svelte` + `esbuild` are devDependencies; `scripts/build-svelte.js` compiles
+> `renderer/hub/svelte/*.svelte` into one IIFE bundle assigning a single global
+> (`window.OrdinateSvelte`), loaded like any other classic `<script src>` and **last**, because a
+> classic script's top-level `const` lives in the global *lexical* environment and is in TDZ until
+> its script has run. Scoped styles compile OUT to `svelte/bundle.css` (`css: 'external'`), so the
+> CSP is unchanged — and Svelte **5** specifically, because Svelte 4 installs transition keyframes
+> via `insertRule`, which `style-src 'self'` refuses. The spike island is behind
+> `localStorage 'scSvelte' === '1'`, **default off**: it is developer evidence, not product. What
+> the spike proves is *feasibility*, not *benefit* — no measured case for porting anything has been
+> made yet, so a real panel port is a new decision.
 >
 > **Mosaic/vgplot is built but DARK** ([`docs/phase-3c/`](docs/phase-3c/)) — a second chart stack
 > behind `localStorage 'scMosaic' === '1'`, default off, covering 16 of 28 chart types and falling
@@ -408,8 +419,10 @@ unconverted JS loads directly. The only other "build" is packaging installers.
 **From the DuckDB brief, deliberately not built** — each argued from measurements in
 [`docs/phase-3/README.md`](docs/phase-3/README.md), so re-litigate with numbers, not opinion:
 deck.gl (`@loaders.gl` defaults to fetching workers from unpkg.com — MapLibre avoids this and shipped
-in Phase 4, PR #18), the Svelte renderer, and the Tauri shell. Apache Arrow is not achievable with
-the current binding.
+in Phase 4, PR #18) and the Tauri shell. Apache Arrow is not achievable with the current binding.
+The **Svelte renderer** moved out of this list in Phase 5 — but only as far as a *spike*: porting a
+real panel, or letting a component render unflagged, is still a new decision needing a measured
+case ([`docs/phase-5/`](docs/phase-5/)).
 
 **Built but deliberately dark:** Mosaic + vgplot ([`docs/phase-3c/`](docs/phase-3c/)). Turning it on
 by default, mapping style overrides / the `⋯` menu to Plot, or moving filters into renderer SQL are

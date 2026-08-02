@@ -175,3 +175,6 @@ scripts/**/*.js
 # file was hand-written source. Regenerate both with `npm run build:svelte`.
 /renderer/hub/svelte/bundle.js
 /renderer/hub/svelte/bundle.css
+
+# Phase 5 Svelte toolchain self-check — emitted sibling.
+/scripts/test-svelteBuild.js

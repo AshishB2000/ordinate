@@ -72,7 +72,29 @@ export function unmountIsland(host: Element | string): void {
 // and index.html is edited by people.
 const HOST_ID = 'svelte-island-host';
 
+/**
+ * The spike island is DEVELOPER EVIDENCE, not product. Without this gate it
+ * auto-mounted a debug card — tick counter, "Probe globals", "not probed" — at
+ * the top of the Projects home screen, the first thing every user sees.
+ *
+ * Same mechanism as `scMosaic` (plotRender.ts) and `scAllCharts`
+ * (renderResult.ts): read at call time so devtools can flip it without a
+ * rebuild, strict `=== '1'`, default off because `getItem` returns null.
+ *
+ * The bundle still LOADS unflagged, deliberately — that is what keeps the
+ * toolchain honest, because a broken or stale bundle stays a console error on
+ * every launch rather than something only a flag-holder would ever see.
+ */
+export function svelteIslandEnabled(): boolean {
+  try {
+    return localStorage.getItem('scSvelte') === '1';
+  } catch {
+    return false; // localStorage unavailable — stay off
+  }
+}
+
 function autoMount(): void {
+  if (!svelteIslandEnabled()) return;
   const host = document.getElementById(HOST_ID);
   if (host) mountIsland(host);
 }
