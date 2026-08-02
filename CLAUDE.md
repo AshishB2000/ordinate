@@ -20,12 +20,19 @@ quality before adding code.
 > **Architecture: the DuckDB migration LANDED.** Datasets are stored as **Parquet**, and metrics,
 > aggregates, column stats, anomaly detection and the Explore grid all query those files **in place**
 > — no table is materialised into `Cell[][]` to answer a question. The row cap is **1,000,000**
-> (was 50,000). See [`docs/phase-0/`](docs/phase-0/) … [`docs/phase-3b/`](docs/phase-3b/) for the
+> (was 50,000). See [`docs/phase-0/`](docs/phase-0/) … [`docs/phase-3c/`](docs/phase-3c/) for the
 > measured basis of every decision, and `.claude/plans/rewrite-to-duckdb-stack.md` for the original
 > brief. **Not** built, and argued against on measured grounds in
-> [`docs/phase-3/README.md`](docs/phase-3/README.md): Mosaic/vgplot, deck.gl/MapLibre, the Svelte
-> renderer, and the Tauri shell. Apache Arrow is **not** achievable with the current binding —
-> `@duckdb/node-api` ships no Arrow support.
+> [`docs/phase-3/README.md`](docs/phase-3/README.md): deck.gl/MapLibre, the Svelte renderer, and the
+> Tauri shell. Apache Arrow is **not** achievable with the current binding — `@duckdb/node-api`
+> ships no Arrow support.
+>
+> **Mosaic/vgplot is built but DARK** ([`docs/phase-3c/`](docs/phase-3c/)) — a second chart stack
+> behind `localStorage 'scMosaic' === '1'`, default off, covering 16 of 28 chart types and falling
+> back to Chart.js for the rest. It exists because the *blockers* were real and are now gone, not
+> because it earns its keep: queries are already ~12 ms, so Chart.js was never the bottleneck. Do
+> not make it the default without a measured reason. **Never render `vg.table()`** — its CSS is
+> per-instance dynamic and cannot be pre-extracted, so it violates `style-src` on every update.
 >
 > **The JS implementations are still the reference.** Every resident (SQL) path falls back to the
 > pure-JS original on any failure, and each is guarded by *differential* tests that assert the two
@@ -228,7 +235,9 @@ and maps). A disk-persisted history rail lists captures (newest first); clicking
 - **Renderer (hub):** many `<script>` files sharing one global scope (call-time resolution, so
   load order is irrelevant): capture surface — `hub.js` (shell/state/error card), `renderResult.js`
   (result + chart-type picker), `chartRender.js` (buildChart), `chartControls.js`
-  (Values/Periods/customize), `mapRender.js` (Leaflet), `reportExport.js` (export + map→PNG),
+  (Values/Periods/customize), `plotRender.js` (the dark Mosaic/vgplot stack — `renderVizInArea`'s
+  one extra branch; falls back to Chart.js on anything it can't draw), `mapRender.js` (Leaflet),
+  `reportExport.js` (export + map→PNG),
   `execMenu.js`, `settingsPanels.js` (Local CLI + BYOK), `customDropdown.js`, `geoMatch.js`;
   workspace — `workspace.js` (nav/shell), `projects.js`, `datasets.js`, `prepare.js`, `visuals.js`,
   `dashboards.js`, `connections.js`, `captureDataset.js`, `copilot.js`. Shared globals in
@@ -245,6 +254,7 @@ Renderer→main: `invoke` (reply) or `send` (fire-and-forget); main→renderer: 
 | Datasets/Prepare | `dataset:pickAndParse`/`:parsePaste`/`:get`/`:list`/`:save`/`:update`/`:delete`/`:combine`, `dataset:addStep`/`:updateStep`/`:removeStep`/`:reorderSteps`/`:setSteps`, `dataset:stats`/`:explain`, `dataset:suggestSteps`/`:suggestCalcField`, **`dataset:meta`** (rows-free open), **`dataset:page`** (one grid window: offset/limit/search/sort), `captureDataset:draft`/`:save` |
 | Connections | `connections:list`, `connection:testAndSave`/`:listTables`/`:run`/`:refresh`/`:delete` |
 | Visuals | `visual:get`/`:list`/`:save`/`:update`/`:duplicate`/`:delete`/`:data`/`:suggest` |
+| Mosaic (dark) | `mosaic:view` (ensure a typed view over the Parquet), `mosaic:query` (one statement, **async bridge only**) |
 | Dashboards | `dashboard:get`/`:list`/`:save`/`:update`/`:delete`/`:metric`/`:draft`/`:summary`/`:explainAnomalies`, `dashboard:exportHtml`/`:exportPng`/`:exportPdf`/`:revealFolder` |
 | Copilot | `copilot:ask`/`:history`/`:clear`/`:setEnabled` |
 | Exec/BYOK | `exec:setMode`, `byok:saveProvider`/`:test`/`:activate`/`:revealKey`, `key:status`/`:save`/`:clear`/`:validate`/`:models`, `local:save`, `provider:activate`, `model:save`, `rules:set`, `memory:setModel` |
@@ -347,7 +357,15 @@ npm test           # scripts/test-*.js self-checks
 npm run dist:mac   # macOS dmg (electron-builder)
 npm run dist:win   # Windows installer/zip
 npm run icons:verify   # verify logos vs installed simple-icons
+npm run build:vendor   # regenerate renderer/hub/vendor/* (vgplot bundle + plot.css)
 ```
+`build:vendor` is **not** part of any other script. `renderer/hub/vendor/vgplot.js` and `plot.css`
+are **committed build artifacts** — that is what keeps CI and `electron-builder` from needing the
+181 MB Mosaic dependency tree, none of which is in `package.json`. It installs into a scratch dir
+outside the repo (never `node_modules`), strips Observable Plot's three `<style>` injections so the
+hub CSP needs no hash or nonce, and stubs `@duckdb/duckdb-wasm` (which otherwise drags in
+`new Function(` and `cdn.jsdelivr.net` URLs). It **exits non-zero** if any of those patches stops
+applying — a Plot version bump breaks the build, loudly, rather than the running app, silently.
 Benchmarks: `npm run bench:pipeline` (10k/100k/1M, diffable before/after) and
 `npm run bench:resident`. Their recorded baselines live in `docs/phase-1/`.
 
@@ -369,11 +387,14 @@ unconverted JS loads directly. The only other "build" is packaging installers.
 ## Out of scope (don't build unprompted)
 **From the DuckDB brief, deliberately not built** — each argued from measurements in
 [`docs/phase-3/README.md`](docs/phase-3/README.md), so re-litigate with numbers, not opinion:
-Mosaic + vgplot (its premise was interactive cross-filtering at scale, and queries are now ~12 ms —
-Chart.js drawing 40 bars was never the bottleneck; 5 of 28 chart types have no equivalent mark),
 deck.gl/MapLibre (`@loaders.gl` defaults to fetching workers from unpkg.com and any basemap adds a
 second external fetch — Leaflet does both map types in 144 KB with OSM already declared), the Svelte
 renderer, and the Tauri shell. Apache Arrow is not achievable with the current binding.
+
+**Built but deliberately dark:** Mosaic + vgplot ([`docs/phase-3c/`](docs/phase-3c/)). Turning it on
+by default, mapping style overrides / the `⋯` menu to Plot, or moving filters into renderer SQL are
+all *new* decisions needing their own justification — the measured case for the stack still has not
+been made. `vg.table()` and anything else from `@uwdata/mosaic-inputs` are off-limits under the CSP.
 
 Also out of scope: installing CLIs for the user, a hosted/central-server web version, a marketing website,
 spreadsheet export, and a full memory/summarization step (`memoryModel` config exists as an

@@ -144,3 +144,20 @@ scripts/**/*.js
 /src/anomaliesResident.js
 /scripts/test-anomaliesResident.js
 /scripts/test-wideTables.js
+
+# Phase 3c vendor bundle — the exceptions to "never commit .js".
+# These two are NOT tsc output and have no .ts sibling:
+#   scripts/build-vendor.js is a hand-written build tool (like download-geo.ts's
+#   role, but plain Node — it must run before any TypeScript build exists), and
+#   renderer/hub/vendor/vgplot.js is its committed output. Committing the bundle
+#   is what keeps CI and electron-builder off the 180+ MB vgplot tree.
+!/scripts/build-vendor.js
+!/renderer/hub/vendor/vgplot.js
+
+# Phase 3c Mosaic connector (mosaic:view / mosaic:query) — emitted siblings.
+/src/ipc/mosaic.js
+/scripts/test-mosaicIpc.js
+
+# Phase 3c Mosaic/vgplot renderer — emitted siblings.
+/renderer/hub/plotRender.js
+/scripts/test-plotSpec.js

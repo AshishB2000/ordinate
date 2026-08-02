@@ -623,7 +623,13 @@ async function renderVisualCard(card: any, body: HTMLElement): Promise<void> {
   area.className = 'dash-viz-area cv-viz-area';
   body.innerHTML = '';
   body.appendChild(area);
-  renderVizInArea(area, data, type, entry, 'v');
+  // The trailing argument is dataset IDENTITY for the Mosaic engine — the same
+  // project/dataset/encoding/filters that produced `data`, so the two engines
+  // can never disagree about what this card shows. With the 'scMosaic' flag off
+  // (the default) it is ignored and Chart.js draws exactly as before.
+  renderVizInArea(area, data, type, entry, 'v', {
+    projectId: currentProjectId, datasetId: visual.datasetId, encoding: visual.encoding, filters: merged,
+  });
 }
 
 // The ONE app-computed number (main-only; never the model, never the renderer).

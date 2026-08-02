@@ -47,10 +47,13 @@ const vizEntry: any = {
 
 // Render the current data/type through the adapter entry, mapping the one
 // vizOverrides object onto whatever key renderVizInArea derives ('v:'+type).
-function renderVizViaEntry(area: HTMLElement, data: any, type: string): void {
+// `source` is the dataset identity the Mosaic engine needs (it queries the
+// dataset's view rather than the computed data); omitting it just keeps
+// Chart.js. See the seam in renderResult.ts.
+function renderVizViaEntry(area: HTMLElement, data: any, type: string, source?: any): void {
   vizEntry.id = vizEditingId || 'draft';
   vizEntry.chartOverrides = { ['v:' + type]: vizOverrides };
-  renderVizInArea(area, data, type, vizEntry, 'v');
+  renderVizInArea(area, data, type, vizEntry, 'v', source);
 }
 
 // Debounced persist of override edits. Only a saved visual writes to disk; an
@@ -538,7 +541,11 @@ async function recomputeVisual(): Promise<void> {
       }
       // Render through the adapter entry so the ⋯ Customize menu + Values/Periods
       // controls attach; overrides persist via the entry's saveOverride (§4/§6).
-      renderVizViaEntry(area, data, type);
+      // The identity (same project/dataset/encoding/filters this data came from)
+      // rides along for the Mosaic engine; with the flag off it is ignored.
+      renderVizViaEntry(area, data, type, {
+        projectId: currentProjectId, datasetId: vizDatasetId, encoding, filters: readFilters(),
+      });
     },
   });
   vizPicker = picker;
