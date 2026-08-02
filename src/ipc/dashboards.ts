@@ -206,7 +206,44 @@ async function metricFor(
 //
 // `rowCount` comes from `getDatasetMeta`, which reads it out of the JSON record
 // without touching the table, so consulting the threshold costs nothing.
-const ANOMALY_MIN_ROWS = 5_000;
+// ...but rows are only half the story, and the flat threshold above was WRONG
+// on wide tables. The resident detector issues a handful of statements PER
+// NUMERIC COLUMN, each paying the bridge's per-statement floor, so its cost
+// scales with column count while the JS side scales with rows x columns.
+// Measured (identical results throughout — this is purely cost):
+//
+//   numeric cols   rows     JS      resident   ratio
+//              7   20,000    80 ms      92 ms   1.1x
+//             17   20,000   171 ms     276 ms   1.6x
+//             34   10,000   175 ms     528 ms   3.0x SLOWER
+//             67   10,000   350 ms   1,459 ms   4.2x SLOWER
+//            133    5,000   334 ms   5,909 ms  17.7x SLOWER
+//
+// At 1,000 columns it reached 57 seconds — a hang, on a path a user triggers
+// by clicking "explain anomalies".
+//
+// So the gate is a budget, not a row count: spend one statement's worth of
+// setup per numeric column only when there are enough rows to amortise it.
+// A single-numeric-column table needs 5,000 rows, which reproduces the old
+// threshold exactly; 133 numeric columns would need 665,000.
+//
+// The proper fix is to batch the per-column statements into one, the way
+// statsResident folds every column into a single grouped scan. Until then this
+// picks the faster path instead of assuming one always wins.
+// Two terms, and BOTH are needed. A first attempt let a zero-numeric-column
+// table skip the row check entirely, on the reasoning that there are no
+// per-column statements to pay for — but the base statements (the grouped
+// category scan, the period GROUP BY) still cost the bridge's fixed floor, so a
+// four-row table was taking the resident path to answer something JS does
+// instantly. A test caught it.
+const ANOMALY_MIN_ROWS = 5_000; // pays for the base statements
+const ANOMALY_ROWS_PER_NUMERIC_COL = 5_000; // pays for each column's own
+
+function anomalyResidentWorthIt(meta: datasets.DatasetMeta): boolean {
+  const numericCols = meta.columns.filter((c) => c.type === 'number').length;
+  const needed = Math.max(ANOMALY_MIN_ROWS, numericCols * ANOMALY_ROWS_PER_NUMERIC_COL);
+  return meta.rowCount >= needed;
+}
 
 /**
  * One dataset's app-detected anomalies plus the name `buildAnomaliesFacts`
@@ -221,7 +258,7 @@ async function anomaliesFor(
 ): Promise<{ name: string; list: anomalies.Anomaly[] } | null> {
   try {
     const meta = await datasets.getDatasetMeta(projectId, datasetId);
-    if (meta && meta.resident && meta.rowCount >= ANOMALY_MIN_ROWS && anomaliesResident.isAnomaliesResident()) {
+    if (meta && meta.resident && anomalyResidentWorthIt(meta) && anomaliesResident.isAnomaliesResident()) {
       const src = await datasets.residentSource(projectId, datasetId);
       if (src) {
         const list = anomaliesResident.detectAnomaliesResident(src);
