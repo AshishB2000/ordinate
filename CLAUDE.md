@@ -17,27 +17,33 @@ quality before adding code.
 > directory and orphans existing config, history, and projects, so it needs a migration, not a
 > find-and-replace. Docs use Ordinate; the built macOS bundle is still `Screenchart.app`.
 
-> **Phase 4 (MapLibre GL) is IN PROGRESS on `feat/phase-4-maplibre` — the `maplibre-gl` dependency
-> is intentional.** An audit pass already stashed it once as "stray … contradicts phase-3 §3"; it is
-> not stray. `renderer/hub/mapRender.ts` has been ported from Leaflet to **MapLibre GL 4.7.1**,
-> pinned to v4 for its UMD + `-csp` builds (v6 is ESM-only and needs a bundler this repo does not
-> have). **The external-fetch surface is unchanged:** an inline `version: 8` style object with one
-> raster source over the same three `a|b|c.tile.openstreetmap.org` hosts, and deliberately **no
-> `glyphs` and no `sprite` URL** — both would add a network host and break invariant 1. Because
-> there are no glyphs, map value labels are DOM `Marker`s rather than a symbol layer, so a bare
-> `canvas.toDataURL()` loses them; export must go through `capturePage`. Maps now require **WebGL2**
-> and must render in the visible hub window, never the offscreen report window.
+> **Architecture: the DuckDB migration LANDED.** Datasets are stored as **Parquet**, and metrics,
+> aggregates, column stats, anomaly detection and the Explore grid all query those files **in place**
+> — no table is materialised into `Cell[][]` to answer a question. The row cap is **1,000,000**
+> (was 50,000). See [`docs/phase-0/`](docs/phase-0/) … [`docs/phase-3b/`](docs/phase-3b/) for the
+> measured basis of every decision, and `.claude/plans/rewrite-to-duckdb-stack.md` for the original
+> brief. **Not** built, and argued against on measured grounds in
+> [`docs/phase-3/README.md`](docs/phase-3/README.md): Mosaic/vgplot, deck.gl, the Svelte renderer,
+> and the Tauri shell. Apache Arrow is **not** achievable with the current binding —
+> `@duckdb/node-api` ships no Arrow support.
 >
-> **Note for whoever merges `docs/architecture-after-duckdb`:** its CLAUDE.md lists "deck.gl/MapLibre"
-> under *not built, argued against*. That line is what triggered the stash and must be amended when
-> that branch lands. Per [`docs/phase-3b/README.md`](docs/phase-3b/README.md), Mosaic is likewise
-> mis-filed there as rejected when it is actually unblocked with only B1/B2 outstanding.
-
-> **Architecture direction (planned — NOT built).** A migration to DuckDB + Apache Arrow + Mosaic +
-> WebGL charts + Tauri is specified in [`.claude/plans/rewrite-to-duckdb-stack.md`](.claude/plans/rewrite-to-duckdb-stack.md).
-> **Everything below this line describes the code as it exists today** and remains the source of
-> truth until a migration phase lands. Update this file as each phase completes — do not describe
-> the target stack here before it is real.
+> **Phase 4 (MapLibre GL) LANDED** (PR #18) — `maplibre-gl` is an intentional dependency, not stray.
+> `renderer/hub/mapRender.ts` runs on **MapLibre GL 4.7.1**, pinned to v4 for its UMD and `-csp`
+> builds; v6 is ESM-only and would need a bundler this repo does not have. Phase 3 argued against
+> "deck.gl/MapLibre" because `@loaders.gl` fetches workers from unpkg.com and a basemap adds a second
+> external fetch — **neither applies to MapLibre**: it does not use `@loaders.gl`, its worker loads
+> locally from `node_modules` via the `-csp` build, and the style is an inline `version: 8` object
+> over the same three OSM hosts, so **the external-fetch surface is unchanged** (one CSP directive
+> added, `connect-src`, because MapLibre fetches tiles with the Fetch API rather than `<img>`). The
+> *size* half of that objection stands and was accepted: ~1.1 MB shipped against Leaflet's 164 KB.
+> There is deliberately **no `glyphs` and no `sprite` URL** — either adds a network host and breaks
+> invariant 1. Without glyphs there is no symbol layer, so map value labels are DOM `Marker`s: a bare
+> `canvas.toDataURL()` drops them, and export must composite via `capturePage`. Maps now require
+> **WebGL2** and must render in the visible hub window, never the offscreen report window.
+>
+> **The JS implementations are still the reference.** Every resident (SQL) path falls back to the
+> pure-JS original on any failure, and each is guarded by *differential* tests that assert the two
+> agree. When changing one, change or re-verify the other.
 
 ## Project Overview
 - **What:** a project-based BI workspace. A **project** holds datasets, visuals, and dashboards under
@@ -79,7 +85,7 @@ quality before adding code.
 - **Screenshot/hotkey:** `desktopCapturer` + `globalShortcut` (default `CommandOrControl+Alt+S`
   → `⌘⌥S` on macOS; user-configurable).
 - **Charts:** Chart.js 4 + plugins (treemap, sankey, matrix, financial, `@sgratzl` boxplot).
-  **Maps:** Leaflet (OSM tiles — the one planned external network call).
+  **Maps:** MapLibre GL 4 (WebGL; raster OSM tiles — the one planned external network call).
 - **Data sources:** `pg` (pure-JS Postgres, read-only), `exceljs` (XLSX **read-only, single sheet**;
   write side never loaded), plus a hand-written RFC-4180 CSV tokenizer and `https` URL fetch in `src/`.
 - **Export:** `pdfmake` (PDF), `docx` (Word), `pptxgenjs` (PPT); dashboards → self-contained HTML
@@ -219,7 +225,7 @@ with `#ex-local-panel`/`#ex-byok-panel`, `#about-panel`, `#permission-panel`), s
 `hub:open-settings`; back returns to the hub view.
 
 ### Result surface
-Thumbnail (→ lightbox), headline + analysis, a chart or Leaflet map with a `⋯` menu
+Thumbnail (→ lightbox), headline + analysis, a chart or MapLibre map with a `⋯` menu
 (Values/Periods/customize), follow-up chips + input, and report export (PDF/Word/PPT — charts
 and maps). A disk-persisted history rail lists captures (newest first); clicking restores its thread.
 
@@ -236,7 +242,7 @@ and maps). A disk-persisted history rail lists captures (newest first); clicking
 - **Renderer (hub):** many `<script>` files sharing one global scope (call-time resolution, so
   load order is irrelevant): capture surface — `hub.js` (shell/state/error card), `renderResult.js`
   (result + chart-type picker), `chartRender.js` (buildChart), `chartControls.js`
-  (Values/Periods/customize), `mapRender.js` (Leaflet), `reportExport.js` (export + map→PNG),
+  (Values/Periods/customize), `mapRender.js` (MapLibre GL), `reportExport.js` (export + map→PNG),
   `execMenu.js`, `settingsPanels.js` (Local CLI + BYOK), `customDropdown.js`, `geoMatch.js`;
   workspace — `workspace.js` (nav/shell), `projects.js`, `datasets.js`, `prepare.js`, `visuals.js`,
   `dashboards.js`, `connections.js`, `captureDataset.js`, `copilot.js`. Shared globals in
@@ -308,7 +314,7 @@ postinstall).
 ## UI and Design
 - Overlay dims the display under the cursor (multi-monitor aware) behind a drag-box selector.
 - Single window: settings/about/permission are inline overlay panels, never a new window.
-- Charts (Chart.js) for tabular data; Leaflet for genuinely geographic data (`map_bubble`/
+- Charts (Chart.js) for tabular data; MapLibre GL for genuinely geographic data (`map_bubble`/
   `map_choropleth`). Chart-type picker = Recommended / Selected / + More; grouped data supports
   Values/Periods and small multiples where it fits.
 - Theming: system/light/dark (`themePreference`); `data-theme` on `<html>`, CSS vars in
@@ -379,9 +385,8 @@ unconverted JS loads directly. The only other "build" is packaging installers.
 [`docs/phase-3/README.md`](docs/phase-3/README.md), so re-litigate with numbers, not opinion:
 Mosaic + vgplot (its premise was interactive cross-filtering at scale, and queries are now ~12 ms —
 Chart.js drawing 40 bars was never the bottleneck; 5 of 28 chart types have no equivalent mark),
-deck.gl/MapLibre (`@loaders.gl` defaults to fetching workers from unpkg.com and any basemap adds a
-second external fetch — Leaflet does both map types in 144 KB with OSM already declared), the Svelte
-renderer, and the Tauri shell. Apache Arrow is not achievable with the current binding.
+deck.gl (`@loaders.gl` defaults to fetching workers from unpkg.com — MapLibre avoids this and shipped
+in Phase 4, PR #18), the Svelte renderer, and the Tauri shell. Apache Arrow is not achievable with the current binding.
 
 Also out of scope: installing CLIs for the user, a hosted/central-server web version, a marketing website,
 spreadsheet export, and a full memory/summarization step (`memoryModel` config exists as an
