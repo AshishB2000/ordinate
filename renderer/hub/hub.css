@@ -3945,25 +3945,207 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 
 /* ── view toggle (home vs workspace) ──────────────────────────────────────── */
 #home-view { display: none; }
-.win[data-view="home"] #home-view { display: flex; }
+.win[data-view="home"] #home-view { display: grid; }
 .win[data-view="home"] .hub-body { display: none; }
 .win[data-view="workspace"] #home-view { display: none; }
 
-/* ── HOME: project gallery ────────────────────────────────────────────────── */
+/* ── HOME: the start page ─────────────────────────────────────────────────
+   Three panes: Connect rail | Open + Quick start | Discover. The rail and the
+   Discover panel drop out on narrow windows so the centre column is never
+   squeezed to nothing — the hub has no minimum width and users do make it
+   small. Each pane scrolls on its own; the section itself does not. */
 .home-view {
+  /* Still a flex CHILD of .win even though its own display is grid — without
+     flex:1 the section collapses to content height and the panes stop partway
+     down the window. */
   flex: 1;
   min-height: 0;
-  flex-direction: column;
-  padding: 24px 28px;
-  gap: 20px;
-  overflow-y: auto;
+  grid-template-columns: 232px minmax(0, 1fr) 280px;
+  overflow: hidden;
   background: var(--bg);
+}
+
+/* LEFT — Connect. The one deliberately dark surface in the app: it reads as
+   chrome rather than content, which is what keeps it from competing with the
+   project cards for attention. */
+.home-connect {
+  background: #17324a;
+  color: #e8eef4;
+  padding: 22px 0 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.home-connect-title {
+  font-size: 21px;
+  font-weight: 600;
+  margin: 0;
+  padding: 0 20px;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+.home-connect-group { display: flex; flex-direction: column; }
+.home-connect-h {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(232, 238, 244, 0.55);
+  padding: 0 20px 6px;
+}
+.home-connect-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 20px;
+  border: 0;
+  background: transparent;
+  color: #dbe6ef;
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.home-connect-item:hover { background: rgba(255, 255, 255, 0.09); color: #fff; }
+.home-connect-item:focus-visible { outline: 2px solid #7db9ff; outline-offset: -2px; }
+.home-connect-dot { width: 9px; height: 9px; border-radius: 2px; flex: 0 0 auto; }
+.home-dot-file  { background: #4a9de0; }
+.home-dot-paste { background: #8fb8d6; }
+.home-dot-pg    { background: #5fbf9c; }
+.home-dot-url   { background: #d8a657; }
+.home-dot-cap   { background: #e0798c; }
+.home-connect-note {
+  margin: auto 20px 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: rgba(232, 238, 244, 0.5);
+}
+
+/* CENTRE */
+.home-main {
+  min-width: 0;
+  overflow-y: auto;
+  padding: 24px 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
 }
 .home-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+}
+.home-head-actions { display: flex; align-items: center; gap: 10px; }
+.home-search {
+  width: 190px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+.home-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.home-section-h {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+  margin: 0 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.home-quick-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+.home-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 12px 14px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.home-tile:hover { border-color: var(--accent); background: var(--surface-2); }
+.home-tile:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; }
+/* Flat colour blocks rather than imagery: no asset to ship, no external fetch,
+   and they stay legible in both themes. */
+.home-tile-art {
+  width: 100%;
+  height: 54px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+}
+.home-art-cap  { background: linear-gradient(135deg, rgba(125,185,255,0.28), rgba(74,157,224,0.14)); }
+.home-art-file { background: linear-gradient(135deg, rgba(95,191,156,0.28), rgba(74,157,224,0.14)); }
+.home-art-pg   { background: linear-gradient(135deg, rgba(216,166,87,0.28), rgba(95,191,156,0.14)); }
+.home-tile-name { font-size: 13.5px; font-weight: 600; color: var(--text-strong); }
+.home-tile-sub  { font-size: 12px; color: var(--muted); line-height: 1.45; }
+
+/* RIGHT — Discover. Deliberately LOCAL: no feed, no external fetch. */
+.home-discover {
+  border-left: 1px solid var(--border);
+  background: var(--surface-1);
+  padding: 24px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.home-discover-title {
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--text-strong);
+  margin: 0 0 2px;
+  letter-spacing: -0.01em;
+}
+.home-disc-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 13px 14px;
+}
+.home-disc-h { font-size: 13px; font-weight: 600; color: var(--text-strong); margin-bottom: 5px; }
+.home-disc-p { font-size: 12.5px; line-height: 1.55; color: var(--muted); margin: 0; }
+.home-kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.home-disc-link {
+  margin-top: 9px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.home-disc-link:hover { text-decoration: underline; }
+
+@media (max-width: 1180px) {
+  .win[data-view="home"] .home-view { grid-template-columns: 232px minmax(0, 1fr); }
+  .home-discover { display: none; }
+}
+@media (max-width: 860px) {
+  .win[data-view="home"] .home-view { grid-template-columns: minmax(0, 1fr); }
+  .home-connect { display: none; }
 }
 .home-title {
   font-size: 22px;
