@@ -6047,3 +6047,23 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   gap: 8px;
   flex: none;
 }
+
+/* ── Mosaic/vgplot plots (renderer/hub/plotRender.ts, 'scMosaic' flag) ──────
+   The Chart.js path sizes a <canvas> to its wrapper; a Plot figure is an <svg>
+   with intrinsic width/height baked in at build time, so the wrapper only has
+   to box it, centre it and let a too-wide plot scroll rather than blow out the
+   card. Plot's own base rules come from vendor/plot.css. */
+.cv-plot-wrap {
+  position: relative;
+  width: 100%;
+  overflow: auto;
+  padding: 8px;
+  box-sizing: border-box;
+  color: var(--text);
+}
+
+.cv-plot-wrap svg {
+  max-width: 100%;
+  height: auto;
+  overflow: visible;
+}

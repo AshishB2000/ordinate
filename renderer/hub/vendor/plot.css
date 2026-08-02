@@ -1,0 +1,76 @@
+/*
+ * @observablehq/plot@0.6.17 runtime stylesheet, extracted from source.
+ * Plot normally appends these rules as an inline <style> at render time,
+ * which the hub CSP (style-src 'self') refuses — a console error and a
+ * securitypolicyviolation on EVERY render. build-vendor.js removes that
+ * injection from the bundle, so this file is the only source of these
+ * rules. It MUST be linked wherever vgplot.js is, or plots lose their
+ * base styling (max-width, white-space:pre on tick labels).
+ * Plot's default class name here is .plot-d6a7b5
+ * GENERATED FILE — DO NOT EDIT BY HAND.
+ * Regenerate with:  npm run build:vendor   (scripts/build-vendor.js)
+ */
+/* from @observablehq/plot src/legends/ramp.js */
+:where(.plot-d6a7b5-ramp) {
+  display: block;
+  height: auto;
+  height: intrinsic;
+  max-width: 100%;
+  overflow: visible;
+}
+:where(.plot-d6a7b5-ramp text) {
+  white-space: pre;
+}
+
+/* from @observablehq/plot src/legends/swatches.js */
+:where(.plot-d6a7b5-swatches-columns .plot-d6a7b5-swatch) {
+  display: flex;
+  align-items: center;
+  break-inside: avoid;
+  padding-bottom: 1px;
+}
+:where(.plot-d6a7b5-swatches-columns .plot-d6a7b5-swatch::before) {
+  flex-shrink: 0;
+}
+:where(.plot-d6a7b5-swatches-columns .plot-d6a7b5-swatch-label) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* from @observablehq/plot src/legends/swatches.js */
+:where(.plot-d6a7b5-swatches-wrap) {
+  display: flex;
+  align-items: center;
+  min-height: 33px;
+  flex-wrap: wrap;
+}
+:where(.plot-d6a7b5-swatches-wrap .plot-d6a7b5-swatch) {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 1em;
+}
+
+/* from @observablehq/plot src/legends/swatches.js */
+:where(.plot-d6a7b5-swatches) {
+  font-family: system-ui, sans-serif;
+  font-size: 10px;
+  margin-bottom: 0.5em;
+}
+:where(.plot-d6a7b5-swatch > svg) {
+  margin-right: 0.5em;
+  overflow: visible;
+}
+
+/* from @observablehq/plot src/plot.js */
+:where(.plot-d6a7b5) {
+  --plot-background: white;
+  display: block;
+  height: auto;
+  height: intrinsic;
+  max-width: 100%;
+}
+:where(.plot-d6a7b5 text),
+:where(.plot-d6a7b5 tspan) {
+  white-space: pre;
+}

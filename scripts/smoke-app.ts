@@ -213,6 +213,76 @@ async function main(): Promise<void> {
   });
   ok('dataset is listed in the UI with its row count', listed !== null, listed || 'not rendered');
 
+  // ── The Mosaic/vgplot path (Phase 3c), with the flag ON ───────────────────
+  // Everything above ran with `scMosaic` unset, i.e. Chart.js. That proves the
+  // default path is intact and NOTHING about the new one. The whole reason this
+  // file exists is that a CSP violation once survived 2,400 passing assertions
+  // because no test rendered the page — and vgplot's stack is exactly that shape
+  // of risk again: Observable Plot injects a <style> element, which `style-src
+  // 'self'` refuses. The build strips those injections, but "the build stripped
+  // them" is a claim about a bundle, not about the running app.
+  await win.evaluate(() => localStorage.setItem('scMosaic', '1'));
+  await win.reload();
+  await win.waitForLoadState('domcontentloaded');
+  await win.waitForTimeout(3000);
+  await win
+    .evaluate(() => {
+      const s = document.querySelector('#splash, .splash, [class*=splash], [id*=splash]');
+      if (s) s.remove();
+    })
+    .catch(() => {});
+
+  const clickText = (re: string) =>
+    win.evaluate((src: string) => {
+      const rx = new RegExp(src, 'i');
+      const el = [...document.querySelectorAll('button, a, [role=button], [class*=card], li')].find(
+        (b) => rx.test(b.textContent || ''),
+      ) as HTMLElement | undefined;
+      if (el) el.click();
+      return !!el;
+    }, re);
+
+  await clickText('smoke test');
+  await win.waitForTimeout(1500);
+  await clickText('^\\s*Visuals\\s*$');
+  await win.waitForTimeout(1500);
+  const openedViz = await clickText('sales by region');
+  ok('saved visual opens from the UI with Mosaic enabled', openedViz);
+
+  // WAIT FOR THE CONDITION, never a fixed sleep. A 4 s pause was enough on a dev
+  // machine and not on a CI runner, where this reported `marks=0 canvases=0` —
+  // neither stack had drawn yet, which reads exactly like "vgplot is broken".
+  // Rendering here is a resident DuckDB query plus a view round trip, so its
+  // latency tracks the host, not the code.
+  await win
+    .waitForFunction(
+      () => !!document.querySelector('svg[class*="plot-"], canvas'),
+      undefined,
+      { timeout: 60_000 },
+    )
+    .catch(() => {}); // fall through to the assertions, which report what's there
+
+  // Plot stamps every figure with the constant class `plot-d6a7b5`; an <svg>
+  // carrying it is proof vgplot drew, not Chart.js (which draws to <canvas>).
+  const mosaic = await win.evaluate(() => {
+    const svg = document.querySelector('svg[class*="plot-"]');
+    return {
+      drew: !!svg,
+      marks: svg ? svg.querySelectorAll('rect, path, circle, line').length : 0,
+      // The injection the build removes. One of these means style-src fired.
+      styleEls: document.querySelectorAll('style').length,
+      canvases: document.querySelectorAll('canvas').length,
+    };
+  });
+  ok('vgplot rendered an SVG (not a Chart.js canvas)', mosaic.drew,
+     `marks=${mosaic.marks} canvases=${mosaic.canvases}`);
+  ok('the vgplot figure actually has marks', mosaic.marks > 0, `${mosaic.marks} mark elements`);
+  // Zero is the whole point: Plot's injected <style> is stripped at bundle time,
+  // so the rules come only from the linked vendor/plot.css. A non-zero count here
+  // means a future Plot version re-introduced an injection the build didn't catch.
+  ok('no <style> element was injected (CSP style-src stays clean)', mosaic.styleEls === 0,
+     `${mosaic.styleEls} <style> elements in the document`);
+
   const shot = path.join(shotDir, 'app-window.png');
   await win.screenshot({ path: shot });
   ok('screenshot captured', fs.existsSync(shot) && fs.statSync(shot).size > 5000,

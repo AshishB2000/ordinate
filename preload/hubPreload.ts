@@ -284,6 +284,16 @@ contextBridge.exposeInMainWorld('hub', {
   // Optional `filters` (transforms filter steps) are applied BEFORE aggregation.
   computeVisualData: (projectId: string, datasetId: string, encoding: any, filters?: any) =>
     ipcRenderer.invoke('visual:data', { projectId, datasetId, encoding, filters }),
+  // ── Mosaic connector (Phase 3c) — Mosaic's whole database contract is one
+  // method, so it is two channels here. Ensure the typed, user-named SQL VIEW
+  // over a dataset's stored Parquet and report the columns it exposes; returns
+  // { ok, name, columns:[{name,type,sqlType}] } | { ok:false, error }.
+  mosaicView: (projectId: string, datasetId: string) => ipcRenderer.invoke('mosaic:view', { projectId, datasetId }),
+  // Run ONE statement and get plain JSON rows back (Arrow is impossible — the
+  // native binding ships none — and is REJECTED rather than downgraded, so build
+  // the Coordinator with { consolidate: false }). type: 'json' (default) | 'exec'.
+  // Returns { ok, rows, rowCount, truncated } | { ok:false, error }.
+  mosaicQuery: (sql: string, type?: string) => ipcRenderer.invoke('mosaic:query', { sql, type }),
   // ── Dashboards (a grid of cards — visual/text/metric — across one or more pages) ──
   // List a project's saved dashboards (newest-updated first).
   listDashboards: (projectId: string) => ipcRenderer.invoke('dashboard:list', { projectId }),

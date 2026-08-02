@@ -161,6 +161,21 @@ declare global {
       duplicateVisual(projectId: string, id: string): Promise<any>;
       suggestVisual(projectId: string, datasetId: string): Promise<any>;
       computeVisualData(projectId: string, datasetId: string, encoding: any, filters?: any): Promise<any>;
+      // ── Mosaic connector (Phase 3c) — the whole database contract in two calls ──
+      mosaicView(
+        projectId: string,
+        datasetId: string,
+      ): Promise<
+        | { ok: true; name: string; columns: { name: string; type: string; sqlType: 'DOUBLE' | 'VARCHAR' }[] }
+        | { ok: false; error: string }
+      >;
+      mosaicQuery(
+        sql: string,
+        type?: 'json' | 'exec' | 'arrow',
+      ): Promise<
+        | { ok: true; rows: Record<string, string | number | null>[]; rowCount: number; truncated: boolean }
+        | { ok: false; error: string }
+      >;
       // ── Dashboards (a grid of cards — visual/text/metric — across pages) ──
       listDashboards(projectId: string): Promise<any[]>;
       getDashboard(projectId: string, id: string): Promise<any>;
@@ -198,6 +213,12 @@ declare global {
     // ── Vendor libraries loaded via <script> tags in index.html ────────────
     Chart: any; // ponytail: Chart.js UMD global, typing the full API isn't worth it
     ChartBoxPlot: any; // ponytail: @sgratzl/chartjs-chart-boxplot UMD global
+    // Mosaic/vgplot IIFE global from vendor/vgplot.js (scripts/build-vendor.js).
+    // 421 exports — marks, attribute directives, interactors and SQL builders —
+    // all reached dynamically by name in plotRender.ts, so a hand-written type
+    // would be a second, staler copy of the bundle's surface. Optional because
+    // plotRender falls back to Chart.js when the tag failed to load.
+    vg?: any; // ponytail: @uwdata/vgplot bundle global
     pdfMake: any; // ponytail: pdfmake UMD global
     PptxGenJS: any; // ponytail: pptxgenjs UMD global (constructor)
     docx: any; // ponytail: docx IIFE global

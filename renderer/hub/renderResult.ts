@@ -8,11 +8,35 @@
 
 // ── Render a viz of the given type into a container div. Destroys any prior chart/map. ──
 // entry + turnIdx are optional; when provided they enable the ⋯ chart menu.
-function renderVizInArea(container, data, type, entry, turnIdx) {
+// `source` is optional dataset IDENTITY ({projectId, datasetId, encoding, filters}),
+// passed only by callers that HAVE one — the Visuals builder and dashboard cards.
+// It is what the Mosaic/vgplot engine needs and `data` cannot carry: Mosaic issues
+// its own SQL against the dataset's view instead of consuming a computed
+// {labels, series}. Omitting it (the capture result surface, the export preview,
+// every chartControls re-render) simply keeps the Chart.js path, unchanged.
+function renderVizInArea(container, data, type, entry, turnIdx, source?) {
   const old = chartInstances.get(container);
   // A small-multiples render stores an array of charts; single charts store one.
   if (old) { (Array.isArray(old) ? old : [old]).forEach(c => { try { c.destroy(); } catch (_) {} }); chartInstances.delete(container); }
   destroyMapInContainer(container);
+  container.innerHTML = '';
+
+  // ── The Mosaic seam: ONE branch, default off (localStorage 'scMosaic'). ──
+  // Any miss — flag off, no identity, a type or encoding vgplot can't express,
+  // a view that won't resolve, a query that errors — falls through to Chart.js
+  // below, silently but observably (plotRender.js records it on the container
+  // and at console.debug). See renderer/hub/plotRender.ts.
+  if (mosaicEnabled() && mosaicCanRender(type, source)) {
+    renderMosaicViz(container, type, source, () => renderChartJsInArea(container, data, type, entry, turnIdx))
+      .then(drawn => { if (!drawn) renderChartJsInArea(container, data, type, entry, turnIdx); });
+    return;
+  }
+  renderChartJsInArea(container, data, type, entry, turnIdx);
+}
+
+// The Chart.js/Leaflet/table ladder — everything renderVizInArea did before the
+// Mosaic seam, minus the teardown its caller already performed.
+function renderChartJsInArea(container, data, type, entry, turnIdx) {
   container.innerHTML = '';
 
   // Grouped share/magnitude charts (pie, donut, gauge, treemap, funnel, histogram)

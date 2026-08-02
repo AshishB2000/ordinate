@@ -609,6 +609,11 @@ require("./src/ipc/dashboardExport").register();
 
 require("./src/ipc/copilot").register();
 
+// Phase 3c — the Mosaic connector (mosaic:view / mosaic:query). Registering is
+// free: the DuckDB connection is hardened lazily on the FIRST Mosaic call, so a
+// session that never opens a Mosaic chart pays nothing and the bridge stays lazy.
+require("./src/ipc/mosaic").register();
+
 // Week 13 — capture → dataset bridge. resolveCropPath hands the on-disk crop path
 // from main's per-entry state (entryData, then the summaries cache) so a renderer-
 // sent path is never trusted; both maps already carry cropPath per entryId.
