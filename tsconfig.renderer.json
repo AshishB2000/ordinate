@@ -17,5 +17,11 @@
     "alwaysStrict": true,
     "tsBuildInfoFile": "node_modules/.cache/tsc/renderer.tsbuildinfo"
   },
-  "include": ["renderer/**/*.ts"]
+  "include": ["renderer/**/*.ts"],
+  // Phase 5: the Svelte island sources are MODULES, bundled by esbuild
+  // (scripts/build-svelte.js), not classic scripts emitted in place. Compiling
+  // them here would emit stray sibling .js files, and their `import` statements
+  // would poison the shared global-scope program every other renderer file
+  // depends on. They are type-checked separately by tsconfig.svelte.json.
+  "exclude": ["renderer/hub/svelte/**"]
 }

@@ -163,3 +163,15 @@ scripts/**/*.js
 /scripts/test-plotSpec.js
 # Phase 4 MapLibre GL — emitted sibling.
 /renderer/hub/mapWorker.js
+
+# ── Phase 5: Svelte islands (docs/phase-5/01-toolchain.md) ──────────────────
+# scripts/build-svelte.js is a hand-written build tool with no .ts sibling —
+# same exception as build-vendor.js above, and for the same reason: it must run
+# without a TypeScript build already existing.
+!/scripts/build-svelte.js
+# Its output. bundle.js is already covered by the `renderer/**/*.js` glob, but
+# listed explicitly per the in-place-emit convention — and bundle.CSS needs its
+# own entry, because until now this repo had no generated CSS and every .css
+# file was hand-written source. Regenerate both with `npm run build:svelte`.
+/renderer/hub/svelte/bundle.js
+/renderer/hub/svelte/bundle.css
