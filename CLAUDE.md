@@ -17,15 +17,25 @@ quality before adding code.
 > directory and orphans existing config, history, and projects, so it needs a migration, not a
 > find-and-replace. Docs use Ordinate; the built macOS bundle is still `Screenchart.app`.
 
-> **Architecture direction (planned — NOT built).** A migration to DuckDB + Apache Arrow + Mosaic +
-> WebGL charts + Tauri is specified in [`.claude/plans/rewrite-to-duckdb-stack.md`](.claude/plans/rewrite-to-duckdb-stack.md).
-> **Everything below this line describes the code as it exists today** and remains the source of
-> truth until a migration phase lands. Update this file as each phase completes — do not describe
-> the target stack here before it is real.
+> **Architecture: the DuckDB migration LANDED.** Datasets are stored as **Parquet**, and metrics,
+> aggregates, column stats, anomaly detection and the Explore grid all query those files **in place**
+> — no table is materialised into `Cell[][]` to answer a question. The row cap is **1,000,000**
+> (was 50,000). See [`docs/phase-0/`](docs/phase-0/) … [`docs/phase-3b/`](docs/phase-3b/) for the
+> measured basis of every decision, and `.claude/plans/rewrite-to-duckdb-stack.md` for the original
+> brief. **Not** built, and argued against on measured grounds in
+> [`docs/phase-3/README.md`](docs/phase-3/README.md): Mosaic/vgplot, deck.gl/MapLibre, the Svelte
+> renderer, and the Tauri shell. Apache Arrow is **not** achievable with the current binding —
+> `@duckdb/node-api` ships no Arrow support.
+>
+> **The JS implementations are still the reference.** Every resident (SQL) path falls back to the
+> pure-JS original on any failure, and each is guarded by *differential* tests that assert the two
+> agree. When changing one, change or re-verify the other.
 
 ## Project Overview
-- **What:** a project-based BI workspace. A **project** holds datasets, visuals, and dashboards, all
-  as plain JSON on disk. Everything works with **no model configured**; AI is a fully-optional add-on.
+- **What:** a project-based BI workspace. A **project** holds datasets, visuals, and dashboards under
+  `userData/projects/<id>/`: **metadata as JSON, table data as Parquet** (a 500k-row dataset is
+  ~0.3 MB of Parquet plus a ~500-byte JSON record). Everything works with **no model configured**;
+  AI is a fully-optional add-on.
 - **Data sources (`sourceKind`):** `csv | json | paste | xlsx | postgres | url | combined | capture` —
   all 8 reachable. File dialog is **CSV/JSON/XLSX only** (TSV is paste-only); XLSX is **read-only,
   one sheet**; Postgres and URL are **read-only**.
@@ -49,6 +59,13 @@ quality before adding code.
 
 ## Tech Stack
 - **Runtime:** Electron 42 (macOS-first; darwin + win32 build targets, linux eventually).
+- **Compute/storage engine:** **DuckDB** (`@duckdb/node-api`, a prebuilt N-API module — no
+  `electron-rebuild`) behind a **synchronous** bridge in `src/duckdb.ts`: DuckDB lives in a worker
+  thread and the main thread blocks on `Atomics.wait` over a growable `SharedArrayBuffer`. There is
+  also a non-blocking `queryAsync`/`execAsync` on the same worker and connection, for interactive or
+  high-frequency callers — a blocking call freezes all five windows, the menu bar and the hotkey.
+  **Storage: Parquet**, all columns VARCHAR with Ordinate's own `ColumnType` kept in the JSON record
+  (a typed column would let the sniffer turn `007` into `7`).
 - **Language/UI:** TypeScript, **incremental migration** from plain JS (no bundler — `tsc` only);
   vanilla HTML/CSS, no framework. Mixed tree: converted files are `.ts`, the rest still `.js`.
 - **Screenshot/hotkey:** `desktopCapturer` + `globalShortcut` (default `CommandOrControl+Alt+S`
@@ -94,6 +111,12 @@ hub opens to **Execution settings** instead — capture never starts.
 ### The workspace (projects → datasets → prepare → visuals → dashboards)
 - **On-disk stores** — one directory per project under `userData/projects/<id>/`, holding
   `project.json` plus per-record files in `datasets/`, `visuals/`, `dashboards/` (each `<id>.json`).
+  A dataset record is **metadata only** (`schemaVersion: 3`); its table lives in a sibling
+  `<id>.parquet`, and the immutable prepare source in `<id>.source.parquet` when one exists (keyed on
+  `source !== undefined`, **not** on `steps.length` — `updateSteps` snapshots a source even for an
+  empty step list). Migration from the old inline-rows format (v2) is **one-way and lazy**, gated on
+  the bridge being available so a machine where the native module fails to load keeps working exactly
+  as before. `deleteDataset` removes all three files.
   Mirrors `src/history.ts` conventions. **Path-traversal hardening:** every id is a generated UUID,
   validated by a `UUID_RE` regex before it touches a path (dual-UUID guard on `projectId` + record
   id); writes are **atomic** (temp sibling then `rename`); corrupt/unreadable files are skipped, not
@@ -109,8 +132,15 @@ hub opens to **Execution settings** instead — capture never starts.
   unknown step skipped with a warning, never throws. `formula.ts` = safe expression evaluator
   (tokenizer + recursive-descent parser + tree-walker, **no `eval`/`new Function`**; div-by-zero /
   type-mismatch / unknown-column → `null`). `combineTables` (append / inner join) is IPC-only.
+  `sqlGen.ts` compiles the same `TransformStep[]` into a CTE chain and `pipelineDuck.ts` runs it,
+  but that path is **off by default** (`ORDINATE_DUCKDB_PIPELINE=1`): it must load the rows first,
+  and the load costs 100× more than the query. It pays off only once a caller works from a resident
+  table, which is what the modules below do.
 - **Explore** — `datasetStats.ts`: per-column summaries + quality flags (empty_heavy,
-  constant_column, duplicate_rows).
+  constant_column, duplicate_rows). `statsResident.ts` computes the same answers straight off the
+  Parquet in **one statement for all columns**, and `datasetPage.ts` serves the grid **one 500-row
+  page at a time** (paged, searched and sorted in SQL) — the grid used to hold every row in renderer
+  memory and re-copy it on each keystroke, which is what capped datasets at 50k.
 - **Visuals** — `visuals.ts` stores encoding + chart type + style + filters; `vizData.ts`
   (`buildVizData`) is a **pure bridge** producing the exact `{labels, series}` (+ `geo`) that the
   existing `chartRender.buildChart` / `mapRender` already consume. Chart-type ids/labels live in
@@ -122,6 +152,45 @@ hub opens to **Execution settings** instead — capture never starts.
   heterogeneous datasets), `dashboardExport.ts` (self-contained HTML with inlined Chart.js UMD read
   off `node_modules`; PNG/PDF via offscreen `reportCapture.ts`; `sanitizeBundle` whitelists the
   export to labels/numbers/strings/`data:image` only — no secrets, no http(s) images).
+### The resident-query layer (how a question gets answered)
+
+Every one of these queries the stored `.parquet` **in place** and returns `null` on any failure, so
+the caller keeps its pure-JS path. That fallback is the safety property — and the hazard: a broken
+fast path is not *wrong*, just slow, so each module is paired with a **differential** test that
+asserts it matches the JS original value-for-value (with `Object.is`, so `''` can never pass as
+`null`), and several also assert *which path ran*.
+
+| module | replaces | measured at 1M rows |
+|--------|----------|---------------------|
+| `residentQuery.ts` | `metricValue.computeMetric`, the aggregated half of `buildVizData` | metric 1,257 ms → **2 ms**; chart 1,394 ms → **12 ms** |
+| `statsResident.ts` | `datasetStats` (+ a bounded row sample for prompts) | 2,227 ms → **73 ms** |
+| `anomaliesResident.ts` | `anomalies.detectAnomalies` | 4,511 ms → **328 ms** |
+| `datasetPage.ts` | the renderer's in-memory grid | one page in **~11 ms** |
+| `parquetStore.ts` | the JSON table blob | 500k rows ≈ **0.3 MB** |
+| `datasetView.ts` | — | typed, user-named SQL `VIEW` over the positional store |
+
+**Rules that are not negotiable in this layer:**
+- **Cast on the DECLARED type, never inference.** `TRY_CAST('007' AS DOUBLE)` is `7`. Only a
+  `number`-typed column is cast; `text`/`date` stay VARCHAR. `sum()` over a text column must stay a
+  loud binder error, never a silently wrong figure.
+- **Order is never assumed.** A bare `GROUP BY` does not preserve first-seen order, and *whether it
+  reorders is machine-dependent* — so every query carries an explicit ordinal
+  (`read_parquet(..., file_row_number=true)`) and ends its `ORDER BY` with it. Without a total order,
+  paging duplicates and drops rows.
+- **Empty means `null` OR `''` OR whitespace**, matching JS. DuckDB's `trim()` strips NBSP but not
+  tab, and RE2's `\s` does the opposite, so the whitespace class is spelled out explicitly.
+- **Prefer `CASE WHEN … THEN v END` over `FILTER (WHERE …)`.** Per-column `FILTER` clauses cost
+  16× more at width — this was a real regression (57 s on a 1,000-column table).
+- **Choosing the fast path is a cost model, not a flag.** Thresholds live at the call site and are
+  documented with the measurements that produced them; anomalies needs a width term as well as a row
+  term, because its cost scales with column count.
+- Every aggregate is `CAST(… AS DOUBLE)` — `SUM(INTEGER)` is HUGEINT and reaches JS as a **BigInt**.
+
+**Known divergences**, pinned by tests rather than hidden: parallel float summation differs from a
+JS left-fold in the last ULPs (~1e-13), and quantile interpolation by ~1e-15. Neither reaches a
+rendered figure, but `mean` enters AI prompts unrounded. A leading U+FEFF is lost on every string
+the bridge returns — an upstream `@duckdb/node-api` bug, worked around in `parquetStore` only.
+
 - **AI (optional)** — `copilot.ts` (`askCopilot`: per-project `copilot.json` thread, 200-turn cap;
   main builds an app-computed FACTS block, model narrates only those), plus `suggestSteps`,
   `suggestCalcField`, `suggestChart`, `draftDashboard`, `summarizeDashboard`, and
@@ -148,6 +217,8 @@ and maps). A disk-persisted history rail lists captures (newest first); clicking
 
 ### Code layout
 - **Main:** `main.js` = entry/lifecycle/hotkey/capture loop/windows. Logic in `src/` modules:
+  DuckDB layer (`duckdb, duckdbWorker, parquetStore, sqlGen, pipelineDuck, residentQuery,
+  statsResident, anomaliesResident, datasetPage, datasetView`);
   capture path (`analyze, calc, headline, capture, config, history, hotkey, localCli, localCliRun,
   models, icons, userPath, disclaim`); workspace (`projects, datasets, parse, parseXlsx,
   connections, connectionRun, captureDataset, transforms, formula, datasetStats, visuals, vizData,
@@ -171,7 +242,7 @@ Renderer→main: `invoke` (reply) or `send` (fire-and-forget); main→renderer: 
 | Capture | `capture:commit`/`:cancel`, `overlay:frame`, `hub:capture`, `hub:captureRegion` (map→PNG) |
 | Results | `hub:new-entry`, `hub:entry-result`, `hub:followup`(+`-result`), `hub:retry`, `hub:saveChartOverrides` |
 | Projects | `projects:list`/`:create`/`:open`/`:rename`/`:delete` |
-| Datasets/Prepare | `dataset:pickAndParse`/`:parsePaste`/`:get`/`:list`/`:save`/`:update`/`:delete`/`:combine`, `dataset:addStep`/`:updateStep`/`:removeStep`/`:reorderSteps`/`:setSteps`, `dataset:stats`/`:explain`, `dataset:suggestSteps`/`:suggestCalcField`, `captureDataset:draft`/`:save` |
+| Datasets/Prepare | `dataset:pickAndParse`/`:parsePaste`/`:get`/`:list`/`:save`/`:update`/`:delete`/`:combine`, `dataset:addStep`/`:updateStep`/`:removeStep`/`:reorderSteps`/`:setSteps`, `dataset:stats`/`:explain`, `dataset:suggestSteps`/`:suggestCalcField`, **`dataset:meta`** (rows-free open), **`dataset:page`** (one grid window: offset/limit/search/sort), `captureDataset:draft`/`:save` |
 | Connections | `connections:list`, `connection:testAndSave`/`:listTables`/`:run`/`:refresh`/`:delete` |
 | Visuals | `visual:get`/`:list`/`:save`/`:update`/`:duplicate`/`:delete`/`:data`/`:suggest` |
 | Dashboards | `dashboard:get`/`:list`/`:save`/`:update`/`:delete`/`:metric`/`:draft`/`:summary`/`:explainAnomalies`, `dashboard:exportHtml`/`:exportPng`/`:exportPdf`/`:revealFolder` |
@@ -252,29 +323,59 @@ concentration risk."), not jargon. All figures are computed by the app.
 
 ## Testing and Commands
 - **Priority test:** local vision model accuracy on real screenshots. Node self-checks in
-  `scripts/test-*.js` (pure logic, no framework) via `npm test`; add one per non-trivial helper.
+  `scripts/test-*.js` (pure logic, no framework) via `npm test` (**~3,000 assertions**); add one per
+  non-trivial helper.
+- **Differential tests are the house style for anything with two implementations.** A resident-SQL
+  module is tested by running the SAME input through it and through the pure-JS original and
+  comparing with `Object.is` — not against hand-written expected values. Several also spy on
+  `datasets.getDataset` to assert the table was *never hydrated*, so a fast path that silently stops
+  firing fails loudly instead of passing green and inert.
+- **`npm run smoke` is the only check that runs the actual app.** It launches Electron via
+  Playwright's `_electron` driver, saves a **1,000,000-row** dataset, opens the project from the
+  rendered UI, asserts the dataset is visible with its row count, and fails on **any** renderer
+  console error. That last rule is what catches a blocked inline style — a CSP violation that made
+  two hub banners paint visible on every load survived 2,400 passing assertions, because nothing
+  else rendered the page. Note the first paint is a **splash screen**: a screenshot taken there
+  passes every size and DOM check while proving nothing.
+- **CI** (`.github/workflows/ci.yml`) runs type-check + `npm test` + the smoke test on every PR to
+  `devops`; `build.yml` builds both installers on real runners (tag or manual dispatch).
 
 ```bash
 npm start          # run the app (no dev build step)
+npm run smoke      # launch the REAL app and drive it (see below)
 npm test           # scripts/test-*.js self-checks
 npm run dist:mac   # macOS dmg (electron-builder)
 npm run dist:win   # Windows installer/zip
 npm run icons:verify   # verify logos vs installed simple-icons
 ```
+Benchmarks: `npm run bench:pipeline` (10k/100k/1M, diffable before/after) and
+`npm run bench:resident`. Their recorded baselines live in `docs/phase-1/`.
+
 `postinstall` fetches map GeoJSON (`scripts/download-geo.js`). `npm run build:ts` compiles the
 converted `.ts` files in place (runs automatically via `prestart`/`pretest`/`predist:*`);
 unconverted JS loads directly. The only other "build" is packaging installers.
 
 ## Git and commits
-- **Branch from `main` for every change.** Each new feature or fix starts on a fresh branch
-  created from an up-to-date `main` (`fix/...` for a bugfix, `feat/...` for a feature), is
-  committed there, then pushed and merged into `main` via a pull request. **Never commit
-  directly to `main`.**
+- **Branch from `devops` for every change.** `devops` is this repo's **default branch** and the
+  trunk all work merges into; `main` sits at the initial import and is not used. Each new feature or
+  fix starts on a fresh branch off an up-to-date `devops` (`fix/...`, `feat/...`, `perf/...`,
+  `test/...`, `docs/...`), is committed there, then pushed and merged via a pull request.
+  **Never commit directly to `devops`.** Note `ci.yml`/`lint.yml` watch `[devops, main]` — they
+  previously watched a `dev` branch that does not exist, so CI silently never ran; if the default
+  branch is renamed, update those lists with it.
 - **Never** add a `Co-Authored-By: Claude …` trailer (or any AI co-author line) to commit
   messages. Write the title + body and stop — no trailer.
 
 ## Out of scope (don't build unprompted)
-Installing CLIs for the user, a hosted/central-server web version, a marketing website,
+**From the DuckDB brief, deliberately not built** — each argued from measurements in
+[`docs/phase-3/README.md`](docs/phase-3/README.md), so re-litigate with numbers, not opinion:
+Mosaic + vgplot (its premise was interactive cross-filtering at scale, and queries are now ~12 ms —
+Chart.js drawing 40 bars was never the bottleneck; 5 of 28 chart types have no equivalent mark),
+deck.gl/MapLibre (`@loaders.gl` defaults to fetching workers from unpkg.com and any basemap adds a
+second external fetch — Leaflet does both map types in 144 KB with OSM already declared), the Svelte
+renderer, and the Tauri shell. Apache Arrow is not achievable with the current binding.
+
+Also out of scope: installing CLIs for the user, a hosted/central-server web version, a marketing website,
 spreadsheet export, and a full memory/summarization step (`memoryModel` config exists as an
 integration point but nothing consumes it yet). Ask before adding runtime dependencies — prefer
 stdlib / native platform features / already-installed deps.
