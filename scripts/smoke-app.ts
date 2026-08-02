@@ -35,7 +35,23 @@ function ok(label: string, cond: boolean, extra?: string): void {
 
 async function main(): Promise<void> {
   const app = await _electron.launch({
-    args: ['.', '--password-store=basic', '--user-data-dir=' + userData],
+    args: [
+      '.',
+      '--password-store=basic',
+      '--user-data-dir=' + userData,
+      // MapLibre needs a real WebGL context. Under xvfb there is no GPU, and
+      // modern Chromium refuses to fall back to its software rasteriser for
+      // WebGL unless explicitly told it may — so without this the map renders
+      // the app's honest "This map needs WebGL" fallback and the map assertions
+      // below fail on CI while passing on any developer machine.
+      //
+      // SwiftShader is slower but it is a REAL GL implementation: the same
+      // MapLibre code path, the same shaders, the same tile requests. The
+      // alternative — letting the assertions accept the fallback when GL is
+      // missing — would mean CI silently stops testing maps, which is the gap
+      // this coverage was added to close.
+      '--enable-unsafe-swiftshader',
+    ],
     cwd: REPO,
     timeout: 120_000,
   });
@@ -136,6 +152,30 @@ async function main(): Promise<void> {
       encoding: { category: 'region', values: [{ column: 'amount', aggregation: 'sum' }] },
     });
     out.visualId = v && v.id;
+
+    // A second, tiny dataset for the MAP path (Phase 4). Deliberately its own
+    // dataset: the geo join matches on region NAME, and 'region0'..'region6'
+    // above match nothing. Eight real states, so the choropleth has both a
+    // colour ramp and a min/max to label.
+    const states = ['California', 'Texas', 'Florida', 'New York',
+                    'Illinois', 'Ohio', 'Georgia', 'Washington'];
+    const geoDs = await datasets.saveDataset(proj.id, {
+      name: 'By state',
+      sourceKind: 'csv',
+      columns: [{ name: 'state', type: 'text' }, { name: 'revenue', type: 'number' }],
+      rows: states.map((s, i) => [s, (i + 1) * 1000]),
+    });
+    const mv = await visuals.saveVisual(proj.id, {
+      datasetId: geoDs.id,
+      name: 'Revenue by state',
+      chartType: 'map_choropleth',
+      encoding: {
+        category: 'state',
+        values: [{ column: 'revenue', aggregation: 'sum' }],
+        geo: { level: 'us_state' },
+      },
+    });
+    out.mapVisualId = mv && mv.id;
     return out;
   });
 
@@ -282,6 +322,55 @@ async function main(): Promise<void> {
   // means a future Plot version re-introduced an injection the build didn't catch.
   ok('no <style> element was injected (CSP style-src stays clean)', mosaic.styleEls === 0,
      `${mosaic.styleEls} <style> elements in the document`);
+
+  // ── The MAP path (Phase 4, MapLibre GL) ───────────────────────────────────
+  // Until this block, nothing in the repo rendered a map in the real app. That
+  // left the entire WebGL stack uncovered by the one check that runs it — a
+  // worker loaded from a URL that resolves INSIDE the asar when packaged, a CSP
+  // that had to gain `connect-src` because MapLibre fetches tiles with Fetch
+  // rather than <img>, and a GL context that must actually initialise. None of
+  // that is observable from a unit test.
+  await clickText('^\\s*Visuals\\s*$');
+  await win.waitForTimeout(1500);
+  ok('map visual opens from the UI', await clickText('revenue by state'));
+
+  await win
+    .waitForFunction(() => !!document.querySelector('.maplibregl-map canvas'), undefined, {
+      timeout: 60_000,
+    })
+    .catch(() => {});
+  // Tiles are network-bound; the markers only appear once the geo join resolves.
+  await win
+    .waitForFunction(() => document.querySelectorAll('.maplibregl-marker').length > 0, undefined, {
+      timeout: 60_000,
+    })
+    .catch(() => {});
+
+  const map = await win.evaluate(() => {
+    const cv = document.querySelector('.maplibregl-map canvas') as HTMLCanvasElement | null;
+    let gl = false;
+    // Re-getting the same context type returns the LIVE context; a lost or never
+    // created one is null. Cheap proof the GL path really initialised.
+    try { gl = !!(cv && (cv.getContext('webgl2') || cv.getContext('webgl'))); } catch (_) { /* no GL */ }
+    const fb = document.querySelector('.cv-chart-fallback');
+    return {
+      hasMap: !!document.querySelector('.maplibregl-map'),
+      size: cv ? `${cv.width}x${cv.height}` : 'none',
+      gl,
+      markers: document.querySelectorAll('.maplibregl-marker').length,
+      // The WebGL-missing / no-boundaries message. Present means the map did NOT
+      // draw and the app fell back — which passes a naive "something rendered" check.
+      fallback: fb ? (fb.textContent || '').trim().slice(0, 80) : null,
+    };
+  });
+  ok('MapLibre map rendered', map.hasMap && map.gl, `canvas=${map.size} gl=${map.gl}`);
+  ok('the GL canvas has real pixels', !/^0x|x0$|none/.test(map.size), map.size);
+  ok('no map fallback message (WebGL present, boundaries matched)', map.fallback === null,
+     map.fallback || '');
+  // Value labels are DOM Markers, not a symbol layer, because the style ships no
+  // glyphs (adding one would mean a second network host). Zero here means the geo
+  // join found nothing — the map would look fine and say nothing.
+  ok('choropleth value labels placed as DOM markers', map.markers > 0, `${map.markers} markers`);
 
   const shot = path.join(shotDir, 'app-window.png');
   await win.screenshot({ path: shot });

@@ -17,7 +17,9 @@ if (window.Chart && window.ChartBoxPlot && window.ChartBoxPlot.BoxPlotController
 
 // WeakMap tracks Chart.js instances per viz-area div for destruction on re-render.
 const chartInstances = new WeakMap();
-// WeakMap tracks Leaflet map instances for clean destruction on switch.
+// WeakMap tracks MapLibre GL map instances for clean destruction on switch. This one
+// matters more than chartInstances: a leaked map holds a live WebGL context, and a
+// browser only grants a handful before it starts dropping the oldest.
 const mapInstances = new WeakMap();
 
 // The plottable series for a chart: those with a non-empty values array.

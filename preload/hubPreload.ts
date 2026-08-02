@@ -125,7 +125,10 @@ contextBridge.exposeInMainWorld('hub', {
   // Save a generated Word (.docx) report (base64 bytes) via the native save panel.
   saveDocx: (base64: string, defaultName: string) => ipcRenderer.invoke('hub:saveDocx', { base64, defaultName }),
   // Snapshot a page region (DIP rect {x,y,width,height}) to a PNG data URL — used to
-  // export the live Leaflet map (tiles + overlay + legend) into reports.
+  // export the live MapLibre map into reports. It composites the WebGL canvas AND the
+  // DOM layer on top of it (value-label markers, legend) in one shot — a bare
+  // canvas.toDataURL() would drop the markers, which are DOM because the style ships
+  // no glyphs and so has no symbol layer.
   captureRegion: (rect: { x: number; y: number; width: number; height: number }) =>
     ipcRenderer.invoke('hub:captureRegion', rect),
   // Render a self-contained HTML report to a PNG data URL via a hidden, content-sized

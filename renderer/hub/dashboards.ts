@@ -384,7 +384,7 @@ function handleRemovePage(i: number): void {
 }
 
 // ── Grid + cards ──────────────────────────────────────────────────────────────
-// Destroy the Chart.js / Leaflet instances living in the current grid's card
+// Destroy the Chart.js / MapLibre instances living in the current grid's card
 // areas BEFORE their DOM is wiped. Without this, grid.innerHTML='' detaches the
 // canvases but leaves their Chart instances (and ResizeObservers/rAF handlers) in
 // the registry — a real leak that accrues on every page switch / add / remove /

@@ -91,8 +91,8 @@ const MOSAIC_CHART_TYPES: ReadonlySet<string> = new Set([
 //   boxplot      → vgplot does NOT re-export Plot's boxX/boxY (phase-3 §4.1);
 //                  buildable from rules + ticks, but that is a build, not a swap
 //   table        → not a chart
-//   map_*        → Leaflet owns maps, and phase 3d's recommendation is to keep
-//                  it (docs/phase-3 §3)
+//   map_*        → MapLibre GL owns maps (Phase 4). vgplot's `geo` mark draws
+//                  GeoJSON but ships no basemap, so it is not a replacement.
 const MOSAIC_FALLBACK_TYPES: ReadonlySet<string> = new Set([
   'pie', 'donut', 'gauge', 'treemap', 'sankey',
   'combo', 'funnel', 'candlestick', 'boxplot',
@@ -184,7 +184,7 @@ function requirement(column: string, agg: MosaicAgg | null): { column: string; n
 function buildPlotSpec(type: string, encoding: PlotEncoding, viewName: string): PlotSpec | null {
   if (!mosaicChartCapable(type)) return null;
   if (!encoding || typeof encoding.category !== 'string' || !encoding.category) return null;
-  // A geo encoding is a map, and maps stay on Leaflet.
+  // A geo encoding is a map, and maps stay on MapLibre GL.
   if (encoding.geo) return null;
 
   const cat = encoding.category;

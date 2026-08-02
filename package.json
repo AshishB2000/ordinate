@@ -44,7 +44,6 @@
     "chartjs-chart-treemap": "^3.1.0",
     "docx": "^9.7.1",
     "exceljs": "^4.4.0",
-    "leaflet": "^1.9.4",
     "maplibre-gl": "^4.7.1",
     "pdfmake": "^0.3.11",
     "pg": "^8.22.0",
