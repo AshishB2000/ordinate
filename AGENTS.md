@@ -17,11 +17,20 @@ quality before adding code.
 > directory and orphans existing config, history, and projects, so it needs a migration, not a
 > find-and-replace. Docs use Ordinate; the built macOS bundle is still `Screenchart.app`.
 
-> **Architecture direction (planned — NOT built).** A migration to DuckDB + Apache Arrow + Mosaic +
-> WebGL charts + Tauri is specified in [`.claude/plans/rewrite-to-duckdb-stack.md`](.claude/plans/rewrite-to-duckdb-stack.md).
-> **Everything below this line describes the code as it exists today** and remains the source of
-> truth until a migration phase lands. Update this file as each phase completes — do not describe
-> the target stack here before it is real.
+> ## ⚠️ THIS FILE IS STALE. READ [`CLAUDE.md`](CLAUDE.md) INSTEAD.
+>
+> AGENTS.md was a byte-identical mirror of CLAUDE.md and has since drifted. **CLAUDE.md is the
+> authoritative architecture reference**; everything below here is kept only because deleting it
+> outright is a separate decision. Where the two disagree, CLAUDE.md wins.
+>
+> The paragraph that used to sit here said a migration to "DuckDB + Apache Arrow + Mosaic + WebGL
+> charts + Tauri" was *planned — NOT built*. Every clause of that is now wrong, and a stale note of
+> exactly this kind already caused an audit pass to stash a live dependency mid-port. For the record:
+> **DuckDB and Parquet LANDED** (phases 0–3c; the row cap is 1,000,000). **MapLibre GL LANDED**
+> (Phase 4, PR #18). **Mosaic/vgplot is built but dark** behind a default-off flag. **Svelte is a
+> toolchain spike only**, nothing is ported. **Apache Arrow is not achievable** with the current
+> binding. **Tauri was costed in [`docs/phase-6/`](docs/phase-6/) and the recommendation is to close
+> it.**
 
 ## Project Overview
 - **What:** a project-based BI workspace. A **project** holds datasets, visuals, and dashboards, all
@@ -133,7 +142,6 @@ hub opens to **Execution settings** instead — capture never starts.
 |--------|----------|------------------|--------------------------|
 | Hub | `renderer/hub/` | `hubPreload` → `window.hub` | `hubWindow.js` |
 | Overlay | `renderer/overlay/` | `overlayPreload` → `window.overlay` | `overlayWindow.js` |
-| Status | `renderer/status/` | `statusPreload` → `window.screenchart` | `statusWindow.js` |
 | About | `renderer/about/` | `aboutPreload` → `window.about` | `aboutWindow.js` |
 | Permission | `renderer/permission/` | `permissionPreload` → `window.permission` | `permissionWindow.js` |
 
@@ -179,7 +187,7 @@ Renderer→main: `invoke` (reply) or `send` (fire-and-forget); main→renderer: 
 | Exec/BYOK | `exec:setMode`, `byok:saveProvider`/`:test`/`:activate`/`:revealKey`, `key:status`/`:save`/`:clear`/`:validate`/`:models`, `local:save`, `provider:activate`, `model:save`, `rules:set`, `memory:setModel` |
 | Local CLI | `cli:detect`/`:detectOne`/`:setActive`/`:test`/`:models`/`:saveModel`, `models:list` |
 | History/export | `history:load`/`:delete`, `data:delete`, `hub:history`, `hub:saveImage`/`:savePdf`/`:saveDocx`/`:savePptx`/`:captureReport`, `hub:copy`/`:copyText` |
-| Theme/notif/hotkey | `theme:getPreference`/`:setPreference`/apply, `notifications:bootstrap`/`:set`, `hotkey:save`/`:label`, `hub:hotkey-state`, `hub:open`/`:open-settings`/`:show-permission`, `status:state`, `shell:open`, `provider:logos`/`agent:logos`, `permission:open-settings` |
+| Theme/notif/hotkey | `theme:getPreference`/`:setPreference`/apply, `notifications:bootstrap`/`:set`, `hotkey:save`/`:label`, `hub:hotkey-state`, `hub:open`/`:open-settings`/`:show-permission`, `shell:open`, `provider:logos`/`agent:logos`, `permission:open-settings` |
 
 ### Config (`src/config.js`) — main process only, schema v2
 `DEFAULTS` is the source of truth: `executionMode`, `activeProvider`, `byok` (per-provider

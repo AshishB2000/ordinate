@@ -54,12 +54,7 @@ async function shootBoth(win, name, sendChannel, payload) {
 
 app.whenReady().then(async () => {
   try {
-    let win = mk(400, 320, 'statusPreload.js');
-    await loadAndWait(win, 'renderer/status/index.html');
-    await shootBoth(win, 'status', 'status:state', { hotkey: 'Cmd+Shift+S', note: '' });
-    win.destroy();
-
-    win = mk(1180, 780, 'hubPreload.js');
+    let win = mk(1180, 780, 'hubPreload.js');
     await loadAndWait(win, 'renderer/hub/index.html');
     await shootBoth(win, 'hub', null, null);
     win.destroy();
