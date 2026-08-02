@@ -71,7 +71,7 @@ async function main(): Promise<void> {
 
     // The correctness-sensitive shapes: leading zeros, '', negatives.
     const rows: any[][] = [];
-    for (let i = 0; i < 500_000; i++) {
+    for (let i = 0; i < 1_000_000; i++) {
       rows.push([
         'region' + (i % 7),
         String(i % 500).padStart(3, '0'),
@@ -95,22 +95,39 @@ async function main(): Promise<void> {
     const meta = await datasets.getDatasetMeta(proj.id, ds.id);
     out.resident = meta && meta.resident;
 
-    // NOTE: still the hydrating path, deliberately — this asserts the chart
-    // math itself, and is the one place the smoke test pays for a full load.
-    const full = await datasets.getDataset(proj.id, ds.id);
-    const viz = vizData.buildVizData(full.columns, full.rows, {
-      category: 'region',
-      values: [{ column: 'amount', aggregation: 'sum' }],
-    });
-    out.labels = viz.data.labels;
-    out.seriesName = viz.data.series[0] && viz.data.series[0].name;
-    out.values = viz.data.series[0] && viz.data.series[0].values;
-    out.metric = metricValue.computeMetric(full.columns, full.rows, {
+    // Chart and metric go through the RESIDENT paths — what visual:data and
+    // dashboard:metric actually use since Phase 2.5. At a million rows the old
+    // hydrate-then-fold would dominate this test's runtime while exercising a
+    // path the app no longer takes.
+    const residentQuery = req('./src/residentQuery.js');
+    const datasetPage = req('./src/datasetPage.js');
+    const src = await datasets.residentSource(proj.id, ds.id);
+    out.hasResidentSource = !!src;
+
+    let t = Date.now();
+    const agg = src && residentQuery.aggregateResident(src, 'region', [
+      { column: 'amount', aggregation: 'sum' },
+    ]);
+    out.aggMs = Date.now() - t;
+    out.labels = agg && agg.labels;
+    out.seriesName = agg && agg.series[0] && agg.series[0].name;
+    out.values = agg && agg.series[0] && agg.series[0].values;
+
+    t = Date.now();
+    out.metric = src && residentQuery.computeMetricResident(src, {
       column: 'amount',
       aggregation: 'sum',
     });
-    out.skuSample = full.rows.slice(0, 3).map((x: any[]) => x[1]);
-    out.skuTypes = full.rows.slice(0, 3).map((x: any[]) => typeof x[1]);
+    out.metricMs = Date.now() - t;
+
+    // One page of the Explore grid — the path that replaced holding the table.
+    t = Date.now();
+    const page = src && datasetPage.readPage(src, { offset: 0, limit: 500 });
+    out.pageMs = Date.now() - t;
+    out.pageRows = page && page.rows.length;
+    out.pageTotal = page && page.total;
+    out.skuSample = page ? page.rows.slice(0, 3).map((x: any[]) => x[1]) : [];
+    out.skuTypes = page ? page.rows.slice(0, 3).map((x: any[]) => typeof x[1]) : [];
 
     const v = await visuals.saveVisual(proj.id, {
       datasetId: ds.id,
@@ -123,14 +140,21 @@ async function main(): Promise<void> {
   });
 
   ok('project created', !!r.projectId);
-  ok('500k-row dataset saved — 10x the old 50k cap', r.rowCount === 500_000, `rowCount=${r.rowCount}`);
+  ok('1,000,000-row dataset saved — the full cap, 20x the old one', r.rowCount === 1_000_000, `rowCount=${r.rowCount}`);
   ok('dataset is Parquet-backed', r.resident === true);
   ok('chart data computed', Array.isArray(r.labels) && r.labels.length === 7,
      `labels=${JSON.stringify(r.labels)}`);
   ok('series named by measureLabel', r.seriesName === 'sum of amount', `"${r.seriesName}"`);
   ok('chart values are JS numbers', r.values.every((v: unknown) => typeof v === 'number'),
-     `first=${r.values[0]}`);
-  ok('metric card computed', typeof r.metric === 'number', `sum=${r.metric}`);
+     `first=${r.values[0]}, agg took ${r.aggMs} ms`);
+  ok('metric card computed', typeof r.metric === 'number', `sum=${r.metric} in ${r.metricMs} ms`);
+  ok('dataset exposes a resident source', r.hasResidentSource === true);
+  ok('one Explore page read', r.pageRows === 500 && r.pageTotal === 1_000_000,
+     `${r.pageRows} rows of ${r.pageTotal} in ${r.pageMs} ms`);
+  // These are the numbers the whole migration exists to produce. Loose bounds —
+  // a CI runner is slower than a dev machine — but a regression to seconds fails.
+  ok('aggregate over 1M rows is fast', r.aggMs < 2000, `${r.aggMs} ms`);
+  ok('page read over 1M rows is fast', r.pageMs < 2000, `${r.pageMs} ms`);
   ok('leading zeros stayed text',
      r.skuTypes.every((t: string) => t === 'string') && r.skuSample[0] === '000',
      JSON.stringify(r.skuSample));
@@ -183,7 +207,7 @@ async function main(): Promise<void> {
   // what proves the Parquet store reaches the screen, not just the API.
   const listed: string | null = await win.evaluate(() => {
     const el = [...document.querySelectorAll('*')].find(
-      (e) => e.children.length === 0 && /500000 rows/.test(e.textContent || ''),
+      (e) => e.children.length === 0 && /1000000 rows/.test(e.textContent || ''),
     );
     return el ? (el.textContent || '').trim().slice(0, 60) : null;
   });
