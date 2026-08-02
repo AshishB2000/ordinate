@@ -86,14 +86,63 @@
     </button>
   </div>
 
-  <!-- ── home view (project gallery) ──────────────────────────────── -->
+  <!-- ── home view — the start page ───────────────────────────────────
+       Three panes: Connect (left rail), Open + Quick start (centre),
+       Discover (right). Every Connect item performs a REAL action — it
+       ensures a project exists, opens it, and runs that importer. A rail of
+       decorations would be worse than the plain gallery this replaced.
+       Wiring lives in projects.ts (startFromSource). -->
   <section id="home-view" class="home-view">
+
+    <!-- LEFT: Connect. Mirrors the eight sourceKinds the app actually has —
+         not a longer list that looks impressive and half-works. -->
+    <aside class="home-connect" aria-label="Connect a data source">
+      <h2 class="home-connect-title">Connect</h2>
+
+      <div class="home-connect-group">
+        <div class="home-connect-h">To a file</div>
+        <button class="home-connect-item" type="button" data-source="file">
+          <span class="home-connect-dot home-dot-file" aria-hidden="true"></span>CSV, JSON or Excel
+        </button>
+        <button class="home-connect-item" type="button" data-source="paste">
+          <span class="home-connect-dot home-dot-paste" aria-hidden="true"></span>Paste data
+        </button>
+      </div>
+
+      <div class="home-connect-group">
+        <div class="home-connect-h">To a server</div>
+        <button class="home-connect-item" type="button" data-source="postgres">
+          <span class="home-connect-dot home-dot-pg" aria-hidden="true"></span>PostgreSQL
+        </button>
+        <button class="home-connect-item" type="button" data-source="url">
+          <span class="home-connect-dot home-dot-url" aria-hidden="true"></span>URL or API
+        </button>
+      </div>
+
+      <div class="home-connect-group">
+        <div class="home-connect-h">From your screen</div>
+        <button class="home-connect-item" type="button" data-source="capture">
+          <span class="home-connect-dot home-dot-cap" aria-hidden="true"></span>Screenshot capture
+        </button>
+      </div>
+
+      <p class="home-connect-note">
+        Postgres, URL and Excel are read-only. Nothing leaves this machine.
+      </p>
+    </aside>
+
+    <!-- CENTRE: Open + Quick start -->
+    <div class="home-main">
     <div class="home-head">
       <div>
-        <h1 class="home-title">Projects</h1>
+        <h1 class="home-title">Open</h1>
         <p class="home-sub">Open a project or start a new one.</p>
       </div>
-      <button id="home-new-project" class="btn btn-primary" type="button">New project</button>
+      <div class="home-head-actions">
+        <input id="home-search" class="home-search" type="search" placeholder="Search projects"
+               aria-label="Search projects" autocomplete="off" />
+        <button id="home-new-project" class="btn btn-primary" type="button">New project</button>
+      </div>
     </div>
 
     <!-- PHASE 5 SPIKE — Svelte island host. Empty in the served HTML; the bundle
@@ -127,9 +176,67 @@
         </svg>
       </div>
       <h2 class="home-empty-h">No projects yet</h2>
-      <p class="home-empty-sub">Create a project to organize your captures and analysis.</p>
+      <p class="home-empty-sub">Pick a source on the left, or start a project and add data later.</p>
       <button id="home-empty-new" class="btn btn-primary" type="button">New project</button>
     </div>
+
+    <!-- Shown only when a search matches nothing. Separate from home-empty so
+         "you have no projects" and "your filter matched none" never read as
+         the same state. -->
+    <div id="home-noresults" class="home-empty" hidden>
+      <h2 class="home-empty-h">No matching projects</h2>
+      <p class="home-empty-sub">Nothing here matches that search.</p>
+    </div>
+
+    <!-- Quick start. Three tiles for the paths a new user most likely wants;
+         each is the same action as its Connect item, at a bigger target. -->
+    <div class="home-quick">
+      <h2 class="home-section-h">Quick start</h2>
+      <div class="home-quick-row">
+        <button class="home-tile" type="button" data-source="capture">
+          <span class="home-tile-name">Capture a screenshot</span>
+          <span class="home-tile-sub">Read a chart or table off the screen</span>
+        </button>
+        <button class="home-tile" type="button" data-source="file">
+          <span class="home-tile-name">Import a file</span>
+          <span class="home-tile-sub">CSV, JSON or Excel — up to 1,000,000 rows</span>
+        </button>
+        <button class="home-tile" type="button" data-source="postgres">
+          <span class="home-tile-name">Connect Postgres</span>
+          <span class="home-tile-sub">Read-only, with a row cap and a timeout</span>
+        </button>
+      </div>
+    </div>
+    </div><!-- /home-main -->
+
+    <!-- RIGHT: Discover. Deliberately LOCAL — no feed, no external fetch.
+         Local-first is a product promise, so this panel is filled from config
+         the app already has (projects.ts fillDiscover). -->
+    <aside class="home-discover" aria-label="Discover">
+      <h2 class="home-discover-title">Discover</h2>
+
+      <div class="home-disc-card">
+        <div class="home-disc-h">Capture anything on screen</div>
+        <p class="home-disc-p">
+          Press <kbd id="home-disc-hotkey" class="home-kbd">⌘⌥S</kbd> anywhere to grab a region.
+          The app computes every number itself — a model only reads the picture.
+        </p>
+      </div>
+
+      <div class="home-disc-card">
+        <div class="home-disc-h">AI is optional</div>
+        <p class="home-disc-p" id="home-disc-ai">Checking…</p>
+        <button class="home-disc-link" type="button" id="home-disc-settings">Open settings</button>
+      </div>
+
+      <div class="home-disc-card">
+        <div class="home-disc-h">Your data stays here</div>
+        <p class="home-disc-p">
+          Projects live on this machine. The only network call is map tiles, and
+          only when a map is on screen.
+        </p>
+      </div>
+    </aside>
   </section>
 
   <!-- ── hub body ──────────────────────────────────────────────────── -->

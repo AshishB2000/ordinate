@@ -200,11 +200,144 @@ async function handleDeleteProject(id: string): Promise<void> {
   else await renderHomeGallery();
 }
 
-// Wire the two "New project" buttons and paint the initial gallery.
+// ── Start page: Connect rail + Quick start ───────────────────────────────────
+
+// Every Connect item and Quick-start tile routes through here. A source is only
+// meaningful INSIDE a project, so this resolves one first: reuse the most
+// recently updated project, or create one. That is the whole point of making
+// these real buttons — a rail that looked the part and did nothing would be
+// worse than the plain gallery it replaced.
+//
+// `capture` is the exception: it needs no project, and gating a global hotkey's
+// on-screen twin behind project creation would be silly.
+async function startFromSource(kind: string): Promise<void> {
+  if (kind === 'capture') {
+    window.hub.takeScreenshot();
+    return;
+  }
+
+  let id = '';
+  try {
+    const list = await window.hub.listProjects();
+    // Newest-first from main, so [0] is the one the user most likely means.
+    if (Array.isArray(list) && list.length) id = String(list[0].id || '');
+  } catch (_) { /* fall through and create one */ }
+
+  if (!id) {
+    const created = await window.hub.createProject('Untitled project');
+    if (!created || !created.id) return; // main refused — leave the user on home
+    id = String(created.id);
+  }
+
+  await openWorkspace(id); // workspace.ts — lands on the Sources section
+  runSourceAction(kind);
+}
+
+// The source-specific step, once the workspace is open. Each branch is guarded:
+// these are globals owned by sibling scripts, and a missing one must be a no-op
+// — the user is already on Sources and can carry on by hand — rather than a
+// ReferenceError that kills the whole click.
+function runSourceAction(kind: string): void {
+  // openWorkspace() lands on Sources, but the file picker and the paste box
+  // live in the DATASETS panel — acting on them from Sources targets a hidden
+  // section, which is how the paste box silently failed to take focus.
+  if (kind === 'file' || kind === 'paste') {
+    if (typeof selectSection === 'function') selectSection('datasets'); // workspace.ts
+  }
+
+  if (kind === 'file') {
+    if (typeof handleImportFile === 'function') handleImportFile(); // datasets.ts
+    return;
+  }
+  if (kind === 'paste') {
+    const box = document.getElementById('ds-paste-input') as HTMLTextAreaElement | null;
+    if (box) { box.scrollIntoView({ block: 'center' }); box.focus(); }
+    return;
+  }
+  if (kind === 'postgres' || kind === 'url') {
+    // Open the connect panel and preselect the kind, so the rail's two server
+    // entries actually land somewhere different from each other.
+    const open = document.getElementById('conn-connect-btn') as HTMLButtonElement | null;
+    if (open) open.click();
+    const sel = document.getElementById('conn-kind-select') as HTMLSelectElement | null;
+    if (sel) {
+      sel.value = kind;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+}
+
+// Filter the gallery by name. Purely a view filter — it never re-reads disk, so
+// typing cannot race renderHomeGallery(). "No matches" is a SEPARATE state from
+// "no projects": conflating them tells a first-run user their search is broken.
+function applyHomeSearch(): void {
+  const input = document.getElementById('home-search') as HTMLInputElement | null;
+  const gallery = document.getElementById('home-gallery');
+  const none = document.getElementById('home-noresults');
+  if (!gallery) return;
+  const q = (input ? input.value : '').trim().toLowerCase();
+  const cards = Array.from(gallery.querySelectorAll('.project-card')) as HTMLElement[];
+  let shown = 0;
+  cards.forEach((card) => {
+    const nameEl = card.querySelector('.project-card-name');
+    const name = (nameEl && nameEl.textContent ? nameEl.textContent : '').toLowerCase();
+    const hit = !q || name.indexOf(q) !== -1;
+    card.hidden = !hit;
+    if (hit) shown++;
+  });
+  if (none) none.hidden = !(q !== '' && cards.length > 0 && shown === 0);
+}
+
+// Fill the Discover panel from state the app already holds. No network call:
+// local-first is the reason this panel is not a feed.
+async function fillDiscover(): Promise<void> {
+  const keyEl = document.getElementById('home-disc-hotkey');
+  if (keyEl) {
+    try {
+      // `hotkey:label` resolves { label, accelerator } — not a bare string.
+      const res: any = await window.hub.getHotkeyLabel();
+      const label = res && typeof res === 'object' ? res.label : res;
+      if (label) keyEl.textContent = String(label);
+    } catch (_) { /* keep the default printed in the markup */ }
+  }
+  const aiEl = document.getElementById('home-disc-ai');
+  if (aiEl) {
+    let ready = false;
+    try {
+      const st = await window.hub.getKeyStatus();
+      ready = !!(st && (st.hasApiKey || st.ready));
+    } catch (_) { ready = false; }
+    aiEl.textContent = ready
+      ? 'A model is configured. Every figure is still computed by the app — the model only reads pictures and writes prose.'
+      : 'No model configured. Everything except the AI features works exactly as it is.';
+  }
+}
+
+// Wire the start page and paint the initial gallery.
 function initHome(): void {
   const newBtn = document.getElementById('home-new-project');
   if (newBtn) newBtn.addEventListener('click', () => handleNewProject());
   const emptyNew = document.getElementById('home-empty-new');
   if (emptyNew) emptyNew.addEventListener('click', () => handleNewProject());
+
+  // One listener covers the rail AND the tiles — both carry data-source.
+  document.querySelectorAll('#home-view [data-source]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const kind = (el as HTMLElement).dataset.source || '';
+      if (kind) startFromSource(kind);
+    });
+  });
+
+  const search = document.getElementById('home-search');
+  if (search) search.addEventListener('input', () => applyHomeSearch());
+
+  const settings = document.getElementById('home-disc-settings');
+  if (settings) {
+    settings.addEventListener('click', () => {
+      if (typeof showSettingsPanel === 'function') showSettingsPanel(); // hub.ts
+    });
+  }
+
+  fillDiscover();
   renderHomeGallery();
 }
