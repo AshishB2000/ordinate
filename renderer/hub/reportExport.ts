@@ -7,9 +7,8 @@
 // Render `type` to a crisp PNG data URL OFF-SCREEN (2x, no animation), composited
 // onto a solid background so it embeds cleanly in a report. Reuses buildChart, so
 // the exported chart matches the on-screen one. Resolves null if the type can't draw.
-// Maps (Leaflet) are NOT handled here — they're DOM tiles, not a canvas; capturing
-// them needs leaflet-image/html2canvas (a new dep), so maps are excluded from export
-// for now (see the chartable filter in renderTurnResult).
+// Maps are NOT handled here — see captureMapPNG below, which snapshots the live
+// MapLibre render through the main process instead of rasterizing a Chart.js canvas.
 function captureChartPNG(type: string, data: any, overrides?: any): Promise<string | null> {
   return new Promise<string | null>((resolve) => {
     const holder = document.createElement('div');
@@ -45,12 +44,35 @@ function captureChartPNG(type: string, data: any, overrides?: any): Promise<stri
   });
 }
 
-// Capture the live Leaflet map (tiles + choropleth/bubble SVG overlay + legend) to a
-// crisp PNG for the report. A map isn't a <canvas>, so we render it on-screen in a
-// generously-sized holder, wait for EVERY tile to load, then snapshot the real pixels
-// via the main process (Electron capturePage — native, no CORS/tainting). Returns null
-// if the map can't be captured cleanly (tiles never finish, blank, IPC failure) so the
-// caller can fall back rather than embed a blank/half-loaded map.
+// ── MapLibre map → PNG ───────────────────────────────────────────────────────
+//
+// PHASE-4 CONTRACT — the two export hooks renderer/hub/mapRender.ts publishes:
+//   • `getMapInContainer(container)` → the live MapLibre map drawn into that container,
+//     or null when a geo fallback (bar chart / note) drew instead.
+//   • `waitForMapIdle(container, timeoutMs)` → true once the map has loaded its tiles
+//     and settled on 'idle', false on timeout. This replaces the Leaflet-era DOM
+//     tile-counting wait: MapLibre knows when it is done, the DOM does not.
+// mapRender.ts also owns `preserveDrawingBuffer: true` on the map — needed ONLY by the
+// last-resort canvas fallback below, never by capturePage. It is set in exactly one
+// place, there, and is not duplicated here.
+//
+// WHY capturePage AND NOT `canvas.toDataURL()` as the primary. MapLibre draws the whole
+// map (tiles, fills, circles, labels) into ONE WebGL canvas, but the legend, the
+// "couldn't place" note and the value chips are DOM siblings — reading the canvas alone
+// would silently drop them. `webContents.capturePage` snapshots the COMPOSITED page, so
+// WebGL layers and DOM overlays come back in one image, at the display's scale factor,
+// with no CORS/canvas tainting and no new dependency. It also does NOT depend on
+// preserveDrawingBuffer, because the compositor reads the presented surface rather than
+// the drawing buffer. The canvas read is kept only as a degraded fallback.
+//
+// The holder is `position: fixed` at the hub's top-left (.export-map-capture), i.e. it
+// is genuinely on-screen in the VISIBLE hub window while the snapshot is taken — the
+// offscreen report window (src/reportCapture.ts) never renders a map itself, it only
+// embeds the `data:` PNG produced here. That is deliberate: it keeps WebGL entirely out
+// of the hidden-BrowserWindow path.
+//
+// Returns null if the map can't be captured cleanly (never idles, comes back blank, IPC
+// failure) so the caller falls back rather than embedding a half-drawn map.
 async function captureMapPNG(vizData: any, type: string): Promise<string | null> {
   if (!window.hub || typeof window.hub.captureRegion !== 'function') return null;
   if (typeof renderMapInArea !== 'function') return null;
@@ -66,18 +88,31 @@ async function captureMapPNG(vizData: any, type: string): Promise<string | null>
 
   try {
     await renderMapInArea(holder, vizData, type);
-    // Drop the interactive control cluster (Values / ⋯) — keep the value legend.
-    holder.querySelectorAll<HTMLElement>('.cv-graph-controls').forEach(c => { c.style.display = 'none'; });
-    if (!holder.querySelector('.leaflet-container')) return null;   // didn't actually render a map
-    const loaded = await waitForMapTiles(holder, 8000);
-    if (!loaded) return null;
-    // Two frames so the final tiles/overlay paint before the snapshot is taken.
+    // Drop the interactive controls — the Values / ⋯ cluster and MapLibre's own
+    // zoom/compass buttons. The value legend and the OSM attribution both stay.
+    holder.querySelectorAll<HTMLElement>('.cv-graph-controls, .maplibregl-ctrl-group')
+      .forEach(c => { c.style.display = 'none'; });
+
+    const map = getMapInContainer(holder);
+    if (!map) return null;   // a geo fallback (bar chart / note) drew instead of a map
+
+    // The holder was sized before the map was built, but a resize() is free insurance
+    // that the GL drawing buffer matches the box we are about to snapshot.
+    try { if (typeof map.resize === 'function') map.resize(); } catch (_) {}
+
+    const idle = await waitForMapIdle(holder, 8000);
+    if (!idle) return null;
+    // Two frames so the last render pass is composited before the snapshot is taken.
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
     const rect = holder.getBoundingClientRect();
     const png = await window.hub.captureRegion({
       x: rect.left, y: rect.top, width: rect.width, height: rect.height,
     });
-    return png || null;
+    // A uniform image means the WebGL layer did not make it into the composite — the
+    // one failure mode that would otherwise ship a blank rectangle into a report.
+    if (png && !(await isUniformImage(png))) return png;
+    return await captureMapCanvasPNG(map);
   } catch (e) {
     console.error('[export] map capture failed', e);
     return null;
@@ -87,23 +122,63 @@ async function captureMapPNG(vizData: any, type: string): Promise<string | null>
   }
 }
 
-// True once every Leaflet tile in `holder` has loaded and stayed stable for a few
-// frames; false on timeout — so a half-loaded/blank map becomes a clean fallback
-// rather than a broken image in the report.
-function tilesComplete(total: number, loaded: number): boolean { return total > 0 && loaded >= total; }
-function waitForMapTiles(holder: HTMLElement, timeoutMs: number): Promise<boolean> {
+// Last resort when the composited snapshot came back blank: read the map's own WebGL
+// canvas. Loses the DOM legend/notes, but a map without its legend beats no map at all.
+// This is the ONE caller that needs the map to have been created with
+// preserveDrawingBuffer: true (set in mapRender.ts, see the contract above) — without
+// it the read comes back transparent, which the uniform check below rejects, and the
+// caller degrades to "couldn't capture the map" rather than embedding a blank box.
+async function captureMapCanvasPNG(map: any): Promise<string | null> {
+  try {
+    const canvas = typeof map.getCanvas === 'function' ? map.getCanvas() : null;
+    if (!canvas || typeof canvas.toDataURL !== 'function') return null;
+    if (typeof map.triggerRepaint === 'function') map.triggerRepaint();
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    // Composite onto the theme surface so a transparent GL background doesn't turn into
+    // a black block in a PDF/Word page.
+    const out = document.createElement('canvas');
+    out.width = canvas.width; out.height = canvas.height;
+    const ctx = out.getContext('2d');
+    if (!ctx) return null;
+    ctx.fillStyle = getCSSVar('--surface') || '#ffffff';
+    ctx.fillRect(0, 0, out.width, out.height);
+    ctx.drawImage(canvas, 0, 0);
+    const url = out.toDataURL('image/png');
+    return (await isUniformImage(url)) ? null : url;
+  } catch (e) {
+    console.error('[export] map canvas fallback failed', e);
+    return null;
+  }
+}
+
+// True when every pixel of `dataUrl` is the same colour — the signature of a capture
+// that produced nothing (blank GL layer, empty surface). Sampled through a small
+// downscale so the check costs a fixed ~1k pixel reads regardless of capture size.
+// Errors resolve false: a check we can't run must never discard a good image.
+function isUniformImage(dataUrl: string): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
-    const start = Date.now();
-    let stable = 0;
-    const tick = () => {
-      const total = holder.querySelectorAll('.leaflet-tile').length;
-      const loaded = holder.querySelectorAll('.leaflet-tile-loaded').length;
-      if (tilesComplete(total, loaded)) { if (++stable >= 3) return resolve(true); }
-      else stable = 0;
-      if (Date.now() - start > timeoutMs) return resolve(false);
-      setTimeout(tick, 120);
-    };
-    setTimeout(tick, 250);   // let fitBounds trigger the tile requests first
+    try {
+      const img = new Image();
+      img.onerror = () => resolve(false);
+      img.onload = () => {
+        try {
+          const S = 32;
+          const c = document.createElement('canvas');
+          c.width = S; c.height = S;
+          const ctx = c.getContext('2d');
+          if (!ctx) return resolve(false);
+          ctx.drawImage(img, 0, 0, S, S);
+          const d = ctx.getImageData(0, 0, S, S).data;
+          for (let i = 4; i < d.length; i += 4) {
+            if (d[i] !== d[0] || d[i + 1] !== d[1] || d[i + 2] !== d[2] || d[i + 3] !== d[3]) {
+              return resolve(false);
+            }
+          }
+          resolve(true);
+        } catch (_) { resolve(false); }
+      };
+      img.src = dataUrl;
+    } catch (_) { resolve(false); }
   });
 }
 

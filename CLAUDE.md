@@ -17,19 +17,27 @@ quality before adding code.
 > directory and orphans existing config, history, and projects, so it needs a migration, not a
 > find-and-replace. Docs use Ordinate; the built macOS bundle is still `Screenchart.app`.
 
-> **Architecture: the DuckDB migration LANDED.** Datasets are stored as **Parquet**, and metrics,
-> aggregates, column stats, anomaly detection and the Explore grid all query those files **in place**
-> — no table is materialised into `Cell[][]` to answer a question. The row cap is **1,000,000**
-> (was 50,000). See [`docs/phase-0/`](docs/phase-0/) … [`docs/phase-3b/`](docs/phase-3b/) for the
-> measured basis of every decision, and `.claude/plans/rewrite-to-duckdb-stack.md` for the original
-> brief. **Not** built, and argued against on measured grounds in
-> [`docs/phase-3/README.md`](docs/phase-3/README.md): Mosaic/vgplot, deck.gl/MapLibre, the Svelte
-> renderer, and the Tauri shell. Apache Arrow is **not** achievable with the current binding —
-> `@duckdb/node-api` ships no Arrow support.
+> **Phase 4 (MapLibre GL) is IN PROGRESS on `feat/phase-4-maplibre` — the `maplibre-gl` dependency
+> is intentional.** An audit pass already stashed it once as "stray … contradicts phase-3 §3"; it is
+> not stray. `renderer/hub/mapRender.ts` has been ported from Leaflet to **MapLibre GL 4.7.1**,
+> pinned to v4 for its UMD + `-csp` builds (v6 is ESM-only and needs a bundler this repo does not
+> have). **The external-fetch surface is unchanged:** an inline `version: 8` style object with one
+> raster source over the same three `a|b|c.tile.openstreetmap.org` hosts, and deliberately **no
+> `glyphs` and no `sprite` URL** — both would add a network host and break invariant 1. Because
+> there are no glyphs, map value labels are DOM `Marker`s rather than a symbol layer, so a bare
+> `canvas.toDataURL()` loses them; export must go through `capturePage`. Maps now require **WebGL2**
+> and must render in the visible hub window, never the offscreen report window.
 >
-> **The JS implementations are still the reference.** Every resident (SQL) path falls back to the
-> pure-JS original on any failure, and each is guarded by *differential* tests that assert the two
-> agree. When changing one, change or re-verify the other.
+> **Note for whoever merges `docs/architecture-after-duckdb`:** its CLAUDE.md lists "deck.gl/MapLibre"
+> under *not built, argued against*. That line is what triggered the stash and must be amended when
+> that branch lands. Per [`docs/phase-3b/README.md`](docs/phase-3b/README.md), Mosaic is likewise
+> mis-filed there as rejected when it is actually unblocked with only B1/B2 outstanding.
+
+> **Architecture direction (planned — NOT built).** A migration to DuckDB + Apache Arrow + Mosaic +
+> WebGL charts + Tauri is specified in [`.claude/plans/rewrite-to-duckdb-stack.md`](.claude/plans/rewrite-to-duckdb-stack.md).
+> **Everything below this line describes the code as it exists today** and remains the source of
+> truth until a migration phase lands. Update this file as each phase completes — do not describe
+> the target stack here before it is real.
 
 ## Project Overview
 - **What:** a project-based BI workspace. A **project** holds datasets, visuals, and dashboards under

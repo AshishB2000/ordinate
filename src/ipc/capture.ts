@@ -2,10 +2,20 @@ import { ipcMain, BrowserWindow } from 'electron';
 import { captureHtmlToPng } from '../reportCapture';
 
 // Snapshot a rectangular region of the hub window's rendered page to a PNG data URL.
-// Used to export the Leaflet MAP (tiles + choropleth/bubble SVG overlay + legend) into
-// reports: a map isn't a single <canvas>, so the renderer draws it on-screen and we
-// capture the real pixels here. webContents.capturePage is native — no CORS/canvas
-// tainting and no extra dependency, unlike leaflet-image / html2canvas.
+// Used to export the MAP (MapLibre's WebGL canvas + the DOM legend / value chips /
+// "couldn't place" note that sit on top of it) into reports: the renderer draws it
+// on-screen and we capture the real pixels here.
+//
+// capturePage snapshots the COMPOSITED page, which is why it is the right primitive for
+// a WebGL map: GL layers and DOM overlays come back in a single image, at the display's
+// scale factor, and — unlike `canvas.toDataURL()` — it does not depend on the canvas
+// having been created with `preserveDrawingBuffer`, because the compositor reads the
+// presented surface rather than the drawing buffer. Native, so no CORS/canvas tainting
+// and no extra dependency (no html2canvas, no maplibre-gl-export).
+//
+// The window captured here is the VISIBLE hub. Maps are deliberately never rendered in
+// the hidden offscreen window used by captureHtmlToPng below — that path only ever
+// receives an already-rasterized `data:` PNG. See src/reportCapture.ts.
 export function register() {
   // ponytail: untrusted renderer payloads — any, validated field-by-field below.
   ipcMain.handle('hub:captureRegion', async (event, rect: any) => {
