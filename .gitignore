@@ -139,3 +139,7 @@ scripts/**/*.js
 # Server-side paged read for the Explore grid — emitted siblings.
 /src/datasetPage.js
 /scripts/test-datasetPage.js
+
+# Resident anomaly detection (dashboard:explainAnomalies off Parquet) — emitted siblings.
+/src/anomaliesResident.js
+/scripts/test-anomaliesResident.js
