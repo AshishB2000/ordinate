@@ -193,6 +193,10 @@ contextBridge.exposeInMainWorld('hub', {
   // it draws through datasetPage, so nothing needs the full table clone.
   getDatasetMeta: (projectId: string, id: string) =>
     ipcRenderer.invoke('dataset:meta', { projectId, id }),
+  // Distinct values of ONE column, computed in main off the Parquet. The
+  // dashboard filter picker used to hydrate the whole table to do this itself.
+  datasetDistinct: (projectId: string, datasetId: string, column: string, limit?: number) =>
+    ipcRenderer.invoke('dataset:distinct', { projectId, datasetId, column, limit }),
   // One window of rows for the Explore grid, paged/searched/sorted in main against
   // the stored .parquet. The grid used to hold the WHOLE table in renderer memory
   // and re-copy it on every keystroke, which is what capped datasets at 50k rows.

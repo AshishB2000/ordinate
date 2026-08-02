@@ -114,6 +114,19 @@ declare global {
         target?: { datasetId: string; mode: 'replace' | 'append' };
       }): Promise<any>;
       getDataset(projectId: string, id: string): Promise<any>;
+      // Metadata only — same shape as getDataset but WITHOUT `rows`, and it never
+      // migrates (a metadata read stays a read). Prefer this anywhere only
+      // `columns` is needed: getDataset hydrates the whole table, which is ~4 s
+      // at the 1,000,000-row cap and was freezing three modal-open paths.
+      getDatasetMeta(projectId: string, id: string): Promise<any>;
+      // Distinct non-empty values of one column, capped, computed in MAIN off the
+      // Parquet. Replaces scanning `ds.rows` in the renderer.
+      datasetDistinct(
+        projectId: string,
+        datasetId: string,
+        column: string,
+        limit?: number,
+      ): Promise<{ values: string[] }>;
       deleteDataset(projectId: string, id: string): Promise<{ ok: boolean }>;
       datasetStats(projectId: string, datasetId: string): Promise<any>;
       updateDataset(projectId: string, datasetId: string, columns: any[]): Promise<any>;

@@ -578,8 +578,38 @@ function mosaicCanRender(type: string, source?: MosaicSource | null): boolean {
   // renderer SQL would risk a chart that is quietly filtered differently from the
   // Chart.js one, which is the one failure this path must not have.
   if (Array.isArray(source.filters) && source.filters.length) return false;
-  if (!window.vg) return false;
+  // NOTE: deliberately does NOT test `window.vg`. The 608 KB vendor bundle is
+  // loaded lazily by `ensureVgplot()` on first use, so it is legitimately absent
+  // here. `renderMosaicViz` awaits the load and returns false if it fails, which
+  // is the same Chart.js fallback this check used to produce.
   return buildPlotSpec(type, source.encoding, 'probe') !== null;
+}
+
+// ── Lazy vendor load ─────────────────────────────────────────────────────────
+//
+// vendor/vgplot.js is 608 KB and used to be a static <script src> in index.html,
+// parsed on every launch even though the flag defaults OFF and 12 of 28 chart
+// types can never use it. It is now injected on first Mosaic render.
+//
+// A dynamically-created <script src="vendor/vgplot.js"> is same-origin, so the
+// hub CSP (`script-src 'self'`) allows it unchanged — no nonce, no hash.
+
+let vgplotLoad: Promise<boolean> | null = null;
+
+/** Loads the vendor bundle once. Resolves TRUE when `window.vg` is usable. */
+function ensureVgplot(): Promise<boolean> {
+  if (window.vg) return Promise.resolve(true);
+  if (vgplotLoad) return vgplotLoad;
+  vgplotLoad = new Promise<boolean>((resolve) => {
+    const s = document.createElement('script');
+    s.src = 'vendor/vgplot.js';
+    s.onload = () => resolve(!!window.vg);
+    // Reset on failure so a later render retries rather than being poisoned by
+    // one transient miss.
+    s.onerror = () => { vgplotLoad = null; resolve(false); };
+    document.head.appendChild(s);
+  });
+  return vgplotLoad;
 }
 
 /**
@@ -600,6 +630,15 @@ async function renderMosaicViz(
   const token = ++mosaicTokenSeq;
   mosaicTokens.set(container, token);
   const current = () => mosaicTokens.get(container) === token;
+
+  // First Mosaic render in this session pays for the vendor bundle; every launch
+  // that never draws a Mosaic chart pays nothing.
+  const haveVg = await ensureVgplot();
+  if (!current()) return true; // superseded while the bundle was loading
+  if (!haveVg) {
+    mosaicNote(container, 'fallback', 'window.vg missing');
+    return false;
+  }
 
   let view: any;
   try {
