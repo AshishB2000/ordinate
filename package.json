@@ -25,7 +25,8 @@
     "dist:win": "electron-builder --win --publish never",
     "bench:pipeline": "npm run build:ts && node scripts/bench-pipeline.js",
     "bench:resident": "npm run build:ts && node scripts/bench-resident.js",
-    "smoke": "npm run build && node scripts/smoke-app.js"
+    "smoke": "npm run build && node scripts/smoke-app.js",
+    "build:icons": "node scripts/build-icons.js"
   },
   "license": "MIT",
   "devDependencies": {
@@ -36,6 +37,7 @@
     "electron-builder": "^26.0.12",
     "esbuild": "^0.25.12",
     "playwright": "^1.62.1",
+    "simple-icons": "^16.23.0",
     "svelte": "^5.56.8",
     "typescript": "^7.0.2"
   },
@@ -52,8 +54,7 @@
     "maplibre-gl": "^4.7.1",
     "pdfmake": "^0.3.11",
     "pg": "^8.22.0",
-    "pptxgenjs": "^4.0.1",
-    "simple-icons": "^16.23.0"
+    "pptxgenjs": "^4.0.1"
   },
   "build": {
     "appId": "app.screenshot.desktop",

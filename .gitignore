@@ -154,6 +154,11 @@ scripts/**/*.js
 !/scripts/build-vendor.js
 !/renderer/hub/vendor/vgplot.js
 
+# scripts/build-icons.js — same exception, same reason: a hand-written build
+# tool with no .ts sibling. It bakes assets/provider-icons.json so simple-icons
+# can be a devDependency instead of 25 MB of runtime dependency.
+!/scripts/build-icons.js
+
 # Phase 3c Mosaic connector (mosaic:view / mosaic:query) — emitted siblings.
 /src/ipc/mosaic.js
 /scripts/test-mosaicIpc.js

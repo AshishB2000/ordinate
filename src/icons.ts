@@ -43,14 +43,24 @@ export function safeColor(hex: string): string {
 }
 
 // providerId → { path, color, title, export } for providers with a real icon.
+//
+// Read from a COMMITTED asset, not from simple-icons at runtime. The six icons
+// here are ~12 KB of path data; depending on the package shipped 25 MB into the
+// bundle to get them. simple-icons is now a devDependency and
+// `npm run build:icons` bakes assets/provider-icons.json — the same
+// committed-build-artifact pattern as renderer/hub/vendor/. The generator fails
+// loudly when an upstream export disappears, so a missing icon is a build error
+// rather than a badge that silently replaces a logo.
+const ICON_ASSET = path.join(__dirname, '..', 'assets', 'provider-icons.json');
+
 export const providerLogos = (() => {
   const out: Record<string, { path: string; color: string; title: string; export: string }> = {};
   try {
-    // ponytail: optional dep, indexed by dynamic export name — any is fine here
-    const si: any = require('simple-icons');
-    for (const [id, name] of Object.entries(PROVIDER_SI)) {
-      const ic = si[name];
-      if (ic && ic.path) out[id] = { path: ic.path, color: safeColor(ic.hex), title: ic.title, export: name };
+    const raw = JSON.parse(fs.readFileSync(ICON_ASSET, 'utf8'));
+    const icons = (raw && raw.icons) || {};
+    for (const id of Object.keys(PROVIDER_SI)) {
+      const ic = icons[id];
+      if (ic && ic.path) out[id] = { path: ic.path, color: safeColor(ic.hex), title: ic.title, export: ic.export };
     }
   } catch (_) { /* icons optional — renderer falls back to badges */ }
   return out;
