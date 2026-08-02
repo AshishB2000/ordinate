@@ -256,7 +256,7 @@ async function onDatasetChange(datasetId: string, preset?: any): Promise<void> {
   if (!currentProjectId || !datasetId) return;
   let ds: any = null;
   try {
-    ds = await window.hub.getDataset(currentProjectId, datasetId);
+    ds = await window.hub.getDatasetMeta(currentProjectId, datasetId);
   } catch (_) {
     ds = null;
   }

@@ -12,7 +12,14 @@ import {
   sampleRowsResident,
   StatsSource,
 } from '../statsResident';
-import { readPage, pageRowsJs, PageRequest } from '../datasetPage';
+import {
+  readPage,
+  pageRowsJs,
+  PageRequest,
+  readDistinct,
+  distinctValuesJs,
+  MAX_DISTINCT,
+} from '../datasetPage';
 import { explainText, suggestSteps, suggestCalcField } from '../analyze';
 import { compile } from '../formula';
 
@@ -332,6 +339,34 @@ export function register() {
       return { ok: true, rows: page.rows, total: page.total, offset: page.offset };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to read the dataset page' };
+    }
+  });
+
+  // Distinct values of one column, for the dashboard filter-value picker. Same
+  // two-path shape as `dataset:page`: straight off the Parquet when the bridge is
+  // up, otherwise `distinctValuesJs` — the SAME reference `readDistinct` is
+  // asserted against — over the hydrated table.
+  //
+  // This exists so the renderer stops hydrating a whole table to collect at most
+  // 200 options. Never throws; an unreadable dataset yields no values, which the
+  // caller already renders as "no values to filter on".
+  ipcMain.handle('dataset:distinct', async (_e, { projectId, datasetId, column, limit }: any = {}) => {
+    try {
+      const col = typeof column === 'string' ? column : '';
+      const cap = typeof limit === 'number' && limit > 0 ? limit : MAX_DISTINCT;
+      if (!col) return { values: [] };
+
+      const src = await datasets.residentSource(projectId, datasetId);
+      if (src) {
+        const fast = readDistinct(src, col, cap);
+        if (fast) return { values: fast };
+      }
+
+      const ds = await datasets.getDataset(projectId, datasetId);
+      if (!ds) return { values: [] };
+      return { values: distinctValuesJs(ds.columns, ds.rows, col, cap) };
+    } catch {
+      return { values: [] };
     }
   });
 

@@ -1963,3 +1963,54 @@ if (stpLoginToggle) {
   });
 }
 
+
+// ── Permission panel ─────────────────────────────────────────────────────────
+//
+// Screen Recording permission. Two entry points existed and BOTH were dead:
+//   1. main.ts `openPermission()` sends `hub:show-permission` when a capture is
+//      blocked. The preload exposes `onShowPermission`, but nothing subscribed.
+//   2. Settings → General → "Test permission screen" calls `showPermissionPanel()`,
+//      which was declared in globals.d.ts and defined NOWHERE — so the button
+//      threw a ReferenceError.
+// The markup (#permission-panel) and its styles shipped fully built, and none of
+// its three buttons was wired either. This connects all of it.
+
+const permPanel = document.getElementById('permission-panel');
+const permClose = document.getElementById('permission-close');
+const permOpenSettings = document.getElementById('perm-open-settings');
+const permDone = document.getElementById('perm-done');
+let permOpener: Element | null = null;
+let _permKeydown: ((e: KeyboardEvent) => void) | null = null;
+
+function showPermissionPanel(): void {
+  if (!permPanel) return;
+  // Remember what to refocus on close, matching hideSettingsPanel's behaviour.
+  permOpener = document.activeElement;
+  permPanel.style.display = 'flex';
+  if (permOpenSettings && typeof permOpenSettings.focus === 'function') permOpenSettings.focus();
+  _permKeydown = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); hidePermissionPanel(); } };
+  document.addEventListener('keydown', _permKeydown, true);
+}
+
+function hidePermissionPanel(): void {
+  if (_permKeydown) { document.removeEventListener('keydown', _permKeydown, true); _permKeydown = null; }
+  if (permPanel) permPanel.style.display = 'none';
+  if (permOpener && typeof (permOpener as HTMLElement).focus === 'function') (permOpener as HTMLElement).focus();
+  permOpener = null;
+}
+
+if (permClose) permClose.addEventListener('click', hidePermissionPanel);
+if (permDone) permDone.addEventListener('click', hidePermissionPanel);
+if (permOpenSettings) {
+  permOpenSettings.addEventListener('click', () => {
+    // Opens macOS System Settings → Privacy & Security → Screen Recording. The
+    // panel stays up: the user grants permission over there and comes back.
+    try { window.hub.openSystemSettings(); } catch (_) {}
+  });
+}
+
+// The push from main. Without this, a blocked capture opened the hub and then
+// showed nothing at all.
+if (window.hub && typeof window.hub.onShowPermission === 'function') {
+  window.hub.onShowPermission(showPermissionPanel);
+}

@@ -1473,9 +1473,10 @@
 <script src="../../node_modules/chartjs-chart-sankey/dist/chartjs-chart-sankey.min.js"></script>
 <script src="../../node_modules/chartjs-chart-financial/dist/chartjs-chart-financial.min.js"></script>
 <script src="../../node_modules/@sgratzl/chartjs-chart-boxplot/build/index.umd.min.js"></script>
-<!-- Mosaic/vgplot (window.vg) — the committed vendor bundle, behind the default-off
-     'scMosaic' flag. One <script src> exactly like chart.umd.js above. -->
-<script src="vendor/vgplot.js"></script>
+<!-- Mosaic/vgplot (window.vg) is NOT loaded here. The committed vendor bundle is
+     608 KB and the 'scMosaic' flag is default-off, so plotRender.js injects it
+     with a <script src="vendor/vgplot.js"> on the FIRST Mosaic render instead.
+     Same-origin, so `script-src 'self'` covers it with no CSP change. -->
 <!-- Maps: MapLibre GL, CSP-SAFE build. `maplibre-gl-csp.js` (not `maplibre-gl.js`)
      exists precisely so the worker is a real file instead of an inlined blob: URL
      and so nothing goes through `new Function` — that is what lets the hub keep
@@ -1520,9 +1521,9 @@
 <script src="hub.js"></script>
 
 <!-- Phase 5 — the Svelte islands bundle. An IIFE assigning ONE global
-     (window.OrdinateSvelte), so it loads exactly like chart.umd.js and
-     vendor/vgplot.js above: a classic <script src>, no `type="module"`, nothing
-     about the surrounding global-scope world changed.
+     (window.OrdinateSvelte), so it loads exactly like chart.umd.js above: a
+     classic <script src>, no `type="module"`, nothing about the surrounding
+     global-scope world changed.
 
      LOAD ORDER IS LOAD-BEARING and this must stay LAST. A classic script's
      top-level `const`/`let` (VIZ_LABELS, SHAPE_CHARTS, …) lives in the global

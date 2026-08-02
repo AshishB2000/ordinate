@@ -235,12 +235,18 @@ the bridge returns — an upstream `@duckdb/node-api` bug, worked around in `par
 | Hub | `renderer/hub/` | `hubPreload` → `window.hub` | `hubWindow.js` |
 | Overlay | `renderer/overlay/` | `overlayPreload` → `window.overlay` | `overlayWindow.js` |
 | Status | `renderer/status/` | `statusPreload` → `window.screenchart` | `statusWindow.js` |
-| About | `renderer/about/` | `aboutPreload` → `window.about` | `aboutWindow.js` |
-| Permission | `renderer/permission/` | `permissionPreload` → `window.permission` | `permissionWindow.js` |
+
+**Three windows, not five.** About and Permission were separate `BrowserWindow`s once; the
+single-window redesign replaced them with inline hub panels and their factories, preloads and
+renderers were never instantiated again. All of it (`renderer/about/`, `renderer/permission/`,
+`src/windows/{about,permission}Window.ts`, `preload/{about,permission}Preload.ts` — 683 lines)
+was deleted. `main.ts`'s `openPermission()` has always driven the hub panel, not a window.
 
 Settings/About/Permission are fixed full-window overlay panels inside the hub (`#settings-panel`
 with `#ex-local-panel`/`#ex-byok-panel`, `#about-panel`, `#permission-panel`), shown via
-`hub:open-settings`; back returns to the hub view.
+`hub:open-settings`; back returns to the hub view. The permission panel has two entry points, both
+wired in `hub.ts`: the `hub:show-permission` push (sent by `openPermission()` when a capture is
+blocked, consumed via `onShowPermission`) and Settings → General → "Test permission screen".
 
 ### Result surface
 Thumbnail (→ lightbox), headline + analysis, a chart or MapLibre map with a `⋯` menu

@@ -774,7 +774,7 @@ async function handleAddMetric(): Promise<void> {
 
   let ds: any = null;
   try {
-    ds = await window.hub.getDataset(currentProjectId, dsId);
+    ds = await window.hub.getDatasetMeta(currentProjectId, dsId);
   } catch (_) {
     ds = null;
   }
@@ -1169,7 +1169,7 @@ async function pickDatasetAndColumn(
   );
   if (dsId === null) return null;
   let ds: any = null;
-  try { ds = await window.hub.getDataset(currentProjectId, dsId); } catch (_) { ds = null; }
+  try { ds = await window.hub.getDatasetMeta(currentProjectId, dsId); } catch (_) { ds = null; }
   let cols = ds && Array.isArray(ds.columns) ? ds.columns : [];
   if (columnFilter) cols = cols.filter(columnFilter);
   const column = await dashChooseModal(
@@ -1183,23 +1183,25 @@ async function pickDatasetAndColumn(
 
 // Distinct non-empty values of a column, as chooser options (capped so the select stays
 // usable). Values are kept as strings — filters compare type-aware in MAIN.
-function distinctColumnOptions(ds: any, column: string): Array<{ value: string; label: string }> {
-  const cols = ds && Array.isArray(ds.columns) ? ds.columns : [];
-  const ci = cols.findIndex((c: any) => c.name === column);
-  if (ci < 0) return [];
-  const rows = ds && Array.isArray(ds.rows) ? ds.rows : [];
-  const seen = new Set<string>();
-  const out: Array<{ value: string; label: string }> = [];
-  for (const r of rows) {
-    const cell = r[ci];
-    if (cell == null || cell === '') continue;
-    const v = String(cell);
-    if (seen.has(v)) continue;
-    seen.add(v);
-    out.push({ value: v, label: v });
-    if (out.length >= 200) break;
+//
+// Computed in MAIN off the Parquet (`dataset:distinct`). This used to scan
+// `ds.rows` here, which meant hydrating the entire table into the renderer to
+// collect at most 200 options — ~4 s at the 1,000,000-row cap, inside a
+// modal-open path. `src/datasetPage.distinctValuesJs` is the reference this loop
+// became; it kept the same rules, including that "empty" is only `null` and `''`
+// (a whitespace-only value is a legitimate option).
+async function distinctColumnOptions(
+  datasetId: string,
+  column: string,
+): Promise<Array<{ value: string; label: string }>> {
+  if (!currentProjectId || !datasetId || !column) return [];
+  try {
+    const res = await window.hub.datasetDistinct(currentProjectId, datasetId, column, 200);
+    const values = res && Array.isArray(res.values) ? res.values : [];
+    return values.map((v: string) => ({ value: String(v), label: String(v) }));
+  } catch (_) {
+    return [];
   }
-  return out;
 }
 
 // + Filter: dataset → column → operator → value (skipped for value-less ops).
@@ -1226,7 +1228,7 @@ async function handleAddDashFilter(): Promise<void> {
 async function handleDashCategory(): Promise<void> {
   const picked = await pickDatasetAndColumn();
   if (!picked) return;
-  const opts = distinctColumnOptions(picked.ds, picked.column);
+  const opts = await distinctColumnOptions(String(picked.ds && picked.ds.id ? picked.ds.id : ""), picked.column);
   const value = await dashChooseModal('Category — pick a value', opts, 'Apply');
   if (value === null) return;
   upsertDashFilter({ type: 'filter', column: picked.column, op: '=', value });
@@ -1237,7 +1239,7 @@ async function handleDashCategory(): Promise<void> {
 async function handleDashPeriod(): Promise<void> {
   const picked = await pickDatasetAndColumn((c) => c && c.type === 'date');
   if (!picked) return;
-  const opts = distinctColumnOptions(picked.ds, picked.column);
+  const opts = await distinctColumnOptions(String(picked.ds && picked.ds.id ? picked.ds.id : ""), picked.column);
   const value = await dashChooseModal('Period — pick a value', opts, 'Apply');
   if (value === null) return;
   upsertDashFilter({ type: 'filter', column: picked.column, op: '=', value });
