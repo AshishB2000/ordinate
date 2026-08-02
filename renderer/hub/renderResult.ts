@@ -34,7 +34,7 @@ function renderVizInArea(container, data, type, entry, turnIdx, source?) {
   renderChartJsInArea(container, data, type, entry, turnIdx);
 }
 
-// The Chart.js/Leaflet/table ladder — everything renderVizInArea did before the
+// The Chart.js/MapLibre/table ladder — everything renderVizInArea did before the
 // Mosaic seam, minus the teardown its caller already performed.
 function renderChartJsInArea(container, data, type, entry, turnIdx) {
   container.innerHTML = '';
