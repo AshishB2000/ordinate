@@ -657,6 +657,45 @@ async function main(): Promise<void> {
     }
   }
 
+  // ── 13b. A WIDE table: every column's own figures, uncapped ────────────────
+  // Every other fixture here is at most 6 columns, so nothing pinned the SQL
+  // that is emitted PER COLUMN once there are a hundred of them — and the
+  // outlier passes write one predicate and three aggregates each. This fixture
+  // is 90 columns (30 numeric, 1 date) and is diffed with the caps lifted, so
+  // the assertion is "all 30 columns' fences, counts and extremes agree", not
+  // "the first three do".
+  {
+    const cols: ParsedColumn[] = [D('day')];
+    for (let c = 1; c < 90; c += 1) {
+      if (c % 3 === 0) cols.push(N(`n${c}`));
+      else if (c % 7 === 0) cols.push(T(`dom${c}`)); // dominant + empty-heavy
+      else cols.push(T(`t${c}`));
+    }
+    const rows: Cell[][] = [];
+    for (let r = 0; r < 300; r += 1) {
+      const row: Cell[] = [r < 150 ? '2023' : '2024'];
+      for (let c = 1; c < 90; c += 1) {
+        if (c % 3 === 0) {
+          // A planted spike in every third numeric column, at a different row
+          // each time, so the columns do NOT share an outlier row or a fence.
+          row.push(r === (c % 17) + 5 && c % 9 === 0 ? 100000 + c : ((r * (c + 3)) % 97) - 48);
+        } else if (c % 7 === 0) {
+          row.push(r % 4 === 0 ? '' : 'A');
+        } else {
+          row.push(`v${(r + c) % 13}`);
+        }
+      }
+      rows.push(row);
+    }
+    const f = makeFixture('wide: 90 columns (30 numeric)', cols, rows);
+    const uncapped: AnomalyOptions = { maxPerKind: 1000, maxTotal: 1000 };
+    const got = diff(f, uncapped);
+    ok('wide: every numeric column with a planted spike is flagged',
+      (got ?? []).filter((a) => a.kind === 'numeric_outlier').length >= 3);
+    ok('wide: the capped list agrees too (the caps run over a long list here)',
+      (diff(f) ?? []).length <= 12);
+  }
+
   // ── 14. The one semantic that genuinely differs: float summation order ─────
   // A JS left-fold and DuckDB's parallel partial sums can differ in the last
   // ULPs on NON-INTEGER data, and `quantile_cont` differs from

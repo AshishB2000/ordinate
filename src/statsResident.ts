@@ -382,8 +382,15 @@ function qualitySql(cols: ParsedColumn[], parquetPath: string): string {
       sel.push(`CAST(count(DISTINCT ${n}) AS DOUBLE) AS d${i}`);
       return;
     }
-    sel.push(`CAST(count(*) FILTER (WHERE NOT ${sqlEmpty(p)}) AS DOUBLE) AS ne${i}`);
-    sel.push(`CAST(count(DISTINCT ${p}) FILTER (WHERE NOT ${sqlEmpty(p)}) AS DOUBLE) AS d${i}`);
+    // NOT `count(*) FILTER (WHERE NOT sc_empty(p))`. A FILTER clause per column
+    // is quadratic-ish in practice: at 334 columns this statement took 41 s of a
+    // 44 s call, and at 1,000 columns 51 s. Nulling the value inside a CASE and
+    // leaning on count()'s own NULL-skipping is the identical computation and
+    // measured 51,407 ms -> 4,838 ms at 1,000 columns, with 0 figures differing.
+    // Same rewrite, same reason, as hitsSql in src/anomaliesResident.ts.
+    const kept = `CASE WHEN ${sqlEmpty(p)} THEN NULL ELSE ${p} END`;
+    sel.push(`CAST(count(${kept}) AS DOUBLE) AS ne${i}`);
+    sel.push(`CAST(count(DISTINCT ${kept}) AS DOUBLE) AS d${i}`);
   });
 
   const key = cols.map((col, i) => (col.type === 'number' ? sqlNum(phys(i)) : phys(i))).join(', ');
