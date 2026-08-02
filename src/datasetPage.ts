@@ -545,3 +545,91 @@ function schemaOf(src: PageSource): ParsedColumn[] | null {
   }
   return src.columns;
 }
+
+// ── Distinct column values ───────────────────────────────────────────────────
+//
+// The dashboard filter-value picker used to hydrate the whole table into the
+// renderer and scan `ds.rows` (`dashboards.distinctColumnOptions`). It caps at
+// 200 OUTPUTS, not rows, so at the 1,000,000-row cap it paid for every row to
+// show at most 200 options — inside a modal-open path.
+//
+// Same two-path shape as `readPage`: SQL off the Parquet, `null` to fall back to
+// the JS reference below. Fidelity notes, all load-bearing:
+//   - "Empty" here is ONLY `null` and `''`. NOT the whitespace rule used
+//     elsewhere in this file — the JS original tests `cell == null || cell === ''`
+//     and a whitespace-only value IS a legitimate option. Matching the original
+//     matters more than being internally consistent.
+//   - First-seen order, so `ORDER BY MIN(ordinal)` — a bare GROUP BY does not
+//     preserve it and whether it reorders is machine-dependent.
+//   - The cap is applied AFTER dedupe, matching the JS `out.length >= limit`.
+
+/** Ceiling on returned options, matching the renderer's original cap. */
+export const MAX_DISTINCT = 200;
+
+/**
+ * Distinct non-empty values of one column, in first-seen order, capped.
+ *
+ * Byte-for-byte `distinctValuesJs(columns, rows, column, limit)` over the stored
+ * table, without hydrating a row. `null` ALWAYS means "fall back", never "no
+ * values" — an empty column returns `[]`.
+ */
+export function readDistinct(src: PageSource, column: string, limit: number): string[] | null {
+  try {
+    const cols = schemaOf(src);
+    if (!cols) return null;
+    const ci = cols.findIndex((c) => c.name === column);
+    if (ci < 0) return null;
+    const cap = Math.min(Math.max(Math.floor(limit) || 0, 0), MAX_DISTINCT);
+    if (cap === 0) return [];
+
+    const { from, ord } = orderedFrom(src.parquetPath, ordinalMode);
+    const v = bomSafe(phys(ci));
+    const sql =
+      `SELECT ${v} AS v, MIN(${ord}) AS o FROM ${from} ` +
+      `WHERE ${phys(ci)} IS NOT NULL AND CAST(${phys(ci)} AS VARCHAR) <> '' ` +
+      `GROUP BY v ORDER BY o ASC LIMIT ?;`;
+
+    const rows = duck.query(sql, [cap]);
+    return rows.map((r) => String(r.v ?? ''));
+  } catch (err) {
+    const msg = String((err as Error)?.message ?? '');
+    if (ordinalMode === 'file_row_number' && /file_row_number/i.test(msg)) {
+      ordinalMode = 'row_number';
+      return readDistinct(src, column, limit);
+    }
+    return null;
+  }
+}
+
+/**
+ * THE REFERENCE IMPLEMENTATION — a verbatim transcription of the loop that used
+ * to live in `renderer/hub/dashboards.ts`'s `distinctColumnOptions`, and the
+ * fallback for a v2 (rows-inline) record. Pure.
+ */
+export function distinctValuesJs(
+  columns: ParsedColumn[],
+  rows: Cell[][],
+  column: string,
+  limit: number,
+): string[] {
+  const cols = Array.isArray(columns) ? columns : [];
+  const ci = cols.findIndex((c) => c && c.name === column);
+  if (ci < 0) return [];
+  const cap = Math.min(Math.max(Math.floor(limit) || 0, 0), MAX_DISTINCT);
+  // The push-then-test loop below would emit one value before breaking, so a
+  // zero cap has to short-circuit. The original renderer loop hardcoded 200 and
+  // never had to answer this; a parameterised cap does.
+  if (cap === 0) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const r of Array.isArray(rows) ? rows : []) {
+    const cell = r ? r[ci] : null;
+    if (cell == null || cell === '') continue;
+    const s = String(cell);
+    if (seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+    if (out.length >= cap) break;
+  }
+  return out;
+}

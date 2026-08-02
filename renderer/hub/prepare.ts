@@ -564,7 +564,7 @@ async function syncCombineOn(): Promise<void> {
     rightSel.innerHTML = '';
     let other: any = null;
     try {
-      other = await window.hub.getDataset(currentProjectId, otherSel.value);
+      other = await window.hub.getDatasetMeta(currentProjectId, otherSel.value);
     } catch (_) {
       other = null;
     }
