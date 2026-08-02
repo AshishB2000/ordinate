@@ -35,7 +35,23 @@ function ok(label: string, cond: boolean, extra?: string): void {
 
 async function main(): Promise<void> {
   const app = await _electron.launch({
-    args: ['.', '--password-store=basic', '--user-data-dir=' + userData],
+    args: [
+      '.',
+      '--password-store=basic',
+      '--user-data-dir=' + userData,
+      // MapLibre needs a real WebGL context. Under xvfb there is no GPU, and
+      // modern Chromium refuses to fall back to its software rasteriser for
+      // WebGL unless explicitly told it may — so without this the map renders
+      // the app's honest "This map needs WebGL" fallback and the map assertions
+      // below fail on CI while passing on any developer machine.
+      //
+      // SwiftShader is slower but it is a REAL GL implementation: the same
+      // MapLibre code path, the same shaders, the same tile requests. The
+      // alternative — letting the assertions accept the fallback when GL is
+      // missing — would mean CI silently stops testing maps, which is the gap
+      // this coverage was added to close.
+      '--enable-unsafe-swiftshader',
+    ],
     cwd: REPO,
     timeout: 120_000,
   });
