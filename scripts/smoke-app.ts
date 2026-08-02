@@ -248,7 +248,19 @@ async function main(): Promise<void> {
   await win.waitForTimeout(1500);
   const openedViz = await clickText('sales by region');
   ok('saved visual opens from the UI with Mosaic enabled', openedViz);
-  await win.waitForTimeout(4000);
+
+  // WAIT FOR THE CONDITION, never a fixed sleep. A 4 s pause was enough on a dev
+  // machine and not on a CI runner, where this reported `marks=0 canvases=0` —
+  // neither stack had drawn yet, which reads exactly like "vgplot is broken".
+  // Rendering here is a resident DuckDB query plus a view round trip, so its
+  // latency tracks the host, not the code.
+  await win
+    .waitForFunction(
+      () => !!document.querySelector('svg[class*="plot-"], canvas'),
+      undefined,
+      { timeout: 60_000 },
+    )
+    .catch(() => {}); // fall through to the assertions, which report what's there
 
   // Plot stamps every figure with the constant class `plot-d6a7b5`; an <svg>
   // carrying it is proof vgplot drew, not Chart.js (which draws to <canvas>).
