@@ -102,6 +102,14 @@
          contract: a plain element the classic hub owns, and one bundled
          component rendering inside it, next to vanilla UI that knows nothing
          about it. Delete this host and the island simply does not appear.
+
+         GATED: the island only mounts when localStorage 'scSvelte' === '1'
+         (svelte/main.ts). It is developer evidence, not product — unflagged it
+         rendered a debug card with a tick counter and "not probed" at the top of
+         the Projects home screen, the first thing every user sees. The BUNDLE
+         still loads unflagged, so a broken or stale one stays a console error on
+         every launch rather than something only a flag-holder would notice.
+
          Parked on the home view because it is the first screen `npm start`
          shows; the real migration targets the workspace panels.
          See docs/phase-5/01-toolchain.md. -->

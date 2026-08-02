@@ -253,6 +253,18 @@ async function main(): Promise<void> {
   });
   ok('dataset is listed in the UI with its row count', listed !== null, listed || 'not rendered');
 
+  // Nothing above set `scSvelte`, so this is the DEFAULT user experience. The
+  // Phase 5 spike shipped auto-mounting its debug card — tick counter, "Probe
+  // globals", "not probed" — onto the Projects home screen for everyone. This
+  // asserts the GATE, not the island: developer evidence stays invisible until
+  // it is asked for.
+  const islandOff = await win.evaluate(() => {
+    const host = document.getElementById('svelte-island-host');
+    return { present: !!host, children: host ? host.children.length : 0 };
+  });
+  ok('the Svelte spike island does NOT mount by default', islandOff.children === 0,
+     `host present=${islandOff.present} children=${islandOff.children}`);
+
   // ── The Mosaic/vgplot path (Phase 3c), with the flag ON ───────────────────
   // Everything above ran with `scMosaic` unset, i.e. Chart.js. That proves the
   // default path is intact and NOTHING about the new one. The whole reason this
@@ -261,7 +273,11 @@ async function main(): Promise<void> {
   // of risk again: Observable Plot injects a <style> element, which `style-src
   // 'self'` refuses. The build strips those injections, but "the build stripped
   // them" is a claim about a bundle, not about the running app.
-  await win.evaluate(() => localStorage.setItem('scMosaic', '1'));
+  // The same reload turns on the Phase 5 Svelte island, asserted just below.
+  await win.evaluate(() => {
+    localStorage.setItem('scMosaic', '1');
+    localStorage.setItem('scSvelte', '1');
+  });
   await win.reload();
   await win.waitForLoadState('domcontentloaded');
   await win.waitForTimeout(3000);
@@ -271,6 +287,34 @@ async function main(): Promise<void> {
       if (s) s.remove();
     })
     .catch(() => {});
+
+  // ── The Svelte island (Phase 5) ───────────────────────────────────────────
+  // docs/phase-5/01-toolchain.md §10 names `npm run smoke` as "the check
+  // standing between this design and a stale bundle shipping unnoticed" — but
+  // nothing asserted the island at all. A MISSING bundle surfaces as a load
+  // error; a STALE one produces no error whatsoever, it just renders old code.
+  // Compiling it is not evidence; mounting it is.
+  const island = await win.evaluate(() => {
+    const host = document.getElementById('svelte-island-host');
+    const g = (window as any).OrdinateSvelte;
+    return {
+      bundleLoaded: !!(g && typeof g.mountIsland === 'function'),
+      version: (g && g.version) || null,
+      mounted: !!(host && host.children.length > 0),
+      text: host ? (host.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60) : '',
+      // Svelte compiles scoped styles OUT to svelte/bundle.css (`css: 'external'`).
+      // A <style> here means a build regressed to runtime injection, which
+      // `style-src 'self'` refuses.
+      styleEls: document.querySelectorAll('style').length,
+      cssLinked: [...document.styleSheets].some((s) => (s.href || '').includes('svelte/bundle.css')),
+    };
+  });
+  ok('the Svelte bundle loaded and exposes one global', island.bundleLoaded,
+     `version=${island.version}`);
+  ok('the island mounts when scSvelte is on', island.mounted, island.text);
+  ok('scoped styles came from the linked bundle.css, not an injected <style>',
+     island.cssLinked && island.styleEls === 0,
+     `linked=${island.cssLinked} styleEls=${island.styleEls}`);
 
   const clickText = (re: string) =>
     win.evaluate((src: string) => {
