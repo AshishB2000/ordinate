@@ -144,3 +144,6 @@ scripts/**/*.js
 /src/anomaliesResident.js
 /scripts/test-anomaliesResident.js
 /scripts/test-wideTables.js
+
+# Phase 4 MapLibre GL — emitted sibling.
+/renderer/hub/mapWorker.js

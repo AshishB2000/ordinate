@@ -7,8 +7,24 @@ import { BrowserWindow } from 'electron';
 // reinvent): a hidden sandboxed window (no node access), fonts + every <img> awaited so
 // nothing is captured half-painted, sized to the full content height so a footer is
 // never clipped, then captured at the display scale factor (2× on retina) for crisp text
-// and charts. No html2canvas / leaflet-image / new dependency — capturePage + printToPDF
-// are native Chromium.
+// and charts. No html2canvas / new dependency — capturePage + printToPDF are native
+// Chromium.
+//
+// NO-WEBGL INVARIANT (Phase 4 — MapLibre). The HTML rendered here is RASTER ONLY: every
+// map card and every plugin chart arrives as an already-captured `data:` PNG <img>, and
+// the only live drawing is core Chart.js on a 2D canvas. A MapLibre map is NEVER built
+// inside this window. That is deliberate, not incidental:
+//   • a hidden BrowserWindow is the least reliable place to run WebGL — it depends on
+//     `paintWhenInitiallyHidden` keeping the compositor alive, and on a GPU (or a
+//     SwiftShader fallback) being available to a window nobody is looking at;
+//   • the map is instead rendered in the VISIBLE hub window and snapshotted through
+//     `hub:captureRegion`, where WebGL is unambiguously composited (see
+//     renderer/hub/reportExport.ts `captureMapPNG` and src/ipc/capture.ts);
+//   • `settleAndSize` below waits on `document.images`, which is exactly the right
+//     barrier for a page of PNGs and would be the WRONG one for a live GL map (an <img>
+//     load event says nothing about a map having finished rendering).
+// If a live map is ever wanted in an exported page, it needs its own idle barrier and a
+// verified GPU path in a hidden window — do not assume this routine covers it.
 
 function offscreenWindow(width: number): BrowserWindow {
   const w = Math.max(320, Math.min(1600, Math.round(width) || 640));

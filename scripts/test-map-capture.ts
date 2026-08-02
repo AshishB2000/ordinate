@@ -1,11 +1,13 @@
-// Self-check for the map-export capture guards. The renderer/main code isn't node-
-// runnable (DOM / Electron), so these mirror the two pure guards — keep in sync with
-// reportExport.js tilesComplete() and src/ipc/capture.js's box validation.
+// Self-check for the map-export capture guard. The main-process code is not
+// node-runnable (Electron), so captureBox mirrors src/ipc/capture.ts.
+//
+// NOTE: this is a mirror, not an import — it passes even if the real guard is
+// deleted. Extract the real one into an importable module when src/ipc/capture.ts
+// is next touched. The former tilesComplete half was removed in the MapLibre port:
+// it counted .leaflet-tile DOM nodes and no longer exists in the product.
 
 export {}; // module scope — sibling test scripts share top-level names
 
-// "Every tile loaded" — gates the snapshot so a half-loaded/blank map never exports.
-function tilesComplete(total: number, loaded: number): boolean { return total > 0 && loaded >= total; }
 
 // Main-process capture box validation: round + reject non-positive sizes.
 // ponytail: rect mirrors an untrusted IPC payload — any matches the real guard's input
@@ -23,11 +25,6 @@ function captureBox(rect: any) {
 let failures = 0;
 function ok(label: string, cond: boolean) { if (cond) console.log('ok   ' + label); else { console.error('FAIL ' + label); failures++; } }
 
-// tilesComplete: capture only when all tiles are in.
-ok('no tiles yet → not complete', !tilesComplete(0, 0));
-ok('some tiles still loading → not complete', !tilesComplete(12, 7));
-ok('all tiles loaded → complete', tilesComplete(12, 12));
-ok('more loaded than counted (race) → complete', tilesComplete(12, 13));
 
 // captureBox: rounds, clamps origin, rejects empty.
 ok('valid rect → rounded box', JSON.stringify(captureBox({ x: 10.4, y: 20.6, width: 900.2, height: 540.8 })) === JSON.stringify({ x: 10, y: 21, width: 900, height: 541 }));

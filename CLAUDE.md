@@ -17,6 +17,22 @@ quality before adding code.
 > directory and orphans existing config, history, and projects, so it needs a migration, not a
 > find-and-replace. Docs use Ordinate; the built macOS bundle is still `Screenchart.app`.
 
+> **Phase 4 (MapLibre GL) is IN PROGRESS on `feat/phase-4-maplibre` — the `maplibre-gl` dependency
+> is intentional.** An audit pass already stashed it once as "stray … contradicts phase-3 §3"; it is
+> not stray. `renderer/hub/mapRender.ts` has been ported from Leaflet to **MapLibre GL 4.7.1**,
+> pinned to v4 for its UMD + `-csp` builds (v6 is ESM-only and needs a bundler this repo does not
+> have). **The external-fetch surface is unchanged:** an inline `version: 8` style object with one
+> raster source over the same three `a|b|c.tile.openstreetmap.org` hosts, and deliberately **no
+> `glyphs` and no `sprite` URL** — both would add a network host and break invariant 1. Because
+> there are no glyphs, map value labels are DOM `Marker`s rather than a symbol layer, so a bare
+> `canvas.toDataURL()` loses them; export must go through `capturePage`. Maps now require **WebGL2**
+> and must render in the visible hub window, never the offscreen report window.
+>
+> **Note for whoever merges `docs/architecture-after-duckdb`:** its CLAUDE.md lists "deck.gl/MapLibre"
+> under *not built, argued against*. That line is what triggered the stash and must be amended when
+> that branch lands. Per [`docs/phase-3b/README.md`](docs/phase-3b/README.md), Mosaic is likewise
+> mis-filed there as rejected when it is actually unblocked with only B1/B2 outstanding.
+
 > **Architecture direction (planned — NOT built).** A migration to DuckDB + Apache Arrow + Mosaic +
 > WebGL charts + Tauri is specified in [`.claude/plans/rewrite-to-duckdb-stack.md`](.claude/plans/rewrite-to-duckdb-stack.md).
 > **Everything below this line describes the code as it exists today** and remains the source of
