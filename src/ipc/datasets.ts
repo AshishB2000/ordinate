@@ -68,10 +68,15 @@ function sourceKindFor(ext: string): SourceKind | null {
 // narrates from these and never recomputes. Kept small (column stats + up to 5
 // sample rows) so it fits comfortably in a single prompt.
 const EXPLAIN_SAMPLE_ROWS = 5;
+// Takes METADATA, not a Dataset: it only ever read name/rowCount/columns plus a
+// 5-row sample, so it never needed the table. `sample` is passed in so the
+// caller can supply it from a bounded read (statsResident.sampleRowsResident)
+// instead of hydrating the whole thing to quote five rows.
 function buildDatasetSummaryText(
-  ds: datasets.Dataset,
+  ds: { name: string; rowCount: number; columns: datasets.Dataset['columns'] },
   summaries: ColumnSummary[],
   issues: QualityIssue[],
+  sample: (string | number | null)[][],
 ): string {
   const lines: string[] = [];
   lines.push(`Dataset: "${ds.name}" (${ds.rowCount} rows, ${ds.columns.length} columns).`);
@@ -96,7 +101,7 @@ function buildDatasetSummaryText(
     lines.push('Data-quality notes:');
     issues.forEach((i) => lines.push(`- ${i.detail}`));
   }
-  const sample = ds.rows.slice(0, EXPLAIN_SAMPLE_ROWS);
+  // `sample` is supplied by the caller — see the note on the signature.
   if (sample.length > 0) {
     lines.push('');
     lines.push(`Sample rows (first ${sample.length}):`);
@@ -159,6 +164,23 @@ async function residentStats(
   const issues = findQualityIssuesResident(src);
   if (!issues) return null;
   return { src, summaries, issues };
+}
+
+// Everything the AI-suggestion prompts need, WITHOUT hydrating the table:
+// metadata for the header line, app-computed summaries and quality issues, and a
+// bounded row sample. Returns null when the dataset is not Parquet-backed or the
+// bridge is down, and the caller falls back to the hydrating path.
+async function residentPromptFacts(
+  projectId: string,
+  datasetId: string,
+): Promise<{ meta: datasets.DatasetMeta; summaries: ColumnSummary[]; issues: QualityIssue[]; sample: (string | number | null)[][] } | null> {
+  const meta = await datasets.getDatasetMeta(projectId, datasetId);
+  if (!meta) return null;
+  const fast = await residentStats(projectId, datasetId);
+  if (!fast) return null;
+  const sample = sampleRowsResident(fast.src, EXPLAIN_SAMPLE_ROWS);
+  if (!sample) return null;
+  return { meta, summaries: fast.summaries, issues: fast.issues, sample };
 }
 
 export function register() {
@@ -340,17 +362,9 @@ export function register() {
       // five rows of it. Every piece must succeed or the whole thing falls back
       // — a half-resident prompt is not worth the branch.
       let summaryText: string | null = null;
-      const fast = await residentStats(projectId, datasetId);
+      const fast = await residentPromptFacts(projectId, datasetId);
       if (fast) {
-        const meta = await datasets.getDatasetMeta(projectId, datasetId);
-        const sample = sampleRowsResident(fast.src, EXPLAIN_SAMPLE_ROWS);
-        if (meta && sample) {
-          summaryText = buildDatasetSummaryText(
-            { ...meta, rows: sample } as datasets.Dataset,
-            fast.summaries,
-            fast.issues,
-          );
-        }
+        summaryText = buildDatasetSummaryText(fast.meta, fast.summaries, fast.issues, fast.sample);
       }
 
       if (summaryText === null) {
@@ -360,7 +374,7 @@ export function register() {
           computeColumnSummary(col, ds.rows.map((row) => (row ? row[c] ?? null : null))),
         );
         const issues = findQualityIssues(ds.columns, ds.rows);
-        summaryText = buildDatasetSummaryText(ds, summaries, issues);
+        summaryText = buildDatasetSummaryText(ds, summaries, issues, ds.rows.slice(0, EXPLAIN_SAMPLE_ROWS));
       }
 
       const res = await explainText(summaryText);
@@ -514,13 +528,20 @@ export function register() {
   // No model configured → { ok:false, notReady:true } for a gentle hint.
   ipcMain.handle('dataset:suggestSteps', async (_e, { projectId, datasetId }: any = {}) => {
     try {
-      const ds = await datasets.getDataset(projectId, datasetId);
-      if (!ds) return { ok: false, error: 'Dataset not found' };
-      const summaries = ds.columns.map((col, c) =>
-        computeColumnSummary(col, ds.rows.map((row) => (row ? row[c] ?? null : null))),
-      );
-      const issues = findQualityIssues(ds.columns, ds.rows);
-      const summaryText = buildDatasetSummaryText(ds, summaries, issues);
+      // Fast path: metadata + Parquet-side stats, no table hydrated.
+      let summaryText: string;
+      const fast = await residentPromptFacts(projectId, datasetId);
+      if (fast) {
+        summaryText = buildDatasetSummaryText(fast.meta, fast.summaries, fast.issues, fast.sample);
+      } else {
+        const ds = await datasets.getDataset(projectId, datasetId);
+        if (!ds) return { ok: false, error: 'Dataset not found' };
+        const summaries = ds.columns.map((col, c) =>
+          computeColumnSummary(col, ds.rows.map((row) => (row ? row[c] ?? null : null))),
+        );
+        const issues = findQualityIssues(ds.columns, ds.rows);
+        summaryText = buildDatasetSummaryText(ds, summaries, issues, ds.rows.slice(0, EXPLAIN_SAMPLE_ROWS));
+      }
       const res = await suggestSteps(summaryText);
       if (res.ok) return { ok: true, steps: transforms.sanitizeSteps(res.steps) };
       if (res.errorType === 'not_ready') return { ok: false, notReady: true };
@@ -539,13 +560,20 @@ export function register() {
   // → { ok:false, notReady:true } for a gentle hint.
   ipcMain.handle('dataset:suggestCalcField', async (_e, { projectId, datasetId }: any = {}) => {
     try {
-      const ds = await datasets.getDataset(projectId, datasetId);
-      if (!ds) return { ok: false, error: 'Dataset not found' };
-      const summaries = ds.columns.map((col, c) =>
-        computeColumnSummary(col, ds.rows.map((row) => (row ? row[c] ?? null : null))),
-      );
-      const issues = findQualityIssues(ds.columns, ds.rows);
-      const summaryText = buildDatasetSummaryText(ds, summaries, issues);
+      // Fast path: metadata + Parquet-side stats, no table hydrated.
+      let summaryText: string;
+      const fast = await residentPromptFacts(projectId, datasetId);
+      if (fast) {
+        summaryText = buildDatasetSummaryText(fast.meta, fast.summaries, fast.issues, fast.sample);
+      } else {
+        const ds = await datasets.getDataset(projectId, datasetId);
+        if (!ds) return { ok: false, error: 'Dataset not found' };
+        const summaries = ds.columns.map((col, c) =>
+          computeColumnSummary(col, ds.rows.map((row) => (row ? row[c] ?? null : null))),
+        );
+        const issues = findQualityIssues(ds.columns, ds.rows);
+        summaryText = buildDatasetSummaryText(ds, summaries, issues, ds.rows.slice(0, EXPLAIN_SAMPLE_ROWS));
+      }
       const res = await suggestCalcField(summaryText);
       if (!res.ok) {
         if (res.errorType === 'not_ready') return { ok: false, notReady: true };

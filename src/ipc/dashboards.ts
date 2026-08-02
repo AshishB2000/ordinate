@@ -4,6 +4,7 @@ import * as datasets from '../datasets';
 import * as visuals from '../visuals';
 import * as copilot from '../copilot';
 import * as anomalies from '../anomalies';
+import * as anomaliesResident from '../anomaliesResident';
 import * as residentQuery from '../residentQuery';
 import { computeMetric } from '../metricValue';
 import type { MetricAggregation } from '../metricValue';
@@ -151,6 +152,89 @@ async function metricFor(
     ? applyPipeline({ columns: ds.columns, rows: ds.rows }, filters)
     : { columns: ds.columns, rows: ds.rows };
   return { ok: true, value: computeMetric(table.columns, table.rows, spec) };
+}
+
+// ── The resident anomaly path ───────────────────────────────────────────────
+//
+// `dashboard:explainAnomalies` was the LAST handler that hydrated a whole table:
+// it loops every dataset a dashboard references and, per dataset, called
+// `getDataset` (a full `Cell[][]` materialisation) so that `detectAnomalies`
+// could fold over the rows. With the import cap at 1,000,000 rows that is
+// several seconds per dataset, and the answer is at most twelve sentences.
+//
+// `anomaliesResident.detectAnomaliesResident` is a proven-equivalent
+// implementation (differential test: the resident list must deep-equal the JS
+// list over the same file's rows — same order, same `detail` strings, same
+// severities). It answers the two rules that need real SQL — `numeric_outlier`
+// and `period_change` — off the Parquet file, and reuses `statsResident` for
+// `dominant_category` / `empty_heavy` / `constant_column`, exactly as
+// `anomalies.ts` reuses `datasetStats` for the last two.
+//
+// THE JS PATH REMAINS THE REFERENCE IMPLEMENTATION, and the fallback is PER
+// DATASET: a project can mix v2 (inline-rows) and v3 (Parquet) records, and a
+// resident failure on one must not cost the others their fast path. Anything the
+// resident path cannot answer — no Parquet, no bridge, a query failure, a
+// non-reproducible option — returns `null` and that ONE dataset hydrates. A
+// resident failure is a performance event, never a user-facing error.
+//
+// `buildAnomaliesFacts` is unchanged: it is pure string formatting over an
+// already-computed list. The only thing it needed was the dataset NAME, which
+// now comes from `getDatasetMeta` (a JSON metadata read that never touches the
+// table) instead of from a hydrated `Dataset`.
+//
+// ── The threshold, and why it is NOT the metric one ─────────────────────────
+// Measured on this repo, from a dataset ID to a finished `Anomaly[]` (so the JS
+// column includes the hydration it cannot avoid), one dataset of 6 columns
+// (2 numeric, 1 date, 3 text), warm bridge, median of 11:
+//
+//     rows       100   1,000   2,000   3,000   5,000   8,000   10,000   200,000   1,000,000
+//     JS    ms  2.94    6.48    9.22   13.08   19.57   28.65    39.37    774.47        4,511
+//     res.  ms 17.04   18.44   18.43   19.56   20.58   22.90    25.39    106.57          328
+//
+// Unlike `dashboard:metric`, the resident side here has a REAL floor — ~17 ms,
+// near-flat to 5,000 rows. A metric card is one scalar from one statement; a
+// full anomaly scan is six (`statsResident`'s two, plus this module's row-count
+// + outlier aggregates, squared deviations, outlier predicate and period
+// buckets), several of which sort or group the whole relation. So the crossover
+// is ~5,500 rows, not ~100, and RESIDENT_MIN_ROWS (1,000) would make the
+// resident path 2.8x SLOWER on a 1,000-row dataset. Hence a second, higher
+// constant rather than a shared one.
+//
+// Above the crossover the gap grows with rows, because the JS side is hydration
+// and the resident side is a fixed handful of scans: 1.6x at 10k, 7.3x at 200k,
+// 13.8x at the 1,000,000-row import cap (4.5 s → 0.33 s).
+//
+// `rowCount` comes from `getDatasetMeta`, which reads it out of the JSON record
+// without touching the table, so consulting the threshold costs nothing.
+const ANOMALY_MIN_ROWS = 5_000;
+
+/**
+ * One dataset's app-detected anomalies plus the name `buildAnomaliesFacts`
+ * quotes, or `null` when the dataset is missing/unreadable (the caller skips
+ * it, exactly as the pre-rewire `if (!ds) continue` did).
+ *
+ * Never throws: any resident failure degrades to the hydrate-and-fold path.
+ */
+async function anomaliesFor(
+  projectId: string,
+  datasetId: string,
+): Promise<{ name: string; list: anomalies.Anomaly[] } | null> {
+  try {
+    const meta = await datasets.getDatasetMeta(projectId, datasetId);
+    if (meta && meta.resident && meta.rowCount >= ANOMALY_MIN_ROWS && anomaliesResident.isAnomaliesResident()) {
+      const src = await datasets.residentSource(projectId, datasetId);
+      if (src) {
+        const list = anomaliesResident.detectAnomaliesResident(src);
+        // `[]` is a real answer (a clean dataset); only `null` means fall back.
+        if (list !== null) return { name: meta.name, list };
+      }
+    }
+  } catch (_) {
+    /* fall through to the reference path */
+  }
+  const ds = await datasets.getDataset(projectId, datasetId);
+  if (!ds) return null;
+  return { name: ds.name, list: anomalies.detectAnomalies(ds.columns, ds.rows) };
 }
 
 export function register() {
@@ -388,12 +472,10 @@ export function register() {
       const all: anomalies.Anomaly[] = [];
       const factsBlocks: string[] = [];
       for (const dsId of datasetIds) {
-        const ds = await datasets.getDataset(projectId, dsId);
-        if (!ds) continue;
-        const list = anomalies.detectAnomalies(ds.columns, ds.rows);
-        if (list.length === 0) continue;
-        all.push(...list);
-        factsBlocks.push(anomalies.buildAnomaliesFacts(ds.name, list));
+        const found = await anomaliesFor(projectId, dsId);
+        if (!found || found.list.length === 0) continue;
+        all.push(...found.list);
+        factsBlocks.push(anomalies.buildAnomaliesFacts(found.name, found.list));
       }
 
       if (all.length === 0) return { ok: true, text: null, anomalies: [] };
