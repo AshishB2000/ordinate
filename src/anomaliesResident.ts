@@ -50,7 +50,13 @@
 //      the 0.5 case of the continuous form (verified: `median` over (1,2,3,4) =
 //      2.5). The function used here is `quantile_cont`, verified against
 //      `anomalies.quantile` on 800 random samples (see §"What could NOT be
-//      reproduced").
+//      reproduced"). It is called ONCE PER COLUMN with a LIST of both
+//      quantiles — `quantile_cont(v, [0.25, 0.75])` — which is one sort instead
+//      of two. The list form was verified BIT-IDENTICAL to two scalar calls
+//      before it was relied on: 400 random samples (n 2..41, mixed magnitudes,
+//      integer and non-integer) plus 511 columns of non-integer fixture data,
+//      0 disagreements. A different interpolation there would move a
+//      user-visible fence, so this is measured, not assumed.
 //
 // ── What is reused rather than re-derived ────────────────────────────────────
 // `anomalies.ts` does not reimplement `empty_heavy`/`constant_column`; it calls
@@ -63,6 +69,38 @@
 // first-occurrence tie-break `mode()` does not give you. Only the two rules with
 // no equivalent upstream — `numeric_outlier` and `period_change` — generate SQL
 // here.
+//
+// ── Cost, and where it is NOT ────────────────────────────────────────────────
+// This module issues FIVE statements regardless of how wide the table is (six
+// when there is a date column) — its own three outlier passes plus
+// `statsResident`'s summary and quality scans. Width was still a hang:
+// 57 s at 1,000 columns. The cause was one spelling, not the statement count —
+// `count(*) FILTER (WHERE …)` costs far more per aggregate than the identical
+// `count(CASE WHEN … THEN … END)`, and this file emitted three of them per
+// number column (see `hitsSql`). Measured on this repo's bridge, one dataset,
+// medians, before/after interleaved so both see the same machine, and asserted
+// byte-identical at every point:
+//
+//   number columns    rows      JS     THIS MODULE'S SQL      whole call
+//                                        before    after    before    after
+//     2           1,000,000  1,621 ms    127 ms   119 ms     309 ms   299 ms
+//     7              20,000     64 ms     26 ms    25 ms      85 ms    84 ms
+//    34              10,000    156 ms     84 ms    75 ms     442 ms   431 ms
+//    67              10,000    328 ms    217 ms   150 ms   1,435 ms 1,253 ms
+//   134               5,000    324 ms    732 ms   248 ms   6,907 ms 7,523 ms
+//   334               2,000    351 ms  11,567 ms  586 ms  51,932 ms 44,229 ms
+//
+// The tall/narrow case this path exists for did not regress (a single
+// `quantile_cont` over a LIST of both quantiles is one sort where there were
+// two, which is why it moved slightly the other way).
+//
+// THE WHOLE-CALL COLUMN BARELY MOVES ON WIDE TABLES, AND THAT IS NOT THIS FILE:
+// at 334 number columns 41,166 ms of the remaining 44,229 ms is
+// `statsResident`'s quality scan, which spells its per-column non-empty and
+// distinct counts with the same `FILTER` — measured 51,407 ms → 4,838 ms under
+// the same rewrite, with zero figures differing. Until that is fixed the
+// caller's width gate (`ipc/dashboards.ts`) still has to exist; nothing in the
+// numbers above justifies removing it.
 //
 // ── What could NOT be reproduced ─────────────────────────────────────────────
 // FLOAT SUMMATION ORDER, in three places: the outlier mean, the outlier
@@ -268,7 +306,7 @@ function capAndOrder(found: Anomaly[], o: Opts): Anomaly[] {
 //
 // THREE PASSES, because the JS is three passes and each depends on the last:
 //
-//   base  count, sum, quantile_cont(0.25), quantile_cont(0.75)  — no dependency
+//   base  count, sum, quantile_cont([0.25, 0.75])              — no dependency
 //   dev   sum((v - mean) * (v - mean))                          — needs mean
 //   hits  count/min/max of the values matching the predicate    — needs the
 //                                                                 fences + std
@@ -529,8 +567,8 @@ function numericCte(parquetPath: string, idx: number[]): string {
 }
 
 /**
- * Pass 1 — the row count plus, per number column, the four aggregates that
- * depend on nothing else.
+ * Pass 1 — the row count plus, per number column, the aggregates that depend on
+ * nothing else.
  *
  * `count(v)` is the FINITE count: `sqlNum` degrades `NaN`/`±Infinity` to NULL
  * before any aggregate sees them, which matters twice over here — an unfiltered
@@ -540,19 +578,37 @@ function numericCte(parquetPath: string, idx: number[]): string {
  * `quantile_cont`, NOT `quantile`/`quantile_disc`/`median` — see the header.
  * NO COALESCE: a column with no finite cells must stay NULL, and it is filtered
  * out in TS by the count anyway.
+ *
+ * BOTH FENCES COME OUT OF ONE SORT. `quantile_cont` takes a LIST of quantiles
+ * and returns a list of results, so `[0.25, 0.75]` is one ordering of the
+ * column's values rather than two independent ones. The list is subscripted in
+ * an outer projection (`q[1]`, `q[2]`, 1-based) rather than returned as a list:
+ * a LIST crosses `src/duckdb.ts` as JSON TEXT, and re-parsing a double out of
+ * DuckDB's own float formatting is a round trip this file has no business
+ * trusting when the value is a user-visible fence. Subscripting keeps both
+ * halves DOUBLE the whole way. Verified bit-identical to two scalar calls
+ * (header, trap 2).
  */
 function baseSql(parquetPath: string, numIdx: number[]): string {
   if (numIdx.length === 0) {
     return `SELECT CAST(count(*) AS DOUBLE) AS n FROM ${relationSql(parquetPath)};`;
   }
-  const sel = [`CAST(count(*) AS DOUBLE) AS n`];
+  const agg = [`count(*) AS n`];
+  const sel = [`CAST(n AS DOUBLE) AS n`];
   for (const i of numIdx) {
-    sel.push(`CAST(count(v${i}) AS DOUBLE) AS k${i}`);
-    sel.push(`CAST(sum(v${i}) AS DOUBLE) AS s${i}`);
-    sel.push(`CAST(quantile_cont(v${i}, 0.25) AS DOUBLE) AS q1_${i}`);
-    sel.push(`CAST(quantile_cont(v${i}, 0.75) AS DOUBLE) AS q3_${i}`);
+    agg.push(`count(v${i}) AS k${i}`);
+    agg.push(`sum(v${i}) AS s${i}`);
+    agg.push(`quantile_cont(v${i}, [0.25, 0.75]) AS q${i}`);
+    sel.push(`CAST(k${i} AS DOUBLE) AS k${i}`);
+    sel.push(`CAST(s${i} AS DOUBLE) AS s${i}`);
+    sel.push(`CAST(q${i}[1] AS DOUBLE) AS q1_${i}`);
+    sel.push(`CAST(q${i}[2] AS DOUBLE) AS q3_${i}`);
   }
-  return `WITH ${numericCte(parquetPath, numIdx)} SELECT ${sel.join(', ')} FROM v;`;
+  return (
+    `WITH ${numericCte(parquetPath, numIdx)}, ` +
+    `a AS (SELECT ${agg.join(', ')} FROM v) ` +
+    `SELECT ${sel.join(', ')} FROM a;`
+  );
 }
 
 /**
@@ -601,12 +657,31 @@ function devSql(
  * A NULL `v` fails every comparison (NULL is not TRUE), so non-finite cells drop
  * out for free; the explicit `IS NOT NULL` is kept for the reader.
  *
- * The predicate is materialised as a boolean column in an `h` CTE rather than
- * repeated inside all three `FILTER` clauses. That is not cosmetic: a repeated
- * predicate repeats its `?` placeholders, and a positional binding cannot be
- * reused — the three copies would need the parameters pushed three times, which
- * is exactly the kind of bookkeeping that goes wrong silently. One occurrence,
- * one binding.
+ * The predicate occurs ONCE, in an `h` CTE, rather than being repeated inside
+ * three aggregates. That is not cosmetic: a repeated predicate repeats its `?`
+ * placeholders, and a positional binding cannot be reused — the three copies
+ * would need the parameters pushed three times, which is exactly the kind of
+ * bookkeeping that goes wrong silently. One occurrence, one binding.
+ *
+ * WHAT THE `h` CTE PROJECTS IS THE VALUE, NULLED WHEN THE PREDICATE MISSES —
+ * `CASE WHEN <pred> THEN v END` — and the three aggregates are then the plain
+ * `count`/`min`/`max` of it, which ignore NULL. The obvious spelling is a
+ * boolean column plus `count(*) FILTER (WHERE h)`, `min(v) FILTER (WHERE h)`,
+ * `max(v) FILTER (WHERE h)`, and it is IDENTICAL in meaning — but `FILTER`
+ * carries a per-aggregate cost that explodes with the column count, and this
+ * statement emits three aggregates per number column. Measured on this repo's
+ * bridge, same file, same fences, same results (medians, interleaved so the two
+ * shapes see the same machine):
+ *
+ *     number columns      FILTER      CASE-nulled
+ *       2 (1M rows)        26 ms          32 ms
+ *       7                  21 ms          20 ms
+ *     134                 757 ms         198 ms
+ *     334              13,230 ms         798 ms
+ *
+ * At 334 columns that is 1,002 filtered aggregates against 1,002 plain ones —
+ * a 16.6x difference for a rewrite that changes no number. This was the single
+ * biggest cost inside this module on wide tables.
  */
 function hitsSql(
   parquetPath: string,
@@ -627,11 +702,12 @@ function hitsSql(
       clauses.push(`abs((${v} - CAST(? AS DOUBLE)) / CAST(? AS DOUBLE)) > CAST(? AS DOUBLE)`);
       params.push(s.mean, s.std, o.zThreshold);
     }
-    preds.push(`${v}`);
-    preds.push(`(${v} IS NOT NULL AND (${clauses.join(' OR ')})) AS h${i}`);
-    sel.push(`CAST(count(*) FILTER (WHERE h${i}) AS DOUBLE) AS c${i}`);
-    sel.push(`CAST(min(${v}) FILTER (WHERE h${i}) AS DOUBLE) AS lo${i}`);
-    sel.push(`CAST(max(${v}) FILTER (WHERE h${i}) AS DOUBLE) AS hi${i}`);
+    preds.push(`CASE WHEN ${v} IS NOT NULL AND (${clauses.join(' OR ')}) THEN ${v} END AS h${i}`);
+    // count/min/max IGNORE NULL, so these are exactly the outliers' count and
+    // extremes — the raw data values, never a fence or a mean.
+    sel.push(`CAST(count(h${i}) AS DOUBLE) AS c${i}`);
+    sel.push(`CAST(min(h${i}) AS DOUBLE) AS lo${i}`);
+    sel.push(`CAST(max(h${i}) AS DOUBLE) AS hi${i}`);
   }
   return (
     `WITH ${numericCte(parquetPath, idx)}, ` +
