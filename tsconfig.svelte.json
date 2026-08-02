@@ -1,0 +1,29 @@
+{
+  // Third world (phase 5): the bundled Svelte islands under renderer/hub/svelte/.
+  //
+  // Unlike the other two configs this one EMITS NOTHING. esbuild does the
+  // transpiling and bundling (scripts/build-svelte.js), and esbuild does not
+  // type-check, so `tsc -p tsconfig.svelte.json --noEmit` is the only type gate
+  // the island glue code gets. Run via `npm run typecheck:svelte`.
+  //
+  // SCOPE, STATED HONESTLY: this checks the `.ts` files only. The `<script>`
+  // block inside a `.svelte` file is NOT checked — that needs `svelte-check`
+  // (+ svelte2tsx + a language server), a dependency this phase deliberately
+  // did not add. `svelte-shims.d.ts` types every `*.svelte` import as a
+  // component with `any` props, which is enough to keep the glue honest about
+  // module resolution but says nothing about a component's internals.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    // Modules, not classic scripts — the one place in this repo where `import`
+    // is allowed in renderer code, because a bundler consumes it.
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": [],
+    "noEmit": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "tsBuildInfoFile": "node_modules/.cache/tsc/svelte.tsbuildinfo"
+  },
+  "include": ["renderer/hub/svelte/**/*.ts", "renderer/hub/svelte/**/*.d.ts"]
+}
