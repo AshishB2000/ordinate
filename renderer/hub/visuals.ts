@@ -13,21 +13,22 @@
 // (renderResult.ts). Consumes window.hub.* (the visual:* + dataset:* bridge). All
 // names/values render as textContent only (no HTML injection); no inline style=.
 
-// ── Types (renderer-local twins of src/visuals.ts shapes) ─────────────────────
-type VizAgg = 'sum' | 'avg' | 'count' | 'min' | 'max' | 'none';
-interface VizMeasureUI { column: string; aggregation: VizAgg }
-interface VizCol { name: string; type: string }
+// The measure/aggregation/column shapes moved to encodingForm.ts with the form
+// that owns them (EncAgg / EncMeasure / EncCol). This file no longer names a
+// column or an aggregation anywhere — it hands the dataset's columns over and
+// reads back an encoding.
 
 // ── Module-local state (one builder at a time) ───────────────────────────────
 let vizDatasetId = ''; // dataset currently loaded into the builder
-let vizColumns: VizCol[] = []; // its columns (name + type)
-let vizMeasures: VizMeasureUI[] = []; // the measure rows
+// The encoding form (encodingForm.ts) owns columns, measures and filters now.
+// Created on first open, because the template it clones must be in the DOM and
+// this file's top level runs before that is guaranteed.
+let vizForm: EncodingFormApi | null = null;
 let vizEditingId = ''; // open saved visual's id ('' = building a new one)
 let vizCurrentChartType = ''; // the type currently shown / to be saved
 let vizPicker: any = null; // last buildVizPicker() instance (owns the chip row)
 let vizRecomputeTimer: number | null = null;
 let vizOverrides: any = {}; // the SAME override object buildChart accepts (title/color/…)
-let vizFilters: any[] = []; // visual-level row filters (transforms `filter` steps)
 let vizSaveTimer: number | null = null; // debounce for auto-persisting override edits
 
 // The adapter "entry" handed to renderVizInArea so the ⋯ Customize menu +
@@ -68,11 +69,6 @@ function scheduleSaveVisualOverrides(): void {
   }, 300);
 }
 
-const VIZ_AGGS: VizAgg[] = ['sum', 'avg', 'count', 'min', 'max', 'none'];
-const VIZ_AGG_LABELS: Record<VizAgg, string> = {
-  sum: 'Sum', avg: 'Average', count: 'Count', min: 'Min', max: 'Max', none: 'Raw (no aggregation)',
-};
-
 // ── Small DOM helpers ────────────────────────────────────────────────────────
 function vizEl(id: string): HTMLElement | null {
   return document.getElementById(id);
@@ -96,11 +92,6 @@ function fillSelect(sel: HTMLSelectElement | null, items: Array<{ value: string;
     if (it.value === value) opt.selected = true;
     sel.appendChild(opt);
   });
-}
-
-function vizNumberCols(): VizCol[] {
-  const nums = vizColumns.filter((c) => c.type === 'number');
-  return nums.length ? nums : vizColumns.slice(); // fall back to all if no numeric col
 }
 
 // ── Saved-visual list ────────────────────────────────────────────────────────
@@ -218,12 +209,12 @@ async function openVisualBuilder(): Promise<void> {
   vizEditingId = '';
   vizCurrentChartType = '';
   vizOverrides = {};
-  vizFilters = [];
+  ensureVizForm();
   const datasets = await loadDatasetOptions('');
   vizShow('viz-builder', true);
   if (!datasets.length) {
     // No datasets to build from — show the builder shell with a clear hint.
-    vizShow('viz-encoding', false);
+    if (vizForm) vizForm.show(false);
     setVizWarnings(['Import a dataset in the Datasets section first, then build a visual from it.']);
     clearVizArea();
     return;
@@ -236,14 +227,10 @@ function closeVisualBuilder(): void {
   vizShow('viz-builder', false);
   vizEditingId = '';
   vizDatasetId = '';
-  vizColumns = [];
-  vizMeasures = [];
   vizCurrentChartType = '';
   vizOverrides = {};
-  vizFilters = [];
   vizPicker = null;
-  const fl = vizEl('viz-filters-list');
-  if (fl) fl.innerHTML = '';
+  if (vizForm) vizForm.show(false);
   const sh = vizEl('viz-suggest-hint');
   if (sh) sh.hidden = true;
   clearVizArea();
@@ -261,190 +248,29 @@ async function onDatasetChange(datasetId: string, preset?: any): Promise<void> {
     ds = null;
   }
   if (!ds) {
-    vizShow('viz-encoding', false);
+    if (vizForm) vizForm.show(false);
     setVizWarnings(['That dataset could not be loaded.']);
     clearVizArea();
     return;
   }
   vizDatasetId = String(ds.id || datasetId);
-  vizColumns = Array.isArray(ds.columns)
+  const cols = Array.isArray(ds.columns)
     ? ds.columns.map((c: any) => ({
         name: c && c.name != null ? String(c.name) : '',
         type: c && (c.type === 'number' || c.type === 'date') ? c.type : 'text',
       }))
     : [];
+  ensureVizForm();
+  // The form decides the default category, the default measure and the sort
+  // order of the options. Restoring a saved visual is the same call with a
+  // preset, so "new" and "reopened" cannot drift apart.
+  vizForm!.setColumns(cols, preset, preset && Array.isArray(preset.filters) ? preset.filters : []);
 
-  // Category options: all columns, text/date listed before numbers.
-  const catItems = vizColumns
-    .slice()
-    .sort((a, b) => (a.type === 'number' ? 1 : 0) - (b.type === 'number' ? 1 : 0))
-    .map((c) => ({ value: c.name, label: c.name }));
-  const presetCat = preset && typeof preset.category === 'string' ? preset.category : '';
-  const catValue = presetCat || (catItems[0] ? catItems[0].value : '');
-  fillSelect(vizSelect('viz-category-select'), catItems, catValue);
-
-  // Split/series options: None + text columns.
-  const textCols = vizColumns.filter((c) => c.type !== 'number');
-  const serItems = [{ value: '', label: 'None' }].concat(textCols.map((c) => ({ value: c.name, label: c.name })));
-  const presetSeries = preset && typeof preset.series === 'string' ? preset.series : '';
-  fillSelect(vizSelect('viz-series-select'), serItems, presetSeries);
-
-  // Geo level.
-  const geoSel = vizSelect('viz-geo-level');
-  if (geoSel) geoSel.value = preset && preset.geo && typeof preset.geo.level === 'string' ? preset.geo.level : '';
-
-  // Measures: restore from preset, else one default (first numeric column, sum).
-  if (preset && Array.isArray(preset.values) && preset.values.length) {
-    vizMeasures = preset.values.map((v: any) => ({
-      column: v && typeof v.column === 'string' ? v.column : '',
-      aggregation: VIZ_AGGS.indexOf(v && v.aggregation) >= 0 ? (v.aggregation as VizAgg) : 'sum',
-    }));
-  } else {
-    const nums = vizNumberCols();
-    vizMeasures = [{ column: nums[0] ? nums[0].name : '', aggregation: 'sum' }];
-  }
-  renderMeasureRows();
-  renderFilterRows();
-
-  vizShow('viz-encoding', true);
+  vizForm!.show(true);
   await recomputeVisual();
 }
 
-// ── Visual-level filters (reuse the transforms `filter` step; app computes all
-// numbers by filtering rows BEFORE aggregation in buildVizData) ───────────────
-// FILTER_OPS is the shared list from prepare.ts (same global script scope).
-function renderFilterRows(): void {
-  const list = vizEl('viz-filters-list');
-  if (!list) return;
-  list.innerHTML = '';
-  vizFilters.forEach((f, i) => list.appendChild(makeVizFilterRow(f, i)));
-}
-
-function makeVizFilterRow(step: any, i: number): HTMLElement {
-  const row = document.createElement('div');
-  row.className = 'viz-filter-row';
-
-  const colSel = document.createElement('select');
-  colSel.className = 'viz-select';
-  colSel.setAttribute('aria-label', 'Filter column');
-  fillSelect(colSel, vizColumns.map((c) => ({ value: c.name, label: c.name })), step.column || '');
-  colSel.addEventListener('change', () => { vizFilters[i].column = colSel.value; scheduleRecompute(); });
-  row.appendChild(colSel);
-
-  const opSel = document.createElement('select');
-  opSel.className = 'viz-select';
-  opSel.setAttribute('aria-label', 'Filter condition');
-  fillSelect(opSel, FILTER_OPS.map((o) => ({ value: o, label: o })), step.op || '=');
-  row.appendChild(opSel);
-
-  const valIn = document.createElement('input');
-  valIn.type = 'text';
-  valIn.className = 'viz-filter-val';
-  valIn.value = step.value != null ? String(step.value) : '';
-  valIn.setAttribute('aria-label', 'Filter value');
-  valIn.addEventListener('input', () => { vizFilters[i].value = valIn.value; scheduleRecompute(); });
-  row.appendChild(valIn);
-
-  const syncVal = () => { valIn.hidden = opSel.value === 'is_empty' || opSel.value === 'not_empty'; };
-  opSel.addEventListener('change', () => { vizFilters[i].op = opSel.value; syncVal(); scheduleRecompute(); });
-  syncVal();
-
-  const del = document.createElement('button');
-  del.type = 'button';
-  del.className = 'viz-value-del';
-  del.setAttribute('aria-label', 'Remove filter');
-  del.textContent = '×';
-  del.addEventListener('click', () => { vizFilters.splice(i, 1); renderFilterRows(); scheduleRecompute(); });
-  row.appendChild(del);
-
-  return row;
-}
-
-function handleAddFilter(): void {
-  vizFilters.push({ type: 'filter', column: vizColumns[0] ? vizColumns[0].name : '', op: '=', value: '' });
-  renderFilterRows();
-}
-
-// Read the filter rows as transforms `filter` steps (main-side sanitizeFilters
-// validates/whitelists again). Rows with no column are dropped.
-function readFilters(): any[] {
-  return vizFilters
-    .filter((f) => f && f.column)
-    .map((f) => {
-      const s: any = { type: 'filter', column: f.column, op: f.op || '=' };
-      if (f.op !== 'is_empty' && f.op !== 'not_empty') s.value = f.value != null ? f.value : '';
-      return s;
-    });
-}
-
-// ── Measure rows ─────────────────────────────────────────────────────────────
-function renderMeasureRows(): void {
-  const list = vizEl('viz-values-list');
-  if (!list) return;
-  list.innerHTML = '';
-  const numCols = vizNumberCols();
-  vizMeasures.forEach((m, i) => {
-    const row = document.createElement('div');
-    row.className = 'viz-value-row';
-
-    const colSel = document.createElement('select');
-    colSel.className = 'viz-select viz-value-col';
-    colSel.setAttribute('aria-label', 'Measure column');
-    fillSelect(colSel, numCols.map((c) => ({ value: c.name, label: c.name })), m.column);
-    colSel.addEventListener('change', () => {
-      vizMeasures[i].column = colSel.value;
-      scheduleRecompute();
-    });
-    row.appendChild(colSel);
-
-    const aggSel = document.createElement('select');
-    aggSel.className = 'viz-select viz-value-agg';
-    aggSel.setAttribute('aria-label', 'Aggregation');
-    fillSelect(aggSel, VIZ_AGGS.map((a) => ({ value: a, label: VIZ_AGG_LABELS[a] })), m.aggregation);
-    aggSel.addEventListener('change', () => {
-      vizMeasures[i].aggregation = aggSel.value as VizAgg;
-      scheduleRecompute();
-    });
-    row.appendChild(aggSel);
-
-    const del = document.createElement('button');
-    del.type = 'button';
-    del.className = 'viz-value-del';
-    del.setAttribute('aria-label', 'Remove measure');
-    del.textContent = '×';
-    del.disabled = vizMeasures.length <= 1; // keep at least one measure
-    del.addEventListener('click', () => {
-      vizMeasures.splice(i, 1);
-      renderMeasureRows();
-      scheduleRecompute();
-    });
-    row.appendChild(del);
-
-    list.appendChild(row);
-  });
-}
-
-function handleAddMeasure(): void {
-  const nums = vizNumberCols();
-  vizMeasures.push({ column: nums[0] ? nums[0].name : '', aggregation: 'sum' });
-  renderMeasureRows();
-  scheduleRecompute();
-}
-
 // ── Encoding → recompute → render ────────────────────────────────────────────
-function readEncoding(): any {
-  const category = (vizSelect('viz-category-select') || ({} as any)).value || '';
-  const values = vizMeasures
-    .filter((m) => m.column)
-    .map((m) => ({ column: m.column, aggregation: m.aggregation }));
-  const enc: any = { category, values };
-  const series = (vizSelect('viz-series-select') || ({} as any)).value || '';
-  if (series) enc.series = series;
-  const geoLevel = (vizSelect('viz-geo-level') || ({} as any)).value || '';
-  if (geoLevel) enc.geo = { level: geoLevel };
-  return enc;
-}
-
 function scheduleRecompute(): void {
   if (vizRecomputeTimer !== null) window.clearTimeout(vizRecomputeTimer);
   vizRecomputeTimer = window.setTimeout(() => {
@@ -478,10 +304,10 @@ function clearVizArea(): void {
 // picker + draw the current type. Mirrors renderTurnResult's picker wiring.
 async function recomputeVisual(): Promise<void> {
   if (!currentProjectId || !vizDatasetId) return;
-  const encoding = readEncoding();
+  const encoding = vizForm!.getEncoding();
   let res: any;
   try {
-    res = await window.hub.computeVisualData(currentProjectId, vizDatasetId, encoding, readFilters());
+    res = await window.hub.computeVisualData(currentProjectId, vizDatasetId, encoding, vizForm!.getFilters());
   } catch (_) {
     res = { ok: false, error: 'Could not compute the visual.' };
   }
@@ -502,7 +328,7 @@ async function recomputeVisual(): Promise<void> {
   // for a geo encoding; the map is appended AFTER (never the default).
   let shape = res.recommendedShape;
   if (data.geo) {
-    const catCol = vizColumns.find((c) => c.name === encoding.category);
+    const catCol = vizForm!.getColumns().find((c) => c.name === encoding.category);
     shape = catCol && catCol.type === 'date' ? 'time_series' : 'categorical';
   }
   const recommended = eligibleChartTypes(shape, countNumericSeries(data), (data.labels || []).length);
@@ -544,7 +370,7 @@ async function recomputeVisual(): Promise<void> {
       // The identity (same project/dataset/encoding/filters this data came from)
       // rides along for the Mosaic engine; with the flag off it is ignored.
       renderVizViaEntry(area, data, type, {
-        projectId: currentProjectId, datasetId: vizDatasetId, encoding, filters: readFilters(),
+        projectId: currentProjectId, datasetId: vizDatasetId, encoding, filters: vizForm!.getFilters(),
       });
     },
   });
@@ -578,7 +404,7 @@ async function openSavedVisual(id: string): Promise<void> {
   vizEditingId = String(visual.id || id);
   vizCurrentChartType = typeof visual.chartType === 'string' ? visual.chartType : '';
   vizOverrides = visual.overrides && typeof visual.overrides === 'object' ? visual.overrides : {};
-  vizFilters = Array.isArray(visual.filters)
+  const savedFilters = Array.isArray(visual.filters)
     ? visual.filters.map((f: any) => ({
         type: 'filter',
         column: f && f.column != null ? String(f.column) : '',
@@ -588,7 +414,10 @@ async function openSavedVisual(id: string): Promise<void> {
     : [];
   await loadDatasetOptions(String(visual.datasetId || ''));
   vizShow('viz-builder', true);
-  await onDatasetChange(String(visual.datasetId || ''), visual.encoding);
+  // Encoding AND filters go in as one preset, so restoring a saved visual is the
+  // same code path as opening a new one.
+  await onDatasetChange(String(visual.datasetId || ''),
+                        { ...(visual.encoding || {}), filters: savedFilters });
 }
 
 // ── Save ─────────────────────────────────────────────────────────────────────
@@ -597,7 +426,7 @@ async function handleSaveVisual(): Promise<void> {
     window.alert('Pick a dataset first.');
     return;
   }
-  const encoding = readEncoding();
+  const encoding = vizForm!.getEncoding();
   if (!encoding.category || !Array.isArray(encoding.values) || encoding.values.length === 0) {
     window.alert('Pick a category and at least one measure before saving.');
     return;
@@ -610,7 +439,7 @@ async function handleSaveVisual(): Promise<void> {
 
   let res: any;
   try {
-    const filters = readFilters();
+    const filters = vizForm!.getFilters();
     if (vizEditingId) {
       res = await window.hub.updateVisual(currentProjectId, vizEditingId, { name: finalName, chartType, encoding, overrides: vizOverrides, filters });
       res = res && res.ok ? res.visual : res;
@@ -667,18 +496,10 @@ async function handleSuggestVisual(): Promise<void> {
 // Populate the builder form from a suggested encoding (never auto-saves). Numbers
 // are recomputed by the app on the recompute that follows.
 function applySuggestedEncoding(enc: any, chartType: string): void {
-  if (!enc || typeof enc !== 'object') return;
-  const catSel = vizSelect('viz-category-select');
-  if (catSel && typeof enc.category === 'string' && enc.category) catSel.value = enc.category;
-  const serSel = vizSelect('viz-series-select');
-  if (serSel) serSel.value = typeof enc.series === 'string' && enc.series ? enc.series : '';
-  if (Array.isArray(enc.values) && enc.values.length) {
-    vizMeasures = enc.values.map((v: any) => ({
-      column: v && typeof v.column === 'string' ? v.column : '',
-      aggregation: VIZ_AGGS.indexOf(v && v.aggregation) >= 0 ? (v.aggregation as VizAgg) : 'sum',
-    }));
-    renderMeasureRows();
-  }
+  if (!enc || typeof enc !== 'object' || !vizForm) return;
+  // Same call the dataset switch and the saved-visual restore make. A suggestion
+  // is just another preset, so it cannot support a field the other two do not.
+  vizForm.setEncoding(enc);
   if (typeof chartType === 'string' && chartType) vizCurrentChartType = chartType;
   recomputeVisual();
 }
@@ -702,12 +523,6 @@ function initVisuals(): void {
   const saveBtn = vizEl('viz-save-btn');
   if (saveBtn) saveBtn.addEventListener('click', () => handleSaveVisual());
 
-  const addValueBtn = vizEl('viz-add-value');
-  if (addValueBtn) addValueBtn.addEventListener('click', () => handleAddMeasure());
-
-  const addFilterBtn = vizEl('viz-add-filter');
-  if (addFilterBtn) addFilterBtn.addEventListener('click', () => handleAddFilter());
-
   const suggestBtn = vizEl('viz-suggest-btn');
   if (suggestBtn) suggestBtn.addEventListener('click', () => handleSuggestVisual());
 
@@ -717,16 +532,17 @@ function initVisuals(): void {
     vizEditingId = '';
     vizCurrentChartType = '';
     vizOverrides = {};
-    vizFilters = [];
     onDatasetChange(dsSel.value);
   });
+  // Category / Split / Geo / measures / filters are the encoding form's, and it
+  // reports every one of them through the single onChange in ensureVizForm().
+}
 
-  const catSel = vizSelect('viz-category-select');
-  if (catSel) catSel.addEventListener('change', () => scheduleRecompute());
-
-  const serSel = vizSelect('viz-series-select');
-  if (serSel) serSel.addEventListener('change', () => scheduleRecompute());
-
-  const geoSel = vizSelect('viz-geo-level');
-  if (geoSel) geoSel.addEventListener('change', () => scheduleRecompute());
+// Mount the encoding form once, into the builder. Its onChange is the ONE place
+// an encoding edit becomes a recompute.
+function ensureVizForm(): void {
+  if (vizForm) return;
+  const mount = vizEl('viz-encoding-mount');
+  if (!mount) return;
+  vizForm = createEncodingForm(mount, { onChange: () => scheduleRecompute() });
 }
