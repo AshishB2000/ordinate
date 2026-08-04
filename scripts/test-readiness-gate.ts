@@ -5,9 +5,6 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 
-// Explicit annotation (not a cast): assert.ok is an assertion function, and
-// TS requires the call target itself to carry a declared type (TS2775).
-const assert: typeof import('assert') = require('assert');
 
 const RUNNABLE_LOCAL = ['claude', 'antigravity', 'codex', 'grok', 'opencode', 'cursor'];
 

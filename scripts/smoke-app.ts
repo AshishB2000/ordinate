@@ -77,8 +77,6 @@ async function main(): Promise<void> {
     const projects = req('./src/projects.js');
     const datasets = req('./src/datasets.js');
     const visuals = req('./src/visuals.js');
-    const vizData = req('./src/vizData.js');
-    const metricValue = req('./src/metricValue.js');
     const out: any = {};
 
     await projects.init();
@@ -287,17 +285,6 @@ async function main(): Promise<void> {
       el.click();
       return true;
     }, id);
-  const fillPrompt = async (value: string): Promise<boolean> =>
-    win.evaluate((v) => {
-      const box = document.querySelector('.ws-modal-overlay .ws-modal');
-      if (!box) return false;
-      const input = box.querySelector('.ws-modal-input') as HTMLInputElement | null;
-      if (input) input.value = v;
-      const okBtn = box.querySelector('.ws-modal-actions .btn-primary') as HTMLElement | null;
-      if (!okBtn) return false;
-      okBtn.click();
-      return true;
-    }, value);
   const pickFirstOption = async (): Promise<boolean> =>
     win.evaluate(() => {
       const box = document.querySelector('.ws-modal-overlay .ws-modal');
@@ -1103,6 +1090,59 @@ async function main(): Promise<void> {
   // glyphs (adding one would mean a second network host). Zero here means the geo
   // join found nothing — the map would look fine and say nothing.
   ok('choropleth value labels placed as DOM markers', map.markers > 0, `${map.markers} markers`);
+
+  // ── The deferred export bundles ────────────────────────────────────────────
+  // The map assertions above already prove the 'map' bundle loads on demand
+  // under the real hub CSP — a map rendered, and this run fails on any renderer
+  // console error, which a refused <script src> would be. The three EXPORT
+  // bundles have no such witness: nothing in this run opens a PDF/PPT/Word
+  // export, so without this block they would be deferred and unverified, and a
+  // broken one would surface as "PDF engine not loaded" on a user's machine.
+  //
+  // Asserted in both directions. Absent-at-startup is the half that would rot
+  // silently: if someone re-adds a static <script> tag, every ensureBundle()
+  // still resolves and every export still works, so only the ABSENCE check
+  // notices that the saving was quietly given back.
+  const lazyExports = await win.evaluate(async () => {
+    const w = window as any;
+    const before = { pdf: !!w.pdfMake, pptx: !!w.PptxGenJS, docx: !!w.docx };
+    const loaded = {
+      pdf: await w.ensureBundle('pdf'),
+      pptx: await w.ensureBundle('pptx'),
+      docx: await w.ensureBundle('docx'),
+    };
+    return {
+      before,
+      loaded,
+      after: { pdf: !!w.pdfMake, pptx: !!w.PptxGenJS, docx: !!w.docx },
+      // Order proof, done the only way that cannot be faked: actually build a
+      // PDF. vfs_fonts.js does not set a property to check — it CALLS
+      // pdfMake.addVirtualFileSystem(), guarded on pdfMake already existing. So
+      // if the two ever loaded concurrently (a dynamically inserted <script> is
+      // async by default, which is why lazyScript sets async = false) the fonts
+      // would silently never register, every property check would still pass,
+      // and the failure would appear only when a user exported a PDF.
+      pdfBuilds: await w.pdfMake
+        .createPdf({ content: 'smoke' })
+        .getBase64()
+        .then((b: string) => typeof b === 'string' && b.length > 100)
+        .catch(() => false),
+      docxUsable: !!(w.docx && w.docx.Packer),
+    };
+  });
+  ok('the export engines are ABSENT at startup — the 3,411K is genuinely not parsed',
+     !lazyExports.before.pdf && !lazyExports.before.pptx && !lazyExports.before.docx,
+     JSON.stringify(lazyExports.before));
+  ok('...and each loads on demand under the real hub CSP (script-src \'self\')',
+     lazyExports.loaded.pdf && lazyExports.loaded.pptx && lazyExports.loaded.docx,
+     JSON.stringify(lazyExports.loaded));
+  ok('...defining the globals the export paths guard on',
+     lazyExports.after.pdf && lazyExports.after.pptx && lazyExports.after.docx,
+     JSON.stringify(lazyExports.after));
+  ok('...with intra-bundle order preserved — a real PDF builds, so the fonts registered',
+     lazyExports.pdfBuilds);
+  ok('...and docx exposing Packer, which exportDocx checks before building',
+     lazyExports.docxUsable);
 
   const shot = path.join(shotDir, 'app-window.png');
   await win.screenshot({ path: shot });

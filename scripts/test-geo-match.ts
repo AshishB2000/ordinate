@@ -7,7 +7,6 @@ export {}; // module scope — sibling test scripts share top-level names
 // Explicit annotation (not a cast): assert.ok is an assertion function, and
 // TS requires the call target itself to carry a declared type (TS2775).
 const assert: typeof import('assert') = require('assert');
-import * as path from 'path';
 
 // ponytail: geoMatch.js is a renderer global-script (not a TS module) and the
 // county asset is postinstall-fetched JSON — require both with loose types.

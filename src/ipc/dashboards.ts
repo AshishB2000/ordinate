@@ -6,6 +6,7 @@ import * as copilot from '../copilot';
 import * as anomalies from '../anomalies';
 import * as anomaliesResident from '../anomaliesResident';
 import * as residentQuery from '../residentQuery';
+import * as trace from '../residentTrace';
 import { computeMetric } from '../metricValue';
 import type { MetricAggregation } from '../metricValue';
 import { applyPipeline } from '../transforms';
@@ -143,7 +144,13 @@ async function metricFor(
 ): Promise<{ ok: boolean; value: number | null }> {
   if (target.src) {
     const resident = residentQuery.computeMetricResident(target.src, spec, filters);
-    if (resident !== null) return { ok: true, value: resident };
+    if (resident !== null) {
+      trace.record('metric', 'resident');
+      return { ok: true, value: resident };
+    }
+    trace.record('metric', 'failed', `aggregation=${spec.aggregation}, filters=${filters.length}`);
+  } else {
+    trace.record('metric', 'skipped');
   }
   if (target.ds === undefined) target.ds = await datasets.getDataset(projectId, datasetId);
   const ds = target.ds;
@@ -263,11 +270,20 @@ async function anomaliesFor(
       if (src) {
         const list = anomaliesResident.detectAnomaliesResident(src);
         // `[]` is a real answer (a clean dataset); only `null` means fall back.
-        if (list !== null) return { name: meta.name, list };
+        if (list !== null) {
+          trace.record('anomalies', 'resident');
+          return { name: meta.name, list };
+        }
+        trace.record('anomalies', 'failed', `${meta.rowCount} rows × ${meta.columns.length} cols`);
+      } else {
+        trace.record('anomalies', 'failed', 'no resident source for a resident dataset');
       }
+    } else {
+      trace.record('anomalies', 'skipped');
     }
   } catch (_) {
     /* fall through to the reference path */
+    trace.record('anomalies', 'failed', 'threw');
   }
   const ds = await datasets.getDataset(projectId, datasetId);
   if (!ds) return null;

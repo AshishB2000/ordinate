@@ -16,17 +16,17 @@ export function register() {
 
   ipcMain.on('shell:open', (_e, url: any) => {
     if (typeof url === 'string' && /^https?:\/\//.test(url)) {
-      shell.openExternal(url);
+      void shell.openExternal(url);
     }
   });
 
   ipcMain.on('privacy:open-input-monitoring', () => {
-    shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent');
+    void shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent');
   });
 
   // Open macOS Privacy → Screen Recording settings.
   ipcMain.handle('permission:open-settings', () => {
-    shell.openExternal(
+    void shell.openExternal(
       'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'
     );
   });

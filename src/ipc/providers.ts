@@ -8,6 +8,7 @@ import * as history from '../history';
 // passed via deps here). The ambient declarations emit nothing, so the compiled
 // output keeps the identical bare references inside wipeHistory (a latent
 // ReferenceError if data:delete runs with scope history/everything).
+// oxlint-disable-next-line no-unused-vars -- ambient: assigned here, read in main.ts.
 declare let historySummaries: any[];
 declare const entryData: Map<string, any>;
 declare const entryThreads: Map<string, any>;

@@ -201,7 +201,9 @@ const NEED = 2; // bytes required, on overflow
 const MICROS = 3; // worker-side elapsed µs (diagnostic)
 
 const PENDING = 0;
-const OK = 1;
+// 1 = OK. Named only on the worker side (src/duckdbWorker.ts, which writes it);
+// this side decodes by elimination — anything not PENDING/OVERFLOW/ERROR is a
+// success — so a local `OK` constant here would be write-only.
 const ERROR = 2;
 const OVERFLOW = 3;
 

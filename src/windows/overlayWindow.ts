@@ -35,6 +35,6 @@ export function createOverlayWindow(display: Display): BrowserWindow {
   win.setAlwaysOnTop(true, 'screen-saver');
   win.setVisibleOnAllWorkspaces(true);
 
-  win.loadFile(path.join(ROOT, 'renderer', 'overlay', 'index.html'));
+  void win.loadFile(path.join(ROOT, 'renderer', 'overlay', 'index.html'));
   return win;
 }

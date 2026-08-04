@@ -108,7 +108,8 @@ function fetch(url: string, redirects?: number): Promise<string> {
     const mod = url.startsWith('https') ? https : http;
     mod.get(url, { headers: { 'User-Agent': 'screenchart-geo-setup' } }, res => {
       if (res.statusCode === 301 || res.statusCode === 302) {
-        return fetch(res.headers.location!, (redirects || 0) + 1).then(resolve).catch(reject);
+        fetch(res.headers.location!, (redirects || 0) + 1).then(resolve).catch(reject);
+        return;
       }
       if (res.statusCode !== 200) {
         reject(new Error(`HTTP ${res.statusCode} for ${url}`));
@@ -199,7 +200,7 @@ async function processSource(src: GeoSource): Promise<void> {
   console.log(`  Saved ${outName} (${kb} KB, ${stripped.features.length} features)`);
 }
 
-(async () => {
+void (async () => {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   for (const src of SOURCES) {
     await processSource(src);

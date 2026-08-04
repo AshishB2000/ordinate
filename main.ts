@@ -119,10 +119,6 @@ const entryData = new Map<number, any>();
 let historySummaries: any[] = [];
 
 
-function isWayland(): boolean {
-  return process.platform === 'linux' && process.env.XDG_SESSION_TYPE === 'wayland';
-}
-
 function endCapture(): void {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     overlayWindow.close();
@@ -440,7 +436,7 @@ ipcMain.on('hub:capture', () => {
     openExecutionSettings();
     return;
   }
-  startCapture();
+  void startCapture();
 });
 
 // ── IPC: key management ───────────────────────────────────────────────────
@@ -478,7 +474,7 @@ ipcMain.handle('hotkey:save', (_e, { accelerator }) => {
 
   const handler = () => {
     if (!config.executionReady()) { openExecutionSettings(); return; }
-    startCapture();
+    void startCapture();
   };
 
   const registered = globalShortcut.register(newHotkey, handler);
@@ -635,13 +631,13 @@ require("./src/ipc/captureDataset").register({
 
 // ── App lifecycle ─────────────────────────────────────────────────────────
 
-app.whenReady().then(async () => {
+void app.whenReady().then(async () => {
   config.load();
 
   // Recompute Local CLI availability with the recovered PATH before the user can
   // trigger capture (the readiness gate reads this). Background — bounded by the
   // readVersion guard, so it never blocks the hub or hangs.
-  refreshLocalCliDetectionAtStartup();
+  void refreshLocalCliDetectionAtStartup();
 
   // Apply the saved theme preference to nativeTheme so 'system' tracks the OS
   // and forced light/dark are honored before any window opens.
@@ -665,7 +661,7 @@ app.whenReady().then(async () => {
       openExecutionSettings();
       return;
     }
-    startCapture();
+    void startCapture();
   });
 
   // register() returns false if the accelerator is already registered, but the

@@ -346,6 +346,12 @@ function _addValueLabelMarker(map: any, lng: number, lat: number, text: string):
 }
 
 async function renderMapInArea(container: HTMLElement, data: any, type: string): Promise<void> {
+  // MapLibre (714K) + the bundled GeoJSON (212K) are fetched on first map, not
+  // at hub open — see renderer/hub/lazyScript.ts. The bundle also carries
+  // mapWorker.js, whose setWorkerUrl() must run after the UMD and before any
+  // map is constructed, which the bundle's declared order guarantees.
+  await ensureBundle('map');
+
   // Need MapLibre loaded and geo data on the result
   if (!_mlgl()) {
     container.innerHTML = '<div class="cv-chart-fallback">Map library not loaded.</div>';

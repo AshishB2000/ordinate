@@ -362,10 +362,28 @@ shareable project folder/export), `modelCache`, `hotkey`, `theme`/`themePreferen
   (tsc, no bundler) emits the sibling `foo.js`, and that emitted path gets an explicit
   `.gitignore` entry. require paths / `<script src>` tags / electron-builder config never change.
   Two worlds, two configs: `tsconfig.main.json` (main/src/preload/scripts — NodeNext CommonJS,
-  node types) and `tsconfig.renderer.json` (DOM, no node types). `strict` is on; no `any` without
-  a comment. Renderer files stay **global-scope scripts** — no import/export in renderer `.ts`
-  (shared globals are declared in `renderer/hub/globals.d.ts`). `prestart`/`pretest`/`predist:*`
-  compile automatically.
+  node types) and `tsconfig.renderer.json` (DOM, no node types). **`strict` is on in the MAIN
+  world only.** `tsconfig.renderer.json` sets `"strict": false` — `noImplicitAny` and
+  `strictNullChecks` are off across all ~15,800 renderer lines, deliberately, so the DOM-heavy
+  legacy layer compiles without hundreds of casts. This file used to claim strict was on
+  everywhere; it was wrong about half the codebase. That relaxation is why the renderer carries
+  146 lint findings the main world does not, and why they are turned off in a named override in
+  `.oxlintrc.json` rather than pretended away — they unlock when `strict` comes back on. No `any`
+  without a comment. Renderer files stay **global-scope scripts** — no import/export in renderer
+  `.ts` (shared globals are declared in `renderer/hub/globals.d.ts`).
+  `prestart`/`pretest`/`predist:*` compile automatically.
+- **Lint is a real gate.** `npm run lint` = **oxlint**, type-aware, over the main world and the
+  renderer; the tree is at **zero findings** and CI fails a PR that adds one. Not
+  `typescript-eslint` — it refuses TS 7 at runtime (this repo is on 7.0.2); oxlint's type-aware
+  engine is `tsgolint`, built on the TS 7 native compiler. Prettier stays **advisory**
+  (`continue-on-error`): 238 files are unformatted and normalising them is a whole-tree diff.
+- **Heavy vendor bundles load on FIRST USE, not at hub open** (`renderer/hub/lazyScript.ts`):
+  pdfmake+fonts, pptxgenjs, docx, and MapLibre+GeoJSON — 4,346K of the former 5,476K eager
+  payload, now 1,130K. `ensureBundle(name)` before the call site's existing "engine not loaded"
+  guard. A dynamic same-origin `<script src>` is not inline, so the CSP is unchanged. **`async =
+  false` is load-bearing** — two groups are order-dependent (`mapWorker.js` after the MapLibre
+  UMD; `vfs_fonts.js` after pdfmake) and a dynamically inserted script defaults to async. Chart.js
+  stays eager. vgplot has deferred itself since Phase 3c; `svelte/bundle.js` is eager on purpose.
 - Unconverted plain JS keeps `'use strict'` everywhere. `contextIsolation: true`,
   `nodeIntegration: false` — all renderer↔main via `contextBridge` + IPC, never direct Node from
   a renderer.
@@ -416,14 +434,25 @@ concentration risk."), not jargon. All figures are computed by the app.
 
 ## Testing and Commands
 - **Priority test:** local vision model accuracy on real screenshots. Node self-checks in
-  `scripts/test-*.js` (pure logic, no framework) via `npm test` (**53 self-check files**, thousands
+  `scripts/test-*.js` (pure logic, no framework) via `npm test` (**56 self-check files**, thousands
   of assertions — 7 of them the per-family connector suites, plus `duckdbSidecar` and `cssVars`); add one per
-  non-trivial helper.
+  non-trivial helper. **Adding a suite needs no wiring**: `npm test` is
+  `node --test "scripts/test-*.js"` and the glob finds it. It was a 53-long `&&` chain until
+  2026-08-04, which meant the FIRST failure hid every one after it; the runner now reports all 56
+  every run, in parallel (45.9s → 28.5s). `npm run test:coverage` adds
+  `--experimental-test-coverage`, which the chain could not do at all.
 - **Differential tests are the house style for anything with two implementations.** A resident-SQL
   module is tested by running the SAME input through it and through the pure-JS original and
   comparing with `Object.is` — not against hand-written expected values. Several also spy on
   `datasets.getDataset` to assert the table was *never hydrated*, so a fast path that silently stops
   firing fails loudly instead of passing green and inert.
+- **A fast path that stops firing is now loud at RUNTIME too**, not only in tests
+  (`src/residentTrace.ts`). Every resident module returns `null` on failure and the caller quietly
+  hydrates in JS — correct, but a ~600× slowdown that ships green. Each of the seven call sites
+  records `resident` / `skipped` (a deliberate decision: no bridge, not resident, or below the cost
+  threshold — counted, silent) / `failed` (attempted and came back null anyway — **warns**, once per
+  op per process). `failed` should be zero on every machine; a threshold change shows up as
+  `skipped` instead.
 - **`npm run smoke` is the only check that runs the actual app.** It launches Electron via
   Playwright's `_electron` driver, saves a **1,000,000-row** dataset, opens the project from the
   rendered UI, asserts the dataset is visible with its row count, and fails on **any** renderer
@@ -432,12 +461,16 @@ concentration risk."), not jargon. All figures are computed by the app.
   else rendered the page. Note the first paint is a **splash screen**: a screenshot taken there
   passes every size and DOM check while proving nothing.
 - **CI** (`.github/workflows/ci.yml`) runs type-check + `npm test` + the smoke test on every PR to
-  `devops`; `build.yml` builds both installers on real runners (tag or manual dispatch).
+  `devops`; `lint.yml` runs `npm run lint` (**blocking**) and Prettier (**advisory**, and labelled
+  as such in the job name — an advisory job that can never go green is noise); `build.yml` builds
+  both installers on real runners (tag or manual dispatch).
 
 ```bash
 npm start          # run the app (no dev build step)
 npm run smoke      # launch the REAL app and drive it (see below)
-npm test           # scripts/test-*.js self-checks
+npm test           # node --test over scripts/test-*.js — all 56, parallel, all reported
+npm run test:coverage  # same, with --experimental-test-coverage
+npm run lint       # oxlint, type-aware, main + renderer. BLOCKING in CI, zero findings
 npm run dist:mac   # macOS dmg (electron-builder)
 npm run dist:win   # Windows installer/zip
 npm run icons:verify   # verify logos vs installed simple-icons

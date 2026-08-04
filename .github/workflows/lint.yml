@@ -1,9 +1,22 @@
-name: Format check
+name: Lint
 
-# Reports Prettier formatting drift on every push/PR. Non-blocking for now
-# (continue-on-error) — it surfaces the list of files that aren't formatted
-# without failing the build on the existing codebase. Tighten later by
-# removing continue-on-error once the tree is normalized.
+# Two jobs with deliberately different weight:
+#
+#   lint      BLOCKING. `npm run lint` — oxlint with type-aware rules, over the
+#             main world and the renderer. The tree is at zero findings; a new
+#             one fails the PR. This is the gate.
+#
+#   prettier  ADVISORY (continue-on-error). 238 files are not Prettier-formatted
+#             and normalising them would be a whole-tree diff that buries real
+#             review. It reports drift; it does not gate. Remove
+#             continue-on-error in the same PR that formats the tree, not before
+#             — an advisory job that can never go green is just noise.
+#
+# oxlint (not typescript-eslint) because this repo is on TypeScript 7, and
+# typescript-eslint hard-refuses TS 7 at runtime — "typescript-eslint does not
+# support TS 7.0", see typescript-eslint#10940. oxlint's type-aware engine is
+# tsgolint, which is built on the TS 7 native compiler, so it is not a
+# workaround here, it is the better fit.
 
 on:
   push:
@@ -12,14 +25,25 @@ on:
     branches: [devops, main]
 
 jobs:
-  prettier:
-    name: Prettier --check
+  lint:
+    name: oxlint (blocking)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Check formatting (non-blocking)
+      - run: npm ci
+      - run: npm run lint
+
+  prettier:
+    name: Prettier --check (advisory)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Report formatting drift (does not gate)
         continue-on-error: true
         run: npx --yes prettier@3 --check .

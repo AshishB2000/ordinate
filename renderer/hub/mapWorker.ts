@@ -7,9 +7,11 @@
 // that it has no idea where that file lives, so the app must tell it once, up
 // front, via setWorkerUrl(). Everything below exists to answer that question.
 //
-// Ordering matters: this runs at top level immediately after maplibre-gl-csp.js
-// and before every other hub script, so no map can be constructed before the
-// worker URL is set. Keep the <script> tags in index.html in that order.
+// Ordering matters: this must run after maplibre-gl-csp.js and before any map
+// is constructed. It is no longer a <script> tag in index.html — it is the
+// second entry of the 'map' bundle in lazyScript.ts, which loads a group's
+// scripts strictly in sequence, and `renderMapInArea` awaits that bundle before
+// it touches maplibregl. Keep it second in that array.
 //
 // It is a separate file rather than an inline <script> because the hub CSP is
 // `script-src 'self'` with no 'unsafe-inline' — an inline script would be

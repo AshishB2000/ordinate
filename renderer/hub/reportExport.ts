@@ -305,6 +305,8 @@ function buildReportDoc({ title, analysis, headlineSegments, png }: any) {
 // dialog (main process). png is the Stage-A capture (null if the chart couldn't
 // be drawn — the doc then notes that gracefully instead of failing).
 async function exportPdf({ title, analysis, headlineSegments, type, png }: any) {
+  showToast('Preparing PDF engine…');
+  await ensureBundle('pdf');
   if (!window.pdfMake || typeof window.pdfMake.createPdf !== 'function') {
     showToast('PDF engine not loaded'); return;
   }
@@ -374,6 +376,8 @@ function buildReportPptx({ title, analysis, headlineSegments, png, logoPng }: an
 
 // Generate the .pptx (pptxgenjs, in-renderer) and save via the native dialog.
 async function exportPptx({ title, analysis, headlineSegments, png }: any) {
+  showToast('Preparing PowerPoint engine…');
+  await ensureBundle('pptx');
   if (!window.PptxGenJS) { showToast('PowerPoint engine not loaded'); return; }
   showToast('Building PowerPoint…');
   let base64;
@@ -531,6 +535,8 @@ function buildReportDocx({ title, analysis, headlineSegments, png, logoPng, pngD
 
 // Generate the one-page .docx (docx lib, in-renderer) and save via the native dialog.
 async function exportDocx({ title, analysis, headlineSegments, png }: any) {
+  showToast('Preparing Word engine…');
+  await ensureBundle('docx');
   if (!window.docx || !window.docx.Packer) { showToast('Word engine not loaded'); return; }
   showToast('Building Word…');
   let base64;

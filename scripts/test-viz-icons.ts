@@ -48,7 +48,6 @@ if (missing.length) { console.error('FAIL missing VIZ_ICONS for: ' + missing.joi
 else console.log('ok   every VIZ_LABELS type has an icon (' + labelKeys.length + ' types)');
 
 // Each icon must contain a balanced <svg ...> ... </svg>.
-const iconCount = (src.match(/_vi\(/g) || []).length;
 const svgPattern = /<svg[\s\S]*?<\/svg>/;
 const wrapper = /_vi\('([\s\S]*?)'\)/g;
 let m: RegExpExecArray | null, checked = 0, bad = 0;

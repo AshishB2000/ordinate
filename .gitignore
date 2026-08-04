@@ -119,6 +119,8 @@ scripts/**/*.js
 # Phase 3 resident Parquet query — emitted siblings.
 /src/residentQuery.js
 /scripts/test-residentQuery.js
+/src/residentTrace.js
+/scripts/test-residentTrace.js
 /scripts/bench-resident.js
 
 # Phase 3b typed dataset VIEW over the Parquet store — emitted siblings.
@@ -168,6 +170,7 @@ scripts/**/*.js
 /scripts/test-plotSpec.js
 # Phase 4 MapLibre GL — emitted sibling.
 /renderer/hub/mapWorker.js
+/renderer/hub/lazyScript.js
 
 # ── Phase 5: Svelte islands (docs/phase-5/01-toolchain.md) ──────────────────
 # scripts/build-svelte.js is a hand-written build tool with no .ts sibling —

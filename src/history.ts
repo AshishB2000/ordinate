@@ -107,7 +107,7 @@ export async function loadAllSummaries(): Promise<Array<{ id: string; title: str
 
 // Load a single thread's full data. Returns null if missing or corrupt.
 // ponytail: thread envelope JSON — see saveThread.
-export async function loadThread(id: string | number): Promise<any | null> {
+export async function loadThread(id: string | number): Promise<any> {
   if (!isValidId(id)) return null;
   try {
     const raw = await fs.promises.readFile(threadFilePath(id), 'utf8');
