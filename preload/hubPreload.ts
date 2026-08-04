@@ -348,6 +348,15 @@ contextBridge.exposeInMainWorld('hub', {
   updateAnalysis: (projectId: string, id: string, patch: { name?: string; sheets?: any; filters?: any }) =>
     ipcRenderer.invoke('analysis:update', { projectId, id, ...patch }),
   deleteAnalysis: (projectId: string, id: string) => ipcRenderer.invoke('analysis:delete', { projectId, id }),
+  // PUBLISH — take a SNAPSHOT of the analysis as a dashboard. Each referenced
+  // Visual's DEFINITION is copied BY VALUE into its card, so editing (or
+  // deleting) that visual afterwards cannot change the published dashboard.
+  // Data is NOT snapshotted: a published dashboard reads live data through a
+  // frozen definition. Pass `dashboardId` to REPUBLISH over one this analysis
+  // published before; anything else publishes a new dashboard.
+  // { ok, dashboard, created } | { ok:false, error }.
+  publishAnalysis: (projectId: string, id: string, opts?: { dashboardId?: string; name?: string }) =>
+    ipcRenderer.invoke('analysis:publish', { projectId, id, ...(opts || {}) }),
   // The implicit wrap of a LEGACY standalone dashboard. Call it when the user
   // opens one FOR EDITING — never on list, never on open-to-view: that is what
   // keeps a read a read. Idempotent. { ok, analysis, created } | { ok:false, error }.

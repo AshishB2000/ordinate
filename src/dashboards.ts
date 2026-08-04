@@ -16,12 +16,27 @@
 // A dashboard does NOT validate that referenced visualId/datasetId still exist —
 // a dangling reference is handled gracefully at render time (the card shows a
 // placeholder), so deleting a visual/dataset never corrupts a dashboard.
+//
+// ── schema v3: a Card is TWO-SHAPED ────────────────────────────────────────
+// An authoring card (on an analysis sheet, or on a legacy dashboard) REFERENCES
+// a visual by id. A PUBLISHED card carries an inline `CardVisual` — a by-value
+// copy of the Visual's definition taken at publish time. That copy is the whole
+// snapshot guarantee: editing (or deleting) the source Visual afterwards cannot
+// change one byte of the published dashboard.
+//
+// This module therefore takes a VALUE import of ./visuals for its three
+// sanitizers. There is no cycle (visuals.ts imports projects/datasets/transforms
+// and never dashboards), and calling the real sanitizers is deliberate: a
+// CardVisual is untrusted renderer/disk input and duplicating a security
+// whitelist is how whitelists drift.
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
 import * as projects from './projects';
+import { sanitizeChartType, sanitizeEncoding, sanitizeOverrides, sanitizeFilters } from './visuals';
+import type { Visual } from './visuals';
 import { sanitizeSteps } from './transforms';
 import type { FilterStep } from './transforms';
 
@@ -47,11 +62,36 @@ export interface CardMetric {
   format?: 'auto' | 'plain' | 'thousands' | 'compact' | 'percent' | 'currency';
 }
 
+/**
+ * A by-value copy of a Visual's DEFINITION, taken at publish time — NOT a copy
+ * of its data. Every figure a published card shows is still recomputed on open
+ * from the LIVE dataset (`visual:data` takes exactly these fields), so a
+ * published dashboard shows current data through a frozen definition.
+ *
+ * Derived with `Pick<Visual, …>` on purpose: if `Visual` grows a field, this
+ * type does not silently acquire it, and the copy site in `analysis:publish` is
+ * the one place that has to decide whether a published card should carry it.
+ */
+export type CardVisual = Pick<
+  Visual,
+  'datasetId' | 'name' | 'chartType' | 'encoding' | 'overrides' | 'filters'
+>;
+
 export interface Card {
   id: string; // UUID — a stable key only, never a filesystem path
   type: CardType;
   layout: CardLayout;
+
+  /** Authoring-time REFERENCE — analysis sheets and legacy dashboards. */
   visualId?: string; // type 'visual'
+
+  /**
+   * Publish-time SNAPSHOT. WHEN PRESENT IT WINS: no render path may resolve
+   * `visualId`. A published card keeps `visualId` too, but only as (i) the
+   * republish source and (ii) an "open the source visual" affordance.
+   */
+  visual?: CardVisual; // type 'visual'
+
   heading?: string; // type 'text'
   text?: string; // type 'text'
   metric?: CardMetric; // type 'metric'
@@ -167,6 +207,34 @@ export function sanitizeLayout(raw: unknown): CardLayout {
   return { x, y, w, h };
 }
 
+/**
+ * Whitelist an untrusted inline visual snapshot. DELEGATES to the real
+ * visuals.ts sanitizers (`sanitizeChartType`/`sanitizeEncoding`/
+ * `sanitizeOverrides`/`sanitizeFilters`) rather than reimplementing them, so a
+ * published card can never be a looser whitelist than the Visual it was copied
+ * from. Returns null when there is no dataset to draw from — a snapshot without
+ * one carries nothing renderable.
+ *
+ * `datasetId` is checked as a non-empty string, not as a UUID, matching the
+ * metric-card rule above: it never touches a path here, and every consumer
+ * (`datasets.getDataset`/`getDatasetMeta`) re-validates the UUID shape before
+ * one is built.
+ */
+export function sanitizeCardVisual(raw: unknown): CardVisual | null {
+  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
+  if (!o) return null;
+  const datasetId = typeof o.datasetId === 'string' ? o.datasetId : '';
+  if (!datasetId) return null;
+  return {
+    datasetId,
+    name: typeof o.name === 'string' ? o.name : '',
+    chartType: sanitizeChartType(o.chartType),
+    encoding: sanitizeEncoding(o.encoding),
+    overrides: sanitizeOverrides(o.overrides),
+    filters: sanitizeFilters(o.filters),
+  };
+}
+
 // Whitelist one untrusted card by type. An unknown type, or a type missing its
 // required payload, → null (dropped by sanitizeCards). Each card gets a stable
 // UUID key (a stray/invalid stored id is regenerated).
@@ -181,9 +249,14 @@ export function sanitizeCard(raw: unknown): Card | null {
   const card: Card = { id, type, layout };
 
   if (type === 'visual') {
-    // A visual card is only meaningful with a visualId; drop it otherwise.
-    if (!isValidId(o.visualId)) return null;
-    card.visualId = o.visualId;
+    // TWO-SHAPED (v3): a visual card is meaningful with a valid `visualId`
+    // (authoring) OR a well-formed inline `visual` (published). Both may be
+    // present — a published card keeps its reference for republish — and a card
+    // carrying NEITHER still has nothing to draw, so it is dropped as before.
+    if (isValidId(o.visualId)) card.visualId = o.visualId;
+    const inline = sanitizeCardVisual(o.visual);
+    if (inline) card.visual = inline;
+    if (card.visualId === undefined && card.visual === undefined) return null;
     return card;
   }
 
@@ -246,8 +319,10 @@ export function sanitizePages(raw: unknown): Page[] {
 // Whitelist untrusted dashboard-wide filters: delegate to the shared
 // transforms.sanitizeSteps (drops unknown types/fields) and keep ONLY `filter`
 // steps — a dashboard filter is a row predicate, never a column-mutating transform.
-// A non-array / absent input → [] (backward-compatible v1 → v2 default). Kept local
-// so dashboards.ts needs no visuals.ts import (mirrors visuals.sanitizeFilters).
+// A non-array / absent input → [] (backward-compatible v1 → v2 default). Kept
+// separate from visuals.sanitizeFilters because these are the DASHBOARD's own
+// filters, not a visual's — the two happen to share a rule, not a meaning.
+// (This module does import visuals.ts as of v3, for the CardVisual sanitizers.)
 export function sanitizeDashboardFilters(raw: unknown): FilterStep[] {
   return sanitizeSteps(raw).filter((s): s is FilterStep => s.type === 'filter');
 }
@@ -369,14 +444,29 @@ export async function saveDashboard(
 
 // Patch an existing dashboard's name and/or full pages array in place, bumping
 // updatedAt. Returns null if either id is invalid or the dashboard doesn't exist.
+//
+// ── A PUBLISHED DASHBOARD IS READ-ONLY, AND IT IS ENFORCED HERE ─────────────
+// `analysisId !== null` means "this file is a snapshot someone published". Any
+// write to it that is not itself a publish is REFUSED (null), no matter which
+// main-process caller made it. The guard lives in the store, not in the
+// renderer, because the renderer's ~600 ms autosave debounce would otherwise
+// overwrite a snapshot the moment a card was nudged — and a renderer-side check
+// is a courtesy, not a guarantee.
+//
+// `opts.publish` is the ONE way past it, and only two callers may set it:
+// `analysis:publish` (writing the new snapshot) and the implicit wrap (stamping
+// provenance onto a legacy dashboard). Neither is a user edit of the snapshot's
+// contents.
 export async function updateDashboard(
   projectId: string,
   id: string,
   patch: { name?: string; pages?: unknown; filters?: unknown; analysisId?: unknown; publishedAt?: unknown },
+  opts: { publish?: boolean } = {},
 ): Promise<Dashboard | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   const existing = await getDashboard(projectId, id);
   if (!existing) return null;
+  if (existing.analysisId !== null && !opts.publish) return null; // read-only snapshot
 
   const updated: Dashboard = {
     ...existing,

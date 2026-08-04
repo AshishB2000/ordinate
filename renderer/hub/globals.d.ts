@@ -235,6 +235,13 @@ declare global {
         patch: { name?: string; sheets?: any; filters?: any },
       ): Promise<any>;
       deleteAnalysis(projectId: string, id: string): Promise<{ ok: boolean }>;
+      // Channel `analysis:publish` — snapshots the analysis into a dashboard
+      // (each visual's DEFINITION copied by value; data stays live).
+      publishAnalysis(
+        projectId: string,
+        id: string,
+        opts?: { dashboardId?: string; name?: string },
+      ): Promise<any>;
       analysisForDashboard(projectId: string, dashboardId: string): Promise<any>;
       summarizeDashboard(projectId: string, id: string): Promise<any>;
       explainDashboardAnomalies(projectId: string, id: string): Promise<any>;

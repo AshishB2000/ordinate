@@ -578,19 +578,38 @@ function renderDashCardBody(card: any, body: HTMLElement): void {
   renderTextCard(card, body);
 }
 
-// REUSE the existing visual render path — no charting code lives here. Load the
-// saved Visual (for its datasetId/encoding/chartType/overrides/filters), compute
-// the renderer-ready data in main, then hand it to renderVizInArea exactly like
-// the Visuals builder does.
-async function renderVisualCard(card: any, body: HTMLElement): Promise<void> {
-  if (!currentProjectId || !card.visualId) { dashCardMissing(body, 'No visual selected.'); return; }
-  let visual: any = null;
+// Resolve the definition a visual card draws from. A card is TWO-SHAPED:
+//
+//   • PUBLISHED — `card.visual` is an inline by-value snapshot of the Visual,
+//     taken when the analysis was published. IT WINS, and `card.visualId` is
+//     NEVER resolved: the source visual may have been edited or deleted since,
+//     and a published dashboard must not move until it is published again.
+//   • AUTHORING / LEGACY — `card.visualId` only, resolved from disk as before.
+//
+// Returns { visual, inline } so callers can tell a frozen definition from a
+// live one (a published card must not write chart styling back to a source it
+// no longer follows).
+async function resolveCardVisual(card: any): Promise<{ visual: any; inline: boolean } | null> {
+  if (card && card.visual && card.visual.datasetId) return { visual: card.visual, inline: true };
+  if (!currentProjectId || !card || !card.visualId) return null;
   try {
-    visual = await window.hub.getVisual(currentProjectId, card.visualId);
+    const v = await window.hub.getVisual(currentProjectId, card.visualId);
+    return v ? { visual: v, inline: false } : null;
   } catch (_) {
-    visual = null;
+    return null;
   }
-  if (!visual) { dashCardMissing(body, 'This visual was deleted.', true); return; }
+}
+
+// REUSE the existing visual render path — no charting code lives here. Resolve
+// the definition (inline snapshot first, then the saved Visual) for its
+// datasetId/encoding/chartType/overrides/filters, compute the renderer-ready
+// data in main, then hand it to renderVizInArea exactly like the Visuals
+// builder does.
+async function renderVisualCard(card: any, body: HTMLElement): Promise<void> {
+  if (!currentProjectId || (!card.visualId && !card.visual)) { dashCardMissing(body, 'No visual selected.'); return; }
+  const resolved = await resolveCardVisual(card);
+  if (!resolved) { dashCardMissing(body, 'This visual was deleted.', true); return; }
+  const visual = resolved.visual;
 
   // Merge dashboard-wide filters (first) with the visual's own filters, then pass the
   // combined list through the UNCHANGED visual:data channel — it sanitizes + applies
@@ -613,7 +632,11 @@ async function renderVisualCard(card: any, body: HTMLElement): Promise<void> {
   const entry: any = {
     id: card.id,
     chartOverrides: { ['v:' + type]: visual.overrides || {} },
+    // On a PUBLISHED card this is a no-op: the snapshot is read-only, and
+    // writing back would edit a source visual this card no longer follows —
+    // the styling would silently move somewhere else's chart and not this one.
     saveOverride: (merged: any) => {
+      if (resolved.inline) return;
       if (currentProjectId && card.visualId) {
         window.hub.updateVisual(currentProjectId, card.visualId, { overrides: merged || {} }).catch(() => {});
       }
@@ -867,6 +890,11 @@ function scheduleDashSave(): void {
 
 async function persistDashboard(): Promise<void> {
   if (!dashCurrent || !currentProjectId) return;
+  // A PUBLISHED dashboard is a read-only snapshot: main refuses the write
+  // (src/dashboards.ts updateDashboard), so don't fire the autosave at it. This
+  // check is a courtesy that keeps the debounce quiet — the guarantee is the
+  // main-process one, not this line.
+  if (dashCurrent.analysisId) { dashDirty = false; return; }
   try {
     const res = await window.hub.updateDashboard(currentProjectId, dashCurrent.id, {
       name: dashCurrent.name,
@@ -1338,10 +1366,13 @@ async function buildMetricExportCard(card: any, layout: any): Promise<any> {
 }
 
 async function buildVisualExportCard(card: any, layout: any, forCapture: boolean): Promise<any> {
-  if (!currentProjectId || !card.visualId) return { kind: 'broken', layout, reason: 'No visual selected' };
-  let visual: any = null;
-  try { visual = await window.hub.getVisual(currentProjectId, card.visualId); } catch (_) { visual = null; }
-  if (!visual) return { kind: 'broken', layout, reason: 'Source removed' };
+  if (!currentProjectId || (!card.visualId && !card.visual)) return { kind: 'broken', layout, reason: 'No visual selected' };
+  // Same two-shaped resolution as renderVisualCard: an inline publish-time
+  // snapshot wins, so an export of a published dashboard carries the frozen
+  // definition — and still exports fine after the source visual is deleted.
+  const resolved = await resolveCardVisual(card);
+  if (!resolved) return { kind: 'broken', layout, reason: 'Source removed' };
+  const visual = resolved.visual;
   const merged = mergeDashFilters(dashCurrent && dashCurrent.filters, visual.filters);
   let res: any;
   try { res = await window.hub.computeVisualData(currentProjectId, visual.datasetId, visual.encoding, merged); }

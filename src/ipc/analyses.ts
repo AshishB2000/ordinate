@@ -79,12 +79,130 @@ export async function wrapDashboardInAnalysis(
 
   // Step 2. A failure here is survivable (see the header) — the analysis stands,
   // the dashboard stays unwrapped, and the next edit retries.
-  await dashboards.updateDashboard(projectId, dashboardId, {
-    analysisId: created.id,
-    publishedAt: d.publishedAt || d.updatedAt,
-  });
+  //
+  // `publish: true` — this is a PROVENANCE STAMP, not a user edit of the
+  // snapshot's contents, so it is one of the two writes allowed past the
+  // read-only guard in dashboards.updateDashboard. It also covers the re-wrap
+  // case, where the dashboard already carries a (stale) analysisId.
+  await dashboards.updateDashboard(
+    projectId,
+    dashboardId,
+    { analysisId: created.id, publishedAt: d.publishedAt || d.updatedAt },
+    { publish: true },
+  );
 
   return { ok: true, analysis: created, created: true };
+}
+
+// ── PUBLISH — the whole point of the split ──────────────────────────────────
+//
+// Publishing is a SNAPSHOT, NOT A LINK. After it, editing the analysis — its
+// sheets, its filters, or ANY VISUAL IT REFERENCES — must not change the
+// published dashboard by one byte until the user publishes again.
+//
+// That is why each referenced Visual's DEFINITION is copied BY VALUE into the
+// card as an inline `CardVisual`. Layout alone is not enough: a visual is part
+// of what the author edits, so a published dashboard that resolved `visualId`
+// at render time would silently reshape itself the moment someone changed a
+// chart type from the Visuals page. Copying the definition is the level at
+// which the guarantee holds.
+//
+// What is deliberately NOT copied is the DATA. A published dashboard still
+// reads the live Parquet through the frozen definition — refreshing a Postgres
+// connection is a data event, and a dashboard that could never see new numbers
+// is not what "publish" means in a BI tool. This is a stated non-guarantee, not
+// an oversight.
+//
+// Nothing in here hydrates a dataset, touches a row, or computes a figure.
+export async function publishAnalysis(
+  projectId: string,
+  id: string,
+  opts: { dashboardId?: unknown; name?: unknown } = {},
+): Promise<{ ok: true; dashboard: dashboards.Dashboard; created: boolean } | { ok: false; error: string }> {
+  const a = await analysis.getAnalysis(projectId, id);
+  if (!a) return { ok: false, error: 'Analysis not found' };
+
+  // 1. Deep-copy sheets → pages. CARD IDS ARE KEPT: a stable card id across
+  //    republishes is what a future "what changed since last publish" diff
+  //    needs, and a card id is a key, never a path.
+  const pages: unknown[] = JSON.parse(JSON.stringify(a.sheets));
+
+  // 2. Denormalise every visual card. On failure the card keeps its
+  //    `visualId` only and renders the existing "Unavailable" placeholder —
+  //    dropping it would silently reflow the layout, which is worse than a
+  //    visible gap.
+  for (const page of pages as { cards?: Record<string, unknown>[] }[]) {
+    for (const card of page.cards || []) {
+      if (card.type !== 'visual' || typeof card.visualId !== 'string') continue;
+      const v = await visuals.getVisual(projectId, card.visualId);
+      if (!v) continue;
+      card.visual = {
+        datasetId: v.datasetId,
+        name: v.name,
+        chartType: v.chartType,
+        encoding: v.encoding,
+        overrides: v.overrides,
+        filters: v.filters,
+      };
+    }
+  }
+
+  // 3. Analysis-wide filters, by value.
+  const filters = JSON.parse(JSON.stringify(a.filters));
+
+  // 4. PRUNE ON WRITE. `publishedDashboardIds` is provenance and a read must
+  //    stay a read, so nothing prunes it on load — this is the one place that
+  //    knows a stale id is stale, because it is already checking whether the
+  //    republish target still exists.
+  const live: string[] = [];
+  for (const did of a.publishedDashboardIds) {
+    if (await dashboards.getDashboard(projectId, did)) live.push(did);
+  }
+
+  const publishedAt = new Date().toISOString();
+  const name = typeof opts.name === 'string' && opts.name.trim() ? opts.name.trim() : undefined;
+  // A `dashboardId` that is not in this analysis's OWN provenance list is
+  // refused (it falls through to a new dashboard): that is what stops one
+  // analysis from overwriting another's published dashboard.
+  const target = typeof opts.dashboardId === 'string' && live.includes(opts.dashboardId) ? opts.dashboardId : null;
+
+  let dashboard: dashboards.Dashboard | null = null;
+  let created = false;
+  if (target) {
+    dashboard = await dashboards.updateDashboard(
+      projectId,
+      target,
+      { name, pages, filters, analysisId: a.id, publishedAt },
+      { publish: true }, // the only other write allowed past the read-only guard
+    );
+  }
+  if (!dashboard) {
+    dashboard = await dashboards.saveDashboard(projectId, {
+      name: name || a.name,
+      pages,
+      filters,
+      analysisId: a.id,
+      publishedAt,
+    });
+    created = true;
+    if (!dashboard) return { ok: false, error: 'Could not publish the dashboard' };
+    live.push(dashboard.id);
+  }
+
+  // 5. Record provenance LAST. The dashboard is the artifact the user asked
+  //    for, so it is written first; a failure here leaves an unrecorded (but
+  //    perfectly good) dashboard, which is recoverable, while the reverse would
+  //    record an id for a dashboard that does not exist.
+  //    `bumpUpdatedAt: false` — publishing edits no sheet, filter or name, and
+  //    `updatedAt` is what "has unpublished changes?" compares against.
+  await analysis.updateAnalysis(
+    projectId,
+    id,
+    { publishedDashboardIds: live, lastPublishedAt: publishedAt },
+    { bumpUpdatedAt: false },
+  );
+
+  return { ok: true, dashboard, created };
 }
 
 // AI-DRAFTED LAYOUT — moved VERBATIM from `dashboard:draft`, which is deleted
@@ -161,6 +279,17 @@ export function register() {
       return await wrapDashboardInAnalysis(projectId, dashboardId);
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to open the analysis' };
+    }
+  });
+
+  // PUBLISH — create a new dashboard, or update the one being republished.
+  // `dashboardId` is honoured only when it is already in this analysis's
+  // publishedDashboardIds (see publishAnalysis); anything else publishes anew.
+  ipcMain.handle('analysis:publish', async (_e, { projectId, id, dashboardId, name }: any = {}) => {
+    try {
+      return await publishAnalysis(projectId, id, { dashboardId, name });
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Failed to publish the analysis' };
     }
   });
 
