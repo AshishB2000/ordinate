@@ -285,6 +285,17 @@ async function main(): Promise<void> {
       el.click();
       return true;
     }, id);
+  const fillPrompt = async (value: string): Promise<boolean> =>
+    win.evaluate((v) => {
+      const box = document.querySelector('.ws-modal-overlay .ws-modal');
+      if (!box) return false;
+      const input = box.querySelector('.ws-modal-input') as HTMLInputElement | null;
+      if (input) input.value = v;
+      const okBtn = box.querySelector('.ws-modal-actions .btn-primary') as HTMLElement | null;
+      if (!okBtn) return false;
+      okBtn.click();
+      return true;
+    }, value);
   const pickFirstOption = async (): Promise<boolean> =>
     win.evaluate(() => {
       const box = document.querySelector('.ws-modal-overlay .ws-modal');
@@ -1028,6 +1039,145 @@ async function main(): Promise<void> {
   }));
   ok('Discard resolves false and tears the dialog down',
      discarded.result === false && discarded.gone, JSON.stringify(discarded));
+
+  // ── The Visuals builder, end to end ───────────────────────────────────────
+  // The encoding form is now a mounted <template> clone (encodingForm.ts) rather
+  // than markup addressed by id. That refactor is invisible when it works and
+  // total when it does not — a mis-scoped querySelector yields a builder whose
+  // controls are simply inert, which nothing outside a running window can see.
+  // So: open it, read the controls, CHANGE one, and save.
+  ok('the Visuals section opens', await clickExact('Visuals'));
+  await win.waitForTimeout(1200);
+  ok('New visual opens the builder', await clickId('viz-new-btn'));
+  await win.waitForTimeout(2500);
+
+  // Pick a KNOWN dataset rather than whichever the select defaulted to, so the
+  // column assertions below mean something.
+  await win.evaluate(() => {
+    const sel = document.getElementById('viz-dataset-select') as HTMLSelectElement;
+    const sales = [...sel.options].find((o) => /Sales/.test(o.textContent || ''));
+    if (sales) {
+      sel.value = sales.value;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
+  await win.waitForTimeout(2500);
+
+  const form = await win.evaluate(() => {
+    const enc = document.querySelector('.viz-encoding') as HTMLElement | null;
+    const cat = document.querySelector('.js-enc-cat') as HTMLSelectElement | null;
+    const ser = document.querySelector('.js-enc-series') as HTMLSelectElement | null;
+    const geo = document.querySelector('.js-enc-geo') as HTMLSelectElement | null;
+    const label = document.querySelector('.viz-encoding label[for]') as HTMLLabelElement | null;
+    const agg = document.querySelector('.viz-value-agg') as HTMLSelectElement | null;
+    return {
+      mounted: !!enc && enc.offsetParent !== null,
+      // Exactly ONE form is mounted. <template> content is inert and must not
+      // be counted by a querySelectorAll, which is itself worth pinning.
+      instances: document.querySelectorAll('.viz-encoding').length,
+      catOptions: cat ? [...cat.options].map((o) => o.value) : [],
+      seriesFirst: ser && ser.options[0] ? ser.options[0].textContent : '',
+      geoOptions: geo ? geo.options.length : 0,
+      measures: document.querySelectorAll('.viz-value-row').length,
+      aggOptions: agg ? [...agg.options].map((o) => o.textContent) : [],
+      // The per-instance id rewrite: a label must still point at a control that
+      // EXISTS, or clicking it focuses nothing.
+      labelFor: label?.htmlFor || '',
+      labelResolves: !!(label && document.getElementById(label.htmlFor)),
+      labelSuffixed: /-ef\d+$/.test(label?.htmlFor || ''),
+    };
+  });
+  ok('the encoding form mounts, exactly once', form.mounted && form.instances === 1,
+     JSON.stringify({ mounted: form.mounted, instances: form.instances }));
+  ok("…with the dataset's columns, text before numbers",
+     JSON.stringify(form.catOptions) === JSON.stringify(['region', 'sku', 'note', 'amount']),
+     JSON.stringify(form.catOptions));
+  ok('…one default measure, and the full aggregation list',
+     form.measures === 1 &&
+       JSON.stringify(form.aggOptions) ===
+         JSON.stringify(['Sum', 'Average', 'Count', 'Min', 'Max', 'Raw (no aggregation)']),
+     JSON.stringify(form.aggOptions));
+  ok('…Split by defaulting to None, and all six geo levels',
+     form.seriesFirst === 'None' && form.geoOptions === 6,
+     `series="${form.seriesFirst}" geo=${form.geoOptions}`);
+  ok('…and every label still resolves to its own control after the id rewrite',
+     form.labelResolves && form.labelSuffixed, form.labelFor);
+
+  // Drive it: add a measure, switch an aggregation. This is what proves the
+  // form's single onChange is actually wired to the recompute.
+  await win.evaluate(() => (document.querySelector('.js-enc-add-value') as HTMLElement).click());
+  await win.waitForTimeout(1800);
+  const added = await win.evaluate(() => ({
+    measures: document.querySelectorAll('.viz-value-row').length,
+    // At two measures the delete buttons un-disable; at one they are disabled,
+    // because the form keeps at least one measure.
+    firstDelEnabled: !(document.querySelector('.viz-value-del') as HTMLButtonElement)?.disabled,
+  }));
+  ok('+ Add measure adds a row and frees the delete buttons',
+     added.measures === 2 && added.firstDelEnabled, JSON.stringify(added));
+
+  await win.evaluate(() => {
+    const agg = document.querySelector('.viz-value-agg') as HTMLSelectElement;
+    agg.value = 'avg';
+    agg.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await win
+    .waitForFunction(() => !!document.querySelector('#viz-area canvas, #viz-area svg'), undefined,
+                     { timeout: 30_000 })
+    .catch(() => {});
+  ok('changing an aggregation recomputes and redraws the preview',
+     await win.evaluate(() => !!document.querySelector('#viz-area canvas, #viz-area svg')));
+
+  const filterAdded = await win.evaluate(() => {
+    (document.querySelector('.js-enc-add-filter') as HTMLElement).click();
+    return document.querySelectorAll('.viz-filter-row').length;
+  });
+  ok('+ Add filter adds a filter row', filterAdded === 1, String(filterAdded));
+
+  const builderShot = path.join(shotDir, 'visual-builder.png');
+  await win.screenshot({ path: builderShot });
+  ok('visual builder screenshot captured',
+     fs.existsSync(builderShot) && fs.statSync(builderShot).size > 5000,
+     `${Math.round(fs.statSync(builderShot).size / 1024)} KB -> ${builderShot}`);
+
+  // Save prompts for a name — answer it, or the write never happens and the
+  // list silently stays as it was.
+  ok('Save asks for a name', await clickId('viz-save-btn'));
+  await win.waitForTimeout(600);
+  ok('…and takes one', await fillPrompt('Encoding form check'));
+  await win.waitForTimeout(2500);
+  const saved = await win.evaluate(() => ({
+    count: document.querySelectorAll('#viz-saved-list > *').length,
+    names: [...document.querySelectorAll('#viz-saved-list')]
+      .map((l) => (l.textContent || '').replace(/\s+/g, ' ').trim()).join('').slice(0, 120),
+    builderClosed: (document.getElementById('viz-builder') as HTMLElement)?.hidden === true,
+  }));
+  ok('…the visual is written and appears in the saved list',
+     saved.count >= 3 && /Encoding form check/.test(saved.names), JSON.stringify(saved));
+  ok('…and saving closes the builder', saved.builderClosed);
+
+  // Reopen it. The restore path runs the SAME setColumns(cols, preset) call as a
+  // fresh build, so a preset that silently fails to apply shows up right here —
+  // as the two measures we just saved coming back as one.
+  ok('the saved visual reopens', await win.evaluate(() => {
+    const el = [...document.querySelectorAll('#viz-saved-list button, #viz-saved-list [role=button]')]
+      .find((b) => /Encoding form check/.test(b.textContent || '')) as HTMLElement | undefined;
+    if (!el) return false;
+    el.click();
+    return true;
+  }));
+  await win.waitForTimeout(3000);
+  const restored = await win.evaluate(() => ({
+    instances: document.querySelectorAll('.viz-encoding').length,
+    measures: document.querySelectorAll('.viz-value-row').length,
+    firstAgg: (document.querySelector('.viz-value-agg') as HTMLSelectElement)?.value || '',
+  }));
+  ok('…into the same single form, with both measures and the aggregation restored',
+     restored.instances === 1 && restored.measures === 2 && restored.firstAgg === 'avg',
+     JSON.stringify(restored));
+
+  await clickId('viz-cancel-btn');
+  await win.waitForTimeout(600);
 
   // Leave the app on the Datasets section, where the rest of this file expects
   // to find it.

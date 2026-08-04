@@ -738,41 +738,12 @@
           </div>
           <div class="viz-suggest-hint" id="viz-suggest-hint" hidden></div>
 
-          <div class="viz-encoding" id="viz-encoding" hidden>
-            <div class="viz-build-row">
-              <label class="viz-field-label" for="viz-category-select">Category</label>
-              <select class="viz-select" id="viz-category-select" aria-label="Category (dimension)"></select>
-            </div>
-
-            <div class="viz-build-row viz-values-row">
-              <label class="viz-field-label">Measures</label>
-              <div class="viz-values-list" id="viz-values-list"></div>
-              <button class="btn btn-sm" type="button" id="viz-add-value">+ Add measure</button>
-            </div>
-
-            <div class="viz-build-row">
-              <label class="viz-field-label" for="viz-series-select">Split by</label>
-              <select class="viz-select" id="viz-series-select" aria-label="Split/series column"></select>
-            </div>
-
-            <div class="viz-build-row" id="viz-geo-wrap">
-              <label class="viz-field-label" for="viz-geo-level">Map regions</label>
-              <select class="viz-select" id="viz-geo-level" aria-label="Geographic level">
-                <option value="">Off</option>
-                <option value="country">Countries</option>
-                <option value="us_state">US states</option>
-                <option value="us_county">US counties</option>
-                <option value="us_city">US cities</option>
-                <option value="us_zip">US ZIP codes</option>
-              </select>
-            </div>
-
-            <div class="viz-build-row viz-values-row" id="viz-filters-row">
-              <label class="viz-field-label">Filters</label>
-              <div class="viz-filters-list" id="viz-filters-list"></div>
-              <button class="btn btn-sm" type="button" id="viz-add-filter">＋ Add filter</button>
-            </div>
-          </div>
+          <!-- The encoding form mounts HERE, cloned from #viz-encoding-tpl at the
+               bottom of this file by createEncodingForm (encodingForm.js). It is
+               a template rather than markup because phase C mounts a second copy
+               in the analysis authoring panel, and two live copies cannot both
+               own #viz-category-select. -->
+          <div class="viz-encoding-mount" id="viz-encoding-mount"></div>
 
           <div class="viz-warnings" id="viz-warnings" hidden></div>
           <div class="viz-switcher-mount" id="viz-switcher-mount"></div>
@@ -1623,6 +1594,52 @@
     </button>
   </div>
 
+  <!-- ── The encoding form, once, as a template ──────────────────────────────
+       Cloned per mount by createEncodingForm (encodingForm.js): the Visuals
+       builder mounts one, and the analysis authoring panel mounts another
+       against the selected card. Every control is addressed by its `js-enc-*`
+       class, scoped to the clone; the `id`s exist ONLY so each <label for=> has
+       a target, and are rewritten with a per-instance suffix on mount.
+       Do not add an id here that the JS looks up — it would resolve to the
+       first mounted form for every instance. -->
+  <template id="viz-encoding-tpl">
+    <div class="viz-encoding" hidden>
+      <div class="viz-build-row">
+        <label class="viz-field-label" for="viz-category-select">Category</label>
+        <select class="viz-select js-enc-cat" id="viz-category-select" aria-label="Category (dimension)"></select>
+      </div>
+
+      <div class="viz-build-row viz-values-row">
+        <label class="viz-field-label">Measures</label>
+        <div class="viz-values-list js-enc-values"></div>
+        <button class="btn btn-sm js-enc-add-value" type="button">+ Add measure</button>
+      </div>
+
+      <div class="viz-build-row">
+        <label class="viz-field-label" for="viz-series-select">Split by</label>
+        <select class="viz-select js-enc-series" id="viz-series-select" aria-label="Split/series column"></select>
+      </div>
+
+      <div class="viz-build-row js-enc-geo-wrap">
+        <label class="viz-field-label" for="viz-geo-level">Map regions</label>
+        <select class="viz-select js-enc-geo" id="viz-geo-level" aria-label="Geographic level">
+          <option value="">Off</option>
+          <option value="country">Countries</option>
+          <option value="us_state">US states</option>
+          <option value="us_county">US counties</option>
+          <option value="us_city">US cities</option>
+          <option value="us_zip">US ZIP codes</option>
+        </select>
+      </div>
+
+      <div class="viz-build-row viz-values-row js-enc-filters-row">
+        <label class="viz-field-label">Filters</label>
+        <div class="viz-filters-list js-enc-filters"></div>
+        <button class="btn btn-sm js-enc-add-filter" type="button">＋ Add filter</button>
+      </div>
+    </div>
+  </template>
+
 <script src="../../node_modules/chart.js/dist/chart.umd.js"></script>
 <script src="../../node_modules/chartjs-chart-treemap/dist/chartjs-chart-treemap.min.js"></script>
 <script src="../../node_modules/chartjs-chart-matrix/dist/chartjs-chart-matrix.min.js"></script>
@@ -1665,6 +1682,7 @@
 <script src="captureDataset.js"></script>
 <script src="prepare.js"></script>
 <script src="connections.js"></script>
+<script src="encodingForm.js"></script>
 <script src="visuals.js"></script>
 <script src="dashboards.js"></script>
 <script src="analyses.js"></script>
