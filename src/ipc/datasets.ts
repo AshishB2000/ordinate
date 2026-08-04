@@ -22,6 +22,7 @@ import {
 } from '../datasetPage';
 import { explainText, suggestSteps, suggestCalcField } from '../analyze';
 import { compile } from '../formula';
+import * as trace from '../residentTrace';
 
 // Datasets (file-based data sources) IPC — pick+parse/paste/save/list/get/delete.
 // All are ipcMain.handle (request/response). Native open dialog runs in MAIN;
@@ -165,11 +166,21 @@ async function residentStats(
   datasetId: string,
 ): Promise<{ src: StatsSource; summaries: ColumnSummary[]; issues: QualityIssue[] } | null> {
   const src = await datasets.residentSource(projectId, datasetId);
-  if (!src) return null;
+  if (!src) {
+    trace.record('datasetStats', 'skipped');
+    return null;
+  }
   const summaries = computeColumnSummariesResident(src);
-  if (!summaries) return null;
+  if (!summaries) {
+    trace.record('datasetStats', 'failed', `summaries, ${src.columns.length} cols`);
+    return null;
+  }
   const issues = findQualityIssuesResident(src);
-  if (!issues) return null;
+  if (!issues) {
+    trace.record('datasetStats', 'failed', `quality issues, ${src.columns.length} cols`);
+    return null;
+  }
+  trace.record('datasetStats', 'resident');
   return { src, summaries, issues };
 }
 
@@ -330,7 +341,13 @@ export function register() {
       const src = await datasets.residentSource(projectId, datasetId);
       if (src) {
         const fast = readPage(src, req);
-        if (fast) return { ok: true, rows: fast.rows, total: fast.total, offset: fast.offset };
+        if (fast) {
+          trace.record('datasetPage', 'resident');
+          return { ok: true, rows: fast.rows, total: fast.total, offset: fast.offset };
+        }
+        trace.record('datasetPage', 'failed', `offset=${req.offset}, sorted=${!!req.sortColumn}, searched=${!!req.search}`);
+      } else {
+        trace.record('datasetPage', 'skipped');
       }
 
       const ds = await datasets.getDataset(projectId, datasetId);
@@ -359,7 +376,13 @@ export function register() {
       const src = await datasets.residentSource(projectId, datasetId);
       if (src) {
         const fast = readDistinct(src, col, cap);
-        if (fast) return { values: fast };
+        if (fast) {
+          trace.record('datasetDistinct', 'resident');
+          return { values: fast };
+        }
+        trace.record('datasetDistinct', 'failed', `limit=${cap}`);
+      } else {
+        trace.record('datasetDistinct', 'skipped');
       }
 
       const ds = await datasets.getDataset(projectId, datasetId);

@@ -5,6 +5,7 @@ import { buildVizData, recommendChartType } from '../vizData';
 import type { VizDataResult } from '../vizData';
 import { aggregateResident } from '../residentQuery';
 import type { ResidentMeasure } from '../residentQuery';
+import * as trace from '../residentTrace';
 import { sanitizeEncoding, sanitizeChartType } from '../visuals';
 import type { VizEncoding } from '../visuals';
 import type { FilterStep } from '../transforms';
@@ -112,7 +113,10 @@ export async function residentVizData(
 
     // v2 record, missing .parquet, or no working bridge → the JS path.
     const src = await datasets.residentSource(projectId, datasetId);
-    if (!src) return null;
+    if (!src) {
+      trace.record('vizAggregate', 'skipped');
+      return null;
+    }
 
     // The warning-freedom proof (see above). Column identity is exact and
     // case-sensitive, matching `transforms.colIndex`.
@@ -134,7 +138,11 @@ export async function residentVizData(
     }));
 
     const chart = aggregateResident(src, encoding.category, measures, filters);
-    if (!chart) return null; // bridge down / query failed → JS path
+    if (!chart) {
+      trace.record('vizAggregate', 'failed', `${measures.length} measure(s), filters=${filters.length}`);
+      return null; // bridge down / query failed → JS path
+    }
+    trace.record('vizAggregate', 'resident');
 
     return {
       data: { labels: chart.labels, series: chart.series },
@@ -270,7 +278,14 @@ export function register() {
       const src = await datasets.residentSource(projectId, datasetId);
       if (meta && src) {
         const summaries = computeColumnSummariesResident(src);
-        if (summaries) summaryText = buildColumnSummaryText(meta, summaries);
+        if (summaries) {
+          summaryText = buildColumnSummaryText(meta, summaries);
+          trace.record('columnSummaries', 'resident');
+        } else {
+          trace.record('columnSummaries', 'failed', `${meta.rowCount} rows × ${meta.columns.length} cols`);
+        }
+      } else {
+        trace.record('columnSummaries', 'skipped');
       }
       if (summaryText === null) {
         const ds = await datasets.getDataset(projectId, datasetId);

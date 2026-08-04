@@ -119,6 +119,8 @@ scripts/**/*.js
 # Phase 3 resident Parquet query — emitted siblings.
 /src/residentQuery.js
 /scripts/test-residentQuery.js
+/src/residentTrace.js
+/scripts/test-residentTrace.js
 /scripts/bench-resident.js
 
 # Phase 3b typed dataset VIEW over the Parquet store — emitted siblings.
