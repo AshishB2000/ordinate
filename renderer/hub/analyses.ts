@@ -248,7 +248,8 @@ async function anCreateWizard(): Promise<void> {
   rail.className = 'an-wiz-rail';
   const railSteps = [
     { n: 1, label: 'Choose data' },
-    { n: 2, label: 'Build with AI', opt: true },
+    { n: 2, label: 'Start from' },
+    { n: 3, label: 'Describe it', opt: true },
   ].map((s) => {
     const el = document.createElement('div');
     el.className = 'an-wiz-step';
@@ -385,10 +386,71 @@ async function anCreateWizard(): Promise<void> {
     });
   }
 
-  // ── Step 2: the AI step ───────────────────────────────────────────────────
+  // ── Step 2: what to start from ────────────────────────────────────────────
+  // Layout and AI are ONE step, not two. Asking for a starting layout and then
+  // discarding it because the model defined its own sheets is a dialog that
+  // lies about what it does. Picking AI here is what reveals step 3.
+  //
+  // The first three are the REAL `.dash-starters` scaffolds (dashboards.ts
+  // applyStarter), so every option does something. QuickSight's Interactive-vs-
+  // Pixel-Perfect / Layout / Optimize-for-width pickers are deliberately absent:
+  // Ordinate has one layout, no paginated-report mode and no fixed-width canvas,
+  // so those three controls would change nothing.
+  type StartKind = 'blank' | 'kpis' | 'twoup' | 'ai';
+  let startFrom: StartKind = 'blank';
+
   const pane2 = document.createElement('div');
   pane2.className = 'an-wiz-pane';
   pane2.hidden = true;
+  const startGrid = document.createElement('div');
+  startGrid.className = 'an-wiz-starts';
+  const START_OPTS: Array<{ id: StartKind; title: string; body: string; art: string[] }> = [
+    { id: 'blank', title: 'Blank sheet', body: 'One empty sheet. Add cards as you go.', art: ['b-full'] },
+    { id: 'kpis', title: 'KPIs + chart', body: 'A KPI strip across the top, with a wide chart beneath it.', art: ['b-strip', 'b-wide'] },
+    { id: 'twoup', title: 'Two-up', body: 'Two charts side by side, with a notes card below.', art: ['b-half', 'b-half', 'b-strip'] },
+    { id: 'ai', title: '✨ Let AI design it', body: 'Describe what you want and a model proposes the sheets. You review it first.', art: ['b-ai'] },
+  ];
+  const startCards = START_OPTS.map((o) => {
+    const c = document.createElement('button');
+    c.type = 'button';
+    c.className = 'an-wiz-start' + (o.id === 'ai' ? ' an-wiz-start--ai' : '');
+    c.setAttribute('role', 'radio');
+    c.dataset.kind = o.id;
+    const art = document.createElement('span');
+    art.className = 'an-wiz-start-art';
+    o.art.forEach((cls) => {
+      const b = document.createElement('span');
+      b.className = 'an-wiz-block ' + cls;
+      art.appendChild(b);
+    });
+    const t = document.createElement('span');
+    t.className = 'an-wiz-start-t';
+    t.textContent = o.title;
+    const p = document.createElement('span');
+    p.className = 'an-wiz-start-p';
+    p.textContent = o.body;
+    c.appendChild(art);
+    c.appendChild(t);
+    c.appendChild(p);
+    c.addEventListener('click', () => { startFrom = o.id; sync(); });
+    startGrid.appendChild(c);
+    return { el: c, id: o.id };
+  });
+  pane2.appendChild(startGrid);
+  const startNote = document.createElement('p');
+  startNote.className = 'an-wiz-note';
+  startNote.textContent =
+    'No model is configured, so AI drafting is unavailable. Everything else works without one — pick any of the other three, or connect a model in Settings → Execution.';
+  startNote.hidden = true;
+  pane2.appendChild(startNote);
+
+  // ── Step 3: the AI step ───────────────────────────────────────────────────
+  // Reachable ONLY when step 2's AI card was chosen, which step 2 disables
+  // without a model. That is the single gate — this pane deliberately does not
+  // re-check readiness, because two guards for one condition is how they drift.
+  const pane3 = document.createElement('div');
+  pane3.className = 'an-wiz-pane';
+  pane3.hidden = true;
 
   const aiCard = document.createElement('div');
   aiCard.className = 'an-wiz-ai';
@@ -414,24 +476,17 @@ async function anCreateWizard(): Promise<void> {
     c.addEventListener('click', () => { ta.value = ex; ta.focus(); });
     chips.appendChild(c);
   });
-  const notReadyNote = document.createElement('p');
-  notReadyNote.className = 'an-wiz-note';
-  notReadyNote.textContent =
-    'No model is configured, so AI drafting is unavailable. Everything else works without one — skip this step, or connect a model in Settings → Execution.';
-  notReadyNote.hidden = aiReady;
-  if (!aiReady) { ta.disabled = true; chips.hidden = true; }
-
   aiCard.appendChild(aiH);
   aiCard.appendChild(aiP);
   aiCard.appendChild(ta);
   aiCard.appendChild(chips);
-  aiCard.appendChild(notReadyNote);
-  pane2.appendChild(aiCard);
+  pane3.appendChild(aiCard);
 
   const body = document.createElement('div');
   body.className = 'an-wiz-body';
   body.appendChild(pane1);
   body.appendChild(pane2);
+  body.appendChild(pane3);
 
   // ── Footer ────────────────────────────────────────────────────────────────
   const foot = document.createElement('div');
@@ -440,7 +495,7 @@ async function anCreateWizard(): Promise<void> {
   backBtn.type = 'button';
   backBtn.className = 'btn an-wiz-back';
   backBtn.textContent = '‹ Back';
-  backBtn.addEventListener('click', () => { step = 1; sync(); });
+  backBtn.addEventListener('click', () => { step = Math.max(1, step - 1); sync(); });
   const spacer = document.createElement('span');
   spacer.className = 'an-wiz-spacer';
   const cancel = document.createElement('button');
@@ -448,6 +503,7 @@ async function anCreateWizard(): Promise<void> {
   cancel.className = 'btn';
   cancel.textContent = 'Cancel';
   cancel.addEventListener('click', close);
+  // Only on step 3: a way out of the AI step that still produces the analysis.
   const skip = document.createElement('button');
   skip.type = 'button';
   skip.className = 'btn';
@@ -465,24 +521,55 @@ async function anCreateWizard(): Promise<void> {
   function sync(): void {
     pane1.hidden = step !== 1;
     pane2.hidden = step !== 2;
-    sub.textContent = step === 1
-      ? 'Choose the dataset to build from. You can add more sheets and datasets later.'
-      : 'Optional. Describe the analysis and the AI will draft it — or skip and start from a blank sheet.';
+    pane3.hidden = step !== 3;
+    sub.textContent =
+      step === 1 ? 'Choose the dataset to build from. You can add more sheets and datasets later.'
+      : step === 2 ? 'Pick a starting layout, or let a model design the whole analysis for you.'
+      : 'Describe the analysis and the AI will draft it. You review everything before it is created.';
+
+    // Step 3 exists only on the AI route, so the rail dims it otherwise rather
+    // than pretending there is a third step everyone has to walk through.
     railSteps.forEach((s, i) => {
-      s.el.className = 'an-wiz-step' + (i + 1 === step ? ' is-active' : '') + (i + 1 < step ? ' is-done' : '');
-      s.dot.textContent = i + 1 < step ? '✓' : String(i + 1);
+      const n = i + 1;
+      const skipped = n === 3 && startFrom !== 'ai';
+      s.el.className = 'an-wiz-step'
+        + (n === step ? ' is-active' : '')
+        + (n < step ? ' is-done' : '')
+        + (skipped ? ' is-skipped' : '');
+      s.dot.textContent = n < step ? '✓' : String(n);
     });
-    backBtn.hidden = step !== 2;
-    skip.hidden = step !== 2;
-    next.textContent = step === 1 ? 'Next' : 'Draft with AI';
-    next.disabled = step === 1 ? !selectedId : !aiReady;
-    if (step === 2 && aiReady) setTimeout(() => ta.focus(), 0);
+
+    startCards.forEach((c) => {
+      const on = c.id === startFrom;
+      c.el.classList.toggle('is-selected', on);
+      c.el.setAttribute('aria-checked', on ? 'true' : 'false');
+      // With no model the AI card is not a choice, and says why below.
+      if (c.id === 'ai') (c.el as HTMLButtonElement).disabled = !aiReady;
+    });
+    startNote.hidden = step !== 2 || aiReady;
+
+    backBtn.hidden = step === 1;
+    skip.hidden = step !== 3;
+    // Step 2 finishes the wizard for the three non-AI routes — there is nothing
+    // left to ask, so it says Create rather than marching through a dead step.
+    next.textContent =
+      step === 1 ? 'Next'
+      : step === 2 ? (startFrom === 'ai' ? 'Next' : 'Create analysis')
+      : 'Draft with AI';
+    next.disabled = step === 1 ? !selectedId : false;
+    if (step === 3) setTimeout(() => ta.focus(), 0);
   }
 
   const chosenName = (): string => nameIn.value.trim() || 'Untitled analysis';
 
-  // Blank path: create it and open, no model involved.
-  async function createBlank(): Promise<void> {
+  // Non-AI path: create it, open it, then scaffold.
+  //
+  // The starter is applied AFTER opening rather than packed into createAnalysis,
+  // because `applyStarter` already does exactly this against the open editor —
+  // including asking which saved visual belongs in each slot. Re-implementing it
+  // over a sheets array would be a second scaffolder that has to be kept in step
+  // with the one the "+ Page" button uses.
+  async function createFromStarter(kind: StartKind): Promise<void> {
     let res: any;
     try {
       res = await window.hub.createAnalysis({ projectId: currentProjectId, name: chosenName() });
@@ -495,11 +582,17 @@ async function anCreateWizard(): Promise<void> {
     await refreshAnalysisList();
     anLastPublishedName = null;
     openAnalysisFrom(res);
+    if (kind === 'kpis' || kind === 'twoup') await applyStarter(kind);
   }
 
-  skip.addEventListener('click', () => { createBlank(); });
+  skip.addEventListener('click', () => { createFromStarter('blank'); });
   next.addEventListener('click', async () => {
     if (step === 1) { step = 2; sync(); return; }
+    if (step === 2) {
+      if (startFrom === 'ai') { step = 3; sync(); return; }
+      await createFromStarter(startFrom);
+      return;
+    }
     // AI path. The wizard stays open and busy while the model works — closing it
     // first would leave nothing on screen to explain the wait.
     const label = next.textContent;
@@ -518,7 +611,16 @@ async function anCreateWizard(): Promise<void> {
     next.disabled = false;
     skip.disabled = false;
     next.textContent = label || 'Draft with AI';
-    if (res && res.notReady) { notReadyNote.hidden = false; return; }
+    // Step 2 gates this route on aiReady, so notReady here means the model went
+    // away between opening the wizard and pressing the button. Send them back to
+    // the step that can still produce an analysis rather than stranding them.
+    if (res && res.notReady) {
+      aiReady = false;
+      startFrom = 'blank';
+      step = 2;
+      sync();
+      return;
+    }
     if (!res || res.ok === false) {
       window.alert((res && res.error) || 'Could not draft an analysis.');
       return;

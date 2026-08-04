@@ -5345,6 +5345,9 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   color: var(--muted);
 }
 .an-wiz-step.is-active { background: var(--accent-soft); color: var(--accent); }
+/* Step 3 only exists on the AI route — dimmed, not hidden, so the rail does not
+   reflow every time the choice on step 2 changes. */
+.an-wiz-step.is-skipped { opacity: 0.4; }
 .an-wiz-dot {
   width: 22px;
   height: 22px;
@@ -5465,7 +5468,54 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .an-wiz-name[hidden] { display: none; }
 .an-wiz-name > span { font-size: 11.5px; font-weight: 600; color: var(--text); }
 
-/* Step 2 */
+/* Step 2 — starting layout. The thumbnails are CSS blocks rather than images:
+   an illustration would mean shipping four assets for decoration, and these
+   theme themselves. */
+.an-wiz-starts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.an-wiz-start {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.an-wiz-start:hover:not(:disabled) { border-color: var(--border-3); }
+.an-wiz-start.is-selected { border-color: var(--accent); background: var(--accent-soft); }
+.an-wiz-start:disabled { opacity: 0.45; cursor: not-allowed; }
+.an-wiz-start-t { font-size: 12.5px; font-weight: 600; color: var(--text-strong); }
+.an-wiz-start-p { font-size: 11px; line-height: 1.45; color: var(--muted); }
+.an-wiz-start-art {
+  width: 100%;
+  height: 54px;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 4px;
+  padding: 6px;
+  border-radius: var(--r-sm);
+  background: var(--inset);
+  margin-bottom: 2px;
+}
+.an-wiz-block { background: var(--border-3); border-radius: 2px; }
+.an-wiz-start.is-selected .an-wiz-block { background: var(--accent); }
+.b-full  { width: 100%; height: 100%; }
+.b-strip { width: 100%; height: 9px; }
+.b-wide  { width: 100%; height: 27px; }
+.b-half  { width: calc(50% - 2px); height: 27px; }
+.b-ai    { width: 100%; height: 100%; background: linear-gradient(115deg, var(--accent) 0%, #7c3aed 100%); }
+.an-wiz-start--ai.is-selected .b-ai { background: linear-gradient(115deg, var(--accent) 0%, #7c3aed 100%); }
+
+/* Step 3 */
 .an-wiz-ai {
   padding: 18px;
   border: 1px solid var(--accent-line);

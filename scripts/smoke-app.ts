@@ -371,8 +371,9 @@ async function main(): Promise<void> {
   });
   ok('the wizard paints at a real size', wiz1.open && wiz1.w > 500 && wiz1.h > 300,
      `${wiz1.w}x${wiz1.h}`);
-  ok('…with two steps, the second marked optional',
-     JSON.stringify(wiz1.steps) === JSON.stringify(['Choose data', 'Build with AI']) && wiz1.step2Optional,
+  ok('…with three steps, the last marked optional',
+     JSON.stringify(wiz1.steps) === JSON.stringify(['Choose data', 'Start from', 'Describe it']) &&
+       wiz1.step2Optional,
      JSON.stringify(wiz1.steps));
   ok('…step 1 lists the project datasets with their columns',
      wiz1.datasetRows === 2 &&
@@ -427,38 +428,52 @@ async function main(): Promise<void> {
   });
   await win.waitForTimeout(600);
 
+  // Step 2 — Start from. Layout and AI are ONE step: three real scaffolds plus
+  // the AI route, and picking AI is what reveals step 3.
   const wiz2 = await win.evaluate(() => {
-    const ta = document.querySelector('.an-wiz-ta') as HTMLTextAreaElement | null;
+    const cards = [...document.querySelectorAll('.an-wiz-start')] as HTMLButtonElement[];
     const note = document.querySelector('.an-wiz-note') as HTMLElement | null;
     const next = [...document.querySelectorAll('.an-wiz-foot .btn-primary')][0] as HTMLButtonElement | null;
-    const skip = [...document.querySelectorAll('.an-wiz-foot .btn')]
-      .find((b) => /Skip/.test(b.textContent || '')) as HTMLButtonElement | undefined;
+    const rail = [...document.querySelectorAll('.an-wiz-step')];
     return {
-      onStep2: !!document.querySelector('.an-wiz-ai') &&
-               (document.querySelector('.an-wiz-ai') as HTMLElement).offsetParent !== null,
+      count: cards.length,
+      titles: [...document.querySelectorAll('.an-wiz-start-t')].map((t) => (t.textContent || '').trim()),
       doneTick: (document.querySelector('.an-wiz-step.is-done .an-wiz-dot')?.textContent || '').trim(),
-      taPresent: !!ta,
-      // No model in a smoke run: the AI half must be off, and say why.
-      taDisabled: !!ta?.disabled,
-      draftDisabled: !!next?.disabled,
-      draftLabel: (next?.textContent || '').trim(),
+      // Blank is the default, so the step is answerable by pressing Enter.
+      selected: [...document.querySelectorAll('.an-wiz-start.is-selected .an-wiz-start-t')]
+        .map((t) => (t.textContent || '').trim()),
+      // No model in a smoke run: the AI CARD is the gate, and it says why.
+      aiDisabled: !!cards.find((c) => c.dataset.kind === 'ai')?.disabled,
+      othersEnabled: cards.filter((c) => c.dataset.kind !== 'ai').every((c) => !c.disabled),
       noteVisible: !!note && note.offsetParent !== null,
-      noteText: (note?.textContent || '').trim().slice(0, 90),
-      // …while Skip stays live. This is the assertion that makes "optional" real.
-      skipVisible: !!skip && skip.offsetParent !== null,
-      skipDisabled: !!skip?.disabled,
+      noteText: (note?.textContent || '').trim().slice(0, 80),
+      // Nothing left to ask on the three non-AI routes, so step 2 finishes.
+      nextLabel: (next?.textContent || '').trim(),
+      nextDisabled: !!next?.disabled,
+      // Step 3 is dimmed, not hidden — the rail must not reflow on every choice.
+      step3Skipped: rail.length === 3 && rail[2].classList.contains('is-skipped'),
+      // Skip belongs to step 3 only; on step 2 the primary button IS the finish.
+      skipVisible: !!([...document.querySelectorAll('.an-wiz-foot .btn')]
+        .find((b) => /Skip/.test(b.textContent || '')) as HTMLElement | undefined)?.offsetParent,
       backVisible: !!([...document.querySelectorAll('.an-wiz-foot .btn')]
         .find((b) => /Back/.test(b.textContent || '')) as HTMLElement | undefined)?.offsetParent,
     };
   });
-  ok('step 2 is the AI step', wiz2.onStep2 && wiz2.taPresent && wiz2.draftLabel === 'Draft with AI',
-     JSON.stringify({ step2: wiz2.onStep2, label: wiz2.draftLabel }));
+  ok('step 2 offers four ways to start',
+     wiz2.count === 4 &&
+       JSON.stringify(wiz2.titles) ===
+         JSON.stringify(['Blank sheet', 'KPIs + chart', 'Two-up', '✨ Let AI design it']),
+     JSON.stringify(wiz2.titles));
   ok('…step 1 is ticked off behind it', wiz2.doneTick === '✓', `"${wiz2.doneTick}"`);
-  ok('…with no model configured, AI drafting is disabled AND says why',
-     wiz2.taDisabled && wiz2.draftDisabled && wiz2.noteVisible && /No model is configured/.test(wiz2.noteText),
+  ok('…Blank is preselected, so the step answers itself',
+     JSON.stringify(wiz2.selected) === JSON.stringify(['Blank sheet']), JSON.stringify(wiz2.selected));
+  ok('…with no model, ONLY the AI card is disabled, and it says why',
+     wiz2.aiDisabled && wiz2.othersEnabled && wiz2.noteVisible && /No model is configured/.test(wiz2.noteText),
      wiz2.noteText);
-  ok('…but Skip stays available, so the step is genuinely optional',
-     wiz2.skipVisible && !wiz2.skipDisabled);
+  ok('…and step 3 is dimmed rather than removed', wiz2.step3Skipped);
+  ok('…a non-AI route finishes here, so the button says Create',
+     wiz2.nextLabel === 'Create analysis' && !wiz2.nextDisabled, `"${wiz2.nextLabel}"`);
+  ok('…Skip is not offered on this step (the primary button is the finish)', !wiz2.skipVisible);
   ok('…and Back is offered', wiz2.backVisible);
 
   const wizShot2 = path.join(shotDir, 'wizard-step2.png');
@@ -466,21 +481,41 @@ async function main(): Promise<void> {
   ok('wizard step 2 screenshot captured', fs.existsSync(wizShot2) && fs.statSync(wizShot2).size > 5000,
      `${Math.round(fs.statSync(wizShot2).size / 1024)} KB -> ${wizShot2}`);
 
-  // A smoke run has no model, so everything above exercised the DISABLED half of
-  // step 2 and the example chips never rendered — an entire flex-wrap row of CSS
-  // that would ship unseen. Reveal them to check they lay out and click; this
-  // asserts LAYOUT only, and makes no claim about a model being configured.
+  // ── The AI route, forced ──────────────────────────────────────────────────
+  // With no model the AI card is disabled, so step 3 is unreachable and its
+  // whole pane — textarea, example chips, the notReady recovery — would ship
+  // never having rendered. Enabling the card drives the REAL handlers from
+  // there on. This asserts layout and control flow only; it makes no claim
+  // about a model being configured, and the notReady assertion below is exactly
+  // the proof that none is.
+  await win.evaluate(() => {
+    const ai = [...document.querySelectorAll('.an-wiz-start')]
+      .find((c) => (c as HTMLElement).dataset.kind === 'ai') as HTMLButtonElement;
+    ai.disabled = false;
+    ai.click();
+  });
+  await win.waitForTimeout(300);
+  const aiPicked = await win.evaluate(() => ({
+    label: ([...document.querySelectorAll('.an-wiz-foot .btn-primary')][0]?.textContent || '').trim(),
+    step3Live: !document.querySelectorAll('.an-wiz-step')[2].classList.contains('is-skipped'),
+  }));
+  ok('picking the AI card turns step 3 on and the button back to Next',
+     aiPicked.label === 'Next' && aiPicked.step3Live, JSON.stringify(aiPicked));
+
+  await win.evaluate(() =>
+    ([...document.querySelectorAll('.an-wiz-foot .btn-primary')][0] as HTMLElement).click());
+  await win.waitForTimeout(400);
+
   const chips = await win.evaluate(() => {
     const row = document.querySelector('.an-wiz-chips') as HTMLElement | null;
     const ta = document.querySelector('.an-wiz-ta') as HTMLTextAreaElement | null;
-    if (!row || !ta) return null;
-    row.hidden = false;
-    ta.disabled = false;
+    const card = document.querySelector('.an-wiz-ai') as HTMLElement | null;
+    if (!row || !ta || !card) return null;
     const btns = [...row.querySelectorAll('.an-wiz-chip')] as HTMLElement[];
-    const card = document.querySelector('.an-wiz-ai') as HTMLElement;
     const cr = card.getBoundingClientRect();
-    (btns[0] as HTMLElement).click();
+    btns[0].click();
     return {
+      onStep3: card.offsetParent !== null,
       count: btns.length,
       // Each chip must sit inside the card it belongs to — a long example string
       // in a flex row is exactly what overflows a modal.
@@ -490,27 +525,46 @@ async function main(): Promise<void> {
       }),
       wrapped: new Set(btns.map((b) => Math.round(b.getBoundingClientRect().top))).size,
       filled: ta.value,
+      skipVisible: !!([...document.querySelectorAll('.an-wiz-foot .btn')]
+        .find((b) => /Skip/.test(b.textContent || '')) as HTMLElement | undefined)?.offsetParent,
     };
   });
-  ok('the example chips lay out inside the card and wrap',
-     !!chips && chips.count === 3 && chips.inside, JSON.stringify(chips));
-  ok('…and clicking one fills the prompt box',
-     !!chips && chips.filled.startsWith('Show revenue by region'), chips?.filled.slice(0, 50) || '');
+  ok('step 3 is the AI step, and its chips lay out inside the card',
+     !!chips && chips.onStep3 && chips.count === 3 && chips.inside, JSON.stringify(chips));
+  ok('…clicking a chip fills the prompt box',
+     !!chips && chips.filled.startsWith('Show revenue by region'), chips?.filled.slice(0, 44) || '');
+  ok('…and Skip appears here, so the AI step is genuinely optional', !!chips?.skipVisible);
 
-  const wizShot3 = path.join(shotDir, 'wizard-step2-ready.png');
+  const wizShot3 = path.join(shotDir, 'wizard-step3.png');
   await win.screenshot({ path: wizShot3 });
-  ok('wizard step 2 (chips revealed) screenshot captured',
-     fs.existsSync(wizShot3) && fs.statSync(wizShot3).size > 5000,
+  ok('wizard step 3 screenshot captured', fs.existsSync(wizShot3) && fs.statSync(wizShot3).size > 5000,
      `${Math.round(fs.statSync(wizShot3).size / 1024)} KB -> ${wizShot3}`);
 
-  // Skip → the blank analysis is created and opened.
-  await win.evaluate(() => {
-    const skip = [...document.querySelectorAll('.an-wiz-foot .btn')]
-      .find((b) => /Skip/.test(b.textContent || '')) as HTMLElement | undefined;
-    if (skip) skip.click();
+  // Pressing Draft with no model must not strand the user on a dead step.
+  await win.evaluate(() =>
+    ([...document.querySelectorAll('.an-wiz-foot .btn-primary')][0] as HTMLElement).click());
+  await win.waitForTimeout(2500);
+  const bounced = await win.evaluate(() => {
+    const rail = [...document.querySelectorAll('.an-wiz-step')];
+    const note = document.querySelector('.an-wiz-note') as HTMLElement | null;
+    return {
+      stillOpen: !!document.querySelector('.an-wiz'),
+      backOnStep2: rail[1].classList.contains('is-active'),
+      noteVisible: !!note && note.offsetParent !== null,
+      selected: [...document.querySelectorAll('.an-wiz-start.is-selected .an-wiz-start-t')]
+        .map((t) => (t.textContent || '').trim()),
+    };
   });
+  ok('drafting with no model returns to step 2 rather than stranding the user',
+     bounced.stillOpen && bounced.backOnStep2 && bounced.noteVisible, JSON.stringify(bounced));
+  ok('…and re-selects a route that can still finish',
+     JSON.stringify(bounced.selected) === JSON.stringify(['Blank sheet']), JSON.stringify(bounced.selected));
+
+  // Finish on Blank — the downstream assertions expect exactly one empty sheet.
+  await win.evaluate(() =>
+    ([...document.querySelectorAll('.an-wiz-foot .btn-primary')][0] as HTMLElement).click());
   await win.waitForTimeout(2000);
-  ok('Skip creates the analysis and closes the wizard',
+  ok('Create analysis creates it and closes the wizard',
      await win.evaluate(() => !document.querySelector('.an-wiz')));
 
   // The editor must be INSIDE the Analyses panel, in analysis mode, and — the
@@ -795,6 +849,58 @@ async function main(): Promise<void> {
   await win.screenshot({ path: listShot });
   ok('analyses list screenshot captured', fs.existsSync(listShot) && fs.statSync(listShot).size > 5000,
      `${Math.round(fs.statSync(listShot).size / 1024)} KB -> ${listShot}`);
+
+  // ── A starter route actually scaffolds ────────────────────────────────────
+  // The whole argument for step 2 is that every card does something. A layout
+  // picker whose options all produce the same empty sheet is the thing this was
+  // built to avoid, so assert the cards land. Runs LAST in this section and
+  // makes a SECOND analysis, which is why it sits below the list-count
+  // assertions rather than above them.
+  ok('a second Create analysis opens the wizard', await clickId('an-new-btn'));
+  await win.waitForTimeout(700);
+  await win.evaluate(() => {
+    (document.querySelector('.an-wiz-row') as HTMLElement).click();   // any dataset
+    const nameIn = document.querySelector('.an-wiz-name input') as HTMLInputElement;
+    nameIn.value = 'Starter analysis';
+    nameIn.dispatchEvent(new Event('input', { bubbles: true }));
+    ([...document.querySelectorAll('.an-wiz-foot .btn-primary')][0] as HTMLElement).click();
+  });
+  await win.waitForTimeout(500);
+  ok('…and KPIs + chart can be chosen', await win.evaluate(() => {
+    const c = [...document.querySelectorAll('.an-wiz-start')]
+      .find((x) => (x as HTMLElement).dataset.kind === 'kpis') as HTMLElement | undefined;
+    if (!c) return false;
+    c.click();
+    return true;
+  }));
+  await win.waitForTimeout(300);
+  await win.evaluate(() =>
+    ([...document.querySelectorAll('.an-wiz-foot .btn-primary')][0] as HTMLElement).click());
+  await win.waitForTimeout(1800);
+  // applyStarter asks which saved visual belongs in the wide slot.
+  ok('the starter asks which visual fills its slot', await pickFirstOption());
+  await win.waitForTimeout(2500);
+
+  const scaffold = await win.evaluate(() => ({
+    cards: document.querySelectorAll('#dash-grid .dash-card').length,
+    kinds: [...document.querySelectorAll('#dash-grid .dash-card')]
+      .map((c) => [...c.classList].find((k) => k.startsWith('dash-card--')) || '?'),
+    name: (document.getElementById('dash-name')?.textContent || '').trim(),
+  }));
+  ok('KPIs + chart scaffolds a real layout, not an empty sheet',
+     scaffold.cards === 2 && scaffold.kinds.includes('dash-card--text') &&
+       scaffold.kinds.includes('dash-card--visual'),
+     JSON.stringify(scaffold));
+  ok('…into the analysis the wizard just named', scaffold.name === 'Starter analysis', scaffold.name);
+
+  const starterShot = path.join(shotDir, 'starter-scaffold.png');
+  await win.screenshot({ path: starterShot });
+  ok('starter scaffold screenshot captured',
+     fs.existsSync(starterShot) && fs.statSync(starterShot).size > 5000,
+     `${Math.round(fs.statSync(starterShot).size / 1024)} KB -> ${starterShot}`);
+
+  ok('back to Analyses after the starter', await clickExact('Analyses'));
+  await win.waitForTimeout(1200);
 
   // ── The AI draft review dialog, on a synthetic Phase E envelope ───────────
   // `analysis:draft` needs a configured model, which a smoke run has not got, so
