@@ -170,10 +170,21 @@ hub opens to **Execution settings** instead — capture never starts.
   fatal. `src/projects.ts`, `datasets.ts`, `visuals.ts`, `dashboards.ts` own these stores.
 - **Sources** — `datasets.ts` stores the parsed table + `sourceKind`. Parsing is centralized in
   `src/parse.ts` (`finalizeTable`, strict `isFiniteNumber` gate so `007`/zips/>15-digit ids stay
-  text) and `parseXlsx.ts` (read-only single-sheet via `exceljs`). `connections.ts` +
-  `connectionRun.ts` = Postgres (pure-JS `pg`, parameterized `information_schema`, sub-select +
-  `LIMIT`/`statement_timeout`, client closed in `finally`). URL fetch is https-only, byte/timeout
-  capped. `captureDataset.ts` projects a capture's `extractedTable` into a reviewable dataset draft.
+  text) and `parseXlsx.ts` (read-only single-sheet via `exceljs`). **`src/connectors/` is a REGISTRY
+  of 35 read-only data sources — one connector is one entry, never a union type.** `types.ts` is the
+  contract (`ConnectorDef`: fields, `listTables`, `run`); `index.ts` collects the families and
+  exposes a renderer-safe `connectorCatalog()`. Wire-compatible sources SHARE an implementation, so
+  35 sources cost four pure-JS drivers (~6.7 MB, no ODBC, nothing for a user to download):
+  `postgres.ts` 11 (Postgres, **Redshift**, CockroachDB, AlloyDB, Neon, Supabase, Timescale,
+  Yugabyte, Materialize, QuestDB, RisingWave) · `mysql.ts` 8 (MySQL, MariaDB, Aurora, SingleStore,
+  TiDB, PlanetScale, StarRocks, Doris) · `http.ts` 7 (ClickHouse, Databricks, Trino, Presto,
+  Elasticsearch, OpenSearch, Druid — Node `https` only, no dep) · `mssql.ts` 3 · `oracle.ts` 2
+  (**Thin mode only — never call `initOracleClient`**) · `local.ts` 3 (DuckDB/Parquet/CSV files) ·
+  `url.ts` 1. `connections.ts` stores `{connectorId, values}` (v2; v1 `kind` migrates lazily);
+  `connectionRun.ts` dispatches through the registry. **Three rules: read-only, secrets never leave
+  main, EVERY query bounded — the old central `LIMIT` wrapper is gone because it breaks five of six
+  dialects, so each family caps server-side itself.** `captureDataset.ts` projects a capture's
+  `extractedTable` into a reviewable dataset draft.
 - **Prepare** — `transforms.ts` folds ordered steps (calculated_field, filter, group_aggregate,
   dedupe, fill_empty, trim, drop_column, rename_column) over an immutable deep copy → reversible;
   unknown step skipped with a warning, never throws. `formula.ts` = safe expression evaluator
@@ -276,7 +287,7 @@ Thumbnail (→ lightbox), headline + analysis, a chart or MapLibre map with a `�
 and maps). A disk-persisted history rail lists captures (newest first); clicking restores its thread.
 
 ### Code layout
-- **Main:** `main.js` = entry/lifecycle/hotkey/capture loop/windows. Logic in `src/` modules:
+- **Main:** `main.ts` (emits `main.js`) = entry/lifecycle/hotkey/capture loop/windows. Logic in `src/` modules:
   DuckDB layer (`duckdb, duckdbWorker, parquetStore, sqlGen, pipelineDuck, residentQuery,
   statsResident, anomaliesResident, datasetPage, datasetView`);
   capture path (`analyze, calc, headline, capture, config, history, hotkey, localCli, localCliRun,
@@ -305,7 +316,7 @@ Renderer→main: `invoke` (reply) or `send` (fire-and-forget); main→renderer: 
 | Results | `hub:new-entry`, `hub:entry-result`, `hub:followup`(+`-result`), `hub:retry`, `hub:saveChartOverrides` |
 | Projects | `projects:list`/`:create`/`:open`/`:rename`/`:delete` |
 | Datasets/Prepare | `dataset:pickAndParse`/`:parsePaste`/`:get`/`:list`/`:save`/`:update`/`:delete`/`:combine`, `dataset:addStep`/`:updateStep`/`:removeStep`/`:reorderSteps`/`:setSteps`, `dataset:stats`/`:explain`, `dataset:suggestSteps`/`:suggestCalcField`, **`dataset:meta`** (rows-free open), **`dataset:page`** (one grid window: offset/limit/search/sort), `captureDataset:draft`/`:save` |
-| Connections | `connections:list`, `connection:testAndSave`/`:listTables`/`:run`/`:refresh`/`:delete` |
+| Connections | `connectors:catalog` (renderer-safe source list), `connections:list`, `connection:testAndSave`/`:listTables`/`:run`/`:refresh`/`:delete` |
 | Visuals | `visual:get`/`:list`/`:save`/`:update`/`:duplicate`/`:delete`/`:data`/`:suggest` |
 | Mosaic (dark) | `mosaic:view` (ensure a typed view over the Parquet), `mosaic:query` (one statement, **async bridge only**) |
 | Dashboards | `dashboard:get`/`:list`/`:save`/`:update`/`:delete`/`:metric`/`:draft`/`:summary`/`:explainAnomalies`, `dashboard:exportHtml`/`:exportPng`/`:exportPdf`/`:revealFolder` |
@@ -386,7 +397,7 @@ concentration risk."), not jargon. All figures are computed by the app.
 
 ## Testing and Commands
 - **Priority test:** local vision model accuracy on real screenshots. Node self-checks in
-  `scripts/test-*.js` (pure logic, no framework) via `npm test` (**~3,000 assertions**); add one per
+  `scripts/test-*.js` (pure logic, no framework) via `npm test` (**4,334 assertions**); add one per
   non-trivial helper.
 - **Differential tests are the house style for anything with two implementations.** A resident-SQL
   module is tested by running the SAME input through it and through the pure-JS original and
