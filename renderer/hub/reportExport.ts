@@ -237,8 +237,8 @@ function svgToPngDataUrl(svg: string, w: number, h: number): Promise<string | nu
 const REPORT_LOGO_SVG =
   '<svg width="24" height="24" viewBox="0 0 24 24" fill="none">' +
   '<g stroke="#0f1117" stroke-width="2" stroke-linecap="round">' +
-  '<path d="M12 5.4V18.6"/><path d="M5.4 12H18.6"/></g>' +
-  '<circle cx="16.6" cy="8.3" r="3.1" fill="#2563eb"/></svg>';
+  '<path d="M12 3V21"/><path d="M3 12H21"/></g>' +
+  '<circle cx="16.5" cy="7.5" r="2.6" fill="#2563eb"/></svg>';
 
 // ponytail: the export args ({ title, analysis, headlineSegments, png, … }) and the
 // pdfmake/pptxgenjs/docx document trees are big untyped envelopes — typed `any`

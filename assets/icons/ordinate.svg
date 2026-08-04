@@ -3,7 +3,8 @@
      ordinate IS the y-coordinate: the height of a point above the x-axis, which
      is why the dot sits near the top-right corner rather than beside the origin.
      Geometry is on a 1024 grid: macOS Big Sur grid — an 824px tile centred in 1024 with a
-     100px margin and a 22.37% corner radius, mark spans 45% of the tile, all coordinates land on whole pixels
+     100px margin and a 22.37% corner radius, mark spans 55% of the tile, with the value at the CENTRE of the
+     upper-right quadrant, all coordinates land on whole pixels
      at 1024, 512, 256, 128 and 64. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
@@ -14,8 +15,8 @@
   </defs>
   <rect x="100" y="100" width="824" height="824" rx="184" fill="url(#tile)"/>
   <g stroke="#131318" stroke-width="43" stroke-linecap="round">
-    <path d="M512 327V697"/>
-    <path d="M327 512H697"/>
+    <path d="M512 286V738"/>
+    <path d="M286 512H738"/>
   </g>
-  <circle cx="639" cy="385" r="67" fill="#2563eb"/>
+  <circle cx="625" cy="399" r="67" fill="#2563eb"/>
 </svg>
