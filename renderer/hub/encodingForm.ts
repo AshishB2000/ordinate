@@ -40,6 +40,13 @@ interface EncodingFormApi {
   setColumns(cols: EncCol[], preset?: any, filters?: any[]): void;
   /** Apply an encoding against the columns already loaded (an AI suggestion). */
   setEncoding(preset: any): void;
+  /**
+   * Put `column` into the named well — what a drop, or a click on a field,
+   * means. Returns false if the column is not in this dataset, so the caller
+   * can refuse the drop rather than silently encoding a phantom column.
+   * The form stays DnD-agnostic: the caller owns the drag listeners.
+   */
+  dropField(well: string, column: string): boolean;
   /** The encoding in the shape computeVisualData / buildVizData consume. */
   getEncoding(): any;
   /** Visual-level filters as transforms `filter` steps. */
@@ -262,6 +269,40 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     // restoring a saved visual does not.
     setEncoding(preset: any): void {
       this.setColumns(columns, preset, filters);
+    },
+
+    dropField(well: string, column: string): boolean {
+      if (!columns.some((c) => c.name === column)) return false;
+      if (well === 'category') {
+        if (!catSel) return false;
+        catSel.value = column;
+        if (catSel.value !== column) return false; // not an option (shouldn't happen)
+      } else if (well === 'series') {
+        if (!serSel) return false;
+        serSel.value = column;
+        if (serSel.value !== column) return false;
+      } else if (well === 'values') {
+        // A measure select only offers numberCols(), so a text column dropped
+        // here would land on a select that cannot hold it. Default it to
+        // `count`, which is the aggregation that makes sense for one.
+        const numeric = columns.some((c) => c.name === column && c.type === 'number');
+        // Replace the lone empty default rather than stacking a second row on it.
+        const blank = measures.length === 1 && !measures[0].column;
+        const m: EncMeasure = { column, aggregation: numeric ? 'sum' : 'count' };
+        if (blank) measures[0] = m;
+        else measures.push(m);
+        renderMeasures();
+      } else if (well === 'filters') {
+        filters.push({ type: 'filter', column, op: '=', value: '' });
+        renderFilters();
+        // A filter with no value yet changes nothing, so no onChange — same
+        // reasoning as the + Add filter button.
+        return true;
+      } else {
+        return false;
+      }
+      opts.onChange();
+      return true;
     },
 
     getEncoding(): any {

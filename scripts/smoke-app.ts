@@ -633,6 +633,175 @@ async function main(): Promise<void> {
   const cardCount = await win.evaluate(() => document.querySelectorAll('#dash-grid .dash-card').length);
   ok('the card lands on the sheet grid', cardCount === 1, String(cardCount));
 
+  // ── The authoring workbench (phase C) ─────────────────────────────────────
+  // Three columns bound by SELECTION. Everything here is asserted from a
+  // laid-out page: a panel that renders at zero width, a well that never accepts
+  // a drop, and a CSP-blocked drag indicator all pass any check made elsewhere.
+  const bench = await win.evaluate(() => {
+    const host = document.getElementById('an-editor-host') as HTMLElement | null;
+    const left = document.getElementById('an-side-left') as HTMLElement | null;
+    const right = document.getElementById('an-side-right') as HTMLElement | null;
+    const ed = document.getElementById('dash-editor') as HTMLElement | null;
+    const r = (el: HTMLElement | null) => (el ? el.getBoundingClientRect() : null);
+    const L = r(left), E = r(ed), R = r(right);
+    return {
+      active: !!host?.classList.contains('is-active'),
+      leftW: Math.round(L?.width || 0),
+      rightW: Math.round(R?.width || 0),
+      // Source order is left, right, editor — `order` is what puts the sheet in
+      // the middle, so this asserts the CSS actually applied.
+      inOrder: !!(L && E && R) && L.left < E.left && E.left < R.left,
+      panes: [...document.querySelectorAll('.an-pane-title')].map((t) => (t.textContent || '').trim()),
+    };
+  });
+  ok('the workbench is three columns, in the right order',
+     bench.active && bench.inOrder && bench.leftW > 150 && bench.rightW > 150,
+     JSON.stringify(bench));
+  ok('…named Data, Visuals and Properties',
+     JSON.stringify(bench.panes) === JSON.stringify(['Data', 'Visuals', 'Properties']),
+     JSON.stringify(bench.panes));
+
+  // Nothing is selected yet, so the panels must say so rather than show a stale
+  // or half-bound state.
+  const unbound = await win.evaluate(() => ({
+    dataHint: (document.getElementById('an-data-hint') as HTMLElement)?.offsetParent !== null,
+    vizInnerHidden: (document.getElementById('an-viz-inner') as HTMLElement)?.offsetParent == null,
+    propsHint: (document.getElementById('an-props-hint') as HTMLElement)?.offsetParent !== null,
+  }));
+  ok('with nothing selected, all three panels say so', unbound.dataHint &&
+     unbound.vizInnerHidden && unbound.propsHint, JSON.stringify(unbound));
+
+  // SELECT the card. This is the whole binding.
+  await win.evaluate(() => (document.querySelector('#dash-grid .dash-card') as HTMLElement).click());
+  await win.waitForFunction(
+    () => document.querySelectorAll('#an-fields .an-field').length > 0, undefined, { timeout: 30_000 },
+  ).catch(() => {});
+  const bound = await win.evaluate(() => {
+    const fields = [...document.querySelectorAll('#an-fields .an-field')] as HTMLElement[];
+    const wells = [...document.querySelectorAll('#an-wells [data-well]')] as HTMLElement[];
+    return {
+      selectedCards: document.querySelectorAll('#dash-grid .dash-card.is-selected').length,
+      fields: fields.map((f) => f.dataset.column),
+      allDraggable: fields.every((f) => f.draggable),
+      wells: wells.map((w) => w.dataset.well),
+      wellsVisible: wells.every((w) => w.offsetParent !== null),
+      chips: document.querySelectorAll('#an-switcher .cv-viz-switcher button, #an-switcher .cv-viz-chip').length,
+      propsRows: document.querySelectorAll('#an-props .an-prop-row').length,
+      title: (document.querySelector('#an-props .an-prop-input') as HTMLInputElement)?.value || '',
+    };
+  });
+  ok('clicking a card selects exactly one', bound.selectedCards === 1, String(bound.selectedCards));
+  ok('…and the Data panel lists that visual\'s dataset columns, all draggable',
+     JSON.stringify(bound.fields) === JSON.stringify(['state', 'revenue']) && bound.allDraggable,
+     JSON.stringify(bound.fields));
+  ok('…the wells are mounted and visible',
+     JSON.stringify(bound.wells) === JSON.stringify(['category', 'values', 'series', 'filters']) &&
+       bound.wellsVisible, JSON.stringify(bound.wells));
+  ok('…the chart-type chips render', bound.chips > 0, `${bound.chips} chips`);
+  ok('…and Properties binds to the card', bound.propsRows >= 3 && !!bound.title,
+     `${bound.propsRows} rows, title="${bound.title}"`);
+
+  // Move/resize/remove moved INTO Properties, so the nine-button cluster is off
+  // every card header. They must not merely be duplicated — that was two rows of
+  // wrapped buttons inside a narrowed centre column saying the same thing twice.
+  const ctrls = await win.evaluate(() => ({
+    onCards: [...document.querySelectorAll('#dash-grid .dash-card-ctrls')]
+      .filter((c) => (c as HTMLElement).offsetParent !== null).length,
+    inProps: document.querySelectorAll('#an-props .an-prop-btn').length,
+    remove: !!document.querySelector('#an-props .an-prop-del'),
+  }));
+  ok('…the per-card button cluster is gone, and Properties owns those controls',
+     ctrls.onCards === 0 && ctrls.inProps === 8 && ctrls.remove, JSON.stringify(ctrls));
+
+  const benchShot = path.join(shotDir, 'authoring-workbench.png');
+  await win.screenshot({ path: benchShot });
+  ok('workbench screenshot captured', fs.existsSync(benchShot) && fs.statSync(benchShot).size > 5000,
+     `${Math.round(fs.statSync(benchShot).size / 1024)} KB -> ${benchShot}`);
+
+  // A REAL drag: dragstart on a field, dragover + drop on a well, carrying a
+  // DataTransfer. Playwright cannot synthesise a native HTML5 drag, so the
+  // events are dispatched — but they are the same events the browser fires, and
+  // they run the same listeners, including the dataTransfer round trip.
+  const dropped = await win.evaluate(() => {
+    const field = [...document.querySelectorAll('#an-fields .an-field')]
+      .find((f) => (f as HTMLElement).dataset.column === 'state') as HTMLElement;
+    const well = document.querySelector('#an-wells [data-well="filters"]') as HTMLElement;
+    const dt = new DataTransfer();
+    field.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+    const dragging = document.body.classList.contains('an-dragging');
+    well.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    const highlighted = well.classList.contains('is-drop');
+    well.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    field.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt }));
+    return {
+      carried: dt.getData('text/plain'),
+      dragging,
+      highlighted,
+      cleared: !well.classList.contains('is-drop'),
+      filterRows: document.querySelectorAll('#an-wells .viz-filter-row').length,
+      droppedCol: (document.querySelector('#an-wells .viz-filter-row select') as HTMLSelectElement)?.value,
+    };
+  });
+  ok('dragstart carries the column name and marks the drag',
+     dropped.carried === 'state' && dropped.dragging, JSON.stringify(dropped));
+  ok('…dragover highlights the well, and the highlight clears on drop',
+     dropped.highlighted && dropped.cleared);
+  ok('…and the drop lands the field in that well',
+     dropped.filterRows === 1 && dropped.droppedCol === 'state',
+     `${dropped.filterRows} row(s), column=${dropped.droppedCol}`);
+
+  // Click-to-add is the keyboard path; a drag-only well is unreachable.
+  await win.evaluate(() => {
+    const f = [...document.querySelectorAll('#an-fields .an-field')]
+      .find((x) => (x as HTMLElement).dataset.column === 'revenue') as HTMLElement;
+    f.click();
+  });
+  await win.waitForTimeout(1500);
+  ok('clicking a numeric field adds it as a measure, no mouse drag needed',
+     await win.evaluate(() => document.querySelectorAll('#an-wells .viz-value-row').length >= 1));
+
+  // UNDO both edits. They were written through to the SAVED visual — which is
+  // the designed behaviour (a card references a project-level Visual, and
+  // publishing denormalises so readers are unaffected) — and the first run of
+  // this block proved it the hard way: it left an always-false filter on the map
+  // visual and broke every map assertion 400 lines below. A test that mutates
+  // shared state has to put it back.
+  await win.evaluate(() => {
+    document.querySelectorAll('#an-wells .viz-filter-row .viz-value-del')
+      .forEach((b) => (b as HTMLElement).click());
+  });
+  await win.waitForTimeout(1200);
+  await win.evaluate(() => {
+    const dels = [...document.querySelectorAll('#an-wells .viz-value-row .viz-value-del')] as HTMLButtonElement[];
+    // Leave exactly one measure — the form refuses to go below one anyway.
+    dels.slice(1).forEach((b) => b.click());
+  });
+  await win.waitForTimeout(2500);
+  const reverted = await win.evaluate(() => ({
+    filters: document.querySelectorAll('#an-wells .viz-filter-row').length,
+    measures: document.querySelectorAll('#an-wells .viz-value-row').length,
+  }));
+  ok('the well edits undo from the same panel, restoring the shared visual',
+     reverted.filters === 0 && reverted.measures === 1, JSON.stringify(reverted));
+
+  // Collapse, and survive a reload — the state is in localStorage.
+  await win.evaluate(() => (document.getElementById('an-props-toggle') as HTMLElement).click());
+  await win.waitForTimeout(300);
+  const collapsed = await win.evaluate(() => ({
+    isCollapsed: !!document.getElementById('an-pane-props')?.classList.contains('is-collapsed'),
+    bodyHidden: (document.getElementById('an-props-body') as HTMLElement)?.offsetParent == null,
+    // The header must survive, or there is no labelled way back.
+    headVisible: (document.querySelector('#an-pane-props .an-pane-head') as HTMLElement)?.offsetParent !== null,
+    expanded: document.getElementById('an-props-toggle')?.getAttribute('aria-expanded'),
+    stored: localStorage.getItem('anPanes'),
+  }));
+  ok('a pane collapses its body but keeps its header',
+     collapsed.isCollapsed && collapsed.bodyHidden && collapsed.headVisible &&
+       collapsed.expanded === 'false', JSON.stringify(collapsed));
+  ok('…and the collapse is remembered', collapsed.stored === 'an-pane-props', collapsed.stored || '');
+  await win.evaluate(() => (document.getElementById('an-props-toggle') as HTMLElement).click());
+  await win.waitForTimeout(300);
+
   const anShot = path.join(shotDir, 'analysis-editor.png');
   await win.screenshot({ path: anShot });
   ok('analysis editor screenshot captured', fs.existsSync(anShot) && fs.statSync(anShot).size > 5000,
@@ -703,6 +872,32 @@ async function main(): Promise<void> {
   ok('every edit affordance is withdrawn (add / save / card controls)',
      !published.addVisual && !published.save && published.cardCtrls === 0,
      JSON.stringify({ addVisual: published.addVisual, save: published.save, ctrls: published.cardCtrls }));
+
+  // THE INVARIANT. A published dashboard is a snapshot; an authoring panel that
+  // can mutate a card, plus the 600 ms autosave debounce, would clobber it. The
+  // panels must therefore not be on screen here AT ALL — and clicking a card
+  // must not bind them, which is the failure mode a visibility check alone would
+  // miss (a hidden-but-live panel still writes).
+  const noPanels = await win.evaluate(() => {
+    const vis = (id: string) => (document.getElementById(id) as HTMLElement | null)?.offsetParent != null;
+    const before = {
+      left: vis('an-side-left'),
+      right: vis('an-side-right'),
+      active: !!document.getElementById('an-editor-host')?.classList.contains('is-active'),
+    };
+    (document.querySelector('#dash-grid .dash-card') as HTMLElement | null)?.click();
+    return {
+      ...before,
+      // After clicking a card in dashboard mode: still nothing bound.
+      selectedAfterClick: document.querySelectorAll('#dash-grid .dash-card.is-selected').length,
+      fieldsAfterClick: document.querySelectorAll('#an-fields .an-field').length,
+    };
+  });
+  ok('a published dashboard shows NO authoring panels',
+     !noPanels.left && !noPanels.right && !noPanels.active, JSON.stringify(noPanels));
+  ok('…and clicking one of its cards binds nothing',
+     noPanels.selectedAfterClick === 0 && noPanels.fieldsAfterClick === 0,
+     JSON.stringify({ sel: noPanels.selectedAfterClick, fields: noPanels.fieldsAfterClick }));
 
   const pubShot = path.join(shotDir, 'published-dashboard.png');
   await win.screenshot({ path: pubShot });
@@ -1064,21 +1259,25 @@ async function main(): Promise<void> {
   await win.waitForTimeout(2500);
 
   const form = await win.evaluate(() => {
-    const enc = document.querySelector('.viz-encoding') as HTMLElement | null;
-    const cat = document.querySelector('.js-enc-cat') as HTMLSelectElement | null;
-    const ser = document.querySelector('.js-enc-series') as HTMLSelectElement | null;
-    const geo = document.querySelector('.js-enc-geo') as HTMLSelectElement | null;
-    const label = document.querySelector('.viz-encoding label[for]') as HTMLLabelElement | null;
-    const agg = document.querySelector('.viz-value-agg') as HTMLSelectElement | null;
+    // Scoped to the Visuals section: since phase C the analysis workbench mounts
+    // a SECOND encoding form, which is exactly what phase B made possible. A
+    // bare document.querySelector here would read whichever mounted first.
+    const box = document.getElementById('ws-visuals') as HTMLElement;
+    const enc = box.querySelector('.viz-encoding') as HTMLElement | null;
+    const cat = box.querySelector('.js-enc-cat') as HTMLSelectElement | null;
+    const ser = box.querySelector('.js-enc-series') as HTMLSelectElement | null;
+    const geo = box.querySelector('.js-enc-geo') as HTMLSelectElement | null;
+    const label = box.querySelector('.viz-encoding label[for]') as HTMLLabelElement | null;
+    const agg = box.querySelector('.viz-value-agg') as HTMLSelectElement | null;
     return {
       mounted: !!enc && enc.offsetParent !== null,
       // Exactly ONE form is mounted. <template> content is inert and must not
       // be counted by a querySelectorAll, which is itself worth pinning.
-      instances: document.querySelectorAll('.viz-encoding').length,
+      instances: box.querySelectorAll('.viz-encoding').length,
       catOptions: cat ? [...cat.options].map((o) => o.value) : [],
       seriesFirst: ser && ser.options[0] ? ser.options[0].textContent : '',
       geoOptions: geo ? geo.options.length : 0,
-      measures: document.querySelectorAll('.viz-value-row').length,
+      measures: box.querySelectorAll('.viz-value-row').length,
       aggOptions: agg ? [...agg.options].map((o) => o.textContent) : [],
       // The per-instance id rewrite: a label must still point at a control that
       // EXISTS, or clicking it focuses nothing.
@@ -1105,19 +1304,20 @@ async function main(): Promise<void> {
 
   // Drive it: add a measure, switch an aggregation. This is what proves the
   // form's single onChange is actually wired to the recompute.
-  await win.evaluate(() => (document.querySelector('.js-enc-add-value') as HTMLElement).click());
+  await win.evaluate(() =>
+    (document.querySelector('#ws-visuals .js-enc-add-value') as HTMLElement).click());
   await win.waitForTimeout(1800);
   const added = await win.evaluate(() => ({
-    measures: document.querySelectorAll('.viz-value-row').length,
+    measures: document.querySelectorAll('#ws-visuals .viz-value-row').length,
     // At two measures the delete buttons un-disable; at one they are disabled,
     // because the form keeps at least one measure.
-    firstDelEnabled: !(document.querySelector('.viz-value-del') as HTMLButtonElement)?.disabled,
+    firstDelEnabled: !(document.querySelector('#ws-visuals .viz-value-del') as HTMLButtonElement)?.disabled,
   }));
   ok('+ Add measure adds a row and frees the delete buttons',
      added.measures === 2 && added.firstDelEnabled, JSON.stringify(added));
 
   await win.evaluate(() => {
-    const agg = document.querySelector('.viz-value-agg') as HTMLSelectElement;
+    const agg = document.querySelector('#ws-visuals .viz-value-agg') as HTMLSelectElement;
     agg.value = 'avg';
     agg.dispatchEvent(new Event('change', { bubbles: true }));
   });
@@ -1129,8 +1329,8 @@ async function main(): Promise<void> {
      await win.evaluate(() => !!document.querySelector('#viz-area canvas, #viz-area svg')));
 
   const filterAdded = await win.evaluate(() => {
-    (document.querySelector('.js-enc-add-filter') as HTMLElement).click();
-    return document.querySelectorAll('.viz-filter-row').length;
+    (document.querySelector('#ws-visuals .js-enc-add-filter') as HTMLElement).click();
+    return document.querySelectorAll('#ws-visuals .viz-filter-row').length;
   });
   ok('+ Add filter adds a filter row', filterAdded === 1, String(filterAdded));
 
@@ -1167,11 +1367,14 @@ async function main(): Promise<void> {
     return true;
   }));
   await win.waitForTimeout(3000);
-  const restored = await win.evaluate(() => ({
-    instances: document.querySelectorAll('.viz-encoding').length,
-    measures: document.querySelectorAll('.viz-value-row').length,
-    firstAgg: (document.querySelector('.viz-value-agg') as HTMLSelectElement)?.value || '',
-  }));
+  const restored = await win.evaluate(() => {
+    const box = document.getElementById('ws-visuals') as HTMLElement;
+    return {
+      instances: box.querySelectorAll('.viz-encoding').length,
+      measures: box.querySelectorAll('.viz-value-row').length,
+      firstAgg: (box.querySelector('.viz-value-agg') as HTMLSelectElement)?.value || '',
+    };
+  });
   ok('…into the same single form, with both measures and the aggregation restored',
      restored.instances === 1 && restored.measures === 2 && restored.firstAgg === 'avg',
      JSON.stringify(restored));

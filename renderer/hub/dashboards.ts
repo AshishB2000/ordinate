@@ -345,6 +345,11 @@ function applyDashEditorMode(): void {
   if (!ed) return;
   ed.classList.toggle('dash-editor--analysis', dashMode === 'analysis');
   ed.classList.toggle('dash-editor--readonly', dashReadOnly);
+  // The workbench columns light up for an open ANALYSIS only. In dashboard mode
+  // this turns them off, which is the invariant: a published dashboard is a
+  // snapshot, and a panel that can mutate a card plus the 600 ms autosave would
+  // clobber it.
+  anSyncWorkbench();
 }
 
 // The read-only explanation, with the route back to the authoring surface.
@@ -381,6 +386,9 @@ function closeDashboardEditor(): void {
   const pages = dashEl('dash-pages');
   if (pages) pages.innerHTML = '';
   dashShow('dash-editor', false);
+  // dashCurrent is null now, so this drops the workbench columns and clears the
+  // selection — closing an analysis must not leave panels bound to a dead card.
+  anSyncWorkbench();
   dashShow('dash-list-view', true);
   dashShow('an-list-view', true);
   dashMode = 'dashboard';
@@ -530,6 +538,9 @@ function renderDashGrid(): void {
   // Grid-level drop target for native drag rearrange.
   grid.ondragover = (e) => { if (dashDragId) e.preventDefault(); };
   grid.ondrop = (e) => onDashGridDrop(e, grid);
+  // The cards were just rebuilt, so the authoring workbench has to repaint its
+  // selection ring and drop a selection whose card no longer exists.
+  anSyncWorkbench();
 }
 
 function nextFreeRow(): number {

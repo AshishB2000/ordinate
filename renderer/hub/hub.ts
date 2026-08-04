@@ -180,6 +180,7 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
   initVisuals();         // visuals.ts
   initDashboards();      // dashboards.ts
   initAnalyses();        // analyses.ts
+  initAuthoring();       // authoring.ts — the analysis workbench panels
   initCopilot();         // copilot.ts
 })();
 
