@@ -11,16 +11,30 @@
 // spinning on EAGAIN is a correct blocking read, and it is cheap because the
 // reply is already in flight when the spin starts.
 //
-// Measured on this machine (medians of 201 round trips, `node` echo child):
+// TRANSPORT, measured on this machine (medians of 201 round trips, echo child):
 //
-//   payload            spin-on-EAGAIN pipe     SAB handshake (today)
-//   scalar                     0.009 ms                  ~0.5 ms
-//   83 KB (Explore page)       0.076 ms                        —
+//   payload                spin-on-EAGAIN pipe     blocking FIFO
+//   scalar                         0.009 ms           0.009 ms
+//   83 KB (Explore page)           0.076 ms           0.114 ms
 //
 //   EAGAIN spins per 83 KB call: 18.7
 //
-// So the sync API survives, no caller has to become `async`, and the most common
-// call in the app gets faster.
+// So the sync API survives and no caller has to become `async` — which is the
+// large, risky change this design exists to avoid.
+//
+// BUT THIS IS NOT A SPEEDUP, and docs/phase-6/01 §4.2 is wrong to imply it is.
+// That section priced the transport ALONE against an echo child. Measured END TO
+// END against real DuckDB queries, the sidecar is at parity on a scalar and
+// modestly slower on real payloads, because transport is a small fraction of a
+// query's cost and the extra copy is not free:
+//
+//   metric  (one scalar)   worker 0.35 ms   sidecar 0.34 ms    -4%
+//   chart   (40 groups)    worker 1.76 ms   sidecar 1.97 ms   +12%
+//   page    (500 rows)     worker 1.12 ms   sidecar 1.27 ms   +14%
+//
+// The case for this module is COMPLEXITY and ROBUSTNESS, not speed: it retires
+// 534 lines of SharedArrayBuffer/Atomics machinery, and a child process can be
+// killed mid-native-call where a wedged worker thread can only be orphaned.
 //
 // WHAT THIS DOES NOT DO YET. It does not replace src/duckdb.ts. It is built and
 // tested alongside it so the two can be compared value-for-value first — the
