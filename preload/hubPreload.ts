@@ -353,7 +353,15 @@ contextBridge.exposeInMainWorld('hub', {
   // The CHANNEL is `analysis:draft`; `dashboard:draft` was deleted, not aliased.
   // The METHOD name is kept — the model call behind it is still
   // analyze.draftDashboard(), extended in place rather than twinned.
-  draftDashboard: (projectId: string) => ipcRenderer.invoke('analysis:draft', { projectId }),
+  // `opts` scopes the draft: `datasetId` narrows the FACTS block to one dataset,
+  // `intent` is the user's own description of what they want. Both optional — the
+  // hero/empty-state buttons still call this with a bare projectId.
+  draftDashboard: (projectId: string, opts?: { datasetId?: string; intent?: string }) =>
+    ipcRenderer.invoke('analysis:draft', {
+      projectId,
+      datasetId: opts && opts.datasetId,
+      intent: opts && opts.intent,
+    }),
   // Re-validate + re-preview a plan the USER edited. NOT an AI call — this works
   // with no model configured. Same reply shape as draftDashboard, minus notReady.
   previewAnalysisPlan: (projectId: string, plan: any) =>

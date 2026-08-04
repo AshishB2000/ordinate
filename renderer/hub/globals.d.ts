@@ -229,7 +229,13 @@ declare global {
       // {labels, series} (+ geo) object chartRender.buildChart consumes; when it
       // is null it carries a `note` saying why, and that note is what gets
       // rendered — never a substituted figure.
-      draftDashboard(projectId: string): Promise<any>;
+      // `opts` scopes the draft: `datasetId` narrows the FACTS block to one
+      // dataset, `intent` is the user's own words from the create wizard. Both
+      // optional — the unscoped whole-project draft still passes one argument.
+      draftDashboard(
+        projectId: string,
+        opts?: { datasetId?: string; intent?: string },
+      ): Promise<any>;
       // The two halves of the Phase E plan pipeline: preview re-renders a plan
       // without writing anything; build materialises it. Typed loosely because
       // the plan envelope is owned by main (same convention as the rest of this

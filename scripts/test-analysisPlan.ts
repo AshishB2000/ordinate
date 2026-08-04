@@ -343,6 +343,75 @@ async function checkFacts(): Promise<void> {
   ok('the plan context carries no rows', !ctxJson.includes(CELL_SENTINEL));
 }
 
+// ── §4b Scoping the context to one dataset, and the user's intent ──────────
+// The create wizard picks a dataset and takes free text. Both narrow what the
+// model sees; neither may widen what it can produce.
+async function checkScopeAndIntent(): Promise<void> {
+  const all = await plan.loadPlanContext(projectId);
+  ok('scope: unscoped context still sees every dataset', all.datasets.length >= 2,
+     String(all.datasets.length));
+
+  const one = await plan.loadPlanContext(projectId, salesId);
+  ok('scope: a datasetId narrows the context to that dataset',
+     one.datasets.length === 1 && one.datasets[0].id === salesId,
+     JSON.stringify(one.datasets.map((d) => d.name)));
+  const scopedFacts = plan.buildFactsText(one);
+  ok('scope: the FACTS block names the chosen dataset', scopedFacts.includes('"Sales"'));
+  ok('scope: and does NOT name the others', !scopedFacts.includes('"Huge"'));
+  // Visuals ride with their dataset — offering one built on an excluded dataset
+  // would get it dropped at validation, which reads as a bug rather than a scope.
+  ok('scope: saved visuals are filtered to the chosen dataset too',
+     one.visuals.every((v: any) => v.datasetId === salesId),
+     JSON.stringify(one.visuals.map((v: any) => v.name)));
+  // An unknown id must not silently fall back to "everything".
+  const nothing = await plan.loadPlanContext(projectId, '00000000-0000-4000-8000-000000000000');
+  ok('scope: an unmatched datasetId yields an EMPTY context, not the full one',
+     nothing.datasets.length === 0, String(nothing.datasets.length));
+
+  // The intent is the one untrusted string in the prompt.
+  const plain = plan.buildFactsText(all);
+  const withIntent = plan.buildFactsText(all, 'Revenue by region, flag concentration risk.');
+  ok('intent: absent by default', plain === plan.buildFactsText(all, ''));
+  ok('intent: appears when given', withIntent.includes('Revenue by region, flag concentration risk.'));
+  ok('intent: is fenced and labelled a REQUEST, not a fact',
+     withIntent.includes('<<<USER REQUEST') && /REQUEST/.test(withIntent));
+  ok('intent: is placed AFTER the closed chart vocabulary',
+     withIntent.indexOf('<<<USER REQUEST') > withIntent.indexOf('Chart types you may use'));
+  ok('intent: adding one does not disturb the facts above it',
+     withIntent.startsWith(plain), 'facts block is a prefix of the intent version');
+
+  // Length cap: an intent cannot bury the FACTS it is supposed to live inside.
+  const huge = 'x'.repeat(9000);
+  const capped = plan.buildFactsText(all, huge);
+  ok('intent: is length-capped', !capped.includes('x'.repeat(2001)),
+     `${capped.length - plain.length} chars added for a 9,000-char intent`);
+
+  // The point of the whole design: intent does NOT widen the vocabulary. A plan
+  // that asks for an off-list chart type is still dropped, exactly as if the
+  // model had invented it unprompted.
+  const injected = await plan.previewPlan(projectId, {
+    name: 'Injected',
+    sheets: [{ name: 'S', visuals: [
+      { dataset: 'Sales', name: 'Bad', chartType: 'spiral',
+        encoding: { category: 'region', values: [{ column: 'revenue', aggregation: 'sum' }] } },
+    ] }],
+  }, one);
+  ok('intent: an off-list chart type is still dropped and reported',
+     injected.dropped.some((d: any) => d.kind === 'chartType'),
+     JSON.stringify(injected.dropped.map((d: any) => d.kind)));
+  // And a dataset outside the scope cannot be planned against.
+  const outside = await plan.previewPlan(projectId, {
+    name: 'Outside',
+    sheets: [{ name: 'S', visuals: [
+      { dataset: 'Huge', name: 'Nope', chartType: 'bar',
+        encoding: { category: 'region', values: [{ column: 'revenue', aggregation: 'sum' }] } },
+    ] }],
+  }, one);
+  ok('scope: a dataset outside the scope is dropped, not silently planned',
+     outside.dropped.some((d: any) => d.kind === 'dataset'),
+     JSON.stringify(outside.dropped.map((d: any) => d.kind)));
+}
+
 // ── §5 A preview never hydrates a table ────────────────────────────────────
 async function checkNoHydration(): Promise<void> {
   const meta = await datasets.getDatasetMeta(projectId, salesId);
@@ -689,6 +758,7 @@ async function checkChannels(): Promise<void> {
   await checkNotReady();
   await checkThreeDrops();
   await checkFacts();
+  await checkScopeAndIntent();
   await checkNoHydration();
   await checkInjection();
   await checkPreviewMatchesBuild();

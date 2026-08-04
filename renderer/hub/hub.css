@@ -5069,6 +5069,461 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   margin: 0;
 }
 
+/* ── Analyses page: hero, table, empty state ────────────────────────────────
+   Everything here is scoped under #ws-analyses on purpose. `.dash-list-item`,
+   `.dash-list-open` and `.dash-list-badge` are SHARED with the Dashboards list,
+   which is still a stacked list — restyling them globally would silently
+   re-lay-out that section too. */
+.an-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 26px;
+  border-radius: var(--r-lg);
+  background: linear-gradient(103deg, var(--accent) 0%, #4f46e5 52%, #7c3aed 100%);
+  color: #fff;
+  overflow: hidden;
+}
+.an-hero[hidden] { display: none; }
+.an-hero-copy { max-width: 640px; }
+.an-hero-h {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+}
+.an-hero-p {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.86);
+}
+.an-hero-actions { display: flex; gap: 8px; }
+/* The banner sits on a saturated gradient, so the two buttons need their own
+   treatment — the shared .btn-primary blue would vanish into it. */
+.an-hero-actions .btn-primary {
+  background: #fff;
+  border-color: #fff;
+  color: var(--accent-2);
+}
+.an-hero-actions .btn-primary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(255, 255, 255, 0.9);
+  color: var(--accent-2);
+}
+.an-hero-actions .btn-ghost {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #fff;
+}
+.an-hero-actions .btn-ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+/* A chart motif, in CSS. An illustration would mean shipping an image asset for
+   decoration; five spans cost nothing and theme themselves. */
+.an-hero-art {
+  display: flex;
+  align-items: flex-end;
+  gap: 7px;
+  height: 78px;
+  flex: none;
+}
+.an-hero-bar {
+  width: 16px;
+  border-radius: 3px 3px 0 0;
+  background: rgba(255, 255, 255, 0.42);
+}
+.an-hero-bar--1 { height: 34%; }
+.an-hero-bar--2 { height: 62%; }
+.an-hero-bar--3 { height: 45%; }
+.an-hero-bar--4 { height: 100%; background: rgba(255, 255, 255, 0.82); }
+.an-hero-bar--5 { height: 72%; }
+
+.an-table {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 14px 16px 16px;
+  gap: 10px;
+}
+.an-table[hidden] { display: none; }
+.an-table-head {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+/* One template, declared once and inherited by the rows below, so a column
+   label can never drift out of line with the cell under it. */
+.an-table-cols,
+#ws-analyses .dash-list-item {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 82px 190px 150px 56px;
+  align-items: center;
+  gap: 12px;
+}
+.an-table-cols {
+  padding: 0 10px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.an-col-action { text-align: right; }
+#ws-analyses .dash-list { gap: 0; }
+#ws-analyses .dash-list-item {
+  border-bottom: 1px solid var(--border);
+  padding: 2px 10px;
+}
+#ws-analyses .dash-list-item:last-child { border-bottom: 0; }
+#ws-analyses .dash-list-item:hover { background: var(--surface-2); }
+/* The name cell is the click target. Stripped back to a link-like control: the
+   card border and padding belong to the row now, not to the button. */
+#ws-analyses .dash-list-open {
+  flex: none;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  min-width: 0;
+}
+#ws-analyses .dash-list-open:hover .dash-list-name { color: var(--accent); }
+#ws-analyses .dash-list-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#ws-analyses .an-cell {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#ws-analyses .an-cell-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+/* The ⋯ trigger. Square, quiet until hovered — it is a control, not data, and
+   the row already has a click target on the name. */
+#ws-analyses .an-row-menu {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  line-height: 1;
+  background: none;
+  border-color: transparent;
+  border-radius: var(--r-sm);
+  color: var(--text-dim);
+}
+#ws-analyses .an-row-menu:hover {
+  background: var(--surface-3);
+  border-color: var(--border-2);
+  color: var(--text);
+}
+/* Status pill. `--dirty` already exists for the unpublished-changes badge; these
+   two are the other two states a row can be in. */
+.an-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.an-status--published { background: var(--ok-soft); color: var(--ok); }
+.an-status--draft { background: var(--surface-3); color: var(--muted); }
+
+.an-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  padding: 56px 32px 64px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.an-empty[hidden] { display: none; }
+.an-empty-art {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 44px;
+  margin-bottom: 14px;
+}
+.an-empty-art .an-hero-bar { background: var(--accent-line); width: 14px; }
+.an-empty-h {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.an-empty-p {
+  margin: 0;
+  max-width: 460px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.an-empty-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+/* ── Create-analysis wizard ─────────────────────────────────────────────────
+   Two classes, not one: `.ws-modal` is defined LATER in this file, so a bare
+   `.an-wiz` loses the cascade on every property they share (width, padding) at
+   equal specificity. `.ws-modal.an-draft-modal` above solves it the same way. */
+.ws-modal.an-wiz {
+  width: min(860px, 92vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  text-align: left;
+}
+.an-wiz-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px 14px;
+}
+.an-wiz-sub {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 620px;
+}
+.an-wiz-x {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 0;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+.an-wiz-x:hover { background: var(--surface-2); color: var(--text); }
+
+.an-wiz-rail {
+  display: flex;
+  gap: 8px;
+  padding: 0 22px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.an-wiz-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 6px;
+  border-radius: var(--r-full);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.an-wiz-step.is-active { background: var(--accent-soft); color: var(--accent); }
+.an-wiz-dot {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.an-wiz-step.is-active .an-wiz-dot { background: var(--accent); color: var(--accent-ink); }
+.an-wiz-step.is-done .an-wiz-dot { background: var(--ok); color: #fff; }
+.an-wiz-step-label { font-weight: 500; }
+.an-wiz-optional {
+  padding: 1px 7px;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.an-wiz-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 22px 4px;
+}
+.an-wiz-pane { display: flex; flex-direction: column; gap: 14px; }
+.an-wiz-pane[hidden] { display: none; }
+
+.an-wiz-bar { display: flex; gap: 10px; align-items: center; }
+.an-wiz-search { flex: 1; }
+.an-wiz-table {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.an-wiz-table[hidden] { display: none; }
+/* Shared template — the labels and the rows are separate elements, so this is
+   the only thing keeping them in the same columns. */
+.an-wiz-cols,
+.an-wiz-row {
+  display: grid;
+  grid-template-columns: 30px minmax(160px, 1fr) 88px 78px 104px 116px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+}
+.an-wiz-cols {
+  height: 36px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.an-wiz-rows { max-height: 268px; overflow-y: auto; }
+.an-wiz-row {
+  width: 100%;
+  height: 44px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.an-wiz-row:last-child { border-bottom: 0; }
+.an-wiz-row:hover { background: var(--surface-2); }
+.an-wiz-row.is-selected { background: var(--accent-soft); }
+.an-wiz-radio {
+  width: 15px;
+  height: 15px;
+  border-radius: var(--r-full);
+  border: 1.5px solid var(--border-3);
+  display: block;
+}
+.an-wiz-row.is-selected .an-wiz-radio {
+  border-color: var(--accent);
+  border-width: 4.5px;
+}
+.an-wiz-dsname {
+  font-size: 13px;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.an-wiz-cell {
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.an-wiz-kind {
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+  background: var(--surface-3);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.an-wiz-none {
+  margin: 0;
+  padding: 18px 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.an-wiz-name { display: flex; flex-direction: column; gap: 6px; }
+.an-wiz-name[hidden] { display: none; }
+.an-wiz-name > span { font-size: 11.5px; font-weight: 600; color: var(--text); }
+
+/* Step 2 */
+.an-wiz-ai {
+  padding: 18px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.an-wiz-ai-h { margin: 0; font-size: 14px; font-weight: 600; color: var(--text-strong); }
+.an-wiz-ai-p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--muted); }
+.an-wiz-ta {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.an-wiz-ta:focus { outline: none; border-color: var(--accent); }
+.an-wiz-ta:disabled { opacity: 0.5; cursor: not-allowed; }
+.an-wiz-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.an-wiz-chips[hidden] { display: none; }
+.an-wiz-chip {
+  padding: 5px 10px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  text-align: left;
+}
+.an-wiz-chip:hover { border-color: var(--accent); color: var(--accent); }
+.an-wiz-note {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: var(--r-sm);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.an-wiz-note[hidden] { display: none; }
+
+.an-wiz-foot {
+  padding: 14px 22px 18px;
+  border-top: 1px solid var(--border);
+  align-items: center;
+}
+.an-wiz-spacer { flex: 1; }
+.an-wiz-back[hidden] { display: none; }
+
 /* Editor */
 .dash-editor {
   flex: 1;
