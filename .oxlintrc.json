@@ -1,0 +1,68 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+
+  "categories": {
+    "correctness": "error"
+  },
+
+  "rules": {
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/await-thenable": "error",
+    "typescript/no-for-in-array": "error",
+    "typescript/no-array-delete": "error",
+    "typescript/no-duplicate-type-constituents": "error",
+    "typescript/no-meaningless-void-operator": "error",
+    "typescript/no-redundant-type-constituents": "error",
+
+    "eslint/no-unused-vars": [
+      "error",
+      { "args": "after-used", "argsIgnorePattern": "^_", "varsIgnorePattern": "^_", "caughtErrors": "none" }
+    ],
+    "eslint/eqeqeq": ["error", "smart"],
+    "eslint/no-var": "error",
+    "eslint/no-return-assign": "error",
+    "eslint/no-eval": "error",
+    "eslint/no-new-func": "error",
+    "eslint/no-script-url": "error",
+
+    "typescript/no-base-to-string": "off",
+    "typescript/restrict-template-expressions": "off",
+    "typescript/unbound-method": "off",
+    "typescript/require-array-sort-compare": "off",
+    "unicorn/no-thenable": "off",
+    "unicorn/no-useless-fallback-in-spread": "off",
+    "unicorn/no-new-array": "off",
+    "unicorn/prefer-string-starts-ends-with": "off",
+    "eslint/no-control-regex": "off",
+    "eslint/no-useless-escape": "off"
+  },
+
+  "overrides": [
+    {
+      "files": ["**/*.d.ts"],
+      "rules": {
+        "eslint/no-var": "off"
+      }
+    },
+    {
+      "files": ["renderer/**"],
+      "rules": {
+        "typescript/no-floating-promises": "off",
+        "typescript/no-misused-promises": "off",
+        "typescript/no-useless-default-assignment": "off",
+        "eslint/no-unused-vars": "off"
+      }
+    }
+  ],
+
+  "ignorePatterns": [
+    "**/node_modules/**",
+    ".claude/worktrees/**",
+    "dist/**",
+    "renderer/hub/vendor/**",
+    "renderer/hub/svelte/bundle.js",
+    "assets/geo/*.js",
+    "geo/**"
+  ]
+}

@@ -825,7 +825,7 @@ async function main(): Promise<void> {
   }
 }
 
-main()
+void main()
   .catch((err) => { console.error('FAIL unexpected error', err); failures += 1; })
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch { /* best effort */ }

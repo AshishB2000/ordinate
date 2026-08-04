@@ -1433,7 +1433,7 @@ function cvStopSteps() {
   cvStepTimer = null;
 }
 
-function cvFinishSteps(callback) {
+function cvFinishSteps(callback: () => void) {
   clearInterval(cvStepTimer);
   cvStepTimer = null;
   function completeNext() {

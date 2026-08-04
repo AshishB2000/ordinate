@@ -21,7 +21,7 @@
   // Match an AI-provided place against a GeoJSON feature's properties.
   // For US sub-state levels, state + kind (county vs independent city) must agree
   // when both sides carry them — that's what tells "Roanoke" county from city.
-  function matchGeoItem(geoItems: any[], featProps: any): any | undefined {
+  function matchGeoItem(geoItems: any[], featProps: any): any {
     const featName = normalizeName(featProps.name || '');
     const featIso2 = (featProps.iso2 || '').toLowerCase();
     const featState = normalizeName(featProps.state || '');

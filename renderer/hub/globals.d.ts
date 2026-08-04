@@ -324,7 +324,7 @@ declare global {
   // they need an ambient declaration here. Callers use the bare name.
   function makeDropdown(opts?: DropdownOpts): DropdownApi; // customDropdown.js
   function normalizeName(n: string | null | undefined): string; // geoMatch.js
-  function matchGeoItem(geoItems: any[], featProps: any): any | undefined; // geoMatch.js
+  function matchGeoItem(geoItems: any[], featProps: any): any; // geoMatch.js
 
   // PRE-EXISTING BUG (present in the original hub.js): called in the stpTestPerm
   // click handler but defined nowhere, so it throws at runtime. Declared here to

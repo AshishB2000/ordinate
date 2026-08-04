@@ -77,8 +77,6 @@ async function main(): Promise<void> {
     const projects = req('./src/projects.js');
     const datasets = req('./src/datasets.js');
     const visuals = req('./src/visuals.js');
-    const vizData = req('./src/vizData.js');
-    const metricValue = req('./src/metricValue.js');
     const out: any = {};
 
     await projects.init();
@@ -287,17 +285,6 @@ async function main(): Promise<void> {
       el.click();
       return true;
     }, id);
-  const fillPrompt = async (value: string): Promise<boolean> =>
-    win.evaluate((v) => {
-      const box = document.querySelector('.ws-modal-overlay .ws-modal');
-      if (!box) return false;
-      const input = box.querySelector('.ws-modal-input') as HTMLInputElement | null;
-      if (input) input.value = v;
-      const okBtn = box.querySelector('.ws-modal-actions .btn-primary') as HTMLElement | null;
-      if (!okBtn) return false;
-      okBtn.click();
-      return true;
-    }, value);
   const pickFirstOption = async (): Promise<boolean> =>
     win.evaluate(() => {
       const box = document.querySelector('.ws-modal-overlay .ws-modal');

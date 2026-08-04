@@ -104,6 +104,6 @@ export function createHubWindow(): BrowserWindow {
     reclamping = false;
   });
 
-  win.loadFile(path.join(ROOT, 'renderer', 'hub', 'index.html'));
+  void win.loadFile(path.join(ROOT, 'renderer', 'hub', 'index.html'));
   return win;
 }

@@ -172,7 +172,7 @@ let ranAfter = false;
 const syncRows = side.query('SELECT 1 AS a');
 // If query() were secretly async this would already be true, because a resolved
 // promise's continuation would have run before we get here.
-Promise.resolve().then(() => {
+void Promise.resolve().then(() => {
   ranAfter = true;
 });
 ok('query() returned rows on the very next line', syncRows[0].a === 1);

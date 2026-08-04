@@ -517,8 +517,6 @@ async function callProvider(provider: string, systemPrompt: string, messages: Ne
 function resolveByok():
   | { error: TypedError }
   | { error?: undefined; provider: string; apiKey?: string | null; baseUrl?: string; model: string; maxTokens?: number | string } {
-  const cfg = config.get();
-
   // Only ever run a provider that is actually Connected (verified). A stale or
   // keyless active provider resolves to null → ask the user to connect one.
   const provider = config.effectiveByokActive();
