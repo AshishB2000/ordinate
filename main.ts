@@ -595,6 +595,28 @@ require("./src/ipc/copilot").register();
 // session that never opens a Mosaic chart pays nothing and the bridge stays lazy.
 require("./src/ipc/mosaic").register();
 
+// Phase 7 — pre-register the folders the local-file connectors have been pointed
+// at, BEFORE anything can harden the connection.
+//
+// `allowed_directories` may only be set while `enable_external_access` is still
+// on, and `lock_configuration` makes the whole thing irreversible for the
+// process lifetime. So a folder that is not inside the lock when it closes
+// cannot be read at all until the next launch. Without this, "query folder A,
+// then add and query folder B" fails in the same session.
+//
+// Deliberately conditional: an empty registry means the user has never used one
+// of these connectors, and hardening eagerly would start the DuckDB worker on
+// every launch for a feature they do not use — the exact laziness the comment
+// above is protecting.
+try {
+  const localDirs = require("./src/connectors/local").registeredDirs(app.getPath("userData"));
+  if (Array.isArray(localDirs) && localDirs.length) {
+    require("./src/ipc/mosaic")
+      .hardenConnection([app.getPath("userData"), ...localDirs])
+      .catch(() => { /* best-effort: a failure costs a restart, never correctness */ });
+  }
+} catch (_) { /* connector module absent or registry unreadable — stay lazy */ }
+
 // Week 13 — capture → dataset bridge. resolveCropPath hands the on-disk crop path
 // from main's per-entry state (entryData, then the summaries cache) so a renderer-
 // sent path is never trusted; both maps already carry cropPath per entryId.

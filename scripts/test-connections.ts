@@ -47,25 +47,32 @@ async function main(): Promise<void> {
   let list = await connections.listConnections(proj.id);
   ok('listConnections is empty initially', Array.isArray(list) && list.length === 0);
 
-  // save a Postgres connection.
+  // save a connection. Schema v2: a connectorId plus a generic `values` bag —
+  // the store keeps whatever field keys the connector declares (validated and
+  // whitelisted upstream, in src/ipc/connections.ts).
   const a = await connections.saveConnection(proj.id, {
     name: '  Warehouse  ',
-    kind: 'postgres',
-    host: 'db.example.com',
-    port: 5432,
-    database: 'analytics',
-    user: 'reader',
-    ssl: true,
+    connectorId: 'url',
+    values: {
+      host: 'db.example.com',
+      port: 5432,
+      database: 'analytics',
+      user: 'reader',
+      ssl: true,
+      url: 'https://db.example.com/analytics.json',
+    },
     table: 'public.sales',
   });
   ok('saveConnection returns a connection', a !== null && typeof a.id === 'string' && UUID_RE.test(a.id));
   ok('saveConnection trims the name', a !== null && a.name === 'Warehouse');
   ok('saveConnection sets projectId', a !== null && a.projectId === proj.id);
-  ok('saveConnection keeps non-secret pg metadata', a !== null && a.host === 'db.example.com' && a.port === 5432 && a.database === 'analytics' && a.user === 'reader' && a.ssl === true && a.table === 'public.sales');
-  ok('saveConnection sets kind', a !== null && a.kind === 'postgres');
+  ok('saveConnection keeps non-secret metadata', a !== null && a.values.host === 'db.example.com' && a.values.port === 5432 && a.values.database === 'analytics' && a.values.user === 'reader' && a.values.ssl === true && a.table === 'public.sales');
+  ok('saveConnection sets connectorId', a !== null && a.connectorId === 'url');
+  ok('saveConnection rejects an unknown connectorId',
+    (await connections.saveConnection(proj.id, { name: 'nope', connectorId: 'not-a-connector' })) === null);
   ok('saveConnection defaults lastStatus untested', a !== null && a.lastStatus === 'untested');
   ok('saveConnection defaults lastRefreshedAt null', a !== null && a.lastRefreshedAt === null);
-  ok('saveConnection sets schemaVersion 1', a !== null && a.schemaVersion === 1);
+  ok('saveConnection sets schemaVersion 2', a !== null && a.schemaVersion === 2);
   ok('saveConnection sets createdAt === updatedAt', a !== null && a.createdAt === a.updatedAt);
   ok('connection file written to disk',
     a !== null && fs.existsSync(path.join(tmpUserData, 'projects', proj.id, 'connections', a.id + '.json')));
@@ -74,12 +81,12 @@ async function main(): Promise<void> {
   await new Promise((r) => setTimeout(r, 5));
   const b = await connections.saveConnection(proj.id, {
     name: 'Prices API',
-    kind: 'url',
-    url: 'https://api.example.com/prices.json',
+    connectorId: 'url',
+    values: { url: 'https://api.example.com/prices.json' },
   });
   ok('second saveConnection returns a connection', b !== null);
   ok('connection ids are unique', a !== null && b !== null && a.id !== b.id);
-  ok('url connection keeps its url', b !== null && b.url === 'https://api.example.com/prices.json' && b.kind === 'url');
+  ok('url connection keeps its url', b !== null && b.values.url === 'https://api.example.com/prices.json' && b.connectorId === 'url');
 
   // list — both, newest-updated first (b first).
   list = await connections.listConnections(proj.id);
@@ -88,13 +95,13 @@ async function main(): Promise<void> {
 
   // get.
   const gotA = a !== null ? await connections.getConnection(proj.id, a.id) : null;
-  ok('getConnection returns the full connection', gotA !== null && a !== null && gotA.id === a.id && gotA.host === 'db.example.com');
+  ok('getConnection returns the full connection', gotA !== null && a !== null && gotA.id === a.id && gotA.values.host === 'db.example.com');
   const gotMissing = await connections.getConnection(proj.id, '00000000-0000-0000-0000-000000000000');
   ok('getConnection returns null for a missing uuid', gotMissing === null);
 
   // save under a UUID-shaped but nonexistent project → null (no orphans).
   const orphan = await connections.saveConnection('00000000-0000-0000-0000-000000000000', {
-    name: 'Orphan', kind: 'url', url: 'https://x.example.com',
+    name: 'Orphan', connectorId: 'url', values: { url: 'https://x.example.com' },
   });
   ok('saveConnection rejects a nonexistent parent project', orphan === null);
 
@@ -149,9 +156,9 @@ async function main(): Promise<void> {
   fs.writeFileSync(outsideSentinel, 'keep');
 
   ok('saveConnection rejects a traversal projectId',
-    (await connections.saveConnection('..', { name: 'x', kind: 'url', url: 'https://x' })) === null);
+    (await connections.saveConnection('..', { name: 'x', connectorId: 'url', values: { url: 'https://x' } })) === null);
   ok('saveConnection rejects a nested traversal projectId',
-    (await connections.saveConnection('../../foo', { name: 'x', kind: 'url', url: 'https://x' })) === null);
+    (await connections.saveConnection('../../foo', { name: 'x', connectorId: 'url', values: { url: 'https://x' } })) === null);
   ok('getConnection rejects a traversal projectId', (await connections.getConnection('..', b !== null ? b.id : 'x')) === null);
   ok('getConnection rejects a traversal connId', (await connections.getConnection(proj.id, '../SECRET')) === null);
   ok('getConnection rejects a nested traversal connId', (await connections.getConnection(proj.id, '../../etc/passwd')) === null);

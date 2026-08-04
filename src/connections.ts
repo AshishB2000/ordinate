@@ -4,38 +4,49 @@
 // src/datasets.ts verbatim: the UUID id-validation guard, atomic JSON writes,
 // and graceful skip of missing/corrupt files.
 //
-// SECURITY: this file stores ONLY non-secret metadata (name, kind, host/port/
-// db/user, url, table/query, status). The pg password / URL auth token live in
-// config.json's connectionSecrets block (see src/config.ts) — NEVER here, so a
-// connections/*.json is safe to share. BOTH projectId AND connId are validated
-// as UUIDs before either is concatenated into a path, so a connection path can
-// never escape userData/projects/<projectId>/connections.
+// SCHEMA v2 (2026-08). v1 hardcoded `kind: 'postgres' | 'url'` plus a fixed set
+// of top-level pg fields, which meant every new data source edited this file, the
+// IPC layer, the runner and the renderer. v2 stores a `connectorId` (validated
+// against src/connectors) and a generic `values` bag keyed by the connector's own
+// field keys. Migration is LAZY and ONE-WAY, exactly like datasets.ts v2→v3: a v1
+// record is upgraded in memory on every read and rewritten as v2 the next time it
+// is saved, so a user with saved connections loses nothing and a rollback still
+// finds a readable file.
+//
+// SECURITY: this file stores ONLY non-secret metadata (name, connectorId, the
+// non-secret field values, the saved table/query, status). Passwords, tokens and
+// API keys live in config.json's connectionSecrets block (see src/config.ts) —
+// NEVER here, so a connections/*.json stays safe to share. Any value whose field
+// the connector marks `secret` is stripped on write AND on the way to a renderer,
+// so a bad caller cannot smuggle one into the shareable file. BOTH projectId AND
+// connId are validated as UUIDs before either is concatenated into a path, so a
+// connection path can never escape userData/projects/<projectId>/connections.
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
 import * as projects from './projects';
+import type { ConnectorDef } from './connectors/types';
 
-export type ConnectionKind = 'postgres' | 'url';
+/** v1's fixed union, kept ONLY so the migration can name what it reads. */
+export type LegacyConnectionKind = 'postgres' | 'url';
+
+/** Non-secret form values, keyed by ConnectorField.key. JSON scalars only. */
+export type ConnectionValues = Record<string, string | number | boolean | null>;
 
 export interface Connection {
   id: string; // generated UUID
   projectId: string;
   name: string;
-  kind: ConnectionKind;
-  // postgres (non-secret only — password lives in config.connectionSecrets):
-  host?: string;
-  port?: number;
-  database?: string;
-  user?: string;
-  ssl?: boolean;
+  /** Which ConnectorDef runs this connection. Persisted — never rename one. */
+  connectorId: string;
+  /** Non-secret field values. Secrets live in config.connectionSecrets. */
+  values: ConnectionValues;
   // the saved table or query the user picked (their own DB; run as-is but
-  // LIMIT-wrapped by the runner):
+  // bounded by the connector's rowLimit/timeout):
   table?: string;
   query?: string;
-  // url source (https only; token, if any, lives in config.connectionSecrets):
-  url?: string;
   // status / telemetry:
   lastRefreshedAt: string | null;
   lastStatus: 'ok' | 'error' | 'untested';
@@ -43,38 +54,39 @@ export interface Connection {
   linkedDatasetId?: string | null; // set once a run result is saved as a dataset
   createdAt: string;
   updatedAt: string;
-  schemaVersion: 1;
+  schemaVersion: 2;
 }
 
-// The renderer-facing view. Connection carries no secret, but define an explicit
-// whitelist so a stray future field can never leak — and to signal intent.
-export type PublicConnection = Connection;
-
-// Whitelisted copy of a connection for the renderer. There is no secret in a
-// Connection, but we rebuild it field-by-field rather than pass the object
-// through, so nothing unexpected ever rides along.
-export function publicConnection(c: Connection): PublicConnection {
-  return {
-    id: c.id,
-    projectId: c.projectId,
-    name: c.name,
-    kind: c.kind,
-    host: c.host,
-    port: c.port,
-    database: c.database,
-    user: c.user,
-    ssl: c.ssl,
-    table: c.table,
-    query: c.query,
-    url: c.url,
-    lastRefreshedAt: c.lastRefreshedAt,
-    lastStatus: c.lastStatus,
-    lastError: c.lastError ?? null,
-    linkedDatasetId: c.linkedDatasetId ?? null,
-    createdAt: c.createdAt,
-    updatedAt: c.updatedAt,
-    schemaVersion: 1,
-  };
+// The renderer-facing view. A Connection carries no secret, but the view is
+// rebuilt key-by-key so a stray future field can never leak.
+//
+// The flat legacy fields are DERIVED, not stored: renderer/hub/connections.js
+// still reads c.kind / c.host / c.url to label a row, and this file's job is not
+// to break it. They are a read-only mirror of `values` — writing them changes
+// nothing.
+export interface PublicConnection {
+  id: string;
+  projectId: string;
+  name: string;
+  connectorId: string;
+  values: ConnectionValues;
+  table?: string;
+  query?: string;
+  lastRefreshedAt: string | null;
+  lastStatus: 'ok' | 'error' | 'untested';
+  lastError?: string | null;
+  linkedDatasetId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  schemaVersion: 2;
+  // ── derived legacy mirror (display only) ──
+  kind: string;
+  host?: string;
+  port?: number;
+  database?: string;
+  user?: string;
+  ssl?: boolean;
+  url?: string;
 }
 
 let projectsBase: string | null = null;
@@ -91,6 +103,49 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 function isValidId(id: unknown): id is string {
   return typeof id === 'string' && UUID_RE.test(id);
 }
+
+// The registry is loaded LAZILY and behind a try/catch. This module is a pure
+// metadata store — it must keep listing and reading records on a machine where a
+// driver failed to load, so a registry failure degrades validation, never the
+// store. (It also keeps `require('./connections')` from pulling four database
+// drivers into a self-check that only touches disk.)
+type Registry = typeof import('./connectors');
+let registryCache: Registry | null | undefined;
+function registry(): Registry | null {
+  if (registryCache === undefined) {
+    try {
+      registryCache = require('./connectors') as Registry;
+    } catch (err: unknown) {
+      console.error('[connections] Connector registry unavailable:', err instanceof Error ? err.message : err);
+      registryCache = null;
+    }
+  }
+  return registryCache;
+}
+
+function connectorOf(connectorId: string): ConnectorDef | null {
+  const reg = registry();
+  return reg ? reg.getConnector(connectorId) : null;
+}
+
+/** True when the registry can run this id. Unknown ids are refused on WRITE
+ *  (you cannot save what you cannot test) but tolerated on READ, so a record
+ *  never disappears because a driver failed to load today. */
+export function isKnownConnectorId(id: unknown): boolean {
+  const reg = registry();
+  if (!reg) return typeof id === 'string' && id.length > 0; // no registry → no opinion
+  return reg.isKnownConnectorId(id);
+}
+
+// Field keys this connector routes to the secret store. Empty when the connector
+// is unknown — in that case nothing is stripped, because nothing is known to be
+// a secret and silently deleting a user's stored value would be worse.
+function secretKeysOf(connectorId: string): ReadonlySet<string> {
+  const def = connectorOf(connectorId);
+  if (!def) return EMPTY_SET;
+  return new Set((def.fields || []).filter((f) => f.secret === true).map((f) => f.key));
+}
+const EMPTY_SET: ReadonlySet<string> = new Set<string>();
 
 // A URL connection's metadata (incl. `url`) lives in the git-SHAREABLE
 // connections/<id>.json. Inline credentials (https://user:pass@host) would leak
@@ -111,6 +166,35 @@ function stripUrlUserinfo(url: string): string {
   }
 }
 
+// Any value key that looks like a URL gets the same userinfo strip. Keyed on the
+// key name rather than the connector so it also covers a v1 record read before
+// its connector module is available.
+function isUrlKey(key: string): boolean {
+  return key === 'url' || key.toLowerCase().endsWith('url');
+}
+
+// Coerce an arbitrary bag into JSON scalars. Anything else (object, array,
+// function, undefined) is dropped rather than persisted — a connection file must
+// stay a flat, shareable, JSON-clonable record.
+function sanitizeValues(
+  input: unknown,
+  secretKeys: ReadonlySet<string> = EMPTY_SET,
+): ConnectionValues {
+  const out: ConnectionValues = {};
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return out;
+  // ponytail: an IPC payload / disk JSON bag — every entry is type-checked below.
+  for (const [key, raw] of Object.entries(input as Record<string, unknown>)) {
+    if (typeof key !== 'string' || !key) continue;
+    if (secretKeys.has(key)) continue; // a secret NEVER enters the project file
+    if (raw === null) { out[key] = null; continue; }
+    if (typeof raw === 'boolean') { out[key] = raw; continue; }
+    if (typeof raw === 'number') { if (Number.isFinite(raw)) out[key] = raw; continue; }
+    if (typeof raw === 'string') { out[key] = isUrlKey(key) ? stripUrlUserinfo(raw) : raw; continue; }
+    // everything else is dropped on purpose
+  }
+  return out;
+}
+
 function connectionsDir(projectId: string): string {
   return path.join(getProjectsBase(), projectId, 'connections');
 }
@@ -119,7 +203,6 @@ function connectionFilePath(projectId: string, id: string): string {
   return path.join(connectionsDir(projectId), id + '.json');
 }
 
-const KINDS: ReadonlySet<string> = new Set<ConnectionKind>(['postgres', 'url']);
 const STATUSES: ReadonlySet<string> = new Set(['ok', 'error', 'untested']);
 
 // Atomic JSON write: temp sibling then rename (atomic on same fs). Copied from
@@ -133,44 +216,128 @@ async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
   await fs.promises.rename(tmp, file); // atomic on same fs
 }
 
-// Basic shape validation for a parsed connection.json (skips corrupt files).
-function isValidConnection(data: any): boolean {
-  return (
-    Boolean(data) &&
-    typeof data.id === 'string' &&
-    data.id.length > 0 &&
-    KINDS.has(data.kind)
-  );
+// ── v1 → v2 migration ────────────────────────────────────────────────────────
+//
+// v1 record:
+//   { id, projectId, name, kind: 'postgres'|'url',
+//     host, port, database, user, ssl, table, query, url,
+//     lastRefreshedAt, lastStatus, lastError, linkedDatasetId,
+//     createdAt, updatedAt, schemaVersion: 1 }
+//
+// Everything above survives: `kind` becomes `connectorId` through the map below
+// (the two v1 kinds are the ids of the two connectors that replaced them), the
+// six source fields become `values`, and table/query/status/telemetry are
+// already v2-shaped. Nothing is dropped and nothing is renamed on disk until the
+// record is next written.
+
+const LEGACY_KIND_TO_CONNECTOR: Readonly<Record<string, string>> = {
+  postgres: 'postgres',
+  url: 'url',
+};
+
+/** The v1 top-level keys that became `values` entries. */
+const LEGACY_VALUE_KEYS: readonly string[] = ['host', 'port', 'database', 'user', 'ssl', 'url'];
+
+function isLegacyRecord(data: Record<string, unknown>): boolean {
+  return typeof data.connectorId !== 'string' || !data.connectorId;
 }
 
-// Coerce a parsed object into a well-formed Connection (fills sane defaults).
+// Lift a v1 record's flat source fields into a v2 `values` bag.
+function migrateLegacyValues(data: Record<string, unknown>): ConnectionValues {
+  const values: ConnectionValues = {};
+  for (const key of LEGACY_VALUE_KEYS) {
+    const raw = data[key];
+    if (typeof raw === 'string') values[key] = isUrlKey(key) ? stripUrlUserinfo(raw) : raw;
+    else if (typeof raw === 'number' && Number.isFinite(raw)) values[key] = raw;
+    else if (typeof raw === 'boolean') values[key] = raw;
+  }
+  return values;
+}
+
+function migrateLegacyConnectorId(data: Record<string, unknown>): string {
+  const kind = typeof data.kind === 'string' ? data.kind : '';
+  return LEGACY_KIND_TO_CONNECTOR[kind] || kind || 'url';
+}
+
+// Basic shape validation for a parsed connection.json (skips corrupt files).
+// Accepts BOTH schemas: a v2 record identifies its connector, a v1 record its
+// kind. Deliberately does NOT consult the registry — an unknown connector is a
+// record we can still list, name and delete.
+function isValidConnection(data: unknown): data is Record<string, unknown> {
+  if (!data || typeof data !== 'object') return false;
+  const d = data as Record<string, unknown>;
+  if (typeof d.id !== 'string' || !d.id) return false;
+  if (typeof d.connectorId === 'string' && d.connectorId) return true;
+  return typeof d.kind === 'string' && d.kind.length > 0;
+}
+
+// Coerce a parsed object into a well-formed Connection, migrating v1 on the way.
 // String fields are copied only when they are strings — never trusts disk JSON.
-function normalize(data: any, projectId: string): Connection {
-  const createdAt = data.createdAt || new Date().toISOString();
-  const kind: ConnectionKind = KINDS.has(data.kind) ? data.kind : 'url';
-  const status = STATUSES.has(data.lastStatus) ? data.lastStatus : 'untested';
+function normalize(data: Record<string, unknown>, projectId: string): Connection {
+  const createdAt = typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString();
+  const legacy = isLegacyRecord(data);
+  const connectorId = legacy
+    ? migrateLegacyConnectorId(data)
+    : String(data.connectorId);
+  // A legacy record's `values` come from its flat fields; a v2 record's from its
+  // own bag. Secret keys are stripped in both directions — a value that somehow
+  // reached disk must not reach a caller as if it were metadata we endorse.
+  const secretKeys = secretKeysOf(connectorId);
+  const values = legacy
+    ? sanitizeValues(migrateLegacyValues(data), secretKeys)
+    : sanitizeValues(data.values, secretKeys);
+  const status = STATUSES.has(String(data.lastStatus)) ? String(data.lastStatus) : 'untested';
+
   const c: Connection = {
     id: String(data.id),
     projectId,
     name: typeof data.name === 'string' && data.name.trim() ? data.name : 'Untitled connection',
-    kind,
+    connectorId,
+    values,
     lastRefreshedAt: typeof data.lastRefreshedAt === 'string' ? data.lastRefreshedAt : null,
     lastStatus: status as Connection['lastStatus'],
     lastError: typeof data.lastError === 'string' ? data.lastError : null,
     linkedDatasetId: typeof data.linkedDatasetId === 'string' ? data.linkedDatasetId : null,
     createdAt,
-    updatedAt: data.updatedAt || createdAt,
-    schemaVersion: 1,
+    updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : createdAt,
+    schemaVersion: 2,
   };
-  if (typeof data.host === 'string') c.host = data.host;
-  if (typeof data.port === 'number') c.port = data.port;
-  if (typeof data.database === 'string') c.database = data.database;
-  if (typeof data.user === 'string') c.user = data.user;
-  if (typeof data.ssl === 'boolean') c.ssl = data.ssl;
   if (typeof data.table === 'string') c.table = data.table;
   if (typeof data.query === 'string') c.query = data.query;
-  if (typeof data.url === 'string') c.url = stripUrlUserinfo(data.url);
   return c;
+}
+
+// Whitelisted copy of a connection for the renderer. There is no secret in a
+// Connection, but we rebuild it field-by-field rather than pass the object
+// through, so nothing unexpected ever rides along — plus one belt-and-braces
+// pass that drops any `values` key the connector marks `secret`.
+export function publicConnection(c: Connection): PublicConnection {
+  const values = sanitizeValues(c.values, secretKeysOf(c.connectorId));
+  const out: PublicConnection = {
+    id: c.id,
+    projectId: c.projectId,
+    name: c.name,
+    connectorId: c.connectorId,
+    values,
+    table: c.table,
+    query: c.query,
+    lastRefreshedAt: c.lastRefreshedAt,
+    lastStatus: c.lastStatus,
+    lastError: c.lastError ?? null,
+    linkedDatasetId: c.linkedDatasetId ?? null,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
+    schemaVersion: 2,
+    // derived display mirror — see PublicConnection
+    kind: c.connectorId,
+  };
+  if (typeof values.host === 'string') out.host = values.host;
+  if (typeof values.port === 'number') out.port = values.port;
+  if (typeof values.database === 'string') out.database = values.database;
+  if (typeof values.user === 'string') out.user = values.user;
+  if (typeof values.ssl === 'boolean') out.ssl = values.ssl;
+  if (typeof values.url === 'string') out.url = values.url;
+  return out;
 }
 
 // No-op stub kept for symmetry with datasets.init()/projects.init(). The
@@ -180,7 +347,8 @@ export async function init(): Promise<void> {
 }
 
 // Return a project's connections, newest-updated first. Skips corrupt/missing
-// files quietly (ENOENT silent; real damage logged).
+// files quietly (ENOENT silent; real damage logged). v1 records are migrated in
+// memory here — reading never rewrites a file.
 export async function listConnections(projectId: string): Promise<Connection[]> {
   if (!isValidId(projectId)) return [];
   const dir = connectionsDir(projectId);
@@ -213,7 +381,7 @@ export async function listConnections(projectId: string): Promise<Connection[]> 
 }
 
 // Load a single connection. Returns null if either id is invalid, or the file is
-// missing/corrupt.
+// missing/corrupt. Migrates v1 → v2 in memory.
 export async function getConnection(projectId: string, id: string): Promise<Connection | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   try {
@@ -229,15 +397,10 @@ export async function getConnection(projectId: string, id: string): Promise<Conn
 // The editable, non-secret fields a caller supplies to create a connection.
 export interface ConnectionInput {
   name: string;
-  kind: ConnectionKind;
-  host?: string;
-  port?: number;
-  database?: string;
-  user?: string;
-  ssl?: boolean;
+  connectorId: string;
+  values?: Record<string, unknown>;
   table?: string;
   query?: string;
-  url?: string;
   lastStatus?: Connection['lastStatus'];
   lastRefreshedAt?: string | null;
   lastError?: string | null;
@@ -245,42 +408,41 @@ export interface ConnectionInput {
 
 // Create a new connection file. Id is generated (never derived from the name).
 // The project's connections/ dir is created lazily. Returns the created
-// connection, or null if the projectId is invalid or its parent project does
-// not exist. The SECRET is NOT handled here — the IPC layer stores it separately
-// via config.setConnectionSecret(connId, ...).
+// connection, or null if the projectId is invalid, its parent project does not
+// exist, or the connectorId is not one the registry can run. The SECRET is NOT
+// handled here — the IPC layer stores it separately via
+// config.setConnectionSecret(connId, ...).
 export async function saveConnection(
   projectId: string,
   input: ConnectionInput,
 ): Promise<Connection | null> {
   if (!isValidId(projectId)) return null;
+  const connectorId = typeof input.connectorId === 'string' ? input.connectorId.trim() : '';
+  // Refuse to persist a record nothing can open. Reads stay permissive; writes
+  // do not, because an unknown id here is a bug in the caller, not old data.
+  if (!connectorId || !isKnownConnectorId(connectorId)) return null;
   // Don't orphan a connection under a bogus-but-UUID-shaped project id.
   const parent = await projects.getProject(projectId);
   if (!parent) return null;
 
   const id = randomUUID();
   const now = new Date().toISOString();
-  const kind: ConnectionKind = KINDS.has(input.kind) ? input.kind : 'url';
   const c: Connection = {
     id,
     projectId,
     name: typeof input.name === 'string' && input.name.trim() ? input.name.trim() : 'Untitled connection',
-    kind,
+    connectorId,
+    values: sanitizeValues(input.values, secretKeysOf(connectorId)),
     lastRefreshedAt: input.lastRefreshedAt ?? null,
     lastStatus: STATUSES.has(input.lastStatus as string) ? (input.lastStatus as Connection['lastStatus']) : 'untested',
     lastError: input.lastError ?? null,
     linkedDatasetId: null,
     createdAt: now,
     updatedAt: now,
-    schemaVersion: 1,
+    schemaVersion: 2,
   };
-  if (typeof input.host === 'string') c.host = input.host;
-  if (typeof input.port === 'number') c.port = input.port;
-  if (typeof input.database === 'string') c.database = input.database;
-  if (typeof input.user === 'string') c.user = input.user;
-  if (typeof input.ssl === 'boolean') c.ssl = input.ssl;
   if (typeof input.table === 'string') c.table = input.table;
   if (typeof input.query === 'string') c.query = input.query;
-  if (typeof input.url === 'string') c.url = stripUrlUserinfo(input.url);
 
   await fs.promises.mkdir(connectionsDir(projectId), { recursive: true });
   await writeJsonAtomic(connectionFilePath(projectId, id), c);
@@ -289,11 +451,15 @@ export async function saveConnection(
 
 // Fields that may be patched onto an existing connection (status/telemetry +
 // editable metadata). id/projectId/createdAt/schemaVersion are never patchable.
-export type ConnectionPatch = Partial<Omit<Connection, 'id' | 'projectId' | 'createdAt' | 'schemaVersion'>>;
+export type ConnectionPatch = Partial<Omit<Connection, 'id' | 'projectId' | 'createdAt' | 'schemaVersion' | 'values'>> & {
+  /** MERGED onto the stored values (not replaced), so a patch can set one field. */
+  values?: Record<string, unknown>;
+};
 
 // Merge a patch onto an existing connection (lastRefreshedAt / lastStatus /
-// linkedDatasetId / edited metadata). Bumps updatedAt. Returns null if either id
-// is invalid or the connection does not exist.
+// linkedDatasetId / edited metadata). Bumps updatedAt, and rewrites the record as
+// v2 — this is where a lazily-migrated v1 file finally lands on disk. Returns
+// null if either id is invalid or the connection does not exist.
 export async function updateConnection(
   projectId: string,
   id: string,
@@ -306,15 +472,19 @@ export async function updateConnection(
   const next: Connection = { ...existing };
   // Only copy known fields, type-checked, so an IPC payload can't inject junk.
   if (typeof patch.name === 'string' && patch.name.trim()) next.name = patch.name.trim();
-  if (patch.kind !== undefined && KINDS.has(patch.kind)) next.kind = patch.kind;
-  if (typeof patch.host === 'string') next.host = patch.host;
-  if (typeof patch.port === 'number') next.port = patch.port;
-  if (typeof patch.database === 'string') next.database = patch.database;
-  if (typeof patch.user === 'string') next.user = patch.user;
-  if (typeof patch.ssl === 'boolean') next.ssl = patch.ssl;
+  if (typeof patch.connectorId === 'string' && isKnownConnectorId(patch.connectorId)) {
+    next.connectorId = patch.connectorId;
+  }
+  if (patch.values !== undefined) {
+    next.values = sanitizeValues(
+      { ...existing.values, ...sanitizeValues(patch.values) },
+      secretKeysOf(next.connectorId),
+    );
+  } else {
+    next.values = sanitizeValues(existing.values, secretKeysOf(next.connectorId));
+  }
   if (typeof patch.table === 'string') next.table = patch.table;
   if (typeof patch.query === 'string') next.query = patch.query;
-  if (typeof patch.url === 'string') next.url = stripUrlUserinfo(patch.url);
   if (patch.lastRefreshedAt !== undefined) next.lastRefreshedAt = patch.lastRefreshedAt;
   if (patch.lastStatus !== undefined && STATUSES.has(patch.lastStatus)) next.lastStatus = patch.lastStatus;
   if (patch.lastError !== undefined) next.lastError = patch.lastError;
