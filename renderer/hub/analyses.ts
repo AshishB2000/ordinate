@@ -504,7 +504,7 @@ function anDraftReviewModal(draft: any): Promise<boolean> {
       done = true;
       document.removeEventListener('keydown', onKey, true);
       // Tear down any preview chart before its container leaves the document.
-      scroll.querySelectorAll('.an-draft-viz').forEach((c) => {
+      scroll.querySelectorAll('.an-draft-viz .dash-viz-area').forEach((c) => {
         try {
           const inst = chartInstances.get(c as HTMLElement);
           if (inst && typeof inst.destroy === 'function') inst.destroy();
@@ -574,9 +574,17 @@ function anDraftVisualEl(v: any): HTMLElement {
     return wrap;
   }
 
+  // A fixed-height box holding the exact `.dash-viz-area .cv-viz-area` pairing
+  // the dashboard grid uses — that combination is what bounds a chart to its
+  // container, and it is already proven at card size. `.cv-viz-area` alone
+  // carries `min-height: 300px` and a viewport-sized canvas wrapper, which
+  // painted straight through the card below this one.
+  const box = document.createElement('div');
+  box.className = 'an-draft-viz';
   const area = document.createElement('div');
-  area.className = 'an-draft-viz cv-viz-area';
-  wrap.appendChild(area);
+  area.className = 'dash-viz-area cv-viz-area';
+  box.appendChild(area);
+  wrap.appendChild(box);
   // Deferred so the container has its box before Chart.js measures it — a chart
   // sized inside a not-yet-laid-out modal renders at zero height.
   window.setTimeout(() => {
