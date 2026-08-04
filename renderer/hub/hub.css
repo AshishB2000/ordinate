@@ -7391,3 +7391,51 @@ body.an-dragging .an-wells .viz-build-row[data-well] {
   border-radius: 4px;
   background: var(--surface-3);
 }
+
+/* AI in the Visuals panel. Deliberately ABOVE the chip row and visually apart
+   from it: the chips' "Recommended" marks are the app's own shape logic, and
+   nothing here may read as if a model produced them. */
+.an-ai-slot { display: flex; flex-direction: column; gap: 6px; }
+.an-ai-btn { width: 100%; }
+.an-ai-note {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.an-ai-note[hidden] { display: none; }
+
+/* ── Direct manipulation on the sheet ────────────────────────────────────────
+   Drag the card to move, drag its right/bottom edge to resize. A ghost shows the
+   target cell while the card stays put — re-laying out the real card mid-drag
+   would re-render its chart on every frame. */
+.an-workbench.is-active #dash-grid .dash-card-head { cursor: grab; }
+.an-workbench.is-active #dash-grid .dash-card.is-dragging { opacity: 0.5; }
+.an-workbench.is-active #dash-grid .dash-card.is-dragging .dash-card-head { cursor: grabbing; }
+body.an-grabbing { user-select: none; cursor: grabbing; }
+.an-workbench.is-active #dash-grid .dash-card { position: relative; }
+.an-workbench.is-active #dash-grid .dash-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Handles sit ON the edge, half in and half out, so the whole border reads as
+   grabbable rather than just a corner pip. */
+.an-resize { position: absolute; z-index: 2; }
+.an-resize--e { top: 8px; bottom: 14px; right: -3px; width: 7px; cursor: ew-resize; }
+.an-resize--s { left: 8px; right: 14px; bottom: -3px; height: 7px; cursor: ns-resize; }
+.an-resize--se { right: -3px; bottom: -3px; width: 14px; height: 14px; cursor: nwse-resize; }
+.an-workbench.is-active #dash-grid .dash-card:hover .an-resize--se,
+.an-workbench.is-active #dash-grid .dash-card.is-selected .an-resize--se {
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  border-bottom-right-radius: 4px;
+}
+
+.an-ghost {
+  border: 2px dashed var(--accent);
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  pointer-events: none;
+  z-index: 1;
+}

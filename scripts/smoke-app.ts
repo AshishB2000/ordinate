@@ -698,20 +698,167 @@ async function main(): Promise<void> {
      JSON.stringify(bound.wells) === JSON.stringify(['category', 'values', 'series', 'filters']) &&
        bound.wellsVisible, JSON.stringify(bound.wells));
   ok('…the chart-type chips render', bound.chips > 0, `${bound.chips} chips`);
-  ok('…and Properties binds to the card', bound.propsRows >= 3 && !!bound.title,
+  // Exactly ONE chip row. Selecting a card and writing a well edit both rebuild
+  // it, and each clears the mount before its await — two in flight left two rows
+  // stacked, which every count-based assertion happily passed.
+  ok('…as exactly one row, not one per in-flight rebuild',
+     await win.evaluate(() => document.querySelectorAll('#an-switcher .cv-viz-switcher').length) === 1,
+     await win.evaluate(() =>
+       String(document.querySelectorAll('#an-switcher .cv-viz-switcher').length) + ' switcher row(s)'));
+
+  // ── AI in the Visuals panel (phase D) ─────────────────────────────────────
+  // The point of this block is the SEPARATION. The ✨ button is a model call;
+  // the chips' "Recommended" tier is app-computed shape eligibility. A smoke run
+  // has no model, which is exactly the case that proves they are independent:
+  // the button must be off and say why, while the chips still work.
+  const ai = await win.evaluate(() => {
+    const btn = document.getElementById('an-suggest-btn') as HTMLButtonElement | null;
+    const note = document.getElementById('an-ai-note') as HTMLElement | null;
+    const slot = document.getElementById('an-ai-slot') as HTMLElement | null;
+    const switcher = document.getElementById('an-switcher') as HTMLElement | null;
+    const sr = slot?.getBoundingClientRect();
+    const wr = switcher?.getBoundingClientRect();
+    return {
+      present: !!btn,
+      label: (btn?.textContent || '').trim(),
+      disabled: !!btn?.disabled,
+      noteVisible: !!note && note.offsetParent !== null,
+      noteText: (note?.textContent || '').trim(),
+      // Above the chips, and visually separate — nothing here may read as if a
+      // model produced the Recommended marks.
+      aboveChips: !!(sr && wr) && sr.bottom <= wr.top + 1,
+      chips: switcher ? switcher.querySelectorAll('.cv-viz-chip').length : 0,
+      activeChip: (switcher?.querySelector('.cv-viz-chip.active')?.textContent || '').trim(),
+    };
+  });
+  ok('the ✨ Suggest a visual button is offered, above the chart types',
+     ai.present && /Suggest a visual/.test(ai.label) && ai.aboveChips, JSON.stringify(ai));
+  ok('…with no model it is DISABLED and says so',
+     ai.disabled && ai.noteVisible && /needs? a model/i.test(ai.noteText), ai.noteText);
+  ok('…while the app-computed chart types still work, and say they are the app\'s',
+     ai.chips > 0 && /recommended by the app itself/i.test(ai.noteText) && !!ai.activeChip,
+     `${ai.chips} chips, active="${ai.activeChip}"`);
+
+  // The "+ More" panel is where the Recommended TIER is named. It must exist
+  // with no model configured — it is shape eligibility, not a suggestion.
+  const tiers = await win.evaluate(() => {
+    const more = [...document.querySelectorAll('#an-switcher .cv-viz-chip, #an-switcher button')]
+      .find((b) => /More/.test(b.textContent || '')) as HTMLElement | undefined;
+    if (!more) return null;
+    more.click();
+    // The panel is appended to <body> (renderResult.ts openMorePanel), not into
+    // the switcher — so scoping the query to #an-switcher finds nothing.
+    const labels = [...document.querySelectorAll('.cv-more-panel .cv-more-group-label')]
+      .map((l) => (l.textContent || '').trim());
+    return { opened: true, hasRecommended: labels.some((l) => /^Recommended/.test(l)), labels: labels.slice(0, 6) };
+  });
+  ok('…and “Recommended” is a tier the app fills with no model involved',
+     !!tiers && tiers.hasRecommended, JSON.stringify(tiers));
+  await win.evaluate(() => document.body.click());
+  await win.waitForTimeout(300);
+  ok('…and Properties binds to the card', bound.propsRows >= 2 && !!bound.title,
      `${bound.propsRows} rows, title="${bound.title}"`);
 
-  // Move/resize/remove moved INTO Properties, so the nine-button cluster is off
-  // every card header. They must not merely be duplicated — that was two rows of
-  // wrapped buttons inside a narrowed centre column saying the same thing twice.
+  // Layout is DIRECT MANIPULATION: the nine-button cluster is off the card
+  // header and was NOT replaced by steppers in Properties. Aiming at a target
+  // four clicks away is arithmetic, not editing.
   const ctrls = await win.evaluate(() => ({
     onCards: [...document.querySelectorAll('#dash-grid .dash-card-ctrls')]
       .filter((c) => (c as HTMLElement).offsetParent !== null).length,
-    inProps: document.querySelectorAll('#an-props .an-prop-btn').length,
+    steppers: document.querySelectorAll('#an-props .an-prop-btn').length,
+    handles: [...document.querySelectorAll('#dash-grid .dash-card.is-selected .an-resize')]
+      .map((h) => [...h.classList].find((c) => c.startsWith('an-resize--'))),
     remove: !!document.querySelector('#an-props .an-prop-del'),
   }));
-  ok('…the per-card button cluster is gone, and Properties owns those controls',
-     ctrls.onCards === 0 && ctrls.inProps === 8 && ctrls.remove, JSON.stringify(ctrls));
+  ok('…the per-card button cluster is gone, and no steppers replaced it',
+     ctrls.onCards === 0 && ctrls.steppers === 0 && ctrls.remove, JSON.stringify(ctrls));
+  ok('…the card carries right, bottom and corner resize handles instead',
+     JSON.stringify(ctrls.handles) ===
+       JSON.stringify(['an-resize--e', 'an-resize--s', 'an-resize--se']),
+     JSON.stringify(ctrls.handles));
+
+  // ── Drag to move, drag an edge to resize ──────────────────────────────────
+  // A real pointer gesture: pointerdown on the header, pointermove across the
+  // grid, pointerup. Asserted through the LAYOUT the card lands on, because that
+  // is the thing being manipulated. The ghost must appear during the drag and
+  // the card must NOT move until release — re-laying out mid-drag would
+  // re-render the chart on every frame.
+  const moved: any = await win.evaluate(() => {
+    const el = document.querySelector('#dash-grid .dash-card.is-selected') as HTMLElement;
+    const head = el.querySelector('.dash-card-head') as HTMLElement;
+    const grid = document.getElementById('dash-grid') as HTMLElement;
+    const before = el.style.gridColumn;
+    const pitch = (grid.getBoundingClientRect().width + 12) / 12;
+    const r = head.getBoundingClientRect();
+    const opts = (x: number, y: number) =>
+      ({ bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, pointerId: 1 });
+    head.dispatchEvent(new PointerEvent('pointerdown', opts(r.left + 20, r.top + 8)));
+    window.dispatchEvent(new PointerEvent('pointermove', opts(r.left + 20 + pitch * 2, r.top + 8)));
+    const ghost = document.querySelector('.an-ghost') as HTMLElement | null;
+    // Left HELD here on purpose: the screenshot below is taken mid-gesture, with
+    // the ghost on screen and the card still in its old cell. Released after.
+    (window as any).__endDrag = () =>
+      window.dispatchEvent(new PointerEvent('pointerup', opts(r.left + 20 + pitch * 2, r.top + 8)));
+    return {
+      before,
+      ghostShown: !!ghost && ghost.getBoundingClientRect().width > 0,
+      ghostCol: ghost?.style.gridColumn || '',
+      cardUnmoved: el.style.gridColumn === before,
+    };
+  });
+
+  // What a drag actually looks like: ghost at the target cell, card dimmed in
+  // place. Only a held gesture can show this, so it is captured before release.
+  const dragShot = path.join(shotDir, 'card-drag.png');
+  await win.screenshot({ path: dragShot });
+  ok('mid-drag screenshot captured', fs.existsSync(dragShot) && fs.statSync(dragShot).size > 5000,
+     `${Math.round(fs.statSync(dragShot).size / 1024)} KB -> ${dragShot}`);
+
+  const landed = await win.evaluate(() => {
+    (window as any).__endDrag();
+    const el = document.querySelector('#dash-grid .dash-card.is-selected') as HTMLElement;
+    return { after: el.style.gridColumn, ghostGone: !document.querySelector('.an-ghost') };
+  });
+  Object.assign(moved, landed);
+  ok('dragging the card shows a ghost at the target cell',
+     moved.ghostShown && !!moved.ghostCol, JSON.stringify({ ghost: moved.ghostCol }));
+  ok('…and the card itself does not move until the pointer is released',
+     moved.cardUnmoved, `${moved.before} throughout the drag`);
+  ok('…on release it lands where the ghost was, and the ghost is gone',
+     moved.after !== moved.before && moved.after === moved.ghostCol && moved.ghostGone,
+     `${moved.before} -> ${moved.after}`);
+
+  const resized = await win.evaluate(() => {
+    const el = document.querySelector('#dash-grid .dash-card.is-selected') as HTMLElement;
+    const handle = el.querySelector('.an-resize--s') as HTMLElement;
+    const before = el.style.gridRow;
+    const r = handle.getBoundingClientRect();
+    const opts = (x: number, y: number) =>
+      ({ bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, pointerId: 2 });
+    handle.dispatchEvent(new PointerEvent('pointerdown', opts(r.left + 2, r.top + 2)));
+    window.dispatchEvent(new PointerEvent('pointermove', opts(r.left + 2, r.top + 2 + (48 + 12) * 2)));
+    window.dispatchEvent(new PointerEvent('pointerup', opts(r.left + 2, r.top + 2 + (48 + 12) * 2)));
+    return { before, after: el.style.gridRow };
+  });
+  ok('dragging the bottom edge makes the card taller',
+     resized.after !== resized.before, `${resized.before} -> ${resized.after}`);
+
+  // Dragging cannot be the ONLY way to lay out a sheet.
+  const keyed = await win.evaluate(() => {
+    const el = document.querySelector('#dash-grid .dash-card.is-selected') as HTMLElement;
+    const before = el.style.gridColumn;
+    el.focus();
+    const focused = document.activeElement === el;
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    const afterMove = el.style.gridColumn;
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', shiftKey: true, bubbles: true }));
+    return { focused, before, afterMove, afterResize: el.style.gridColumn };
+  });
+  ok('a card is focusable, and arrow keys move it without a mouse',
+     keyed.focused && keyed.afterMove !== keyed.before,
+     `${keyed.before} -> ${keyed.afterMove}`);
+  ok('…and shift+arrow resizes it', keyed.afterResize !== keyed.afterMove,
+     `${keyed.afterMove} -> ${keyed.afterResize}`);
 
   const benchShot = path.join(shotDir, 'authoring-workbench.png');
   await win.screenshot({ path: benchShot });

@@ -150,6 +150,7 @@ async function anSelectCard(cardId: string | null): Promise<void> {
   anEnsureForm();
   anForm!.setColumns(anColumns, visual.encoding, Array.isArray(visual.filters) ? visual.filters : []);
   anShowEncoding(true, '');
+  await anRenderAiSlot();
   await anRenderSwitcher();
 }
 
@@ -244,6 +245,92 @@ function anDropInto(well: string, column: string): void {
   if (!okDrop) showToast('“' + column + '” is not a column of this visual’s dataset.');
 }
 
+// ── AI in the Visuals panel ─────────────────────────────────────────────────
+// TWO MECHANISMS, TWO LABELS. This button is a model call (suggestVisual). The
+// "Recommended" marks on the chips below are app-computed shape eligibility and
+// involve no model at all. Conflating them would credit the app's own logic to
+// an LLM and, worse, make the chip row look broken when no model is configured —
+// it works perfectly without one, which is why the note below says so.
+let anAiReady: boolean | null = null; // null = not asked yet
+// Only the newest anRenderSwitcher call may paint. Selecting a card and writing
+// a well edit both rebuild the chips, and each clears the mount BEFORE its await
+// — so two in flight clear twice and then append twice, leaving two chip rows.
+let anSwitcherSeq = 0;
+
+async function anRenderAiSlot(): Promise<void> {
+  const slot = anEl('an-ai-slot');
+  if (!slot) return;
+  slot.innerHTML = '';
+  if (anAiReady === null) {
+    try {
+      const st: any = await window.hub.getKeyStatus();
+      anAiReady = !!(st && st.isReady);
+    } catch (_) {
+      anAiReady = false;
+    }
+  }
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn btn-sm an-ai-btn';
+  btn.id = 'an-suggest-btn';
+  btn.textContent = '✨ Suggest a visual';
+  btn.disabled = !anAiReady;
+  btn.addEventListener('click', () => anSuggestVisual(btn));
+  slot.appendChild(btn);
+
+  const note = document.createElement('p');
+  note.className = 'an-ai-note';
+  note.id = 'an-ai-note';
+  if (!anAiReady) {
+    note.textContent =
+      'AI suggestions need a model in Settings → Execution. The chart types below are recommended by the app itself and work without one.';
+  } else {
+    note.hidden = true;
+  }
+  slot.appendChild(note);
+}
+
+function anSetAiNote(text: string): void {
+  const note = anEl('an-ai-note');
+  if (!note) return;
+  note.textContent = text;
+  note.hidden = !text;
+}
+
+async function anSuggestVisual(btn: HTMLButtonElement): Promise<void> {
+  if (!anVisual || !currentProjectId || !anForm) return;
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Thinking…';
+  let res: any;
+  try {
+    res = await window.hub.suggestVisual(currentProjectId, String(anVisual.datasetId));
+  } catch (_) {
+    res = { ok: false };
+  }
+  btn.disabled = false;
+  btn.textContent = label || '✨ Suggest a visual';
+
+  if (res && res.notReady) {
+    anAiReady = false;
+    await anRenderAiSlot();
+    return;
+  }
+  if (!res || res.ok === false || !res.encoding) {
+    anSetAiNote((res && res.error) || 'Could not suggest a visual.');
+    return;
+  }
+  // Confirmed before it touches anything, like every other AI action here: the
+  // model proposes STRUCTURE and the user approves it. Every figure that then
+  // appears is computed by the app from the same encoding.
+  if (!window.confirm('Apply the suggested visual? You can still adjust it before it is saved.')) return;
+  anSetAiNote('');
+  anForm.setEncoding(res.encoding);
+  if (typeof res.chartType === 'string' && res.chartType) anVisual.chartType = res.chartType;
+  anScheduleWrite();
+}
+
 // The chart-type chips. Eligibility ("Recommended") is APP-COMPUTED from the
 // data's shape — no model — and it is derived here exactly as the Visuals
 // builder derives it, from the same computeVisualData reply. Re-deriving it
@@ -251,6 +338,7 @@ function anDropInto(well: string, column: string): void {
 async function anRenderSwitcher(): Promise<void> {
   const mount = anEl('an-switcher');
   if (!mount || !anVisual || !anForm || !currentProjectId) return;
+  const seq = ++anSwitcherSeq;
   mount.innerHTML = '';
   const encoding = anForm.getEncoding();
   if (!encoding.category || !encoding.values || !encoding.values.length) return;
@@ -262,6 +350,8 @@ async function anRenderSwitcher(): Promise<void> {
   } catch (_) {
     res = null;
   }
+  // A newer call started while this one was awaiting; that one owns the mount.
+  if (seq !== anSwitcherSeq) return;
   if (!res || res.ok === false || !anVisual) return;
   const data = res.data || { labels: [], series: [] };
 
@@ -287,6 +377,8 @@ async function anRenderSwitcher(): Promise<void> {
       anScheduleWrite();
     },
   });
+  if (seq !== anSwitcherSeq) return;
+  mount.innerHTML = '';
   mount.appendChild(anPicker.switcher);
 }
 
@@ -360,32 +452,14 @@ function anRenderProps(card: any): void {
   kind.textContent = card.type;
   host.appendChild(row('Card', kind));
 
-  // Size + position. These were nine buttons on every card header; one selected
-  // card needs them once, which is most of the clutter gone from the sheet.
-  const mk = (label: string, aria: string, fn: () => void): HTMLButtonElement => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'an-prop-btn';
-    b.textContent = label;
-    b.setAttribute('aria-label', aria);
-    b.addEventListener('click', () => { fn(); anPaintSelection(); });
-    return b;
-  };
-  const move = document.createElement('div');
-  move.className = 'an-prop-grid';
-  move.appendChild(mk('◀', 'Move left', () => nudgeCard(card, -1, 0)));
-  move.appendChild(mk('▶', 'Move right', () => nudgeCard(card, 1, 0)));
-  move.appendChild(mk('▲', 'Move up', () => nudgeCard(card, 0, -1)));
-  move.appendChild(mk('▼', 'Move down', () => nudgeCard(card, 0, 1)));
-  host.appendChild(row('Position', move));
-
-  const size = document.createElement('div');
-  size.className = 'an-prop-grid';
-  size.appendChild(mk('W−', 'Narrower', () => resizeCard(card, -1, 0)));
-  size.appendChild(mk('W+', 'Wider', () => resizeCard(card, 1, 0)));
-  size.appendChild(mk('H−', 'Shorter', () => resizeCard(card, 0, -1)));
-  size.appendChild(mk('H+', 'Taller', () => resizeCard(card, 0, 1)));
-  host.appendChild(row('Size', size));
+  // NO position/size steppers here. The card is dragged and resized directly on
+  // the sheet (anWireCards), which is what a layout wants — aiming at a target
+  // four clicks away is not editing, it is arithmetic. Keyboard users get arrows
+  // and shift+arrows on the focused card, so the drag is not the only path.
+  const how = document.createElement('p');
+  how.className = 'an-prop-note an-prop-note--info';
+  how.textContent = 'Drag the card to move it, or drag its right/bottom edge to resize. With the card focused, arrow keys move it and shift+arrows resize it.';
+  host.appendChild(how);
 
   if (card.type === 'visual' && anVisual) {
     const nameIn = document.createElement('input');
@@ -422,6 +496,171 @@ function anRenderProps(card: any): void {
   host.appendChild(del);
 }
 
+// ── Direct manipulation: drag to move, drag an edge to resize ───────────────
+// QuickSight moves a visual by dragging it and resizes it by its edges, and that
+// is what a sheet layout wants — stepper buttons make you aim at a target four
+// clicks away.
+//
+// Pointer Events, not HTML5 drag-and-drop. HTML5 drag gives no continuous
+// position (dragover fires coarsely, and the drag image is the browser's), which
+// is exactly what a snap-to-grid preview needs. setPointerCapture also keeps the
+// gesture alive when the pointer leaves the card, which a fast drag always does.
+//
+// Nothing moves until the pointer is released: a ghost shows the target cell
+// while the card stays put. Re-laying out the real card mid-drag would re-render
+// its chart on every frame.
+let anGhost: HTMLElement | null = null;
+let anGesture: any = null;
+
+/** Column pitch: 12 tracks with 11 gaps between them, so pitch = (w + gap) / 12. */
+function anColPitch(grid: HTMLElement): number {
+  return (grid.getBoundingClientRect().width + DASH_GAP_PX) / DASH_GRID_COLS;
+}
+
+function anRowPitch(): number {
+  return DASH_ROW_PX + DASH_GAP_PX;
+}
+
+function anShowGhost(grid: HTMLElement, x: number, y: number, w: number, h: number): void {
+  if (!anGhost) {
+    anGhost = document.createElement('div');
+    anGhost.className = 'an-ghost';
+    grid.appendChild(anGhost);
+  }
+  anGhost.style.gridColumn = x + 1 + ' / span ' + w;
+  anGhost.style.gridRow = y + 1 + ' / span ' + h;
+}
+
+function anClearGhost(): void {
+  if (anGhost) anGhost.remove();
+  anGhost = null;
+}
+
+function anBeginGesture(e: PointerEvent, card: any, el: HTMLElement, mode: string): void {
+  const grid = anEl('dash-grid');
+  if (!grid || dashMode !== 'analysis') return;
+  const l = card.layout || (card.layout = { x: 0, y: 0, w: 6, h: 4 });
+  anGesture = {
+    card, el, mode,
+    startX: e.clientX, startY: e.clientY,
+    x0: l.x || 0, y0: l.y || 0, w0: l.w || 1, h0: l.h || 1,
+    next: { x: l.x || 0, y: l.y || 0, w: l.w || 1, h: l.h || 1 },
+    grid,
+  };
+  el.classList.add('is-dragging');
+  document.body.classList.add('an-grabbing');
+  // Keeps the gesture alive when the pointer leaves the card, which a fast drag
+  // always does. It THROWS for a pointer id the browser has no active pointer
+  // for, and capture is an optimisation here — the window listeners carry the
+  // gesture either way — so a failure must not take the drag down with it.
+  try {
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  } catch (_) { /* no active pointer for that id */ }
+  e.preventDefault();
+}
+
+function anMoveGesture(e: PointerEvent): void {
+  if (!anGesture) return;
+  const g = anGesture;
+  const dx = Math.round((e.clientX - g.startX) / anColPitch(g.grid));
+  const dy = Math.round((e.clientY - g.startY) / anRowPitch());
+  if (g.mode === 'move') {
+    g.next.x = clampInt(g.x0 + dx, 0, DASH_GRID_COLS - g.w0, g.x0);
+    g.next.y = Math.max(0, g.y0 + dy);
+    g.next.w = g.w0;
+    g.next.h = g.h0;
+  } else {
+    // Resize from the right/bottom edge: x,y are fixed and w,h follow the pointer.
+    g.next.x = g.x0;
+    g.next.y = g.y0;
+    g.next.w = g.mode === 'e' || g.mode === 'se'
+      ? clampInt(g.w0 + dx, 1, DASH_GRID_COLS - g.x0, g.w0) : g.w0;
+    g.next.h = g.mode === 's' || g.mode === 'se'
+      ? Math.max(1, g.h0 + dy) : g.h0;
+  }
+  anShowGhost(g.grid, g.next.x, g.next.y, g.next.w, g.next.h);
+}
+
+function anEndGesture(): void {
+  if (!anGesture) return;
+  const g = anGesture;
+  anGesture = null;
+  g.el.classList.remove('is-dragging');
+  document.body.classList.remove('an-grabbing');
+  anClearGhost();
+  const l = g.card.layout;
+  const changed = l.x !== g.next.x || l.y !== g.next.y || l.w !== g.next.w || l.h !== g.next.h;
+  if (!changed) return;
+  l.x = g.next.x; l.y = g.next.y; l.w = g.next.w; l.h = g.next.h;
+  reapplyCardStyle(g.card);
+  markDashDirty();
+}
+
+/**
+ * Attach the gesture to every card. Called after each grid render, because
+ * renderDashGrid rebuilds the card elements.
+ */
+function anWireCards(): void {
+  if (dashMode !== 'analysis') return;
+  const grid = anEl('dash-grid');
+  if (!grid) return;
+  document.querySelectorAll('#dash-grid .dash-card').forEach((node) => {
+    const el = node as HTMLElement;
+    if (el.dataset.anWired === '1') return;
+    el.dataset.anWired = '1';
+    const card = anCardById(el.dataset.cardId || null);
+    if (!card) return;
+
+    // The native HTML5 drag the dashboard editor uses would fight the pointer
+    // gesture — both start from the same press.
+    const head = el.querySelector('.dash-card-head') as HTMLElement | null;
+    if (head) {
+      head.draggable = false;
+      head.addEventListener('pointerdown', (e) => {
+        if ((e as PointerEvent).button !== 0) return;
+        anSelectCard(card.id);
+        anBeginGesture(e as PointerEvent, card, el, 'move');
+      });
+    }
+
+    // Edge + corner handles. Right = width, bottom = height, corner = both.
+    (['e', 's', 'se'] as const).forEach((mode) => {
+      const h = document.createElement('span');
+      h.className = 'an-resize an-resize--' + mode;
+      h.setAttribute('aria-hidden', 'true'); // keyboard resize is on the card itself
+      h.addEventListener('pointerdown', (e) => {
+        if ((e as PointerEvent).button !== 0) return;
+        e.stopPropagation();
+        anSelectCard(card.id);
+        anBeginGesture(e as PointerEvent, card, el, mode);
+      });
+      el.appendChild(h);
+    });
+
+    // The keyboard path. Dragging is a mouse gesture, and it cannot be the ONLY
+    // way to lay out a sheet — arrows move, shift+arrows resize.
+    el.tabIndex = 0;
+    el.addEventListener('keydown', (e) => {
+      const k = (e as KeyboardEvent).key;
+      const d = k === 'ArrowLeft' ? [-1, 0] : k === 'ArrowRight' ? [1, 0]
+        : k === 'ArrowUp' ? [0, -1] : k === 'ArrowDown' ? [0, 1] : null;
+      if (!d) return;
+      e.preventDefault();
+      anSelectCard(card.id);
+      if ((e as KeyboardEvent).shiftKey) resizeCard(card, d[0], d[1]);
+      else nudgeCard(card, d[0], d[1]);
+    });
+  });
+
+  // One listener pair for the whole gesture, not one per card.
+  if (!grid.dataset.anGestures) {
+    grid.dataset.anGestures = '1';
+    window.addEventListener('pointermove', anMoveGesture);
+    window.addEventListener('pointerup', anEndGesture);
+    window.addEventListener('pointercancel', anEndGesture);
+  }
+}
+
 // ── Wiring ──────────────────────────────────────────────────────────────────
 /** Called by dashboards.ts after every grid render, and on open/close. */
 function anSyncWorkbench(): void {
@@ -437,6 +676,7 @@ function anSyncWorkbench(): void {
     return;
   }
   anPaintSelection();
+  anWireCards();
 }
 
 function initAuthoring(): void {
