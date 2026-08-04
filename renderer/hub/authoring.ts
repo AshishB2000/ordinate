@@ -150,6 +150,7 @@ async function anSelectCard(cardId: string | null): Promise<void> {
   anEnsureForm();
   anForm!.setColumns(anColumns, visual.encoding, Array.isArray(visual.filters) ? visual.filters : []);
   anShowEncoding(true, '');
+  await anRenderAiSlot();
   await anRenderSwitcher();
 }
 
@@ -242,6 +243,88 @@ function anDropInto(well: string, column: string): void {
   if (!anForm) return;
   const okDrop = anForm.dropField(well, column);
   if (!okDrop) showToast('“' + column + '” is not a column of this visual’s dataset.');
+}
+
+// ── AI in the Visuals panel ─────────────────────────────────────────────────
+// TWO MECHANISMS, TWO LABELS. This button is a model call (suggestVisual). The
+// "Recommended" marks on the chips below are app-computed shape eligibility and
+// involve no model at all. Conflating them would credit the app's own logic to
+// an LLM and, worse, make the chip row look broken when no model is configured —
+// it works perfectly without one, which is why the note below says so.
+let anAiReady: boolean | null = null; // null = not asked yet
+
+async function anRenderAiSlot(): Promise<void> {
+  const slot = anEl('an-ai-slot');
+  if (!slot) return;
+  slot.innerHTML = '';
+  if (anAiReady === null) {
+    try {
+      const st: any = await window.hub.getKeyStatus();
+      anAiReady = !!(st && st.isReady);
+    } catch (_) {
+      anAiReady = false;
+    }
+  }
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn btn-sm an-ai-btn';
+  btn.id = 'an-suggest-btn';
+  btn.textContent = '✨ Suggest a visual';
+  btn.disabled = !anAiReady;
+  btn.addEventListener('click', () => anSuggestVisual(btn));
+  slot.appendChild(btn);
+
+  const note = document.createElement('p');
+  note.className = 'an-ai-note';
+  note.id = 'an-ai-note';
+  if (!anAiReady) {
+    note.textContent =
+      'AI suggestions need a model in Settings → Execution. The chart types below are recommended by the app itself and work without one.';
+  } else {
+    note.hidden = true;
+  }
+  slot.appendChild(note);
+}
+
+function anSetAiNote(text: string): void {
+  const note = anEl('an-ai-note');
+  if (!note) return;
+  note.textContent = text;
+  note.hidden = !text;
+}
+
+async function anSuggestVisual(btn: HTMLButtonElement): Promise<void> {
+  if (!anVisual || !currentProjectId || !anForm) return;
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Thinking…';
+  let res: any;
+  try {
+    res = await window.hub.suggestVisual(currentProjectId, String(anVisual.datasetId));
+  } catch (_) {
+    res = { ok: false };
+  }
+  btn.disabled = false;
+  btn.textContent = label || '✨ Suggest a visual';
+
+  if (res && res.notReady) {
+    anAiReady = false;
+    await anRenderAiSlot();
+    return;
+  }
+  if (!res || res.ok === false || !res.encoding) {
+    anSetAiNote((res && res.error) || 'Could not suggest a visual.');
+    return;
+  }
+  // Confirmed before it touches anything, like every other AI action here: the
+  // model proposes STRUCTURE and the user approves it. Every figure that then
+  // appears is computed by the app from the same encoding.
+  if (!window.confirm('Apply the suggested visual? You can still adjust it before it is saved.')) return;
+  anSetAiNote('');
+  anForm.setEncoding(res.encoding);
+  if (typeof res.chartType === 'string' && res.chartType) anVisual.chartType = res.chartType;
+  anScheduleWrite();
 }
 
 // The chart-type chips. Eligibility ("Recommended") is APP-COMPUTED from the

@@ -698,6 +698,57 @@ async function main(): Promise<void> {
      JSON.stringify(bound.wells) === JSON.stringify(['category', 'values', 'series', 'filters']) &&
        bound.wellsVisible, JSON.stringify(bound.wells));
   ok('…the chart-type chips render', bound.chips > 0, `${bound.chips} chips`);
+
+  // ── AI in the Visuals panel (phase D) ─────────────────────────────────────
+  // The point of this block is the SEPARATION. The ✨ button is a model call;
+  // the chips' "Recommended" tier is app-computed shape eligibility. A smoke run
+  // has no model, which is exactly the case that proves they are independent:
+  // the button must be off and say why, while the chips still work.
+  const ai = await win.evaluate(() => {
+    const btn = document.getElementById('an-suggest-btn') as HTMLButtonElement | null;
+    const note = document.getElementById('an-ai-note') as HTMLElement | null;
+    const slot = document.getElementById('an-ai-slot') as HTMLElement | null;
+    const switcher = document.getElementById('an-switcher') as HTMLElement | null;
+    const sr = slot?.getBoundingClientRect();
+    const wr = switcher?.getBoundingClientRect();
+    return {
+      present: !!btn,
+      label: (btn?.textContent || '').trim(),
+      disabled: !!btn?.disabled,
+      noteVisible: !!note && note.offsetParent !== null,
+      noteText: (note?.textContent || '').trim(),
+      // Above the chips, and visually separate — nothing here may read as if a
+      // model produced the Recommended marks.
+      aboveChips: !!(sr && wr) && sr.bottom <= wr.top + 1,
+      chips: switcher ? switcher.querySelectorAll('.cv-viz-chip').length : 0,
+      activeChip: (switcher?.querySelector('.cv-viz-chip.active')?.textContent || '').trim(),
+    };
+  });
+  ok('the ✨ Suggest a visual button is offered, above the chart types',
+     ai.present && /Suggest a visual/.test(ai.label) && ai.aboveChips, JSON.stringify(ai));
+  ok('…with no model it is DISABLED and says so',
+     ai.disabled && ai.noteVisible && /needs? a model/i.test(ai.noteText), ai.noteText);
+  ok('…while the app-computed chart types still work, and say they are the app\'s',
+     ai.chips > 0 && /recommended by the app itself/i.test(ai.noteText) && !!ai.activeChip,
+     `${ai.chips} chips, active="${ai.activeChip}"`);
+
+  // The "+ More" panel is where the Recommended TIER is named. It must exist
+  // with no model configured — it is shape eligibility, not a suggestion.
+  const tiers = await win.evaluate(() => {
+    const more = [...document.querySelectorAll('#an-switcher .cv-viz-chip, #an-switcher button')]
+      .find((b) => /More/.test(b.textContent || '')) as HTMLElement | undefined;
+    if (!more) return null;
+    more.click();
+    // The panel is appended to <body> (renderResult.ts openMorePanel), not into
+    // the switcher — so scoping the query to #an-switcher finds nothing.
+    const labels = [...document.querySelectorAll('.cv-more-panel .cv-more-group-label')]
+      .map((l) => (l.textContent || '').trim());
+    return { opened: true, hasRecommended: labels.some((l) => /^Recommended/.test(l)), labels: labels.slice(0, 6) };
+  });
+  ok('…and “Recommended” is a tier the app fills with no model involved',
+     !!tiers && tiers.hasRecommended, JSON.stringify(tiers));
+  await win.evaluate(() => document.body.click());
+  await win.waitForTimeout(300);
   ok('…and Properties binds to the card', bound.propsRows >= 3 && !!bound.title,
      `${bound.propsRows} rows, title="${bound.title}"`);
 

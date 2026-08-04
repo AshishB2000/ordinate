@@ -7391,3 +7391,16 @@ body.an-dragging .an-wells .viz-build-row[data-well] {
   border-radius: 4px;
   background: var(--surface-3);
 }
+
+/* AI in the Visuals panel. Deliberately ABOVE the chip row and visually apart
+   from it: the chips' "Recommended" marks are the app's own shape logic, and
+   nothing here may read as if a model produced them. */
+.an-ai-slot { display: flex; flex-direction: column; gap: 6px; }
+.an-ai-btn { width: 100%; }
+.an-ai-note {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.an-ai-note[hidden] { display: none; }
