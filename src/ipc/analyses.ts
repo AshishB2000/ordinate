@@ -298,7 +298,11 @@ export function register() {
 
   // Exported so the self-check drives the real handler body, not a copy of it —
   // the same reason `wrapDashboardInAnalysis` / `publishAnalysis` are exported.
-  ipcMain.handle('analysis:draft', async (_e, { projectId }: any = {}) => draftAnalysisPlan(projectId));
+  ipcMain.handle('analysis:draft', async (_e, { projectId, datasetId, intent }: any = {}) =>
+    draftAnalysisPlan(projectId, {
+      datasetId: typeof datasetId === 'string' ? datasetId : undefined,
+      intent: typeof intent === 'string' ? intent : undefined,
+    }));
 
   // Re-validate and re-preview a plan the USER edited. No model, so this works
   // with nothing configured — the plan is data, and validating data is app code.
@@ -331,15 +335,25 @@ export function register() {
  * `{ ok:false, notReady:true }` with no model configured, which is the whole of
  * what "AI is optional" costs this surface — preview and build still work.
  */
-export async function draftAnalysisPlan(projectId: string): Promise<any> {
+export async function draftAnalysisPlan(
+  projectId: string,
+  opts: { datasetId?: string; intent?: string } = {},
+): Promise<any> {
   try {
-    const ctx = await plan.loadPlanContext(projectId);
+    const ctx = await plan.loadPlanContext(projectId, opts.datasetId);
     if (ctx.datasets.length === 0 && ctx.visuals.length === 0) {
-      return { ok: false, error: 'Add a dataset or visual before drafting an analysis.' };
+      // Scoped and empty means the id did not resolve — say which, rather than
+      // telling someone looking at a dataset that they have no datasets.
+      return {
+        ok: false,
+        error: opts.datasetId
+          ? 'That dataset could not be read, so there is nothing to draft from.'
+          : 'Add a dataset or visual before drafting an analysis.',
+      };
     }
 
     // App-computed, row-free, secret-free. See analysisPlan.buildFactsText.
-    const res = await draftDashboard(plan.buildFactsText(ctx));
+    const res = await draftDashboard(plan.buildFactsText(ctx, opts.intent));
     if (!res.ok) {
       if (res.errorType === 'not_ready') return { ok: false, notReady: true };
       return { ok: false, error: res.message || 'Could not draft an analysis' };

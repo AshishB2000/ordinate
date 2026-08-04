@@ -21,6 +21,26 @@
 // say WHICH dashboard it wrote. Session-only — provenance lives on the record.
 let anLastPublishedName: string | null = null;
 
+// The intro banner is shown until dismissed, once per machine. localStorage
+// rather than config.json: it is a per-install UI preference with no bearing on
+// data or a project, and config is main-process-only.
+const AN_HERO_KEY = 'anHeroDismissed';
+
+// Table and empty state are mutually exclusive — one or the other is on screen,
+// never both and never neither. The hero rides with the table, because on an
+// empty page the empty state already makes the pitch and says it better.
+function anShowList(count: number): void {
+  const table = dashEl('an-table');
+  const empty = dashEl('an-list-empty');
+  const hero = dashEl('an-hero');
+  const has = count > 0;
+  if (table) table.hidden = !has;
+  if (empty) empty.hidden = has;
+  let dismissed = false;
+  try { dismissed = localStorage.getItem(AN_HERO_KEY) === '1'; } catch (_) { /* private mode */ }
+  if (hero) hero.hidden = !has || dismissed;
+}
+
 // ── List view ───────────────────────────────────────────────────────────────
 async function refreshAnalysisList(): Promise<void> {
   // Flush a pending debounced edit before the editor is torn down, so a quick
@@ -28,11 +48,10 @@ async function refreshAnalysisList(): Promise<void> {
   if (dashDirty && dashCurrent) await persistDashboard();
   closeDashboardEditor();
   const list = dashEl('an-list');
-  const empty = dashEl('an-list-empty');
   if (!list) return;
   list.innerHTML = '';
   if (!currentProjectId) {
-    if (empty) empty.hidden = false;
+    anShowList(0);
     return;
   }
   let items: any[] = [];
@@ -42,8 +61,8 @@ async function refreshAnalysisList(): Promise<void> {
     items = [];
   }
   if (!Array.isArray(items)) items = [];
-  if (empty) empty.hidden = items.length > 0;
   items.forEach((a) => list.appendChild(makeAnListItem(a)));
+  anShowList(items.length);
 }
 
 // Refresh the summaries without tearing down an open editor.
@@ -56,8 +75,7 @@ async function refreshAnalysisListKeepEditor(): Promise<void> {
     if (!Array.isArray(items)) return;
     list.innerHTML = '';
     items.forEach((a) => list.appendChild(makeAnListItem(a)));
-    const empty = dashEl('an-list-empty');
-    if (empty) empty.hidden = items.length > 0;
+    anShowList(items.length);
   } catch (_) { /* ignore */ }
 }
 
@@ -73,6 +91,11 @@ function analysisHasUnpublishedChanges(a: any): boolean {
   return up > pub;
 }
 
+// One row = one grid row, cells in the order the column labels declare them:
+// Name · Sheets · Status · Last updated · Action. There is deliberately no
+// Owner column (QuickSight has one) — every analysis in a local-first,
+// single-user app is owned by the person reading the screen, so the column
+// would say "Me" on every row forever.
 function makeAnListItem(a: any): HTMLElement {
   const row = document.createElement('div');
   row.className = 'dash-list-item';
@@ -83,64 +106,443 @@ function makeAnListItem(a: any): HTMLElement {
   const nameRow = document.createElement('span');
   nameRow.className = 'dash-list-name';
   nameRow.textContent = a && a.name ? String(a.name) : 'Untitled analysis';
-  if (analysisHasUnpublishedChanges(a)) {
+  open.appendChild(nameRow);
+  const dirty = analysisHasUnpublishedChanges(a);
+  if (dirty) {
+    // Stays a sibling of the name, not a child of it, so the name can ellipsis
+    // without taking the badge with it.
     const badge = document.createElement('span');
     badge.className = 'dash-list-badge dash-list-badge--dirty';
     badge.textContent = 'Unpublished changes';
-    nameRow.appendChild(badge);
+    open.appendChild(badge);
   }
-  const meta = document.createElement('span');
-  meta.className = 'dash-list-meta';
-  const sheets = a && typeof a.sheetCount === 'number' ? a.sheetCount : 1;
-  meta.textContent =
-    sheets + (sheets === 1 ? ' sheet · ' : ' sheets · ') +
-    (a && a.lastPublishedAt
-      ? 'published ' + formatSidebarTime(a.lastPublishedAt)
-      : 'never published') +
-    ' · edited ' + formatSidebarTime(a && a.updatedAt);
-  open.appendChild(nameRow);
-  open.appendChild(meta);
   open.addEventListener('click', () => openAnalysis(String(a.id)));
 
-  const ren = document.createElement('button');
-  ren.type = 'button';
-  ren.className = 'dash-list-btn';
-  ren.setAttribute('aria-label', 'Rename analysis');
-  ren.textContent = '✎';
-  ren.addEventListener('click', (e) => {
-    e.stopPropagation();
-    handleRenameAnalysis(String(a.id), a && a.name ? String(a.name) : '');
-  });
+  const sheets = a && typeof a.sheetCount === 'number' ? a.sheetCount : 1;
+  const sheetCell = document.createElement('span');
+  sheetCell.className = 'an-cell';
+  sheetCell.textContent = String(sheets);
 
-  const del = document.createElement('button');
-  del.type = 'button';
-  del.className = 'dash-list-btn';
-  del.setAttribute('aria-label', 'Delete analysis');
-  del.textContent = '🗑';
-  del.addEventListener('click', (e) => { e.stopPropagation(); handleDeleteAnalysis(String(a.id)); });
+  // Three states, and the pill says which: published & current, published &
+  // drifted, never published. The dirty case already carries a badge on the
+  // name, so here it reads as the plain published time.
+  const statusCell = document.createElement('span');
+  statusCell.className = 'an-cell';
+  const pill = document.createElement('span');
+  if (a && a.lastPublishedAt) {
+    pill.className = 'an-status an-status--published';
+    pill.textContent = 'Published ' + formatSidebarTime(a.lastPublishedAt);
+  } else {
+    pill.className = 'an-status an-status--draft';
+    pill.textContent = 'Not published';
+  }
+  statusCell.appendChild(pill);
+
+  const updCell = document.createElement('span');
+  updCell.className = 'an-cell';
+  updCell.textContent = formatSidebarTime(a && a.updatedAt);
+
+  // One ⋯ trigger, opening the shared row menu from projects.ts. Rename and
+  // Delete moved inside it: the row is a table now, and two glyphs per row read
+  // as content competing with the data rather than as controls.
+  const actions = document.createElement('span');
+  actions.className = 'an-cell-actions';
+  const menuBtn = document.createElement('button');
+  menuBtn.type = 'button';
+  menuBtn.className = 'dash-list-btn an-row-menu';
+  menuBtn.setAttribute('aria-label', 'Analysis options');
+  menuBtn.setAttribute('aria-haspopup', 'menu');
+  menuBtn.textContent = '⋯';
+  // ponytail: Open only, plus the two that were already here. Publish is NOT in
+  // this menu — it needs the editor loaded (handlePublishAnalysis reads
+  // dashCurrent), so from a list row it would be a race, not a shortcut.
+  menuBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openRowMenu(menuBtn, [
+      { label: 'Open', onClick: () => { openAnalysis(String(a.id)); } },
+      {
+        label: 'Rename',
+        onClick: () => handleRenameAnalysis(String(a.id), a && a.name ? String(a.name) : ''),
+      },
+      { label: 'Delete', danger: true, onClick: () => handleDeleteAnalysis(String(a.id)) },
+    ]);
+  });
+  actions.appendChild(menuBtn);
 
   row.appendChild(open);
-  row.appendChild(ren);
-  row.appendChild(del);
+  row.appendChild(sheetCell);
+  row.appendChild(statusCell);
+  row.appendChild(updCell);
+  row.appendChild(actions);
   return row;
 }
 
-async function handleNewAnalysis(): Promise<void> {
+// ── Create-analysis wizard ──────────────────────────────────────────────────
+// Two steps: pick the data, then optionally describe what you want and let the
+// model draft it. Step 2 is genuinely optional — Skip creates the blank analysis
+// immediately, and with no model configured the AI half is disabled but the Skip
+// path is not, which is the whole of what "AI is optional" costs this surface.
+//
+// ponytail: no pagination and no server-side search — the list is one project's
+// datasets, filtered in memory. Add paging when a project has enough datasets to
+// need it; `dataset:list` already returns summaries, not rows, so this is cheap.
+const AN_WIZ_EXAMPLES = [
+  'Show revenue by region over time, and flag any concentration risk.',
+  'Which categories are growing fastest, and which are shrinking?',
+  'Give me an overview sheet, then a sheet per region.',
+];
+
+async function anCreateWizard(): Promise<void> {
   if (!currentProjectId) { window.alert('Open a project first.'); return; }
-  const name = await promptModal('New analysis', 'Untitled analysis', 'Create');
-  if (name === null) return;
-  let res: any;
+
+  let sets: any[] = [];
   try {
-    res = await window.hub.createAnalysis({ projectId: currentProjectId, name });
-  } catch (_) {
-    res = null;
+    sets = await window.hub.listDatasets(currentProjectId);
+  } catch (_) { sets = []; }
+  if (!Array.isArray(sets)) sets = [];
+
+  // Readiness comes from the ONE source main already exposes (publicConfig
+  // .isReady = Local CLI OR BYOK). No new IPC, and no second definition of
+  // "ready" that can disagree with the one gating capture.
+  let aiReady = false;
+  try {
+    const st: any = await window.hub.getKeyStatus();
+    aiReady = !!(st && st.isReady);
+  } catch (_) { aiReady = false; }
+
+  let selectedId: string | null = null;
+  let step = 1;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'ws-modal-overlay';
+  const box = document.createElement('div');
+  box.className = 'ws-modal an-wiz';
+  overlay.appendChild(box);
+
+  const close = (): void => { overlay.remove(); document.removeEventListener('keydown', onKey, true); };
+  const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+  document.addEventListener('keydown', onKey, true);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  // ── Header + step rail ────────────────────────────────────────────────────
+  const head = document.createElement('div');
+  head.className = 'an-wiz-head';
+  const titles = document.createElement('div');
+  const h = document.createElement('div');
+  h.className = 'ws-modal-title';
+  h.textContent = 'Create analysis';
+  const sub = document.createElement('p');
+  sub.className = 'an-wiz-sub';
+  titles.appendChild(h);
+  titles.appendChild(sub);
+  const x = document.createElement('button');
+  x.type = 'button';
+  x.className = 'an-wiz-x';
+  x.setAttribute('aria-label', 'Close');
+  x.textContent = '✕';
+  x.addEventListener('click', close);
+  head.appendChild(titles);
+  head.appendChild(x);
+
+  const rail = document.createElement('div');
+  rail.className = 'an-wiz-rail';
+  const railSteps = [
+    { n: 1, label: 'Choose data' },
+    { n: 2, label: 'Build with AI', opt: true },
+  ].map((s) => {
+    const el = document.createElement('div');
+    el.className = 'an-wiz-step';
+    const dot = document.createElement('span');
+    dot.className = 'an-wiz-dot';
+    dot.textContent = String(s.n);
+    const lab = document.createElement('span');
+    lab.className = 'an-wiz-step-label';
+    lab.textContent = s.label;
+    el.appendChild(dot);
+    el.appendChild(lab);
+    if (s.opt) {
+      const o = document.createElement('span');
+      o.className = 'an-wiz-optional';
+      o.textContent = 'Optional';
+      el.appendChild(o);
+    }
+    rail.appendChild(el);
+    return { el, dot };
+  });
+
+  // ── Step 1: the dataset picker ────────────────────────────────────────────
+  const pane1 = document.createElement('div');
+  pane1.className = 'an-wiz-pane';
+
+  const bar = document.createElement('div');
+  bar.className = 'an-wiz-bar';
+  const search = document.createElement('input');
+  search.type = 'search';
+  search.className = 'ws-modal-input an-wiz-search';
+  search.placeholder = 'Search datasets by name';
+  const mkDataset = document.createElement('button');
+  mkDataset.type = 'button';
+  mkDataset.className = 'btn';
+  mkDataset.textContent = 'Create dataset';
+  mkDataset.addEventListener('click', () => {
+    // Leaves the wizard for the existing import flow rather than re-hosting it
+    // in a modal. Deliberate: one import path, not two.
+    close();
+    selectSection('sources');
+  });
+  bar.appendChild(search);
+  bar.appendChild(mkDataset);
+
+  const table = document.createElement('div');
+  table.className = 'an-wiz-table';
+  const cols = document.createElement('div');
+  cols.className = 'an-wiz-cols';
+  ['', 'Dataset name', 'Rows', 'Columns', 'Source', 'Last modified'].forEach((c) => {
+    const s = document.createElement('span');
+    s.textContent = c;
+    cols.appendChild(s);
+  });
+  const rowsHost = document.createElement('div');
+  rowsHost.className = 'an-wiz-rows';
+  table.appendChild(cols);
+  table.appendChild(rowsHost);
+
+  const noneEl = document.createElement('p');
+  noneEl.className = 'an-wiz-none';
+  noneEl.hidden = true;
+
+  const nameWrap = document.createElement('label');
+  nameWrap.className = 'an-wiz-name';
+  const nameLab = document.createElement('span');
+  nameLab.textContent = 'Analysis name';
+  const nameIn = document.createElement('input');
+  nameIn.type = 'text';
+  nameIn.className = 'ws-modal-input';
+  nameIn.placeholder = 'Untitled analysis';
+  // Tracks the dataset until the user types their own, then stops fighting them.
+  let nameTouched = false;
+  nameIn.addEventListener('input', () => { nameTouched = true; });
+  nameWrap.appendChild(nameLab);
+  nameWrap.appendChild(nameIn);
+
+  pane1.appendChild(bar);
+  pane1.appendChild(table);
+  pane1.appendChild(noneEl);
+  pane1.appendChild(nameWrap);
+
+  function renderRows(): void {
+    const q = search.value.trim().toLowerCase();
+    const shown = sets.filter((d) => !q || String(d.name || '').toLowerCase().includes(q));
+    rowsHost.innerHTML = '';
+    table.hidden = sets.length === 0;
+    noneEl.hidden = sets.length !== 0;
+    nameWrap.hidden = sets.length === 0;
+    if (sets.length === 0) {
+      noneEl.textContent = 'This project has no datasets yet. Create one first — an analysis is built on data.';
+      return;
+    }
+    if (shown.length === 0) {
+      const p = document.createElement('p');
+      p.className = 'an-wiz-none';
+      p.textContent = 'No dataset matches “' + search.value.trim() + '”.';
+      rowsHost.appendChild(p);
+      return;
+    }
+    shown.forEach((d) => {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'an-wiz-row' + (selectedId === d.id ? ' is-selected' : '');
+      row.setAttribute('role', 'radio');
+      row.setAttribute('aria-checked', selectedId === d.id ? 'true' : 'false');
+      const radio = document.createElement('span');
+      radio.className = 'an-wiz-radio';
+      const nm = document.createElement('span');
+      nm.className = 'an-wiz-dsname';
+      nm.textContent = String(d.name || 'Untitled');
+      const rc = document.createElement('span');
+      rc.className = 'an-wiz-cell';
+      rc.textContent = typeof d.rowCount === 'number' ? d.rowCount.toLocaleString() : '—';
+      const cc = document.createElement('span');
+      cc.className = 'an-wiz-cell';
+      cc.textContent = typeof d.columnCount === 'number' ? String(d.columnCount) : '—';
+      const sk = document.createElement('span');
+      sk.className = 'an-wiz-cell';
+      const chip = document.createElement('span');
+      chip.className = 'an-wiz-kind';
+      chip.textContent = String(d.sourceKind || 'csv');
+      sk.appendChild(chip);
+      const up = document.createElement('span');
+      up.className = 'an-wiz-cell';
+      up.textContent = formatSidebarTime(d.updatedAt || null);
+      [radio, nm, rc, cc, sk, up].forEach((c) => row.appendChild(c));
+      row.addEventListener('click', () => {
+        selectedId = String(d.id);
+        if (!nameTouched) nameIn.value = String(d.name || '').trim() + ' analysis';
+        renderRows();
+        sync();
+      });
+      rowsHost.appendChild(row);
+    });
   }
-  if (!res || res.ok === false || !res.id) {
-    window.alert((res && res.error) || 'Failed to create the analysis.');
-    return;
+
+  // ── Step 2: the AI step ───────────────────────────────────────────────────
+  const pane2 = document.createElement('div');
+  pane2.className = 'an-wiz-pane';
+  pane2.hidden = true;
+
+  const aiCard = document.createElement('div');
+  aiCard.className = 'an-wiz-ai';
+  const aiH = document.createElement('h3');
+  aiH.className = 'an-wiz-ai-h';
+  aiH.textContent = '✨ Describe what you want to see';
+  const aiP = document.createElement('p');
+  aiP.className = 'an-wiz-ai-p';
+  aiP.textContent =
+    'The model proposes structure only — which sheets, which charts, which calculated fields. ' +
+    'Every number is computed by the app from your data, and you review the whole draft before anything is created.';
+  const ta = document.createElement('textarea');
+  ta.className = 'an-wiz-ta';
+  ta.rows = 4;
+  ta.placeholder = 'e.g. Revenue by region over the last year, with a sheet breaking down the top region.';
+  const chips = document.createElement('div');
+  chips.className = 'an-wiz-chips';
+  AN_WIZ_EXAMPLES.forEach((ex) => {
+    const c = document.createElement('button');
+    c.type = 'button';
+    c.className = 'an-wiz-chip';
+    c.textContent = ex;
+    c.addEventListener('click', () => { ta.value = ex; ta.focus(); });
+    chips.appendChild(c);
+  });
+  const notReadyNote = document.createElement('p');
+  notReadyNote.className = 'an-wiz-note';
+  notReadyNote.textContent =
+    'No model is configured, so AI drafting is unavailable. Everything else works without one — skip this step, or connect a model in Settings → Execution.';
+  notReadyNote.hidden = aiReady;
+  if (!aiReady) { ta.disabled = true; chips.hidden = true; }
+
+  aiCard.appendChild(aiH);
+  aiCard.appendChild(aiP);
+  aiCard.appendChild(ta);
+  aiCard.appendChild(chips);
+  aiCard.appendChild(notReadyNote);
+  pane2.appendChild(aiCard);
+
+  const body = document.createElement('div');
+  body.className = 'an-wiz-body';
+  body.appendChild(pane1);
+  body.appendChild(pane2);
+
+  // ── Footer ────────────────────────────────────────────────────────────────
+  const foot = document.createElement('div');
+  foot.className = 'ws-modal-actions an-wiz-foot';
+  const backBtn = document.createElement('button');
+  backBtn.type = 'button';
+  backBtn.className = 'btn an-wiz-back';
+  backBtn.textContent = '‹ Back';
+  backBtn.addEventListener('click', () => { step = 1; sync(); });
+  const spacer = document.createElement('span');
+  spacer.className = 'an-wiz-spacer';
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'btn';
+  cancel.textContent = 'Cancel';
+  cancel.addEventListener('click', close);
+  const skip = document.createElement('button');
+  skip.type = 'button';
+  skip.className = 'btn';
+  skip.textContent = 'Skip — blank sheet';
+  const next = document.createElement('button');
+  next.type = 'button';
+  next.className = 'btn btn-primary';
+  next.textContent = 'Next';
+  foot.appendChild(backBtn);
+  foot.appendChild(spacer);
+  foot.appendChild(cancel);
+  foot.appendChild(skip);
+  foot.appendChild(next);
+
+  function sync(): void {
+    pane1.hidden = step !== 1;
+    pane2.hidden = step !== 2;
+    sub.textContent = step === 1
+      ? 'Choose the dataset to build from. You can add more sheets and datasets later.'
+      : 'Optional. Describe the analysis and the AI will draft it — or skip and start from a blank sheet.';
+    railSteps.forEach((s, i) => {
+      s.el.className = 'an-wiz-step' + (i + 1 === step ? ' is-active' : '') + (i + 1 < step ? ' is-done' : '');
+      s.dot.textContent = i + 1 < step ? '✓' : String(i + 1);
+    });
+    backBtn.hidden = step !== 2;
+    skip.hidden = step !== 2;
+    next.textContent = step === 1 ? 'Next' : 'Draft with AI';
+    next.disabled = step === 1 ? !selectedId : !aiReady;
+    if (step === 2 && aiReady) setTimeout(() => ta.focus(), 0);
   }
-  await refreshAnalysisList();
-  openAnalysisFrom(res);
+
+  const chosenName = (): string => nameIn.value.trim() || 'Untitled analysis';
+
+  // Blank path: create it and open, no model involved.
+  async function createBlank(): Promise<void> {
+    let res: any;
+    try {
+      res = await window.hub.createAnalysis({ projectId: currentProjectId, name: chosenName() });
+    } catch (_) { res = null; }
+    if (!res || res.ok === false || !res.id) {
+      window.alert((res && res.error) || 'Failed to create the analysis.');
+      return;
+    }
+    close();
+    await refreshAnalysisList();
+    anLastPublishedName = null;
+    openAnalysisFrom(res);
+  }
+
+  skip.addEventListener('click', () => { createBlank(); });
+  next.addEventListener('click', async () => {
+    if (step === 1) { step = 2; sync(); return; }
+    // AI path. The wizard stays open and busy while the model works — closing it
+    // first would leave nothing on screen to explain the wait.
+    const label = next.textContent;
+    next.disabled = true;
+    skip.disabled = true;
+    next.textContent = 'Thinking…';
+    let res: any;
+    try {
+      res = await window.hub.draftDashboard(currentProjectId, {
+        datasetId: selectedId || undefined,
+        intent: ta.value.trim(),
+      });
+    } catch (_) {
+      res = { ok: false, error: 'Could not draft an analysis.' };
+    }
+    next.disabled = false;
+    skip.disabled = false;
+    next.textContent = label || 'Draft with AI';
+    if (res && res.notReady) { notReadyNote.hidden = false; return; }
+    if (!res || res.ok === false) {
+      window.alert((res && res.error) || 'Could not draft an analysis.');
+      return;
+    }
+    close();
+    await anMaterialiseDraft(res, nameTouched ? chosenName() : '');
+  });
+
+  box.appendChild(head);
+  box.appendChild(rail);
+  box.appendChild(body);
+  box.appendChild(foot);
+  document.body.appendChild(overlay);
+
+  search.addEventListener('input', renderRows);
+  // Preselect when there is only one dataset — the step is then a confirmation,
+  // not a decision, and Next is live immediately.
+  if (sets.length === 1) {
+    selectedId = String(sets[0].id);
+    nameIn.value = String(sets[0].name || '').trim() + ' analysis';
+  }
+  renderRows();
+  sync();
+  (sets.length === 0 ? mkDataset : search).focus();
 }
 
 async function handleRenameAnalysis(id: string, currentName: string): Promise<void> {
@@ -327,6 +729,16 @@ async function handleDraftAnalysis(): Promise<void> {
     return;
   }
 
+  await anMaterialiseDraft(res);
+}
+
+// Review → build → open. Split out of handleDraftAnalysis because the create
+// wizard's AI step ends in exactly the same place, and two copies of the
+// plan-vs-sheets decision below is how they drift apart.
+// `preferredName` is the wizard's name field, which the user typed before the
+// model proposed one; theirs wins.
+async function anMaterialiseDraft(res: any, preferredName?: string): Promise<void> {
+  if (!currentProjectId) return;
   const approved = await anDraftReviewModal(res);
   if (!approved) return;
 
@@ -334,11 +746,15 @@ async function handleDraftAnalysis(): Promise<void> {
   // version flag. A `plan` means the Phase E pipeline owns the write (it has to:
   // calculated fields and visuals are records this renderer cannot mint).
   // Otherwise the draft is already a sheet array and createAnalysis takes it.
-  const name = res.name || 'AI analysis';
+  const name = (preferredName || '').trim() || res.name || 'AI analysis';
   let saved: any = null;
   try {
     if (res.plan && typeof window.hub.buildAnalysisPlan === 'function') {
-      const built = await window.hub.buildAnalysisPlan(currentProjectId, res.plan);
+      // The plan carries the model's own name. If the user typed one in the
+      // wizard first, that is the one they expect to see in the list.
+      const planToBuild =
+        (preferredName || '').trim() ? { ...res.plan, name } : res.plan;
+      const built = await window.hub.buildAnalysisPlan(currentProjectId, planToBuild);
       if (built && built.ok === false) {
         window.alert(built.error || 'Failed to build the analysis.');
         return;
@@ -631,10 +1047,24 @@ async function handleOpenAnalysisForDashboard(): Promise<void> {
 
 // ── Boot wiring (once) ──────────────────────────────────────────────────────
 function initAnalyses(): void {
-  const newBtn = dashEl('an-new-btn');
-  if (newBtn) newBtn.addEventListener('click', () => handleNewAnalysis());
-  const draftBtn = dashEl('an-draft-btn');
-  if (draftBtn) draftBtn.addEventListener('click', () => handleDraftAnalysis());
+  // Three Create buttons (table header, hero, empty state) and two AI ones —
+  // whichever is on screen runs the same handler. Same call, not a copy of it.
+  ['an-new-btn', 'an-hero-new', 'an-empty-new'].forEach((id) => {
+    const b = dashEl(id);
+    if (b) b.addEventListener('click', () => anCreateWizard());
+  });
+  ['an-draft-btn', 'an-empty-draft'].forEach((id) => {
+    const b = dashEl(id);
+    if (b) b.addEventListener('click', () => handleDraftAnalysis());
+  });
+  const dismiss = dashEl('an-hero-dismiss');
+  if (dismiss) {
+    dismiss.addEventListener('click', () => {
+      try { localStorage.setItem(AN_HERO_KEY, '1'); } catch (_) { /* private mode */ }
+      const hero = dashEl('an-hero');
+      if (hero) hero.hidden = true;
+    });
+  }
   const pub = dashEl('an-publish-btn');
   if (pub) pub.addEventListener('click', () => handlePublishAnalysis(false));
   const republish = dashEl('an-republish-btn');

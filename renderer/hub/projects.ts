@@ -72,43 +72,53 @@ function closeProjectMenu(): void {
   document.removeEventListener('click', closeProjectMenu, true);
 }
 
-function openCardMenu(trigger: HTMLElement, p: any): void {
+// The popup itself, given the items to put in it. Shared with the Analyses row
+// menu (analyses.ts) — same DOM, same positioning, same one-menu-open-at-a-time
+// slot, so opening one closes the other.
+function openRowMenu(
+  trigger: HTMLElement,
+  items: Array<{ label: string; danger?: boolean; onClick: () => void }>,
+): void {
   closeProjectMenu();
   const menu = document.createElement('div');
   menu.className = 'project-card-popup';
 
-  const rename = document.createElement('button');
-  rename.type = 'button';
-  rename.className = 'project-card-popup-item';
-  rename.textContent = 'Rename';
-  rename.addEventListener('click', (e) => {
-    e.stopPropagation();
-    closeProjectMenu();
-    handleRenameProject(String(p.id), p.name || '');
+  items.forEach((it) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'project-card-popup-item' + (it.danger ? ' project-card-popup-danger' : '');
+    b.textContent = it.label;
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeProjectMenu();
+      it.onClick();
+    });
+    menu.appendChild(b);
   });
-
-  const del = document.createElement('button');
-  del.type = 'button';
-  del.className = 'project-card-popup-item project-card-popup-danger';
-  del.textContent = 'Delete';
-  del.addEventListener('click', (e) => {
-    e.stopPropagation();
-    closeProjectMenu();
-    handleDeleteProject(String(p.id));
-  });
-
-  menu.appendChild(rename);
-  menu.appendChild(del);
   document.body.appendChild(menu);
 
+  // Right-aligned to the trigger, and flipped above it when there is no room
+  // below — a row near the bottom of a long list would otherwise open its menu
+  // off-screen with no way to reach Delete.
   const rect = trigger.getBoundingClientRect();
   menu.style.position = 'fixed';
-  menu.style.top = rect.bottom + 4 + 'px';
+  const below = rect.bottom + 4;
+  menu.style.top =
+    (below + menu.offsetHeight > window.innerHeight - 8
+      ? Math.max(8, rect.top - menu.offsetHeight - 4)
+      : below) + 'px';
   menu.style.left = Math.max(8, rect.right - menu.offsetWidth) + 'px';
   openProjectMenu = menu;
 
   // Close on the next outside click (capture phase, after this click settles).
   setTimeout(() => document.addEventListener('click', closeProjectMenu, true), 0);
+}
+
+function openCardMenu(trigger: HTMLElement, p: any): void {
+  openRowMenu(trigger, [
+    { label: 'Rename', onClick: () => handleRenameProject(String(p.id), p.name || '') },
+    { label: 'Delete', danger: true, onClick: () => handleDeleteProject(String(p.id)) },
+  ]);
 }
 
 // Small in-app text dialog. Electron does NOT implement window.prompt() (it's a

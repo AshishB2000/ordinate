@@ -314,10 +314,217 @@ async function main(): Promise<void> {
   ok('the Analyses section is in the workspace nav', await clickExact('Analyses'));
   await win.waitForTimeout(800);
 
-  ok('New analysis opens the name prompt', await clickId('an-new-btn'));
-  await win.waitForTimeout(400);
-  ok('the name prompt accepts a name', await fillPrompt('Smoke analysis'));
-  await win.waitForTimeout(1500);
+  // A fresh project has no analyses, so the EMPTY STATE is the real first
+  // screen. Asserted by what is painted, not by the hidden attribute: the
+  // table's own Create button has no `hidden` of its own — only its container
+  // does — so `clickId` would happily click it and report green while the user
+  // saw an empty page. offsetParent is the check that can tell.
+  const emptyState = await win.evaluate(() => {
+    const vis = (id: string) => (document.getElementById(id) as HTMLElement | null)?.offsetParent != null;
+    const empty = document.getElementById('an-list-empty');
+    const r = empty?.getBoundingClientRect();
+    return {
+      emptyVisible: !!empty && empty.offsetParent !== null,
+      h: Math.round(r?.height || 0),
+      heading: (document.querySelector('.an-empty-h')?.textContent || '').trim(),
+      createVisible: vis('an-empty-new'),
+      aiVisible: vis('an-empty-draft'),
+      aiLabel: (document.getElementById('an-empty-draft')?.textContent || '').trim(),
+      // The table and its hero belong to the populated state only.
+      tableVisible: vis('an-table'),
+      heroVisible: vis('an-hero'),
+    };
+  });
+  ok('an empty Analyses page shows the empty state, not a bare table',
+     emptyState.emptyVisible && emptyState.h > 150 && !emptyState.tableVisible &&
+     !emptyState.heroVisible, JSON.stringify(emptyState));
+  ok('the empty state offers both doors — blank and AI',
+     emptyState.createVisible && emptyState.aiVisible && /AI/.test(emptyState.aiLabel),
+     `"${emptyState.heading}" / "${emptyState.aiLabel}"`);
+
+  const emptyShot = path.join(shotDir, 'analyses-empty.png');
+  await win.screenshot({ path: emptyShot });
+  ok('empty-state screenshot captured', fs.existsSync(emptyShot) && fs.statSync(emptyShot).size > 5000,
+     `${Math.round(fs.statSync(emptyShot).size / 1024)} KB -> ${emptyShot}`);
+
+  // ── The create wizard ─────────────────────────────────────────────────────
+  // Two steps: pick a dataset, then optionally let the model draft it. This run
+  // has NO model configured, which is the case that matters most here — the AI
+  // half must be visibly unavailable while Skip still works, or "AI is optional"
+  // is a claim rather than a behaviour.
+  ok('Create analysis opens the wizard', await clickId('an-empty-new'));
+  await win.waitForTimeout(700);
+
+  const wiz1 = await win.evaluate(() => {
+    const box = document.querySelector('.an-wiz') as HTMLElement | null;
+    const r = box?.getBoundingClientRect();
+    const rows = [...document.querySelectorAll('.an-wiz-row')];
+    const cols = [...document.querySelectorAll('.an-wiz-cols span')].map((s) => (s.textContent || '').trim());
+    const cellLefts = rows[0] ? [...rows[0].children].map((c) => Math.round(c.getBoundingClientRect().left)) : [];
+    const colLefts = [...document.querySelectorAll('.an-wiz-cols span')].map((c) => Math.round(c.getBoundingClientRect().left));
+    return {
+      open: !!box && box.offsetParent !== null,
+      w: Math.round(r?.width || 0),
+      h: Math.round(r?.height || 0),
+      steps: [...document.querySelectorAll('.an-wiz-step-label')].map((s) => (s.textContent || '').trim()),
+      step2Optional: !!document.querySelector('.an-wiz-optional'),
+      cols,
+      aligned: colLefts.length === cellLefts.length &&
+               colLefts.every((x, i) => Math.abs(x - cellLefts[i]) <= 1),
+      datasetRows: rows.length,
+      rowText: rows.map((r2) => (r2.textContent || '').replace(/\s+/g, ' ').trim()).join(' | ').slice(0, 120),
+      // Both fixture datasets are listed, and the single-dataset preselect does
+      // NOT fire (there are two), so Next must start disabled... except one gets
+      // clicked below.
+      selected: document.querySelectorAll('.an-wiz-row.is-selected').length,
+      createDatasetOffered: [...document.querySelectorAll('.an-wiz-bar .btn')]
+        .some((b) => /Create dataset/.test(b.textContent || '')),
+      searchPlaceholder: (document.querySelector('.an-wiz-search') as HTMLInputElement | null)?.placeholder || '',
+    };
+  });
+  ok('the wizard paints at a real size', wiz1.open && wiz1.w > 500 && wiz1.h > 300,
+     `${wiz1.w}x${wiz1.h}`);
+  ok('…with two steps, the second marked optional',
+     JSON.stringify(wiz1.steps) === JSON.stringify(['Choose data', 'Build with AI']) && wiz1.step2Optional,
+     JSON.stringify(wiz1.steps));
+  ok('…step 1 lists the project datasets with their columns',
+     wiz1.datasetRows === 2 &&
+       JSON.stringify(wiz1.cols) === JSON.stringify(['', 'Dataset name', 'Rows', 'Columns', 'Source', 'Last modified']),
+     `${wiz1.datasetRows} rows / ${JSON.stringify(wiz1.cols)}`);
+  ok('…and those cells line up under their labels', wiz1.aligned);
+  ok('…the row shows the real row count', /1,000,000/.test(wiz1.rowText), wiz1.rowText);
+  ok('…Create dataset and search are offered',
+     wiz1.createDatasetOffered && /Search datasets/.test(wiz1.searchPlaceholder));
+
+  // Next is gated on a selection — two datasets means no preselect.
+  const gated = await win.evaluate(() => {
+    const next = [...document.querySelectorAll('.an-wiz-foot .btn-primary')][0] as HTMLButtonElement | null;
+    return { disabled: !!next?.disabled, label: (next?.textContent || '').trim() };
+  });
+  ok('Next is disabled until a dataset is chosen', gated.disabled, `"${gated.label}"`);
+
+  // Search narrows the list, then picking prefills the name.
+  const searched = await win.evaluate(() => {
+    const s = document.querySelector('.an-wiz-search') as HTMLInputElement;
+    s.value = 'Sales';
+    s.dispatchEvent(new Event('input', { bubbles: true }));
+    return document.querySelectorAll('.an-wiz-row').length;
+  });
+  ok('search narrows the dataset list', searched === 1, `${searched} row(s) match "Sales"`);
+
+  const picked = await win.evaluate(() => {
+    (document.querySelector('.an-wiz-row') as HTMLElement).click();
+    const next = [...document.querySelectorAll('.an-wiz-foot .btn-primary')][0] as HTMLButtonElement | null;
+    const nameIn = document.querySelector('.an-wiz-name input') as HTMLInputElement | null;
+    return {
+      selected: document.querySelectorAll('.an-wiz-row.is-selected').length,
+      nextEnabled: !next?.disabled,
+      name: nameIn?.value || '',
+    };
+  });
+  ok('picking a dataset selects it and frees Next',
+     picked.selected === 1 && picked.nextEnabled, JSON.stringify(picked));
+  ok('…and prefills the analysis name from it', picked.name === 'Sales analysis', `"${picked.name}"`);
+
+  const wizShot = path.join(shotDir, 'wizard-step1.png');
+  await win.screenshot({ path: wizShot });
+  ok('wizard step 1 screenshot captured', fs.existsSync(wizShot) && fs.statSync(wizShot).size > 5000,
+     `${Math.round(fs.statSync(wizShot).size / 1024)} KB -> ${wizShot}`);
+
+  // Set the name this run asserts on everywhere below, then go to step 2.
+  await win.evaluate(() => {
+    const nameIn = document.querySelector('.an-wiz-name input') as HTMLInputElement;
+    nameIn.value = 'Smoke analysis';
+    nameIn.dispatchEvent(new Event('input', { bubbles: true }));
+    ([...document.querySelectorAll('.an-wiz-foot .btn-primary')][0] as HTMLElement).click();
+  });
+  await win.waitForTimeout(600);
+
+  const wiz2 = await win.evaluate(() => {
+    const ta = document.querySelector('.an-wiz-ta') as HTMLTextAreaElement | null;
+    const note = document.querySelector('.an-wiz-note') as HTMLElement | null;
+    const next = [...document.querySelectorAll('.an-wiz-foot .btn-primary')][0] as HTMLButtonElement | null;
+    const skip = [...document.querySelectorAll('.an-wiz-foot .btn')]
+      .find((b) => /Skip/.test(b.textContent || '')) as HTMLButtonElement | undefined;
+    return {
+      onStep2: !!document.querySelector('.an-wiz-ai') &&
+               (document.querySelector('.an-wiz-ai') as HTMLElement).offsetParent !== null,
+      doneTick: (document.querySelector('.an-wiz-step.is-done .an-wiz-dot')?.textContent || '').trim(),
+      taPresent: !!ta,
+      // No model in a smoke run: the AI half must be off, and say why.
+      taDisabled: !!ta?.disabled,
+      draftDisabled: !!next?.disabled,
+      draftLabel: (next?.textContent || '').trim(),
+      noteVisible: !!note && note.offsetParent !== null,
+      noteText: (note?.textContent || '').trim().slice(0, 90),
+      // …while Skip stays live. This is the assertion that makes "optional" real.
+      skipVisible: !!skip && skip.offsetParent !== null,
+      skipDisabled: !!skip?.disabled,
+      backVisible: !!([...document.querySelectorAll('.an-wiz-foot .btn')]
+        .find((b) => /Back/.test(b.textContent || '')) as HTMLElement | undefined)?.offsetParent,
+    };
+  });
+  ok('step 2 is the AI step', wiz2.onStep2 && wiz2.taPresent && wiz2.draftLabel === 'Draft with AI',
+     JSON.stringify({ step2: wiz2.onStep2, label: wiz2.draftLabel }));
+  ok('…step 1 is ticked off behind it', wiz2.doneTick === '✓', `"${wiz2.doneTick}"`);
+  ok('…with no model configured, AI drafting is disabled AND says why',
+     wiz2.taDisabled && wiz2.draftDisabled && wiz2.noteVisible && /No model is configured/.test(wiz2.noteText),
+     wiz2.noteText);
+  ok('…but Skip stays available, so the step is genuinely optional',
+     wiz2.skipVisible && !wiz2.skipDisabled);
+  ok('…and Back is offered', wiz2.backVisible);
+
+  const wizShot2 = path.join(shotDir, 'wizard-step2.png');
+  await win.screenshot({ path: wizShot2 });
+  ok('wizard step 2 screenshot captured', fs.existsSync(wizShot2) && fs.statSync(wizShot2).size > 5000,
+     `${Math.round(fs.statSync(wizShot2).size / 1024)} KB -> ${wizShot2}`);
+
+  // A smoke run has no model, so everything above exercised the DISABLED half of
+  // step 2 and the example chips never rendered — an entire flex-wrap row of CSS
+  // that would ship unseen. Reveal them to check they lay out and click; this
+  // asserts LAYOUT only, and makes no claim about a model being configured.
+  const chips = await win.evaluate(() => {
+    const row = document.querySelector('.an-wiz-chips') as HTMLElement | null;
+    const ta = document.querySelector('.an-wiz-ta') as HTMLTextAreaElement | null;
+    if (!row || !ta) return null;
+    row.hidden = false;
+    ta.disabled = false;
+    const btns = [...row.querySelectorAll('.an-wiz-chip')] as HTMLElement[];
+    const card = document.querySelector('.an-wiz-ai') as HTMLElement;
+    const cr = card.getBoundingClientRect();
+    (btns[0] as HTMLElement).click();
+    return {
+      count: btns.length,
+      // Each chip must sit inside the card it belongs to — a long example string
+      // in a flex row is exactly what overflows a modal.
+      inside: btns.every((b) => {
+        const r = b.getBoundingClientRect();
+        return r.left >= cr.left - 1 && r.right <= cr.right + 1 && r.height > 0;
+      }),
+      wrapped: new Set(btns.map((b) => Math.round(b.getBoundingClientRect().top))).size,
+      filled: ta.value,
+    };
+  });
+  ok('the example chips lay out inside the card and wrap',
+     !!chips && chips.count === 3 && chips.inside, JSON.stringify(chips));
+  ok('…and clicking one fills the prompt box',
+     !!chips && chips.filled.startsWith('Show revenue by region'), chips?.filled.slice(0, 50) || '');
+
+  const wizShot3 = path.join(shotDir, 'wizard-step2-ready.png');
+  await win.screenshot({ path: wizShot3 });
+  ok('wizard step 2 (chips revealed) screenshot captured',
+     fs.existsSync(wizShot3) && fs.statSync(wizShot3).size > 5000,
+     `${Math.round(fs.statSync(wizShot3).size / 1024)} KB -> ${wizShot3}`);
+
+  // Skip → the blank analysis is created and opened.
+  await win.evaluate(() => {
+    const skip = [...document.querySelectorAll('.an-wiz-foot .btn')]
+      .find((b) => /Skip/.test(b.textContent || '')) as HTMLElement | undefined;
+    if (skip) skip.click();
+  });
+  await win.waitForTimeout(2000);
+  ok('Skip creates the analysis and closes the wizard',
+     await win.evaluate(() => !document.querySelector('.an-wiz')));
 
   // The editor must be INSIDE the Analyses panel, in analysis mode, and — the
   // check a DOM assertion cannot make — actually have a box on screen.
@@ -511,17 +718,92 @@ async function main(): Promise<void> {
     const row = [...document.querySelectorAll('#an-list .dash-list-item')].find((r) =>
       /Smoke analysis/.test(r.textContent || ''),
     );
-    return row
-      ? {
-          text: (row.textContent || '').trim().slice(0, 100),
-          badge: (row.querySelector('.dash-list-badge') as HTMLElement | null)?.textContent || '',
-        }
-      : null;
+    const vis = (id: string) => (document.getElementById(id) as HTMLElement | null)?.offsetParent != null;
+    const cols = [...document.querySelectorAll('.an-table-cols span')];
+    // The header labels and the row cells are two separate grids that share one
+    // `grid-template-columns`. Nothing but a laid-out page can prove they line
+    // up — so compare the actual left edges rather than trusting the CSS.
+    const colLefts = cols.map((c) => Math.round(c.getBoundingClientRect().left));
+    const cellLefts = row
+      ? [...row.children].map((c) => Math.round(c.getBoundingClientRect().left))
+      : [];
+    return {
+      found: !!row,
+      text: row ? (row.textContent || '').trim().slice(0, 100) : '',
+      badge: (row?.querySelector('.dash-list-badge') as HTMLElement | null)?.textContent || '',
+      status: (row?.querySelector('.an-status') as HTMLElement | null)?.textContent || '',
+      headers: cols.map((c) => (c.textContent || '').trim()),
+      colLefts,
+      cellLefts,
+      aligned: colLefts.length === cellLefts.length &&
+               colLefts.every((x, i) => Math.abs(x - cellLefts[i]) <= 1),
+      tableVisible: vis('an-table'),
+      emptyVisible: vis('an-list-empty'),
+      heroVisible: vis('an-hero'),
+    };
   });
-  ok('the analysis is listed with its sheet count and publish state', !!anRow,
+  ok('the analysis is listed with its sheet count and publish state', !!anRow?.found,
      anRow ? anRow.text : 'not found');
   ok('and the list flags unpublished changes', anRow?.badge === 'Unpublished changes',
      anRow?.badge || '(none)');
+  ok('a populated page shows the table and hides the empty state',
+     !!anRow && anRow.tableVisible && !anRow.emptyVisible, JSON.stringify({
+       table: anRow?.tableVisible, empty: anRow?.emptyVisible }));
+  ok('the intro banner rides with the table until dismissed', !!anRow && anRow.heroVisible);
+  ok('the table declares its columns',
+     JSON.stringify(anRow?.headers) ===
+       JSON.stringify(['Name', 'Sheets', 'Status', 'Last updated', 'Action']),
+     JSON.stringify(anRow?.headers));
+  ok('and every row cell lines up under its column label', !!anRow && anRow.aligned,
+     `cols=${JSON.stringify(anRow?.colLefts)} cells=${JSON.stringify(anRow?.cellLefts)}`);
+  ok('the row carries a status pill', /Published/.test(anRow?.status || ''), anRow?.status || '(none)');
+
+  // The ⋯ row menu. Rename and Delete used to be two bare glyphs in the row; now
+  // they live behind this. A popup is appended to <body> and positioned with
+  // fixed coordinates, so "does it exist" is not the question — "is it on screen,
+  // next to the button that opened it" is, and only a laid-out page can answer.
+  const rowMenu = await win.evaluate(() => {
+    const btn = document.querySelector('#an-list .an-row-menu') as HTMLElement | null;
+    if (!btn) return { opened: false };
+    btn.click();
+    const pop = document.querySelector('.project-card-popup') as HTMLElement | null;
+    if (!pop) return { opened: false };
+    const pr = pop.getBoundingClientRect();
+    const br = btn.getBoundingClientRect();
+    return {
+      opened: true,
+      items: [...pop.querySelectorAll('.project-card-popup-item')].map((b) => (b.textContent || '').trim()),
+      danger: !!pop.querySelector('.project-card-popup-danger'),
+      onScreen: pr.width > 0 && pr.height > 0 && pr.top >= 0 && pr.left >= 0 &&
+                pr.bottom <= window.innerHeight && pr.right <= window.innerWidth,
+      // Right-aligned to the trigger, directly under it.
+      anchored: Math.abs(pr.right - br.right) <= 2 && pr.top >= br.bottom - 1,
+      inlineGlyphs: document.querySelectorAll('#an-list .dash-list-btn').length,
+    };
+  });
+  ok('the ⋯ row menu opens', rowMenu.opened);
+  ok('…with Open / Rename / Delete inside it',
+     JSON.stringify(rowMenu.items) === JSON.stringify(['Open', 'Rename', 'Delete']),
+     JSON.stringify(rowMenu.items));
+  ok('…Delete marked as the destructive one', !!rowMenu.danger);
+  ok('…painted fully on screen and anchored to its button',
+     !!rowMenu.onScreen && !!rowMenu.anchored,
+     `onScreen=${rowMenu.onScreen} anchored=${rowMenu.anchored}`);
+  // The row's only control is the trigger — the ✎/🗑 pair is gone, not just hidden.
+  ok('and the row carries exactly one control, the trigger', rowMenu.inlineGlyphs === 1,
+     `${rowMenu.inlineGlyphs} inline buttons`);
+
+  const menuShot = path.join(shotDir, 'analyses-row-menu.png');
+  await win.screenshot({ path: menuShot });
+  ok('row-menu screenshot captured', fs.existsSync(menuShot) && fs.statSync(menuShot).size > 5000,
+     `${Math.round(fs.statSync(menuShot).size / 1024)} KB -> ${menuShot}`);
+
+  // Dismiss it, so the screenshot below and the draft dialog are not taken with
+  // a popup floating over them.
+  await win.evaluate(() => (document.body as HTMLElement).click());
+  await win.waitForTimeout(300);
+  ok('an outside click closes the ⋯ menu',
+     await win.evaluate(() => !document.querySelector('.project-card-popup')));
   const listShot = path.join(shotDir, 'analyses-list.png');
   await win.screenshot({ path: listShot });
   ok('analyses list screenshot captured', fs.existsSync(listShot) && fs.statSync(listShot).size > 5000,
