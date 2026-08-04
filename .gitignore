@@ -183,3 +183,6 @@ scripts/**/*.js
 
 # Phase 5 Svelte toolchain self-check — emitted sibling.
 /scripts/test-svelteBuild.js
+
+# CSS custom-property check — emitted sibling.
+/scripts/test-cssVars.js
