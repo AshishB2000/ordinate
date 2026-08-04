@@ -255,6 +255,7 @@
         <button class="ws-nav-item active" type="button" data-section="sources">Sources</button>
         <button class="ws-nav-item"        type="button" data-section="datasets">Datasets</button>
         <button class="ws-nav-item"        type="button" data-section="visuals">Visuals</button>
+        <button class="ws-nav-item"        type="button" data-section="analyses">Analyses</button>
         <button class="ws-nav-item"        type="button" data-section="dashboards">Dashboards</button>
         <button class="ws-nav-item"        type="button" data-section="ai">AI <span class="ws-badge">optional</span></button>
       </div>
@@ -793,16 +794,36 @@
         </div>
       </div>
     </section>
+    <!-- ANALYSES — the AUTHORING surface. Its editor is the SAME #dash-editor
+         element the Dashboards section uses: the grid editor is re-parented into
+         #an-editor-host when an analysis is open and back into #dash-editor-host
+         when a dashboard is. One editor, one set of behaviour, two hosts. -->
+    <section class="ws-panel" id="ws-analyses" data-section="analyses" hidden>
+      <div class="dash-panel" id="an-list-view">
+        <div class="dash-list-head">
+          <div>
+            <h2 class="viz-h">Analyses</h2>
+            <p class="viz-sub">An analysis is where you build: sheets of cards and analysis-wide filters. Publishing takes a snapshot of it as a dashboard — the read-only surface people open. Editing an analysis afterwards never moves a published dashboard until you republish.</p>
+          </div>
+          <div class="dash-list-head-actions">
+            <button class="btn" type="button" id="an-draft-btn">✨ AI draft analysis</button>
+            <button class="btn btn-primary" type="button" id="an-new-btn">New analysis</button>
+          </div>
+        </div>
+        <div class="dash-list" id="an-list"></div>
+        <p class="dash-list-empty" id="an-list-empty" hidden>No analyses yet.</p>
+      </div>
+      <div class="dash-editor-host" id="an-editor-host"></div>
+    </section>
     <section class="ws-panel" id="ws-dashboards" data-section="dashboards" hidden>
       <!-- List view: saved dashboards + New button -->
       <div class="dash-panel" id="dash-list-view">
         <div class="dash-list-head">
           <div>
             <h2 class="viz-h">Dashboards</h2>
-            <p class="viz-sub">Arrange saved visuals, computed metrics, and notes onto a grid across one or more pages. Every number is computed by the app.</p>
+            <p class="viz-sub">The read surface: snapshots published from an analysis, plus standalone dashboards. A published one is read-only — edit its analysis and republish. Every number is computed by the app, from live data.</p>
           </div>
           <div class="dash-list-head-actions">
-            <button class="btn" type="button" id="dash-draft-btn">✨ AI draft dashboard</button>
             <button class="btn btn-primary" type="button" id="dash-new-btn">New dashboard</button>
           </div>
         </div>
@@ -810,35 +831,54 @@
         <p class="dash-list-empty" id="dash-list-empty" hidden>No dashboards yet.</p>
       </div>
 
+      <div class="dash-editor-host" id="dash-editor-host">
       <!-- Editor view: page tabs + toolbar + grid canvas -->
       <div class="dash-editor" id="dash-editor" hidden>
         <div class="dash-editor-head">
           <button class="btn btn-sm" type="button" id="dash-back-btn">‹ Back</button>
           <span class="dash-name" id="dash-name"></span>
-          <button class="btn btn-sm" type="button" id="dash-rename-btn">Rename</button>
+          <button class="btn btn-sm dash-edit-only" type="button" id="dash-rename-btn">Rename</button>
           <span class="dash-editor-spacer"></span>
-          <button class="btn btn-sm" type="button" id="dash-add-visual">+ Visual</button>
-          <button class="btn btn-sm" type="button" id="dash-add-metric">+ Metric</button>
-          <button class="btn btn-sm" type="button" id="dash-add-text">+ Text</button>
-          <button class="btn btn-primary btn-sm" type="button" id="dash-save-btn">Save</button>
+          <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-visual">+ Visual</button>
+          <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-metric">+ Metric</button>
+          <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-text">+ Text</button>
+          <button class="btn btn-sm dash-edit-only" type="button" id="dash-legacy-wrap-btn" hidden>Edit as analysis</button>
+          <button class="btn btn-sm dash-an-only" type="button" id="an-republish-btn" hidden>Republish…</button>
+          <button class="btn btn-primary btn-sm dash-an-only" type="button" id="an-publish-btn">Publish</button>
+          <button class="btn btn-primary btn-sm dash-edit-only" type="button" id="dash-save-btn">Save</button>
         </div>
+
+        <!-- Why this dashboard cannot be edited here, and where to go instead.
+             Shown only for a PUBLISHED dashboard (Dashboard.analysisId set) —
+             main refuses the write, so the UI must not pretend otherwise. -->
+        <div class="dash-readonly" id="dash-readonly" hidden>
+          <span class="dash-readonly-badge">Read-only</span>
+          <span class="dash-readonly-text" id="dash-readonly-text"></span>
+          <button class="btn btn-sm" type="button" id="dash-open-analysis">Open its analysis ›</button>
+        </div>
+
+        <!-- Publish state of the open ANALYSIS: never published / last published,
+             plus the unpublished-changes hint. -->
+        <div class="an-pubstate" id="an-pubstate" hidden></div>
 
         <!-- Toolbar: dashboard-wide filters + quick controls + present/export/share -->
         <div class="dash-toolbar" id="dash-toolbar">
           <div class="dash-filter-bar">
             <span class="dash-toolbar-label">Filters</span>
             <div class="dash-filter-chips" id="dash-filter-chips"></div>
-            <button class="btn btn-sm" type="button" id="dash-add-filter">+ Filter</button>
-            <button class="btn btn-sm" type="button" id="dash-clear-filters" hidden>Clear all</button>
+            <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-filter">+ Filter</button>
+            <button class="btn btn-sm dash-edit-only" type="button" id="dash-clear-filters" hidden>Clear all</button>
           </div>
           <div class="dash-toolbar-quick">
-            <button class="btn btn-sm dash-ctrl" type="button" id="dash-category-select">Category…</button>
-            <button class="btn btn-sm dash-ctrl" type="button" id="dash-period-select">Period…</button>
+            <button class="btn btn-sm dash-ctrl dash-edit-only" type="button" id="dash-category-select">Category…</button>
+            <button class="btn btn-sm dash-ctrl dash-edit-only" type="button" id="dash-period-select">Period…</button>
           </div>
           <span class="dash-editor-spacer"></span>
           <div class="dash-toolbar-actions">
-            <button class="btn btn-sm" type="button" id="dash-summary-btn">✨ Summary</button>
-            <button class="btn btn-sm" type="button" id="dash-anomalies-btn">✨ Explain anomalies</button>
+            <!-- Both channels take a dashboardId (they narrate a finished
+                 artifact), so they are hidden while an ANALYSIS is open. -->
+            <button class="btn btn-sm dash-db-only" type="button" id="dash-summary-btn">✨ Summary</button>
+            <button class="btn btn-sm dash-db-only" type="button" id="dash-anomalies-btn">✨ Explain anomalies</button>
             <button class="btn btn-sm" type="button" id="dash-present-btn">Present</button>
             <button class="btn btn-sm" type="button" id="dash-export-btn">Export…</button>
             <button class="btn btn-sm" type="button" id="dash-share-btn">Share</button>
@@ -860,6 +900,7 @@
           <button class="btn btn-sm dash-starter" type="button" id="dash-starter-kpis">KPIs + chart</button>
           <button class="btn btn-sm dash-starter" type="button" id="dash-starter-twoup">Two-up</button>
         </div>
+      </div>
       </div>
     </section>
     <section class="ws-panel" id="ws-ai" data-section="ai" hidden>
@@ -1593,6 +1634,7 @@
 <script src="connections.js"></script>
 <script src="visuals.js"></script>
 <script src="dashboards.js"></script>
+<script src="analyses.js"></script>
 <script src="copilot.js"></script>
 <script src="hub.js"></script>
 

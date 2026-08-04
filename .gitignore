@@ -196,6 +196,7 @@ scripts/**/*.js
 # Analysis (the authoring container a dashboard is published from) — emitted siblings.
 /src/analysis.js
 /src/ipc/analyses.js
+/renderer/hub/analyses.js
 /scripts/test-analysis.js
 
 # The AI analysis plan (facts → envelope → validation → preview → build).

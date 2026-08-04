@@ -32,6 +32,15 @@ const DASH_AGG_LABELS: Record<DashAgg, string> = {
 // ── Module-local state ────────────────────────────────────────────────────────
 let dashList: any[] = [];          // summaries (list view)
 let dashCurrent: any = null;       // the open Dashboard (full), or null on the list
+// WHICH RECORD the editor is bound to. Phase D: an Analysis is the authoring
+// container and its `sheets` ARE dashboard `pages` (src/analysis.ts reuses the
+// type), so ONE editor drives both — the mode only decides which channel the
+// save goes down and which list Back returns to.
+let dashMode: 'dashboard' | 'analysis' = 'dashboard';
+// A PUBLISHED dashboard (Dashboard.analysisId !== null) is a snapshot. Main
+// refuses every non-publish write to it (src/dashboards.ts updateDashboard), so
+// the editor must not offer edits that will fail — this flag removes them.
+let dashReadOnly = false;
 let dashPageIdx = 0;               // active page index within dashCurrent.pages
 let dashDirty = false;             // unsaved layout/card edits
 let dashSaveTimer: number | null = null; // debounced autosave
@@ -156,10 +165,22 @@ function makeDashListItem(d: any): HTMLElement {
   const name = document.createElement('span');
   name.className = 'dash-list-name';
   name.textContent = d && d.name ? String(d.name) : 'Untitled dashboard';
+  // A published dashboard is read-only. Say so BEFORE it is opened — the
+  // summary carries analysisId precisely so this costs no extra read.
+  const published = Boolean(d && d.analysisId);
+  if (published) {
+    const badge = document.createElement('span');
+    badge.className = 'dash-list-badge';
+    badge.textContent = 'Published · read-only';
+    name.appendChild(badge);
+  }
   const meta = document.createElement('span');
   meta.className = 'dash-list-meta';
   const pages = d && typeof d.pageCount === 'number' ? d.pageCount : 1;
-  meta.textContent = pages + (pages === 1 ? ' page · ' : ' pages · ') + formatSidebarTime(d && d.updatedAt);
+  meta.textContent = pages + (pages === 1 ? ' page · ' : ' pages · ') +
+    (published && d.publishedAt
+      ? 'published ' + formatSidebarTime(d.publishedAt)
+      : formatSidebarTime(d && d.updatedAt));
   open.appendChild(name);
   open.appendChild(meta);
   open.addEventListener('click', () => openDashboard(String(d.id)));
@@ -179,7 +200,9 @@ function makeDashListItem(d: any): HTMLElement {
   del.addEventListener('click', (e) => { e.stopPropagation(); handleDeleteDashboard(String(d.id)); });
 
   row.appendChild(open);
-  row.appendChild(ren);
+  // Renaming a published snapshot is a write main refuses — offering the button
+  // would just fail. Deleting is still allowed: a snapshot can be discarded.
+  if (!published) row.appendChild(ren);
   row.appendChild(del);
   return row;
 }
@@ -252,8 +275,49 @@ async function openDashboard(id: string): Promise<void> {
   openDashboardFrom(d);
 }
 
+// Re-parent the ONE editor element into the host of whichever section owns it.
+// Both hosts are `display: contents` (hub.css), so the editor stays a direct
+// flex item of its .ws-panel and the layout is unchanged. Cheaper and far less
+// error-prone than a second copy of the editor markup, which would need a second
+// copy of every id and every listener.
+function mountDashEditor(hostId: string): void {
+  const ed = dashEl('dash-editor');
+  const host = dashEl(hostId);
+  if (ed && host && ed.parentElement !== host) host.appendChild(ed);
+}
+
 function openDashboardFrom(d: any): void {
-  dashCurrent = d;
+  dashMode = 'dashboard';
+  // A published dashboard carries the id of the analysis it was snapshotted
+  // from. That is PROVENANCE, never a lookup (nothing here loads the analysis to
+  // render) — it only tells us the record is read-only.
+  dashReadOnly = Boolean(d && d.analysisId);
+  mountDashEditor('dash-editor-host');
+  openEditorWith(d, d && d.name ? d.name : 'Untitled dashboard');
+  renderDashReadOnlyNote(d);
+}
+
+// Open an ANALYSIS in the same editor. `sheets` and `pages` are the same type
+// (src/analysis.ts reuses dashboards.Page), so the array is ALIASED rather than
+// copied: every existing page/card/filter handler keeps working on
+// `dashCurrent.pages`, and the save reads it back out as `sheets`.
+function openAnalysisFrom(a: any): void {
+  dashMode = 'analysis';
+  dashReadOnly = false;
+  mountDashEditor('an-editor-host');
+  if (!Array.isArray(a.sheets) || a.sheets.length === 0) {
+    a.sheets = [{ id: dashUuid(), name: 'Sheet 1', cards: [] }];
+  }
+  a.pages = a.sheets; // alias, NOT a copy — one array, two names
+  dashShow('an-list-view', false);
+  openEditorWith(a, a && a.name ? a.name : 'Untitled analysis');
+  renderDashReadOnlyNote(null);
+  renderAnalysisPubState();
+}
+
+// The part both entry points share: bind state, paint the editor.
+function openEditorWith(rec: any, title: string): void {
+  dashCurrent = rec;
   dashPageIdx = 0;
   dashDirty = false;
   if (!Array.isArray(dashCurrent.pages) || dashCurrent.pages.length === 0) {
@@ -263,13 +327,45 @@ function openDashboardFrom(d: any): void {
   if (!Array.isArray(dashCurrent.filters)) dashCurrent.filters = [];
   dashShow('dash-list-view', false);
   dashShow('dash-editor', true);
+  applyDashEditorMode();
   const aiOut = dashEl('dash-ai-out');
   if (aiOut) { aiOut.hidden = true; aiOut.innerHTML = ''; }
   const nameEl = dashEl('dash-name');
-  if (nameEl) nameEl.textContent = dashCurrent.name || 'Untitled dashboard';
+  if (nameEl) nameEl.textContent = title;
   renderDashFilterBar();
   renderDashPages();
   renderDashGrid();
+}
+
+// Mode + read-only are expressed as CLASSES on the editor (hub CSP forbids
+// inline style=); hub.css hides `.dash-edit-only` / `.dash-db-only` / the card
+// and page controls from there.
+function applyDashEditorMode(): void {
+  const ed = dashEl('dash-editor');
+  if (!ed) return;
+  ed.classList.toggle('dash-editor--analysis', dashMode === 'analysis');
+  ed.classList.toggle('dash-editor--readonly', dashReadOnly);
+}
+
+// The read-only explanation, with the route back to the authoring surface.
+// `d` null (or an unpublished record) hides it.
+function renderDashReadOnlyNote(d: any): void {
+  const note = dashEl('dash-readonly');
+  const txt = dashEl('dash-readonly-text');
+  const btn = dashEl('dash-open-analysis');
+  const wrap = dashEl('dash-legacy-wrap-btn');
+  if (!note || !txt || !btn) return;
+  // A LEGACY standalone dashboard (no analysisId) stays editable exactly as it
+  // was, and gets the one-way "wrap it in an analysis" affordance — the explicit
+  // user action §4.1 of docs/analysis/00-model.md names as the migration trigger.
+  if (wrap) wrap.hidden = !(d && !d.analysisId);
+  if (!d || !d.analysisId) { note.hidden = true; return; }
+  note.hidden = false;
+  txt.textContent =
+    'This dashboard is a published snapshot' +
+    (d.publishedAt ? ' from ' + formatSidebarTime(d.publishedAt) : '') +
+    '. It cannot be edited here — change its analysis and publish again. Its figures are still recomputed from live data every time you open it.';
+  btn.hidden = false;
 }
 
 function closeDashboardEditor(): void {
@@ -286,6 +382,14 @@ function closeDashboardEditor(): void {
   if (pages) pages.innerHTML = '';
   dashShow('dash-editor', false);
   dashShow('dash-list-view', true);
+  dashShow('an-list-view', true);
+  dashMode = 'dashboard';
+  dashReadOnly = false;
+  applyDashEditorMode();
+  const note = dashEl('dash-readonly');
+  if (note) note.hidden = true;
+  const pub = dashEl('an-pubstate');
+  if (pub) pub.hidden = true;
 }
 
 // Browsers expose crypto.randomUUID in the renderer; used for local page/card
@@ -309,6 +413,10 @@ function dashCurrentPage(): any {
 }
 
 function markDashDirty(): void {
+  // A published dashboard is read-only. Nothing in the UI should reach here (the
+  // controls are hidden), but the 600 ms autosave is exactly the mechanism that
+  // would quietly overwrite a snapshot, so it is stopped at the source too.
+  if (dashReadOnly) return;
   dashDirty = true;
   scheduleDashSave();
 }
@@ -461,7 +569,7 @@ function makeDashCardEl(card: any): HTMLElement {
   // Header: drag handle + title + layout controls + remove.
   const head = document.createElement('div');
   head.className = 'dash-card-head';
-  head.draggable = true;
+  head.draggable = !dashReadOnly; // a snapshot cannot be rearranged
   head.addEventListener('dragstart', (e) => {
     dashDragId = card.id;
     if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
@@ -894,7 +1002,8 @@ async function persistDashboard(): Promise<void> {
   // (src/dashboards.ts updateDashboard), so don't fire the autosave at it. This
   // check is a courtesy that keeps the debounce quiet — the guarantee is the
   // main-process one, not this line.
-  if (dashCurrent.analysisId) { dashDirty = false; return; }
+  if (dashMode === 'dashboard' && dashCurrent.analysisId) { dashDirty = false; return; }
+  if (dashMode === 'analysis') { await persistAnalysis(); return; }
   try {
     const res = await window.hub.updateDashboard(currentProjectId, dashCurrent.id, {
       name: dashCurrent.name,
@@ -912,16 +1021,41 @@ async function persistDashboard(): Promise<void> {
   } catch (_) { /* keep dashDirty so an explicit Save can retry */ }
 }
 
+// The analysis half of persistDashboard: same edits, different channel. Sheets
+// are read straight out of `pages` because they are the same array.
+async function persistAnalysis(): Promise<void> {
+  if (!dashCurrent || !currentProjectId) return;
+  try {
+    const res = await window.hub.updateAnalysis(currentProjectId, dashCurrent.id, {
+      name: dashCurrent.name,
+      sheets: dashCurrent.pages,
+      filters: Array.isArray(dashCurrent.filters) ? dashCurrent.filters : [],
+    });
+    if (res && res.ok && res.analysis) {
+      // Adopt main's sanitized copy, keeping the pages/sheets alias intact.
+      dashCurrent = res.analysis;
+      dashCurrent.pages = dashCurrent.sheets;
+      if (!Array.isArray(dashCurrent.filters)) dashCurrent.filters = [];
+      if (dashPageIdx >= dashCurrent.pages.length) dashPageIdx = 0;
+    }
+    dashDirty = false;
+    renderAnalysisPubState(); // an edit means "unpublished changes" — say so
+  } catch (_) { /* keep dashDirty so an explicit Save can retry */ }
+}
+
 async function handleSaveDashboard(): Promise<void> {
   if (dashSaveTimer !== null) { window.clearTimeout(dashSaveTimer); dashSaveTimer = null; }
   await persistDashboard();
-  await refreshDashboardListKeepEditor();
+  if (dashMode === 'analysis') await refreshAnalysisListKeepEditor();
+  else await refreshDashboardListKeepEditor();
 }
 
 async function handleBackToList(): Promise<void> {
+  const wasAnalysis = dashMode === 'analysis';
   if (dashDirty) await persistDashboard();
   closeDashboardEditor();
-  await refreshDashboardList();
+  if (wasAnalysis) await refreshAnalysisList();
+  else await refreshDashboardList();
 }
 
 // ── Embedded AI actions (Week 12) ─────────────────────────────────────────────
@@ -983,60 +1117,9 @@ function renderAnomaliesPanel(out: HTMLElement, anomalies: any[], proseText: str
   }
 }
 
-// Draft dashboard (list view): the model proposes STRUCTURE (cards by name) — main
-// resolves names→ids, lays out the grid, and computes every figure at render. We
-// confirm-before-save; the created dashboard opens in the normal (fully editable)
-// editor. Execution-gated → gentle hint, never an error dialog.
-//
-// The channel behind window.hub.draftDashboard is now `analysis:draft` (the old
-// `dashboard:draft` was DELETED, not aliased), so the proposal arrives as
-// `sheets`, not `pages`. A sheet IS a dashboards Page, so the payload is
-// unchanged in shape and this still saves a dashboard: the analysis surface that
-// should own the draft does not exist in the UI yet, and a button that creates a
-// record nothing can open would be worse than one that creates a dashboard.
-// Repoint the save below to window.hub.createAnalysis when that surface lands.
-async function handleDraftDashboard(): Promise<void> {
-  if (!currentProjectId) { window.alert('Open a project first.'); return; }
-  const btn = dashEl('dash-draft-btn') as HTMLButtonElement | null;
-  const label = btn ? btn.textContent : '';
-  if (btn) { btn.disabled = true; btn.textContent = 'Thinking…'; }
-  let res: any;
-  try {
-    res = await window.hub.draftDashboard(currentProjectId);
-  } catch (_) {
-    res = { ok: false, error: 'Could not draft a dashboard.' };
-  }
-  if (btn) { btn.disabled = false; btn.textContent = label || '✨ AI draft dashboard'; }
-
-  if (res && res.notReady) {
-    window.alert('Connect a model in Execution settings to draft a dashboard.');
-    return;
-  }
-  if (!res || res.ok === false) {
-    window.alert((res && res.error) || 'Could not draft a dashboard.');
-    return;
-  }
-  const pages = Array.isArray(res.sheets) ? res.sheets : [];
-  const cardCount = pages.reduce((n: number, p: any) => n + (Array.isArray(p.cards) ? p.cards.length : 0), 0);
-  const name = res.name || 'AI dashboard';
-  const confirmMsg =
-    'AI proposed the dashboard “' + name + '” with ' + cardCount + ' card' + (cardCount === 1 ? '' : 's') +
-    '. Create it? Every figure is computed by the app and you can edit everything after.';
-  if (!window.confirm(confirmMsg)) return;
-
-  let saved: any;
-  try {
-    saved = await window.hub.saveDashboard({ projectId: currentProjectId, name, pages });
-  } catch (_) {
-    saved = null;
-  }
-  if (!saved || saved.ok === false || !saved.id) {
-    window.alert((saved && saved.error) || 'Failed to create the dashboard.');
-    return;
-  }
-  await refreshDashboardList();
-  openDashboardFrom(saved);
-}
+// The AI draft now lands on the ANALYSIS surface — see handleDraftAnalysis in
+// analyses.ts. The channel (analysis:draft) always returned `sheets`; what was
+// missing was somewhere to put them, and `dashboard:draft` no longer exists.
 
 // Executive summary (editor): persist pending edits, then main recomputes every
 // card's figure and feeds them as FACTS; the model only narrates. Prose renders as
@@ -1559,8 +1642,6 @@ function handleDashShare(): void {
 function initDashboards(): void {
   const newBtn = dashEl('dash-new-btn');
   if (newBtn) newBtn.addEventListener('click', () => handleNewDashboard());
-  const draftBtn = dashEl('dash-draft-btn');
-  if (draftBtn) draftBtn.addEventListener('click', () => handleDraftDashboard());
   const summaryBtn = dashEl('dash-summary-btn');
   if (summaryBtn) summaryBtn.addEventListener('click', () => handleDashSummary());
   const anomaliesBtn = dashEl('dash-anomalies-btn');
@@ -1571,7 +1652,9 @@ function initDashboards(): void {
 
   const rename = dashEl('dash-rename-btn');
   if (rename) rename.addEventListener('click', () => {
-    if (dashCurrent) handleRenameDashboard(dashCurrent.id, dashCurrent.name || '');
+    if (!dashCurrent) return;
+    if (dashMode === 'analysis') handleRenameAnalysis(dashCurrent.id, dashCurrent.name || '');
+    else handleRenameDashboard(dashCurrent.id, dashCurrent.name || '');
   });
 
   const addV = dashEl('dash-add-visual');

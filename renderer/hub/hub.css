@@ -86,6 +86,12 @@ html[data-os="win"] .titlebar { padding-right: 146px; }
 }
 
 .btn .ic { display: block; }
+/* `display: inline-flex` above BEATS the UA's `[hidden] { display: none }`, so
+   until this rule existed `el.hidden = true` did nothing to a .btn — the
+   dashboard toolbar's "Clear all" showed with zero filters, and every
+   conditionally-hidden button in the analysis surface showed unconditionally.
+   Same defect, same fix, for the AI interpretation panel below. */
+.btn[hidden] { display: none; }
 
 .btn-sm {
   height: 30px;
@@ -5074,6 +5080,90 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   gap: 12px;
 }
 .dash-editor[hidden] { display: none; }
+
+/* ── Phase D: one editor, two hosts ────────────────────────────────────────
+   The SAME #dash-editor element is re-parented between #an-editor-host (in the
+   Analyses panel) and #dash-editor-host (in the Dashboards panel). The host is
+   `display: contents` so the editor stays a direct flex item of .ws-panel and
+   the layout is byte-identical to before it had a wrapper. */
+.dash-editor-host { display: contents; }
+
+/* Mode + read-only are CLASSES on #dash-editor, never inline styles (hub CSP),
+   mirroring how .dash-presenting hides its chrome. */
+.dash-an-only { display: none; }
+.dash-editor--analysis .dash-an-only { display: inline-flex; }
+.dash-an-only[hidden] { display: none; }
+.dash-editor--analysis .dash-db-only { display: none; }
+
+/* A PUBLISHED dashboard is a snapshot: main refuses every non-publish write, so
+   the UI removes the affordances rather than offering an edit that will fail. */
+.dash-editor--readonly .dash-edit-only,
+.dash-editor--readonly .dash-card-ctrls,
+.dash-editor--readonly .dash-page-ctrl,
+.dash-editor--readonly .dash-page-add,
+.dash-editor--readonly .dash-filter-chip-x,
+.dash-editor--readonly .dash-starters { display: none; }
+.dash-editor--readonly .dash-card-head { cursor: default; }
+
+.dash-readonly {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.dash-readonly[hidden] { display: none; }
+.dash-readonly-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-3);
+  background: var(--surface-3);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.dash-readonly-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text);
+}
+
+/* Publish state of the open analysis (never published / last published + the
+   unpublished-changes hint). */
+.an-pubstate {
+  font-size: 12px;
+  color: var(--muted);
+}
+.an-pubstate[hidden] { display: none; }
+.an-pubstate-dirty { color: var(--accent); font-weight: 600; }
+
+/* List badges: "Published" on a dashboard row, "Unpublished changes" on an
+   analysis row. */
+.dash-list-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-3);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.dash-list-badge--dirty {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .dash-editor-head {
   display: flex;
   align-items: center;
@@ -5256,6 +5346,135 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   font-size: 13px;
   color: var(--muted);
   margin: 8px 0;
+}
+
+/* ── AI draft review (Phase E envelope): the plan, the previews, and — never
+      hidden — everything the app refused. Wider than the stock .ws-modal and
+      scrolled internally, so a long draft cannot push the actions off-screen. ── */
+/* `.ws-modal` sets width: min(360px, …) and is defined LATER in this file, so an
+   equal-specificity `.an-draft-modal` would lose to it. Qualify with both. */
+.ws-modal.an-draft-modal { width: min(760px, calc(100vw - 48px)); }
+.an-draft-body {
+  max-height: min(60vh, 560px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
+}
+.an-draft-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.an-draft-rationale { margin: 2px 0; }
+.an-draft-section {
+  margin-top: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+}
+.an-draft-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+.an-draft-note--why {
+  padding: 10px 12px;
+  border: 1px dashed var(--border-2);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.an-draft-calc {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.an-draft-calc-name { font-weight: 600; color: var(--text-strong); }
+.an-draft-calc-formula {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.an-draft-visual {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.an-draft-visual-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.an-draft-visual-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.an-draft-visual-type {
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-3);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+/* An explicit height: a chart measured inside a modal that has not been laid
+   out yet renders at zero and looks like a silent failure. `overflow: hidden` is
+   not decoration — `.cv-canvas-wrap` sizes itself against the VIEWPORT, so
+   without a clip the preview chart paints straight through the card beneath it.
+   The inner element carries `.dash-viz-area .cv-viz-area`, the same pairing the
+   dashboard grid uses to bound a chart to its cell. */
+.an-draft-viz {
+  height: 200px;
+  min-height: 200px;
+  position: relative;
+  overflow: hidden;
+}
+.an-draft-viz .cv-canvas-wrap { height: 100%; min-height: 0; }
+.an-draft-dropped {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 7px 10px;
+  border: 1px solid var(--border-2);
+  border-left: 3px solid var(--accent-line);
+  border-radius: 6px;
+  background: var(--surface-2);
+  font-size: 12px;
+}
+.an-draft-dropped-kind {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--accent);
+}
+.an-draft-dropped-where {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--muted);
+}
+.an-draft-dropped-msg { color: var(--text); }
+.an-draft-foot {
+  margin: 12px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
 }
 
 /* ── Week 10 dashboard toolbar (filters + quick controls + present/export/share) ── */
@@ -6334,6 +6553,9 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   border: 1px solid var(--border);
   border-radius: 8px;
 }
+/* Without this the `hidden` attribute lost to `display: flex` and the panel
+   painted as an empty bordered bar above every dashboard grid. */
+.ai-interp[hidden] { display: none; }
 .ai-interp-head {
   display: flex;
   align-items: center;

@@ -222,8 +222,20 @@ declare global {
       ): Promise<any>;
       deleteDashboard(projectId: string, id: string): Promise<{ ok: boolean }>;
       // Channel `analysis:draft` (the old `dashboard:draft` was deleted, not
-      // aliased). Resolves to { ok, name, sheets } — `sheets`, not `pages`.
+      // aliased). Phase E widened the reply to
+      //   { ok, name, rationale, sheets: [{ name, visuals: VisualPreview[] }],
+      //     calculatedFields, dropped: [{kind, where, message}], plan }
+      // — `sheets`, never `pages`. A VisualPreview's `data` is already the exact
+      // {labels, series} (+ geo) object chartRender.buildChart consumes; when it
+      // is null it carries a `note` saying why, and that note is what gets
+      // rendered — never a substituted figure.
       draftDashboard(projectId: string): Promise<any>;
+      // The two halves of the Phase E plan pipeline: preview re-renders a plan
+      // without writing anything; build materialises it. Typed loosely because
+      // the plan envelope is owned by main (same convention as the rest of this
+      // bridge) — ponytail.
+      previewAnalysisPlan(projectId: string, plan: any): Promise<any>;
+      buildAnalysisPlan(projectId: string, plan: any): Promise<any>;
       // ── Analyses (the AUTHORING container — sheets of cards + filters) ──
       listAnalyses(projectId: string): Promise<any[]>;
       getAnalysis(projectId: string, id: string): Promise<any>;
