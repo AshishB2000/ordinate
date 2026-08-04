@@ -405,6 +405,39 @@ function anDraftReviewModal(draft: any): Promise<boolean> {
       scroll.appendChild(panel);
     }
 
+    // WHAT WAS DROPPED. Never collapsed, never behind a toggle — and FIRST,
+    // above the previews. At its natural height a preview chart pushes this
+    // below the fold in a multi-visual draft, and a list of the model's
+    // mistakes that the user has to scroll to find defeats the point of
+    // showing it: they approve the plan having seen only the parts that worked.
+    const dropped: any[] = Array.isArray(draft && draft.dropped) ? draft.dropped : [];
+    if (dropped.length) {
+      scroll.appendChild(anDraftSectionLabel(
+        dropped.length + (dropped.length === 1 ? ' thing was dropped' : ' things were dropped'),
+      ));
+      const why = document.createElement('div');
+      why.className = 'an-draft-note';
+      why.textContent = 'The app refused these because it could not verify them. They are listed so the draft is not flattered by hiding its own mistakes.';
+      scroll.appendChild(why);
+      dropped.forEach((d: any) => {
+        const row = document.createElement('div');
+        row.className = 'an-draft-dropped';
+        const where = document.createElement('span');
+        where.className = 'an-draft-dropped-where';
+        where.textContent = String((d && d.where) || '');
+        const kind = document.createElement('span');
+        kind.className = 'an-draft-dropped-kind';
+        kind.textContent = String((d && d.kind) || 'dropped');
+        const msg = document.createElement('span');
+        msg.className = 'an-draft-dropped-msg';
+        msg.textContent = String((d && d.message) || '');
+        row.appendChild(kind);
+        if (where.textContent) row.appendChild(where);
+        row.appendChild(msg);
+        scroll.appendChild(row);
+      });
+    }
+
     // Calculated fields the plan wants to add, shown with their formulas: they
     // are new columns in the user's data and must not arrive unannounced.
     const calcs: any[] = Array.isArray(draft && draft.calculatedFields) ? draft.calculatedFields : [];
@@ -451,34 +484,6 @@ function anDraftReviewModal(draft: any): Promise<boolean> {
       visuals.forEach((v: any) => scroll.appendChild(anDraftVisualEl(v)));
     });
 
-    // WHAT WAS DROPPED. Never collapsed, never behind a toggle.
-    const dropped: any[] = Array.isArray(draft && draft.dropped) ? draft.dropped : [];
-    if (dropped.length) {
-      scroll.appendChild(anDraftSectionLabel(
-        dropped.length + (dropped.length === 1 ? ' thing was dropped' : ' things were dropped'),
-      ));
-      const why = document.createElement('div');
-      why.className = 'an-draft-note';
-      why.textContent = 'The app refused these because it could not verify them. They are listed so the draft is not flattered by hiding its own mistakes.';
-      scroll.appendChild(why);
-      dropped.forEach((d: any) => {
-        const row = document.createElement('div');
-        row.className = 'an-draft-dropped';
-        const where = document.createElement('span');
-        where.className = 'an-draft-dropped-where';
-        where.textContent = String((d && d.where) || '');
-        const kind = document.createElement('span');
-        kind.className = 'an-draft-dropped-kind';
-        kind.textContent = String((d && d.kind) || 'dropped');
-        const msg = document.createElement('span');
-        msg.className = 'an-draft-dropped-msg';
-        msg.textContent = String((d && d.message) || '');
-        row.appendChild(kind);
-        if (where.textContent) row.appendChild(where);
-        row.appendChild(msg);
-        scroll.appendChild(row);
-      });
-    }
 
     box.appendChild(scroll);
 

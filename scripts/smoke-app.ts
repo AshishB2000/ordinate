@@ -579,7 +579,15 @@ async function main(): Promise<void> {
     );
     const mr = modal?.getBoundingClientRect();
     const vr = viz?.getBoundingClientRect();
+    // Where the drop list sits RELATIVE to the first preview chart. At its
+    // natural height a chart pushes the drop list below the fold, and a list of
+    // the model's mistakes the user must scroll to find defeats the point:
+    // they approve having seen only the parts that worked.
+    const firstDropTop = dropped.length
+      ? Math.round((dropped[0] as HTMLElement).getBoundingClientRect().top) : -1;
     return {
+      firstDropTop,
+      firstVizTop: Math.round(vr?.top ?? 1e9),
       modalW: Math.round(mr?.width || 0),
       modalH: Math.round(mr?.height || 0),
       vizH: Math.round(vr?.height || 0),
@@ -606,6 +614,10 @@ async function main(): Promise<void> {
       fakeFigure: /(^|\s)(0|—|N\/A)(\s|$)/.test(note?.textContent || ''),
     };
   });
+  // Order, not just presence: dropped entries must come BEFORE the previews.
+  ok('what was dropped is shown above the preview charts, not below them',
+     review.firstDropTop >= 0 && review.firstDropTop < review.firstVizTop,
+     `dropTop=${review.firstDropTop} vizTop=${review.firstVizTop}`);
   ok('the draft review dialog paints at a real size', review.modalW > 400 && review.modalH > 200,
      `${review.modalW}x${review.modalH}`);
   ok('a previewed visual renders its app-computed data as a chart',
