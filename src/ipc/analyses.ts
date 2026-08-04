@@ -1,9 +1,9 @@
 import { ipcMain } from 'electron';
 import * as analysis from '../analysis';
 import * as dashboards from '../dashboards';
-import * as datasets from '../datasets';
 import * as visuals from '../visuals';
 import { draftDashboard } from '../analyze';
+import * as plan from '../analysisPlan';
 
 // Analyses IPC — list/get/create/rename/update/delete an Analysis (the AUTHORING
 // container), plus the two channels that only exist here:
@@ -205,26 +205,29 @@ export async function publishAnalysis(
   return { ok: true, dashboard, created };
 }
 
-// AI-DRAFTED LAYOUT — moved VERBATIM from `dashboard:draft`, which is deleted
-// rather than aliased: two AI paths that both create a layout, differing subtly,
-// is the failure mode worth avoiding, and an alias IS that outcome.
+// ── THE AI PLAN — draft → preview → build ──────────────────────────────────
 //
-// Build a compact inventory (datasets → columns; saved visuals by name), ask the
-// model for a name + cards referencing ONLY those names, then RESOLVE names→ids
-// in MAIN (verify columns exist, clamp aggregations, map visual names→ids),
-// ASSIGN the grid layout ourselves (flow packer), and sanitize into sheets.
-// Returns { ok, name, sheets } WITHOUT saving — the renderer confirms first.
-// Every figure is computed later, at render.
+// `dashboard:draft` was deleted rather than aliased in Phase C, and this is the
+// channel that replaced it. Phase E extended it end-to-end without adding a
+// second AI path: `analyze.draftDashboard()` is still the ONE model call (its
+// prompt grew from a flat card list into the plan envelope), and every decision
+// about what that call produced is re-made by `analysisPlan.validatePlan` — the
+// SAME function `analysis:buildPlan` runs on the way in.
 //
-// The only change from the dashboard version is what it PRODUCES: `sheets` for
-// an analysis, not `pages` for a dashboard. The AI's output is a first draft —
-// the thing a user immediately wants to edit — so it must land on the authoring
-// surface, not in the one place the model calls immutable.
+//   analysis:draft       AI. FACTS in (no rows, no secrets), plan envelope out,
+//                        validated + previewed. `not_ready` with no model.
+//   analysis:previewPlan NOT AI. Re-validate + re-preview a user-EDITED plan.
+//   analysis:buildPlan   NOT AI. Re-validate the approved plan and create the
+//                        records: calculated fields → ordinary TransformSteps,
+//                        visuals → real Visuals, sheets → an Analysis.
 //
-// `analyze.draftDashboard()` KEEPS ITS NAME: it is the model call, it sits beside
-// summarizeDashboard/explainAnomalies, and a later phase must EXTEND it rather
-// than add a second drafting function.
-const DRAFT_AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
+// Only the first needs a model. Editing, previewing and building a plan work
+// with nothing configured at all — they are app code, and that is what keeps
+// "AI is optional" true for the whole surface rather than just the entry point.
+//
+// Nothing here returns a figure the model produced. Every number in a preview
+// came out of `vizDataFor`, which is the same function that draws the built
+// Visual; see the header of src/analysisPlan.ts for why they cannot disagree.
 
 export function register() {
   ipcMain.handle('analysis:list', async (_e, { projectId }: any = {}) =>
@@ -293,87 +296,59 @@ export function register() {
     }
   });
 
-  ipcMain.handle('analysis:draft', async (_e, { projectId }: any = {}) => {
+  // Exported so the self-check drives the real handler body, not a copy of it —
+  // the same reason `wrapDashboardInAnalysis` / `publishAnalysis` are exported.
+  ipcMain.handle('analysis:draft', async (_e, { projectId }: any = {}) => draftAnalysisPlan(projectId));
+
+  // Re-validate and re-preview a plan the USER edited. No model, so this works
+  // with nothing configured — the plan is data, and validating data is app code.
+  ipcMain.handle('analysis:previewPlan', async (_e, { projectId, plan: raw }: any = {}) => {
     try {
-      const dsSummaries = await datasets.listDatasets(projectId);
-      const vList = await visuals.listVisuals(projectId);
-      if (dsSummaries.length === 0 && vList.length === 0) {
-        return { ok: false, error: 'Add a dataset or visual before drafting an analysis.' };
-      }
-
-      // Load each dataset's columns for the inventory + name→(id, columns) lookup.
-      // METADATA ONLY — this loop reads name/columns/id and nothing else, so it
-      // uses getDatasetMeta. It previously hydrated EVERY dataset in the project
-      // (both the derived table and the immutable source) to build a prompt
-      // listing column names: at the 1M row cap that is hundreds of MB parsed per
-      // draft, for data that is never looked at.
-      const dsByName = new Map<string, datasets.DatasetMeta>();
-      const invLines: string[] = ['Datasets and their columns:'];
-      for (const s of dsSummaries) {
-        const ds = await datasets.getDatasetMeta(projectId, s.id);
-        if (!ds) continue;
-        dsByName.set(ds.name, ds);
-        invLines.push(`- "${ds.name}": ${ds.columns.map((c) => `${c.name} (${c.type})`).join(', ') || '(no columns)'}`);
-      }
-      invLines.push('');
-      invLines.push('Saved visuals (reference by exact name):');
-      const vByName = new Map<string, string>(); // name → visualId
-      vList.forEach((v) => vByName.set(v.name, v.id));
-      invLines.push(vList.length ? vList.map((v) => `- "${v.name}"`).join('\n') : '- (none)');
-
-      const res = await draftDashboard(invLines.join('\n'));
-      if (!res.ok) {
-        if (res.errorType === 'not_ready') return { ok: false, notReady: true };
-        return { ok: false, error: res.message || 'Could not draft an analysis' };
-      }
-
-      const structure = (res.structure && typeof res.structure === 'object' ? res.structure : {}) as Record<string, unknown>;
-      const name = typeof structure.name === 'string' && structure.name.trim() ? structure.name.trim() : 'AI analysis';
-      const rawCards = Array.isArray(structure.cards) ? structure.cards : [];
-
-      // Flow packer: metric 3×2, visual 6×6, text 12×2 — laid out left→right,
-      // wrapping at GRID_COLS. Resolve every reference; drop anything unresolvable.
-      const packed: unknown[] = [];
-      let cx = 0;
-      let cy = 0;
-      let rowH = 0;
-      const place = (w: number, h: number) => {
-        if (cx + w > dashboards.GRID_COLS) { cx = 0; cy += rowH; rowH = 0; }
-        const layout = { x: cx, y: cy, w, h };
-        cx += w;
-        if (h > rowH) rowH = h;
-        return layout;
-      };
-      for (const raw of rawCards) {
-        const c = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
-        if (!c) continue;
-        if (c.type === 'metric') {
-          const ds = typeof c.dataset === 'string' ? dsByName.get(c.dataset) : undefined;
-          if (!ds) continue;
-          const column = typeof c.column === 'string' ? c.column : '';
-          if (!ds.columns.some((col) => col.name === column)) continue; // column must exist
-          const aggregation = typeof c.aggregation === 'string' && DRAFT_AGGS.has(c.aggregation) ? c.aggregation : 'sum';
-          const label = typeof c.label === 'string' ? c.label : `${aggregation}(${column})`;
-          packed.push({ type: 'metric', layout: place(3, 2), metric: { datasetId: ds.id, column, aggregation, label } });
-        } else if (c.type === 'visual') {
-          const visualId = typeof c.visual === 'string' ? vByName.get(c.visual) : undefined;
-          if (!visualId) continue;
-          packed.push({ type: 'visual', layout: place(6, 6), visualId });
-        } else if (c.type === 'text') {
-          const heading = typeof c.heading === 'string' ? c.heading : undefined;
-          const text = typeof c.text === 'string' ? c.text : undefined;
-          if (heading === undefined && text === undefined) continue;
-          packed.push({ type: 'text', layout: place(12, 2), heading, text });
-        }
-      }
-
-      // sanitizeCards drops anything still malformed; wrap into a single sheet.
-      // A sheet IS a dashboards.Page, so this is the same sanitiser either way.
-      const cards = dashboards.sanitizeCards(packed);
-      const sheets = [{ name: 'Page 1', cards }];
-      return { ok: true, name, sheets };
+      return await plan.previewPlan(projectId, raw);
     } catch (err: any) {
-      return { ok: false, error: err?.message || 'Failed to draft an analysis' };
+      return { ok: false, error: err?.message || 'Failed to preview the plan' };
     }
   });
+
+  // APPROVAL. Re-validates with the same validatePlan the preview ran, then
+  // creates the records through the existing stores. Also model-free.
+  ipcMain.handle('analysis:buildPlan', async (_e, { projectId, plan: raw }: any = {}) => {
+    try {
+      return await plan.buildPlan(projectId, raw);
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Failed to build the analysis' };
+    }
+  });
+}
+
+/**
+ * `analysis:draft`'s body: FACTS → the one model call → validate → preview.
+ *
+ * Returns `{ ok:true, plan, ...preview }` — the plan the renderer will hand back
+ * to `analysis:buildPlan` verbatim, plus everything needed to show it. Nothing
+ * is saved: the user approves, edits or rejects first.
+ *
+ * `{ ok:false, notReady:true }` with no model configured, which is the whole of
+ * what "AI is optional" costs this surface — preview and build still work.
+ */
+export async function draftAnalysisPlan(projectId: string): Promise<any> {
+  try {
+    const ctx = await plan.loadPlanContext(projectId);
+    if (ctx.datasets.length === 0 && ctx.visuals.length === 0) {
+      return { ok: false, error: 'Add a dataset or visual before drafting an analysis.' };
+    }
+
+    // App-computed, row-free, secret-free. See analysisPlan.buildFactsText.
+    const res = await draftDashboard(plan.buildFactsText(ctx));
+    if (!res.ok) {
+      if (res.errorType === 'not_ready') return { ok: false, notReady: true };
+      return { ok: false, error: res.message || 'Could not draft an analysis' };
+    }
+
+    // Reuses the context the FACTS block was built from — the model saw exactly
+    // the records this validates against.
+    return await plan.previewPlan(projectId, res.structure, ctx);
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Failed to draft an analysis' };
+  }
 }

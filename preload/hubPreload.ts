@@ -327,15 +327,44 @@ contextBridge.exposeInMainWorld('hub', {
     ipcRenderer.invoke('dashboard:update', { projectId, id, ...patch }),
   // Delete a dashboard; returns { ok: boolean }.
   deleteDashboard: (projectId: string, id: string) => ipcRenderer.invoke('dashboard:delete', { projectId, id }),
-  // OPTIONAL AI layout draft (structure only — the model proposes cards by name;
-  // MAIN resolves names→ids, assigns the grid, and computes every figure at render).
-  // Returns the proposal WITHOUT saving. { ok, name, sheets } |
-  // { ok:false, notReady:true } | { ok:false, error }.
+  // ── The AI ANALYSIS PLAN: draft → (edit →) preview → build ────────────────
+  //
+  // OPTIONAL AI plan draft (STRUCTURE ONLY — the model names datasets, columns,
+  // chart types, aggregations and formulas, and never writes a figure). MAIN
+  // builds a row-free FACTS block, makes the one model call, VALIDATES the
+  // envelope against the real records, and renders a preview from real data.
+  // Returns WITHOUT saving anything.
+  //
+  //   { ok:true, name, rationale, sheets:[{name, visuals:[VisualPreview]}],
+  //     calculatedFields:[CalcFieldPreview], dropped:[{kind, where, message}],
+  //     plan }                                  ← hand `plan` back to build
+  //   | { ok:false, notReady:true }              ← no model configured
+  //   | { ok:false, error }
+  //
+  // A VisualPreview carries { name, chartType, encoding, filters, datasetName,
+  // data, recommendedShape, warnings, note? }. `data` is the EXACT
+  // {labels, series} shape chartRender.buildChart consumes, computed by the same
+  // function that will draw the built Visual — or null, with `note` saying why
+  // (a card waiting on a calculated field; a table too large to preview). A
+  // CalcFieldPreview carries { name, expression, refs, unknownRefs, sample } —
+  // the sample is real rows the APP evaluated. `dropped` is what the model
+  // proposed and the app refused; show it, do not hide it.
   //
   // The CHANNEL is `analysis:draft`; `dashboard:draft` was deleted, not aliased.
-  // The METHOD name is kept — this is still "draft me a layout", and the model
-  // call behind it is still analyze.draftDashboard().
+  // The METHOD name is kept — the model call behind it is still
+  // analyze.draftDashboard(), extended in place rather than twinned.
   draftDashboard: (projectId: string) => ipcRenderer.invoke('analysis:draft', { projectId }),
+  // Re-validate + re-preview a plan the USER edited. NOT an AI call — this works
+  // with no model configured. Same reply shape as draftDashboard, minus notReady.
+  previewAnalysisPlan: (projectId: string, plan: any) =>
+    ipcRenderer.invoke('analysis:previewPlan', { projectId, plan }),
+  // APPROVAL. Re-validates with the same validator the preview ran, then creates
+  // the records: calculated fields become ordinary TransformSteps, visuals become
+  // real Visuals, sheets become an Analysis. Also NOT an AI call.
+  // { ok:true, analysis, visualIds, calculatedFields, dropped, warnings }
+  // | { ok:false, error }.
+  buildAnalysisPlan: (projectId: string, plan: any) =>
+    ipcRenderer.invoke('analysis:buildPlan', { projectId, plan }),
 
   // ── Analyses (the AUTHORING container — sheets of cards + analysis-wide
   // filters; a dashboard is a published snapshot OF one). ────────────────────
