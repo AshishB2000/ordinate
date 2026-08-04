@@ -39,7 +39,17 @@ quality before adding code.
 > webview↔Rust boundary a Tauri port would **keep** costs ~6.7 ms at 64 KB, against queries of
 > 2–12 ms. `Atomics.wait` is also spec-prohibited on a webview main thread, so the sync bridge could
 > only be deleted, never ported. **The one worthwhile idea in Phase 6 needs neither Rust nor Tauri:**
-> move DuckDB into a sidecar process as an *Electron* refactor.
+> move DuckDB into a sidecar process as an *Electron* refactor. **That sidecar is now BUILT and
+> proven differential, but NOT yet adopted** (PR #34): `src/duckdbSidecar.ts` (parent client) +
+> `src/duckdbSidecarChild.ts` (child) present the same synchronous `query()` surface as
+> `src/duckdb.ts`, over a child process instead of a worker + `SharedArrayBuffer` — the sync API
+> survives because spinning on `EAGAIN` over a non-blocking stdio pipe is a correct blocking read
+> (18.7 spins per 83 KB call). The DuckDB↔JS type mapping and result encoder are extracted into
+> `src/duckdbEngine.ts` so the worker bridge and the sidecar share ONE converter. **It is NOT a
+> speedup** (`ecc4d0c` corrected the phase-6 doc that implied so): measured end-to-end it is at
+> parity on a scalar and modestly slower on real payloads, because transport is a small fraction of
+> a query's cost. It exists to prove the sync API can survive the move; adopting it is a separate
+> decision.
 >
 > **Phase 5 (Svelte) is a TOOLCHAIN SPIKE, not a migration** ([`docs/phase-5/`](docs/phase-5/), PR
 > #22). `svelte` + `esbuild` are devDependencies; `scripts/build-svelte.js` compiles
@@ -210,6 +220,14 @@ hub opens to **Execution settings** instead — capture never starts.
   heterogeneous datasets), `dashboardExport.ts` (self-contained HTML with inlined Chart.js UMD read
   off `node_modules`; PNG/PDF via offscreen `reportCapture.ts`; `sanitizeBundle` whitelists the
   export to labels/numbers/strings/`data:image` only — no secrets, no http(s) images).
+  **Planned but NOT built (decision only, `docs/analysis/00-model.md`, PR #39):** a QuickSight-style
+  split where an **analysis** is the mutable workspace that owns sheets and a **dashboard** is a
+  read-only *published snapshot*. On publish each referenced Visual's definition (datasetId,
+  chartType, encoding, overrides, filters) is copied **by value** into the card — visuals stay
+  project-level, referenced by id, and Parquet is never duplicated. Legacy dashboards survive,
+  wrapped lazily on first edit; `normalize()` upgrades in memory and writes nothing. This supersedes
+  `draftDashboard`/`dashboard:draft` with `analysis:draft` — but that is a decision record, no
+  product code exists yet, so the current IPC and code below still use `dashboard:draft`.
 ### The resident-query layer (how a question gets answered)
 
 Every one of these queries the stored `.parquet` **in place** and returns `null` on any failure, so
@@ -288,8 +306,9 @@ and maps). A disk-persisted history rail lists captures (newest first); clicking
 
 ### Code layout
 - **Main:** `main.ts` (emits `main.js`) = entry/lifecycle/hotkey/capture loop/windows. Logic in `src/` modules:
-  DuckDB layer (`duckdb, duckdbWorker, parquetStore, sqlGen, pipelineDuck, residentQuery,
-  statsResident, anomaliesResident, datasetPage, datasetView`);
+  DuckDB layer (`duckdb, duckdbWorker, duckdbEngine, duckdbSidecar, duckdbSidecarChild,
+  parquetStore, sqlGen, pipelineDuck, residentQuery, statsResident, anomaliesResident,
+  datasetPage, datasetView`);
   capture path (`analyze, calc, headline, capture, config, history, hotkey, localCli, localCliRun,
   models, icons, userPath, disclaim`); workspace (`projects, datasets, parse, parseXlsx,
   connections, connectionRun, captureDataset, transforms, formula, datasetStats, visuals, vizData,
@@ -397,7 +416,8 @@ concentration risk."), not jargon. All figures are computed by the app.
 
 ## Testing and Commands
 - **Priority test:** local vision model accuracy on real screenshots. Node self-checks in
-  `scripts/test-*.js` (pure logic, no framework) via `npm test` (**4,334 assertions**); add one per
+  `scripts/test-*.js` (pure logic, no framework) via `npm test` (**53 self-check files**, thousands
+  of assertions — 7 of them the per-family connector suites, plus `duckdbSidecar` and `cssVars`); add one per
   non-trivial helper.
 - **Differential tests are the house style for anything with two implementations.** A resident-SQL
   module is tested by running the SAME input through it and through the pure-JS original and
