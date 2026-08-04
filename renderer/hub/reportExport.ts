@@ -229,16 +229,16 @@ function svgToPngDataUrl(svg: string, w: number, h: number): Promise<string | nu
 // Build the pdfmake document definition for the one-page report. Colors are the
 // app's LIGHT-theme tokens hardcoded (the PDF is always a white page, regardless
 // of the app's current theme). A4 with 36pt side margins → 523pt content width.
-// The app's brand mark (the titlebar's capture-frame + ascending-bars logo),
-// recolored for the white PDF page (frame = ink, bars = accent). Inlined as an SVG
-// string so the report needs no image asset — assets/icons is NOT bundled into the
+// The app's brand mark — Cartesian axes with the plotted value (the ordinate),
+// matching assets/icons/mark.svg. Hardcoded to the LIGHT tokens because the PDF
+// is always a white page regardless of the app's theme. Inlined as an SVG string
+// so the report needs no image asset — assets/icons is NOT bundled into the
 // packaged asar, and pdfmake renders {svg} as crisp vector.
 const REPORT_LOGO_SVG =
   '<svg width="24" height="24" viewBox="0 0 24 24" fill="none">' +
-  '<path d="M4 8.2V5.6A1.6 1.6 0 0 1 5.6 4H8.2M15.8 4h2.6A1.6 1.6 0 0 1 20 5.6V8.2M20 15.8v2.6a1.6 1.6 0 0 1-1.6 1.6H15.8M8.2 20H5.6A1.6 1.6 0 0 1 4 18.4V15.8" stroke="#0f1117" stroke-width="1.7" stroke-linecap="round"/>' +
-  '<rect x="7.6" y="13" width="2.3" height="4.2" rx="0.6" fill="#2563eb"/>' +
-  '<rect x="10.85" y="10.4" width="2.3" height="6.8" rx="0.6" fill="#2563eb"/>' +
-  '<rect x="14.1" y="7.6" width="2.3" height="9.6" rx="0.6" fill="#2563eb"/></svg>';
+  '<g stroke="#0f1117" stroke-width="2" stroke-linecap="round">' +
+  '<path d="M12 5.4V18.6"/><path d="M5.4 12H18.6"/></g>' +
+  '<circle cx="16.6" cy="8.3" r="3.1" fill="#2563eb"/></svg>';
 
 // ponytail: the export args ({ title, analysis, headlineSegments, png, … }) and the
 // pdfmake/pptxgenjs/docx document trees are big untyped envelopes — typed `any`

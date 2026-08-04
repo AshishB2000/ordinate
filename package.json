@@ -26,7 +26,8 @@
     "bench:pipeline": "npm run build:ts && node scripts/bench-pipeline.js",
     "bench:resident": "npm run build:ts && node scripts/bench-resident.js",
     "smoke": "npm run build && node scripts/smoke-app.js",
-    "build:icons": "node scripts/build-icons.js"
+    "build:icons": "node scripts/build-icons.js",
+    "build:appicon": "electron scripts/build-appicon.js"
   },
   "license": "MIT",
   "devDependencies": {
