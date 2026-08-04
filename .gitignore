@@ -186,3 +186,9 @@ scripts/**/*.js
 
 # CSS custom-property check — emitted sibling.
 /scripts/test-cssVars.js
+
+# DuckDB sidecar (docs/phase-6 §4, option b1) — emitted siblings.
+/src/duckdbEngine.js
+/src/duckdbSidecar.js
+/src/duckdbSidecarChild.js
+/scripts/test-duckdbSidecar.js
