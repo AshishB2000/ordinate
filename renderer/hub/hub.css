@@ -3967,11 +3967,12 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 
 /* LEFT — Connect. Uses the app's own surfaces and accent, NOT a slab of colour
    borrowed from another product: it has to read as part of Screenchart in both
-   themes, and a hardcoded dark rail would look pasted on in light mode. It is
-   separated from the centre by a border and one step of surface, which is the
-   same way every other rail in this app is set apart. */
+   themes, and a hardcoded dark rail would look pasted on in light mode.
+   Shares --bg with the centre column and is set apart by the border alone, so
+   the start page reads as one surface with a divider rather than three tinted
+   slabs — the rail is a list of links, not a region competing for attention. */
 .home-connect {
-  background: var(--surface-1);
+  background: var(--bg);
   border-right: 1px solid var(--border);
   color: var(--text);
   padding: 22px 0 24px;
@@ -4079,7 +4080,7 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   align-items: flex-start;
   gap: 3px;
   padding: 12px 14px 14px;
-  background: var(--surface-1);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-left: 3px solid var(--accent-line);
   border-radius: 10px;
@@ -4103,7 +4104,7 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 /* RIGHT — Discover. Deliberately LOCAL: no feed, no external fetch. */
 .home-discover {
   border-left: 1px solid var(--border);
-  background: var(--surface-1);
+  background: var(--surface);
   padding: 24px 20px;
   overflow-y: auto;
   display: flex;
