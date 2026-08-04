@@ -253,6 +253,285 @@ async function main(): Promise<void> {
   });
   ok('dataset is listed in the UI with its row count', listed !== null, listed || 'not rendered');
 
+  // ── Phase D: the analysis authoring surface, driven as a user ─────────────
+  // Everything below clicks real buttons and fills real modals. It is here and
+  // not in a node self-check for the reason this whole file exists: a panel that
+  // renders at zero height, or a control hidden by a CSP-blocked style, passes
+  // every DOM assertion made outside a running window.
+  //
+  // Playwright dismisses dialogs by default, which would silently answer "no" to
+  // a window.confirm(). Accept them, and keep the text so an UNEXPECTED alert
+  // (the failure path of every handler in analyses.ts) is visible rather than
+  // swallowed.
+  const dialogs: string[] = [];
+  win.on('dialog', (d) => {
+    dialogs.push(d.type() + ': ' + d.message());
+    d.accept().catch(() => {});
+  });
+
+  // A tiny DOM driver, defined once and re-used: click by visible text, click by
+  // id, fill the prompt modal, pick from the chooser modal.
+  const clickExact = async (text: string): Promise<boolean> =>
+    win.evaluate((t) => {
+      const el = [...document.querySelectorAll('button, a, [role=button], li')].find(
+        (b) => (b as HTMLElement).offsetParent !== null && (b.textContent || '').trim() === t,
+      ) as HTMLElement | undefined;
+      if (!el) return false;
+      el.click();
+      return true;
+    }, text);
+  const clickId = async (id: string): Promise<boolean> =>
+    win.evaluate((i) => {
+      const el = document.getElementById(i) as HTMLElement | null;
+      if (!el || el.hidden) return false;
+      el.click();
+      return true;
+    }, id);
+  const fillPrompt = async (value: string): Promise<boolean> =>
+    win.evaluate((v) => {
+      const box = document.querySelector('.ws-modal-overlay .ws-modal');
+      if (!box) return false;
+      const input = box.querySelector('.ws-modal-input') as HTMLInputElement | null;
+      if (input) input.value = v;
+      const okBtn = box.querySelector('.ws-modal-actions .btn-primary') as HTMLElement | null;
+      if (!okBtn) return false;
+      okBtn.click();
+      return true;
+    }, value);
+  const pickFirstOption = async (): Promise<boolean> =>
+    win.evaluate(() => {
+      const box = document.querySelector('.ws-modal-overlay .ws-modal');
+      if (!box) return false;
+      const sel = box.querySelector('select.ws-modal-input') as HTMLSelectElement | null;
+      if (!sel || sel.options.length === 0) return false;
+      sel.selectedIndex = 0;
+      const okBtn = box.querySelector('.ws-modal-actions .btn-primary') as HTMLElement | null;
+      if (!okBtn) return false;
+      okBtn.click();
+      return true;
+    });
+
+  ok('the Analyses section is in the workspace nav', await clickExact('Analyses'));
+  await win.waitForTimeout(800);
+
+  ok('New analysis opens the name prompt', await clickId('an-new-btn'));
+  await win.waitForTimeout(400);
+  ok('the name prompt accepts a name', await fillPrompt('Smoke analysis'));
+  await win.waitForTimeout(1500);
+
+  // The editor must be INSIDE the Analyses panel, in analysis mode, and — the
+  // check a DOM assertion cannot make — actually have a box on screen.
+  const anEditor = await win.evaluate(() => {
+    const ed = document.getElementById('dash-editor');
+    if (!ed) return null;
+    const r = ed.getBoundingClientRect();
+    return {
+      inAnalysesPanel: !!ed.closest('#ws-analyses'),
+      analysisMode: ed.classList.contains('dash-editor--analysis'),
+      w: Math.round(r.width),
+      h: Math.round(r.height),
+      pubstate: (document.getElementById('an-pubstate')?.textContent || '').trim().slice(0, 60),
+      publishVisible: (document.getElementById('an-publish-btn') as HTMLElement | null)?.offsetParent != null,
+      addVisualVisible: (document.getElementById('dash-add-visual') as HTMLElement | null)?.offsetParent != null,
+      summaryVisible: (document.getElementById('dash-summary-btn') as HTMLElement | null)?.offsetParent != null,
+      sheetTabs: document.querySelectorAll('#dash-pages .dash-page-tab').length,
+      // `hidden` on a .btn was a no-op until hub.css got `.btn[hidden]` — the
+      // rule that hid these three lost to `display: inline-flex`. Nothing but a
+      // rendered window can tell the difference, which is why they are asserted
+      // by VISIBILITY (offsetParent) and not by the attribute.
+      republishVisible: (document.getElementById('an-republish-btn') as HTMLElement | null)?.offsetParent != null,
+      legacyWrapVisible: (document.getElementById('dash-legacy-wrap-btn') as HTMLElement | null)?.offsetParent != null,
+      clearFiltersVisible: (document.getElementById('dash-clear-filters') as HTMLElement | null)?.offsetParent != null,
+      aiPanelVisible: (document.getElementById('dash-ai-out') as HTMLElement | null)?.offsetParent != null,
+    };
+  });
+  ok('the analysis editor opened inside the Analyses panel',
+     !!anEditor && anEditor.inAnalysesPanel && anEditor.analysisMode,
+     JSON.stringify(anEditor));
+  ok('the analysis editor has a real box (not zero-height)',
+     !!anEditor && anEditor.w > 200 && anEditor.h > 200, `${anEditor?.w}x${anEditor?.h}`);
+  ok('an unpublished analysis says so', !!anEditor && /Not published yet/.test(anEditor.pubstate),
+     anEditor?.pubstate || '');
+  ok('Publish and the card controls are offered on an analysis',
+     !!anEditor && anEditor.publishVisible && anEditor.addVisualVisible);
+  ok('the dashboard-only AI actions are hidden on an analysis',
+     !!anEditor && anEditor.summaryVisible === false);
+  ok('the analysis opens with one sheet', anEditor?.sheetTabs === 1, String(anEditor?.sheetTabs));
+  ok('nothing that should be hidden is painted (Republish / Edit-as-analysis / Clear all / AI panel)',
+     !!anEditor && !anEditor.republishVisible && !anEditor.legacyWrapVisible &&
+     !anEditor.clearFiltersVisible && !anEditor.aiPanelVisible,
+     JSON.stringify({
+       republish: anEditor?.republishVisible, legacyWrap: anEditor?.legacyWrapVisible,
+       clearFilters: anEditor?.clearFiltersVisible, aiPanel: anEditor?.aiPanelVisible,
+     }));
+
+  // Add the saved visual as a card, through the picker.
+  ok('+ Visual opens the picker', await clickId('dash-add-visual'));
+  await win.waitForTimeout(500);
+  ok('the picker adds the saved visual', await pickFirstOption());
+  await win.waitForTimeout(3000); // render + the 600 ms debounced autosave
+
+  const cardCount = await win.evaluate(() => document.querySelectorAll('#dash-grid .dash-card').length);
+  ok('the card lands on the sheet grid', cardCount === 1, String(cardCount));
+
+  const anShot = path.join(shotDir, 'analysis-editor.png');
+  await win.screenshot({ path: anShot });
+  ok('analysis editor screenshot captured', fs.existsSync(anShot) && fs.statSync(anShot).size > 5000,
+     `${Math.round(fs.statSync(anShot).size / 1024)} KB -> ${anShot}`);
+
+  // PUBLISH.
+  ok('Publish is clickable', await clickId('an-publish-btn'));
+  await win.waitForTimeout(3000);
+  const afterPublish = await win.evaluate(() => ({
+    pubstate: (document.getElementById('an-pubstate')?.textContent || '').trim(),
+    republishVisible: (document.getElementById('an-republish-btn') as HTMLElement | null)?.offsetParent != null,
+  }));
+  ok('the analysis reports it published, and to which dashboard',
+     /Published/.test(afterPublish.pubstate) && /Smoke analysis/.test(afterPublish.pubstate),
+     afterPublish.pubstate.slice(0, 120));
+  ok('Republish appears once there is something to republish over', afterPublish.republishVisible);
+
+  // The published dashboard, in the Dashboards surface.
+  ok('the Dashboards section is reachable', await clickExact('Dashboards'));
+  await win.waitForTimeout(1500);
+  const dashRow = await win.evaluate(() => {
+    const rows = [...document.querySelectorAll('#dash-list .dash-list-item')];
+    const row = rows.find((r) => /Smoke analysis/.test(r.textContent || ''));
+    return row
+      ? {
+          text: (row.textContent || '').trim().slice(0, 90),
+          badge: !!row.querySelector('.dash-list-badge'),
+          renameOffered: !!row.querySelector('[aria-label="Rename dashboard"]'),
+        }
+      : null;
+  });
+  ok('the published dashboard is listed', !!dashRow, dashRow ? dashRow.text : 'not found');
+  ok('and it is marked read-only in the list', !!dashRow && dashRow.badge, dashRow ? dashRow.text : '');
+  ok('and its list Rename is withdrawn (main would refuse the write)',
+     !!dashRow && dashRow.renameOffered === false);
+
+  ok('the published dashboard opens', await win.evaluate(() => {
+    const rows = [...document.querySelectorAll('#dash-list .dash-list-item')];
+    const row = rows.find((r) => /Smoke analysis/.test(r.textContent || ''));
+    const open = row?.querySelector('.dash-list-open') as HTMLElement | undefined;
+    if (!open) return false;
+    open.click();
+    return true;
+  }));
+  await win.waitForTimeout(3000);
+  const published = await win.evaluate(() => {
+    const ed = document.getElementById('dash-editor');
+    const note = document.getElementById('dash-readonly') as HTMLElement | null;
+    return {
+      inDashPanel: !!ed?.closest('#ws-dashboards'),
+      readOnly: !!ed?.classList.contains('dash-editor--readonly'),
+      noteVisible: !!note && note.offsetParent !== null,
+      noteText: (note?.textContent || '').trim().slice(0, 140),
+      routeBack: (document.getElementById('dash-open-analysis') as HTMLElement | null)?.offsetParent != null,
+      addVisual: (document.getElementById('dash-add-visual') as HTMLElement | null)?.offsetParent != null,
+      save: (document.getElementById('dash-save-btn') as HTMLElement | null)?.offsetParent != null,
+      cardCtrls: [...document.querySelectorAll('#dash-grid .dash-card-ctrls')]
+        .filter((c) => (c as HTMLElement).offsetParent !== null).length,
+      cards: document.querySelectorAll('#dash-grid .dash-card').length,
+      pages: document.querySelectorAll('#dash-pages .dash-page-tab').length,
+    };
+  });
+  ok('the published dashboard renders in the Dashboards panel',
+     published.inDashPanel && published.cards === 1, JSON.stringify(published));
+  ok('it presents itself as read-only, and says why', published.readOnly && published.noteVisible,
+     published.noteText);
+  ok('with a route back to its analysis', published.routeBack);
+  ok('every edit affordance is withdrawn (add / save / card controls)',
+     !published.addVisual && !published.save && published.cardCtrls === 0,
+     JSON.stringify({ addVisual: published.addVisual, save: published.save, ctrls: published.cardCtrls }));
+
+  const pubShot = path.join(shotDir, 'published-dashboard.png');
+  await win.screenshot({ path: pubShot });
+  ok('published dashboard screenshot captured', fs.existsSync(pubShot) && fs.statSync(pubShot).size > 5000,
+     `${Math.round(fs.statSync(pubShot).size / 1024)} KB -> ${pubShot}`);
+
+  // THE SNAPSHOT GUARANTEE, from the UI: edit the analysis, and the published
+  // dashboard must not move until it is published again.
+  // Take the route back the read-only banner offers, rather than navigating —
+  // that button is `analysis:forDashboard`, and on a PUBLISHED dashboard it must
+  // resolve the existing analysis rather than wrap a second one.
+  ok('the banner routes back to the analysis', await clickId('dash-open-analysis'));
+  await win.waitForTimeout(2500);
+  const routed = await win.evaluate(() => {
+    const ed = document.getElementById('dash-editor');
+    return {
+      inAnalysesPanel: !!ed?.closest('#ws-analyses'),
+      analysisMode: !!ed?.classList.contains('dash-editor--analysis'),
+      navActive: (document.querySelector('.ws-nav-item.active') as HTMLElement | null)?.textContent?.trim(),
+      name: (document.getElementById('dash-name')?.textContent || '').trim(),
+      analyses: document.querySelectorAll('#an-list .dash-list-item').length,
+    };
+  });
+  ok('…landing in the Analyses section with that analysis open',
+     routed.inAnalysesPanel && routed.analysisMode && routed.navActive === 'Analyses' &&
+     routed.name === 'Smoke analysis',
+     JSON.stringify(routed));
+  ok('and it did NOT wrap a second analysis', routed.analyses === 1, String(routed.analyses));
+  ok('a sheet can be added to the analysis', await win.evaluate(() => {
+    const add = document.querySelector('#dash-pages .dash-page-add') as HTMLElement | null;
+    if (!add) return false;
+    add.click();
+    return true;
+  }));
+  await win.waitForTimeout(3000); // debounced save
+  const twoSheets = await win.evaluate(() => ({
+    tabs: document.querySelectorAll('#dash-pages .dash-page-tab').length,
+    pubstate: (document.getElementById('an-pubstate')?.textContent || '').trim(),
+  }));
+  ok('the analysis now has two sheets', twoSheets.tabs === 2, String(twoSheets.tabs));
+  ok('and it reports unpublished changes', /Unpublished changes/.test(twoSheets.pubstate),
+     twoSheets.pubstate.slice(0, 120));
+
+  ok('back to Dashboards', await clickExact('Dashboards'));
+  await win.waitForTimeout(1200);
+  await win.evaluate(() => {
+    const open = [...document.querySelectorAll('#dash-list .dash-list-open')].find((b) =>
+      /Smoke analysis/.test(b.textContent || ''),
+    ) as HTMLElement | undefined;
+    if (open) open.click();
+  });
+  await win.waitForTimeout(2500);
+  const stillOne = await win.evaluate(() =>
+    document.querySelectorAll('#dash-pages .dash-page-tab').length,
+  );
+  ok('the PUBLISHED dashboard did not move when the analysis was edited', stillOne === 1,
+     `${stillOne} page tab(s)`);
+
+  ok('no unexpected alert during the analysis flow', dialogs.length === 0, dialogs.join(' | '));
+
+  // The analyses LIST, with the unpublished-changes badge on it.
+  ok('back to Analyses', await clickExact('Analyses'));
+  await win.waitForTimeout(1200);
+  const anRow = await win.evaluate(() => {
+    const row = [...document.querySelectorAll('#an-list .dash-list-item')].find((r) =>
+      /Smoke analysis/.test(r.textContent || ''),
+    );
+    return row
+      ? {
+          text: (row.textContent || '').trim().slice(0, 100),
+          badge: (row.querySelector('.dash-list-badge') as HTMLElement | null)?.textContent || '',
+        }
+      : null;
+  });
+  ok('the analysis is listed with its sheet count and publish state', !!anRow,
+     anRow ? anRow.text : 'not found');
+  ok('and the list flags unpublished changes', anRow?.badge === 'Unpublished changes',
+     anRow?.badge || '(none)');
+  const listShot = path.join(shotDir, 'analyses-list.png');
+  await win.screenshot({ path: listShot });
+  ok('analyses list screenshot captured', fs.existsSync(listShot) && fs.statSync(listShot).size > 5000,
+     `${Math.round(fs.statSync(listShot).size / 1024)} KB -> ${listShot}`);
+
+  // Leave the app on the Datasets section, where the rest of this file expects
+  // to find it.
+  await clickExact('Datasets');
+  await win.waitForTimeout(800);
+
   // Nothing above set `scSvelte`, so this is the DEFAULT user experience. The
   // Phase 5 spike shipped auto-mounting its debug card — tick counter, "Probe
   // globals", "not probed" — onto the Projects home screen for everyone. This

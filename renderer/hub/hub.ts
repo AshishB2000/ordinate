@@ -179,6 +179,7 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
   initConnections();     // connections.ts
   initVisuals();         // visuals.ts
   initDashboards();      // dashboards.ts
+  initAnalyses();        // analyses.ts
   initCopilot();         // copilot.ts
 })();
 

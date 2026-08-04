@@ -35,7 +35,10 @@ function buildCopilotContextRef(): { kind: string; id: string; label: string } {
   if (typeof vizEditingId === 'string' && vizEditingId) {
     return { kind: 'visual', id: vizEditingId, label: 'visual · open visual' };
   }
-  if (typeof dashCurrent !== 'undefined' && dashCurrent && dashCurrent.id) {
+  // Only a DASHBOARD is a copilot context: the editor also opens analyses, and
+  // src/ipc/copilot.ts dispatches on dataset|visual|dashboard, so handing it an
+  // analysis id would just fail to resolve. Falls through to whole-project.
+  if (typeof dashCurrent !== 'undefined' && dashCurrent && dashCurrent.id && dashMode === 'dashboard') {
     const name = dashCurrent.name ? String(dashCurrent.name) : 'open dashboard';
     return { kind: 'dashboard', id: String(dashCurrent.id), label: 'dashboard · ' + name };
   }

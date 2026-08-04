@@ -69,6 +69,8 @@ function selectSection(section: string): void {
   if (section === 'sources' && typeof refreshConnectionList === 'function') refreshConnectionList();
   // Refresh the saved-visuals list when the Visuals section becomes active (visuals.ts).
   if (section === 'visuals' && typeof refreshVisualList === 'function') refreshVisualList();
+  // Refresh the analyses list when the Analyses section becomes active (analyses.ts).
+  if (section === 'analyses' && typeof refreshAnalysisList === 'function') refreshAnalysisList();
   // Refresh the saved-dashboards list when the Dashboards section becomes active (dashboards.ts).
   if (section === 'dashboards' && typeof refreshDashboardList === 'function') refreshDashboardList();
   // Refresh the AI Copilot chat when the AI section becomes active (copilot.ts).

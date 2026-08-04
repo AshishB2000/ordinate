@@ -133,6 +133,13 @@ export interface DashboardSummary {
   name: string;
   pageCount: number;
   updatedAt: string;
+  /**
+   * Provenance, carried into the summary so the LIST can mark a record
+   * read-only without opening it. Still never a lookup — nothing loads the
+   * analysis to render or describe a dashboard.
+   */
+  analysisId: string | null;
+  publishedAt: string | null;
 }
 
 let projectsBase: string | null = null;
@@ -384,7 +391,14 @@ export async function listDashboards(projectId: string): Promise<DashboardSummar
       const data = JSON.parse(raw);
       if (!isValidDashboard(data)) continue;
       const d = normalize(data, projectId);
-      out.push({ id: d.id, name: d.name, pageCount: d.pages.length, updatedAt: d.updatedAt });
+      out.push({
+        id: d.id,
+        name: d.name,
+        pageCount: d.pages.length,
+        updatedAt: d.updatedAt,
+        analysisId: d.analysisId,
+        publishedAt: d.publishedAt,
+      });
     } catch (err: any) {
       if (err.code !== 'ENOENT') {
         console.error('[dashboards] Skipping corrupt or unreadable dashboard:', id, err.message);
