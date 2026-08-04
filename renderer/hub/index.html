@@ -823,7 +823,60 @@
           </div>
         </div>
       </div>
-      <div class="dash-editor-host" id="an-editor-host"></div>
+      <!-- The authoring workbench. These panels live in the ANALYSES section
+           ONLY — #dash-editor is re-parented in between them (CSS `order`), and
+           the Dashboards host has no panels at all. That is not a styling
+           choice: a published dashboard is a read-only snapshot, and a panel
+           that can mutate a card, plus the 600 ms autosave, would clobber it. -->
+      <div class="dash-editor-host an-workbench" id="an-editor-host">
+        <aside class="an-side an-side--left" id="an-side-left">
+          <section class="an-pane" id="an-pane-data">
+            <header class="an-pane-head">
+              <button class="an-pane-toggle" type="button" id="an-data-toggle" aria-expanded="true">
+                <span class="an-pane-caret" aria-hidden="true">▾</span>
+                <span class="an-pane-title">Data</span>
+              </button>
+              <button class="btn btn-sm" type="button" id="an-calc-btn" title="Add a calculated field to this dataset">+ Calculated field</button>
+            </header>
+            <div class="an-pane-body" id="an-data-body">
+              <p class="an-pane-hint" id="an-data-hint">Select a visual card to see its fields.</p>
+              <div class="an-fields" id="an-fields"></div>
+            </div>
+          </section>
+
+          <section class="an-pane" id="an-pane-visuals">
+            <header class="an-pane-head">
+              <button class="an-pane-toggle" type="button" id="an-viz-toggle" aria-expanded="true">
+                <span class="an-pane-caret" aria-hidden="true">▾</span>
+                <span class="an-pane-title">Visuals</span>
+              </button>
+            </header>
+            <div class="an-pane-body" id="an-viz-body">
+              <p class="an-pane-hint" id="an-viz-hint">Nothing selected.</p>
+              <div class="an-viz-inner" id="an-viz-inner" hidden>
+                <div class="an-ai-slot" id="an-ai-slot"></div>
+                <div class="an-switcher" id="an-switcher"></div>
+                <div class="an-wells" id="an-wells"></div>
+              </div>
+            </div>
+          </section>
+        </aside>
+
+        <aside class="an-side an-side--right" id="an-side-right">
+          <section class="an-pane" id="an-pane-props">
+            <header class="an-pane-head">
+              <button class="an-pane-toggle" type="button" id="an-props-toggle" aria-expanded="true">
+                <span class="an-pane-caret" aria-hidden="true">▾</span>
+                <span class="an-pane-title">Properties</span>
+              </button>
+            </header>
+            <div class="an-pane-body" id="an-props-body">
+              <p class="an-pane-hint" id="an-props-hint">Select a card to edit it.</p>
+              <div class="an-props" id="an-props"></div>
+            </div>
+          </section>
+        </aside>
+      </div>
     </section>
     <section class="ws-panel" id="ws-dashboards" data-section="dashboards" hidden>
       <!-- List view: saved dashboards + New button -->
@@ -1604,18 +1657,18 @@
        first mounted form for every instance. -->
   <template id="viz-encoding-tpl">
     <div class="viz-encoding" hidden>
-      <div class="viz-build-row">
+      <div class="viz-build-row" data-well="category">
         <label class="viz-field-label" for="viz-category-select">Category</label>
         <select class="viz-select js-enc-cat" id="viz-category-select" aria-label="Category (dimension)"></select>
       </div>
 
-      <div class="viz-build-row viz-values-row">
+      <div class="viz-build-row viz-values-row" data-well="values">
         <label class="viz-field-label">Measures</label>
         <div class="viz-values-list js-enc-values"></div>
         <button class="btn btn-sm js-enc-add-value" type="button">+ Add measure</button>
       </div>
 
-      <div class="viz-build-row">
+      <div class="viz-build-row" data-well="series">
         <label class="viz-field-label" for="viz-series-select">Split by</label>
         <select class="viz-select js-enc-series" id="viz-series-select" aria-label="Split/series column"></select>
       </div>
@@ -1632,7 +1685,7 @@
         </select>
       </div>
 
-      <div class="viz-build-row viz-values-row js-enc-filters-row">
+      <div class="viz-build-row viz-values-row js-enc-filters-row" data-well="filters">
         <label class="viz-field-label">Filters</label>
         <div class="viz-filters-list js-enc-filters"></div>
         <button class="btn btn-sm js-enc-add-filter" type="button">＋ Add filter</button>
@@ -1685,6 +1738,7 @@
 <script src="encodingForm.js"></script>
 <script src="visuals.js"></script>
 <script src="dashboards.js"></script>
+<script src="authoring.js"></script>
 <script src="analyses.js"></script>
 <script src="copilot.js"></script>
 <script src="hub.js"></script>
