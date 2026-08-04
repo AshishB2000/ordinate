@@ -5405,12 +5405,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   margin: 0;
   max-width: 560px;
 }
-.conn-hint {
-  font-size: 12px;
-  color: var(--muted);
-  margin: 8px 0 2px;
-  max-width: 560px;
-}
 .conn-error {
   font-size: 12px;
   color: #b91c1c;
@@ -5424,6 +5418,159 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   flex-direction: column;
   gap: 8px;
   max-width: 620px;
+  flex: 0 0 auto; /* see .conn-picker — panel sections must not be shrunk */
+}
+/* `display: flex` beats the `hidden` attribute's UA `display: none`, so every
+   flex/grid container in this panel needs its own [hidden] rule. Without it the
+   picker and the form paint on top of each other. */
+.conn-form[hidden] { display: none; }
+
+/* ── Connector picker (Step 1) — grouped, searchable tiles ── */
+.conn-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* .conn-panel is a scrolling flex column, so a tall child would otherwise be
+     SHRUNK to fit and spill its overflow over the next section — 32 tiles
+     printed straight through the "Saved connections" heading. The panel scrolls;
+     its sections do not compress. */
+  flex: 0 0 auto;
+}
+.conn-picker[hidden] { display: none; }
+.conn-search-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 620px;
+}
+.conn-search {
+  flex: 1;
+  min-width: 0;
+}
+.conn-search-count {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.conn-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.conn-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.conn-group[hidden] { display: none; }
+.conn-group-h {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0;
+}
+.conn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+}
+.conn-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 12px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-strong);
+  font: inherit;
+}
+.conn-tile:hover {
+  background: var(--surface-2);
+  border-color: var(--border-2);
+}
+.conn-tile:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 3px var(--accent-line);
+}
+.conn-tile-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+.conn-tile-blurb {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.conn-picker-msg {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+  padding: 14px 0;
+}
+
+/* ── Chosen connector + its generically-rendered fields (Step 2) ── */
+.conn-chosen-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.conn-chosen-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.conn-chosen-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.conn-chosen-blurb {
+  font-size: 12px;
+  color: var(--muted);
+}
+.conn-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.conn-check {
+  flex: 0 0 auto;
+  margin: 0;
+}
+.conn-help {
+  font-size: 11px;
+  color: var(--muted);
+  margin: -2px 0 2px 98px;
+  max-width: 500px;
+}
+.conn-req {
+  color: var(--accent);
+  margin-left: 2px;
+}
+/* Two classes deep on purpose: `.conn-input` is declared LATER in this file, so
+   a single-class rule loses the cascade and the invalid field silently kept its
+   normal border — a miss visible only in a screenshot. */
+.conn-input.conn-input-invalid,
+.conn-input.conn-input-invalid:focus {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18);
 }
 .conn-field-row {
   display: flex;
@@ -5468,7 +5615,17 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 14px;
+  flex: 0 0 auto; /* see .conn-picker — panel sections must not be shrunk */
 }
+/* Same trap as .conn-form: these are flex containers toggled with `hidden`, so
+   the UA rule loses without an explicit override. The run box, its table/query
+   rows and the save bar were painting on an untouched panel. The ds-* ones are
+   ID-scoped so the shared dataset rules are left alone. */
+.conn-run[hidden] { display: none; }
+.conn-preview[hidden] { display: none; }
+.conn-field-row[hidden] { display: none; }
+#conn-run-warnings[hidden] { display: none; }
+#conn-save-bar[hidden] { display: none; }
 .conn-run-head {
   display: flex;
   align-items: center;
@@ -5491,6 +5648,7 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   gap: 8px;
   border-top: 1px solid var(--border);
   padding-top: 14px;
+  flex: 0 0 auto; /* see .conn-picker — panel sections must not be shrunk */
 }
 .conn-saved-h {
   font-size: 14px;
@@ -6256,4 +6414,13 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   max-width: 100%;
   height: auto;
   overflow: visible;
+}
+
+/* A connector field of type 'textarea' — a SQL statement needs more than a line. */
+.conn-textarea {
+  min-height: 76px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
 }

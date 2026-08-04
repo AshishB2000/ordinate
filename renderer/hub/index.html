@@ -528,72 +528,36 @@
           <h3 class="conn-h">Connect data</h3>
           <button class="btn btn-sm" type="button" id="conn-close-btn">Close</button>
         </div>
-        <p class="conn-sub">Pull structured data from a Postgres database or a JSON URL/API into this project as a dataset.</p>
+        <p class="conn-sub">Pick a data source, fill in its details, and pull it into this project as a dataset. Every source is read-only.</p>
 
         <div class="conn-error" id="conn-error" hidden></div>
 
-        <div class="conn-form" id="conn-form">
-          <div class="conn-field-row">
-            <label class="conn-label" for="conn-kind-select">Type</label>
-            <select class="conn-input" id="conn-kind-select">
-              <option value="postgres">Postgres</option>
-              <option value="url">URL / API (JSON)</option>
-            </select>
+        <!-- Step 1 — the connector picker. Tiles are BUILT BY connections.ts from
+             the connectors:catalog contract; nothing here is per-connector. -->
+        <div class="conn-picker" id="conn-picker">
+          <div class="conn-search-row">
+            <input class="conn-input conn-search" id="conn-search" type="text" placeholder="Search data sources…" autocomplete="off" spellcheck="false" aria-label="Search data sources" />
+            <span class="conn-search-count" id="conn-search-count"></span>
+          </div>
+          <div class="conn-groups" id="conn-groups"></div>
+          <p class="conn-picker-msg" id="conn-picker-none" hidden>No data sources match that search.</p>
+          <p class="conn-picker-msg" id="conn-picker-unavailable" hidden>No data sources are available in this build.</p>
+        </div>
+
+        <!-- Step 2 — the chosen connector's form, rendered generically. -->
+        <div class="conn-form" id="conn-form" hidden>
+          <div class="conn-chosen-head">
+            <div class="conn-chosen-text">
+              <span class="conn-chosen-name" id="conn-chosen-name"></span>
+              <span class="conn-chosen-blurb" id="conn-chosen-blurb"></span>
+            </div>
+            <button class="btn btn-sm" type="button" id="conn-change-btn">Change source</button>
           </div>
           <div class="conn-field-row">
             <label class="conn-label" for="conn-name">Name</label>
             <input class="conn-input" id="conn-name" type="text" placeholder="Optional connection name" autocomplete="off" />
           </div>
-
-          <!-- Postgres fields -->
-          <div id="conn-pg-fields">
-            <div class="conn-field-row">
-              <label class="conn-label" for="conn-host">Host</label>
-              <input class="conn-input" id="conn-host" type="text" placeholder="localhost" autocomplete="off" />
-            </div>
-            <div class="conn-field-row">
-              <label class="conn-label" for="conn-port">Port</label>
-              <input class="conn-input" id="conn-port" type="text" placeholder="5432" autocomplete="off" />
-            </div>
-            <div class="conn-field-row">
-              <label class="conn-label" for="conn-db">Database</label>
-              <input class="conn-input" id="conn-db" type="text" placeholder="mydb" autocomplete="off" />
-            </div>
-            <div class="conn-field-row">
-              <label class="conn-label" for="conn-user">User</label>
-              <input class="conn-input" id="conn-user" type="text" placeholder="postgres" autocomplete="off" />
-            </div>
-            <div class="conn-field-row">
-              <label class="conn-label" for="conn-password">Password</label>
-              <input class="conn-input" id="conn-password" type="password" placeholder="••••••••" autocomplete="off" />
-            </div>
-            <div class="conn-field-row">
-              <label class="conn-label" for="conn-ssl">SSL</label>
-              <input id="conn-ssl" type="checkbox" />
-            </div>
-            <p class="conn-hint">Optional: save a specific table or a SQL query to pull from. You can also pick a table after connecting.</p>
-            <div class="conn-field-row">
-              <label class="conn-label" for="conn-table">Table</label>
-              <input class="conn-input" id="conn-table" type="text" placeholder="schema.table (optional)" autocomplete="off" />
-            </div>
-            <div class="conn-field-row conn-field-row-wide">
-              <label class="conn-label" for="conn-query">Query</label>
-              <textarea class="conn-input conn-query" id="conn-query" placeholder="select … (optional; overrides table)"></textarea>
-            </div>
-          </div>
-
-          <!-- URL fields -->
-          <div id="conn-url-fields" hidden>
-            <div class="conn-field-row conn-field-row-wide">
-              <label class="conn-label" for="conn-url">URL</label>
-              <input class="conn-input" id="conn-url" type="text" placeholder="https://api.example.com/data.json" autocomplete="off" />
-            </div>
-            <div class="conn-field-row">
-              <label class="conn-label" for="conn-token">Auth token</label>
-              <input class="conn-input" id="conn-token" type="password" placeholder="Optional Bearer token" autocomplete="off" />
-            </div>
-          </div>
-
+          <div class="conn-fields" id="conn-fields"></div>
           <div class="conn-form-actions">
             <button class="btn btn-primary" type="button" id="conn-test-btn">Test &amp; Save</button>
           </div>

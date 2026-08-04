@@ -146,7 +146,29 @@ declare global {
       ): Promise<any>;
       suggestDatasetSteps(projectId: string, datasetId: string): Promise<any>;
       suggestCalcField(projectId: string, datasetId: string): Promise<any>;
-      // ── Connected data sources (Postgres + read-only URL/API JSON) ──
+      // ── Connected data sources (every source is a connector in src/connectors) ──
+      // The picker/form catalog. Form SHAPE only — `secret` marks a field whose
+      // value goes one-way into the `secret` payload; no value ever comes back.
+      connectorCatalog(): Promise<
+        {
+          id: string;
+          label: string;
+          family: string;
+          category: string;
+          blurb?: string;
+          fields: {
+            key: string;
+            label: string;
+            type: 'text' | 'number' | 'password' | 'select' | 'checkbox' | 'textarea';
+            required: boolean;
+            placeholder?: string;
+            default?: string | number | boolean;
+            options?: { value: string; label: string }[];
+            secret: boolean;
+            help?: string;
+          }[];
+        }[]
+      >;
       listConnections(projectId: string): Promise<any[]>;
       testAndSaveConnection(projectId: string, kind: string, config: any, secret: any): Promise<any>;
       listConnectionTables(projectId: string, connId: string): Promise<any>;

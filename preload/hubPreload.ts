@@ -246,15 +246,26 @@ contextBridge.exposeInMainWorld('hub', {
   // { ok:false, error }.
   suggestCalcField: (projectId: string, datasetId: string) =>
     ipcRenderer.invoke('dataset:suggestCalcField', { projectId, datasetId }),
-  // ── Connected data sources (Postgres + read-only URL/API JSON) ──
-  // Secrets (pg password / URL token) travel ONE-WAY to main inside `secret` and
-  // are NEVER read back — no reveal bridge, mirroring how BYOK keys work.
+  // ── Connected data sources (every source is a connector in src/connectors) ──
+  // Secrets (passwords / tokens / API keys) travel ONE-WAY to main inside
+  // `secret` and are NEVER read back — no reveal bridge, mirroring BYOK keys.
+  // Every data source the app can read, as {id,label,family,category,blurb,
+  // fields} — enough to BUILD the connection form with no hardcoded list in the
+  // renderer. Form SHAPE only: a field's `secret` flag travels so the renderer
+  // can render a password input and route the value into `secret`; a secret
+  // VALUE never comes back this way. Resolves to a bare array (empty if the
+  // registry could not be read — the picker falls back on its own).
+  connectorCatalog: () => ipcRenderer.invoke('connectors:catalog'),
   // List a project's saved connections (secret-free public view).
   listConnections: (projectId: string) => ipcRenderer.invoke('connections:list', { projectId }),
-  // Test a connection with the typed secret; persist metadata + secret only on success.
+  // Test a connection with the typed secret; persist metadata + secret only on
+  // success. `kind` is the connectorId (the two pre-registry names, 'postgres'
+  // and 'url', are the ids of the connectors that replaced them, so an
+  // un-migrated caller keeps working); `config` carries the form field values.
   testAndSaveConnection: (projectId: string, kind: string, config: any, secret: any) =>
     ipcRenderer.invoke('connection:testAndSave', { projectId, kind, config, secret }),
-  // Postgres only: list a saved connection's tables (secret loaded in main).
+  // List a saved connection's tables (secret loaded in main). A source with no
+  // table picker returns an empty list, not an error.
   listConnectionTables: (projectId: string, connId: string) =>
     ipcRenderer.invoke('connection:listTables', { projectId, connId }),
   // Run a saved connection and return a ParseResult preview (no save).

@@ -1,0 +1,604 @@
+// The PostgreSQL wire-protocol connector family. MAIN PROCESS ONLY.
+//
+// Eleven sources ship from this file. They are not eleven implementations —
+// they are ONE driver plus a table of per-vendor facts (default port, whether
+// TLS is effectively mandatory, and how to list tables when the vendor's
+// `information_schema` is not the standard one). Anything that is genuinely the
+// same for all eleven — the read-only wrapper, the row cap, the server-side
+// timeout, secret redaction, closing the client — exists exactly once, because
+// eleven copies of a security property is eleven chances to get it wrong.
+//
+// The driver is a direct descendant of `src/connectionRun.ts`'s `pgListTables` /
+// `pgRun`, and deliberately keeps every guarantee that file already made:
+//
+//   • parameterised `information_schema` listing (values are BOUND, never
+//     concatenated),
+//   • a table name is whitelist-validated AND double-quoted before it can reach
+//     SQL text,
+//   • the user's own SQL runs inside `select * from ( … ) limit n`,
+//   • the query is bounded by a SERVER-side `statement_timeout`,
+//   • the client is closed in a `finally`, on every path.
+//
+// Two things are deliberately DIFFERENT from `connectionRun.ts`, and both are
+// tightenings rather than features:
+//
+//   1. TLS no longer means `rejectUnauthorized: false`. `connectionRun` disabled
+//      certificate verification whenever `ssl` was on, which buys encryption
+//      but not authentication — an on-path attacker can still be the server.
+//      Here verification is ON by default and turning it off is a separate,
+//      explicit checkbox whose `help` text says exactly what it costs.
+//   2. The session is asked to be read-only (`default_transaction_read_only`)
+//      before anything runs. The sub-select wrapper alone does NOT make a query
+//      read-only: Postgres allows data-modifying CTEs, so
+//      `select * from (with x as (insert … returning *) select * from x) t` is
+//      a perfectly legal write inside a SELECT. The session flag closes that.
+//      It is best-effort (see `applyGuards`) because not every engine here has
+//      the setting, so it is a second lock, never the only one.
+//
+// ── Two things this file could not verify without a live server ──────────────
+// Marked `// UNVERIFIED` at each site, and repeated here so they are not
+// discovered by a user first:
+//   • Redshift's `svv_external_tables` column names (`schemaname`/`tablename`)
+//     and the exact set of objects `information_schema.tables` omits on a
+//     late-binding view.
+//   • Whether QuestDB / Materialize / RisingWave accept `set statement_timeout`
+//     and expose `information_schema.tables`. Both are handled by falling back,
+//     never by assuming.
+
+import { Client, types as pgTypes } from 'pg';
+import type {
+  ConnectorColumn,
+  ConnectorContext,
+  ConnectorDef,
+  ConnectorError,
+  ConnectorField,
+  ConnectorRows,
+  ConnectorTable,
+  ConnectorTables,
+} from './types';
+import { safeError } from './types';
+
+// ── Bounds ───────────────────────────────────────────────────────────────────
+
+/** Ceiling on the table picker. A warehouse can hold six figures of tables and
+ *  the picker is a list, not a search engine. Also bounded by ctx.rowLimit. */
+const MAX_TABLES = 1000;
+
+/** Floor for the server-side statement timeout. `ctx.timeoutMs` is the budget
+ *  for the WHOLE operation, so the query gets what connecting did not spend —
+ *  but never a value so small that a healthy query is killed on arrival. */
+const MIN_STATEMENT_TIMEOUT_MS = 1_000;
+
+/** A Postgres identifier we are willing to interpolate. Verbatim from
+ *  `connectionRun.ts` — leading letter/underscore, then letters/digits/_/$.
+ *  Identifiers cannot be bound parameters, so this whitelist is the first guard
+ *  and `quoteIdent` is the second. */
+const IDENT_RE = /^[a-zA-Z_][a-zA-Z0-9_$]*$/;
+
+/** Doubling an embedded `"` is the WHOLE escape for a delimited identifier:
+ *  inside `"…"` a `;`, a newline, `--` or `drop table` is inert text. Same rule
+ *  and same reasoning as `src/datasetView.ts` `quoteIdent`. Applied even though
+ *  IDENT_RE already forbids a quote, so the two guards are independent. */
+function quoteIdent(id: string): string {
+  return '"' + id.replace(/"/g, '""') + '"';
+}
+
+/**
+ * What counts as "the user typed a query" rather than "the user typed a table
+ * name". Deliberately an ALLOWLIST of read-shaped statement starts, because the
+ * consequence of guessing wrong in this direction is small (a rejected input
+ * with a clear message) and the consequence of guessing wrong in the other
+ * direction is that arbitrary text goes to the server inside a sub-select.
+ *
+ * It is also the cheapest read-only guard in the file: `drop table x`,
+ * `insert …` and `update …` are not query starts, so they are judged as table
+ * names, fail IDENT_RE, and never reach a socket. `with … (insert … returning)`
+ * DOES start like a query — that hole is what `default_transaction_read_only`
+ * in `applyGuards` is for.
+ *
+ * `\b` matters: `selection`, `with_totals` and `table_sales` are table names,
+ * not statements, and a word boundary is what keeps them that way.
+ */
+const QUERY_START_RE = /^\(|^(select|with|values|table)\b/i;
+
+// ── Value coercion off ConnectorContext.values (all `unknown`) ────────────────
+
+function asString(v: unknown): string {
+  if (typeof v === 'string') return v.trim();
+  if (v == null) return '';
+  return String(v).trim();
+}
+
+function asBool(v: unknown): boolean {
+  return v === true || v === 1 || v === 'true' || v === '1' || v === 'on';
+}
+
+function asPort(v: unknown, fallback: number): number {
+  const n = typeof v === 'number' ? v : parseInt(asString(v), 10);
+  return Number.isInteger(n) && n > 0 && n <= 65535 ? n : fallback;
+}
+
+// ── Per-vendor facts ─────────────────────────────────────────────────────────
+
+/** One table-listing attempt. Tried in order; the first that answers wins. */
+interface ListQuery {
+  sql: string;
+  /** Result column positions. `schema: -1` means the source has no schemas. */
+  schema: number;
+  name: number;
+  /** True when `sql` references `$1` and wants the schema filter bound. */
+  wantsSchemaParam: boolean;
+}
+
+interface PgVariant {
+  id: string;
+  label: string;
+  category: ConnectorDef['category'];
+  blurb: string;
+  /** The vendor's documented default port for its PostgreSQL endpoint. */
+  port: number;
+  /** TLS prefilled ON where the vendor's public endpoint requires it. */
+  ssl: boolean;
+  /** Tried in order. Omitted → STANDARD_LIST. */
+  list?: ListQuery[];
+  /** false → a rejected `set statement_timeout` is tolerated instead of fatal.
+   *  Only for engines that speak the wire protocol without being Postgres. */
+  statementTimeoutVerified: boolean;
+}
+
+// The standard listing: parameterised, catalog schemas excluded, ordered. This
+// is `connectionRun.pgListTables` with an optional bound schema filter added.
+// `$1::text is null` lets ONE statement serve both "all schemas" and "one
+// schema" without building SQL by string concatenation.
+const STANDARD_LIST: ListQuery[] = [
+  {
+    sql: `select table_schema, table_name
+            from information_schema.tables
+           where table_schema not in ('pg_catalog', 'information_schema')
+             and ($1::text is null or table_schema = $1::text)
+           order by table_schema, table_name`,
+    schema: 0,
+    name: 1,
+    wantsSchemaParam: true,
+  },
+];
+
+const VARIANTS: PgVariant[] = [
+  {
+    id: 'postgres',
+    label: 'PostgreSQL',
+    category: 'Databases',
+    blurb: 'Read-only access to a PostgreSQL database.',
+    port: 5432,
+    ssl: false, // Usually reached over a private network or localhost.
+    statementTimeoutVerified: true,
+  },
+  {
+    id: 'amazon-redshift',
+    label: 'Amazon Redshift',
+    category: 'Cloud warehouses',
+    blurb: 'Read-only access to a Redshift cluster or Serverless workgroup.',
+    port: 5439, // Redshift's own default, NOT 5432.
+    ssl: true, // Reached over the public internet; clusters commonly require SSL.
+    statementTimeoutVerified: true, // Redshift implements statement_timeout (ms).
+    list: [
+      // WHY a Redshift-specific query: `information_schema.tables` on Redshift
+      // does not report Spectrum/external tables, which live in external
+      // schemas and are listed by `svv_external_tables` instead. A user whose
+      // data lake is the whole point of their cluster would see an empty
+      // picker. The UNION covers both; if the account cannot read
+      // `svv_external_tables` the whole statement fails and the plain
+      // information_schema attempt below still answers.
+      // UNVERIFIED: the `schemaname`/`tablename` column names of
+      // SVV_EXTERNAL_TABLES are from documentation, not from a live cluster —
+      // which is exactly why this is a fallback ladder and not one statement.
+      {
+        sql: `select table_schema, table_name
+                from information_schema.tables
+               where table_schema not in ('pg_catalog', 'information_schema')
+                 and ($1::text is null or table_schema = $1::text)
+              union
+              select schemaname, tablename
+                from svv_external_tables
+               where ($1::text is null or schemaname = $1::text)
+               order by 1, 2`,
+        schema: 0,
+        name: 1,
+        wantsSchemaParam: true,
+      },
+      ...STANDARD_LIST,
+    ],
+  },
+  {
+    id: 'cockroachdb',
+    label: 'CockroachDB',
+    category: 'Databases',
+    blurb: 'Read-only access to a CockroachDB cluster over its SQL port.',
+    port: 26257, // CockroachDB's SQL port.
+    // Cockroach *Cloud* requires TLS, but this entry also covers a self-hosted
+    // `--insecure` cluster, so it is off by default and one checkbox away.
+    ssl: false,
+    statementTimeoutVerified: true,
+  },
+  {
+    id: 'alloydb',
+    label: 'Google AlloyDB',
+    category: 'Cloud warehouses',
+    blurb: 'Read-only access to an AlloyDB for PostgreSQL cluster.',
+    port: 5432,
+    ssl: true, // Public-IP connections require SSL.
+    statementTimeoutVerified: true,
+  },
+  {
+    id: 'neon',
+    label: 'Neon',
+    category: 'Cloud warehouses',
+    blurb: 'Read-only access to a Neon serverless Postgres branch.',
+    port: 5432,
+    ssl: true, // Neon refuses a plaintext connection.
+    statementTimeoutVerified: true,
+  },
+  {
+    id: 'supabase',
+    label: 'Supabase',
+    category: 'Cloud warehouses',
+    blurb: 'Read-only access to a Supabase project database.',
+    port: 5432, // Direct connection. The pooler answers on 6543 — user-editable.
+    ssl: true, // Supabase requires TLS on the public endpoint.
+    statementTimeoutVerified: true,
+  },
+  {
+    id: 'timescaledb',
+    label: 'TimescaleDB',
+    category: 'Databases',
+    blurb: 'Read-only access to a TimescaleDB (PostgreSQL extension) database.',
+    port: 5432, // An extension on stock Postgres — same port, same catalogs.
+    ssl: false,
+    statementTimeoutVerified: true,
+  },
+  {
+    id: 'yugabytedb',
+    label: 'YugabyteDB',
+    category: 'Databases',
+    blurb: 'Read-only access to a YugabyteDB cluster over the YSQL API.',
+    // 5433, not 5432: YSQL's default port. 5432 on a Yugabyte node is nothing,
+    // and 7000/9000 are the admin UIs. Getting this wrong is a connection
+    // refused with no hint as to why, so it is pinned by a test.
+    port: 5433,
+    ssl: false,
+    statementTimeoutVerified: true,
+  },
+  {
+    id: 'materialize',
+    label: 'Materialize',
+    category: 'Databases',
+    blurb: 'Read-only access to a Materialize instance over its pgwire port.',
+    port: 6875,
+    ssl: false,
+    // UNVERIFIED: Materialize documents a `statement_timeout` session variable
+    // but this was not exercised against a live instance. Tolerated rather than
+    // fatal — see `applyGuards` for what that costs.
+    statementTimeoutVerified: false,
+    list: [
+      // Materialize's information_schema is documented as partial. Try it, then
+      // fall back to `show tables`, which is native and returns the object name
+      // in its first column (read POSITIONALLY, so a differing column name
+      // between versions cannot break the listing).
+      ...STANDARD_LIST,
+      { sql: 'show tables', schema: -1, name: 0, wantsSchemaParam: false },
+    ],
+  },
+  {
+    id: 'questdb',
+    label: 'QuestDB',
+    category: 'Databases',
+    blurb: 'Read-only access to QuestDB over its PostgreSQL wire port.',
+    port: 8812, // QuestDB's pgwire port (9000 is the HTTP/REST endpoint).
+    ssl: false,
+    // UNVERIFIED: QuestDB implements a subset of pgwire and its handling of
+    // `set statement_timeout` was not confirmed. Tolerated, not fatal.
+    statementTimeoutVerified: false,
+    list: [
+      // QuestDB has no schemas, so the standard statement's `table_schema`
+      // predicate and its bound parameter are both meaningless here — and
+      // QuestDB's parameter support in pgwire is limited. Ask for the two
+      // columns unfiltered first…
+      {
+        sql: 'select table_schema, table_name from information_schema.tables order by 1, 2',
+        schema: 0,
+        name: 1,
+        wantsSchemaParam: false,
+      },
+      // …and fall back to `show tables`, which QuestDB has had far longer than
+      // its information_schema. One column, read positionally.
+      { sql: 'show tables', schema: -1, name: 0, wantsSchemaParam: false },
+    ],
+  },
+  {
+    id: 'risingwave',
+    label: 'RisingWave',
+    category: 'Databases',
+    blurb: 'Read-only access to a RisingWave streaming database.',
+    port: 4566,
+    ssl: false,
+    // UNVERIFIED against a live instance; RisingWave tracks Postgres closely
+    // but is not Postgres. Tolerated, not fatal.
+    statementTimeoutVerified: false,
+    list: [
+      ...STANDARD_LIST,
+      { sql: 'show tables', schema: -1, name: 0, wantsSchemaParam: false },
+    ],
+  },
+];
+
+// ── Form ─────────────────────────────────────────────────────────────────────
+
+function buildFields(v: PgVariant): ConnectorField[] {
+  return [
+    { key: 'host', label: 'Host', type: 'text', required: true, placeholder: 'db.example.com' },
+    { key: 'port', label: 'Port', type: 'number', required: true, default: v.port },
+    { key: 'database', label: 'Database', type: 'text', required: true, placeholder: 'postgres' },
+    { key: 'user', label: 'User', type: 'text', required: true },
+    // The ONLY secret on this form. `secret: true` routes it to
+    // config.connectionSecrets instead of the project record — the project
+    // folder is shareable, so a password landing there is the worst failure
+    // this family has. Pinned by a test for exactly that reason.
+    { key: 'password', label: 'Password', type: 'password', secret: true },
+    {
+      key: 'schema',
+      label: 'Schema',
+      type: 'text',
+      placeholder: 'all schemas',
+      help: 'Optional. Limits the table list to one schema. Sent as a bound query parameter, never as SQL text.',
+    },
+    { key: 'ssl', label: 'Use TLS', type: 'checkbox', default: v.ssl },
+    {
+      key: 'sslInsecure',
+      label: 'Trust an unverified certificate',
+      type: 'checkbox',
+      default: false,
+      help: 'Off by default. Turning it on keeps the connection encrypted but stops checking WHO is on the other end, so anyone able to intercept the network can impersonate the server. Only for a private network with a self-signed certificate.',
+    },
+  ];
+}
+
+// ── Driver ───────────────────────────────────────────────────────────────────
+
+/** Everything `new Client(…)` needs, resolved from ctx. */
+function clientConfig(v: PgVariant, ctx: ConnectorContext): ConstructorParameters<typeof Client>[0] {
+  const useSsl = asBool(ctx.values.ssl);
+  const insecure = asBool(ctx.values.sslInsecure);
+  return {
+    host: asString(ctx.values.host),
+    port: asPort(ctx.values.port, v.port),
+    database: asString(ctx.values.database),
+    user: asString(ctx.values.user),
+    password: ctx.secrets.password || '',
+    // Verification ON unless the user explicitly opted out. See header note 1.
+    ssl: useSsl ? { rejectUnauthorized: !insecure } : undefined,
+    connectionTimeoutMillis: ctx.timeoutMs,
+    // JS-side backstop ONLY. It makes the call RETURN; it does not stop the
+    // server working (or billing). The server-side bound is set in applyGuards.
+    query_timeout: ctx.timeoutMs,
+  };
+}
+
+/**
+ * The two session guards, issued as ordinary statements after connect.
+ *
+ * WHY not the startup packet: `pg` puts a `statement_timeout` client option
+ * into the STARTUP message (see node_modules/pg/lib/client.js getStartupConf).
+ * A server that does not know that GUC answers FATAL and the connection never
+ * opens — so on a pgwire-compatible engine the startup route would turn a
+ * missing timeout into a missing connector. Sent as a statement, a rejection is
+ * one failed query we can decide about.
+ *
+ * The timeout value is an integer we computed, not user text; `set` does not
+ * accept a bound parameter, so interpolation is unavoidable and safe here.
+ */
+async function applyGuards(v: PgVariant, client: Client, ctx: ConnectorContext, startedAt: number): Promise<void> {
+  // Read-only first: if anything below throws, the session is already locked.
+  // Best-effort by design — not every engine here has the setting, and its
+  // absence must not remove a source. The sub-select wrapper and the read-only
+  // credentials the user connects with remain the primary guards.
+  try {
+    await client.query('set default_transaction_read_only to on');
+  } catch {
+    /* engine has no such setting — see the comment above */
+  }
+
+  // `ctx.timeoutMs` is the budget for the WHOLE operation, so the query gets
+  // what connecting did not spend.
+  const spent = Date.now() - startedAt;
+  const budget = Math.max(MIN_STATEMENT_TIMEOUT_MS, Math.floor(ctx.timeoutMs - spent));
+  try {
+    await client.query(`set statement_timeout to ${budget}`);
+  } catch (e) {
+    // On real Postgres this cannot fail for any reason that leaves the session
+    // usable, so a failure is a genuine error. On the three engines flagged
+    // UNVERIFIED it may simply be unsupported; we continue with only the
+    // JS-side `query_timeout`, which returns control but leaves the server
+    // running the query. That degradation is documented rather than hidden.
+    if (v.statementTimeoutVerified) throw e;
+  }
+}
+
+/** The rowMode:'array' result shape. @types/pg's overloads do not line up with
+ *  a `{text, rowMode, values}` object literal, so the cast is confined here. */
+interface ArrayResult {
+  fields?: { name: string; dataTypeID: number }[];
+  rows?: unknown[][];
+}
+
+async function queryArray(client: Client, text: string, values?: unknown[]): Promise<ArrayResult> {
+  const cfg = { text, rowMode: 'array', values } as unknown as Parameters<Client['query']>[0];
+  return (await client.query(cfg)) as unknown as ArrayResult;
+}
+
+/** Connect, run `fn`, and close the client — ALWAYS, on every path. */
+async function withClient<T>(
+  v: PgVariant,
+  ctx: ConnectorContext,
+  fn: (client: Client) => Promise<T | ConnectorError>,
+): Promise<T | ConnectorError> {
+  const startedAt = Date.now();
+  const client = new Client(clientConfig(v, ctx));
+  try {
+    await client.connect();
+    await applyGuards(v, client, ctx, startedAt);
+    return await fn(client);
+  } catch (e) {
+    // `pg` puts host, port, database and sometimes the whole DSN in its error
+    // messages. Nothing reaches a renderer without passing through here.
+    return { ok: false, error: safeError(e, ctx.secrets) };
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
+// ── Column types ─────────────────────────────────────────────────────────────
+
+let oidNames: Map<number, string> | null = null;
+
+/** The SOURCE's type name, verbatim — read out of `pg`'s own builtin OID table
+ *  rather than a hand-copied list, so it cannot drift. An OID we do not know
+ *  (an extension type, or a pgwire engine's own) reports `oid_<n>`: honest and
+ *  useless beats plausible and wrong, because the caller maps this to a
+ *  ColumnType and `007` must stay text. */
+function typeName(oid: number): string {
+  if (!oidNames) {
+    oidNames = new Map<number, string>();
+    const builtins = (pgTypes as unknown as { builtins?: Record<string, unknown> } | undefined)?.builtins;
+    for (const [k, val] of Object.entries(builtins || {})) {
+      if (typeof val === 'number' && !oidNames.has(val)) oidNames.set(val, k.toLowerCase());
+    }
+  }
+  return oidNames.get(oid) || `oid_${oid}`;
+}
+
+/** Narrow a driver value to what ConnectorRows allows. Dates become ISO strings
+ *  and structured values become JSON, matching `connectionRun.cellToString`;
+ *  a bigint becomes a string because a JS number would silently lose digits. */
+function cellValue(v: unknown): string | number | boolean | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return v;
+  if (v instanceof Date) return v.toISOString();
+  if (typeof v === 'bigint') return v.toString();
+  if (v instanceof Buffer) return v.toString('base64');
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+}
+
+// ── Operations ───────────────────────────────────────────────────────────────
+
+async function listTables(v: PgVariant, ctx: ConnectorContext): Promise<ConnectorTables | ConnectorError> {
+  const schemaFilter = asString(ctx.values.schema);
+  const cap = Math.max(1, Math.min(MAX_TABLES, Math.floor(ctx.rowLimit) || MAX_TABLES));
+  const candidates = v.list && v.list.length ? v.list : STANDARD_LIST;
+
+  return withClient<ConnectorTables>(v, ctx, async (client) => {
+    let firstError: unknown = null;
+
+    for (const c of candidates) {
+      try {
+        // The schema is a VALUE and is bound as one — it is never concatenated,
+        // so a name like `evil"; drop table x; --` is inert data on the wire.
+        const values = c.wantsSchemaParam ? [schemaFilter || null] : undefined;
+        // The cap is our own integer. `limit` cannot take a bound parameter on
+        // every engine here, so it is interpolated after Math.floor.
+        const res = await queryArray(client, `${c.sql} limit ${cap}`, values);
+        const rows = res.rows || [];
+        const tables: ConnectorTable[] = [];
+        for (const row of rows) {
+          const name = asString(row[c.name]);
+          if (!name) continue;
+          const schema = c.schema >= 0 ? asString(row[c.schema]) : '';
+          tables.push(schema ? { schema, name } : { name });
+        }
+        return { ok: true, tables };
+      } catch (e) {
+        // A candidate failing is expected — that is what the ladder is for.
+        // Keep the FIRST error: candidate 1 is the intended path, so its
+        // message is the one that explains a total failure.
+        if (firstError === null) firstError = e;
+      }
+    }
+    return { ok: false, error: safeError(firstError, ctx.secrets) };
+  });
+}
+
+/**
+ * `sql` is either the user's own SELECT or a bare (optionally schema-qualified)
+ * table name — the same two shapes `connectionRun.pgRun` accepted. A bare name
+ * is unambiguous because `select * from ( public.sales ) t` is not valid SQL,
+ * so nothing a user could mean as a query is read as a table.
+ */
+async function run(v: PgVariant, ctx: ConnectorContext, sql: string): Promise<ConnectorRows | ConnectorError> {
+  const input = typeof sql === 'string' ? sql.trim() : '';
+  if (!input) return { ok: false, error: 'No table or query specified' };
+
+  const cap = Math.max(1, Math.floor(ctx.rowLimit) || 1);
+  // Ask for ONE more row than the cap. If it comes back, the cap clipped the
+  // result and `truncated` says so; the extra row is dropped. Guessing
+  // truncation from `rows.length === cap` would cry wolf on an exact fit.
+  const probe = cap + 1;
+
+  let text: string;
+  if (QUERY_START_RE.test(input)) {
+    // Their database, their SQL — but always sub-select wrapped so the row cap
+    // applies no matter what they wrote. A trailing `;` would end the statement
+    // before the wrapper's `limit`, so strip it (verbatim from connectionRun).
+    text = `select * from ( ${input.replace(/;\s*$/, '')} ) as _ord_wrap limit ${probe}`;
+  } else {
+    // Anything that is not recognisably a query is treated as a TABLE NAME and
+    // must survive the whitelist. This is what makes a hostile string safe:
+    // `evil"; drop table x; --` is not a query start, so it is judged as a
+    // table name, fails IDENT_RE, and is rejected here — before a client is
+    // opened, so nothing at all reaches the server.
+    const parts = input.split('.');
+    if (parts.length > 2 || !parts.every((p) => IDENT_RE.test(p))) {
+      return { ok: false, error: 'Invalid table name' };
+    }
+    // Whitelisted above, then quoted here. Two independent guards: the regex
+    // forbids a `"` from ever existing in the name, and `quoteIdent` doubles
+    // one anyway, so neither alone has to be perfect.
+    text = `select * from ${parts.map(quoteIdent).join('.')} limit ${probe}`;
+  }
+
+  return withClient<ConnectorRows>(v, ctx, async (client) => {
+    // rowMode:'array' → rows are positional, so `select *` across a join with
+    // duplicate column names does not collide the way an object would.
+    const res = await queryArray(client, text);
+    const columns: ConnectorColumn[] = (res.fields || []).map((f) => ({
+      name: String(f.name),
+      type: typeName(Number(f.dataTypeID)),
+    }));
+    const raw = res.rows || [];
+    const truncated = raw.length > cap;
+    const rows = (truncated ? raw.slice(0, cap) : raw).map((row) => row.map(cellValue));
+    return { ok: true, columns, rows, truncated };
+  });
+}
+
+// ── The eleven ───────────────────────────────────────────────────────────────
+
+function define(v: PgVariant): ConnectorDef {
+  return {
+    id: v.id,
+    label: v.label,
+    family: 'postgres',
+    category: v.category,
+    readOnly: true,
+    blurb: v.blurb,
+    fields: buildFields(v),
+    listTables: (ctx: ConnectorContext) => listTables(v, ctx),
+    run: (ctx: ConnectorContext, sql: string) => run(v, ctx, sql),
+  };
+}
+
+export const CONNECTORS: ConnectorDef[] = VARIANTS.map(define);
+
+export default CONNECTORS;
