@@ -959,6 +959,14 @@ function renderAnomaliesPanel(out: HTMLElement, anomalies: any[], proseText: str
 // resolves names→ids, lays out the grid, and computes every figure at render. We
 // confirm-before-save; the created dashboard opens in the normal (fully editable)
 // editor. Execution-gated → gentle hint, never an error dialog.
+//
+// The channel behind window.hub.draftDashboard is now `analysis:draft` (the old
+// `dashboard:draft` was DELETED, not aliased), so the proposal arrives as
+// `sheets`, not `pages`. A sheet IS a dashboards Page, so the payload is
+// unchanged in shape and this still saves a dashboard: the analysis surface that
+// should own the draft does not exist in the UI yet, and a button that creates a
+// record nothing can open would be worse than one that creates a dashboard.
+// Repoint the save below to window.hub.createAnalysis when that surface lands.
 async function handleDraftDashboard(): Promise<void> {
   if (!currentProjectId) { window.alert('Open a project first.'); return; }
   const btn = dashEl('dash-draft-btn') as HTMLButtonElement | null;
@@ -980,7 +988,7 @@ async function handleDraftDashboard(): Promise<void> {
     window.alert((res && res.error) || 'Could not draft a dashboard.');
     return;
   }
-  const pages = Array.isArray(res.pages) ? res.pages : [];
+  const pages = Array.isArray(res.sheets) ? res.sheets : [];
   const cardCount = pages.reduce((n: number, p: any) => n + (Array.isArray(p.cards) ? p.cards.length : 0), 0);
   const name = res.name || 'AI dashboard';
   const confirmMsg =

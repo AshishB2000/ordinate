@@ -78,6 +78,35 @@ async function main(): Promise<void> {
     'utf8',
   );
 
+  // ── 1b. A METADATA READ MUST NOT MIGRATE ──
+  // getDatasetMeta's stated contract is "migration is a write, and a metadata
+  // read must stay a read". Every lazy-migration design in the app rests on it,
+  // including the implicit-analysis wrap for legacy dashboards. Nothing asserted
+  // it: getDatasetMeta appeared exactly once in scripts/, and only to read
+  // `meta.resident`. So run it FIRST, before anything hydrates, and prove the
+  // bytes on disk are untouched — with the bridge available, so a migration
+  // genuinely COULD have happened here.
+  const v2BytesBefore = await fs.promises.readFile(path.join(dsDir(proj.id), UUID + '.json'), 'utf8');
+  const metaOfV2 = await datasets.getDatasetMeta(proj.id, UUID);
+  ok('getDatasetMeta reads a v2 record', metaOfV2 !== null && metaOfV2.name === 'Legacy sales');
+  ok('getDatasetMeta reports a v2 record as NOT resident', metaOfV2 !== null && metaOfV2.resident === false);
+  ok('getDatasetMeta carries rowCount without the table', metaOfV2 !== null && metaOfV2.rowCount === 4);
+  ok('getDatasetMeta does NOT hydrate (no rows on the meta object)',
+    metaOfV2 !== null && (metaOfV2 as unknown as Record<string, unknown>).rows === undefined);
+  const v2BytesAfterMeta = await fs.promises.readFile(path.join(dsDir(proj.id), UUID + '.json'), 'utf8');
+  ok('getDatasetMeta left the v2 file byte-identical (a read stays a read)',
+    v2BytesAfterMeta === v2BytesBefore);
+  ok('getDatasetMeta wrote no .parquet sibling',
+    !fs.existsSync(path.join(dsDir(proj.id), UUID + '.parquet')));
+  {
+    const after = JSON.parse(v2BytesAfterMeta);
+    ok('the record on disk is still schemaVersion 2 after a metadata read', after.schemaVersion === 2);
+    ok('the record on disk still carries its rows after a metadata read',
+      Array.isArray(after.rows) && after.rows.length === 4);
+  }
+  ok('a metadata read leaves no .tmp litter',
+    fs.readdirSync(dsDir(proj.id)).every((f) => !f.includes('.tmp')));
+
   // ── 2. Opening it must work, and must migrate ──
   const loaded = await datasets.getDataset(proj.id, UUID);
   ok('v2 record loads', loaded !== null);

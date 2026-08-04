@@ -192,3 +192,8 @@ scripts/**/*.js
 /src/duckdbSidecar.js
 /src/duckdbSidecarChild.js
 /scripts/test-duckdbSidecar.js
+
+# Analysis (the authoring container a dashboard is published from) — emitted siblings.
+/src/analysis.js
+/src/ipc/analyses.js
+/scripts/test-analysis.js
