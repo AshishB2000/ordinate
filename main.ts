@@ -586,6 +586,10 @@ require("./src/ipc/visuals").register();
 
 require("./src/ipc/dashboards").register();
 
+// Analyses — the AUTHORING container a dashboard is published FROM. Also owns
+// `analysis:draft`, which replaced the deleted `dashboard:draft`.
+require("./src/ipc/analyses").register();
+
 require("./src/ipc/dashboardExport").register();
 
 require("./src/ipc/copilot").register();

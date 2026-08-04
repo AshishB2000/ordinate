@@ -64,7 +64,9 @@ async function main(): Promise<void> {
   ok('saveDashboard returns a dashboard', a !== null && typeof a.id === 'string' && a.id.length > 0);
   ok('saveDashboard trims the name', a !== null && a.name === 'Q3 board');
   ok('saveDashboard sets projectId', a !== null && a.projectId === proj.id);
-  ok('saveDashboard sets schemaVersion 2', a !== null && a.schemaVersion === 2);
+  ok('saveDashboard sets schemaVersion 3', a !== null && a.schemaVersion === 3);
+  ok('saveDashboard defaults analysisId to null', a !== null && a.analysisId === null);
+  ok('saveDashboard defaults publishedAt to null', a !== null && a.publishedAt === null);
   ok('saveDashboard defaults filters to [] when none supplied', a !== null && Array.isArray(a.filters) && a.filters.length === 0);
   ok('saveDashboard sets createdAt === updatedAt', a !== null && a.createdAt === a.updatedAt);
   ok('saveDashboard keeps the one page', a !== null && a.pages.length === 1);
@@ -173,7 +175,7 @@ async function main(): Promise<void> {
     withFilters !== null && withFilters.filters[0].column === 'region'
     && withFilters.filters[0].op === '=' && withFilters.filters[0].value === 'West'
     && withFilters.filters[1].column === 'pop' && withFilters.filters[1].op === '>=' && withFilters.filters[1].value === 100);
-  ok('saveDashboard with filters is schemaVersion 2', withFilters !== null && withFilters.schemaVersion === 2);
+  ok('saveDashboard with filters is schemaVersion 3', withFilters !== null && withFilters.schemaVersion === 3);
 
   const reFiltered = withFilters !== null ? await dashboards.getDashboard(proj.id, withFilters.id) : null;
   ok('dashboard filters survive a reload',
@@ -190,7 +192,7 @@ async function main(): Promise<void> {
     updNoFilters !== null && updNoFilters.filters.length === 1 && updNoFilters.filters[0].column === 'year');
 
   // Backward-compat: a v1 dashboard.json (no `filters`, schemaVersion 1) loads as
-  // filters:[] and schemaVersion 2, rendering identically to Week 9.
+  // filters:[] and schemaVersion 3, rendering identically to Week 9.
   const v1Id = '77777777-7777-4777-8777-777777777777';
   const v1Path = path.join(tmpUserData, 'projects', proj.id, 'dashboards', v1Id + '.json');
   fs.writeFileSync(v1Path, JSON.stringify({
@@ -200,7 +202,62 @@ async function main(): Promise<void> {
   }));
   const v1Loaded = await dashboards.getDashboard(proj.id, v1Id);
   ok('v1 dashboard (no filters) loads as filters:[]', v1Loaded !== null && Array.isArray(v1Loaded.filters) && v1Loaded.filters.length === 0);
-  ok('v1 dashboard is upgraded to schemaVersion 2 on load', v1Loaded !== null && v1Loaded.schemaVersion === 2);
+  ok('v1 dashboard is upgraded to schemaVersion 3 on load', v1Loaded !== null && v1Loaded.schemaVersion === 3);
+
+  // ── A READ MUST STAY A READ (the property the analysis wrap rests on) ────────
+  // A v2 record (filters present, no analysisId/publishedAt) plants on disk and
+  // is read back through get AND list. Both must report the v3 defaults IN
+  // MEMORY and leave the BYTES ON DISK untouched — the implicit-analysis wrap is
+  // triggered by an EDIT, so if a read silently rewrote the file the whole lazy
+  // design would be a fiction.
+  const v2Id = '88888888-8888-4888-8888-888888888888';
+  const v2Path = path.join(tmpUserData, 'projects', proj.id, 'dashboards', v2Id + '.json');
+  const v2Bytes = JSON.stringify({
+    id: v2Id, projectId: proj.id, name: 'Legacy v2', schemaVersion: 2,
+    pages: [{ id: '99999999-9999-4999-8999-999999999999', name: 'Legacy', cards: [] }],
+    filters: [{ type: 'filter', column: 'region', op: '=', value: 'West' }],
+    createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+  }, null, 2);
+  fs.writeFileSync(v2Path, v2Bytes, 'utf8');
+  const v2Loaded = await dashboards.getDashboard(proj.id, v2Id);
+  ok('v2 dashboard loads', v2Loaded !== null && v2Loaded.name === 'Legacy v2');
+  ok('v2 dashboard reads analysisId as null', v2Loaded !== null && v2Loaded.analysisId === null);
+  ok('v2 dashboard reads publishedAt as null', v2Loaded !== null && v2Loaded.publishedAt === null);
+  ok('v2 dashboard is upgraded to schemaVersion 3 in memory', v2Loaded !== null && v2Loaded.schemaVersion === 3);
+  ok('v2 dashboard keeps its filters', v2Loaded !== null && v2Loaded.filters.length === 1 && v2Loaded.filters[0].column === 'region');
+  await dashboards.listDashboards(proj.id);
+  ok('getDashboard + listDashboards did NOT rewrite the v2 file (bytes identical)',
+    fs.readFileSync(v2Path, 'utf8') === v2Bytes);
+  const stillV2 = JSON.parse(fs.readFileSync(v2Path, 'utf8'));
+  ok('the v2 file on disk is still schemaVersion 2', stillV2.schemaVersion === 2);
+  ok('the v2 file on disk still has no analysisId', stillV2.analysisId === undefined);
+
+  // ── ATOMIC WRITE: no .tmp sibling survives a successful write ────────────────
+  // src/dashboards.ts writes a temp sibling then renames. Nothing asserted the
+  // temp file was gone afterwards, so a rename that silently degraded to a copy
+  // would leave litter in the project folder unnoticed.
+  const dashDir = path.join(tmpUserData, 'projects', proj.id, 'dashboards');
+  const strays = fs.readdirSync(dashDir).filter((f) => f.includes('.tmp'));
+  ok('no .tmp sibling survives a successful dashboard write', strays.length === 0);
+
+  // ── CORRUPT FILE IS SKIPPED, NOT FATAL ──────────────────────────────────────
+  // The filename guard was tested; the JSON-parse guard was not. A UUID-named
+  // file full of garbage must be skipped and the good dashboards still returned.
+  const corruptId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  fs.writeFileSync(path.join(dashDir, corruptId + '.json'), '{ this is not: json', 'utf8');
+  const truncatedId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  fs.writeFileSync(path.join(dashDir, truncatedId + '.json'), '{"id":', 'utf8');
+  const noIdId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  fs.writeFileSync(path.join(dashDir, noIdId + '.json'), '{"name":"no id here"}', 'utf8');
+  const afterCorrupt = await dashboards.listDashboards(proj.id);
+  ok('listDashboards survives a corrupt dashboards/*.json',
+    Array.isArray(afterCorrupt) && afterCorrupt.length > 0);
+  ok('listDashboards skips the corrupt records',
+    !afterCorrupt.some((d) => d.id === corruptId || d.id === truncatedId || d.id === noIdId));
+  ok('listDashboards still returns the good records',
+    b !== null && afterCorrupt.some((d) => d.id === b.id) && afterCorrupt.some((d) => d.id === v2Id));
+  ok('getDashboard of a corrupt record returns null (never throws)',
+    (await dashboards.getDashboard(proj.id, corruptId)) === null);
 
   // ── delete ────────────────────────────────────────────────────────────────────
   const del = b !== null ? await dashboards.deleteDashboard(proj.id, b.id) : false;

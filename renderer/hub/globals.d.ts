@@ -221,7 +221,21 @@ declare global {
         patch: { name?: string; pages?: any; filters?: any },
       ): Promise<any>;
       deleteDashboard(projectId: string, id: string): Promise<{ ok: boolean }>;
+      // Channel `analysis:draft` (the old `dashboard:draft` was deleted, not
+      // aliased). Resolves to { ok, name, sheets } — `sheets`, not `pages`.
       draftDashboard(projectId: string): Promise<any>;
+      // ── Analyses (the AUTHORING container — sheets of cards + filters) ──
+      listAnalyses(projectId: string): Promise<any[]>;
+      getAnalysis(projectId: string, id: string): Promise<any>;
+      createAnalysis(payload: { projectId: string; name: string; sheets?: any; filters?: any }): Promise<any>;
+      renameAnalysis(projectId: string, id: string, name: string): Promise<any>;
+      updateAnalysis(
+        projectId: string,
+        id: string,
+        patch: { name?: string; sheets?: any; filters?: any },
+      ): Promise<any>;
+      deleteAnalysis(projectId: string, id: string): Promise<{ ok: boolean }>;
+      analysisForDashboard(projectId: string, dashboardId: string): Promise<any>;
       summarizeDashboard(projectId: string, id: string): Promise<any>;
       explainDashboardAnomalies(projectId: string, id: string): Promise<any>;
       computeMetric(

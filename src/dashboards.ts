@@ -74,9 +74,18 @@ export interface Dashboard {
   // all cards — 100% app-computed, strict-number rule intact. A v1 file (no
   // `filters`) normalizes to [], i.e. behaves exactly as Week 9 (backward-compatible).
   filters: FilterStep[];
+
+  // ── schema v3: a dashboard is the PUBLISHED SNAPSHOT of an Analysis ────────
+  // `analysisId` is PROVENANCE ONLY. It must NEVER become a lookup — "load the
+  // analysis to render the dashboard" would destroy the snapshot guarantee, and
+  // a published dashboard has to render with its analysis deleted. null = a
+  // legacy standalone dashboard, or one created before its analysis existed.
+  analysisId: string | null;
+  // When this snapshot was taken; null on a legacy record.
+  publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
-  schemaVersion: 2;
+  schemaVersion: 3;
 }
 
 export interface DashboardSummary {
@@ -250,6 +259,12 @@ function isValidDashboard(data: any): boolean {
 
 // Coerce a parsed object into a well-formed Dashboard (fills defaults, guarantees
 // schemaVersion 1 + ≥1 page, and re-sanitizes every card on load).
+//
+// v1/v2 → v3 IS AN IN-MEMORY UPGRADE THAT WRITES NOTHING. This is the same
+// contract v1→v2 already had for `filters` ("absent (v1) → []"), and it is what
+// lets the implicit-analysis wrap be triggered by an EDIT rather than by a read:
+// listing and opening a legacy dashboard leave the bytes on disk untouched, and
+// the file stays v2 until something actually writes it.
 function normalize(data: any, projectId: string): Dashboard {
   const createdAt = data.createdAt || new Date().toISOString();
   return {
@@ -258,9 +273,11 @@ function normalize(data: any, projectId: string): Dashboard {
     name: typeof data.name === 'string' && data.name.trim() ? data.name : 'Untitled dashboard',
     pages: sanitizePages(data.pages),
     filters: sanitizeDashboardFilters(data.filters), // absent (v1) → []
+    analysisId: isValidId(data.analysisId) ? data.analysisId : null, // absent (v1/v2) → null
+    publishedAt: typeof data.publishedAt === 'string' && data.publishedAt ? data.publishedAt : null,
     createdAt,
     updatedAt: data.updatedAt || createdAt,
-    schemaVersion: 2,
+    schemaVersion: 3,
   };
 }
 
@@ -325,7 +342,7 @@ export async function getDashboard(projectId: string, id: string): Promise<Dashb
 // at least one page (a default empty page if none supplied).
 export async function saveDashboard(
   projectId: string,
-  input: { name: string; pages?: unknown; filters?: unknown },
+  input: { name: string; pages?: unknown; filters?: unknown; analysisId?: unknown; publishedAt?: unknown },
 ): Promise<Dashboard | null> {
   if (!isValidId(projectId)) return null;
   const parent = await projects.getProject(projectId);
@@ -339,9 +356,11 @@ export async function saveDashboard(
     name: typeof input.name === 'string' && input.name.trim() ? input.name.trim() : 'Untitled dashboard',
     pages: sanitizePages(input.pages),
     filters: sanitizeDashboardFilters(input.filters),
+    analysisId: isValidId(input.analysisId) ? input.analysisId : null,
+    publishedAt: typeof input.publishedAt === 'string' && input.publishedAt ? input.publishedAt : null,
     createdAt: now,
     updatedAt: now,
-    schemaVersion: 2,
+    schemaVersion: 3,
   };
   await fs.promises.mkdir(dashboardsDir(projectId), { recursive: true });
   await writeJsonAtomic(dashboardFilePath(projectId, id), dashboard);
@@ -353,7 +372,7 @@ export async function saveDashboard(
 export async function updateDashboard(
   projectId: string,
   id: string,
-  patch: { name?: string; pages?: unknown; filters?: unknown },
+  patch: { name?: string; pages?: unknown; filters?: unknown; analysisId?: unknown; publishedAt?: unknown },
 ): Promise<Dashboard | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   const existing = await getDashboard(projectId, id);
@@ -364,6 +383,14 @@ export async function updateDashboard(
     name: typeof patch.name === 'string' && patch.name.trim() ? patch.name.trim() : existing.name,
     pages: patch.pages !== undefined ? sanitizePages(patch.pages) : existing.pages,
     filters: patch.filters !== undefined ? sanitizeDashboardFilters(patch.filters) : existing.filters,
+    analysisId:
+      patch.analysisId !== undefined
+        ? (isValidId(patch.analysisId) ? patch.analysisId : null)
+        : existing.analysisId,
+    publishedAt:
+      patch.publishedAt !== undefined
+        ? (typeof patch.publishedAt === 'string' && patch.publishedAt ? patch.publishedAt : null)
+        : existing.publishedAt,
     updatedAt: new Date().toISOString(),
   };
   await fs.promises.mkdir(dashboardsDir(projectId), { recursive: true });

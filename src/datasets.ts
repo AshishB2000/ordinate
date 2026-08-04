@@ -294,8 +294,8 @@ export async function listDatasets(projectId: string): Promise<DatasetSummary[]>
 //
 // `getDataset` hydrates the whole table into Cell[][]. That is the right shape
 // for anything that needs the rows, and the wrong one for the many callers that
-// only want columns/name/rowCount — `dashboard:draft` loads EVERY dataset in a
-// project just to read `ds.columns`, and the renderer's column pickers pay for a
+// only want columns/name/rowCount — `analysis:draft` (formerly `dashboard:draft`)
+// loads EVERY dataset in a project just to read `ds.columns`, and the renderer's column pickers pay for a
 // full structured-clone over IPC to populate a dropdown.
 
 /** Everything in a Dataset except the tables. Cheap: one small JSON read. */

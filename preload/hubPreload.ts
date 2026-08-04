@@ -327,11 +327,32 @@ contextBridge.exposeInMainWorld('hub', {
     ipcRenderer.invoke('dashboard:update', { projectId, id, ...patch }),
   // Delete a dashboard; returns { ok: boolean }.
   deleteDashboard: (projectId: string, id: string) => ipcRenderer.invoke('dashboard:delete', { projectId, id }),
-  // OPTIONAL AI dashboard draft (structure only — the model proposes cards by name;
+  // OPTIONAL AI layout draft (structure only — the model proposes cards by name;
   // MAIN resolves names→ids, assigns the grid, and computes every figure at render).
-  // Returns the proposal WITHOUT saving. { ok, name, pages } |
+  // Returns the proposal WITHOUT saving. { ok, name, sheets } |
   // { ok:false, notReady:true } | { ok:false, error }.
-  draftDashboard: (projectId: string) => ipcRenderer.invoke('dashboard:draft', { projectId }),
+  //
+  // The CHANNEL is `analysis:draft`; `dashboard:draft` was deleted, not aliased.
+  // The METHOD name is kept — this is still "draft me a layout", and the model
+  // call behind it is still analyze.draftDashboard().
+  draftDashboard: (projectId: string) => ipcRenderer.invoke('analysis:draft', { projectId }),
+
+  // ── Analyses (the AUTHORING container — sheets of cards + analysis-wide
+  // filters; a dashboard is a published snapshot OF one). ────────────────────
+  listAnalyses: (projectId: string) => ipcRenderer.invoke('analysis:list', { projectId }),
+  getAnalysis: (projectId: string, id: string) => ipcRenderer.invoke('analysis:get', { projectId, id }),
+  createAnalysis: (payload: { projectId: string; name: string; sheets?: any; filters?: any }) =>
+    ipcRenderer.invoke('analysis:create', payload),
+  renameAnalysis: (projectId: string, id: string, name: string) =>
+    ipcRenderer.invoke('analysis:rename', { projectId, id, name }),
+  updateAnalysis: (projectId: string, id: string, patch: { name?: string; sheets?: any; filters?: any }) =>
+    ipcRenderer.invoke('analysis:update', { projectId, id, ...patch }),
+  deleteAnalysis: (projectId: string, id: string) => ipcRenderer.invoke('analysis:delete', { projectId, id }),
+  // The implicit wrap of a LEGACY standalone dashboard. Call it when the user
+  // opens one FOR EDITING — never on list, never on open-to-view: that is what
+  // keeps a read a read. Idempotent. { ok, analysis, created } | { ok:false, error }.
+  analysisForDashboard: (projectId: string, dashboardId: string) =>
+    ipcRenderer.invoke('analysis:forDashboard', { projectId, dashboardId }),
   // OPTIONAL AI executive summary (prose). MAIN recomputes every card's figure and
   // feeds them as FACTS; the model only narrates, never recomputes. Returns
   // { ok, text, provenance } | { ok:false, notReady:true } | { ok:false, error }.

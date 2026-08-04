@@ -10,7 +10,7 @@ import { computeMetric } from '../metricValue';
 import type { MetricAggregation } from '../metricValue';
 import { applyPipeline } from '../transforms';
 import type { FilterStep } from '../transforms';
-import { draftDashboard, summarizeDashboard, explainAnomalies } from '../analyze';
+import { summarizeDashboard, explainAnomalies } from '../analyze';
 
 // Dashboards IPC — list/get/save/update/delete a Dashboard, plus `dashboard:metric`
 // which loads a dataset and runs the PURE src/metricValue.ts helper to produce the
@@ -368,95 +368,13 @@ export function register() {
     return computed;
   }
 
-  // AI-DRAFTED LAYOUT. Build a compact inventory (datasets → columns; saved visuals
-  // by name), ask the model for a name + cards referencing ONLY those names, then
-  // RESOLVE names→ids in MAIN (verify columns exist, clamp aggregations, map visual
-  // names→ids), ASSIGN the grid layout ourselves (flow packer), and sanitize into
-  // pages. Returns { ok, name, pages } WITHOUT saving — the renderer confirms, then
-  // calls the existing dashboard:save. Every figure is computed later at render.
-  const DRAFT_AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
-  ipcMain.handle('dashboard:draft', async (_e, { projectId }: any = {}) => {
-    try {
-      const dsSummaries = await datasets.listDatasets(projectId);
-      const vList = await visuals.listVisuals(projectId);
-      if (dsSummaries.length === 0 && vList.length === 0) {
-        return { ok: false, error: 'Add a dataset or visual before drafting a dashboard.' };
-      }
-
-      // Load each dataset's columns for the inventory + name→(id, columns) lookup.
-      // METADATA ONLY — this loop reads name/columns/id and nothing else, so it
-      // uses getDatasetMeta. It previously hydrated EVERY dataset in the project
-      // (both the derived table and the immutable source) to build a prompt
-      // listing column names: at the 50k row cap that is tens of MB parsed per
-      // draft, for data that is never looked at.
-      const dsByName = new Map<string, datasets.DatasetMeta>();
-      const invLines: string[] = ['Datasets and their columns:'];
-      for (const s of dsSummaries) {
-        const ds = await datasets.getDatasetMeta(projectId, s.id);
-        if (!ds) continue;
-        dsByName.set(ds.name, ds);
-        invLines.push(`- "${ds.name}": ${ds.columns.map((c) => `${c.name} (${c.type})`).join(', ') || '(no columns)'}`);
-      }
-      invLines.push('');
-      invLines.push('Saved visuals (reference by exact name):');
-      const vByName = new Map<string, string>(); // name → visualId
-      vList.forEach((v) => vByName.set(v.name, v.id));
-      invLines.push(vList.length ? vList.map((v) => `- "${v.name}"`).join('\n') : '- (none)');
-
-      const res = await draftDashboard(invLines.join('\n'));
-      if (!res.ok) {
-        if (res.errorType === 'not_ready') return { ok: false, notReady: true };
-        return { ok: false, error: res.message || 'Could not draft a dashboard' };
-      }
-
-      const structure = (res.structure && typeof res.structure === 'object' ? res.structure : {}) as Record<string, unknown>;
-      const name = typeof structure.name === 'string' && structure.name.trim() ? structure.name.trim() : 'AI dashboard';
-      const rawCards = Array.isArray(structure.cards) ? structure.cards : [];
-
-      // Flow packer: metric 3×2, visual 6×6, text 12×2 — laid out left→right,
-      // wrapping at GRID_COLS. Resolve every reference; drop anything unresolvable.
-      const packed: unknown[] = [];
-      let cx = 0;
-      let cy = 0;
-      let rowH = 0;
-      const place = (w: number, h: number) => {
-        if (cx + w > dashboards.GRID_COLS) { cx = 0; cy += rowH; rowH = 0; }
-        const layout = { x: cx, y: cy, w, h };
-        cx += w;
-        if (h > rowH) rowH = h;
-        return layout;
-      };
-      for (const raw of rawCards) {
-        const c = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
-        if (!c) continue;
-        if (c.type === 'metric') {
-          const ds = typeof c.dataset === 'string' ? dsByName.get(c.dataset) : undefined;
-          if (!ds) continue;
-          const column = typeof c.column === 'string' ? c.column : '';
-          if (!ds.columns.some((col) => col.name === column)) continue; // column must exist
-          const aggregation = typeof c.aggregation === 'string' && DRAFT_AGGS.has(c.aggregation) ? c.aggregation : 'sum';
-          const label = typeof c.label === 'string' ? c.label : `${aggregation}(${column})`;
-          packed.push({ type: 'metric', layout: place(3, 2), metric: { datasetId: ds.id, column, aggregation, label } });
-        } else if (c.type === 'visual') {
-          const visualId = typeof c.visual === 'string' ? vByName.get(c.visual) : undefined;
-          if (!visualId) continue;
-          packed.push({ type: 'visual', layout: place(6, 6), visualId });
-        } else if (c.type === 'text') {
-          const heading = typeof c.heading === 'string' ? c.heading : undefined;
-          const text = typeof c.text === 'string' ? c.text : undefined;
-          if (heading === undefined && text === undefined) continue;
-          packed.push({ type: 'text', layout: place(12, 2), heading, text });
-        }
-      }
-
-      // sanitizeCards drops anything still malformed; wrap into a single page.
-      const cards = dashboards.sanitizeCards(packed);
-      const pages = [{ name: 'Page 1', cards }];
-      return { ok: true, name, pages };
-    } catch (err: any) {
-      return { ok: false, error: err?.message || 'Failed to draft a dashboard' };
-    }
-  });
+  // `dashboard:draft` USED TO LIVE HERE. It is DELETED, not aliased or
+  // deprecated-but-live: its body moved verbatim to `analysis:draft` in
+  // src/ipc/analyses.ts and now produces `sheets` for an analysis instead of
+  // `pages` for a dashboard. The AI's output is a first draft — the thing a user
+  // immediately wants to edit — so it belongs on the authoring surface, not in
+  // the published snapshot. Two AI paths that both create a layout, differing
+  // subtly, is the failure mode an alias would have shipped.
 
   // AI SUMMARY (prose). Recompute every metric card in MAIN, format them as FACTS
   // via the existing pure copilot.dashboardFacts (guard line + app-computed numbers),
