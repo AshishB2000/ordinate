@@ -799,28 +799,55 @@ export async function suggestCalcField(
   return { ok: true, name: parsed.name, expression: parsed.expression };
 }
 
-// Week 12 — OPTIONAL AI-drafted dashboard LAYOUT. Twin of suggestSteps: same
-// execution path, STRUCTURE ONLY (a single JSON object of cards referencing the
-// given dataset/column/visual names), and NEVER a computed value or number — the
-// IPC resolves names→ids, the app assigns grid coordinates, and every figure is
-// computed at render. The caller sanitizes and the renderer confirms before saving.
+// Week 12 → EXTENDED — the OPTIONAL AI ANALYSIS PLAN. Still the same single model
+// call it has always been (same execution path, same tolerant single-object
+// parse, same name), but what it asks for grew from a flat card list into the
+// PLAN ENVELOPE that src/analysisPlan.ts validates: named sheets of visuals,
+// plus calculated fields, plus a rationale.
+//
+// This function is deliberately NOT twinned with a `draftAnalysis()`. Two AI
+// paths that both build an analysis, differing subtly, is the failure mode worth
+// avoiding above all others here — so the prompt was extended IN PLACE and the
+// old `{name, cards}` shape retired with it.
+//
+// Unchanged, and the reason the feature is safe: STRUCTURE ONLY. The model names
+// datasets, columns, chart types, aggregations and formulas; it NEVER writes a
+// value. The caller resolves names→ids, compiles every formula with
+// src/formula.ts, validates every encoding against the REAL column types, drops
+// and reports what does not survive, and computes every figure itself at render.
+//
+// `inventoryText` is the app-computed FACTS block (analysisPlan.buildFactsText):
+// dataset/column names, declared types and per-column stats — and no rows.
 const DRAFT_DASHBOARD_SYSTEM_PROMPT =
-  'You propose a dashboard LAYOUT for a project as ONLY a single JSON object — no markdown, no code fences, no ' +
-  'prose. NEVER output a computed value or number; the app computes every metric and chart itself. Reference ' +
-  'ONLY the exact dataset names, column names, and saved-visual names given to you. Use this shape:\n' +
-  '  { "name": "<dashboard name>", "cards": [ <card>, ... ] }  (aim for 4-8 cards)\n' +
-  'Each card is ONE of:\n' +
-  '  { "type":"metric", "dataset":"<dataset name>", "column":"<numeric column>", ' +
-  '"aggregation":"sum|avg|count|min|max", "label":"<short label>" }\n' +
-  '  { "type":"visual", "visual":"<saved visual name>" }\n' +
-  '  { "type":"text", "heading":"<title>", "text":"<1-2 sentence framing, NO numbers>" }\n' +
-  'Prefer leading with a few key metric cards, then charts, then an optional text note. Do NOT specify ' +
-  'positions or sizes — the app arranges the grid. Return ONLY the JSON object.';
+  'You propose an ANALYSIS PLAN for a project as ONLY a single JSON object — no markdown, no code fences, no ' +
+  'prose. NEVER output a computed value, figure, percentage or count; the app computes every number itself and ' +
+  'will REJECT anything it cannot verify. Reference ONLY the exact dataset names, column names, saved-visual ' +
+  'names and chart types given to you. Use this shape:\n' +
+  '  { "name": "<analysis name>",\n' +
+  '    "rationale": "<1-3 sentences, NO numbers, on why these views>",\n' +
+  '    "calculatedFields": [ { "dataset":"<dataset name>", "name":"<new column name>", "formula":"<expression>" } ],\n' +
+  '    "sheets": [ { "name":"<sheet name>", "visuals": [ <visual>, ... ] } ] }\n' +
+  'Aim for 1-3 sheets and 2-5 visuals per sheet. "calculatedFields" may be an empty array.\n' +
+  'Each visual is EITHER a new chart:\n' +
+  '  { "dataset":"<dataset name>", "name":"<short title>", "chartType":"<one of the listed chart types>",\n' +
+  '    "encoding": { "category":"<dimension column>", "values":[ {"column":"<column>",' +
+  '"aggregation":"sum|avg|count|min|max"} ], "series":"<optional split column>" },\n' +
+  '    "filters": [ {"type":"filter","column":"<column>","op":"=|!=|>|<|>=|<=|contains|is_empty|not_empty",' +
+  '"value":<string or number>} ] }\n' +
+  'OR a reference to an existing saved visual, to place it as-is:\n' +
+  '  { "visual":"<saved visual name>" }\n' +
+  'Rules: a measure using sum/avg/min/max MUST name a number column — "count" works on any column. A ' +
+  'calculated-field formula may use + - * / %, comparisons (= != > < >= <=), and/or/not, parentheses, ' +
+  'numeric/string literals, and functions such as round, abs, floor, ceil, min, max, lower, upper, trim, len, ' +
+  'concat, if, coalesce; reference columns bare, or in [brackets] if they contain spaces. ALWAYS wrap a ' +
+  'division in round(..., 4) — the app stores a value with more than 15 significant digits as TEXT, so an ' +
+  'unrounded ratio produces a column you cannot then average. Do NOT specify positions or sizes — the app ' +
+  'arranges the grid. Return ONLY the JSON object.';
 export async function draftDashboard(
   inventoryText: string,
 ): Promise<{ ok: true; structure: unknown } | TypedError> {
   if (!config.executionReady()) {
-    return { ok: false, errorType: 'not_ready', message: 'Connect a model in Execution settings to draft a dashboard.' };
+    return { ok: false, errorType: 'not_ready', message: 'Connect a model in Execution settings to draft an analysis.' };
   }
   const messages: NeutralMsg[] = [{ role: 'user', text: inventoryText }];
   const { rawText, error } = await dispatch(DRAFT_DASHBOARD_SYSTEM_PROMPT, messages);

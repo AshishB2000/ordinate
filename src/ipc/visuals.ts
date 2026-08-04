@@ -148,6 +148,59 @@ export async function residentVizData(
   }
 }
 
+/** The reply shape of `visual:data`. `tooLarge` is only ever set by a caller
+ *  that supplied `maxHydrateRows` (see below); `visual:data` itself never does. */
+export type VizDataReply =
+  | { ok: true; data: VizDataResult['data']; recommendedShape: string; warnings: string[] }
+  | { ok: false; error: string; tooLarge?: true };
+
+/**
+ * THE one function that turns (dataset, encoding, filters) into chart data.
+ *
+ * Extracted from the `visual:data` handler so that ANY other caller which needs
+ * "what will this chart show?" — notably the analysis-plan PREVIEW — goes
+ * through the identical resident-then-JS decision with the identical arguments.
+ * That is not a tidiness point: it is the reason a previewed chart and the
+ * chart the built Visual renders cannot disagree. Same function, same inputs,
+ * same output.
+ *
+ * Takes ALREADY-SANITIZED encoding/filters, exactly like `residentVizData`.
+ *
+ * `maxHydrateRows` is an OPTIONAL cost ceiling on the JS fallback, and it is a
+ * cost model rather than a flag. `visual:data` omits it (one chart, drawn
+ * because the user is looking at it, may pay ~1.2 s to hydrate 1M rows). The
+ * plan preview supplies one, because it draws EVERY chart in the plan at once:
+ * eight charts × a full 1M-row hydrate each is ~9 s and eight table copies
+ * resident in main's heap. Above the ceiling the honest answer is "no preview
+ * for this card", never a slow one and never a guessed one.
+ */
+export async function vizDataFor(
+  projectId: string,
+  datasetId: string,
+  encoding: VizEncoding,
+  filters: FilterStep[],
+  opts: { maxHydrateRows?: number } = {},
+): Promise<VizDataReply> {
+  // Fast path: an aggregated chart over a resident (v3) dataset, answered
+  // without hydrating a single row. Returns null unless provably identical.
+  const fast = await residentVizData(projectId, datasetId, encoding, filters);
+  if (fast) return { ok: true, data: fast.data, recommendedShape: fast.recommendedShape, warnings: fast.warnings };
+
+  if (typeof opts.maxHydrateRows === 'number') {
+    // Metadata read — one small JSON, no rows, no migration.
+    const meta = await datasets.getDatasetMeta(projectId, datasetId);
+    if (!meta) return { ok: false, error: 'Dataset not found' };
+    if (meta.rowCount > opts.maxHydrateRows) {
+      return { ok: false, error: 'Too large to preview without the DuckDB bridge', tooLarge: true };
+    }
+  }
+
+  const ds = await datasets.getDataset(projectId, datasetId);
+  if (!ds) return { ok: false, error: 'Dataset not found' };
+  const result = buildVizData(ds.columns, ds.rows, encoding, filters);
+  return { ok: true, data: result.data, recommendedShape: result.recommendedShape, warnings: result.warnings };
+}
+
 export function register() {
   ipcMain.handle('visual:list', async (_e, { projectId }: any = {}) => visuals.listVisuals(projectId));
 
@@ -196,16 +249,7 @@ export function register() {
       // renderer input, and both paths below consume the sanitized values.
       const enc = sanitizeEncoding(encoding);
       const flt = visuals.sanitizeFilters(filters);
-
-      // Fast path: an aggregated chart over a resident (v3) dataset, answered
-      // without hydrating a single row. Returns null unless provably identical.
-      const fast = await residentVizData(projectId, datasetId, enc, flt);
-      if (fast) return { ok: true, data: fast.data, recommendedShape: fast.recommendedShape, warnings: fast.warnings };
-
-      const ds = await datasets.getDataset(projectId, datasetId);
-      if (!ds) return { ok: false, error: 'Dataset not found' };
-      const result = buildVizData(ds.columns, ds.rows, enc, flt);
-      return { ok: true, data: result.data, recommendedShape: result.recommendedShape, warnings: result.warnings };
+      return await vizDataFor(projectId, datasetId, enc, flt);
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute the visual data' };
     }
