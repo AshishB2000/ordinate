@@ -1,0 +1,11 @@
+<!-- Ordinate mark, no tile — for in-app use, the README and any dark surface.
+     Axes take `currentColor` so the mark inherits the surrounding text colour and
+     works in both themes; only the plotted value is brand blue.
+     Same proportions as the app icon: axes 75% of the frame; the value sits at the centre of the upper-right quadrant. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+  <g stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <path d="M12 3V21"/>
+    <path d="M3 12H21"/>
+  </g>
+  <circle cx="16.5" cy="7.5" r="2.6" fill="#2563eb"/>
+</svg>
