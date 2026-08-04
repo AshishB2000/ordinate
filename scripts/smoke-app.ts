@@ -783,7 +783,7 @@ async function main(): Promise<void> {
   // is the thing being manipulated. The ghost must appear during the drag and
   // the card must NOT move until release — re-laying out mid-drag would
   // re-render the chart on every frame.
-  const moved = await win.evaluate(() => {
+  const moved: any = await win.evaluate(() => {
     const el = document.querySelector('#dash-grid .dash-card.is-selected') as HTMLElement;
     const head = el.querySelector('.dash-card-head') as HTMLElement;
     const grid = document.getElementById('dash-grid') as HTMLElement;
@@ -795,14 +795,31 @@ async function main(): Promise<void> {
     head.dispatchEvent(new PointerEvent('pointerdown', opts(r.left + 20, r.top + 8)));
     window.dispatchEvent(new PointerEvent('pointermove', opts(r.left + 20 + pitch * 2, r.top + 8)));
     const ghost = document.querySelector('.an-ghost') as HTMLElement | null;
-    const mid = {
+    // Left HELD here on purpose: the screenshot below is taken mid-gesture, with
+    // the ghost on screen and the card still in its old cell. Released after.
+    (window as any).__endDrag = () =>
+      window.dispatchEvent(new PointerEvent('pointerup', opts(r.left + 20 + pitch * 2, r.top + 8)));
+    return {
+      before,
       ghostShown: !!ghost && ghost.getBoundingClientRect().width > 0,
       ghostCol: ghost?.style.gridColumn || '',
       cardUnmoved: el.style.gridColumn === before,
     };
-    window.dispatchEvent(new PointerEvent('pointerup', opts(r.left + 20 + pitch * 2, r.top + 8)));
-    return { before, after: el.style.gridColumn, ghostGone: !document.querySelector('.an-ghost'), ...mid };
   });
+
+  // What a drag actually looks like: ghost at the target cell, card dimmed in
+  // place. Only a held gesture can show this, so it is captured before release.
+  const dragShot = path.join(shotDir, 'card-drag.png');
+  await win.screenshot({ path: dragShot });
+  ok('mid-drag screenshot captured', fs.existsSync(dragShot) && fs.statSync(dragShot).size > 5000,
+     `${Math.round(fs.statSync(dragShot).size / 1024)} KB -> ${dragShot}`);
+
+  const landed = await win.evaluate(() => {
+    (window as any).__endDrag();
+    const el = document.querySelector('#dash-grid .dash-card.is-selected') as HTMLElement;
+    return { after: el.style.gridColumn, ghostGone: !document.querySelector('.an-ghost') };
+  });
+  Object.assign(moved, landed);
   ok('dragging the card shows a ghost at the target cell',
      moved.ghostShown && !!moved.ghostCol, JSON.stringify({ ghost: moved.ghostCol }));
   ok('…and the card itself does not move until the pointer is released',
