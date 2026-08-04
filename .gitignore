@@ -170,6 +170,7 @@ scripts/**/*.js
 /scripts/test-plotSpec.js
 # Phase 4 MapLibre GL — emitted sibling.
 /renderer/hub/mapWorker.js
+/renderer/hub/lazyScript.js
 
 # ── Phase 5: Svelte islands (docs/phase-5/01-toolchain.md) ──────────────────
 # scripts/build-svelte.js is a hand-written build tool with no .ts sibling —

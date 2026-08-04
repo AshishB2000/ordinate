@@ -1633,28 +1633,22 @@
      608 KB and the 'scMosaic' flag is default-off, so plotRender.js injects it
      with a <script src="vendor/vgplot.js"> on the FIRST Mosaic render instead.
      Same-origin, so `script-src 'self'` covers it with no CSP change. -->
-<!-- Maps: MapLibre GL, CSP-SAFE build. `maplibre-gl-csp.js` (not `maplibre-gl.js`)
-     exists precisely so the worker is a real file instead of an inlined blob: URL
-     and so nothing goes through `new Function` — that is what lets the hub keep
-     `default-src 'none'` with no `blob:` and no 'unsafe-eval'. The trade is that
-     the worker path is not baked in, so mapWorker.js must hand it to
-     maplibregl.setWorkerUrl() BEFORE the first map is constructed; it is loaded
-     immediately after and must stay in that order. -->
-<script src="../../node_modules/maplibre-gl/dist/maplibre-gl-csp.js"></script>
-<script src="mapWorker.js"></script>
-<!-- PDF report export: pdfmake + its bundled fonts (vfs_fonts auto-attaches to
-     window.pdfMake). Loaded the same node_modules way as chart.js, so it packs
-     into the asar identically. -->
-<script src="../../node_modules/pdfmake/build/pdfmake.min.js"></script>
-<script src="../../node_modules/pdfmake/build/vfs_fonts.js"></script>
-<!-- PowerPoint report export: pptxgenjs (UMD bundle exposes window.PptxGenJS,
-     JSZip included). Same node_modules load as chart.js → packs into the asar. -->
-<script src="../../node_modules/pptxgenjs/dist/pptxgen.bundle.js"></script>
-<!-- Word report export: docx IIFE bundle exposes window.docx (JSZip included).
-     Same node_modules load as the others → packs into the asar identically. -->
-<script src="../../node_modules/docx/dist/index.iife.js"></script>
-<script src="../../assets/geo/world-countries.js"></script>
-<script src="../../assets/geo/us-states.js"></script>
+<!-- MapLibre GL + its geo data (926K), pdfmake + fonts (1864K), pptxgenjs (450K)
+     and docx (1097K) are NOT loaded here. Together they were 4,336K parsed on
+     every launch for a map most datasets do not have and three export formats
+     most sessions never open. lazyScript.js fetches each group on first use —
+     same-origin <script src>, so `script-src 'self'` covers it with no CSP
+     change, exactly as plotRender.js has done for vgplot since Phase 3c.
+
+     The MapLibre ordering constraint moved WITH it, into the 'map' bundle:
+     `maplibre-gl-csp.js` (not `maplibre-gl.js`) keeps the worker as a real file
+     rather than an inlined blob: URL, which is what lets the hub keep
+     `default-src 'none'` with no `blob:` and no 'unsafe-eval' — the trade being
+     that the worker path is not baked in, so mapWorker.js must hand it to
+     maplibregl.setWorkerUrl() BEFORE the first map is constructed. ensureBundle
+     loads a group strictly in order, and renderMapInArea awaits it before it
+     touches maplibregl, so that guarantee is preserved rather than dropped. -->
+<script src="lazyScript.js"></script>
 <script src="geoMatch.js"></script>
 <script src="chartRender.js"></script>
 <script src="plotRender.js"></script>
