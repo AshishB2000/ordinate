@@ -266,6 +266,13 @@ export async function saveAnalysis(
 // REPLACED wholesale, never merged (mirrors updateDashboard exactly); an omitted
 // field keeps its stored value. Returns null if either id is invalid or the
 // analysis doesn't exist.
+//
+// `opts.bumpUpdatedAt: false` leaves `updatedAt` alone. Exactly one caller uses
+// it: `analysis:publish`, writing back `publishedDashboardIds`/`lastPublishedAt`.
+// `updatedAt` means "last CONTENT edit" (see the field comment), and publishing
+// edits no sheet, filter or name — bumping it there would make
+// `updatedAt > lastPublishedAt`, i.e. "this analysis has unpublished changes",
+// true the instant a publish finished.
 export async function updateAnalysis(
   projectId: string,
   id: string,
@@ -276,6 +283,7 @@ export async function updateAnalysis(
     publishedDashboardIds?: unknown;
     lastPublishedAt?: unknown;
   },
+  opts: { bumpUpdatedAt?: boolean } = {},
 ): Promise<Analysis | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   const existing = await getAnalysis(projectId, id);
@@ -294,7 +302,7 @@ export async function updateAnalysis(
       patch.lastPublishedAt !== undefined
         ? sanitizeTimestamp(patch.lastPublishedAt)
         : existing.lastPublishedAt,
-    updatedAt: new Date().toISOString(),
+    updatedAt: opts.bumpUpdatedAt === false ? existing.updatedAt : new Date().toISOString(),
   };
   await fs.promises.mkdir(analysesDir(projectId), { recursive: true });
   await writeJsonAtomic(analysisFilePath(projectId, id), updated);

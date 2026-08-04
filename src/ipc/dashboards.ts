@@ -293,8 +293,21 @@ export function register() {
     }
   });
 
+  // A PUBLISHED dashboard (analysisId set) is READ-ONLY. The refusal is enforced
+  // in dashboards.updateDashboard, which every main-process caller goes through;
+  // this branch exists only to say WHY, since the store can only answer null.
+  // Without it the renderer's ~600 ms autosave debounce would overwrite a
+  // snapshot the moment a card was nudged.
   ipcMain.handle('dashboard:update', async (_e, { projectId, id, name, pages, filters }: any = {}) => {
     try {
+      const existing = await dashboards.getDashboard(projectId, id);
+      if (existing && existing.analysisId) {
+        return {
+          ok: false,
+          readOnly: true,
+          error: 'This dashboard is a published snapshot. Edit it in its analysis, then publish again.',
+        };
+      }
       const dashboard = await dashboards.updateDashboard(projectId, id, { name, pages, filters });
       return dashboard ? { ok: true, dashboard } : { ok: false, error: 'Could not update the dashboard' };
     } catch (err: any) {
@@ -417,6 +430,12 @@ export function register() {
       for (const page of d.pages || []) {
         for (const card of page.cards || []) {
           if (card.type === 'metric' && card.metric) addId(card.metric.datasetId);
+          // A PUBLISHED card carries its visual's definition inline, so the
+          // dataset id is right there — strictly better than a disk read, and
+          // required: the source Visual may have been edited or deleted since,
+          // and the snapshot must not follow it. The `visualId` branch stays for
+          // legacy dashboards, which have no inline spec.
+          else if (card.type === 'visual' && card.visual) addId(card.visual.datasetId);
           else if (card.type === 'visual' && card.visualId) {
             const v = await visuals.getVisual(projectId, card.visualId);
             if (v) addId(v.datasetId);
