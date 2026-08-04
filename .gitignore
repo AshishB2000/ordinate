@@ -197,3 +197,7 @@ scripts/**/*.js
 /src/analysis.js
 /src/ipc/analyses.js
 /scripts/test-analysis.js
+
+# The AI analysis plan (facts → envelope → validation → preview → build).
+/src/analysisPlan.js
+/scripts/test-analysisPlan.js
