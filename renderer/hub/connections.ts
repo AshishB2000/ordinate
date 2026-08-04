@@ -107,6 +107,9 @@ let connRunPreview: any = null; // last run ParseResult, held for "save as datas
 
 let connCatalog: ConnDef[] = []; // resolved once per panel open
 let connCatalogLoaded = false;
+// True when the catalogue channel was unavailable or errored and the two-source
+// fallback is in use. Drives the on-screen notice; see loadConnCatalog().
+let connCatalogDegraded = false;
 let connSelected: ConnDef | null = null; // the connector whose form is showing
 let connSearch = ''; // current picker filter
 // Non-secret answers kept per connector id so "Change source" and back is not
@@ -228,7 +231,14 @@ async function loadConnCatalog(): Promise<void> {
     }
   }
   // An old main (or a channel that errored) still gets the two sources it can
-  // actually serve, rather than an empty panel.
+  // actually serve, rather than an empty panel — but it must SAY SO.
+  //
+  // Silently degrading to two is how a stale build looks like a missing
+  // feature: the picker renders, the search works, and typing "red" simply
+  // finds nothing because Redshift was never in the list. That happened to a
+  // real user, and nothing on screen explained it. A fallback that hides its
+  // own failure is worse than no fallback.
+  connCatalogDegraded = list.length === 0;
   connCatalog = list.length > 0 ? list : CONN_FALLBACK_CATALOG;
   connCatalogLoaded = true;
 }
@@ -304,6 +314,9 @@ function connRenderPicker(): void {
   const emptyCatalog = connCatalog.length === 0;
   connShow('conn-picker-unavailable', emptyCatalog);
   connShow('conn-picker-none', !emptyCatalog && shown.length === 0);
+  // Visible whenever the full list could not be fetched, whether or not the
+  // current search matches — the reason the list is short is the point.
+  connShow('conn-picker-degraded', connCatalogDegraded);
 
   const count = connEl('conn-search-count');
   if (count) {

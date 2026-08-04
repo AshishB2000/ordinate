@@ -542,6 +542,11 @@
           <div class="conn-groups" id="conn-groups"></div>
           <p class="conn-picker-msg" id="conn-picker-none" hidden>No data sources match that search.</p>
           <p class="conn-picker-msg" id="conn-picker-unavailable" hidden>No data sources are available in this build.</p>
+          <!-- Shown when the catalogue channel could not be reached and the panel
+               fell back to the two sources main has always served. Without this
+               the fallback is invisible: the picker looks fine, the search works,
+               and 33 sources are simply absent with no explanation. -->
+          <p class="conn-picker-msg conn-picker-warn" id="conn-picker-degraded" hidden>Showing only the built-in sources — the full list could not be loaded. If you just updated, run <code>npm install &amp;&amp; npm start</code> to rebuild.</p>
         </div>
 
         <!-- Step 2 — the chosen connector's form, rendered generically. -->

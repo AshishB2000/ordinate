@@ -6424,3 +6424,21 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   font-size: 12.5px;
   line-height: 1.5;
 }
+
+/* The connector catalogue fell back to its built-in sources. Warn-toned rather
+   than error-toned: the panel still works, it is just incomplete. */
+.conn-picker-warn {
+  color: var(--text);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: 8px;
+  padding: 9px 11px;
+  line-height: 1.5;
+}
+.conn-picker-warn code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-3);
+}
