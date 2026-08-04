@@ -208,14 +208,19 @@ async function handleDeleteProject(id: string): Promise<void> {
 // these real buttons — a rail that looked the part and did nothing would be
 // worse than the plain gallery it replaced.
 //
-// `capture` is the exception: it needs no project, and gating a global hotkey's
-// on-screen twin behind project creation would be silly.
+// `capture` (Screenchart) used to be the exception here: it fired
+// window.hub.takeScreenshot() immediately, so clicking a start-page entry dimmed
+// the screen and put the user straight into a drag-to-select overlay. That is
+// the right behaviour for the global HOTKEY, which the user presses when they
+// are already looking at what they want to grab — but it is the wrong behaviour
+// for a button on the start page, which reads as "take me to that feature", not
+// "start capturing now".
+//
+// It now routes like every other source: resolve a project, open the workspace,
+// and land on Sources — which IS the Screenchart surface (the capture history
+// rail plus the Welcome pane with its own New capture button). The user takes
+// the shot from there, or with the hotkey, when they are ready.
 async function startFromSource(kind: string): Promise<void> {
-  if (kind === 'capture') {
-    window.hub.takeScreenshot();
-    return;
-  }
-
   let id = '';
   try {
     const list = await window.hub.listProjects();
