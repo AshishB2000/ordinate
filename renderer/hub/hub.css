@@ -1308,7 +1308,8 @@ html[data-os="win"] .titlebar { padding-right: 146px; }
   width: 54px;
   height: 54px;
   border-radius: 15px;
-  background: var(--accent);
+  /* No background: the artwork carries its own tile. A CSS tile behind it
+     would frame the icon inside a second, larger square. */
   display: grid;
   place-items: center;
   margin-bottom: 16px;
