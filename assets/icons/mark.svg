@@ -1,11 +1,14 @@
 <!-- Ordinate mark, no tile — for in-app use, the README and any dark surface.
-     Axes take `currentColor` so the mark inherits the surrounding text colour and
-     works in both themes; only the plotted value is brand blue.
-     Same proportions as the app icon: axes 75% of the frame; the value sits at the centre of the upper-right quadrant. -->
+     The hexagon frame takes `currentColor` so the mark inherits the surrounding
+     text colour and works in both themes; only the bars are brand blue.
+     Same construction as the app icon: one stroked path with round joins, scaled
+     up ~1.22x from the icon's proportions since there is no tile margin here. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-  <g stroke="currentColor" stroke-width="2" stroke-linecap="round">
-    <path d="M12 3V21"/>
-    <path d="M3 12H21"/>
+  <path d="M12 3.5L20.7 8.4V15.6L12 20.5L3.3 15.6V8.4Z"
+        stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/>
+  <g fill="#2563eb">
+    <rect x="7.37" y="11.71" width="2.52" height="4" rx="1.26"/>
+    <rect x="10.74" y="9.66" width="2.52" height="6.05" rx="1.26"/>
+    <rect x="14.12" y="8.28" width="2.52" height="7.43" rx="1.26"/>
   </g>
-  <circle cx="16.5" cy="7.5" r="2.6" fill="#2563eb"/>
 </svg>

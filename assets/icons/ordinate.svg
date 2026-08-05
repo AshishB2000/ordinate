@@ -1,22 +1,28 @@
 <!-- Ordinate app icon — LIGHT.
-     Cartesian axes with a value plotted high in the positive quadrant. An
-     ordinate IS the y-coordinate: the height of a point above the x-axis, which
-     is why the dot sits near the top-right corner rather than beside the origin.
-     Geometry is on a 1024 grid: macOS Big Sur grid — an 824px tile centred in 1024 with a
-     100px margin and a 22.37% corner radius, mark spans 55% of the tile, with the value at the CENTRE of the
-     upper-right quadrant, all coordinates land on whole pixels
-     at 1024, 512, 256, 128 and 64. -->
+     A hexagonal frame holding three ascending bars: data, structured, seen from
+     every angle. Geometry is on a 1024 grid — macOS Big Sur tile (824px centred
+     in 1024, 22.37% corner radius); the hexagon is drawn as a STROKED path
+     rather than two filled polygons so `stroke-linejoin: round` gives the six
+     rounded corners for free and there is one shape to retune, not two. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
     <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#ffffff"/>
       <stop offset="1" stop-color="#eceef3"/>
     </linearGradient>
+    <!-- Straddles the brand #2563eb: lighter at the top-left vertex, deeper at
+         the bottom-right, which is what gives the frame its facet. -->
+    <linearGradient id="hex" x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#4c8dfa"/>
+      <stop offset="1" stop-color="#1d4ed8"/>
+    </linearGradient>
   </defs>
   <rect x="100" y="100" width="824" height="824" rx="184" fill="url(#tile)"/>
-  <g stroke="#131318" stroke-width="43" stroke-linecap="round">
-    <path d="M512 286V738"/>
-    <path d="M286 512H738"/>
+  <path d="M512 216L816 386V638L512 808L208 638V386Z"
+        fill="none" stroke="url(#hex)" stroke-width="86" stroke-linejoin="round"/>
+  <g fill="#2563eb">
+    <rect x="350" y="502" width="88" height="140" rx="44"/>
+    <rect x="468" y="430" width="88" height="212" rx="44"/>
+    <rect x="586" y="382" width="88" height="260" rx="44"/>
   </g>
-  <circle cx="625" cy="399" r="67" fill="#2563eb"/>
 </svg>
