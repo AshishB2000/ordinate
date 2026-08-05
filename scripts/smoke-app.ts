@@ -833,6 +833,76 @@ async function main(): Promise<void> {
   ok('…and a measure pill is wide enough for its field name',
      !!pill && pill.boxW >= pill.textW, JSON.stringify(pill));
 
+  // EVERY filled well is a pill, not just the JS-rendered ones — Category and
+  // Split by were dropdowns while Measures and Filters were pills, which is the
+  // inconsistency the reference does not have.
+  const singles = await win.evaluate(() => {
+    const row = (well: string) =>
+      document.querySelector('#an-wells [data-well="' + well + '"]') as HTMLElement | null;
+    const cat = row('category');
+    const ser = row('series');
+    return {
+      catPill: (cat?.querySelector('.enc-pill--one .enc-pill-name')?.textContent || '').trim(),
+      catSelectHidden: !!(cat?.querySelector('select') as HTMLSelectElement | null)?.hidden,
+      // Split by is empty by default, so it must show the placeholder instead.
+      serEmpty: (ser?.querySelector('.enc-empty')?.textContent || '').trim(),
+      // Category is NOT clearable: a chart with no dimension has nothing to plot.
+      catClearable: !!cat?.querySelector('.enc-pill--one .viz-value-del'),
+      serClearable: !!ser?.querySelector('.enc-pill--one .viz-value-del'),
+    };
+  });
+  ok('a filled single-value well is a pill, with its select standing down',
+     singles.catPill === 'state' && singles.catSelectHidden, JSON.stringify(singles));
+  ok('…an empty one says what belongs in it',
+     singles.serEmpty === 'Add a dimension', singles.serEmpty);
+  ok('…and Category offers no clear, because a chart needs a dimension',
+     !singles.catClearable);
+
+  // EXACTLY ONE of {pill | placeholder | select} is visible per single well.
+  // Leaving the select up alongside the placeholder painted "None" underneath
+  // "Add a dimension" — two controls for one value.
+  const doubled = await win.evaluate(() =>
+    ['category', 'series'].map((w) => {
+      const row = document.querySelector('#an-wells [data-well="' + w + '"]') as HTMLElement;
+      const vis = (el: Element | null) => !!el && (el as HTMLElement).offsetParent !== null;
+      return {
+        well: w,
+        showing: [
+          vis(row.querySelector('.enc-pill--one')),
+          vis(row.querySelector('.enc-empty')),
+          vis(row.querySelector('select')),
+        ].filter(Boolean).length,
+      };
+    }));
+  ok('…and a single-value well shows exactly one control, never two',
+     doubled.every((d) => d.showing === 1), JSON.stringify(doubled));
+
+  // Clicking the pill name reveals the select it stands in for — the pill must
+  // not be a dead end.
+  const reveal = await win.evaluate(() => {
+    const cat = document.querySelector('#an-wells [data-well="category"]') as HTMLElement;
+    (cat.querySelector('.enc-pill-name') as HTMLElement).click();
+    const sel = cat.querySelector('select') as HTMLSelectElement;
+    return { hidden: sel.hidden, focused: document.activeElement === sel };
+  });
+  ok('…clicking the pill reveals the select behind it', !reveal.hidden && reveal.focused,
+     JSON.stringify(reveal));
+  // …and the pill steps aside when it does. Leaving both up showed the value
+  // twice, which is what the screenshot caught.
+  const afterReveal = await win.evaluate(() => {
+    const cat = document.querySelector('#an-wells [data-well="category"]') as HTMLElement;
+    const vis = (el: Element | null) => !!el && (el as HTMLElement).offsetParent !== null;
+    return {
+      pill: vis(cat.querySelector('.enc-pill--one')),
+      select: vis(cat.querySelector('select')),
+    };
+  });
+  ok('…and the pill steps aside rather than stacking with it',
+     !afterReveal.pill && afterReveal.select, JSON.stringify(afterReveal));
+  // Put the pill back so the screenshot below shows the resting state.
+  await win.evaluate(() => (document.querySelector('#an-wells [data-well="category"] select') as HTMLElement)?.blur());
+  await win.waitForTimeout(300);
+
   // ── AI in the Visuals panel (phase D) ─────────────────────────────────────
   // The point of this block is the SEPARATION. The ✨ button is a model call;
   // the chips' "Recommended" tier is app-computed shape eligibility. A smoke run

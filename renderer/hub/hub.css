@@ -7678,3 +7678,32 @@ body.an-focus .an-pubstate {
   white-space: nowrap;
 }
 body.an-focus .an-workbench.is-active > .dash-editor > .dash-toolbar { margin-top: 8px; }
+
+/* Single-value wells (Category, Split by) read as pills too, so every filled
+   well looks the same. The <select> is still the value — the pill stands in for
+   it until you click to change it. */
+.an-wells .enc-pill--one { grid-template-columns: minmax(0, 1fr) 18px; }
+.an-wells .enc-pill-name {
+  background: none;
+  border: 0;
+  padding: 3px 4px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--text-strong);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.an-wells .enc-pill-name:hover { text-decoration: underline; }
+.an-wells .enc-empty.enc-single { cursor: pointer; }
+.an-wells .enc-empty.enc-single:hover { border-color: var(--accent); color: var(--accent); }
+.an-wells select.viz-select[hidden] { display: none; }
+
+/* `hidden` is a no-op against an explicit `display`. The pill is `display:grid`
+   and the placeholder `display:block`, so both need this to actually hide —
+   the same trap `.btn[hidden]` hit in the dashboard editor. */
+.an-wells .enc-pill[hidden],
+.an-wells .enc-empty[hidden] { display: none; }

@@ -119,6 +119,72 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     return p;
   }
 
+  /**
+   * A SINGLE-value well (Category, Split by) in the wells variant: a pill when
+   * it holds a field, a dashed placeholder when it does not.
+   *
+   * The <select> stays — it is still the value, still what getEncoding() reads,
+   * and still what a keyboard user operates. This only decides which of the two
+   * is on screen. Building a separate widget and syncing it back would be a
+   * second source of truth for the same field.
+   */
+  function syncSingle(sel: HTMLSelectElement | null, emptyText: string, clearable: boolean): void {
+    if (!wells || !sel) return;
+    const row = sel.closest('.viz-build-row') as HTMLElement | null;
+    if (!row) return;
+    row.querySelector('.enc-single')?.remove();
+    // The select is ALWAYS stood down: either the pill or the placeholder is
+    // showing it. Leaving it visible when empty painted the well twice — a
+    // "None" dropdown sitting under "Add a dimension".
+    //
+    // And the stand-in SWAPS with the select rather than stacking on it: leaving
+    // the pill up while the select was revealed showed the value twice.
+    const reveal = (standIn: HTMLElement): void => {
+      standIn.hidden = true;
+      sel.hidden = false;
+      sel.focus();
+    };
+    const has = !!sel.value;
+    sel.hidden = true;
+    if (!has) {
+      const ph = placeholder(emptyText);
+      ph.classList.add('enc-single');
+      ph.addEventListener('click', () => reveal(ph));
+      row.appendChild(ph);
+      return;
+    }
+    const pill = document.createElement('div');
+    pill.className = 'enc-pill enc-pill--one enc-single';
+    const name = document.createElement('button');
+    name.type = 'button';
+    name.className = 'enc-pill-name';
+    name.textContent = sel.options[sel.selectedIndex]?.text || sel.value;
+    // Click the name to change it: reveal the select the pill is standing in for.
+    name.addEventListener('click', () => reveal(pill));
+    pill.appendChild(name);
+    if (clearable) {
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'viz-value-del';
+      del.setAttribute('aria-label', 'Remove ' + name.textContent);
+      del.textContent = '×';
+      del.addEventListener('click', () => {
+        sel.value = '';
+        syncSingle(sel, emptyText, clearable);
+        opts.onChange();
+      });
+      pill.appendChild(del);
+    }
+    row.appendChild(pill);
+  }
+
+  function syncSingles(): void {
+    // Category is not clearable: a chart without a dimension has nothing to plot,
+    // and the form has always guaranteed one.
+    syncSingle(catSel, 'Add a dimension', false);
+    syncSingle(serSel, 'Add a dimension', true);
+  }
+
   // Falls back to ALL columns when the dataset has no numeric one, so the
   // measure select is never empty — `count` over a text column is legitimate.
   // This fallback is load-bearing and is why measures are not filtered to
@@ -250,7 +316,10 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     // No onChange: an empty filter row changes nothing until it names a column,
     // and getFilters() drops it. Recomputing here would be a wasted query.
   });
-  [catSel, serSel, geoSel].forEach((s) => s && s.addEventListener('change', () => opts.onChange()));
+  [catSel, serSel, geoSel].forEach((s) =>
+    s && s.addEventListener('change', () => { syncSingles(); opts.onChange(); }));
+  // Leaving the select without choosing puts the pill back.
+  [catSel, serSel].forEach((s) => s && s.addEventListener('blur', () => syncSingles()));
 
   return {
     el: root,
@@ -290,6 +359,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       filters = Array.isArray(presetFilters) ? presetFilters.map((f) => ({ ...f })) : [];
       renderMeasures();
       renderFilters();
+      syncSingles();
     },
 
     // Re-applies against the columns already loaded, keeping the current
@@ -330,6 +400,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       } else {
         return false;
       }
+      syncSingles();
       opts.onChange();
       return true;
     },
