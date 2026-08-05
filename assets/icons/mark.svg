@@ -1,11 +1,18 @@
 <!-- Ordinate mark, no tile — for in-app use, the README and any dark surface.
-     Axes take `currentColor` so the mark inherits the surrounding text colour and
-     works in both themes; only the plotted value is brand blue.
-     Same proportions as the app icon: axes 75% of the frame; the value sits at the centre of the upper-right quadrant. -->
+     The hexagon takes `currentColor` so the mark inherits the surrounding text
+     colour and works in both themes; only the bars are brand blue.
+     Same hexagon as the app icon (assets/icons/ordinate.svg), scaled to fill the
+     frame since there is no tile margin. Two deliberate departures, both because
+     the detail is sub-pixel by 20px and closes up into a smudge instead of
+     reading as itself: FLAT colour, no facet gradient; and no bottom notch or
+     stem. The ring is thinned too (2.2 against a faithful 3.5) and the bars
+     widened — three ~1.7px bars inside a heavy frame are not legible. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-  <g stroke="currentColor" stroke-width="2" stroke-linecap="round">
-    <path d="M12 3V21"/>
-    <path d="M3 12H21"/>
+  <path d="M12 3.1L20 7.9V16.1L12 20.9L4 16.1V7.9Z"
+        stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+  <g fill="#2563eb">
+    <rect x="8.25" y="13.2" width="2" height="2.6" rx="1"/>
+    <rect x="11" y="11.4" width="2" height="4.4" rx="1"/>
+    <rect x="13.75" y="9.8" width="2" height="6" rx="1"/>
   </g>
-  <circle cx="16.5" cy="7.5" r="2.6" fill="#2563eb"/>
 </svg>
