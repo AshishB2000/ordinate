@@ -238,18 +238,47 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       });
       row.appendChild(aggSel);
 
-      const del = document.createElement('button');
-      del.type = 'button';
-      del.className = 'viz-value-del';
-      del.setAttribute('aria-label', 'Remove measure');
-      del.textContent = '×';
-      del.disabled = measures.length <= 1; // keep at least one measure
-      del.addEventListener('click', () => {
-        measures.splice(i, 1);
-        renderMeasures();
-        opts.onChange();
-      });
-      row.appendChild(del);
+      if (wells) {
+        // The reference puts a ⋮ on each field pill. openRowMenu is the popup
+        // projects.ts already owns — one menu implementation in the renderer,
+        // not a third.
+        const menu = document.createElement('button');
+        menu.type = 'button';
+        menu.className = 'enc-pill-menu';
+        menu.setAttribute('aria-label', 'Options for ' + (m.column || 'this measure'));
+        menu.setAttribute('aria-haspopup', 'menu');
+        menu.textContent = '⋮';
+        menu.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const items: Array<{ label: string; danger?: boolean; onClick: () => void }> =
+            ENC_AGGS.map((a) => ({
+              label: ENC_AGG_LABELS[a],
+              onClick: () => { measures[i].aggregation = a; renderMeasures(); opts.onChange(); },
+            }));
+          if (measures.length > 1) {
+            items.push({
+              label: 'Remove',
+              danger: true,
+              onClick: () => { measures.splice(i, 1); renderMeasures(); opts.onChange(); },
+            });
+          }
+          openRowMenu(menu, items);
+        });
+        row.appendChild(menu);
+      } else {
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'viz-value-del';
+        del.setAttribute('aria-label', 'Remove measure');
+        del.textContent = '×';
+        del.disabled = measures.length <= 1; // keep at least one measure
+        del.addEventListener('click', () => {
+          measures.splice(i, 1);
+          renderMeasures();
+          opts.onChange();
+        });
+        row.appendChild(del);
+      }
       valuesList.appendChild(row);
     });
   }

@@ -31,6 +31,7 @@ let anPicker: any = null;
 // a well edit can write back without re-reading either.
 let anVisual: any = null;
 let anColumns: Array<{ name: string; type: string }> = [];
+let anDataset: { name: string; kind: string } | null = null;
 let anSaveTimer: number | null = null;
 
 const AN_PANE_KEY = 'anPanes'; // collapsed pane ids, comma-separated
@@ -136,6 +137,9 @@ async function anSelectCard(cardId: string | null): Promise<void> {
     meta = null;
   }
   if (anSelectedCardId !== cardId) return;
+  anDataset = meta
+    ? { name: String(meta.name || 'Dataset'), kind: String(meta.sourceKind || 'data') }
+    : null;
   anColumns = meta && Array.isArray(meta.columns)
     ? meta.columns.map((c: any) => ({
         name: c && c.name != null ? String(c.name) : '',
@@ -176,6 +180,17 @@ function anRenderFields(): void {
   const host = anEl('an-fields');
   if (!host) return;
   host.innerHTML = '';
+  const ds = anEl('an-ds');
+  const kind = anEl('an-ds-kind');
+  const dsName = anEl('an-ds-name');
+  if (ds && kind && dsName) {
+    ds.hidden = !anDataset;
+    if (anDataset) {
+      kind.textContent = anDataset.kind.toUpperCase();
+      dsName.textContent = anDataset.name;
+      dsName.title = anDataset.name;
+    }
+  }
   const box = anEl('an-field-search') as HTMLInputElement | null;
   const q = (box?.value || '').trim().toLowerCase();
   const shown = q ? anColumns.filter((c) => c.name.toLowerCase().includes(q)) : anColumns;
@@ -195,7 +210,15 @@ function anRenderFields(): void {
     const icon = document.createElement('span');
     icon.className = 'an-field-ic';
     icon.setAttribute('aria-hidden', 'true');
-    icon.textContent = col.type === 'number' ? '#' : col.type === 'date' ? '🗓' : 'A';
+    if (col.type === 'date') {
+      // Inline SVG, not an emoji: 🗓 renders at a different size and weight to
+      // the letterforms next to it on every platform.
+      icon.innerHTML =
+        '<svg viewBox="0 0 24 24" fill="none"><rect x="4" y="6" width="16" height="14" rx="2" stroke="currentColor" stroke-width="2"/>'
+        + '<path d="M4 10h16M9 3v4M15 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    } else {
+      icon.textContent = col.type === 'number' ? '#' : 'A';
+    }
     const name = document.createElement('span');
     name.className = 'an-field-name';
     name.textContent = col.name;
@@ -515,11 +538,46 @@ function anRenderProps(card: any): void {
     return body;
   };
 
+  // Every control below writes a field `chartRender.buildChart` already reads
+  // (overrides.title / showLegend / legendPosition / showValues / showGridlines
+  // / yZero / xAxisLabel / yAxisLabel). Nothing here is a new formatting engine:
+  // the ⋯ Customize menu has driven these same keys since the capture surface.
+  const ov = (): any => {
+    if (!anVisual) return {};
+    if (!anVisual.overrides || typeof anVisual.overrides !== 'object') anVisual.overrides = {};
+    return anVisual.overrides;
+  };
+  const labelled = (host: HTMLElement, text: string, control: HTMLElement): void => {
+    const l = document.createElement('span');
+    l.className = 'an-prop-label';
+    l.textContent = text;
+    host.appendChild(l);
+    host.appendChild(control);
+  };
+  const check = (host: HTMLElement, text: string, key: string, dflt: boolean): void => {
+    const wrap = document.createElement('label');
+    wrap.className = 'an-prop-check';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = ov()[key] !== undefined ? !!ov()[key] : dflt;
+    box.addEventListener('change', () => { ov()[key] = box.checked; anScheduleWrite(); });
+    const t = document.createElement('span');
+    t.textContent = text;
+    wrap.appendChild(box);
+    wrap.appendChild(t);
+    host.appendChild(wrap);
+  };
+  const textField = (host: HTMLElement, text: string, key: string): void => {
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'an-prop-input';
+    inp.value = ov()[key] != null ? String(ov()[key]) : '';
+    inp.addEventListener('input', () => { ov()[key] = inp.value; anScheduleWrite(); });
+    labelled(host, text, inp);
+  };
+
   const display = section('Display settings', true);
   if (card.type === 'visual' && anVisual) {
-    const lab = document.createElement('span');
-    lab.className = 'an-prop-label';
-    lab.textContent = 'Title';
     const nameIn = document.createElement('input');
     nameIn.type = 'text';
     nameIn.className = 'an-prop-input';
@@ -528,8 +586,32 @@ function anRenderProps(card: any): void {
       if (anVisual) anVisual.name = nameIn.value;
       anScheduleWrite();
     });
-    display.appendChild(lab);
-    display.appendChild(nameIn);
+    labelled(display, 'Title', nameIn);
+    check(display, 'Show legend', 'showLegend', true);
+    const legPos = document.createElement('select');
+    legPos.className = 'an-prop-input';
+    [['top', 'Top'], ['right', 'Right'], ['bottom', 'Bottom'], ['left', 'Left']].forEach(([v, l]) => {
+      const o = document.createElement('option');
+      o.value = v; o.textContent = l;
+      legPos.appendChild(o);
+    });
+    legPos.value = String(ov().legendPosition || 'top');
+    legPos.addEventListener('change', () => { ov().legendPosition = legPos.value; anScheduleWrite(); });
+    labelled(display, 'Legend position', legPos);
+    // ponytail: no "Show data labels" here. buildChart reads overrides.showValues,
+    // but sanitizeOverrides (src/visuals.ts) does NOT whitelist it — a saved
+    // visual drops the key, so the checkbox would tick and change nothing after a
+    // reload. Add it to that whitelist and this becomes a two-line addition.
+
+    const axes = section('Axes', false);
+    textField(axes, 'X axis label', 'xAxisLabel');
+    textField(axes, 'Y axis label', 'yAxisLabel');
+    check(axes, 'Start Y axis at zero', 'yZero', false);
+    check(axes, 'Show gridlines', 'showGridlines', true);
+    // ponytail: colour, number format and sort are NOT here — they live in the
+    // chart's own ⋯ Customize menu (chartControls.ts), which owns the swatch
+    // grid and the per-series state. Duplicating that here would be a second
+    // editor for one override object. Move them if Customize is retired.
   } else {
     const k = document.createElement('p');
     k.className = 'an-prop-note an-prop-note--info';
@@ -538,6 +620,9 @@ function anRenderProps(card: any): void {
   }
 
   const layout = section('Layout', false);
+  // ponytail: no width/height numbers here on purpose — the card is dragged and
+  // resized on the sheet, and a second way to set the same two integers is what
+  // the steppers already were.
   const how = document.createElement('p');
   how.className = 'an-prop-note an-prop-note--info';
   how.textContent =
@@ -697,6 +782,22 @@ function anWireCards(): void {
       });
     }
 
+    // Eight selection squares, as the reference draws them. Decoration only —
+    // aria-hidden, no listeners: the resize GESTURE lives on the three edge
+    // handles below, and eight draggable corners would be eight more code paths
+    // to test for one that already works.
+    // ponytail: visual only. Wire nw/n/ne/w/e drag if someone asks to resize
+    // from the top or left; today every resize grows right/down.
+    const marks = document.createElement('span');
+    marks.className = 'an-marks';
+    marks.setAttribute('aria-hidden', 'true');
+    ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'].forEach((pos) => {
+      const m = document.createElement('span');
+      m.className = 'an-mark an-mark--' + pos;
+      marks.appendChild(m);
+    });
+    el.appendChild(marks);
+
     // Edge + corner handles. Right = width, bottom = height, corner = both.
     (['e', 's', 'se'] as const).forEach((mode) => {
       const h = document.createElement('span');
@@ -746,6 +847,9 @@ function anSyncWorkbench(): void {
   // made this surface feel stuffed — the nav is 176px of chrome you cannot use
   // while authoring, and "‹ Back" in the editor head already returns to it.
   document.body.classList.toggle('an-focus', on);
+  const rail = anEl('an-rail');
+  if (rail) rail.hidden = !on;
+  if (on) anPaintRail();
   if (dashMode !== 'analysis') {
     anSelectedCardId = null;
     return;
@@ -759,7 +863,51 @@ function anSyncWorkbench(): void {
   anWireCards();
 }
 
+// ── The tool rail ───────────────────────────────────────────────────────────
+// Icon-only controls over actions that already exist. Nothing here is new
+// behaviour: the three pane buttons drive the same disclosure the pane headers
+// do, and the rest delegate to the buttons the editor already owns.
+function anWireRail(): void {
+  const relay = (id: string, targetId: string): void => {
+    const b = anEl(id);
+    if (!b) return;
+    b.addEventListener('click', () => {
+      const t = anEl(targetId) as HTMLButtonElement | null;
+      // Disabled or absent means the action is genuinely unavailable right now
+      // (no model, no selection); the rail must not pretend otherwise.
+      if (t && !t.hidden && !t.disabled) t.click();
+    });
+  };
+  ([
+    ['an-rail-data', 'an-pane-data'],
+    ['an-rail-visuals', 'an-pane-visuals'],
+    ['an-rail-props', 'an-pane-props'],
+  ] as Array<[string, string]>).forEach(([btn, pane]) => {
+    const b = anEl(btn);
+    if (b) b.addEventListener('click', () => { anToggleCollapsed(pane); anPaintRail(); });
+  });
+  relay('an-rail-filter', 'dash-add-filter');
+  relay('an-rail-ai', 'an-suggest-btn');
+  relay('an-rail-add-visual', 'dash-add-visual');
+  relay('an-rail-add-text', 'dash-add-text');
+  relay('an-rail-add-metric', 'dash-add-metric');
+}
+
+/** A pane toggle reads as ON when its pane is open — the rail is a mirror. */
+function anPaintRail(): void {
+  ([
+    ['an-rail-data', 'an-pane-data'],
+    ['an-rail-visuals', 'an-pane-visuals'],
+    ['an-rail-props', 'an-pane-props'],
+  ] as Array<[string, string]>).forEach(([btn, pane]) => {
+    const b = anEl(btn);
+    const p = anEl(pane);
+    if (b && p) b.classList.toggle('is-on', !p.classList.contains('is-collapsed'));
+  });
+}
+
 function initAuthoring(): void {
+  anWireRail();
   anApplyCollapsed();
   [
     ['an-data-toggle', 'an-pane-data'],
