@@ -162,6 +162,8 @@ function anShowEncoding(on: boolean, hint: string): void {
   if (inner) inner.hidden = !on;
   if (vizHint) { vizHint.hidden = on; vizHint.textContent = hint || 'Nothing selected.'; }
   if (fields) fields.hidden = !on;
+  const search = anEl('an-field-search');
+  if (search) search.hidden = !on;
   if (dataHint) { dataHint.hidden = on; dataHint.textContent = hint || 'Select a visual card to see its fields.'; }
   if (!on && fields) fields.innerHTML = '';
 }
@@ -174,7 +176,17 @@ function anRenderFields(): void {
   const host = anEl('an-fields');
   if (!host) return;
   host.innerHTML = '';
-  anColumns.forEach((col) => {
+  const box = anEl('an-field-search') as HTMLInputElement | null;
+  const q = (box?.value || '').trim().toLowerCase();
+  const shown = q ? anColumns.filter((c) => c.name.toLowerCase().includes(q)) : anColumns;
+  if (!shown.length) {
+    const none = document.createElement('p');
+    none.className = 'an-pane-hint';
+    none.textContent = 'No field matches “' + (box?.value || '').trim() + '”.';
+    host.appendChild(none);
+    return;
+  }
+  shown.forEach((col) => {
     const item = document.createElement('button');
     item.type = 'button';
     item.className = 'an-field an-field--' + col.type;
@@ -214,7 +226,7 @@ function anEnsureForm(): void {
   if (anForm) return;
   const mount = anEl('an-wells');
   if (!mount) return;
-  anForm = createEncodingForm(mount, { onChange: () => anScheduleWrite() });
+  anForm = createEncodingForm(mount, { onChange: () => anScheduleWrite(), variant: 'wells' });
   anForm.show(true);
   anWireWells(anForm.el);
 }
@@ -365,20 +377,58 @@ async function anRenderSwitcher(): Promise<void> {
   if (!recommended.length) return;
 
   const current = String(anVisual.chartType || '');
+  const initial = recommended.indexOf(current) >= 0 ? current : recommended[0];
+
+  if (seq !== anSwitcherSeq) return;
+  mount.innerHTML = '';
+  const h = document.createElement('p');
+  h.className = 'an-switcher-h';
+  h.textContent = 'Change visual type';
+  mount.appendChild(h);
+
+  // ONE row naming the CURRENT type, not a grid of every type — the reference
+  // spends its panel space on the wells, and the full picker is one click away.
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = 'an-typerow';
+  row.setAttribute('aria-label', 'Change visual type');
+  const ic = document.createElement('span');
+  ic.className = 'an-typerow-ic';
+  ic.innerHTML = VIZ_ICONS[initial] || ''; // trusted static SVG, as renderResult.ts
+  const nm = document.createElement('span');
+  nm.className = 'an-typerow-name';
+  nm.textContent = VIZ_LABELS[initial] || initial;
+  const chev = document.createElement('span');
+  chev.className = 'an-typerow-chev';
+  chev.setAttribute('aria-hidden', 'true');
+  chev.textContent = '›';
+  row.appendChild(ic);
+  row.appendChild(nm);
+  row.appendChild(chev);
+  mount.appendChild(row);
+
+  // "+ More" keeps the full three-tier panel — Recommended / Selected / Other.
   anPicker = buildVizPicker({
     recommended,
     pool: ALL_CHART_TYPE_IDS.concat(['table', 'map_bubble', 'map_choropleth']),
     data,
     hasGeo: !!data.geo,
-    initial: recommended.indexOf(current) >= 0 ? current : recommended[0],
+    initial,
     onSelect: (type: string) => {
       if (!anVisual) return;
       anVisual.chartType = type;
+      ic.innerHTML = VIZ_ICONS[type] || '';
+      nm.textContent = VIZ_LABELS[type] || type;
       anScheduleWrite();
     },
   });
-  if (seq !== anSwitcherSeq) return;
-  mount.innerHTML = '';
+  // The chip row still owns that panel's state, so the row above delegates to it
+  // rather than growing a second chart-type vocabulary here.
+  row.addEventListener('click', () => {
+    const more = anPicker.switcher.querySelector('.cv-viz-more') as HTMLElement | null;
+    (more || anPicker.switcher.querySelector('button') as HTMLElement)?.click();
+  });
+  anPicker.switcher.classList.add('an-switcher-hidden');
   mount.appendChild(anPicker.switcher);
 }
 
@@ -436,32 +486,40 @@ function anRenderProps(card: any): void {
   hint.hidden = !!card;
   if (!card) return;
 
-  const row = (label: string, control: HTMLElement): HTMLElement => {
-    const r = document.createElement('div');
-    r.className = 'an-prop-row';
-    const l = document.createElement('span');
-    l.className = 'an-prop-label';
-    l.textContent = label;
-    r.appendChild(l);
-    r.appendChild(control);
-    return r;
+  /** One disclosure row: a header that toggles its body, collapsed by default
+   *  unless it is the section you almost always want. */
+  const section = (title: string, open: boolean): HTMLElement => {
+    const sec = document.createElement('section');
+    sec.className = 'an-sec' + (open ? ' is-open' : '');
+    const head = document.createElement('button');
+    head.type = 'button';
+    head.className = 'an-sec-head';
+    head.setAttribute('aria-expanded', open ? 'true' : 'false');
+    const chev = document.createElement('span');
+    chev.className = 'an-sec-chev';
+    chev.setAttribute('aria-hidden', 'true');
+    chev.textContent = '›';
+    const t = document.createElement('span');
+    t.textContent = title;
+    head.appendChild(chev);
+    head.appendChild(t);
+    const body = document.createElement('div');
+    body.className = 'an-sec-body';
+    head.addEventListener('click', () => {
+      const on = sec.classList.toggle('is-open');
+      head.setAttribute('aria-expanded', on ? 'true' : 'false');
+    });
+    sec.appendChild(head);
+    sec.appendChild(body);
+    host.appendChild(sec);
+    return body;
   };
 
-  const kind = document.createElement('span');
-  kind.className = 'an-prop-kind';
-  kind.textContent = card.type;
-  host.appendChild(row('Card', kind));
-
-  // NO position/size steppers here. The card is dragged and resized directly on
-  // the sheet (anWireCards), which is what a layout wants — aiming at a target
-  // four clicks away is not editing, it is arithmetic. Keyboard users get arrows
-  // and shift+arrows on the focused card, so the drag is not the only path.
-  const how = document.createElement('p');
-  how.className = 'an-prop-note an-prop-note--info';
-  how.textContent = 'Drag the card to move it, or drag its right/bottom edge to resize. With the card focused, arrow keys move it and shift+arrows resize it.';
-  host.appendChild(how);
-
+  const display = section('Display settings', true);
   if (card.type === 'visual' && anVisual) {
+    const lab = document.createElement('span');
+    lab.className = 'an-prop-label';
+    lab.textContent = 'Title';
     const nameIn = document.createElement('input');
     nameIn.type = 'text';
     nameIn.className = 'an-prop-input';
@@ -470,13 +528,29 @@ function anRenderProps(card: any): void {
       if (anVisual) anVisual.name = nameIn.value;
       anScheduleWrite();
     });
-    host.appendChild(row('Title', nameIn));
+    display.appendChild(lab);
+    display.appendChild(nameIn);
+  } else {
+    const k = document.createElement('p');
+    k.className = 'an-prop-note an-prop-note--info';
+    k.textContent = 'A ' + card.type + ' card. Select a visual card to edit fields and a title.';
+    display.appendChild(k);
+  }
 
-    const shared = document.createElement('p');
-    shared.className = 'an-prop-note an-prop-note--info';
-    shared.textContent =
+  const layout = section('Layout', false);
+  const how = document.createElement('p');
+  how.className = 'an-prop-note an-prop-note--info';
+  how.textContent =
+    'Drag the card to move it, or drag its right/bottom edge to resize. With the card focused, arrow keys move it and shift+arrows resize it.';
+  layout.appendChild(how);
+
+  if (card.type === 'visual' && anVisual) {
+    const shared = section('Sharing', false);
+    const p = document.createElement('p');
+    p.className = 'an-prop-note an-prop-note--info';
+    p.textContent =
       'This is a saved visual. Editing its fields changes it everywhere it is used — published dashboards keep the copy they were published with.';
-    host.appendChild(shared);
+    shared.appendChild(p);
   }
 
   const note = document.createElement('p');
@@ -665,7 +739,13 @@ function anWireCards(): void {
 /** Called by dashboards.ts after every grid render, and on open/close. */
 function anSyncWorkbench(): void {
   const host = anEl('an-editor-host');
-  if (host) host.classList.toggle('is-active', dashMode === 'analysis' && !!dashCurrent);
+  const on = dashMode === 'analysis' && !!dashCurrent;
+  if (host) host.classList.toggle('is-active', on);
+  // FOCUS MODE. An open analysis takes the whole window: the project nav goes
+  // away, as it does in the reference. Four columns competing for 1180px is what
+  // made this surface feel stuffed — the nav is 176px of chrome you cannot use
+  // while authoring, and "‹ Back" in the editor head already returns to it.
+  document.body.classList.toggle('an-focus', on);
   if (dashMode !== 'analysis') {
     anSelectedCardId = null;
     return;
@@ -706,6 +786,9 @@ function initAuthoring(): void {
   // + Calculated field belongs to the dataset, and the Prepare pipeline already
   // owns authoring one (reversible, safe evaluator, AI suggestion). Sending the
   // user there beats a second formula editor that has to stay in step with it.
+  const search = anEl('an-field-search');
+  if (search) search.addEventListener('input', () => anRenderFields());
+
   const calc = anEl('an-calc-btn');
   if (calc) {
     calc.addEventListener('click', () => {

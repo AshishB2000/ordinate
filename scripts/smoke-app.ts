@@ -269,15 +269,35 @@ async function main(): Promise<void> {
 
   // A tiny DOM driver, defined once and re-used: click by visible text, click by
   // id, fill the prompt modal, pick from the chooser modal.
-  const clickExact = async (text: string): Promise<boolean> =>
-    win.evaluate((t) => {
-      const el = [...document.querySelectorAll('button, a, [role=button], li')].find(
-        (b) => (b as HTMLElement).offsetParent !== null && (b.textContent || '').trim() === t,
-      ) as HTMLElement | undefined;
-      if (!el) return false;
-      el.click();
-      return true;
-    }, text);
+  // Click a visible control by its exact text.
+  //
+  // An OPEN ANALYSIS hides the project nav (focus mode), exactly as the
+  // reference does — so the section buttons are genuinely unreachable until the
+  // analysis is closed, and "‹ Back" is the way out. Model that rather than
+  // reaching past it: if the target is not on screen and we are in focus mode,
+  // leave the analysis first and try again. A test that could still click a
+  // hidden nav item would be asserting a UI the user does not have.
+  const clickExact = async (text: string): Promise<boolean> => {
+    const hit = async (t: string): Promise<boolean> =>
+      win.evaluate((x) => {
+        const el = [...document.querySelectorAll('button, a, [role=button], li')].find(
+          (b) => (b as HTMLElement).offsetParent !== null && (b.textContent || '').trim() === x,
+        ) as HTMLElement | undefined;
+        if (!el) return false;
+        el.click();
+        return true;
+      }, t);
+    if (await hit(text)) return true;
+    const focused = await win.evaluate(() => document.body.classList.contains('an-focus'));
+    if (!focused) return false;
+    await win.evaluate(() => {
+      const back = [...document.querySelectorAll('.dash-editor-head button')]
+        .find((b) => /Back/.test(b.textContent || '')) as HTMLElement | undefined;
+      back?.click();
+    });
+    await win.waitForTimeout(1200);
+    return hit(text);
+  };
   const clickId = async (id: string): Promise<boolean> =>
     win.evaluate((i) => {
       const el = document.getElementById(i) as HTMLElement | null;
@@ -654,6 +674,32 @@ async function main(): Promise<void> {
       panes: [...document.querySelectorAll('.an-pane-title')].map((t) => (t.textContent || '').trim()),
     };
   });
+  // Focus mode: an open analysis owns the window, so the project nav is gone —
+  // the reference has no nav while you author, and four columns competing for
+  // the width is what made this read as stuffed.
+  const focus = await win.evaluate(() => {
+    const nav = document.getElementById('workspace-nav') as HTMLElement | null;
+    const head = document.querySelector('#dash-editor .dash-editor-head') as HTMLElement | null;
+    const kids = head ? [...head.children] as HTMLElement[] : [];
+    const tops = new Set(kids.filter((k) => k.offsetParent !== null)
+      .map((k) => Math.round(k.getBoundingClientRect().top)));
+    return {
+      focusOn: document.body.classList.contains('an-focus'),
+      navHidden: !nav || nav.offsetParent === null,
+      // "One row" is the HEAD's height, not the children's top edges —
+      // align-items:center gives items of different heights different tops
+      // while they share a row, which is what this first (wrongly) measured.
+      headH: Math.round(head?.getBoundingClientRect().height || 0),
+      headRows: tops.size,
+      backOffered: kids.some((k) => /Back/.test(k.textContent || '') && k.offsetParent !== null),
+    };
+  });
+  ok('an open analysis takes the window, and the project nav steps aside',
+     focus.focusOn && focus.navHidden, JSON.stringify(focus));
+  ok('…its toolbar stays on one row', focus.headH > 0 && focus.headH <= 50,
+     `head is ${focus.headH}px tall (one row of 26px buttons + padding)`);
+  ok('…with Back as the way out, since the nav is gone', focus.backOffered);
+
   ok('the workbench is three columns, in the right order',
      bench.active && bench.inOrder && bench.leftW > 150 && bench.rightW > 150,
      JSON.stringify(bench));
@@ -685,8 +731,8 @@ async function main(): Promise<void> {
       allDraggable: fields.every((f) => f.draggable),
       wells: wells.map((w) => w.dataset.well),
       wellsVisible: wells.every((w) => w.offsetParent !== null),
-      chips: document.querySelectorAll('#an-switcher .cv-viz-switcher button, #an-switcher .cv-viz-chip').length,
-      propsRows: document.querySelectorAll('#an-props .an-prop-row').length,
+      chips: document.querySelectorAll('#an-switcher .an-typerow').length,
+      propsRows: document.querySelectorAll('#an-props .an-sec').length,
       title: (document.querySelector('#an-props .an-prop-input') as HTMLInputElement)?.value || '',
     };
   });
@@ -702,9 +748,160 @@ async function main(): Promise<void> {
   // it, and each clears the mount before its await — two in flight left two rows
   // stacked, which every count-based assertion happily passed.
   ok('…as exactly one row, not one per in-flight rebuild',
-     await win.evaluate(() => document.querySelectorAll('#an-switcher .cv-viz-switcher').length) === 1,
+     await win.evaluate(() => document.querySelectorAll('#an-switcher .an-typerow').length) === 1,
      await win.evaluate(() =>
-       String(document.querySelectorAll('#an-switcher .cv-viz-switcher').length) + ' switcher row(s)'));
+       String(document.querySelectorAll('#an-switcher .an-typerow').length) + ' row(s)'));
+  // Icons, not text chips — this is what made the panel read as rough.
+  const icons = await win.evaluate(() => {
+    const row = document.querySelector('#an-switcher .an-typerow') as HTMLElement | null;
+    return {
+      svg: !!row?.querySelector('.an-typerow-ic svg'),
+      name: (row?.querySelector('.an-typerow-name')?.textContent || '').trim(),
+      labelled: !!row?.getAttribute('aria-label'),
+      // The chip row is still in the DOM (it owns the + More panel) but must not
+      // be on screen — two chart-type UIs would be the divergence this avoids.
+      chipRowHidden: (document.querySelector('#an-switcher .cv-viz-switcher') as HTMLElement | null)
+        ?.getBoundingClientRect().width! <= 2,
+    };
+  });
+  ok('…as an icon + the CURRENT type name + a way into the full picker',
+     icons.svg && !!icons.name && icons.labelled && icons.chipRowHidden, JSON.stringify(icons));
+
+  // Search fields — a wide dataset is unusable without it.
+  const search = await win.evaluate(() => {
+    const box = document.getElementById('an-field-search') as HTMLInputElement;
+    const before = document.querySelectorAll('#an-fields .an-field').length;
+    box.value = 'rev';
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+    const after = document.querySelectorAll('#an-fields .an-field').length;
+    box.value = '';
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+    return { visible: box.offsetParent !== null, before, after,
+             restored: document.querySelectorAll('#an-fields .an-field').length };
+  });
+  ok('the Data panel searches its fields',
+     search.visible && search.after < search.before && search.restored === search.before,
+     JSON.stringify(search));
+
+  // Properties is a list of disclosure sections, not a flat form.
+  const secs = await win.evaluate(() => {
+    const heads = [...document.querySelectorAll('#an-props .an-sec-head')] as HTMLElement[];
+    const first = heads[0];
+    const openBefore = !!first?.closest('.an-sec')?.classList.contains('is-open');
+    first?.click();
+    return {
+      titles: heads.map((h) => (h.lastElementChild?.textContent || '').trim()),
+      openBefore,
+      openAfter: !!first?.closest('.an-sec')?.classList.contains('is-open'),
+      aria: first?.getAttribute('aria-expanded'),
+    };
+  });
+  ok('Properties is a list of collapsible sections',
+     secs.titles.length >= 2 && secs.titles[0] === 'Display settings' &&
+       secs.openBefore && !secs.openAfter && secs.aria === 'false',
+     JSON.stringify(secs));
+  await win.evaluate(() =>
+    (document.querySelector('#an-props .an-sec-head') as HTMLElement)?.click());
+
+  // Empty wells must SAY what belongs in them, which is the QuickSight
+  // affordance a bare dropdown does not give.
+  const zones = await win.evaluate(() => ({
+    placeholders: [...document.querySelectorAll('#an-wells .enc-empty')].map((e) => (e.textContent || '').trim()),
+    pills: document.querySelectorAll('#an-wells .enc-pill').length,
+  }));
+  ok('…and an empty well says what belongs in it',
+     zones.placeholders.some((t) => /Drop a field here to filter/.test(t)),
+     JSON.stringify(zones));
+
+  // The pill has to FIT its field name. At 232px the aggregation select's
+  // intrinsic width was winning and clipping "revenue" to "reve" — a bug no
+  // count-based assertion sees, so measure the rendered text box instead.
+  const pill = await win.evaluate(() => {
+    const sel = document.querySelector('#an-wells .enc-pill > .viz-select') as HTMLSelectElement | null;
+    if (!sel) return null;
+    const span = document.createElement('span');
+    span.textContent = sel.options[sel.selectedIndex]?.text || '';
+    const cs = getComputedStyle(sel);
+    span.style.font = cs.font;
+    span.style.position = 'absolute';
+    span.style.visibility = 'hidden';
+    document.body.appendChild(span);
+    const textW = span.getBoundingClientRect().width;
+    span.remove();
+    return { name: sel.value, textW: Math.ceil(textW), boxW: Math.floor(sel.getBoundingClientRect().width) };
+  });
+  ok('…and a measure pill is wide enough for its field name',
+     !!pill && pill.boxW >= pill.textW, JSON.stringify(pill));
+
+  // EVERY filled well is a pill, not just the JS-rendered ones — Category and
+  // Split by were dropdowns while Measures and Filters were pills, which is the
+  // inconsistency the reference does not have.
+  const singles = await win.evaluate(() => {
+    const row = (well: string) =>
+      document.querySelector('#an-wells [data-well="' + well + '"]') as HTMLElement | null;
+    const cat = row('category');
+    const ser = row('series');
+    return {
+      catPill: (cat?.querySelector('.enc-pill--one .enc-pill-name')?.textContent || '').trim(),
+      catSelectHidden: !!(cat?.querySelector('select') as HTMLSelectElement | null)?.hidden,
+      // Split by is empty by default, so it must show the placeholder instead.
+      serEmpty: (ser?.querySelector('.enc-empty')?.textContent || '').trim(),
+      // Category is NOT clearable: a chart with no dimension has nothing to plot.
+      catClearable: !!cat?.querySelector('.enc-pill--one .viz-value-del'),
+      serClearable: !!ser?.querySelector('.enc-pill--one .viz-value-del'),
+    };
+  });
+  ok('a filled single-value well is a pill, with its select standing down',
+     singles.catPill === 'state' && singles.catSelectHidden, JSON.stringify(singles));
+  ok('…an empty one says what belongs in it',
+     singles.serEmpty === 'Add a dimension', singles.serEmpty);
+  ok('…and Category offers no clear, because a chart needs a dimension',
+     !singles.catClearable);
+
+  // EXACTLY ONE of {pill | placeholder | select} is visible per single well.
+  // Leaving the select up alongside the placeholder painted "None" underneath
+  // "Add a dimension" — two controls for one value.
+  const doubled = await win.evaluate(() =>
+    ['category', 'series'].map((w) => {
+      const row = document.querySelector('#an-wells [data-well="' + w + '"]') as HTMLElement;
+      const vis = (el: Element | null) => !!el && (el as HTMLElement).offsetParent !== null;
+      return {
+        well: w,
+        showing: [
+          vis(row.querySelector('.enc-pill--one')),
+          vis(row.querySelector('.enc-empty')),
+          vis(row.querySelector('select')),
+        ].filter(Boolean).length,
+      };
+    }));
+  ok('…and a single-value well shows exactly one control, never two',
+     doubled.every((d) => d.showing === 1), JSON.stringify(doubled));
+
+  // Clicking the pill name reveals the select it stands in for — the pill must
+  // not be a dead end.
+  const reveal = await win.evaluate(() => {
+    const cat = document.querySelector('#an-wells [data-well="category"]') as HTMLElement;
+    (cat.querySelector('.enc-pill-name') as HTMLElement).click();
+    const sel = cat.querySelector('select') as HTMLSelectElement;
+    return { hidden: sel.hidden, focused: document.activeElement === sel };
+  });
+  ok('…clicking the pill reveals the select behind it', !reveal.hidden && reveal.focused,
+     JSON.stringify(reveal));
+  // …and the pill steps aside when it does. Leaving both up showed the value
+  // twice, which is what the screenshot caught.
+  const afterReveal = await win.evaluate(() => {
+    const cat = document.querySelector('#an-wells [data-well="category"]') as HTMLElement;
+    const vis = (el: Element | null) => !!el && (el as HTMLElement).offsetParent !== null;
+    return {
+      pill: vis(cat.querySelector('.enc-pill--one')),
+      select: vis(cat.querySelector('select')),
+    };
+  });
+  ok('…and the pill steps aside rather than stacking with it',
+     !afterReveal.pill && afterReveal.select, JSON.stringify(afterReveal));
+  // Put the pill back so the screenshot below shows the resting state.
+  await win.evaluate(() => (document.querySelector('#an-wells [data-well="category"] select') as HTMLElement)?.blur());
+  await win.waitForTimeout(300);
 
   // ── AI in the Visuals panel (phase D) ─────────────────────────────────────
   // The point of this block is the SEPARATION. The ✨ button is a model call;
@@ -742,8 +939,7 @@ async function main(): Promise<void> {
   // The "+ More" panel is where the Recommended TIER is named. It must exist
   // with no model configured — it is shape eligibility, not a suggestion.
   const tiers = await win.evaluate(() => {
-    const more = [...document.querySelectorAll('#an-switcher .cv-viz-chip, #an-switcher button')]
-      .find((b) => /More/.test(b.textContent || '')) as HTMLElement | undefined;
+    const more = document.querySelector('#an-switcher .an-typerow') as HTMLElement | undefined;
     if (!more) return null;
     more.click();
     // The panel is appended to <body> (renderResult.ts openMorePanel), not into

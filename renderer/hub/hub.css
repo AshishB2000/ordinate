@@ -5287,55 +5287,57 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 }
 
 /* ── The analysis authoring workbench ───────────────────────────────────────
-   Three columns: Data + Visuals left, the sheet grid centre, Properties right.
+   Modelled on QuickSight: dense flush columns separated by hairlines, not
+   floating rounded cards. The sheet is the only white surface; the panels sit
+   behind it so the eye goes to the data.
    #dash-editor is re-parented in as the LAST child, so `order` — not source
-   order — is what puts it in the middle. The Dashboards host is untouched and
-   has no panels at all. */
+   order — puts it in the middle. The Dashboards host has no panels at all. */
 .an-workbench.is-active {
   display: grid;
-  grid-template-columns: 268px minmax(0, 1fr) 250px;
-  gap: 14px;
-  align-items: start;
+  grid-template-columns: 232px minmax(0, 1fr) 244px;
+  gap: 0;
+  align-items: stretch;
   min-height: 0;
 }
-.an-workbench.is-active > .dash-editor { order: 2; min-width: 0; }
+.an-workbench.is-active > .dash-editor {
+  order: 2;
+  min-width: 0;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  padding: 14px 16px;
+}
+/* The card is the only white surface on the canvas, so the sheet reads as a
+   document rather than as more panel. */
+.an-workbench.is-active #dash-grid .dash-card { background: var(--surface); }
 .an-workbench.is-active > .an-side--left { order: 1; }
 .an-workbench.is-active > .an-side--right { order: 3; }
-/* Not active (no analysis open, or dashboard mode): the panels stay out of the
-   way entirely rather than rendering empty chrome. */
 .an-workbench:not(.is-active) > .an-side { display: none; }
 
 .an-side {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  position: sticky;
-  top: 8px;
-  max-height: calc(100vh - 90px);
+  background: var(--surface);
+  max-height: calc(100vh - 78px);
   overflow-y: auto;
 }
-.an-pane {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  overflow: hidden;
-  flex: none;
-}
+/* Hairline between stacked panes — a card border around each was four borders
+   where one rule does the job. */
+.an-pane { border-bottom: 1px solid var(--border); }
+.an-pane:last-child { border-bottom: 0; }
 .an-pane-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
+  padding: 9px 12px;
 }
-.an-pane.is-collapsed .an-pane-head { border-bottom: 0; }
 .an-pane-toggle {
   display: flex;
   align-items: center;
   gap: 6px;
   flex: 1;
-  padding: 2px;
+  padding: 0;
   background: none;
   border: 0;
   cursor: pointer;
@@ -5343,16 +5345,20 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   color: var(--text-strong);
   text-align: left;
 }
-.an-pane-title { font-size: 12px; font-weight: 600; letter-spacing: 0.02em; }
+.an-pane-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 .an-pane-caret {
-  font-size: 10px;
-  color: var(--muted);
+  font-size: 9px;
+  color: var(--text-dim);
   transition: transform 0.12s var(--ease);
 }
 .an-pane.is-collapsed .an-pane-caret { transform: rotate(-90deg); }
-/* Collapsed hides the BODY, never the header — the way back stays labelled. */
 .an-pane.is-collapsed .an-pane-body { display: none; }
-.an-pane-body { padding: 10px; }
+.an-pane-body { padding: 0 12px 12px; }
 .an-pane-hint {
   margin: 0;
   font-size: 11.5px;
@@ -5360,16 +5366,17 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   color: var(--muted);
 }
 .an-pane-hint[hidden] { display: none; }
+#an-calc-btn { font-size: 11px; padding: 3px 8px; }
 
 /* Fields */
-.an-fields { display: flex; flex-direction: column; gap: 3px; max-height: 260px; overflow-y: auto; }
+.an-fields { display: flex; flex-direction: column; gap: 1px; max-height: 250px; overflow-y: auto; }
 .an-fields[hidden] { display: none; }
 .an-field {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 5px 8px;
+  padding: 4px 6px;
   background: none;
   border: 1px solid transparent;
   border-radius: var(--r-sm);
@@ -5379,11 +5386,11 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   color: var(--text);
   text-align: left;
 }
-.an-field:hover { background: var(--surface-2); border-color: var(--border-2); }
+.an-field:hover { background: var(--surface-2); }
 .an-field:active { cursor: grabbing; }
 .an-field-ic {
-  width: 17px;
-  height: 17px;
+  width: 15px;
+  height: 15px;
   flex: none;
   display: flex;
   align-items: center;
@@ -5391,74 +5398,163 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   border-radius: 3px;
   background: var(--surface-3);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
 }
 .an-field--number .an-field-ic { background: var(--accent-soft); color: var(--accent); }
 .an-field--date .an-field-ic { background: var(--warn-soft); color: var(--warn); }
 .an-field-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Wells. While a field is in flight EVERY well outlines itself, so the drop
-   targets are discoverable mid-drag rather than only on hover. */
-.an-viz-inner { display: flex; flex-direction: column; gap: 10px; }
+/* ── Wells ──────────────────────────────────────────────────────────────────
+   A bordered drop zone per encoding slot, a PILL per field, and a dashed line
+   saying what belongs in an empty one. */
+.an-viz-inner { display: flex; flex-direction: column; gap: 12px; }
 .an-viz-inner[hidden] { display: none; }
-.an-wells .viz-encoding { display: flex; flex-direction: column; gap: 8px; }
+.an-wells .viz-encoding { display: flex; flex-direction: column; gap: 10px; }
 .an-wells .viz-build-row {
+  display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 4px;
-  padding: 6px;
-  border: 1px dashed transparent;
-  border-radius: var(--r-sm);
+  gap: 5px;
+  padding: 0;
+  border: 0;
 }
-.an-wells .viz-field-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; }
-body.an-dragging .an-wells .viz-build-row[data-well] {
+.an-wells .viz-field-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+/* The zone itself: everything after the label. */
+.an-wells .viz-values-list,
+.an-wells .viz-filters-list,
+.an-wells select.viz-select {
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  min-height: 30px;
+  padding: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.an-wells select.viz-select {
+  display: block;
+  padding: 5px 8px;
+  font-size: 11.5px;
+  width: 100%;
+  min-width: 0;
+}
+.an-wells .enc-empty {
+  border: 1px dashed var(--border-3);
+  border-radius: 3px;
+  padding: 5px 8px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.an-wells .enc-pill {
+  display: grid;
+  /* Fixed second track, not `auto`: the aggregation select's intrinsic width
+     (text + the native dropdown arrow) was winning the fight and squeezing the
+     field name down to a few characters. */
+  grid-template-columns: minmax(0, 1fr) 58px 18px;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 3px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: 3px;
+}
+.an-wells .enc-pill--filter { grid-template-columns: minmax(0, 1fr) 58px 18px; }
+.an-wells .enc-pill > .viz-select {
+  /* No native arrow: it costs ~16px per select, and in a 232px column that is
+     the difference between "revenue" and "reve…". The pill reads as text. */
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: none;
+  padding: 2px 3px;
+  font-size: 11.5px;
+  color: var(--text-strong);
+  min-width: 0;
+  width: 100%;
+  min-height: 0;
+  border-radius: 0;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.an-wells .enc-pill > .viz-select:hover { background: var(--surface-3); border-radius: 3px; }
+.an-wells .enc-pill .viz-value-agg { font-size: 10.5px; color: var(--muted); }
+.an-wells .enc-pill .viz-filter-val {
+  grid-column: 1 / -1;
+  border: 1px solid var(--border-2);
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-size: 11px;
+  min-width: 0;
+}
+.an-wells .enc-pill .viz-value-del {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 3px;
+}
+.an-wells .enc-pill .viz-value-del:hover { background: var(--surface-3); color: var(--error); }
+.an-wells .btn { width: 100%; font-size: 11px; padding: 3px 8px; }
+/* Mid-drag, every zone outlines itself so the targets are discoverable. */
+body.an-dragging .an-wells .viz-build-row[data-well] .viz-values-list,
+body.an-dragging .an-wells .viz-build-row[data-well] .viz-filters-list,
+body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   border-color: var(--border-3);
   background: var(--inset);
 }
-.an-wells .viz-build-row.is-drop {
+.an-wells .viz-build-row.is-drop .viz-values-list,
+.an-wells .viz-build-row.is-drop .viz-filters-list,
+.an-wells .viz-build-row.is-drop select.viz-select {
   border-color: var(--accent);
-  border-style: solid;
   background: var(--accent-soft);
 }
-/* The panel is 268px, and these rows were built for a full-width builder — as
-   flex they push the aggregation select off the edge. Grid so they fit the
-   column they are in, with the × always reachable. */
-.an-wells .viz-value-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 24px;
-  gap: 4px;
-  align-items: center;
-}
-.an-wells .viz-filter-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 24px;
-  grid-template-areas: 'col op del' 'val val val';
-  gap: 4px;
-  align-items: center;
-}
-.an-wells .viz-filter-row > :nth-child(1) { grid-area: col; }
-.an-wells .viz-filter-row > :nth-child(2) { grid-area: op; }
-.an-wells .viz-filter-row > :nth-child(3) { grid-area: val; }
-.an-wells .viz-filter-row > :nth-child(4) { grid-area: del; }
-.an-wells .viz-select,
-.an-wells .viz-filter-val { min-width: 0; width: 100%; font-size: 11.5px; }
-.an-wells .btn { width: 100%; }
-.an-switcher .cv-viz-switcher { flex-wrap: wrap; gap: 4px; }
 
-/* The per-card control cluster is Properties' job now. Nine buttons on every
-   card header, wrapping onto two rows inside a narrowed centre column, said the
-   same thing twice — and the selected card is the only one they can apply to. */
-.an-workbench.is-active .dash-card-ctrls { display: none; }
+/* Chart type: an ICON grid, like QuickSight's "Change visual type". */
+.an-switcher-h {
+  margin: 0 0 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.an-typegrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; }
+.an-type {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  color: var(--muted);
+}
+.an-type svg { width: 16px; height: 16px; }
+.an-type:hover { border-color: var(--accent); color: var(--accent); }
+.an-type.is-active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.an-type.is-more { font-size: 10px; font-weight: 600; }
 
-/* Properties */
-.an-props { display: flex; flex-direction: column; gap: 10px; }
+/* Properties: labelled sections, not a flat list. */
+.an-props { display: flex; flex-direction: column; gap: 12px; }
 .an-prop-row { display: flex; flex-direction: column; gap: 4px; }
 .an-prop-label {
-  font-size: 10.5px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   color: var(--text-dim);
 }
 .an-prop-kind {
@@ -5469,20 +5565,8 @@ body.an-dragging .an-wells .viz-build-row[data-well] {
   font-size: 11px;
   text-transform: capitalize;
 }
-.an-prop-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
-.an-prop-btn {
-  padding: 5px 0;
-  background: var(--surface);
-  border: 1px solid var(--border-2);
-  border-radius: var(--r-sm);
-  cursor: pointer;
-  font: inherit;
-  font-size: 11px;
-  color: var(--text);
-}
-.an-prop-btn:hover { border-color: var(--accent); color: var(--accent); }
 .an-prop-input {
-  padding: 6px 8px;
+  padding: 5px 8px;
   border: 1px solid var(--border-2);
   border-radius: var(--r-sm);
   background: var(--surface);
@@ -5493,16 +5577,14 @@ body.an-dragging .an-wells .viz-build-row[data-well] {
 .an-prop-input:focus { outline: none; border-color: var(--accent); }
 .an-prop-note {
   margin: 0;
-  font-size: 11px;
+  font-size: 10.5px;
   line-height: 1.5;
   color: var(--warn);
 }
 .an-prop-note[hidden] { display: none; }
-.an-prop-note--info { color: var(--muted); }
-.an-prop-del { width: 100%; margin-top: 2px; }
+.an-prop-note--info { color: var(--text-dim); }
+.an-prop-del { width: 100%; font-size: 11.5px; }
 
-/* The selection ring — the whole binding is "which card is selected", so it has
-   to be unmistakable. */
 #dash-grid .dash-card.is-selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-line);
@@ -7439,3 +7521,189 @@ body.an-grabbing { user-select: none; cursor: grabbing; }
   pointer-events: none;
   z-index: 1;
 }
+
+/* The chip row still owns the "+ More" panel's state; the icon grid above is
+   what the user sees. Off-screen rather than display:none, because a hidden
+   element cannot be clicked to open the panel. */
+.an-switcher-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* The per-card control cluster is not needed in the workbench: the card is
+   dragged and resized directly, and Remove lives in Properties. */
+.an-workbench.is-active .dash-card-ctrls { display: none; }
+
+/* Search fields — the reference puts one above the field list, and a wide
+   dataset is unusable without it. */
+.an-field-search {
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--inset);
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+}
+.an-field-search:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+.an-field-search[hidden] { display: none; }
+
+/* Change visual type: one row naming the current type, with a chevron into the
+   full picker. */
+.an-typerow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-strong);
+  text-align: left;
+}
+.an-typerow:hover { border-color: var(--accent); }
+.an-typerow-ic {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  background: var(--inset);
+  color: var(--accent);
+}
+.an-typerow-ic svg { width: 16px; height: 16px; }
+.an-typerow-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.an-typerow-chev { color: var(--text-dim); font-size: 15px; }
+
+/* Properties: a list of disclosure rows. */
+.an-sec { border-bottom: 1px solid var(--border); }
+.an-sec:last-of-type { border-bottom: 0; }
+.an-sec-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 9px 2px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-strong);
+  text-align: left;
+}
+.an-sec-chev {
+  color: var(--text-dim);
+  font-size: 14px;
+  transition: transform 0.12s var(--ease);
+}
+.an-sec.is-open .an-sec-chev { transform: rotate(90deg); }
+.an-sec-body { display: none; flex-direction: column; gap: 5px; padding: 0 2px 10px; }
+.an-sec.is-open .an-sec-body { display: flex; }
+
+/* ── Focus mode: an open analysis owns the window ────────────────────────────
+   The reference has no project nav while you author — the panels and the sheet
+   get the full width. "‹ Back" in the editor head is the way out. */
+body.an-focus .ws-nav { display: none; }
+body.an-focus .hub-body { padding: 0; }
+body.an-focus #ws-analyses { padding: 0; }
+body.an-focus .an-workbench.is-active {
+  height: calc(100vh - 40px);
+  grid-template-columns: 248px minmax(0, 1fr) 264px;
+}
+body.an-focus .an-workbench.is-active > .dash-editor {
+  overflow-y: auto;
+  padding: 0;
+}
+/* The editor head becomes the top bar of the canvas, and stays put while the
+   sheet scrolls under it. */
+body.an-focus .dash-editor-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  margin: 0;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+body.an-focus .an-workbench.is-active > .dash-editor > .an-pubstate,
+body.an-focus .an-workbench.is-active > .dash-editor > .dash-toolbar,
+body.an-focus .an-workbench.is-active > .dash-editor > .dash-pages,
+body.an-focus .an-workbench.is-active > .dash-editor > .dash-grid,
+body.an-focus .an-workbench.is-active > .dash-editor > .dash-starters,
+body.an-focus .an-workbench.is-active > .dash-editor > .dash-ai-out {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+body.an-focus .an-side { max-height: calc(100vh - 40px); }
+
+/* The editor head is one row in focus mode. At 665px it was wrapping Save onto
+   a second line, which pushed the sheet down and looked broken. */
+body.an-focus .dash-editor-head {
+  flex-wrap: nowrap;
+  gap: 6px;
+  align-items: center;
+}
+body.an-focus .dash-editor-head .btn {
+  height: 26px;
+  padding: 0 9px;
+  font-size: 11.5px;
+  white-space: nowrap;
+  flex: none;
+}
+body.an-focus .dash-editor-head #dash-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+/* The publish-state line is context, not a paragraph — one line, muted. */
+body.an-focus .an-pubstate {
+  font-size: 11px;
+  margin: 8px 16px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.an-focus .an-workbench.is-active > .dash-editor > .dash-toolbar { margin-top: 8px; }
+
+/* Single-value wells (Category, Split by) read as pills too, so every filled
+   well looks the same. The <select> is still the value — the pill stands in for
+   it until you click to change it. */
+.an-wells .enc-pill--one { grid-template-columns: minmax(0, 1fr) 18px; }
+.an-wells .enc-pill-name {
+  background: none;
+  border: 0;
+  padding: 3px 4px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--text-strong);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.an-wells .enc-pill-name:hover { text-decoration: underline; }
+.an-wells .enc-empty.enc-single { cursor: pointer; }
+.an-wells .enc-empty.enc-single:hover { border-color: var(--accent); color: var(--accent); }
+.an-wells select.viz-select[hidden] { display: none; }
+
+/* `hidden` is a no-op against an explicit `display`. The pill is `display:grid`
+   and the placeholder `display:block`, so both need this to actually hide —
+   the same trap `.btn[hidden]` hit in the dashboard editor. */
+.an-wells .enc-pill[hidden],
+.an-wells .enc-empty[hidden] { display: none; }
