@@ -685,8 +685,8 @@ async function main(): Promise<void> {
       allDraggable: fields.every((f) => f.draggable),
       wells: wells.map((w) => w.dataset.well),
       wellsVisible: wells.every((w) => w.offsetParent !== null),
-      chips: document.querySelectorAll('#an-switcher .an-type').length,
-      propsRows: document.querySelectorAll('#an-props .an-prop-row').length,
+      chips: document.querySelectorAll('#an-switcher .an-typerow').length,
+      propsRows: document.querySelectorAll('#an-props .an-sec').length,
       title: (document.querySelector('#an-props .an-prop-input') as HTMLInputElement)?.value || '',
     };
   });
@@ -701,24 +701,61 @@ async function main(): Promise<void> {
   // Exactly ONE chip row. Selecting a card and writing a well edit both rebuild
   // it, and each clears the mount before its await — two in flight left two rows
   // stacked, which every count-based assertion happily passed.
-  ok('…as exactly one grid, not one per in-flight rebuild',
-     await win.evaluate(() => document.querySelectorAll('#an-switcher .an-typegrid').length) === 1,
+  ok('…as exactly one row, not one per in-flight rebuild',
+     await win.evaluate(() => document.querySelectorAll('#an-switcher .an-typerow').length) === 1,
      await win.evaluate(() =>
-       String(document.querySelectorAll('#an-switcher .an-typegrid').length) + ' grid(s)'));
+       String(document.querySelectorAll('#an-switcher .an-typerow').length) + ' row(s)'));
   // Icons, not text chips — this is what made the panel read as rough.
   const icons = await win.evaluate(() => {
-    const b = [...document.querySelectorAll('#an-switcher .an-type')] as HTMLElement[];
+    const row = document.querySelector('#an-switcher .an-typerow') as HTMLElement | null;
     return {
-      count: b.length,
-      allSvg: b.filter((x) => !x.classList.contains('is-more')).every((x) => !!x.querySelector('svg')),
-      labelled: b.every((x) => !!x.getAttribute('aria-label')),
-      active: document.querySelectorAll('#an-switcher .an-type.is-active').length,
-      more: b.filter((x) => x.classList.contains('is-more')).length,
+      svg: !!row?.querySelector('.an-typerow-ic svg'),
+      name: (row?.querySelector('.an-typerow-name')?.textContent || '').trim(),
+      labelled: !!row?.getAttribute('aria-label'),
+      // The chip row is still in the DOM (it owns the + More panel) but must not
+      // be on screen — two chart-type UIs would be the divergence this avoids.
+      chipRowHidden: (document.querySelector('#an-switcher .cv-viz-switcher') as HTMLElement | null)
+        ?.getBoundingClientRect().width! <= 2,
     };
   });
-  ok('…drawn as an icon grid with one active type and a More button',
-     icons.count > 1 && icons.allSvg && icons.labelled && icons.active === 1 && icons.more === 1,
-     JSON.stringify(icons));
+  ok('…as an icon + the CURRENT type name + a way into the full picker',
+     icons.svg && !!icons.name && icons.labelled && icons.chipRowHidden, JSON.stringify(icons));
+
+  // Search fields — a wide dataset is unusable without it.
+  const search = await win.evaluate(() => {
+    const box = document.getElementById('an-field-search') as HTMLInputElement;
+    const before = document.querySelectorAll('#an-fields .an-field').length;
+    box.value = 'rev';
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+    const after = document.querySelectorAll('#an-fields .an-field').length;
+    box.value = '';
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+    return { visible: box.offsetParent !== null, before, after,
+             restored: document.querySelectorAll('#an-fields .an-field').length };
+  });
+  ok('the Data panel searches its fields',
+     search.visible && search.after < search.before && search.restored === search.before,
+     JSON.stringify(search));
+
+  // Properties is a list of disclosure sections, not a flat form.
+  const secs = await win.evaluate(() => {
+    const heads = [...document.querySelectorAll('#an-props .an-sec-head')] as HTMLElement[];
+    const first = heads[0];
+    const openBefore = !!first?.closest('.an-sec')?.classList.contains('is-open');
+    first?.click();
+    return {
+      titles: heads.map((h) => (h.lastElementChild?.textContent || '').trim()),
+      openBefore,
+      openAfter: !!first?.closest('.an-sec')?.classList.contains('is-open'),
+      aria: first?.getAttribute('aria-expanded'),
+    };
+  });
+  ok('Properties is a list of collapsible sections',
+     secs.titles.length >= 2 && secs.titles[0] === 'Display settings' &&
+       secs.openBefore && !secs.openAfter && secs.aria === 'false',
+     JSON.stringify(secs));
+  await win.evaluate(() =>
+    (document.querySelector('#an-props .an-sec-head') as HTMLElement)?.click());
 
   // Empty wells must SAY what belongs in them, which is the QuickSight
   // affordance a bare dropdown does not give.
@@ -786,7 +823,7 @@ async function main(): Promise<void> {
   // The "+ More" panel is where the Recommended TIER is named. It must exist
   // with no model configured — it is shape eligibility, not a suggestion.
   const tiers = await win.evaluate(() => {
-    const more = document.querySelector('#an-switcher .an-type.is-more') as HTMLElement | undefined;
+    const more = document.querySelector('#an-switcher .an-typerow') as HTMLElement | undefined;
     if (!more) return null;
     more.click();
     // The panel is appended to <body> (renderResult.ts openMorePanel), not into
