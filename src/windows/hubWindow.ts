@@ -7,7 +7,7 @@ const isMac = process.platform === 'darwin';
 const isWin = process.platform === 'win32';
 
 // We hide the native title bar on both OSes so the app name shows only in our
-// in-app header (no duplicate "Screenchart"). macOS keeps the traffic lights via
+// in-app header (no duplicate "Ordinate"). macOS keeps the traffic lights via
 // hiddenInset; Windows keeps min/max/close via the title-bar overlay (WCO).
 // These WCO colors mirror --titlebar / --text-strong in renderer/theme.css so the
 // controls strip blends with our header in both themes. Windows-only; updated live
@@ -70,9 +70,9 @@ export function createHubWindow(): BrowserWindow {
     height,
     minWidth: 900,
     minHeight: 600,
-    title: 'Screenchart',
+    title: 'Ordinate',
     backgroundColor: '#f7f7f8',
-    // Hide the native title bar (and its duplicate "Screenchart" text) while
+    // Hide the native title bar (and its duplicate "Ordinate" text) while
     // keeping the OS window controls: traffic lights on macOS, the WCO on Windows.
     ...(isMac ? { titleBarStyle: 'hiddenInset' as const } : {}),
     ...(isWin ? {

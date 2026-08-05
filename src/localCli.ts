@@ -46,7 +46,7 @@ interface DetectResult {
 // GROUP. We spawn detached (own group leader), so process.kill(-pid) reaps the
 // probe AND any background daemon it forked — the classic "CLI spawns a daemon
 // that inherits the pipe" case below. Detaching also makes macOS attribute the
-// child's file access to the CLI, not to Screenchart, so detection never trips a
+// child's file access to the CLI, not to Ordinate, so detection never trips a
 // Photos / Documents / Downloads / Music TCC prompt under our app's name.
 const liveProbes = new Set<ChildProcess>();
 
@@ -162,7 +162,7 @@ export const REGISTRY: RegistryEntry[] = [
     // cross-app access. The other CLIs are plain API clients and don't. We pass
     // only minimal read-only flags — the analysis is a pure API round-trip on the
     // image and works whether or not that permission is granted.
-    note: 'On first run, macOS may show a “Cursor wants to access data from other apps” prompt. It’s safe to choose Don’t Allow — Screenchart only needs Cursor to analyze your image, which still works.',
+    note: 'On first run, macOS may show a “Cursor wants to access data from other apps” prompt. It’s safe to choose Don’t Allow — Ordinate only needs Cursor to analyze your image, which still works.',
   },
 ];
 
@@ -239,7 +239,7 @@ export function readVersion(resolvedPath: string, versionArgs: string[] | undefi
     try {
       // TCC: run the probe via disclaim-exec (packaged macOS) so the CLI is its
       // own responsible process — macOS won't attribute its file access to
-      // Screenchart. No-op passthrough in dev / non-mac.
+      // Ordinate. No-op passthrough in dev / non-mac.
       // cwd = os.tmpdir(): a non-protected scoped dir so the probe never runs from
       // the app bundle, "/", or a user folder. detached: true → own process group
       // (see killTree / liveProbes above).

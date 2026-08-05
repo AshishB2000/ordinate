@@ -62,7 +62,7 @@ import * as localCli from './src/localCli';
 import * as localCliRun from './src/localCliRun';
 import { analyze, analyzeFollowup } from './src/analyze';
 
-console.log('[boot] Screenchart', app.getVersion(), '| packaged =', app.isPackaged);
+console.log('[boot] Ordinate', app.getVersion(), '| packaged =', app.isPackaged);
 
 // The result we persist per turn: the FULL analysis result minus the raw provider
 // thread (_messages is stored separately in thread.messages and never goes to the
@@ -212,7 +212,7 @@ async function startCapture(): Promise<void> {
     // The overwhelmingly common cause here is Screen Recording not being active
     // for the app — getSources fails/times out, most often on the FIRST capture
     // while macOS is still showing its OWN permission dialog. Do NOT surface a
-    // Screenchart "Capture failed" card here: it duplicates the native OS prompt
+    // Ordinate "Capture failed" card here: it duplicates the native OS prompt
     // and reads as a broken app. Log it (above) and route to the permission
     // panel guidance instead — same as the empty-frame path.
     // TODO: post-permission onboarding — route to existing setup window with a
@@ -283,7 +283,7 @@ function maybeNotifyDone(title?: string): void {
     if (hubWindow && !hubWindow.isDestroyed() && hubWindow.isFocused()) return;
     if (!Notification.isSupported || !Notification.isSupported()) return;
     new Notification({
-      title: 'Screenchart',
+      title: 'Ordinate',
       body: title ? `Analysis ready — ${title}` : 'Analysis ready.',
       silent: false,
     }).show();
@@ -306,7 +306,7 @@ function bootstrapNotification(): { ok: boolean; supported: boolean } {
   try {
     if (!Notification.isSupported || !Notification.isSupported()) return { ok: false, supported: false };
     new Notification({
-      title: 'Screenchart',
+      title: 'Ordinate',
       body: 'Desktop notifications are on. You’ll be alerted when an analysis finishes and this window isn’t focused.',
       silent: true,
     }).show();

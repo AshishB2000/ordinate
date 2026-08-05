@@ -210,7 +210,7 @@ export async function clearHistory(projectId: string): Promise<boolean> {
 // only lays out the ones handed to it.
 
 const GUARD_LINE =
-  'The numbers below were computed by the app (Screenchart), not by you. ' +
+  'The numbers below were computed by the app (Ordinate), not by you. ' +
   'Treat them as ground truth: cite them exactly and NEVER recompute, round, or invent a figure.';
 
 const SAMPLE_ROWS = 5;

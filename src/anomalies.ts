@@ -340,7 +340,7 @@ export function detectAnomalies(
 // Twin of copilot's GUARD_LINE style: every figure below was computed by the app;
 // the model must cite them exactly and NEVER recompute or invent one.
 const GUARD_LINE =
-  'The anomalies below were DETECTED and MEASURED by the app (Screenchart), not by you. ' +
+  'The anomalies below were DETECTED and MEASURED by the app (Ordinate), not by you. ' +
   'Treat every figure as ground truth: cite them exactly and NEVER recompute, round, or invent one.';
 
 export function buildAnomaliesFacts(datasetName: string, anomalies: Anomaly[]): string {

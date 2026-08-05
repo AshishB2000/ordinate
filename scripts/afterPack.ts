@@ -2,7 +2,7 @@
 //
 // Electron ships its own Info.plist with a set of default privacy
 // usage-description strings (camera, microphone, bluetooth, audio capture).
-// Screenchart uses NONE of those APIs — it needs SCREEN RECORDING only, which
+// Ordinate uses NONE of those APIs — it needs SCREEN RECORDING only, which
 // we declare via build.mac.extendInfo (NSScreenCaptureUsageDescription).
 //
 // These stray keys don't trigger a prompt on their own, but they show up if a

@@ -1400,7 +1400,7 @@ function exitDashPresent(): void {
 
 // ── Export (HTML / PDF / PNG) ─────────────────────────────────────────────────
 // Core Chart.js types that can render LIVE from inlined {labels,series} in the
-// self-contained HTML. Screenchart type → Chart.js native type. Anything else
+// self-contained HTML. Ordinate type → Chart.js native type. Anything else
 // (clustered/stacked/combo/heatmap/treemap/… + maps + table) is embedded as a PNG.
 const DASH_EXPORT_LIVE_TYPES: Record<string, string> = {
   column: 'bar', line: 'line', line_markers: 'line', area: 'line',
