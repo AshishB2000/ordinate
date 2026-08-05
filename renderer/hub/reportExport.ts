@@ -236,12 +236,12 @@ function svgToPngDataUrl(svg: string, w: number, h: number): Promise<string | nu
 // packaged asar, and pdfmake renders {svg} as crisp vector.
 const REPORT_LOGO_SVG =
   '<svg width="24" height="24" viewBox="0 0 24 24" fill="none">' +
-  '<path d="M12 3.5L20.7 8.4V15.6L12 20.5L3.3 15.6V8.4Z" ' +
-  'stroke="#0f1117" stroke-width="2.4" stroke-linejoin="round"/>' +
+  '<path d="M12 3.1L20 7.9V16.1L12 20.9L4 16.1V7.9Z" ' +
+  'stroke="#0f1117" stroke-width="2.2" stroke-linejoin="round"/>' +
   '<g fill="#2563eb">' +
-  '<rect x="7.37" y="11.71" width="2.52" height="4" rx="1.26"/>' +
-  '<rect x="10.74" y="9.66" width="2.52" height="6.05" rx="1.26"/>' +
-  '<rect x="14.12" y="8.28" width="2.52" height="7.43" rx="1.26"/></g></svg>';
+  '<rect x="8.25" y="13.2" width="2" height="2.6" rx="1"/>' +
+  '<rect x="11" y="11.4" width="2" height="4.4" rx="1"/>' +
+  '<rect x="13.75" y="9.8" width="2" height="6" rx="1"/></g></svg>';
 
 // ponytail: the export args ({ title, analysis, headlineSegments, png, … }) and the
 // pdfmake/pptxgenjs/docx document trees are big untyped envelopes — typed `any`
