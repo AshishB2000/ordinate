@@ -1,19 +1,25 @@
-<!-- Ordinate app icon — DARK. Same geometry; only the tile and the blues move.
-     A faceted hexagonal frame around three ascending bars; the middle bar runs
-     on past the others toward a notch that splits the bottom vertex.
-     Traced from assets/icons/reference/cube-insight-200.png — every coordinate
-     is a measurement off that bitmap mapped onto a 1024 grid (scale 5.12) and
-     re-centred, because the source art sits 5% right of centre: invisible in a
-     lockup, wrong in a dock icon.
-     The frame is ONE path with fill-rule="evenodd" — outer hexagon, inner
-     hexagon reversed, notch — so the notch shows the TILE through it. Painting
-     a notch on top would be the wrong colour the moment the tile gradient or
-     the dark variant changes. -->
+<!-- Ordinate app icon — DARK. Same trace; only the tile and the three blues move.
+     The Cube Insight mark: a faceted hexagonal frame around three ascending
+     bars, the middle one running past the others into a notch that splits the
+     bottom vertex.
+     The path below is a MACHINE TRACE of assets/icons/reference/cube-insight-200.png,
+     not a redrawing: the bitmap was 4x bilinear-upsampled, thresholded on
+     blueness (b-r > 120), its pixel boundaries chained into loops, and each loop
+     Douglas-Peucker simplified at 1.5/800 — about 1.9px of error once scaled to
+     1024, which is invisible. An earlier hand-reconstruction from measurements
+     got the frame right and the stem and notch visibly wrong; tracing the
+     outline removes the judgement calls.
+     The FRAME IS ONE LOOP, not two. The notch connects the inner region to the
+     outside, so the frame has a single boundary — which is why this is
+     fill-rule="evenodd" over four subpaths (frame + three bars) rather than an
+     outer/inner pair.
+     Re-centred on the hexagon: the source art sits 5% right of the image centre,
+     invisible in a lockup and wrong in a dock icon. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <!-- Sampled around the ring at 15-degree steps: lightest at the top
-         vertex, darkest at the lower-left face. That is a cube lit from above,
-         and it is the only reason a flat frame reads as 3D. -->
+    <!-- Sampled off the reference around the ring at 15-degree steps:
+         lightest at the top vertex, darkest on the lower-left face. That is a
+         cube lit from above, and it is the only reason a flat frame reads as 3D. -->
     <linearGradient id="hex" x1="0.45" y1="0.02" x2="0.24" y2="0.91">
       <stop offset="0" stop-color="#63a6ff"/>
       <stop offset="0.5" stop-color="#2f80ff"/>
@@ -21,10 +27,5 @@
     </linearGradient>
   </defs>
   <rect x="100" y="100" width="824" height="824" rx="184" fill="#0e0e12"/>
-  <path fill-rule="evenodd" fill="url(#hex)" d="M481.1 182.4 Q512.0 164.0 542.9 182.4 L798.1 334.6 Q829.0 353.0 829.0 389.0 L829.0 650.0 Q829.0 686.0 797.4 703.3 L543.6 842.7 Q512.0 860.0 480.4 842.7 L226.6 703.3 Q195.0 686.0 195.0 650.0 L195.0 389.0 Q195.0 353.0 225.9 334.6 Z M334.5 394.0 Q312.0 407.0 312.0 433.0 L312.0 591.0 Q312.0 617.0 334.5 630.0 L489.5 719.0 Q512.0 732.0 534.5 719.0 L689.5 630.0 Q712.0 617.0 712.0 591.0 L712.0 433.0 Q712.0 407.0 689.5 394.0 L534.5 305.0 Q512.0 292.0 489.5 305.0 Z M496.0 690.0 L528.0 690.0 L528.0 852.0 Q528.0 868.0 512.0 868.0 Q496.0 868.0 496.0 852.0 Z"/>
-  <g fill="#3f8bff">
-    <rect x="394" y="568" width="58" height="103" rx="29"/>
-    <rect x="481" y="497" width="58" height="210" rx="29"/>
-    <rect x="568" y="435" width="58" height="236" rx="29"/>
-  </g>
+  <path fill-rule="evenodd" fill="url(#hex)" d="M501.8 166.4 L526.1 166.4 L549.1 172.8 L801.3 316.2 L817.9 330.2 L826.9 343.0 L833.3 364.8 L833.3 672.0 L825.6 692.5 L817.9 704.0 L798.7 719.4 L756.5 741.1 L753.9 745.0 L737.3 751.4 L691.2 780.8 L613.1 823.0 L610.6 826.9 L549.1 858.9 L537.6 857.6 L531.2 852.5 L528.6 844.8 L528.6 747.5 L531.2 741.1 L689.9 652.8 L704.0 640.0 L709.1 629.8 L710.4 418.6 L704.0 401.9 L688.6 387.8 L655.4 371.2 L636.2 357.1 L629.8 355.8 L627.2 352.0 L620.8 350.7 L618.2 346.9 L556.8 312.3 L547.8 309.8 L545.3 305.9 L518.4 294.4 L500.5 295.7 L335.4 387.8 L321.3 400.6 L312.3 419.8 L311.0 615.7 L316.2 634.9 L329.0 649.0 L344.3 659.2 L396.8 686.1 L396.8 688.6 L405.8 691.2 L423.7 704.0 L442.9 711.7 L451.8 719.4 L468.5 725.8 L490.2 742.4 L492.8 762.9 L492.8 844.8 L489.0 852.5 L478.7 857.6 L460.8 852.5 L458.2 848.6 L404.5 820.5 L350.7 787.2 L341.8 784.6 L312.3 765.4 L279.0 748.8 L279.0 746.2 L243.2 728.3 L234.2 720.6 L225.3 718.1 L203.5 698.9 L193.3 675.8 L193.3 362.2 L203.5 336.6 L221.4 320.0 L326.4 262.4 L378.9 229.1 L401.9 218.9 L469.8 177.9 Z M588.8 435.2 L606.7 435.2 L614.4 439.0 L622.1 446.7 L625.9 455.7 L625.9 646.4 L622.1 652.8 L573.4 677.1 L570.9 672.0 L570.9 453.1 L576.0 444.2 Z M501.8 499.2 L523.5 500.5 L535.0 510.7 L537.6 519.7 L537.6 692.5 L529.9 700.2 L514.6 706.6 L501.8 704.0 L483.8 692.5 L483.8 515.8 L492.8 504.3 Z M417.3 567.0 L433.9 567.0 L441.6 570.9 L449.3 579.8 L450.6 632.3 L449.3 672.0 L446.7 674.6 L396.8 646.4 L398.1 582.4 L404.5 573.4 Z"/>
 </svg>
