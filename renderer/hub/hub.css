@@ -3972,7 +3972,7 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 }
 
 /* LEFT — Connect. Uses the app's own surfaces and accent, NOT a slab of colour
-   borrowed from another product: it has to read as part of Screenchart in both
+   borrowed from another product: it has to read as part of Ordinate in both
    themes, and a hardcoded dark rail would look pasted on in light mode.
    Shares --bg with the centre column and is set apart by the border alone, so
    the start page reads as one surface with a divider rather than three tinted

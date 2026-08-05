@@ -572,7 +572,7 @@ function lcAvailRow(cli) {
     // Retired CLI: honest copy, never probed or run, no install action.
     note.textContent = cli.retiredNote || 'Retired — no longer available.';
   } else if (cli.installOnly || !cli.binaryName) {
-    note.textContent = 'Install to use this CLI with Screenchart.';
+    note.textContent = 'Install to use this CLI with Ordinate.';
   } else {
     const code = lcMakeEl('code', null, cli.binaryName);
     note.appendChild(code);

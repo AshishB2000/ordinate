@@ -2,7 +2,7 @@
 //
 // wrapCommand(bin, args) returns the {cmd, args} to actually spawn/execFile so
 // that macOS treats the CLI agent as its OWN TCC responsible process instead of
-// blaming Screenchart for the agent's file access (Photos/Desktop/Documents/…).
+// blaming Ordinate for the agent's file access (Photos/Desktop/Documents/…).
 //
 // The compiled helper only exists in a PACKAGED macOS build (scripts/afterPack.js
 // builds it into Contents/Resources/disclaim-exec). In dev (`npm start`) or on

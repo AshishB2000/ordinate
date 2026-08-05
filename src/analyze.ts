@@ -23,7 +23,7 @@ const CONFIDENCE_LEVELS = ['high', 'medium', 'low'];
 
 // Brief system prompt for consistent JSON output across all turns.
 const SYSTEM_PROMPT =
-  'You are a data analysis assistant for Screenchart. ' +
+  'You are a data analysis assistant for Ordinate. ' +
   'Always respond with ONLY a JSON object — no markdown, no code fences, no text outside the JSON.';
 
 // Full analysis prompt sent with the image on the first turn.
@@ -614,7 +614,7 @@ export async function testLocalCli(cliId: string): Promise<TypedError | { ok: tr
 // this returns a soft not_ready error so the renderer can show a gentle hint
 // rather than an error dialog.
 const EXPLAIN_SYSTEM_PROMPT =
-  'You are a data explainer for Screenchart. You are given a compact summary of a ' +
+  'You are a data explainer for Ordinate. You are given a compact summary of a ' +
   'dataset — its columns, their types, already-computed statistics, and a few sample ' +
   'rows. Reply in plain, concise prose (2-5 sentences): describe what the dataset ' +
   'appears to contain, notable patterns, and any data-quality caveats mentioned. ' +
@@ -642,7 +642,7 @@ export async function explainText(userPrompt: string): Promise<{ ok: true; text:
 // does NOT go through parseReply(). No model configured → a soft not_ready error so
 // the renderer shows a gentle hint, never an error dialog.
 const CHAT_SYSTEM_PROMPT =
-  'You are Screenchart Copilot, a data analysis assistant for the user\'s current workspace. ' +
+  'You are Ordinate Copilot, a data analysis assistant for the user\'s current workspace. ' +
   'You are given FACTS about the active project/dataset/visual/dashboard — columns, types, ' +
   'already-computed statistics, sample rows, and computed chart/metric values. ' +
   'Answer in plain, concise prose (no markdown, no code fences, no bullet lists unless asked). ' +
@@ -861,13 +861,13 @@ export async function draftDashboard(
 // the FACTS block from app-computed numbers (copilot.dashboardFacts /
 // anomalies.buildAnomaliesFacts); the model only narrates and never recomputes.
 const SUMMARY_SYSTEM_PROMPT =
-  'You are an executive-summary writer for Screenchart. You are given the APP-COMPUTED metric and chart values ' +
+  'You are an executive-summary writer for Ordinate. You are given the APP-COMPUTED metric and chart values ' +
   'of a dashboard as FACTS. Write a short executive summary (2-5 sentences) of what the dashboard shows — the ' +
   'headline story, standouts, and any risk/concentration worth flagging. Plain prose, no markdown/bullets. ' +
   'NEVER invent, round, or recompute a figure — cite ONLY the exact numbers given; if a number is not in the ' +
   'facts, do not state one.';
 const ANOMALY_SYSTEM_PROMPT =
-  'You explain data anomalies for Screenchart. You are given anomalies the APP already detected, each with its ' +
+  'You explain data anomalies for Ordinate. You are given anomalies the APP already detected, each with its ' +
   'app-computed figures, as FACTS. In plain prose (2-5 sentences, no markdown/bullets) explain what these ' +
   'anomalies likely mean and what to check — CONTEXTUALIZE them, do not list them mechanically. NEVER invent, ' +
   'round, or recompute a figure; the app found and measured every anomaly — cite its numbers exactly.';

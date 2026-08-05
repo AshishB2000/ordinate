@@ -67,7 +67,7 @@ export function register({ getHubWindow, notifyKeyChanged }: {
           });
           if (res.ok) {
             const json = await res.json();
-            // Only vision-capable models are useful for Screenchart
+            // Only vision-capable models are useful for Ordinate
             models = (json.data || [])
               .filter((m: any) => /^(gpt-4o|gpt-4-turbo|gpt-4-vision|o1|o3)/.test(m.id))
               .sort((a: any, b: any) => b.id.localeCompare(a.id))

@@ -217,7 +217,7 @@ const SHARE_URL  = GITHUB_URL;
 // NOTE: LinkedIn (share-offsite) and Facebook (sharer) accept a URL only and
 // ignore SHARE_TEXT — they pull the page's own OpenGraph title/description. The
 // other four carry the text. Colon (not em-dash) so the encoded text reads clean.
-const SHARE_TEXT = 'Screenchart: screenshot any chart, table, or data and get instant AI analysis. Local-first, bring your own key.';
+const SHARE_TEXT = 'Ordinate: screenshot any chart, table, or data and get instant AI analysis. Local-first, bring your own key.';
 
 const _enc = encodeURIComponent;
 const SHARE_LINKS = {
@@ -632,6 +632,8 @@ if (stpNotifDesktop) {
       try {
         const r = await window.hub.bootstrapNotifications();
         if (r && r.supported === false) showToast('Desktop notifications aren’t supported on this system.');
+        // "Screenchart" here is the BUNDLE name, which is what System Settings lists
+        // — not a missed rename. See the note in index.html's permission panel.
         else showToast('Sent a test notification. If it didn’t appear, allow Screenchart in System Settings → Notifications.');
       } catch (_) { /* never block the toggle */ }
     }
@@ -1931,7 +1933,7 @@ if (stpClose) stpClose.addEventListener('click', hideSettingsPanel);
 const stpVersionEl = document.querySelector('.stp-version');
 if (stpVersionEl) {
   const v = (window.hub && window.hub.appVersion) || '';
-  stpVersionEl.textContent = v ? `Screenchart ${v}` : 'Screenchart';
+  stpVersionEl.textContent = v ? `Ordinate ${v}` : 'Ordinate';
 }
 
 const stpAbout = document.getElementById('stp-about');

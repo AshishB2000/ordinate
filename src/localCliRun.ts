@@ -186,7 +186,7 @@ function runChild(bin: string, args: string[], cwd: string, stdin?: string, time
     let child!: ChildProcess;
     try {
       // TCC: run the agent via disclaim-exec (packaged macOS) so it's its OWN
-      // responsible process — macOS then blames the AGENT, not Screenchart, for
+      // responsible process — macOS then blames the AGENT, not Ordinate, for
       // its file access, killing the spurious Photos/Documents/Downloads/Music
       // prompts. No-op passthrough in dev / non-mac. The helper uses SETEXEC, so
       // everything below (pipes, timeout, group-kill) still targets the real agent.
