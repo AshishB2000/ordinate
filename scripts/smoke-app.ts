@@ -700,6 +700,47 @@ async function main(): Promise<void> {
      `head is ${focus.headH}px tall (one row of 26px buttons + padding)`);
   ok('…with Back as the way out, since the nav is gone', focus.backOffered);
 
+  // ── The tool rail ─────────────────────────────────────────────────────────
+  // Icon-only chrome is where dead controls hide: nothing labels them, so a
+  // button wired to nothing looks identical to one that works. Assert every
+  // icon has an accessible name AND that the pane toggles actually drive the
+  // panes.
+  const rail = await win.evaluate(() => {
+    const r = document.getElementById('an-rail') as HTMLElement | null;
+    const btns = [...(r?.querySelectorAll('.an-rail-btn') || [])] as HTMLButtonElement[];
+    return {
+      visible: !!r && r.offsetParent !== null,
+      count: btns.length,
+      allLabelled: btns.every((b) => !!b.getAttribute('aria-label')),
+      allSvg: btns.every((b) => !!b.querySelector('svg')),
+      // Pane toggles mirror their pane's state.
+      dataOn: !!document.getElementById('an-rail-data')?.classList.contains('is-on'),
+    };
+  });
+  ok('the tool rail is on screen, every icon named and drawn',
+     rail.visible && rail.count === 8 && rail.allLabelled && rail.allSvg, JSON.stringify(rail));
+
+  const railToggle = await win.evaluate(() => {
+    const before = !document.getElementById('an-pane-data')?.classList.contains('is-collapsed');
+    (document.getElementById('an-rail-data') as HTMLElement).click();
+    const after = !document.getElementById('an-pane-data')?.classList.contains('is-collapsed');
+    const mirrored = document.getElementById('an-rail-data')?.classList.contains('is-on') === after;
+    (document.getElementById('an-rail-data') as HTMLElement).click(); // restore
+    return { before, after, mirrored };
+  });
+  ok('…and a rail pane button really collapses its pane, and mirrors it',
+     railToggle.before && !railToggle.after && railToggle.mirrored, JSON.stringify(railToggle));
+
+  // The ADD icons delegate to the editor's own handlers rather than duplicating
+  // them — same modal, same code path.
+  const railAdd = await win.evaluate(() => {
+    (document.getElementById('an-rail-add-text') as HTMLElement).click();
+    const open = !!document.querySelector('.ws-modal-overlay');
+    document.querySelectorAll('.ws-modal-overlay').forEach((o) => o.remove());
+    return open;
+  });
+  ok('…and an ADD icon runs the editor\'s own add-card action', railAdd);
+
   ok('the workbench is three columns, in the right order',
      bench.active && bench.inOrder && bench.leftW > 150 && bench.rightW > 150,
      JSON.stringify(bench));
@@ -796,9 +837,51 @@ async function main(): Promise<void> {
       aria: first?.getAttribute('aria-expanded'),
     };
   });
+  // The sections must be backed by REAL overrides, not styled placeholders: a
+  // control that writes nothing looks identical to one that works.
+  const props = await win.evaluate(() => {
+    const box = document.getElementById('an-props') as HTMLElement;
+    const legend = [...box.querySelectorAll('.an-prop-check')]
+      .find((l) => /Show legend/.test(l.textContent || ''))?.querySelector('input') as HTMLInputElement | null;
+    const before = legend?.checked;
+    legend?.click();
+    return {
+      titleBound: (box.querySelector('.an-prop-input') as HTMLInputElement)?.value || '',
+      hadLegend: !!legend,
+      toggled: legend?.checked !== before,
+    };
+  });
+  ok('Display settings binds to the visual and to a real override',
+     !!props.titleBound && props.hadLegend && props.toggled, JSON.stringify(props));
+  await win.waitForTimeout(1800);
+  // The write reaches the record the chart draws from — asserted through main,
+  // not through the DOM that set it.
+  // Read the SAVED record from main, not from the renderer that wrote it — and
+  // via app.evaluate, because `currentProjectId` is a top-level `let` in a
+  // classic script and therefore lives in the global lexical environment, not on
+  // `window`. Reaching for window.currentProjectId silently yields undefined,
+  // which is what made this first report "not saved" for a write that worked.
+  const persisted = await app.evaluate(async (_electron, arg: any) => {
+    const req = (process as any).mainModule.require.bind((process as any).mainModule);
+    const visuals = req('./src/visuals.js');
+    const v = await visuals.getVisual(arg.projectId, arg.visualId);
+    return { hasOverrides: !!v && !!v.overrides, showLegend: v && v.overrides && v.overrides.showLegend };
+  }, { projectId: r.projectId, visualId: r.mapVisualId });
+  ok('…and that override is saved on the visual',
+     !!persisted && persisted.hasOverrides && persisted.showLegend === false,
+     JSON.stringify(persisted));
+  // Put it back so later assertions see the resting state.
+  await win.evaluate(() => {
+    const l = [...document.querySelectorAll('#an-props .an-prop-check')]
+      .find((x) => /Show legend/.test(x.textContent || ''))?.querySelector('input') as HTMLInputElement | null;
+    l?.click();
+  });
+  await win.waitForTimeout(1500);
+
   ok('Properties is a list of collapsible sections',
      secs.titles.length >= 2 && secs.titles[0] === 'Display settings' &&
-       secs.openBefore && !secs.openAfter && secs.aria === 'false',
+       secs.openBefore && !secs.openAfter && secs.aria === 'false' &&
+       secs.titles.includes('Axes'),
      JSON.stringify(secs));
   await win.evaluate(() =>
     (document.querySelector('#an-props .an-sec-head') as HTMLElement)?.click());
@@ -1114,12 +1197,23 @@ async function main(): Promise<void> {
       .forEach((b) => (b as HTMLElement).click());
   });
   await win.waitForTimeout(1200);
-  await win.evaluate(() => {
-    const dels = [...document.querySelectorAll('#an-wells .viz-value-row .viz-value-del')] as HTMLButtonElement[];
-    // Leave exactly one measure — the form refuses to go below one anyway.
-    dels.slice(1).forEach((b) => b.click());
-  });
-  await win.waitForTimeout(2500);
+  // A measure is removed through its ⋮ menu now, which is the real user path.
+  // The form refuses to go below one measure, so only the extras have a Remove.
+  for (let i = 0; i < 3; i++) {
+    const removed = await win.evaluate(() => {
+      const menus = [...document.querySelectorAll('#an-wells .viz-value-row .enc-pill-menu')] as HTMLElement[];
+      if (menus.length <= 1) return false;
+      menus[menus.length - 1].click();
+      const item = [...document.querySelectorAll('.project-card-popup .project-card-popup-item')]
+        .find((b) => /Remove/.test(b.textContent || '')) as HTMLElement | undefined;
+      if (!item) return false;
+      item.click();
+      return true;
+    });
+    if (!removed) break;
+    await win.waitForTimeout(1200);
+  }
+  await win.waitForTimeout(2000);
   const reverted = await win.evaluate(() => ({
     filters: document.querySelectorAll('#an-wells .viz-filter-row').length,
     measures: document.querySelectorAll('#an-wells .viz-value-row').length,
