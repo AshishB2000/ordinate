@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/images/logo.png" alt="" width="104" height="104" />
+</p>
+
 <h1 align="center">Ordinate</h1>
 
 <p align="center"><b>A local-first, open-source personal BI workspace. Bring in your data (files, paste, Excel, Postgres, a URL, or a screenshot), prepare it, visualize it across 28 chart &amp; map types, assemble dashboards, and share. Optional AI on top; the app does the math.</b></p>
