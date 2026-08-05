@@ -30,9 +30,10 @@ or narrate figures the app already computed — it **never** writes a computed n
 
 These are the ones where a mistake is expensive or silent. Everything else is in CLAUDE.md.
 
-- **Branch off `devops` for every change** (`fix/…`, `feat/…`, `perf/…`, `test/…`, `docs/…`), then
-  open a pull request. `devops` is the default branch and the trunk; `main` sits at the initial
-  import and is unused. **Never commit directly to either.**
+- **Branch off `develop` for every change** (`fix/…`, `feat/…`, `perf/…`, `test/…`, `docs/…`), then
+  open a pull request. `develop` is the default branch and the trunk; `main` sits at the initial
+  import and is unused. **Never commit directly to either.** If the trunk is ever renamed again,
+  the branch lists in `ci.yml`/`lint.yml` must move with it — otherwise CI stops running silently.
 - **Never** add a `Co-Authored-By` trailer or any AI co-author line to a commit message.
 - **No `eval`, no `new Function`, anywhere.** User and model input never becomes executable code.
   The formula evaluator is a hand-written tokenizer + parser + tree-walker for exactly this reason.

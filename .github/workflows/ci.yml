@@ -4,10 +4,11 @@ name: CI build check
 # tree, run the node self-checks. Catches a broken commit immediately. The
 # heavy installer build lives in build.yml (tags only) — this stays light.
 #
-# Watches `devops`, which is this repo's DEFAULT branch. It previously watched
-# `dev`, which does not exist here, so this workflow had never run on a single
-# pull request — five PRs merged unchecked. If the default branch is ever
-# renamed, this list must be updated with it.
+# Watches `develop`, which is this repo's DEFAULT branch. This list has now gone
+# stale TWICE, and both times the symptom was silence rather than a red check:
+# it watched `dev` (never existed), then `devops` after the trunk was renamed to
+# `develop`. Each time, every pull request merged without CI having run.
+# Renaming the trunk means editing this list in the same commit.
 #
 # Node 24 matches what Electron 42 bundles, so the self-checks exercise the same
 # runtime the app ships on. The DuckDB native binding is a prebuilt N-API module
@@ -15,9 +16,9 @@ name: CI build check
 
 on:
   push:
-    branches: [devops, main]
+    branches: [develop, main]
   pull_request:
-    branches: [devops, main]
+    branches: [develop, main]
 
 jobs:
   check:
