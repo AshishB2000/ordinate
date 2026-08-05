@@ -214,7 +214,7 @@ function anEnsureForm(): void {
   if (anForm) return;
   const mount = anEl('an-wells');
   if (!mount) return;
-  anForm = createEncodingForm(mount, { onChange: () => anScheduleWrite() });
+  anForm = createEncodingForm(mount, { onChange: () => anScheduleWrite(), variant: 'wells' });
   anForm.show(true);
   anWireWells(anForm.el);
 }
@@ -365,20 +365,64 @@ async function anRenderSwitcher(): Promise<void> {
   if (!recommended.length) return;
 
   const current = String(anVisual.chartType || '');
+  const initial = recommended.indexOf(current) >= 0 ? current : recommended[0];
+
+  if (seq !== anSwitcherSeq) return;
+  mount.innerHTML = '';
+  const h = document.createElement('p');
+  h.className = 'an-switcher-h';
+  h.textContent = 'Change visual type';
+  mount.appendChild(h);
+
+  // An ICON grid, like QuickSight's. VIZ_ICONS is the same trusted static SVG
+  // set the chip row and the "+ More" panel already draw from, so a type looks
+  // the same wherever it is offered.
+  const grid = document.createElement('div');
+  grid.className = 'an-typegrid';
+  recommended.slice(0, 11).forEach((type: string) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'an-type' + (type === initial ? ' is-active' : '');
+    b.title = VIZ_LABELS[type] || type;
+    b.setAttribute('aria-label', VIZ_LABELS[type] || type);
+    b.innerHTML = VIZ_ICONS[type] || ''; // trusted static SVG, same as renderResult.ts
+    b.addEventListener('click', () => {
+      if (!anVisual) return;
+      anVisual.chartType = type;
+      grid.querySelectorAll('.an-type').forEach((x) => x.classList.remove('is-active'));
+      b.classList.add('is-active');
+      anScheduleWrite();
+    });
+    grid.appendChild(b);
+  });
+
+  // "+ More" keeps the full three-tier panel — Recommended / Selected / Other —
+  // rather than a second chart-type vocabulary living in this file.
   anPicker = buildVizPicker({
     recommended,
     pool: ALL_CHART_TYPE_IDS.concat(['table', 'map_bubble', 'map_choropleth']),
     data,
     hasGeo: !!data.geo,
-    initial: recommended.indexOf(current) >= 0 ? current : recommended[0],
+    initial,
     onSelect: (type: string) => {
       if (!anVisual) return;
       anVisual.chartType = type;
       anScheduleWrite();
     },
   });
-  if (seq !== anSwitcherSeq) return;
-  mount.innerHTML = '';
+  const more = anPicker.switcher.querySelector('.cv-viz-more') as HTMLElement | null;
+  const moreBtn = document.createElement('button');
+  moreBtn.type = 'button';
+  moreBtn.className = 'an-type is-more';
+  moreBtn.textContent = '···';
+  moreBtn.title = 'More chart types';
+  moreBtn.setAttribute('aria-label', 'More chart types');
+  moreBtn.addEventListener('click', () => (more || anPicker.switcher.querySelector('button'))?.click());
+  grid.appendChild(moreBtn);
+  mount.appendChild(grid);
+  // The real chip row stays in the DOM but out of sight: it owns the "+ More"
+  // panel's state, and re-implementing that here is the divergence this avoids.
+  anPicker.switcher.classList.add('an-switcher-hidden');
   mount.appendChild(anPicker.switcher);
 }
 

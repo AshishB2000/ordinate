@@ -31,6 +31,16 @@
 interface EncodingFormOpts {
   /** Fired on any edit. The caller decides whether that means recompute, save, both. */
   onChange: () => void;
+  /**
+   * 'form'  — the Visuals builder: labelled rows of selects (unchanged).
+   * 'wells' — the authoring panel: each row is a drop zone, each field a pill,
+   *           and an empty zone says what belongs in it.
+   *
+   * ONE state and one getEncoding() either way. This changes what the rows LOOK
+   * like, never what they mean — a second form is exactly what this file exists
+   * to prevent.
+   */
+  variant?: 'form' | 'wells';
 }
 
 interface EncodingFormApi {
@@ -94,9 +104,20 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
   const addValue = q<HTMLButtonElement>('js-enc-add-value');
   const addFilter = q<HTMLButtonElement>('js-enc-add-filter');
 
+  const wells = opts.variant === 'wells';
+  if (wells) root.classList.add('is-wells');
+
   let columns: EncCol[] = [];
   let measures: EncMeasure[] = [];
   let filters: any[] = [];
+
+  /** The dashed "nothing here yet" line an empty well shows. */
+  function placeholder(text: string): HTMLElement {
+    const p = document.createElement('div');
+    p.className = 'enc-empty';
+    p.textContent = text;
+    return p;
+  }
 
   // Falls back to ALL columns when the dataset has no numeric one, so the
   // measure select is never empty — `count` over a text column is legitimate.
@@ -126,9 +147,13 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
   function renderMeasures(): void {
     valuesList.innerHTML = '';
     const nums = numberCols();
+    if (wells && !measures.some((m) => m.column)) {
+      valuesList.appendChild(placeholder('Drop a measure here'));
+      return;
+    }
     measures.forEach((m, i) => {
       const row = document.createElement('div');
-      row.className = 'viz-value-row';
+      row.className = wells ? 'viz-value-row enc-pill' : 'viz-value-row';
 
       const colSel = document.createElement('select');
       colSel.className = 'viz-select viz-value-col';
@@ -167,12 +192,16 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
   // so the app still computes every number) ─────────────────────────────────
   function renderFilters(): void {
     filtersList.innerHTML = '';
+    if (wells && !filters.length) {
+      filtersList.appendChild(placeholder('Drop a field here to filter'));
+      return;
+    }
     filters.forEach((f, i) => filtersList.appendChild(makeFilterRow(f, i)));
   }
 
   function makeFilterRow(step: any, i: number): HTMLElement {
     const row = document.createElement('div');
-    row.className = 'viz-filter-row';
+    row.className = wells ? 'viz-filter-row enc-pill enc-pill--filter' : 'viz-filter-row';
 
     const colSel = document.createElement('select');
     colSel.className = 'viz-select';

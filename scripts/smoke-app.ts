@@ -685,7 +685,7 @@ async function main(): Promise<void> {
       allDraggable: fields.every((f) => f.draggable),
       wells: wells.map((w) => w.dataset.well),
       wellsVisible: wells.every((w) => w.offsetParent !== null),
-      chips: document.querySelectorAll('#an-switcher .cv-viz-switcher button, #an-switcher .cv-viz-chip').length,
+      chips: document.querySelectorAll('#an-switcher .an-type').length,
       propsRows: document.querySelectorAll('#an-props .an-prop-row').length,
       title: (document.querySelector('#an-props .an-prop-input') as HTMLInputElement)?.value || '',
     };
@@ -701,10 +701,54 @@ async function main(): Promise<void> {
   // Exactly ONE chip row. Selecting a card and writing a well edit both rebuild
   // it, and each clears the mount before its await — two in flight left two rows
   // stacked, which every count-based assertion happily passed.
-  ok('…as exactly one row, not one per in-flight rebuild',
-     await win.evaluate(() => document.querySelectorAll('#an-switcher .cv-viz-switcher').length) === 1,
+  ok('…as exactly one grid, not one per in-flight rebuild',
+     await win.evaluate(() => document.querySelectorAll('#an-switcher .an-typegrid').length) === 1,
      await win.evaluate(() =>
-       String(document.querySelectorAll('#an-switcher .cv-viz-switcher').length) + ' switcher row(s)'));
+       String(document.querySelectorAll('#an-switcher .an-typegrid').length) + ' grid(s)'));
+  // Icons, not text chips — this is what made the panel read as rough.
+  const icons = await win.evaluate(() => {
+    const b = [...document.querySelectorAll('#an-switcher .an-type')] as HTMLElement[];
+    return {
+      count: b.length,
+      allSvg: b.filter((x) => !x.classList.contains('is-more')).every((x) => !!x.querySelector('svg')),
+      labelled: b.every((x) => !!x.getAttribute('aria-label')),
+      active: document.querySelectorAll('#an-switcher .an-type.is-active').length,
+      more: b.filter((x) => x.classList.contains('is-more')).length,
+    };
+  });
+  ok('…drawn as an icon grid with one active type and a More button',
+     icons.count > 1 && icons.allSvg && icons.labelled && icons.active === 1 && icons.more === 1,
+     JSON.stringify(icons));
+
+  // Empty wells must SAY what belongs in them, which is the QuickSight
+  // affordance a bare dropdown does not give.
+  const zones = await win.evaluate(() => ({
+    placeholders: [...document.querySelectorAll('#an-wells .enc-empty')].map((e) => (e.textContent || '').trim()),
+    pills: document.querySelectorAll('#an-wells .enc-pill').length,
+  }));
+  ok('…and an empty well says what belongs in it',
+     zones.placeholders.some((t) => /Drop a field here to filter/.test(t)),
+     JSON.stringify(zones));
+
+  // The pill has to FIT its field name. At 232px the aggregation select's
+  // intrinsic width was winning and clipping "revenue" to "reve" — a bug no
+  // count-based assertion sees, so measure the rendered text box instead.
+  const pill = await win.evaluate(() => {
+    const sel = document.querySelector('#an-wells .enc-pill > .viz-select') as HTMLSelectElement | null;
+    if (!sel) return null;
+    const span = document.createElement('span');
+    span.textContent = sel.options[sel.selectedIndex]?.text || '';
+    const cs = getComputedStyle(sel);
+    span.style.font = cs.font;
+    span.style.position = 'absolute';
+    span.style.visibility = 'hidden';
+    document.body.appendChild(span);
+    const textW = span.getBoundingClientRect().width;
+    span.remove();
+    return { name: sel.value, textW: Math.ceil(textW), boxW: Math.floor(sel.getBoundingClientRect().width) };
+  });
+  ok('…and a measure pill is wide enough for its field name',
+     !!pill && pill.boxW >= pill.textW, JSON.stringify(pill));
 
   // ── AI in the Visuals panel (phase D) ─────────────────────────────────────
   // The point of this block is the SEPARATION. The ✨ button is a model call;
@@ -742,8 +786,7 @@ async function main(): Promise<void> {
   // The "+ More" panel is where the Recommended TIER is named. It must exist
   // with no model configured — it is shape eligibility, not a suggestion.
   const tiers = await win.evaluate(() => {
-    const more = [...document.querySelectorAll('#an-switcher .cv-viz-chip, #an-switcher button')]
-      .find((b) => /More/.test(b.textContent || '')) as HTMLElement | undefined;
+    const more = document.querySelector('#an-switcher .an-type.is-more') as HTMLElement | undefined;
     if (!more) return null;
     more.click();
     // The panel is appended to <body> (renderResult.ts openMorePanel), not into
