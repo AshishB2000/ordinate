@@ -739,7 +739,13 @@ function anWireCards(): void {
 /** Called by dashboards.ts after every grid render, and on open/close. */
 function anSyncWorkbench(): void {
   const host = anEl('an-editor-host');
-  if (host) host.classList.toggle('is-active', dashMode === 'analysis' && !!dashCurrent);
+  const on = dashMode === 'analysis' && !!dashCurrent;
+  if (host) host.classList.toggle('is-active', on);
+  // FOCUS MODE. An open analysis takes the whole window: the project nav goes
+  // away, as it does in the reference. Four columns competing for 1180px is what
+  // made this surface feel stuffed — the nav is 176px of chrome you cannot use
+  // while authoring, and "‹ Back" in the editor head already returns to it.
+  document.body.classList.toggle('an-focus', on);
   if (dashMode !== 'analysis') {
     anSelectedCardId = null;
     return;

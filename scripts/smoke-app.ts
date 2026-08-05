@@ -269,15 +269,35 @@ async function main(): Promise<void> {
 
   // A tiny DOM driver, defined once and re-used: click by visible text, click by
   // id, fill the prompt modal, pick from the chooser modal.
-  const clickExact = async (text: string): Promise<boolean> =>
-    win.evaluate((t) => {
-      const el = [...document.querySelectorAll('button, a, [role=button], li')].find(
-        (b) => (b as HTMLElement).offsetParent !== null && (b.textContent || '').trim() === t,
-      ) as HTMLElement | undefined;
-      if (!el) return false;
-      el.click();
-      return true;
-    }, text);
+  // Click a visible control by its exact text.
+  //
+  // An OPEN ANALYSIS hides the project nav (focus mode), exactly as the
+  // reference does — so the section buttons are genuinely unreachable until the
+  // analysis is closed, and "‹ Back" is the way out. Model that rather than
+  // reaching past it: if the target is not on screen and we are in focus mode,
+  // leave the analysis first and try again. A test that could still click a
+  // hidden nav item would be asserting a UI the user does not have.
+  const clickExact = async (text: string): Promise<boolean> => {
+    const hit = async (t: string): Promise<boolean> =>
+      win.evaluate((x) => {
+        const el = [...document.querySelectorAll('button, a, [role=button], li')].find(
+          (b) => (b as HTMLElement).offsetParent !== null && (b.textContent || '').trim() === x,
+        ) as HTMLElement | undefined;
+        if (!el) return false;
+        el.click();
+        return true;
+      }, t);
+    if (await hit(text)) return true;
+    const focused = await win.evaluate(() => document.body.classList.contains('an-focus'));
+    if (!focused) return false;
+    await win.evaluate(() => {
+      const back = [...document.querySelectorAll('.dash-editor-head button')]
+        .find((b) => /Back/.test(b.textContent || '')) as HTMLElement | undefined;
+      back?.click();
+    });
+    await win.waitForTimeout(1200);
+    return hit(text);
+  };
   const clickId = async (id: string): Promise<boolean> =>
     win.evaluate((i) => {
       const el = document.getElementById(i) as HTMLElement | null;
@@ -654,6 +674,32 @@ async function main(): Promise<void> {
       panes: [...document.querySelectorAll('.an-pane-title')].map((t) => (t.textContent || '').trim()),
     };
   });
+  // Focus mode: an open analysis owns the window, so the project nav is gone —
+  // the reference has no nav while you author, and four columns competing for
+  // the width is what made this read as stuffed.
+  const focus = await win.evaluate(() => {
+    const nav = document.getElementById('workspace-nav') as HTMLElement | null;
+    const head = document.querySelector('#dash-editor .dash-editor-head') as HTMLElement | null;
+    const kids = head ? [...head.children] as HTMLElement[] : [];
+    const tops = new Set(kids.filter((k) => k.offsetParent !== null)
+      .map((k) => Math.round(k.getBoundingClientRect().top)));
+    return {
+      focusOn: document.body.classList.contains('an-focus'),
+      navHidden: !nav || nav.offsetParent === null,
+      // "One row" is the HEAD's height, not the children's top edges —
+      // align-items:center gives items of different heights different tops
+      // while they share a row, which is what this first (wrongly) measured.
+      headH: Math.round(head?.getBoundingClientRect().height || 0),
+      headRows: tops.size,
+      backOffered: kids.some((k) => /Back/.test(k.textContent || '') && k.offsetParent !== null),
+    };
+  });
+  ok('an open analysis takes the window, and the project nav steps aside',
+     focus.focusOn && focus.navHidden, JSON.stringify(focus));
+  ok('…its toolbar stays on one row', focus.headH > 0 && focus.headH <= 50,
+     `head is ${focus.headH}px tall (one row of 26px buttons + padding)`);
+  ok('…with Back as the way out, since the nav is gone', focus.backOffered);
+
   ok('the workbench is three columns, in the right order',
      bench.active && bench.inOrder && bench.leftW > 150 && bench.rightW > 150,
      JSON.stringify(bench));
