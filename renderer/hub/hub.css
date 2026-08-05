@@ -5381,7 +5381,17 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   color: var(--muted);
 }
 .an-pane-hint[hidden] { display: none; }
-#an-calc-btn { font-size: 11px; padding: 3px 8px; }
+.an-calc-btn { font-size: 11px; padding: 3px 8px; align-self: flex-start; margin-top: 8px; }
+
+/* #an-data-body hosted inside the Visuals pane: it is a section of that pane
+   now, not a pane of its own, so it drops the pane padding and gains a rule
+   separating the fields from the wells below. */
+#an-viz-fields > .an-pane-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--border);
+}
 
 /* Fields */
 .an-fields { display: flex; flex-direction: column; gap: 1px; max-height: 250px; overflow-y: auto; }

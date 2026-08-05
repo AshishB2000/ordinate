@@ -876,10 +876,14 @@
             </div>
           </section>
 
+          <!-- #an-data-body is MOVED into #an-viz-fields below while the Visuals
+               flyout is open, and back here when Data is. The field list is the
+               drag SOURCE and the wells are the drop target, so they have to be
+               in the same open flyout or a drag reaches nothing. One element,
+               two hosts — same trick as .dash-toolbar and #dash-editor. -->
           <section class="an-pane" id="an-pane-data" hidden>
             <header class="an-pane-head">
               <span class="an-pane-title">Data</span>
-              <button class="btn btn-sm" type="button" id="an-calc-btn" title="Add a calculated field to this dataset">+ Calculated field</button>
             </header>
             <div class="an-pane-body" id="an-data-body">
               <p class="an-pane-hint" id="an-data-hint">Select a visual card to see its fields.</p>
@@ -892,6 +896,10 @@
               </div>
               <input class="an-field-search" id="an-field-search" type="search" placeholder="Search fields" aria-label="Search fields" hidden>
               <div class="an-fields" id="an-fields"></div>
+              <!-- Travels with the field list: it adds a field to the dataset
+                   those fields come from, so it belongs beside them, not in a
+                   pane header the fields have left. -->
+              <button class="btn btn-sm an-calc-btn" type="button" id="an-calc-btn" title="Add a calculated field to this dataset">+ Calculated field</button>
             </div>
           </section>
 
@@ -900,6 +908,10 @@
             <div class="an-pane-body" id="an-viz-body">
               <p class="an-pane-hint" id="an-viz-hint">Nothing selected.</p>
               <div class="an-viz-inner" id="an-viz-inner" hidden>
+                <!-- Host for #an-data-body. Inside .an-viz-inner, so it appears
+                     only once a card is selected — which is also the only time
+                     there are fields to list. -->
+                <div class="an-viz-fields" id="an-viz-fields"></div>
                 <div class="an-ai-slot" id="an-ai-slot"></div>
                 <div class="an-switcher" id="an-switcher"></div>
                 <div class="an-wells" id="an-wells"></div>

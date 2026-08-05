@@ -59,6 +59,12 @@ function anSetFlyout(pane: string | null): void {
   });
   const side = anEl('an-side-left');
   if (side) side.hidden = !anFlyout;
+  // The field list follows the flyout: dragging a field into a well needs both
+  // ends open at once, and only one flyout is. Moved, never copied — a second
+  // #an-fields would need a second render target and a second set of listeners.
+  const fields = anEl('an-data-body');
+  const fieldHost = anFlyout === 'an-pane-visuals' ? anEl('an-viz-fields') : anEl('an-pane-data');
+  if (fields && fieldHost && fields.parentElement !== fieldHost) fieldHost.appendChild(fields);
   document.querySelectorAll('#an-rail .an-rail-btn').forEach((b) => {
     const el = b as HTMLElement;
     const on = !!anFlyout && el.dataset.pane === anFlyout;
@@ -223,9 +229,9 @@ function anRenderFields(): void {
     name.textContent = col.name;
     item.appendChild(icon);
     item.appendChild(name);
-    // Click-to-add matters more than it used to: the wells live in the Visuals
-    // flyout and only one flyout is open, so dragging from here reaches nothing.
-    item.title = col.name + ' · ' + col.type + ' — click to add';
+    // Drag works in the Visuals flyout, where the wells are; in the Data flyout
+    // there is nothing to drop onto, so name the click path in the tooltip.
+    item.title = col.name + ' · ' + col.type + ' — drag or click to add';
 
     item.addEventListener('dragstart', (e) => {
       // text/plain so the payload survives; the class is what marks the drag as

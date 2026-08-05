@@ -847,6 +847,29 @@ async function main(): Promise<void> {
   ok('…the wells are mounted and visible',
      JSON.stringify(bound.wells) === JSON.stringify(['category', 'values', 'series', 'filters']) &&
        bound.wellsVisible, JSON.stringify(bound.wells));
+
+  // DRAG NEEDS BOTH ENDS. The field list is the drag source and the wells are
+  // the drop target; only one flyout is open, so the list has to have MOVED into
+  // the Visuals pane. Asserted by geometry, not by parentage: a list that is in
+  // the right node but painting at zero height is still undraggable.
+  const dragReach = await win.evaluate(() => {
+    const f = document.querySelector('#an-fields .an-field') as HTMLElement | null;
+    const w = document.querySelector('#an-wells [data-well="values"]') as HTMLElement | null;
+    return {
+      inVisuals: !!document.querySelector('#an-viz-fields #an-fields'),
+      // Exactly one field list in the DOM — moved, not copied.
+      lists: document.querySelectorAll('#an-fields').length,
+      fieldBox: Math.round(f?.getBoundingClientRect().height || 0),
+      wellBox: Math.round(w?.getBoundingClientRect().height || 0),
+      // The fields sit above the wells, which is what makes the drag a short one.
+      above: !!(f && w) && f.getBoundingClientRect().top < w.getBoundingClientRect().top,
+      calcTravelled: !!document.querySelector('#an-viz-fields #an-calc-btn'),
+    };
+  });
+  ok('…and the field list moved in beside them, so a field can be dragged to a well',
+     dragReach.inVisuals && dragReach.lists === 1 && dragReach.fieldBox > 0 &&
+       dragReach.wellBox > 0 && dragReach.above && dragReach.calcTravelled,
+     JSON.stringify(dragReach));
   ok('…the chart-type chips render', bound.chips > 0, `${bound.chips} chips`);
   // Exactly ONE chip row. Selecting a card and writing a well edit both rebuild
   // it, and each clears the mount before its await — two in flight left two rows
