@@ -34,47 +34,43 @@ let anColumns: Array<{ name: string; type: string }> = [];
 let anDataset: { name: string; kind: string } | null = null;
 let anSaveTimer: number | null = null;
 
-const AN_PANE_KEY = 'anPanes'; // collapsed pane ids, comma-separated
+const AN_FLYOUT_KEY = 'anFlyout'; // id of the one open flyout pane, '' for none
+const AN_PANES = ['an-pane-add', 'an-pane-data', 'an-pane-visuals', 'an-pane-filter'];
 
 function anEl(id: string): HTMLElement | null {
   return document.getElementById(id);
 }
 
-// ── Collapse ────────────────────────────────────────────────────────────────
-// Collapsed panes keep their header (a labelled way back), so nothing is ever
-// unreachable — this is a disclosure, not a hidden feature.
-function anReadCollapsed(): Set<string> {
-  try {
-    return new Set((localStorage.getItem(AN_PANE_KEY) || '').split(',').filter(Boolean));
-  } catch (_) {
-    return new Set();
-  }
-}
+// ── The flyout ──────────────────────────────────────────────────────────────
+// ONE panel at a time, hung off the rail. Two panels stacked in a column is what
+// made this surface feel stuffed: the wells and the field list each want the
+// full height, and neither got it. Closing the flyout entirely (click the lit
+// icon again) collapses its grid track to zero, so the sheet takes the window.
+let anFlyout: string | null = null;
 
-function anApplyCollapsed(): void {
-  const set = anReadCollapsed();
-  [
-    { pane: 'an-pane-data', toggle: 'an-data-toggle' },
-    { pane: 'an-pane-visuals', toggle: 'an-viz-toggle' },
-    { pane: 'an-pane-props', toggle: 'an-props-toggle' },
-  ].forEach(({ pane, toggle }) => {
-    const el = anEl(pane);
-    const btn = anEl(toggle);
-    if (!el || !btn) return;
-    const off = set.has(pane);
-    el.classList.toggle('is-collapsed', off);
-    btn.setAttribute('aria-expanded', off ? 'false' : 'true');
+function anSetFlyout(pane: string | null): void {
+  anFlyout = pane && AN_PANES.indexOf(pane) >= 0 ? pane : null;
+  try {
+    localStorage.setItem(AN_FLYOUT_KEY, anFlyout || '');
+  } catch (_) { /* private mode — the flyout still works, it just forgets */ }
+  AN_PANES.forEach((id) => {
+    const el = anEl(id);
+    if (el) el.hidden = id !== anFlyout;
+  });
+  const side = anEl('an-side-left');
+  if (side) side.hidden = !anFlyout;
+  document.querySelectorAll('#an-rail .an-rail-btn').forEach((b) => {
+    const el = b as HTMLElement;
+    const on = !!anFlyout && el.dataset.pane === anFlyout;
+    el.classList.toggle('is-on', on);
+    el.setAttribute('aria-expanded', on ? 'true' : 'false');
   });
 }
 
-function anToggleCollapsed(paneId: string): void {
-  const set = anReadCollapsed();
-  if (set.has(paneId)) set.delete(paneId);
-  else set.add(paneId);
-  try {
-    localStorage.setItem(AN_PANE_KEY, [...set].join(','));
-  } catch (_) { /* private mode — the panes still toggle, they just forget */ }
-  anApplyCollapsed();
+/** Properties is a per-card panel, so it is closed until a card asks for it. */
+function anSetProps(on: boolean): void {
+  const side = anEl('an-side-right');
+  if (side) side.hidden = !on;
 }
 
 // ── Selection ───────────────────────────────────────────────────────────────
@@ -104,6 +100,9 @@ async function anSelectCard(cardId: string | null): Promise<void> {
 
   const card = anCardById(cardId);
   anRenderProps(card);
+  // Re-bind, never re-open: an open Properties panel follows the selection, and
+  // deselecting closes it rather than leaving an empty panel holding a column.
+  if (!card) anSetProps(false);
 
   // Fields + wells are a VISUAL card's business. A text or metric card still
   // selects, and still gets Properties — it just has no encoding to edit.
@@ -224,7 +223,9 @@ function anRenderFields(): void {
     name.textContent = col.name;
     item.appendChild(icon);
     item.appendChild(name);
-    item.title = col.name + ' · ' + col.type;
+    // Click-to-add matters more than it used to: the wells live in the Visuals
+    // flyout and only one flyout is open, so dragging from here reaches nothing.
+    item.title = col.name + ' · ' + col.type + ' — click to add';
 
     item.addEventListener('dragstart', (e) => {
       // text/plain so the payload survives; the class is what marks the drag as
@@ -780,6 +781,26 @@ function anWireCards(): void {
         anSelectCard(card.id);
         anBeginGesture(e as PointerEvent, card, el, 'move');
       });
+
+      // The card's own way into Properties. Added here rather than in
+      // dashboards.ts because the whole panel is analysis-only — a published
+      // dashboard has no card properties to edit.
+      const gear = document.createElement('button');
+      gear.type = 'button';
+      gear.className = 'an-card-props';
+      gear.title = 'Properties';
+      gear.setAttribute('aria-label', 'Card properties');
+      gear.innerHTML =
+        '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>'
+        + '<path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6"'
+        + ' stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>';
+      gear.addEventListener('pointerdown', (e) => e.stopPropagation()); // not a drag
+      gear.addEventListener('click', (e) => {
+        e.stopPropagation();
+        anSelectCard(card.id);
+        anSetProps(true);
+      });
+      head.appendChild(gear);
     }
 
     // Eight selection squares, as the reference draws them. Decoration only —
@@ -847,9 +868,22 @@ function anSyncWorkbench(): void {
   // made this surface feel stuffed — the nav is 176px of chrome you cannot use
   // while authoring, and "‹ Back" in the editor head already returns to it.
   document.body.classList.toggle('an-focus', on);
-  const rail = anEl('an-rail');
-  if (rail) rail.hidden = !on;
-  if (on) anPaintRail();
+  anMountFilterBar(on);
+  // The analysis name IS the rename control in focus mode (the separate Rename
+  // button is hidden), so it has to answer to the keyboard as well as a click.
+  const nameEl = anEl('dash-name');
+  if (nameEl) {
+    if (on) {
+      nameEl.setAttribute('role', 'button');
+      nameEl.setAttribute('tabindex', '0');
+      nameEl.title = 'Click to rename';
+    } else {
+      nameEl.removeAttribute('role');
+      nameEl.removeAttribute('tabindex');
+      nameEl.removeAttribute('title');
+    }
+  }
+  if (!on) anSetProps(false);
   if (dashMode !== 'analysis') {
     anSelectedCardId = null;
     return;
@@ -863,60 +897,91 @@ function anSyncWorkbench(): void {
   anWireCards();
 }
 
-// ── The tool rail ───────────────────────────────────────────────────────────
-// Icon-only controls over actions that already exist. Nothing here is new
-// behaviour: the three pane buttons drive the same disclosure the pane headers
-// do, and the rest delegate to the buttons the editor already owns.
-function anWireRail(): void {
-  const relay = (id: string, targetId: string): void => {
-    const b = anEl(id);
-    if (!b) return;
-    b.addEventListener('click', () => {
-      const t = anEl(targetId) as HTMLButtonElement | null;
-      // Disabled or absent means the action is genuinely unavailable right now
-      // (no model, no selection); the rail must not pretend otherwise.
-      if (t && !t.hidden && !t.disabled) t.click();
-    });
-  };
-  ([
-    ['an-rail-data', 'an-pane-data'],
-    ['an-rail-visuals', 'an-pane-visuals'],
-    ['an-rail-props', 'an-pane-props'],
-  ] as Array<[string, string]>).forEach(([btn, pane]) => {
-    const b = anEl(btn);
-    if (b) b.addEventListener('click', () => { anToggleCollapsed(pane); anPaintRail(); });
-  });
-  relay('an-rail-filter', 'dash-add-filter');
-  relay('an-rail-ai', 'an-suggest-btn');
-  relay('an-rail-add-visual', 'dash-add-visual');
-  relay('an-rail-add-text', 'dash-add-text');
-  relay('an-rail-add-metric', 'dash-add-metric');
+// ── Delegation ──────────────────────────────────────────────────────────────
+/**
+ * Click the real button behind an icon or a menu row. Disabled or `hidden` means
+ * the action is genuinely unavailable right now (no model, no selection, read-only
+ * dashboard), and a proxy must not pretend otherwise. CSS-hidden is fine: the
+ * editor head still owns these handlers, focus mode just does not draw them.
+ */
+function anClick(targetId: string): void {
+  const t = anEl(targetId) as HTMLButtonElement | null;
+  if (t && !t.hidden && !t.disabled) t.click();
 }
 
-/** A pane toggle reads as ON when its pane is open — the rail is a mirror. */
-function anPaintRail(): void {
+// The dashboard-wide filter bar is MOVED into the Filters flyout while an
+// analysis is open, and moved back when it closes. One element, two hosts —
+// exactly what #dash-editor itself does. A copy would need a second set of ids
+// and a second renderDashFilterBar target.
+function anMountFilterBar(on: boolean): void {
+  const bar = document.querySelector('#dash-editor .dash-toolbar, #an-filter-body .dash-toolbar') as HTMLElement | null;
+  if (!bar) return;
+  const host = on ? anEl('an-filter-body') : anEl('dash-editor');
+  if (!host || bar.parentElement === host) return;
+  if (on) host.appendChild(bar);
+  else host.insertBefore(bar, anEl('dash-present-exit')); // its original slot
+}
+
+// ── The tool rail ───────────────────────────────────────────────────────────
+function anWireRail(): void {
+  document.querySelectorAll('#an-rail .an-rail-btn').forEach((b) => {
+    const pane = (b as HTMLElement).dataset.pane || '';
+    b.addEventListener('click', () => anSetFlyout(anFlyout === pane ? null : pane));
+  });
   ([
-    ['an-rail-data', 'an-pane-data'],
-    ['an-rail-visuals', 'an-pane-visuals'],
-    ['an-rail-props', 'an-pane-props'],
-  ] as Array<[string, string]>).forEach(([btn, pane]) => {
-    const b = anEl(btn);
-    const p = anEl(pane);
-    if (b && p) b.classList.toggle('is-on', !p.classList.contains('is-collapsed'));
+    ['an-add-visual', 'dash-add-visual'],
+    ['an-add-metric', 'dash-add-metric'],
+    ['an-add-text', 'dash-add-text'],
+  ] as Array<[string, string]>).forEach(([id, target]) => {
+    const b = anEl(id);
+    if (b) b.addEventListener('click', () => anClick(target));
   });
 }
 
 function initAuthoring(): void {
   anWireRail();
-  anApplyCollapsed();
-  [
-    ['an-data-toggle', 'an-pane-data'],
-    ['an-viz-toggle', 'an-pane-visuals'],
-    ['an-props-toggle', 'an-pane-props'],
-  ].forEach(([btnId, paneId]) => {
-    const b = anEl(btnId);
-    if (b) b.addEventListener('click', () => anToggleCollapsed(paneId));
-  });
+  let saved = '';
+  try {
+    saved = localStorage.getItem(AN_FLYOUT_KEY) || '';
+  } catch (_) { /* private mode — start closed */ }
+  anSetFlyout(saved || null);
+
+  const closeProps = anEl('an-props-close');
+  if (closeProps) closeProps.addEventListener('click', () => anSetProps(false));
+
+  // The name is the rename control; the separate Rename button is hidden in
+  // focus mode but still owns the handler.
+  const nameEl = anEl('dash-name');
+  if (nameEl) {
+    const rename = (): void => { if (dashMode === 'analysis') anClick('dash-rename-btn'); };
+    nameEl.addEventListener('click', rename);
+    nameEl.addEventListener('keydown', (e) => {
+      const k = (e as KeyboardEvent).key;
+      if (k === 'Enter' || k === ' ') { e.preventDefault(); rename(); }
+    });
+  }
+
+  // ⋯ overflow: Present / Export… / Share. openMiniMenu (chartControls.ts) is
+  // the hub's existing popover — positioned, outside-click and Esc already done.
+  const more = anEl('an-more-btn');
+  if (more) {
+    more.addEventListener('click', () => {
+      openMiniMenu(more, (menu: HTMLElement, close: () => void) => {
+        ([
+          ['Present', 'dash-present-btn'],
+          ['Export…', 'dash-export-btn'],
+          ['Share', 'dash-share-btn'],
+        ] as Array<[string, string]>).forEach(([label, target]) => {
+          const row = document.createElement('button');
+          row.type = 'button';
+          row.className = 'chart-menu-item';
+          row.textContent = label;
+          row.addEventListener('click', () => { close(); anClick(target); });
+          menu.appendChild(row);
+        });
+      });
+    });
+  }
 
   // Selection, by delegation — the grid rebuilds its cards on every render, so
   // per-card listeners would have to be re-attached each time.

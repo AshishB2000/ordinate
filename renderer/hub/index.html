@@ -836,13 +836,49 @@
            choice: a published dashboard is a read-only snapshot, and a panel
            that can mutate a card, plus the 600 ms autosave, would clobber it. -->
       <div class="dash-editor-host an-workbench" id="an-editor-host">
-        <aside class="an-side an-side--left" id="an-side-left">
-          <section class="an-pane" id="an-pane-data">
+        <!-- ── Tool rail ─────────────────────────────────────────────────────
+             A thin vertical strip of icon-only buttons, one per panel. Exactly
+             ONE flyout is open at a time and clicking the active icon closes it,
+             so at rest the sheet gets the whole window. Icons are inline SVG (no
+             font, no fetch) and each carries an aria-label AND a title: an
+             icon-only button is otherwise unreadable to a screen reader and
+             unnameable to everyone else. -->
+        <nav class="an-rail" id="an-rail" aria-label="Authoring panels">
+          <button class="an-rail-btn" type="button" data-pane="an-pane-add" aria-label="Add a card" title="Add">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <button class="an-rail-btn" type="button" data-pane="an-pane-data" aria-label="Data" title="Data">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3" stroke="currentColor" stroke-width="1.8"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" stroke="currentColor" stroke-width="1.8"/></svg>
+          </button>
+          <button class="an-rail-btn" type="button" data-pane="an-pane-visuals" aria-label="Visuals" title="Visuals">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="11" width="4" height="9" fill="currentColor"/><rect x="10" y="6" width="4" height="14" fill="currentColor"/><rect x="16" y="14" width="4" height="6" fill="currentColor"/></svg>
+          </button>
+          <button class="an-rail-btn" type="button" data-pane="an-pane-filter" aria-label="Filters" title="Filters">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5h16l-6 7v6l-4 2v-8L4 5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          </button>
+        </nav>
+
+        <aside class="an-side an-side--left" id="an-side-left" hidden>
+          <!-- The three add-card actions, off the rail's + button. They delegate
+               to the editor-head buttons rather than duplicating the handlers,
+               so there is still exactly one of each. -->
+          <section class="an-pane" id="an-pane-add" hidden>
+            <header class="an-pane-head"><span class="an-pane-title">Add to sheet</span></header>
+            <div class="an-pane-body an-add-list">
+              <button class="btn btn-sm" type="button" id="an-add-visual">Visual</button>
+              <button class="btn btn-sm" type="button" id="an-add-metric">Metric</button>
+              <button class="btn btn-sm" type="button" id="an-add-text">Text</button>
+              <!-- ponytail: no chart-type gallery here. A new visual card is
+                   blank; picking its type is what the Visuals panel's "Change
+                   visual type" row already does, against real data, so a second
+                   picker would guess before the encoding exists. -->
+              <p class="an-pane-hint">A new visual card starts blank — select it, then pick its fields and chart type under Visuals.</p>
+            </div>
+          </section>
+
+          <section class="an-pane" id="an-pane-data" hidden>
             <header class="an-pane-head">
-              <button class="an-pane-toggle" type="button" id="an-data-toggle" aria-expanded="true">
-                <span class="an-pane-caret" aria-hidden="true">▾</span>
-                <span class="an-pane-title">Data</span>
-              </button>
+              <span class="an-pane-title">Data</span>
               <button class="btn btn-sm" type="button" id="an-calc-btn" title="Add a calculated field to this dataset">+ Calculated field</button>
             </header>
             <div class="an-pane-body" id="an-data-body">
@@ -859,13 +895,8 @@
             </div>
           </section>
 
-          <section class="an-pane" id="an-pane-visuals">
-            <header class="an-pane-head">
-              <button class="an-pane-toggle" type="button" id="an-viz-toggle" aria-expanded="true">
-                <span class="an-pane-caret" aria-hidden="true">▾</span>
-                <span class="an-pane-title">Visuals</span>
-              </button>
-            </header>
+          <section class="an-pane" id="an-pane-visuals" hidden>
+            <header class="an-pane-head"><span class="an-pane-title">Visuals</span></header>
             <div class="an-pane-body" id="an-viz-body">
               <p class="an-pane-hint" id="an-viz-hint">Nothing selected.</p>
               <div class="an-viz-inner" id="an-viz-inner" hidden>
@@ -875,15 +906,26 @@
               </div>
             </div>
           </section>
+
+          <!-- The analysis-wide filter bar. `.dash-toolbar` is MOVED here (not
+               copied) while an analysis is open and moved back into #dash-editor
+               when it closes — same one-element-two-hosts trick #dash-editor
+               itself uses. It carries `dash-editor--analysis` because that class
+               normally sits on #dash-editor, which is no longer its ancestor,
+               and it is what hides the dashboard-only AI buttons. -->
+          <section class="an-pane dash-editor--analysis" id="an-pane-filter" hidden>
+            <header class="an-pane-head"><span class="an-pane-title">Filters</span></header>
+            <div class="an-pane-body" id="an-filter-body"></div>
+          </section>
         </aside>
 
-        <aside class="an-side an-side--right" id="an-side-right">
+        <!-- Properties: closed by default, and its grid track collapses when it
+             is, so the sheet reclaims the width. Opened from the ⚙ on a card. -->
+        <aside class="an-side an-side--right" id="an-side-right" hidden>
           <section class="an-pane" id="an-pane-props">
             <header class="an-pane-head">
-              <button class="an-pane-toggle" type="button" id="an-props-toggle" aria-expanded="true">
-                <span class="an-pane-caret" aria-hidden="true">▾</span>
-                <span class="an-pane-title">Properties</span>
-              </button>
+              <span class="an-pane-title">Properties</span>
+              <button class="an-pane-x" type="button" id="an-props-close" aria-label="Close properties" title="Close">✕</button>
             </header>
             <div class="an-pane-body" id="an-props-body">
               <p class="an-pane-hint" id="an-props-hint">Select a card to edit it.</p>
@@ -921,56 +963,15 @@
           <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-metric">+ Metric</button>
           <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-text">+ Text</button>
           <button class="btn btn-sm dash-edit-only" type="button" id="dash-legacy-wrap-btn" hidden>Edit as analysis</button>
+          <!-- Focus-mode overflow. Present / Export… / Share are one click away
+               instead of three buttons in the strip; the menu delegates to the
+               real buttons in .dash-toolbar-actions, so there is one handler per
+               action, not two. Shown by CSS in focus mode only. -->
+          <button class="btn btn-sm an-more-btn" type="button" id="an-more-btn"
+            aria-haspopup="true" aria-label="More actions" title="More actions">⋯</button>
           <button class="btn btn-sm dash-an-only" type="button" id="an-republish-btn" hidden>Republish…</button>
           <button class="btn btn-primary btn-sm dash-an-only" type="button" id="an-publish-btn">Publish</button>
           <button class="btn btn-primary btn-sm dash-edit-only" type="button" id="dash-save-btn">Save</button>
-        </div>
-
-        <!-- ── Tool rail (ANALYSIS focus mode only) ────────────────────────────
-             The reference's icon toolbar. Every control here drives an action
-             that already exists — pane disclosure, + Filter, the AI suggestion,
-             and the three add-card handlers. Icons are inline SVG (no font, no
-             fetch) and every one carries an aria-label, because an icon-only
-             button is otherwise unreadable to a screen reader.
-
-             The reference's word menus (File / Edit / Data / Insert / Sheets /
-             Objects / Search) are deliberately NOT here: every item they would
-             hold is already a labelled button one row above or in this rail, so
-             they would be a second route to the same handful of actions. See the
-             PR for the full reasoning. -->
-        <div class="an-rail" id="an-rail" hidden>
-          <div class="an-rail-group">
-            <button class="an-rail-btn" type="button" id="an-rail-data" aria-label="Data panel" title="Data panel">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3" stroke="currentColor" stroke-width="1.8"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" stroke="currentColor" stroke-width="1.8"/></svg>
-            </button>
-            <button class="an-rail-btn" type="button" id="an-rail-visuals" aria-label="Visuals panel" title="Visuals panel">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="11" width="4" height="9" fill="currentColor"/><rect x="10" y="6" width="4" height="14" fill="currentColor"/><rect x="16" y="14" width="4" height="6" fill="currentColor"/></svg>
-            </button>
-            <button class="an-rail-btn" type="button" id="an-rail-filter" aria-label="Add a filter" title="Add a filter">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5h16l-6 7v6l-4 2v-8L4 5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
-            </button>
-            <button class="an-rail-btn" type="button" id="an-rail-props" aria-label="Properties panel" title="Properties panel">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="9" cy="7" r="2" fill="currentColor"/><circle cx="15" cy="12" r="2" fill="currentColor"/><circle cx="8" cy="17" r="2" fill="currentColor"/></svg>
-            </button>
-            <button class="an-rail-btn" type="button" id="an-rail-ai" aria-label="Suggest a visual with AI" title="Suggest a visual with AI">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M18 15.5 18.8 18 21 18.8 18.8 19.6 18 22l-.8-2.4L15 18.8l2.2-.8.8-2.5Z" fill="currentColor"/></svg>
-            </button>
-          </div>
-
-          <span class="an-rail-sep" aria-hidden="true"></span>
-
-          <div class="an-rail-group">
-            <span class="an-rail-label">Add</span>
-            <button class="an-rail-btn" type="button" id="an-rail-add-visual" aria-label="Add a chart" title="Add a chart">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 19h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="m5 15 4-5 4 3 5-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </button>
-            <button class="an-rail-btn" type="button" id="an-rail-add-text" aria-label="Add a text card" title="Add a text card">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 6h14M9 6v13M5 6v-1h14v1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M7 19h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-            </button>
-            <button class="an-rail-btn" type="button" id="an-rail-add-metric" aria-label="Add a metric card" title="Add a metric card">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="6" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M8 14V10M12 14v-6M16 14v-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-            </button>
-          </div>
         </div>
 
         <!-- Why this dashboard cannot be edited here, and where to go instead.
