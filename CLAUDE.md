@@ -461,7 +461,7 @@ concentration risk."), not jargon. All figures are computed by the app.
   else rendered the page. Note the first paint is a **splash screen**: a screenshot taken there
   passes every size and DOM check while proving nothing.
 - **CI** (`.github/workflows/ci.yml`) runs type-check + `npm test` + the smoke test on every PR to
-  `devops`; `lint.yml` runs `npm run lint` (**blocking**) and Prettier (**advisory**, and labelled
+  `develop`; `lint.yml` runs `npm run lint` (**blocking**) and Prettier (**advisory**, and labelled
   as such in the job name — an advisory job that can never go green is noise); `build.yml` builds
   both installers on real runners (tag or manual dispatch).
 
@@ -491,13 +491,16 @@ converted `.ts` files in place (runs automatically via `prestart`/`pretest`/`pre
 unconverted JS loads directly. The only other "build" is packaging installers.
 
 ## Git and commits
-- **Branch from `devops` for every change.** `devops` is this repo's **default branch** and the
+- **Branch from `develop` for every change.** `develop` is this repo's **default branch** and the
   trunk all work merges into; `main` sits at the initial import and is not used. Each new feature or
-  fix starts on a fresh branch off an up-to-date `devops` (`fix/...`, `feat/...`, `perf/...`,
+  fix starts on a fresh branch off an up-to-date `develop` (`fix/...`, `feat/...`, `perf/...`,
   `test/...`, `docs/...`), is committed there, then pushed and merged via a pull request.
-  **Never commit directly to `devops`.** Note `ci.yml`/`lint.yml` watch `[devops, main]` — they
-  previously watched a `dev` branch that does not exist, so CI silently never ran; if the default
-  branch is renamed, update those lists with it.
+  **Never commit directly to `develop`.** Note `ci.yml`/`lint.yml` watch `[develop, main]`, and that
+  list is the third thing to break this way: it watched `dev` (never existed), then `devops` after
+  the trunk was renamed to `develop` — each time CI silently stopped running rather than failing.
+  **Renaming the trunk means editing those two lists in the same commit.** A local clone also keeps
+  the old upstream (`branch.<name>.merge`) and has to be repointed by hand:
+  `git branch --set-upstream-to=origin/develop develop`.
 - **Never** add a `Co-Authored-By: Claude …` trailer (or any AI co-author line) to commit
   messages. Write the title + body and stop — no trailer.
 
