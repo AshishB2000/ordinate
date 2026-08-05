@@ -5292,18 +5292,22 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
    behind it so the eye goes to the data.
    #dash-editor is re-parented in as the LAST child, so `order` — not source
    order — puts it in the middle. The Dashboards host has no panels at all. */
-/* Four tracks: rail | flyout | sheet | properties. The two panel tracks are
-   `auto`, so a `display: none` panel takes ZERO width and the sheet reclaims it —
-   which is the whole point of the rail. A fixed column would leave a gap. */
+/* Rail | flyout | sheet | properties, as FLEX — not grid.
+   Grid was wrong here and the smoke test caught it: a `display: none` child is
+   not a grid item at all, so with both panels shut auto-placement dropped
+   #dash-editor into the second (content-sized) track and left the 1fr track
+   empty — a 358px sheet in a 1180px window. Flex has no fixed track list, so a
+   hidden panel simply stops existing and the sheet takes the space back, which
+   is the whole point of the rail. */
 .an-workbench.is-active {
-  display: grid;
-  grid-template-columns: 48px auto minmax(0, 1fr) auto;
+  display: flex;
   gap: 0;
   align-items: stretch;
   min-height: 0;
 }
 .an-workbench.is-active > .dash-editor {
   order: 3;
+  flex: 1 1 auto;
   min-width: 0;
   background: var(--bg);
   border-left: 1px solid var(--border);
@@ -5322,7 +5326,7 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .an-side {
   display: flex;
   flex-direction: column;
-  width: 252px;
+  flex: 0 0 252px;
   background: var(--surface);
   max-height: calc(100vh - 78px);
   overflow-y: auto;
@@ -7753,6 +7757,7 @@ body.an-focus .dash-editor-head #dash-name {
    deliberately not copied, and this has to keep working in both themes. */
 .an-rail {
   display: flex;
+  flex: 0 0 48px;
   flex-direction: column;
   align-items: center;
   gap: 4px;
