@@ -1,6 +1,6 @@
 # Analysis — the record model, and the two decisions
 
-**Status:** spec only. No product code exists on this branch (`feat/analysis-spec`, off `devops`).
+**Status:** spec only. No product code exists on this branch (`feat/analysis-spec`, off `develop`).
 **Tests:** `npm test` → **4,334 ok / 0 fail** (MEASURED, this branch, unchanged — nothing was edited).
 **Scope of this document:** the on-disk shapes, the publish semantics, the migration, the IPC surface,
 and the list of behaviour Phase C is not allowed to break.

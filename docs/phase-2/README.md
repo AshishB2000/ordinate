@@ -1,7 +1,7 @@
 # Phase 2 — Parquet storage
 
 **Status:** complete. Gate met.
-**Branch:** `feat/phase-2-parquet`, off `feat/phase-1-duckdb` (Phase 2 needs the bridge; this deviates from "one branch per phase off `devops`" and the two should merge in order).
+**Branch:** `feat/phase-2-parquet`, off `feat/phase-1-duckdb` (Phase 2 needs the bridge; this deviates from "one branch per phase off `develop`" and the two should merge in order).
 **Tests:** `npm test` → **1,391 ok / 0 fail** (Phase 1 left it at 1,265; +126).
 **Gate:** *existing projects open correctly after migration; round-trip tests pass* — both proven by `scripts/test-datasetsMigration.ts`, which plants a real pre-Phase-2 JSON on disk and asserts the upgrade.
 

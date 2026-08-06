@@ -28,7 +28,7 @@ the target is interactive cross-filtering on millions.
 
 ## 2. Current state
 
-- **Repo:** `/Users/ashishb/Projects/ordinate` — private, default branch `devops`.
+- **Repo:** `/Users/ashishb/Projects/ordinate` — private, default branch `develop`.
 - **History:** one commit (`d70a143 Initial commit`), 223 files. Imported from the Screenchart
   project; no prior history.
 - **Build:** `npm run build:ts` (tsc, in-place sibling emit, no bundler). Zero errors expected.
@@ -131,7 +131,7 @@ images. Any new export path needs the equivalent.
 ## 5. Phases
 
 Each phase is independently shippable and independently revertible. **Do not start a phase until
-the previous one's gate passes.** One branch per phase, off `devops`.
+the previous one's gate passes.** One branch per phase, off `develop`.
 
 ### Phase 0 — Spec extraction (no product changes)
 Turn the existing test suite into an explicit behaviour spec: for each of `parse`, `transforms`,
@@ -179,7 +179,7 @@ files; the secrets boundary from invariant 4 is intact.
 
 ## 6. Rules of engagement
 
-- **Branch per phase**, off `devops` (`feat/phase-1-duckdb`, etc.). Never commit directly to `main`.
+- **Branch per phase**, off `develop` (`feat/phase-1-duckdb`, etc.). Never commit directly to `main`.
 - **Never** add a `Co-Authored-By` or AI co-author trailer to a commit message. Title and body, stop.
 - Ask before adding runtime dependencies beyond the target stack above.
 - Keep `npm test` green. When behaviour genuinely must change, change the test deliberately and say

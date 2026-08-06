@@ -496,8 +496,8 @@ unconverted JS loads directly. The only other "build" is packaging installers.
   fix starts on a fresh branch off an up-to-date `develop` (`fix/...`, `feat/...`, `perf/...`,
   `test/...`, `docs/...`), is committed there, then pushed and merged via a pull request.
   **Never commit directly to `develop`.** Note `ci.yml`/`lint.yml` watch `[develop, main]`, and that
-  list is the third thing to break this way: it watched `dev` (never existed), then `devops` after
-  the trunk was renamed to `develop` — each time CI silently stopped running rather than failing.
+  list is the third thing to break this way: it watched `dev` (never existed), then an earlier trunk
+  name, before the trunk settled on `develop` — each time CI silently stopped running rather than failing.
   **Renaming the trunk means editing those two lists in the same commit.** A local clone also keeps
   the old upstream (`branch.<name>.merge`) and has to be repointed by hand:
   `git branch --set-upstream-to=origin/develop develop`.

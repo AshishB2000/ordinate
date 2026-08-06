@@ -182,7 +182,7 @@ record.
 
 ## 7. Phases
 
-One branch per phase off `devops`, one PR each. **Do not start a phase until the previous one's gate
+One branch per phase off `develop`, one PR each. **Do not start a phase until the previous one's gate
 passes.**
 
 ### Phase A — Spec, and the two decisions
@@ -216,7 +216,7 @@ previewed with those three dropped and reported.
 
 ## 8. Rules of engagement
 
-- Branch off `devops` (`feat/…`); never commit to `devops` or `main` directly.
+- Branch off `develop` (`feat/…`); never commit to `develop` or `main` directly.
 - **Never** add a `Co-Authored-By` or AI co-author trailer to a commit message.
 - `npm test` green at every phase gate. Never delete a failing assertion to go green — if behaviour
   must change, change the test deliberately and say so in the commit body.

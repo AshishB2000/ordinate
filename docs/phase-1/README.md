@@ -1,7 +1,7 @@
 # Phase 1 — DuckDB behind the existing APIs
 
 **Status:** built, tested, proven equivalent — and **disabled by default**, for a measured reason.
-**Branch:** `feat/phase-1-duckdb` off `devops`.
+**Branch:** `feat/phase-1-duckdb` off `develop`.
 **Tests:** `npm test` → **1,265 ok / 0 fail** (was 964; +301 new assertions).
 **Build:** `npm run build:ts` → 0 errors.
 
