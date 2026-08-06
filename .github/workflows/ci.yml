@@ -60,10 +60,23 @@ jobs:
           SMOKE_ARTIFACT_DIR: ${{ runner.temp }}
       # Upload the screenshot ALWAYS — on a failure it is the only way to see
       # what the app actually looked like when it broke.
+      #
+      # continue-on-error, because this step must never decide whether the BUILD
+      # passed. When the account's artifact storage quota is full the upload
+      # fails with "Artifact storage quota has been hit", and without this the
+      # whole smoke job goes red immediately after printing "All app smoke checks
+      # passed." — a green test reported as a failure. That is worse than having
+      # no artifact: it trains everyone to ignore a red smoke job, which is the
+      # one job that catches a CSP violation or a blank render.
       - name: Upload the window screenshot
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: app-window-screenshot
           path: ${{ runner.temp }}/app-window.png
           if-no-files-found: warn
+          # The default is 90 days. A ~400 KB screenshot per PR run, kept for
+          # three months, is what filled the quota in the first place; nobody has
+          # ever wanted last quarter's smoke screenshot.
+          retention-days: 7
