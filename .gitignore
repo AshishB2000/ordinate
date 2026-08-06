@@ -21,6 +21,14 @@ config.json
 # Claude Code agent worktrees (transient)
 .claude/worktrees/
 
+# Per-session agent state, NOT project source. These kept turning up STAGED
+# after a worktree checkout — memory notes, and a brainstorm server's pids,
+# tokens and scratch HTML — one `git commit -a` away from landing on develop.
+# Note `.claude/plans/`, `.claude/skills/` and `.claude/settings.json` ARE
+# tracked and deliberately stay that way; only the per-project session dir goes.
+.claude/projects/
+.superpowers/
+
 # TypeScript: ALL runtime .js is compiled output of a sibling .ts source
 # (in-place emit) — sources are the .ts files, never commit emitted .js.
 /main.js
