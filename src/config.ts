@@ -60,6 +60,10 @@ interface Config {
   // from execution-readiness). Default true; when false the renderer hides the
   // chat entirely and never calls the model.
   copilotEnabled: boolean;
+  // Home "Starred" pins — a flat list of "type:id" keys (e.g. "analysis:<uuid>").
+  // ONE array for all four record types, so a record never carries a starred flag
+  // and there are no per-type migrations.
+  starred: string[];
   providers: Record<string, LegacyProviderEntry>;
   byok: ByokBlock;
   // Connection secrets, keyed by connection UUID. Never reaches a renderer.
@@ -148,6 +152,9 @@ const DEFAULTS: Omit<Config, 'providers' | 'byok'> = {
   // AI Copilot panel is ON by default — it stays fully optional (execution-gated),
   // but the user can also switch it OFF entirely from the panel's toggle.
   copilotEnabled: true,
+  // Home "Starred" pins, as "type:id" keys. One flat array, one setter — no
+  // per-record flag, no migration.
+  starred: [],
   // Connection secrets (pg passwords / URL tokens), keyed by connection UUID.
   // Plaintext on disk like API keys; stripped from every renderer-facing view.
   connectionSecrets: {},
@@ -159,6 +166,23 @@ let cache: Config | null = null;
 
 function configPath(): string {
   return path.join(app.getPath('userData'), 'config.json');
+}
+
+// Starred pins are "type:id" strings: keep only non-empty strings, dedupe, and
+// bound the length (a pin list is small — this only guards against junk on disk
+// or a bad IPC payload). Shared by sanitize() and setStarred().
+function cleanStarred(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const s of raw) {
+    if (typeof s === 'string' && s.length > 0 && !seen.has(s)) {
+      seen.add(s);
+      out.push(s);
+      if (out.length >= 1000) break;
+    }
+  }
+  return out;
 }
 
 // ponytail: input is raw disk/IPC JSON — validated field-by-field below.
@@ -179,6 +203,8 @@ function sanitize(input: any): Partial<Config> {
     };
   }
   if (typeof input.copilotEnabled === 'boolean') out.copilotEnabled = input.copilotEnabled;
+  // Whitelisted so it survives disk load ({...DEFAULTS, ...sanitize(onDisk)}).
+  if (Array.isArray(input.starred)) out.starred = cleanStarred(input.starred);
   return out;
 }
 
@@ -708,7 +734,18 @@ export function publicConfig() {
     notifications:  { ...(cfg.notifications || { sound: false, desktop: false }) },
     // Default true when absent (older config.json predating Week 11).
     copilotEnabled: cfg.copilotEnabled !== false,
+    // Home "Starred" pins — a flat "type:id" list, safe to expose (no secrets).
+    starred: [...(cfg.starred || [])],
   };
+}
+
+// Replace the Home "Starred" pin list (the renderer toggles then sends the whole
+// list). Validated/deduped/bounded like the disk path.
+export function setStarred(ids: unknown): { ok: boolean; starred: string[] } {
+  const cfg = get();
+  cfg.starred = cleanStarred(ids);
+  persist(cfg);
+  return { ok: true, starred: cfg.starred };
 }
 
 // Persist the user's global rules (Instructions / Rules box). Empty allowed.

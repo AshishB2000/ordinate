@@ -324,48 +324,70 @@ async function fillDiscover(): Promise<void> {
   }
 }
 
-// ── Recent (cross-project) ───────────────────────────────────────────────────
+// ── Recent + Starred (cross-project) ─────────────────────────────────────────
 
-// How many rows show before "Show all"; the main-process list itself is capped
-// (recent.ts). Purely a view limit, so expanding never re-reads disk.
+// How many Recent rows show before "Show all"; the main-process list is already
+// capped (recent.ts). Purely a view limit, so expanding never re-reads disk.
 const RECENT_COLLAPSED = 8;
 let recentExpanded = false;
 let recentItems: any[] = [];
+let starredSet = new Set<string>();
 
-// Repaint the Home centre: Recent rows if there is anything, else the first-run
-// quick start. Called on boot and whenever Home is (re)shown (selectSection).
+// The pin key stored in config.starred — matches "type:id" (e.g. "analysis:<id>").
+function starKey(it: any): string {
+  return String(it.type || '') + ':' + String(it.id || '');
+}
+
+// Fetch the recent list AND the starred pins, then paint both Home sections.
+// Called on boot and whenever Home is (re)shown (selectSection).
 async function renderRecent(): Promise<void> {
-  const rowsEl = document.getElementById('home-recent-rows');
+  const [list, starred] = await Promise.all([
+    window.hub.recentItems().catch(() => []),
+    window.hub.getStarred().catch(() => []),
+  ]);
+  recentItems = Array.isArray(list) ? list : [];
+  starredSet = new Set(Array.isArray(starred) ? starred : []);
+  paintHome();
+}
+
+// Split the one recent list into Starred (pinned) and Recent (the rest). Starred
+// hides entirely when empty; the first-run block shows only when there is
+// nothing at all.
+function paintHome(): void {
+  const starredSec = document.getElementById('home-starred');
+  const starredRows = document.getElementById('home-starred-rows');
   const recentSec = document.getElementById('home-recent');
+  const recentRows = document.getElementById('home-recent-rows');
   const firstrun = document.getElementById('home-firstrun');
   const showall = document.getElementById('home-showall') as HTMLButtonElement | null;
-  if (!rowsEl) return;
 
-  try {
-    const list = await window.hub.recentItems();
-    recentItems = Array.isArray(list) ? list : [];
-  } catch (_) {
-    recentItems = [];
+  const starred = recentItems.filter((it) => starredSet.has(starKey(it)));
+  const rest = recentItems.filter((it) => !starredSet.has(starKey(it)));
+
+  if (starredSec) starredSec.hidden = starred.length === 0;
+  if (starredRows) {
+    starredRows.innerHTML = '';
+    starred.forEach((it) => starredRows.appendChild(makeRecentRow(it)));
   }
 
-  const has = recentItems.length > 0;
-  if (recentSec) recentSec.hidden = !has;
-  if (firstrun) firstrun.hidden = has; // Discover/quick-start is first-run only
-
-  const shown = recentExpanded ? recentItems : recentItems.slice(0, RECENT_COLLAPSED);
-  rowsEl.innerHTML = '';
-  shown.forEach((it) => rowsEl.appendChild(makeRecentRow(it)));
-
+  const shown = recentExpanded ? rest : rest.slice(0, RECENT_COLLAPSED);
+  if (recentSec) recentSec.hidden = rest.length === 0;
+  if (recentRows) {
+    recentRows.innerHTML = '';
+    shown.forEach((it) => recentRows.appendChild(makeRecentRow(it)));
+  }
   if (showall) {
-    const more = recentItems.length > RECENT_COLLAPSED;
+    const more = rest.length > RECENT_COLLAPSED;
     showall.hidden = !more;
     showall.textContent = recentExpanded ? 'Show less' : 'Show all →';
   }
+
+  // Discover/quick-start is first-run only — hidden the moment anything exists.
+  if (firstrun) firstrun.hidden = recentItems.length > 0;
 }
 
-// One Recent row: star toggle · name · type chip · project · relative time. The
-// whole row is a button that opens the item; the star (wired in a later phase)
-// stops propagation so starring never also opens.
+// One row: star toggle · name · type chip · project · relative time. The whole
+// row opens the item; the star toggles the pin without opening.
 function makeRecentRow(it: any): HTMLElement {
   const row = document.createElement('button');
   row.type = 'button';
@@ -374,13 +396,25 @@ function makeRecentRow(it: any): HTMLElement {
   row.dataset.id = String(it.id || '');
   row.dataset.projectId = String(it.projectId || '');
 
+  const on = starredSet.has(starKey(it));
   const star = document.createElement('span');
-  star.className = 'home-row-star';
+  star.className = 'home-row-star' + (on ? ' is-on' : '');
   star.setAttribute('role', 'button');
   star.setAttribute('tabindex', '0');
-  star.setAttribute('aria-label', 'Star');
-  star.textContent = '☆'; // ☆ — persistence lands in the Starred phase
-  star.addEventListener('click', (e) => e.stopPropagation());
+  star.setAttribute('aria-label', on ? 'Unstar' : 'Star');
+  star.setAttribute('aria-pressed', on ? 'true' : 'false');
+  star.textContent = on ? '★' : '☆';
+  star.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleStar(it);
+  });
+  star.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleStar(it);
+    }
+  });
 
   const name = document.createElement('span');
   name.className = 'home-row-name';
@@ -404,9 +438,20 @@ function makeRecentRow(it: any): HTMLElement {
   return row;
 }
 
-// Opening a Recent item sets the active project implicitly from the record's own
-// project id (the whole point of dropping the project front door), then lands on
-// the item — best-effort open of the exact record if its opener exists.
+// Toggle a pin, persist the whole list (one setter), and repaint. No re-fetch of
+// the recent list — only the star state changed.
+function toggleStar(it: any): void {
+  const key = starKey(it);
+  if (starredSet.has(key)) starredSet.delete(key);
+  else starredSet.add(key);
+  if (window.hub.setStarred) window.hub.setStarred([...starredSet]);
+  paintHome();
+}
+
+// Opening a Recent/Starred item sets the active project implicitly from the
+// record's own project id (the whole point of dropping the project front door),
+// then lands on the item — best-effort open of the exact record if its opener
+// exists.
 async function openRecentItem(it: any): Promise<void> {
   await openWorkspace(String(it.projectId)); // workspace.ts — sets currentProjectId
   if (it.type === 'dataset') {
@@ -444,7 +489,7 @@ function initHome(): void {
   if (showall) {
     showall.addEventListener('click', () => {
       recentExpanded = !recentExpanded;
-      renderRecent();
+      paintHome();
     });
   }
 

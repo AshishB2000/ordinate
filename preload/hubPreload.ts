@@ -148,6 +148,9 @@ contextBridge.exposeInMainWorld('hub', {
   listProjects: () => ipcRenderer.invoke('projects:list'),
   // Cross-project recent list (datasets/analyses/dashboards, newest first).
   recentItems: (limit?: number) => ipcRenderer.invoke('recent:list', { limit }),
+  // Home "Starred" pins — a flat "type:id" list. get reads; set replaces.
+  getStarred: () => ipcRenderer.invoke('starred:get'),
+  setStarred: (ids: string[]) => ipcRenderer.invoke('starred:set', { ids }),
   // Create a new project; returns the created Project.
   createProject: (name: string) => ipcRenderer.invoke('projects:create', { name }),
   // Rename a project (bumps updatedAt); returns the updated Project or null.

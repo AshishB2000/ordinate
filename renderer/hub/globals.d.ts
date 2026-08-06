@@ -95,6 +95,8 @@ declare global {
       // ── Projects (workspace shell) ──
       listProjects(): Promise<any[]>;
       recentItems(limit?: number): Promise<any[]>;
+      getStarred(): Promise<string[]>;
+      setStarred(ids: string[]): Promise<{ ok: boolean; starred: string[] }>;
       createProject(name: string): Promise<any>;
       renameProject(id: string, name: string): Promise<any>;
       deleteProject(id: string): Promise<{ ok: boolean }>;
