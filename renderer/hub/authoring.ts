@@ -86,7 +86,7 @@ function anSetFlyout(pane: string | null): void {
 // The active tab is remembered across card selection: re-binding a panel must
 // not throw you back to Build every time you click a different card.
 const AN_TAB_KEY = 'anPropsTab';
-const AN_TABS = ['an-tabp-build', 'an-tabp-format'];
+const AN_TABS = ['an-tabp-build', 'an-tabp-format', 'an-tabp-interact'];
 
 function anSetTab(panelId: string): void {
   const id = AN_TABS.indexOf(panelId) >= 0 ? panelId : AN_TABS[0];
@@ -138,6 +138,7 @@ async function anSelectCard(cardId: string | null): Promise<void> {
 
   const card = anCardById(cardId);
   anRenderProps(card);
+  anRenderInteractions(card);
   // Selecting a card BINDS Properties, and opens it only when nothing else is
   // open. Force-switching would yank the user out of Data or the gallery
   // mid-task — and, because the field list follows the flyout, would move the
@@ -190,6 +191,7 @@ async function anSelectCard(cardId: string | null): Promise<void> {
   // Repaint Properties now that anVisual is loaded: the first call above ran
   // before the awaits, so the title field had no name to show.
   anRenderProps(card);
+  anRenderInteractions(card);
   anEnsureForm();
   anForm!.setColumns(anColumns, visual.encoding, Array.isArray(visual.filters) ? visual.filters : []);
   anShowEncoding(true, '');
@@ -619,6 +621,82 @@ async function anWriteVisual(): Promise<void> {
   anPaintSelection();
   // Eligibility depends on the data, and the data just changed.
   await anRenderSwitcher();
+}
+
+// ── The Interactions tab ────────────────────────────────────────────────────
+// Two REAL behaviours, not placeholders. Both persist on the visual's existing
+// `overrides` (whitelisted in src/visuals.ts) rather than a new storage field —
+// two booleans do not justify a file-format decision.
+function anRenderInteractions(card: any): void {
+  const host = anEl('an-interact');
+  if (!host) return;
+  host.innerHTML = '';
+  // Interactions are a VISUAL card's business; a text or metric card has no
+  // chart to click and no tooltip to show.
+  if (!card || card.type !== 'visual' || !anVisual) {
+    const p = document.createElement('p');
+    p.className = 'an-prop-note an-prop-note--info';
+    p.textContent = card
+      ? 'A ' + card.type + ' card has no chart to interact with.'
+      : 'Select a visual card to set its interactions.';
+    host.appendChild(p);
+    return;
+  }
+
+  const ov = (): any => {
+    if (!anVisual.overrides || typeof anVisual.overrides !== 'object') anVisual.overrides = {};
+    return anVisual.overrides;
+  };
+  const toggle = (text: string, note: string, key: string, dflt: boolean): void => {
+    const wrap = document.createElement('label');
+    wrap.className = 'an-prop-check';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = ov()[key] !== undefined ? !!ov()[key] : dflt;
+    box.addEventListener('change', () => {
+      ov()[key] = box.checked;
+      anScheduleWrite();
+      // The card has to be redrawn, not just saved: cross-filter attaches its
+      // listener at render time, and the tooltip option is baked into the chart.
+      renderDashGrid();
+      anPaintSelection();
+    });
+    const t = document.createElement('span');
+    t.textContent = text;
+    wrap.appendChild(box);
+    wrap.appendChild(t);
+    host.appendChild(wrap);
+    const p = document.createElement('p');
+    p.className = 'an-prop-note an-prop-note--info';
+    p.textContent = note;
+    host.appendChild(p);
+  };
+
+  const cat = (anVisual.encoding && anVisual.encoding.category) || '';
+  toggle(
+    'Clicking this visual filters the sheet',
+    cat
+      ? 'Click a bar or slice to filter every other card by that ' + cat + '. Click it again to clear. '
+        + 'Cards whose dataset has no “' + cat + '” column are left alone.'
+      : 'Give this visual a category first — a click has to mean one value of one column.',
+    'crossFilter', false,
+  );
+  toggle(
+    'Show tooltips',
+    'The hover readout on bars, points and slices.',
+    'showTooltips', true,
+  );
+
+  // Honest about the gap rather than silently doing nothing: maps and tables
+  // draw no Chart.js instance, so a click on one cannot be hit-tested yet.
+  const type = String(anVisual.chartType || '');
+  if (type === 'table' || type.indexOf('map_') === 0) {
+    const p = document.createElement('p');
+    p.className = 'an-prop-note';
+    p.textContent = 'Click-to-filter does not apply to ' + (VIZ_LABELS[type] || type)
+      + ' yet — only charts are clickable.';
+    host.appendChild(p);
+  }
 }
 
 // ── The Properties panel ────────────────────────────────────────────────────

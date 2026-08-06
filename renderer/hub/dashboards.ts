@@ -772,6 +772,64 @@ async function renderVisualCard(card: any, body: HTMLElement): Promise<void> {
   renderVizInArea(area, data, type, entry, 'v', {
     projectId: currentProjectId, datasetId: visual.datasetId, encoding: visual.encoding, filters: merged,
   });
+  wireCrossFilter(area, visual);
+}
+
+// ── Click-to-filter ──────────────────────────────────────────────────────────
+// Opt-in per visual (overrides.crossFilter, default off): clicking a bar/slice
+// applies that category value as a DASHBOARD filter, so every other card on the
+// sheet narrows with it. Off by default because a click that silently refilters
+// every other card is a surprise, and the sheet already has an explicit filter
+// bar for the deliberate case.
+//
+// A DOM listener that hit-tests the stored Chart instance, NOT options.onClick:
+// buildChart is shared with the capture surface and the Visuals builder, and
+// neither of those should grow a dashboard behaviour.
+function wireCrossFilter(area: HTMLElement, visual: any): void {
+  const ov = (visual && visual.overrides) || {};
+  if (!ov.crossFilter || dashReadOnly) return;
+  const column = visual && visual.encoding && visual.encoding.category;
+  if (!column) return; // nothing to filter ON — a click would mean nothing
+  area.classList.add('is-crossfilter');
+  area.addEventListener('click', (e) => {
+    const chart: any = chartInstances.get(area);
+    // Maps and tables draw no Chart.js instance. They simply do not cross-filter
+    // yet, and a click on one must do nothing rather than throw.
+    if (!chart || typeof chart.getElementsAtEventForMode !== 'function') return;
+    let hit: any[] = [];
+    try {
+      hit = chart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
+    } catch (_) {
+      hit = [];
+    }
+    if (!hit.length) return; // a click on empty canvas is not a filter
+    const labels = (chart.data && chart.data.labels) || [];
+    const value = labels[hit[0].index];
+    if (value === undefined) return;
+    applyCrossFilter(String(column), value);
+  });
+}
+
+/** Toggle the clicked value on the sheet's filter list, then redraw everything. */
+function applyCrossFilter(column: string, value: unknown): void {
+  if (!dashCurrent || dashReadOnly) return; // a published snapshot is not editable
+  dashCurrent.filters = toggleCrossFilterSteps(dashCurrent.filters, column, value);
+  markDashDirty();
+  renderDashFilterBar();
+  renderDashGrid();
+}
+
+// Renderer-side mirror of src/dashboardFilters.toggleCrossFilter — same rule,
+// same shape. That module is the node-tested one; this is the live grid's copy,
+// exactly as mergeDashFilters above mirrors mergeDashboardFilters.
+function toggleCrossFilterSteps(filters: any, column: string, value: unknown): any[] {
+  const list = (Array.isArray(filters) ? filters : []).filter((s: any) => s && s.type === 'filter');
+  if (!column) return list.slice();
+  const v = value == null ? '' : String(value);
+  const same = (s: any): boolean => s.column === column && s.op === '=';
+  const already = list.some((s: any) => same(s) && String(s.value == null ? '' : s.value) === v);
+  const rest = list.filter((s: any) => !same(s));
+  return already ? rest : rest.concat([{ type: 'filter', column, op: '=', value: v }]);
 }
 
 // The ONE app-computed number (main-only; never the model, never the renderer).

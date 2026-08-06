@@ -46,3 +46,35 @@ export function mergeDashboardFilters(
   }
   return out;
 }
+
+// ── Click-to-filter ─────────────────────────────────────────────────────────
+// Clicking a bar/slice on a cross-filter-enabled visual TOGGLES that category
+// value as a dashboard-wide filter. Pure, so the construction is node-testable
+// (scripts/test-crossFilter.ts) rather than only reachable through a chart click.
+//
+// Why `=` and why the category column: a click identifies one label on the
+// category axis, which is exactly one equality predicate. Anything richer (a
+// range from a brushed axis, multi-select) is a different gesture and would need
+// its own op — this deliberately does the one thing a click means.
+//
+// TOGGLE, not push: clicking the same bar twice is the obvious way to undo, and
+// without it the only way back is the filter bar's ✕, which is a different
+// control in a different place. Clicking a DIFFERENT value on the same column
+// REPLACES it — two `=` predicates on one column match nothing, which would read
+// as "the chart broke" rather than "you filtered twice".
+export function toggleCrossFilter(
+  filters: FilterStep[] | null | undefined,
+  column: string,
+  value: unknown,
+): FilterStep[] {
+  const list = (Array.isArray(filters) ? filters : []).filter((s) => s && s.type === 'filter');
+  if (!column) return list.slice();
+  const v = value == null ? '' : String(value);
+  const same = (s: FilterStep): boolean => s.column === column && s.op === '=';
+  const already = list.some((s) => same(s) && String(s.value ?? '') === v);
+  // Drop any existing `=` on this column either way: on toggle-off that removes
+  // it, on a different value that replaces rather than stacks.
+  const rest = list.filter((s) => !same(s));
+  if (already) return rest;
+  return rest.concat([{ type: 'filter', column, op: '=', value: v } as FilterStep]);
+}

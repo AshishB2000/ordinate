@@ -943,8 +943,8 @@ async function main(): Promise<void> {
       stored: localStorage.getItem('anPropsTab'),
     };
   });
-  ok('Properties is a tab strip — Build and Format, neither named after its container',
-     JSON.stringify(tabs.labels) === JSON.stringify(['Build', 'Format']) &&
+  ok('Properties is a tab strip — Build / Format / Interactions, none named after its container',
+     JSON.stringify(tabs.labels) === JSON.stringify(['Build', 'Format', 'Interactions']) &&
        tabs.listRole === 'tablist' && tabs.roles, JSON.stringify(tabs));
   ok('…and exactly one panel is mounted at a time, with aria following',
      tabs.buildOn && tabs.formatOff && tabs.afterBuildOff && tabs.afterFormatOn &&
@@ -1144,6 +1144,60 @@ async function main(): Promise<void> {
      JSON.stringify(secs));
   await win.evaluate(() =>
     (document.querySelector('#an-props .an-sec-head') as HTMLElement)?.click());
+
+  // ── The Interactions tab ──────────────────────────────────────────────────
+  // The tab has to hold REAL behaviour, not disabled placeholders — so assert
+  // the controls exist, are enabled, and that toggling one reaches the SAVED
+  // visual through main. A tab of dead switches is worse than no tab.
+  await win.evaluate(() => (document.getElementById('an-tab-interact') as HTMLElement).click());
+  await win.waitForTimeout(200);
+  const interact = await win.evaluate(() => {
+    const host = document.getElementById('an-interact') as HTMLElement;
+    const boxes = [...host.querySelectorAll('.an-prop-check input')] as HTMLInputElement[];
+    return {
+      visible: host.offsetParent !== null,
+      count: boxes.length,
+      labels: [...host.querySelectorAll('.an-prop-check')].map((l) => (l.textContent || '').trim()),
+      allEnabled: boxes.every((b) => !b.disabled),
+      // Defaults: cross-filter OFF (a click that silently refilters every card is
+      // a surprise), tooltips ON (every chart before this key had them).
+      crossOff: boxes[0] && boxes[0].checked === false,
+      tipsOn: boxes[1] && boxes[1].checked === true,
+    };
+  });
+  ok('the Interactions tab holds real, enabled controls',
+     interact.visible && interact.count === 2 && interact.allEnabled, JSON.stringify(interact));
+  ok('…defaulting to cross-filter off and tooltips on',
+     interact.crossOff && interact.tipsOn, JSON.stringify(interact));
+
+  const interactShot = path.join(shotDir, 'interactions-tab.png');
+  await win.screenshot({ path: interactShot });
+  ok('interactions tab screenshot captured',
+     fs.existsSync(interactShot) && fs.statSync(interactShot).size > 5000,
+     `${Math.round(fs.statSync(interactShot).size / 1024)} KB -> ${interactShot}`);
+
+  // Turn cross-filter ON and assert it reaches the record, read back through
+  // main — not from the DOM that set it.
+  await win.evaluate(() => {
+    const b = document.querySelector('#an-interact .an-prop-check input') as HTMLInputElement;
+    b.click();
+  });
+  await win.waitForTimeout(1800);
+  const savedInteract = await app.evaluate(async (_electron, arg: any) => {
+    const req = (process as any).mainModule.require.bind((process as any).mainModule);
+    const visuals = req('./src/visuals.js');
+    const v = await visuals.getVisual(arg.projectId, arg.visualId);
+    return { crossFilter: v && v.overrides && v.overrides.crossFilter };
+  }, { projectId: r.projectId, visualId: r.mapVisualId });
+  ok('…and the interaction setting survives sanitizeOverrides into the saved visual',
+     savedInteract && savedInteract.crossFilter === true, JSON.stringify(savedInteract));
+
+  // Put it back — later assertions read this same shared visual.
+  await win.evaluate(() => {
+    const b = document.querySelector('#an-interact .an-prop-check input') as HTMLInputElement;
+    b.click();
+  });
+  await win.waitForTimeout(1800);
 
   // Back to the wells — everything below measures the encoding form, which now
   // lives in the Properties flyout's BUILD tab.

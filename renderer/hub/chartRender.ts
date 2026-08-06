@@ -1082,7 +1082,11 @@ function buildChart(canvas, data, type, overrides) {
               },
             },
           },
-          tooltip: tooltipConfig,
+          // Absent means ON: every chart drawn before this key existed had
+          // tooltips, and a missing override must not silently turn them off.
+          tooltip: overrides.showTooltips === false
+            ? { enabled: false }
+            : tooltipConfig,
         },
         scales,
       },

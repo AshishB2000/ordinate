@@ -919,6 +919,8 @@
                     data-tab="an-tabp-build" aria-selected="true" aria-controls="an-tabp-build">Build</button>
                   <button class="an-tab" type="button" role="tab" id="an-tab-format"
                     data-tab="an-tabp-format" aria-selected="false" aria-controls="an-tabp-format">Format</button>
+                  <button class="an-tab" type="button" role="tab" id="an-tab-interact"
+                    data-tab="an-tabp-interact" aria-selected="false" aria-controls="an-tabp-interact">Interactions</button>
                 </div>
 
                 <div class="an-tabp" id="an-tabp-build" role="tabpanel" aria-labelledby="an-tab-build">
@@ -935,6 +937,14 @@
 
                 <div class="an-tabp" id="an-tabp-format" role="tabpanel" aria-labelledby="an-tab-format" hidden>
                   <div class="an-props" id="an-props"></div>
+                </div>
+
+                <!-- Built by anRenderInteractions(): two real behaviours, both
+                     persisted on the visual's existing `overrides`. Rendered in
+                     JS rather than declared here because each control has to
+                     read its current value off the selected visual. -->
+                <div class="an-tabp" id="an-tabp-interact" role="tabpanel" aria-labelledby="an-tab-interact" hidden>
+                  <div class="an-props" id="an-interact"></div>
                 </div>
               </div>
             </div>
