@@ -421,6 +421,39 @@ async function main(): Promise<void> {
       homeLogos.postgresSvg && homeLogos.mysqlSvg && homeLogos.actionSvgs,
     JSON.stringify(homeLogos));
 
+  // The strapline under the Connect cards ("Press ⌘⌥S … No model configured …
+  // Your data stays on this machine.") was removed. Asserting the TEXT is gone
+  // rather than the element, because a future rewrite could reintroduce the
+  // copy under a different class and the element check would not notice.
+  //
+  // The hotkey assertion is the load-bearing half. That strapline was the only
+  // thing on Home printing the REAL configured shortcut — `fillDiscover()` wrote
+  // it into `#home-disc-hotkey`. The "Grab it off your screen" card had a
+  // HARDCODED ⌘⌥S, so deleting the line naively would have left a rebound
+  // hotkey silently wrong on the front page. The id moved onto the card; this
+  // proves it is still being filled and not just present in the markup.
+  const homeStrapline = await win.evaluate(() => {
+    const text = document.body.innerText || '';
+    const kbd = document.getElementById('home-disc-hotkey');
+    return {
+      machineText: text.includes('stays on this machine'),
+      noModelText: text.includes('No model configured'),
+      staleClass: !!document.querySelector('.home-discover-line'),
+      staleAiSpan: !!document.getElementById('home-disc-ai'),
+      hotkey: kbd ? (kbd.textContent || '').trim() : null,
+      // fillDiscover() is async; a still-default value on a machine whose hotkey
+      // IS the default is indistinguishable from "never ran", so assert only
+      // that something non-empty was rendered into it.
+      hotkeyFilled: !!(kbd && (kbd.textContent || '').trim().length > 0),
+    };
+  });
+  ok('home: the strapline under the Connect cards is gone',
+    !homeStrapline.machineText && !homeStrapline.noModelText &&
+      !homeStrapline.staleClass && !homeStrapline.staleAiSpan,
+    JSON.stringify(homeStrapline));
+  ok('home: …but the capture card still prints the REAL hotkey, not a hardcoded one',
+    homeStrapline.hotkeyFilled, `hotkey=${homeStrapline.hotkey}`);
+
   const homeShots: string[] = [];
   for (const theme of ['light', 'dark']) {
     await win.evaluate((nextTheme) =>

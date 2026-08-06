@@ -239,7 +239,12 @@
               </span>
               <span class="home-card-body">
                 <span class="home-card-name">Grab it off your screen</span>
-                <span class="home-card-sub">Any chart or table on screen. Press <kbd class="home-kbd">⌘⌥S</kbd>.</span>
+                <!-- The ⌘⌥S here is a DEFAULT, overwritten by fillDiscover() from the
+                     real configured hotkey. The id used to live on the discover line
+                     below; when that line was removed this became the only place the
+                     hotkey is shown on Home, so the id moved with it — otherwise a
+                     user who rebound the shortcut would be told to press the wrong keys. -->
+                <span class="home-card-sub">Any chart or table on screen. Press <kbd id="home-disc-hotkey" class="home-kbd">⌘⌥S</kbd>.</span>
               </span>
             </button>
 
@@ -273,11 +278,6 @@
               </span>
             </button>
           </div>
-          <p class="home-discover-line">
-            Press <kbd id="home-disc-hotkey" class="home-kbd">⌘⌥S</kbd> to capture anything on screen.
-            <span id="home-disc-ai">AI is optional.</span>
-            Your data stays on this machine.
-          </p>
         </div>
 
         <!-- Starred — ALWAYS rendered; a muted placeholder when nothing is

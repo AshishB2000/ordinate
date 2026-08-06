@@ -4174,7 +4174,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .home-showall:hover { text-decoration: underline; }
 .home-firstrun { display: flex; flex-direction: column; gap: 16px; }
 .home-firstrun[hidden] { display: none; }
-.home-discover-line { font-size: 12.5px; line-height: 1.6; color: var(--muted); margin: 0; }
 
 /* Recent / Starred rows — a full-width button per record inside .home-rows. */
 .home-row {

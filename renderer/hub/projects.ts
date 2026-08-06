@@ -333,29 +333,22 @@ function applyHomeSearch(): void {
   if (none) none.hidden = !(q !== '' && cards.length > 0 && shown === 0);
 }
 
-// Fill the Discover panel from state the app already holds. No network call:
-// local-first is the reason this panel is not a feed.
+// Print the REAL capture hotkey on the "Grab it off your screen" card. The
+// markup carries ⌘⌥S as a default; this replaces it with whatever the user
+// actually bound, so the card never instructs them to press the wrong keys.
+//
+// This used to fill a second line under the cards ("…AI is optional. Your data
+// stays on this machine.") and the key-status half of it went with that line.
+// The hotkey half did not, because the card still shows a shortcut.
 async function fillDiscover(): Promise<void> {
   const keyEl = document.getElementById('home-disc-hotkey');
-  if (keyEl) {
-    try {
-      // `hotkey:label` resolves { label, accelerator } — not a bare string.
-      const res: any = await window.hub.getHotkeyLabel();
-      const label = res && typeof res === 'object' ? res.label : res;
-      if (label) keyEl.textContent = String(label);
-    } catch (_) { /* keep the default printed in the markup */ }
-  }
-  const aiEl = document.getElementById('home-disc-ai');
-  if (aiEl) {
-    let ready = false;
-    try {
-      const st = await window.hub.getKeyStatus();
-      ready = !!(st && (st.hasApiKey || st.ready));
-    } catch (_) { ready = false; }
-    aiEl.textContent = ready
-      ? 'A model is configured. Every figure is still computed by the app — the model only reads pictures and writes prose.'
-      : 'No model configured. Everything except the AI features works exactly as it is.';
-  }
+  if (!keyEl) return;
+  try {
+    // `hotkey:label` resolves { label, accelerator } — not a bare string.
+    const res: any = await window.hub.getHotkeyLabel();
+    const label = res && typeof res === 'object' ? res.label : res;
+    if (label) keyEl.textContent = String(label);
+  } catch (_) { /* keep the default printed in the markup */ }
 }
 
 // ── Recent + Starred (cross-project) ─────────────────────────────────────────
