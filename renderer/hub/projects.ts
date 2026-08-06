@@ -324,6 +324,103 @@ async function fillDiscover(): Promise<void> {
   }
 }
 
+// ── Recent (cross-project) ───────────────────────────────────────────────────
+
+// How many rows show before "Show all"; the main-process list itself is capped
+// (recent.ts). Purely a view limit, so expanding never re-reads disk.
+const RECENT_COLLAPSED = 8;
+let recentExpanded = false;
+let recentItems: any[] = [];
+
+// Repaint the Home centre: Recent rows if there is anything, else the first-run
+// quick start. Called on boot and whenever Home is (re)shown (selectSection).
+async function renderRecent(): Promise<void> {
+  const rowsEl = document.getElementById('home-recent-rows');
+  const recentSec = document.getElementById('home-recent');
+  const firstrun = document.getElementById('home-firstrun');
+  const showall = document.getElementById('home-showall') as HTMLButtonElement | null;
+  if (!rowsEl) return;
+
+  try {
+    const list = await window.hub.recentItems();
+    recentItems = Array.isArray(list) ? list : [];
+  } catch (_) {
+    recentItems = [];
+  }
+
+  const has = recentItems.length > 0;
+  if (recentSec) recentSec.hidden = !has;
+  if (firstrun) firstrun.hidden = has; // Discover/quick-start is first-run only
+
+  const shown = recentExpanded ? recentItems : recentItems.slice(0, RECENT_COLLAPSED);
+  rowsEl.innerHTML = '';
+  shown.forEach((it) => rowsEl.appendChild(makeRecentRow(it)));
+
+  if (showall) {
+    const more = recentItems.length > RECENT_COLLAPSED;
+    showall.hidden = !more;
+    showall.textContent = recentExpanded ? 'Show less' : 'Show all →';
+  }
+}
+
+// One Recent row: star toggle · name · type chip · project · relative time. The
+// whole row is a button that opens the item; the star (wired in a later phase)
+// stops propagation so starring never also opens.
+function makeRecentRow(it: any): HTMLElement {
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = 'home-row';
+  row.dataset.type = String(it.type || '');
+  row.dataset.id = String(it.id || '');
+  row.dataset.projectId = String(it.projectId || '');
+
+  const star = document.createElement('span');
+  star.className = 'home-row-star';
+  star.setAttribute('role', 'button');
+  star.setAttribute('tabindex', '0');
+  star.setAttribute('aria-label', 'Star');
+  star.textContent = '☆'; // ☆ — persistence lands in the Starred phase
+  star.addEventListener('click', (e) => e.stopPropagation());
+
+  const name = document.createElement('span');
+  name.className = 'home-row-name';
+  name.textContent = it.name || 'Untitled';
+
+  const chip = document.createElement('span');
+  chip.className = 'home-row-chip home-chip-' + row.dataset.type;
+  chip.textContent =
+    it.type === 'dataset' ? 'Dataset' : it.type === 'analysis' ? 'Analysis' : 'Dashboard';
+
+  const proj = document.createElement('span');
+  proj.className = 'home-row-proj';
+  proj.textContent = it.projectName || '';
+
+  const time = document.createElement('span');
+  time.className = 'home-row-time';
+  time.textContent = formatSidebarTime(it.updatedAt || null); // hub.ts
+
+  row.append(star, name, chip, proj, time);
+  row.addEventListener('click', () => openRecentItem(it));
+  return row;
+}
+
+// Opening a Recent item sets the active project implicitly from the record's own
+// project id (the whole point of dropping the project front door), then lands on
+// the item — best-effort open of the exact record if its opener exists.
+async function openRecentItem(it: any): Promise<void> {
+  await openWorkspace(String(it.projectId)); // workspace.ts — sets currentProjectId
+  if (it.type === 'dataset') {
+    selectSection('datasets');
+    if (typeof openSavedDataset === 'function') openSavedDataset(String(it.id));
+  } else if (it.type === 'analysis') {
+    selectSection('analyses');
+    if (typeof openAnalysis === 'function') openAnalysis(String(it.id));
+  } else if (it.type === 'dashboard') {
+    selectSection('dashboards');
+    if (typeof openDashboard === 'function') openDashboard(String(it.id));
+  }
+}
+
 // Wire the Home section and the persistent sidebar's source entries.
 function initHome(): void {
   const newBtn = document.getElementById('home-new-project');
@@ -343,5 +440,14 @@ function initHome(): void {
   const more = document.getElementById('as-connect-more');
   if (more) more.addEventListener('click', () => startFromSource('catalog'));
 
+  const showall = document.getElementById('home-showall');
+  if (showall) {
+    showall.addEventListener('click', () => {
+      recentExpanded = !recentExpanded;
+      renderRecent();
+    });
+  }
+
   fillDiscover();
+  renderRecent();
 }

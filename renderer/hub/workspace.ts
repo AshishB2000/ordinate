@@ -57,6 +57,8 @@ function selectSection(section: string): void {
   document.querySelectorAll('.ws-panel').forEach((panel) => {
     (panel as HTMLElement).hidden = (panel as HTMLElement).dataset.section !== section;
   });
+  // Repaint the cross-project Recent list when Home becomes active (projects.ts).
+  if (section === 'home' && typeof renderRecent === 'function') renderRecent();
   // Refresh the datasets list when its section becomes active (datasets.ts).
   if (section === 'datasets' && typeof refreshDatasetList === 'function') refreshDatasetList();
   // Refresh the saved-connections list when Sources becomes active (connections.ts).

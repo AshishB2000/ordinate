@@ -574,6 +574,8 @@ require("./src/ipc/capture").register();
 
 require("./src/ipc/projects").register();
 
+require("./src/ipc/recent").register();
+
 require("./src/ipc/datasets").register();
 
 require("./src/ipc/connections").register();

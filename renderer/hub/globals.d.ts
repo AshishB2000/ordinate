@@ -94,6 +94,7 @@ declare global {
       saveChartOverrides(entryId: string, key: string, overrides: any): Promise<any>;
       // ── Projects (workspace shell) ──
       listProjects(): Promise<any[]>;
+      recentItems(limit?: number): Promise<any[]>;
       createProject(name: string): Promise<any>;
       renameProject(id: string, name: string): Promise<any>;
       deleteProject(id: string): Promise<{ ok: boolean }>;

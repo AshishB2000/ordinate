@@ -146,6 +146,8 @@ contextBridge.exposeInMainWorld('hub', {
   // ── Projects (workspace shell) ──
   // List all projects (newest-updated first).
   listProjects: () => ipcRenderer.invoke('projects:list'),
+  // Cross-project recent list (datasets/analyses/dashboards, newest first).
+  recentItems: (limit?: number) => ipcRenderer.invoke('recent:list', { limit }),
   // Create a new project; returns the created Project.
   createProject: (name: string) => ipcRenderer.invoke('projects:create', { name }),
   // Rename a project (bumps updatedAt); returns the updated Project or null.
