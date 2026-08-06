@@ -43,214 +43,202 @@
   </div>
 </div>
 
-<div class="win" data-view="home">
+<div class="win">
 
-  <!-- ── titlebar ─────────────────────────────────────────────────── -->
-  <div class="titlebar">
-    <span class="glyph" aria-hidden="true">
-      <!-- Ordinate mark: a hexagonal frame holding three ascending bars. -->
-      <img class="brand-mark" src="logo.png" width="20" height="20" alt="" aria-hidden="true">
-    </span>
-    <span class="tb-title">Ordinate</span>
-    <div class="tb-spacer"></div>
-    <button id="exec-mode-btn" class="btn btn-ghost tb-gear" type="button"
-      aria-haspopup="true" aria-expanded="false" aria-label="Execution mode">
-      <!-- lucide `cpu` icon — neutral default; JS swaps to the active logo when connected -->
-      <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect width="16" height="16" x="4" y="4" rx="2"/>
-        <rect width="6" height="6" x="9" y="9" rx="1"/>
-        <path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/>
-        <path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/>
-      </svg>
-    </button>
-    <button id="settings-gear" class="btn btn-ghost tb-gear" type="button"
-      aria-haspopup="true" aria-expanded="false" aria-label="Settings menu">
-      <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
-          stroke="currentColor" stroke-width="1.7"/>
-      </svg>
-    </button>
-  </div>
+  <!-- ── titlebar ─────────────────────────────────────────────────────
+       An EMPTY drag strip. It exists only to give the macOS traffic lights /
+       Windows window controls their vertical space (per-OS padding in hub.css).
+       The app's chrome — brand, nav, connect, AI, settings — moved into the
+       persistent sidebar below. No interactive children, so the whole strip
+       drags the window. -->
+  <div class="titlebar"></div>
 
-  <!-- ── home view — the start page ───────────────────────────────────
-       Three panes: Connect (left rail), Open + Quick start (centre),
-       Discover (right). Every Connect item performs a REAL action — it
-       ensures a project exists, opens it, and runs that importer. A rail of
-       decorations would be worse than the plain gallery this replaced.
-       Wiring lives in projects.ts (startFromSource). -->
-  <section id="home-view" class="home-view">
+  <!-- ── hub body ──────────────────────────────────────────────────────
+       One persistent sidebar (search · nav · connect · AI · settings) beside a
+       content stage that swaps by [data-section]. Home is just another section
+       now — there is no separate "pick a project" front door. Default is home. -->
+  <div class="hub-body" data-section="home">
 
-    <!-- LEFT: Connect. Mirrors the eight sourceKinds the app actually has —
-         not a longer list that looks impressive and half-works. -->
-    <aside class="home-connect" aria-label="Connect a data source">
-      <h2 class="home-connect-title">Connect</h2>
+    <!-- ── persistent sidebar ─────────────────────────────────────────
+         Always present, across every section. Top-to-bottom: search · primary
+         nav · Connect shortlist · AI + Settings pinned at the bottom. This is
+         the ONE nav — workspace.ts owns it (selectSection toggles .as-nav-item
+         and the matching .ws-panel[data-section]). Sources is NOT here: the
+         Connect section below is Sources, in a better form. AI is a tool
+         button, not a place. -->
+    <aside id="app-sidebar" class="app-sidebar" aria-label="Navigation">
 
-      <div class="home-connect-group">
-        <div class="home-connect-h">To a file</div>
-        <button class="home-connect-item" type="button" data-source="file">
-          <span class="home-connect-dot home-dot-file" aria-hidden="true"></span>CSV, JSON or Excel
-        </button>
-        <button class="home-connect-item" type="button" data-source="paste">
-          <span class="home-connect-dot home-dot-paste" aria-hidden="true"></span>Paste data
-        </button>
-      </div>
-
-      <div class="home-connect-group">
-        <div class="home-connect-h">To a server</div>
-        <button class="home-connect-item" type="button" data-source="postgres">
-          <span class="home-connect-dot home-dot-pg" aria-hidden="true"></span>PostgreSQL
-        </button>
-        <button class="home-connect-item" type="button" data-source="url">
-          <span class="home-connect-dot home-dot-url" aria-hidden="true"></span>URL or API
-        </button>
-      </div>
-
-      <div class="home-connect-group">
-        <div class="home-connect-h">From your screen</div>
-        <!-- Screenchart is the name of this DATA SOURCE (screenshot capture), not of
-             the product — it survived the rename on purpose. Same at the Quick start
-             tile below. -->
-        <button class="home-connect-item" type="button" data-source="capture">
-          <span class="home-connect-dot home-dot-cap" aria-hidden="true"></span>Screenchart
-        </button>
-      </div>
-
-      <p class="home-connect-note">
-        Postgres, URL and Excel are read-only. Nothing leaves this machine.
-      </p>
-    </aside>
-
-    <!-- CENTRE: Open + Quick start -->
-    <div class="home-main">
-    <div class="home-head">
-      <div>
-        <h1 class="home-title">Open</h1>
-        <p class="home-sub">Open a project or start a new one.</p>
-      </div>
-      <div class="home-head-actions">
-        <input id="home-search" class="home-search" type="search" placeholder="Search projects"
-               aria-label="Search projects" autocomplete="off" />
-        <button id="home-new-project" class="btn btn-primary" type="button">New project</button>
-      </div>
-    </div>
-
-    <!-- PHASE 5 SPIKE — Svelte island host. Empty in the served HTML; the bundle
-         (loaded last, at the bottom of this file) mounts
-         renderer/hub/svelte/Island.svelte into it. That is the entire "island"
-         contract: a plain element the classic hub owns, and one bundled
-         component rendering inside it, next to vanilla UI that knows nothing
-         about it. Delete this host and the island simply does not appear.
-
-         GATED: the island only mounts when localStorage 'scSvelte' === '1'
-         (svelte/main.ts). It is developer evidence, not product — unflagged it
-         rendered a debug card with a tick counter and "not probed" at the top of
-         the Projects home screen, the first thing every user sees. The BUNDLE
-         still loads unflagged, so a broken or stale one stays a console error on
-         every launch rather than something only a flag-holder would notice.
-
-         Parked on the home view because it is the first screen `npm start`
-         shows; the real migration targets the workspace panels.
-         See docs/phase-5/01-toolchain.md. -->
-    <div id="svelte-island-host"></div>
-
-    <!-- populated by projects.js renderHomeGallery(); one .project-card per project -->
-    <div id="home-gallery" class="home-gallery"></div>
-
-    <!-- empty state, shown only when zero projects (toggled via [hidden]) -->
-    <div id="home-empty" class="home-empty" hidden>
-      <div class="home-empty-mark" aria-hidden="true">
-        <svg width="34" height="34" viewBox="0 0 24 24" fill="none">
-          <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2.2H19.5A1.5 1.5 0 0 1 21 9.7V18a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18z"
-            stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-        </svg>
-      </div>
-      <h2 class="home-empty-h">No projects yet</h2>
-      <p class="home-empty-sub">Pick a source on the left, or start a project and add data later.</p>
-      <button id="home-empty-new" class="btn btn-primary" type="button">New project</button>
-    </div>
-
-    <!-- Shown only when a search matches nothing. Separate from home-empty so
-         "you have no projects" and "your filter matched none" never read as
-         the same state. -->
-    <div id="home-noresults" class="home-empty" hidden>
-      <h2 class="home-empty-h">No matching projects</h2>
-      <p class="home-empty-sub">Nothing here matches that search.</p>
-    </div>
-
-    <!-- Quick start. Three tiles for the paths a new user most likely wants;
-         each is the same action as its Connect item, at a bigger target. -->
-    <div class="home-quick">
-      <h2 class="home-section-h">Quick start</h2>
-      <div class="home-quick-row">
-        <button class="home-tile" type="button" data-source="capture">
-          <span class="home-tile-name">Screenchart</span>
-          <span class="home-tile-sub">Read a chart or table off the screen</span>
-        </button>
-        <button class="home-tile" type="button" data-source="file">
-          <span class="home-tile-name">Import a file</span>
-          <span class="home-tile-sub">CSV, JSON or Excel — up to 1,000,000 rows</span>
-        </button>
-        <button class="home-tile" type="button" data-source="postgres">
-          <span class="home-tile-name">Connect Postgres</span>
-          <span class="home-tile-sub">Read-only, with a row cap and a timeout</span>
-        </button>
-      </div>
-    </div>
-    </div><!-- /home-main -->
-
-    <!-- RIGHT: Discover. Deliberately LOCAL — no feed, no external fetch.
-         Local-first is a product promise, so this panel is filled from config
-         the app already has (projects.ts fillDiscover). -->
-    <aside class="home-discover" aria-label="Discover">
-      <h2 class="home-discover-title">Discover</h2>
-
-      <div class="home-disc-card">
-        <div class="home-disc-h">Capture anything on screen</div>
-        <p class="home-disc-p">
-          Press <kbd id="home-disc-hotkey" class="home-kbd">⌘⌥S</kbd> anywhere to grab a region.
-          The app computes every number itself — a model only reads the picture.
-        </p>
-      </div>
-
-      <div class="home-disc-card">
-        <div class="home-disc-h">AI is optional</div>
-        <p class="home-disc-p" id="home-disc-ai">Checking…</p>
-        <button class="home-disc-link" type="button" id="home-disc-settings">Open settings</button>
-      </div>
-
-      <div class="home-disc-card">
-        <div class="home-disc-h">Your data stays here</div>
-        <p class="home-disc-p">
-          Projects live on this machine. The only network call is map tiles, and
-          only when a map is on screen.
-        </p>
-      </div>
-    </aside>
-  </section>
-
-  <!-- ── hub body ──────────────────────────────────────────────────── -->
-  <div class="hub-body" data-section="sources">
-
-    <!-- ── workspace left nav ───────────────────────────────────── -->
-    <nav id="workspace-nav" class="ws-nav" aria-label="Project sections">
-      <button id="ws-back-home" class="ws-back" type="button" aria-label="Back to projects">
+      <!-- search — pinned above the nav, searches everything (phase: search) -->
+      <div class="as-search">
         <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M20 20l-3.6-3.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
         </svg>
-        Projects
-      </button>
-      <div id="ws-project-name" class="ws-project-name">Project name</div>
-      <div class="ws-nav-list">
-        <button class="ws-nav-item active" type="button" data-section="sources">Sources</button>
-        <button class="ws-nav-item"        type="button" data-section="datasets">Datasets</button>
-        <button class="ws-nav-item"        type="button" data-section="visuals">Visuals</button>
-        <button class="ws-nav-item"        type="button" data-section="analyses">Analyses</button>
-        <button class="ws-nav-item"        type="button" data-section="dashboards">Dashboards</button>
-        <button class="ws-nav-item"        type="button" data-section="ai">AI <span class="ws-badge">optional</span></button>
+        <input id="global-search" class="as-search-input" type="search" placeholder="Search"
+          aria-label="Search datasets, analyses, dashboards and connectors"
+          autocomplete="off" spellcheck="false" />
       </div>
-    </nav>
+      <div id="global-search-results" class="as-search-results" hidden></div>
+
+      <!-- primary nav -->
+      <nav class="as-nav" aria-label="Sections">
+        <button class="as-nav-item active" type="button" data-section="home">
+          <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 11.5 12 5l8 6.5M6 10v9h12v-9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>Home</span>
+        </button>
+        <button class="as-nav-item" type="button" data-section="datasets">
+          <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <ellipse cx="12" cy="6" rx="7" ry="3" stroke="currentColor" stroke-width="1.7"/>
+            <path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" stroke="currentColor" stroke-width="1.7"/>
+          </svg>
+          <span>Data</span>
+        </button>
+        <button class="as-nav-item" type="button" data-section="visuals">
+          <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="4" y="12" width="4" height="7" rx="1" fill="currentColor"/>
+            <rect x="10" y="7" width="4" height="12" rx="1" fill="currentColor"/>
+            <rect x="16" y="14" width="4" height="5" rx="1" fill="currentColor"/>
+          </svg>
+          <span>Visuals</span>
+        </button>
+        <button class="as-nav-item" type="button" data-section="analyses">
+          <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="1.7"/>
+            <path d="M8 14v3M12 10v7M16 8v9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+          <span>Analyses</span>
+        </button>
+        <button class="as-nav-item" type="button" data-section="dashboards">
+          <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="4" y="4" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.7"/>
+            <rect x="13" y="4" width="7" height="4" rx="1.5" stroke="currentColor" stroke-width="1.7"/>
+            <rect x="4" y="13" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.7"/>
+            <rect x="13" y="10" width="7" height="10" rx="1.5" stroke="currentColor" stroke-width="1.7"/>
+          </svg>
+          <span>Dashboards</span>
+        </button>
+      </nav>
+
+      <div class="as-divider"></div>
+
+      <!-- Connect: a deliberate five-source shortlist + a door to the full
+           catalog. This IS Sources. Count on More… is filled from the live
+           connectors:catalog in a later phase. -->
+      <div class="as-connect">
+        <div class="as-section-h">Connect</div>
+        <button class="as-connect-item" type="button" data-source="file">
+          <span class="as-dot as-dot-1" aria-hidden="true"></span>CSV / Excel
+        </button>
+        <button class="as-connect-item" type="button" data-source="paste">
+          <span class="as-dot as-dot-2" aria-hidden="true"></span>Paste data
+        </button>
+        <button class="as-connect-item" type="button" data-source="postgres">
+          <span class="as-dot as-dot-3" aria-hidden="true"></span>PostgreSQL
+        </button>
+        <button class="as-connect-item" type="button" data-source="mysql">
+          <span class="as-dot as-dot-4" aria-hidden="true"></span>MySQL
+        </button>
+        <button class="as-connect-item" type="button" data-source="capture">
+          <span class="as-dot as-dot-5" aria-hidden="true"></span>Screenshot
+        </button>
+        <button class="as-connect-more" id="as-connect-more" type="button">
+          More<span class="as-count" id="as-connect-count"></span>
+        </button>
+      </div>
+
+      <!-- bottom: AI (a tool, opens copilot over the current view) + Settings.
+           #exec-mode-btn and #settings-gear moved here from the titlebar; ids
+           kept so their existing hub.ts wiring is untouched. -->
+      <div class="as-bottom">
+        <button id="side-ai-btn" class="as-tool" type="button">
+          <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3Z" fill="currentColor"/>
+            <path d="M18.5 14l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8Z" fill="currentColor"/>
+          </svg>
+          <span>AI</span>
+        </button>
+        <div class="as-bottom-row">
+          <button id="exec-mode-btn" class="as-icon-btn" type="button"
+            aria-haspopup="true" aria-expanded="false" aria-label="Execution mode">
+            <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect width="16" height="16" x="4" y="4" rx="2"/>
+              <rect width="6" height="6" x="9" y="9" rx="1"/>
+              <path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/>
+              <path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/>
+            </svg>
+          </button>
+          <button id="settings-gear" class="as-tool as-tool--grow" type="button"
+            aria-haspopup="true" aria-expanded="false" aria-label="Settings menu">
+            <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
+                stroke="currentColor" stroke-width="1.7"/>
+            </svg>
+            <span>Settings</span>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── home section — recent / starred, or first-run quick start ──
+         A .ws-panel like the others, toggled by selectSection('home'). Starred
+         (phase 3) and Recent (phase 2) fill in later; until then the first-run
+         block is what shows. -->
+    <section class="ws-panel home-panel" id="home-view" data-section="home">
+      <div class="home-scroll">
+        <div class="home-head">
+          <h1 class="home-title">Home</h1>
+          <button id="home-new-project" class="btn btn-primary" type="button">New project</button>
+        </div>
+
+        <!-- PHASE 5 SPIKE — Svelte island host. Empty in the served HTML; the
+             bundle mounts renderer/hub/svelte/Island.svelte here only when
+             localStorage 'scSvelte' === '1' (default off — developer evidence,
+             not product). Parked on Home because it is the first screen
+             `npm start` shows. See docs/phase-5/01-toolchain.md. -->
+        <div id="svelte-island-host"></div>
+
+        <!-- Starred — hidden entirely until something is starred (phase 3). -->
+        <section class="home-sec" id="home-starred" hidden>
+          <h2 class="home-sec-h">Starred</h2>
+          <div class="home-rows" id="home-starred-rows"></div>
+        </section>
+
+        <!-- Recent — cross-project, filled by phase 2. -->
+        <section class="home-sec" id="home-recent" hidden>
+          <h2 class="home-sec-h">Recent</h2>
+          <div class="home-rows" id="home-recent-rows"></div>
+          <button class="home-showall" id="home-showall" type="button" hidden>Show all →</button>
+        </section>
+
+        <!-- First-run: the three quick-start doors plus a one-line Discover.
+             Shown when there is nothing recent or starred to show. -->
+        <div class="home-firstrun" id="home-firstrun">
+          <div class="home-quick-row">
+            <button class="home-tile" type="button" data-source="capture">
+              <span class="home-tile-name">Screenshot</span>
+              <span class="home-tile-sub">Read a chart or table off the screen</span>
+            </button>
+            <button class="home-tile" type="button" data-source="file">
+              <span class="home-tile-name">Import a file</span>
+              <span class="home-tile-sub">CSV, JSON or Excel — up to 1,000,000 rows</span>
+            </button>
+            <button class="home-tile" type="button" data-source="postgres">
+              <span class="home-tile-name">Connect Postgres</span>
+              <span class="home-tile-sub">Read-only, with a row cap and a timeout</span>
+            </button>
+          </div>
+          <p class="home-discover-line">
+            Press <kbd id="home-disc-hotkey" class="home-kbd">⌘⌥S</kbd> to capture anything on screen.
+            <span id="home-disc-ai">AI is optional.</span>
+            Your data stays on this machine.
+          </p>
+        </div>
+      </div>
+    </section>
 
     <!-- ── sidebar ──────────────────────────────────────────────── -->
     <aside class="sidebar">

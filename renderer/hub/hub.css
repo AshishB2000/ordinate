@@ -3950,11 +3950,221 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
    style= but attribute + class changes are fine). The existing sidebar+main are
    the Sources section and are shown unchanged. */
 
-/* ── view toggle (home vs workspace) ──────────────────────────────────────── */
-#home-view { display: none; }
-.win[data-view="home"] #home-view { display: grid; }
-.win[data-view="home"] .hub-body { display: none; }
-.win[data-view="workspace"] #home-view { display: none; }
+/* ══ App shell: persistent sidebar + section stage ═════════════════════════
+   The sidebar (search · nav · connect · AI · settings) is ALWAYS present; the
+   stage swaps by .hub-body[data-section] and Home is just another .ws-panel,
+   so there is no view toggle — JS flips the attribute/classes only (CSP-safe).
+   The legacy .home-view / .home-connect / .home-discover / .ws-nav /
+   .project-card rules further down no longer match any element and are inert;
+   they are removed in a later cleanup, not load-bearing here. */
+
+/* ── persistent sidebar ─────────────────────────────────────────────────── */
+.app-sidebar {
+  width: 210px;
+  flex: 0 0 210px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 10px 12px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+}
+
+/* search — pinned above the nav */
+.as-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 9px;
+  margin-bottom: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text-faint);
+}
+.as-search .ic { flex: 0 0 auto; }
+.as-search:focus-within { border-color: var(--accent); }
+.as-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.as-search-input::placeholder { color: var(--text-faint); }
+
+/* search results dropdown (populated by the search wiring in a later phase) */
+.as-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 260px;
+  overflow-y: auto;
+  margin: -2px 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.as-search-results[hidden] { display: none; }
+
+/* primary nav */
+.as-nav { display: flex; flex-direction: column; gap: 2px; }
+.as-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+  padding: 7px 9px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.as-nav-item .ic { flex: 0 0 auto; color: var(--text-faint); }
+.as-nav-item:hover { background: var(--surface-2); color: var(--text); }
+.as-nav-item:hover .ic { color: var(--muted); }
+.as-nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.as-nav-item.active .ic { color: var(--accent); }
+.as-nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.as-divider { height: 1px; background: var(--border); margin: 8px 2px; }
+
+/* Connect shortlist + a door to the full catalog */
+.as-connect { display: flex; flex-direction: column; gap: 1px; }
+.as-section-h {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding: 0 9px 5px;
+}
+.as-connect-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+  padding: 6px 9px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.as-connect-item:hover { background: var(--surface-2); color: var(--text-strong); }
+.as-connect-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.as-dot { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; background: var(--accent); }
+.as-dot-2 { opacity: 0.72; }
+.as-dot-3 { opacity: 0.85; }
+.as-dot-4 { opacity: 0.6; }
+.as-dot-5 { opacity: 0.95; }
+.as-connect-more {
+  align-self: flex-start;
+  margin: 3px 0 0 26px;
+  padding: 3px 4px;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.as-connect-more:hover { text-decoration: underline; }
+.as-count::before { content: " "; }
+
+/* bottom tools — AI + settings, pinned to the base */
+.as-bottom {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.as-bottom-row { display: flex; align-items: center; gap: 4px; }
+.as-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 9px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.as-tool .ic { flex: 0 0 auto; }
+.as-tool:hover { background: var(--surface-2); color: var(--text); }
+.as-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.as-tool--grow { flex: 1 1 auto; }
+.as-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.as-icon-btn:hover { background: var(--surface-2); color: var(--text); }
+.as-icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.as-icon-btn img { width: 16px; height: 16px; border-radius: 3px; }
+
+/* ── HOME section — recent / starred, over a first-run quick start ────────── */
+.home-panel { overflow: hidden; }
+.home-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 22px 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.home-sec { display: flex; flex-direction: column; gap: 10px; }
+.home-sec[hidden] { display: none; }
+.home-sec-h { font-size: 13px; font-weight: 600; color: var(--text-strong); margin: 0; }
+.home-rows {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.home-showall {
+  align-self: flex-end;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.home-showall[hidden] { display: none; }
+.home-showall:hover { text-decoration: underline; }
+.home-firstrun { display: flex; flex-direction: column; gap: 16px; }
+.home-firstrun[hidden] { display: none; }
+.home-discover-line { font-size: 12.5px; line-height: 1.6; color: var(--muted); margin: 0; }
 
 /* ── HOME: the start page ─────────────────────────────────────────────────
    Three panes: Connect rail | Open + Quick start | Discover. The rail and the
@@ -7698,7 +7908,10 @@ body.an-grabbing { user-select: none; cursor: grabbing; }
 /* ── Focus mode: an open analysis owns the window ────────────────────────────
    The reference has no project nav while you author — the panels and the sheet
    get the full width. "‹ Back" in the editor head is the way out. */
-body.an-focus .ws-nav { display: none; }
+body.an-focus .ws-nav,
+/* The persistent sidebar steps aside while authoring an analysis, just as the
+   old project nav did — focus mode gives the sheet the whole window. */
+body.an-focus .app-sidebar { display: none; }
 body.an-focus .hub-body { padding: 0; }
 body.an-focus #ws-analyses { padding: 0; }
 /* The titlebar is the frameless window's drag region and holds the macOS traffic

@@ -269,16 +269,12 @@ function runSourceAction(kind: string): void {
     if (box) { box.scrollIntoView({ block: 'center' }); box.focus(); }
     return;
   }
-  if (kind === 'postgres' || kind === 'url') {
-    // Open the connect panel and preselect the kind, so the rail's two server
-    // entries actually land somewhere different from each other.
+  if (kind === 'postgres' || kind === 'url' || kind === 'mysql' || kind === 'catalog') {
+    // Open the connect panel — it IS the connectors:catalog picker now, so the
+    // server shortlist entries and "More…" all land on the same searchable
+    // catalog (connections.ts owns which connector is preselected/searched).
     const open = document.getElementById('conn-connect-btn') as HTMLButtonElement | null;
     if (open) open.click();
-    const sel = document.getElementById('conn-kind-select') as HTMLSelectElement | null;
-    if (sel) {
-      sel.value = kind;
-      sel.dispatchEvent(new Event('change', { bubbles: true }));
-    }
   }
 }
 
@@ -328,31 +324,24 @@ async function fillDiscover(): Promise<void> {
   }
 }
 
-// Wire the start page and paint the initial gallery.
+// Wire the Home section and the persistent sidebar's source entries.
 function initHome(): void {
   const newBtn = document.getElementById('home-new-project');
   if (newBtn) newBtn.addEventListener('click', () => handleNewProject());
-  const emptyNew = document.getElementById('home-empty-new');
-  if (emptyNew) emptyNew.addEventListener('click', () => handleNewProject());
 
-  // One listener covers the rail AND the tiles — both carry data-source.
-  document.querySelectorAll('#home-view [data-source]').forEach((el) => {
+  // One listener covers the sidebar Connect items AND the first-run tiles —
+  // both carry data-source, wherever they live in the DOM.
+  document.querySelectorAll('[data-source]').forEach((el) => {
     el.addEventListener('click', () => {
       const kind = (el as HTMLElement).dataset.source || '';
       if (kind) startFromSource(kind);
     });
   });
 
-  const search = document.getElementById('home-search');
-  if (search) search.addEventListener('input', () => applyHomeSearch());
-
-  const settings = document.getElementById('home-disc-settings');
-  if (settings) {
-    settings.addEventListener('click', () => {
-      if (typeof showSettingsPanel === 'function') showSettingsPanel(); // hub.ts
-    });
-  }
+  // "More…" opens the full data-source catalog (the connect panel), resolving a
+  // project first like any other source.
+  const more = document.getElementById('as-connect-more');
+  if (more) more.addEventListener('click', () => startFromSource('catalog'));
 
   fillDiscover();
-  renderHomeGallery();
 }
