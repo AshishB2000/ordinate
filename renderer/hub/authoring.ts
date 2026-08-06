@@ -796,10 +796,14 @@ function anWireCards(): void {
       gear.className = 'an-card-props';
       gear.title = 'Properties';
       gear.setAttribute('aria-label', 'Card properties');
+      // Sliders, not a cogwheel: a circle ringed by radial ticks is the
+      // universal BRIGHTNESS glyph and read as one on the sheet. This is the
+      // same mark the old props rail button used, so the vocabulary is unchanged.
       gear.innerHTML =
-        '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>'
-        + '<path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6"'
-        + ' stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>';
+        '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">'
+        + '<path d="M5 7h14M5 12h14M5 17h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'
+        + '<circle cx="9" cy="7" r="2" fill="currentColor"/><circle cx="15" cy="12" r="2" fill="currentColor"/>'
+        + '<circle cx="8" cy="17" r="2" fill="currentColor"/></svg>';
       gear.addEventListener('pointerdown', (e) => e.stopPropagation()); // not a drag
       gear.addEventListener('click', (e) => {
         e.stopPropagation();

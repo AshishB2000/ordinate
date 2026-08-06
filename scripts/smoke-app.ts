@@ -743,6 +743,14 @@ async function main(): Promise<void> {
      JSON.stringify({ left: bench.leftShut, right: bench.rightShut,
                       sheet: bench.sheetW, win: bench.winW }));
 
+  // The resting state is the claim this whole surface makes — top strip, rail,
+  // sheet, nothing else — so photograph it before anything opens a flyout.
+  const restShot = path.join(shotDir, 'analysis-at-rest.png');
+  await win.screenshot({ path: restShot });
+  ok('analysis at-rest screenshot captured',
+     fs.existsSync(restShot) && fs.statSync(restShot).size > 5000,
+     `${Math.round(fs.statSync(restShot).size / 1024)} KB -> ${restShot}`);
+
   // ── The tool rail ─────────────────────────────────────────────────────────
   // Icon-only chrome is where dead controls hide: nothing labels them, so a
   // button wired to nothing looks identical to one that works. Assert every
