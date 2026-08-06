@@ -284,6 +284,10 @@ declare global {
       setCopilotEnabled(enabled: boolean): Promise<any>;
       providerLogos: Record<string, { path: string; color: string; title: string }>;
       agentLogos: Record<string, string>;
+      connectorLogos: Record<string,
+        { path: string; color: string; title: string } |
+        { src: string; title: string }
+      >;
       appVersion: string;
     };
 

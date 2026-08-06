@@ -22,6 +22,31 @@ export const PROVIDER_SI: Record<string, string> = {
   // gateway (generic), grok (xAI), antigravity (Google).
 };
 
+export const CONNECTOR_SI: Record<string, string> = {
+  postgres: 'siPostgresql',
+  cockroachdb: 'siCockroachlabs',
+  timescaledb: 'siTimescale',
+  mysql: 'siMysql',
+  mariadb: 'siMariadb',
+  tidb: 'siTidb',
+  planetscale: 'siPlanetscale',
+  alloydb: 'siGooglecloud',
+  neon: 'siNeon',
+  supabase: 'siSupabase',
+  singlestore: 'siSinglestore',
+  doris: 'siApachedoris',
+  clickhouse: 'siClickhouse',
+  'databricks-sql': 'siDatabricks',
+  trino: 'siTrino',
+  presto: 'siPresto',
+  elasticsearch: 'siElasticsearch',
+  opensearch: 'siOpensearch',
+  druid: 'siApachedruid',
+  'duckdb-file': 'siDuckdb',
+  'parquet-folder': 'siApacheparquet',
+  url: 'siJson',
+};
+
 // Relative luminance (WCAG) of a 6-hex color, 0 (black) … 1 (white).
 export function relLuminance(hex: string): number {
   const n = parseInt(hex, 16);
@@ -44,14 +69,17 @@ export function safeColor(hex: string): string {
 
 // providerId → { path, color, title, export } for providers with a real icon.
 //
-// Read from a COMMITTED asset, not from simple-icons at runtime. The six icons
-// here are ~12 KB of path data; depending on the package shipped 25 MB into the
-// bundle to get them. simple-icons is now a devDependency and
+// Read from a COMMITTED asset, not from simple-icons at runtime. The provider
+// and connector marks are ~41 KB of path data; depending on the package shipped
+// 25 MB into the bundle to get them. simple-icons is now a devDependency and
 // `npm run build:icons` bakes assets/provider-icons.json — the same
 // committed-build-artifact pattern as renderer/hub/vendor/. The generator fails
 // loudly when an upstream export disappears, so a missing icon is a build error
 // rather than a badge that silently replaces a logo.
 const ICON_ASSET = path.join(__dirname, '..', 'assets', 'provider-icons.json');
+
+export type BrandGlyph = { path: string; color: string; title: string; export: string };
+export type BrandImage = { src: string; title: string };
 
 export const providerLogos = (() => {
   const out: Record<string, { path: string; color: string; title: string; export: string }> = {};
@@ -63,6 +91,33 @@ export const providerLogos = (() => {
       if (ic && ic.path) out[id] = { path: ic.path, color: safeColor(ic.hex), title: ic.title, export: ic.export };
     }
   } catch (_) { /* icons optional — renderer falls back to badges */ }
+  return out;
+})();
+
+const CONNECTOR_DIR = path.join(__dirname, '..', 'renderer', 'hub', 'assets', 'connectors');
+
+export const connectorLogos = (() => {
+  const out: Record<string, BrandGlyph | BrandImage> = {};
+  try {
+    const raw = JSON.parse(fs.readFileSync(ICON_ASSET, 'utf8'));
+    const entries = (raw && raw.icons) || {};
+    for (const id of Object.keys(CONNECTOR_SI)) {
+      const ic = entries[id];
+      if (ic?.path) out[id] = {
+        path: ic.path, color: safeColor(ic.hex), title: ic.title, export: ic.export,
+      };
+    }
+  } catch (_) { /* renderer falls back to badges */ }
+  try {
+    for (const file of fs.readdirSync(CONNECTOR_DIR)) {
+      const match = /^(.+)\.(svg|png)$/i.exec(file);
+      if (!match) continue;
+      const ext = match[2].toLowerCase();
+      const mime = ext === 'svg' ? 'image/svg+xml' : 'image/png';
+      const src = `data:${mime};base64,` + fs.readFileSync(path.join(CONNECTOR_DIR, file)).toString('base64');
+      out[match[1].toLowerCase()] = { src, title: match[1] };
+    }
+  } catch (_) { /* renderer falls back to badges */ }
   return out;
 })();
 

@@ -1,5 +1,5 @@
 import { ipcMain, shell, app } from 'electron';
-import { providerLogos, agentLogos } from '../icons';
+import { providerLogos, agentLogos, connectorLogos } from '../icons';
 
 // Shell / logos IPC — synchronous brand-glyph payloads for the sandboxed hub
 // preload, external-URL opening, and the macOS System-Settings deep links.
@@ -9,6 +9,7 @@ export function register() {
   // pulls the brand glyph paths from main at load time (tiny one-shot payload).
   ipcMain.on('provider:logos', (e) => { e.returnValue = providerLogos; });
   ipcMain.on('agent:logos', (e) => { e.returnValue = agentLogos; });
+  ipcMain.on('connector:logos', (e) => { e.returnValue = connectorLogos; });
 
   // App version straight from package.json (via app.getVersion), read once by the
   // hub preload at load. Keeps the About panel's version dynamic — never hardcoded.

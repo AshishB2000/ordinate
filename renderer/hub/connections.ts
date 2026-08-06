@@ -118,6 +118,10 @@ const connDraftValues: Record<string, Record<string, unknown>> = {};
 
 const CONN_PREVIEW_ROWS = 500; // display-only slice (full capped rows stay in connRunPreview)
 
+type ConnLogo = { path?: string; color?: string; title?: string; src?: string };
+const CONN_LOGOS: Record<string, ConnLogo> =
+  (window.hub && window.hub.connectorLogos) || {};
+
 // ── Small DOM helpers ────────────────────────────────────────────────────────
 function connEl(id: string): HTMLElement | null {
   return document.getElementById(id);
@@ -328,23 +332,76 @@ function connRenderPicker(): void {
   }
 }
 
+function connInitials(label: string): string {
+  const words = label.replace(/\([^)]*\)/g, '').trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '?';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
+
+function connMakeLogo(d: ConnDef): HTMLElement {
+  const host = document.createElement('span');
+  host.className = 'conn-logo';
+  host.setAttribute('aria-hidden', 'true');
+  const logo = CONN_LOGOS[d.id];
+  if (logo?.src) {
+    const img = document.createElement('img');
+    img.addEventListener('error', () => {
+      const currentHost = img.parentElement;
+      if (!(currentHost instanceof HTMLElement)) return;
+      currentHost.replaceChildren();
+      currentHost.classList.add('conn-logo-fallback');
+      currentHost.textContent = connInitials(d.label);
+    }, { once: true });
+    img.src = logo.src;
+    img.alt = '';
+    host.appendChild(img);
+  } else if (logo?.path) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', logo.path);
+    path.setAttribute('fill', logo.color || 'currentColor');
+    svg.appendChild(path);
+    host.appendChild(svg);
+  } else {
+    host.classList.add('conn-logo-fallback');
+    host.textContent = connInitials(d.label);
+  }
+  return host;
+}
+
+function connRenderChosenLogo(d: ConnDef): void {
+  const host = connEl('conn-chosen-logo');
+  if (!host) return;
+  const logo = connMakeLogo(d);
+  host.replaceChildren(...logo.childNodes);
+  host.className = logo.className;
+  host.setAttribute('aria-hidden', 'true');
+}
+
 function connMakeTile(d: ConnDef): HTMLElement {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'conn-tile';
   btn.dataset.connectorId = d.id;
 
+  btn.appendChild(connMakeLogo(d));
+  const copy = document.createElement('span');
+  copy.className = 'conn-tile-copy';
+
   const label = document.createElement('span');
   label.className = 'conn-tile-label';
   label.textContent = d.label; // textContent — a label is never HTML
-  btn.appendChild(label);
+  copy.appendChild(label);
 
   if (d.blurb) {
     const blurb = document.createElement('span');
     blurb.className = 'conn-tile-blurb';
     blurb.textContent = d.blurb;
-    btn.appendChild(blurb);
+    copy.appendChild(blurb);
   }
+  btn.appendChild(copy);
   // A <button> already answers Enter and Space; the arrow keys are wired once on
   // the container in initConnections.
   btn.addEventListener('click', () => connSelectConnector(d, connDraftValues[d.id]));
@@ -373,6 +430,7 @@ function connPickerKeydown(e: KeyboardEvent): void {
 
 // ── Step 2: the generic form ─────────────────────────────────────────────────
 function connSelectConnector(d: ConnDef, values?: Record<string, unknown>): void {
+  connRenderChosenLogo(d);
   connSetError('');
   connSelected = d;
 

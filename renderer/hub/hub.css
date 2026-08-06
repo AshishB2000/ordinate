@@ -6907,9 +6907,9 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 }
 .conn-tile {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
   min-width: 0;
   padding: 10px 12px;
   text-align: left;
@@ -6919,6 +6919,44 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   cursor: pointer;
   color: var(--text-strong);
   font: inherit;
+}
+.conn-logo {
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  box-sizing: border-box;
+  padding: 8px;
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--muted);
+  overflow: hidden;
+}
+.conn-logo svg,
+.conn-logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.conn-logo-fallback {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.conn-tile-copy,
+.conn-chosen-ident {
+  display: flex;
+  min-width: 0;
+}
+.conn-tile-copy {
+  flex-direction: column;
+  gap: 3px;
+}
+.conn-chosen-ident {
+  align-items: center;
+  gap: 10px;
 }
 .conn-tile:hover {
   background: var(--surface-2);

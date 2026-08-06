@@ -12,6 +12,8 @@ try { PROVIDER_LOGOS = ipcRenderer.sendSync('provider:logos') || {}; } catch (_)
 // Full-color agent logos (data URIs) for marks not in simple-icons (e.g. Antigravity).
 let AGENT_LOGOS: any = {};
 try { AGENT_LOGOS = ipcRenderer.sendSync('agent:logos') || {}; } catch (_) { AGENT_LOGOS = {}; }
+let CONNECTOR_LOGOS: any = {};
+try { CONNECTOR_LOGOS = ipcRenderer.sendSync('connector:logos') || {}; } catch (_) { CONNECTOR_LOGOS = {}; }
 // App version (from package.json via app.getVersion) — read once for the About panel.
 let APP_VERSION = '';
 try { APP_VERSION = ipcRenderer.sendSync('app:version') || ''; } catch (_) { APP_VERSION = ''; }
@@ -451,6 +453,7 @@ contextBridge.exposeInMainWorld('hub', {
   providerLogos: PROVIDER_LOGOS,
   // Static map of { agentId: dataUri } for full-color logos (no keys).
   agentLogos: AGENT_LOGOS,
+  connectorLogos: CONNECTOR_LOGOS,
   // App version string (e.g. "0.1.0") from package.json — for the About panel.
   appVersion: APP_VERSION,
 });

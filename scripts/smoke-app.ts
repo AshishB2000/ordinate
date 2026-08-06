@@ -294,6 +294,68 @@ async function main(): Promise<void> {
     })
     .catch(() => {});
 
+  await win.evaluate(async () => {
+    await (window as any).openConnPanel();
+    (window as any).selectSection('sources');
+  });
+  await win.waitForTimeout(300);
+
+  const logoPicker = await win.evaluate(() => {
+    const tiles = [...document.querySelectorAll<HTMLButtonElement>('.conn-tile')];
+    const byId = (id: string) => document.querySelector<HTMLButtonElement>(`.conn-tile[data-connector-id="${id}"]`);
+    const redshift = byId('amazon-redshift');
+    const postgres = byId('postgres');
+    const sqlserver = byId('sqlserver');
+    return {
+      count: tiles.length,
+      everyTileHasLogo: tiles.every((tile) => !!tile.querySelector('.conn-logo')),
+      redshiftIsImage: !!redshift?.querySelector('.conn-logo img[src^="data:image/png;base64,"]'),
+      postgresIsSvg: !!postgres?.querySelector('.conn-logo svg path'),
+      sqlserverFallback: sqlserver?.querySelector('.conn-logo-fallback')?.textContent || '',
+      logosDecorative: tiles.every((tile) => tile.querySelector('.conn-logo')?.getAttribute('aria-hidden') === 'true'),
+    };
+  });
+  ok('all 35 connector tiles have a logo block', logoPicker.count === 35 && logoPicker.everyTileHasLogo, JSON.stringify(logoPicker));
+  ok('Redshift uses the supplied image and PostgreSQL uses a bundled glyph',
+    logoPicker.redshiftIsImage && logoPicker.postgresIsSvg, JSON.stringify(logoPicker));
+  ok('an unmapped source gets a deterministic fallback badge', logoPicker.sqlserverFallback === 'MS', logoPicker.sqlserverFallback);
+  ok('connector logos are decorative', logoPicker.logosDecorative);
+
+  const brokenImageFallback = await win.evaluate(() => {
+    const redshiftLogo = document.querySelector<HTMLElement>(
+      '.conn-tile[data-connector-id="amazon-redshift"] .conn-logo',
+    );
+    redshiftLogo?.querySelector('img')?.dispatchEvent(new Event('error'));
+    return {
+      isFallback: redshiftLogo?.classList.contains('conn-logo-fallback') || false,
+      text: redshiftLogo?.textContent || '',
+      hasImage: !!redshiftLogo?.querySelector('img'),
+    };
+  });
+  ok('a malformed connector image falls back to deterministic initials',
+    brokenImageFallback.isFallback && brokenImageFallback.text === 'AR' && !brokenImageFallback.hasImage,
+    JSON.stringify(brokenImageFallback));
+
+  await win.click('.conn-tile[data-connector-id="amazon-redshift"]');
+  const chosenHasLogo = await win.evaluate(() =>
+    !!document.querySelector('#conn-chosen-logo img[src^="data:image/png;base64,"]'));
+  ok('the selected-source header repeats its logo', chosenHasLogo);
+  const brokenChosenImageFallback = await win.evaluate(() => {
+    const chosenLogo = document.querySelector<HTMLElement>('#conn-chosen-logo');
+    chosenLogo?.querySelector('img')?.dispatchEvent(new Event('error'));
+    return {
+      isFallback: chosenLogo?.classList.contains('conn-logo-fallback') || false,
+      text: chosenLogo?.textContent || '',
+      hasImage: !!chosenLogo?.querySelector('img'),
+    };
+  });
+  ok('a malformed selected-source image falls back to deterministic initials',
+    brokenChosenImageFallback.isFallback && brokenChosenImageFallback.text === 'AR' &&
+      !brokenChosenImageFallback.hasImage,
+    JSON.stringify(brokenChosenImageFallback));
+  await win.click('#conn-close-btn');
+  await win.evaluate(() => { (window as any).selectSection('home'); });
+
   // ── Home view coverage (regression guard) ─────────────────────────────────
   // The persistent sidebar is the FIRST thing every user sees, yet nothing here
   // ever clicked it — the suite reloaded then drove the workspace via
