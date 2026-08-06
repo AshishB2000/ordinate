@@ -220,6 +220,41 @@ async function main(): Promise<void> {
     })
     .catch(() => {});
 
+  // ── Home view coverage (regression guard) ─────────────────────────────────
+  // The persistent sidebar is the FIRST thing every user sees, yet nothing here
+  // ever clicked it — the suite reloaded then drove the workspace via
+  // openWorkspace(), so a home whose controls were all bound to stale selectors
+  // would ship GREEN. A real inconsistent/stale build does exactly that, and
+  // silently (no console error). So click REAL controls and assert each produces
+  // its effect. A dead (unbound) or covered (overlay) button leaves the effect
+  // absent, which fails loudly here.
+  const homeSection = () =>
+    win.evaluate(() => document.querySelector('.hub-body')?.getAttribute('data-section'));
+
+  await win.click('#settings-gear', { timeout: 4000 }).catch(() => {});
+  await win.waitForTimeout(300);
+  const settingsOpened = await win.evaluate(() => {
+    const m = document.getElementById('settings-menu');
+    return !!m && m.hidden === false;
+  });
+  ok('home: the Settings gear opens its menu', settingsOpened);
+  await win.keyboard.press('Escape').catch(() => {});
+  await win.waitForTimeout(200);
+
+  await win.click('.as-nav-item[data-section="visuals"]', { timeout: 4000 }).catch(() => {});
+  await win.waitForTimeout(400);
+  const navSection = await homeSection();
+  ok('home: a sidebar nav item switches the section', navSection === 'visuals', `section=${navSection}`);
+
+  await win.click('#side-ai-btn', { timeout: 4000 }).catch(() => {});
+  await win.waitForTimeout(400);
+  const aiSection = await homeSection();
+  ok('home: the AI tool button opens the AI section', aiSection === 'ai', `section=${aiSection}`);
+
+  // Back to Home so the project-open flow below starts from a clean state.
+  await win.click('.as-nav-item[data-section="home"]', { timeout: 4000 }).catch(() => {});
+  await win.waitForTimeout(300);
+
   // Projects are no longer the front door — there is no card to click. Open the
   // project through openWorkspace(), the same renderer entry point the app uses
   // when a Recent item is opened, then navigate to Data via the sidebar nav.
