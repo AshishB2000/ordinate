@@ -466,6 +466,22 @@ async function openRecentItem(it: any): Promise<void> {
   }
 }
 
+// Fill the Connect "More…" count from the LIVE connectors:catalog, never a
+// literal — the shortlist is five, but the real number of sources is whatever
+// the registry currently exposes. connections.ts owns the same contract and
+// degrades gracefully; here a missing/failing catalog just leaves "More…" bare.
+async function fillConnectorCount(): Promise<void> {
+  const countEl = document.getElementById('as-connect-count');
+  if (!countEl) return;
+  try {
+    const cat = await window.hub.connectorCatalog();
+    const n = Array.isArray(cat) ? cat.length : 0;
+    if (n > 0) countEl.textContent = String(n);
+  } catch (_) {
+    /* leave "More…" without a count if the catalog channel is unavailable */
+  }
+}
+
 // Wire the Home section and the persistent sidebar's source entries.
 function initHome(): void {
   const newBtn = document.getElementById('home-new-project');
@@ -494,5 +510,6 @@ function initHome(): void {
   }
 
   fillDiscover();
+  fillConnectorCount();
   renderRecent();
 }
