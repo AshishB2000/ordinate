@@ -4360,37 +4360,55 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
 }
+/* First-run cards. Two columns; the capture card is the hero and spans both,
+   because screen capture is the one thing no other BI tool does. Each card is a
+   real button wired by data-source to the same action as the sidebar Connect
+   entries. Art is inline SVG drawn with currentColor + --accent so one asset
+   serves both themes (CSP allows no external image and no inline style). */
 .home-quick-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
-.home-tile {
+.home-card {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  padding: 12px 14px 14px;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 16px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--accent-line);
-  border-radius: 10px;
+  border-radius: 12px;
   cursor: pointer;
   text-align: left;
   font: inherit;
+  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
-.home-tile:hover {
+.home-card:hover {
+  transform: translateY(-2px);
   border-color: var(--accent);
-  background: var(--surface-2);
-  border-left-color: var(--accent);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
 }
-.home-tile:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; }
-/* Deliberately no thumbnail. Tableau's accelerators preview a real dashboard;
-   ours would preview nothing, and a pale empty rectangle reads as a broken
-   image rather than as art. A left accent edge carries the same "this is a
-   starting point" signal for none of the cost. */
-.home-tile-name { font-size: 13.5px; font-weight: 600; color: var(--text-strong); }
-.home-tile-sub  { font-size: 12px; color: var(--muted); line-height: 1.45; }
+.home-card:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; }
+.home-card--hero {
+  grid-column: 1 / -1;
+  gap: 20px;
+  padding: 20px 22px;
+  background: linear-gradient(180deg, var(--accent-soft), var(--surface) 70%);
+}
+
+.home-card-art { flex: none; color: var(--muted); display: flex; }
+.home-card-art svg { display: block; }
+.home-card--hero .home-card-art { color: var(--accent); }
+.home-card-art .art-line { stroke: currentColor; }
+.home-card-art .art-fill { fill: var(--accent); }
+.home-card-art .art-stroke { stroke: var(--accent); }
+.home-card-art .art-faint { stroke: var(--accent-line); }
+
+.home-card-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.home-card-name { font-size: 14px; font-weight: 600; color: var(--text-strong); }
+.home-card--hero .home-card-name { font-size: 17px; }
+.home-card-sub { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.home-card-sub .home-kbd { margin: 0 1px; }
 
 /* RIGHT — Discover. Deliberately LOCAL: no feed, no external fetch. */
 .home-discover {

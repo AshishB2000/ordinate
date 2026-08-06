@@ -220,17 +220,56 @@
              reads as structured and waiting, never blank. -->
         <div class="home-firstrun" id="home-firstrun">
           <div class="home-quick-row">
-            <button class="home-tile" type="button" data-source="capture">
-              <span class="home-tile-name">Screenshot</span>
-              <span class="home-tile-sub">Read a chart or table off the screen</span>
+            <!-- HERO — screen capture, the one thing no other BI tool does. Spans
+                 the full row, most saturated art. -->
+            <button class="home-card home-card--hero" type="button" data-source="capture">
+              <span class="home-card-art" aria-hidden="true">
+                <svg viewBox="0 0 80 72" width="80" height="72" fill="none">
+                  <rect class="art-fill" x="20" y="40" width="9" height="20" rx="1.5"/>
+                  <rect class="art-fill" x="33" y="28" width="9" height="32" rx="1.5"/>
+                  <rect class="art-fill" x="46" y="46" width="9" height="14" rx="1.5"/>
+                  <rect class="art-fill" x="59" y="22" width="9" height="38" rx="1.5"/>
+                  <path class="art-line" d="M14 61 H72" stroke-width="1.5" stroke-linecap="round"/>
+                  <rect class="art-stroke" x="10" y="14" width="42" height="40" rx="2.5"
+                        stroke-width="1.7" stroke-dasharray="4 3.5"/>
+                  <rect class="art-fill" x="7" y="11" width="6" height="6" rx="1.2"/>
+                  <rect class="art-fill" x="49" y="51" width="6" height="6" rx="1.2"/>
+                </svg>
+              </span>
+              <span class="home-card-body">
+                <span class="home-card-name">Grab it off your screen</span>
+                <span class="home-card-sub">Any chart or table on screen. Press <kbd class="home-kbd">⌘⌥S</kbd>.</span>
+              </span>
             </button>
-            <button class="home-tile" type="button" data-source="file">
-              <span class="home-tile-name">Import a file</span>
-              <span class="home-tile-sub">CSV, JSON or Excel — up to 1,000,000 rows</span>
+
+            <button class="home-card" type="button" data-source="file">
+              <span class="home-card-art" aria-hidden="true">
+                <svg viewBox="0 0 72 72" width="72" height="72" fill="none">
+                  <path class="art-line" d="M20 10 H44 L56 22 V62 H20 Z" stroke-width="1.8" stroke-linejoin="round"/>
+                  <path class="art-line" d="M44 10 V22 H56" stroke-width="1.8" stroke-linejoin="round"/>
+                  <path class="art-faint" d="M26 34 H50 M26 42 H50 M26 50 H50" stroke-width="1.4"/>
+                  <path class="art-faint" d="M34 30 V54 M42 30 V54" stroke-width="1.4"/>
+                </svg>
+              </span>
+              <span class="home-card-body">
+                <span class="home-card-name">Bring a file</span>
+                <span class="home-card-sub">CSV, JSON or Excel — up to 1,000,000 rows.</span>
+              </span>
             </button>
-            <button class="home-tile" type="button" data-source="postgres">
-              <span class="home-tile-name">Connect Postgres</span>
-              <span class="home-tile-sub">Read-only, with a row cap and a timeout</span>
+
+            <button class="home-card" type="button" data-source="postgres">
+              <span class="home-card-art" aria-hidden="true">
+                <svg viewBox="0 0 72 72" width="72" height="72" fill="none">
+                  <path class="art-line" d="M18 16 V50 a18 6 0 0 0 36 0 V16" stroke-width="1.7" stroke-linecap="round"/>
+                  <ellipse class="art-fill" cx="36" cy="16" rx="18" ry="6"/>
+                  <path class="art-line" d="M18 28 a18 6 0 0 0 36 0" stroke-width="1.5"/>
+                  <path class="art-line" d="M18 39 a18 6 0 0 0 36 0" stroke-width="1.5"/>
+                </svg>
+              </span>
+              <span class="home-card-body">
+                <span class="home-card-name">Query a database</span>
+                <span class="home-card-sub">Postgres, MySQL and <span id="firstrun-db-count">33</span> more. Read-only.</span>
+              </span>
             </button>
           </div>
           <p class="home-discover-line">

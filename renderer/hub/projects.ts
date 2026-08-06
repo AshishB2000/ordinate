@@ -530,6 +530,10 @@ async function fillConnectorCount(): Promise<void> {
     const cat = await window.hub.connectorCatalog();
     const n = Array.isArray(cat) ? cat.length : 0;
     if (n > 0) countEl.textContent = String(n);
+    // First-run card 3 names Postgres + MySQL explicitly, so "and N more" is the
+    // rest of the live catalog. Leave the markup fallback if the count is odd.
+    const dbCount = document.getElementById('firstrun-db-count');
+    if (dbCount && n > 2) dbCount.textContent = String(n - 2);
   } catch (_) {
     /* leave "More…" without a count if the catalog channel is unavailable */
   }
