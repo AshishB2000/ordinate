@@ -2,7 +2,7 @@
 
 **Status:** shipped as a working spike on `feat/phase-5`. The hub renders one real Svelte
 component alongside the existing vanilla UI.
-**CSP verdict:** **RESOLVED, not relaxed.** The hub CSP is byte-identical to `devops` — no hash,
+**CSP verdict:** **RESOLVED, not relaxed.** The hub CSP is byte-identical to `develop` — no hash,
 no nonce, no `'unsafe-inline'`.
 **Verified:** `npm run build` ✓ · `npm test` (all self-checks, unchanged) ✓ · `npm run smoke`
 (real Electron, fails on *any* renderer console error) ✓ · `electron-builder --mac dir` ✓ ·

@@ -6,8 +6,8 @@ name: CI build check
 #
 # Watches `develop`, which is this repo's DEFAULT branch. This list has now gone
 # stale TWICE, and both times the symptom was silence rather than a red check:
-# it watched `dev` (never existed), then `devops` after the trunk was renamed to
-# `develop`. Each time, every pull request merged without CI having run.
+# it watched `dev` (never existed), then an earlier trunk name before the rename
+# to `develop`. Each time, every pull request merged without CI having run.
 # Renaming the trunk means editing this list in the same commit.
 #
 # Node 24 matches what Electron 42 bundles, so the self-checks exercise the same

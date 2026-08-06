@@ -1,7 +1,7 @@
 # Phase 2.5 — wiring the engine up
 
 **Status:** complete.
-**Branch:** `feat/phase-2.5-rewire`, off `devops`.
+**Branch:** `feat/phase-2.5-rewire`, off `develop`.
 **Tests:** `npm test` → **2,411 ok / 0 fail** (was 1,913; +498).
 
 Phases 1–3b built a DuckDB engine that was **inert**. Every IPC handler still called `getDataset`, which hydrates the whole table into `Cell[][]`, then computed in JS. The 206–630× resident-query numbers existed in `residentQuery.ts` and nothing called it.

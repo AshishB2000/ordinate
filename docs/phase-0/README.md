@@ -2,7 +2,7 @@
 
 **Status:** complete. No product code was changed.
 **Gate:** ✅ `npm install` clean · `npm run build:ts` → 0 errors · `npm test` → **964 ok / 0 fail**.
-**Baseline commit:** `d70a143` on `devops`.
+**Baseline commit:** `d70a143` on `develop`.
 **✅ VERIFIED.** The §7 experiment script has been run against **DuckDB 1.5.5** — measured results are in [06-duckdb-verification.md](06-duckdb-verification.md), which supersedes every `NEEDS VERIFICATION` marker in documents 01–05. **Six predictions were wrong**; four in the migration's favour, two against. Where this document and 06 disagree, **06 wins** — it was measured, this was inferred. The revised Tier 1 list is in §5 of 06.
 
 ## Documents

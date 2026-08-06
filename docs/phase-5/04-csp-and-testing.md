@@ -9,13 +9,13 @@ described inline so they can be re-run.
 
 ## 0. Baselines — verified before anything landed
 
-| check | `devops` @ `b811700` | `feat/phase-5` base @ `69609df` |
+| check | `develop` @ `b811700` | `feat/phase-5` base @ `69609df` |
 |---|---:|---:|
 | `npm test` | **3,267 ok / 0 fail** | **3,263 ok / 0 fail** |
 | `npm run smoke` | **28 ok / 0 fail** | 23 assertions defined; not runnable as-shipped (B1) |
 | `npm run build:ts` | green | green *only* with an isolated `tsBuildInfoFile` (B1) |
 
-Both suites are green on `devops`. Phase 5 must not close below **3,267** and **28**.
+Both suites are green on `develop`. Phase 5 must not close below **3,267** and **28**.
 
 ### B1 — BLOCKER, environment: the worktree cannot build or test
 
@@ -45,21 +45,21 @@ Fix (pick one, in order of preference):
 Do **not** "fix" it by deleting the shared cache; it grows back on the next build in
 either checkout and the failure returns intermittently.
 
-### B2 — the branch base is behind `devops` and would revert Phase 4 coverage
+### B2 — the branch base is behind `develop` and would revert Phase 4 coverage
 
-`feat/phase-5` is based on `69609df`, which is **two commits behind** `devops`:
+`feat/phase-5` is based on `69609df`, which is **two commits behind** `develop`:
 
 ```
 68efc0d  chore: retire Leaflet, and cover the map path in the smoke test
 b811700  test: let the smoke test get a WebGL context under xvfb
 ```
 
-The worktree's `scripts/smoke-app.ts` carries **23** assertions against `devops`'s **28**:
+The worktree's `scripts/smoke-app.ts` carries **23** assertions against `develop`'s **28**:
 it has **no map assertions** (map opens, MapLibre rendered, GL canvas has pixels, no
 fallback message, choropleth markers) and no `--enable-unsafe-swiftshader`, without which
 the map assertions fail under xvfb on CI while passing on any developer machine. Merging
 Phase 5 from this base **deletes the Phase 4 MapLibre smoke coverage and un-retires
-Leaflet.** Rebase onto `devops` before any further work.
+Leaflet.** Rebase onto `develop` before any further work.
 
 ---
 
@@ -426,7 +426,7 @@ worker are exactly the class of bug that only appears there.
   true; Svelte 4 would not qualify.
 - **Two blockers, both environmental, both outside my remit to fix:** the worktree's
   symlinked `node_modules` breaks `build:ts` silently (B1), and the branch base is two
-  commits behind `devops` and would revert Phase 4's map smoke coverage (B2).
+  commits behind `develop` and would revert Phase 4's map smoke coverage (B2).
 - **Two live defects in landed Phase 5 work:** `build-svelte`'s `append_styles` check is
   a false positive that will stop the build on the first `style:` directive (§1.5), and
   `pretest` runs `build:ts` rather than `build`, so `npm test` executes without a Svelte

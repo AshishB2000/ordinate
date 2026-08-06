@@ -247,7 +247,7 @@ The part I would push back on is the **nonce/hash injection**. Tauri "will appen
 hashes to the relevant CSP attributes automatically to bundled code and assets" (RESEARCHED). That
 is a good default for most apps and a bad fit for this one, because this repo's CSP discipline is
 built on the property that **the shipped policy is a literal string a human can read in
-`index.html` and diff against `devops`**. Phase 5's toolchain doc treats "two CSPs that can drift"
+`index.html` and diff against `develop`**. Phase 5's toolchain doc treats "two CSPs that can drift"
 as the failure mode to design against. A framework-generated policy with framework-generated
 nonces is a third CSP that no one diffs.
 

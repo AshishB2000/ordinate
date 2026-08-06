@@ -1,8 +1,8 @@
 # Phase 3c — Mosaic + vgplot, behind a flag
 
 **Status:** shipped, default off (`localStorage 'scMosaic' === '1'`).
-**Branch:** `feat/phase-3c-mosaic`, off `devops`.
-**Tests:** `npm test` → **3,198 ok / 0 fail** (devops left it at 2,991; +207). `npm run smoke` now drives the vgplot path in the real app.
+**Branch:** `feat/phase-3c-mosaic`, off `develop`.
+**Tests:** `npm test` → **3,198 ok / 0 fail** (develop left it at 2,991; +207). `npm run smoke` now drives the vgplot path in the real app.
 
 [Phase 3](../phase-3/README.md) §5 said *"do not do Phase 3 as specified"* and split it. 3a (resident queries) and 3b (async bridge + typed views) shipped. This is **3c**: the rendering half, gated on the two build-level blockers 3b left open — B1 (vgplot is 1,039 ESM modules in a project with no bundler) and B2 (Observable Plot injects an inline `<style>` the hub CSP refuses).
 
