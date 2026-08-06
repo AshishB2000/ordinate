@@ -197,7 +197,20 @@ hub opens to **Execution settings** instead — capture never starts.
   `extractedTable` into a reviewable dataset draft.
 - **Prepare** — `transforms.ts` folds ordered steps (calculated_field, filter, group_aggregate,
   dedupe, fill_empty, trim, drop_column, rename_column) over an immutable deep copy → reversible;
-  unknown step skipped with a warning, never throws. `formula.ts` = safe expression evaluator
+  unknown step skipped with a warning, never throws. **The filter-operator vocabulary lives in ONE
+  place, `filterOps.ts`** — a dependency-free leaf, because the four consumers (`transforms` the JS
+  predicate, `sqlGen` the pipeline compiler, `residentQuery` the resident predicate, `ipc/visuals`
+  the warning-freedom gate) cannot share it any other way: `transforms → pipelineDuck → sqlGen`, so
+  sqlGen value-importing transforms would close a cycle, which is why the list used to be spelled
+  out four times. Adding an op to three of four is INVISIBLE — the resident path just returns null
+  for the op it doesn't know and the JS fallback answers correctly, ~600× slower, green in CI.
+  `in` / `not in` carry their operand in a separate `values?: Cell[]`, never by widening `value` —
+  widening would make every stored visual.json/dashboard.json a migration. An empty `values` list
+  SKIPS the step with a warning rather than matching zero rows (a filter that blanks the chart the
+  instant it is created reads as a bug), and `not in` is the EXACT complement of `in`, which is
+  deliberately unlike `!=` — on a number column `=` and `!=` are both false for a null cell, so
+  `!=` is not a complement, while a null cell is in no list and therefore survives `not in`.
+  `formula.ts` = safe expression evaluator
   (tokenizer + recursive-descent parser + tree-walker, **no `eval`/`new Function`**; div-by-zero /
   type-mismatch / unknown-column → `null`). `combineTables` (append / inner join) is IPC-only.
   `sqlGen.ts` compiles the same `TransformStep[]` into a CTE chain and `pipelineDuck.ts` runs it,
@@ -311,7 +324,7 @@ and maps). A disk-persisted history rail lists captures (newest first); clicking
   datasetPage, datasetView`);
   capture path (`analyze, calc, headline, capture, config, history, hotkey, localCli, localCliRun,
   models, icons, userPath, disclaim`); workspace (`projects, datasets, parse, parseXlsx,
-  connections, connectionRun, captureDataset, transforms, formula, datasetStats, visuals, vizData,
+  connections, connectionRun, captureDataset, transforms, filterOps, formula, datasetStats, visuals, vizData,
   dashboards, dashboardFilters, metricValue, dashboardExport, reportCapture`); AI (`copilot,
   anomalies`). **IPC** split into `src/ipc/*.ts`, each exporting `register(deps)`, wired in
   `main.js`. Add new IPC to the matching `src/ipc` module, not `main.js`.

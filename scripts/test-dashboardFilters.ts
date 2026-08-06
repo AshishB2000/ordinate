@@ -114,5 +114,44 @@ ok('the code column stays type text after a dashboard filter', zeroTable.columns
 ok('sum(sales) over the leading-zero-filtered subset is the one row (100)',
   computeMetric(zeroTable.columns, zeroTable.rows, { column: 'sales', aggregation: 'sum' }) === 100);
 
+// ── `in` / `not in` survive the merge ────────────────────────────────────────
+//
+// The merge is where a multi-value filter is easiest to lose: the step's operand
+// lives in `values`, and an identity key built from `value` alone would make
+// every `in` on one column look like the same step.
+{
+  const inWest: FilterStep = { type: 'filter', column: 'region', op: 'in', values: ['West'] };
+  const inEast: FilterStep = { type: 'filter', column: 'region', op: 'in', values: ['East'] };
+  const inBoth: FilterStep = { type: 'filter', column: 'region', op: 'in', values: ['West', 'East'] };
+
+  ok('an `in` step survives the merge intact', JSON.stringify(mergeDashboardFilters([inWest], [])) === JSON.stringify([inWest]));
+  ok('…values and all', JSON.stringify(mergeDashboardFilters([inWest], [])[0].values) === JSON.stringify(['West']));
+
+  // The bug this guards: keying identity on `value` only would collapse these.
+  ok('two DIFFERENT `in` lists on one column are two steps, not one', mergeDashboardFilters([inWest], [inEast]).length === 2);
+  ok('…but an identical `in` step is still de-duped', mergeDashboardFilters([inWest], [inWest]).length === 1);
+  ok('a longer list is a different step from a shorter one', mergeDashboardFilters([inWest], [inBoth]).length === 2);
+  ok('`in` and `not in` on the same list are two steps', mergeDashboardFilters([inWest], [{ ...inWest, op: 'not in' }]).length === 2);
+
+  // …and the merged list still moves a real metric card.
+  ok('a dashboard `in` filter changes the metric total (650 → 150)', metricWith(mergeDashboardFilters([inWest], []), 'sales', 'sum') === 150);
+  ok('a two-value `in` is the union of both (650)', metricWith(mergeDashboardFilters([inBoth], []), 'sales', 'sum') === 650);
+  ok('`not in` is the complement (650 → 500)', metricWith(mergeDashboardFilters([{ ...inWest, op: 'not in' }], []), 'sales', 'sum') === 500);
+
+  // A dashboard-wide `in` on a column a card's dataset lacks is still skipped,
+  // which is what lets one filter span heterogeneous datasets.
+  ok('an `in` on a missing column is skipped, total unchanged (650)',
+    metricWith(mergeDashboardFilters([{ type: 'filter', column: 'nope', op: 'in', values: ['x'] }], []), 'sales', 'sum') === 650);
+  // An empty list skips too — a half-built filter must not blank the card.
+  ok('an `in` with no values yet leaves the card at its unfiltered total (650)',
+    metricWith(mergeDashboardFilters([{ type: 'filter', column: 'region', op: 'in', values: [] }], []), 'sales', 'sum') === 650);
+
+  // Leading-zero safety holds for the list operator too.
+  const zeroIn = applyPipeline({ columns, rows }, mergeDashboardFilters([{ type: 'filter', column: 'code', op: 'in', values: ['007', '008'] }], []));
+  const ci = zeroIn.columns.findIndex((c) => c.name === 'code');
+  ok('`in` on leading-zero ids keeps both rows', zeroIn.rows.length === 2);
+  ok('…and they are still the STRINGS "007"/"008"', zeroIn.rows[0][ci] === '007' && zeroIn.rows[1][ci] === '008');
+}
+
 if (failures) { console.error('\n' + failures + ' dashboardFilters check(s) FAILED'); process.exit(1); }
 console.log('\nAll dashboardFilters checks passed.');

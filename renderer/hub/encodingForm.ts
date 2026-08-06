@@ -311,16 +311,36 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     fill(opSel, FILTER_OPS.map((o: string) => ({ value: o, label: o })), step.op || '=');
     row.appendChild(opSel);
 
+    // One input, two shapes: a scalar, or a comma-separated list for `in`/`not
+    // in`. Both are written back on every keystroke so the chart re-renders as
+    // the list is typed, exactly as the scalar already did.
     const valIn = document.createElement('input');
     valIn.type = 'text';
     valIn.className = 'viz-filter-val';
-    valIn.value = step.value != null ? String(step.value) : '';
+    valIn.value = isListFilterOp(step.op) ? formatFilterValues(step.values) : step.value != null ? String(step.value) : '';
     valIn.setAttribute('aria-label', 'Filter value');
-    valIn.addEventListener('input', () => { filters[i].value = valIn.value; opts.onChange(); });
+    valIn.addEventListener('input', () => {
+      if (isListFilterOp(filters[i].op)) filters[i].values = parseFilterValues(valIn.value);
+      else filters[i].value = valIn.value;
+      opts.onChange();
+    });
     row.appendChild(valIn);
 
-    const syncVal = (): void => { valIn.hidden = opSel.value === 'is_empty' || opSel.value === 'not_empty'; };
-    opSel.addEventListener('change', () => { filters[i].op = opSel.value; syncVal(); opts.onChange(); });
+    const syncVal = (): void => {
+      const list = isListFilterOp(opSel.value);
+      valIn.hidden = isValuelessFilterOp(opSel.value);
+      valIn.placeholder = list ? 'CA, WA, NY' : '';
+      valIn.setAttribute('aria-label', list ? 'Filter values, comma separated' : 'Filter value');
+    };
+    opSel.addEventListener('change', () => {
+      filters[i].op = opSel.value;
+      // Re-read the SAME text under the new operator's rules, so switching
+      // `= CA` to `in` keeps "CA" as the first entry instead of dropping it.
+      if (isListFilterOp(opSel.value)) filters[i].values = parseFilterValues(valIn.value);
+      else filters[i].value = valIn.value;
+      syncVal();
+      opts.onChange();
+    });
     syncVal();
 
     const del = document.createElement('button');
@@ -453,7 +473,8 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
         .filter((f) => f && f.column)
         .map((f) => {
           const s: any = { type: 'filter', column: f.column, op: f.op || '=' };
-          if (f.op !== 'is_empty' && f.op !== 'not_empty') s.value = f.value != null ? f.value : '';
+          if (isListFilterOp(f.op)) s.values = Array.isArray(f.values) ? f.values.slice() : [];
+          else if (!isValuelessFilterOp(f.op)) s.value = f.value != null ? f.value : '';
           return s;
         });
     },
