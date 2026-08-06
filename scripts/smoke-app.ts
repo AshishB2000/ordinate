@@ -916,27 +916,53 @@ async function main(): Promise<void> {
        dragReach.wellBox > 0 && dragReach.above && dragReach.calcTravelled,
      JSON.stringify(dragReach));
 
-  // The two disclosures: what it PLOTS, and how it LOOKS.
-  const secs2 = await win.evaluate(() => {
+  // TABS: what it PLOTS (Build) and how it LOOKS (Format). Exactly one panel is
+  // on screen at a time — a "tab" that leaves both mounted is just a heading.
+  const tabs = await win.evaluate(() => {
     const has = (sel: string) => {
       const el = document.querySelector(sel) as HTMLElement | null;
       return !!el && el.offsetParent !== null;
     };
+    const strip = [...document.querySelectorAll('#an-tabs .an-tab')] as HTMLElement[];
+    const before = {
+      labels: strip.map((t) => (t.textContent || '').trim()),
+      // Announceable without icons: role, aria-selected and aria-controls.
+      roles: strip.every((t) => t.getAttribute('role') === 'tab' && !!t.getAttribute('aria-controls')),
+      listRole: document.getElementById('an-tabs')?.getAttribute('role'),
+      buildOn: has('#an-tabp-build .an-wells'),
+      formatOff: !has('#an-tabp-format .an-props'),
+      selBuild: strip[0]?.getAttribute('aria-selected'),
+    };
+    // Switch to Format.
+    strip[1].click();
     return {
-      visualSec: has('#an-sec-visual .an-wells'),
-      formatSec: has('#an-sec-format .an-props'),
-      // Both start open, and collapse independently.
-      collapsed: (() => {
-        const head = document.querySelector('#an-sec-visual .an-sec-head') as HTMLElement;
-        head.click();
-        const shut = !document.getElementById('an-sec-visual')?.classList.contains('is-open');
-        head.click();
-        return shut;
-      })(),
+      ...before,
+      afterBuildOff: !has('#an-tabp-build .an-wells'),
+      afterFormatOn: has('#an-tabp-format .an-props'),
+      selFormat: strip[1].getAttribute('aria-selected'),
+      stored: localStorage.getItem('anPropsTab'),
     };
   });
-  ok('Properties holds both sections — the encoding and the formatting',
-     secs2.visualSec && secs2.formatSec && secs2.collapsed, JSON.stringify(secs2));
+  ok('Properties is a tab strip — Build and Format, neither named after its container',
+     JSON.stringify(tabs.labels) === JSON.stringify(['Build', 'Format']) &&
+       tabs.listRole === 'tablist' && tabs.roles, JSON.stringify(tabs));
+  ok('…and exactly one panel is mounted at a time, with aria following',
+     tabs.buildOn && tabs.formatOff && tabs.afterBuildOff && tabs.afterFormatOn &&
+       tabs.selBuild === 'true' && tabs.selFormat === 'true', JSON.stringify(tabs));
+
+  // The active tab must survive re-binding — clicking a different card cannot
+  // throw you back to Build mid-edit. Format is open from the switch above.
+  await win.evaluate(() => (document.querySelector('#dash-grid .dash-card') as HTMLElement).click());
+  await win.waitForTimeout(900);
+  const tabKept = await win.evaluate(() => ({
+    stillFormat: (document.getElementById('an-tabp-format') as HTMLElement)?.offsetParent !== null,
+    lit: (document.querySelector('#an-tabs .an-tab.is-on') as HTMLElement | null)?.textContent?.trim(),
+  }));
+  ok('…and the active tab survives re-selecting a card', tabKept.stillFormat &&
+     tabKept.lit === 'Format', JSON.stringify(tabKept));
+  // Back to Build: everything below measures the wells.
+  await win.evaluate(() => (document.getElementById('an-tab-build') as HTMLElement).click());
+  await win.waitForTimeout(150);
 
   // Click-to-fill targets the next EMPTY well, so the feature never depends on
   // drag. Checked as a pure mapping against the live encoding (category filled,
@@ -1049,7 +1075,15 @@ async function main(): Promise<void> {
     (document.getElementById('an-pane-props') as HTMLElement | null)?.offsetParent != null);
   ok('the ⚙ on a card opens the Properties panel', propsOpened);
 
-  // Properties is a list of disclosure sections, not a flat form.
+  // The formatting controls live in the FORMAT tab, so open it — measuring a
+  // panel that is in the DOM but not on screen proves nothing about it.
+  await win.evaluate(() => (document.getElementById('an-tab-format') as HTMLElement).click());
+  await win.waitForTimeout(150);
+  const formatVisible = await win.evaluate(() =>
+    (document.querySelector('#an-tabp-format .an-props') as HTMLElement | null)?.offsetParent != null);
+  ok('…on the Format tab, which is where the formatting controls are', formatVisible);
+
+  // Format is a list of disclosure sections, not a flat form.
   const secs = await win.evaluate(() => {
     const heads = [...document.querySelectorAll('#an-props .an-sec-head')] as HTMLElement[];
     const first = heads[0];
@@ -1112,8 +1146,10 @@ async function main(): Promise<void> {
     (document.querySelector('#an-props .an-sec-head') as HTMLElement)?.click());
 
   // Back to the wells — everything below measures the encoding form, which now
-  // lives in the Properties flyout.
+  // lives in the Properties flyout's BUILD tab.
   await openPane('an-pane-props');
+  await win.evaluate(() => (document.getElementById('an-tab-build') as HTMLElement).click());
+  await win.waitForTimeout(150);
 
   // Empty wells must SAY what belongs in them, which is the QuickSight
   // affordance a bare dropdown does not give.

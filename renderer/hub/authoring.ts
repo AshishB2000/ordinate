@@ -77,6 +77,34 @@ function anSetFlyout(pane: string | null): void {
   if (anFlyout === 'an-pane-visuals') anRenderGallery();
 }
 
+// ── The Properties tabs ─────────────────────────────────────────────────────
+// BUILD is what the visual plots, FORMAT is how it looks. They were one stacked
+// column under a heading that named its own container ("Visual", inside a
+// visual). Tabs, not disclosures, because the two jobs are alternatives — you
+// are doing one or the other, and stacking them made both scroll.
+//
+// The active tab is remembered across card selection: re-binding a panel must
+// not throw you back to Build every time you click a different card.
+const AN_TAB_KEY = 'anPropsTab';
+const AN_TABS = ['an-tabp-build', 'an-tabp-format'];
+
+function anSetTab(panelId: string): void {
+  const id = AN_TABS.indexOf(panelId) >= 0 ? panelId : AN_TABS[0];
+  try {
+    localStorage.setItem(AN_TAB_KEY, id);
+  } catch (_) { /* private mode — the tabs still switch, they just forget */ }
+  AN_TABS.forEach((p) => {
+    const panel = anEl(p);
+    if (panel) panel.hidden = p !== id;
+  });
+  document.querySelectorAll('#an-tabs .an-tab').forEach((b) => {
+    const el = b as HTMLElement;
+    const on = el.dataset.tab === id;
+    el.classList.toggle('is-on', on);
+    el.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+}
+
 /** Properties is now one of the rail flyouts, not a column of its own. */
 function anSetProps(on: boolean): void {
   if (on) anSetFlyout('an-pane-props');
@@ -1079,18 +1107,14 @@ function initAuthoring(): void {
   } catch (_) { /* private mode — start closed */ }
   anSetFlyout(saved || null);
 
-  // The two disclosures inside Properties. Same `.an-sec` pattern anRenderProps
-  // builds its own sections with — these are just declared in HTML because they
-  // are fixed, so they need the toggle wired once.
-  ['an-sec-visual', 'an-sec-format'].forEach((id) => {
-    const sec = anEl(id);
-    const head = sec?.querySelector('.an-sec-head') as HTMLElement | null;
-    if (!sec || !head) return;
-    head.addEventListener('click', () => {
-      const open = sec.classList.toggle('is-open');
-      head.setAttribute('aria-expanded', open ? 'true' : 'false');
-    });
+  document.querySelectorAll('#an-tabs .an-tab').forEach((b) => {
+    b.addEventListener('click', () => anSetTab((b as HTMLElement).dataset.tab || ''));
   });
+  let savedTab = '';
+  try {
+    savedTab = localStorage.getItem(AN_TAB_KEY) || '';
+  } catch (_) { /* private mode — start on Build */ }
+  anSetTab(savedTab || AN_TABS[0]);
 
   // The name is the rename control; the separate Rename button is hidden in
   // focus mode but still owns the handler.

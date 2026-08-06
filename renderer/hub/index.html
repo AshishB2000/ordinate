@@ -901,37 +901,41 @@
             <div class="an-pane-body" id="an-filter-body"></div>
           </section>
 
-          <!-- Everything that edits the SELECTED card, in two disclosures:
-               "Visual" is what it plots (encoding + type), "Properties" is how it
-               looks (formatting). Both are the existing renderers re-hosted —
-               #an-switcher + #an-wells from encodingForm, and anRenderProps()
-               into #an-props. Nothing lives on the right of the sheet any more. -->
+          <!-- Everything that edits the SELECTED card, split across TABS rather
+               than stacked disclosures: BUILD is what it plots, FORMAT is how it
+               looks. Two unrelated jobs that were sharing one scroll, under a
+               heading ("Visual") that named its own container.
+               Both are the existing renderers re-hosted — #an-switcher +
+               #an-wells from encodingForm, anRenderProps() into #an-props.
+               An icon-free tab strip is invisible to a screen reader without
+               role/aria-selected/aria-controls, so they are spelled out. -->
           <section class="an-pane" id="an-pane-props" hidden>
             <header class="an-pane-head"><span class="an-pane-title">Properties</span></header>
             <div class="an-pane-body" id="an-props-body">
               <p class="an-pane-hint" id="an-props-hint">Select a visual card to edit it.</p>
               <div id="an-props-inner" hidden>
-                <section class="an-sec is-open" id="an-sec-visual">
-                  <button class="an-sec-head" type="button" aria-expanded="true">
-                    <span class="an-sec-chev" aria-hidden="true">›</span><span>Visual</span>
-                  </button>
-                  <div class="an-sec-body">
-                    <!-- Host for #an-data-body while this flyout is open, so the
-                         drag source sits directly above its drop targets. -->
-                    <div id="an-props-fields"></div>
-                    <div class="an-ai-slot" id="an-ai-slot"></div>
-                    <div class="an-switcher" id="an-switcher"></div>
-                    <div class="an-wells" id="an-wells"></div>
-                  </div>
-                </section>
-                <section class="an-sec is-open" id="an-sec-format">
-                  <button class="an-sec-head" type="button" aria-expanded="true">
-                    <span class="an-sec-chev" aria-hidden="true">›</span><span>Properties</span>
-                  </button>
-                  <div class="an-sec-body">
-                    <div class="an-props" id="an-props"></div>
-                  </div>
-                </section>
+                <div class="an-tabs" id="an-tabs" role="tablist" aria-label="Visual settings">
+                  <button class="an-tab is-on" type="button" role="tab" id="an-tab-build"
+                    data-tab="an-tabp-build" aria-selected="true" aria-controls="an-tabp-build">Build</button>
+                  <button class="an-tab" type="button" role="tab" id="an-tab-format"
+                    data-tab="an-tabp-format" aria-selected="false" aria-controls="an-tabp-format">Format</button>
+                </div>
+
+                <div class="an-tabp" id="an-tabp-build" role="tabpanel" aria-labelledby="an-tab-build">
+                  <!-- Host for #an-data-body while this flyout is open. The field
+                       list is the drag SOURCE and the wells below are the drop
+                       TARGET, so they have to share a tab — splitting them across
+                       tabs breaks drag exactly as splitting them across flyouts
+                       would. Click-to-assign covers the keyboard either way. -->
+                  <div id="an-props-fields"></div>
+                  <div class="an-ai-slot" id="an-ai-slot"></div>
+                  <div class="an-switcher" id="an-switcher"></div>
+                  <div class="an-wells" id="an-wells"></div>
+                </div>
+
+                <div class="an-tabp" id="an-tabp-format" role="tabpanel" aria-labelledby="an-tab-format" hidden>
+                  <div class="an-props" id="an-props"></div>
+                </div>
               </div>
             </div>
           </section>
