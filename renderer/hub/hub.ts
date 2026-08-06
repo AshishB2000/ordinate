@@ -238,12 +238,24 @@ function openSettingsMenu() {
   if (!settingsMenu || !settingsGear) return;
   closeExecMenu();
   settingsMenu.hidden = false;
-  // Anchor the panel under the gear, right-aligned, clamped to the viewport.
+  // Anchor the panel by the gear, right-aligned, clamped to the viewport. The
+  // gear sits at the bottom of the sidebar, so anchoring BELOW it drops the menu
+  // off the bottom of the window. Open toward whichever side has more room
+  // (upward here), pinning the far edge and capping height to the space free.
   const r = settingsGear.getBoundingClientRect();
   let left = r.right - settingsMenu.offsetWidth;
   if (left < 12) left = 12;
   settingsMenu.style.left = left + 'px';
-  settingsMenu.style.top  = (r.bottom + 6) + 'px';
+  if (r.top > window.innerHeight - r.bottom) {
+    settingsMenu.style.top = 'auto';
+    settingsMenu.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+    settingsMenu.style.maxHeight = (r.top - 12) + 'px';
+  } else {
+    settingsMenu.style.bottom = 'auto';
+    settingsMenu.style.top = (r.bottom + 6) + 'px';
+    settingsMenu.style.maxHeight = (window.innerHeight - r.bottom - 18) + 'px';
+  }
+  settingsMenu.style.overflowY = 'auto';
   settingsGear.setAttribute('aria-expanded', 'true');
   reflectThemeControls();
   _smDismiss = (e) => {
