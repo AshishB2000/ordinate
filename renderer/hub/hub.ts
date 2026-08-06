@@ -170,9 +170,8 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
 // which load before hub.js. The existing capture→result surface is the Sources
 // section and is otherwise untouched.
 (function initWorkspaceShell() {
-  const win = document.querySelector('.win');
-  if (win) win.setAttribute('data-view', 'home');
-  initWorkspaceRouter(); // workspace.ts
+  initWorkspaceRouter(); // workspace.ts — wires the persistent sidebar nav
+  selectSection('home'); // workspace.ts — Home is the default section
   initHome();            // projects.ts
   initDatasets();        // datasets.ts
   initPrepare();         // prepare.ts

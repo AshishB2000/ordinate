@@ -324,6 +324,11 @@ export function register({ getHubWindow, notifyKeyChanged }: {
     return config.setNotifications(fields || {});
   });
 
+  // Home "Starred" pins — read the current list, or replace it wholesale. A flat
+  // array of "type:id" keys; no secrets, so both directions are renderer-safe.
+  ipcMain.handle('starred:get', () => config.publicConfig().starred);
+  ipcMain.handle('starred:set', (_e, { ids }: any = {}) => config.setStarred(ids));
+
   // Delete-my-data — destructive, irreversible, LOCAL ONLY. Runs ONLY on an
   // explicit user click and ONLY after the user accepts the confirm dialog below.
   // scope: 'history' | 'credentials' | 'settings' | 'everything'. Returns the exact

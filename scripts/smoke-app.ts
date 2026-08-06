@@ -220,22 +220,21 @@ async function main(): Promise<void> {
     })
     .catch(() => {});
 
-  const opened: string | null = await win.evaluate(() => {
-    const el = [...document.querySelectorAll('button, a, [role=button], [class*=card], li')].find(
-      (b) => /smoke test/i.test(b.textContent || ''),
-    ) as HTMLElement | undefined;
-    if (el) {
-      el.click();
-      return (el.textContent || '').trim().slice(0, 40);
-    }
-    return null;
-  });
-  ok('project opens from the UI list', opened !== null, opened || 'not found in the rendered list');
+  // Projects are no longer the front door — there is no card to click. Open the
+  // project through openWorkspace(), the same renderer entry point the app uses
+  // when a Recent item is opened, then navigate to Data via the sidebar nav.
+  const opened: string | null = await win.evaluate((id) => {
+    const ow = (window as any).openWorkspace;
+    if (typeof ow !== 'function') return null;
+    ow(id);
+    return id;
+  }, r.projectId);
+  ok('project opens from the UI (openWorkspace)', opened !== null, opened || 'openWorkspace missing');
   await win.waitForTimeout(1500);
 
   await win.evaluate(() => {
-    const el = [...document.querySelectorAll('button, a, [role=button], li')].find((b) =>
-      /^\s*Datasets\s*$/.test(b.textContent || ''),
+    const el = [...document.querySelectorAll('.as-nav-item')].find((b) =>
+      /^\s*Data\s*$/.test(b.textContent || ''),
     ) as HTMLElement | undefined;
     if (el) el.click();
   });
@@ -1581,7 +1580,7 @@ async function main(): Promise<void> {
     return {
       inAnalysesPanel: !!ed?.closest('#ws-analyses'),
       analysisMode: !!ed?.classList.contains('dash-editor--analysis'),
-      navActive: (document.querySelector('.ws-nav-item.active') as HTMLElement | null)?.textContent?.trim(),
+      navActive: (document.querySelector('.as-nav-item.active') as HTMLElement | null)?.textContent?.trim(),
       name: (document.getElementById('dash-name')?.textContent || '').trim(),
       analyses: document.querySelectorAll('#an-list .dash-list-item').length,
     };
@@ -2047,9 +2046,9 @@ async function main(): Promise<void> {
   await clickId('viz-cancel-btn');
   await win.waitForTimeout(600);
 
-  // Leave the app on the Datasets section, where the rest of this file expects
-  // to find it.
-  await clickExact('Datasets');
+  // Leave the app on the Data section, where the rest of this file expects
+  // to find it. (The Datasets nav item is labelled "Data" now.)
+  await clickExact('Data');
   await win.waitForTimeout(800);
 
   // Nothing above set `scSvelte`, so this is the DEFAULT user experience. The
@@ -2125,7 +2124,8 @@ async function main(): Promise<void> {
       return !!el;
     }, re);
 
-  await clickText('smoke test');
+  // Re-open the project (no card to click) and jump to Visuals via the nav.
+  await win.evaluate((id) => (window as any).openWorkspace?.(id), r.projectId);
   await win.waitForTimeout(1500);
   await clickText('^\\s*Visuals\\s*$');
   await win.waitForTimeout(1500);

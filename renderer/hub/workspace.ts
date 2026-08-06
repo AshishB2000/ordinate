@@ -2,39 +2,32 @@
 // <script> — NO import/export; symbols are shared with the other hub scripts
 // (projects.ts owns the gallery, hub.ts the capture/result surface).
 //
-// Drives HOME (project gallery) vs WORKSPACE (5-section left nav) purely by
-// flipping data-attributes; hub.css does all showing/hiding:
-//   .win[data-view]            → home vs workspace
-//   .hub-body[data-section]    → which workspace section body is visible
-// This keeps the existing capture→result surface (the Sources section) byte-for
-// -byte unchanged.
+// The sidebar is persistent and Home is just another section, so navigation is
+// ONE attribute: hub.css shows exactly one section body per
+// .hub-body[data-section]. There is no home/workspace view toggle any more —
+// opening an item sets the active project implicitly; the user never has to
+// pick a project to reach their work. The capture→result surface (the Sources
+// section) is unchanged.
 
 // ── Session state (renderer-only; launch always starts on HOME) ──────────────
 let currentProjectId: string | null = null;
-let currentSection = 'sources';
-
-function wsWinEl(): HTMLElement | null {
-  return document.querySelector('.win');
-}
+let currentSection = 'home';
 
 function wsBodyEl(): HTMLElement | null {
   return document.querySelector('.hub-body');
 }
 
-function setView(view: 'home' | 'workspace'): void {
-  const win = wsWinEl();
-  if (win) win.setAttribute('data-view', view);
-}
-
-// Return to the project gallery and refresh it.
+// Return to the Home section. Projects are no longer the front door, so this is
+// just a section switch that also drops the active project.
 function showHome(): void {
   currentProjectId = null;
-  setView('home');
-  renderHomeGallery(); // defined in projects.ts
+  selectSection('home');
 }
 
-// Enter a project's workspace. Validates via main first; if the project is gone
-// (deleted/corrupt), fall back to HOME rather than showing an empty workspace.
+// Enter a project's workspace context. Validates via main first; if the project
+// is gone (deleted/corrupt), fall back to HOME rather than a dangling context.
+// Lands on Sources (the capture surface); callers that open a specific item
+// select their own section afterwards.
 async function openWorkspace(id: string): Promise<void> {
   const project = await window.hub.openProject(id);
   if (!project) {
@@ -43,9 +36,10 @@ async function openWorkspace(id: string): Promise<void> {
     return;
   }
   currentProjectId = project.id;
+  // #ws-project-name was removed with the old nav; keep the guarded write so any
+  // future header stays in sync without a hard dependency.
   const nameEl = document.getElementById('ws-project-name');
   if (nameEl) nameEl.textContent = project.name || 'Untitled project';
-  setView('workspace');
   selectSection('sources');
 }
 
@@ -55,7 +49,7 @@ function selectSection(section: string): void {
   currentSection = section;
   const body = wsBodyEl();
   if (body) body.dataset.section = section;
-  document.querySelectorAll('.ws-nav-item').forEach((item) => {
+  document.querySelectorAll('.as-nav-item').forEach((item) => {
     (item as HTMLElement).classList.toggle('active', (item as HTMLElement).dataset.section === section);
   });
   // Only the matching non-Sources placeholder is shown; Sources uses the
@@ -63,6 +57,8 @@ function selectSection(section: string): void {
   document.querySelectorAll('.ws-panel').forEach((panel) => {
     (panel as HTMLElement).hidden = (panel as HTMLElement).dataset.section !== section;
   });
+  // Repaint the cross-project Recent list when Home becomes active (projects.ts).
+  if (section === 'home' && typeof renderRecent === 'function') renderRecent();
   // Refresh the datasets list when its section becomes active (datasets.ts).
   if (section === 'datasets' && typeof refreshDatasetList === 'function') refreshDatasetList();
   // Refresh the saved-connections list when Sources becomes active (connections.ts).
@@ -77,13 +73,15 @@ function selectSection(section: string): void {
   if (section === 'ai' && typeof refreshCopilot === 'function') refreshCopilot();
 }
 
-// Wire the back-to-projects button and the section nav items (once, on boot).
+// Wire the persistent sidebar nav (once, on boot). The AI tool button opens the
+// copilot section over the current view; the connect items and "More…" are
+// wired in projects.ts (they resolve a project first).
 function initWorkspaceRouter(): void {
-  const back = document.getElementById('ws-back-home');
-  if (back) back.addEventListener('click', () => showHome());
-  document.querySelectorAll('.ws-nav-item').forEach((item) => {
-    item.addEventListener('click', () => selectSection((item as HTMLElement).dataset.section || 'sources'));
+  document.querySelectorAll('.as-nav-item').forEach((item) => {
+    item.addEventListener('click', () => selectSection((item as HTMLElement).dataset.section || 'home'));
   });
+  const ai = document.getElementById('side-ai-btn');
+  if (ai) ai.addEventListener('click', () => selectSection('ai'));
 }
 
 // Quick-capture guarantee: a capture fired from HOME (or before any project
@@ -115,7 +113,6 @@ async function ensureWorkspaceForCapture(): Promise<void> {
     }
   } catch (_) { /* never let project setup abort the capture render */ }
   // Do NOT call openWorkspace()/showHome() here — openWorkspace falls back to
-  // HOME on failure, which hides the result surface. Force it visible directly.
-  setView('workspace');
+  // HOME on failure, which hides the result surface. Force Sources visible.
   selectSection('sources');
 }

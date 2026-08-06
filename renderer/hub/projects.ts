@@ -269,16 +269,12 @@ function runSourceAction(kind: string): void {
     if (box) { box.scrollIntoView({ block: 'center' }); box.focus(); }
     return;
   }
-  if (kind === 'postgres' || kind === 'url') {
-    // Open the connect panel and preselect the kind, so the rail's two server
-    // entries actually land somewhere different from each other.
+  if (kind === 'postgres' || kind === 'url' || kind === 'mysql' || kind === 'catalog') {
+    // Open the connect panel — it IS the connectors:catalog picker now, so the
+    // server shortlist entries and "More…" all land on the same searchable
+    // catalog (connections.ts owns which connector is preselected/searched).
     const open = document.getElementById('conn-connect-btn') as HTMLButtonElement | null;
     if (open) open.click();
-    const sel = document.getElementById('conn-kind-select') as HTMLSelectElement | null;
-    if (sel) {
-      sel.value = kind;
-      sel.dispatchEvent(new Event('change', { bubbles: true }));
-    }
   }
 }
 
@@ -328,31 +324,192 @@ async function fillDiscover(): Promise<void> {
   }
 }
 
-// Wire the start page and paint the initial gallery.
+// ── Recent + Starred (cross-project) ─────────────────────────────────────────
+
+// How many Recent rows show before "Show all"; the main-process list is already
+// capped (recent.ts). Purely a view limit, so expanding never re-reads disk.
+const RECENT_COLLAPSED = 8;
+let recentExpanded = false;
+let recentItems: any[] = [];
+let starredSet = new Set<string>();
+
+// The pin key stored in config.starred — matches "type:id" (e.g. "analysis:<id>").
+function starKey(it: any): string {
+  return String(it.type || '') + ':' + String(it.id || '');
+}
+
+// Fetch the recent list AND the starred pins, then paint both Home sections.
+// Called on boot and whenever Home is (re)shown (selectSection).
+async function renderRecent(): Promise<void> {
+  const [list, starred] = await Promise.all([
+    window.hub.recentItems().catch(() => []),
+    window.hub.getStarred().catch(() => []),
+  ]);
+  recentItems = Array.isArray(list) ? list : [];
+  starredSet = new Set(Array.isArray(starred) ? starred : []);
+  paintHome();
+}
+
+// Split the one recent list into Starred (pinned) and Recent (the rest). Starred
+// hides entirely when empty; the first-run block shows only when there is
+// nothing at all.
+function paintHome(): void {
+  const starredSec = document.getElementById('home-starred');
+  const starredRows = document.getElementById('home-starred-rows');
+  const recentSec = document.getElementById('home-recent');
+  const recentRows = document.getElementById('home-recent-rows');
+  const firstrun = document.getElementById('home-firstrun');
+  const showall = document.getElementById('home-showall') as HTMLButtonElement | null;
+
+  const starred = recentItems.filter((it) => starredSet.has(starKey(it)));
+  const rest = recentItems.filter((it) => !starredSet.has(starKey(it)));
+
+  if (starredSec) starredSec.hidden = starred.length === 0;
+  if (starredRows) {
+    starredRows.innerHTML = '';
+    starred.forEach((it) => starredRows.appendChild(makeRecentRow(it)));
+  }
+
+  const shown = recentExpanded ? rest : rest.slice(0, RECENT_COLLAPSED);
+  if (recentSec) recentSec.hidden = rest.length === 0;
+  if (recentRows) {
+    recentRows.innerHTML = '';
+    shown.forEach((it) => recentRows.appendChild(makeRecentRow(it)));
+  }
+  if (showall) {
+    const more = rest.length > RECENT_COLLAPSED;
+    showall.hidden = !more;
+    showall.textContent = recentExpanded ? 'Show less' : 'Show all →';
+  }
+
+  // Discover/quick-start is first-run only — hidden the moment anything exists.
+  if (firstrun) firstrun.hidden = recentItems.length > 0;
+}
+
+// One row: star toggle · name · type chip · project · relative time. The whole
+// row opens the item; the star toggles the pin without opening.
+function makeRecentRow(it: any): HTMLElement {
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = 'home-row';
+  row.dataset.type = String(it.type || '');
+  row.dataset.id = String(it.id || '');
+  row.dataset.projectId = String(it.projectId || '');
+
+  const on = starredSet.has(starKey(it));
+  const star = document.createElement('span');
+  star.className = 'home-row-star' + (on ? ' is-on' : '');
+  star.setAttribute('role', 'button');
+  star.setAttribute('tabindex', '0');
+  star.setAttribute('aria-label', on ? 'Unstar' : 'Star');
+  star.setAttribute('aria-pressed', on ? 'true' : 'false');
+  star.textContent = on ? '★' : '☆';
+  star.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleStar(it);
+  });
+  star.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleStar(it);
+    }
+  });
+
+  const name = document.createElement('span');
+  name.className = 'home-row-name';
+  name.textContent = it.name || 'Untitled';
+
+  const chip = document.createElement('span');
+  chip.className = 'home-row-chip home-chip-' + row.dataset.type;
+  chip.textContent =
+    it.type === 'dataset' ? 'Dataset' : it.type === 'analysis' ? 'Analysis' : 'Dashboard';
+
+  const proj = document.createElement('span');
+  proj.className = 'home-row-proj';
+  proj.textContent = it.projectName || '';
+
+  const time = document.createElement('span');
+  time.className = 'home-row-time';
+  time.textContent = formatSidebarTime(it.updatedAt || null); // hub.ts
+
+  row.append(star, name, chip, proj, time);
+  row.addEventListener('click', () => openRecentItem(it));
+  return row;
+}
+
+// Toggle a pin, persist the whole list (one setter), and repaint. No re-fetch of
+// the recent list — only the star state changed.
+function toggleStar(it: any): void {
+  const key = starKey(it);
+  if (starredSet.has(key)) starredSet.delete(key);
+  else starredSet.add(key);
+  if (window.hub.setStarred) window.hub.setStarred([...starredSet]);
+  paintHome();
+}
+
+// Opening a Recent/Starred item sets the active project implicitly from the
+// record's own project id (the whole point of dropping the project front door),
+// then lands on the item — best-effort open of the exact record if its opener
+// exists.
+async function openRecentItem(it: any): Promise<void> {
+  await openWorkspace(String(it.projectId)); // workspace.ts — sets currentProjectId
+  if (it.type === 'dataset') {
+    selectSection('datasets');
+    if (typeof openSavedDataset === 'function') openSavedDataset(String(it.id));
+  } else if (it.type === 'analysis') {
+    selectSection('analyses');
+    if (typeof openAnalysis === 'function') openAnalysis(String(it.id));
+  } else if (it.type === 'dashboard') {
+    selectSection('dashboards');
+    if (typeof openDashboard === 'function') openDashboard(String(it.id));
+  }
+}
+
+// Fill the Connect "More…" count from the LIVE connectors:catalog, never a
+// literal — the shortlist is five, but the real number of sources is whatever
+// the registry currently exposes. connections.ts owns the same contract and
+// degrades gracefully; here a missing/failing catalog just leaves "More…" bare.
+async function fillConnectorCount(): Promise<void> {
+  const countEl = document.getElementById('as-connect-count');
+  if (!countEl) return;
+  try {
+    const cat = await window.hub.connectorCatalog();
+    const n = Array.isArray(cat) ? cat.length : 0;
+    if (n > 0) countEl.textContent = String(n);
+  } catch (_) {
+    /* leave "More…" without a count if the catalog channel is unavailable */
+  }
+}
+
+// Wire the Home section and the persistent sidebar's source entries.
 function initHome(): void {
   const newBtn = document.getElementById('home-new-project');
   if (newBtn) newBtn.addEventListener('click', () => handleNewProject());
-  const emptyNew = document.getElementById('home-empty-new');
-  if (emptyNew) emptyNew.addEventListener('click', () => handleNewProject());
 
-  // One listener covers the rail AND the tiles — both carry data-source.
-  document.querySelectorAll('#home-view [data-source]').forEach((el) => {
+  // One listener covers the sidebar Connect items AND the first-run tiles —
+  // both carry data-source, wherever they live in the DOM.
+  document.querySelectorAll('[data-source]').forEach((el) => {
     el.addEventListener('click', () => {
       const kind = (el as HTMLElement).dataset.source || '';
       if (kind) startFromSource(kind);
     });
   });
 
-  const search = document.getElementById('home-search');
-  if (search) search.addEventListener('input', () => applyHomeSearch());
+  // "More…" opens the full data-source catalog (the connect panel), resolving a
+  // project first like any other source.
+  const more = document.getElementById('as-connect-more');
+  if (more) more.addEventListener('click', () => startFromSource('catalog'));
 
-  const settings = document.getElementById('home-disc-settings');
-  if (settings) {
-    settings.addEventListener('click', () => {
-      if (typeof showSettingsPanel === 'function') showSettingsPanel(); // hub.ts
+  const showall = document.getElementById('home-showall');
+  if (showall) {
+    showall.addEventListener('click', () => {
+      recentExpanded = !recentExpanded;
+      paintHome();
     });
   }
 
   fillDiscover();
-  renderHomeGallery();
+  fillConnectorCount();
+  renderRecent();
 }
