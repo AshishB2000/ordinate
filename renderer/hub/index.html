@@ -191,7 +191,20 @@
       <div class="home-scroll">
         <div class="home-head">
           <h1 class="home-title">Home</h1>
-          <button id="home-new-project" class="btn btn-primary" type="button">New project</button>
+          <!-- "+ New" opens a menu of the things a user actually creates
+               (Analysis / Dashboard / data source). Projects are demoted — the
+               front door no longer leads with them; they are still created
+               implicitly on disk. Menu built in projects.ts (openRowMenu). -->
+          <button id="home-new-project" class="btn btn-primary" type="button"
+            aria-haspopup="true" aria-expanded="false">
+            <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            New
+            <svg class="ic" width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
         </div>
 
         <!-- PHASE 5 SPIKE — Svelte island host. Empty in the served HTML; the
@@ -201,21 +214,10 @@
              `npm start` shows. See docs/phase-5/01-toolchain.md. -->
         <div id="svelte-island-host"></div>
 
-        <!-- Starred — hidden entirely until something is starred (phase 3). -->
-        <section class="home-sec" id="home-starred" hidden>
-          <h2 class="home-sec-h">Starred</h2>
-          <div class="home-rows" id="home-starred-rows"></div>
-        </section>
-
-        <!-- Recent — cross-project, filled by phase 2. -->
-        <section class="home-sec" id="home-recent" hidden>
-          <h2 class="home-sec-h">Recent</h2>
-          <div class="home-rows" id="home-recent-rows"></div>
-          <button class="home-showall" id="home-showall" type="button" hidden>Show all →</button>
-        </section>
-
         <!-- First-run: the three quick-start doors plus a one-line Discover.
-             Shown when there is nothing recent or starred to show. -->
+             Shown only until there is recent/starred content; the Starred and
+             Recent sections below ALWAYS render (with an empty state) so the page
+             reads as structured and waiting, never blank. -->
         <div class="home-firstrun" id="home-firstrun">
           <div class="home-quick-row">
             <button class="home-tile" type="button" data-source="capture">
@@ -237,6 +239,21 @@
             Your data stays on this machine.
           </p>
         </div>
+
+        <!-- Starred — ALWAYS rendered; a muted placeholder when nothing is
+             pinned. paintHome() fills #home-starred-rows. -->
+        <section class="home-sec" id="home-starred">
+          <h2 class="home-sec-h">Starred</h2>
+          <div class="home-rows" id="home-starred-rows"></div>
+        </section>
+
+        <!-- Recent — ALWAYS rendered; a muted placeholder when there is nothing
+             yet. Cross-project, newest first. -->
+        <section class="home-sec" id="home-recent">
+          <h2 class="home-sec-h">Recent</h2>
+          <div class="home-rows" id="home-recent-rows"></div>
+          <button class="home-showall" id="home-showall" type="button" hidden>Show all →</button>
+        </section>
       </div>
     </section>
 

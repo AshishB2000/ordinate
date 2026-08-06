@@ -230,7 +230,11 @@ async function handleDeleteProject(id: string): Promise<void> {
 // and land on Sources — which IS the Screenchart surface (the capture history
 // rail plus the Welcome pane with its own New capture button). The user takes
 // the shot from there, or with the hotkey, when they are ready.
-async function startFromSource(kind: string): Promise<void> {
+// Resolve a project to work in (a source/analysis/dashboard is only meaningful
+// inside one) and open its workspace. Reuse the most-recently-updated project, or
+// create one. Projects stay on disk as a grouping — the user just never has to
+// pick one to start. Returns false only if main refused to create one.
+async function ensureProjectAndOpen(): Promise<boolean> {
   let id = '';
   try {
     const list = await window.hub.listProjects();
@@ -240,12 +244,42 @@ async function startFromSource(kind: string): Promise<void> {
 
   if (!id) {
     const created = await window.hub.createProject('Untitled project');
-    if (!created || !created.id) return; // main refused — leave the user on home
+    if (!created || !created.id) return false; // main refused — leave the user on home
     id = String(created.id);
   }
 
   await openWorkspace(id); // workspace.ts — lands on the Sources section
+  return true;
+}
+
+async function startFromSource(kind: string): Promise<void> {
+  if (!(await ensureProjectAndOpen())) return;
   runSourceAction(kind);
+}
+
+// ── "+ New" menu (front door) ────────────────────────────────────────────────
+// Projects were demoted, so the primary button no longer creates one. It opens a
+// menu of what a user actually makes; each resolves a project implicitly, opens
+// its workspace, and lands on the create flow.
+async function newAnalysis(): Promise<void> {
+  if (!(await ensureProjectAndOpen())) return;
+  selectSection('analyses'); // workspace.ts
+  if (typeof anCreateWizard === 'function') anCreateWizard(); // analyses.ts
+}
+
+async function newDashboard(): Promise<void> {
+  if (!(await ensureProjectAndOpen())) return;
+  selectSection('dashboards'); // workspace.ts
+  if (typeof handleNewDashboard === 'function') handleNewDashboard(); // dashboards.ts
+}
+
+// Open the +New menu anchored to the button, reusing the shared row-menu popup.
+function openNewMenu(trigger: HTMLElement): void {
+  openRowMenu(trigger, [
+    { label: 'Analysis', onClick: () => newAnalysis() },
+    { label: 'Dashboard', onClick: () => newDashboard() },
+    { label: 'Data source', onClick: () => startFromSource('catalog') },
+  ]);
 }
 
 // The source-specific step, once the workspace is open. Each branch is guarded:
@@ -364,17 +398,25 @@ function paintHome(): void {
   const starred = recentItems.filter((it) => starredSet.has(starKey(it)));
   const rest = recentItems.filter((it) => !starredSet.has(starKey(it)));
 
-  if (starredSec) starredSec.hidden = starred.length === 0;
+  // Starred and Recent ALWAYS render — a heading plus a muted placeholder when
+  // empty. Hiding them left a large void under the first-run cards; a structured
+  // "nothing here yet" reads as waiting rather than broken.
+  if (starredSec) starredSec.hidden = false;
   if (starredRows) {
     starredRows.innerHTML = '';
-    starred.forEach((it) => starredRows.appendChild(makeRecentRow(it)));
+    if (starred.length) starred.forEach((it) => starredRows.appendChild(makeRecentRow(it)));
+    else starredRows.appendChild(makeEmptyRow('Star anything to pin it here.'));
   }
 
   const shown = recentExpanded ? rest : rest.slice(0, RECENT_COLLAPSED);
-  if (recentSec) recentSec.hidden = rest.length === 0;
+  if (recentSec) recentSec.hidden = false;
   if (recentRows) {
     recentRows.innerHTML = '';
-    shown.forEach((it) => recentRows.appendChild(makeRecentRow(it)));
+    if (rest.length) shown.forEach((it) => recentRows.appendChild(makeRecentRow(it)));
+    else
+      recentRows.appendChild(
+        makeEmptyRow('Nothing yet. Datasets, analyses and dashboards you open will show up here.'),
+      );
   }
   if (showall) {
     const more = rest.length > RECENT_COLLAPSED;
@@ -438,6 +480,17 @@ function makeRecentRow(it: any): HTMLElement {
   return row;
 }
 
+// A muted, non-interactive placeholder row for an empty Starred/Recent section.
+function makeEmptyRow(text: string): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'home-row home-row-empty';
+  const span = document.createElement('span');
+  span.className = 'home-row-emptytext';
+  span.textContent = text;
+  row.appendChild(span);
+  return row;
+}
+
 // Toggle a pin, persist the whole list (one setter), and repaint. No re-fetch of
 // the recent list — only the star state changed.
 function toggleStar(it: any): void {
@@ -485,7 +538,7 @@ async function fillConnectorCount(): Promise<void> {
 // Wire the Home section and the persistent sidebar's source entries.
 function initHome(): void {
   const newBtn = document.getElementById('home-new-project');
-  if (newBtn) newBtn.addEventListener('click', () => handleNewProject());
+  if (newBtn) newBtn.addEventListener('click', () => openNewMenu(newBtn));
 
   // One listener covers the sidebar Connect items AND the first-run tiles —
   // both carry data-source, wherever they live in the DOM.
