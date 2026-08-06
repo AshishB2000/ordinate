@@ -412,7 +412,21 @@ function openExecMenu(): void {
   let left = r.right - execMenu.offsetWidth;
   if (left < 12) left = 12;
   execMenu.style.left = left + 'px';
-  execMenu.style.top  = (r.bottom + 6) + 'px';
+  // The exec button sits at the bottom of the sidebar, so a menu anchored BELOW
+  // it drops off the bottom of the window and can't be seen. Open toward whichever
+  // side has more room (upward here), pinning the FAR edge so the menu stays on
+  // screen as the agent list fills in asynchronously, and cap its height to the
+  // space available so a short window scrolls instead of clipping.
+  if (r.top > window.innerHeight - r.bottom) {
+    execMenu.style.top = 'auto';
+    execMenu.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+    execMenu.style.maxHeight = (r.top - 12) + 'px';
+  } else {
+    execMenu.style.bottom = 'auto';
+    execMenu.style.top = (r.bottom + 6) + 'px';
+    execMenu.style.maxHeight = (window.innerHeight - r.bottom - 18) + 'px';
+  }
+  execMenu.style.overflowY = 'auto';
   execBtn.setAttribute('aria-expanded', 'true');
   refreshExecMenu();
   // Scan PATH once so Local status is fresh without first opening Settings.
