@@ -107,6 +107,69 @@ function cteCount(sql: string): number {
   const s = sqlOf([{ type: 'filter', column: 'city', op: 'not_empty' }]);
   ok('filter not_empty: negated shared predicate', s.includes('WHERE NOT (c0 IS NULL OR regexp_full_match'));
 }
+// ── filter in / not in ───────────────────────────────────────────────────────
+{
+  const r = gen([{ type: 'filter', column: 'city', op: 'in', values: ['Paris', 'Berlin'] }]);
+  ok(
+    'filter in: one bound hole per value, over the coalesced varchar',
+    (r.sql || '').includes("coalesce(coalesce(CAST(c0 AS VARCHAR), '') IN (CAST(? AS VARCHAR), CAST(? AS VARCHAR)), FALSE)"),
+  );
+  ok('filter in: every value is bound, in order', JSON.stringify(r.params) === JSON.stringify(['Paris', 'Berlin']));
+}
+{
+  const r = gen([{ type: 'filter', column: 'city', op: 'not in', values: ['Paris'] }]);
+  // The coalesce is what makes NOT exact: `NULL IN (…)` is NULL, and a bare NOT
+  // would drop null rows instead of keeping them.
+  ok('filter not in: negates a coalesced (never-NULL) IN', (r.sql || '').includes('WHERE NOT coalesce('));
+}
+{
+  const r = gen([{ type: 'filter', column: 'units', op: 'in', values: [3, '5'] }]);
+  ok('filter in: a number column casts to DOUBLE', (r.sql || '').includes('IN (CAST(? AS DOUBLE), CAST(? AS DOUBLE))'));
+  ok("filter in: '5' goes through the same strict gate `=` uses → the number 5", JSON.stringify(r.params) === JSON.stringify([3, 5]));
+  ok('filter in: a number column is read through the finite-cast guard', (r.sql || '').includes('CASE WHEN isfinite(TRY_CAST(c2 AS DOUBLE))'));
+}
+{
+  // Cast on the DECLARED type: a text column is never cast, so 7 cannot match '007'.
+  const r = gen([{ type: 'filter', column: 'sku', op: 'in', values: [7] }]);
+  ok('filter in: a text column stays VARCHAR', (r.sql || '').includes('CAST(? AS VARCHAR)') && !(r.sql || '').includes('CAST(? AS DOUBLE)'));
+  ok('filter in: …and the numeric entry is stringified, not cast', r.params[0] === '7');
+}
+{
+  const r = gen([{ type: 'filter', column: 'units', op: 'in', values: ['abc', 'x'] }]);
+  ok('filter in: an all-uncoercible numeric list is FALSE with no params', (r.sql || '').includes('WHERE FALSE') && r.params.length === 0);
+  const n = gen([{ type: 'filter', column: 'units', op: 'not in', values: ['abc'] }]);
+  ok('filter not in: …and its negation is NOT FALSE, which keeps every row', (n.sql || '').includes('WHERE NOT FALSE'));
+}
+{
+  // De-duplicated, so a hostile 10k-entry list of one value binds ONE param.
+  const r = gen([{ type: 'filter', column: 'city', op: 'in', values: ['Paris', 'Paris', 'Paris'] }]);
+  ok('filter in: duplicate values collapse to one bound param', r.params.length === 1);
+}
+{
+  const src = gen([]);
+  const r = gen([{ type: 'filter', column: 'city', op: 'in', values: [] }]);
+  ok('filter in: an empty list emits NO CTE (skipped, not WHERE FALSE)', cteCount(r.sql || '') === cteCount(src.sql || ''));
+  ok('filter in: …and warns with the shared text', r.warnings.length === 1 && r.warnings[0].includes('no values'));
+  ok('filter in: an empty list binds nothing', r.params.length === 0);
+}
+{
+  // SECURITY: the value LIST is the one operand whose COUNT the renderer
+  // controls, so it is the one most worth proving stays parameterised.
+  const evil = "Paris' OR 1=1 --";
+  const r = gen([{ type: 'filter', column: 'city', op: 'in', values: [evil, 'Berlin'] }]);
+  ok('injection (in): no value appears in the SQL text', !(r.sql || '').includes('OR 1=1'));
+  ok('injection (in): each value is a bound param verbatim', r.params.length === 2 && r.params[0] === evil);
+}
+{
+  // A filter that branches on the declared type cannot run after fill_empty has
+  // made that type data-derived — same rule the comparison operators follow.
+  const r = gen([
+    { type: 'fill_empty', column: 'city', value: 'x' },
+    { type: 'filter', column: 'city', op: 'in', values: ['Paris'] },
+  ]);
+  ok('filter in: bails after a fill_empty retyped the column', r.sql === null && String(r.unsupported).includes('data-derived type'));
+}
+
 {
   // SECURITY: a hostile filter value must stay a parameter.
   const evil = "Paris' OR 1=1 --";
@@ -384,6 +447,40 @@ if (!duckdbAvailable()) {
   check('numeric filter != against a non-lossless value drops everything', [{ type: 'filter', column: 'units', op: '!=', value: '007' }], '');
   check('text equality filter', [{ type: 'filter', column: 'city', op: '=', value: 'Paris' }], 'Paris,007,3,10\nParis,007,2,10');
   check('contains is a substring test on the stringified cell', [{ type: 'filter', column: 'sku', op: 'contains', value: '01' }], 'Berlin,012,5,20');
+  check(
+    'in matches any listed value, in source row order',
+    [{ type: 'filter', column: 'sku', op: 'in', values: ['007', '020'] }],
+    'Paris,007,3,10\nParis,007,2,10\nBerlin,020,0,5',
+  );
+  check(
+    'not in is the exact complement of in',
+    [{ type: 'filter', column: 'sku', op: 'not in', values: ['007', '020'] }],
+    'Berlin,012,5,20',
+  );
+  check(
+    'in on a number column compares numbers, not text',
+    [{ type: 'filter', column: 'units', op: 'in', values: [3, 0] }],
+    'Paris,007,3,10\nBerlin,020,0,5',
+  );
+  check(
+    "in on a TEXT column does not fuse '007' with 7",
+    [{ type: 'filter', column: 'sku', op: 'in', values: [7] }],
+    '',
+  );
+  check(
+    'in with an empty list is skipped, so every row survives',
+    [{ type: 'filter', column: 'city', op: 'in', values: [] }],
+    'Paris,007,3,10\nBerlin,012,5,20\nParis,007,2,10\nBerlin,020,0,5',
+  );
+  // The NULL case the coalesce exists for: c1 is NULL in row 1, so `not in`
+  // must KEEP it. Without coalesce, `NOT (NULL IN …)` is NULL and it vanishes.
+  check(
+    'not in keeps a NULL cell (three-valued IN is folded to FALSE first)',
+    [{ type: 'filter', column: 'sku', op: 'not in', values: ['007'] }],
+    'Berlin,NULL,5,20',
+    COLS,
+    "CREATE TABLE ds AS SELECT * FROM (VALUES (0,'Paris','007','3','10'),(1,'Berlin',NULL,'5','20')) t(__ord, c0, c1, c2, c3);",
+  );
   check(
     'group_aggregate in first-seen group order via min(__ord)',
     [{ type: 'group_aggregate', groupBy: ['city'], aggregations: [{ column: 'units', fn: 'sum', as: 'total_units' }, { column: 'price', fn: 'avg', as: 'avg_price' }, { column: 'sku', fn: 'count', as: 'n' }, { column: 'sku', fn: 'min', as: 'min_sku' }] }],

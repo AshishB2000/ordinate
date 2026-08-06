@@ -38,7 +38,9 @@
 
 import type { ColumnType } from './parse';
 import { coerceValue } from './parse';
-import type { Aggregation, AggFn, Cell, FilterOp, TransformStep } from './transforms';
+import type { Aggregation, AggFn, Cell, TransformStep } from './transforms';
+import type { FilterOp } from './filterOps';
+import { FILTER_OPS, COMPARE_OPS, LIST_OPS, emptyListWarning } from './filterOps';
 
 // ── Public shapes ────────────────────────────────────────────────────────────
 
@@ -100,9 +102,7 @@ function sqlStr(phys: string): string {
 
 // ── Small helpers mirroring transforms.ts ────────────────────────────────────
 
-const FILTER_OPS: ReadonlySet<string> = new Set(['=', '!=', '>', '<', '>=', '<=', 'contains', 'is_empty', 'not_empty']);
 const AGG_FNS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
-const COMPARE_OPS: ReadonlySet<string> = new Set(['=', '!=', '>', '<', '>=', '<=']);
 const SQL_OP: Record<string, string> = { '=': '=', '!=': '<>', '>': '>', '<': '<', '>=': '>=', '<=': '<=' };
 const PHYS_RE = /^c\d+$/;
 
@@ -117,6 +117,63 @@ function cellToString(cell: Cell | undefined): string {
 
 function quoteIdent(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
+}
+
+/**
+ * `in` / `not in` as ONE never-NULL boolean, so `NOT` is a safe negation.
+ *
+ * Three things this has to get right:
+ *
+ *  1. EVERY value is a bound `?`. A value list is untrusted renderer/AI input
+ *     and is the one place in this generator where the operand count is
+ *     attacker-influenced — interpolating it would be the injection hole the
+ *     positional-identifier design exists to avoid everywhere else.
+ *  2. CAST ON THE DECLARED TYPE. Only a `number` column is read through
+ *     `sqlNum`; a `text`/`date` column stays VARCHAR, so `'007' in ('7')` is
+ *     false rather than true.
+ *  3. COALESCE, because SQL `IN` is three-valued: `NULL IN (1,2)` is NULL, so a
+ *     bare `NOT (x IN …)` would DROP null rows instead of keeping them. The JS
+ *     side defines `not in` as the exact complement of `in`, and a null cell is
+ *     not in the list — so it must survive. Folding NULL to FALSE first makes
+ *     `NOT` exact. (The text branch can't produce a NULL, since `sqlStr`
+ *     coalesces and every param is stringified; it is wrapped anyway so both
+ *     branches negate by the same rule.)
+ *
+ * Values are de-duplicated to mirror the JS `Set` and to bound the parameter
+ * count — a list of 10,000 identical values binds one `?`, not 10,000.
+ */
+function sqlInPredicate(col: SqlColumn, values: Cell[], negate: boolean, params: (string | number | null)[]): string {
+  let inner: string;
+  if (col.type === 'number') {
+    // The SAME strict gate as transforms (coerceValue → isFiniteNumber): an
+    // entry that isn't a finite number can never equal a finite cell, so it is
+    // dropped. All entries dropped → matches nothing, exactly as `= 'abc'` on a
+    // number column keeps zero rows.
+    const targets = new Set<number>();
+    for (const v of values) {
+      const n = coerceValue(v ?? null, 'number');
+      if (typeof n === 'number' && Number.isFinite(n)) targets.add(n);
+    }
+    if (targets.size === 0) {
+      inner = 'FALSE';
+    } else {
+      const holes: string[] = [];
+      for (const n of targets) {
+        holes.push('CAST(? AS DOUBLE)');
+        params.push(n);
+      }
+      inner = `coalesce(${sqlNum(col.physical)} IN (${holes.join(', ')}), FALSE)`;
+    }
+  } else {
+    const targets = new Set<string>(values.map((v) => cellToString(v)));
+    const holes: string[] = [];
+    for (const t of targets) {
+      holes.push('CAST(? AS VARCHAR)');
+      params.push(t);
+    }
+    inner = `coalesce(${sqlStr(col.physical)} IN (${holes.join(', ')}), FALSE)`;
+  }
+  return negate ? `NOT ${inner}` : inner;
 }
 
 // ── generateSql ──────────────────────────────────────────────────────────────
@@ -224,6 +281,19 @@ export function generateSql(relation: string, columns: SqlColumn[], steps: Trans
           // empty needle that matches EVERY row — coalesce reproduces both.
           where = `contains(${sqlStr(col.physical)}, CAST(? AS VARCHAR))`;
           params.push(cellToString(step.value));
+        } else if (LIST_OPS.has(op)) {
+          if (retyped.has(col.physical)) {
+            return bail(`filter on "${step.column}" needs a data-derived type (retyped by an earlier fill_empty)`);
+          }
+          const values = Array.isArray(step.values) ? step.values : [];
+          if (values.length === 0) {
+            // Skip with the SAME warning text the JS fold emits — the pipeline
+            // differential test compares warning arrays, not just rows. No CTE,
+            // so the chain continues from the previous one (R-TRANS-17/18).
+            warnings.push(emptyListWarning(step.column, op));
+            break;
+          }
+          where = sqlInPredicate(col, values, op === 'not in', params);
         } else if (COMPARE_OPS.has(op)) {
           if (retyped.has(col.physical)) {
             return bail(`filter on "${step.column}" needs a data-derived type (retyped by an earlier fill_empty)`);

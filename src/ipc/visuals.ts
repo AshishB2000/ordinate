@@ -9,6 +9,7 @@ import * as trace from '../residentTrace';
 import { sanitizeEncoding, sanitizeChartType } from '../visuals';
 import type { VizEncoding } from '../visuals';
 import type { FilterStep } from '../transforms';
+import { FILTER_OPS, LIST_OPS } from '../filterOps';
 import { computeColumnSummariesResident } from '../statsResident';
 import { computeColumnSummary } from '../datasetStats';
 import type { ColumnSummary } from '../datasetStats';
@@ -78,13 +79,20 @@ function buildColumnSummaryText(
 // (The four guard-rail early returns each carry a warning too, so they are
 // likewise left to `buildVizData`.)
 
-// Mirrors the private set at transforms.ts:101. `visuals.sanitizeFilters`
-// already guarantees a valid op, so this is defence against a future divergence,
-// not a live case — an unknown op would make transforms warn, and a warning is
-// exactly what disqualifies the fast path.
-const FILTER_OPS: ReadonlySet<string> = new Set([
-  '=', '!=', '>', '<', '>=', '<=', 'contains', 'is_empty', 'not_empty',
-]);
+// The op vocabulary comes from src/filterOps.ts so this gate cannot drift out of
+// step with the three implementations — that drift is silent by construction
+// (the fast path just stops firing and the JS path answers correctly, slowly).
+// `visuals.sanitizeFilters` already guarantees a valid op, so the check itself is
+// defence against a future divergence rather than a live case.
+//
+// `in`/`not in` add a FOURTH warning source to the three enumerated above: an
+// empty value list makes `transforms.stepFilter` skip the step with a warning.
+// Like the other three it is decidable from the step alone, with no rows.
+function filterCannotWarn(f: FilterStep, names: Set<string>): boolean {
+  if (!f || f.type !== 'filter' || !names.has(f.column) || !FILTER_OPS.has(f.op)) return false;
+  if (LIST_OPS.has(f.op) && (!Array.isArray(f.values) || f.values.length === 0)) return false;
+  return true;
+}
 
 /**
  * The aggregated (branch A) `visual:data` answer computed straight off Parquet,
@@ -125,7 +133,7 @@ export async function residentVizData(
     if (!names.has(encoding.category)) return null;
     for (const v of values) if (!names.has(v.column)) return null;
     for (const f of filters) {
-      if (!f || f.type !== 'filter' || !names.has(f.column) || !FILTER_OPS.has(f.op)) return null;
+      if (!filterCannotWarn(f, names)) return null;
     }
 
     // In an aggregated build `buildVizData` coerces a 'none' measure to 'sum'

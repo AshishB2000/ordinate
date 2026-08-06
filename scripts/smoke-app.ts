@@ -134,6 +134,54 @@ async function main(): Promise<void> {
     });
     out.metricMs = Date.now() - t;
 
+    // ── An `in` filter, end to end, on a MILLION rows ───────────────────────
+    //
+    // The differential suites prove `in` is correct. What they cannot prove is
+    // that the real CALL SITE still routes to SQL: an operator missing from a
+    // resident module's vocabulary is SKIPPED, not failed — no WHERE is emitted
+    // and the query happily answers over every row. So this asserts three
+    // separate things, because any one of them alone can pass while broken:
+    //   1. the chart returns only the 3 listed groups,
+    //   2. the metric changes (a skipped predicate would return the full sum),
+    //   3. residentTrace says 'resident', not 'skipped' or 'failed'.
+    const trace = req('./src/residentTrace.js');
+    const ipcVisuals = req('./src/ipc/visuals.js');
+    const inFilter = [
+      { type: 'filter', column: 'region', op: 'in', values: ['region0', 'region2', 'region4'] },
+    ];
+
+    out.inChart = src && residentQuery.aggregateResident(src, 'region', [
+      { column: 'amount', aggregation: 'sum' },
+    ], inFilter);
+    out.inLabels = out.inChart && out.inChart.labels;
+    out.inMetric = src && residentQuery.computeMetricResident(
+      src, { column: 'amount', aggregation: 'sum' }, inFilter,
+    );
+    out.notInMetric = src && residentQuery.computeMetricResident(
+      src, { column: 'amount', aggregation: 'sum' },
+      [{ type: 'filter', column: 'region', op: 'not in', values: ['region0', 'region2', 'region4'] }],
+    );
+
+    // Through the shipped IPC helper, which is what `visual:data` calls — and
+    // therefore the thing that has to still choose the resident path.
+    trace.reset();
+    t = Date.now();
+    const viaIpc = await ipcVisuals.residentVizData(proj.id, ds.id, {
+      category: 'region', values: [{ column: 'amount', aggregation: 'sum' }],
+    }, inFilter);
+    out.inIpcMs = Date.now() - t;
+    out.inIpcLabels = viaIpc && viaIpc.data && viaIpc.data.labels;
+    out.inIpcWarnings = viaIpc && viaIpc.warnings ? viaIpc.warnings.length : -1;
+    out.inTrace = trace.snapshot().vizAggregate || null;
+
+    // An `in` with NO values must be REJECTED by that helper, because the JS
+    // path would emit a warning there and the fast path may only run when it
+    // provably would not have.
+    trace.reset();
+    out.emptyInViaIpc = await ipcVisuals.residentVizData(proj.id, ds.id, {
+      category: 'region', values: [{ column: 'amount', aggregation: 'sum' }],
+    }, [{ type: 'filter', column: 'region', op: 'in', values: [] }]);
+
     // One page of the Explore grid — the path that replaced holding the table.
     t = Date.now();
     const page = src && datasetPage.readPage(src, { offset: 0, limit: 500 });
@@ -187,6 +235,32 @@ async function main(): Promise<void> {
      `first=${r.values[0]}, agg took ${r.aggMs} ms`);
   ok('metric card computed', typeof r.metric === 'number', `sum=${r.metric} in ${r.metricMs} ms`);
   ok('dataset exposes a resident source', r.hasResidentSource === true);
+
+  // ── The `in` operator, on the real app, over a million rows ───────────────
+  ok('an `in` filter with 3 values narrows the chart to those 3 groups',
+     Array.isArray(r.inLabels) && r.inLabels.length === 3 &&
+       JSON.stringify(r.inLabels) === JSON.stringify(['region0', 'region2', 'region4']),
+     JSON.stringify(r.inLabels));
+  // The proof the predicate REACHED SQL: a skipped operator would answer over
+  // all 7 regions and hand back the unfiltered total.
+  ok('…and the metric card respects it, rather than returning the full total',
+     typeof r.inMetric === 'number' && r.inMetric !== r.metric,
+     `filtered=${r.inMetric} vs unfiltered=${r.metric}`);
+  ok('`in` and `not in` partition the column exactly',
+     typeof r.notInMetric === 'number' && Math.abs((r.inMetric + r.notInMetric) - r.metric) < 1e-6,
+     `${r.inMetric} + ${r.notInMetric} vs ${r.metric}`);
+  ok('the same filter through the shipped visual:data helper agrees',
+     JSON.stringify(r.inIpcLabels) === JSON.stringify(r.inLabels) && r.inIpcWarnings === 0,
+     `labels=${JSON.stringify(r.inIpcLabels)} warnings=${r.inIpcWarnings}`);
+  // residentTrace is the runtime alarm for a fast path that quietly stopped
+  // firing. 'resident' means the SQL path answered; 'skipped'/'failed' would
+  // both still produce a CORRECT chart, ~600x slower, and ship green.
+  ok('…on the RESIDENT path — not skipped, not failed',
+     !!r.inTrace && r.inTrace.resident === 1 && r.inTrace.skipped === 0 && r.inTrace.failed === 0,
+     JSON.stringify(r.inTrace));
+  ok('an `in` with no values falls back instead of silently dropping its warning',
+     r.emptyInViaIpc === null, JSON.stringify(r.emptyInViaIpc));
+  ok('`in` over 1M rows is still fast', r.inIpcMs < 2000, `${r.inIpcMs} ms`);
   ok('one Explore page read', r.pageRows === 500 && r.pageTotal === 1_000_000,
      `${r.pageRows} rows of ${r.pageTotal} in ${r.pageMs} ms`);
   // These are the numbers the whole migration exists to produce. Loose bounds —

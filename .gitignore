@@ -53,6 +53,7 @@ scripts/**/*.js
 /src/datasetStats.js
 /scripts/test-datasetStats.js
 # Week 6 data preparation — emitted siblings.
+/src/filterOps.js
 /src/formula.js
 /src/transforms.js
 /scripts/test-formula.js

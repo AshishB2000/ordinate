@@ -1264,6 +1264,8 @@ const DASH_FILTER_OPS: Array<{ value: string; label: string }> = [
   { value: 'contains', label: 'contains' },
   { value: 'is_empty', label: 'is empty' },
   { value: 'not_empty', label: 'is not empty' },
+  { value: 'in', label: 'is any of' },
+  { value: 'not in', label: 'is none of' },
 ];
 const DASH_VALUELESS_OPS = new Set(['is_empty', 'not_empty']);
 
@@ -1276,6 +1278,13 @@ function dashFilters(): any[] {
 function dashFilterLabel(step: any): string {
   const opLabel = (DASH_FILTER_OPS.find((o) => o.value === step.op) || { label: step.op }).label;
   if (DASH_VALUELESS_OPS.has(step.op)) return `${step.column} ${opLabel}`;
+  if (isListFilterOp(step.op)) {
+    const vals = Array.isArray(step.values) ? step.values : [];
+    // Long lists are summarised — a chip carrying 40 values is unreadable and
+    // pushes every other chip off the bar.
+    const shown = vals.length > 3 ? `${formatFilterValues(vals.slice(0, 3))} +${vals.length - 3}` : formatFilterValues(vals);
+    return `${step.column} ${opLabel} ${shown || '(none)'}`.trim();
+  }
   return `${step.column} ${opLabel} ${step.value == null ? '' : String(step.value)}`.trim();
 }
 
@@ -1399,14 +1408,24 @@ async function handleAddDashFilter(): Promise<void> {
   const op = await dashChooseModal('Filter — pick an operator', DASH_FILTER_OPS, 'Next');
   if (op === null) return;
   const step: any = { type: 'filter', column: picked.column, op };
-  if (!DASH_VALUELESS_OPS.has(op)) {
+  if (isListFilterOp(op)) {
+    const raw = await promptModal('Filter values (comma separated)', '', 'Add');
+    if (raw === null) return;
+    step.values = parseFilterValues(raw);
+    // An empty list is skipped by the pipeline with a warning, so a chip for it
+    // would sit in the bar looking active while doing nothing.
+    if (step.values.length === 0) return;
+  } else if (!DASH_VALUELESS_OPS.has(op)) {
     const value = await promptModal('Filter value', '', 'Add');
     if (value === null) return;
     step.value = value;
   }
   const list = dashFilters();
-  const k = JSON.stringify([step.column, step.op, step.value == null ? null : step.value]);
-  if (!list.some((s: any) => JSON.stringify([s.column, s.op, s.value == null ? null : s.value]) === k)) {
+  // Mirrors src/dashboardFilters.stepKey — `values` is part of the identity, or
+  // two different `in` lists on one column would look like the same chip.
+  const keyOf = (s: any): string => JSON.stringify([s.column, s.op, s.value == null ? null : s.value, s.values == null ? null : s.values]);
+  const k = keyOf(step);
+  if (!list.some((s: any) => keyOf(s) === k)) {
     list.push(step);
   }
   afterDashFilterChange();

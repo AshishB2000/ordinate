@@ -81,7 +81,9 @@
 
 import type { ColumnType, ParsedColumn } from './parse';
 import { coerceValue } from './parse';
-import type { Cell, FilterOp, FilterStep } from './transforms';
+import type { Cell, FilterStep } from './transforms';
+import type { FilterOp } from './filterOps';
+import { FILTER_OPS, COMPARE_OPS, LIST_OPS } from './filterOps';
 import type { MetricAggregation } from './metricValue';
 import { sqlEmpty } from './sqlGen';
 import { relationSql } from './parquetStore';
@@ -118,10 +120,6 @@ export interface ResidentChartData {
 // ── Constants shared with transforms.ts ──────────────────────────────────────
 
 const AGG_FNS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
-const FILTER_OPS: ReadonlySet<string> = new Set([
-  '=', '!=', '>', '<', '>=', '<=', 'contains', 'is_empty', 'not_empty',
-]);
-const COMPARE_OPS: ReadonlySet<string> = new Set(['=', '!=', '>', '<', '>=', '<=']);
 const SQL_OP: Record<string, string> = { '=': '=', '!=': '<>', '>': '>', '<': '<', '>=': '>=', '<=': '<=' };
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -415,6 +413,15 @@ function filterPredicate(cols: ParsedColumn[], s: FilterStep, params: duck.DuckV
     params.push(cellToString(s.value));
     return `contains(${sqlStr(p)}, CAST(? AS VARCHAR))`;
   }
+  if (LIST_OPS.has(op)) {
+    const values = Array.isArray(s.values) ? s.values : [];
+    // Empty list → null, i.e. NO predicate. transforms skips the step with a
+    // warning and applies nothing, so "apply nothing" is the row-identical
+    // answer. (A caller that must not lose the warning — `ipc/visuals.ts`'s
+    // warning-freedom gate — rejects this case before it ever gets here.)
+    if (values.length === 0) return null;
+    return sqlInPredicate(cols[ci].type, p, values, op === 'not in', params);
+  }
   if (!COMPARE_OPS.has(op)) return 'FALSE';
 
   if (cols[ci].type === 'number') {
@@ -431,6 +438,59 @@ function filterPredicate(cols: ParsedColumn[], s: FilterStep, params: duck.DuckV
   }
   params.push(cellToString(s.value));
   return `${sqlStr(p)} ${SQL_OP[op]} CAST(? AS VARCHAR)`;
+}
+
+/**
+ * `in` / `not in` as one never-NULL boolean. The twin of `sqlGen.sqlInPredicate`
+ * — same three rules, same order, and pinned to it by the differential tests in
+ * scripts/test-residentQuery.ts:
+ *
+ *  1. Every value is a bound `?`; a value list is untrusted input and is the
+ *     only operand here whose COUNT the renderer controls.
+ *  2. Cast on the DECLARED type — `sqlNum` only for a `number` column, so
+ *     `'007' in ('7')` stays false.
+ *  3. `coalesce(… , FALSE)` before negating, because `NULL IN (…)` is NULL and a
+ *     bare `NOT` would drop null rows. `not in` is the EXACT complement of `in`
+ *     in the JS fold, so a null cell — which is in no list — has to survive.
+ */
+function sqlInPredicate(
+  type: ColumnType,
+  p: string,
+  values: Cell[],
+  negate: boolean,
+  params: duck.DuckValue[],
+): string {
+  let inner: string;
+  if (type === 'number') {
+    // The same strict gate as transforms: an entry that is not a finite number
+    // can never equal a finite cell, so it is dropped. All dropped → matches
+    // nothing, exactly as `= 'abc'` on a number column keeps zero rows.
+    const targets = new Set<number>();
+    for (const v of values) {
+      const n = coerceValue(v ?? null, 'number');
+      if (typeof n === 'number' && Number.isFinite(n)) targets.add(n);
+    }
+    if (targets.size === 0) {
+      inner = 'FALSE';
+    } else {
+      const holes: string[] = [];
+      for (const n of targets) {
+        holes.push('CAST(? AS DOUBLE)');
+        params.push(n);
+      }
+      inner = `coalesce(${sqlNum(p)} IN (${holes.join(', ')}), FALSE)`;
+    }
+  } else {
+    // De-duplicated to mirror the JS `Set` and to bound the parameter count.
+    const targets = new Set<string>(values.map((v) => cellToString(v)));
+    const holes: string[] = [];
+    for (const t of targets) {
+      holes.push('CAST(? AS VARCHAR)');
+      params.push(t);
+    }
+    inner = `coalesce(${sqlStr(p)} IN (${holes.join(', ')}), FALSE)`;
+  }
+  return negate ? `NOT ${inner}` : inner;
 }
 
 // ── Result decoding ──────────────────────────────────────────────────────────

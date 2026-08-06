@@ -20,9 +20,15 @@
 
 import type { FilterStep } from './transforms';
 
-// Byte-for-byte identity of a filter step: same column, op, and value (null-normalized).
+// Byte-for-byte identity of a filter step: same column, op, and operand
+// (null-normalized). `values` is part of the identity, not just `value` — an
+// `in` step carries its operand there, so keying on `value` alone would make
+// `state in (CA, WA)` and `state in (NY)` the same key and silently drop the
+// second. Order-sensitive by design: this is an identity test, not a set
+// comparison, and re-ordering a list produces the same rows but a different
+// step, which is cheap to keep and wrong to guess at.
 function stepKey(s: FilterStep): string {
-  return JSON.stringify([s.column, s.op, s.value ?? null]);
+  return JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null]);
 }
 
 // Merge dashboard-wide filters with a card's own filters into ONE ordered list:

@@ -348,11 +348,69 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
     // operator including !=.
     { name: 'uncoercible number target', steps: [{ type: 'filter', column: 'sales', op: '!=', value: 'abc' }] },
     { name: "number filter vs '007'", steps: [{ type: 'filter', column: 'sales', op: '=', value: '007' }] },
+    // ── in / not in ──────────────────────────────────────────────────────
+    { name: 'text in (2 values)', steps: [{ type: 'filter', column: 'region', op: 'in', values: ['West', 'East'] }] },
+    { name: 'text in (1 value) === `=`', steps: [{ type: 'filter', column: 'region', op: 'in', values: ['West'] }] },
+    { name: 'text not in', steps: [{ type: 'filter', column: 'region', op: 'not in', values: ['West'] }] },
+    { name: 'text in, absent value', steps: [{ type: 'filter', column: 'region', op: 'in', values: ['Nowhere'] }] },
+    { name: 'text in, duplicates', steps: [{ type: 'filter', column: 'region', op: 'in', values: ['West', 'West'] }] },
+    { name: 'number in', steps: [{ type: 'filter', column: 'sales', op: 'in', values: [100, 300] }] },
+    { name: 'number in, string entries', steps: [{ type: 'filter', column: 'sales', op: 'in', values: ['100', '300'] }] },
+    { name: 'number not in', steps: [{ type: 'filter', column: 'sales', op: 'not in', values: [100] }] },
+    { name: 'number in, uncoercible entries', steps: [{ type: 'filter', column: 'sales', op: 'in', values: ['abc'] }] },
+    { name: 'number not in, uncoercible entries', steps: [{ type: 'filter', column: 'sales', op: 'not in', values: ['abc'] }] },
+    // '007' must not fuse with 7 on either side of the bridge.
+    { name: "text in vs leading zero '007'", steps: [{ type: 'filter', column: 'code', op: 'in', values: ['007'] }] },
+    { name: 'text in vs the NUMBER 7', steps: [{ type: 'filter', column: 'code', op: 'in', values: [7] }] },
+    // The NULL/'' rows in `code` are what makes `not in` differ from `!=`.
+    { name: 'text not in over a column with null and ""', steps: [{ type: 'filter', column: 'code', op: 'not in', values: ['007'] }] },
+    { name: 'text in matches "" (and therefore null)', steps: [{ type: 'filter', column: 'code', op: 'in', values: [''] }] },
+    // An empty list is SKIPPED by both sides — same rows, no predicate.
+    { name: 'in with an empty list', steps: [{ type: 'filter', column: 'region', op: 'in', values: [] }] },
+    { name: 'not in with an empty list', steps: [{ type: 'filter', column: 'region', op: 'not in', values: [] }] },
+    { name: 'in with values omitted entirely', steps: [{ type: 'filter', column: 'region', op: 'in' }] },
+    // `in` composed with the operators that already worked.
+    {
+      name: 'in chained with a numeric comparison',
+      steps: [
+        { type: 'filter', column: 'region', op: 'in', values: ['West', 'East'] },
+        { type: 'filter', column: 'sales', op: '>=', value: 100 },
+      ],
+    },
+    { name: 'in on a column this dataset lacks', steps: [{ type: 'filter', column: 'nope', op: 'in', values: ['x'] }] },
   ];
   for (const c of cases) {
     diffMetric(`filter ${c.name}`, f, 'sales', c.steps);
     diffAggregate(`filter ${c.name}`, f, 'region', [{ column: 'sales', aggregation: 'sum' }], c.steps);
   }
+
+  // ── Proof that the `in` predicate REACHED SQL ────────────────────────────
+  //
+  // Differential equality alone cannot catch this one. An operator missing from
+  // residentQuery's vocabulary is SKIPPED, not failed — `filterPredicate`
+  // returns null, no WHERE is emitted, and the query answers over every row. If
+  // the JS side ever skipped it too, both would agree on the UNFILTERED number
+  // and the suite would pass green with the filter doing nothing at all.
+  //
+  // So: pin the filtered answer to a hand-computed figure AND assert it differs
+  // from the unfiltered one. Rows are West/100, East/200, West/150, North/300,
+  // East/50 → 800 in total, 500 within {West, East}.
+  const inWE: FilterStep[] = [{ type: 'filter', column: 'region', op: 'in', values: ['West', 'East'] }];
+  const unfiltered = rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'sum' });
+  const filtered = rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'sum' }, inWE);
+  ok('in: the resident sum is the FILTERED total (500), not the whole column', filtered === 500);
+  ok('in: …and the unfiltered total really is different (800)', unfiltered === 800);
+  ok('in: so the predicate reached SQL rather than being skipped', filtered !== unfiltered);
+
+  const notWest = rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'sum' }, [
+    { type: 'filter', column: 'region', op: 'not in', values: ['West'] },
+  ]);
+  ok('not in: the resident sum excludes the listed value (550)', notWest === 550);
+
+  // The same proof one level up, on the chart path: 2 groups, not 3.
+  const chart = rq.aggregateResident(f.src, 'region', [{ column: 'sales', aggregation: 'sum' }], inWE);
+  ok('in: aggregateResident returns only the listed groups', !!chart && chart.labels.length === 2);
+  ok('in: …in first-seen order', !!chart && Object.is(chart.labels[0], 'West') && Object.is(chart.labels[1], 'East'));
 }
 
 // ── 7. An EMPTY result ──────────────────────────────────────────────────────

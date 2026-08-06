@@ -137,6 +137,53 @@ async function main(): Promise<void> {
     && styledReloaded.overrides.color === '#0a7'
     && styledReloaded.overrides.numberFormat === 'currency'
     && styledReloaded.overrides.showLegend === true);
+
+  // ── 4. an `in` filter survives save + reload, and aggregates correctly ─────
+  //
+  // The round trip is the part worth pinning: `values` has to get through
+  // sanitizeFilters, JSON on disk, and normalize() on load. A whitelist that
+  // silently dropped it would leave an `in` step with no operand — which the
+  // pipeline then SKIPS, so the chart would quietly show unfiltered totals
+  // rather than failing.
+  const inVisual = await visuals.saveVisual(proj.id, {
+    name: 'A and B, West only',
+    datasetId: dsId,
+    chartType: 'column',
+    encoding,
+    filters: [{ type: 'filter', column: 'region', op: 'in', values: ['West', 'East'] }],
+  });
+  const inLoaded = inVisual !== null ? await visuals.getVisual(proj.id, inVisual.id) : null;
+  ok('an `in` filter persists through save + reload', inLoaded !== null && inLoaded.filters.length === 1 && inLoaded.filters[0].op === 'in');
+  ok('…carrying its values verbatim', JSON.stringify(inLoaded?.filters[0].values) === JSON.stringify(['West', 'East']));
+
+  // Both regions listed → the same totals as no filter at all (115 / 220).
+  const inRes = vizData.buildVizData(COLUMNS, ROWS, inLoaded!.encoding, inLoaded!.filters);
+  const inByProduct = new Map<string | number, number | null>();
+  inRes.data.labels.forEach((lbl, i) => inByProduct.set(lbl, inRes.data.series[0].values[i]));
+  ok('`in` over both regions totals every row (A = 115)', inByProduct.get('A') === 115);
+  ok('…and produces no warnings', inRes.warnings.length === 0);
+
+  // One region listed → identical to the `=` filter tested in section 1.
+  const oneRes = vizData.buildVizData(COLUMNS, ROWS, encoding, [
+    { type: 'filter', column: 'region', op: 'in', values: ['West'] },
+  ]);
+  ok('a one-value `in` matches the `=` result exactly',
+    JSON.stringify(oneRes.data) === JSON.stringify(filteredRes.data));
+
+  const notRes = vizData.buildVizData(COLUMNS, ROWS, encoding, [
+    { type: 'filter', column: 'region', op: 'not in', values: ['West'] },
+  ]);
+  const notByProduct = new Map<string | number, number | null>();
+  notRes.data.labels.forEach((lbl, i) => notByProduct.set(lbl, notRes.data.series[0].values[i]));
+  ok('`not in` gives the complement (A = 100, B = 200)', notByProduct.get('A') === 100 && notByProduct.get('B') === 200);
+
+  // An empty list is skipped WITH a warning — the user sees why nothing changed.
+  const emptyRes = vizData.buildVizData(COLUMNS, ROWS, encoding, [
+    { type: 'filter', column: 'region', op: 'in', values: [] },
+  ]);
+  ok('an empty `in` leaves the chart unfiltered', emptyRes.data.series[0].values[0] === 115);
+  ok('…and surfaces a warning rather than blanking it silently',
+    emptyRes.warnings.length === 1 && emptyRes.warnings[0].includes('no values'));
 }
 
 main()

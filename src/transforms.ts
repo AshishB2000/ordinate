@@ -18,6 +18,8 @@ import { detectColumnType, coerceValue } from './parse';
 import { compile } from './formula';
 import type { FValue } from './formula';
 import { runOnDuckDb } from './pipelineDuck';
+import type { FilterOp } from './filterOps';
+import { FILTER_OPS, LIST_OPS, emptyListWarning } from './filterOps';
 
 // ── Shared shapes ────────────────────────────────────────────────────────────
 
@@ -37,7 +39,7 @@ export interface ApplyResult {
 
 // ── TransformStep union (single-source steps only) ───────────────────────────
 
-export type FilterOp = '=' | '!=' | '>' | '<' | '>=' | '<=' | 'contains' | 'is_empty' | 'not_empty';
+export type { FilterOp } from './filterOps';
 export type AggFn = 'sum' | 'avg' | 'count' | 'min' | 'max';
 export interface Aggregation {
   column: string;
@@ -55,6 +57,15 @@ export interface FilterStep {
   column: string;
   op: FilterOp;
   value?: Cell;
+  /**
+   * The value LIST for `in` / `not in` — deliberately a SEPARATE field rather
+   * than widening `value` to `Cell | Cell[]`. Every stored visual.json /
+   * dashboard.json and every existing code path reads `value` as a scalar, so
+   * widening it would make each of them a type error and a migration; adding a
+   * field makes older steps keep working untouched and newer ones simply carry
+   * one more key. Ignored by every other operator.
+   */
+  values?: Cell[];
 }
 export interface GroupAggregateStep {
   type: 'group_aggregate';
@@ -98,7 +109,6 @@ export type StepType = TransformStep['type'];
 
 // ── Small helpers ────────────────────────────────────────────────────────────
 
-const FILTER_OPS: ReadonlySet<string> = new Set(['=', '!=', '>', '<', '>=', '<=', 'contains', 'is_empty', 'not_empty']);
 const AGG_FNS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
 const STEP_TYPES: ReadonlySet<string> = new Set([
   'calculated_field',
@@ -256,6 +266,44 @@ function stepFilter(t: TableData, s: FilterStep): StepResult {
 
   const col = t.columns[ci];
   const columns = t.columns.map((c) => ({ ...c }));
+
+  // `in` / `not in` are handled before the scalar operators because they read a
+  // different field (`values`, not `value`).
+  if (LIST_OPS.has(s.op)) {
+    const list = Array.isArray(s.values) ? s.values : [];
+    // An empty list SKIPS, matching the "unknown step skipped with a warning,
+    // never throws" contract. Matching zero rows would blank the chart the
+    // instant a filter is created, which reads as a bug rather than as "you
+    // haven't picked any values yet".
+    if (list.length === 0) return skip(t, emptyListWarning(s.column, s.op));
+
+    // `in` is EXACTLY a disjunction of the existing `=` operator, so it reuses
+    // `=`'s coercion rules verbatim: a number column compares round-tripped
+    // finite numbers (uncoercible entries can never match and are dropped), a
+    // text/date column compares `cellToString` output (so a null cell reads as
+    // '' — the same as `= ''` does today).
+    let inList: (cell: Cell) => boolean;
+    if (col.type === 'number') {
+      const targets = new Set<number>();
+      for (const v of list) {
+        const n = coerceValue(v ?? null, 'number');
+        if (typeof n === 'number' && Number.isFinite(n)) targets.add(n);
+      }
+      inList = (cell) => typeof cell === 'number' && Number.isFinite(cell) && targets.has(cell);
+    } else {
+      const targets = new Set<string>(list.map((v) => cellToString(v ?? null)));
+      inList = (cell) => targets.has(cellToString(cell));
+    }
+
+    // EXACT negation — deliberately unlike `!=`. On a number column `!=` returns
+    // false for a null cell (both `=` and `!=` do, because the `cn === null`
+    // guard precedes the switch), so `!=` is not the complement of `=`. `not in`
+    // IS the complement: a null cell is not in the list, so it survives. That
+    // matches what "exclude these three regions" means to a user, and every
+    // implementation of this operator is pinned to that choice by test.
+    const rows = t.rows.filter((r) => (s.op === 'in' ? inList(r[ci]) : !inList(r[ci]))).map((r) => r.slice());
+    return { table: { columns, rows }, warnings: [] };
+  }
 
   let keep: (cell: Cell) => boolean;
   if (s.op === 'is_empty') {
@@ -515,6 +563,10 @@ function asString(v: unknown): string | undefined {
   return typeof v === 'string' ? v : undefined;
 }
 
+function isCell(v: unknown): v is Cell {
+  return typeof v === 'string' || typeof v === 'number' || v === null;
+}
+
 function sanitizeStep(item: unknown): TransformStep | null {
   if (!item || typeof item !== 'object') return null;
   const o = item as Record<string, unknown>;
@@ -533,9 +585,15 @@ function sanitizeStep(item: unknown): TransformStep | null {
       const op = asString(o.op);
       if (column === undefined || op === undefined || !FILTER_OPS.has(op)) return null;
       const step: FilterStep = { type, column, op: op as FilterOp };
-      if (typeof o.value === 'string' || typeof o.value === 'number' || o.value === null) {
-        step.value = o.value as Cell;
-      }
+      if (isCell(o.value)) step.value = o.value;
+      // `values` is whitelisted the same way `value` is, element by element: a
+      // non-array is dropped entirely and a non-Cell entry (object, array,
+      // boolean, undefined) is dropped from the list rather than making the
+      // whole step invalid. Nothing here can produce a nested structure, so a
+      // hostile renderer/AI payload cannot smuggle one past this point into the
+      // SQL builders — which is where an array would otherwise become an
+      // uncontrolled number of bound parameters.
+      if (Array.isArray(o.values)) step.values = o.values.filter(isCell);
       return step;
     }
     case 'group_aggregate': {

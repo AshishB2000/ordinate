@@ -100,6 +100,107 @@ function fixture(): TableData {
   ok('filter: is_empty', empty.rowCount === 2);
 }
 
+// ── filter: in / not in — the multi-value operator ───────────────────────────
+//
+// The property that matters most is that `in` is EXACTLY a disjunction of `=`.
+// So rather than only asserting row counts, several of these run the equivalent
+// `=` steps and compare, which is the same differential idea the resident suites
+// use — a hand-written expectation can agree with a bug, an equivalence can't.
+{
+  const inTwo = applyPipeline(fixture(), [
+    { type: 'filter', column: 'city', op: 'in', values: ['Paris', 'Berlin'] },
+  ]);
+  ok('filter in: matches any listed value', inTwo.rowCount === 4);
+  ok('filter in: no warnings', inTwo.warnings.length === 0);
+
+  // in ['Paris'] must be row-identical to = 'Paris'.
+  const inOne = applyPipeline(fixture(), [{ type: 'filter', column: 'city', op: 'in', values: ['Paris'] }]);
+  const eqOne = applyPipeline(fixture(), [{ type: 'filter', column: 'city', op: '=', value: 'Paris' }]);
+  ok(
+    'filter in: a one-entry list is byte-identical to `=`',
+    JSON.stringify(inOne.rows) === JSON.stringify(eqOne.rows),
+  );
+
+  // A value not present changes nothing; duplicates do not duplicate rows.
+  const withMiss = applyPipeline(fixture(), [
+    { type: 'filter', column: 'city', op: 'in', values: ['Paris', 'Nowhere', 'Paris'] },
+  ]);
+  ok(
+    'filter in: absent and duplicate entries neither add nor drop rows',
+    JSON.stringify(withMiss.rows) === JSON.stringify(inOne.rows),
+  );
+
+  const notIn = applyPipeline(fixture(), [{ type: 'filter', column: 'city', op: 'not in', values: ['Paris'] }]);
+  ok('filter not in: keeps everything else', notIn.rowCount === 2 && colValues(notIn, 'city').every((v) => v === 'Berlin'));
+  ok('filter not in: partitions the table with `in`', notIn.rowCount + inOne.rowCount === fixture().rows.length);
+}
+
+// ── filter in: numbers cast on the DECLARED type, never on inference ─────────
+{
+  const nums = applyPipeline(fixture(), [{ type: 'filter', column: 'units', op: 'in', values: [3, 5] }]);
+  ok('filter in: numeric column matches numeric entries', nums.rowCount === 2);
+
+  // A number column accepts a stringified entry (coerceValue is the same gate
+  // `=` uses), so '3' finds the row 3 does.
+  const asStr = applyPipeline(fixture(), [{ type: 'filter', column: 'units', op: 'in', values: ['3'] }]);
+  ok("filter in: '3' matches the number 3, exactly as `=` does", asStr.rowCount === 1);
+
+  // …but a TEXT column is never cast, so '007' and 7 stay different values.
+  const sku = applyPipeline(fixture(), [{ type: 'filter', column: 'sku', op: 'in', values: ['007'] }]);
+  ok("filter in: text column matches '007' verbatim", sku.rowCount === 2);
+  const skuNum = applyPipeline(fixture(), [{ type: 'filter', column: 'sku', op: 'in', values: [7] }]);
+  ok("filter in: 7 does NOT match the text '007'", skuNum.rowCount === 0);
+
+  // An entry that cannot be a finite number can never equal a numeric cell —
+  // the same rule that makes `units = 'abc'` keep zero rows.
+  const junk = applyPipeline(fixture(), [{ type: 'filter', column: 'units', op: 'in', values: ['abc'] }]);
+  ok('filter in: an uncoercible numeric entry matches nothing', junk.rowCount === 0);
+  const junkNot = applyPipeline(fixture(), [{ type: 'filter', column: 'units', op: 'not in', values: ['abc'] }]);
+  ok('filter not in: …and its negation keeps every row', junkNot.rowCount === fixture().rows.length);
+}
+
+// ── filter in: the empty list SKIPS, it does not match zero rows ─────────────
+{
+  const src = fixture();
+  const none = applyPipeline(src, [{ type: 'filter', column: 'city', op: 'in', values: [] }]);
+  ok('filter in: an empty list keeps every row (skipped, not zero-matched)', none.rowCount === src.rows.length);
+  ok('filter in: …and says so with a warning', none.warnings.length === 1 && none.warnings[0].includes('no values'));
+
+  const missing = applyPipeline(src, [{ type: 'filter', column: 'city', op: 'in' }]);
+  ok('filter in: an omitted `values` behaves like an empty one', missing.rowCount === src.rows.length && missing.warnings.length === 1);
+
+  const notNone = applyPipeline(src, [{ type: 'filter', column: 'city', op: 'not in', values: [] }]);
+  ok('filter not in: an empty list also skips rather than dropping everything', notNone.rowCount === src.rows.length);
+}
+
+// ── filter in: empties, and why `not in` is not `!=` ────────────────────────
+{
+  const withEmpty: TableData = {
+    columns: [{ name: 'a', type: 'text' }],
+    rows: [['x'], [''], [null], ['y']],
+  };
+  // A null cell stringifies to '' — the same rule `= ''` follows today.
+  const blank = applyPipeline(withEmpty, [{ type: 'filter', column: 'a', op: 'in', values: [''] }]);
+  const blankEq = applyPipeline(withEmpty, [{ type: 'filter', column: 'a', op: '=', value: '' }]);
+  ok('filter in: null and "" both match an empty entry, as `=` does', blank.rowCount === 2);
+  ok('filter in: …byte-identically to `=`', JSON.stringify(blank.rows) === JSON.stringify(blankEq.rows));
+
+  // `not in` is the EXACT complement of `in`. `!=` is not the complement of `=`
+  // on a number column (a null cell fails BOTH), so this is a real difference
+  // and it is pinned here on purpose.
+  const nums: TableData = {
+    columns: [{ name: 'n', type: 'number' }],
+    rows: [[1], [2], [null]],
+  };
+  const inN = applyPipeline(nums, [{ type: 'filter', column: 'n', op: 'in', values: [1] }]);
+  const notInN = applyPipeline(nums, [{ type: 'filter', column: 'n', op: 'not in', values: [1] }]);
+  const neN = applyPipeline(nums, [{ type: 'filter', column: 'n', op: '!=', value: 1 }]);
+  ok('filter in: a null numeric cell is in no list', inN.rowCount === 1);
+  ok('filter not in: …so it SURVIVES the negation', notInN.rowCount === 2);
+  ok('filter not in: `!=` drops that null instead — the two differ by design', neN.rowCount === 1);
+  ok('filter not in: in + not in still covers every row', inN.rowCount + notInN.rowCount === nums.rows.length);
+}
+
 // ── group_aggregate: sum / avg / count / min / max ───────────────────────────
 {
   const res = applyPipeline(fixture(), [
@@ -242,6 +343,32 @@ function fixture(): TableData {
   ok('sanitize: keeps only valid steps', clean.length === 2);
   ok('sanitize: strips unknown fields', !('extra' in (clean[1] as unknown as Record<string, unknown>)));
   ok('sanitize: non-array → []', sanitizeSteps('nope').length === 0 && sanitizeSteps(null).length === 0);
+}
+
+// ── sanitizeSteps: the `values` list is untrusted input ─────────────────────
+//
+// `values` reaches the SQL builders as an attacker-influenced NUMBER of bound
+// parameters, so what survives this whitelist is a security boundary, not a
+// convenience.
+{
+  const vals = (raw: unknown): unknown =>
+    (sanitizeSteps([{ type: 'filter', column: 'a', op: 'in', values: raw }])[0] as { values?: unknown }).values;
+
+  ok('sanitize: `in` is a valid operator', sanitizeSteps([{ type: 'filter', column: 'a', op: 'in', values: ['x'] }]).length === 1);
+  ok('sanitize: `not in` is a valid operator', sanitizeSteps([{ type: 'filter', column: 'a', op: 'not in', values: ['x'] }]).length === 1);
+  ok('sanitize: keeps a list of strings/numbers/nulls', JSON.stringify(vals(['a', 1, null])) === JSON.stringify(['a', 1, null]));
+  ok('sanitize: drops non-Cell entries, keeping the rest', JSON.stringify(vals(['a', { evil: 1 }, ['nested'], true, undefined, 2])) === JSON.stringify(['a', 2]));
+  ok('sanitize: a non-array `values` is dropped entirely', vals('CA,WA') === undefined);
+  ok('sanitize: an empty list survives (the pipeline skips it with a warning)', JSON.stringify(vals([])) === JSON.stringify([]));
+
+  // `value` and `values` are independent — adding one must not disturb the other.
+  const both = sanitizeSteps([{ type: 'filter', column: 'a', op: '=', value: 'x', values: ['y'] }])[0] as {
+    value?: unknown;
+    values?: unknown;
+  };
+  ok('sanitize: `value` still survives alongside `values`', both.value === 'x' && JSON.stringify(both.values) === JSON.stringify(['y']));
+  const scalarOnly = sanitizeSteps([{ type: 'filter', column: 'a', op: '=', value: 'x' }])[0] as unknown as Record<string, unknown>;
+  ok('sanitize: a step with no `values` does not grow one', !('values' in scalarOnly));
 }
 
 // ── combineTables: append ────────────────────────────────────────────────────

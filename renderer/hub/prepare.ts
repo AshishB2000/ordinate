@@ -24,7 +24,7 @@ const STEP_TYPES: Array<{ type: string; label: string }> = [
   { type: 'drop_column', label: 'Drop column' },
   { type: 'rename_column', label: 'Rename column' },
 ];
-const FILTER_OPS = ['=', '!=', '>', '<', '>=', '<=', 'contains', 'is_empty', 'not_empty'];
+const FILTER_OPS = ['=', '!=', '>', '<', '>=', '<=', 'contains', 'is_empty', 'not_empty', 'in', 'not in'];
 const AGG_FNS = ['sum', 'avg', 'count', 'min', 'max'];
 
 function pEl(id: string): HTMLElement | null {
@@ -94,6 +94,12 @@ function stepSummaryText(step: any): string {
     case 'filter':
       if (step.op === 'is_empty') return 'Filter: ' + step.column + ' is empty';
       if (step.op === 'not_empty') return 'Filter: ' + step.column + ' is not empty';
+      if (isListFilterOp(step.op)) {
+        const list = formatFilterValues(step.values);
+        // An empty list is SKIPPED by the pipeline (with a warning), so the
+        // summary says so rather than implying the step is doing something.
+        return 'Filter: ' + step.column + ' ' + step.op + ' ' + (list ? '(' + list + ')' : '— no values yet');
+      }
       return 'Filter: ' + step.column + ' ' + step.op + ' ' + (step.value != null ? step.value : '');
     case 'group_aggregate': {
       const by = Array.isArray(step.groupBy) ? step.groupBy.join(', ') : '';
@@ -296,13 +302,29 @@ function buildStepForm(type: string, body: HTMLElement, existing: any): () => an
     case 'filter': {
       const colSel = makeColSelect(existing ? existing.column : undefined);
       const opSel = selectFrom(FILTER_OPS, existing && existing.op ? String(existing.op) : '=');
-      const valIn = textInput(existing && existing.value != null ? String(existing.value) : '');
+      // ONE input for both shapes: a scalar for `=`/`contains`/…, a
+      // comma-separated list for `in`/`not in`. The label and placeholder say
+      // which is in force, and the value carries across when the operator
+      // changes, so switching `= CA` to `in` leaves "CA" as the first entry
+      // rather than silently clearing what was typed.
+      const startsAsList = isListFilterOp(existing && existing.op);
+      const valIn = textInput(
+        startsAsList
+          ? formatFilterValues(existing && existing.values)
+          : existing && existing.value != null
+            ? String(existing.value)
+            : '',
+      );
       const valRow = fieldRow('Value', valIn);
+      const valLabel = valRow.querySelector('.ds-step-field-label') as HTMLElement | null;
       body.appendChild(fieldRow('Column', colSel));
       body.appendChild(fieldRow('Condition', opSel));
       body.appendChild(valRow);
       const syncVal = () => {
-        valRow.hidden = opSel.value === 'is_empty' || opSel.value === 'not_empty';
+        const list = isListFilterOp(opSel.value);
+        valRow.hidden = isValuelessFilterOp(opSel.value);
+        if (valLabel) valLabel.textContent = list ? 'Values' : 'Value';
+        valIn.placeholder = list ? 'CA, WA, NY' : '';
       };
       opSel.addEventListener('change', syncVal);
       syncVal();
@@ -314,7 +336,8 @@ function buildStepForm(type: string, body: HTMLElement, existing: any): () => an
           return null;
         }
         const step: any = { type, column, op };
-        if (op !== 'is_empty' && op !== 'not_empty') step.value = valIn.value;
+        if (isListFilterOp(op)) step.values = parseFilterValues(valIn.value);
+        else if (!isValuelessFilterOp(op)) step.value = valIn.value;
         return step;
       };
     }
