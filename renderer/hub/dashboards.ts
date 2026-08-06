@@ -1296,9 +1296,14 @@ function renderDashFilterBar(): void {
   list.forEach((step: any, i: number) => {
     const chip = document.createElement('span');
     chip.className = 'dash-filter-chip';
-    const txt = document.createElement('span');
+    // The chip's text is the edit affordance — a button, not a span, so it is
+    // keyboard-reachable and announces itself.
+    const txt = document.createElement('button');
+    txt.type = 'button';
     txt.className = 'dash-filter-chip-txt';
     txt.textContent = dashFilterLabel(step);
+    txt.setAttribute('aria-label', 'Edit filter: ' + dashFilterLabel(step));
+    txt.addEventListener('click', () => { void handleEditDashFilter(i); });
     const x = document.createElement('button');
     x.type = 'button';
     x.className = 'dash-filter-chip-x';
@@ -1401,33 +1406,69 @@ async function distinctColumnOptions(
   }
 }
 
-// + Filter: dataset → column → operator → value (skipped for value-less ops).
+// Mirrors src/dashboardFilters.stepKey — `values` is part of the identity, or
+// two different `in` lists on one column would look like the same chip.
+function dashStepKey(s: any): string {
+  return JSON.stringify([s.column, s.op, s.value == null ? null : s.value, s.values == null ? null : s.values]);
+}
+
+// + Filter: dataset → column → the type-aware dialog. The dialog replaces the
+// old operator-pick + value-prompt pair, which asked the user to know that a
+// dimension wants `in` and a measure wants a range before it would show them
+// anything about the column.
 async function handleAddDashFilter(): Promise<void> {
   const picked = await pickDatasetAndColumn();
   if (!picked) return;
-  const op = await dashChooseModal('Filter — pick an operator', DASH_FILTER_OPS, 'Next');
-  if (op === null) return;
-  const step: any = { type: 'filter', column: picked.column, op };
-  if (isListFilterOp(op)) {
-    const raw = await promptModal('Filter values (comma separated)', '', 'Add');
-    if (raw === null) return;
-    step.values = parseFilterValues(raw);
-    // An empty list is skipped by the pipeline with a warning, so a chip for it
-    // would sit in the bar looking active while doing nothing.
-    if (step.values.length === 0) return;
-  } else if (!DASH_VALUELESS_OPS.has(op)) {
-    const value = await promptModal('Filter value', '', 'Add');
-    if (value === null) return;
-    step.value = value;
-  }
+  const cols = picked.ds && Array.isArray(picked.ds.columns) ? picked.ds.columns : [];
+  const col = cols.find((c: any) => c && String(c.name) === picked.column);
+  const steps = await openFilterDialog({
+    projectId: currentProjectId || '',
+    datasetId: String(picked.ds && picked.ds.id ? picked.ds.id : ''),
+    column: picked.column,
+    type: col && col.type ? String(col.type) : 'text',
+  });
+  if (steps === null || steps.length === 0) return;
+
   const list = dashFilters();
-  // Mirrors src/dashboardFilters.stepKey — `values` is part of the identity, or
-  // two different `in` lists on one column would look like the same chip.
-  const keyOf = (s: any): string => JSON.stringify([s.column, s.op, s.value == null ? null : s.value, s.values == null ? null : s.values]);
-  const k = keyOf(step);
-  if (!list.some((s: any) => keyOf(s) === k)) {
-    list.push(step);
+  // A min/max range arrives as two steps; each is de-duped on its own.
+  for (const step of steps) {
+    const k = dashStepKey(step);
+    if (!list.some((s: any) => dashStepKey(s) === k)) list.push(step);
   }
+  afterDashFilterChange();
+}
+
+// Clicking a chip re-opens the dialog on that step. Replacing it in place keeps
+// its position in the bar, so an edit does not reshuffle every other chip.
+async function handleEditDashFilter(idx: number): Promise<void> {
+  const list = dashFilters();
+  const step = list[idx];
+  if (!step || !currentProjectId) return;
+  // The bar spans datasets, so the chip's own dataset is whichever one actually
+  // has this column — the same "skip a filter whose column is absent" rule the
+  // merge follows. Falling back to the first dataset keeps the dialog usable
+  // rather than refusing to open.
+  let datasets: any[] = [];
+  try { datasets = await window.hub.listDatasets(currentProjectId); } catch (_) { datasets = []; }
+  let dsId = '';
+  let type = 'text';
+  for (const d of Array.isArray(datasets) ? datasets : []) {
+    let meta: any = null;
+    try { meta = await window.hub.getDatasetMeta(currentProjectId, String(d.id)); } catch (_) { meta = null; }
+    const col = meta && Array.isArray(meta.columns)
+      ? meta.columns.find((c: any) => c && String(c.name) === step.column)
+      : null;
+    if (col) { dsId = String(d.id); type = col.type ? String(col.type) : 'text'; break; }
+  }
+  const steps = await openFilterDialog({
+    projectId: currentProjectId,
+    datasetId: dsId,
+    column: step.column,
+    type,
+    existing: step,
+  });
+  if (steps === null) return;
+  list.splice(idx, 1, ...steps);
   afterDashFilterChange();
 }
 

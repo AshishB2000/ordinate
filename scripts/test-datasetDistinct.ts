@@ -165,6 +165,101 @@ ok('JS: all-empty → []', same(dp.distinctValuesJs(f6.columns, f6.rows, 'v', 20
 if (resident) ok('resident: all-empty → [] (a real answer, not null)', same(dp.readDistinct(f6.src, 'v', 200), []));
 else ok('resident: all-empty (bridge down — skipped)', true);
 
+// ── §7 the searched page: server-side search + the pre-cap total ─────────────
+//
+// The filter dialog's checkbox list needs both. The search MUST run in SQL — a
+// high-cardinality text column on a 1,000,000-row dataset can have hundreds of
+// thousands of distinct values, and fetching them all to filter in the renderer
+// is exactly the pattern that capped datasets at 50k before this module existed.
+// `total` is what lets the UI say "showing the first 200 of 4,812" rather than
+// implying 200 is all there is.
+
+/** Same differential idea as above, over the {values,total} pair. */
+function differentialPage(label: string, f: Fixture, column: string, req: any): void {
+  const js = dp.distinctValuesPageJs(f.columns, f.rows, column, req);
+  const sql = dp.readDistinctPage(f.src, column, req);
+  if (sql === null) {
+    ok(label + ' (bridge down — JS path only)', true);
+    return;
+  }
+  ok(label, same(sql.values, js.values) && Object.is(sql.total, js.total));
+}
+
+const f7 = fixture([{ name: 'v', type: 'text' }], [
+  ['California'], ['Washington'], ['New York'], ['california'],
+  ['Carolina'], ['Washington'], ['Texas'], [null], [''],
+]);
+
+{
+  const all = dp.distinctValuesPageJs(f7.columns, f7.rows, 'v', {});
+  ok('JS: no search → every distinct value, total === length',
+    all.values.length === 6 && all.total === 6);
+
+  // Case-INSENSITIVE substring, matching what a search box means to a user.
+  const cal = dp.distinctValuesPageJs(f7.columns, f7.rows, 'v', { search: 'cal' });
+  ok('JS: search is a case-insensitive substring match',
+    same(cal.values, ['California', 'california']) && cal.total === 2);
+  ok('JS: a mid-word match counts too (Carolina has no "cal", "lina" does)',
+    dp.distinctValuesPageJs(f7.columns, f7.rows, 'v', { search: 'LINA' }).total === 1);
+  ok('JS: a search matching nothing is an empty list with total 0',
+    dp.distinctValuesPageJs(f7.columns, f7.rows, 'v', { search: 'zzz' }).total === 0);
+  ok('JS: a blank search is not a filter',
+    dp.distinctValuesPageJs(f7.columns, f7.rows, 'v', { search: '' }).total === 6);
+
+  // THE POINT OF `total`: the cap truncates `values` but NOT the count.
+  const capped = dp.distinctValuesPageJs(f7.columns, f7.rows, 'v', { limit: 2 });
+  ok('JS: total is the PRE-cap count, so truncation is never silent',
+    capped.values.length === 2 && capped.total === 6);
+  // …and it is the count AFTER the search, not of the whole column.
+  const both = dp.distinctValuesPageJs(f7.columns, f7.rows, 'v', { search: 'a', limit: 1 });
+  ok('JS: total counts search matches, not the whole column',
+    both.values.length === 1 && both.total === 5);
+  ok('JS: a zero cap still reports the real total',
+    dp.distinctValuesPageJs(f7.columns, f7.rows, 'v', { limit: 0 }).total === 6);
+}
+
+differentialPage('resident matches JS with no search', f7, 'v', {});
+differentialPage('resident matches JS on a search', f7, 'v', { search: 'cal' });
+differentialPage('resident matches JS on an upper-case search', f7, 'v', { search: 'WASH' });
+differentialPage('resident matches JS on a no-match search', f7, 'v', { search: 'zzz' });
+differentialPage('resident matches JS on a blank search', f7, 'v', { search: '' });
+differentialPage('resident matches JS when the cap truncates', f7, 'v', { limit: 2 });
+differentialPage('resident matches JS on search + cap together', f7, 'v', { search: 'a', limit: 1 });
+differentialPage('resident matches JS at a zero cap', f7, 'v', { limit: 0 });
+differentialPage('resident matches JS on the emptiness rule', f2, 'v', { search: '' });
+differentialPage('resident matches JS searching a number-typed column', f1, 'amount', { search: '0' });
+
+// The search is untrusted input from a text box: it must stay a bound parameter.
+{
+  const evil = "' OR 1=1 --";
+  const js = dp.distinctValuesPageJs(f7.columns, f7.rows, 'v', { search: evil });
+  const sql = dp.readDistinctPage(f7.src, 'v', { search: evil });
+  ok('a SQL-shaped search term matches nothing rather than executing',
+    js.total === 0 && (sql === null || sql.total === 0));
+  const quote = dp.readDistinctPage(f7.src, 'v', { search: "'" });
+  ok("a lone quote is a search term, not a syntax error", quote !== null && quote.total === 0);
+}
+
+// The cap can never be raised past MAX_DISTINCT by the caller — the ceiling is
+// the module's, not the renderer's.
+{
+  const over = dp.distinctValuesPageJs(f4.columns, f4.rows, 'v', { limit: 10_000 });
+  ok('JS: a caller cannot request more than MAX_DISTINCT', over.values.length <= dp.MAX_DISTINCT);
+  differentialPage('resident honours the same ceiling', f4, 'v', { limit: 10_000 });
+}
+
+// readDistinct is now a thin wrapper — assert it still answers identically, so
+// the existing `dataset:distinct` callers are provably unaffected.
+{
+  const wrapped = dp.readDistinct(f7.src, 'v', 200);
+  const paged = dp.readDistinctPage(f7.src, 'v', { limit: 200 });
+  ok('readDistinct still equals readDistinctPage().values',
+    (wrapped === null && paged === null) || (paged !== null && same(wrapped, paged.values)));
+  ok('distinctValuesJs still equals distinctValuesPageJs().values',
+    same(dp.distinctValuesJs(f7.columns, f7.rows, 'v', 200),
+      dp.distinctValuesPageJs(f7.columns, f7.rows, 'v', { limit: 200 }).values));
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 cleanup();

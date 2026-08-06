@@ -544,5 +544,10 @@ function ensureVizForm(): void {
   if (vizForm) return;
   const mount = vizEl('viz-encoding-mount');
   if (!mount) return;
-  vizForm = createEncodingForm(mount, { onChange: () => scheduleRecompute() });
+  vizForm = createEncodingForm(mount, {
+    onChange: () => scheduleRecompute(),
+    // Resolved at click time: the builder's dataset changes under the form.
+    dataset: () =>
+      currentProjectId && vizDatasetId ? { projectId: currentProjectId, datasetId: vizDatasetId } : null,
+  });
 }

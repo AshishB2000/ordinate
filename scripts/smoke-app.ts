@@ -2259,6 +2259,99 @@ async function main(): Promise<void> {
   });
   ok('+ Add filter adds a filter row', filterAdded === 1, String(filterAdded));
 
+  // ── The type-aware filter dialog ─────────────────────────────────────────
+  // A dialog nobody drives is untested UI, and untested UI is how a blocked
+  // inline style once shipped past 2,400 green assertions. This opens it on a
+  // TEXT column and checks the thing that makes it type-aware: a real checkbox
+  // list of that column's distinct values, fetched through main.
+  //
+  // The fresh row is also asserted INERT. It used to be `{op:'=', value:''}`,
+  // which matches EMPTY cells — so adding a filter blanked the chart before you
+  // had typed anything, while a comment here claimed it "changes nothing".
+  ok('…and that row is inert until a condition is set',
+     await win.evaluate(() => {
+       const b = document.querySelector('#ws-visuals .viz-filter-cond') as HTMLButtonElement;
+       return !!b && /set a condition/.test(b.textContent || '');
+     }));
+
+  await win.evaluate(() =>
+    (document.querySelector('#ws-visuals .viz-filter-cond') as HTMLElement).click());
+  // The value list is an IPC round trip against a 1M-row Parquet.
+  await win
+    .waitForFunction(() => document.querySelectorAll('.fd-list .fd-opt').length > 0, undefined,
+                     { timeout: 30_000 })
+    .catch(() => {});
+  const dlg = await win.evaluate(() => {
+    const opts = [...document.querySelectorAll('.fd-list .fd-opt')];
+    return {
+      open: !!document.querySelector('.fd-modal'),
+      // A text column gets Values + Condition; a number column would get Range.
+      tabs: [...document.querySelectorAll('.fd-tab')].map((t) => (t.textContent || '').trim()),
+      sub: (document.querySelector('.fd-sub')?.textContent || '').trim(),
+      options: opts.length,
+      // The smoke dataset has exactly 7 regions, so this is the column's REAL
+      // distinct values rather than a placeholder.
+      first: (opts[0]?.textContent || '').trim(),
+      applyDisabled: (document.querySelector('.fd-modal .btn-primary') as HTMLButtonElement)?.disabled,
+    };
+  });
+  ok('the filter dialog opens with a real value list for a text column',
+     dlg.open && dlg.options === 7 && /^region/.test(dlg.first), JSON.stringify(dlg));
+  ok('…adapting to the column type (Values + Condition, not a range)',
+     dlg.sub === 'Text column' && JSON.stringify(dlg.tabs) === JSON.stringify(['Values', 'Condition']),
+     JSON.stringify(dlg.tabs));
+  ok('…with Apply disabled until something is actually selected', dlg.applyDisabled === true);
+
+  // The search must narrow the list through MAIN, not by filtering an
+  // already-fetched array in the renderer.
+  await win.evaluate(() => {
+    const s = document.querySelector('.fd-search') as HTMLInputElement;
+    s.value = 'region3';
+    s.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await win
+    .waitForFunction(() => document.querySelectorAll('.fd-list .fd-opt').length === 1, undefined,
+                     { timeout: 30_000 })
+    .catch(() => {});
+  ok('searching narrows the list (server-side, over 1M rows)',
+     await win.evaluate(() => document.querySelectorAll('.fd-list .fd-opt').length === 1));
+
+  const dialogShot = path.join(shotDir, 'filter-dialog.png');
+  await win.screenshot({ path: dialogShot });
+  ok('filter dialog screenshot captured',
+     fs.existsSync(dialogShot) && fs.statSync(dialogShot).size > 5000,
+     `${Math.round(fs.statSync(dialogShot).size / 1024)} KB -> ${dialogShot}`);
+
+  // Tick three values and apply → ONE `in` step carrying all three.
+  await win.evaluate(() => {
+    const s = document.querySelector('.fd-search') as HTMLInputElement;
+    s.value = '';
+    s.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await win
+    .waitForFunction(() => document.querySelectorAll('.fd-list .fd-opt').length === 7, undefined,
+                     { timeout: 30_000 })
+    .catch(() => {});
+  await win.evaluate(() => {
+    [...document.querySelectorAll('.fd-list .fd-opt input')].slice(0, 3)
+      .forEach((el) => (el as HTMLInputElement).click());
+  });
+  ok('selecting values enables Apply and counts them',
+     await win.evaluate(() => {
+       const note = document.querySelector('.fd-note')?.textContent || '';
+       const btn = document.querySelector('.fd-modal .btn-primary') as HTMLButtonElement;
+       return !btn.disabled && /3 selected/.test(note);
+     }));
+  await win.evaluate(() =>
+    (document.querySelector('.fd-modal .btn-primary') as HTMLElement).click());
+  await win.waitForTimeout(1200);
+  ok('Apply closes the dialog and writes ONE `in` step onto the row',
+     await win.evaluate(() => {
+       const open = !!document.querySelector('.fd-modal');
+       const b = document.querySelector('#ws-visuals .viz-filter-cond') as HTMLElement;
+       return !open && /is any of/.test(b?.textContent || '');
+     }));
+
   const builderShot = path.join(shotDir, 'visual-builder.png');
   await win.screenshot({ path: builderShot });
   ok('visual builder screenshot captured',

@@ -32,6 +32,13 @@ interface EncodingFormOpts {
   /** Fired on any edit. The caller decides whether that means recompute, save, both. */
   onChange: () => void;
   /**
+   * Which dataset the filters run against, resolved at CLICK time rather than at
+   * construction — the form outlives the dataset selection. The type-aware
+   * filter dialog needs it to read a column's distinct values; without it the
+   * dialog still opens, just with no checkbox list to offer.
+   */
+  dataset?: () => { projectId: string; datasetId: string } | null;
+  /**
    * 'form'  — the Visuals builder: labelled rows of selects (unchanged).
    * 'wells' — the authoring panel: each row is a drop zone, each field a pill,
    *           and an empty zone says what belongs in it.
@@ -294,6 +301,27 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     filters.forEach((f, i) => filtersList.appendChild(makeFilterRow(f, i)));
   }
 
+  /** Open the type-aware dialog for one filter row and write the answer back. */
+  async function editFilter(idx: number): Promise<void> {
+    const cur = filters[idx];
+    if (!cur || !cur.column) return;
+    const ds = opts.dataset ? opts.dataset() : null;
+    const col = columns.find((c) => c.name === cur.column);
+    const steps = await openFilterDialog({
+      projectId: ds ? ds.projectId : '',
+      datasetId: ds ? ds.datasetId : '',
+      column: cur.column,
+      type: col ? col.type : 'text',
+      existing: cur,
+    });
+    if (steps === null) return; // cancelled — leave the row exactly as it was
+    // A min/max range is TWO steps and always was; splicing in place keeps each
+    // one independently editable and deletable.
+    filters.splice(idx, 1, ...steps);
+    renderFilters();
+    opts.onChange();
+  }
+
   function makeFilterRow(step: any, i: number): HTMLElement {
     const row = document.createElement('div');
     row.className = wells ? 'viz-filter-row enc-pill enc-pill--filter' : 'viz-filter-row';
@@ -302,46 +330,28 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     colSel.className = 'viz-select';
     colSel.setAttribute('aria-label', 'Filter column');
     fill(colSel, columns.map((c) => ({ value: c.name, label: c.name })), step.column || '');
-    colSel.addEventListener('change', () => { filters[i].column = colSel.value; opts.onChange(); });
+    colSel.addEventListener('change', () => {
+      // Retargeting to a column of a different type makes the old operand
+      // meaningless (an `in` list of region names on a number column), so the
+      // condition resets to unset and the row goes inert until it is set again.
+      filters[i] = { type: 'filter', column: colSel.value, op: '' };
+      renderFilters();
+      opts.onChange();
+    });
     row.appendChild(colSel);
 
-    const opSel = document.createElement('select');
-    opSel.className = 'viz-select';
-    opSel.setAttribute('aria-label', 'Filter condition');
-    fill(opSel, FILTER_OPS.map((o: string) => ({ value: o, label: o })), step.op || '=');
-    row.appendChild(opSel);
-
-    // One input, two shapes: a scalar, or a comma-separated list for `in`/`not
-    // in`. Both are written back on every keystroke so the chart re-renders as
-    // the list is typed, exactly as the scalar already did.
-    const valIn = document.createElement('input');
-    valIn.type = 'text';
-    valIn.className = 'viz-filter-val';
-    valIn.value = isListFilterOp(step.op) ? formatFilterValues(step.values) : step.value != null ? String(step.value) : '';
-    valIn.setAttribute('aria-label', 'Filter value');
-    valIn.addEventListener('input', () => {
-      if (isListFilterOp(filters[i].op)) filters[i].values = parseFilterValues(valIn.value);
-      else filters[i].value = valIn.value;
-      opts.onChange();
-    });
-    row.appendChild(valIn);
-
-    const syncVal = (): void => {
-      const list = isListFilterOp(opSel.value);
-      valIn.hidden = isValuelessFilterOp(opSel.value);
-      valIn.placeholder = list ? 'CA, WA, NY' : '';
-      valIn.setAttribute('aria-label', list ? 'Filter values, comma separated' : 'Filter value');
-    };
-    opSel.addEventListener('change', () => {
-      filters[i].op = opSel.value;
-      // Re-read the SAME text under the new operator's rules, so switching
-      // `= CA` to `in` keeps "CA" as the first entry instead of dropping it.
-      if (isListFilterOp(opSel.value)) filters[i].values = parseFilterValues(valIn.value);
-      else filters[i].value = valIn.value;
-      syncVal();
-      opts.onChange();
-    });
-    syncVal();
+    // ONE control for the whole condition, opening the type-aware dialog —
+    // replacing the operator-select + value-input pair that asked the user to
+    // know that a dimension wants `in` and a measure wants a range. Changing the
+    // COLUMN stays a select, because that is how a filter is retargeted; the
+    // dialog owns everything downstream of it.
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'viz-filter-cond';
+    edit.textContent = filterStepSummary(step) || 'set a condition…';
+    edit.setAttribute('aria-label', 'Edit the filter on ' + (step.column || 'this column'));
+    edit.addEventListener('click', () => { void editFilter(i); });
+    row.appendChild(edit);
 
     const del = document.createElement('button');
     del.type = 'button';
@@ -360,10 +370,12 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     opts.onChange();
   });
   addFilter.addEventListener('click', () => {
-    filters.push({ type: 'filter', column: columns[0] ? columns[0].name : '', op: '=', value: '' });
+    // NO operator yet — see the note on `getFilters`. A fresh row is inert until
+    // the dialog gives it a condition, and it does NOT open the dialog by
+    // itself: a modal that appears on its own steals the next click, which is
+    // usually the one that matters.
+    filters.push({ type: 'filter', column: columns[0] ? columns[0].name : '', op: '' });
     renderFilters();
-    // No onChange: an empty filter row changes nothing until it names a column,
-    // and getFilters() drops it. Recomputing here would be a wasted query.
   });
   [catSel, serSel, geoSel].forEach((s) =>
     s && s.addEventListener('change', () => { syncSingles(); opts.onChange(); }));
@@ -441,10 +453,10 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
         else measures.push(m);
         renderMeasures();
       } else if (well === 'filters') {
-        filters.push({ type: 'filter', column, op: '=', value: '' });
+        // Inert until a condition is set — dropping a field must not silently
+        // change the chart, and must not throw a modal over the drop either.
+        filters.push({ type: 'filter', column, op: '' });
         renderFilters();
-        // A filter with no value yet changes nothing, so no onChange — same
-        // reasoning as the + Add filter button.
         return true;
       } else {
         return false;
@@ -466,11 +478,19 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       return enc;
     },
 
-    // Rows with no column are dropped here; main-side sanitizeFilters validates
-    // and whitelists again regardless.
+    // Rows with no column — and now rows with no OPERATOR — are dropped here;
+    // main-side sanitizeFilters validates and whitelists again regardless.
+    //
+    // The operator check makes an old comment finally true. A freshly added or
+    // freshly dropped row used to be `{op: '=', value: ''}`, and the code here
+    // claimed such a row "changes nothing until it names a column". It did
+    // change something: `= ''` matches rows whose cell is EMPTY, so dropping a
+    // field on FILTERS blanked the chart until you typed a value. An unset row
+    // now carries `op: ''`, which is in no operator vocabulary, so it is
+    // genuinely inert on every path — here, in sanitizeSteps, and in SQL.
     getFilters(): any[] {
       return filters
-        .filter((f) => f && f.column)
+        .filter((f) => f && f.column && f.op)
         .map((f) => {
           const s: any = { type: 'filter', column: f.column, op: f.op || '=' };
           if (isListFilterOp(f.op)) s.values = Array.isArray(f.values) ? f.values.slice() : [];

@@ -124,12 +124,15 @@ declare global {
       getDatasetMeta(projectId: string, id: string): Promise<any>;
       // Distinct non-empty values of one column, capped, computed in MAIN off the
       // Parquet. Replaces scanning `ds.rows` in the renderer.
+      // `search` filters SERVER-SIDE; `total` is the pre-cap match count, so the
+      // caller can say "showing the first N of M" instead of implying N is all.
       datasetDistinct(
         projectId: string,
         datasetId: string,
         column: string,
         limit?: number,
-      ): Promise<{ values: string[] }>;
+        search?: string,
+      ): Promise<{ values: string[]; total: number }>;
       deleteDataset(projectId: string, id: string): Promise<{ ok: boolean }>;
       datasetStats(projectId: string, datasetId: string): Promise<any>;
       updateDataset(projectId: string, datasetId: string, columns: any[]): Promise<any>;
