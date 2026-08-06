@@ -511,15 +511,42 @@ converted `.ts` files in place (runs automatically via `prestart`/`pretest`/`pre
 unconverted JS loads directly. The only other "build" is packaging installers.
 
 ## Git and commits
-- **Branch from `develop` for every change.** `develop` is this repo's **default branch** and the
-  trunk all work merges into; `main` sits at the initial import and is not used. Each new feature or
-  fix starts on a fresh branch off an up-to-date `develop` (`fix/...`, `feat/...`, `perf/...`,
-  `test/...`, `docs/...`), is committed there, then pushed and merged via a pull request.
-  **Never commit directly to `develop`.** Note `ci.yml`/`lint.yml` watch `[develop, main]`, and that
-  list is the third thing to break this way: it watched `dev` (never existed), then an earlier trunk
-  name, before the trunk settled on `develop` — each time CI silently stopped running rather than failing.
-  **Renaming the trunk means editing those two lists in the same commit.** A local clone also keeps
-  the old upstream (`branch.<name>.merge`) and has to be repointed by hand:
+- **Every change starts in its own WORKTREE off `develop` — not in the shared checkout.**
+  `develop` is this repo's **default branch** and the trunk all work merges into; `main` sits at the
+  initial import and is not used. The full loop:
+
+  ```bash
+  git fetch origin && git worktree add -b feat/<topic> ../ordinate-<topic> origin/develop
+  # …work, commit there…
+  git push -u origin feat/<topic> && gh pr create --base develop --fill
+  # wait for CI to go GREEN, then:
+  gh pr merge <n> --merge --delete-branch
+  git worktree remove ../ordinate-<topic>
+  git checkout develop && git pull        # refresh the local trunk before the next change
+  ```
+
+  Branch prefixes: `fix/`, `feat/`, `perf/`, `test/`, `docs/`. **Never commit directly to
+  `develop`.**
+
+  **Why a worktree and not just a branch.** Several sessions share this one clone, and a plain
+  `git checkout` moves the tree under whatever else is running in it — that has already cost work
+  here, including a session that stashed another's in-flight dependency mid-port. A worktree gives
+  each piece of work its own directory, so nobody's checkout moves. Two consequences worth knowing:
+  a branch can only be checked out in ONE worktree, so `fatal: '<branch>' is already used by
+  worktree at …` means some other worktree holds it — free it with
+  `git -C <that-worktree> checkout --detach` (non-destructive; files stay put) rather than deleting
+  anything. And `git worktree list` is the only honest answer to "what is checked out where";
+  leftover worktrees accumulate under `.claude/worktrees/` and should be pruned once merged.
+
+  **Wait for CI green before merging, and confirm it actually ran.** A PR with *no checks at all*
+  is not a passing PR — that is what a stale branch filter in `ci.yml`/`lint.yml` looks like, and it
+  has happened twice (see below). `gh pr checks <n>` reporting nothing is a red flag, not a pass.
+
+  `ci.yml`/`lint.yml` watch `[develop, main]`, and that list is the third thing to break this way:
+  it watched `dev` (never existed), then an earlier trunk name, before the trunk settled on
+  `develop` — each time CI silently stopped running rather than failing. **Renaming the trunk means
+  editing those two lists in the same commit.** A local clone also keeps the old upstream
+  (`branch.<name>.merge`) and has to be repointed by hand:
   `git branch --set-upstream-to=origin/develop develop`.
 - **Never** add a `Co-Authored-By: Claude …` trailer (or any AI co-author line) to commit
   messages. Write the title + body and stop — no trailer.
