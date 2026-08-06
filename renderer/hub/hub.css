@@ -5801,6 +5801,10 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .an-tabp { display: flex; flex-direction: column; gap: 12px; }
 .an-tabp[hidden] { display: none; }
 
+/* A cross-filter-enabled chart is clickable, so it says so. Only the chart area
+   picks up the cursor — the card chrome around it is still just chrome. */
+.dash-viz-area.is-crossfilter { cursor: pointer; }
+
 .an-wells .viz-encoding { display: flex; flex-direction: column; gap: 10px; }
 .an-wells .viz-build-row {
   display: flex;

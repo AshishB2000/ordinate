@@ -56,6 +56,21 @@ export interface VizOverrides {
   hiddenSeries?: number[];
   periodIdx?: number;
   numberFormat?: 'auto' | 'plain' | 'thousands' | 'compact' | 'percent' | 'currency';
+  /**
+   * Interactions. Both live here rather than in a new field because overrides is
+   * already the per-visual bag the editor writes and sanitizeOverrides already
+   * whitelists it — a new storage field would be a new file-format decision for
+   * two booleans.
+   *
+   * crossFilter: clicking a bar/slice on this visual applies the clicked
+   * category value as a dashboard-wide FilterStep. Default OFF: a click that
+   * silently refilters every other card is a surprise, and the sheet has an
+   * explicit filter bar for the deliberate case.
+   * showTooltips: default ON when absent, matching every chart drawn before this
+   * key existed.
+   */
+  crossFilter?: boolean;
+  showTooltips?: boolean;
 }
 
 export interface Visual {
@@ -189,6 +204,8 @@ export function sanitizeOverrides(raw: unknown): VizOverrides {
   if ('showGridlines' in o) out.showGridlines = Boolean(o.showGridlines);
   if ('yZero' in o) out.yZero = Boolean(o.yZero);
   if ('smooth' in o) out.smooth = Boolean(o.smooth);
+  if ('crossFilter' in o) out.crossFilter = Boolean(o.crossFilter);
+  if ('showTooltips' in o) out.showTooltips = Boolean(o.showTooltips);
 
   // Numeric fields — finite numbers only.
   if (Array.isArray(o.hiddenSeries)) {
