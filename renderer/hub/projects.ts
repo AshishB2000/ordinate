@@ -424,8 +424,10 @@ function paintHome(): void {
     showall.textContent = recentExpanded ? 'Show less' : 'Show all →';
   }
 
-  // Discover/quick-start is first-run only — hidden the moment anything exists.
-  if (firstrun) firstrun.hidden = recentItems.length > 0;
+  // The quick-start cards + capture hint stay on EVERY visit (above Starred),
+  // not just first-run — they are the primary "bring data in" doors, so they
+  // remain reachable even once Starred and Recent have content.
+  if (firstrun) firstrun.hidden = false;
 }
 
 // One row: star toggle · name · type chip · project · relative time. The whole

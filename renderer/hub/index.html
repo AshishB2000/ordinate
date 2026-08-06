@@ -214,10 +214,11 @@
              `npm start` shows. See docs/phase-5/01-toolchain.md. -->
         <div id="svelte-island-host"></div>
 
-        <!-- First-run: the three quick-start doors plus a one-line Discover.
-             Shown only until there is recent/starred content; the Starred and
-             Recent sections below ALWAYS render (with an empty state) so the page
-             reads as structured and waiting, never blank. -->
+        <!-- The three quick-start doors plus a one-line Discover/capture hint.
+             ALWAYS shown (paintHome keeps it visible), above Starred and Recent —
+             the primary "bring data in" entry points stay reachable on every
+             visit, not just first-run. -->
+
         <div class="home-firstrun" id="home-firstrun">
           <div class="home-quick-row">
             <!-- HERO — screen capture, the one thing no other BI tool does. Spans
