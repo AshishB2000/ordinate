@@ -5378,8 +5378,20 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   font: inherit;
   position: relative;
 }
-.an-tile-ic { display: inline-flex; color: var(--text); }
+.an-tile-ic { display: inline-flex; }
 .an-tile-ic svg { width: 18px; height: 18px; }
+/* The glyphs cycle Ordinate's OWN chart palette rather than sitting in text
+   black. --chart-1..4 are the same blue/cyan/teal/indigo the charts themselves
+   draw with, and they are redefined under [data-theme="dark"], so dark mode
+   needs no second rule here.
+   A plain nth-child cycle, not a per-type map: these colours are decoration —
+   the icon shape is what carries the meaning — so there is nothing to keep
+   stable. --chart-5 (slate) is deliberately left out of the cycle; it is the one
+   near-neutral in the palette and reads as the grey this replaced. */
+.an-gallery .an-tile:nth-child(4n+1) .an-tile-ic { color: var(--chart-1); }
+.an-gallery .an-tile:nth-child(4n+2) .an-tile-ic { color: var(--chart-2); }
+.an-gallery .an-tile:nth-child(4n+3) .an-tile-ic { color: var(--chart-3); }
+.an-gallery .an-tile:nth-child(4n+4) .an-tile-ic { color: var(--chart-4); }
 .an-tile-name {
   font-size: 10.5px;
   line-height: 1.25;
@@ -5391,7 +5403,9 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   border-color: var(--accent);
   background: var(--accent-soft);
 }
-.an-tile.is-active .an-tile-ic,
+/* The active tile keeps its palette colour — the accent border, fill and label
+   already say which one is selected, and recolouring the glyph would throw away
+   the only colour the tile has. */
 .an-tile.is-active .an-tile-name { color: var(--accent); }
 /* The recommended dot. A badge with text would wrap the tile at this width. */
 .an-tile.is-rec::after {
