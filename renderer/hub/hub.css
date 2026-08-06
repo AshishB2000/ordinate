@@ -5293,9 +5293,10 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
    behind it so the eye goes to the data.
    #dash-editor is re-parented in as the LAST child, so `order` — not source
    order — puts it in the middle. The Dashboards host has no panels at all. */
-/* Rail | flyout | sheet | properties, as FLEX — not grid.
+/* Rail | flyout | sheet, as FLEX — not grid. Nothing sits to the right of the
+   sheet any more; Properties is a rail flyout like every other panel.
    Grid was wrong here and the smoke test caught it: a `display: none` child is
-   not a grid item at all, so with both panels shut auto-placement dropped
+   not a grid item at all, so with the panels shut auto-placement dropped
    #dash-editor into the second (content-sized) track and left the 1fr track
    empty — a 358px sheet in a 1180px window. Flex has no fixed track list, so a
    hidden panel simply stops existing and the sheet takes the space back, which
@@ -5320,7 +5321,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .an-workbench.is-active #dash-grid .dash-card { background: var(--surface); }
 .an-workbench.is-active > .an-rail { order: 1; }
 .an-workbench.is-active > .an-side--left { order: 2; }
-.an-workbench.is-active > .an-side--right { order: 4; }
 .an-workbench:not(.is-active) > .an-side,
 .an-workbench:not(.is-active) > .an-rail { display: none; }
 
@@ -5350,22 +5350,60 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   text-transform: uppercase;
   color: var(--text-strong);
 }
-.an-pane-x {
-  flex: none;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  background: none;
-  border: 0;
-  border-radius: var(--r-sm);
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1;
-  cursor: pointer;
-}
-.an-pane-x:hover { background: var(--surface-2); color: var(--text); }
 .an-pane-body { padding: 12px; }
 .an-add-list { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+
+/* ── The Visuals gallery ─────────────────────────────────────────────────────
+   Two columns of icon+name tiles. Recommended ones sort first and carry a dot,
+   so eligibility reads at a glance without hiding anything: every type stays
+   clickable, because "recommended" is a hint about the data, not a lock. */
+.an-gallery {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.an-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 9px 4px;
+  min-height: 58px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  position: relative;
+}
+.an-tile-ic { display: inline-flex; color: var(--text); }
+.an-tile-ic svg { width: 18px; height: 18px; }
+.an-tile-name {
+  font-size: 10.5px;
+  line-height: 1.25;
+  text-align: center;
+  color: var(--text);
+}
+.an-tile:hover { border-color: var(--accent-line); background: var(--surface-2); }
+.an-tile.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.an-tile.is-active .an-tile-ic,
+.an-tile.is-active .an-tile-name { color: var(--accent); }
+/* The recommended dot. A badge with text would wrap the tile at this width. */
+.an-tile.is-rec::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
 /* The filter bar was a wide toolbar row; in a 252px flyout it stacks. */
 #an-pane-filter .dash-toolbar {
   flex-direction: column;
@@ -5391,7 +5429,7 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 /* #an-data-body hosted inside the Visuals pane: it is a section of that pane
    now, not a pane of its own, so it drops the pane padding and gains a rule
    separating the fields from the wells below. */
-#an-viz-fields > .an-pane-body {
+#an-props-fields > .an-pane-body {
   display: flex;
   flex-direction: column;
   padding: 0 0 10px;
@@ -5438,8 +5476,7 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 /* ── Wells ──────────────────────────────────────────────────────────────────
    A bordered drop zone per encoding slot, a PILL per field, and a dashed line
    saying what belongs in an empty one. */
-.an-viz-inner { display: flex; flex-direction: column; gap: 12px; }
-.an-viz-inner[hidden] { display: none; }
+#an-props-inner[hidden] { display: none; }
 .an-wells .viz-encoding { display: flex; flex-direction: column; gap: 10px; }
 .an-wells .viz-build-row {
   display: flex;
@@ -7674,19 +7711,26 @@ body.an-focus .an-pubstate { display: none; }
 .an-more-btn { display: none; }
 body.an-focus .an-more-btn { display: inline-flex; }
 
-body.an-focus .an-workbench.is-active {
+/* #ws-analyses is already a flex column, so the moved strip is simply its first
+   row and the workbench takes the rest. Height lives on the PANEL now, not on
+   the workbench — the strip is outside it. */
+body.an-focus #ws-analyses {
   height: calc(100vh - 40px);
+  min-height: 0;
+}
+body.an-focus .an-workbench.is-active {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 body.an-focus .an-workbench.is-active > .dash-editor {
   overflow-y: auto;
   padding: 0;
 }
-/* The editor head becomes the top bar of the canvas, and stays put while the
-   sheet scrolls under it. */
+/* The strip spans the window above the rail, the flyout and the sheet. It is a
+   sibling of the workbench (moved there by anMountTopStrip), so it needs no
+   sticky positioning — nothing scrolls underneath it. */
 body.an-focus .dash-editor-head {
-  position: sticky;
-  top: 0;
-  z-index: 3;
+  flex: none;
   margin: 0;
   padding: 10px 16px;
   background: var(--surface);

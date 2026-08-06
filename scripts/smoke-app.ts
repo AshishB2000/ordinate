@@ -679,8 +679,8 @@ async function main(): Promise<void> {
   };
   const openProps = async (): Promise<void> => {
     await win.evaluate(() => {
-      const side = document.getElementById('an-side-right') as HTMLElement | null;
-      if (!side || !side.hidden) return;
+      const pane = document.getElementById('an-pane-props') as HTMLElement | null;
+      if (!pane || !pane.hidden) return;
       (document.querySelector('#dash-grid .dash-card .an-card-props') as HTMLElement | null)?.click();
     });
     await win.waitForTimeout(200);
@@ -699,7 +699,10 @@ async function main(): Promise<void> {
       // Closed at rest — and a closed panel must take NO width, or the rail
       // bought nothing.
       leftShut: !left || left.offsetParent === null,
-      rightShut: !right || right.offsetParent === null,
+      // The right-hand column was DELETED, not hidden — Properties is a rail
+      // flyout now. Asserting absence, because a hidden-but-present panel still
+      // binds to a card and still writes.
+      rightGone: !right,
       railW: Math.round(N?.width || 0),
       // Source order is rail, flyouts, editor — `order` is what puts the sheet
       // after the rail, so this asserts the CSS actually applied.
@@ -714,7 +717,7 @@ async function main(): Promise<void> {
   // the width is what made this read as stuffed.
   const focus = await win.evaluate(() => {
     const nav = document.getElementById('workspace-nav') as HTMLElement | null;
-    const head = document.querySelector('#dash-editor .dash-editor-head') as HTMLElement | null;
+    const head = document.querySelector('.dash-editor-head') as HTMLElement | null;
     const kids = head ? [...head.children] as HTMLElement[] : [];
     const tops = new Set(kids.filter((k) => k.offsetParent !== null)
       .map((k) => Math.round(k.getBoundingClientRect().top)));
@@ -738,10 +741,42 @@ async function main(): Promise<void> {
   ok('the workbench is a rail beside the sheet, in the right order',
      bench.active && bench.inOrder && bench.railW > 30 && bench.railW < 70,
      JSON.stringify(bench));
-  ok('…with both panels shut at rest, so the sheet has the window',
-     bench.leftShut && bench.rightShut && bench.sheetW > bench.winW - 90,
-     JSON.stringify({ left: bench.leftShut, right: bench.rightShut,
+  ok('…with the flyout shut at rest, so the sheet has the window',
+     bench.leftShut && bench.rightGone && bench.sheetW > bench.winW - 90,
+     JSON.stringify({ left: bench.leftShut, rightGone: bench.rightGone,
                       sheet: bench.sheetW, win: bench.winW }));
+
+  // PROBLEM 1: the strip has to span the WINDOW, not just the canvas. It used to
+  // live inside #dash-editor — the centre column — so it started to the right of
+  // an open flyout and read as a third column header. Measured with a flyout
+  // OPEN, because that is the only state where the bug is visible.
+  await openPane('an-pane-data');
+  const strip = await win.evaluate(() => {
+    const head = document.querySelector('.dash-editor-head') as HTMLElement | null;
+    const rail = document.getElementById('an-rail') as HTMLElement | null;
+    const side = document.getElementById('an-side-left') as HTMLElement | null;
+    const H = head?.getBoundingClientRect();
+    const R = rail?.getBoundingClientRect();
+    const S = side?.getBoundingClientRect();
+    return {
+      // Outside the editor, above the workbench.
+      outsideEditor: !document.querySelector('#dash-editor .dash-editor-head'),
+      w: Math.round(H?.width || 0),
+      winW: window.innerWidth,
+      // Starts at the window's left edge, not after the rail or the flyout…
+      startsAtEdge: !!H && H.left <= 2,
+      // …and sits ABOVE both of them.
+      aboveRail: !!(H && R) && H.bottom <= R.top + 1,
+      aboveFlyout: !!(H && S) && H.bottom <= S.top + 1,
+    };
+  });
+  ok('the top strip spans the full window, above the rail and the flyout',
+     strip.outsideEditor && strip.w > strip.winW - 4 && strip.startsAtEdge &&
+       strip.aboveRail && strip.aboveFlyout, JSON.stringify(strip));
+  // Leave it as we found it — the at-rest screenshot below wants nothing open.
+  await win.evaluate(() =>
+    (document.querySelector('#an-rail .an-rail-btn.is-on') as HTMLElement | null)?.click());
+  await win.waitForTimeout(120);
 
   // The resting state is the claim this whole surface makes — top strip, rail,
   // sheet, nothing else — so photograph it before anything opens a flyout.
@@ -769,14 +804,16 @@ async function main(): Promise<void> {
   ok('the tool rail is on screen, every icon named, titled and drawn',
      rail.visible && rail.allLabelled && rail.allSvg &&
        JSON.stringify(rail.panes) ===
-         JSON.stringify(['an-pane-add', 'an-pane-data', 'an-pane-visuals', 'an-pane-filter']),
+         JSON.stringify(['an-pane-add', 'an-pane-data', 'an-pane-visuals', 'an-pane-filter',
+                         'an-pane-props']),
      JSON.stringify(rail));
 
   // ONE flyout at a time, and clicking the lit icon closes it. That is the
   // whole point of the rail — two panels stacked is what it replaced.
   await openPane('an-pane-data');
   const flyout = await win.evaluate(() => {
-    const shown = () => ['an-pane-add', 'an-pane-data', 'an-pane-visuals', 'an-pane-filter']
+    const shown = () => ['an-pane-add', 'an-pane-data', 'an-pane-visuals', 'an-pane-filter',
+      'an-pane-props']
       .filter((id) => (document.getElementById(id) as HTMLElement | null)?.offsetParent != null);
     const afterData = shown();
     (document.querySelector('#an-rail .an-rail-btn[data-pane="an-pane-visuals"]') as HTMLElement).click();
@@ -823,11 +860,11 @@ async function main(): Promise<void> {
   await openPane('an-pane-data');
   const unboundData = await win.evaluate(() =>
     (document.getElementById('an-data-hint') as HTMLElement)?.offsetParent !== null);
-  await openPane('an-pane-visuals');
+  await openPane('an-pane-props');
   const unboundViz = await win.evaluate(() =>
-    (document.getElementById('an-viz-inner') as HTMLElement)?.offsetParent == null);
+    (document.getElementById('an-props-inner') as HTMLElement)?.offsetParent == null);
   ok('with nothing selected, the panels say so', unboundData && unboundViz,
-     JSON.stringify({ dataHint: unboundData, vizInnerHidden: unboundViz }));
+     JSON.stringify({ dataHint: unboundData, propsInnerHidden: unboundViz }));
 
   // SELECT the card. This is the whole binding.
   await win.evaluate(() => (document.querySelector('#dash-grid .dash-card') as HTMLElement).click());
@@ -858,26 +895,112 @@ async function main(): Promise<void> {
 
   // DRAG NEEDS BOTH ENDS. The field list is the drag source and the wells are
   // the drop target; only one flyout is open, so the list has to have MOVED into
-  // the Visuals pane. Asserted by geometry, not by parentage: a list that is in
-  // the right node but painting at zero height is still undraggable.
+  // the PROPERTIES pane, which is where the wells now live. Asserted by geometry,
+  // not by parentage: a list in the right node but painting at zero height is
+  // still undraggable.
   const dragReach = await win.evaluate(() => {
     const f = document.querySelector('#an-fields .an-field') as HTMLElement | null;
     const w = document.querySelector('#an-wells [data-well="values"]') as HTMLElement | null;
     return {
-      inVisuals: !!document.querySelector('#an-viz-fields #an-fields'),
+      inProps: !!document.querySelector('#an-props-fields #an-fields'),
       // Exactly one field list in the DOM — moved, not copied.
       lists: document.querySelectorAll('#an-fields').length,
       fieldBox: Math.round(f?.getBoundingClientRect().height || 0),
       wellBox: Math.round(w?.getBoundingClientRect().height || 0),
       // The fields sit above the wells, which is what makes the drag a short one.
       above: !!(f && w) && f.getBoundingClientRect().top < w.getBoundingClientRect().top,
-      calcTravelled: !!document.querySelector('#an-viz-fields #an-calc-btn'),
+      calcTravelled: !!document.querySelector('#an-props-fields #an-calc-btn'),
     };
   });
   ok('…and the field list moved in beside them, so a field can be dragged to a well',
-     dragReach.inVisuals && dragReach.lists === 1 && dragReach.fieldBox > 0 &&
+     dragReach.inProps && dragReach.lists === 1 && dragReach.fieldBox > 0 &&
        dragReach.wellBox > 0 && dragReach.above && dragReach.calcTravelled,
      JSON.stringify(dragReach));
+
+  // The two disclosures: what it PLOTS, and how it LOOKS.
+  const secs2 = await win.evaluate(() => {
+    const has = (sel: string) => {
+      const el = document.querySelector(sel) as HTMLElement | null;
+      return !!el && el.offsetParent !== null;
+    };
+    return {
+      visualSec: has('#an-sec-visual .an-wells'),
+      formatSec: has('#an-sec-format .an-props'),
+      // Both start open, and collapse independently.
+      collapsed: (() => {
+        const head = document.querySelector('#an-sec-visual .an-sec-head') as HTMLElement;
+        head.click();
+        const shut = !document.getElementById('an-sec-visual')?.classList.contains('is-open');
+        head.click();
+        return shut;
+      })(),
+    };
+  });
+  ok('Properties holds both sections — the encoding and the formatting',
+     secs2.visualSec && secs2.formatSec && secs2.collapsed, JSON.stringify(secs2));
+
+  // Click-to-fill targets the next EMPTY well, so the feature never depends on
+  // drag. Checked as a pure mapping against the live encoding (category filled,
+  // Split by empty) rather than by clicking, which would mutate the shared visual
+  // every later map assertion reads.
+  const nextWell = await win.evaluate(() => ({
+    enc: (window as any).anNextWell ? 'wired' : 'missing',
+    text: (window as any).anNextWell('text'),
+    number: (window as any).anNextWell('number'),
+  }));
+  ok('a clicked field targets the next empty well, by type',
+     nextWell.text === 'series' && nextWell.number === 'values', JSON.stringify(nextWell));
+
+  // ── The Visuals gallery ───────────────────────────────────────────────────
+  // Built from the SAME vocabulary as the result-view picker, with the same
+  // app-computed eligibility. Recommended tiles sort first and are marked.
+  await openPane('an-pane-visuals');
+  const gallery = await win.evaluate(() => {
+    const tiles = [...document.querySelectorAll('#an-gallery .an-tile')] as HTMLElement[];
+    const recIdx = tiles.map((t, i) => (t.classList.contains('is-rec') ? i : -1)).filter((i) => i >= 0);
+    const plainIdx = tiles.map((t, i) => (t.classList.contains('is-rec') ? -1 : i)).filter((i) => i >= 0);
+    return {
+      count: tiles.length,
+      allNamed: tiles.every((t) => !!t.querySelector('.an-tile-name')?.textContent),
+      allDrawn: tiles.every((t) => !!t.querySelector('.an-tile-ic svg')),
+      recommended: recIdx.length,
+      // Recommended first: every recommended index below every plain one.
+      recFirst: recIdx.length === 0 || plainIdx.length === 0 ||
+        Math.max(...recIdx) < Math.min(...plainIdx),
+      active: (document.querySelector('#an-gallery .an-tile.is-active .an-tile-name') as HTMLElement | null)
+        ?.textContent || '',
+    };
+  });
+  ok('the Visuals gallery is a grid of named, drawn type tiles',
+     gallery.count > 20 && gallery.allNamed && gallery.allDrawn, JSON.stringify(gallery));
+  ok('…with the app-recommended types marked and sorted first, and the current one active',
+     gallery.recommended > 0 && gallery.recFirst && !!gallery.active, JSON.stringify(gallery));
+
+  const galleryShot = path.join(shotDir, 'visuals-gallery.png');
+  await win.screenshot({ path: galleryShot });
+  ok('visuals gallery screenshot captured',
+     fs.existsSync(galleryShot) && fs.statSync(galleryShot).size > 5000,
+     `${Math.round(fs.statSync(galleryShot).size / 1024)} KB -> ${galleryShot}`);
+
+  // Clicking a tile really retypes the selected card. Restored afterwards: the
+  // map assertions 400 lines below read this same visual.
+  const retyped = await win.evaluate(async () => {
+    const was = (document.querySelector('#an-gallery .an-tile.is-active') as HTMLElement).dataset.type;
+    const other = [...document.querySelectorAll('#an-gallery .an-tile')]
+      .find((t) => (t as HTMLElement).dataset.type === 'table') as HTMLElement;
+    other.click();
+    return { was, now: (document.querySelector('#an-gallery .an-tile.is-active') as HTMLElement)?.dataset.type };
+  });
+  await win.waitForTimeout(1500);
+  ok('…and clicking a tile retypes the selected card',
+     retyped.was !== 'table' && retyped.now === 'table', JSON.stringify(retyped));
+  await win.evaluate((t) => {
+    const back = [...document.querySelectorAll('#an-gallery .an-tile')]
+      .find((x) => (x as HTMLElement).dataset.type === t) as HTMLElement;
+    back?.click();
+  }, retyped.was);
+  await win.waitForTimeout(1500);
+  await openPane('an-pane-props');
   ok('…the chart-type chips render', bound.chips > 0, `${bound.chips} chips`);
   // Exactly ONE chip row. Selecting a card and writing a well edit both rebuild
   // it, and each clears the mount before its await — two in flight left two rows
@@ -924,7 +1047,7 @@ async function main(): Promise<void> {
   // way in, so opening it here also asserts that button is wired.
   await openProps();
   const propsOpened = await win.evaluate(() =>
-    (document.getElementById('an-side-right') as HTMLElement | null)?.offsetParent != null);
+    (document.getElementById('an-pane-props') as HTMLElement | null)?.offsetParent != null);
   ok('the ⚙ on a card opens the Properties panel', propsOpened);
 
   // Properties is a list of disclosure sections, not a flat form.
@@ -989,9 +1112,9 @@ async function main(): Promise<void> {
   await win.evaluate(() =>
     (document.querySelector('#an-props .an-sec-head') as HTMLElement)?.click());
 
-  // Back to the wells — everything below measures the encoding form, which
-  // lives in the Visuals flyout.
-  await openPane('an-pane-visuals');
+  // Back to the wells — everything below measures the encoding form, which now
+  // lives in the Properties flyout.
+  await openPane('an-pane-props');
 
   // Empty wells must SAY what belongs in them, which is the QuickSight
   // affordance a bare dropdown does not give.
@@ -1328,19 +1451,21 @@ async function main(): Promise<void> {
   ok('the well edits undo from the same panel, restoring the shared visual',
      reverted.filters === 0 && reverted.measures === 1, JSON.stringify(reverted));
 
-  // Properties closes from its own ×, and the flyout choice is remembered.
+  // Properties closes the way every other flyout does — clicking its lit rail
+  // icon. There is no bespoke × any more, because it is no longer a bespoke panel.
   const closedProps = await win.evaluate(() => {
-    (document.getElementById('an-props-close') as HTMLElement).click();
+    (document.querySelector('#an-rail .an-rail-btn[data-pane="an-pane-props"]') as HTMLElement).click();
     return {
-      shut: (document.getElementById('an-side-right') as HTMLElement | null)?.offsetParent == null,
+      shut: (document.getElementById('an-pane-props') as HTMLElement | null)?.offsetParent == null,
+      sideShut: (document.getElementById('an-side-left') as HTMLElement | null)?.offsetParent == null,
       flyout: localStorage.getItem('anFlyout'),
       lit: (document.querySelector('#an-rail .an-rail-btn.is-on') as HTMLElement | null)?.dataset.pane,
     };
   });
-  ok('Properties closes from its own ×', closedProps.shut, JSON.stringify(closedProps));
-  ok('…and the open flyout is remembered, and mirrored on the rail',
-     closedProps.flyout === 'an-pane-visuals' && closedProps.lit === 'an-pane-visuals',
-     JSON.stringify(closedProps));
+  ok('Properties closes from its own rail icon, like every other flyout',
+     closedProps.shut && closedProps.sideShut, JSON.stringify(closedProps));
+  ok('…and the closed state is remembered, with no icon left lit',
+     closedProps.flyout === '' && !closedProps.lit, JSON.stringify(closedProps));
 
   const anShot = path.join(shotDir, 'analysis-editor.png');
   await win.screenshot({ path: anShot });
@@ -1422,7 +1547,7 @@ async function main(): Promise<void> {
     const vis = (id: string) => (document.getElementById(id) as HTMLElement | null)?.offsetParent != null;
     const before = {
       left: vis('an-side-left'),
-      right: vis('an-side-right'),
+      rail: vis('an-rail'),
       active: !!document.getElementById('an-editor-host')?.classList.contains('is-active'),
     };
     (document.querySelector('#dash-grid .dash-card') as HTMLElement | null)?.click();
@@ -1434,7 +1559,7 @@ async function main(): Promise<void> {
     };
   });
   ok('a published dashboard shows NO authoring panels',
-     !noPanels.left && !noPanels.right && !noPanels.active, JSON.stringify(noPanels));
+     !noPanels.left && !noPanels.rail && !noPanels.active, JSON.stringify(noPanels));
   ok('…and clicking one of its cards binds nothing',
      noPanels.selectedAfterClick === 0 && noPanels.fieldsAfterClick === 0,
      JSON.stringify({ sel: noPanels.selectedAfterClick, fields: noPanels.fieldsAfterClick }));

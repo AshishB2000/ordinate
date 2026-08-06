@@ -840,6 +840,9 @@
           <button class="an-rail-btn" type="button" data-pane="an-pane-filter" aria-label="Filters" title="Filters">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5h16l-6 7v6l-4 2v-8L4 5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
           </button>
+          <button class="an-rail-btn" type="button" data-pane="an-pane-props" aria-label="Properties" title="Properties">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="9" cy="7" r="2" fill="currentColor"/><circle cx="15" cy="12" r="2" fill="currentColor"/><circle cx="8" cy="17" r="2" fill="currentColor"/></svg>
+          </button>
         </nav>
 
         <aside class="an-side an-side--left" id="an-side-left" hidden>
@@ -852,19 +855,18 @@
               <button class="btn btn-sm" type="button" id="an-add-visual">Visual</button>
               <button class="btn btn-sm" type="button" id="an-add-metric">Metric</button>
               <button class="btn btn-sm" type="button" id="an-add-text">Text</button>
-              <!-- ponytail: no chart-type gallery here. A new visual card is
-                   blank; picking its type is what the Visuals panel's "Change
-                   visual type" row already does, against real data, so a second
-                   picker would guess before the encoding exists. -->
-              <p class="an-pane-hint">A new visual card starts blank — select it, then pick its fields and chart type under Visuals.</p>
+              <p class="an-pane-hint">A new visual card starts blank — select it, then pick its fields under Properties, or a chart type from the Visuals gallery.</p>
             </div>
           </section>
 
-          <!-- #an-data-body is MOVED into #an-viz-fields below while the Visuals
-               flyout is open, and back here when Data is. The field list is the
-               drag SOURCE and the wells are the drop target, so they have to be
-               in the same open flyout or a drag reaches nothing. One element,
-               two hosts — same trick as .dash-toolbar and #dash-editor. -->
+          <!-- #an-data-body is MOVED into #an-props-fields (the Properties
+               flyout's "Visual" section) while Properties is open, and back here
+               while Data is. The field list is the drag SOURCE and the wells are
+               the drop target, so they have to be in the same open flyout or a
+               drag reaches nothing — and the wells now live under Properties.
+               One element, two hosts — same trick as .dash-toolbar and
+               #dash-editor. Clicking a field also fills the next empty well, so
+               the feature never depends on drag alone. -->
           <section class="an-pane" id="an-pane-data" hidden>
             <header class="an-pane-head">
               <span class="an-pane-title">Data</span>
@@ -887,19 +889,16 @@
             </div>
           </section>
 
+          <!-- A GALLERY of visual types, not an editor. Tiles are built from the
+               same VIZ_LABELS / VIZ_ICONS / ALL_CHART_TYPE_IDS vocabulary the
+               result-view picker uses, and "Recommended" is the same
+               app-computed shape eligibility (eligibleChartTypes) — no second
+               list, no model. Clicking a tile sets the selected card's type. -->
           <section class="an-pane" id="an-pane-visuals" hidden>
             <header class="an-pane-head"><span class="an-pane-title">Visuals</span></header>
             <div class="an-pane-body" id="an-viz-body">
-              <p class="an-pane-hint" id="an-viz-hint">Nothing selected.</p>
-              <div class="an-viz-inner" id="an-viz-inner" hidden>
-                <!-- Host for #an-data-body. Inside .an-viz-inner, so it appears
-                     only once a card is selected — which is also the only time
-                     there are fields to list. -->
-                <div id="an-viz-fields"></div>
-                <div class="an-ai-slot" id="an-ai-slot"></div>
-                <div class="an-switcher" id="an-switcher"></div>
-                <div class="an-wells" id="an-wells"></div>
-              </div>
+              <p class="an-pane-hint" id="an-viz-hint">Pick a visual type. With a card selected it changes that card; otherwise it adds one.</p>
+              <div class="an-gallery" id="an-gallery"></div>
             </div>
           </section>
 
@@ -913,19 +912,39 @@
             <header class="an-pane-head"><span class="an-pane-title">Filters</span></header>
             <div class="an-pane-body" id="an-filter-body"></div>
           </section>
-        </aside>
 
-        <!-- Properties: closed by default, and its grid track collapses when it
-             is, so the sheet reclaims the width. Opened from the ⚙ on a card. -->
-        <aside class="an-side an-side--right" id="an-side-right" hidden>
-          <section class="an-pane" id="an-pane-props">
-            <header class="an-pane-head">
-              <span class="an-pane-title">Properties</span>
-              <button class="an-pane-x" type="button" id="an-props-close" aria-label="Close properties" title="Close">✕</button>
-            </header>
+          <!-- Everything that edits the SELECTED card, in two disclosures:
+               "Visual" is what it plots (encoding + type), "Properties" is how it
+               looks (formatting). Both are the existing renderers re-hosted —
+               #an-switcher + #an-wells from encodingForm, and anRenderProps()
+               into #an-props. Nothing lives on the right of the sheet any more. -->
+          <section class="an-pane" id="an-pane-props" hidden>
+            <header class="an-pane-head"><span class="an-pane-title">Properties</span></header>
             <div class="an-pane-body" id="an-props-body">
-              <p class="an-pane-hint" id="an-props-hint">Select a card to edit it.</p>
-              <div class="an-props" id="an-props"></div>
+              <p class="an-pane-hint" id="an-props-hint">Select a visual card to edit it.</p>
+              <div id="an-props-inner" hidden>
+                <section class="an-sec is-open" id="an-sec-visual">
+                  <button class="an-sec-head" type="button" aria-expanded="true">
+                    <span class="an-sec-chev" aria-hidden="true">›</span><span>Visual</span>
+                  </button>
+                  <div class="an-sec-body">
+                    <!-- Host for #an-data-body while this flyout is open, so the
+                         drag source sits directly above its drop targets. -->
+                    <div id="an-props-fields"></div>
+                    <div class="an-ai-slot" id="an-ai-slot"></div>
+                    <div class="an-switcher" id="an-switcher"></div>
+                    <div class="an-wells" id="an-wells"></div>
+                  </div>
+                </section>
+                <section class="an-sec is-open" id="an-sec-format">
+                  <button class="an-sec-head" type="button" aria-expanded="true">
+                    <span class="an-sec-chev" aria-hidden="true">›</span><span>Properties</span>
+                  </button>
+                  <div class="an-sec-body">
+                    <div class="an-props" id="an-props"></div>
+                  </div>
+                </section>
+              </div>
             </div>
           </section>
         </aside>
