@@ -726,6 +726,11 @@ function renderAnalysisPubState(): void {
     dirty.textContent = ' · Unpublished changes — republish to update the dashboard.';
     el.appendChild(dirty);
   }
+  // Focus mode hides this line — it was a paragraph of chrome sitting on the
+  // sheet — so the same words become the Publish button's tooltip. Same fact,
+  // no canvas space.
+  const pubBtn = dashEl('an-publish-btn');
+  if (pubBtn) pubBtn.title = el.textContent || '';
 }
 
 // ── Publish / republish ─────────────────────────────────────────────────────

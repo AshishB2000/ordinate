@@ -5293,15 +5293,22 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
    behind it so the eye goes to the data.
    #dash-editor is re-parented in as the LAST child, so `order` — not source
    order — puts it in the middle. The Dashboards host has no panels at all. */
+/* Rail | flyout | sheet | properties, as FLEX — not grid.
+   Grid was wrong here and the smoke test caught it: a `display: none` child is
+   not a grid item at all, so with both panels shut auto-placement dropped
+   #dash-editor into the second (content-sized) track and left the 1fr track
+   empty — a 358px sheet in a 1180px window. Flex has no fixed track list, so a
+   hidden panel simply stops existing and the sheet takes the space back, which
+   is the whole point of the rail. */
 .an-workbench.is-active {
-  display: grid;
-  grid-template-columns: 232px minmax(0, 1fr) 244px;
+  display: flex;
   gap: 0;
   align-items: stretch;
   min-height: 0;
 }
 .an-workbench.is-active > .dash-editor {
-  order: 2;
+  order: 3;
+  flex: 1 1 auto;
   min-width: 0;
   background: var(--bg);
   border-left: 1px solid var(--border);
@@ -5311,55 +5318,67 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 /* The card is the only white surface on the canvas, so the sheet reads as a
    document rather than as more panel. */
 .an-workbench.is-active #dash-grid .dash-card { background: var(--surface); }
-.an-workbench.is-active > .an-side--left { order: 1; }
-.an-workbench.is-active > .an-side--right { order: 3; }
-.an-workbench:not(.is-active) > .an-side { display: none; }
+.an-workbench.is-active > .an-rail { order: 1; }
+.an-workbench.is-active > .an-side--left { order: 2; }
+.an-workbench.is-active > .an-side--right { order: 4; }
+.an-workbench:not(.is-active) > .an-side,
+.an-workbench:not(.is-active) > .an-rail { display: none; }
 
 .an-side {
   display: flex;
   flex-direction: column;
+  flex: 0 0 252px;
   background: var(--surface);
   max-height: calc(100vh - 78px);
   overflow-y: auto;
 }
-/* Hairline between stacked panes — a card border around each was four borders
-   where one rule does the job. */
-.an-pane { border-bottom: 1px solid var(--border); }
-.an-pane:last-child { border-bottom: 0; }
+/* `hidden` loses to an explicit `display` — the same trap .dash-an-only hit. */
+.an-side[hidden] { display: none; }
+.an-pane[hidden] { display: none; }
 .an-pane-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 6px;
   padding: 9px 12px;
-}
-.an-pane-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  padding: 0;
-  background: none;
-  border: 0;
-  cursor: pointer;
-  font: inherit;
-  color: var(--text-strong);
-  text-align: left;
+  border-bottom: 1px solid var(--border);
 }
 .an-pane-title {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  color: var(--text-strong);
 }
-.an-pane-caret {
-  font-size: 9px;
-  color: var(--text-dim);
-  transition: transform 0.12s var(--ease);
+.an-pane-x {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
 }
-.an-pane.is-collapsed .an-pane-caret { transform: rotate(-90deg); }
-.an-pane.is-collapsed .an-pane-body { display: none; }
-.an-pane-body { padding: 0 12px 12px; }
+.an-pane-x:hover { background: var(--surface-2); color: var(--text); }
+.an-pane-body { padding: 12px; }
+.an-add-list { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+/* The filter bar was a wide toolbar row; in a 252px flyout it stacks. */
+#an-pane-filter .dash-toolbar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 0;
+  border-bottom: 0;
+}
+#an-pane-filter .dash-toolbar-quick { flex-wrap: wrap; }
+/* Present / Export… / Share moved to the ⋯ menu in the top strip. The buttons
+   stay here because they own the handlers the menu delegates to. */
+#an-pane-filter .dash-toolbar-actions,
+#an-pane-filter .dash-editor-spacer { display: none; }
 .an-pane-hint {
   margin: 0;
   font-size: 11.5px;
@@ -5367,7 +5386,17 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   color: var(--muted);
 }
 .an-pane-hint[hidden] { display: none; }
-#an-calc-btn { font-size: 11px; padding: 3px 8px; }
+.an-calc-btn { font-size: 11px; padding: 3px 8px; align-self: flex-start; margin-top: 8px; }
+
+/* #an-data-body hosted inside the Visuals pane: it is a section of that pane
+   now, not a pane of its own, so it drops the pane padding and gains a rule
+   separating the fields from the wells below. */
+#an-viz-fields > .an-pane-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--border);
+}
 
 /* Fields */
 .an-fields { display: flex; flex-direction: column; gap: 1px; max-height: 250px; overflow-y: auto; }
@@ -7621,9 +7650,32 @@ body.an-grabbing { user-select: none; cursor: grabbing; }
 body.an-focus .ws-nav { display: none; }
 body.an-focus .hub-body { padding: 0; }
 body.an-focus #ws-analyses { padding: 0; }
+/* The titlebar is the frameless window's drag region and holds the macOS traffic
+   lights, so it stays — but authoring is not the place for the wordmark and two
+   settings gears. Emptying it leaves a bare 40px drag strip.
+   ponytail: content hidden, not the strip. Removing the strip means giving the
+   window a new drag region and re-placing the traffic lights. */
+body.an-focus .titlebar .glyph,
+body.an-focus .titlebar .tb-title,
+body.an-focus #exec-mode-btn,
+body.an-focus #settings-gear { display: none; }
+
+/* One row up top: ‹ Back · name · spacer · ⋯ · Publish · Save. Rename folds into
+   clicking the name; the three add-card buttons moved to the rail's + panel. */
+body.an-focus .dash-editor-head #dash-rename-btn,
+body.an-focus .dash-editor-head #dash-add-visual,
+body.an-focus .dash-editor-head #dash-add-metric,
+body.an-focus .dash-editor-head #dash-add-text { display: none; }
+body.an-focus .dash-editor-head #dash-name { cursor: pointer; }
+body.an-focus .dash-editor-head #dash-name:hover { text-decoration: underline; }
+/* The publish-state sentence became the Publish button's tooltip. */
+body.an-focus .an-pubstate { display: none; }
+
+.an-more-btn { display: none; }
+body.an-focus .an-more-btn { display: inline-flex; }
+
 body.an-focus .an-workbench.is-active {
   height: calc(100vh - 40px);
-  grid-template-columns: 248px minmax(0, 1fr) 264px;
 }
 body.an-focus .an-workbench.is-active > .dash-editor {
   overflow-y: auto;
@@ -7640,8 +7692,6 @@ body.an-focus .dash-editor-head {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
-body.an-focus .an-workbench.is-active > .dash-editor > .an-pubstate,
-body.an-focus .an-workbench.is-active > .dash-editor > .dash-toolbar,
 body.an-focus .an-workbench.is-active > .dash-editor > .dash-pages,
 body.an-focus .an-workbench.is-active > .dash-editor > .dash-grid,
 body.an-focus .an-workbench.is-active > .dash-editor > .dash-starters,
@@ -7672,15 +7722,6 @@ body.an-focus .dash-editor-head #dash-name {
   white-space: nowrap;
   min-width: 0;
 }
-/* The publish-state line is context, not a paragraph — one line, muted. */
-body.an-focus .an-pubstate {
-  font-size: 11px;
-  margin: 8px 16px 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-body.an-focus .an-workbench.is-active > .dash-editor > .dash-toolbar { margin-top: 8px; }
 
 /* Single-value wells (Category, Split by) read as pills too, so every filled
    well looks the same. The <select> is still the value — the pill stands in for
@@ -7712,36 +7753,22 @@ body.an-focus .an-workbench.is-active > .dash-editor > .dash-toolbar { margin-to
 .an-wells .enc-empty[hidden] { display: none; }
 
 /* ── The tool rail ───────────────────────────────────────────────────────────
-   The reference's icon toolbar. Palette is ours (theme.css tokens) by the
-   decision in 1cc2e17 — the reference's blues are deliberately not copied, and
-   this has to keep working in both themes. */
+   A 48px vertical strip pinned to the far left, full editor height. Palette is
+   ours (theme.css tokens) by the decision in 1cc2e17 — the reference's blues are
+   deliberately not copied, and this has to keep working in both themes. */
 .an-rail {
   display: flex;
+  flex: 0 0 48px;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 6px 16px;
-  border-bottom: 1px solid var(--border);
+  gap: 4px;
+  padding: 8px 0;
+  border-right: 1px solid var(--border);
   background: var(--surface);
 }
-.an-rail[hidden] { display: none; }
-.an-rail-group { display: flex; align-items: center; gap: 2px; }
-.an-rail-sep {
-  width: 1px;
-  height: 18px;
-  margin: 0 6px;
-  background: var(--border-2);
-}
-.an-rail-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  margin-right: 4px;
-}
 .an-rail-btn {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -7752,10 +7779,33 @@ body.an-focus .an-workbench.is-active > .dash-editor > .dash-toolbar { margin-to
   color: var(--muted);
   cursor: pointer;
 }
-.an-rail-btn svg { width: 17px; height: 17px; }
+.an-rail-btn svg { width: 18px; height: 18px; }
 .an-rail-btn:hover { background: var(--surface-2); color: var(--text); border-color: var(--border-2); }
-/* A pane toggle reads ON while its pane is open. */
+/* The lit icon is the open flyout. Clicking it again closes the flyout. */
 .an-rail-btn.is-on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+
+/* The ⚙ on a card head — the only way into Properties, which is closed until
+   asked for. Faint until the card is hovered or selected, like the resize grip. */
+.an-card-props {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+}
+.an-card-props svg { width: 15px; height: 15px; }
+.an-workbench.is-active #dash-grid .dash-card:hover .an-card-props,
+.an-workbench.is-active #dash-grid .dash-card.is-selected .an-card-props,
+.an-card-props:focus-visible { opacity: 1; }
+.an-card-props:hover { background: var(--surface-2); color: var(--text); }
 
 /* Which dataset the fields belong to. */
 .an-ds {
