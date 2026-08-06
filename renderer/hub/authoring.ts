@@ -35,7 +35,7 @@ let anDataset: { name: string; kind: string } | null = null;
 let anSaveTimer: number | null = null;
 
 const AN_FLYOUT_KEY = 'anFlyout'; // id of the one open flyout pane, '' for none
-const AN_PANES = ['an-pane-add', 'an-pane-data', 'an-pane-visuals', 'an-pane-filter'];
+const AN_PANES = ['an-pane-add', 'an-pane-data', 'an-pane-visuals', 'an-pane-filter', 'an-pane-props'];
 
 function anEl(id: string): HTMLElement | null {
   return document.getElementById(id);
@@ -60,10 +60,11 @@ function anSetFlyout(pane: string | null): void {
   const side = anEl('an-side-left');
   if (side) side.hidden = !anFlyout;
   // The field list follows the flyout: dragging a field into a well needs both
-  // ends open at once, and only one flyout is. Moved, never copied — a second
+  // ends open at once, and only one flyout is. The wells now live under
+  // Properties, so that is where it goes. Moved, never copied — a second
   // #an-fields would need a second render target and a second set of listeners.
   const fields = anEl('an-data-body');
-  const fieldHost = anFlyout === 'an-pane-visuals' ? anEl('an-viz-fields') : anEl('an-pane-data');
+  const fieldHost = anFlyout === 'an-pane-props' ? anEl('an-props-fields') : anEl('an-pane-data');
   if (fields && fieldHost && fields.parentElement !== fieldHost) fieldHost.appendChild(fields);
   document.querySelectorAll('#an-rail .an-rail-btn').forEach((b) => {
     const el = b as HTMLElement;
@@ -71,12 +72,15 @@ function anSetFlyout(pane: string | null): void {
     el.classList.toggle('is-on', on);
     el.setAttribute('aria-expanded', on ? 'true' : 'false');
   });
+  // Painted on open rather than once at startup: which tiles read as recommended
+  // depends on the selected card's data, which changes under it.
+  if (anFlyout === 'an-pane-visuals') anRenderGallery();
 }
 
-/** Properties is a per-card panel, so it is closed until a card asks for it. */
+/** Properties is now one of the rail flyouts, not a column of its own. */
 function anSetProps(on: boolean): void {
-  const side = anEl('an-side-right');
-  if (side) side.hidden = !on;
+  if (on) anSetFlyout('an-pane-props');
+  else if (anFlyout === 'an-pane-props') anSetFlyout(null);
 }
 
 // ── Selection ───────────────────────────────────────────────────────────────
@@ -106,9 +110,11 @@ async function anSelectCard(cardId: string | null): Promise<void> {
 
   const card = anCardById(cardId);
   anRenderProps(card);
-  // Re-bind, never re-open: an open Properties panel follows the selection, and
-  // deselecting closes it rather than leaving an empty panel holding a column.
-  if (!card) anSetProps(false);
+  // Selecting a card BINDS Properties, and opens it only when nothing else is
+  // open. Force-switching would yank the user out of Data or the gallery
+  // mid-task — and, because the field list follows the flyout, would move the
+  // list out from under a drag they had already started.
+  if (card && !anFlyout) anSetFlyout('an-pane-props');
 
   // Fields + wells are a VISUAL card's business. A text or metric card still
   // selects, and still gets Properties — it just has no encoding to edit.
@@ -164,12 +170,15 @@ async function anSelectCard(cardId: string | null): Promise<void> {
 }
 
 function anShowEncoding(on: boolean, hint: string): void {
-  const inner = anEl('an-viz-inner');
-  const vizHint = anEl('an-viz-hint');
+  const inner = anEl('an-props-inner');
+  const propsHint = anEl('an-props-hint');
   const fields = anEl('an-fields');
   const dataHint = anEl('an-data-hint');
   if (inner) inner.hidden = !on;
-  if (vizHint) { vizHint.hidden = on; vizHint.textContent = hint || 'Nothing selected.'; }
+  if (propsHint) {
+    propsHint.hidden = on;
+    propsHint.textContent = hint || 'Select a visual card to edit it.';
+  }
   if (fields) fields.hidden = !on;
   const search = anEl('an-field-search');
   if (search) search.hidden = !on;
@@ -243,10 +252,11 @@ function anRenderFields(): void {
       document.body.classList.add('an-dragging');
     });
     item.addEventListener('dragend', () => document.body.classList.remove('an-dragging'));
-    // Click = drop into the well the column best fits. Same call the drop makes.
-    item.addEventListener('click', () => {
-      anDropInto(col.type === 'number' ? 'values' : 'category', col.name);
-    });
+    // Click = fill the next EMPTY well. Same call the drop makes, so the two
+    // routes cannot drift; this one exists because a drag-only well is
+    // unreachable from the keyboard, and unreachable entirely whenever the
+    // field list and the wells are in different flyouts.
+    item.addEventListener('click', () => anDropInto(anNextWell(col.type), col.name));
     host.appendChild(item);
   });
 }
@@ -279,6 +289,20 @@ function anWireWells(root: HTMLElement): void {
       if (column) anDropInto(el.dataset.well || '', column);
     });
   });
+}
+
+/**
+ * The next empty well a clicked field should fill, respecting type: a number is
+ * a measure and Measures is a list that is never "full", so it always takes one;
+ * a text/date column fills Category, then Split by, then Filters.
+ */
+function anNextWell(colType: string): string {
+  const enc = anForm ? anForm.getEncoding() : null;
+  if (!enc) return colType === 'number' ? 'values' : 'category';
+  if (!enc.category) return 'category';
+  if (colType === 'number') return 'values';
+  if (!enc.series) return 'series';
+  return 'filters';
 }
 
 function anDropInto(well: string, column: string): void {
@@ -404,6 +428,10 @@ async function anRenderSwitcher(): Promise<void> {
   }
   const recommended = eligibleChartTypes(shape, countNumericSeries(data), (data.labels || []).length);
   if (data.geo) recommended.push('map_choropleth'); // maps after charts, never first
+  // The gallery marks the SAME app-computed set, so the two surfaces can never
+  // disagree about what fits this data.
+  anRecommended = recommended.slice();
+  anRenderGallery();
   if (!recommended.length) return;
 
   const current = String(anVisual.chartType || '');
@@ -460,6 +488,71 @@ async function anRenderSwitcher(): Promise<void> {
   });
   anPicker.switcher.classList.add('an-switcher-hidden');
   mount.appendChild(anPicker.switcher);
+}
+
+// ── The Visuals gallery ─────────────────────────────────────────────────────
+// A browsable grid of every visual type, built from the SAME vocabulary the
+// result-view picker uses (VIZ_LABELS / VIZ_ICONS / ALL_CHART_TYPE_IDS). It is a
+// second VIEW of that list, never a second list.
+//
+// Recommended-first ordering is the whole reason this is a gallery rather than a
+// dropdown: eligibility is app-computed from the data's shape (no model), so the
+// types that actually fit float to the top and the rest stay browsable below.
+let anRecommended: string[] = [];
+
+function anGalleryPool(): string[] {
+  const pool = ALL_CHART_TYPE_IDS.concat(['table', 'map_bubble', 'map_choropleth']);
+  const rec = pool.filter((t) => anRecommended.indexOf(t) >= 0);
+  return rec.concat(pool.filter((t) => anRecommended.indexOf(t) < 0));
+}
+
+function anRenderGallery(): void {
+  const mount = anEl('an-gallery');
+  if (!mount) return;
+  mount.innerHTML = '';
+  const current = anVisual ? String(anVisual.chartType || '') : '';
+  anGalleryPool().forEach((type) => {
+    const rec = anRecommended.indexOf(type) >= 0;
+    const tile = document.createElement('button');
+    tile.type = 'button';
+    tile.className = 'an-tile' + (type === current ? ' is-active' : '') + (rec ? ' is-rec' : '');
+    tile.dataset.type = type;
+    const ic = document.createElement('span');
+    ic.className = 'an-tile-ic';
+    ic.setAttribute('aria-hidden', 'true');
+    ic.innerHTML = VIZ_ICONS[type] || ''; // trusted static SVG, as renderResult.ts
+    const nm = document.createElement('span');
+    nm.className = 'an-tile-name';
+    nm.textContent = VIZ_LABELS[type] || type;
+    tile.appendChild(ic);
+    tile.appendChild(nm);
+    tile.title = (VIZ_LABELS[type] || type) + (rec ? ' · recommended for this data' : '');
+    tile.addEventListener('click', () => anGalleryPick(type));
+    mount.appendChild(tile);
+  });
+}
+
+/**
+ * Pick a type from the gallery. With a visual card selected this retypes it;
+ * with nothing selected it runs the editor's OWN add-visual flow first (same
+ * modal, same handler) and applies the type to whatever that added — rather
+ * than growing a second way to create a card.
+ */
+async function anGalleryPick(type: string): Promise<void> {
+  let card = anCardById(anSelectedCardId);
+  if (!card || card.type !== 'visual') {
+    const page = dashCurrentPage();
+    const before = new Set(((page && page.cards) || []).map((c: any) => c && c.id));
+    await handleAddVisual();
+    const after = ((dashCurrentPage() || {}).cards || []).filter((c: any) => c && !before.has(c.id));
+    card = after[after.length - 1] || null;
+    if (!card) return; // the picker was cancelled — nothing to retype
+    await anSelectCard(card.id);
+  }
+  if (!anVisual) return;
+  anVisual.chartType = type;
+  anScheduleWrite();
+  anRenderGallery();
 }
 
 // ── Writing back ────────────────────────────────────────────────────────────
@@ -878,6 +971,7 @@ function anSyncWorkbench(): void {
   // made this surface feel stuffed — the nav is 176px of chrome you cannot use
   // while authoring, and "‹ Back" in the editor head already returns to it.
   document.body.classList.toggle('an-focus', on);
+  anMountTopStrip(on);
   anMountFilterBar(on);
   // The analysis name IS the rename control in focus mode (the separate Rename
   // button is hidden), so it has to answer to the keyboard as well as a click.
@@ -919,6 +1013,35 @@ function anClick(targetId: string): void {
   if (t && !t.hidden && !t.disabled) t.click();
 }
 
+// The top strip is MOVED out of #dash-editor and above the workbench while an
+// analysis is open, then back when it closes.
+//
+// It has to leave the editor to span the window: #dash-editor is the CENTRE
+// column of the workbench, so a strip inside it starts to the right of the
+// flyout and reads as a third column header rather than a title bar. Moving it
+// keeps exactly one Back / Publish / Save, each with its one handler — the same
+// one-element-two-hosts move #dash-editor and .dash-toolbar already use.
+function anMountTopStrip(on: boolean): void {
+  const head = document.querySelector(
+    '#dash-editor > .dash-editor-head, #ws-analyses > .dash-editor-head') as HTMLElement | null;
+  const editor = anEl('dash-editor');
+  const panel = anEl('ws-analyses');
+  const bench = anEl('an-editor-host');
+  if (!head || !editor || !panel || !bench) return;
+  // `dash-editor--analysis` normally sits on #dash-editor and is what shows
+  // .dash-an-only (Publish, Republish) and hides .dash-db-only. Once the head
+  // leaves the editor that class is no longer an ancestor, so it travels with
+  // it — the same fix .dash-toolbar needed when it moved into the Filters pane.
+  // Without this Publish is display:none while ⋯ beside it renders fine.
+  head.classList.toggle('dash-editor--analysis', on);
+  if (on) {
+    // Above the workbench, so the rail, the flyout and the sheet all sit under it.
+    if (head.parentElement !== panel) panel.insertBefore(head, bench);
+  } else if (head.parentElement !== editor) {
+    editor.insertBefore(head, editor.firstChild); // its original slot: first child
+  }
+}
+
 // The dashboard-wide filter bar is MOVED into the Filters flyout while an
 // analysis is open, and moved back when it closes. One element, two hosts —
 // exactly what #dash-editor itself does. A copy would need a second set of ids
@@ -956,8 +1079,18 @@ function initAuthoring(): void {
   } catch (_) { /* private mode — start closed */ }
   anSetFlyout(saved || null);
 
-  const closeProps = anEl('an-props-close');
-  if (closeProps) closeProps.addEventListener('click', () => anSetProps(false));
+  // The two disclosures inside Properties. Same `.an-sec` pattern anRenderProps
+  // builds its own sections with — these are just declared in HTML because they
+  // are fixed, so they need the toggle wired once.
+  ['an-sec-visual', 'an-sec-format'].forEach((id) => {
+    const sec = anEl(id);
+    const head = sec?.querySelector('.an-sec-head') as HTMLElement | null;
+    if (!sec || !head) return;
+    head.addEventListener('click', () => {
+      const open = sec.classList.toggle('is-open');
+      head.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  });
 
   // The name is the rename control; the separate Rename button is hidden in
   // focus mode but still owns the handler.
