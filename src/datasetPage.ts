@@ -567,6 +567,25 @@ function schemaOf(src: PageSource): ParsedColumn[] | null {
 export const MAX_DISTINCT = 200;
 
 /**
+ * A SEARCHED page of distinct values, plus how many there really are.
+ *
+ * `total` is the distinct count MATCHING the search, counted BEFORE the cap —
+ * so the caller can say "showing the first 200 of 4,812" instead of implying
+ * that 200 is all there is. Silent truncation reads as "these are all the
+ * values", which is the one thing a filter picker must never lie about.
+ */
+export interface DistinctResult {
+  values: string[];
+  total: number;
+}
+
+export interface DistinctRequest {
+  /** Case-insensitive substring match, applied IN SQL. Blank/absent = no filter. */
+  search?: string;
+  limit?: number;
+}
+
+/**
  * Distinct non-empty values of one column, in first-seen order, capped.
  *
  * Byte-for-byte `distinctValuesJs(columns, rows, column, limit)` over the stored
@@ -574,28 +593,76 @@ export const MAX_DISTINCT = 200;
  * values" — an empty column returns `[]`.
  */
 export function readDistinct(src: PageSource, column: string, limit: number): string[] | null {
+  const r = readDistinctPage(src, column, { limit });
+  return r === null ? null : r.values;
+}
+
+/**
+ * `readDistinct` plus a server-side search and the pre-cap total.
+ *
+ * THE SEARCH RUNS IN SQL, deliberately. Fetching every distinct value and
+ * filtering in the renderer is the exact pattern that capped datasets at 50k
+ * before `datasetPage` existed — a high-cardinality text column on a 1,000,000
+ * row dataset can have hundreds of thousands of distinct values, and the picker
+ * only ever shows 200 of them.
+ *
+ * ONE statement does both jobs: `COUNT(*) OVER ()` is evaluated over the whole
+ * grouped set before `LIMIT` applies, so the total costs no second query.
+ */
+export function readDistinctPage(
+  src: PageSource,
+  column: string,
+  req?: DistinctRequest,
+): DistinctResult | null {
   try {
     const cols = schemaOf(src);
     if (!cols) return null;
     const ci = cols.findIndex((c) => c.name === column);
     if (ci < 0) return null;
-    const cap = Math.min(Math.max(Math.floor(limit) || 0, 0), MAX_DISTINCT);
-    if (cap === 0) return [];
+    const cap = Math.min(Math.max(Math.floor(req?.limit ?? MAX_DISTINCT) || 0, 0), MAX_DISTINCT);
+    const search = typeof req?.search === 'string' ? req.search : '';
 
     const { from, ord } = orderedFrom(src.parquetPath, ordinalMode);
-    const v = bomSafe(phys(ci));
-    const sql =
-      `SELECT ${v} AS v, MIN(${ord}) AS o FROM ${from} ` +
-      `WHERE ${phys(ci)} IS NOT NULL AND CAST(${phys(ci)} AS VARCHAR) <> '' ` +
-      `GROUP BY v ORDER BY o ASC LIMIT ?;`;
+    const p = phys(ci);
+    const v = bomSafe(p);
+    const params: duck.DuckValue[] = [];
 
-    const rows = duck.query(sql, [cap]);
-    return rows.map((r) => String(r.v ?? ''));
+    // "Empty" here is ONLY null and '' — NOT the whitespace rule used elsewhere
+    // in this file. The JS original tests `cell == null || cell === ''` and a
+    // whitespace-only value IS a legitimate option; matching the original
+    // matters more than being internally consistent.
+    let where = `${p} IS NOT NULL AND CAST(${p} AS VARCHAR) <> ''`;
+    if (search !== '') {
+      // Parameterised, never interpolated: a search box is untrusted input.
+      // `lower()` on both sides, matching the JS reference's toLowerCase().
+      where += ` AND contains(lower(CAST(${p} AS VARCHAR)), lower(CAST(? AS VARCHAR)))`;
+      params.push(search);
+    }
+
+    // MIN(ordinal) per group is unique per group, so ORDER BY o is already a
+    // TOTAL order — a bare GROUP BY preserves nothing, and whether it reorders
+    // is machine-dependent.
+    const inner = `SELECT ${v} AS v, MIN(${ord}) AS o FROM ${from} WHERE ${where} GROUP BY v`;
+    const sql = `SELECT v, o, CAST(COUNT(*) OVER () AS DOUBLE) AS t FROM (${inner}) ORDER BY o ASC LIMIT ?;`;
+    params.push(cap);
+
+    // A zero cap still needs the total (the UI shows "0 of 4,812"), and LIMIT 0
+    // returns no rows to read it from — so ask for the count on its own.
+    if (cap === 0) {
+      const only = duck.query(`SELECT CAST(COUNT(*) AS DOUBLE) AS t FROM (${inner});`, params.slice(0, -1));
+      return { values: [], total: only.length > 0 ? Number(only[0].t) || 0 : 0 };
+    }
+
+    const rows = duck.query(sql, params);
+    return {
+      values: rows.map((r) => String(r.v ?? '')),
+      total: rows.length > 0 ? Number(rows[0].t) || 0 : 0,
+    };
   } catch (err) {
     const msg = String((err as Error)?.message ?? '');
     if (ordinalMode === 'file_row_number' && /file_row_number/i.test(msg)) {
       ordinalMode = 'row_number';
-      return readDistinct(src, column, limit);
+      return readDistinctPage(src, column, req);
     }
     return null;
   }
@@ -612,14 +679,29 @@ export function distinctValuesJs(
   column: string,
   limit: number,
 ): string[] {
+  return distinctValuesPageJs(columns, rows, column, { limit }).values;
+}
+
+/**
+ * The reference for `readDistinctPage` — same search and same total.
+ *
+ * NOTE the loop cannot break at the cap any more: `total` is the count of ALL
+ * matching distinct values, so every row has to be seen even once the output is
+ * full. That is the JS path's cost and precisely the reason the SQL path exists;
+ * this runs only when the bridge is down or the record is a v2 rows-inline one.
+ */
+export function distinctValuesPageJs(
+  columns: ParsedColumn[],
+  rows: Cell[][],
+  column: string,
+  req?: DistinctRequest,
+): DistinctResult {
   const cols = Array.isArray(columns) ? columns : [];
   const ci = cols.findIndex((c) => c && c.name === column);
-  if (ci < 0) return [];
-  const cap = Math.min(Math.max(Math.floor(limit) || 0, 0), MAX_DISTINCT);
-  // The push-then-test loop below would emit one value before breaking, so a
-  // zero cap has to short-circuit. The original renderer loop hardcoded 200 and
-  // never had to answer this; a parameterised cap does.
-  if (cap === 0) return [];
+  if (ci < 0) return { values: [], total: 0 };
+  const cap = Math.min(Math.max(Math.floor(req?.limit ?? MAX_DISTINCT) || 0, 0), MAX_DISTINCT);
+  const needle = typeof req?.search === 'string' ? req.search.toLowerCase() : '';
+
   const seen = new Set<string>();
   const out: string[] = [];
   for (const r of Array.isArray(rows) ? rows : []) {
@@ -627,9 +709,9 @@ export function distinctValuesJs(
     if (cell == null || cell === '') continue;
     const s = String(cell);
     if (seen.has(s)) continue;
+    if (needle !== '' && !s.toLowerCase().includes(needle)) continue;
     seen.add(s);
-    out.push(s);
-    if (out.length >= cap) break;
+    if (out.length < cap) out.push(s);
   }
-  return out;
+  return { values: out, total: seen.size };
 }

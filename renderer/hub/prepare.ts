@@ -300,45 +300,64 @@ function buildStepForm(type: string, body: HTMLElement, existing: any): () => an
       };
     }
     case 'filter': {
+      // The column stays a select (that is how a filter is retargeted); the
+      // CONDITION is one button opening the shared type-aware dialog, so this
+      // surface offers exactly what the visual wells and the sheet filter bar
+      // do — one dialog, three call sites.
       const colSel = makeColSelect(existing ? existing.column : undefined);
-      const opSel = selectFrom(FILTER_OPS, existing && existing.op ? String(existing.op) : '=');
-      // ONE input for both shapes: a scalar for `=`/`contains`/…, a
-      // comma-separated list for `in`/`not in`. The label and placeholder say
-      // which is in force, and the value carries across when the operator
-      // changes, so switching `= CA` to `in` leaves "CA" as the first entry
-      // rather than silently clearing what was typed.
-      const startsAsList = isListFilterOp(existing && existing.op);
-      const valIn = textInput(
-        startsAsList
-          ? formatFilterValues(existing && existing.values)
-          : existing && existing.value != null
-            ? String(existing.value)
-            : '',
-      );
-      const valRow = fieldRow('Value', valIn);
-      const valLabel = valRow.querySelector('.ds-step-field-label') as HTMLElement | null;
-      body.appendChild(fieldRow('Column', colSel));
-      body.appendChild(fieldRow('Condition', opSel));
-      body.appendChild(valRow);
-      const syncVal = () => {
-        const list = isListFilterOp(opSel.value);
-        valRow.hidden = isValuelessFilterOp(opSel.value);
-        if (valLabel) valLabel.textContent = list ? 'Values' : 'Value';
-        valIn.placeholder = list ? 'CA, WA, NY' : '';
+      // `pending` holds what the dialog returned. Seeded from the step being
+      // edited so re-opening the editor and pressing Save is a no-op rather
+      // than a silent reset to `=`.
+      let pending: any[] = existing && existing.op ? [{ ...existing, type: 'filter' }] : [];
+
+      const condBtn = document.createElement('button');
+      condBtn.type = 'button';
+      condBtn.className = 'ds-step-cond';
+      const paintCond = (): void => {
+        condBtn.textContent = pending.length
+          ? pending.map((s) => filterStepSummary(s)).join(' and ')
+          : 'set a condition…';
       };
-      opSel.addEventListener('change', syncVal);
-      syncVal();
+      paintCond();
+      condBtn.addEventListener('click', async () => {
+        const column = colSel.value;
+        if (!column) {
+          window.alert('Pick a column to filter on.');
+          return;
+        }
+        const col = expColumns.find((c) => c.name === column);
+        const steps = await openFilterDialog({
+          projectId: currentProjectId || '',
+          datasetId: expId || '',
+          column,
+          type: col && col.type ? String(col.type) : 'text',
+          existing: pending[0],
+        });
+        if (steps === null) return;
+        pending = steps;
+        paintCond();
+      });
+
+      body.appendChild(fieldRow('Column', colSel));
+      body.appendChild(fieldRow('Condition', condBtn));
+      // Retargeting to another column invalidates the operand — an `in` list of
+      // city names means nothing on a price column.
+      colSel.addEventListener('change', () => { pending = []; paintCond(); });
+
       return () => {
         const column = colSel.value;
-        const op = opSel.value;
         if (!column) {
           window.alert('Pick a column to filter on.');
           return null;
         }
-        const step: any = { type, column, op };
-        if (isListFilterOp(op)) step.values = parseFilterValues(valIn.value);
-        else if (!isValuelessFilterOp(op)) step.value = valIn.value;
-        return step;
+        if (pending.length === 0) {
+          window.alert('Set a condition for this filter.');
+          return null;
+        }
+        // A min/max range is two steps. Returning the ARRAY lets the caller add
+        // both — safe because every filter is a pure row predicate, so the order
+        // they land in the pipeline cannot change the result.
+        return pending.map((s) => ({ ...s, type, column }));
       };
     }
     case 'group_aggregate': {
@@ -500,14 +519,26 @@ function makeAggRow(agg?: any): HTMLElement {
 }
 
 async function saveStepFromForm(getStep: () => any): Promise<void> {
-  const step = getStep();
-  if (!step) return;
+  const got = getStep();
+  if (!got) return;
   if (!currentProjectId || !expId) return;
+  // A filter form can return TWO steps (a min/max range). Everything else
+  // returns one; normalising here keeps every other form untouched.
+  const steps: any[] = Array.isArray(got) ? got : [got];
+  if (steps.length === 0) return;
+
   let res: any;
   if (dsStepEditIndex >= 0) {
-    res = await window.hub.updateDatasetStep(currentProjectId, expId, dsStepEditIndex, step);
+    res = await window.hub.updateDatasetStep(currentProjectId, expId, dsStepEditIndex, steps[0]);
   } else {
-    res = await window.hub.addDatasetStep(currentProjectId, expId, step);
+    res = await window.hub.addDatasetStep(currentProjectId, expId, steps[0]);
+  }
+  // The extra bound of a range is APPENDED rather than inserted next to its
+  // twin: there is no insert-at-index IPC, and it does not need one — filters
+  // are pure row predicates, so where they sit in the order cannot change the
+  // rows they produce (the same property dashboardFilters.ts relies on).
+  for (let i = 1; i < steps.length && res && res.ok; i += 1) {
+    res = await window.hub.addDatasetStep(currentProjectId, expId, steps[i]);
   }
   if (applyStepResult(res)) closeStepEditor();
 }

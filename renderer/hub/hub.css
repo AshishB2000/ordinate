@@ -8311,3 +8311,164 @@ body.an-focus .an-workbench.is-active #dash-pages {
   cursor: pointer;
 }
 .an-prop-check input { accent-color: var(--accent); margin: 0; }
+
+/* ── The type-aware filter dialog (filterDialog.ts) ────────────────────────────
+   Classes only: the hub CSP is `style-src 'self'`, so no inline style= anywhere
+   in the markup this file dresses. Sized to hold ~200 checkboxes without the
+   dialog itself growing past the viewport — the LIST scrolls, the dialog does
+   not, so Apply/Cancel never walk off the bottom of the screen. */
+.ws-modal.fd-modal {
+  width: min(460px, calc(100vw - 48px));
+  text-align: left;
+}
+.fd-sub {
+  margin: -4px 0 10px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.fd-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+.fd-tab {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 6px 10px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.fd-tab:hover { color: var(--text); }
+.fd-tab.is-on {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.fd-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fd-search { margin: 0; }
+.fd-bulk {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.fd-link {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.fd-exclude {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text);
+  cursor: pointer;
+}
+.fd-exclude input { accent-color: var(--accent); margin: 0; }
+/* The list scrolls; the dialog doesn't. A capped 200-value list is ~5,000px
+   tall, which would push the action buttons off-screen. */
+.fd-list {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.fd-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: var(--r-sm);
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
+}
+.fd-opt:hover { background: var(--surface); }
+.fd-opt input { accent-color: var(--accent); margin: 0; flex: 0 0 auto; }
+/* A long value truncates rather than widening the dialog. */
+.fd-opt-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fd-empty {
+  margin: 0;
+  padding: 10px 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+/* Where "showing the first 200 of 4,812" lands — truncation is never silent. */
+.fd-note {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.fd-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.fd-field-label {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* The condition control on a filter row / prepare step: reads as the value it
+   holds, behaves as the button that opens the dialog. */
+.viz-filter-cond,
+.ds-step-cond {
+  appearance: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 4px 8px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.viz-filter-cond:hover,
+.ds-step-cond:hover { border-color: var(--accent); }
+.viz-filter-cond:focus-visible,
+.ds-step-cond:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ds-step-cond { width: 100%; font-size: 13px; padding: 6px 9px; }
+
+/* The filter chip's text is now a button (click to edit) — strip the button
+   chrome so the chip still looks like a chip. */
+.dash-filter-chip-txt {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.dash-filter-chip-txt:hover { text-decoration: underline; }

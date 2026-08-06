@@ -296,7 +296,15 @@ function anEnsureForm(): void {
   if (anForm) return;
   const mount = anEl('an-wells');
   if (!mount) return;
-  anForm = createEncodingForm(mount, { onChange: () => anScheduleWrite(), variant: 'wells' });
+  anForm = createEncodingForm(mount, {
+    onChange: () => anScheduleWrite(),
+    variant: 'wells',
+    // Resolved at click time: the form outlives whichever visual is selected.
+    dataset: () =>
+      anVisual && currentProjectId
+        ? { projectId: currentProjectId, datasetId: String(anVisual.datasetId || '') }
+        : null,
+  });
   anForm.show(true);
   anWireWells(anForm.el);
 }

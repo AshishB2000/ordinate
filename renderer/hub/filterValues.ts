@@ -40,3 +40,43 @@ function isListFilterOp(op: string | null | undefined): boolean {
 function isValuelessFilterOp(op: string | null | undefined): boolean {
   return op === 'is_empty' || op === 'not_empty';
 }
+
+/** Human labels for every operator, shared by all three filter surfaces. */
+const FILTER_OP_LABELS: Record<string, string> = {
+  '=': 'equals',
+  '!=': 'does not equal',
+  '>': 'greater than',
+  '<': 'less than',
+  '>=': 'at least',
+  '<=': 'at most',
+  contains: 'contains',
+  is_empty: 'is empty',
+  not_empty: 'is not empty',
+  in: 'is any of',
+  'not in': 'is none of',
+};
+
+/**
+ * One filter step as a short phrase — what the chip/pill/summary shows.
+ *
+ * Long value lists are summarised rather than printed: a chip carrying 40 values
+ * is unreadable and pushes every other control off its row. An EMPTY list says
+ * so, because the pipeline skips that step with a warning and a chip that looked
+ * active while doing nothing would be the confusing case.
+ */
+function filterStepSummary(step: any): string {
+  if (!step || typeof step !== 'object') return '';
+  // No operator = an unset row. Deliberately blank rather than defaulting to
+  // "equals", so the control falls back to its own "set a condition…" prompt.
+  if (!step.op) return '';
+  const op = String(step.op);
+  const label = FILTER_OP_LABELS[op] || op;
+  if (isValuelessFilterOp(op)) return label;
+  if (isListFilterOp(op)) {
+    const vals: unknown[] = Array.isArray(step.values) ? step.values : [];
+    if (vals.length === 0) return label + ' — no values yet';
+    if (vals.length > 3) return `${label} ${formatFilterValues(vals.slice(0, 3))} +${vals.length - 3}`;
+    return `${label} ${formatFilterValues(vals)}`;
+  }
+  return `${label} ${step.value == null ? '' : String(step.value)}`.trim();
+}

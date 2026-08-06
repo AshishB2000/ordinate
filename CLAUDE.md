@@ -334,7 +334,14 @@ and maps). A disk-persisted history rail lists captures (newest first); clicking
   (Values/Periods/customize), `plotRender.js` (the dark Mosaic/vgplot stack — `renderVizInArea`'s
   one extra branch; falls back to Chart.js on anything it can't draw), `mapRender.js` (MapLibre GL),
   `reportExport.js` (export + map→PNG),
-  `execMenu.js`, `settingsPanels.js` (Local CLI + BYOK), `customDropdown.js`, `geoMatch.js`;
+  `execMenu.js`, `settingsPanels.js` (Local CLI + BYOK), `customDropdown.js`, `geoMatch.js`,
+  `filterValues.js` + `filterDialog.js` (**ONE type-aware filter dialog, three call sites** —
+  `encodingForm` the visual FILTERS well, `prepare` the pipeline step, `dashboards` the sheet filter
+  bar. Text → a checkbox list of distinct values with a SERVER-SIDE search; number → min/max
+  compiling to two AND-ed steps; date → from/to. Relative dates are deliberately out of scope.
+  A `date` column is stored as its ORIGINAL STRING and compared lexicographically, so the native
+  `<input type=date>` is offered only when the stored values are actually ISO — on `MM/DD/YYYY` data
+  an ISO picker would build a confidently wrong filter);
   workspace — `workspace.js` (nav/shell), `projects.js`, `datasets.js`, `prepare.js`, `visuals.js`,
   `dashboards.js`, `connections.js`, `captureDataset.js`, `copilot.js`. Shared globals in
   `renderer/hub/globals.d.ts` (+ `globals.hub-c.d.ts`).
@@ -347,7 +354,7 @@ Renderer→main: `invoke` (reply) or `send` (fire-and-forget); main→renderer: 
 | Capture | `capture:commit`/`:cancel`, `overlay:frame`, `hub:capture`, `hub:captureRegion` (map→PNG) |
 | Results | `hub:new-entry`, `hub:entry-result`, `hub:followup`(+`-result`), `hub:retry`, `hub:saveChartOverrides` |
 | Projects | `projects:list`/`:create`/`:open`/`:rename`/`:delete` |
-| Datasets/Prepare | `dataset:pickAndParse`/`:parsePaste`/`:get`/`:list`/`:save`/`:update`/`:delete`/`:combine`, `dataset:addStep`/`:updateStep`/`:removeStep`/`:reorderSteps`/`:setSteps`, `dataset:stats`/`:explain`, `dataset:suggestSteps`/`:suggestCalcField`, **`dataset:meta`** (rows-free open), **`dataset:page`** (one grid window: offset/limit/search/sort), `captureDataset:draft`/`:save` |
+| Datasets/Prepare | `dataset:pickAndParse`/`:parsePaste`/`:get`/`:list`/`:save`/`:update`/`:delete`/`:combine`, `dataset:addStep`/`:updateStep`/`:removeStep`/`:reorderSteps`/`:setSteps`, `dataset:stats`/`:explain`, `dataset:suggestSteps`/`:suggestCalcField`, **`dataset:meta`** (rows-free open), **`dataset:page`** (one grid window: offset/limit/search/sort), **`dataset:distinct`** (one column's distinct values — capped, **searched in SQL**, and returning the pre-cap `total` so the filter picker can say "showing the first N of M"), `captureDataset:draft`/`:save` |
 | Connections | `connectors:catalog` (renderer-safe source list), `connections:list`, `connection:testAndSave`/`:listTables`/`:run`/`:refresh`/`:delete` |
 | Visuals | `visual:get`/`:list`/`:save`/`:update`/`:duplicate`/`:delete`/`:data`/`:suggest` |
 | Mosaic (dark) | `mosaic:view` (ensure a typed view over the Parquet), `mosaic:query` (one statement, **async bridge only**) |

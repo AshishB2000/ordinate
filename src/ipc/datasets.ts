@@ -16,8 +16,8 @@ import {
   readPage,
   pageRowsJs,
   PageRequest,
-  readDistinct,
-  distinctValuesJs,
+  readDistinctPage,
+  distinctValuesPageJs,
   MAX_DISTINCT,
 } from '../datasetPage';
 import { explainText, suggestSteps, suggestCalcField } from '../analyze';
@@ -367,18 +367,23 @@ export function register() {
   // This exists so the renderer stops hydrating a whole table to collect at most
   // 200 options. Never throws; an unreadable dataset yields no values, which the
   // caller already renders as "no values to filter on".
-  ipcMain.handle('dataset:distinct', async (_e, { projectId, datasetId, column, limit }: any = {}) => {
+  ipcMain.handle('dataset:distinct', async (_e, { projectId, datasetId, column, limit, search }: any = {}) => {
     try {
       const col = typeof column === 'string' ? column : '';
       const cap = typeof limit === 'number' && limit > 0 ? limit : MAX_DISTINCT;
-      if (!col) return { values: [] };
+      // The search runs IN SQL, not in the caller. Fetching every distinct value
+      // and filtering in the renderer is the pattern that capped datasets at 50k
+      // before this module existed. `total` comes back with it so the picker can
+      // say "showing the first 200 of 4,812" instead of implying 200 is all.
+      const req = { limit: cap, search: typeof search === 'string' ? search : '' };
+      if (!col) return { values: [], total: 0 };
 
       const src = await datasets.residentSource(projectId, datasetId);
       if (src) {
-        const fast = readDistinct(src, col, cap);
+        const fast = readDistinctPage(src, col, req);
         if (fast) {
           trace.record('datasetDistinct', 'resident');
-          return { values: fast };
+          return fast;
         }
         trace.record('datasetDistinct', 'failed', `limit=${cap}`);
       } else {
@@ -386,10 +391,10 @@ export function register() {
       }
 
       const ds = await datasets.getDataset(projectId, datasetId);
-      if (!ds) return { values: [] };
-      return { values: distinctValuesJs(ds.columns, ds.rows, col, cap) };
+      if (!ds) return { values: [], total: 0 };
+      return distinctValuesPageJs(ds.columns, ds.rows, col, req);
     } catch {
-      return { values: [] };
+      return { values: [], total: 0 };
     }
   });
 

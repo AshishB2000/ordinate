@@ -202,8 +202,10 @@ contextBridge.exposeInMainWorld('hub', {
     ipcRenderer.invoke('dataset:meta', { projectId, id }),
   // Distinct values of ONE column, computed in main off the Parquet. The
   // dashboard filter picker used to hydrate the whole table to do this itself.
-  datasetDistinct: (projectId: string, datasetId: string, column: string, limit?: number) =>
-    ipcRenderer.invoke('dataset:distinct', { projectId, datasetId, column, limit }),
+  // `search` is applied IN SQL and `total` comes back with the page, so the
+  // filter picker never fetches a whole column to filter it in the renderer.
+  datasetDistinct: (projectId: string, datasetId: string, column: string, limit?: number, search?: string) =>
+    ipcRenderer.invoke('dataset:distinct', { projectId, datasetId, column, limit, search }),
   // One window of rows for the Explore grid, paged/searched/sorted in main against
   // the stored .parquet. The grid used to hold the WHOLE table in renderer memory
   // and re-copy it on every keystroke, which is what capped datasets at 50k rows.
