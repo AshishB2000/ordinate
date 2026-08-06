@@ -536,7 +536,18 @@ async function fillConnectorCount(): Promise<void> {
 }
 
 // Wire the Home section and the persistent sidebar's source entries.
+function fillHomeSourceLogos(): void {
+  document.querySelectorAll<HTMLElement>('.as-source-logo[data-logo-id]').forEach((host) => {
+    const id = host.dataset.logoId || '';
+    const label = host.dataset.logoLabel || '';
+    const logo = connMakeLogoFor(id, label);
+    host.replaceChildren(...logo.childNodes);
+    host.setAttribute('aria-hidden', 'true');
+  });
+}
+
 function initHome(): void {
+  fillHomeSourceLogos();
   const newBtn = document.getElementById('home-new-project');
   if (newBtn) newBtn.addEventListener('click', () => openNewMenu(newBtn));
 

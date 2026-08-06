@@ -4064,11 +4064,21 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 }
 .as-connect-item:hover { background: var(--surface-2); color: var(--text-strong); }
 .as-connect-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.as-dot { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; background: var(--accent); }
-.as-dot-2 { opacity: 0.72; }
-.as-dot-3 { opacity: 0.85; }
-.as-dot-4 { opacity: 0.6; }
-.as-dot-5 { opacity: 0.95; }
+.as-source-logo {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  color: var(--muted);
+}
+.as-source-logo svg,
+.as-source-logo img {
+  display: block;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
 .as-connect-more {
   align-self: flex-start;
   margin: 3px 0 0 26px;

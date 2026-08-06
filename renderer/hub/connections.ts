@@ -121,6 +121,18 @@ const CONN_PREVIEW_ROWS = 500; // display-only slice (full capped rows stay in c
 type ConnLogo = { path?: string; color?: string; title?: string; src?: string };
 const CONN_LOGOS: Record<string, ConnLogo> =
   (window.hub && window.hub.connectorLogos) || {};
+const CONN_ACTION_LOGOS: Record<string, ConnLogo> = {
+  'home-paste': {
+    path: 'M9 2h6a2 2 0 0 1 2 2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2-2Zm0 4h6V4H9v2Zm-2 3v2h10V9H7Zm0 4v2h10v-2H7Zm0 4v2h7v-2H7Z',
+    color: 'currentColor',
+    title: 'Paste data',
+  },
+  'home-capture': {
+    path: 'M4 3h5v2H5v4H3V4a1 1 0 0 1 1-1Zm11 0h5a1 1 0 0 1 1 1v5h-2V5h-4V3ZM3 15h2v4h4v2H4a1 1 0 0 1-1-1v-5Zm16 0h2v5a1 1 0 0 1-1 1h-5v-2h4v-4Zm-7-7a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z',
+    color: 'currentColor',
+    title: 'Screenshot',
+  },
+};
 
 // ── Small DOM helpers ────────────────────────────────────────────────────────
 function connEl(id: string): HTMLElement | null {
@@ -339,11 +351,11 @@ function connInitials(label: string): string {
   return (words[0][0] + words[1][0]).toUpperCase();
 }
 
-function connMakeLogo(d: ConnDef): HTMLElement {
+function connMakeLogoFor(id: string, label: string): HTMLElement {
   const host = document.createElement('span');
   host.className = 'conn-logo';
   host.setAttribute('aria-hidden', 'true');
-  const logo = CONN_LOGOS[d.id];
+  const logo = CONN_LOGOS[id] || CONN_ACTION_LOGOS[id];
   if (logo?.src) {
     const img = document.createElement('img');
     img.addEventListener('error', () => {
@@ -351,7 +363,7 @@ function connMakeLogo(d: ConnDef): HTMLElement {
       if (!(currentHost instanceof HTMLElement)) return;
       currentHost.replaceChildren();
       currentHost.classList.add('conn-logo-fallback');
-      currentHost.textContent = connInitials(d.label);
+      currentHost.textContent = connInitials(label);
     }, { once: true });
     img.src = logo.src;
     img.alt = '';
@@ -366,9 +378,13 @@ function connMakeLogo(d: ConnDef): HTMLElement {
     host.appendChild(svg);
   } else {
     host.classList.add('conn-logo-fallback');
-    host.textContent = connInitials(d.label);
+    host.textContent = connInitials(label);
   }
   return host;
+}
+
+function connMakeLogo(d: ConnDef): HTMLElement {
+  return connMakeLogoFor(d.id, d.label);
 }
 
 function connRenderChosenLogo(d: ConnDef): void {

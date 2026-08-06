@@ -306,20 +306,53 @@ async function main(): Promise<void> {
     const redshift = byId('amazon-redshift');
     const postgres = byId('postgres');
     const sqlserver = byId('sqlserver');
+    const addedLocalIds = ['azure-sql', 'oracle', 'starrocks', 'csv-folder'];
+    const fallbackIds = tiles
+      .filter((tile) => tile.querySelector('.conn-logo-fallback'))
+      .map((tile) => tile.dataset.connectorId || '');
+    const undrawnIds = tiles
+      .filter((tile) => !tile.querySelector('.conn-logo svg, .conn-logo img'))
+      .map((tile) => tile.dataset.connectorId || '');
     return {
       count: tiles.length,
       everyTileHasLogo: tiles.every((tile) => !!tile.querySelector('.conn-logo')),
       redshiftIsImage: !!redshift?.querySelector('.conn-logo img[src^="data:image/png;base64,"]'),
       postgresIsSvg: !!postgres?.querySelector('.conn-logo svg path'),
-      sqlserverFallback: sqlserver?.querySelector('.conn-logo-fallback')?.textContent || '',
+      sqlserverIsImage: !!sqlserver?.querySelector('.conn-logo img[src^="data:image/svg+xml;base64,"]'),
+      addedLocalImages: addedLocalIds.every((id) =>
+        !!byId(id)?.querySelector('.conn-logo img[src^="data:image/"]')),
+      fallbackIds,
+      undrawnIds,
       logosDecorative: tiles.every((tile) => tile.querySelector('.conn-logo')?.getAttribute('aria-hidden') === 'true'),
     };
   });
   ok('all 35 connector tiles have a logo block', logoPicker.count === 35 && logoPicker.everyTileHasLogo, JSON.stringify(logoPicker));
   ok('Redshift uses the supplied image and PostgreSQL uses a bundled glyph',
     logoPicker.redshiftIsImage && logoPicker.postgresIsSvg, JSON.stringify(logoPicker));
-  ok('an unmapped source gets a deterministic fallback badge', logoPicker.sqlserverFallback === 'MS', logoPicker.sqlserverFallback);
+  ok('all catalog sources use real marks instead of normal fallback badges',
+    logoPicker.sqlserverIsImage && logoPicker.addedLocalImages &&
+      logoPicker.fallbackIds.length === 0 &&
+      logoPicker.undrawnIds.length === 0,
+    JSON.stringify(logoPicker));
   ok('connector logos are decorative', logoPicker.logosDecorative);
+
+  const originalTheme = await win.evaluate(() =>
+    document.documentElement.getAttribute('data-theme'));
+  const catalogShots: string[] = [];
+  for (const theme of ['light', 'dark']) {
+    await win.evaluate((nextTheme) =>
+      document.documentElement.setAttribute('data-theme', nextTheme), theme);
+    const shot = path.join(shotDir, `data-source-logos-${theme}.png`);
+    await win.screenshot({ path: shot });
+    catalogShots.push(shot);
+  }
+  await win.evaluate((theme) => {
+    if (theme) document.documentElement.setAttribute('data-theme', theme);
+    else document.documentElement.removeAttribute('data-theme');
+  }, originalTheme);
+  ok('data-source logo screenshots captured in light and dark themes',
+    catalogShots.every((shot) => fs.existsSync(shot) && fs.statSync(shot).size > 5000),
+    catalogShots.join(' | '));
 
   const brokenImageFallback = await win.evaluate(() => {
     const redshiftLogo = document.querySelector<HTMLElement>(
@@ -366,6 +399,43 @@ async function main(): Promise<void> {
   // absent, which fails loudly here.
   const homeSection = () =>
     win.evaluate(() => document.querySelector('.hub-body')?.getAttribute('data-section'));
+
+  const homeLogos = await win.evaluate(() => {
+    const hosts = [...document.querySelectorAll('.as-connect-item .as-source-logo')];
+    return {
+      count: hosts.length,
+      allDrawn: hosts.every((el) => !!el.querySelector('svg, img')),
+      oldDots: document.querySelectorAll('.as-connect-item .as-dot').length,
+      postgresSvg: !!document.querySelector(
+        '.as-source-logo[data-logo-id="postgres"] svg',
+      ),
+      mysqlSvg: !!document.querySelector(
+        '.as-source-logo[data-logo-id="mysql"] svg',
+      ),
+      actionSvgs: ['home-paste', 'home-capture'].every((id) =>
+        !!document.querySelector(`.as-source-logo[data-logo-id="${id}"] svg path[fill="currentColor"]`)),
+    };
+  });
+  ok('home: Connect shortcuts use five real source or action marks',
+    homeLogos.count === 5 && homeLogos.allDrawn && homeLogos.oldDots === 0 &&
+      homeLogos.postgresSvg && homeLogos.mysqlSvg && homeLogos.actionSvgs,
+    JSON.stringify(homeLogos));
+
+  const homeShots: string[] = [];
+  for (const theme of ['light', 'dark']) {
+    await win.evaluate((nextTheme) =>
+      document.documentElement.setAttribute('data-theme', nextTheme), theme);
+    const shot = path.join(shotDir, `home-source-logos-${theme}.png`);
+    await win.screenshot({ path: shot });
+    homeShots.push(shot);
+  }
+  await win.evaluate((theme) => {
+    if (theme) document.documentElement.setAttribute('data-theme', theme);
+    else document.documentElement.removeAttribute('data-theme');
+  }, originalTheme);
+  ok('home source-logo screenshots captured in light and dark themes',
+    homeShots.every((shot) => fs.existsSync(shot) && fs.statSync(shot).size > 5000),
+    homeShots.join(' | '));
 
   await win.click('#settings-gear', { timeout: 4000 }).catch(() => {});
   await win.waitForTimeout(300);
