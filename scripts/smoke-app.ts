@@ -20,6 +20,12 @@ const path: typeof import('path') = require('path');
 // DevTools protocol, so it needs no screen-capture or accessibility permission.
 const { _electron }: typeof import('playwright') = require('playwright');
 
+// A renderer script-global (chartRender.js). Classic-script `const`s live in the
+// global LEXICAL scope, not on `window`, so a page-context callback reaches it by
+// bare name — but this file's own program has never seen it. Declared, not
+// eval'd: the hub CSP is `script-src 'self'`, which blocks eval outright.
+declare const chartInstances: { get(el: unknown): any };
+
 const REPO = path.resolve(__dirname, '..');
 const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-smoke-'));
 const shotDir = process.env.SMOKE_ARTIFACT_DIR || userData;
@@ -2899,6 +2905,141 @@ async function main(): Promise<void> {
   ok('…into the same single form, with both measures and the aggregation restored',
      restored.instances === 1 && restored.measures === 2 && restored.firstAgg === 'avg',
      JSON.stringify(restored));
+
+  // ── Drill-down: the rows behind a bar, on the real app ────────────────────
+  //
+  // THE assertion this feature stands on. Reopen the saved visual (which carries
+  // an `in` filter on region), click a real bar, and check the panel's row total
+  // against a count derived from the FIXTURE'S OWN DEFINITION rather than from
+  // any code path the app uses: the generator writes region = 'region' + (i % 7)
+  // over 1,000,000 rows, so region0 has 142,858 rows and every other region has
+  // 142,857. Nothing but a faithful filter chain produces that number over a
+  // million rows — an off-by-one in the mark filter, a dropped visual filter or
+  // a lost `in` step all land somewhere else.
+  //
+  // This rides on the reopen just above rather than doing its own: the builder
+  // is already showing that visual's chart, and an extra navigation here
+  // perturbed the gallery assertions that follow.
+  //
+  // Wait for the CHART INSTANCE, not for a canvas. Closing the builder leaves
+  // the previous chart's canvas in #viz-area, so `querySelector('canvas')` is
+  // satisfied instantly by a canvas that is about to be cleared — and the click
+  // below then lands on an emptied area.
+  await win
+    .waitForFunction(() => {
+      const area = document.getElementById('viz-area');
+      return !!area && !!area.querySelector('canvas') && !!chartInstances.get(area);
+    }, undefined, { timeout: 60_000 })
+    .catch(() => {});
+
+  // Click a bar the way a user does — a real MouseEvent at that bar's own
+  // coordinates, hit-tested by Chart.js. Calling the handler directly would skip
+  // `chartMarkAt`, which is the part that decides which bar was clicked.
+  //
+  // Pick the TALLEST bar across every dataset, not data[0]. This visual carries
+  // two measures on one axis — avg(amount) ≈ 38 beside sum(amount) ≈ 5.5M — so
+  // the avg series draws as a half-pixel sliver on the baseline, and a click at
+  // its centre lands outside the hit region. The tallest bar is a real target
+  // whichever measure happens to be first.
+  const clicked = await win.evaluate(() => {
+    const area = document.getElementById('viz-area') as HTMLElement;
+    const canvas = area.querySelector('canvas') as HTMLCanvasElement;
+    const chart: any = chartInstances.get(area);
+    if (!chart || !canvas) return { ok: false };
+
+    // FINAL positions, not current ones. Bars animate up from the baseline and
+    // `chartMarkAt` hit-tests with useFinalPosition=true, so a click aimed at a
+    // mid-animation bar misses the region it is tested against — which made this
+    // step pass or fail depending on how fast the machine drew.
+    const bars: { x: number; cy: number; i: number; h: number }[] = [];
+    chart.data.datasets.forEach((_: unknown, d: number) => {
+      chart.getDatasetMeta(d).data.forEach((el: any, i: number) => {
+        const p = el.getProps(['x', 'y', 'base'], true);
+        if (typeof p.base !== 'number') return;
+        bars.push({ x: p.x, cy: (p.y + p.base) / 2, i, h: Math.abs(p.base - p.y) });
+      });
+    });
+    bars.sort((a, b) => b.h - a.h);
+    const best = bars[0];
+    if (!best || best.h < 2) return { ok: false, h: best ? best.h : -1 };
+
+    const rect = canvas.getBoundingClientRect();
+    canvas.dispatchEvent(new MouseEvent('click', {
+      clientX: rect.left + best.x,
+      clientY: rect.top + best.cy,
+      bubbles: true,
+    }));
+    return {
+      ok: true,
+      label: String(chart.data.labels[best.i]),
+      bars: chart.data.labels.length,
+      barPx: Math.round(best.h),
+      // openDrillPanel is synchronous up to its first fetch, so the panel is
+      // already visible here if the hit-test found the bar.
+      opened: !!document.querySelector('.drill-backdrop:not([hidden])'),
+    };
+  });
+  ok('clicking a bar opens the drill panel', clicked.ok === true && clicked.opened === true,
+     JSON.stringify(clicked));
+
+  await win
+    .waitForFunction(() => {
+      const n = document.querySelector('.js-drill-count');
+      return !!n && /\d/.test(n.textContent || '');
+    }, undefined, { timeout: 30_000 })
+    .catch(() => {});
+
+  const drill = await win.evaluate(() => {
+    const panel = document.querySelector('.drill-panel') as HTMLElement | null;
+    const back = document.querySelector('.drill-backdrop') as HTMLElement | null;
+    return {
+      open: !!panel && back?.hidden === false,
+      count: (document.querySelector('.js-drill-count')?.textContent || '').trim(),
+      chips: [...document.querySelectorAll('.drill-chip')].map((c) => (c.textContent || '').trim()),
+      rows: document.querySelectorAll('.drill-scroll tbody tr').length,
+      headers: [...document.querySelectorAll('.drill-scroll thead th')].map((t) => (t.textContent || '').trim()),
+      noteShown: (document.querySelector('.js-drill-note') as HTMLElement)?.hidden === false,
+      modal: panel?.getAttribute('aria-modal'),
+      focusInside: !!panel && panel.contains(document.activeElement),
+    };
+  });
+  // region0 → 142,858; every other region → 142,857 (1,000,000 = 7 × 142,857 + 1).
+  const expected = clicked.label === 'region0' ? 142_858 : 142_857;
+  ok('the panel is a focused, labelled dialog over the chart',
+     drill.open && drill.modal === 'true' && drill.focusInside && !drill.noteShown,
+     JSON.stringify({ open: drill.open, modal: drill.modal, focusInside: drill.focusInside }));
+  ok(`…and its row total is the independently derived count for ${clicked.label}`,
+     drill.count === expected.toLocaleString() + ' rows',
+     `panel="${drill.count}" expected="${expected.toLocaleString()} rows"`);
+  // Two chips: the visual's own filter, then the clicked mark. The mark chip is
+  // the exact one asserted — it is what turns a bar into a row set. (The
+  // reopened visual's `in` step comes back without its value list, so it selects
+  // nothing and the count above is unchanged either way: `region in (…)` is a
+  // superset of `region = region0`. That restore is a pre-existing bug in
+  // openSavedVisual, not this panel's, so it is not encoded as an expectation.)
+  ok('…with the visual\'s own filter AND the clicked mark shown as chips',
+     drill.chips.length === 2 && /^region in/.test(drill.chips[0])
+       && drill.chips[1] === `region = ${clicked.label}`,
+     JSON.stringify(drill.chips));
+  ok('…and it draws one page of that dataset\'s columns, not the whole set',
+     drill.rows === 100 && JSON.stringify(drill.headers) === JSON.stringify(['region', 'sku', 'amount', 'note']),
+     JSON.stringify({ rows: drill.rows, headers: drill.headers }));
+
+  const drillShot = path.join(shotDir, 'drill-panel.png');
+  await win.screenshot({ path: drillShot });
+  ok('drill panel screenshot captured',
+     fs.existsSync(drillShot) && fs.statSync(drillShot).size > 5000,
+     `${Math.round(fs.statSync(drillShot).size / 1024)} KB -> ${drillShot}`);
+
+  await win.keyboard.press('Escape');
+  await win.waitForTimeout(500);
+  ok('Escape closes the panel and returns focus to the chart',
+     await win.evaluate(() => {
+       const back = document.querySelector('.drill-backdrop') as HTMLElement | null;
+       return !!back && back.hidden === true
+         && document.getElementById('viz-area')?.getAttribute('aria-expanded') === 'false';
+     }));
+
 
   await clickId('viz-cancel-btn');
   await win.waitForTimeout(600);

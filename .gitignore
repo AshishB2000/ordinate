@@ -215,3 +215,8 @@ scripts/**/*.js
 # The AI analysis plan (facts → envelope → validation → preview → build).
 /src/analysisPlan.js
 /scripts/test-analysisPlan.js
+
+# Drill-down (the rows behind a number) — emitted siblings.
+/renderer/hub/drill.js
+/scripts/test-dataset-page-filters.js
+/scripts/test-visual-rows.js

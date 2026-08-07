@@ -54,7 +54,16 @@ const vizEntry: any = {
 function renderVizViaEntry(area: HTMLElement, data: any, type: string, source?: any): void {
   vizEntry.id = vizEditingId || 'draft';
   vizEntry.chartOverrides = { ['v:' + type]: vizOverrides };
+  // The drill context is the SAME identity `source` carries — the project,
+  // dataset, encoding and filters this `data` was computed from — so the rows
+  // the panel lists are the rows behind the figure on screen, including while
+  // the builder is still an unsaved draft. Absent it, the ⋯ menu simply has no
+  // "Show underlying rows" item.
+  // A draft has no stored name yet, so the panel gets the same descriptive
+  // label the Save prompt would suggest ("price by region").
+  vizEntry.drill = source ? { name: suggestVisualName(source.encoding || {}, type), ...source } : null;
   renderVizInArea(area, data, type, vizEntry, 'v', source);
+  if (source) wireDrillClick(area, vizEntry.drill);
 }
 
 // Debounced persist of override edits. Only a saved visual writes to disk; an

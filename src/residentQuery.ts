@@ -387,16 +387,44 @@ function aggExpr(cols: ParsedColumn[], ci: number, fn: MetricAggregation): strin
 // heterogeneous datasets.
 
 function whereClause(cols: ParsedColumn[], filters: FilterStep[] | undefined, params: duck.DuckValue[]): string {
-  if (!Array.isArray(filters) || filters.length === 0) return '';
+  const preds = filterPredicates(cols, filters, params);
+  return preds.length === 0 ? '' : ` WHERE ${preds.join(' AND ')}`;
+}
+
+/**
+ * The filter list as SQL conjuncts, EXPORTED so a caller that already has a
+ * WHERE of its own can AND these into it instead of building a second predicate
+ * compiler.
+ *
+ * `datasetPage.readPage` is that caller: the rows behind a number and the number
+ * itself must be selected by the SAME predicate, or the drill-down panel would
+ * quietly contradict the figure above it. One compiler, two callers.
+ *
+ * Order matters: `params` is positional, so a caller must splice these
+ * predicates into its statement in the same order it called this.
+ */
+export function filterPredicates(
+  cols: ParsedColumn[],
+  filters: FilterStep[] | undefined,
+  params: duck.DuckValue[],
+): string[] {
+  if (!Array.isArray(filters) || filters.length === 0) return [];
   const preds: string[] = [];
   for (const f of filters) {
     const p = filterPredicate(cols, f, params);
     if (p) preds.push(p);
   }
-  return preds.length === 0 ? '' : ` WHERE ${preds.join(' AND ')}`;
+  return preds;
 }
 
-function filterPredicate(cols: ParsedColumn[], s: FilterStep, params: duck.DuckValue[]): string | null {
+/**
+ * ONE filter step as a SQL predicate, or `null` when the step applies NOTHING
+ * (unknown column, unknown operator, empty `in` list) — exactly the cases
+ * `transforms.stepFilter` skips with a warning.
+ *
+ * Exported for the same reason as `filterPredicates`.
+ */
+export function filterPredicate(cols: ParsedColumn[], s: FilterStep, params: duck.DuckValue[]): string | null {
   if (!s || typeof s !== 'object' || s.type !== 'filter') return null;
   const ci = colIndex(cols, s.column);
   if (ci < 0) return null; // "Filter skipped: unknown column"

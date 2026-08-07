@@ -6084,6 +6084,10 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 /* A cross-filter-enabled chart is clickable, so it says so. Only the chart area
    picks up the cursor — the card chrome around it is still just chrome. */
 .dash-viz-area.is-crossfilter { cursor: pointer; }
+/* A drillable chart is clickable too — same affordance, and the two are
+   mutually exclusive by construction (cross-filter claims the click when it
+   is on, and drilling moves to the ⋯ menu). */
+.cv-viz-area.is-drillable { cursor: pointer; }
 
 .an-wells .viz-encoding { display: flex; flex-direction: column; gap: 10px; }
 .an-wells .viz-build-row {
@@ -8777,3 +8781,146 @@ body.cap-focus .cap-back {
    runs. Collapsing it only while it is genuinely empty keeps that status working
    — a display:none on the element would have eaten it silently. */
 .main-title p:empty { display: none; }
+
+/* ── The drill-down panel (drill.ts, #drill-tpl) ─────────────────────────────
+   A slide-over from the right, above every other surface: it is opened from a
+   dashboard card, the Visuals builder and the authoring panel alike, so it has
+   to sit above all three. Reuses .ds-table/.ds-th/.ds-td from the Explore grid
+   rather than restyling a second data table — same grid, same look.
+   The panel is a flex column so the grid scrolls while the header (the chips
+   that DEFINE the row set) and the footer stay put. */
+.drill-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100002; /* above .ws-modal-overlay (100001) */
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(0, 0, 0, 0.35);
+}
+.drill-backdrop[hidden] { display: none; }
+.drill-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(880px, calc(100vw - 64px));
+  max-width: 100%;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+}
+.drill-head {
+  padding: 16px 20px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.drill-head-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.drill-title {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-strong);
+  margin: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+.drill-x {
+  flex: 0 0 auto;
+  background: none;
+  border: 0;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 6px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.drill-x:hover { background: var(--bg); }
+.drill-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+/* The filters that define this row set. Read-only labels, never controls —
+   removing one here would mean showing rows that are not behind the figure. */
+.drill-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.drill-chips[hidden] { display: none; }
+.drill-chip {
+  font-size: 12px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+.drill-count {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+.drill-tools { padding: 12px 20px 0; }
+.drill-tools[hidden] { display: none; }
+.drill-search { max-width: 320px; }
+/* The refusal sentence: shown INSTEAD of the grid, never alongside it. */
+.drill-note {
+  margin: 20px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-strong);
+}
+.drill-note[hidden] { display: none; }
+.drill-scroll {
+  flex: 1 1 auto;
+  overflow: auto;
+  margin: 12px 20px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.drill-scroll[hidden] { display: none; }
+.drill-table { width: max-content; min-width: 100%; }
+.drill-th-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.drill-empty {
+  padding: 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.drill-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--border);
+}
+.drill-pager {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.drill-actions {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}

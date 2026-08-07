@@ -7,6 +7,7 @@ import { parseFile, sourceKindFor } from '../fileImport';
 import { refreshDataset } from '../datasetRefresh';
 import * as datasets from '../datasets';
 import * as transforms from '../transforms';
+import type { Cell } from '../transforms';
 import { computeColumnSummary, findQualityIssues, ColumnSummary, QualityIssue } from '../datasetStats';
 import {
   computeColumnSummariesResident,
@@ -22,6 +23,10 @@ import {
   distinctValuesPageJs,
   MAX_DISTINCT,
 } from '../datasetPage';
+// The visual-filter whitelist, reused verbatim: `dataset:page` now takes the
+// same `FilterStep[]` a visual carries, and two sanitisers for one shape is how
+// they drift apart.
+import { sanitizeFilters } from '../visuals';
 import { explainText, suggestSteps, suggestCalcField } from '../analyze';
 import { compile } from '../formula';
 import * as trace from '../residentTrace';
@@ -172,6 +177,57 @@ async function residentPromptFacts(
   return { meta, summaries: fast.summaries, issues: fast.issues, sample };
 }
 
+/** The reply shape of `dataset:page`, shared with the drill-down panel. */
+export type PageReply =
+  | { ok: true; rows: Cell[][]; total: number; offset: number }
+  | { ok: false; error: string };
+
+/**
+ * ONE window of a dataset's rows — the resident read off the stored Parquet, or
+ * the JS reference over a hydrated table when that is not available.
+ *
+ * Extracted from the `dataset:page` handler so `visual:rows` (the drill-down
+ * panel, src/ipc/visuals.ts) reaches the rows through the IDENTICAL decision
+ * with the identical request. That is not tidiness: the panel's job is to show
+ * the rows behind a figure, so a second copy of this decision is a second place
+ * for the rows and the figure to stop agreeing.
+ *
+ * `readPage` returning null ALWAYS means "fall back", never "no rows", so a v2
+ * (rows-inline) record, a missing .parquet or an unavailable bridge lands on
+ * `pageRowsJs` — the SAME reference implementation `readPage` is asserted
+ * against. One definition of the window, two ways of getting there.
+ *
+ * `op` names the call site for `residentTrace`, so a fast path that silently
+ * stops firing is visible per feature rather than pooled.
+ */
+export async function pageFor(
+  projectId: string,
+  datasetId: string,
+  req: PageRequest,
+  op: string,
+): Promise<PageReply> {
+  const src = await datasets.residentSource(projectId, datasetId);
+  if (src) {
+    const fast = readPage(src, req);
+    if (fast) {
+      trace.record(op, 'resident');
+      return { ok: true, rows: fast.rows, total: fast.total, offset: fast.offset };
+    }
+    trace.record(
+      op,
+      'failed',
+      `offset=${req.offset}, sorted=${!!req.sortColumn}, searched=${!!req.search}, filters=${(req.filters || []).length}`,
+    );
+  } else {
+    trace.record(op, 'skipped');
+  }
+
+  const ds = await datasets.getDataset(projectId, datasetId);
+  if (!ds) return { ok: false, error: 'Dataset not found' };
+  const page = pageRowsJs(ds.columns, ds.rows, req);
+  return { ok: true, rows: page.rows, total: page.total, offset: page.offset };
+}
+
 export function register() {
   // Open the native file picker (or, when given { filePath } from a prior pick,
   // skip the dialog and re-parse that file with a chosen sheetName). Returns the
@@ -316,6 +372,10 @@ export function register() {
 
   // ── One WINDOW of a dataset's rows, for the Explore grid ──────────────────
   //
+  // The two-path decision itself lives in `pageFor` below, because the
+  // drill-down panel (`visual:rows`) asks the same question about the same
+  // dataset and must not answer it a second, subtly different way.
+  //
   // The grid used to receive the WHOLE table (`dataset:get` → `expRows = ds.rows`)
   // and then re-copy it in the renderer on every keystroke and header click. That
   // is the last consumer that materialises everything, and it is what forced the
@@ -328,26 +388,15 @@ export function register() {
   // `pageRowsJs` — the SAME reference implementation `readPage` is asserted
   // against, applied to the hydrated table. One definition of what the grid
   // shows, two ways of getting there.
-  ipcMain.handle('dataset:page', async (_e, { projectId, datasetId, offset, limit, search, sortColumn, sortDir }: any = {}) => {
+  ipcMain.handle('dataset:page', async (_e, { projectId, datasetId, offset, limit, search, sortColumn, sortDir, filters }: any = {}) => {
     try {
-      const req: PageRequest = { offset, limit, search, sortColumn, sortDir };
-
-      const src = await datasets.residentSource(projectId, datasetId);
-      if (src) {
-        const fast = readPage(src, req);
-        if (fast) {
-          trace.record('datasetPage', 'resident');
-          return { ok: true, rows: fast.rows, total: fast.total, offset: fast.offset };
-        }
-        trace.record('datasetPage', 'failed', `offset=${req.offset}, sorted=${!!req.sortColumn}, searched=${!!req.search}`);
-      } else {
-        trace.record('datasetPage', 'skipped');
-      }
-
-      const ds = await datasets.getDataset(projectId, datasetId);
-      if (!ds) return { ok: false, error: 'Dataset not found' };
-      const page = pageRowsJs(ds.columns, ds.rows, req);
-      return { ok: true, rows: page.rows, total: page.total, offset: page.offset };
+      // Filters are untrusted renderer input and go through the SAME whitelist a
+      // saved visual's filters do — `transforms.sanitizeSteps` keeping only
+      // 'filter' steps. An unknown column or operator survives sanitisation and
+      // is then SKIPPED by both paging paths (never thrown), because one
+      // dashboard-wide filter has to be able to span heterogeneous datasets.
+      const req: PageRequest = { offset, limit, search, sortColumn, sortDir, filters: sanitizeFilters(filters) };
+      return await pageFor(projectId, datasetId, req, 'datasetPage');
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to read the dataset page' };
     }
