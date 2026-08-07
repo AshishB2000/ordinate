@@ -248,6 +248,166 @@ async function handleDeleteVisual(id: string): Promise<void> {
   await refreshVisualList();
 }
 
+// ── "+ New visual" popup ─────────────────────────────────────────────────────
+// Step 1 asks WHICH dataset, step 2 asks HOW to build it. The modal only
+// RESOLVES a choice — it never creates, saves or navigates anything itself, so
+// Escape / the backdrop / Cancel all resolve null and leave the project as it
+// was. Cloned from #viz-new-tpl per open, so the markup lives with the rest of
+// the hub's HTML and every hook inside it is a `js-` class scoped to the clone.
+interface VizNewChoice {
+  kind: 'manual' | 'ai';
+  datasetId: string;
+  intent: string; // '' unless the user typed one; only 'ai' carries it
+}
+
+async function openNewVisualModal(): Promise<VizNewChoice | null> {
+  let sets: any[] = [];
+  try {
+    sets = await window.hub.listDatasets(currentProjectId);
+  } catch (_) {
+    sets = [];
+  }
+  if (!Array.isArray(sets)) sets = [];
+
+  // Readiness comes from the ONE source main already exposes (publicConfig
+  // .isReady = Local CLI OR BYOK) — the same gate analyses.ts asks. No new IPC
+  // and no second definition of "ready" that could disagree with it.
+  let aiReady = false;
+  try {
+    const st: any = await window.hub.getKeyStatus();
+    aiReady = !!(st && st.isReady);
+  } catch (_) {
+    aiReady = false;
+  }
+
+  const tpl = document.getElementById('viz-new-tpl') as HTMLTemplateElement | null;
+  if (!tpl || !tpl.content.firstElementChild) return null;
+  const overlay = tpl.content.firstElementChild.cloneNode(true) as HTMLElement;
+  const q = (sel: string): any => overlay.querySelector(sel);
+
+  const box = q('.vn-modal');
+  const step1 = q('.js-vn-step1');
+  const step2 = q('.js-vn-step2');
+  const rowsHost = q('.js-vn-rows');
+  const noneEl = q('.js-vn-none');
+  const backBtn = q('.js-vn-back');
+  const intentEl = q('.js-vn-intent') as HTMLTextAreaElement;
+  const askBtn = q('.js-vn-ask') as HTMLButtonElement;
+  const noteEl = q('.js-vn-note');
+
+  return new Promise<VizNewChoice | null>((resolve) => {
+    let done = false;
+    let selectedId = '';
+    let a11y: { onTabKey: (e: KeyboardEvent) => void; release: () => void } | null = null;
+
+    function close(val: VizNewChoice | null): void {
+      if (done) return;
+      done = true;
+      document.removeEventListener('keydown', onKey, true);
+      overlay.remove();
+      if (a11y) a11y.release(); // hand focus back to the trigger
+      resolve(val);
+    }
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        close(null);
+      } else if (a11y) {
+        a11y.onTabKey(e); // trap Tab inside the dialog
+      }
+    }
+
+    // Step 1 → step 2. Re-enterable: step 2's ← Back comes straight back here.
+    function showStep(n: number): void {
+      step1.hidden = n !== 1;
+      step2.hidden = n !== 2;
+      backBtn.hidden = n !== 2;
+      const first = n === 1
+        ? (rowsHost.querySelector('.vn-row') as HTMLElement | null) || (q('.js-vn-import') as HTMLElement)
+        : (aiReady ? intentEl : (q('.js-vn-manual') as HTMLElement));
+      if (first) first.focus();
+    }
+
+    sets.forEach((d) => {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'vn-row';
+      row.setAttribute('role', 'radio');
+      row.setAttribute('aria-checked', 'false');
+      const nm = document.createElement('span');
+      nm.className = 'vn-row-name';
+      nm.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
+      const meta = document.createElement('span');
+      meta.className = 'vn-row-meta';
+      const rows = typeof d.rowCount === 'number' ? d.rowCount.toLocaleString() : '—';
+      const cols = typeof d.columnCount === 'number' ? String(d.columnCount) : '—';
+      meta.textContent = rows + ' rows × ' + cols + ' columns';
+      row.appendChild(nm);
+      row.appendChild(meta);
+      row.addEventListener('click', () => {
+        selectedId = String(d.id);
+        rowsHost.querySelectorAll('.vn-row').forEach((r: any) => r.setAttribute('aria-checked', 'false'));
+        row.setAttribute('aria-checked', 'true');
+        showStep(2);
+      });
+      rowsHost.appendChild(row);
+    });
+    rowsHost.hidden = sets.length === 0;
+    noneEl.hidden = sets.length > 0;
+
+    // No datasets: the one useful action is to go and import some. Leaves for
+    // the existing Data section rather than re-hosting the import flow here.
+    q('.js-vn-import').addEventListener('click', () => {
+      close(null);
+      if (typeof selectSection === 'function') selectSection('datasets');
+    });
+
+    // Without a model the AI route is inert, and says why in the standard line.
+    if (!aiReady) {
+      askBtn.disabled = true;
+      intentEl.disabled = true;
+      noteEl.hidden = false;
+      q('.js-vn-ai').classList.add('is-disabled');
+    }
+
+    askBtn.addEventListener('click', () => {
+      if (!selectedId) return;
+      close({ kind: 'ai', datasetId: selectedId, intent: intentEl.value.trim() });
+    });
+    q('.js-vn-manual').addEventListener('click', () => {
+      if (!selectedId) return;
+      close({ kind: 'manual', datasetId: selectedId, intent: '' });
+    });
+
+    backBtn.addEventListener('click', () => showStep(1));
+    q('.js-vn-cancel').addEventListener('click', () => close(null));
+    q('.js-vn-x').addEventListener('click', () => close(null));
+    overlay.addEventListener('mousedown', (e: MouseEvent) => {
+      if (e.target === overlay) close(null);
+    });
+    document.addEventListener('keydown', onKey, true);
+
+    document.body.appendChild(overlay);
+    a11y = makeModalAccessible(box, 'New visual', null);
+    showStep(1);
+  });
+}
+
+// "+ New visual": ask first, then open the builder on the chosen dataset.
+async function handleNewVisual(): Promise<void> {
+  if (!currentProjectId) {
+    window.alert('Open a project first.');
+    return;
+  }
+  const choice = await openNewVisualModal();
+  if (!choice) return; // cancelled — nothing was created
+  await openVisualBuilder(choice.datasetId);
+  // Phase 3 forwards `choice.intent` and replaces this with a multi-option
+  // picker; today's visual:suggest takes no intent, so it is not sent yet.
+  if (choice.kind === 'ai') await handleSuggestVisual();
+}
+
 // ── Builder open / close ─────────────────────────────────────────────────────
 async function loadDatasetOptions(selectedId: string): Promise<any[]> {
   let items: any[] = [];
@@ -586,7 +746,7 @@ function initVisuals(): void {
   // Two "+ New visual" buttons: the gallery header's and the empty state's.
   ['viz-new-btn', 'viz-empty-new-btn'].forEach((btnId) => {
     const b = vizEl(btnId);
-    if (b) b.addEventListener('click', () => openVisualBuilder());
+    if (b) b.addEventListener('click', () => handleNewVisual());
   });
 
   // "← Back to visuals": leave the builder and repaint the gallery, so a delete

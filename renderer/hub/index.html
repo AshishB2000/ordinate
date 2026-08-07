@@ -1827,6 +1827,56 @@
     </div>
   </template>
 
+  <!-- "+ New visual" popup (visuals.ts openNewVisualModal). Cloned per open, so
+       every id here is a `js-`/`data-` hook scoped to the clone — never an id
+       the JS looks up, exactly as in #viz-encoding-tpl above. Two panes; step 1
+       is re-enterable from step 2's ← Back. -->
+  <template id="viz-new-tpl">
+    <div class="ws-modal-overlay">
+      <div class="ws-modal vn-modal">
+        <div class="vn-head">
+          <div class="ws-modal-title js-vn-title">New visual</div>
+          <button class="vn-x js-vn-x" type="button" aria-label="Close">✕</button>
+        </div>
+
+        <!-- Step 1 — which dataset -->
+        <div class="vn-pane js-vn-step1">
+          <p class="vn-sub">Pick the dataset this visual reads from.</p>
+          <div class="vn-rows js-vn-rows" role="radiogroup" aria-label="Dataset"></div>
+          <div class="vn-none js-vn-none" hidden>
+            <p class="vn-sub">No datasets yet</p>
+            <button class="btn btn-primary js-vn-import" type="button">Import data</button>
+          </div>
+        </div>
+
+        <!-- Step 2 — how to build it -->
+        <div class="vn-pane js-vn-step2" hidden>
+          <div class="vn-choices">
+            <div class="vn-choice js-vn-ai">
+              <h4 class="vn-choice-h">Describe it</h4>
+              <p class="vn-sub">Say what you want to see and a model proposes charts. You pick one — nothing is saved for you.</p>
+              <textarea class="ws-modal-input vn-textarea js-vn-intent" rows="3"
+                        placeholder="e.g. profile registrations year over year"
+                        aria-label="Describe the visual you want"></textarea>
+              <p class="vn-note js-vn-note" hidden>Connect a model in Execution settings to suggest a chart.</p>
+              <button class="btn btn-primary js-vn-ask" type="button">Ask AI</button>
+            </div>
+            <div class="vn-choice">
+              <h4 class="vn-choice-h">Build it myself</h4>
+              <p class="vn-sub">Open the builder on a blank chart and choose the category, measures and type yourself.</p>
+              <button class="btn js-vn-manual" type="button">Open the builder</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="ws-modal-actions vn-actions">
+          <button class="btn js-vn-back" type="button" hidden>← Back</button>
+          <button class="btn js-vn-cancel" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
 <script src="../../node_modules/chart.js/dist/chart.umd.js"></script>
 <script src="../../node_modules/chartjs-chart-treemap/dist/chartjs-chart-treemap.min.js"></script>
 <script src="../../node_modules/chartjs-chart-matrix/dist/chartjs-chart-matrix.min.js"></script>

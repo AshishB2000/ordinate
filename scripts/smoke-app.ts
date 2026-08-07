@@ -2271,8 +2271,43 @@ async function main(): Promise<void> {
   // So: open it, read the controls, CHANGE one, and save.
   ok('the Visuals section opens', await clickExact('Visuals'));
   await win.waitForTimeout(1200);
-  ok('New visual opens the builder', await clickId('viz-new-btn'));
+  // "+ New visual" opens the create popup first (step 1 dataset, step 2 how),
+  // and only "Build it myself" reaches the builder. A popup that renders but
+  // whose rows are inert looks identical from outside — so pick a REAL row.
+  ok('+ New visual opens the create popup', await clickId('viz-new-btn'));
+  await win.waitForTimeout(1200);
+  const popup = await win.evaluate(() => {
+    const modal = document.querySelector('.vn-modal') as HTMLElement | null;
+    const rows = [...document.querySelectorAll('.vn-row')] as HTMLElement[];
+    return {
+      open: !!modal,
+      rows: rows.length,
+      // Step 2 must still be hidden: nothing is chosen yet.
+      step2Hidden: (document.querySelector('.js-vn-step2') as HTMLElement)?.hidden === true,
+      meta: rows[0]?.textContent || '',
+    };
+  });
+  ok('…listing the project datasets with rows × columns', popup.open && popup.rows > 0
+     && /rows ×/.test(popup.meta) && popup.step2Hidden, JSON.stringify(popup));
+
+  ok('…picking a dataset advances to step 2', await win.evaluate(() => {
+    const row = [...document.querySelectorAll('.vn-row')].find(
+      (r) => /Sales/i.test(r.textContent || ''),
+    ) as HTMLElement | undefined;
+    if (!row) return false;
+    row.click();
+    return (document.querySelector('.js-vn-step2') as HTMLElement)?.hidden === false;
+  }));
+
+  ok('…and "Build it myself" closes the popup and opens the builder', await win.evaluate(() => {
+    (document.querySelector('.js-vn-manual') as HTMLElement).click();
+    return true;
+  }));
   await win.waitForTimeout(2500);
+  ok('…with the popup gone and the gallery swapped out for the builder',
+     await win.evaluate(() => !document.querySelector('.vn-modal')
+       && (document.getElementById('viz-builder') as HTMLElement).hidden === false
+       && (document.getElementById('viz-gallery') as HTMLElement).hidden === true));
 
   // Pick a KNOWN dataset rather than whichever the select defaulted to, so the
   // column assertions below mean something.

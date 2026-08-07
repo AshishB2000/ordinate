@@ -5317,6 +5317,115 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   margin: 0;
 }
 
+/* ── "+ New visual" popup (cloned from #viz-new-tpl) ── */
+.ws-modal.vn-modal {
+  width: min(620px, calc(100vw - 48px));
+  gap: 14px;
+}
+.vn-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.vn-x {
+  width: 26px;
+  height: 26px;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.vn-x:hover { color: var(--text); background: var(--surface-2); }
+.vn-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.vn-pane[hidden] { display: none; }
+.vn-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+.vn-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow: auto;
+}
+.vn-rows[hidden] { display: none; }
+.vn-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  padding: 8px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.vn-row:hover,
+.vn-row[aria-checked='true'] { border-color: var(--accent); }
+.vn-row-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-strong);
+}
+.vn-row-meta {
+  font-size: 11px;
+  color: var(--muted);
+}
+.vn-none {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 24px;
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-sm);
+}
+.vn-none[hidden] { display: none; }
+.vn-choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.vn-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.vn-choice.is-disabled { opacity: 0.65; }
+.vn-choice-h {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+  margin: 0;
+}
+.vn-textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: inherit;
+}
+.vn-note {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 0;
+}
+.vn-note[hidden] { display: none; }
+.vn-actions .js-vn-back[hidden] { display: none; }
+
 /* ── Week 8: visual-level filters, duplicate, AI suggest ── */
 .viz-filters-list {
   display: flex;
