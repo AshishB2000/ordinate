@@ -1906,6 +1906,45 @@
     </div>
   </template>
 
+  <!-- The drill-down panel (drill.ts openDrillPanel). ONE instance, cloned on
+       first open and reused everywhere — the Visuals builder, analysis
+       authoring, dashboard cards and published snapshots all show the same
+       panel. Every control is a `js-drill-*` hook; `drill-title` is the only id
+       and exists solely as the dialog's aria-labelledby target, which is safe
+       precisely because there is never a second instance.
+       No inline style= anywhere: the hub CSP would drop it. -->
+  <template id="drill-tpl">
+    <div class="drill-backdrop js-drill-backdrop" hidden>
+      <aside class="drill-panel js-drill-panel" role="dialog" aria-modal="true" aria-labelledby="drill-title">
+        <div class="drill-head">
+          <div class="drill-head-row">
+            <h2 class="drill-title" id="drill-title">Underlying rows</h2>
+            <button class="drill-x js-drill-x" type="button" aria-label="Close">✕</button>
+          </div>
+          <div class="drill-sub js-drill-sub"></div>
+          <!-- The filters that DEFINE this row set, as read-only labels. -->
+          <div class="drill-chips js-drill-chips"></div>
+          <div class="drill-count js-drill-count" aria-live="polite"></div>
+        </div>
+        <div class="drill-tools">
+          <input class="ws-modal-input drill-search js-drill-search" type="search"
+                 placeholder="Search these rows" aria-label="Search these rows">
+        </div>
+        <!-- Either the grid or, when the row set cannot be derived faithfully,
+             the reason — never both. -->
+        <div class="drill-note js-drill-note" hidden></div>
+        <div class="drill-scroll js-drill-scroll"></div>
+        <div class="drill-foot">
+          <div class="drill-pager js-drill-pager"></div>
+          <div class="drill-actions">
+            <button class="btn js-drill-export" type="button">Export these rows (CSV)</button>
+            <button class="btn js-drill-close" type="button">Close</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </template>
+
 <script src="../../node_modules/chart.js/dist/chart.umd.js"></script>
 <script src="../../node_modules/chartjs-chart-treemap/dist/chartjs-chart-treemap.min.js"></script>
 <script src="../../node_modules/chartjs-chart-matrix/dist/chartjs-chart-matrix.min.js"></script>
@@ -1948,6 +1987,7 @@
 <script src="captureDataset.js"></script>
 <script src="filterValues.js"></script>
 <script src="filterDialog.js"></script>
+<script src="drill.js"></script>
 <script src="prepare.js"></script>
 <script src="connections.js"></script>
 <script src="encodingForm.js"></script>

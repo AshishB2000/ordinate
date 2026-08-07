@@ -203,6 +203,18 @@ declare global {
       duplicateVisual(projectId: string, id: string): Promise<any>;
       suggestVisual(projectId: string, datasetId: string, intent?: string): Promise<any>;
       computeVisualData(projectId: string, datasetId: string, encoding: any, filters?: any): Promise<any>;
+      // The rows behind one mark of that chart — same dataset, same filters,
+      // plus an equality filter per clicked axis. Paged/searched/sorted in main.
+      // `{ ok:true, available:false, reason }` when the row set cannot be
+      // derived exactly, which the panel shows instead of a grid.
+      visualRows(
+        projectId: string,
+        datasetId: string,
+        encoding: any,
+        filters: any,
+        mark: any,
+        page: { offset: number; limit: number; search?: string; sortColumn?: string; sortDir?: 'asc' | 'desc' },
+      ): Promise<any>;
       // ── Mosaic connector (Phase 3c) — the whole database contract in two calls ──
       mosaicView(
         projectId: string,

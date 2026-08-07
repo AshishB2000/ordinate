@@ -218,7 +218,14 @@ contextBridge.exposeInMainWorld('hub', {
   datasetPage: (
     projectId: string,
     datasetId: string,
-    req: { offset: number; limit: number; search?: string; sortColumn?: string; sortDir?: 'asc' | 'desc' },
+    req: {
+      offset: number;
+      limit: number;
+      search?: string;
+      sortColumn?: string;
+      sortDir?: 'asc' | 'desc';
+      filters?: any[];
+    },
   ) => ipcRenderer.invoke('dataset:page', { projectId, datasetId, ...req }),
   // Rename columns / correct types; main re-coerces cells on a type change. Returns
   // { ok, dataset } | { ok:false, error }.
@@ -319,6 +326,20 @@ contextBridge.exposeInMainWorld('hub', {
   // Optional `filters` (transforms filter steps) are applied BEFORE aggregation.
   computeVisualData: (projectId: string, datasetId: string, encoding: any, filters?: any) =>
     ipcRenderer.invoke('visual:data', { projectId, datasetId, encoding, filters }),
+  // The ROWS behind one mark of that same chart — same dataset, same filter
+  // list, plus an equality filter per clicked axis. Paged/searched/sorted in
+  // main against the stored .parquet. Returns
+  // { ok:true, available:true, filters, columns, rows, total, offset }
+  // | { ok:true, available:false, reason } when the row set cannot be derived
+  // exactly | { ok:false, error }. A READ: it writes nothing.
+  visualRows: (
+    projectId: string,
+    datasetId: string,
+    encoding: any,
+    filters: any,
+    mark: any,
+    page: { offset: number; limit: number; search?: string; sortColumn?: string; sortDir?: 'asc' | 'desc' },
+  ) => ipcRenderer.invoke('visual:rows', { projectId, datasetId, encoding, filters, mark, page }),
   // ── Mosaic connector (Phase 3c) — Mosaic's whole database contract is one
   // method, so it is two channels here. Ensure the typed, user-named SQL VIEW
   // over a dataset's stored Parquet and report the columns it exposes; returns
