@@ -352,6 +352,11 @@
 
       <!-- main header -->
       <div class="main-top">
+        <!-- Back out of the full-screen Capture workspace. Only rendered in
+             `body.cap-focus` (hub.css) — with the nav hidden there is otherwise
+             no way out, the same trap the analysis focus mode had to solve with
+             its own "‹ Back". -->
+        <button id="cap-back" class="btn btn-sm cap-back" type="button" aria-label="Leave the capture workspace">‹ Back</button>
         <div class="main-title">
           <h2 id="main-title-h">Welcome</h2>
           <p id="main-title-sub">Capture any chart, table, or data to begin</p>
