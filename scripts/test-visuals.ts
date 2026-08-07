@@ -209,6 +209,65 @@ async function main(): Promise<void> {
   ok('saveVisual rejects a non-UUID datasetId',
     (await visuals.saveVisual(proj.id, { name: 'x', datasetId: '../SECRET', chartType: 'column', encoding })) === null);
 
+  // ── favorite: back-compat default + the two-key sort ───────────────────────
+  // The key was added WITHOUT a schema bump, on the argument that an absent
+  // `favorite` already means "not a favourite". That argument only holds if a v2
+  // file written before it existed still loads — so write one by hand, with the
+  // key physically removed, and read it back.
+  const legacyId = a !== null ? a.id : '';
+  const legacyPath = path.join(tmpUserData, 'projects', proj.id, 'visuals', legacyId + '.json');
+  const legacyRaw = JSON.parse(fs.readFileSync(legacyPath, 'utf8'));
+  delete legacyRaw.favorite;
+  ok('the hand-written v2 file really has no favorite key', !('favorite' in legacyRaw));
+  fs.writeFileSync(legacyPath, JSON.stringify(legacyRaw, null, 2));
+
+  const legacy = await visuals.getVisual(proj.id, legacyId);
+  ok('a v2 file with no favorite key loads as favorite:false',
+    legacy !== null && legacy.favorite === false);
+  ok('…and is still schemaVersion 2 — no migration was needed',
+    legacy !== null && legacy.schemaVersion === 2);
+
+  // Sort: favourites first, then updatedAt desc. Favourite the OLDER visual, so
+  // "favourites first" and "newest first" DISAGREE — otherwise the assertion
+  // would pass under either comparator and prove nothing.
+  const newer = await visuals.saveVisual(proj.id, { name: 'Newer', datasetId: dsId, chartType: 'bar', encoding });
+  const before = await visuals.listVisuals(proj.id);
+  ok('the newer visual sorts first while nothing is favourited',
+    before.length === 2 && newer !== null && before[0].id === newer.id);
+  const oldest = before[before.length - 1];
+  const pinned = await visuals.updateVisual(proj.id, oldest.id, { favorite: true });
+  ok('updateVisual accepts favorite in the patch', pinned !== null && pinned.favorite === true);
+
+  let sorted = await visuals.listVisuals(proj.id);
+  ok('listVisuals puts favourites first, ahead of newer non-favourites',
+    sorted[0].id === oldest.id);
+  ok('VisualSummary carries favorite',
+    sorted[0].favorite === true && sorted.slice(1).every((s) => s.favorite === false));
+
+  // A patch that OMITS favorite must not clear it — every other write path
+  // (rename, the debounced override autosave, a chart-type switch) sends one.
+  await visuals.updateVisual(proj.id, oldest.id, { name: 'Renamed while pinned' });
+  sorted = await visuals.listVisuals(proj.id);
+  ok('a patch without favorite leaves it set',
+    sorted[0].id === oldest.id && sorted[0].favorite === true);
+
+  await visuals.updateVisual(proj.id, oldest.id, { favorite: false });
+  sorted = await visuals.listVisuals(proj.id);
+  ok('unfavouriting drops it back into updatedAt order',
+    sorted.every((s) => s.favorite === false));
+
+  // A duplicate of a favourite starts unpinned — otherwise "copy to tweak it"
+  // puts two near-identical cards at the top of the gallery.
+  await visuals.updateVisual(proj.id, oldest.id, { favorite: true });
+  const favDup = await visuals.duplicateVisual(proj.id, oldest.id);
+  ok('a duplicate of a favourite is NOT itself a favourite',
+    favDup !== null && favDup.favorite === false);
+
+  // Leave the project as the traversal checks below expect to find it.
+  if (favDup !== null) await visuals.deleteVisual(proj.id, favDup.id);
+  if (newer !== null) await visuals.deleteVisual(proj.id, newer.id);
+  await visuals.updateVisual(proj.id, oldest.id, { favorite: false, name: 'Population' });
+
   // ── SECURITY: dual-UUID traversal guard ────────────────────────────────────
   // Plant a sentinel above the visuals dir and one outside projects/; every op
   // with a traversal id in EITHER position must refuse to touch them.

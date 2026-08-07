@@ -543,9 +543,18 @@ function renderDashGrid(): void {
   anSyncWorkbench();
 }
 
-function nextFreeRow(): number {
-  const page = dashCurrentPage();
-  const cards = (page && Array.isArray(page.cards)) ? page.cards : [];
+// The first grid row below everything already placed. Defaults to the OPEN
+// page's cards; visuals.ts passes an arbitrary sheet's card list so adding a
+// card from the gallery lands where the editor would have put it — one rule for
+// where the next card goes, not two.
+function nextFreeRow(cardList?: any[]): number {
+  let cards: any[];
+  if (Array.isArray(cardList)) {
+    cards = cardList;
+  } else {
+    const page = dashCurrentPage();
+    cards = (page && Array.isArray(page.cards)) ? page.cards : [];
+  }
   let max = 0;
   cards.forEach((c: any) => {
     const y = (c.layout && c.layout.y) || 0;

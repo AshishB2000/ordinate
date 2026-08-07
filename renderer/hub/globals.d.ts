@@ -196,7 +196,7 @@ declare global {
       updateVisual(
         projectId: string,
         id: string,
-        patch: { name?: string; chartType?: string; encoding?: any; overrides?: any; filters?: any },
+        patch: { name?: string; chartType?: string; encoding?: any; overrides?: any; filters?: any; favorite?: boolean },
       ): Promise<any>;
       deleteVisual(projectId: string, id: string): Promise<{ ok: boolean }>;
       duplicateVisual(projectId: string, id: string): Promise<any>;

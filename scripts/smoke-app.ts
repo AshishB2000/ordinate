@@ -2515,6 +2515,55 @@ async function main(): Promise<void> {
   // Reopen it. The restore path runs the SAME setColumns(cols, preset) call as a
   // fresh build, so a preset that silently fails to apply shows up right here —
   // as the two measures we just saved coming back as one.
+  // The card's own actions. Favourite writes and re-sorts (favourites first), so
+  // the starred card must come back at the front — a star that only repaints
+  // itself would pass a "did it toggle" check and lose the state on refresh.
+  const starred = await win.evaluate(async () => {
+    const cards = [...document.querySelectorAll('.viz-card')] as HTMLElement[];
+    const target = cards.find((c) => /Encoding form check/.test(c.textContent || ''));
+    if (!target) return { found: false };
+    (target.querySelector('.viz-card-star') as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 1500));
+    const first = document.querySelector('.viz-card') as HTMLElement;
+    return {
+      found: true,
+      firstIsStarred: /Encoding form check/.test(first?.textContent || ''),
+      pressed: first?.querySelector('.viz-card-star')?.getAttribute('aria-pressed'),
+    };
+  });
+  ok('the star favourites a visual and sorts it to the front',
+     starred.found === true && starred.firstIsStarred === true && starred.pressed === 'true',
+     JSON.stringify(starred));
+
+  // The ⋯ menu is a real button with honest aria-expanded, and every row is
+  // enabled — "Add to analysis" and "Export" shipped disabled in Phase 1.
+  // Scoped to .viz-card-pop: hub.ts keeps ONE permanent .chart-menu[role=menu]
+  // element in the document for the per-graph ⋯ cluster, so a bare `.chart-menu`
+  // here reads that static one and its rows instead of this popover's.
+  const menu = await win.evaluate(() => {
+    const btn = document.querySelector('.viz-card-menu') as HTMLButtonElement;
+    btn.click();
+    const items = [...document.querySelectorAll('.viz-card-pop button')] as HTMLButtonElement[];
+    return {
+      expanded: btn.getAttribute('aria-expanded'),
+      labels: items.map((i) => (i.textContent || '').trim()),
+      disabled: items.filter((i) => i.disabled).map((i) => i.textContent || ''),
+    };
+  });
+  ok('the ⋯ menu opens with every action enabled',
+     menu.expanded === 'true' && menu.labels.length === 6 && menu.disabled.length === 0
+     && menu.labels.indexOf('Add to analysis') >= 0 && menu.labels.indexOf('Export') >= 0,
+     JSON.stringify(menu));
+  await win.keyboard.press('Escape');
+  await win.waitForTimeout(400);
+  ok('…and Escape closes it, resetting aria-expanded',
+     await win.evaluate(() => !document.querySelector('.viz-card-pop')
+       && document.querySelector('.viz-card-menu')?.getAttribute('aria-expanded') === 'false'));
+
+  // Unstar again so the ordering the reopen check below relies on is restored.
+  await win.evaluate(() => (document.querySelector('.viz-card-star') as HTMLElement).click());
+  await win.waitForTimeout(1500);
+
   ok('the saved visual reopens', await win.evaluate(() => {
     const el = [...document.querySelectorAll('#viz-grid button, #viz-grid [role=button]')]
       .find((b) => /Encoding form check/.test(b.textContent || '')) as HTMLElement | undefined;

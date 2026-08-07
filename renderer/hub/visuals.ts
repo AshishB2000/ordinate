@@ -163,10 +163,13 @@ function makeVisualCard(v: any): HTMLElement {
   star.type = 'button';
   star.className = 'viz-card-star';
   star.textContent = '★';
-  // Phase 4 wires the toggle. It ships disabled now so the card layout is final.
-  star.setAttribute('aria-pressed', 'false');
-  star.setAttribute('aria-label', 'Favourite');
-  star.disabled = true;
+  const fav = v && v.favorite === true;
+  star.setAttribute('aria-pressed', fav ? 'true' : 'false');
+  star.setAttribute('aria-label', fav ? 'Unfavourite' : 'Favourite');
+  star.addEventListener('click', (e) => {
+    e.stopPropagation();
+    handleToggleFavorite(id, !fav, star);
+  });
 
   const menuBtn = document.createElement('button');
   menuBtn.type = 'button';
@@ -194,6 +197,10 @@ function openVisualCardMenu(anchor: HTMLButtonElement, v: any): void {
   openMiniMenu(
     anchor,
     (el: HTMLElement, close: () => void) => {
+      // hub.ts keeps ONE permanent .chart-menu[role=menu] in the document for the
+      // per-graph ⋯ cluster, so `.chart-menu` alone does not identify this
+      // popover. Its own class is what lets a test address it.
+      el.classList.add('viz-card-pop');
       const add = (label: string, run: (() => void) | null): void => {
         const b = document.createElement('button');
         b.type = 'button';
@@ -206,12 +213,154 @@ function openVisualCardMenu(anchor: HTMLButtonElement, v: any): void {
       add('Open', () => openSavedVisual(id));
       add('Rename', () => handleRenameVisual(id, v && v.name ? String(v.name) : ''));
       add('Duplicate', () => handleDuplicateVisual(id));
-      add('Add to analysis', null); // Phase 4
-      add('Export', null); // Phase 4
+      add('Add to analysis', () => handleAddVisualToAnalysis(id));
+      add('Export', () => handleExportVisual(id));
       add('Delete', () => handleDeleteVisual(id));
     },
     () => anchor.setAttribute('aria-expanded', 'false'),
   );
+}
+
+// ── Export a single saved visual ─────────────────────────────────────────────
+// Loads the visual, has MAIN compute its data, and hands the SAME argument
+// object the result surface builds to the SAME openExportDialog — PDF/PPTX/DOCX/
+// HTML/PNG for one chart, with no export path of its own to drift.
+//
+// `entry` is the adapter shape vizEntry already uses, with the visual's stored
+// overrides mapped onto the key the dialog derives ('v:' + type), so an exported
+// chart carries the styling the builder saved. This runs in the VISIBLE hub
+// window, which is where a map must render — the offscreen report window is not
+// touched.
+async function handleExportVisual(id: string): Promise<void> {
+  if (!currentProjectId) return;
+  let visual: any = null;
+  try {
+    visual = await window.hub.getVisual(currentProjectId, id);
+  } catch (_) {
+    visual = null;
+  }
+  if (!visual) {
+    showToast('That visual could not be loaded');
+    return;
+  }
+
+  let res: any;
+  try {
+    res = await window.hub.computeVisualData(
+      currentProjectId, String(visual.datasetId || ''), visual.encoding, visual.filters || []);
+  } catch (_) {
+    res = null;
+  }
+  if (!res || res.ok === false || !res.data) {
+    showToast((res && res.error) || 'Could not compute this visual');
+    return;
+  }
+  const data = res.data;
+
+  // The saved type FIRST so the dialog opens on what the user saved, then the
+  // rest of what this data can actually support.
+  const eligible = eligibleChartTypes(res.recommendedShape, countNumericSeries(data), (data.labels || []).length);
+  if (data.geo) eligible.push('map_choropleth');
+  const saved = String(visual.chartType || '');
+  const recommended = saved ? [saved].concat(eligible.filter((t) => t !== saved)) : eligible;
+
+  const overrides = visual.overrides && typeof visual.overrides === 'object' ? visual.overrides : {};
+  const entry = { id: String(visual.id), chartOverrides: { ['v:' + saved]: overrides } };
+
+  openExportDialog({
+    recommended,
+    selectedExtra: [],
+    current: saved,
+    vizData: data,
+    entry,
+    turnIdx: 'v', // the override-key prefix the builder already writes under
+    hasGeo: !!data.geo,
+    analysis: '',
+    title: String(visual.name || 'Visual'),
+    headlineSegments: [],
+  });
+}
+
+// ── Add a saved visual to an analysis ────────────────────────────────────────
+// Appends a visual card to the LAST sheet of the chosen analysis and persists
+// it. Deliberately does NOT navigate: the user is browsing the gallery and asked
+// to file this away, not to leave.
+async function handleAddVisualToAnalysis(id: string): Promise<void> {
+  if (!currentProjectId) return;
+  let list: any[] = [];
+  try {
+    list = await window.hub.listAnalyses(currentProjectId);
+  } catch (_) {
+    list = [];
+  }
+  if (!Array.isArray(list)) list = [];
+
+  const NEW = '__new__';
+  const options = list
+    .map((a) => ({ value: String(a.id), label: a && a.name ? String(a.name) : 'Untitled analysis' }))
+    .concat([{ value: NEW, label: 'New analysis…' }]);
+  const choice = await dashChooseModal('Add to analysis', options, 'Add');
+  if (choice === null) return;
+
+  let analysis: any = null;
+  if (choice === NEW) {
+    const name = await promptModal('Name the analysis', 'Untitled analysis', 'Create');
+    if (name === null) return;
+    try {
+      analysis = await window.hub.createAnalysis({ projectId: currentProjectId, name: name.trim() || 'Untitled analysis' });
+    } catch (_) {
+      analysis = null;
+    }
+  } else {
+    try {
+      analysis = await window.hub.getAnalysis(currentProjectId, choice);
+    } catch (_) {
+      analysis = null;
+    }
+  }
+  if (!analysis || !analysis.id) {
+    showToast('That analysis could not be opened');
+    return;
+  }
+
+  // An analysis always has at least one sheet; a record that somehow has none
+  // gets one rather than dropping the card on the floor.
+  const sheets = Array.isArray(analysis.sheets) && analysis.sheets.length
+    ? analysis.sheets
+    : [{ id: dashUuid(), name: 'Sheet 1', cards: [] }];
+  const last = sheets[sheets.length - 1];
+  if (!Array.isArray(last.cards)) last.cards = [];
+  // Same layout maths the grid editor uses for its own + Visual — nextFreeRow
+  // takes the card list so this and the editor cannot disagree about where the
+  // next card lands.
+  last.cards.push({ id: dashUuid(), type: 'visual', visualId: id, layout: { x: 0, y: nextFreeRow(last.cards), w: 6, h: 6 } });
+
+  let saved: any = null;
+  try {
+    saved = await window.hub.updateAnalysis(currentProjectId, String(analysis.id), { sheets });
+  } catch (_) {
+    saved = null;
+  }
+  if (!saved || saved.ok === false) {
+    showToast('Could not add it to that analysis');
+    return;
+  }
+  showToast('Added to ' + (analysis.name ? String(analysis.name) : 'the analysis'));
+}
+
+// Optimistic: the star flips immediately, then the list repaints (favourites
+// sort to the top, so the card usually moves). A failed write is reverted by the
+// refresh, which reads what is actually on disk.
+async function handleToggleFavorite(id: string, next: boolean, star: HTMLButtonElement): Promise<void> {
+  if (!currentProjectId) return;
+  star.setAttribute('aria-pressed', next ? 'true' : 'false');
+  star.setAttribute('aria-label', next ? 'Unfavourite' : 'Favourite');
+  try {
+    await window.hub.updateVisual(currentProjectId, id, { favorite: next });
+  } catch (_) {
+    /* ignore — the refresh below shows the stored truth */
+  }
+  await refreshVisualList();
 }
 
 async function handleRenameVisual(id: string, current: string): Promise<void> {

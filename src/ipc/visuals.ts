@@ -238,9 +238,9 @@ export function register() {
     }
   });
 
-  ipcMain.handle('visual:update', async (_e, { projectId, id, name, chartType, encoding, overrides, filters }: any = {}) => {
+  ipcMain.handle('visual:update', async (_e, { projectId, id, name, chartType, encoding, overrides, filters, favorite }: any = {}) => {
     try {
-      const visual = await visuals.updateVisual(projectId, id, { name, chartType, encoding, overrides, filters });
+      const visual = await visuals.updateVisual(projectId, id, { name, chartType, encoding, overrides, filters, favorite });
       return visual ? { ok: true, visual } : { ok: false, error: 'Could not update the visual' };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to update the visual' };

@@ -296,8 +296,8 @@ contextBridge.exposeInMainWorld('hub', {
   saveVisual: (payload: { projectId: string; datasetId: string; name: string; chartType: string; encoding: any; overrides?: any; filters?: any }) =>
     ipcRenderer.invoke('visual:save', payload),
   // Patch an existing visual's name / chartType / encoding / overrides / filters
-  // (datasetId immutable). Any omitted field keeps its stored value.
-  updateVisual: (projectId: string, id: string, patch: { name?: string; chartType?: string; encoding?: any; overrides?: any; filters?: any }) =>
+  // / favorite (datasetId immutable). Any omitted field keeps its stored value.
+  updateVisual: (projectId: string, id: string, patch: { name?: string; chartType?: string; encoding?: any; overrides?: any; filters?: any; favorite?: boolean }) =>
     ipcRenderer.invoke('visual:update', { projectId, id, ...patch }),
   // Delete a visual; returns { ok: boolean }.
   deleteVisual: (projectId: string, id: string) => ipcRenderer.invoke('visual:delete', { projectId, id }),
