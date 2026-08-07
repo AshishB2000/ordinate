@@ -776,8 +776,23 @@
           <!-- Week 13 — capture provenance: thumbnail + view-original + recapture. -->
           <div class="ds-cap-strip" id="ds-cap-strip" hidden></div>
 
-          <div class="ds-quality" id="ds-quality" hidden></div>
+          <!-- ── Three views of one dataset ──────────────────────────────────
+               Data, Prepare and Quality were three panels stacked in one
+               scroll, each toggled independently — Quality was a strip above
+               the toolbar that nobody scrolled to. They are tabs now; the grid
+               below belongs to the explorer, not to a tab, so Prepare can edit
+               a step with its effect visible beside it. -->
+          <div class="ds-tabs" role="tablist" aria-label="Dataset views">
+            <button class="ds-tab" type="button" role="tab" id="ds-tab-data"
+                    aria-selected="true" aria-controls="ds-tabp-data">Data</button>
+            <button class="ds-tab" type="button" role="tab" id="ds-tab-prepare"
+                    aria-selected="false" aria-controls="ds-tabp-prepare" tabindex="-1">Prepare</button>
+            <button class="ds-tab" type="button" role="tab" id="ds-tab-quality"
+                    aria-selected="false" aria-controls="ds-tabp-quality" tabindex="-1">Quality</button>
+          </div>
 
+          <div class="ds-tab-body">
+          <div class="ds-tabp" id="ds-tabp-data" role="tabpanel" aria-labelledby="ds-tab-data">
           <div class="ds-explorer-toolbar">
             <input class="ds-search" id="ds-search" type="search" placeholder="Search rows…" />
             <div class="ds-cols-wrap">
@@ -789,7 +804,16 @@
           </div>
 
           <div class="ds-explain-out" id="ds-explain-out" hidden></div>
+          </div><!-- /#ds-tabp-data -->
 
+          <div class="ds-tabp" id="ds-tabp-quality" role="tabpanel" aria-labelledby="ds-tab-quality" hidden>
+            <div class="ds-quality" id="ds-quality" hidden></div>
+            <!-- Shown only when the quality panel has nothing in it: an empty
+                 tab reads as broken, and "no issues found" is a real answer. -->
+            <p class="ds-quality-none">No quality issues found in this dataset.</p>
+          </div>
+
+          <div class="ds-tabp" id="ds-tabp-prepare" role="tabpanel" aria-labelledby="ds-tab-prepare" hidden>
           <!-- ── Prepare: reversible transform pipeline over the immutable source ── -->
           <div class="ds-prepare-panel" id="ds-prepare-panel" hidden>
             <div class="ds-prepare-warnings" id="ds-prepare-warnings" hidden></div>
@@ -834,9 +858,16 @@
               <div class="ds-combine-note ds-explain-hint" id="ds-combine-note" hidden></div>
             </div>
           </div>
+          </div><!-- /#ds-tabp-prepare -->
 
-          <p class="ds-preview-note" id="ds-explorer-note" hidden></p>
-          <div class="ds-table-scroll" id="ds-explorer-scroll"></div>
+          <!-- The grid belongs to the EXPLORER, not to a tab: Prepare shows it
+               beside the step machinery so a step's effect is visible as it is
+               edited, which is the whole point of a reversible pipeline. -->
+          <div class="ds-grid-pane">
+            <p class="ds-preview-note" id="ds-explorer-note" hidden></p>
+            <div class="ds-table-scroll" id="ds-explorer-scroll"></div>
+          </div>
+          </div><!-- /.ds-tab-body -->
         </div>
 
       </div>

@@ -162,9 +162,91 @@ function dxWatchExplorer(): void {
   sync();
 }
 
+// ── The explorer's tabs: Data · Prepare · Quality ───────────────────────────
+
+/** Tab id → its panel id. Order is the arrow-key order. */
+const DX_TABS: ReadonlyArray<{ tab: string; panel: string }> = [
+  { tab: 'ds-tab-data', panel: 'ds-tabp-data' },
+  { tab: 'ds-tab-prepare', panel: 'ds-tabp-prepare' },
+  { tab: 'ds-tab-quality', panel: 'ds-tabp-quality' },
+];
+
+/**
+ * Select one tab.
+ *
+ * A roving tabindex, so the strip is ONE tab stop and the arrows move within it
+ * — the pattern for a tablist, and the reason these are real buttons with
+ * `role="tab"` rather than styled divs.
+ *
+ * The Prepare panel is unhidden here because `prepare.ts` hides it on every
+ * dataset open (`resetPreparePanel`) — it predates the tab and still believes
+ * it is a panel that toggles. Owning its visibility from the tab is what makes
+ * `#ds-prepare-btn` a tab selector without rewriting that file.
+ */
+function dxSelectTab(tabId: string, focus?: boolean): void {
+  const panel = document.querySelector('#ws-datasets .ds-explorer') as HTMLElement | null;
+  if (!panel) return;
+  for (const t of DX_TABS) {
+    const btn = dxEl(t.tab);
+    const body = dxEl(t.panel);
+    const on = t.tab === tabId;
+    if (btn) {
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+      btn.tabIndex = on ? 0 : -1;
+      if (on && focus) btn.focus();
+    }
+    if (body) body.hidden = !on;
+  }
+  // `tab-data` / `tab-prepare` / `tab-quality` on the explorer: the grid pane
+  // sits below the Data tab and beside the Prepare rail, which is layout, not
+  // visibility, so CSS decides it from here.
+  panel.classList.remove('tab-data', 'tab-prepare', 'tab-quality');
+  panel.classList.add(tabId.replace('ds-tab-', 'tab-'));
+
+  if (tabId === 'ds-tab-prepare') {
+    const prep = dxEl('ds-prepare-panel');
+    if (prep) prep.hidden = false;
+  }
+}
+
+function initDataTabs(): void {
+  const strip = document.querySelector('#ws-datasets .ds-tabs') as HTMLElement | null;
+  if (!strip) return;
+
+  DX_TABS.forEach(({ tab }) => {
+    const btn = dxEl(tab);
+    if (btn) btn.addEventListener('click', () => dxSelectTab(tab));
+  });
+
+  strip.addEventListener('keydown', (e: KeyboardEvent) => {
+    const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+    if (keys.indexOf(e.key) < 0) return;
+    e.preventDefault();
+    const i = DX_TABS.findIndex((t) => dxEl(t.tab)?.getAttribute('aria-selected') === 'true');
+    const at = i < 0 ? 0 : i;
+    let next = at;
+    if (e.key === 'ArrowLeft') next = (at - 1 + DX_TABS.length) % DX_TABS.length;
+    else if (e.key === 'ArrowRight') next = (at + 1) % DX_TABS.length;
+    else if (e.key === 'Home') next = 0;
+    else next = DX_TABS.length - 1;
+    dxSelectTab(DX_TABS[next].tab, true);
+  });
+
+  // Opening a dataset lands on Data — the tab you were on for the LAST dataset
+  // is not a claim about this one.
+  const explorer = dxEl('ds-explorer');
+  if (explorer) {
+    new MutationObserver(() => {
+      if (!explorer.hidden) dxSelectTab('ds-tab-data');
+    }).observe(explorer, { attributes: true, attributeFilter: ['hidden'] });
+  }
+  dxSelectTab('ds-tab-data');
+}
+
 function initDataSection(): void {
   dxWatchImportSurface();
   dxWatchExplorer();
+  initDataTabs();
 
   // Every door into importing opens the dialog first, then triggers the control
   // that already existed — one handler per action, still in datasets.ts.

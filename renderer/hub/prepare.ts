@@ -826,14 +826,24 @@ function resetPreparePanel(): void {
   populateCombineSelect();
 }
 
+/**
+ * "Prepare data" SELECTS THE PREPARE TAB — it no longer toggles a panel.
+ *
+ * This is the one deliberate behaviour change of the Data-section restructure.
+ * Prepare is a view of the open dataset now, alongside Data and Quality
+ * (dataSection.ts), so a button that hid it again while its tab was showing
+ * would leave that tab blank. The panel's own `hidden` is owned by the tab.
+ *
+ * Everything else here is unchanged: the step list and the combine picker are
+ * still refreshed on the way in, exactly as the toggle did.
+ */
 function togglePreparePanel(): void {
   const panel = pEl('ds-prepare-panel');
   if (!panel) return;
-  panel.hidden = !panel.hidden;
-  if (!panel.hidden) {
-    renderStepsList();
-    populateCombineSelect();
-  }
+  panel.hidden = false;
+  if (typeof dxSelectTab === 'function') dxSelectTab('ds-tab-prepare');
+  renderStepsList();
+  populateCombineSelect();
 }
 
 // ── Boot wiring (once) ─────────────────────────────────────────────────────────

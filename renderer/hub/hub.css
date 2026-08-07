@@ -5027,6 +5027,83 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .ds-explorer-ident .ds-source-badge[hidden] { display: none; }
 .ds-back { flex: 0 0 auto; }
 
+/* ── The explorer's tabs ─────────────────────────────────────────────────────
+   The underline strip the authoring panel already uses (.an-tabs / .an-tab),
+   selected on aria-selected rather than a second `is-on` class — these are real
+   role=tab buttons, so the attribute IS the state. */
+.ds-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 4px 0 0;
+  border-bottom: 1px solid var(--border);
+}
+.ds-tab {
+  padding: 6px 12px 7px;
+  background: none;
+  border: 0;
+  /* The underline sits ON the strip's hairline — see .an-tab for why. */
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+.ds-tab:hover { color: var(--text); }
+.ds-tab[aria-selected="true"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.ds-tabp[hidden] { display: none; }
+
+/* The tab body. A column for Data and Quality; Prepare turns it into a
+   workbench — the step machinery in a side rail, the live grid beside it, so a
+   step's effect is visible as it is edited. The rail width is .an-side's, the
+   one this app already uses for exactly this shape. */
+.ds-tab-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.ds-explorer.tab-prepare .ds-tab-body {
+  flex-direction: row;
+  align-items: flex-start;
+}
+.ds-explorer.tab-prepare #ds-tabp-prepare {
+  flex: 0 0 340px;
+  min-width: 0;
+  max-height: calc(100vh - 260px);
+  overflow-y: auto;
+}
+.ds-explorer.tab-prepare .ds-grid-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ds-grid-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+/* Quality is a list of findings; the grid is not part of that answer. */
+.ds-explorer.tab-quality .ds-grid-pane { display: none; }
+/* "No issues" is a real answer — shown only when the issue list is empty,
+   because an empty tab reads as broken. */
+.ds-quality-none {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+#ds-tabp-quality:has(#ds-quality:not([hidden])) .ds-quality-none { display: none; }
+
+/* `hidden` loses to an explicit `display` — the same trap .an-side documents,
+   and the same one the import blocks hit. Without these the Prepare panel and
+   the quality strip are on screen whatever their tab says. */
+.ds-prepare-panel[hidden],
+.ds-quality[hidden] { display: none; }
+
 /* ── The import dialog ───────────────────────────────────────────────────────
    Wider than the stock .ws-modal (which is min(360px, …)) because it holds a
    preview table; `.ws-modal` is defined LATER in this file, so the class pair
