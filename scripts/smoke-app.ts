@@ -356,6 +356,72 @@ async function main(): Promise<void> {
     el?.click();
   });
   await win.waitForTimeout(900);
+
+  // The empty state is the SHARED .ws-empty treatment, not a bespoke dashed box
+  // — the whole point of hoisting those classes. Asserted from a laid-out page:
+  // a glyph cluster that renders zero <svg> children, or an AI door that is not
+  // actually gated, both look fine to a DOM-presence check.
+  const vizEmpty = await win.evaluate(() => {
+    const box = document.getElementById('viz-empty');
+    const art = document.getElementById('viz-empty-art');
+    return {
+      shared: !!box && box.classList.contains('ws-empty'),
+      visible: !!box && box.offsetParent !== null,
+      glyphs: art ? art.querySelectorAll('svg').length : 0,
+      heading: (document.querySelector('#viz-empty .ws-empty-h')?.textContent || '').trim(),
+      aiDisabled: (document.getElementById('viz-empty-ai') as HTMLButtonElement | null)?.disabled,
+      hintShown: (document.getElementById('viz-empty-hint') as HTMLElement | null)?.hidden === false,
+      countHidden: (document.getElementById('viz-count') as HTMLElement | null)?.hidden,
+    };
+  });
+  ok('the Visuals empty state reuses the shared .ws-empty surface',
+     vizEmpty.shared && vizEmpty.visible && vizEmpty.heading === 'No visuals yet',
+     JSON.stringify(vizEmpty));
+  ok('…with a real chart-glyph cluster, not an empty box',
+     vizEmpty.glyphs >= 3, `${vizEmpty.glyphs} glyphs`);
+  ok('…the AI door gated + explained with no model, and the count chip hidden at zero',
+     vizEmpty.aiDisabled === true && vizEmpty.hintShown && vizEmpty.countHidden === true,
+     JSON.stringify(vizEmpty));
+
+  // An empty page that only DESCRIBES the next action is still a blank page.
+  // The band offers the project's real datasets, and — the part worth pinning —
+  // it must not claim "No data yet" to someone who has data. Arriving here via
+  // the nav leaves no project adopted, so this also covers the read path that
+  // resolves an existing project WITHOUT creating one.
+  const startBand = await win.evaluate(() => {
+    const band = document.getElementById('viz-start');
+    const cards = [...document.querySelectorAll('.viz-ds-card')] as HTMLElement[];
+    return {
+      visible: !!band && band.offsetParent !== null,
+      cards: cards.length,
+      noDataCard: !!document.querySelector('.viz-ds-none'),
+      first: (cards[0]?.textContent || '').replace(/\s+/g, ' ').trim(),
+      // The card, the band and the grid must share one left and one right edge
+      // whichever of them is on screen. A capped/centred card silently breaks
+      // that against the full-width band beneath it, and the misalignment is
+      // the kind of thing only a measurement catches.
+      edges: (() => {
+        const card = document.getElementById('viz-empty');
+        const band = document.getElementById('viz-start');
+        if (!card || !band) return null;
+        const c = card.getBoundingClientRect();
+        const b = band.getBoundingClientRect();
+        return { dl: Math.round(Math.abs(c.left - b.left)), dr: Math.round(Math.abs(c.right - b.right)) };
+      })(),
+      cardH: Math.round(document.getElementById('viz-empty')?.getBoundingClientRect().height || 0),
+    };
+  });
+  ok('…and a "Start from a dataset" band offering the project\'s real datasets',
+     startBand.visible && startBand.cards > 0 && !startBand.noDataCard,
+     JSON.stringify(startBand));
+  ok('…listing rows and columns per dataset, not just a name',
+     /rows · \d+ columns/.test(startBand.first), `"${startBand.first}"`);
+  ok('…edge-aligned with the empty card above it, left and right',
+     !!startBand.edges && startBand.edges.dl === 0 && startBand.edges.dr === 0,
+     JSON.stringify(startBand.edges));
+  ok('…and the card reads as a panel, not a strip',
+     startBand.cardH >= 200, `${startBand.cardH}px tall`);
+
   await win.evaluate(() => (document.getElementById('viz-new-btn') as HTMLElement)?.click());
   await win.waitForTimeout(2000);
   const noProject = await win.evaluate(() => ({
@@ -816,7 +882,7 @@ async function main(): Promise<void> {
     return {
       emptyVisible: !!empty && empty.offsetParent !== null,
       h: Math.round(r?.height || 0),
-      heading: (document.querySelector('.an-empty-h')?.textContent || '').trim(),
+      heading: (document.querySelector('.ws-empty-h')?.textContent || '').trim(),
       createVisible: vis('an-empty-new'),
       aiVisible: vis('an-empty-draft'),
       aiLabel: (document.getElementById('an-empty-draft')?.textContent || '').trim(),
