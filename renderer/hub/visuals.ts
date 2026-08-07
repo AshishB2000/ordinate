@@ -662,8 +662,12 @@ async function openNewVisualModal(opts: VizNewOpts = {}): Promise<VizNewChoice |
 // "+ New visual": ask first, then open the builder on the chosen dataset. A
 // suggestion is applied to the form and NEVER saved — the user still reviews it.
 async function handleNewVisual(): Promise<void> {
-  if (!currentProjectId) {
-    window.alert('Open a project first.');
+  // Projects are demoted BY DESIGN: created implicitly, never picked, and there
+  // is no project picker in the nav. So "Open a project first" was a dead end —
+  // on a fresh install there are no projects and nothing on screen can make one.
+  // Resolve (or create) one the same way the Home "+ New" entries do.
+  if (!currentProjectId && !(await resolveProjectId())) {
+    showToast('Could not create a workspace to save this in.');
     return;
   }
   const choice = await openNewVisualModal();

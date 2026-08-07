@@ -32,18 +32,40 @@ function showHome(): void {
 // Lands on Sources (the capture surface); callers that open a specific item
 // select their own section afterwards.
 async function openWorkspace(id: string): Promise<void> {
-  const project = await window.hub.openProject(id);
-  if (!project) {
+  if (!(await adoptProject(id))) {
     console.warn('[workspace] openProject returned null for', id);
     showHome();
     return;
   }
+  selectSection('sources');
+}
+
+/**
+ * Make `id` the session's active project, WITHOUT changing section.
+ *
+ * The half of openWorkspace that is about identity rather than navigation.
+ * Split out because a section the user is already standing in (Visuals,
+ * Analyses, Dashboards) needs a project context but must not be bounced to
+ * Sources to acquire one. Still validates through main first, so a deleted or
+ * corrupt project is refused here rather than becoming a dangling context that
+ * fails on the next call.
+ *
+ * Returns false when main refuses; the caller decides what that means.
+ */
+async function adoptProject(id: string): Promise<boolean> {
+  let project: any = null;
+  try {
+    project = await window.hub.openProject(id);
+  } catch (_) {
+    return false;
+  }
+  if (!project) return false;
   currentProjectId = project.id;
   // #ws-project-name was removed with the old nav; keep the guarded write so any
   // future header stays in sync without a hard dependency.
   const nameEl = document.getElementById('ws-project-name');
   if (nameEl) nameEl.textContent = project.name || 'Untitled project';
-  selectSection('sources');
+  return true;
 }
 
 // Switch which workspace section is visible. Flips the .hub-body[data-section]
