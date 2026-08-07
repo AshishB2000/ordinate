@@ -765,10 +765,25 @@
     </section>
     <section class="ws-panel" id="ws-visuals" data-section="visuals" hidden>
       <div class="viz-panel">
-        <h2 class="viz-h">Visuals</h2>
-        <p class="viz-sub">Build a chart or map from a saved dataset. Every number is computed by the app — nothing is invented.</p>
+        <!-- GALLERY (default view). Mutually exclusive with #viz-builder: exactly
+             one of the two is visible at a time. -->
+        <div class="viz-gallery" id="viz-gallery">
+          <div class="viz-gallery-head">
+            <div class="viz-gallery-copy">
+              <h2 class="viz-h">Visuals</h2>
+              <p class="viz-sub">Saved charts you can drop into any analysis or dashboard.</p>
+            </div>
+            <button class="btn btn-primary" type="button" id="viz-new-btn">+ New visual</button>
+          </div>
+          <div class="viz-grid" id="viz-grid"></div>
+          <div class="viz-empty" id="viz-empty" hidden>
+            <h3 class="viz-empty-h">No visuals yet</h3>
+            <p class="viz-sub">Build a chart from a dataset and it shows up here.</p>
+            <button class="btn btn-primary" type="button" id="viz-empty-new-btn">+ New visual</button>
+          </div>
+        </div>
 
-        <!-- Editor (hidden until "New visual" or opening a saved visual) -->
+        <!-- Editor (hidden until "+ New visual" or opening a saved visual) -->
         <div class="viz-builder" id="viz-builder" hidden>
           <div class="viz-build-row">
             <label class="viz-field-label" for="viz-dataset-select">Dataset</label>
@@ -790,17 +805,8 @@
 
           <div class="viz-build-actions">
             <button class="btn btn-primary" type="button" id="viz-save-btn">Save visual</button>
-            <button class="btn" type="button" id="viz-cancel-btn">Cancel</button>
+            <button class="btn" type="button" id="viz-cancel-btn">← Back to visuals</button>
           </div>
-        </div>
-
-        <div class="viz-saved" id="viz-saved">
-          <div class="viz-saved-head">
-            <h3 class="viz-saved-h">Saved visuals</h3>
-            <button class="btn btn-primary" type="button" id="viz-new-btn">New visual</button>
-          </div>
-          <div class="viz-saved-list" id="viz-saved-list"></div>
-          <p class="viz-saved-empty" id="viz-saved-empty" hidden>No visuals yet.</p>
         </div>
       </div>
     </section>

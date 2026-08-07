@@ -5203,75 +5203,117 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   border-top: 1px solid var(--border);
   padding-top: 12px;
 }
-.viz-saved {
+/* ── Gallery: the saved visuals as cards (replaces the Week 7 row list) ── */
+.viz-gallery {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  border-top: 1px solid var(--border);
-  padding-top: 16px;
+  gap: 16px;
 }
-.viz-saved-head {
+.viz-gallery[hidden] { display: none; }
+.viz-gallery-head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.viz-saved-h {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-strong);
-  margin: 0;
-}
-.viz-saved-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.viz-saved-item {
-  display: flex;
-  align-items: stretch;
-  gap: 6px;
-}
-.viz-saved-open {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
   align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.viz-gallery-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+.viz-grid[hidden] { display: none; }
+.viz-card {
+  position: relative; /* anchors the star + ⋯ overlays onto the tile */
+}
+.viz-card-body {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   gap: 2px;
   text-align: left;
-  padding: 8px 12px;
-  background: var(--bg);
+  padding: 0 0 10px;
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   cursor: pointer;
+  overflow: hidden;
 }
-.viz-saved-open:hover {
+.viz-card-body:hover {
   border-color: var(--accent);
 }
-.viz-saved-name {
+.viz-card-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 104px;
+  margin-bottom: 8px;
+  background: var(--inset);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+.viz-card-body:hover .viz-card-tile { color: var(--accent); }
+/* VIZ_ICONS ships a 13px SVG for the chip row; the card wants it big. */
+.viz-card-glyph svg {
+  width: 44px;
+  height: 44px;
+}
+.viz-card-name {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-strong);
+  padding: 0 12px;
 }
-.viz-saved-meta {
+.viz-card-meta {
   font-size: 11px;
   color: var(--muted);
+  padding: 0 12px;
 }
-.viz-saved-del {
-  padding: 0 10px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  cursor: pointer;
-  color: var(--muted);
-}
-.viz-saved-del:hover {
-  border-color: #dc2626;
-  color: #dc2626;
-}
-.viz-saved-empty {
+.viz-card-star,
+.viz-card-menu {
+  position: absolute;
+  top: 6px;
+  width: 24px;
+  height: 24px;
+  line-height: 1;
   font-size: 13px;
-  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.viz-card-star { left: 6px; }
+.viz-card-menu { right: 6px; }
+.viz-card-star:hover:not(:disabled),
+.viz-card-menu:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.viz-card-star:disabled { cursor: default; }
+.viz-card-star[aria-pressed='true'] { color: var(--warn); }
+.viz-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 32px;
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-md);
+}
+.viz-empty[hidden] { display: none; }
+.viz-empty-h {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
   margin: 0;
 }
 
@@ -5303,18 +5345,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   color: var(--muted);
 }
 .viz-suggest-hint[hidden] { display: none; }
-.viz-saved-dup {
-  padding: 0 10px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  cursor: pointer;
-  color: var(--muted);
-}
-.viz-saved-dup:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
 
 /* ── Week 9: Dashboards (grid of visual/metric/text cards across pages) ── */
 .dash-panel {

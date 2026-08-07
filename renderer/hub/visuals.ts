@@ -94,69 +94,136 @@ function fillSelect(sel: HTMLSelectElement | null, items: Array<{ value: string;
   });
 }
 
-// ── Saved-visual list ────────────────────────────────────────────────────────
+// ── Gallery (the default view: saved visuals as cards) ───────────────────────
+// Same name and same contract as the Week 7 list refresh — only the DOM it
+// produces changed, so workspace.selectSection and every save/delete/duplicate
+// caller is unaffected.
 async function refreshVisualList(): Promise<void> {
-  const list = vizEl('viz-saved-list');
-  const empty = vizEl('viz-saved-empty');
-  if (!list) return;
-  list.innerHTML = '';
-  if (!currentProjectId) {
-    if (empty) empty.hidden = false;
-    return;
-  }
+  const grid = vizEl('viz-grid');
+  const empty = vizEl('viz-empty');
+  if (!grid) return;
+  grid.innerHTML = '';
   let items: any[] = [];
-  try {
-    items = await window.hub.listVisuals(currentProjectId);
-  } catch (_) {
-    items = [];
+  if (currentProjectId) {
+    try {
+      items = await window.hub.listVisuals(currentProjectId);
+    } catch (_) {
+      items = [];
+    }
   }
   if (!Array.isArray(items)) items = [];
+  grid.hidden = items.length === 0;
   if (empty) empty.hidden = items.length > 0;
-  items.forEach((v) => list.appendChild(makeSavedVisualItem(v)));
+  items.forEach((v) => grid.appendChild(makeVisualCard(v)));
 }
 
-function makeSavedVisualItem(v: any): HTMLElement {
-  const row = document.createElement('div');
-  row.className = 'viz-saved-item';
+// Flip between the gallery and the (now full-panel) builder. They are mutually
+// exclusive: the builder is no longer an inline editor sitting above a list.
+function showVizGallery(show: boolean): void {
+  vizShow('viz-gallery', show);
+  vizShow('viz-builder', !show);
+}
 
-  const open = document.createElement('button');
-  open.type = 'button';
-  open.className = 'viz-saved-open';
+function makeVisualCard(v: any): HTMLElement {
+  const id = String(v && v.id ? v.id : '');
+  const card = document.createElement('div');
+  card.className = 'viz-card';
+
+  // The whole card is ONE button, so a card is a single Tab stop. The star and
+  // the ⋯ menu are siblings of it (nested buttons are invalid HTML) positioned
+  // over the tile by CSS.
+  const body = document.createElement('button');
+  body.type = 'button';
+  body.className = 'viz-card-body';
+
+  const tile = document.createElement('span');
+  tile.className = 'viz-card-tile';
+  const glyph = document.createElement('span');
+  glyph.className = 'viz-card-glyph';
+  // The ONLY innerHTML here: VIZ_ICONS is a trusted static constant of
+  // hand-written SVG in renderResult.ts, never user or model input.
+  glyph.innerHTML = VIZ_ICONS[v && v.chartType] || VIZ_ICONS.column;
+  tile.appendChild(glyph);
+
   const name = document.createElement('span');
-  name.className = 'viz-saved-name';
+  name.className = 'viz-card-name';
   name.textContent = v && v.name ? String(v.name) : 'Untitled visual';
+
   const meta = document.createElement('span');
-  meta.className = 'viz-saved-meta';
+  meta.className = 'viz-card-meta';
   const typeLabel = (v && v.chartType && VIZ_LABELS[v.chartType]) || (v && v.chartType) || 'Chart';
   meta.textContent = typeLabel + ' · ' + formatSidebarTime(v && v.updatedAt);
-  open.appendChild(name);
-  open.appendChild(meta);
-  open.addEventListener('click', () => openSavedVisual(String(v.id)));
 
-  const dup = document.createElement('button');
-  dup.type = 'button';
-  dup.className = 'viz-saved-dup';
-  dup.setAttribute('aria-label', 'Duplicate visual');
-  dup.textContent = '⧉';
-  dup.addEventListener('click', (e) => {
+  body.appendChild(tile);
+  body.appendChild(name);
+  body.appendChild(meta);
+  body.addEventListener('click', () => openSavedVisual(id));
+
+  const star = document.createElement('button');
+  star.type = 'button';
+  star.className = 'viz-card-star';
+  star.textContent = '★';
+  // Phase 4 wires the toggle. It ships disabled now so the card layout is final.
+  star.setAttribute('aria-pressed', 'false');
+  star.setAttribute('aria-label', 'Favourite');
+  star.disabled = true;
+
+  const menuBtn = document.createElement('button');
+  menuBtn.type = 'button';
+  menuBtn.className = 'viz-card-menu';
+  menuBtn.textContent = '⋯';
+  menuBtn.setAttribute('aria-haspopup', 'menu');
+  menuBtn.setAttribute('aria-expanded', 'false');
+  menuBtn.setAttribute('aria-label', 'More actions');
+  menuBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    handleDuplicateVisual(String(v.id));
+    openVisualCardMenu(menuBtn, v);
   });
 
-  const del = document.createElement('button');
-  del.type = 'button';
-  del.className = 'viz-saved-del';
-  del.setAttribute('aria-label', 'Delete visual');
-  del.textContent = '🗑';
-  del.addEventListener('click', (e) => {
-    e.stopPropagation();
-    handleDeleteVisual(String(v.id));
-  });
+  card.appendChild(body);
+  card.appendChild(star);
+  card.appendChild(menuBtn);
+  return card;
+}
 
-  row.appendChild(open);
-  row.appendChild(dup);
-  row.appendChild(del);
-  return row;
+// The card's ⋯ popover. Reuses the hub's shared mini-menu (chartControls.ts) —
+// positioning, outside-click and Esc are already solved there.
+function openVisualCardMenu(anchor: HTMLButtonElement, v: any): void {
+  const id = String(v && v.id ? v.id : '');
+  anchor.setAttribute('aria-expanded', 'true');
+  openMiniMenu(
+    anchor,
+    (el: HTMLElement, close: () => void) => {
+      const add = (label: string, run: (() => void) | null): void => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'chart-menu-item';
+        b.textContent = label;
+        b.disabled = !run;
+        if (run) b.addEventListener('click', () => { close(); run(); });
+        el.appendChild(b);
+      };
+      add('Open', () => openSavedVisual(id));
+      add('Rename', () => handleRenameVisual(id, v && v.name ? String(v.name) : ''));
+      add('Duplicate', () => handleDuplicateVisual(id));
+      add('Add to analysis', null); // Phase 4
+      add('Export', null); // Phase 4
+      add('Delete', () => handleDeleteVisual(id));
+    },
+    () => anchor.setAttribute('aria-expanded', 'false'),
+  );
+}
+
+async function handleRenameVisual(id: string, current: string): Promise<void> {
+  if (!currentProjectId) return;
+  const name = await promptModal('Rename this visual', current, 'Rename');
+  if (name === null || !name.trim()) return;
+  try {
+    await window.hub.updateVisual(currentProjectId, id, { name: name.trim() });
+  } catch (_) {
+    /* ignore */
+  }
+  await refreshVisualList();
 }
 
 async function handleDuplicateVisual(id: string): Promise<void> {
@@ -201,7 +268,9 @@ async function loadDatasetOptions(selectedId: string): Promise<any[]> {
   return items;
 }
 
-async function openVisualBuilder(): Promise<void> {
+// `datasetId` preselects the dataset (the create popup already asked which one);
+// omitted, the builder falls back to the first in the list, as it always did.
+async function openVisualBuilder(datasetId?: string): Promise<void> {
   if (!currentProjectId) {
     window.alert('Open a project first.');
     return;
@@ -210,8 +279,8 @@ async function openVisualBuilder(): Promise<void> {
   vizCurrentChartType = '';
   vizOverrides = {};
   ensureVizForm();
-  const datasets = await loadDatasetOptions('');
-  vizShow('viz-builder', true);
+  const datasets = await loadDatasetOptions(datasetId || '');
+  showVizGallery(false);
   if (!datasets.length) {
     // No datasets to build from — show the builder shell with a clear hint.
     if (vizForm) vizForm.show(false);
@@ -224,7 +293,7 @@ async function openVisualBuilder(): Promise<void> {
 }
 
 function closeVisualBuilder(): void {
-  vizShow('viz-builder', false);
+  showVizGallery(true);
   vizEditingId = '';
   vizDatasetId = '';
   vizCurrentChartType = '';
@@ -413,7 +482,7 @@ async function openSavedVisual(id: string): Promise<void> {
       }))
     : [];
   await loadDatasetOptions(String(visual.datasetId || ''));
-  vizShow('viz-builder', true);
+  showVizGallery(false);
   // Encoding AND filters go in as one preset, so restoring a saved visual is the
   // same code path as opening a new one.
   await onDatasetChange(String(visual.datasetId || ''),
@@ -514,11 +583,19 @@ function suggestVisualName(encoding: any, chartType: string): string {
 
 // ── Boot wiring (once) ───────────────────────────────────────────────────────
 function initVisuals(): void {
-  const newBtn = vizEl('viz-new-btn');
-  if (newBtn) newBtn.addEventListener('click', () => openVisualBuilder());
+  // Two "+ New visual" buttons: the gallery header's and the empty state's.
+  ['viz-new-btn', 'viz-empty-new-btn'].forEach((btnId) => {
+    const b = vizEl(btnId);
+    if (b) b.addEventListener('click', () => openVisualBuilder());
+  });
 
+  // "← Back to visuals": leave the builder and repaint the gallery, so a delete
+  // or a rename made while the builder was open shows immediately.
   const cancelBtn = vizEl('viz-cancel-btn');
-  if (cancelBtn) cancelBtn.addEventListener('click', () => closeVisualBuilder());
+  if (cancelBtn) cancelBtn.addEventListener('click', () => {
+    closeVisualBuilder();
+    refreshVisualList();
+  });
 
   const saveBtn = vizEl('viz-save-btn');
   if (saveBtn) saveBtn.addEventListener('click', () => handleSaveVisual());

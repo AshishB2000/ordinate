@@ -2468,8 +2468,8 @@ async function main(): Promise<void> {
   ok('…and takes one', await fillPrompt('Encoding form check'));
   await win.waitForTimeout(2500);
   const saved = await win.evaluate(() => ({
-    count: document.querySelectorAll('#viz-saved-list > *').length,
-    names: [...document.querySelectorAll('#viz-saved-list')]
+    count: document.querySelectorAll('#viz-grid > *').length,
+    names: [...document.querySelectorAll('#viz-grid')]
       .map((l) => (l.textContent || '').replace(/\s+/g, ' ').trim()).join('').slice(0, 120),
     builderClosed: (document.getElementById('viz-builder') as HTMLElement)?.hidden === true,
   }));
@@ -2481,7 +2481,7 @@ async function main(): Promise<void> {
   // fresh build, so a preset that silently fails to apply shows up right here —
   // as the two measures we just saved coming back as one.
   ok('the saved visual reopens', await win.evaluate(() => {
-    const el = [...document.querySelectorAll('#viz-saved-list button, #viz-saved-list [role=button]')]
+    const el = [...document.querySelectorAll('#viz-grid button, #viz-grid [role=button]')]
       .find((b) => /Encoding form check/.test(b.textContent || '')) as HTMLElement | undefined;
     if (!el) return false;
     el.click();
@@ -2571,12 +2571,18 @@ async function main(): Promise<void> {
      island.cssLinked && island.styleEls === 0,
      `linked=${island.cssLinked} styleEls=${island.styleEls}`);
 
+  // Prefer a REAL control. A presentational wrapper can both match [class*=card]
+  // and sit earlier in document order than the button inside it — clicking the
+  // wrapper then does nothing, and every downstream assertion reports "nothing
+  // rendered" rather than "the test clicked the wrong element".
   const clickText = (re: string) =>
     win.evaluate((src: string) => {
       const rx = new RegExp(src, 'i');
-      const el = [...document.querySelectorAll('button, a, [role=button], [class*=card], li')].find(
-        (b) => rx.test(b.textContent || ''),
-      ) as HTMLElement | undefined;
+      const match = (sel: string) =>
+        [...document.querySelectorAll(sel)].find((b) => rx.test(b.textContent || '')) as
+          | HTMLElement
+          | undefined;
+      const el = match('button, a, [role=button]') || match('[class*=card], li');
       if (el) el.click();
       return !!el;
     }, re);
