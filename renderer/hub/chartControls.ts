@@ -132,6 +132,26 @@ function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx,
     if (window.hub) { window.hub.copyText(dataToTSV(data)); showToast('Data copied to clipboard'); }
   }
 
+  // ── Action: show the rows behind this visual ─────────────────────────
+  // The ⋯ route carries NO mark — it drills the whole visual, which is the
+  // only entry point maps and tables have (neither has a Chart.js instance to
+  // hit-test). Gated on entry.drill, so the capture result surface — which has
+  // no dataset behind its chart — never offers it.
+  function onDrill() {
+    closeChartMenu();
+    const d = entry.drill;
+    if (!d) return;
+    openDrillPanel({
+      name: d.name,
+      projectId: d.projectId,
+      datasetId: d.datasetId,
+      encoding: d.encoding,
+      filters: d.filters,
+      mark: null,
+      trigger: anchorBtn,
+    });
+  }
+
   // ── Customize: toggle expand/collapse ────────────────────────────────
   function onCustomizeToggle() {
     if (!cmCustomize) return;
@@ -204,6 +224,7 @@ function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx,
   if (cmCopyImg)       cmCopyImg.addEventListener('click', onCopyImg, sig);
   if (cmDownload)      cmDownload.addEventListener('click', onDownload, sig);
   if (cmCopyData)      cmCopyData.addEventListener('click', onCopyData, sig);
+  if (cmDrill)       { cmDrill.hidden = !entry.drill; cmDrill.addEventListener('click', onDrill, sig); }
   if (cmCustomToggle)  cmCustomToggle.addEventListener('click', onCustomizeToggle, sig);
   if (cmTitleInput)    cmTitleInput.addEventListener('input', onTitleInput, sig);
   if (cmSwatches)      cmSwatches.addEventListener('click', onSwatchClick, sig);
@@ -229,6 +250,45 @@ function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx,
     document.addEventListener('click', _chartMenuDismiss, true);
     document.addEventListener('keydown', _chartMenuEscape, true);
   }, 0);
+}
+
+// ── The clicked mark ────────────────────────────────────────────────────────
+//
+// ONE hit-test, shared by cross-filtering (dashboards.ts) and drill-down
+// (drill.ts). Two copies of this would be two answers to "which bar did they
+// click", and the drill panel's whole claim is that its rows are the ones
+// behind the mark the user pointed at.
+//
+// A DOM listener hit-testing the stored Chart instance, NOT options.onClick:
+// buildChart is shared with the capture surface and the Visuals builder, and
+// neither of those should grow a dashboard behaviour.
+//
+// Returns null for a click on empty canvas, and for a map or a table — neither
+// draws a Chart.js instance, so neither has a mark to identify.
+//
+// `series` is the clicked DATASET'S LABEL, which is a split value only when the
+// encoding actually splits. On a two-MEASURE chart the same field holds "sum of
+// price" — a legend entry, not a column value. The chart cannot tell those
+// apart; the encoding can, so the caller decides whether to send it (see
+// wireDrillClick in drill.ts). Passing it blindly would compose an equality
+// filter on a column the visual never split by.
+function chartMarkAt(area, e) {
+  const chart = chartInstances.get(area);
+  if (!chart || typeof chart.getElementsAtEventForMode !== 'function') return null;
+  let hit = [];
+  try {
+    hit = chart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
+  } catch (_) {
+    hit = [];
+  }
+  if (!hit.length) return null;
+  const labels = (chart.data && chart.data.labels) || [];
+  const category = labels[hit[0].index];
+  if (category === undefined) return null;
+  const sets = (chart.data && chart.data.datasets) || [];
+  const split = sets.length > 1 ? sets[hit[0].datasetIndex] : null;
+  const series = split && typeof split.label === 'string' ? split.label : undefined;
+  return { category, series };
 }
 
 // ── Per-graph control cluster: Values menu, period multi-select, ⋯ ──────────

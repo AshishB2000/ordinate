@@ -1056,6 +1056,20 @@ const chartMenuEl = (function () {
         </svg>
         Copy data
       </button>
+      <!-- Drill-down. Hidden unless the entry carries a drill context (a saved
+           visual on a dashboard/analysis card or in the builder) — the capture
+           result surface has no dataset to drill into. -->
+      <button class="chart-menu-item" id="cm-drill" type="button" hidden>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"
+          stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 5h18"/>
+          <path d="M3 10h18"/>
+          <path d="M3 15h8"/>
+          <circle cx="17" cy="17" r="4"/>
+          <line x1="20" y1="20" x2="22.5" y2="22.5"/>
+        </svg>
+        Show underlying rows
+      </button>
     </div>
     <div class="chart-menu-sep"></div>
     <button class="chart-menu-customize-hdr" id="cm-customize-toggle" type="button">
@@ -1147,6 +1161,7 @@ const chartMenuEl = (function () {
 const cmCopyImg      = document.getElementById('cm-copy-img');
 const cmDownload     = document.getElementById('cm-download');
 const cmCopyData     = document.getElementById('cm-copy-data');
+const cmDrill        = document.getElementById('cm-drill');
 const cmCustomToggle = document.getElementById('cm-customize-toggle');
 const cmCustomize    = document.getElementById('cm-customize');
 const cmTitleInput   = document.getElementById('cm-title') as HTMLInputElement;

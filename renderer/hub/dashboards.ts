@@ -877,8 +877,22 @@ async function renderVisualCard(card: any, body: HTMLElement): Promise<void> {
   // Adapter entry: same shape the Visuals builder uses so the ⋯ Customize /
   // Values controls attach; edits persist back to the underlying visual (the
   // dashboard never owns chart styling — the visual does).
+  // What a drill from this card reads. It is built from `visual` — the
+  // definition `resolveCardVisual` chose — so a PUBLISHED card drills against
+  // its frozen `card.visual` snapshot and never a later edit of the source
+  // visual, exactly as the chart above it is drawn from that snapshot. `merged`
+  // is the same filter list that computed the figure, which is what makes the
+  // rows and the number agree.
+  const drill: any = {
+    name: dashCardTitle(card) === 'Visual' ? visual.name : dashCardTitle(card),
+    projectId: currentProjectId,
+    datasetId: visual.datasetId,
+    encoding: visual.encoding,
+    filters: merged,
+  };
   const entry: any = {
     id: card.id,
+    drill,
     chartOverrides: { ['v:' + type]: visual.overrides || {} },
     // On a PUBLISHED card this is a no-op: the snapshot is read-only, and
     // writing back would edit a source visual this card no longer follows —
@@ -901,7 +915,10 @@ async function renderVisualCard(card: any, body: HTMLElement): Promise<void> {
   renderVizInArea(area, data, type, entry, 'v', {
     projectId: currentProjectId, datasetId: visual.datasetId, encoding: visual.encoding, filters: merged,
   });
-  wireCrossFilter(area, visual);
+  // Cross-filter first: when it is on it owns the plain click (it writes), and
+  // drilling stays available through the ⋯ menu. Otherwise the click drills.
+  // Drilling is a READ, so it is offered on a published snapshot too.
+  if (!wireCrossFilter(area, visual)) wireDrillClick(area, drill);
 }
 
 // ── Click-to-filter ──────────────────────────────────────────────────────────
@@ -911,32 +928,29 @@ async function renderVisualCard(card: any, body: HTMLElement): Promise<void> {
 // every other card is a surprise, and the sheet already has an explicit filter
 // bar for the deliberate case.
 //
-// A DOM listener that hit-tests the stored Chart instance, NOT options.onClick:
-// buildChart is shared with the capture surface and the Visuals builder, and
-// neither of those should grow a dashboard behaviour.
-function wireCrossFilter(area: HTMLElement, visual: any): void {
+// The hit-test itself is `chartMarkAt` (chartControls.ts), shared with the
+// drill-down panel — a DOM listener over the stored Chart instance, NOT
+// options.onClick: buildChart is shared with the capture surface and the Visuals
+// builder, and neither of those should grow a dashboard behaviour.
+//
+// Returns true when this card claimed the plain click, so the caller can wire
+// drill-down on it instead. Cross-filter WRITES a filter and drill only READS,
+// so when both are possible the write keeps the gesture and drilling moves to
+// the ⋯ menu — one click never does two things.
+function wireCrossFilter(area: HTMLElement, visual: any): boolean {
   const ov = (visual && visual.overrides) || {};
-  if (!ov.crossFilter || dashReadOnly) return;
+  if (!ov.crossFilter || dashReadOnly) return false;
   const column = visual && visual.encoding && visual.encoding.category;
-  if (!column) return; // nothing to filter ON — a click would mean nothing
+  if (!column) return false; // nothing to filter ON — a click would mean nothing
   area.classList.add('is-crossfilter');
   area.addEventListener('click', (e) => {
-    const chart: any = chartInstances.get(area);
-    // Maps and tables draw no Chart.js instance. They simply do not cross-filter
-    // yet, and a click on one must do nothing rather than throw.
-    if (!chart || typeof chart.getElementsAtEventForMode !== 'function') return;
-    let hit: any[] = [];
-    try {
-      hit = chart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
-    } catch (_) {
-      hit = [];
-    }
-    if (!hit.length) return; // a click on empty canvas is not a filter
-    const labels = (chart.data && chart.data.labels) || [];
-    const value = labels[hit[0].index];
-    if (value === undefined) return;
-    applyCrossFilter(String(column), value);
+    // Maps and tables draw no Chart.js instance, so `chartMarkAt` is null and a
+    // click on one does nothing rather than throwing.
+    const mark = chartMarkAt(area, e);
+    if (!mark) return; // a click on empty canvas is not a filter
+    applyCrossFilter(String(column), mark.category);
   });
+  return true;
 }
 
 /** Toggle the clicked value on the sheet's filter list, then redraw everything. */

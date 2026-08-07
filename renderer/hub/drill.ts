@@ -40,6 +40,40 @@ interface DrillOpts {
   trigger?: HTMLElement | null;
 }
 
+/**
+ * A plain click on a chart opens the panel for the clicked mark.
+ *
+ * Drilling is a READ and needs no override flag — it is available wherever a
+ * visual renders, including a published, read-only dashboard. Cross-filtering
+ * WRITES a sheet filter, stays opt-in (`overrides.crossFilter`, default off),
+ * and when it is on it owns the plain click: one gesture never gets two side
+ * effects, so the ⋯ menu is the drill route on those cards.
+ *
+ * The hit-test is `chartMarkAt` (chartControls.ts) — the same one
+ * cross-filtering uses, because two answers to "which bar was clicked" is two
+ * answers to what the rows behind it are.
+ */
+function wireDrillClick(area: HTMLElement, ctx: DrillOpts): void {
+  if (!area || !ctx) return;
+  area.classList.add('is-drillable');
+  area.addEventListener('click', (e) => {
+    const mark = chartMarkAt(area, e);
+    if (!mark) return; // empty canvas, or a map/table: the ⋯ menu handles those
+    // `series` is only a split value when the encoding actually splits — on a
+    // multi-measure chart the dataset label is a legend entry ("sum of price").
+    const hasSplit = Boolean(ctx.encoding && typeof ctx.encoding.series === 'string' && ctx.encoding.series);
+    openDrillPanel({
+      name: ctx.name,
+      projectId: ctx.projectId,
+      datasetId: ctx.datasetId,
+      encoding: ctx.encoding,
+      filters: ctx.filters,
+      mark: { category: mark.category, series: hasSplit ? mark.series : undefined },
+      trigger: area,
+    });
+  });
+}
+
 let drillRoot: HTMLElement | null = null; // the cloned #drill-tpl instance
 let drillOpts: DrillOpts | null = null;
 let drillTrigger: HTMLElement | null = null;
