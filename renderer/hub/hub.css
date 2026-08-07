@@ -5635,7 +5635,7 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
    `.dash-list-open` and `.dash-list-badge` are SHARED with the Dashboards list,
    which is still a stacked list — restyling them globally would silently
    re-lay-out that section too. */
-.an-hero {
+.ws-hero {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -5646,61 +5646,61 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   color: #fff;
   overflow: hidden;
 }
-.an-hero[hidden] { display: none; }
-.an-hero-copy { max-width: 640px; }
-.an-hero-h {
+.ws-hero[hidden] { display: none; }
+.ws-hero-copy { max-width: 640px; }
+.ws-hero-h {
   margin: 0 0 6px;
   font-size: 16px;
   font-weight: 600;
   color: #fff;
 }
-.an-hero-p {
+.ws-hero-p {
   margin: 0 0 14px;
   font-size: 12.5px;
   line-height: 1.55;
   color: rgba(255, 255, 255, 0.86);
 }
-.an-hero-actions { display: flex; gap: 8px; }
+.ws-hero-actions { display: flex; gap: 8px; }
 /* The banner sits on a saturated gradient, so the two buttons need their own
    treatment — the shared .btn-primary blue would vanish into it. */
-.an-hero-actions .btn-primary {
+.ws-hero-actions .btn-primary {
   background: #fff;
   border-color: #fff;
   color: var(--accent-2);
 }
-.an-hero-actions .btn-primary:hover:not(:disabled) {
+.ws-hero-actions .btn-primary:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.9);
   border-color: rgba(255, 255, 255, 0.9);
   color: var(--accent-2);
 }
-.an-hero-actions .btn-ghost {
+.ws-hero-actions .btn-ghost {
   background: transparent;
   border-color: rgba(255, 255, 255, 0.5);
   color: #fff;
 }
-.an-hero-actions .btn-ghost:hover:not(:disabled) {
+.ws-hero-actions .btn-ghost:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.14);
   color: #fff;
 }
 /* A chart motif, in CSS. An illustration would mean shipping an image asset for
    decoration; five spans cost nothing and theme themselves. */
-.an-hero-art {
+.ws-hero-art {
   display: flex;
   align-items: flex-end;
   gap: 7px;
   height: 78px;
   flex: none;
 }
-.an-hero-bar {
+.ws-hero-bar {
   width: 16px;
   border-radius: 3px 3px 0 0;
   background: rgba(255, 255, 255, 0.42);
 }
-.an-hero-bar--1 { height: 34%; }
-.an-hero-bar--2 { height: 62%; }
-.an-hero-bar--3 { height: 45%; }
-.an-hero-bar--4 { height: 100%; background: rgba(255, 255, 255, 0.82); }
-.an-hero-bar--5 { height: 72%; }
+.ws-hero-bar--1 { height: 34%; }
+.ws-hero-bar--2 { height: 62%; }
+.ws-hero-bar--3 { height: 45%; }
+.ws-hero-bar--4 { height: 100%; background: rgba(255, 255, 255, 0.82); }
+.ws-hero-bar--5 { height: 72%; }
 
 .an-table {
   display: flex;
@@ -5808,7 +5808,7 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .an-status--published { background: var(--ok-soft); color: var(--ok); }
 .an-status--draft { background: var(--surface-3); color: var(--muted); }
 
-.an-empty {
+.ws-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -5819,29 +5819,29 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
 }
-.an-empty[hidden] { display: none; }
-.an-empty-art {
+.ws-empty[hidden] { display: none; }
+.ws-empty-art {
   display: flex;
   align-items: flex-end;
   gap: 6px;
   height: 44px;
   margin-bottom: 14px;
 }
-.an-empty-art .an-hero-bar { background: var(--accent-line); width: 14px; }
-.an-empty-h {
+.ws-empty-art .ws-hero-bar { background: var(--accent-line); width: 14px; }
+.ws-empty-h {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
   color: var(--text-strong);
 }
-.an-empty-p {
+.ws-empty-p {
   margin: 0;
   max-width: 460px;
   font-size: 12.5px;
   line-height: 1.6;
   color: var(--muted);
 }
-.an-empty-actions {
+.ws-empty-actions {
   display: flex;
   gap: 10px;
   margin-top: 18px;

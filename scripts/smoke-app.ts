@@ -801,7 +801,7 @@ async function main(): Promise<void> {
     return {
       emptyVisible: !!empty && empty.offsetParent !== null,
       h: Math.round(r?.height || 0),
-      heading: (document.querySelector('.an-empty-h')?.textContent || '').trim(),
+      heading: (document.querySelector('.ws-empty-h')?.textContent || '').trim(),
       createVisible: vis('an-empty-new'),
       aiVisible: vis('an-empty-draft'),
       aiLabel: (document.getElementById('an-empty-draft')?.textContent || '').trim(),
