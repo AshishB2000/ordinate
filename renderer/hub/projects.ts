@@ -256,8 +256,11 @@ async function ensureProjectAndOpen(): Promise<boolean> {
  * this exists at all rather than an "Open a project first" dead end — there is
  * no project picker in the nav to send anyone to.
  */
-async function resolveProjectId(): Promise<string> {
+async function resolveProjectId(opts: { create?: boolean } = {}): Promise<string> {
   if (currentProjectId) return currentProjectId;
+  // `create: false` is for READ paths — a section painting what already exists
+  // must never bring a project into being as a side effect of being looked at.
+  const mayCreate = opts.create !== false;
 
   let id = '';
   try {
@@ -266,7 +269,7 @@ async function resolveProjectId(): Promise<string> {
     if (Array.isArray(list) && list.length) id = String(list[0].id || '');
   } catch (_) { /* fall through and create one */ }
 
-  if (!id) {
+  if (!id && mayCreate) {
     try {
       const created = await window.hub.createProject('Untitled project');
       id = created && created.id ? String(created.id) : '';
