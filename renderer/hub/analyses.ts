@@ -731,6 +731,39 @@ function renderAnalysisPubState(): void {
   // no canvas space.
   const pubBtn = dashEl('an-publish-btn');
   if (pubBtn) pubBtn.title = el.textContent || '';
+  anRenderPubPill();
+}
+
+/**
+ * The publish state as a PILL next to the button — the three states the list
+ * already computes, from the same `analysisHasUnpublishedChanges`, never a
+ * second derivation.
+ *
+ * It exists because focus mode hides #an-pubstate: the state was reachable
+ * only by hovering Publish for its tooltip, which is not an affordance.
+ */
+function anRenderPubPill(): void {
+  const pill = dashEl('an-pubpill');
+  if (!pill) return;
+  if (dashMode !== 'analysis' || !dashCurrent) {
+    pill.hidden = true;
+    return;
+  }
+  pill.hidden = false;
+  pill.classList.remove('an-pubpill--draft', 'an-pubpill--live', 'an-pubpill--dirty');
+  if (!dashCurrent.lastPublishedAt) {
+    pill.classList.add('an-pubpill--draft');
+    pill.textContent = 'Draft';
+    pill.title = 'Not published yet.';
+  } else if (analysisHasUnpublishedChanges(dashCurrent)) {
+    pill.classList.add('an-pubpill--dirty');
+    pill.textContent = 'Unpublished changes';
+    pill.title = 'This analysis has changed since it was last published — republish to update the dashboard.';
+  } else {
+    pill.classList.add('an-pubpill--live');
+    pill.textContent = 'Published';
+    pill.title = 'Published ' + formatSidebarTime(dashCurrent.lastPublishedAt) + ' · up to date.';
+  }
 }
 
 // ── Publish / republish ─────────────────────────────────────────────────────

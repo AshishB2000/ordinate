@@ -1178,6 +1178,12 @@
                action, not two. Shown by CSS in focus mode only. -->
           <button class="btn btn-sm an-more-btn" type="button" id="an-more-btn"
             aria-haspopup="true" aria-label="More actions" title="More actions">⋯</button>
+          <!-- The publish STATE, as a pill beside the button: never published /
+               published & current / unpublished changes. Focus mode hides the
+               #an-pubstate paragraph, which left the state as a tooltip only —
+               a fact you had to hover to learn. Filled by anRenderPubState from
+               the same analysisHasUnpublishedChanges the list uses. -->
+          <span class="an-pubpill dash-an-only" id="an-pubpill" hidden></span>
           <button class="btn btn-sm dash-an-only" type="button" id="an-republish-btn" hidden>Republish…</button>
           <button class="btn btn-primary btn-sm dash-an-only" type="button" id="an-publish-btn">Publish</button>
           <button class="btn btn-primary btn-sm dash-edit-only" type="button" id="dash-save-btn">Save</button>
@@ -1230,10 +1236,25 @@
 
         <div class="dash-grid" id="dash-grid"></div>
 
+        <!-- The empty sheet. A blank grid told you nothing about what a sheet
+             is FOR, so it now offers the three things you can put on one and
+             the two starter layouts that already existed (same ids, same
+             handlers) — hidden by renderDashGrid the moment a card lands.
+             The add buttons delegate to the editor head's, so there is still
+             exactly one handler per action. -->
         <div class="dash-starters" id="dash-starters">
-          <span class="dash-starter-label">This page is empty. Start from a layout:</span>
-          <button class="btn btn-sm dash-starter" type="button" id="dash-starter-kpis">KPIs + chart</button>
-          <button class="btn btn-sm dash-starter" type="button" id="dash-starter-twoup">Two-up</button>
+          <h3 class="dash-starter-h">This sheet is empty</h3>
+          <p class="dash-starter-label">Put a chart, a number or a note on it — or start from a layout.</p>
+          <div class="dash-starter-adds">
+            <button class="btn btn-primary" type="button" id="dash-starter-visual">Add a visual</button>
+            <button class="btn" type="button" id="dash-starter-metric">Add a metric</button>
+            <button class="btn" type="button" id="dash-starter-text">Add text</button>
+          </div>
+          <div class="dash-starter-layouts">
+            <span class="dash-starter-or">or start from a layout</span>
+            <button class="btn btn-sm dash-starter" type="button" id="dash-starter-kpis">KPIs + chart</button>
+            <button class="btn btn-sm dash-starter" type="button" id="dash-starter-twoup">Two-up</button>
+          </div>
         </div>
       </div>
       </div>

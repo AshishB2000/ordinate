@@ -2303,6 +2303,18 @@ function initDashboards(): void {
   const save = dashEl('dash-save-btn');
   if (save) save.addEventListener('click', () => handleSaveDashboard());
 
+  // The empty-sheet block's three add buttons delegate to the head strip's, so
+  // each action keeps exactly one handler.
+  ([
+    ['dash-starter-visual', 'dash-add-visual'],
+    ['dash-starter-metric', 'dash-add-metric'],
+    ['dash-starter-text', 'dash-add-text'],
+  ] as Array<[string, string]>).forEach(([id, target]) => {
+    const b = dashEl(id);
+    const t = dashEl(target) as HTMLButtonElement | null;
+    if (b && t) b.addEventListener('click', () => t.click());
+  });
+
   const stK = dashEl('dash-starter-kpis');
   if (stK) stK.addEventListener('click', () => applyStarter('kpis'));
   const stT = dashEl('dash-starter-twoup');
