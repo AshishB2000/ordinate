@@ -164,6 +164,30 @@ export function sanitizeChartType(raw: unknown): string {
   return typeof raw === 'string' && raw.trim() ? raw.trim() : 'column';
 }
 
+/**
+ * The chart types the AI suggestion prompt is allowed to name.
+ *
+ * MAIN needs its own copy: the renderer's `ALL_CHART_TYPE_IDS` lives in
+ * `renderer/hub/renderResult.ts`, a classic global-scope <script> that cannot be
+ * imported here. Two lists can drift, and the drift is SILENT — the model
+ * proposes a type the renderer cannot draw and the user gets an empty option. So
+ * `scripts/test-visual-chart-ids.ts` parses `ALL_CHART_TYPE_IDS` straight out of
+ * that file and asserts every id below is in it.
+ *
+ * Deliberately a SUBSET of what a Visual may STORE: no 'table' (a fallback, not
+ * a proposal) and neither map, because a map needs a geo level the model is
+ * never asked for. `sanitizeChartType` is unchanged and still permissive — this
+ * list constrains the PROMPT, and the picker constrains what can be drawn.
+ */
+export const SUGGESTABLE_CHART_TYPES: readonly string[] = [
+  'column', 'bar', 'clustered_column', 'clustered_bar',
+  'stacked_column', 'stacked_bar', 'pct_stacked_column', 'pct_stacked_bar',
+  'line', 'line_markers', 'area', 'stacked_area',
+  'pie', 'donut', 'scatter', 'gauge', 'combo', 'bubble',
+  'treemap', 'heatmap', 'funnel', 'histogram',
+  'sankey', 'candlestick', 'boxplot',
+];
+
 // Allowed enum sets for the clamped override fields.
 const LEGEND_POSITIONS: ReadonlySet<string> = new Set(['bottom', 'top', 'left', 'right']);
 const SORT_MODES: ReadonlySet<string> = new Set(['none', 'asc', 'desc']);

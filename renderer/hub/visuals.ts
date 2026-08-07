@@ -249,18 +249,29 @@ async function handleDeleteVisual(id: string): Promise<void> {
 }
 
 // ── "+ New visual" popup ─────────────────────────────────────────────────────
-// Step 1 asks WHICH dataset, step 2 asks HOW to build it. The modal only
-// RESOLVES a choice — it never creates, saves or navigates anything itself, so
-// Escape / the backdrop / Cancel all resolve null and leave the project as it
-// was. Cloned from #viz-new-tpl per open, so the markup lives with the rest of
-// the hub's HTML and every hook inside it is a `js-` class scoped to the clone.
+// Step 1 asks WHICH dataset, step 2 asks HOW to build it, step 3 shows what the
+// model proposed. The modal only RESOLVES a choice — it never creates, saves or
+// navigates anything itself, so Escape / the backdrop / Cancel all resolve null
+// and leave the project exactly as it was. Cloned from #viz-new-tpl per open, so
+// the markup lives with the rest of the hub's HTML and every hook inside it is a
+// `js-` class scoped to the clone.
+//
+// The builder's ✨ Suggest chart button opens this SAME modal straight at step 3
+// (`opts.startAtSuggest`). One picker, one code path — not a second flow that
+// could disagree with this one about what a proposal looks like.
 interface VizNewChoice {
-  kind: 'manual' | 'ai';
+  kind: 'manual' | 'suggested';
   datasetId: string;
-  intent: string; // '' unless the user typed one; only 'ai' carries it
+  encoding?: any; // 'suggested' only — already sanitized in main
+  chartType?: string; // 'suggested' only
 }
 
-async function openNewVisualModal(): Promise<VizNewChoice | null> {
+interface VizNewOpts {
+  datasetId?: string; // preselect (the builder already knows its dataset)
+  startAtSuggest?: boolean; // open straight at step 3 and ask immediately
+}
+
+async function openNewVisualModal(opts: VizNewOpts = {}): Promise<VizNewChoice | null> {
   let sets: any[] = [];
   try {
     sets = await window.hub.listDatasets(currentProjectId);
@@ -288,16 +299,20 @@ async function openNewVisualModal(): Promise<VizNewChoice | null> {
   const box = q('.vn-modal');
   const step1 = q('.js-vn-step1');
   const step2 = q('.js-vn-step2');
+  const step3 = q('.js-vn-step3');
   const rowsHost = q('.js-vn-rows');
   const noneEl = q('.js-vn-none');
   const backBtn = q('.js-vn-back');
   const intentEl = q('.js-vn-intent') as HTMLTextAreaElement;
   const askBtn = q('.js-vn-ask') as HTMLButtonElement;
   const noteEl = q('.js-vn-note');
+  const optionsHost = q('.js-vn-options');
+  const statusEl = q('.js-vn-status');
+  const regenBtn = q('.js-vn-regen') as HTMLButtonElement;
 
   return new Promise<VizNewChoice | null>((resolve) => {
     let done = false;
-    let selectedId = '';
+    let selectedId = String(opts.datasetId || '');
     let a11y: { onTabKey: (e: KeyboardEvent) => void; release: () => void } | null = null;
 
     function close(val: VizNewChoice | null): void {
@@ -318,15 +333,112 @@ async function openNewVisualModal(): Promise<VizNewChoice | null> {
       }
     }
 
-    // Step 1 → step 2. Re-enterable: step 2's ← Back comes straight back here.
+    // Step 1 is re-enterable: step 2's ← Back comes straight back here. When the
+    // builder opened us at step 3 there is no step 1 to return to, so ← Back
+    // goes to step 2 instead of stranding the user on a dataset list they were
+    // never shown.
     function showStep(n: number): void {
       step1.hidden = n !== 1;
       step2.hidden = n !== 2;
-      backBtn.hidden = n !== 2;
-      const first = n === 1
-        ? (rowsHost.querySelector('.vn-row') as HTMLElement | null) || (q('.js-vn-import') as HTMLElement)
-        : (aiReady ? intentEl : (q('.js-vn-manual') as HTMLElement));
+      step3.hidden = n !== 3;
+      backBtn.hidden = n === 1 || (n === 2 && !!opts.startAtSuggest);
+      let first: HTMLElement | null = null;
+      if (n === 1) {
+        first = (rowsHost.querySelector('.vn-row') as HTMLElement | null) || (q('.js-vn-import') as HTMLElement);
+      } else if (n === 2) {
+        first = aiReady ? intentEl : (q('.js-vn-manual') as HTMLElement);
+      } else {
+        first = regenBtn;
+      }
       if (first) first.focus();
+    }
+
+    // ── Step 3: ask, then DRAW each proposal ────────────────────────────────
+    // Every figure on screen here comes from window.hub.computeVisualData —
+    // app-computed in main, off the stored Parquet. The model contributed the
+    // encoding, the chart type and the caption, and no number at all.
+    async function runSuggest(): Promise<void> {
+      if (!selectedId) return;
+      showStep(3);
+      regenBtn.disabled = true;
+      optionsHost.innerHTML = '';
+      statusEl.textContent = 'Thinking…';
+
+      let res: any;
+      try {
+        res = await window.hub.suggestVisual(currentProjectId, selectedId, intentEl.value.trim());
+      } catch (_) {
+        res = { ok: false };
+      }
+      if (done) return; // the user closed the modal while the model was thinking
+      regenBtn.disabled = false;
+
+      if (res && res.notReady) {
+        statusEl.textContent = 'Connect a model in Execution settings to suggest a chart.';
+        return;
+      }
+      const options = res && res.ok && Array.isArray(res.options) ? res.options : [];
+      if (!options.length) {
+        statusEl.textContent = (res && res.error) || 'Could not suggest a chart.';
+        return;
+      }
+      statusEl.textContent = 'Pick one to open it in the builder. Nothing is saved until you save it.';
+      // Draw them concurrently: each is a resident query of a few ms, and a
+      // serial loop would make three of them feel like one slow one.
+      await Promise.all(options.map((o: any) => renderOption(o)));
+    }
+
+    async function renderOption(option: any): Promise<void> {
+      const card = document.createElement('div');
+      card.className = 'vn-option';
+      const art = document.createElement('div');
+      art.className = 'vn-option-art';
+      const why = document.createElement('p');
+      why.className = 'vn-option-why';
+      why.textContent = String(option.why || '') || 'Suggested chart';
+      const use = document.createElement('button');
+      use.type = 'button';
+      use.className = 'btn btn-sm';
+      use.textContent = 'Use this chart';
+      use.disabled = true; // until it provably draws
+      card.appendChild(art);
+      card.appendChild(why);
+      card.appendChild(use);
+      optionsHost.appendChild(card);
+
+      let data: any = null;
+      let res: any;
+      try {
+        res = await window.hub.computeVisualData(currentProjectId, selectedId, option.encoding, []);
+        if (res && res.ok !== false) data = res.data;
+      } catch (_) {
+        data = null;
+      }
+      if (done) return;
+
+      // An option that cannot be drawn says so and stays unpickable — offering a
+      // blank tile the user can pick would put a broken encoding in the builder.
+      if (!data || !Array.isArray(data.labels) || !data.labels.length) {
+        card.classList.add('is-broken');
+        const note = document.createElement('span');
+        note.className = 'vn-option-note';
+        note.textContent = "Couldn't draw this one";
+        art.appendChild(note);
+        return;
+      }
+
+      // Which type actually gets drawn is CODE's decision, not the model's: if
+      // the proposed type does not fit the data the app produced, the first
+      // eligible one is used instead. Same eligibility the builder's picker runs.
+      const eligible = eligibleChartTypes(res.recommendedShape, countNumericSeries(data), data.labels.length);
+      const type = eligible.indexOf(option.chartType) >= 0 ? option.chartType : (eligible[0] || 'table');
+      // A null entry is what turns the ⋯ Customize menu off (renderResult.ts):
+      // a preview owns no overrides, so it needs no override key either.
+      renderVizInArea(art, data, type, null, '');
+
+      use.disabled = false;
+      use.addEventListener('click', () =>
+        close({ kind: 'suggested', datasetId: selectedId, encoding: option.encoding, chartType: type }));
     }
 
     sets.forEach((d) => {
@@ -371,16 +483,16 @@ async function openNewVisualModal(): Promise<VizNewChoice | null> {
       q('.js-vn-ai').classList.add('is-disabled');
     }
 
-    askBtn.addEventListener('click', () => {
+    askBtn.addEventListener('click', () => { runSuggest(); });
+    regenBtn.addEventListener('click', () => { runSuggest(); });
+    const goManual = (): void => {
       if (!selectedId) return;
-      close({ kind: 'ai', datasetId: selectedId, intent: intentEl.value.trim() });
-    });
-    q('.js-vn-manual').addEventListener('click', () => {
-      if (!selectedId) return;
-      close({ kind: 'manual', datasetId: selectedId, intent: '' });
-    });
+      close({ kind: 'manual', datasetId: selectedId });
+    };
+    q('.js-vn-manual').addEventListener('click', goManual);
+    q('.js-vn-manual2').addEventListener('click', goManual);
 
-    backBtn.addEventListener('click', () => showStep(1));
+    backBtn.addEventListener('click', () => showStep(step3.hidden ? 1 : 2));
     q('.js-vn-cancel').addEventListener('click', () => close(null));
     q('.js-vn-x').addEventListener('click', () => close(null));
     overlay.addEventListener('mousedown', (e: MouseEvent) => {
@@ -390,11 +502,14 @@ async function openNewVisualModal(): Promise<VizNewChoice | null> {
 
     document.body.appendChild(overlay);
     a11y = makeModalAccessible(box, 'New visual', null);
-    showStep(1);
+    // The builder already knows its dataset, so it skips straight to asking.
+    if (opts.startAtSuggest && selectedId) runSuggest();
+    else showStep(selectedId ? 2 : 1);
   });
 }
 
-// "+ New visual": ask first, then open the builder on the chosen dataset.
+// "+ New visual": ask first, then open the builder on the chosen dataset. A
+// suggestion is applied to the form and NEVER saved — the user still reviews it.
 async function handleNewVisual(): Promise<void> {
   if (!currentProjectId) {
     window.alert('Open a project first.');
@@ -403,9 +518,7 @@ async function handleNewVisual(): Promise<void> {
   const choice = await openNewVisualModal();
   if (!choice) return; // cancelled — nothing was created
   await openVisualBuilder(choice.datasetId);
-  // Phase 3 forwards `choice.intent` and replaces this with a multi-option
-  // picker; today's visual:suggest takes no intent, so it is not sent yet.
-  if (choice.kind === 'ai') await handleSuggestVisual();
+  if (choice.kind === 'suggested') applySuggestedEncoding(choice.encoding, choice.chartType || '');
 }
 
 // ── Builder open / close ─────────────────────────────────────────────────────
@@ -687,39 +800,22 @@ async function handleSaveVisual(): Promise<void> {
   await refreshVisualList();
 }
 
-// ── AI chart suggestion (structure only; never numbers; confirm before apply) ──
+// ── AI chart suggestion (structure only; never numbers; review before apply) ──
+// The builder's ✨ Suggest chart opens the SAME modal the create popup uses,
+// straight at its results step with an empty intent. A drawn picker replaced the
+// old window.confirm: "apply the suggested chart?" asked the user to accept a
+// chart they had not seen.
 async function handleSuggestVisual(): Promise<void> {
   if (!currentProjectId || !vizDatasetId) {
     window.alert('Pick a dataset first.');
     return;
   }
   const hint = vizEl('viz-suggest-hint');
-  const btn = vizEl('viz-suggest-btn') as HTMLButtonElement | null;
-  if (btn) btn.disabled = true;
-  if (hint) { hint.hidden = false; hint.textContent = 'Thinking…'; }
-  let res: any;
-  try {
-    res = await window.hub.suggestVisual(currentProjectId, vizDatasetId);
-  } catch (_) {
-    res = { ok: false };
-  }
-  if (btn) btn.disabled = false;
-
-  if (res && res.notReady) {
-    if (hint) { hint.hidden = false; hint.textContent = 'Connect a model in Execution settings to suggest a chart.'; }
-    return;
-  }
-  if (!res || res.ok === false || !res.encoding) {
-    if (hint) { hint.hidden = false; hint.textContent = (res && res.error) || 'Could not suggest a chart.'; }
-    return;
-  }
-  // Confirm before applying — the user reviews and can still adjust before saving.
-  if (!window.confirm('Apply the suggested chart? You can still adjust it before saving.')) {
-    if (hint) hint.hidden = true;
-    return;
-  }
   if (hint) hint.hidden = true;
-  applySuggestedEncoding(res.encoding, res.chartType);
+  const choice = await openNewVisualModal({ datasetId: vizDatasetId, startAtSuggest: true });
+  // 'manual' and cancel both mean "leave the builder as it is" — it is already
+  // open on this dataset, which is what Build it myself asks for.
+  if (choice && choice.kind === 'suggested') applySuggestedEncoding(choice.encoding, choice.chartType || '');
 }
 
 // Populate the builder form from a suggested encoding (never auto-saves). Numbers

@@ -303,9 +303,11 @@ contextBridge.exposeInMainWorld('hub', {
   deleteVisual: (projectId: string, id: string) => ipcRenderer.invoke('visual:delete', { projectId, id }),
   // Duplicate a visual into an independent copy; returns { ok, visual } | { ok:false, error }.
   duplicateVisual: (projectId: string, id: string) => ipcRenderer.invoke('visual:duplicate', { projectId, id }),
-  // OPTIONAL AI chart suggestion (structure only, execution-gated). Returns
-  // { ok, encoding, chartType } | { ok:false, notReady } | { ok:false, error }.
-  suggestVisual: (projectId: string, datasetId: string) => ipcRenderer.invoke('visual:suggest', { projectId, datasetId }),
+  // OPTIONAL AI chart suggestions (structure only, execution-gated). Returns
+  // { ok:true, options:[{ encoding, chartType, why }] } | { ok:false, notReady }
+  // | { ok:false, error }. `intent` is the user's own words and may be ''.
+  suggestVisual: (projectId: string, datasetId: string, intent?: string) =>
+    ipcRenderer.invoke('visual:suggest', { projectId, datasetId, intent }),
   // Compute the renderer-ready { labels, series } (+ optional geo) for an encoding
   // over a dataset — ALL aggregation math runs in main's pure bridge (no model).
   // Optional `filters` (transforms filter steps) are applied BEFORE aggregation.

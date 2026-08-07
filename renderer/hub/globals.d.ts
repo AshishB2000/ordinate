@@ -200,7 +200,7 @@ declare global {
       ): Promise<any>;
       deleteVisual(projectId: string, id: string): Promise<{ ok: boolean }>;
       duplicateVisual(projectId: string, id: string): Promise<any>;
-      suggestVisual(projectId: string, datasetId: string): Promise<any>;
+      suggestVisual(projectId: string, datasetId: string, intent?: string): Promise<any>;
       computeVisualData(projectId: string, datasetId: string, encoding: any, filters?: any): Promise<any>;
       // ── Mosaic connector (Phase 3c) — the whole database contract in two calls ──
       mosaicView(
