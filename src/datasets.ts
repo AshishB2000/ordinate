@@ -547,11 +547,18 @@ export async function saveDataset(
 // refresh: re-run the source, overwrite the linked dataset's data, bump
 // updatedAt). Preserves id/name/sourceKind/createdAt. Returns null if either id
 // is invalid or the dataset does not exist. Rows are capped defensively.
+// `outWarnings`, when supplied, collects the warnings applyPipeline produced
+// while re-deriving the output. They matter to a REFRESH and to nothing else: if
+// the fresh source has lost a column a step references, applyPipeline skips that
+// step with a warning, and swallowing it would leave the user with a silently
+// shorter pipeline. An out-param rather than a changed return type keeps the two
+// existing callers (capture recapture, connection refresh) untouched.
 export async function updateDatasetData(
   projectId: string,
   id: string,
   data: { columns: ParsedColumn[]; rows: (string | number | null)[][] },
   capture?: { entryId: string | null; cropPath: string | null },
+  outWarnings?: string[],
 ): Promise<Dataset | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   const existing = await getDataset(projectId, id);
@@ -567,6 +574,7 @@ export async function updateDatasetData(
     // the pipeline instead of dropping it or reverting to stale source data.
     const source: TableData = { columns: cols, rows };
     const output = transforms.applyPipeline(source, existing.steps ?? []);
+    if (outWarnings && Array.isArray(output.warnings)) outWarnings.push(...output.warnings);
     updated = {
       ...existing, source, columns: output.columns, rows: output.rows,
       rowCount: output.rowCount, updatedAt: now,
@@ -581,6 +589,43 @@ export async function updateDatasetData(
   await fs.promises.mkdir(datasetsDir(projectId), { recursive: true });
   await persist(projectId, updated);
   return updated;
+}
+
+/**
+ * Stamp ONLY the refresh markers, leaving the stored table completely alone.
+ *
+ * Deliberately does NOT go through normalize()/persist(): it reads the record's
+ * raw JSON, sets three keys, and writes it back atomically. That is what makes
+ * "a failed refresh never destroys data" true rather than merely intended — a
+ * v2 record keeps its rows inline in this very file, and a round trip through
+ * persist() on a failure path would be a table rewrite driven by a code path
+ * whose whole premise is that the fetch did not work.
+ *
+ * Returns false when the record is missing or unreadable; a failed marker write
+ * is never fatal to the refresh that triggered it.
+ */
+export async function markRefresh(
+  projectId: string,
+  id: string,
+  status: 'ok' | 'error',
+  error: string | null,
+): Promise<boolean> {
+  if (!isValidId(projectId) || !isValidId(id)) return false;
+  const file = datasetFilePath(projectId, id);
+  try {
+    const raw = JSON.parse(await fs.promises.readFile(file, 'utf8'));
+    if (!raw || typeof raw !== 'object') return false;
+    raw.lastRefreshStatus = status;
+    raw.lastRefreshError = error;
+    // Only a SUCCESS moves the clock. A failed refresh must not make stale data
+    // look newly fetched — that is the exact wrong number this feature exists
+    // to prevent.
+    if (status === 'ok') raw.lastRefreshedAt = new Date().toISOString();
+    await writeJsonAtomic(file, raw);
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 // Edit a dataset's column DEFINITIONS: rename columns and/or correct types.

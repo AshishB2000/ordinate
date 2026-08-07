@@ -156,6 +156,52 @@ async function runSaved(
   return res.ok ? { ok: true, result: res.result } : res;
 }
 
+/**
+ * Re-run a saved connection into its linked dataset, updating the CONNECTION's
+ * lastStatus / lastError / lastRefreshedAt either way.
+ *
+ * Exported because the dataset refresh service needs exactly this and must not
+ * re-implement it: the secret is resolved here, in main, and a second copy would
+ * be a second place for that to go wrong. `connection:refresh` is now a thin
+ * wrapper over it, so the two cannot drift.
+ *
+ * `outWarnings` collects the pipeline warnings from re-deriving the dataset.
+ */
+export async function refreshConnectionInto(
+  projectId: string,
+  connId: string,
+  datasetId: string,
+  outWarnings?: string[],
+): Promise<{ ok: true; dataset: import('../datasets').Dataset } | { ok: false; error: string }> {
+  try {
+    const res = await runSaved(projectId, connId);
+    if (!res.ok) {
+      await connections.updateConnection(projectId, connId, { lastStatus: 'error', lastError: res.error });
+      return { ok: false, error: res.error };
+    }
+    const ds = await datasets.updateDatasetData(
+      projectId,
+      datasetId,
+      { columns: res.result.columns, rows: res.result.rows },
+      undefined,
+      outWarnings,
+    );
+    if (!ds) {
+      await connections.updateConnection(projectId, connId, { lastStatus: 'error', lastError: 'Linked dataset not found' });
+      return { ok: false, error: 'Linked dataset not found' };
+    }
+    await connections.updateConnection(projectId, connId, {
+      lastStatus: 'ok',
+      lastError: null,
+      lastRefreshedAt: new Date().toISOString(),
+      linkedDatasetId: ds.id,
+    });
+    return { ok: true, dataset: ds };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Could not refresh the connection' };
+  }
+}
+
 export function register(): void {
   // The renderer-safe connector catalog: identity + form shape for every
   // registered source. No functions, no values, nothing secret. Returns a BARE
@@ -256,30 +302,8 @@ export function register(): void {
   // Re-run a connection and overwrite its linked dataset's data. Updates the
   // connection's lastRefreshedAt/lastStatus either way.
   ipcMain.handle('connection:refresh', async (_e, { projectId, connId, datasetId }: any = {}) => {
-    try {
-      const res = await runSaved(projectId, connId);
-      if (!res.ok) {
-        await connections.updateConnection(projectId, connId, { lastStatus: 'error', lastError: res.error });
-        return { ok: false, error: res.error };
-      }
-      const ds = await datasets.updateDatasetData(projectId, datasetId, {
-        columns: res.result.columns,
-        rows: res.result.rows,
-      });
-      if (!ds) {
-        await connections.updateConnection(projectId, connId, { lastStatus: 'error', lastError: 'Linked dataset not found' });
-        return { ok: false, error: 'Linked dataset not found' };
-      }
-      await connections.updateConnection(projectId, connId, {
-        lastStatus: 'ok',
-        lastError: null,
-        lastRefreshedAt: new Date().toISOString(),
-        linkedDatasetId: ds.id,
-      });
-      return { ok: true, dataset: ds };
-    } catch (err: any) {
-      return { ok: false, error: err?.message || 'Could not refresh the connection' };
-    }
+    const res = await refreshConnectionInto(projectId, connId, datasetId);
+    return res.ok ? { ok: true, dataset: res.dataset } : res;
   });
 
   // Delete a connection (also drops its secret from config.json).

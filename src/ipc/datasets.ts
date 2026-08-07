@@ -1,8 +1,10 @@
 import { ipcMain, dialog } from 'electron';
-import * as fs from 'fs';
 import * as path from 'path';
-import { parseCsv, parseJson, parsePaste, ParseResult } from '../parse';
-import { parseXlsx } from '../parseXlsx';
+import { parsePaste } from '../parse';
+// One parser and one byte ceiling, shared with the refresh service — see
+// src/fileImport.ts for why they moved out of this file.
+import { parseFile, sourceKindFor } from '../fileImport';
+import { refreshDataset } from '../datasetRefresh';
 import * as datasets from '../datasets';
 import * as transforms from '../transforms';
 import { computeColumnSummary, findQualityIssues, ColumnSummary, QualityIssue } from '../datasetStats';
@@ -42,11 +44,6 @@ import * as trace from '../residentTrace';
 // dataset like any other and must obey the same ceiling.
 const MAX_ROWS = 1_000_000;
 
-// Byte ceiling enforced BEFORE any file is read into memory — the real anti-OOM
-// guard (parse.ts's MAX_ROWS only trims the output after the whole file is
-// already tokenized). A file over this is rejected with a clear error rather
-// than freezing/crashing the main process.
-const MAX_FILE_BYTES = 512 * 1024 * 1024; // 512 MB (raised with MAX_ROWS)
 
 // Paths main handed out from the native open dialog. The re-parse (sheet-switch)
 // branch of dataset:pickAndParse accepts a renderer-supplied filePath ONLY if it
@@ -56,20 +53,6 @@ const MAX_FILE_BYTES = 512 * 1024 * 1024; // 512 MB (raised with MAX_ROWS)
 // user explicitly picked this session.
 const pickedPaths = new Set<string>();
 
-type SourceKind = 'csv' | 'json' | 'paste' | 'xlsx';
-
-function sourceKindFor(ext: string): SourceKind | null {
-  switch (ext) {
-    case '.csv':
-      return 'csv';
-    case '.json':
-      return 'json';
-    case '.xlsx':
-      return 'xlsx';
-    default:
-      return null;
-  }
-}
 
 // Build a COMPACT, plain-text summary of a dataset for the AI explainer. Every
 // number here is app-computed (datasetStats), embedded as a FACT — the model
@@ -121,18 +104,6 @@ function buildDatasetSummaryText(
   return lines.join('\n');
 }
 
-async function parseFile(filePath: string, kind: SourceKind, sheetName?: string): Promise<ParseResult> {
-  // Reject oversized files before loading them — prevents an OOM/freeze on a
-  // multi-hundred-MB pick (covers csv/json readFile AND the xlsx reader below).
-  const stat = await fs.promises.stat(filePath);
-  if (stat.size > MAX_FILE_BYTES) {
-    const mb = Math.round(stat.size / (1024 * 1024));
-    throw new Error(`File is too large (${mb} MB). The import limit is ${MAX_FILE_BYTES / (1024 * 1024)} MB.`);
-  }
-  if (kind === 'xlsx') return parseXlsx(filePath, sheetName);
-  const text = await fs.promises.readFile(filePath, 'utf8');
-  return kind === 'json' ? parseJson(text) : parseCsv(text);
-}
 
 // ── Stats without hydrating the table ────────────────────────────────────────
 //
@@ -301,6 +272,25 @@ export function register() {
   ipcMain.handle('dataset:delete', async (_e, { projectId, id }: any = {}) => ({
     ok: await datasets.deleteDataset(projectId, id),
   }));
+
+  // Re-fetch a dataset from wherever it came from. One channel for every source
+  // kind; the service decides how, and a failure leaves the stored table alone.
+  // `warningCount` is returned alongside the list so the renderer can say "6 of
+  // 7 · 1 failed" without re-deriving it.
+  ipcMain.handle('dataset:refresh', async (_e, { projectId, id }: any = {}) => {
+    try {
+      const res = await refreshDataset(projectId, id);
+      if (!res.ok) return res;
+      return {
+        ok: true,
+        dataset: res.dataset,
+        warnings: res.warnings,
+        warningCount: res.warnings.length,
+      };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Failed to refresh the dataset' };
+    }
+  });
 
   // Per-column summaries + quality issues for an opened dataset. Computed ONCE
   // when the renderer opens a dataset (not per keystroke — sort/filter/search are

@@ -173,6 +173,10 @@ contextBridge.exposeInMainWorld('hub', {
   // whitelists it before storing, so an unrecognised one is simply dropped.
   saveDataset: (payload: { projectId: string; name: string; sourceKind: string; columns: any[]; rows: any[]; origin?: any }) =>
     ipcRenderer.invoke('dataset:save', payload),
+  // Re-fetch a dataset from wherever it came from (file / url / connection /
+  // combined). Returns { ok:true, dataset, warnings } or { ok:false, error }.
+  // A failure never touches the stored rows.
+  refreshDataset: (projectId: string, id: string) => ipcRenderer.invoke('dataset:refresh', { projectId, id }),
   // List a project's dataset summaries (newest-updated first).
   listDatasets: (projectId: string) => ipcRenderer.invoke('dataset:list', { projectId }),
   // ── Capture → dataset (Week 13) ──
