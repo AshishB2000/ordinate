@@ -356,6 +356,33 @@ async function main(): Promise<void> {
     el?.click();
   });
   await win.waitForTimeout(900);
+
+  // The empty state is the SHARED .ws-empty treatment, not a bespoke dashed box
+  // — the whole point of hoisting those classes. Asserted from a laid-out page:
+  // a glyph cluster that renders zero <svg> children, or an AI door that is not
+  // actually gated, both look fine to a DOM-presence check.
+  const vizEmpty = await win.evaluate(() => {
+    const box = document.getElementById('viz-empty');
+    const art = document.getElementById('viz-empty-art');
+    return {
+      shared: !!box && box.classList.contains('ws-empty'),
+      visible: !!box && box.offsetParent !== null,
+      glyphs: art ? art.querySelectorAll('svg').length : 0,
+      heading: (document.querySelector('#viz-empty .ws-empty-h')?.textContent || '').trim(),
+      aiDisabled: (document.getElementById('viz-empty-ai') as HTMLButtonElement | null)?.disabled,
+      hintShown: (document.getElementById('viz-empty-hint') as HTMLElement | null)?.hidden === false,
+      countHidden: (document.getElementById('viz-count') as HTMLElement | null)?.hidden,
+    };
+  });
+  ok('the Visuals empty state reuses the shared .ws-empty surface',
+     vizEmpty.shared && vizEmpty.visible && vizEmpty.heading === 'No visuals yet',
+     JSON.stringify(vizEmpty));
+  ok('…with a real chart-glyph cluster, not an empty box',
+     vizEmpty.glyphs >= 3, `${vizEmpty.glyphs} glyphs`);
+  ok('…the AI door gated + explained with no model, and the count chip hidden at zero',
+     vizEmpty.aiDisabled === true && vizEmpty.hintShown && vizEmpty.countHidden === true,
+     JSON.stringify(vizEmpty));
+
   await win.evaluate(() => (document.getElementById('viz-new-btn') as HTMLElement)?.click());
   await win.waitForTimeout(2000);
   const noProject = await win.evaluate(() => ({

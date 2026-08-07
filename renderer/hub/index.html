@@ -784,16 +784,42 @@
         <div class="viz-gallery" id="viz-gallery">
           <div class="viz-gallery-head">
             <div class="viz-gallery-copy">
-              <h2 class="viz-h">Visuals</h2>
+              <div class="viz-title-row">
+                <h2 class="viz-h">Visuals</h2>
+                <!-- Filled and shown by refreshVisualList; hidden at zero. -->
+                <span class="viz-count" id="viz-count" hidden></span>
+              </div>
               <p class="viz-sub">Saved charts you can drop into any analysis or dashboard.</p>
             </div>
             <button class="btn btn-primary" type="button" id="viz-new-btn">+ New visual</button>
           </div>
+
+          <!-- First-run hero. Same .ws-hero the Analyses section uses; its art
+               is a glyph cluster injected by visuals.ts (VIZ_ICONS), because
+               those SVGs are a renderer constant, not markup. -->
+          <div class="ws-hero" id="viz-hero" hidden>
+            <div class="ws-hero-copy">
+              <h3 class="ws-hero-h">One chart, saved once, used everywhere.</h3>
+              <p class="ws-hero-p">Pick a dataset, describe what you want to see or build it yourself, then reuse it across analyses and dashboards. Every number is computed by the app.</p>
+              <div class="ws-hero-actions">
+                <button class="btn btn-primary" type="button" id="viz-hero-new">+ New visual</button>
+                <button class="btn btn-ghost" type="button" id="viz-hero-dismiss">Dismiss</button>
+              </div>
+            </div>
+            <div class="ws-hero-art viz-glyph-art" id="viz-hero-art" aria-hidden="true"></div>
+          </div>
+
           <div class="viz-grid" id="viz-grid"></div>
-          <div class="viz-empty" id="viz-empty" hidden>
-            <h3 class="viz-empty-h">No visuals yet</h3>
-            <p class="viz-sub">Build a chart from a dataset and it shows up here.</p>
-            <button class="btn btn-primary" type="button" id="viz-empty-new-btn">+ New visual</button>
+
+          <div class="ws-empty" id="viz-empty" hidden>
+            <div class="ws-empty-art viz-glyph-art" id="viz-empty-art" aria-hidden="true"></div>
+            <h3 class="ws-empty-h">No visuals yet</h3>
+            <p class="ws-empty-p">A visual is one saved chart — build it once, then drop it into any analysis or dashboard, or export it on its own.</p>
+            <div class="ws-empty-actions">
+              <button class="btn btn-primary btn-lg" type="button" id="viz-empty-new-btn">+ New visual</button>
+              <button class="btn btn-lg" type="button" id="viz-empty-ai">✨ Start with AI</button>
+            </div>
+            <p class="viz-empty-hint" id="viz-empty-hint" hidden>Connect a model in Execution settings</p>
           </div>
         </div>
 

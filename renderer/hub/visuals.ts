@@ -103,6 +103,82 @@ function fillSelect(sel: HTMLSelectElement | null, items: Array<{ value: string;
   });
 }
 
+// ── The chart-glyph motif ────────────────────────────────────────────────────
+// The Analyses hero draws five CSS bars. Visuals is about 28 chart TYPES, so
+// its motif is a cluster of real chart glyphs instead — still no image asset,
+// still nothing to ship: VIZ_ICONS (renderResult.ts) is already in the bundle.
+//
+// Those SVG strings are the ONE innerHTML allowed in this file: a trusted
+// hand-written constant, never user or model input. Everything else is
+// textContent.
+const VIZ_ART_TYPES = ['column', 'line', 'donut', 'treemap'];
+// Which glyph reads as the bright one, mirroring how --4 is the tall bar in the
+// Analyses motif.
+const VIZ_ART_FOCUS = 1;
+
+// Disable the empty state's AI door when no model is configured, and say why.
+// Readiness comes from publicConfig.isReady — the one source the create popup
+// and the analysis wizard already ask, so there is no second definition of
+// "ready" that could disagree with them.
+async function refreshVizAiGate(): Promise<void> {
+  const btn = vizEl('viz-empty-ai') as HTMLButtonElement | null;
+  const hint = vizEl('viz-empty-hint');
+  if (!btn) return;
+  let ready = false;
+  try {
+    const st: any = await window.hub.getKeyStatus();
+    ready = !!(st && st.isReady);
+  } catch (_) {
+    ready = false;
+  }
+  btn.disabled = !ready;
+  if (hint) hint.hidden = ready;
+}
+
+// The five chart tokens from renderer/theme.css. Deliberately the SAME palette
+// the charts themselves draw with, so a card's tile colour and the chart it
+// opens are from one family rather than two.
+const VIZ_ACCENTS = ['--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5'];
+
+/**
+ * A stable colour for a chart type: same type, same colour, every render and
+ * every session. A random or index-based pick would reshuffle the grid whenever
+ * a visual was added or renamed, which is exactly the noise this is meant to
+ * avoid.
+ */
+function vizAccentFor(chartType: string): string {
+  let h = 0;
+  for (let i = 0; i < chartType.length; i += 1) {
+    h = (h * 31 + chartType.charCodeAt(i)) >>> 0;
+  }
+  return 'var(' + VIZ_ACCENTS[h % VIZ_ACCENTS.length] + ')';
+}
+
+// Mirrors the Analyses hero's dismissal: same localStorage scheme, its own key.
+const VIZ_HERO_KEY = 'vizHeroDismissed';
+function vizHeroDismissed(): boolean {
+  try {
+    return localStorage.getItem(VIZ_HERO_KEY) === '1';
+  } catch (_) {
+    return false; // private mode — show it rather than crash
+  }
+}
+
+// Fill every .viz-glyph-art host (hero + empty state) with the glyph cluster.
+// Idempotent: re-running replaces the children rather than appending.
+function paintVizGlyphArt(): void {
+  document.querySelectorAll('.viz-glyph-art').forEach((host) => {
+    host.innerHTML = '';
+    VIZ_ART_TYPES.forEach((type, i) => {
+      const cell = document.createElement('span');
+      cell.className = 'viz-glyph' + (i === VIZ_ART_FOCUS ? ' viz-glyph--focus' : '');
+      // Trusted static SVG constant — see the note above.
+      cell.innerHTML = VIZ_ICONS[type] || '';
+      host.appendChild(cell);
+    });
+  });
+}
+
 // ── Gallery (the default view: saved visuals as cards) ───────────────────────
 // Same name and same contract as the Week 7 list refresh — only the DOM it
 // produces changed, so workspace.selectSection and every save/delete/duplicate
@@ -124,6 +200,19 @@ async function refreshVisualList(): Promise<void> {
   grid.hidden = items.length === 0;
   if (empty) empty.hidden = items.length > 0;
   items.forEach((v) => grid.appendChild(makeVisualCard(v)));
+
+  // Count chip beside the heading — hidden at zero, where the empty state is
+  // already saying it.
+  const count = vizEl('viz-count');
+  if (count) {
+    count.hidden = items.length === 0;
+    count.textContent = items.length + (items.length === 1 ? ' visual' : ' visuals');
+  }
+  // First-run hero: only alongside real content, and only until dismissed —
+  // the same rule and the same storage key scheme the Analyses hero uses.
+  const hero = vizEl('viz-hero');
+  if (hero) hero.hidden = items.length === 0 || vizHeroDismissed();
+  paintVizGlyphArt();
 }
 
 // Flip between the gallery and the (now full-panel) builder. They are mutually
@@ -135,8 +224,9 @@ function showVizGallery(show: boolean): void {
 
 function makeVisualCard(v: any): HTMLElement {
   const id = String(v && v.id ? v.id : '');
+  const chartType = (v && v.chartType) ? String(v.chartType) : 'column';
   const card = document.createElement('div');
-  card.className = 'viz-card';
+  card.className = 'viz-card' + (v && v.favorite === true ? ' viz-card--fav' : '');
 
   // The whole card is ONE button, so a card is a single Tab stop. The star and
   // the ⋯ menu are siblings of it (nested buttons are invalid HTML) positioned
@@ -147,11 +237,16 @@ function makeVisualCard(v: any): HTMLElement {
 
   const tile = document.createElement('span');
   tile.className = 'viz-card-tile';
+  // Per-type accent, deterministic: the same chart type always gets the same
+  // colour, so a grid of cards reads as a palette instead of as noise. Set as a
+  // custom property from JS — element.style is fine under the hub's CSP; an
+  // inline style ATTRIBUTE in the HTML would not be.
+  tile.style.setProperty('--viz-accent', vizAccentFor(chartType));
   const glyph = document.createElement('span');
   glyph.className = 'viz-card-glyph';
   // The ONLY innerHTML here: VIZ_ICONS is a trusted static constant of
   // hand-written SVG in renderResult.ts, never user or model input.
-  glyph.innerHTML = VIZ_ICONS[v && v.chartType] || VIZ_ICONS.column;
+  glyph.innerHTML = VIZ_ICONS[chartType] || VIZ_ICONS.column;
   tile.appendChild(glyph);
 
   const name = document.createElement('span');
@@ -160,7 +255,7 @@ function makeVisualCard(v: any): HTMLElement {
 
   const meta = document.createElement('span');
   meta.className = 'viz-card-meta';
-  const typeLabel = (v && v.chartType && VIZ_LABELS[v.chartType]) || (v && v.chartType) || 'Chart';
+  const typeLabel = VIZ_LABELS[chartType] || chartType || 'Chart';
   meta.textContent = typeLabel + ' · ' + formatSidebarTime(v && v.updatedAt);
 
   body.appendChild(tile);
@@ -621,7 +716,11 @@ async function openNewVisualModal(opts: VizNewOpts = {}): Promise<VizNewChoice |
         selectedId = String(d.id);
         rowsHost.querySelectorAll('.vn-row').forEach((r: any) => r.setAttribute('aria-checked', 'false'));
         row.setAttribute('aria-checked', 'true');
-        showStep(2);
+        // "Start with AI" opened this with no dataset, so the choice made here
+        // IS the missing input — go straight to asking rather than back to the
+        // two doors the user already picked between.
+        if (opts.startAtSuggest) runSuggest();
+        else showStep(2);
       });
       rowsHost.appendChild(row);
     });
@@ -670,7 +769,7 @@ async function openNewVisualModal(opts: VizNewOpts = {}): Promise<VizNewChoice |
 
 // "+ New visual": ask first, then open the builder on the chosen dataset. A
 // suggestion is applied to the form and NEVER saved — the user still reviews it.
-async function handleNewVisual(): Promise<void> {
+async function handleNewVisual(opts: VizNewOpts = {}): Promise<void> {
   // Projects are demoted BY DESIGN: created implicitly, never picked, and there
   // is no project picker in the nav. So "Open a project first" was a dead end —
   // on a fresh install there are no projects and nothing on screen can make one.
@@ -679,7 +778,7 @@ async function handleNewVisual(): Promise<void> {
     showToast('Could not create a workspace to save this in.');
     return;
   }
-  const choice = await openNewVisualModal();
+  const choice = await openNewVisualModal(opts);
   if (!choice) return; // cancelled — nothing was created
   await openVisualBuilder(choice.datasetId);
   if (choice.kind === 'suggested') applySuggestedEncoding(choice.encoding, choice.chartType || '');
@@ -1003,11 +1102,32 @@ function suggestVisualName(encoding: any, chartType: string): string {
 
 // ── Boot wiring (once) ───────────────────────────────────────────────────────
 function initVisuals(): void {
-  // Two "+ New visual" buttons: the gallery header's and the empty state's.
-  ['viz-new-btn', 'viz-empty-new-btn'].forEach((btnId) => {
+  // Three "+ New visual" buttons — header, hero, empty state. Whichever is on
+  // screen runs the same handler, exactly as the Analyses section does with its
+  // three Create buttons.
+  ['viz-new-btn', 'viz-empty-new-btn', 'viz-hero-new'].forEach((btnId) => {
     const b = vizEl(btnId);
     if (b) b.addEventListener('click', () => handleNewVisual());
   });
+
+  // "Start with AI" is the same flow with the AI step opened first, not a
+  // second path — handleNewVisual owns resolving the project either way.
+  const emptyAi = vizEl('viz-empty-ai');
+  if (emptyAi) emptyAi.addEventListener('click', () => handleNewVisual({ startAtSuggest: true }));
+
+  const heroDismiss = vizEl('viz-hero-dismiss');
+  if (heroDismiss) {
+    heroDismiss.addEventListener('click', () => {
+      try { localStorage.setItem(VIZ_HERO_KEY, '1'); } catch (_) { /* private mode */ }
+      const hero = vizEl('viz-hero');
+      if (hero) hero.hidden = true;
+    });
+  }
+
+  // Gate the AI door on the SAME readiness the create popup asks (publicConfig
+  // .isReady). Done once at boot rather than per render: it cannot change
+  // without a settings round trip, which reloads this state anyway.
+  void refreshVizAiGate();
 
   // "← Back to visuals": leave the builder and repaint the gallery, so a delete
   // or a rename made while the builder was open shows immediately.

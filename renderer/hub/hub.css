@@ -5284,7 +5284,9 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .viz-gallery[hidden] { display: none; }
 .viz-gallery-head {
   display: flex;
-  align-items: flex-start;
+  /* baseline, so "+ New visual" sits on the same line as the Visuals heading
+     rather than being top-aligned against the two-line copy block. */
+  align-items: baseline;
   justify-content: space-between;
   gap: 16px;
 }
@@ -5295,10 +5297,11 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 }
 .viz-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 14px;
 }
 .viz-grid[hidden] { display: none; }
+
 .viz-card {
   position: relative; /* anchors the star + ⋯ overlays onto the tile */
 }
@@ -5309,85 +5312,160 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   align-items: stretch;
   gap: 2px;
   text-align: left;
-  padding: 0 0 10px;
+  padding: 0 0 11px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--r-md);
+  border-radius: var(--r-lg);
   cursor: pointer;
   overflow: hidden;
+  transition: border-color 140ms var(--ease), box-shadow 140ms var(--ease),
+    transform 140ms var(--ease);
 }
 .viz-card-body:hover {
-  border-color: var(--accent);
+  border-color: var(--border-2);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
+/* A card that lifts is decoration; a card that changes colour is the state.
+   Keep the second, drop the first, when motion is unwelcome. */
+@media (prefers-reduced-motion: reduce) {
+  .viz-card-body { transition: border-color 140ms var(--ease); }
+  .viz-card-body:hover { transform: none; }
+}
+/* A favourite reads as a group at a glance, without a badge. */
+.viz-card--fav .viz-card-body { border-color: var(--accent-line); }
+
 .viz-card-tile {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 104px;
-  margin-bottom: 8px;
-  background: var(--inset);
+  aspect-ratio: 16 / 10;
+  margin-bottom: 9px;
+  background: linear-gradient(160deg, var(--surface-2), var(--inset));
   border-bottom: 1px solid var(--border);
-  color: var(--muted);
+  /* The per-type accent is set from JS onto this element (--viz-accent); the
+     fallback keeps the tile sane if a type ever misses the map. */
+  color: var(--viz-accent, var(--accent));
 }
-.viz-card-body:hover .viz-card-tile { color: var(--accent); }
 /* VIZ_ICONS ships a 13px SVG for the chip row; the card wants it big. */
 .viz-card-glyph svg {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
 }
 .viz-card-name {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-strong);
   padding: 0 12px;
+  /* One line: a two-line name would make neighbouring cards different heights
+     and the grid would stop reading as a grid. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .viz-card-meta {
-  font-size: 11px;
-  color: var(--muted);
+  font-size: 11.5px;
+  color: var(--text-dim);
   padding: 0 12px;
 }
+
+/* Hover-revealed controls. They must stay KEYBOARD reachable, so
+   :focus-visible forces them back to opacity 1 — otherwise tabbing through the
+   grid moves focus onto something invisible. */
 .viz-card-star,
 .viz-card-menu {
   position: absolute;
-  top: 6px;
-  width: 24px;
-  height: 24px;
+  top: 8px;
+  width: 26px;
+  height: 26px;
   line-height: 1;
   font-size: 13px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-faint);
-  background: var(--surface);
+  color: var(--muted);
+  /* A frosted chip over the tile. Derived from --surface rather than a literal
+     white so it is the right chip in BOTH themes — a hardcoded rgba(255,255,255)
+     reads as a glare spot on the dark tile gradient. */
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  backdrop-filter: blur(6px);
   border: 1px solid var(--border);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-full);
   cursor: pointer;
+  opacity: 0;
+  transition: opacity 140ms var(--ease), color 140ms var(--ease),
+    border-color 140ms var(--ease);
 }
-.viz-card-star { left: 6px; }
-.viz-card-menu { right: 6px; }
+.viz-card-star { left: 8px; }
+.viz-card-menu { right: 8px; }
+.viz-card:hover .viz-card-star,
+.viz-card:hover .viz-card-menu,
+.viz-card:focus-within .viz-card-star,
+.viz-card:focus-within .viz-card-menu,
+.viz-card-star:focus-visible,
+.viz-card-menu:focus-visible { opacity: 1; }
+/* A favourite is state, not chrome — it stays visible with nothing hovered. */
+.viz-card-star[aria-pressed='true'] {
+  opacity: 1;
+  color: var(--accent);
+  border-color: var(--accent-line);
+}
 .viz-card-star:hover:not(:disabled),
 .viz-card-menu:hover:not(:disabled) {
   color: var(--accent);
   border-color: var(--accent);
 }
 .viz-card-star:disabled { cursor: default; }
-.viz-card-star[aria-pressed='true'] { color: var(--warn); }
-.viz-empty {
+
+/* ── The chart-glyph motif (hero + empty state) ──
+   The Analyses sections draw five CSS bars; Visuals is about chart TYPES, so it
+   shows real VIZ_ICONS glyphs instead. Overlapped so they read as one cluster
+   rather than a toolbar. */
+.viz-glyph-art {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  gap: 0;
+}
+.viz-glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-line);
+}
+.viz-glyph + .viz-glyph { margin-left: -6px; }
+.viz-glyph svg {
+  width: 28px;
+  height: 28px;
+}
+.viz-glyph--focus { color: var(--accent); }
+/* On the gradient hero the same cluster is white-on-colour, mirroring how --4
+   is the bright bar in the Analyses motif. */
+.ws-hero .viz-glyph { color: rgba(255, 255, 255, 0.42); }
+.ws-hero .viz-glyph--focus { color: rgba(255, 255, 255, 0.82); }
+.ws-hero .viz-glyph svg { width: 34px; height: 34px; }
+
+/* ── Section header ── */
+.viz-title-row {
+  display: flex;
+  align-items: baseline;
   gap: 8px;
-  padding: 32px;
-  border: 1px dashed var(--border-2);
-  border-radius: var(--r-md);
 }
-.viz-empty[hidden] { display: none; }
-.viz-empty-h {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-strong);
-  margin: 0;
+.viz-count {
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border-radius: var(--r-full);
+  padding: 2px 8px;
+  white-space: nowrap;
 }
+.viz-count[hidden] { display: none; }
+
+.viz-empty-hint {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.viz-empty-hint[hidden] { display: none; }
 
 /* ── "+ New visual" popup (cloned from #viz-new-tpl) ── */
 .ws-modal.vn-modal {
