@@ -6045,6 +6045,24 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
    `.dash-list-open` and `.dash-list-badge` are SHARED with the Dashboards list,
    which is still a stacked list — restyling them globally would silently
    re-lay-out that section too. */
+.an-list-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.an-list-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+/* The count rides in the heading, so it must not push itself to the far right
+   the way .ws-badge does in a flex header. */
+.an-count { margin-left: 8px; vertical-align: middle; }
+.an-count[hidden] { display: none; }
+
+.ws-hero,
 .an-hero {
   display: flex;
   align-items: center;
@@ -6056,6 +6074,7 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   color: #fff;
   overflow: hidden;
 }
+.ws-hero[hidden],
 .an-hero[hidden] { display: none; }
 .an-hero-copy { max-width: 640px; }
 .an-hero-h {
@@ -6244,7 +6263,8 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   white-space: nowrap;
 }
 .an-status--published { background: var(--ok-soft); color: var(--ok); }
-.an-status--draft { background: var(--surface-3); color: var(--muted); }
+.an-status--dirty { background: var(--warn-soft); color: var(--warn); }
+.an-status--draft { background: var(--surface-2); color: var(--muted); }
 
 .an-empty {
   display: flex;

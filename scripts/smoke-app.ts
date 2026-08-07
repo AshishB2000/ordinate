@@ -2316,8 +2316,11 @@ async function main(): Promise<void> {
   });
   ok('the analysis is listed with its sheet count and publish state', !!anRow?.found,
      anRow ? anRow.text : 'not found');
-  ok('and the list flags unpublished changes', anRow?.badge === 'Unpublished changes',
-     anRow?.badge || '(none)');
+  // The drifted state IS the status pill now — it used to be a second badge
+  // beside the name while the pill said "Published", two controls for one fact.
+  ok('and the list flags unpublished changes', anRow?.status === 'Unpublished changes',
+     anRow?.status || '(none)');
+  ok('…in the pill, not a second badge on the name', anRow?.badge === '');
   ok('a populated page shows the table and hides the empty state',
      !!anRow && anRow.tableVisible && !anRow.emptyVisible, JSON.stringify({
        table: anRow?.tableVisible, empty: anRow?.emptyVisible }));
@@ -2328,7 +2331,8 @@ async function main(): Promise<void> {
      JSON.stringify(anRow?.headers));
   ok('and every row cell lines up under its column label', !!anRow && anRow.aligned,
      `cols=${JSON.stringify(anRow?.colLefts)} cells=${JSON.stringify(anRow?.cellLefts)}`);
-  ok('the row carries a status pill', /Published/.test(anRow?.status || ''), anRow?.status || '(none)');
+  ok('the row carries a status pill', /^(Draft|Published|Unpublished changes)$/.test(anRow?.status || ''),
+     anRow?.status || '(none)');
 
   // The ⋯ row menu. Rename and Delete used to be two bare glyphs in the row; now
   // they live behind this. A popup is appended to <body> and positioned with

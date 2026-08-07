@@ -950,11 +950,24 @@
          when a dashboard is. One editor, one set of behaviour, two hosts. -->
     <section class="ws-panel" id="ws-analyses" data-section="analyses" hidden>
       <div class="dash-panel" id="an-list-view">
-        <h2 class="viz-h">Analyses</h2>
+        <!-- The section header, matching Data and Visuals: what this is (with
+             how many), then what you can do, right-aligned. The two actions
+             lived inside the table card before, which put them below the hero
+             and above the column labels — a place nothing else in the app puts
+             its primary action. -->
+        <div class="an-list-head">
+          <div class="an-list-head-text">
+            <h2 class="viz-h">Analyses<span class="ws-badge an-count" id="an-count" hidden></span></h2>
+          </div>
+          <div class="an-list-head-actions">
+            <button class="btn" type="button" id="an-draft-btn">✨ AI draft analysis</button>
+            <button class="btn btn-primary" type="button" id="an-new-btn">Create analysis</button>
+          </div>
+        </div>
         <!-- Dismissible intro. Explains the analysis/dashboard split ONCE; the
              state lives in localStorage, so dismissing it is permanent per
              machine and the list gets the whole page back. -->
-        <div class="an-hero" id="an-hero" hidden>
+        <div class="an-hero ws-hero" id="an-hero" hidden>
           <div class="an-hero-copy">
             <h3 class="an-hero-h">Build an analysis, publish a dashboard</h3>
             <p class="an-hero-p">Lay out sheets of charts, metrics and text over your datasets, with analysis-wide filters. Publishing takes a snapshot people open read-only — every number still computed by the app, from live data.</p>
@@ -971,12 +984,8 @@
             <span class="an-hero-bar an-hero-bar--5"></span>
           </div>
         </div>
-        <div class="an-table" id="an-table" hidden>
-          <div class="an-table-head">
-            <button class="btn" type="button" id="an-draft-btn">✨ AI draft analysis</button>
-            <button class="btn btn-primary" type="button" id="an-new-btn">Create analysis</button>
-          </div>
-          <div class="an-table-cols">
+        <div class="an-table ws-table" id="an-table" hidden>
+          <div class="an-table-cols ws-table-cols">
             <span>Name</span>
             <span>Sheets</span>
             <span>Status</span>
@@ -988,15 +997,15 @@
         <!-- Empty state. Two doors, both offered: start from nothing, or describe
              what you want and let a model propose the structure — reviewed before
              anything is created. -->
-        <div class="an-empty" id="an-list-empty" hidden>
+        <div class="an-empty ws-empty" id="an-list-empty" hidden>
           <div class="an-empty-art" aria-hidden="true">
             <span class="an-hero-bar an-hero-bar--2"></span>
             <span class="an-hero-bar an-hero-bar--4"></span>
             <span class="an-hero-bar an-hero-bar--3"></span>
           </div>
-          <h3 class="an-empty-h">No analyses yet</h3>
-          <p class="an-empty-p">An analysis is where you build: sheets of charts, metrics and text over your datasets. Start from a blank sheet, or describe what you want and let the AI draft the sheets, charts and calculated fields — you review all of it before anything is created.</p>
-          <div class="an-empty-actions">
+          <h3 class="an-empty-h ws-empty-h">No analyses yet</h3>
+          <p class="an-empty-p ws-empty-p">An analysis is where you build: sheets of charts, metrics and text over your datasets. Start from a blank sheet, or describe what you want and let the AI draft the sheets, charts and calculated fields — you review all of it before anything is created.</p>
+          <div class="an-empty-actions ws-empty-actions">
             <button class="btn btn-primary btn-lg" type="button" id="an-empty-new">Create analysis</button>
             <button class="btn btn-lg" type="button" id="an-empty-draft">✨ Get started with AI</button>
           </div>

@@ -63,6 +63,16 @@ async function refreshAnalysisList(): Promise<void> {
   if (!Array.isArray(items)) items = [];
   items.forEach((a) => list.appendChild(makeAnListItem(a)));
   anShowList(items.length);
+  anRenderCount(items.length);
+}
+
+/** How many analyses, beside the heading. Hidden at zero — the empty state
+ *  already says there are none, and "0" next to a title reads as an error. */
+function anRenderCount(n: number): void {
+  const chip = dashEl('an-count');
+  if (!chip) return;
+  chip.hidden = n === 0;
+  chip.textContent = String(n);
 }
 
 // Refresh the summaries without tearing down an open editor.
@@ -76,6 +86,7 @@ async function refreshAnalysisListKeepEditor(): Promise<void> {
     list.innerHTML = '';
     items.forEach((a) => list.appendChild(makeAnListItem(a)));
     anShowList(items.length);
+    anRenderCount(items.length);
   } catch (_) { /* ignore */ }
 }
 
@@ -98,7 +109,7 @@ function analysisHasUnpublishedChanges(a: any): boolean {
 // would say "Me" on every row forever.
 function makeAnListItem(a: any): HTMLElement {
   const row = document.createElement('div');
-  row.className = 'dash-list-item';
+  row.className = 'dash-list-item ws-row';
 
   const open = document.createElement('button');
   open.type = 'button';
@@ -107,39 +118,39 @@ function makeAnListItem(a: any): HTMLElement {
   nameRow.className = 'dash-list-name';
   nameRow.textContent = a && a.name ? String(a.name) : 'Untitled analysis';
   open.appendChild(nameRow);
-  const dirty = analysisHasUnpublishedChanges(a);
-  if (dirty) {
-    // Stays a sibling of the name, not a child of it, so the name can ellipsis
-    // without taking the badge with it.
-    const badge = document.createElement('span');
-    badge.className = 'dash-list-badge dash-list-badge--dirty';
-    badge.textContent = 'Unpublished changes';
-    open.appendChild(badge);
-  }
   open.addEventListener('click', () => openAnalysis(String(a.id)));
 
   const sheets = a && typeof a.sheetCount === 'number' ? a.sheetCount : 1;
   const sheetCell = document.createElement('span');
-  sheetCell.className = 'an-cell';
+  sheetCell.className = 'an-cell ws-cell';
   sheetCell.textContent = String(sheets);
 
-  // Three states, and the pill says which: published & current, published &
-  // drifted, never published. The dirty case already carries a badge on the
-  // name, so here it reads as the plain published time.
+  // ONE pill, three states — published & current, published & drifted, never
+  // published — the same three the editor's own pill shows, from the same
+  // analysisHasUnpublishedChanges. The drifted case used to be a second badge
+  // beside the name while the pill said "Published", which is two controls
+  // for one fact and left the pill quietly wrong.
   const statusCell = document.createElement('span');
-  statusCell.className = 'an-cell';
+  statusCell.className = 'an-cell ws-cell';
   const pill = document.createElement('span');
-  if (a && a.lastPublishedAt) {
-    pill.className = 'an-status an-status--published';
-    pill.textContent = 'Published ' + formatSidebarTime(a.lastPublishedAt);
-  } else {
+  if (!a || !a.lastPublishedAt) {
     pill.className = 'an-status an-status--draft';
-    pill.textContent = 'Not published';
+    pill.textContent = 'Draft';
+    pill.title = 'Not published yet.';
+  } else if (analysisHasUnpublishedChanges(a)) {
+    pill.className = 'an-status an-status--dirty';
+    pill.textContent = 'Unpublished changes';
+    pill.title = 'Last published ' + formatSidebarTime(a.lastPublishedAt)
+      + ' — republish to update the dashboard.';
+  } else {
+    pill.className = 'an-status an-status--published';
+    pill.textContent = 'Published';
+    pill.title = 'Published ' + formatSidebarTime(a.lastPublishedAt) + ' · up to date.';
   }
   statusCell.appendChild(pill);
 
   const updCell = document.createElement('span');
-  updCell.className = 'an-cell';
+  updCell.className = 'an-cell ws-cell';
   updCell.textContent = formatSidebarTime(a && a.updatedAt);
 
   // One ⋯ trigger, opening the shared row menu from projects.ts. Rename and
