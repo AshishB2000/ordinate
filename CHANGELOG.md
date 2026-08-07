@@ -10,6 +10,20 @@ All notable changes to Ordinate are documented here. Format based on
 ## [Unreleased]
 
 ### Added
+- **Datasets can be refreshed.** A CSV, an Excel sheet, a URL, a database connection and a combined
+  dataset can all be re-fetched from where they came from — not just connections, as before. A
+  refresh keeps your prepare pipeline: the fresh rows become the new source and every step is
+  re-applied.
+- **Every dataset says how old its data is.** The Data section shows `Data as of <time>` per dataset
+  with a `↻ Refresh` button, plus `Refresh all`. A dataset with no re-fetchable source (pasted text,
+  a screenshot capture, or anything imported before this release) says `Imported <time>` and
+  explains that re-importing the file makes it refreshable.
+- **Analyses and published dashboards show their data's age** in the header, taken from the *oldest*
+  of the datasets they read — a sheet is only as fresh as its stalest input — with a
+  `↻ Refresh data` action that refreshes exactly those datasets and redraws.
+- **A failed refresh never touches your data.** If the file has moved or the source is unreachable,
+  the stored table is left exactly as it was, the reason is shown inline next to the dataset, and a
+  warning dot stays until the next successful refresh.
 - **Visuals is a gallery.** Saved visuals are cards showing the chart type, name and last-updated
   time, instead of a list of rows. Each card has a star and a `⋯` menu: Open, Rename, Duplicate,
   Add to analysis, Export, Delete.
