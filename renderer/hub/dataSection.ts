@@ -254,7 +254,13 @@ function initDataTabs(): void {
     const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
     if (keys.indexOf(e.key) < 0) return;
     e.preventDefault();
-    const i = DX_TABS.findIndex((t) => dxEl(t.tab)?.getAttribute('aria-selected') === 'true');
+    // Anchor on the FOCUSED tab, falling back to the selected one. Selection
+    // follows focus here, so the two normally agree — but focus can be moved
+    // into the strip on its own (a click on the strip, a script), and moving
+    // from the selected tab would then jump somewhere the user is not.
+    const active = document.activeElement as HTMLElement | null;
+    let i = DX_TABS.findIndex((t) => active && active.id === t.tab);
+    if (i < 0) i = DX_TABS.findIndex((t) => dxEl(t.tab)?.getAttribute('aria-selected') === 'true');
     const at = i < 0 ? 0 : i;
     let next = at;
     if (e.key === 'ArrowLeft') next = (at - 1 + DX_TABS.length) % DX_TABS.length;

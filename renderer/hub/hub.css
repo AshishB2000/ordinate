@@ -4992,6 +4992,24 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .ds-preview[hidden],
 .ds-save-bar[hidden] { display: none; }
 
+/* Eighth element caught by the same trap: .ds-explorer sets `display`, so
+   `hidden` alone left it on screen — Back to datasets gave the list back with
+   the explorer still under it. */
+.ds-explorer[hidden] { display: none; }
+
+/* Narrow windows: drop "Data as of" rather than let the Action column fall off
+   the edge of the card. The freshness of the open dataset is in the explorer
+   header, and a clipped delete button is worse than a column you can get to by
+   widening. */
+@media (max-width: 1180px) {
+  .ds-saved-cols,
+  .ds-saved-item {
+    grid-template-columns: minmax(140px, 1fr) 78px 104px 116px;
+  }
+  .ds-saved-cols span:nth-child(4),
+  .ds-saved-item .ds-fresh { display: none; }
+}
+
 /* ── List view ↔ explorer ────────────────────────────────────────────────────
    One at a time. `is-exploring` is set by dataSection.ts from #ds-explorer's own
    `hidden`, so this is a view of that state rather than a second copy of it. */

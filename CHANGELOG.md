@@ -52,12 +52,28 @@ All notable changes to Ordinate are documented here. Format based on
   you: picking one opens the builder, and you still review and save it.
 
 ### Changed
+- **The Data section is three jobs in three places.** It was one scroll of twelve blocks that
+  interleaved importing, exploring and preparing, with the saved datasets — the thing the section is
+  for — last, under all of it. Now: your datasets are a table at the top (Name, Rows, Source, Data as
+  of), importing is a dialog, and opening a dataset takes the whole panel with a `← Back to datasets`,
+  the same way the Visuals gallery and builder swap.
+- **A dataset's views are tabs: Data, Prepare and Quality.** Quality used to be a strip above the
+  toolbar that nobody scrolled to, and says "no quality issues found" when there is nothing to
+  report. Prepare is a workbench — the steps on the left, the live grid on the right — so you can
+  see what a step does to your data while you edit it.
+- **Combine datasets moved out of Prepare** and into its own action in the Data header. It creates a
+  new dataset rather than transforming one, so it never belonged at the bottom of a pipeline panel,
+  and it no longer requires opening some other dataset first to find it.
 - Renamed the project from Screenchart to Ordinate. Screenchart is now the name of one data source
   (screenshot capture) rather than the product. The application bundle and `userData` directory are
   unchanged pending a migration.
 - The AI chart suggestion may now propose any of the 25 chart types the app can draw, up from seven.
 
 ### Fixed
+- The Data section's paste box, sheet picker, warnings, preview, save bar, prepare panel and quality
+  strip were on screen permanently — each set a CSS `display`, which overrides the `hidden`
+  attribute, so they never went away no matter what the app asked for. Closing an open dataset also
+  left it on screen under the list, for the same reason.
 - First-run capture no longer shows a redundant "Capture failed" card window before macOS
   Screen Recording permission is granted.
 - Multi-step modal dialogs no longer let the keyboard focus trap land on a control in a hidden step,
