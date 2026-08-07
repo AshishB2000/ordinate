@@ -303,10 +303,29 @@ function runSourceAction(kind: string): void {
     if (box) { box.scrollIntoView({ block: 'center' }); box.focus(); }
     return;
   }
+  if (kind === 'capture') {
+    // Screenshot is a CAPTURE, not a connector. It used to fall off the end of
+    // this function and do nothing at all: the sidebar entry was labelled,
+    // clickable, and inert, and the only working ways in were the ⌘⌥S hotkey and
+    // the "New capture" button. doCapture() (hub.ts) is exactly what that button
+    // runs; the readiness gate lives in main, which opens Execution settings
+    // instead of capturing when no model is configured.
+    if (typeof doCapture === 'function') doCapture();
+    return;
+  }
   if (kind === 'postgres' || kind === 'url' || kind === 'mysql' || kind === 'catalog') {
-    // Open the connect panel — it IS the connectors:catalog picker now, so the
-    // server shortlist entries and "More…" all land on the same searchable
-    // catalog (connections.ts owns which connector is preselected/searched).
+    // The connect panel IS the connectors:catalog picker. A NAMED entry
+    // preselects its connector and lands on that form; only "More…"
+    // (kind: 'catalog') opens the full grid. Before this, all four opened the
+    // same 35-source grid — so clicking "PostgreSQL" made you go find
+    // PostgreSQL, which is the one thing the shortlist exists to save.
+    const id = kind === 'catalog' ? '' : kind;
+    if (typeof openConnPanel === 'function') {
+      void openConnPanel(id);
+      return;
+    }
+    // The panel's own button is the fallback if connections.ts has not loaded —
+    // it opens the picker, which is worse than a preselect but never nothing.
     const open = document.getElementById('conn-connect-btn') as HTMLButtonElement | null;
     if (open) open.click();
   }

@@ -457,6 +457,68 @@ async function main(): Promise<void> {
   const aiSection = await homeSection();
   ok('home: the AI tool button opens the AI section', aiSection === 'ai', `section=${aiSection}`);
 
+  // ── The Connect shortcuts must go where their LABEL says ─────────────────
+  // Every one of these was clickable and drawn correctly — the logo assertions
+  // above pass on the broken build — while three of them went somewhere else:
+  // PostgreSQL and MySQL both opened the undifferentiated 35-source grid, and
+  // Screenshot fell off the end of runSourceAction and did NOTHING at all. A
+  // labelled, enabled, inert control is exactly the failure a rendering check
+  // cannot see.
+  const openSource = async (kind: string): Promise<void> => {
+    await win.click('.as-nav-item[data-section="home"]', { timeout: 4000 }).catch(() => {});
+    await win.waitForTimeout(300);
+    await win.click(`[data-source="${kind}"]`, { timeout: 4000 }).catch(() => {});
+    await win.waitForTimeout(1500);
+  };
+  const chosenConnector = () =>
+    win.evaluate(() => {
+      const vis = (el: Element | null): boolean => !!el && (el as HTMLElement).offsetParent !== null;
+      return {
+        form: vis(document.getElementById('conn-form')),
+        picker: vis(document.getElementById('conn-picker')),
+        name: (document.getElementById('conn-chosen-name')?.textContent || '').trim(),
+      };
+    });
+
+  await openSource('postgres');
+  const pg = await chosenConnector();
+  ok('home: the PostgreSQL shortcut opens the PostgreSQL form, not the whole catalog',
+     pg.form && !pg.picker && /postgres/i.test(pg.name), JSON.stringify(pg));
+
+  await openSource('mysql');
+  const my = await chosenConnector();
+  ok('home: …and MySQL opens MySQL', my.form && !my.picker && /mysql/i.test(my.name), JSON.stringify(my));
+
+  // "More…" is the one entry that SHOULD show the full grid.
+  await win.click('.as-nav-item[data-section="home"]', { timeout: 4000 }).catch(() => {});
+  await win.waitForTimeout(300);
+  await win.click('#as-connect-more', { timeout: 4000 }).catch(() => {});
+  await win.waitForTimeout(1500);
+  const allSrc = await chosenConnector();
+  ok('home: More… still opens the full source picker', allSrc.picker && !allSrc.form, JSON.stringify(allSrc));
+
+  // Screenshot is a CAPTURE, not a connector — and this asserts the REAL round
+  // trip rather than a stub. `window.hub` is a contextBridge object whose
+  // members are immutable, so monkey-patching `takeScreenshot` silently does
+  // nothing and the assertion would read 0 forever.
+  //
+  // Instead, lean on the gate: `config.executionReady()` is false on this
+  // throwaway profile (no CLI, no key), so main answers a capture request by
+  // opening Execution settings rather than starting one. That panel appearing
+  // proves the click reached main. It also means no overlay opens mid-suite.
+  await openSource('capture');
+  await win.waitForTimeout(1200);
+  const capGate = await win.evaluate(() => {
+    // NOT offsetParent: settings is a FIXED full-window overlay, and
+    // offsetParent is null for position:fixed even when it fills the screen.
+    // Measure the box instead.
+    const p = document.getElementById('settings-panel') as HTMLElement | null;
+    const r = p ? p.getBoundingClientRect() : null;
+    return { settingsOpen: !!p && !p.hidden && !!r && r.width > 0 && r.height > 0 };
+  });
+  ok('home: the Screenshot shortcut reaches main (which gates it to Execution settings)',
+     capGate.settingsOpen, JSON.stringify(capGate));
+
   // Back to Home so the project-open flow below starts from a clean state.
   await win.click('.as-nav-item[data-section="home"]', { timeout: 4000 }).catch(() => {});
   await win.waitForTimeout(300);

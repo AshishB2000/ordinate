@@ -162,11 +162,23 @@ function connVal(id: string): string {
 }
 
 // ── Panel open/close ─────────────────────────────────────────────────────────
-async function openConnPanel(): Promise<void> {
+/**
+ * Open the connect panel, optionally landing straight on one connector's form.
+ *
+ * `preselectId` is what makes the sidebar's PostgreSQL / MySQL shortcuts mean
+ * anything: without it every one of them opened the same 35-source grid, so a
+ * named entry saved the user no step at all — they still had to find their
+ * database in the catalog. An unknown id falls back to the picker rather than
+ * failing, because the catalog is resolved from the live registry and a
+ * shortcut must never be able to open a dead panel.
+ */
+async function openConnPanel(preselectId?: string): Promise<void> {
   connSetError('');
   connShow('conn-panel', true);
   await loadConnCatalog();
-  connShowPicker();
+  const pick = preselectId ? connDefById(preselectId) : null;
+  if (pick) connSelectConnector(pick);
+  else connShowPicker();
   await refreshConnectionList();
 }
 
