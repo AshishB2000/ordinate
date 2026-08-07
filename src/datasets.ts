@@ -18,6 +18,7 @@ import { coerceValue } from './parse';
 import * as projects from './projects';
 import * as parquetStore from './parquetStore';
 import * as transforms from './transforms';
+import { runResidentPipeline } from './pipelineDuck';
 import type { TableData, TransformStep, ApplyResult } from './transforms';
 
 /**
@@ -724,7 +725,21 @@ export async function updateSteps(
     columns: existing.columns.map((c) => ({ ...c })),
     rows: existing.rows.map((r) => r.slice()),
   };
-  const output = transforms.applyPipeline(source, steps);
+
+  // Resident first: fold the steps over <id>.source.parquet in place. Only
+  // possible once a source Parquet exists — on the FIRST edit the source is
+  // being snapshotted from memory here and there is no file yet, so that call
+  // takes the fold and the file appears on persist.
+  //
+  // This skips the fold, NOT the read: `existing` above is already hydrated,
+  // because persist() rewrites source.parquet from memory and the IPC handler
+  // returns the whole dataset (source.rows included) to the renderer. Removing
+  // the read means changing both of those contracts — see the PR.
+  const residentReady = existing.source !== undefined && parquetStore.isSupported();
+  const output =
+    (residentReady
+      ? runResidentPipeline(sourceParquetPath(projectId, id), source.columns, steps)
+      : null) ?? transforms.applyPipeline(source, steps);
 
   const updated: Dataset = {
     ...existing,

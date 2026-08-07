@@ -95,9 +95,18 @@ export function isSupported(): boolean {
  * literal with `'` doubled; backslash is not an escape character in DuckDB
  * string literals, so nothing else needs escaping.
  */
-export function relationSql(filePath: string): string {
+export function relationSql(
+  filePath: string,
+  opts: { fileRowNumber?: boolean } = {},
+): string {
   assertPath(filePath);
-  return `read_parquet('${filePath.replace(/'/g, "''")}')`;
+  // `file_row_number` exposes the 0-based position of each row IN THE FILE.
+  // The prepare pipeline needs it because a bare GROUP BY does not preserve
+  // first-seen order and whether it reorders is machine-dependent, so every
+  // generated ORDER BY ends on that ordinal. Off by default: it is an extra
+  // column, and readers that only want cells should not pay for it.
+  const args = opts.fileRowNumber ? ', file_row_number=true' : '';
+  return `read_parquet('${filePath.replace(/'/g, "''")}'${args})`;
 }
 
 /**
