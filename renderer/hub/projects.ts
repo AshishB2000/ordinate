@@ -326,11 +326,16 @@ function runSourceAction(kind: string): void {
     if (typeof selectSection === 'function') selectSection('datasets'); // workspace.ts
   }
 
+  // Importing is a DIALOG now (dataSection.ts), and both of these controls live
+  // inside it — acting on them directly would target hidden elements, which is
+  // the same failure the selectSection() call above exists to prevent.
   if (kind === 'file') {
-    if (typeof handleImportFile === 'function') handleImportFile(); // datasets.ts
+    if (typeof openImportDialog === 'function') openImportDialog('file');
+    else if (typeof handleImportFile === 'function') handleImportFile(); // datasets.ts
     return;
   }
   if (kind === 'paste') {
+    if (typeof openImportDialog === 'function') openImportDialog('paste');
     const box = document.getElementById('ds-paste-input') as HTMLTextAreaElement | null;
     if (box) { box.scrollIntoView({ block: 'center' }); box.focus(); }
     return;

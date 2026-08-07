@@ -4857,83 +4857,355 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   border-radius: 6px;
   box-sizing: border-box;
 }
-.ds-saved {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border-top: 1px solid var(--border);
-  padding-top: 16px;
-}
-.ds-saved-h {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-strong);
-  margin: 0;
-}
+/* ── The saved-dataset list ──────────────────────────────────────────────────
+   The section's CONTENT, and now its first block. It is the shared `.ws-table`
+   (see the list-table rules above); everything here is the column TEMPLATE and
+   the parts of a row that are specific to a dataset. */
+.ds-saved { padding: 0; }
 .ds-saved-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+}
+/* The template, shared by the header labels and every row:
+   Name · Rows · Source · Data as of · Action. */
+.ds-saved-cols,
+.ds-saved-item {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) 90px 116px minmax(150px, 200px) 132px;
+  align-items: center;
+  gap: 12px;
 }
 .ds-saved-item {
-  display: flex;
-  align-items: stretch;
-  gap: 6px;
-  /* Wraps so .ds-refresh-status takes a full-width line of its own beneath the
-     controls rather than being squeezed in beside them. */
-  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  padding: 2px 10px;
 }
+.ds-saved-item:last-child { border-bottom: 0; }
+.ds-saved-item:hover { background: var(--surface-2); }
+/* The name cell IS the click target — a link-like control, because the row now
+   carries the border and the padding. */
 .ds-saved-open {
-  flex: 1;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
   text-align: left;
-  padding: 8px 12px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  padding: 11px 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
   cursor: pointer;
 }
-.ds-saved-open:hover {
-  border-color: var(--accent);
-}
+.ds-saved-open:hover .ds-saved-name { color: var(--accent); }
 .ds-saved-name {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.ds-saved-meta {
+/* The Source column: a small badge, so a kind is recognisable without reading. */
+.ds-source-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--border-2, var(--border));
+  border-radius: 999px;
+  background: var(--bg);
   font-size: 11px;
-  color: var(--muted);
+  font-weight: 500;
+  color: var(--text);
+}
+.ds-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
 }
 .ds-saved-del {
-  padding: 0 10px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  padding: 0 8px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm, 6px);
   cursor: pointer;
-  color: var(--muted);
+  color: var(--text-dim);
 }
 .ds-saved-del:hover {
   border-color: #dc2626;
   color: #dc2626;
 }
-.ds-saved-empty {
+
+/* ── The section header, and the empty state ── */
+.ds-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.ds-head-text { min-width: 0; }
+.ds-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.ds-head-actions .btn[hidden] { display: none; }
+/* A real empty state, not a bare line of grey text: what is missing, why it
+   matters, and the two ways to fix it. */
+.ws-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 24px;
+  text-align: center;
+}
+.ws-empty[hidden] { display: none; }
+.ws-empty-h {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-strong);
+  margin: 0;
+}
+.ws-empty-p {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+  max-width: 46ch;
+}
+.ws-empty-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+/* The column labels describe rows; with no rows they describe nothing. */
+.ds-saved:has(#ds-saved-empty:not([hidden])) .ds-saved-cols { display: none; }
+
+/* `hidden` has to actually hide. Every one of these sets `display`, which
+   overrides the UA stylesheet's `[hidden] { display: none }` — so the paste box,
+   the sheet picker, the warnings, the preview and the save bar were on screen
+   PERMANENTLY, whatever datasets.ts set `.hidden` to. That is a good part of why
+   this section read as one long pile of blocks, and the import dialog's two-step
+   flow depends on the attribute working. */
+.ds-paste-wrap[hidden],
+.ds-sheet-wrap[hidden],
+.ds-warnings[hidden],
+.ds-preview[hidden],
+.ds-save-bar[hidden] { display: none; }
+
+/* Eighth element caught by the same trap: .ds-explorer sets `display`, so
+   `hidden` alone left it on screen — Back to datasets gave the list back with
+   the explorer still under it. */
+.ds-explorer[hidden] { display: none; }
+
+/* Narrow windows: drop "Data as of" rather than let the Action column fall off
+   the edge of the card. The freshness of the open dataset is in the explorer
+   header, and a clipped delete button is worse than a column you can get to by
+   widening. */
+@media (max-width: 1180px) {
+  .ds-saved-cols,
+  .ds-saved-item {
+    grid-template-columns: minmax(140px, 1fr) 78px 104px 116px;
+  }
+  .ds-saved-cols span:nth-child(4),
+  .ds-saved-item .ds-fresh { display: none; }
+}
+
+/* ── List view ↔ explorer ────────────────────────────────────────────────────
+   One at a time. `is-exploring` is set by dataSection.ts from #ds-explorer's own
+   `hidden`, so this is a view of that state rather than a second copy of it. */
+.ds-panel.is-exploring .ds-list-view { display: none; }
+
+/* The explorer's header: Back, then what this dataset IS (name + source), then
+   how old its data is and the way to re-fetch it. */
+.ds-explorer-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ds-explorer-ident {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.ds-explorer-ident .ds-explorer-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-explorer-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+.ds-explorer-meta .btn[hidden],
+.ds-explorer-ident .ds-source-badge[hidden] { display: none; }
+.ds-back { flex: 0 0 auto; }
+
+/* ── The combine dialog ──────────────────────────────────────────────────────
+   Narrower than the import one: two pickers and a mode, not a preview table. */
+.ds-combine-overlay[hidden] { display: none; }
+.ws-modal.ds-combine-modal {
+  width: min(560px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  gap: 0;
+}
+.ds-combine-modal .ds-combine-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ds-combine-modal .ds-combine-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ds-combine-modal .ds-combine-row .ds-sheet-label {
+  flex: 0 0 96px;
+}
+.ds-combine-modal .ds-combine-select { flex: 1 1 160px; min-width: 0; }
+.ds-combine-foot {
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+  padding: 12px 20px 16px;
+  margin: 0;
+}
+
+/* ── The explorer's tabs ─────────────────────────────────────────────────────
+   The underline strip the authoring panel already uses (.an-tabs / .an-tab),
+   selected on aria-selected rather than a second `is-on` class — these are real
+   role=tab buttons, so the attribute IS the state. */
+.ds-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 4px 0 0;
+  border-bottom: 1px solid var(--border);
+}
+.ds-tab {
+  padding: 6px 12px 7px;
+  background: none;
+  border: 0;
+  /* The underline sits ON the strip's hairline — see .an-tab for why. */
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+.ds-tab:hover { color: var(--text); }
+.ds-tab[aria-selected="true"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.ds-tabp[hidden] { display: none; }
+
+/* The tab body. A column for Data and Quality; Prepare turns it into a
+   workbench — the step machinery in a side rail, the live grid beside it, so a
+   step's effect is visible as it is edited. The rail width is .an-side's, the
+   one this app already uses for exactly this shape. */
+.ds-tab-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.ds-explorer.tab-prepare .ds-tab-body {
+  flex-direction: row;
+  align-items: flex-start;
+}
+.ds-explorer.tab-prepare #ds-tabp-prepare {
+  flex: 0 0 340px;
+  min-width: 0;
+  max-height: calc(100vh - 260px);
+  overflow-y: auto;
+}
+.ds-explorer.tab-prepare .ds-grid-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ds-grid-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+/* Quality is a list of findings; the grid is not part of that answer. */
+.ds-explorer.tab-quality .ds-grid-pane { display: none; }
+/* "No issues" is a real answer — shown only when the issue list is empty,
+   because an empty tab reads as broken. */
+.ds-quality-none {
   font-size: 13px;
   color: var(--muted);
   margin: 0;
 }
+#ds-tabp-quality:has(#ds-quality:not([hidden])) .ds-quality-none { display: none; }
 
-/* ── Freshness: "Data as of …", the ↻ Refresh button, inline status ── */
-.ds-saved-head {
+/* `hidden` loses to an explicit `display` — the same trap .an-side documents,
+   and the same one the import blocks hit. Without these the Prepare panel and
+   the quality strip are on screen whatever their tab says. */
+.ds-prepare-panel[hidden],
+.ds-quality[hidden] { display: none; }
+
+/* ── The import dialog ───────────────────────────────────────────────────────
+   Wider than the stock .ws-modal (which is min(360px, …)) because it holds a
+   preview table; `.ws-modal` is defined LATER in this file, so the class pair
+   is what wins on specificity — the same trick .an-draft-modal uses. A column
+   so the save bar can sit at the bottom as the footer while the body scrolls. */
+.ds-import-overlay[hidden] { display: none; }
+.ws-modal.ds-import-modal {
+  width: min(880px, calc(100vw - 48px));
+  max-height: calc(100vh - 72px);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  gap: 0;
+}
+.ds-modal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
 }
-.ds-saved-head .btn[hidden] { display: none; }
+.ds-modal-head .ws-modal-title { margin: 0; }
+.ds-modal-x {
+  background: none;
+  border: 0;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: var(--r-sm, 6px);
+  cursor: pointer;
+}
+.ds-modal-x:hover { background: var(--bg); }
+/* The body scrolls; the header and the save bar do not. A tall preview must not
+   push the Save button off the bottom of the screen. */
+.ds-modal-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ds-import-modal .ds-save-bar {
+  margin: 0;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--border);
+}
+.ds-import-modal .ds-preview { min-width: 0; }
+
+/* ── Freshness: "Data as of …", the ↻ Refresh button, inline status ── */
 .ds-fresh {
   display: inline-flex;
   align-items: center;
@@ -4987,10 +5259,12 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   .ds-saved-refresh.is-busy::before { animation: none; }
 }
 .ds-refresh-status {
-  flex-basis: 100%;
+  /* Spans every column: the row is a grid now, and a refresh failure is a
+     sentence, not something to squeeze into the action cell. */
+  grid-column: 1 / -1;
   font-size: 11px;
   color: var(--muted);
-  padding: 0 12px 2px;
+  padding: 0 0 6px;
 }
 .ds-refresh-status[hidden] { display: none; }
 .ds-refresh-status.is-error { color: var(--error); }
@@ -5899,6 +6173,16 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .ws-hero-bar--4 { height: 100%; background: rgba(255, 255, 255, 0.82); }
 .ws-hero-bar--5 { height: 72%; }
 
+/* ── The shared list-table ───────────────────────────────────────────────────
+   A card, an uppercase column header, hairline rows. Analyses defined this
+   first and Datasets now uses the SAME one — a second table style would be two
+   places to keep a row looking like a row. Only the COLUMN TEMPLATE is
+   per-section (see `.an-table-cols` and `#ws-datasets` below); everything that
+   makes it a table lives here.
+
+   `.ws-*` is the section-agnostic name; the `.an-*` selectors ride along so the
+   Analyses markup did not have to be rewritten to share them. */
+.ws-table,
 .an-table {
   display: flex;
   flex-direction: column;
@@ -5908,14 +6192,15 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   padding: 14px 16px 16px;
   gap: 10px;
 }
+.ws-table[hidden],
 .an-table[hidden] { display: none; }
 .an-table-head {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
 }
-/* One template, declared once and inherited by the rows below, so a column
-   label can never drift out of line with the cell under it. */
+/* One template per section, declared once and inherited by the rows, so a
+   column label can never drift out of line with the cell under it. */
 .an-table-cols,
 #ws-analyses .dash-list-item {
   display: grid;
@@ -5923,6 +6208,7 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   align-items: center;
   gap: 12px;
 }
+.ws-table-cols,
 .an-table-cols {
   padding: 0 10px 8px;
   border-bottom: 1px solid var(--border);
@@ -5932,6 +6218,22 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   text-transform: uppercase;
   color: var(--text-dim);
 }
+/* A row: hairline separator, quiet hover, no separator on the last one. */
+.ws-row {
+  border-bottom: 1px solid var(--border);
+  padding: 2px 10px;
+}
+.ws-row:last-child { border-bottom: 0; }
+.ws-row:hover { background: var(--surface-2); }
+/* A data cell: secondary text that truncates rather than wrapping the row. */
+.ws-cell {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-col-action,
 .an-col-action { text-align: right; }
 #ws-analyses .dash-list { gap: 0; }
 #ws-analyses .dash-list-item {

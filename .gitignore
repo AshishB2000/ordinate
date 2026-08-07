@@ -220,3 +220,6 @@ scripts/**/*.js
 /renderer/hub/drill.js
 /scripts/test-dataset-page-filters.js
 /scripts/test-visual-rows.js
+
+# Data-section layout (list-first restructure) — emitted sibling.
+/renderer/hub/dataSection.js
