@@ -4980,6 +4980,69 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 /* The column labels describe rows; with no rows they describe nothing. */
 .ds-saved:has(#ds-saved-empty:not([hidden])) .ds-saved-cols { display: none; }
 
+/* `hidden` has to actually hide. Every one of these sets `display`, which
+   overrides the UA stylesheet's `[hidden] { display: none }` — so the paste box,
+   the sheet picker, the warnings, the preview and the save bar were on screen
+   PERMANENTLY, whatever datasets.ts set `.hidden` to. That is a good part of why
+   this section read as one long pile of blocks, and the import dialog's two-step
+   flow depends on the attribute working. */
+.ds-paste-wrap[hidden],
+.ds-sheet-wrap[hidden],
+.ds-warnings[hidden],
+.ds-preview[hidden],
+.ds-save-bar[hidden] { display: none; }
+
+/* ── The import dialog ───────────────────────────────────────────────────────
+   Wider than the stock .ws-modal (which is min(360px, …)) because it holds a
+   preview table; `.ws-modal` is defined LATER in this file, so the class pair
+   is what wins on specificity — the same trick .an-draft-modal uses. A column
+   so the save bar can sit at the bottom as the footer while the body scrolls. */
+.ds-import-overlay[hidden] { display: none; }
+.ws-modal.ds-import-modal {
+  width: min(880px, calc(100vw - 48px));
+  max-height: calc(100vh - 72px);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  gap: 0;
+}
+.ds-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.ds-modal-head .ws-modal-title { margin: 0; }
+.ds-modal-x {
+  background: none;
+  border: 0;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: var(--r-sm, 6px);
+  cursor: pointer;
+}
+.ds-modal-x:hover { background: var(--bg); }
+/* The body scrolls; the header and the save bar do not. A tall preview must not
+   push the Save button off the bottom of the screen. */
+.ds-modal-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ds-import-modal .ds-save-bar {
+  margin: 0;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--border);
+}
+.ds-import-modal .ds-preview { min-width: 0; }
+
 /* ── Freshness: "Data as of …", the ↻ Refresh button, inline status ── */
 .ds-fresh {
   display: inline-flex;

@@ -767,9 +767,17 @@ async function main(): Promise<void> {
       el.click();
       return true;
     }, id);
+  // The OPEN overlay, not the first one in the document. Since the Data
+  // section's import dialog is static markup (hidden until used), a bare
+  // `.ws-modal-overlay` query now finds THAT rather than the modal under test.
+  //
+  // Visibility is getClientRects(), NOT offsetParent: an overlay is
+  // position:fixed, whose offsetParent is null whether it is shown or not.
   const fillPrompt = async (value: string): Promise<boolean> =>
     win.evaluate((v) => {
-      const box = document.querySelector('.ws-modal-overlay .ws-modal');
+      const box = [...document.querySelectorAll('.ws-modal-overlay')]
+        .filter((o) => (o as HTMLElement).getClientRects().length > 0)
+        .map((o) => o.querySelector('.ws-modal'))[0];
       if (!box) return false;
       const input = box.querySelector('.ws-modal-input') as HTMLInputElement | null;
       if (input) input.value = v;
@@ -780,7 +788,9 @@ async function main(): Promise<void> {
     }, value);
   const pickFirstOption = async (): Promise<boolean> =>
     win.evaluate(() => {
-      const box = document.querySelector('.ws-modal-overlay .ws-modal');
+      const box = [...document.querySelectorAll('.ws-modal-overlay')]
+        .filter((o) => (o as HTMLElement).getClientRects().length > 0)
+        .map((o) => o.querySelector('.ws-modal'))[0];
       if (!box) return false;
       const sel = box.querySelector('select.ws-modal-input') as HTMLSelectElement | null;
       if (!sel || sel.options.length === 0) return false;
@@ -1343,8 +1353,12 @@ async function main(): Promise<void> {
   await openPane('an-pane-add');
   const railAdd = await win.evaluate(() => {
     (document.getElementById('an-add-text') as HTMLElement).click();
-    const open = !!document.querySelector('.ws-modal-overlay');
-    document.querySelectorAll('.ws-modal-overlay').forEach((o) => o.remove());
+    const opened = [...document.querySelectorAll('.ws-modal-overlay')]
+      .filter((o) => (o as HTMLElement).getClientRects().length > 0);
+    const open = opened.length > 0;
+    // Remove only what this click created. The import dialog is part of the
+    // page and removing it would break every later import.
+    opened.forEach((o) => o.remove());
     return open;
   });
   ok('…and Add › Text runs the editor\'s own add-card action', railAdd);
@@ -2875,7 +2889,9 @@ async function main(): Promise<void> {
   await win.waitForTimeout(900);
   ok('…listing the existing analyses plus a New analysis… entry',
      await win.evaluate(() => {
-       const sel = document.querySelector('.ws-modal-overlay select.ws-modal-input') as HTMLSelectElement;
+       const sel = [...document.querySelectorAll('.ws-modal-overlay')]
+         .filter((o) => (o as HTMLElement).getClientRects().length > 0)
+         .map((o) => o.querySelector('select.ws-modal-input'))[0] as HTMLSelectElement;
        return !!sel && [...sel.options].some((o) => /New analysis/.test(o.textContent || ''));
      }));
   ok('…and picking one confirms', await pickFirstOption());

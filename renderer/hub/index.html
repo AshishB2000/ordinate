@@ -700,33 +700,56 @@
           </div>
         </div>
 
-        <div class="ds-toolbar">
-          <button class="btn" type="button" id="ds-import-btn">Import file</button>
-          <button class="btn" type="button" id="ds-paste-toggle">Paste data</button>
-        </div>
+        <!-- ── Import, as a dialog ────────────────────────────────────────────
+             The same six blocks as before, with the same ids and the same
+             handlers in datasets.ts — only their container changed. They used
+             to sit in the section's scroll, so an import in progress and the
+             saved list were the same page.
 
-        <div class="ds-paste-wrap" id="ds-paste-wrap" hidden>
-          <textarea class="ds-paste-input" id="ds-paste-input" placeholder="Paste CSV, TSV, or JSON here…"></textarea>
-          <div class="ds-paste-actions">
-            <button class="btn btn-primary" type="button" id="ds-paste-parse">Parse</button>
+             Two steps in one frame: pick a source (Import file / Paste data,
+             which reveals the paste box in place), then confirm what was
+             parsed (sheet, warnings, preview) with the save bar as the footer.
+             The shell is .ws-modal-overlay / .ws-modal, the same one
+             dashChooseModal uses; dataSection.ts wires Escape, the backdrop and
+             the focus trap through the shared makeModalAccessible. -->
+        <div class="ws-modal-overlay ds-import-overlay" id="ds-import-modal" hidden>
+          <div class="ws-modal ds-import-modal">
+            <div class="ds-modal-head">
+              <div class="ws-modal-title" id="ds-import-title">Import data</div>
+              <button class="ds-modal-x" type="button" id="ds-import-x" aria-label="Close">✕</button>
+            </div>
+
+            <div class="ds-modal-body">
+              <div class="ds-toolbar">
+                <button class="btn" type="button" id="ds-import-btn">Import file</button>
+                <button class="btn" type="button" id="ds-paste-toggle">Paste data</button>
+              </div>
+
+              <div class="ds-paste-wrap" id="ds-paste-wrap" hidden>
+                <textarea class="ds-paste-input" id="ds-paste-input" placeholder="Paste CSV, TSV, or JSON here…"></textarea>
+                <div class="ds-paste-actions">
+                  <button class="btn btn-primary" type="button" id="ds-paste-parse">Parse</button>
+                </div>
+              </div>
+
+              <div class="ds-sheet-wrap" id="ds-sheet-wrap" hidden>
+                <label class="ds-sheet-label" for="ds-sheet-select">Sheet</label>
+                <select class="ds-sheet-select" id="ds-sheet-select"></select>
+              </div>
+
+              <div class="ds-warnings" id="ds-warnings" hidden></div>
+
+              <div class="ds-preview" id="ds-preview" hidden>
+                <p class="ds-preview-note" id="ds-preview-note" hidden></p>
+                <div class="ds-table-scroll" id="ds-table-scroll"></div>
+              </div>
+            </div>
+
+            <div class="ds-save-bar" id="ds-save-bar" hidden>
+              <input class="ds-name-input" id="ds-name-input" type="text" placeholder="Dataset name" />
+              <button class="btn btn-primary" type="button" id="ds-save-btn">Save dataset</button>
+            </div>
           </div>
-        </div>
-
-        <div class="ds-sheet-wrap" id="ds-sheet-wrap" hidden>
-          <label class="ds-sheet-label" for="ds-sheet-select">Sheet</label>
-          <select class="ds-sheet-select" id="ds-sheet-select"></select>
-        </div>
-
-        <div class="ds-warnings" id="ds-warnings" hidden></div>
-
-        <div class="ds-preview" id="ds-preview" hidden>
-          <p class="ds-preview-note" id="ds-preview-note" hidden></p>
-          <div class="ds-table-scroll" id="ds-table-scroll"></div>
-        </div>
-
-        <div class="ds-save-bar" id="ds-save-bar" hidden>
-          <input class="ds-name-input" id="ds-name-input" type="text" placeholder="Dataset name" />
-          <button class="btn btn-primary" type="button" id="ds-save-btn">Save dataset</button>
         </div>
 
         <!-- ── Saved-dataset explorer (sort / filter / show-hide / rename / retype / stats / quality / AI explain) ── -->
