@@ -287,12 +287,21 @@ function openMiniMenu(anchorBtn, populate, onClose?) {
   el.style.left = left + 'px';
   el.style.top = top + 'px';
   el.style.maxHeight = (window.innerHeight - top - 8) + 'px';
+  // Escape binds SYNCHRONOUSLY. Deferring it by a tick meant a keypress landing
+  // in that window was lost outright — the listener did not exist yet, and a
+  // keydown is not replayed — so the menu simply stayed open. Rare by hand,
+  // reproducible on a loaded machine, and it is the kind of thing a user reads
+  // as "Escape doesn't work here". A keydown has no in-flight event to worry
+  // about, unlike the click below.
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.stopPropagation(); close(); }
+  }, { capture: true, signal: ac.signal });
+  // The outside-click listener STAYS deferred: it is registered from inside the
+  // dispatch of the click that opened this menu, and binding it synchronously
+  // risks that same click closing the menu it just opened.
   setTimeout(() => {
     document.addEventListener('click', (e) => {
       if (!el.contains(e.target as Node) && e.target !== anchorBtn) close();
-    }, { capture: true, signal: ac.signal });
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { e.stopPropagation(); close(); }
     }, { capture: true, signal: ac.signal });
   }, 0);
   return close;

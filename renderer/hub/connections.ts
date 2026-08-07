@@ -977,6 +977,11 @@ async function handleConnSaveAsDataset(): Promise<void> {
       sourceKind,
       columns: connRunPreview.columns,
       rows: connRunPreview.rows,
+      // The connection ID, never the URL or the DSN: a refresh re-runs the SAVED
+      // connection, so the secret is resolved in main and never round-trips
+      // through here. This covers the URL/API source too — it is a connection
+      // like any other in the registry.
+      origin: { kind: 'connection', connId: connRunConnId },
     });
   } catch (_) {
     connSetError('Failed to save the dataset.');

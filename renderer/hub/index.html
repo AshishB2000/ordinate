@@ -768,7 +768,10 @@
         </div>
 
         <div class="ds-saved" id="ds-saved">
-          <h3 class="ds-saved-h">Saved datasets</h3>
+          <div class="ds-saved-head">
+            <h3 class="ds-saved-h">Saved datasets</h3>
+            <button class="btn btn-sm" type="button" id="ds-refresh-all-btn" hidden>↻ Refresh all</button>
+          </div>
           <div class="ds-saved-list" id="ds-saved-list"></div>
           <p class="ds-saved-empty" id="ds-saved-empty" hidden>No datasets yet.</p>
         </div>
@@ -1052,6 +1055,10 @@
           <button class="btn btn-sm" type="button" id="dash-back-btn">‹ Back</button>
           <span class="dash-name" id="dash-name"></span>
           <button class="btn btn-sm dash-edit-only" type="button" id="dash-rename-btn">Rename</button>
+          <!-- Freshness of the DATA behind this sheet. One element for both
+               hosts: analyses and published dashboards share this editor. -->
+          <span class="dash-fresh" id="dash-fresh" hidden></span>
+          <button class="btn btn-sm" type="button" id="dash-refresh-data" hidden>↻ Refresh data</button>
           <span class="dash-editor-spacer"></span>
           <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-visual">+ Visual</button>
           <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-metric">+ Metric</button>

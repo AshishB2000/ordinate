@@ -203,6 +203,10 @@ async function main(): Promise<void> {
     // dataset: the geo join matches on region NAME, and 'region0'..'region6'
     // above match nothing. Eight real states, so the choropleth has both a
     // colour ramp and a min/max to label.
+    const nodeFs = req('fs');
+    const nodePath = req('path');
+    const userDataDir = req('electron').app.getPath('userData');
+
     const states = ['California', 'Texas', 'Florida', 'New York',
                     'Illinois', 'Ohio', 'Georgia', 'Washington'];
     const geoDs = await datasets.saveDataset(proj.id, {
@@ -222,6 +226,35 @@ async function main(): Promise<void> {
       },
     });
     out.mapVisualId = mv && mv.id;
+
+    // Backdate 'By state' so a sheet reading BOTH it and 'Sales' has a clearly
+    // older input. Without this the oldest-vs-newest rule is untestable: every
+    // fixture is stamped within the same second and either rule reads the same.
+    const OLD_STAMP = '2020-03-04T05:06:07.000Z';
+    const bsFile = nodePath.join(userDataDir, 'projects', proj.id, 'datasets', geoDs.id + '.json');
+    const bsRaw = JSON.parse(nodeFs.readFileSync(bsFile, 'utf8'));
+    bsRaw.lastRefreshedAt = OLD_STAMP;
+    nodeFs.writeFileSync(bsFile, JSON.stringify(bsRaw, null, 2));
+    out.oldStamp = OLD_STAMP;
+
+    // A REAL csv on disk, imported through the real parser and stamped with a
+    // file origin — the fixture for the refresh chain further down. Everything
+    // else in this file is saved from in-memory rows; this one has to be a file,
+    // because the whole point is re-reading it after it changes.
+    const fileImport = req('./src/fileImport.js');
+    const csvPath = nodePath.join(userDataDir, 'refreshable.csv');
+    nodeFs.writeFileSync(csvPath, 'city,visits\nOslo,10\nBergen,20\n', 'utf8');
+    const parsed = await fileImport.parseFile(csvPath, 'csv');
+    const fileDs = await datasets.saveDataset(proj.id, {
+      name: 'Refreshable',
+      sourceKind: 'csv',
+      columns: parsed.columns,
+      rows: parsed.rows,
+      origin: { kind: 'file', path: csvPath },
+    });
+    out.fileDatasetId = fileDs && fileDs.id;
+    out.fileDatasetRows = fileDs && fileDs.rowCount;
+    out.csvPath = csvPath;
     return out;
   });
 
@@ -235,6 +268,8 @@ async function main(): Promise<void> {
      `first=${r.values[0]}, agg took ${r.aggMs} ms`);
   ok('metric card computed', typeof r.metric === 'number', `sum=${r.metric} in ${r.metricMs} ms`);
   ok('dataset exposes a resident source', r.hasResidentSource === true);
+  ok('a file-backed dataset was imported with a file origin',
+     r.fileDatasetRows === 2 && typeof r.csvPath === 'string', `${r.fileDatasetRows} rows from ${r.csvPath}`);
 
   // ── The `in` operator, on the real app, over a million rows ───────────────
   ok('an `in` filter with 3 values narrows the chart to those 3 groups',
@@ -790,8 +825,9 @@ async function main(): Promise<void> {
      JSON.stringify(wiz1.steps) === JSON.stringify(['Choose data', 'Start from', 'Describe it']) &&
        wiz1.step2Optional,
      JSON.stringify(wiz1.steps));
+  // Three fixture datasets now: Sales, By state, and the file-backed Refreshable.
   ok('…step 1 lists the project datasets with their columns',
-     wiz1.datasetRows === 2 &&
+     wiz1.datasetRows === 3 &&
        JSON.stringify(wiz1.cols) === JSON.stringify(['', 'Dataset name', 'Rows', 'Columns', 'Source', 'Last modified']),
      `${wiz1.datasetRows} rows / ${JSON.stringify(wiz1.cols)}`);
   ok('…and those cells line up under their labels', wiz1.aligned);
@@ -1049,6 +1085,51 @@ async function main(): Promise<void> {
   const cardCount = await win.evaluate(() => document.querySelectorAll('#dash-grid .dash-card').length);
   ok('the card lands on the sheet grid', cardCount === 1, String(cardCount));
 
+  // ── Freshness in the analysis header ─────────────────────────────────────
+  // The sheet reads one dataset here, so the header must agree with it. The
+  // OLDEST rule is what matters and it is asserted directly below, on the
+  // dataset ids the sheet actually resolves rather than on wall-clock text.
+  const sheetFresh = await win.evaluate(() => {
+    const label = document.getElementById('dash-fresh') as HTMLElement | null;
+    const btn = document.getElementById('dash-refresh-data') as HTMLElement | null;
+    return {
+      text: (label?.textContent || '').trim(),
+      labelShown: !!label && !label.hidden,
+      btnShown: !!btn && !btn.hidden,
+    };
+  });
+  ok('the analysis header reports the freshness of the data it reads',
+     sheetFresh.labelShown && /^Data as of /.test(sheetFresh.text), JSON.stringify(sheetFresh));
+  // The one card reads the 'Sales' dataset, which was saved with no origin, so
+  // there is nothing to refresh and the button must not pretend otherwise.
+  ok('…and offers no Refresh data button when nothing on the sheet is refreshable',
+     !sheetFresh.btnShown, JSON.stringify(sheetFresh));
+
+  // THE rule: a sheet is only as fresh as its STALEST input. Add a second card
+  // reading the backdated 'By state' dataset — the header must follow the 2020
+  // stamp, not the one written seconds ago. "Newest" would read as today's time
+  // here, which is wrong in the direction that matters: it would tell someone
+  // their figures are current when half of them are years old.
+  await win.evaluate((vid) => {
+    (window as any).pushCard({
+      id: window.crypto.randomUUID(),
+      type: 'visual',
+      visualId: vid,
+      layout: { x: 0, y: 8, w: 6, h: 6 },
+    });
+  }, r.visualId);
+  await win.waitForTimeout(3000);
+  const twoFresh = await win.evaluate(() => ({
+    text: (document.getElementById('dash-fresh')?.textContent || '').trim(),
+    title: (document.getElementById('dash-fresh') as HTMLElement | null)?.title || '',
+    cards: document.querySelectorAll('#dash-grid .dash-card').length,
+  }));
+  // The 2020 stamp renders through formatSidebarTime as "Mar 4 · <time>".
+  ok('a sheet reading two datasets reports the OLDEST of them, not the newest',
+     twoFresh.cards === 2 && /Mar 4/.test(twoFresh.text), JSON.stringify(twoFresh));
+  ok('…and says why, so a header that disagrees with one row is explicable',
+     /oldest of the 2 datasets/.test(twoFresh.title), `"${twoFresh.title}"`);
+
   // ── The authoring workbench ───────────────────────────────────────────────
   // At REST the user sees the top strip, the rail and the sheet — nothing else.
   // Asserted from a laid-out page: a panel that renders at zero width, a well
@@ -1252,9 +1333,18 @@ async function main(): Promise<void> {
 
   // SELECT the card. This is the whole binding.
   await win.evaluate(() => (document.querySelector('#dash-grid .dash-card') as HTMLElement).click());
+  // Wait for the CHIP ROW as well as the field list. They arrive on separate
+  // async paths — the fields as soon as the dataset's columns load, the chips
+  // only once the visual's data has been computed in main — so waiting on the
+  // fields alone left `bound.chips` a race. It read 0 on a CI runner while
+  // passing on a dev machine, and because this single snapshot is asserted
+  // again 150 and 480 lines below, the flake surfaced far from its cause.
   await win.waitForFunction(
-    () => document.querySelectorAll('#an-fields .an-field').length > 0, undefined, { timeout: 30_000 },
-  ).catch(() => {});
+    () => document.querySelectorAll('#an-fields .an-field').length > 0
+      && document.querySelectorAll('#an-switcher .an-typerow').length > 0,
+    undefined,
+    { timeout: 30_000 },
+  ).catch(() => {}); // fall through; the assertions below report what is there
   const bound = await win.evaluate(() => {
     const fields = [...document.querySelectorAll('#an-fields .an-field')] as HTMLElement[];
     const wells = [...document.querySelectorAll('#an-wells [data-well]')] as HTMLElement[];
@@ -2003,8 +2093,10 @@ async function main(): Promise<void> {
       pages: document.querySelectorAll('#dash-pages .dash-page-tab').length,
     };
   });
+  // Two cards: the sheet gained a second one above, to make the oldest-of-many
+  // freshness rule testable.
   ok('the published dashboard renders in the Dashboards panel',
-     published.inDashPanel && published.cards === 1, JSON.stringify(published));
+     published.inDashPanel && published.cards === 2, JSON.stringify(published));
   ok('it presents itself as read-only, and says why', published.readOnly && published.noteVisible,
      published.noteText);
   ok('with a route back to its analysis', published.routeBack);
@@ -2783,6 +2875,115 @@ async function main(): Promise<void> {
   // to find it. (The Datasets nav item is labelled "Data" now.)
   await clickExact('Data');
   await win.waitForTimeout(800);
+
+  // ── Refresh, end to end ───────────────────────────────────────────────────
+  // The one check that proves the whole chain: a file on disk changes, the user
+  // clicks ↻ Refresh, and the RENDERED row count follows. Every layer is real —
+  // the stored origin, the re-read through the shared parser, updateDatasetData,
+  // and the repaint. Nothing here is stubbed.
+  const beforeRefresh = await win.evaluate(() => {
+    const rows = [...document.querySelectorAll('#ds-saved-list .ds-saved-item')] as HTMLElement[];
+    const row = rows.find((el) => /Refreshable/.test(el.textContent || ''));
+    return {
+      found: !!row,
+      text: (row?.querySelector('.ds-saved-meta')?.textContent || ''),
+      fresh: (row?.querySelector('.ds-fresh')?.textContent || ''),
+      hasButton: !!row?.querySelector('.ds-saved-refresh'),
+    };
+  });
+  ok('the file-backed dataset shows 2 rows and a ↻ Refresh button',
+     beforeRefresh.found && /^2 rows/.test(beforeRefresh.text) && beforeRefresh.hasButton,
+     JSON.stringify(beforeRefresh));
+  ok('…with a "Data as of" freshness line rather than a bare timestamp',
+     /Data as of/.test(beforeRefresh.fresh), `"${beforeRefresh.fresh}"`);
+
+  // A dataset with no origin must NOT offer the button, and must say "Imported".
+  const notRefreshable = await win.evaluate(() => {
+    const rows = [...document.querySelectorAll('#ds-saved-list .ds-saved-item')] as HTMLElement[];
+    const row = rows.find((el) => /By state/.test(el.textContent || ''));
+    return {
+      found: !!row,
+      hasButton: !!row?.querySelector('.ds-saved-refresh'),
+      fresh: row?.querySelector('.ds-fresh')?.textContent || '',
+      titled: !!(row?.querySelector('.ds-fresh') as HTMLElement)?.title,
+    };
+  });
+  ok('a dataset with no origin offers no Refresh button and reads "Imported"',
+     notRefreshable.found && !notRefreshable.hasButton && /Imported/.test(notRefreshable.fresh)
+     && notRefreshable.titled, JSON.stringify(notRefreshable));
+
+  // Rewrite the CSV from OUTSIDE the app, exactly as an upstream export would.
+  fs.writeFileSync(r.csvPath, 'city,visits\nOslo,10\nBergen,20\nTromso,30\nStavanger,40\n', 'utf8');
+
+  ok('↻ Refresh is clickable on that row', await win.evaluate(() => {
+    const rows = [...document.querySelectorAll('#ds-saved-list .ds-saved-item')] as HTMLElement[];
+    const row = rows.find((el) => /Refreshable/.test(el.textContent || ''));
+    const btn = row?.querySelector('.ds-saved-refresh') as HTMLElement | undefined;
+    if (!btn) return false;
+    btn.click();
+    return true;
+  }));
+
+  // Wait for the COUNT to change rather than sleeping a fixed amount: this is a
+  // real file read plus a Parquet rewrite, and its latency tracks the host.
+  await win
+    .waitForFunction(
+      () => {
+        const rows = [...document.querySelectorAll('#ds-saved-list .ds-saved-item')] as HTMLElement[];
+        const row = rows.find((el) => /Refreshable/.test(el.textContent || ''));
+        return /^4 rows/.test(row?.querySelector('.ds-saved-meta')?.textContent || '');
+      },
+      undefined,
+      { timeout: 30_000 },
+    )
+    .catch(() => {}); // fall through to the assertion, which reports what is there
+
+  const afterRefresh = await win.evaluate(() => {
+    const rows = [...document.querySelectorAll('#ds-saved-list .ds-saved-item')] as HTMLElement[];
+    const row = rows.find((el) => /Refreshable/.test(el.textContent || ''));
+    return {
+      text: row?.querySelector('.ds-saved-meta')?.textContent || '',
+      status: row?.querySelector('.ds-refresh-status')?.textContent || '',
+      errored: !!row?.querySelector('.ds-fresh-dot'),
+    };
+  });
+  ok('refreshing re-reads the changed file and the rendered row count follows',
+     /^4 rows/.test(afterRefresh.text), JSON.stringify(afterRefresh));
+  ok('…with no error state left on the row',
+     !afterRefresh.errored && afterRefresh.status === '', JSON.stringify(afterRefresh));
+
+  // And the failure half of the contract: delete the file, refresh, and the
+  // stored rows must survive.
+  fs.rmSync(r.csvPath);
+  await win.evaluate(() => {
+    const rows = [...document.querySelectorAll('#ds-saved-list .ds-saved-item')] as HTMLElement[];
+    const row = rows.find((el) => /Refreshable/.test(el.textContent || ''));
+    (row?.querySelector('.ds-saved-refresh') as HTMLElement | undefined)?.click();
+  });
+  await win
+    .waitForFunction(
+      () => {
+        const rows = [...document.querySelectorAll('#ds-saved-list .ds-saved-item')] as HTMLElement[];
+        const row = rows.find((el) => /Refreshable/.test(el.textContent || ''));
+        return !!row?.querySelector('.ds-refresh-status.is-error');
+      },
+      undefined,
+      { timeout: 30_000 },
+    )
+    .catch(() => {});
+  const afterFailure = await win.evaluate(() => {
+    const rows = [...document.querySelectorAll('#ds-saved-list .ds-saved-item')] as HTMLElement[];
+    const row = rows.find((el) => /Refreshable/.test(el.textContent || ''));
+    return {
+      text: row?.querySelector('.ds-saved-meta')?.textContent || '',
+      status: row?.querySelector('.ds-refresh-status')?.textContent || '',
+      isError: !!row?.querySelector('.ds-refresh-status.is-error'),
+    };
+  });
+  ok('a refresh whose file has vanished reports inline, never in an alert',
+     afterFailure.isError && /no longer at/.test(afterFailure.status), JSON.stringify(afterFailure));
+  ok('…and the 4 rows it already had are still there',
+     /^4 rows/.test(afterFailure.text), JSON.stringify(afterFailure));
 
   // Nothing above set `scSvelte`, so this is the DEFAULT user experience. The
   // Phase 5 spike shipped auto-mounting its debug card — tick counter, "Probe

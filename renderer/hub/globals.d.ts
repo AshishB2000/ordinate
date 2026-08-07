@@ -104,7 +104,8 @@ declare global {
       // ── Datasets (file-based data sources) ──
       pickAndParseDataset(sheetName?: string, filePath?: string): Promise<any>;
       parsePasteDataset(text: string): Promise<any>;
-      saveDataset(payload: { projectId: string; name: string; sourceKind: string; columns: any[]; rows: any[] }): Promise<any>;
+      saveDataset(payload: { projectId: string; name: string; sourceKind: string; columns: any[]; rows: any[]; origin?: any }): Promise<any>;
+      refreshDataset(projectId: string, id: string): Promise<any>;
       listDatasets(projectId: string): Promise<any[]>;
       // ── Capture → dataset (Week 13) ──
       captureToDatasetDraft(extractedTable: any): Promise<any>;
