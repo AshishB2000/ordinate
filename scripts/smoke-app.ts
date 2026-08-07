@@ -454,13 +454,18 @@ async function main(): Promise<void> {
       mysqlSvg: !!document.querySelector(
         '.as-source-logo[data-logo-id="mysql"] svg',
       ),
-      actionSvgs: ['home-paste', 'home-capture'].every((id) =>
-        !!document.querySelector(`.as-source-logo[data-logo-id="${id}"] svg path[fill="currentColor"]`)),
+      pasteSvg: !!document.querySelector(
+        '.as-source-logo[data-logo-id="home-paste"] svg path[fill="currentColor"]',
+      ),
+      captureImg: document.querySelector(
+        '.as-source-logo[data-logo-id="home-capture"] img',
+      )?.getAttribute('src') === 'assets/connectors/screenchart.png',
     };
   });
   ok('home: Connect shortcuts use five real source or action marks',
     homeLogos.count === 5 && homeLogos.allDrawn && homeLogos.oldDots === 0 &&
-      homeLogos.postgresSvg && homeLogos.mysqlSvg && homeLogos.actionSvgs,
+      homeLogos.postgresSvg && homeLogos.mysqlSvg && homeLogos.pasteSvg &&
+      homeLogos.captureImg,
     JSON.stringify(homeLogos));
 
   // The strapline under the Connect cards ("Press ⌘⌥S … No model configured …

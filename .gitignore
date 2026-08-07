@@ -36,6 +36,7 @@ src/**/*.js
 preload/**/*.js
 renderer/**/*.js
 scripts/**/*.js
+!/scripts/build-appicon.js
 # Week 2 workspace/projects data layer — emitted siblings (also covered by the
 # globs above; listed explicitly per the in-place-emit convention).
 /src/projects.js

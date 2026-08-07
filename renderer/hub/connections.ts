@@ -128,8 +128,7 @@ const CONN_ACTION_LOGOS: Record<string, ConnLogo> = {
     title: 'Paste data',
   },
   'home-capture': {
-    path: 'M4 3h5v2H5v4H3V4a1 1 0 0 1 1-1Zm11 0h5a1 1 0 0 1 1 1v5h-2V5h-4V3ZM3 15h2v4h4v2H4a1 1 0 0 1-1-1v-5Zm16 0h2v5a1 1 0 0 1-1 1h-5v-2h4v-4Zm-7-7a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z',
-    color: 'currentColor',
+    src: 'assets/connectors/screenchart.png',
     title: 'Screenshot',
   },
 };

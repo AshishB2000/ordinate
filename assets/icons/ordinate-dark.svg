@@ -2,7 +2,7 @@
      The Cube Insight mark: a faceted hexagonal frame around three ascending
      bars, the middle one running past the others into a notch that splits the
      bottom vertex.
-     The path below is a MACHINE TRACE of assets/icons/reference/cube-insight-200.png,
+     The path below is the approved MACHINE TRACE of the original supplied artwork,
      not a redrawing: the bitmap was 4x bilinear-upsampled, thresholded on
      blueness (b-r > 120), its pixel boundaries chained into loops, and each loop
      Douglas-Peucker simplified at 1.5/800 — about 1.9px of error once scaled to
