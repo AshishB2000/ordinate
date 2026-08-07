@@ -6662,6 +6662,14 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   color: var(--text-strong);
 }
 .dash-editor-spacer { flex: 1; }
+/* Freshness of the sheet's data — the OLDEST of the datasets it reads. */
+.dash-fresh {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.dash-fresh[hidden] { display: none; }
+#dash-refresh-data[hidden] { display: none; }
 
 .dash-pages {
   display: flex;

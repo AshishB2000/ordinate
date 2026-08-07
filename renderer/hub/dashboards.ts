@@ -541,6 +541,126 @@ function renderDashGrid(): void {
   // The cards were just rebuilt, so the authoring workbench has to repaint its
   // selection ring and drop a selection whose card no longer exists.
   anSyncWorkbench();
+  // Which datasets the sheet reads can change with any card edit, so the
+  // freshness line is derived from the cards on every grid render.
+  refreshDashFreshness();
+}
+
+// ── Freshness of the data behind the open sheet ──────────────────────────────
+//
+// An analysis and a published dashboard are only as fresh as their STALEST
+// input, so the header reports the OLDEST lastRefreshedAt across every dataset
+// the sheet reads. Reporting the newest would be a number that is wrong in
+// exactly the direction that matters — it would tell someone their figures are
+// current when half of them are a week old.
+//
+// Nothing is recomputed here: dashboards already recompute every figure from
+// stored data on render, so a refresh that lands is picked up by re-rendering
+// the sheet and no downstream plumbing changes.
+
+/** Every dataset id the OPEN sheet reads, across visual and metric cards. */
+async function dashSheetDatasetIds(): Promise<string[]> {
+  const page = dashCurrentPage();
+  const cards = (page && Array.isArray(page.cards)) ? page.cards : [];
+  const ids = new Set<string>();
+  for (const card of cards) {
+    if (card && card.type === 'metric' && card.metric && card.metric.datasetId) {
+      ids.add(String(card.metric.datasetId));
+      continue;
+    }
+    if (card && card.type === 'visual') {
+      // Resolves a published card's inline snapshot first, exactly as the
+      // renderer does — a published dashboard reads the dataset its FROZEN
+      // definition names, not whatever the source visual points at today.
+      const resolved = await resolveCardVisual(card);
+      if (resolved && resolved.visual && resolved.visual.datasetId) {
+        ids.add(String(resolved.visual.datasetId));
+      }
+    }
+  }
+  return [...ids];
+}
+
+// Paint (or hide) the header's freshness line + Refresh data button.
+async function refreshDashFreshness(): Promise<void> {
+  const label = dashEl('dash-fresh');
+  const btn = dashEl('dash-refresh-data') as HTMLButtonElement | null;
+  if (!label || !btn) return;
+  if (!currentProjectId || !dashCurrent) {
+    label.hidden = true;
+    btn.hidden = true;
+    return;
+  }
+
+  const ids = await dashSheetDatasetIds();
+  let summaries: any[] = [];
+  try {
+    summaries = await window.hub.listDatasets(currentProjectId);
+  } catch (_) {
+    summaries = [];
+  }
+  if (!Array.isArray(summaries)) summaries = [];
+  const byId = new Map<string, any>(summaries.map((d: any) => [String(d.id), d]));
+
+  let oldest: number | null = null;
+  let anyRefreshable = false;
+  ids.forEach((id) => {
+    const d = byId.get(id);
+    if (!d) return;
+    if (d.originKind) anyRefreshable = true;
+    const stamp = Date.parse(d.lastRefreshedAt || d.updatedAt || '');
+    if (!Number.isFinite(stamp)) return;
+    if (oldest === null || stamp < oldest) oldest = stamp;
+  });
+
+  if (oldest === null) {
+    label.hidden = true;
+    btn.hidden = true;
+    return;
+  }
+  label.hidden = false;
+  label.textContent = 'Data as of ' + formatSidebarTime(new Date(oldest).toISOString());
+  // Say WHY it is the oldest, so a header that disagrees with a single dataset's
+  // own line is explicable rather than a bug report.
+  label.title = ids.length > 1
+    ? 'The oldest of the ' + ids.length + ' datasets this sheet reads.'
+    : '';
+  btn.hidden = !anyRefreshable;
+}
+
+// Refresh exactly the datasets this sheet reads, then re-render it.
+async function handleDashRefreshData(): Promise<void> {
+  if (!currentProjectId) return;
+  const btn = dashEl('dash-refresh-data') as HTMLButtonElement | null;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Refreshing…';
+  }
+  const ids = await dashSheetDatasetIds();
+  let okCount = 0;
+  // Sequential for the same reasons as the Data section's Refresh all: one bad
+  // source must not stall the rest, and one table in flight keeps memory flat.
+  for (const id of ids) {
+    let res: any;
+    try {
+      res = await window.hub.refreshDataset(currentProjectId, id);
+    } catch (_) {
+      res = { ok: false };
+    }
+    if (res && res.ok) okCount += 1;
+  }
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = '↻ Refresh data';
+  }
+  const failed = ids.length - okCount;
+  if (typeof showToast === 'function') {
+    showToast('Refreshed ' + okCount + ' of ' + ids.length + (failed > 0 ? ' · ' + failed + ' failed' : ''));
+  }
+  // Every figure is recomputed from stored data on render, so re-rendering IS
+  // the propagation — there is nothing else downstream to update.
+  renderDashGrid();
+  await refreshDashFreshness();
 }
 
 // The first grid row below everything already placed. Defaults to the OPEN
@@ -1787,6 +1907,9 @@ function initDashboards(): void {
 
   const back = dashEl('dash-back-btn');
   if (back) back.addEventListener('click', () => handleBackToList());
+
+  const refreshData = dashEl('dash-refresh-data');
+  if (refreshData) refreshData.addEventListener('click', () => handleDashRefreshData());
 
   const rename = dashEl('dash-rename-btn');
   if (rename) rename.addEventListener('click', () => {

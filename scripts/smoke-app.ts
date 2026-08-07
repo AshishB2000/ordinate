@@ -203,6 +203,10 @@ async function main(): Promise<void> {
     // dataset: the geo join matches on region NAME, and 'region0'..'region6'
     // above match nothing. Eight real states, so the choropleth has both a
     // colour ramp and a min/max to label.
+    const nodeFs = req('fs');
+    const nodePath = req('path');
+    const userDataDir = req('electron').app.getPath('userData');
+
     const states = ['California', 'Texas', 'Florida', 'New York',
                     'Illinois', 'Ohio', 'Georgia', 'Washington'];
     const geoDs = await datasets.saveDataset(proj.id, {
@@ -223,16 +227,22 @@ async function main(): Promise<void> {
     });
     out.mapVisualId = mv && mv.id;
 
+    // Backdate 'By state' so a sheet reading BOTH it and 'Sales' has a clearly
+    // older input. Without this the oldest-vs-newest rule is untestable: every
+    // fixture is stamped within the same second and either rule reads the same.
+    const OLD_STAMP = '2020-03-04T05:06:07.000Z';
+    const bsFile = nodePath.join(userDataDir, 'projects', proj.id, 'datasets', geoDs.id + '.json');
+    const bsRaw = JSON.parse(nodeFs.readFileSync(bsFile, 'utf8'));
+    bsRaw.lastRefreshedAt = OLD_STAMP;
+    nodeFs.writeFileSync(bsFile, JSON.stringify(bsRaw, null, 2));
+    out.oldStamp = OLD_STAMP;
+
     // A REAL csv on disk, imported through the real parser and stamped with a
     // file origin — the fixture for the refresh chain further down. Everything
     // else in this file is saved from in-memory rows; this one has to be a file,
     // because the whole point is re-reading it after it changes.
-    const nodeFs = req('fs');
-    const nodePath = req('path');
     const fileImport = req('./src/fileImport.js');
-    // `require` is not defined in this evaluated scope — everything resolves
-    // through main's own require, which is the point of `req`.
-    const csvPath = nodePath.join(req('electron').app.getPath('userData'), 'refreshable.csv');
+    const csvPath = nodePath.join(userDataDir, 'refreshable.csv');
     nodeFs.writeFileSync(csvPath, 'city,visits\nOslo,10\nBergen,20\n', 'utf8');
     const parsed = await fileImport.parseFile(csvPath, 'csv');
     const fileDs = await datasets.saveDataset(proj.id, {
@@ -1011,6 +1021,51 @@ async function main(): Promise<void> {
 
   const cardCount = await win.evaluate(() => document.querySelectorAll('#dash-grid .dash-card').length);
   ok('the card lands on the sheet grid', cardCount === 1, String(cardCount));
+
+  // ── Freshness in the analysis header ─────────────────────────────────────
+  // The sheet reads one dataset here, so the header must agree with it. The
+  // OLDEST rule is what matters and it is asserted directly below, on the
+  // dataset ids the sheet actually resolves rather than on wall-clock text.
+  const sheetFresh = await win.evaluate(() => {
+    const label = document.getElementById('dash-fresh') as HTMLElement | null;
+    const btn = document.getElementById('dash-refresh-data') as HTMLElement | null;
+    return {
+      text: (label?.textContent || '').trim(),
+      labelShown: !!label && !label.hidden,
+      btnShown: !!btn && !btn.hidden,
+    };
+  });
+  ok('the analysis header reports the freshness of the data it reads',
+     sheetFresh.labelShown && /^Data as of /.test(sheetFresh.text), JSON.stringify(sheetFresh));
+  // The one card reads the 'Sales' dataset, which was saved with no origin, so
+  // there is nothing to refresh and the button must not pretend otherwise.
+  ok('…and offers no Refresh data button when nothing on the sheet is refreshable',
+     !sheetFresh.btnShown, JSON.stringify(sheetFresh));
+
+  // THE rule: a sheet is only as fresh as its STALEST input. Add a second card
+  // reading the backdated 'By state' dataset — the header must follow the 2020
+  // stamp, not the one written seconds ago. "Newest" would read as today's time
+  // here, which is wrong in the direction that matters: it would tell someone
+  // their figures are current when half of them are years old.
+  await win.evaluate((vid) => {
+    (window as any).pushCard({
+      id: window.crypto.randomUUID(),
+      type: 'visual',
+      visualId: vid,
+      layout: { x: 0, y: 8, w: 6, h: 6 },
+    });
+  }, r.visualId);
+  await win.waitForTimeout(3000);
+  const twoFresh = await win.evaluate(() => ({
+    text: (document.getElementById('dash-fresh')?.textContent || '').trim(),
+    title: (document.getElementById('dash-fresh') as HTMLElement | null)?.title || '',
+    cards: document.querySelectorAll('#dash-grid .dash-card').length,
+  }));
+  // The 2020 stamp renders through formatSidebarTime as "Mar 4 · <time>".
+  ok('a sheet reading two datasets reports the OLDEST of them, not the newest',
+     twoFresh.cards === 2 && /Mar 4/.test(twoFresh.text), JSON.stringify(twoFresh));
+  ok('…and says why, so a header that disagrees with one row is explicable',
+     /oldest of the 2 datasets/.test(twoFresh.title), `"${twoFresh.title}"`);
 
   // ── The authoring workbench ───────────────────────────────────────────────
   // At REST the user sees the top strip, the rail and the sheet — nothing else.
@@ -1966,8 +2021,10 @@ async function main(): Promise<void> {
       pages: document.querySelectorAll('#dash-pages .dash-page-tab').length,
     };
   });
+  // Two cards: the sheet gained a second one above, to make the oldest-of-many
+  // freshness rule testable.
   ok('the published dashboard renders in the Dashboards panel',
-     published.inDashPanel && published.cards === 1, JSON.stringify(published));
+     published.inDashPanel && published.cards === 2, JSON.stringify(published));
   ok('it presents itself as read-only, and says why', published.readOnly && published.noteVisible,
      published.noteText);
   ok('with a route back to its analysis', published.routeBack);
