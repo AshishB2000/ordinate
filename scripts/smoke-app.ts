@@ -329,6 +329,38 @@ async function main(): Promise<void> {
     })
     .catch(() => {});
 
+  // ── The no-project dead end ───────────────────────────────────────────────
+  // FIRST UI interaction in this file, deliberately. The renderer's
+  // currentProjectId is a script-scope `let`, not a window property, so a test
+  // cannot fake the null state — it can only run before anything fills it in.
+  // Placed later, this assertion passes with the bug still present, because the
+  // home-screen checks below adopt a project on the way past.
+  //
+  // Null currentProjectId is the state a fresh install is permanently in.
+  // "+ New visual" used to alert "Open a project first" and stop — a dead end,
+  // since projects are demoted by design and there is no picker in the nav to
+  // send anyone to. It must resolve one implicitly and open the popup.
+  await win.evaluate(() => {
+    (window as any).__alerts = [];
+    window.alert = (m?: any) => { (window as any).__alerts.push(String(m)); };
+  });
+  await win.evaluate(() => {
+    const el = [...document.querySelectorAll('.as-nav-item')].find(
+      (b) => (b.textContent || '').trim() === 'Visuals') as HTMLElement | undefined;
+    el?.click();
+  });
+  await win.waitForTimeout(900);
+  await win.evaluate(() => (document.getElementById('viz-new-btn') as HTMLElement)?.click());
+  await win.waitForTimeout(2000);
+  const noProject = await win.evaluate(() => ({
+    alerts: (window as any).__alerts as string[],
+    modalOpen: !!document.querySelector('.vn-modal'),
+  }));
+  ok('+ New visual with no project adopted opens the popup instead of a dead end',
+     noProject.modalOpen && noProject.alerts.length === 0, JSON.stringify(noProject));
+  await win.evaluate(() => (document.querySelector('.js-vn-cancel') as HTMLElement)?.click());
+  await win.waitForTimeout(400);
+
   await win.evaluate(async () => {
     // Connect is its own SECTION now, not an overlay over the capture surface, so
     // opening it IS the navigation. The old follow-up selectSection('sources')

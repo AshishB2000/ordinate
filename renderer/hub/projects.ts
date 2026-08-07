@@ -235,6 +235,30 @@ async function handleDeleteProject(id: string): Promise<void> {
 // create one. Projects stay on disk as a grouping — the user just never has to
 // pick one to start. Returns false only if main refused to create one.
 async function ensureProjectAndOpen(): Promise<boolean> {
+  const id = await resolveProjectId();
+  if (!id) return false; // main refused — leave the user on home
+  await openWorkspace(id); // workspace.ts — lands on the Sources section
+  return true;
+}
+
+/**
+ * Resolve a project to work in WITHOUT navigating: reuse the most-recently-
+ * updated one, or create it. Returns '' only if main refused to create one.
+ *
+ * Split out of ensureProjectAndOpen because a section that is ALREADY the place
+ * the user wants to be (Visuals, Analyses, Dashboards) needs the project but
+ * must not be thrown to Sources to get it. Sharing the resolution keeps one
+ * answer to "which project am I in" — a second copy would be a second way to
+ * pick, and the two would disagree the moment ordering changed.
+ *
+ * Projects are demoted by design: they stay on disk as a grouping and are
+ * created implicitly, so the user never has to pick one to start. That is why
+ * this exists at all rather than an "Open a project first" dead end — there is
+ * no project picker in the nav to send anyone to.
+ */
+async function resolveProjectId(): Promise<string> {
+  if (currentProjectId) return currentProjectId;
+
   let id = '';
   try {
     const list = await window.hub.listProjects();
@@ -243,13 +267,18 @@ async function ensureProjectAndOpen(): Promise<boolean> {
   } catch (_) { /* fall through and create one */ }
 
   if (!id) {
-    const created = await window.hub.createProject('Untitled project');
-    if (!created || !created.id) return false; // main refused — leave the user on home
-    id = String(created.id);
+    try {
+      const created = await window.hub.createProject('Untitled project');
+      id = created && created.id ? String(created.id) : '';
+    } catch (_) {
+      return '';
+    }
   }
+  if (!id) return '';
 
-  await openWorkspace(id); // workspace.ts — lands on the Sources section
-  return true;
+  // Adopt it as the session's project so the caller's very next window.hub.*
+  // call has a context — WITHOUT a section change.
+  return (await adoptProject(id)) ? id : '';
 }
 
 async function startFromSource(kind: string): Promise<void> {
