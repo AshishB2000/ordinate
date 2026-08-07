@@ -257,14 +257,21 @@ function dataToTSV(data) {
 
 // Generic single-use popover styled like the chart menu. `populate(el, close)` fills it.
 // Positions under the anchor and dismisses on outside-click / Esc.
+// `onClose` (optional) fires however the menu goes away — the only way an anchor
+// can keep its aria-expanded honest, since Esc and outside-click close from here.
 let _activeMiniMenu = null;
-function openMiniMenu(anchorBtn, populate) {
+function openMiniMenu(anchorBtn, populate, onClose?) {
   if (_activeMiniMenu) _activeMiniMenu();   // close any open mini menu first
   const el = document.createElement('div');
   el.className = 'chart-menu';
   el.setAttribute('role', 'menu');
   const ac = new AbortController();
-  const close = () => { ac.abort(); el.remove(); if (_activeMiniMenu === close) _activeMiniMenu = null; };
+  const close = () => {
+    ac.abort();
+    el.remove();
+    if (_activeMiniMenu === close) _activeMiniMenu = null;
+    if (onClose) onClose();
+  };
   _activeMiniMenu = close;
   populate(el, close);
   document.body.appendChild(el);

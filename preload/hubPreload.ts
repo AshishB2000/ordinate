@@ -296,16 +296,18 @@ contextBridge.exposeInMainWorld('hub', {
   saveVisual: (payload: { projectId: string; datasetId: string; name: string; chartType: string; encoding: any; overrides?: any; filters?: any }) =>
     ipcRenderer.invoke('visual:save', payload),
   // Patch an existing visual's name / chartType / encoding / overrides / filters
-  // (datasetId immutable). Any omitted field keeps its stored value.
-  updateVisual: (projectId: string, id: string, patch: { name?: string; chartType?: string; encoding?: any; overrides?: any; filters?: any }) =>
+  // / favorite (datasetId immutable). Any omitted field keeps its stored value.
+  updateVisual: (projectId: string, id: string, patch: { name?: string; chartType?: string; encoding?: any; overrides?: any; filters?: any; favorite?: boolean }) =>
     ipcRenderer.invoke('visual:update', { projectId, id, ...patch }),
   // Delete a visual; returns { ok: boolean }.
   deleteVisual: (projectId: string, id: string) => ipcRenderer.invoke('visual:delete', { projectId, id }),
   // Duplicate a visual into an independent copy; returns { ok, visual } | { ok:false, error }.
   duplicateVisual: (projectId: string, id: string) => ipcRenderer.invoke('visual:duplicate', { projectId, id }),
-  // OPTIONAL AI chart suggestion (structure only, execution-gated). Returns
-  // { ok, encoding, chartType } | { ok:false, notReady } | { ok:false, error }.
-  suggestVisual: (projectId: string, datasetId: string) => ipcRenderer.invoke('visual:suggest', { projectId, datasetId }),
+  // OPTIONAL AI chart suggestions (structure only, execution-gated). Returns
+  // { ok:true, options:[{ encoding, chartType, why }] } | { ok:false, notReady }
+  // | { ok:false, error }. `intent` is the user's own words and may be ''.
+  suggestVisual: (projectId: string, datasetId: string, intent?: string) =>
+    ipcRenderer.invoke('visual:suggest', { projectId, datasetId, intent }),
   // Compute the renderer-ready { labels, series } (+ optional geo) for an encoding
   // over a dataset — ALL aggregation math runs in main's pure bridge (no model).
   // Optional `filters` (transforms filter steps) are applied BEFORE aggregation.

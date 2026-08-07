@@ -82,6 +82,13 @@ export interface Visual {
   encoding: VizEncoding;
   overrides: VizOverrides; // chart-styling overrides (empty {} = defaults). schema v2.
   filters: FilterStep[]; // visual-level row filters applied BEFORE aggregation. schema v2.
+  /**
+   * Pinned to the top of the gallery. NOT a schema bump: `normalize()` defaults
+   * a missing key to `false`, so every v2 file written before this existed reads
+   * back correctly and unfavourited. A version bump would have bought a
+   * migration for one boolean whose absence already means exactly what it should.
+   */
+  favorite: boolean;
   createdAt: string;
   updatedAt: string;
   schemaVersion: 2;
@@ -93,6 +100,7 @@ export interface VisualSummary {
   chartType: string;
   datasetId: string;
   updatedAt: string;
+  favorite: boolean;
 }
 
 let projectsBase: string | null = null;
@@ -163,6 +171,30 @@ export function sanitizeEncoding(raw: unknown): VizEncoding {
 export function sanitizeChartType(raw: unknown): string {
   return typeof raw === 'string' && raw.trim() ? raw.trim() : 'column';
 }
+
+/**
+ * The chart types the AI suggestion prompt is allowed to name.
+ *
+ * MAIN needs its own copy: the renderer's `ALL_CHART_TYPE_IDS` lives in
+ * `renderer/hub/renderResult.ts`, a classic global-scope <script> that cannot be
+ * imported here. Two lists can drift, and the drift is SILENT — the model
+ * proposes a type the renderer cannot draw and the user gets an empty option. So
+ * `scripts/test-visual-chart-ids.ts` parses `ALL_CHART_TYPE_IDS` straight out of
+ * that file and asserts every id below is in it.
+ *
+ * Deliberately a SUBSET of what a Visual may STORE: no 'table' (a fallback, not
+ * a proposal) and neither map, because a map needs a geo level the model is
+ * never asked for. `sanitizeChartType` is unchanged and still permissive — this
+ * list constrains the PROMPT, and the picker constrains what can be drawn.
+ */
+export const SUGGESTABLE_CHART_TYPES: readonly string[] = [
+  'column', 'bar', 'clustered_column', 'clustered_bar',
+  'stacked_column', 'stacked_bar', 'pct_stacked_column', 'pct_stacked_bar',
+  'line', 'line_markers', 'area', 'stacked_area',
+  'pie', 'donut', 'scatter', 'gauge', 'combo', 'bubble',
+  'treemap', 'heatmap', 'funnel', 'histogram',
+  'sankey', 'candlestick', 'boxplot',
+];
 
 // Allowed enum sets for the clamped override fields.
 const LEGEND_POSITIONS: ReadonlySet<string> = new Set(['bottom', 'top', 'left', 'right']);
@@ -242,6 +274,8 @@ function normalize(data: any, projectId: string): Visual {
     // v1 files carry no overrides/filters → {} / [] (behaves exactly as Week 7).
     overrides: sanitizeOverrides(data.overrides),
     filters: sanitizeFilters(data.filters),
+    // Absent (every file written before favourites existed) means false.
+    favorite: data.favorite === true,
     createdAt,
     updatedAt: data.updatedAt || createdAt,
     schemaVersion: 2,
@@ -276,7 +310,10 @@ export async function listVisuals(projectId: string): Promise<VisualSummary[]> {
       const data = JSON.parse(raw);
       if (!isValidVisual(data)) continue;
       const v = normalize(data, projectId);
-      out.push({ id: v.id, name: v.name, chartType: v.chartType, datasetId: v.datasetId, updatedAt: v.updatedAt });
+      out.push({
+        id: v.id, name: v.name, chartType: v.chartType, datasetId: v.datasetId,
+        updatedAt: v.updatedAt, favorite: v.favorite,
+      });
     } catch (err: any) {
       if (err.code !== 'ENOENT') {
         console.error('[visuals] Skipping corrupt or unreadable visual:', id, err.message);
@@ -284,7 +321,13 @@ export async function listVisuals(projectId: string): Promise<VisualSummary[]> {
     }
   }
 
-  out.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  // Favourites first, then newest-updated. Two keys, one comparator — a
+  // separate partition-then-concat would sort the two halves independently and
+  // is the same thing written twice.
+  out.sort((a, b) => {
+    if (a.favorite !== b.favorite) return a.favorite ? -1 : 1;
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+  });
   return out;
 }
 
@@ -308,7 +351,10 @@ export async function getVisual(projectId: string, id: string): Promise<Visual |
 // can never orphan-reference a missing dataset the bridge would fail to load.
 export async function saveVisual(
   projectId: string,
-  input: { name: string; datasetId: string; chartType: string; encoding: unknown; overrides?: unknown; filters?: unknown },
+  input: {
+    name: string; datasetId: string; chartType: string; encoding: unknown;
+    overrides?: unknown; filters?: unknown; favorite?: unknown;
+  },
 ): Promise<Visual | null> {
   if (!isValidId(projectId) || !isValidId(input.datasetId)) return null;
   const parent = await projects.getProject(projectId);
@@ -329,6 +375,7 @@ export async function saveVisual(
     encoding: sanitizeEncoding(input.encoding),
     overrides: sanitizeOverrides(input.overrides),
     filters: sanitizeFilters(input.filters),
+    favorite: input.favorite === true,
     createdAt: now,
     updatedAt: now,
     schemaVersion: 2,
@@ -344,7 +391,10 @@ export async function saveVisual(
 export async function updateVisual(
   projectId: string,
   id: string,
-  patch: { name?: string; chartType?: string; encoding?: unknown; overrides?: unknown; filters?: unknown },
+  patch: {
+    name?: string; chartType?: string; encoding?: unknown; overrides?: unknown;
+    filters?: unknown; favorite?: unknown;
+  },
 ): Promise<Visual | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   const existing = await getVisual(projectId, id);
@@ -357,6 +407,7 @@ export async function updateVisual(
     encoding: patch.encoding !== undefined ? sanitizeEncoding(patch.encoding) : existing.encoding,
     overrides: patch.overrides !== undefined ? sanitizeOverrides(patch.overrides) : existing.overrides,
     filters: patch.filters !== undefined ? sanitizeFilters(patch.filters) : existing.filters,
+    favorite: patch.favorite !== undefined ? patch.favorite === true : existing.favorite,
     updatedAt: new Date().toISOString(),
   };
   await fs.promises.mkdir(visualsDir(projectId), { recursive: true });
@@ -386,6 +437,9 @@ export async function duplicateVisual(projectId: string, id: string): Promise<Vi
     encoding: source.encoding,
     overrides: source.overrides,
     filters: source.filters,
+    // A copy starts unpinned: duplicating a favourite to tweak it should not
+    // put two near-identical cards at the top of the gallery.
+    favorite: false,
     createdAt: now,
     updatedAt: now,
     schemaVersion: 2,

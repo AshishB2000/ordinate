@@ -94,69 +94,285 @@ function fillSelect(sel: HTMLSelectElement | null, items: Array<{ value: string;
   });
 }
 
-// ── Saved-visual list ────────────────────────────────────────────────────────
+// ── Gallery (the default view: saved visuals as cards) ───────────────────────
+// Same name and same contract as the Week 7 list refresh — only the DOM it
+// produces changed, so workspace.selectSection and every save/delete/duplicate
+// caller is unaffected.
 async function refreshVisualList(): Promise<void> {
-  const list = vizEl('viz-saved-list');
-  const empty = vizEl('viz-saved-empty');
-  if (!list) return;
-  list.innerHTML = '';
-  if (!currentProjectId) {
-    if (empty) empty.hidden = false;
-    return;
-  }
+  const grid = vizEl('viz-grid');
+  const empty = vizEl('viz-empty');
+  if (!grid) return;
+  grid.innerHTML = '';
   let items: any[] = [];
-  try {
-    items = await window.hub.listVisuals(currentProjectId);
-  } catch (_) {
-    items = [];
+  if (currentProjectId) {
+    try {
+      items = await window.hub.listVisuals(currentProjectId);
+    } catch (_) {
+      items = [];
+    }
   }
   if (!Array.isArray(items)) items = [];
+  grid.hidden = items.length === 0;
   if (empty) empty.hidden = items.length > 0;
-  items.forEach((v) => list.appendChild(makeSavedVisualItem(v)));
+  items.forEach((v) => grid.appendChild(makeVisualCard(v)));
 }
 
-function makeSavedVisualItem(v: any): HTMLElement {
-  const row = document.createElement('div');
-  row.className = 'viz-saved-item';
+// Flip between the gallery and the (now full-panel) builder. They are mutually
+// exclusive: the builder is no longer an inline editor sitting above a list.
+function showVizGallery(show: boolean): void {
+  vizShow('viz-gallery', show);
+  vizShow('viz-builder', !show);
+}
 
-  const open = document.createElement('button');
-  open.type = 'button';
-  open.className = 'viz-saved-open';
+function makeVisualCard(v: any): HTMLElement {
+  const id = String(v && v.id ? v.id : '');
+  const card = document.createElement('div');
+  card.className = 'viz-card';
+
+  // The whole card is ONE button, so a card is a single Tab stop. The star and
+  // the ⋯ menu are siblings of it (nested buttons are invalid HTML) positioned
+  // over the tile by CSS.
+  const body = document.createElement('button');
+  body.type = 'button';
+  body.className = 'viz-card-body';
+
+  const tile = document.createElement('span');
+  tile.className = 'viz-card-tile';
+  const glyph = document.createElement('span');
+  glyph.className = 'viz-card-glyph';
+  // The ONLY innerHTML here: VIZ_ICONS is a trusted static constant of
+  // hand-written SVG in renderResult.ts, never user or model input.
+  glyph.innerHTML = VIZ_ICONS[v && v.chartType] || VIZ_ICONS.column;
+  tile.appendChild(glyph);
+
   const name = document.createElement('span');
-  name.className = 'viz-saved-name';
+  name.className = 'viz-card-name';
   name.textContent = v && v.name ? String(v.name) : 'Untitled visual';
+
   const meta = document.createElement('span');
-  meta.className = 'viz-saved-meta';
+  meta.className = 'viz-card-meta';
   const typeLabel = (v && v.chartType && VIZ_LABELS[v.chartType]) || (v && v.chartType) || 'Chart';
   meta.textContent = typeLabel + ' · ' + formatSidebarTime(v && v.updatedAt);
-  open.appendChild(name);
-  open.appendChild(meta);
-  open.addEventListener('click', () => openSavedVisual(String(v.id)));
 
-  const dup = document.createElement('button');
-  dup.type = 'button';
-  dup.className = 'viz-saved-dup';
-  dup.setAttribute('aria-label', 'Duplicate visual');
-  dup.textContent = '⧉';
-  dup.addEventListener('click', (e) => {
+  body.appendChild(tile);
+  body.appendChild(name);
+  body.appendChild(meta);
+  body.addEventListener('click', () => openSavedVisual(id));
+
+  const star = document.createElement('button');
+  star.type = 'button';
+  star.className = 'viz-card-star';
+  star.textContent = '★';
+  const fav = v && v.favorite === true;
+  star.setAttribute('aria-pressed', fav ? 'true' : 'false');
+  star.setAttribute('aria-label', fav ? 'Unfavourite' : 'Favourite');
+  star.addEventListener('click', (e) => {
     e.stopPropagation();
-    handleDuplicateVisual(String(v.id));
+    handleToggleFavorite(id, !fav, star);
   });
 
-  const del = document.createElement('button');
-  del.type = 'button';
-  del.className = 'viz-saved-del';
-  del.setAttribute('aria-label', 'Delete visual');
-  del.textContent = '🗑';
-  del.addEventListener('click', (e) => {
+  const menuBtn = document.createElement('button');
+  menuBtn.type = 'button';
+  menuBtn.className = 'viz-card-menu';
+  menuBtn.textContent = '⋯';
+  menuBtn.setAttribute('aria-haspopup', 'menu');
+  menuBtn.setAttribute('aria-expanded', 'false');
+  menuBtn.setAttribute('aria-label', 'More actions');
+  menuBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    handleDeleteVisual(String(v.id));
+    openVisualCardMenu(menuBtn, v);
   });
 
-  row.appendChild(open);
-  row.appendChild(dup);
-  row.appendChild(del);
-  return row;
+  card.appendChild(body);
+  card.appendChild(star);
+  card.appendChild(menuBtn);
+  return card;
+}
+
+// The card's ⋯ popover. Reuses the hub's shared mini-menu (chartControls.ts) —
+// positioning, outside-click and Esc are already solved there.
+function openVisualCardMenu(anchor: HTMLButtonElement, v: any): void {
+  const id = String(v && v.id ? v.id : '');
+  anchor.setAttribute('aria-expanded', 'true');
+  openMiniMenu(
+    anchor,
+    (el: HTMLElement, close: () => void) => {
+      // hub.ts keeps ONE permanent .chart-menu[role=menu] in the document for the
+      // per-graph ⋯ cluster, so `.chart-menu` alone does not identify this
+      // popover. Its own class is what lets a test address it.
+      el.classList.add('viz-card-pop');
+      const add = (label: string, run: (() => void) | null): void => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'chart-menu-item';
+        b.textContent = label;
+        b.disabled = !run;
+        if (run) b.addEventListener('click', () => { close(); run(); });
+        el.appendChild(b);
+      };
+      add('Open', () => openSavedVisual(id));
+      add('Rename', () => handleRenameVisual(id, v && v.name ? String(v.name) : ''));
+      add('Duplicate', () => handleDuplicateVisual(id));
+      add('Add to analysis', () => handleAddVisualToAnalysis(id));
+      add('Export', () => handleExportVisual(id));
+      add('Delete', () => handleDeleteVisual(id));
+    },
+    () => anchor.setAttribute('aria-expanded', 'false'),
+  );
+}
+
+// ── Export a single saved visual ─────────────────────────────────────────────
+// Loads the visual, has MAIN compute its data, and hands the SAME argument
+// object the result surface builds to the SAME openExportDialog — PDF/PPTX/DOCX/
+// HTML/PNG for one chart, with no export path of its own to drift.
+//
+// `entry` is the adapter shape vizEntry already uses, with the visual's stored
+// overrides mapped onto the key the dialog derives ('v:' + type), so an exported
+// chart carries the styling the builder saved. This runs in the VISIBLE hub
+// window, which is where a map must render — the offscreen report window is not
+// touched.
+async function handleExportVisual(id: string): Promise<void> {
+  if (!currentProjectId) return;
+  let visual: any = null;
+  try {
+    visual = await window.hub.getVisual(currentProjectId, id);
+  } catch (_) {
+    visual = null;
+  }
+  if (!visual) {
+    showToast('That visual could not be loaded');
+    return;
+  }
+
+  let res: any;
+  try {
+    res = await window.hub.computeVisualData(
+      currentProjectId, String(visual.datasetId || ''), visual.encoding, visual.filters || []);
+  } catch (_) {
+    res = null;
+  }
+  if (!res || res.ok === false || !res.data) {
+    showToast((res && res.error) || 'Could not compute this visual');
+    return;
+  }
+  const data = res.data;
+
+  // The saved type FIRST so the dialog opens on what the user saved, then the
+  // rest of what this data can actually support.
+  const eligible = eligibleChartTypes(res.recommendedShape, countNumericSeries(data), (data.labels || []).length);
+  if (data.geo) eligible.push('map_choropleth');
+  const saved = String(visual.chartType || '');
+  const recommended = saved ? [saved].concat(eligible.filter((t) => t !== saved)) : eligible;
+
+  const overrides = visual.overrides && typeof visual.overrides === 'object' ? visual.overrides : {};
+  const entry = { id: String(visual.id), chartOverrides: { ['v:' + saved]: overrides } };
+
+  openExportDialog({
+    recommended,
+    selectedExtra: [],
+    current: saved,
+    vizData: data,
+    entry,
+    turnIdx: 'v', // the override-key prefix the builder already writes under
+    hasGeo: !!data.geo,
+    analysis: '',
+    title: String(visual.name || 'Visual'),
+    headlineSegments: [],
+  });
+}
+
+// ── Add a saved visual to an analysis ────────────────────────────────────────
+// Appends a visual card to the LAST sheet of the chosen analysis and persists
+// it. Deliberately does NOT navigate: the user is browsing the gallery and asked
+// to file this away, not to leave.
+async function handleAddVisualToAnalysis(id: string): Promise<void> {
+  if (!currentProjectId) return;
+  let list: any[] = [];
+  try {
+    list = await window.hub.listAnalyses(currentProjectId);
+  } catch (_) {
+    list = [];
+  }
+  if (!Array.isArray(list)) list = [];
+
+  const NEW = '__new__';
+  const options = list
+    .map((a) => ({ value: String(a.id), label: a && a.name ? String(a.name) : 'Untitled analysis' }))
+    .concat([{ value: NEW, label: 'New analysis…' }]);
+  const choice = await dashChooseModal('Add to analysis', options, 'Add');
+  if (choice === null) return;
+
+  let analysis: any = null;
+  if (choice === NEW) {
+    const name = await promptModal('Name the analysis', 'Untitled analysis', 'Create');
+    if (name === null) return;
+    try {
+      analysis = await window.hub.createAnalysis({ projectId: currentProjectId, name: name.trim() || 'Untitled analysis' });
+    } catch (_) {
+      analysis = null;
+    }
+  } else {
+    try {
+      analysis = await window.hub.getAnalysis(currentProjectId, choice);
+    } catch (_) {
+      analysis = null;
+    }
+  }
+  if (!analysis || !analysis.id) {
+    showToast('That analysis could not be opened');
+    return;
+  }
+
+  // An analysis always has at least one sheet; a record that somehow has none
+  // gets one rather than dropping the card on the floor.
+  const sheets = Array.isArray(analysis.sheets) && analysis.sheets.length
+    ? analysis.sheets
+    : [{ id: dashUuid(), name: 'Sheet 1', cards: [] }];
+  const last = sheets[sheets.length - 1];
+  if (!Array.isArray(last.cards)) last.cards = [];
+  // Same layout maths the grid editor uses for its own + Visual — nextFreeRow
+  // takes the card list so this and the editor cannot disagree about where the
+  // next card lands.
+  last.cards.push({ id: dashUuid(), type: 'visual', visualId: id, layout: { x: 0, y: nextFreeRow(last.cards), w: 6, h: 6 } });
+
+  let saved: any = null;
+  try {
+    saved = await window.hub.updateAnalysis(currentProjectId, String(analysis.id), { sheets });
+  } catch (_) {
+    saved = null;
+  }
+  if (!saved || saved.ok === false) {
+    showToast('Could not add it to that analysis');
+    return;
+  }
+  showToast('Added to ' + (analysis.name ? String(analysis.name) : 'the analysis'));
+}
+
+// Optimistic: the star flips immediately, then the list repaints (favourites
+// sort to the top, so the card usually moves). A failed write is reverted by the
+// refresh, which reads what is actually on disk.
+async function handleToggleFavorite(id: string, next: boolean, star: HTMLButtonElement): Promise<void> {
+  if (!currentProjectId) return;
+  star.setAttribute('aria-pressed', next ? 'true' : 'false');
+  star.setAttribute('aria-label', next ? 'Unfavourite' : 'Favourite');
+  try {
+    await window.hub.updateVisual(currentProjectId, id, { favorite: next });
+  } catch (_) {
+    /* ignore — the refresh below shows the stored truth */
+  }
+  await refreshVisualList();
+}
+
+async function handleRenameVisual(id: string, current: string): Promise<void> {
+  if (!currentProjectId) return;
+  const name = await promptModal('Rename this visual', current, 'Rename');
+  if (name === null || !name.trim()) return;
+  try {
+    await window.hub.updateVisual(currentProjectId, id, { name: name.trim() });
+  } catch (_) {
+    /* ignore */
+  }
+  await refreshVisualList();
 }
 
 async function handleDuplicateVisual(id: string): Promise<void> {
@@ -181,6 +397,281 @@ async function handleDeleteVisual(id: string): Promise<void> {
   await refreshVisualList();
 }
 
+// ── "+ New visual" popup ─────────────────────────────────────────────────────
+// Step 1 asks WHICH dataset, step 2 asks HOW to build it, step 3 shows what the
+// model proposed. The modal only RESOLVES a choice — it never creates, saves or
+// navigates anything itself, so Escape / the backdrop / Cancel all resolve null
+// and leave the project exactly as it was. Cloned from #viz-new-tpl per open, so
+// the markup lives with the rest of the hub's HTML and every hook inside it is a
+// `js-` class scoped to the clone.
+//
+// The builder's ✨ Suggest chart button opens this SAME modal straight at step 3
+// (`opts.startAtSuggest`). One picker, one code path — not a second flow that
+// could disagree with this one about what a proposal looks like.
+interface VizNewChoice {
+  kind: 'manual' | 'suggested';
+  datasetId: string;
+  encoding?: any; // 'suggested' only — already sanitized in main
+  chartType?: string; // 'suggested' only
+}
+
+interface VizNewOpts {
+  datasetId?: string; // preselect (the builder already knows its dataset)
+  startAtSuggest?: boolean; // open straight at step 3 and ask immediately
+}
+
+async function openNewVisualModal(opts: VizNewOpts = {}): Promise<VizNewChoice | null> {
+  let sets: any[] = [];
+  try {
+    sets = await window.hub.listDatasets(currentProjectId);
+  } catch (_) {
+    sets = [];
+  }
+  if (!Array.isArray(sets)) sets = [];
+
+  // Readiness comes from the ONE source main already exposes (publicConfig
+  // .isReady = Local CLI OR BYOK) — the same gate analyses.ts asks. No new IPC
+  // and no second definition of "ready" that could disagree with it.
+  let aiReady = false;
+  try {
+    const st: any = await window.hub.getKeyStatus();
+    aiReady = !!(st && st.isReady);
+  } catch (_) {
+    aiReady = false;
+  }
+
+  const tpl = document.getElementById('viz-new-tpl') as HTMLTemplateElement | null;
+  if (!tpl || !tpl.content.firstElementChild) return null;
+  const overlay = tpl.content.firstElementChild.cloneNode(true) as HTMLElement;
+  const q = (sel: string): any => overlay.querySelector(sel);
+
+  const box = q('.vn-modal');
+  const step1 = q('.js-vn-step1');
+  const step2 = q('.js-vn-step2');
+  const step3 = q('.js-vn-step3');
+  const rowsHost = q('.js-vn-rows');
+  const noneEl = q('.js-vn-none');
+  const backBtn = q('.js-vn-back');
+  const intentEl = q('.js-vn-intent') as HTMLTextAreaElement;
+  const askBtn = q('.js-vn-ask') as HTMLButtonElement;
+  const noteEl = q('.js-vn-note');
+  const optionsHost = q('.js-vn-options');
+  const statusEl = q('.js-vn-status');
+  const regenBtn = q('.js-vn-regen') as HTMLButtonElement;
+
+  return new Promise<VizNewChoice | null>((resolve) => {
+    let done = false;
+    let selectedId = String(opts.datasetId || '');
+    let a11y: { onTabKey: (e: KeyboardEvent) => void; release: () => void } | null = null;
+
+    function close(val: VizNewChoice | null): void {
+      if (done) return;
+      done = true;
+      document.removeEventListener('keydown', onKey, true);
+      overlay.remove();
+      if (a11y) a11y.release(); // hand focus back to the trigger
+      resolve(val);
+    }
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        close(null);
+      } else if (a11y) {
+        a11y.onTabKey(e); // trap Tab inside the dialog
+      }
+    }
+
+    // Step 1 is re-enterable: step 2's ← Back comes straight back here. When the
+    // builder opened us at step 3 there is no step 1 to return to, so ← Back
+    // goes to step 2 instead of stranding the user on a dataset list they were
+    // never shown.
+    function showStep(n: number): void {
+      step1.hidden = n !== 1;
+      step2.hidden = n !== 2;
+      step3.hidden = n !== 3;
+      backBtn.hidden = n === 1 || (n === 2 && !!opts.startAtSuggest);
+      let first: HTMLElement | null = null;
+      if (n === 1) {
+        first = (rowsHost.querySelector('.vn-row') as HTMLElement | null) || (q('.js-vn-import') as HTMLElement);
+      } else if (n === 2) {
+        first = aiReady ? intentEl : (q('.js-vn-manual') as HTMLElement);
+      } else {
+        // Regenerate is disabled while the model is thinking, and focusing a
+        // disabled button is a no-op that would strand focus outside the dialog.
+        first = regenBtn.disabled ? (q('.js-vn-manual2') as HTMLElement) : regenBtn;
+      }
+      if (first) first.focus();
+    }
+
+    // ── Step 3: ask, then DRAW each proposal ────────────────────────────────
+    // Every figure on screen here comes from window.hub.computeVisualData —
+    // app-computed in main, off the stored Parquet. The model contributed the
+    // encoding, the chart type and the caption, and no number at all.
+    async function runSuggest(): Promise<void> {
+      if (!selectedId) return;
+      showStep(3);
+      regenBtn.disabled = true;
+      optionsHost.innerHTML = '';
+      statusEl.textContent = 'Thinking…';
+
+      let res: any;
+      try {
+        res = await window.hub.suggestVisual(currentProjectId, selectedId, intentEl.value.trim());
+      } catch (_) {
+        res = { ok: false };
+      }
+      if (done) return; // the user closed the modal while the model was thinking
+      regenBtn.disabled = false;
+
+      if (res && res.notReady) {
+        statusEl.textContent = 'Connect a model in Execution settings to suggest a chart.';
+        return;
+      }
+      const options = res && res.ok && Array.isArray(res.options) ? res.options : [];
+      if (!options.length) {
+        statusEl.textContent = (res && res.error) || 'Could not suggest a chart.';
+        return;
+      }
+      statusEl.textContent = 'Pick one to open it in the builder. Nothing is saved until you save it.';
+      // Draw them concurrently: each is a resident query of a few ms, and a
+      // serial loop would make three of them feel like one slow one.
+      await Promise.all(options.map((o: any) => renderOption(o)));
+    }
+
+    async function renderOption(option: any): Promise<void> {
+      const card = document.createElement('div');
+      card.className = 'vn-option';
+      const art = document.createElement('div');
+      art.className = 'vn-option-art';
+      const why = document.createElement('p');
+      why.className = 'vn-option-why';
+      why.textContent = String(option.why || '') || 'Suggested chart';
+      const use = document.createElement('button');
+      use.type = 'button';
+      use.className = 'btn btn-sm';
+      use.textContent = 'Use this chart';
+      use.disabled = true; // until it provably draws
+      card.appendChild(art);
+      card.appendChild(why);
+      card.appendChild(use);
+      optionsHost.appendChild(card);
+
+      let data: any = null;
+      let res: any;
+      try {
+        res = await window.hub.computeVisualData(currentProjectId, selectedId, option.encoding, []);
+        if (res && res.ok !== false) data = res.data;
+      } catch (_) {
+        data = null;
+      }
+      if (done) return;
+
+      // An option that cannot be drawn says so and stays unpickable — offering a
+      // blank tile the user can pick would put a broken encoding in the builder.
+      if (!data || !Array.isArray(data.labels) || !data.labels.length) {
+        card.classList.add('is-broken');
+        const note = document.createElement('span');
+        note.className = 'vn-option-note';
+        note.textContent = "Couldn't draw this one";
+        art.appendChild(note);
+        return;
+      }
+
+      // Which type actually gets drawn is CODE's decision, not the model's: if
+      // the proposed type does not fit the data the app produced, the first
+      // eligible one is used instead. Same eligibility the builder's picker runs.
+      const eligible = eligibleChartTypes(res.recommendedShape, countNumericSeries(data), data.labels.length);
+      const type = eligible.indexOf(option.chartType) >= 0 ? option.chartType : (eligible[0] || 'table');
+      // A null entry is what turns the ⋯ Customize menu off (renderResult.ts):
+      // a preview owns no overrides, so it needs no override key either.
+      renderVizInArea(art, data, type, null, '');
+
+      use.disabled = false;
+      use.addEventListener('click', () =>
+        close({ kind: 'suggested', datasetId: selectedId, encoding: option.encoding, chartType: type }));
+    }
+
+    sets.forEach((d) => {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'vn-row';
+      row.setAttribute('role', 'radio');
+      row.setAttribute('aria-checked', 'false');
+      const nm = document.createElement('span');
+      nm.className = 'vn-row-name';
+      nm.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
+      const meta = document.createElement('span');
+      meta.className = 'vn-row-meta';
+      const rows = typeof d.rowCount === 'number' ? d.rowCount.toLocaleString() : '—';
+      const cols = typeof d.columnCount === 'number' ? String(d.columnCount) : '—';
+      meta.textContent = rows + ' rows × ' + cols + ' columns';
+      row.appendChild(nm);
+      row.appendChild(meta);
+      row.addEventListener('click', () => {
+        selectedId = String(d.id);
+        rowsHost.querySelectorAll('.vn-row').forEach((r: any) => r.setAttribute('aria-checked', 'false'));
+        row.setAttribute('aria-checked', 'true');
+        showStep(2);
+      });
+      rowsHost.appendChild(row);
+    });
+    rowsHost.hidden = sets.length === 0;
+    noneEl.hidden = sets.length > 0;
+
+    // No datasets: the one useful action is to go and import some. Leaves for
+    // the existing Data section rather than re-hosting the import flow here.
+    q('.js-vn-import').addEventListener('click', () => {
+      close(null);
+      if (typeof selectSection === 'function') selectSection('datasets');
+    });
+
+    // Without a model the AI route is inert, and says why in the standard line.
+    if (!aiReady) {
+      askBtn.disabled = true;
+      intentEl.disabled = true;
+      noteEl.hidden = false;
+      q('.js-vn-ai').classList.add('is-disabled');
+    }
+
+    askBtn.addEventListener('click', () => { runSuggest(); });
+    regenBtn.addEventListener('click', () => { runSuggest(); });
+    const goManual = (): void => {
+      if (!selectedId) return;
+      close({ kind: 'manual', datasetId: selectedId });
+    };
+    q('.js-vn-manual').addEventListener('click', goManual);
+    q('.js-vn-manual2').addEventListener('click', goManual);
+
+    backBtn.addEventListener('click', () => showStep(step3.hidden ? 1 : 2));
+    q('.js-vn-cancel').addEventListener('click', () => close(null));
+    q('.js-vn-x').addEventListener('click', () => close(null));
+    overlay.addEventListener('mousedown', (e: MouseEvent) => {
+      if (e.target === overlay) close(null);
+    });
+    document.addEventListener('keydown', onKey, true);
+
+    document.body.appendChild(overlay);
+    a11y = makeModalAccessible(box, 'New visual', null);
+    // The builder already knows its dataset, so it skips straight to asking.
+    if (opts.startAtSuggest && selectedId) runSuggest();
+    else showStep(selectedId ? 2 : 1);
+  });
+}
+
+// "+ New visual": ask first, then open the builder on the chosen dataset. A
+// suggestion is applied to the form and NEVER saved — the user still reviews it.
+async function handleNewVisual(): Promise<void> {
+  if (!currentProjectId) {
+    window.alert('Open a project first.');
+    return;
+  }
+  const choice = await openNewVisualModal();
+  if (!choice) return; // cancelled — nothing was created
+  await openVisualBuilder(choice.datasetId);
+  if (choice.kind === 'suggested') applySuggestedEncoding(choice.encoding, choice.chartType || '');
+}
+
 // ── Builder open / close ─────────────────────────────────────────────────────
 async function loadDatasetOptions(selectedId: string): Promise<any[]> {
   let items: any[] = [];
@@ -201,7 +692,9 @@ async function loadDatasetOptions(selectedId: string): Promise<any[]> {
   return items;
 }
 
-async function openVisualBuilder(): Promise<void> {
+// `datasetId` preselects the dataset (the create popup already asked which one);
+// omitted, the builder falls back to the first in the list, as it always did.
+async function openVisualBuilder(datasetId?: string): Promise<void> {
   if (!currentProjectId) {
     window.alert('Open a project first.');
     return;
@@ -210,8 +703,8 @@ async function openVisualBuilder(): Promise<void> {
   vizCurrentChartType = '';
   vizOverrides = {};
   ensureVizForm();
-  const datasets = await loadDatasetOptions('');
-  vizShow('viz-builder', true);
+  const datasets = await loadDatasetOptions(datasetId || '');
+  showVizGallery(false);
   if (!datasets.length) {
     // No datasets to build from — show the builder shell with a clear hint.
     if (vizForm) vizForm.show(false);
@@ -224,7 +717,7 @@ async function openVisualBuilder(): Promise<void> {
 }
 
 function closeVisualBuilder(): void {
-  vizShow('viz-builder', false);
+  showVizGallery(true);
   vizEditingId = '';
   vizDatasetId = '';
   vizCurrentChartType = '';
@@ -413,7 +906,7 @@ async function openSavedVisual(id: string): Promise<void> {
       }))
     : [];
   await loadDatasetOptions(String(visual.datasetId || ''));
-  vizShow('viz-builder', true);
+  showVizGallery(false);
   // Encoding AND filters go in as one preset, so restoring a saved visual is the
   // same code path as opening a new one.
   await onDatasetChange(String(visual.datasetId || ''),
@@ -458,39 +951,22 @@ async function handleSaveVisual(): Promise<void> {
   await refreshVisualList();
 }
 
-// ── AI chart suggestion (structure only; never numbers; confirm before apply) ──
+// ── AI chart suggestion (structure only; never numbers; review before apply) ──
+// The builder's ✨ Suggest chart opens the SAME modal the create popup uses,
+// straight at its results step with an empty intent. A drawn picker replaced the
+// old window.confirm: "apply the suggested chart?" asked the user to accept a
+// chart they had not seen.
 async function handleSuggestVisual(): Promise<void> {
   if (!currentProjectId || !vizDatasetId) {
     window.alert('Pick a dataset first.');
     return;
   }
   const hint = vizEl('viz-suggest-hint');
-  const btn = vizEl('viz-suggest-btn') as HTMLButtonElement | null;
-  if (btn) btn.disabled = true;
-  if (hint) { hint.hidden = false; hint.textContent = 'Thinking…'; }
-  let res: any;
-  try {
-    res = await window.hub.suggestVisual(currentProjectId, vizDatasetId);
-  } catch (_) {
-    res = { ok: false };
-  }
-  if (btn) btn.disabled = false;
-
-  if (res && res.notReady) {
-    if (hint) { hint.hidden = false; hint.textContent = 'Connect a model in Execution settings to suggest a chart.'; }
-    return;
-  }
-  if (!res || res.ok === false || !res.encoding) {
-    if (hint) { hint.hidden = false; hint.textContent = (res && res.error) || 'Could not suggest a chart.'; }
-    return;
-  }
-  // Confirm before applying — the user reviews and can still adjust before saving.
-  if (!window.confirm('Apply the suggested chart? You can still adjust it before saving.')) {
-    if (hint) hint.hidden = true;
-    return;
-  }
   if (hint) hint.hidden = true;
-  applySuggestedEncoding(res.encoding, res.chartType);
+  const choice = await openNewVisualModal({ datasetId: vizDatasetId, startAtSuggest: true });
+  // 'manual' and cancel both mean "leave the builder as it is" — it is already
+  // open on this dataset, which is what Build it myself asks for.
+  if (choice && choice.kind === 'suggested') applySuggestedEncoding(choice.encoding, choice.chartType || '');
 }
 
 // Populate the builder form from a suggested encoding (never auto-saves). Numbers
@@ -514,11 +990,19 @@ function suggestVisualName(encoding: any, chartType: string): string {
 
 // ── Boot wiring (once) ───────────────────────────────────────────────────────
 function initVisuals(): void {
-  const newBtn = vizEl('viz-new-btn');
-  if (newBtn) newBtn.addEventListener('click', () => openVisualBuilder());
+  // Two "+ New visual" buttons: the gallery header's and the empty state's.
+  ['viz-new-btn', 'viz-empty-new-btn'].forEach((btnId) => {
+    const b = vizEl(btnId);
+    if (b) b.addEventListener('click', () => handleNewVisual());
+  });
 
+  // "← Back to visuals": leave the builder and repaint the gallery, so a delete
+  // or a rename made while the builder was open shows immediately.
   const cancelBtn = vizEl('viz-cancel-btn');
-  if (cancelBtn) cancelBtn.addEventListener('click', () => closeVisualBuilder());
+  if (cancelBtn) cancelBtn.addEventListener('click', () => {
+    closeVisualBuilder();
+    refreshVisualList();
+  });
 
   const saveBtn = vizEl('viz-save-btn');
   if (saveBtn) saveBtn.addEventListener('click', () => handleSaveVisual());

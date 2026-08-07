@@ -13,7 +13,7 @@ import { FILTER_OPS, LIST_OPS } from '../filterOps';
 import { computeColumnSummariesResident } from '../statsResident';
 import { computeColumnSummary } from '../datasetStats';
 import type { ColumnSummary } from '../datasetStats';
-import { suggestChart } from '../analyze';
+import { suggestCharts } from '../analyze';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus
 // `visual:data` which loads a dataset and runs the PURE bridge (src/vizData.ts) to
@@ -88,6 +88,12 @@ function buildColumnSummaryText(
 // `in`/`not in` add a FOURTH warning source to the three enumerated above: an
 // empty value list makes `transforms.stepFilter` skip the step with a warning.
 // Like the other three it is decidable from the step alone, with no rows.
+// How many charts `visual:suggest` asks for, and the cap on each caption. Three
+// fits the picker without scrolling and is three real model-side proposals, not
+// one restyled; 120 chars is a caption, past which it is prose.
+const SUGGEST_COUNT = 3;
+const WHY_MAX = 120;
+
 function filterCannotWarn(f: FilterStep, names: Set<string>): boolean {
   if (!f || f.type !== 'filter' || !names.has(f.column) || !FILTER_OPS.has(f.op)) return false;
   if (LIST_OPS.has(f.op) && (!Array.isArray(f.values) || f.values.length === 0)) return false;
@@ -232,9 +238,9 @@ export function register() {
     }
   });
 
-  ipcMain.handle('visual:update', async (_e, { projectId, id, name, chartType, encoding, overrides, filters }: any = {}) => {
+  ipcMain.handle('visual:update', async (_e, { projectId, id, name, chartType, encoding, overrides, filters, favorite }: any = {}) => {
     try {
-      const visual = await visuals.updateVisual(projectId, id, { name, chartType, encoding, overrides, filters });
+      const visual = await visuals.updateVisual(projectId, id, { name, chartType, encoding, overrides, filters, favorite });
       return visual ? { ok: true, visual } : { ok: false, error: 'Could not update the visual' };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to update the visual' };
@@ -272,11 +278,15 @@ export function register() {
   });
 
   // OPTIONAL AI chart suggestion. Builds the SAME compact column summary (app-
-  // computed stats as facts), asks the model to propose STRUCTURE ONLY (a single
-  // encoding + chart type referencing the given columns), sanitizes it, and returns
-  // it WITHOUT saving — the renderer populates the builder for the user to review.
+  // computed stats as facts), asks the model to propose STRUCTURE ONLY (an
+  // encoding + chart type + a short structural caption, referencing the given
+  // columns), sanitizes every option, and returns them WITHOUT saving — the
+  // renderer draws each one for the user to pick from.
   // No model configured → { ok:false, notReady:true } for a gentle hint.
-  ipcMain.handle('visual:suggest', async (_e, { projectId, datasetId }: any = {}) => {
+  //
+  // `intent` is the user's own words. It is UNTRUSTED and goes to the model in
+  // the USER message (see analyze.suggestCharts), never the system prompt.
+  ipcMain.handle('visual:suggest', async (_e, { projectId, datasetId, intent }: any = {}) => {
     try {
       // Fast path: metadata + Parquet-side summaries, no table hydrated. This
       // prompt is a dozen lines of column stats — it never justified loading a
@@ -303,9 +313,18 @@ export function register() {
         );
         summaryText = buildColumnSummaryText(ds, summaries);
       }
-      const res = await suggestChart(summaryText);
+      const res = await suggestCharts(summaryText, typeof intent === 'string' ? intent : '', SUGGEST_COUNT);
       if (res.ok) {
-        return { ok: true, encoding: sanitizeEncoding(res.encoding), chartType: sanitizeChartType(res.chartType) };
+        // Sanitisation is a security control over MODEL output, exactly as it is
+        // over renderer input: the encoding and the type go through the same two
+        // whitelists a saved visual does, and `why` is coerced to a bounded
+        // string so a runaway caption cannot become the UI.
+        const options = res.options.map((o) => ({
+          encoding: sanitizeEncoding(o),
+          chartType: sanitizeChartType(o.chartType),
+          why: typeof o.why === 'string' ? o.why.slice(0, WHY_MAX) : '',
+        }));
+        return { ok: true, options };
       }
       if (res.errorType === 'not_ready') return { ok: false, notReady: true };
       return { ok: false, error: res.message || 'Could not suggest a chart' };
