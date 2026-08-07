@@ -5460,27 +5460,25 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 }
 .viz-count[hidden] { display: none; }
 
-/* ── The empty state, centred ──
-   The panel is already a flex column, so the gallery can simply GROW into the
-   space left over — no calc() against a header height that would silently rot
-   the moment the header changes. `:has()` keeps this state-driven from the DOM
-   the JS already produces (#viz-grid carries [hidden] when there is nothing to
-   show) rather than needing a second class to keep in sync. */
-.viz-gallery:has(> .viz-grid[hidden]) { flex: 1; }
+/* ── The empty state ──
+   TOP-ALIGNED, like every other section: content flows from the header down and
+   trailing whitespace under the last band is what a populated page does too.
+   The card, the "Start from a dataset" band and #viz-grid are all full width, so
+   the three share one left and one right edge whichever of them is on screen —
+   a narrower centred card broke that alignment against the band beneath it.
+   Only the card's CONTENTS are centred (see .ws-empty). */
 .viz-empty-wrap {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   gap: 22px;
-  min-height: 0;
 }
 .viz-empty-wrap[hidden] { display: none; }
-/* A full-width card holding one paragraph is what reads as stranded. */
+/* Reads as a panel rather than a strip. .ws-empty already centres and stacks
+   its children; this only gives them room. */
 .viz-empty-wrap > .ws-empty {
   width: 100%;
-  max-width: 560px;
-  margin: 0 auto;
+  min-height: 200px;
+  justify-content: center;
 }
 
 /* ── "Start from a dataset" ──
@@ -5491,10 +5489,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   flex-direction: column;
   gap: 10px;
   width: 100%;
-  /* Wider than the 560px card above it, but sized so six cards land as an even
-     3x2 block rather than a ragged 4+2. */
-  max-width: 660px;
-  margin: 0 auto;
 }
 .viz-start[hidden] { display: none; }
 .viz-start-head {

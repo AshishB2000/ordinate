@@ -396,15 +396,19 @@ async function main(): Promise<void> {
       cards: cards.length,
       noDataCard: !!document.querySelector('.viz-ds-none'),
       first: (cards[0]?.textContent || '').replace(/\s+/g, ' ').trim(),
-      centred: (() => {
+      // The card, the band and the grid must share one left and one right edge
+      // whichever of them is on screen. A capped/centred card silently breaks
+      // that against the full-width band beneath it, and the misalignment is
+      // the kind of thing only a measurement catches.
+      edges: (() => {
         const card = document.getElementById('viz-empty');
-        const panel = document.querySelector('.viz-panel');
-        if (!card || !panel) return null;
+        const band = document.getElementById('viz-start');
+        if (!card || !band) return null;
         const c = card.getBoundingClientRect();
-        const p = panel.getBoundingClientRect();
-        // Real vertical composition: space ABOVE the card, not just below it.
-        return Math.round(c.top - p.top);
+        const b = band.getBoundingClientRect();
+        return { dl: Math.round(Math.abs(c.left - b.left)), dr: Math.round(Math.abs(c.right - b.right)) };
       })(),
+      cardH: Math.round(document.getElementById('viz-empty')?.getBoundingClientRect().height || 0),
     };
   });
   ok('…and a "Start from a dataset" band offering the project\'s real datasets',
@@ -412,9 +416,11 @@ async function main(): Promise<void> {
      JSON.stringify(startBand));
   ok('…listing rows and columns per dataset, not just a name',
      /rows · \d+ columns/.test(startBand.first), `"${startBand.first}"`);
-  ok('…with the empty block vertically composed rather than pinned to the top',
-     typeof startBand.centred === 'number' && startBand.centred > 40,
-     `${startBand.centred}px above the card`);
+  ok('…edge-aligned with the empty card above it, left and right',
+     !!startBand.edges && startBand.edges.dl === 0 && startBand.edges.dr === 0,
+     JSON.stringify(startBand.edges));
+  ok('…and the card reads as a panel, not a strip',
+     startBand.cardH >= 200, `${startBand.cardH}px tall`);
 
   await win.evaluate(() => (document.getElementById('viz-new-btn') as HTMLElement)?.click());
   await win.waitForTimeout(2000);
