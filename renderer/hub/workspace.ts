@@ -12,6 +12,9 @@
 // ── Session state (renderer-only; launch always starts on HOME) ──────────────
 let currentProjectId: string | null = null;
 let currentSection = 'home';
+// Where a "Close" should return to. Only updated on a real change, so repeated
+// clicks on the same nav item cannot make a section its own predecessor.
+let previousSection = 'home';
 
 function wsBodyEl(): HTMLElement | null {
   return document.querySelector('.hub-body');
@@ -46,6 +49,7 @@ async function openWorkspace(id: string): Promise<void> {
 // Switch which workspace section is visible. Flips the .hub-body[data-section]
 // attribute (CSS shows exactly one body) and toggles nav + placeholder state.
 function selectSection(section: string): void {
+  if (section !== currentSection) previousSection = currentSection;
   currentSection = section;
   const body = wsBodyEl();
   if (body) body.dataset.section = section;
@@ -71,6 +75,15 @@ function selectSection(section: string): void {
   if (section === 'dashboards' && typeof refreshDashboardList === 'function') refreshDashboardList();
   // Refresh the AI Copilot chat when the AI section becomes active (copilot.ts).
   if (section === 'ai' && typeof refreshCopilot === 'function') refreshCopilot();
+  // Reload the connector catalogue when Connect becomes active (connections.ts).
+  if (section === 'connect' && typeof refreshConnPanel === 'function') void refreshConnPanel();
+}
+
+// Leave `section` for whatever was showing before it, falling back to Home.
+// Guarding on `section` matters: without it, opening Connect twice in a row
+// would set Connect as its own previous section and Close would go nowhere.
+function leaveSection(section: string): void {
+  selectSection(previousSection && previousSection !== section ? previousSection : 'home');
 }
 
 // Wire the persistent sidebar nav (once, on boot). The AI tool button opens the
