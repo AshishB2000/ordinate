@@ -161,11 +161,34 @@ function connVal(id: string): string {
 }
 
 // ── Panel open/close ─────────────────────────────────────────────────────────
-// Connect is a SECTION now, so showing it is selectSection's job and this must
-// not also toggle `hidden` — the two would fight, and whichever ran last would
-// win. openConnPanel therefore only routes; refreshConnPanel below is the part
-// that loads content, and the router calls it once the section is active.
-function openConnPanel(): void {
+// The connector a shortcut asked to land on, handed to the NEXT refreshConnPanel().
+//
+// This is a handoff, not state. openConnPanel cannot select the connector itself:
+// Connect is a section, so opening it goes through selectSection, which fires
+// refreshConnPanel() once the section is active — and that reload would blow any
+// earlier selection straight back to the picker. Parking the id here lets the one
+// function that owns the panel's content apply it, so the two never fight.
+//
+// It is consumed on every refresh, including the ones where the lookup fails, so
+// a stale id can never survive to the next visit and reopen a form nobody asked
+// for.
+let connPendingPreselect = '';
+
+/**
+ * Open the connect panel, optionally landing straight on one connector's form.
+ *
+ * `preselectId` is what makes the sidebar's PostgreSQL / MySQL shortcuts mean
+ * anything: without it every one of them opened the same 35-source grid, so a
+ * named entry saved the user no step at all — they still had to find their
+ * database in the catalog.
+ *
+ * Connect is a SECTION, so showing it is selectSection's job and this must not
+ * also toggle `hidden` — the two would fight, and whichever ran last would win.
+ * openConnPanel therefore only routes; refreshConnPanel below is the part that
+ * loads content, and the router calls it once the section is active.
+ */
+function openConnPanel(preselectId?: string): void {
+  connPendingPreselect = preselectId || '';
   if (typeof selectSection === 'function') { selectSection('connect'); return; }
   // No router in scope (a DOM harness loading this file alone): show it directly
   // so the panel is still usable rather than silently doing nothing.
@@ -175,11 +198,20 @@ function openConnPanel(): void {
 
 // Reset to step 1 and reload the catalogue + saved connections. Called by
 // selectSection whenever the Connect section becomes active, so the picker is
-// never left showing a half-filled form from a previous visit.
+// never left showing a half-filled form from a previous visit — unless a
+// shortcut asked for a named connector, which is the one thing allowed to
+// replace step 1 with step 2.
 async function refreshConnPanel(): Promise<void> {
+  const preselect = connPendingPreselect;
+  connPendingPreselect = '';
   connSetError('');
   await loadConnCatalog();
-  connShowPicker();
+  // An unknown id falls back to the picker rather than failing, because the
+  // catalog is resolved from the live registry and a shortcut must never be able
+  // to open a dead panel.
+  const pick = preselect ? connDefById(preselect) : null;
+  if (pick) connSelectConnector(pick);
+  else connShowPicker();
   await refreshConnectionList();
 }
 
