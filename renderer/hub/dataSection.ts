@@ -39,31 +39,78 @@ function dxClick(id: string): void {
 // this only opens, closes and traps focus in it. Every control inside keeps the
 // handler datasets.ts gave it, so the dialog cannot change what importing DOES.
 
-/** Focus trap + return, from the shared helper every other hub modal uses. */
-let dxImportA11y: { onTabKey: (e: KeyboardEvent) => void; release: () => void } | null = null;
-/** Watches the save bar, so a SUCCESSFUL save closes the dialog. See below. */
+/**
+ * ONE dialog mechanism for this section's two modals.
+ *
+ * Both are static markup (their controls keep the ids and handlers they always
+ * had); this adds only the modal behaviour — Escape, backdrop, and the focus
+ * trap from the shared `makeModalAccessible`, the same one dashChooseModal and
+ * the capture review dialog use.
+ */
+const dxOpenDialogs = new Map<string, { a11y: { onTabKey: (e: KeyboardEvent) => void; release: () => void } | null; onKey: (e: KeyboardEvent) => void }>();
+
+function dxDialogOpen(overlayId: string): boolean {
+  const el = dxEl(overlayId);
+  return !!el && !el.hidden;
+}
+
+function dxOpenDialog(overlayId: string, boxSel: string, label: string, initialFocusId?: string): boolean {
+  const overlay = dxEl(overlayId);
+  const box = overlay ? (overlay.querySelector(boxSel) as HTMLElement | null) : null;
+  if (!overlay || !box || !overlay.hidden) return false;
+
+  overlay.hidden = false;
+  const state = {
+    a11y: makeModalAccessible(box, label, initialFocusId ? dxEl(initialFocusId) : null),
+    onKey: (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        dxCloseDialog(overlayId);
+        return;
+      }
+      const st = dxOpenDialogs.get(overlayId);
+      if (st && st.a11y) st.a11y.onTabKey(e);
+    },
+  };
+  dxOpenDialogs.set(overlayId, state);
+  document.addEventListener('keydown', state.onKey, true);
+
+  // Backdrop only, on mousedown — a selection dragged out of the dialog and
+  // released on the backdrop is not a click on it.
+  overlay.onmousedown = (e: MouseEvent): void => {
+    if (e.target === overlay) dxCloseDialog(overlayId);
+  };
+  return true;
+}
+
+function dxCloseDialog(overlayId: string): void {
+  const overlay = dxEl(overlayId);
+  if (!overlay || overlay.hidden) return;
+  overlay.hidden = true;
+  const state = dxOpenDialogs.get(overlayId);
+  if (state) {
+    document.removeEventListener('keydown', state.onKey, true);
+    if (state.a11y) state.a11y.release(); // focus back to whatever opened it
+    dxOpenDialogs.delete(overlayId);
+  }
+}
+
+/** Watches the save bar, so a SUCCESSFUL save closes the import dialog. */
 let dxSaveWatch: MutationObserver | null = null;
 
 function dxImportOpen(): boolean {
-  const modal = dxEl('ds-import-modal');
-  return !!modal && !modal.hidden;
+  return dxDialogOpen('ds-import-modal');
 }
 
 /**
- * Open the dialog on step one.
+ * Open the import dialog on step one.
  *
- * `then` runs after it is on screen — that is how `+ Import data` and the
- * empty state's `Import file` reach the native file picker: open the frame
- * first, so the parsed preview has somewhere to land.
+ * `then` runs once it is on screen — that is how `+ Import data` and the empty
+ * state's `Import file` reach the native file picker: open the frame first, so
+ * the parsed preview has somewhere to land.
  */
 function dxOpenImport(then?: () => void): void {
-  const modal = dxEl('ds-import-modal');
-  const box = modal ? (modal.querySelector('.ds-import-modal') as HTMLElement | null) : null;
-  if (!modal || !box || !modal.hidden) return;
-
-  modal.hidden = false;
-  dxImportA11y = makeModalAccessible(box, 'Import data', dxEl('ds-import-btn'));
-  document.addEventListener('keydown', dxImportKey, true);
+  if (!dxOpenDialog('ds-import-modal', '.ds-import-modal', 'Import data', 'ds-import-btn')) return;
 
   // A save that SUCCEEDS ends with datasets.ts hiding the save bar
   // (clearPreview) and repainting the list; a save that fails alerts and leaves
@@ -82,28 +129,13 @@ function dxOpenImport(then?: () => void): void {
 }
 
 function dxCloseImport(): void {
-  const modal = dxEl('ds-import-modal');
-  if (!modal || modal.hidden) return;
-  modal.hidden = true;
-  document.removeEventListener('keydown', dxImportKey, true);
   if (dxSaveWatch) {
     dxSaveWatch.disconnect();
     dxSaveWatch = null;
   }
-  if (dxImportA11y) {
-    dxImportA11y.release(); // focus back to whatever opened it
-    dxImportA11y = null;
-  }
+  dxCloseDialog('ds-import-modal');
 }
 
-function dxImportKey(e: KeyboardEvent): void {
-  if (e.key === 'Escape') {
-    e.preventDefault();
-    dxCloseImport();
-    return;
-  }
-  if (dxImportA11y) dxImportA11y.onTabKey(e);
-}
 
 /**
  * PUBLIC entry point for the other surfaces that start an import.
@@ -262,14 +294,22 @@ function initDataSection(): void {
   const x = dxEl('ds-import-x');
   if (x) x.addEventListener('click', () => dxCloseImport());
 
-  // Backdrop only — mousedown, so a selection dragged out of the preview and
-  // released on the backdrop does not count as a click on it.
-  const modal = dxEl('ds-import-modal');
-  if (modal) {
-    modal.addEventListener('mousedown', (e) => {
-      if (e.target === modal) dxCloseImport();
+  // Combine: its own dialog, opened from the header. `populateCombineSelect`
+  // (prepare.ts) fills both pickers and pre-selects the open dataset when there
+  // is one — so the dialog is filled by the code that owns combining, not here.
+  const combineOpen = dxEl('ds-combine-open');
+  if (combineOpen) {
+    combineOpen.addEventListener('click', () => {
+      dxOpenDialog('ds-combine-modal', '.ds-combine-modal', 'Combine datasets', 'ds-combine-left');
+      if (typeof populateCombineSelect === 'function') void populateCombineSelect();
+      const note = dxEl('ds-combine-note');
+      if (note) note.hidden = true; // last run's outcome is not this one's
     });
   }
+  const combineX = dxEl('ds-combine-x');
+  if (combineX) combineX.addEventListener('click', () => dxCloseDialog('ds-combine-modal'));
+
+
 }
 
 // The hub boots its sections from hub.ts; this one has no state to restore, so

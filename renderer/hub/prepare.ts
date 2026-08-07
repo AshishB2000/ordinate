@@ -564,6 +564,19 @@ function hideTypeMenu(): void {
 }
 
 // ── Combine with another dataset ──────────────────────────────────────────────
+/**
+ * The dataset on the LEFT of a combine.
+ *
+ * Combining is reached from the section header now, where no dataset is open —
+ * so the dialog carries its own picker, defaulting to the open one when there
+ * is one. `expId` remains the fallback, which is what every caller from inside
+ * the explorer still gets.
+ */
+function dsCombineLeftId(): string {
+  const sel = pEl('ds-combine-left') as HTMLSelectElement | null;
+  return (sel && sel.value) || expId;
+}
+
 async function populateCombineSelect(): Promise<void> {
   const sel = pEl('ds-combine-select') as HTMLSelectElement | null;
   if (!sel || !currentProjectId) return;
@@ -573,8 +586,32 @@ async function populateCombineSelect(): Promise<void> {
   } catch (_) {
     items = [];
   }
+  const all = Array.isArray(items) ? items : [];
+
+  // The left side: every dataset, with the open one pre-selected. Re-rendered
+  // only when the set changed, so re-opening the dialog does not discard a
+  // choice the user just made.
+  const leftSel = pEl('ds-combine-left') as HTMLSelectElement | null;
+  let leftId = dsCombineLeftId();
+  if (leftSel) {
+    const want = all.map((d) => String(d.id)).join(',');
+    if (leftSel.dataset.ids !== want) {
+      leftSel.innerHTML = '';
+      all.forEach((d) => {
+        const opt = document.createElement('option');
+        opt.value = String(d.id);
+        opt.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
+        leftSel.appendChild(opt);
+      });
+      leftSel.dataset.ids = want;
+    }
+    if (expId && all.some((d) => String(d.id) === expId)) leftSel.value = expId;
+    else if (!leftSel.value && leftSel.options.length) leftSel.value = leftSel.options[0].value;
+    leftId = leftSel.value;
+  }
+
   sel.innerHTML = '';
-  const others = (Array.isArray(items) ? items : []).filter((d) => String(d.id) !== expId);
+  const others = all.filter((d) => String(d.id) !== leftId);
   if (!others.length) {
     const opt = document.createElement('option');
     opt.value = '';
@@ -601,13 +638,29 @@ async function syncCombineOn(): Promise<void> {
   onRow.hidden = !isJoin;
   if (!isJoin) return;
 
+  // Left keys come from whichever dataset is on the left — which is the open
+  // one only when the dialog was opened from inside it. Same metadata read as
+  // the right-hand side below; `expColumns` would be the open dataset's columns
+  // against a different dataset's rows.
   const leftSel = pEl('ds-combine-on-left') as HTMLSelectElement | null;
-  if (leftSel) {
+  const leftId = dsCombineLeftId();
+  if (leftSel && currentProjectId) {
     leftSel.innerHTML = '';
-    expColumns.forEach((c) => {
+    let left: any = null;
+    if (leftId === expId) {
+      left = { columns: expColumns };
+    } else {
+      try {
+        left = await window.hub.getDatasetMeta(currentProjectId, leftId);
+      } catch (_) {
+        left = null;
+      }
+    }
+    const cols: any[] = left && Array.isArray(left.columns) ? left.columns : [];
+    cols.forEach((c) => {
       const o = document.createElement('option');
-      o.value = c.name;
-      o.textContent = c.name;
+      o.value = c && c.name != null ? String(c.name) : '';
+      o.textContent = c && c.name != null ? String(c.name) : '';
       leftSel.appendChild(o);
     });
   }
@@ -640,7 +693,8 @@ function showCombineNote(msg: string): void {
 }
 
 async function handleCombine(): Promise<void> {
-  if (!currentProjectId || !expId) return;
+  const leftId = dsCombineLeftId();
+  if (!currentProjectId || !leftId) return;
   const otherSel = pEl('ds-combine-select') as HTMLSelectElement | null;
   const modeSel = pEl('ds-combine-mode') as HTMLSelectElement | null;
   if (!otherSel || !otherSel.value) {
@@ -662,7 +716,7 @@ async function handleCombine(): Promise<void> {
   }
   let res: any;
   try {
-    res = await window.hub.combineDatasets(currentProjectId, expId, otherSel.value, mode, on);
+    res = await window.hub.combineDatasets(currentProjectId, leftId, otherSel.value, mode, on);
   } catch (_) {
     res = { ok: false, error: 'Failed to combine the datasets.' };
   }
@@ -882,4 +936,9 @@ function initPrepare(): void {
   if (combineMode) combineMode.addEventListener('change', () => syncCombineOn());
   const combineBtn = pEl('ds-combine-btn');
   if (combineBtn) combineBtn.addEventListener('click', () => handleCombine());
+
+  // Changing the left side re-lists the right (a dataset cannot be combined
+  // with itself) and re-reads the join keys.
+  const combineLeft = pEl('ds-combine-left');
+  if (combineLeft) combineLeft.addEventListener('change', () => { void populateCombineSelect(); });
 }

@@ -679,6 +679,7 @@
           </div>
           <div class="ds-head-actions">
             <button class="btn btn-primary" type="button" id="ds-import-open">+ Import data</button>
+            <button class="btn" type="button" id="ds-combine-open">Combine datasets</button>
             <button class="btn btn-sm" type="button" id="ds-refresh-all-btn" hidden>↻ Refresh all</button>
           </div>
         </div>
@@ -706,6 +707,47 @@
           </div>
         </div>
         </div><!-- /.ds-list-view -->
+
+        <!-- ── Combine, as a dialog ────────────────────────────────────────
+             Combining CREATES A NEW DATASET (sourceKind 'combined') — it is not
+             a transform step, and it sat at the bottom of the prepare panel
+             where it read as one. It belongs to the list, so it opens from the
+             section header. Every control keeps its id and its handler; the
+             left-hand picker is new, because from the list there is no "open
+             dataset" for it to mean. -->
+        <div class="ws-modal-overlay ds-combine-overlay" id="ds-combine-modal" hidden>
+          <div class="ws-modal ds-combine-modal">
+            <div class="ds-modal-head">
+              <div class="ws-modal-title">Combine datasets</div>
+              <button class="ds-modal-x" type="button" id="ds-combine-x" aria-label="Close">✕</button>
+            </div>
+            <div class="ds-modal-body">
+              <div class="ds-combine-wrap">
+                <div class="ds-combine-row">
+                  <label class="ds-sheet-label" for="ds-combine-left">This dataset</label>
+                  <select class="ds-combine-select" id="ds-combine-left" aria-label="This dataset"></select>
+                </div>
+                <div class="ds-combine-row">
+                  <label class="ds-sheet-label" for="ds-combine-select">Combine with</label>
+                  <select class="ds-combine-select" id="ds-combine-select" aria-label="Other dataset"></select>
+                  <select class="ds-combine-mode" id="ds-combine-mode" aria-label="Combine mode">
+                    <option value="append">Append rows</option>
+                    <option value="join">Join on key</option>
+                  </select>
+                </div>
+                <div class="ds-combine-row" id="ds-combine-on" hidden>
+                  <select class="ds-combine-key" id="ds-combine-on-left" aria-label="This dataset key"></select>
+                  <span class="ds-combine-eq">=</span>
+                  <select class="ds-combine-key" id="ds-combine-on-right" aria-label="Other dataset key"></select>
+                </div>
+                <div class="ds-combine-note ds-explain-hint" id="ds-combine-note" hidden></div>
+              </div>
+            </div>
+            <div class="ds-save-bar ds-combine-foot">
+              <button class="btn btn-primary" type="button" id="ds-combine-btn">Combine</button>
+            </div>
+          </div>
+        </div>
 
         <!-- ── Import, as a dialog ────────────────────────────────────────────
              The same six blocks as before, with the same ids and the same
@@ -840,23 +882,6 @@
               </div>
             </div>
 
-            <div class="ds-combine-wrap">
-              <h4 class="ds-combine-h">Combine with another dataset</h4>
-              <div class="ds-combine-row">
-                <select class="ds-combine-select" id="ds-combine-select" aria-label="Other dataset"></select>
-                <select class="ds-combine-mode" id="ds-combine-mode" aria-label="Combine mode">
-                  <option value="append">Append rows</option>
-                  <option value="join">Join on key</option>
-                </select>
-              </div>
-              <div class="ds-combine-row" id="ds-combine-on" hidden>
-                <select class="ds-combine-key" id="ds-combine-on-left" aria-label="This dataset key"></select>
-                <span class="ds-combine-eq">=</span>
-                <select class="ds-combine-key" id="ds-combine-on-right" aria-label="Other dataset key"></select>
-              </div>
-              <button class="btn" type="button" id="ds-combine-btn">Combine</button>
-              <div class="ds-combine-note ds-explain-hint" id="ds-combine-note" hidden></div>
-            </div>
           </div>
           </div><!-- /#ds-tabp-prepare -->
 

@@ -5027,6 +5027,38 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .ds-explorer-ident .ds-source-badge[hidden] { display: none; }
 .ds-back { flex: 0 0 auto; }
 
+/* ── The combine dialog ──────────────────────────────────────────────────────
+   Narrower than the import one: two pickers and a mode, not a preview table. */
+.ds-combine-overlay[hidden] { display: none; }
+.ws-modal.ds-combine-modal {
+  width: min(560px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  gap: 0;
+}
+.ds-combine-modal .ds-combine-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ds-combine-modal .ds-combine-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ds-combine-modal .ds-combine-row .ds-sheet-label {
+  flex: 0 0 96px;
+}
+.ds-combine-modal .ds-combine-select { flex: 1 1 160px; min-width: 0; }
+.ds-combine-foot {
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+  padding: 12px 20px 16px;
+  margin: 0;
+}
+
 /* ── The explorer's tabs ─────────────────────────────────────────────────────
    The underline strip the authoring panel already uses (.an-tabs / .an-tab),
    selected on aria-selected rather than a second `is-on` class — these are real
