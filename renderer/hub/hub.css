@@ -8742,3 +8742,38 @@ body.an-focus .an-workbench.is-active #dash-pages {
   cursor: pointer;
 }
 .dash-filter-chip-txt:hover { text-decoration: underline; }
+
+/* ── Focus mode: the Capture workspace owns the window ───────────────────────
+   Same mechanism as `body.an-focus` above (an open analysis), deliberately
+   rather than a second pattern: one body class, everything else here.
+
+   "Screenshot" in the CONNECT rail is a destination, not a panel — the captures
+   column and the capture surface get the whole window, and "‹ Back" is the way
+   out. The global ⌘⌥S hotkey is registered in main and is completely unaffected
+   by any of this; only the visual chip goes. */
+body.cap-focus .app-sidebar { display: none; }
+body.cap-focus .hub-body { padding: 0; }
+
+/* The header keeps "New capture" and loses everything that belongs to the
+   surrounding app rather than to capturing: the shortcut chip (this workspace is
+   already the place you capture from) and "Connect data" (which navigates to a
+   different section, so offering it from inside a focused workspace would throw
+   the user straight back out). */
+body.cap-focus .hotkey-hint,
+body.cap-focus #conn-connect-btn { display: none; }
+
+/* Back is rendered ONLY in focus mode — outside it the nav is present and this
+   button would be a second, redundant way home. */
+.cap-back { display: none; }
+body.cap-focus .cap-back {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 10px;
+  flex: 0 0 auto;
+}
+
+/* setCaptureFocus() blanks the strapline rather than hiding it, because hub.ts
+   writes live status ("Analyzing…", "Ready") into this same element as a capture
+   runs. Collapsing it only while it is genuinely empty keeps that status working
+   — a display:none on the element would have eaten it silently. */
+.main-title p:empty { display: none; }

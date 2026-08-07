@@ -303,6 +303,16 @@ function runSourceAction(kind: string): void {
     if (box) { box.scrollIntoView({ block: 'center' }); box.focus(); }
     return;
   }
+  // "Screenshot" is a destination, not an action: openWorkspace() has already
+  // landed on Sources (the capture surface), and this turns that surface into a
+  // full-screen workspace — no nav, captures column kept. Entering focus mode is
+  // the ONLY thing this branch does; the capture pipeline is untouched, and the
+  // global ⌘⌥S hotkey is registered in main and unaffected.
+  if (kind === 'capture') {
+    if (typeof setCaptureFocus === 'function') setCaptureFocus(true); // workspace.ts
+    return;
+  }
+
   if (kind === 'postgres' || kind === 'url' || kind === 'mysql' || kind === 'catalog') {
     // Open the connect panel — it IS the connectors:catalog picker now, so the
     // server shortlist entries and "More…" all land on the same searchable
