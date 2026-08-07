@@ -215,6 +215,17 @@ declare global {
         mark: any,
         page: { offset: number; limit: number; search?: string; sortColumn?: string; sortDir?: 'asc' | 'desc' },
       ): Promise<any>;
+      // That same row set as a CSV file, written in main through the native save
+      // panel. Returns { ok, dest, rows } | { ok:false, canceled|error }.
+      exportVisualRows(
+        projectId: string,
+        datasetId: string,
+        encoding: any,
+        filters: any,
+        mark: any,
+        page: { search?: string; sortColumn?: string; sortDir?: 'asc' | 'desc' },
+        name?: string,
+      ): Promise<any>;
       // ── Mosaic connector (Phase 3c) — the whole database contract in two calls ──
       mosaicView(
         projectId: string,

@@ -29,6 +29,11 @@ const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'screenchart-drill-'))
 // the real, shipped handler is invoked rather than a copy of its logic.
 const handlers = new Map<string, (e: unknown, arg: unknown) => Promise<any>>();
 
+// The save panel is stubbed rather than shown: `saveTo` is where the next
+// export lands, and `null` stands for the user cancelling.
+let saveTo: string | null = null;
+let messageBoxes = 0;
+
 const origLoad = Module._load;
 Module._load = function (request: string, ...rest: any[]): any {
   if (request === 'electron') {
@@ -39,7 +44,13 @@ Module._load = function (request: string, ...rest: any[]): any {
           handlers.set(channel, fn);
         },
       },
-      dialog: {},
+      dialog: {
+        showSaveDialog: async () => (saveTo ? { canceled: false, filePath: saveTo } : { canceled: true }),
+        showMessageBox: async () => {
+          messageBoxes += 1;
+          return { response: 0 };
+        },
+      },
     };
   }
   return origLoad.apply(this, [request, ...rest]);
@@ -384,7 +395,109 @@ async function main(): Promise<void> {
     ok("leading zeros: the '007' bar re-sums correctly", Object.is(sum, ref.data.series[0].values[i]));
   }
 
-  // ── 7. A missing dataset is an error, never an empty "available" answer ────
+  // ── 7. CSV export: the file IS the grid ───────────────────────────────────
+  //
+  // Same filters, same search, same order, every row — not the window on screen
+  // and not the unfiltered table.
+  {
+    const exportRows = handlers.get('visual:rowsExport');
+    if (!exportRows) {
+      ok('visual:rowsExport was registered', false);
+    } else {
+      const encoding: VizEncoding = visualsMod.sanitizeEncoding({
+        category: 'region',
+        values: [{ column: 'amount', aggregation: 'sum' }],
+      });
+      const mark = { category: 'North' };
+      const shown = await drill(encoding, [], mark);
+
+      saveTo = path.join(tmpUserData, 'north.csv');
+      const res = await exportRows(null, {
+        projectId,
+        datasetId: fixtureId,
+        encoding,
+        filters: [],
+        mark,
+        page: {},
+        name: 'amount by region',
+      });
+      ok('export: ok, with the row count written', res.ok === true && res.rows === shown.total);
+
+      const text = fs.readFileSync(saveTo, 'utf8');
+      const lines = text.split('\r\n').filter((l: string) => l !== '');
+      ok('export: RFC-4180 CRLF line endings', text.includes('\r\n'));
+      ok('export: no BOM at the head of the file', !text.startsWith('﻿'));
+      ok('export: a header line plus one line per row', lines.length === shown.total + 1);
+      ok('export: the header is the column names', lines[0] === 'region,channel,code,amount,day');
+      ok(
+        'export: every data line belongs to the mark',
+        lines.slice(1).every((l: string) => l.startsWith('North,')),
+      );
+      ok("export: '007' survives as text, unquoted and unmangled", text.includes(',007,'));
+
+      // A null cell is an EMPTY FIELD, not the text "null".
+      ok('export: a null cell is an empty field', !/,null,|,null$/.test(text));
+
+      // The search narrows the FILE, not just the grid.
+      saveTo = path.join(tmpUserData, 'north-web.csv');
+      const searched = await exportRows(null, {
+        projectId,
+        datasetId: fixtureId,
+        encoding,
+        filters: [],
+        mark,
+        page: { search: 'Web' },
+        name: 'x',
+      });
+      const searchedLines = fs.readFileSync(saveTo, 'utf8').split('\r\n').filter((l: string) => l !== '');
+      ok(
+        'export: the search applies to the file too',
+        searched.ok === true && searchedLines.length === searched.rows + 1 && searched.rows < res.rows,
+      );
+      ok('export: …and every exported row matches it', searchedLines.slice(1).every((l: string) => l.includes('Web')));
+
+      // Cancelling the save panel writes nothing.
+      saveTo = null;
+      const canceled = await exportRows(null, {
+        projectId,
+        datasetId: fixtureId,
+        encoding,
+        filters: [],
+        mark,
+        page: {},
+        name: 'x',
+      });
+      ok('export: cancelling writes no file', canceled.ok === false && canceled.canceled === true);
+
+      // A refused drill cannot be exported either — the same lock, twice.
+      saveTo = path.join(tmpUserData, 'never.csv');
+      const refused = await exportRows(null, {
+        projectId,
+        datasetId: fixtureId,
+        encoding,
+        filters: [],
+        mark: { category: '' },
+        page: {},
+        name: 'x',
+      });
+      ok(
+        'export: a refused drill exports nothing, with the reason',
+        refused.ok === false && typeof refused.error === 'string' && !fs.existsSync(saveTo),
+      );
+      ok('export: no size warning was shown for a small set', messageBoxes === 0);
+    }
+  }
+
+  // ── 8. RFC-4180 quoting, at the unit ─────────────────────────────────────
+  {
+    const line = ipcVisuals.csvLine(['plain', 'has,comma', 'has"quote', 'has\nnewline', null, '', 0, '007']);
+    ok(
+      'csvLine: quotes only what needs it, doubles embedded quotes, null → empty',
+      line === 'plain,"has,comma","has""quote","has\nnewline",,,0,007',
+    );
+  }
+
+  // ── 9. A missing dataset is an error, never an empty "available" answer ────
   {
     const res = await visualRows(null, {
       projectId,

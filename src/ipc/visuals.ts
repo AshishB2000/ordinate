@@ -1,4 +1,6 @@
-import { ipcMain } from 'electron';
+import { ipcMain, app, dialog } from 'electron';
+import * as fs from 'fs';
+import * as path from 'path';
 import * as visuals from '../visuals';
 import * as datasets from '../datasets';
 import { buildVizData, recommendChartType } from '../vizData';
@@ -15,6 +17,7 @@ import { FILTER_OPS, LIST_OPS } from '../filterOps';
 // The drill-down panel pages rows through the SAME two-path decision the Explore
 // grid uses — see `pageFor`'s note on why there is only one of them.
 import { pageFor } from './datasets';
+import { MAX_LIMIT } from '../datasetPage';
 import type { PageRequest } from '../datasetPage';
 import { computeColumnSummariesResident } from '../statsResident';
 import { computeColumnSummary } from '../datasetStats';
@@ -331,6 +334,95 @@ function markStep(
   return { step: { type: 'filter', column, op: '=', value } };
 }
 
+// ── CSV export of the drilled rows ──────────────────────────────────────────
+
+/** Past this many rows the export asks first. */
+const EXPORT_WARN_ROWS = 1_000_000;
+
+/**
+ * How many rows one read pulls across the bridge.
+ *
+ * `datasetPage.MAX_LIMIT`, i.e. the largest window the paged read will serve.
+ * Each read is ONE bounded call — the same call the Explore grid makes for a
+ * page — and the loop yields to the event loop between them, so a long export
+ * costs many short blocks rather than one long freeze of every window, the menu
+ * bar and the hotkey.
+ */
+const EXPORT_CHUNK = MAX_LIMIT;
+
+/**
+ * One CSV record, RFC-4180.
+ *
+ * Quote only when required (a comma, a quote or a line break), doubling any
+ * embedded quote. A null cell is an EMPTY FIELD, not the text "null" — and an
+ * empty field is distinguishable from a quoted empty string, which is as close
+ * as CSV gets to preserving the `null` vs `''` distinction the storage layer
+ * keeps.
+ *
+ * NOTE: no BOM, here or at the head of the file. `src/duckdb.ts` loses a leading
+ * U+FEFF from every string it returns and `datasetPage` already repairs that on
+ * projection, so cells arrive here correct; prepending a BOM for a spreadsheet's
+ * benefit would corrupt a cell that legitimately starts with one.
+ */
+export function csvLine(cells: readonly Cell[]): string {
+  return cells
+    .map((c) => {
+      if (c == null) return '';
+      const s = String(c);
+      return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    })
+    .join(',');
+}
+
+/** `price by region` → `price-by-region.csv`, and never a path. */
+function csvFileName(name: unknown): string {
+  const raw = typeof name === 'string' ? name : '';
+  const slug = raw.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+  return (slug || 'underlying-rows') + '.csv';
+}
+
+/**
+ * Stream the filtered row set to `filePath`, a window at a time.
+ *
+ * Nothing bigger than one window is ever resident: rows are read in chunks,
+ * written, and dropped. Backpressure is honoured (`write` returning false waits
+ * for `drain`), which is also what yields the event loop between reads.
+ *
+ * `total` bounds the loop, so a table that grows under the export cannot make it
+ * run away — the file is the row set as counted, which is the count the panel
+ * showed.
+ */
+async function writeDrillCsv(
+  filePath: string,
+  projectId: string,
+  datasetId: string,
+  base: PageRequest,
+  columns: ParsedColumn[],
+  total: number,
+): Promise<number> {
+  const out = fs.createWriteStream(filePath, { encoding: 'utf8' });
+  const write = (s: string): Promise<void> =>
+    new Promise((resolve, reject) => {
+      out.once('error', reject);
+      if (out.write(s)) resolve();
+      else out.once('drain', () => resolve());
+    });
+
+  let written = 0;
+  try {
+    await write(csvLine(columns.map((c) => c.name)) + '\r\n');
+    for (let offset = 0; offset < total; offset += EXPORT_CHUNK) {
+      const res = await pageFor(projectId, datasetId, { ...base, offset, limit: EXPORT_CHUNK }, 'drillExport');
+      if (!res.ok || res.rows.length === 0) break;
+      await write(res.rows.map((r) => csvLine(r)).join('\r\n') + '\r\n');
+      written += res.rows.length;
+    }
+  } finally {
+    await new Promise<void>((resolve) => out.end(resolve));
+  }
+  return written;
+}
+
 /** The reply shape of `visual:data`. `tooLarge` is only ever set by a caller
  *  that supplied `maxHydrateRows` (see below); `visual:data` itself never does. */
 export type VizDataReply =
@@ -487,6 +579,72 @@ export function register() {
       };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to read the underlying rows' };
+    }
+  });
+
+  // ── The drilled rows as a CSV file ───────────────────────────────────────
+  //
+  // Plain-text row export — NOT the spreadsheet export CLAUDE.md lists as out of
+  // scope. No xlsx, no formatting, no new dependency: RFC-4180 text, UTF-8, one
+  // header line, written with `fs`.
+  //
+  // It re-resolves the drill from the SAME arguments the panel resolved, so the
+  // file is the grid: same filters, same search, same order. A refusal here is
+  // the same refusal the panel got, and the panel disables the button on one
+  // anyway — this is the second lock, not the first.
+  ipcMain.handle('visual:rowsExport', async (_e, { projectId, datasetId, encoding, filters, mark, page, name }: any = {}) => {
+    try {
+      const enc = sanitizeEncoding(encoding);
+      const flt = visuals.sanitizeFilters(filters);
+      const meta = await datasets.getDatasetMeta(projectId, datasetId);
+      if (!meta) return { ok: false, error: 'Dataset not found' };
+
+      const resolved = resolveDrill(meta.columns, enc, flt, mark);
+      if (!resolved.available) return { ok: false, error: resolved.reason };
+
+      const p = page && typeof page === 'object' ? page : {};
+      const base: PageRequest = {
+        offset: 0,
+        limit: 0, // count only — `readPage` short-circuits before reading a row
+        search: p.search,
+        sortColumn: p.sortColumn,
+        sortDir: p.sortDir,
+        filters: resolved.filters,
+      };
+      const counted = await pageFor(projectId, datasetId, base, 'drillExport');
+      if (!counted.ok) return counted;
+      const total = counted.total;
+      if (total === 0) return { ok: false, error: 'There are no rows to export.' };
+
+      // The cap IS the filtered total — the file is the row set the panel is
+      // showing, never more. Past a million rows say so BEFORE writing: a
+      // warning that arrives after a 1M-row file has been written is not a
+      // warning. (The import cap is 1,000,000, so this is a backstop for a
+      // future raise rather than a live case today.)
+      if (total > EXPORT_WARN_ROWS) {
+        const { response } = await dialog.showMessageBox({
+          type: 'warning',
+          buttons: ['Export anyway', 'Cancel'],
+          defaultId: 1,
+          cancelId: 1,
+          message: `This will write ${total.toLocaleString()} rows.`,
+          detail: 'A file this large can take a while to write and to open.',
+        });
+        if (response !== 0) return { ok: false, canceled: true };
+      }
+
+      const safe = csvFileName(name);
+      const { filePath, canceled } = await dialog.showSaveDialog({
+        title: 'Export these rows',
+        defaultPath: path.join(app.getPath('downloads'), safe),
+        filters: [{ name: 'CSV', extensions: ['csv'] }],
+      });
+      if (canceled || !filePath) return { ok: false, canceled: true };
+
+      const written = await writeDrillCsv(filePath, projectId, datasetId, base, meta.columns, total);
+      return { ok: true, dest: filePath, rows: written };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Failed to export the rows' };
     }
   });
 

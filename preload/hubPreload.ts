@@ -340,6 +340,18 @@ contextBridge.exposeInMainWorld('hub', {
     mark: any,
     page: { offset: number; limit: number; search?: string; sortColumn?: string; sortDir?: 'asc' | 'desc' },
   ) => ipcRenderer.invoke('visual:rows', { projectId, datasetId, encoding, filters, mark, page }),
+  // The same row set as a CSV file. Main re-resolves the drill, opens the native
+  // save panel and streams the rows — the renderer sends arguments, never rows.
+  // Returns { ok:true, dest, rows } | { ok:false, canceled } | { ok:false, error }.
+  exportVisualRows: (
+    projectId: string,
+    datasetId: string,
+    encoding: any,
+    filters: any,
+    mark: any,
+    page: { search?: string; sortColumn?: string; sortDir?: 'asc' | 'desc' },
+    name?: string,
+  ) => ipcRenderer.invoke('visual:rowsExport', { projectId, datasetId, encoding, filters, mark, page, name }),
   // ── Mosaic connector (Phase 3c) — Mosaic's whole database contract is one
   // method, so it is two channels here. Ensure the typed, user-named SQL VIEW
   // over a dataset's stored Parquet and report the columns it exposes; returns

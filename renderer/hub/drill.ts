@@ -127,10 +127,9 @@ function drillEnsureRoot(): HTMLElement | null {
     }, DRILL_SEARCH_MS);
   });
 
-  // Export is wired in Phase 5; until then the button does not exist for the
-  // user rather than existing and doing nothing.
-  const exportBtn = drillQ('.js-drill-export');
-  if (exportBtn) exportBtn.hidden = true;
+  drillQ('.js-drill-export')?.addEventListener('click', () => {
+    void exportDrillRows();
+  });
 
   // Escape closes; Tab cycles WITHIN the panel. Bound on the panel rather than
   // the document so it cannot swallow keys meant for anything else.
@@ -403,6 +402,50 @@ function drillSortBy(name: string): void {
   }
   drillOffset = 0;
   void drillFetch();
+}
+
+/**
+ * Write the CURRENT row set to a CSV file.
+ *
+ * Main re-resolves the drill from the same arguments and re-reads the same
+ * filtered, searched, sorted set, so the file is the grid — not the window on
+ * screen, and not the unfiltered table. The renderer sends arguments, never
+ * rows: shipping the set here to write it is the pattern this whole feature
+ * avoids, and the panel only ever holds one page anyway.
+ */
+async function exportDrillRows(): Promise<void> {
+  if (!drillOpts || drillReason !== '' || drillTotal === 0) return;
+  const o = drillOpts;
+  const btn = drillQ('.js-drill-export') as HTMLButtonElement | null;
+  const bridge = (window.hub as any).exportVisualRows;
+  if (typeof bridge !== 'function') return;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Exporting…';
+  }
+  let res: any = null;
+  try {
+    res = await bridge(o.projectId, o.datasetId, o.encoding, o.filters || [], o.mark || null, {
+      search: drillSearch.trim(),
+      sortColumn: drillSortCol,
+      sortDir: drillSortDir,
+    }, o.name || '');
+  } catch (_) {
+    res = null;
+  }
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = 'Export these rows (CSV)';
+  }
+  if (!res || res.canceled) return;
+  if (typeof showToast === 'function') {
+    if (res.ok) {
+      const file = String(res.dest || '').split(/[\\/]/).pop();
+      showToast(`Exported ${Number(res.rows || 0).toLocaleString()} rows → ${file}`);
+    } else {
+      showToast(res.error || 'Could not export these rows');
+    }
+  }
 }
 
 function drillPaintPager(): void {
