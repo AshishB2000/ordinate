@@ -662,50 +662,179 @@
     <!-- ── workspace section placeholders (SHELL — content in later weeks) ── -->
     <section class="ws-panel" id="ws-datasets" data-section="datasets" hidden>
       <div class="ds-panel">
-        <h2 class="ds-h">Datasets</h2>
-        <p class="ds-sub">Import CSV, JSON, or Excel — or paste data — to save a structured dataset in this project.</p>
-
-        <div class="ds-toolbar">
-          <button class="btn" type="button" id="ds-import-btn">Import file</button>
-          <button class="btn" type="button" id="ds-paste-toggle">Paste data</button>
-        </div>
-
-        <div class="ds-paste-wrap" id="ds-paste-wrap" hidden>
-          <textarea class="ds-paste-input" id="ds-paste-input" placeholder="Paste CSV, TSV, or JSON here…"></textarea>
-          <div class="ds-paste-actions">
-            <button class="btn btn-primary" type="button" id="ds-paste-parse">Parse</button>
+        <!-- The section header: what this is, then what you can do to it. The
+             list below is the section's CONTENT — it used to be last, under the
+             whole import flow, which is why the section read as a pile of
+             unrelated blocks rather than "your datasets". -->
+        <!-- The LIST view. It and the explorer below are mutually exclusive —
+             opening a dataset takes the whole panel, the same gallery↔builder
+             swap the Visuals section uses. dataSection.ts flips the section's
+             class from the explorer's own `hidden`, so datasets.ts keeps
+             showing/hiding exactly what it always did. -->
+        <div class="ds-list-view">
+        <div class="ds-head">
+          <div class="ds-head-text">
+            <h2 class="ds-h">Datasets</h2>
+            <p class="ds-sub">Import CSV, JSON, or Excel — or paste data — to save a structured dataset in this project.</p>
+          </div>
+          <div class="ds-head-actions">
+            <button class="btn btn-primary" type="button" id="ds-import-open">+ Import data</button>
+            <button class="btn" type="button" id="ds-combine-open">Combine datasets</button>
+            <button class="btn btn-sm" type="button" id="ds-refresh-all-btn" hidden>↻ Refresh all</button>
           </div>
         </div>
 
-        <div class="ds-sheet-wrap" id="ds-sheet-wrap" hidden>
-          <label class="ds-sheet-label" for="ds-sheet-select">Sheet</label>
-          <select class="ds-sheet-select" id="ds-sheet-select"></select>
+        <!-- The saved datasets, as the same list-table Analyses uses. The column
+             labels live here (one template, shared with the rows in hub.css, so
+             a label cannot drift out of line with the cell under it); the rows
+             themselves are built by datasets.ts's makeSavedItem. -->
+        <div class="ds-saved ws-table" id="ds-saved">
+          <div class="ws-table-cols ds-saved-cols">
+            <span>Name</span>
+            <span>Rows</span>
+            <span>Source</span>
+            <span>Data as of</span>
+            <span class="ws-col-action">Action</span>
+          </div>
+          <div class="ds-saved-list" id="ds-saved-list"></div>
+          <div class="ws-empty ds-saved-empty" id="ds-saved-empty" hidden>
+            <h3 class="ws-empty-h">No datasets yet</h3>
+            <p class="ws-empty-p">Import a CSV, JSON or Excel file — or paste data straight in — to save a structured dataset in this project.</p>
+            <div class="ws-empty-actions">
+              <button class="btn btn-primary" type="button" id="ds-empty-import">Import file</button>
+              <button class="btn" type="button" id="ds-empty-paste">Paste data</button>
+            </div>
+          </div>
+        </div>
+        </div><!-- /.ds-list-view -->
+
+        <!-- ── Combine, as a dialog ────────────────────────────────────────
+             Combining CREATES A NEW DATASET (sourceKind 'combined') — it is not
+             a transform step, and it sat at the bottom of the prepare panel
+             where it read as one. It belongs to the list, so it opens from the
+             section header. Every control keeps its id and its handler; the
+             left-hand picker is new, because from the list there is no "open
+             dataset" for it to mean. -->
+        <div class="ws-modal-overlay ds-combine-overlay" id="ds-combine-modal" hidden>
+          <div class="ws-modal ds-combine-modal">
+            <div class="ds-modal-head">
+              <div class="ws-modal-title">Combine datasets</div>
+              <button class="ds-modal-x" type="button" id="ds-combine-x" aria-label="Close">✕</button>
+            </div>
+            <div class="ds-modal-body">
+              <div class="ds-combine-wrap">
+                <div class="ds-combine-row">
+                  <label class="ds-sheet-label" for="ds-combine-left">This dataset</label>
+                  <select class="ds-combine-select" id="ds-combine-left" aria-label="This dataset"></select>
+                </div>
+                <div class="ds-combine-row">
+                  <label class="ds-sheet-label" for="ds-combine-select">Combine with</label>
+                  <select class="ds-combine-select" id="ds-combine-select" aria-label="Other dataset"></select>
+                  <select class="ds-combine-mode" id="ds-combine-mode" aria-label="Combine mode">
+                    <option value="append">Append rows</option>
+                    <option value="join">Join on key</option>
+                  </select>
+                </div>
+                <div class="ds-combine-row" id="ds-combine-on" hidden>
+                  <select class="ds-combine-key" id="ds-combine-on-left" aria-label="This dataset key"></select>
+                  <span class="ds-combine-eq">=</span>
+                  <select class="ds-combine-key" id="ds-combine-on-right" aria-label="Other dataset key"></select>
+                </div>
+                <div class="ds-combine-note ds-explain-hint" id="ds-combine-note" hidden></div>
+              </div>
+            </div>
+            <div class="ds-save-bar ds-combine-foot">
+              <button class="btn btn-primary" type="button" id="ds-combine-btn">Combine</button>
+            </div>
+          </div>
         </div>
 
-        <div class="ds-warnings" id="ds-warnings" hidden></div>
+        <!-- ── Import, as a dialog ────────────────────────────────────────────
+             The same six blocks as before, with the same ids and the same
+             handlers in datasets.ts — only their container changed. They used
+             to sit in the section's scroll, so an import in progress and the
+             saved list were the same page.
 
-        <div class="ds-preview" id="ds-preview" hidden>
-          <p class="ds-preview-note" id="ds-preview-note" hidden></p>
-          <div class="ds-table-scroll" id="ds-table-scroll"></div>
-        </div>
+             Two steps in one frame: pick a source (Import file / Paste data,
+             which reveals the paste box in place), then confirm what was
+             parsed (sheet, warnings, preview) with the save bar as the footer.
+             The shell is .ws-modal-overlay / .ws-modal, the same one
+             dashChooseModal uses; dataSection.ts wires Escape, the backdrop and
+             the focus trap through the shared makeModalAccessible. -->
+        <div class="ws-modal-overlay ds-import-overlay" id="ds-import-modal" hidden>
+          <div class="ws-modal ds-import-modal">
+            <div class="ds-modal-head">
+              <div class="ws-modal-title" id="ds-import-title">Import data</div>
+              <button class="ds-modal-x" type="button" id="ds-import-x" aria-label="Close">✕</button>
+            </div>
 
-        <div class="ds-save-bar" id="ds-save-bar" hidden>
-          <input class="ds-name-input" id="ds-name-input" type="text" placeholder="Dataset name" />
-          <button class="btn btn-primary" type="button" id="ds-save-btn">Save dataset</button>
+            <div class="ds-modal-body">
+              <div class="ds-toolbar">
+                <button class="btn" type="button" id="ds-import-btn">Import file</button>
+                <button class="btn" type="button" id="ds-paste-toggle">Paste data</button>
+              </div>
+
+              <div class="ds-paste-wrap" id="ds-paste-wrap" hidden>
+                <textarea class="ds-paste-input" id="ds-paste-input" placeholder="Paste CSV, TSV, or JSON here…"></textarea>
+                <div class="ds-paste-actions">
+                  <button class="btn btn-primary" type="button" id="ds-paste-parse">Parse</button>
+                </div>
+              </div>
+
+              <div class="ds-sheet-wrap" id="ds-sheet-wrap" hidden>
+                <label class="ds-sheet-label" for="ds-sheet-select">Sheet</label>
+                <select class="ds-sheet-select" id="ds-sheet-select"></select>
+              </div>
+
+              <div class="ds-warnings" id="ds-warnings" hidden></div>
+
+              <div class="ds-preview" id="ds-preview" hidden>
+                <p class="ds-preview-note" id="ds-preview-note" hidden></p>
+                <div class="ds-table-scroll" id="ds-table-scroll"></div>
+              </div>
+            </div>
+
+            <div class="ds-save-bar" id="ds-save-bar" hidden>
+              <input class="ds-name-input" id="ds-name-input" type="text" placeholder="Dataset name" />
+              <button class="btn btn-primary" type="button" id="ds-save-btn">Save dataset</button>
+            </div>
+          </div>
         </div>
 
         <!-- ── Saved-dataset explorer (sort / filter / show-hide / rename / retype / stats / quality / AI explain) ── -->
         <div class="ds-explorer" id="ds-explorer" hidden>
           <div class="ds-explorer-head">
-            <h3 class="ds-explorer-title" id="ds-explorer-title"></h3>
-            <button class="btn" type="button" id="ds-explorer-close">Close</button>
+            <button class="btn btn-sm ds-back" type="button" id="ds-explorer-close">← Back to datasets</button>
+            <div class="ds-explorer-ident">
+              <h3 class="ds-explorer-title" id="ds-explorer-title"></h3>
+              <span class="ds-source-badge" id="ds-explorer-source" hidden></span>
+            </div>
+            <div class="ds-explorer-meta">
+              <span class="ds-fresh" id="ds-explorer-fresh"></span>
+              <button class="btn btn-sm" type="button" id="ds-explorer-refresh" hidden>↻ Refresh</button>
+            </div>
           </div>
 
           <!-- Week 13 — capture provenance: thumbnail + view-original + recapture. -->
           <div class="ds-cap-strip" id="ds-cap-strip" hidden></div>
 
-          <div class="ds-quality" id="ds-quality" hidden></div>
+          <!-- ── Three views of one dataset ──────────────────────────────────
+               Data, Prepare and Quality were three panels stacked in one
+               scroll, each toggled independently — Quality was a strip above
+               the toolbar that nobody scrolled to. They are tabs now; the grid
+               below belongs to the explorer, not to a tab, so Prepare can edit
+               a step with its effect visible beside it. -->
+          <div class="ds-tabs" role="tablist" aria-label="Dataset views">
+            <button class="ds-tab" type="button" role="tab" id="ds-tab-data"
+                    aria-selected="true" aria-controls="ds-tabp-data">Data</button>
+            <button class="ds-tab" type="button" role="tab" id="ds-tab-prepare"
+                    aria-selected="false" aria-controls="ds-tabp-prepare" tabindex="-1">Prepare</button>
+            <button class="ds-tab" type="button" role="tab" id="ds-tab-quality"
+                    aria-selected="false" aria-controls="ds-tabp-quality" tabindex="-1">Quality</button>
+          </div>
 
+          <div class="ds-tab-body">
+          <div class="ds-tabp" id="ds-tabp-data" role="tabpanel" aria-labelledby="ds-tab-data">
           <div class="ds-explorer-toolbar">
             <input class="ds-search" id="ds-search" type="search" placeholder="Search rows…" />
             <div class="ds-cols-wrap">
@@ -717,7 +846,16 @@
           </div>
 
           <div class="ds-explain-out" id="ds-explain-out" hidden></div>
+          </div><!-- /#ds-tabp-data -->
 
+          <div class="ds-tabp" id="ds-tabp-quality" role="tabpanel" aria-labelledby="ds-tab-quality" hidden>
+            <div class="ds-quality" id="ds-quality" hidden></div>
+            <!-- Shown only when the quality panel has nothing in it: an empty
+                 tab reads as broken, and "no issues found" is a real answer. -->
+            <p class="ds-quality-none">No quality issues found in this dataset.</p>
+          </div>
+
+          <div class="ds-tabp" id="ds-tabp-prepare" role="tabpanel" aria-labelledby="ds-tab-prepare" hidden>
           <!-- ── Prepare: reversible transform pipeline over the immutable source ── -->
           <div class="ds-prepare-panel" id="ds-prepare-panel" hidden>
             <div class="ds-prepare-warnings" id="ds-prepare-warnings" hidden></div>
@@ -744,37 +882,19 @@
               </div>
             </div>
 
-            <div class="ds-combine-wrap">
-              <h4 class="ds-combine-h">Combine with another dataset</h4>
-              <div class="ds-combine-row">
-                <select class="ds-combine-select" id="ds-combine-select" aria-label="Other dataset"></select>
-                <select class="ds-combine-mode" id="ds-combine-mode" aria-label="Combine mode">
-                  <option value="append">Append rows</option>
-                  <option value="join">Join on key</option>
-                </select>
-              </div>
-              <div class="ds-combine-row" id="ds-combine-on" hidden>
-                <select class="ds-combine-key" id="ds-combine-on-left" aria-label="This dataset key"></select>
-                <span class="ds-combine-eq">=</span>
-                <select class="ds-combine-key" id="ds-combine-on-right" aria-label="Other dataset key"></select>
-              </div>
-              <button class="btn" type="button" id="ds-combine-btn">Combine</button>
-              <div class="ds-combine-note ds-explain-hint" id="ds-combine-note" hidden></div>
-            </div>
           </div>
+          </div><!-- /#ds-tabp-prepare -->
 
-          <p class="ds-preview-note" id="ds-explorer-note" hidden></p>
-          <div class="ds-table-scroll" id="ds-explorer-scroll"></div>
+          <!-- The grid belongs to the EXPLORER, not to a tab: Prepare shows it
+               beside the step machinery so a step's effect is visible as it is
+               edited, which is the whole point of a reversible pipeline. -->
+          <div class="ds-grid-pane">
+            <p class="ds-preview-note" id="ds-explorer-note" hidden></p>
+            <div class="ds-table-scroll" id="ds-explorer-scroll"></div>
+          </div>
+          </div><!-- /.ds-tab-body -->
         </div>
 
-        <div class="ds-saved" id="ds-saved">
-          <div class="ds-saved-head">
-            <h3 class="ds-saved-h">Saved datasets</h3>
-            <button class="btn btn-sm" type="button" id="ds-refresh-all-btn" hidden>↻ Refresh all</button>
-          </div>
-          <div class="ds-saved-list" id="ds-saved-list"></div>
-          <p class="ds-saved-empty" id="ds-saved-empty" hidden>No datasets yet.</p>
-        </div>
       </div>
     </section>
     <section class="ws-panel" id="ws-visuals" data-section="visuals" hidden>
@@ -1984,6 +2104,7 @@
 <script src="projects.js"></script>
 <script src="workspace.js"></script>
 <script src="datasets.js"></script>
+<script src="dataSection.js"></script>
 <script src="captureDataset.js"></script>
 <script src="filterValues.js"></script>
 <script src="filterDialog.js"></script>

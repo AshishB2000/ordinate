@@ -700,9 +700,14 @@ async function main(): Promise<void> {
 
   // The dataset must be VISIBLE in the UI, with its real row count — this is
   // what proves the Parquet store reaches the screen, not just the API.
+  // SCOPED to the list's own row-count cell. A document-wide text search also
+  // matches the import hint ("CSV, JSON or Excel — up to 1,000,000 rows."),
+  // which would pass this check with the dataset absent from the screen —
+  // exactly the failure it exists to catch. The cell groups thousands now, so
+  // the separator is whatever the runtime locale picks, or none.
   const listed: string | null = await win.evaluate(() => {
-    const el = [...document.querySelectorAll('*')].find(
-      (e) => e.children.length === 0 && /1000000 rows/.test(e.textContent || ''),
+    const el = [...document.querySelectorAll('#ds-saved-list .ds-saved-item .ds-saved-meta')].find(
+      (e) => /1[,.\u202f\u00a0\s]?000[,.\u202f\u00a0\s]?000 rows/.test(e.textContent || ''),
     );
     return el ? (el.textContent || '').trim().slice(0, 60) : null;
   });
@@ -762,9 +767,17 @@ async function main(): Promise<void> {
       el.click();
       return true;
     }, id);
+  // The OPEN overlay, not the first one in the document. Since the Data
+  // section's import dialog is static markup (hidden until used), a bare
+  // `.ws-modal-overlay` query now finds THAT rather than the modal under test.
+  //
+  // Visibility is getClientRects(), NOT offsetParent: an overlay is
+  // position:fixed, whose offsetParent is null whether it is shown or not.
   const fillPrompt = async (value: string): Promise<boolean> =>
     win.evaluate((v) => {
-      const box = document.querySelector('.ws-modal-overlay .ws-modal');
+      const box = [...document.querySelectorAll('.ws-modal-overlay')]
+        .filter((o) => (o as HTMLElement).getClientRects().length > 0)
+        .map((o) => o.querySelector('.ws-modal'))[0];
       if (!box) return false;
       const input = box.querySelector('.ws-modal-input') as HTMLInputElement | null;
       if (input) input.value = v;
@@ -775,7 +788,9 @@ async function main(): Promise<void> {
     }, value);
   const pickFirstOption = async (): Promise<boolean> =>
     win.evaluate(() => {
-      const box = document.querySelector('.ws-modal-overlay .ws-modal');
+      const box = [...document.querySelectorAll('.ws-modal-overlay')]
+        .filter((o) => (o as HTMLElement).getClientRects().length > 0)
+        .map((o) => o.querySelector('.ws-modal'))[0];
       if (!box) return false;
       const sel = box.querySelector('select.ws-modal-input') as HTMLSelectElement | null;
       if (!sel || sel.options.length === 0) return false;
@@ -1338,8 +1353,12 @@ async function main(): Promise<void> {
   await openPane('an-pane-add');
   const railAdd = await win.evaluate(() => {
     (document.getElementById('an-add-text') as HTMLElement).click();
-    const open = !!document.querySelector('.ws-modal-overlay');
-    document.querySelectorAll('.ws-modal-overlay').forEach((o) => o.remove());
+    const opened = [...document.querySelectorAll('.ws-modal-overlay')]
+      .filter((o) => (o as HTMLElement).getClientRects().length > 0);
+    const open = opened.length > 0;
+    // Remove only what this click created. The import dialog is part of the
+    // page and removing it would break every later import.
+    opened.forEach((o) => o.remove());
     return open;
   });
   ok('…and Add › Text runs the editor\'s own add-card action', railAdd);
@@ -2870,7 +2889,9 @@ async function main(): Promise<void> {
   await win.waitForTimeout(900);
   ok('…listing the existing analyses plus a New analysis… entry',
      await win.evaluate(() => {
-       const sel = document.querySelector('.ws-modal-overlay select.ws-modal-input') as HTMLSelectElement;
+       const sel = [...document.querySelectorAll('.ws-modal-overlay')]
+         .filter((o) => (o as HTMLElement).getClientRects().length > 0)
+         .map((o) => o.querySelector('select.ws-modal-input'))[0] as HTMLSelectElement;
        return !!sel && [...sel.options].some((o) => /New analysis/.test(o.textContent || ''));
      }));
   ok('…and picking one confirms', await pickFirstOption());
