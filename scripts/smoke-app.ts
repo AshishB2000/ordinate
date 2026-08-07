@@ -1333,9 +1333,18 @@ async function main(): Promise<void> {
 
   // SELECT the card. This is the whole binding.
   await win.evaluate(() => (document.querySelector('#dash-grid .dash-card') as HTMLElement).click());
+  // Wait for the CHIP ROW as well as the field list. They arrive on separate
+  // async paths — the fields as soon as the dataset's columns load, the chips
+  // only once the visual's data has been computed in main — so waiting on the
+  // fields alone left `bound.chips` a race. It read 0 on a CI runner while
+  // passing on a dev machine, and because this single snapshot is asserted
+  // again 150 and 480 lines below, the flake surfaced far from its cause.
   await win.waitForFunction(
-    () => document.querySelectorAll('#an-fields .an-field').length > 0, undefined, { timeout: 30_000 },
-  ).catch(() => {});
+    () => document.querySelectorAll('#an-fields .an-field').length > 0
+      && document.querySelectorAll('#an-switcher .an-typerow').length > 0,
+    undefined,
+    { timeout: 30_000 },
+  ).catch(() => {}); // fall through; the assertions below report what is there
   const bound = await win.evaluate(() => {
     const fields = [...document.querySelectorAll('#an-fields .an-field')] as HTMLElement[];
     const wells = [...document.querySelectorAll('#an-wells [data-well]')] as HTMLElement[];
