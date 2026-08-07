@@ -50,6 +50,11 @@ async function openWorkspace(id: string): Promise<void> {
 // attribute (CSS shows exactly one body) and toggles nav + placeholder state.
 function selectSection(section: string): void {
   if (section !== currentSection) previousSection = currentSection;
+  // Leaving the Capture workspace by ANY route drops focus mode — the nav has to
+  // come back even when the user left via a global search hit or a capture
+  // landing rather than the Back button. Tying it to the section change instead
+  // of to the Back handler is what makes that hold for routes added later.
+  if (section !== 'sources') setCaptureFocus(false);
   currentSection = section;
   const body = wsBodyEl();
   if (body) body.dataset.section = section;
@@ -95,6 +100,33 @@ function initWorkspaceRouter(): void {
   });
   const ai = document.getElementById('side-ai-btn');
   if (ai) ai.addEventListener('click', () => selectSection('ai'));
+  // The only way out of the Capture workspace while the nav is hidden. Reuses
+  // leaveSection() — the same helper Connect's Close uses — rather than adding a
+  // second notion of "where was I".
+  const capBack = document.getElementById('cap-back');
+  if (capBack) capBack.addEventListener('click', () => leaveSection('sources'));
+}
+
+/**
+ * Enter/leave the full-screen Capture workspace.
+ *
+ * Same mechanism the analysis authoring surface already uses (`body.an-focus`,
+ * authoring.ts) rather than a second one: a body class, everything else in
+ * hub.css. The capture surface itself is untouched — this only decides which
+ * chrome renders around it.
+ *
+ * The default strapline is REPLACED, not hidden, because hub.ts writes real
+ * status into the same element ("Analyzing…", "Ready") as a capture progresses.
+ * Blanking it lets `:empty` collapse the line now and lets that status appear
+ * normally later; a `display:none` rule would have silently eaten it.
+ */
+function setCaptureFocus(on: boolean): void {
+  document.body.classList.toggle('cap-focus', on);
+  if (!on) return;
+  const h = document.getElementById('main-title-h');
+  const sub = document.getElementById('main-title-sub');
+  if (h) h.textContent = 'Capture';
+  if (sub) sub.textContent = '';
 }
 
 // Quick-capture guarantee: a capture fired from HOME (or before any project
