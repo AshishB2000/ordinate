@@ -658,6 +658,7 @@ async function openSavedDataset(id: string): Promise<void> {
   }
   const title = dsEl('ds-explorer-title');
   if (title) title.textContent = expName;
+  renderExplorerIdent(ds);
 
   // Week 13 — capture provenance strip (thumbnail + view-original + recapture).
   renderCapStrip(ds);
@@ -666,6 +667,44 @@ async function openSavedDataset(id: string): Promise<void> {
   resetPreparePanel(); // prepare.ts — collapse editor/suggest/menu, render steps + combine
   await refreshExplorerPage(); // awaited so the grid never paints blank first
   await loadExplorerStats();
+}
+
+/**
+ * The open dataset's identity line: source badge, "Data as of …", and Refresh.
+ *
+ * The same three facts its row in the list shows, from the same helpers
+ * (`DS_SOURCE_LABELS`, `dsFreshnessText`, `handleRefreshDataset`) — the explorer
+ * is a view of that row, so it must not derive them a second way. Refresh
+ * appears only where there is something to re-fetch, exactly as in the list, and
+ * repaints the row before reopening the explorer so the header it leaves behind
+ * is the stored one.
+ */
+function renderExplorerIdent(d: any): void {
+  const kind = d && d.sourceKind ? String(d.sourceKind) : '';
+  const badge = dsEl('ds-explorer-source');
+  if (badge) {
+    badge.textContent = DS_SOURCE_LABELS[kind] || kind;
+    badge.hidden = !badge.textContent;
+  }
+
+  const fresh = dsEl('ds-explorer-fresh');
+  if (fresh) {
+    fresh.textContent = dsFreshnessText(d);
+    fresh.title = d && d.originKind ? '' : DS_NOT_REFRESHABLE_HINT;
+  }
+
+  const btn = dsEl('ds-explorer-refresh') as HTMLButtonElement | null;
+  if (btn) {
+    btn.hidden = !(d && d.originKind);
+    btn.onclick = async (): Promise<void> => {
+      const id = String((d && d.id) || expId || '');
+      if (!id) return;
+      await handleRefreshDataset(id, btn, null);
+      // The row repainted; reopen so the grid, the stats and this header all
+      // describe the data that was just fetched rather than the previous one.
+      await openSavedDataset(id);
+    };
+  }
 }
 
 // Week 13 — render (or hide) the capture-provenance strip for the open dataset.

@@ -666,6 +666,12 @@
              list below is the section's CONTENT — it used to be last, under the
              whole import flow, which is why the section read as a pile of
              unrelated blocks rather than "your datasets". -->
+        <!-- The LIST view. It and the explorer below are mutually exclusive —
+             opening a dataset takes the whole panel, the same gallery↔builder
+             swap the Visuals section uses. dataSection.ts flips the section's
+             class from the explorer's own `hidden`, so datasets.ts keeps
+             showing/hiding exactly what it always did. -->
+        <div class="ds-list-view">
         <div class="ds-head">
           <div class="ds-head-text">
             <h2 class="ds-h">Datasets</h2>
@@ -699,6 +705,7 @@
             </div>
           </div>
         </div>
+        </div><!-- /.ds-list-view -->
 
         <!-- ── Import, as a dialog ────────────────────────────────────────────
              The same six blocks as before, with the same ids and the same
@@ -755,8 +762,15 @@
         <!-- ── Saved-dataset explorer (sort / filter / show-hide / rename / retype / stats / quality / AI explain) ── -->
         <div class="ds-explorer" id="ds-explorer" hidden>
           <div class="ds-explorer-head">
-            <h3 class="ds-explorer-title" id="ds-explorer-title"></h3>
-            <button class="btn" type="button" id="ds-explorer-close">Close</button>
+            <button class="btn btn-sm ds-back" type="button" id="ds-explorer-close">← Back to datasets</button>
+            <div class="ds-explorer-ident">
+              <h3 class="ds-explorer-title" id="ds-explorer-title"></h3>
+              <span class="ds-source-badge" id="ds-explorer-source" hidden></span>
+            </div>
+            <div class="ds-explorer-meta">
+              <span class="ds-fresh" id="ds-explorer-fresh"></span>
+              <button class="btn btn-sm" type="button" id="ds-explorer-refresh" hidden>↻ Refresh</button>
+            </div>
           </div>
 
           <!-- Week 13 — capture provenance: thumbnail + view-original + recapture. -->

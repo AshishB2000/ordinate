@@ -141,8 +141,30 @@ function dxWatchImportSurface(): void {
   for (const el of watched) obs.observe(el, { attributes: true, attributeFilter: ['hidden'] });
 }
 
+/**
+ * The list and the explorer are mutually exclusive: opening a dataset takes the
+ * whole panel, closing it gives the list back. Same swap the Visuals section
+ * makes between its gallery and its builder.
+ *
+ * It is driven OFF `#ds-explorer`'s own `hidden`, which datasets.ts already
+ * sets when a dataset opens and when Back is pressed. So this adds a view
+ * without touching that logic — and it cannot fall out of step with it, because
+ * it is reading the same bit rather than keeping a second one.
+ */
+function dxWatchExplorer(): void {
+  const explorer = dxEl('ds-explorer');
+  const panel = document.querySelector('#ws-datasets .ds-panel') as HTMLElement | null;
+  if (!explorer || !panel) return;
+  const sync = (): void => {
+    panel.classList.toggle('is-exploring', !explorer.hidden);
+  };
+  new MutationObserver(sync).observe(explorer, { attributes: true, attributeFilter: ['hidden'] });
+  sync();
+}
+
 function initDataSection(): void {
   dxWatchImportSurface();
+  dxWatchExplorer();
 
   // Every door into importing opens the dialog first, then triggers the control
   // that already existed — one handler per action, still in datasets.ts.

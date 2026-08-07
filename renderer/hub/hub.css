@@ -4992,6 +4992,41 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .ds-preview[hidden],
 .ds-save-bar[hidden] { display: none; }
 
+/* ── List view ↔ explorer ────────────────────────────────────────────────────
+   One at a time. `is-exploring` is set by dataSection.ts from #ds-explorer's own
+   `hidden`, so this is a view of that state rather than a second copy of it. */
+.ds-panel.is-exploring .ds-list-view { display: none; }
+
+/* The explorer's header: Back, then what this dataset IS (name + source), then
+   how old its data is and the way to re-fetch it. */
+.ds-explorer-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ds-explorer-ident {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.ds-explorer-ident .ds-explorer-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-explorer-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+.ds-explorer-meta .btn[hidden],
+.ds-explorer-ident .ds-source-badge[hidden] { display: none; }
+.ds-back { flex: 0 0 auto; }
+
 /* ── The import dialog ───────────────────────────────────────────────────────
    Wider than the stock .ws-modal (which is min(360px, …)) because it holds a
    preview table; `.ws-modal` is defined LATER in this file, so the class pair
