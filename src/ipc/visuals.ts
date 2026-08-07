@@ -8,8 +8,14 @@ import type { ResidentMeasure } from '../residentQuery';
 import * as trace from '../residentTrace';
 import { sanitizeEncoding, sanitizeChartType } from '../visuals';
 import type { VizEncoding } from '../visuals';
-import type { FilterStep } from '../transforms';
+import type { Cell, FilterStep } from '../transforms';
+import type { ParsedColumn } from '../parse';
+import { coerceValue } from '../parse';
 import { FILTER_OPS, LIST_OPS } from '../filterOps';
+// The drill-down panel pages rows through the SAME two-path decision the Explore
+// grid uses — see `pageFor`'s note on why there is only one of them.
+import { pageFor } from './datasets';
+import type { PageRequest } from '../datasetPage';
 import { computeColumnSummariesResident } from '../statsResident';
 import { computeColumnSummary } from '../datasetStats';
 import type { ColumnSummary } from '../datasetStats';
@@ -170,6 +176,161 @@ export async function residentVizData(
   }
 }
 
+// ── Drill-down: the rows behind ONE mark ────────────────────────────────────
+//
+// The app's core claim is that it does the math and never invents a figure.
+// This is the check on that claim: click a bar and get the rows it was computed
+// from. Which means the row set has to be EXACTLY the aggregate's input — not a
+// close one. A drill that quietly returns a superset would contradict the number
+// printed above it, which is worse than having no drill at all.
+//
+// So the composition is deliberately dumb: the filter list that produced the
+// figure, plus one equality filter per clicked axis, evaluated by the same
+// compiler (`residentQuery.filterPredicates` via `datasetPage`). Everything that
+// cannot be expressed that way REFUSES, with a sentence saying why.
+//
+// ── What can be re-derived, and what cannot ─────────────────────────────────
+// `buildVizData` has three branches. (A) aggregated and (B) split/pivot are
+// group-bys — a mark IS a group, and a group is exactly `category = X` (and, for
+// (B), `AND series = Y`). (C) raw is not: it plots one point per ROW, several
+// rows can share a label, and "the rows with this label" would be a superset of
+// the single row clicked. Geo is not either: a region is a set of names matched
+// by `geoMatch`, not one cell value.
+//
+// ── The ambiguity that is easy to miss ──────────────────────────────────────
+// A group key and its LABEL are not the same thing. On a text column, `null` and
+// `''` are two distinct groups (two bars) that both render with a blank label,
+// and the string filter `= ''` matches both — so drilling a blank label could
+// return two bars' worth of rows for one bar. On a number column the empty group
+// is labelled `''` too, and `= ''` there matches nothing at all. Both are
+// refused rather than approximated: a blank label cannot identify one group.
+//
+// Likewise a number column can only be matched on a value that survives
+// `parse.coerceValue` — `isFiniteNumber` is strict, so a label that does not
+// round-trip (an exponent form, say) is refused instead of matching zero rows
+// under a non-zero bar.
+
+/** The clicked mark: the category label and, on a split chart, the series name. */
+export interface DrillMark {
+  category?: Cell;
+  series?: Cell;
+}
+
+export type DrillResolution =
+  | { available: true; filters: FilterStep[] }
+  | { available: false; reason: string };
+
+function markValue(v: unknown): Cell | undefined {
+  if (typeof v === 'string' || typeof v === 'number') return v;
+  return undefined;
+}
+
+/**
+ * The filter list whose rows are exactly the mark's input, or a refusal.
+ *
+ * PURE — columns/encoding/filters/mark in, filters or a reason out. `filters` is
+ * the list that produced the FIGURE (the visual's own filters merged with the
+ * sheet's, in the caller's order), and is returned unchanged at the head of the
+ * result so the panel can show it as chips.
+ *
+ * With NO mark this cannot fail on chart shape: the caller is asking for the
+ * rows behind the whole visual, which is just its filters — that is the drill
+ * entry point for maps and tables, where there is no mark to hit-test.
+ */
+export function resolveDrill(
+  columns: ParsedColumn[],
+  encoding: VizEncoding,
+  filters: FilterStep[],
+  mark?: DrillMark,
+): DrillResolution {
+  const base = Array.isArray(filters) ? filters.slice() : [];
+  const cols = Array.isArray(columns) ? columns : [];
+  const category = markValue(mark?.category);
+  const series = markValue(mark?.series);
+  if (category === undefined && series === undefined) return { available: true, filters: base };
+
+  if (!encoding) return { available: false, reason: 'This visual has no encoding to identify the clicked mark by.' };
+  if (encoding.geo) {
+    return {
+      available: false,
+      reason:
+        'A map region is matched to rows by NAME, not by one cell value, so the exact rows behind a region cannot be listed. Use ⋯ → Show underlying rows for the whole visual.',
+    };
+  }
+  const values = Array.isArray(encoding.values) ? encoding.values : [];
+  if (values.length > 0 && values.every((v) => v.aggregation === 'none')) {
+    return {
+      available: false,
+      reason:
+        'This chart plots one point per row rather than groups, so a point is a single row and not a set that can be re-derived by filtering.',
+    };
+  }
+  if (typeof encoding.category !== 'string' || encoding.category === '') {
+    return { available: false, reason: 'This visual has no category column, so a mark identifies nothing.' };
+  }
+
+  const hasSplit = typeof encoding.series === 'string' && encoding.series.length > 0;
+  if (category === undefined) {
+    return { available: false, reason: 'The clicked mark carries no category value.' };
+  }
+  // A mark on a split chart is a (category, series) CELL. Either half alone
+  // selects a whole row or column of the pivot — a superset of what was clicked.
+  if (hasSplit && series === undefined) {
+    return {
+      available: false,
+      reason: 'This chart is split into series, so a mark needs both a category and a series to identify its rows.',
+    };
+  }
+  if (!hasSplit && series !== undefined) {
+    return { available: false, reason: 'This chart has no split column, so the clicked series cannot be resolved.' };
+  }
+
+  const steps: FilterStep[] = [];
+  const cat = markStep(cols, encoding.category, category);
+  if ('reason' in cat) return { available: false, reason: cat.reason };
+  steps.push(cat.step);
+  if (hasSplit) {
+    const ser = markStep(cols, encoding.series as string, series as Cell);
+    if ('reason' in ser) return { available: false, reason: ser.reason };
+    steps.push(ser.step);
+  }
+  return { available: true, filters: base.concat(steps) };
+}
+
+/**
+ * One clicked axis → one equality filter, or the reason it cannot be one.
+ *
+ * The value is compared AS THE LABEL CARRIED IT. Every column is stored VARCHAR
+ * and the label came from those same cells, so an `=` on the raw string is
+ * exact — no trimming, no coercion, `007` stays `007`.
+ */
+function markStep(
+  cols: ParsedColumn[],
+  column: string,
+  value: Cell,
+): { step: FilterStep } | { reason: string } {
+  const col = cols.find((c) => c && c.name === column);
+  if (!col) {
+    return {
+      reason: `"${column}" is not a stored column of this dataset, so the rows behind this mark cannot be looked up.`,
+    };
+  }
+  // A blank label does not identify a group: `null` and `''` are two groups that
+  // both render blank, and on a number column blank is the no-value group, which
+  // no equality filter selects.
+  if (value === null || String(value).trim() === '') {
+    return {
+      reason: `The clicked mark has a blank "${column}", which can mean either an empty value or a missing one — those are different rows, so the exact set is ambiguous.`,
+    };
+  }
+  if (col.type === 'number' && coerceValue(value, 'number') === null) {
+    return {
+      reason: `"${String(value)}" is not a value the number column "${column}" can be matched on, so its rows cannot be identified exactly.`,
+    };
+  }
+  return { step: { type: 'filter', column, op: '=', value } };
+}
+
 /** The reply shape of `visual:data`. `tooLarge` is only ever set by a caller
  *  that supplied `maxHydrateRows` (see below); `visual:data` itself never does. */
 export type VizDataReply =
@@ -274,6 +435,58 @@ export function register() {
       return await vizDataFor(projectId, datasetId, enc, flt);
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute the visual data' };
+    }
+  });
+
+  // ── The rows behind one mark (drill-down) ────────────────────────────────
+  //
+  // A READ, and only a read: it writes no filter, touches no card, and works on
+  // a published snapshot exactly as on an authoring surface. The caller passes
+  // the SAME filter list it passed to `visual:data` (the visual's own filters
+  // merged with the sheet's) — resolved by the renderer, which is where a
+  // published card's frozen `card.visual` definition wins over `card.visualId`.
+  // Main never re-resolves the visual, so a snapshot drills against what it was
+  // published with rather than a later edit.
+  //
+  // Returns the resolved filter list so the panel can render it as chips, or
+  // `available: false` + a reason when the row set cannot be derived faithfully.
+  ipcMain.handle('visual:rows', async (_e, { projectId, datasetId, encoding, filters, mark, page }: any = {}) => {
+    try {
+      // Untrusted renderer input, sanitized before anything reads it — the same
+      // two whitelists `visual:data` runs.
+      const enc = sanitizeEncoding(encoding);
+      const flt = visuals.sanitizeFilters(filters);
+
+      // Metadata only: the column list is all `resolveDrill` needs, and the grid
+      // needs it for headers. No rows are hydrated to answer a refusal.
+      const meta = await datasets.getDatasetMeta(projectId, datasetId);
+      if (!meta) return { ok: false, error: 'Dataset not found' };
+
+      const resolved = resolveDrill(meta.columns, enc, flt, mark);
+      if (!resolved.available) return { ok: true, available: false, reason: resolved.reason };
+
+      const p = page && typeof page === 'object' ? page : {};
+      const req: PageRequest = {
+        offset: p.offset,
+        limit: p.limit,
+        search: p.search,
+        sortColumn: p.sortColumn,
+        sortDir: p.sortDir,
+        filters: resolved.filters,
+      };
+      const res = await pageFor(projectId, datasetId, req, 'drillRows');
+      if (!res.ok) return res;
+      return {
+        ok: true,
+        available: true,
+        filters: resolved.filters,
+        columns: meta.columns,
+        rows: res.rows,
+        total: res.total,
+        offset: res.offset,
+      };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Failed to read the underlying rows' };
     }
   });
 
