@@ -8802,10 +8802,10 @@ body.an-focus #settings-gear { display: none; }
 
 /* One row up top: ‹ Back · name · spacer · ⋯ · Publish · Save. Rename folds into
    clicking the name; the three add-card buttons moved to the rail's + panel. */
-body.an-focus .dash-editor-head #dash-rename-btn,
-body.an-focus .dash-editor-head #dash-add-visual,
-body.an-focus .dash-editor-head #dash-add-metric,
-body.an-focus .dash-editor-head #dash-add-text { display: none; }
+/* Rename stays hidden in focus mode — the analysis NAME is the rename control
+   there. The three add buttons came BACK to the strip when the rail's + pane
+   was removed: one add path, and it is this one. */
+body.an-focus .dash-editor-head #dash-rename-btn { display: none; }
 body.an-focus .dash-editor-head #dash-name { cursor: pointer; }
 body.an-focus .dash-editor-head #dash-name:hover { text-decoration: underline; }
 /* The publish-state sentence became the Publish button's tooltip. */

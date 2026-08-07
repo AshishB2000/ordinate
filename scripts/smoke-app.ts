@@ -1086,13 +1086,14 @@ async function main(): Promise<void> {
       // button's tooltip. Read it from there, or this asserts a hidden node.
       pubstate: (document.getElementById('an-publish-btn')?.getAttribute('title') || '').trim().slice(0, 60),
       publishVisible: (document.getElementById('an-publish-btn') as HTMLElement | null)?.offsetParent != null,
-      // Add-card moved off the top strip onto the rail's + panel.
+      // The head strip is the ONE add path again — the rail's + pane went away
+      // with the Analyses-v2 dialogs, and removing it meant un-hiding these.
       addVisualVisible:
-        (document.querySelector('#an-rail .an-rail-btn[data-pane="an-pane-add"]') as HTMLElement | null)
-          ?.offsetParent != null,
-      // …and the strip really did shed the three buttons and Rename.
-      stripLean: ['dash-add-visual', 'dash-add-metric', 'dash-add-text', 'dash-rename-btn']
-        .every((id) => (document.getElementById(id) as HTMLElement | null)?.offsetParent == null),
+        (document.getElementById('dash-add-visual') as HTMLElement | null)?.offsetParent != null,
+      addAllVisible: ['dash-add-visual', 'dash-add-metric', 'dash-add-text']
+        .every((id) => (document.getElementById(id) as HTMLElement | null)?.offsetParent != null),
+      // Rename stays off the strip: the analysis NAME is the rename control.
+      stripLean: (document.getElementById('dash-rename-btn') as HTMLElement | null)?.offsetParent == null,
       moreVisible: (document.getElementById('an-more-btn') as HTMLElement | null)?.offsetParent != null,
       summaryVisible: (document.getElementById('dash-summary-btn') as HTMLElement | null)?.offsetParent != null,
       sheetTabs: document.querySelectorAll('#dash-pages .dash-page-tab').length,
@@ -1113,9 +1114,9 @@ async function main(): Promise<void> {
      !!anEditor && anEditor.w > 200 && anEditor.h > 200, `${anEditor?.w}x${anEditor?.h}`);
   ok('an unpublished analysis says so', !!anEditor && /Not published yet/.test(anEditor.pubstate),
      anEditor?.pubstate || '');
-  ok('Publish and the card controls are offered on an analysis',
-     !!anEditor && anEditor.publishVisible && anEditor.addVisualVisible);
-  ok('…and the top strip is down to Back / name / ⋯ / Publish / Save',
+  ok('Publish and the three add buttons are offered on an analysis',
+     !!anEditor && anEditor.publishVisible && anEditor.addVisualVisible && anEditor.addAllVisible);
+  ok('…and the strip sheds Rename (the name is the rename control) but keeps ⋯',
      !!anEditor && anEditor.stripLean && anEditor.moreVisible,
      JSON.stringify({ lean: anEditor?.stripLean, more: anEditor?.moreVisible }));
   ok('the dashboard-only AI actions are hidden on an analysis',
@@ -1336,16 +1337,14 @@ async function main(): Promise<void> {
   ok('the tool rail is on screen, every icon named, titled and drawn',
      rail.visible && rail.allLabelled && rail.allSvg &&
        JSON.stringify(rail.panes) ===
-         JSON.stringify(['an-pane-add', 'an-pane-data', 'an-pane-visuals', 'an-pane-filter',
-                         'an-pane-props']),
+         JSON.stringify(['an-pane-data', 'an-pane-visuals', 'an-pane-filter', 'an-pane-props']),
      JSON.stringify(rail));
 
   // ONE flyout at a time, and clicking the lit icon closes it. That is the
   // whole point of the rail — two panels stacked is what it replaced.
   await openPane('an-pane-data');
   const flyout = await win.evaluate(() => {
-    const shown = () => ['an-pane-add', 'an-pane-data', 'an-pane-visuals', 'an-pane-filter',
-      'an-pane-props']
+    const shown = () => ['an-pane-data', 'an-pane-visuals', 'an-pane-filter', 'an-pane-props']
       .filter((id) => (document.getElementById(id) as HTMLElement | null)?.offsetParent != null);
     const afterData = shown();
     (document.querySelector('#an-rail .an-rail-btn[data-pane="an-pane-visuals"]') as HTMLElement).click();
@@ -1362,11 +1361,10 @@ async function main(): Promise<void> {
   ok('…and clicking the lit icon closes the flyout entirely',
      flyout.afterClose.length === 0 && flyout.sideShut, JSON.stringify(flyout.afterClose));
 
-  // The Add panel delegates to the editor's own handlers rather than
-  // duplicating them — same modal, same code path.
-  await openPane('an-pane-add');
-  const railAdd = await win.evaluate(() => {
-    (document.getElementById('an-add-text') as HTMLElement).click();
+  // The one add path: the head strip's + Text opens its modal directly. (The
+  // rail's + pane, which used to delegate to it, no longer exists.)
+  const headAdd = await win.evaluate(() => {
+    (document.getElementById('dash-add-text') as HTMLElement).click();
     const opened = [...document.querySelectorAll('.ws-modal-overlay')]
       .filter((o) => (o as HTMLElement).getClientRects().length > 0);
     const open = opened.length > 0;
@@ -1375,7 +1373,7 @@ async function main(): Promise<void> {
     opened.forEach((o) => o.remove());
     return open;
   });
-  ok('…and Add › Text runs the editor\'s own add-card action', railAdd);
+  ok('…and the head strip\'s + Text opens its add-card modal', headAdd);
 
   // The analysis-wide filter bar really MOVED into the Filters flyout — it is
   // one element with two hosts, so a copy left behind would be a second, dead
@@ -1596,10 +1594,33 @@ async function main(): Promise<void> {
   ok('…as an icon + the CURRENT type name + a way into the full picker',
      icons.svg && !!icons.name && icons.labelled && icons.chipRowHidden, JSON.stringify(icons));
 
-  // Search fields — a wide dataset is unusable without it. Needs the Data
-  // flyout, since only one is open at a time now.
+  // Search fields — a wide dataset is unusable without it. The Data flyout is
+  // the BROWSE render now (its own list, its own search); the canonical,
+  // draggable list lives in Properties. Both filter; each is asserted where it
+  // lives.
   await openPane('an-pane-data');
   const search = await win.evaluate(() => {
+    const box = document.getElementById('an-browse-search') as HTMLInputElement;
+    const before = document.querySelectorAll('#an-browse .an-field').length;
+    box.value = 'rev';
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+    const after = document.querySelectorAll('#an-browse .an-field').length;
+    box.value = '';
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+    return { visible: box.offsetParent !== null, before, after,
+             restored: document.querySelectorAll('#an-browse .an-field').length,
+             // Browse items assign on click but do NOT drag — the wells are in
+             // the other flyout, so a drag from here reaches nothing.
+             browseDraggable: [...document.querySelectorAll('#an-browse .an-field')]
+               .some((f) => (f as HTMLElement).draggable) };
+  });
+  ok('the Data panel searches its fields',
+     search.visible && search.after < search.before && search.restored === search.before,
+     JSON.stringify(search));
+  ok('…and its browse items are click-to-assign, not draggable', search.browseDraggable === false);
+
+  const propsSearch = await win.evaluate(() => {
+    (document.querySelector('#an-rail .an-rail-btn[data-pane="an-pane-props"]') as HTMLElement).click();
     const box = document.getElementById('an-field-search') as HTMLInputElement;
     const before = document.querySelectorAll('#an-fields .an-field').length;
     box.value = 'rev';
@@ -1610,9 +1631,11 @@ async function main(): Promise<void> {
     return { visible: box.offsetParent !== null, before, after,
              restored: document.querySelectorAll('#an-fields .an-field').length };
   });
-  ok('the Data panel searches its fields',
-     search.visible && search.after < search.before && search.restored === search.before,
-     JSON.stringify(search));
+  ok('the Properties field list searches too',
+     propsSearch.visible && propsSearch.after < propsSearch.before
+       && propsSearch.restored === propsSearch.before,
+     JSON.stringify(propsSearch));
+  await openPane('an-pane-data');
 
   // Properties is closed until a card's ⚙ asks for it — the gear IS the only
   // way in, so opening it here also asserts that button is wired.
