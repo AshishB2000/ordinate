@@ -169,7 +169,9 @@ contextBridge.exposeInMainWorld('hub', {
   // Parse pasted text (JSON / CSV / TSV auto-detect); returns { ok, preview }.
   parsePasteDataset: (text: string) => ipcRenderer.invoke('dataset:parsePaste', { text }),
   // Persist a dataset under its project; returns the saved Dataset or { ok:false, error }.
-  saveDataset: (payload: { projectId: string; name: string; sourceKind: string; columns: any[]; rows: any[] }) =>
+  // `origin` (optional) is what makes the dataset refreshable later; main
+  // whitelists it before storing, so an unrecognised one is simply dropped.
+  saveDataset: (payload: { projectId: string; name: string; sourceKind: string; columns: any[]; rows: any[]; origin?: any }) =>
     ipcRenderer.invoke('dataset:save', payload),
   // List a project's dataset summaries (newest-updated first).
   listDatasets: (projectId: string) => ipcRenderer.invoke('dataset:list', { projectId }),

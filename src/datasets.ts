@@ -20,6 +20,30 @@ import * as parquetStore from './parquetStore';
 import * as transforms from './transforms';
 import type { TableData, TransformStep, ApplyResult } from './transforms';
 
+/**
+ * WHERE a dataset's rows came from, so they can be fetched again.
+ *
+ * Distinct from `sourceKind`, which is a display/format label and is a closed
+ * union of eight values that 35 connectors already collapse onto. This says how
+ * to RE-RUN the import, and it is the only thing that makes a dataset
+ * refreshable — a record without one is a snapshot, exactly as every dataset was
+ * before this existed.
+ *
+ * `paste` and `capture` deliberately have no origin: pasted text has no
+ * re-fetchable source, and a capture already has its own recapture flow.
+ */
+export type DatasetOrigin =
+  | { kind: 'file'; path: string; sheetName?: string }
+  | { kind: 'url'; url: string }
+  | { kind: 'connection'; connId: string }
+  | {
+      kind: 'combined';
+      leftId: string;
+      rightId: string;
+      mode: 'append' | 'join';
+      on?: { left: string; right: string };
+    };
+
 export interface Dataset {
   id: string;
   projectId: string;
@@ -48,6 +72,18 @@ export interface Dataset {
   // steps). When steps returns to [], output === source and the dataset reverts.
   source?: TableData;
   steps?: TransformStep[];
+  /**
+   * Refresh provenance. All OPTIONAL, so every record written before this
+   * existed stays valid untouched and simply reads as "not refreshable".
+   *
+   * `lastRefreshedAt` is deliberately separate from `updatedAt`: a rename or a
+   * pipeline edit bumps updatedAt without the DATA being any newer, and
+   * "Data as of…" must not claim otherwise.
+   */
+  origin?: DatasetOrigin;
+  lastRefreshedAt?: string;
+  lastRefreshStatus?: 'ok' | 'error';
+  lastRefreshError?: string | null;
 }
 
 export interface DatasetSummary {
@@ -60,6 +96,11 @@ export interface DatasetSummary {
   // Week 13 — just the crop path (not the full capture object) so the saved-list
   // can render a capture thumbnail + badge without a full dataset load.
   capture?: { cropPath: string | null };
+  // Freshness for the saved list, WITHOUT a full dataset load. Only the origin's
+  // `kind` is carried: the list needs "is this refreshable", not the path or URL.
+  originKind?: DatasetOrigin['kind'];
+  lastRefreshedAt?: string;
+  lastRefreshStatus?: 'ok' | 'error';
 }
 
 let projectsBase: string | null = null;
@@ -101,6 +142,68 @@ function sanitizeCapture(raw: any): { entryId: string | null; cropPath: string |
   const cropPath = typeof raw.cropPath === 'string' && raw.cropPath ? raw.cropPath : null;
   if (entryId === null && cropPath === null) return undefined;
   return { entryId, cropPath };
+}
+
+/**
+ * Whitelist an untrusted `origin` — from a stored file OR a save IPC payload —
+ * into a well-formed DatasetOrigin, or `undefined`. Never throws.
+ *
+ * This is a SECURITY control, not tidying. `normalize()` runs it on every load,
+ * so a hand-edited or corrupted record degrades to "not refreshable" instead of
+ * turning into a file read or a fetch at an attacker's chosen target:
+ *   • a relative path could escape wherever the refresh happens to resolve it
+ *   • `file:`/`javascript:`/`data:` URLs are not fetchable sources
+ *   • a non-UUID id would reach a path join in connections/datasets
+ * Same whitelist discipline as sanitizeCapture and visuals.sanitizeEncoding:
+ * keep only what is recognised, drop the rest, never repair.
+ */
+export function sanitizeOrigin(raw: unknown): DatasetOrigin | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const o = raw as Record<string, unknown>;
+  const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+
+  switch (o.kind) {
+    case 'file': {
+      const p = typeof o.path === 'string' ? o.path : '';
+      // Absolute only. A relative path has no meaning outside the cwd it was
+      // captured in, and main's cwd is not the user's.
+      if (!p || !path.isAbsolute(p)) return undefined;
+      const sheetName = str(o.sheetName);
+      return sheetName ? { kind: 'file', path: p, sheetName } : { kind: 'file', path: p };
+    }
+    case 'url': {
+      const u = str(o.url);
+      if (!u) return undefined;
+      try {
+        const parsed = new URL(u);
+        // http/https ONLY. (The URL connector itself is https-only and will
+        // refuse an http one at fetch time — this is the outer guard that keeps
+        // every other scheme from ever reaching a fetcher.)
+        if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return undefined;
+        return { kind: 'url', url: u };
+      } catch (_) {
+        return undefined;
+      }
+    }
+    case 'connection': {
+      const connId = str(o.connId);
+      return isValidId(connId) ? { kind: 'connection', connId } : undefined;
+    }
+    case 'combined': {
+      const leftId = str(o.leftId);
+      const rightId = str(o.rightId);
+      if (!isValidId(leftId) || !isValidId(rightId)) return undefined;
+      if (o.mode !== 'append' && o.mode !== 'join') return undefined;
+      const out: DatasetOrigin = { kind: 'combined', leftId, rightId, mode: o.mode };
+      const on = o.on as Record<string, unknown> | undefined;
+      if (on && typeof on === 'object' && typeof on.left === 'string' && typeof on.right === 'string') {
+        out.on = { left: on.left, right: on.right };
+      }
+      return out;
+    }
+    default:
+      return undefined;
+  }
 }
 
 // Atomic JSON write: temp sibling then rename (atomic on same fs), so a crash
@@ -236,6 +339,15 @@ function normalize(data: any, projectId: string): Dataset {
   // Week 13 — carry a screenshot link through when present (shape-checked).
   const capture = sanitizeCapture(data.capture);
   if (capture) ds.capture = capture;
+  // Refresh provenance. sanitizeOrigin runs on EVERY load, so a hand-edited or
+  // corrupt origin reads back as "not refreshable" rather than as a file read.
+  const origin = sanitizeOrigin(data.origin);
+  if (origin) ds.origin = origin;
+  if (typeof data.lastRefreshedAt === 'string' && data.lastRefreshedAt) ds.lastRefreshedAt = data.lastRefreshedAt;
+  if (data.lastRefreshStatus === 'ok' || data.lastRefreshStatus === 'error') {
+    ds.lastRefreshStatus = data.lastRefreshStatus;
+  }
+  if (typeof data.lastRefreshError === 'string') ds.lastRefreshError = data.lastRefreshError;
   return ds;
 }
 
@@ -276,6 +388,9 @@ export async function listDatasets(projectId: string): Promise<DatasetSummary[]>
         updatedAt: ds.updatedAt,
       };
       if (ds.capture) summary.capture = { cropPath: ds.capture.cropPath };
+      if (ds.origin) summary.originKind = ds.origin.kind;
+      if (ds.lastRefreshedAt) summary.lastRefreshedAt = ds.lastRefreshedAt;
+      if (ds.lastRefreshStatus) summary.lastRefreshStatus = ds.lastRefreshStatus;
       out.push(summary);
     } catch (err: any) { // ponytail: fs errors carry .code, JSON errors don't
       if (err.code !== 'ENOENT') {
@@ -386,6 +501,7 @@ export async function saveDataset(
     columns: ParsedColumn[];
     rows: (string | number | null)[][];
     capture?: { entryId: string | null; cropPath: string | null };
+    origin?: unknown;
   },
 ): Promise<Dataset | null> {
   if (!isValidId(projectId)) return null;
@@ -412,6 +528,16 @@ export async function saveDataset(
   // Week 13 — persist the screenshot link for a capture-sourced dataset.
   const capture = sanitizeCapture(input.capture);
   if (capture) dataset.capture = capture;
+  // An import IS a fetch, so a freshly saved dataset's data is as of now. Without
+  // this the first "Data as of…" would read from updatedAt and drift the moment
+  // the dataset is renamed.
+  const origin = sanitizeOrigin(input.origin);
+  if (origin) {
+    dataset.origin = origin;
+    dataset.lastRefreshedAt = now;
+    dataset.lastRefreshStatus = 'ok';
+    dataset.lastRefreshError = null;
+  }
   await fs.promises.mkdir(datasetsDir(projectId), { recursive: true });
   await persist(projectId, dataset);
   return dataset;

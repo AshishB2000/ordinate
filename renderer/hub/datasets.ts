@@ -194,6 +194,16 @@ async function handleParsePaste(): Promise<void> {
   renderPreview(res.preview, true);
 }
 
+// The sheet the preview is currently showing, for an xlsx import. Undefined for
+// csv/json (and for a single-sheet workbook, where the picker is hidden), so a
+// stored origin only names a sheet when one was actually chosen.
+function dsChosenSheet(): string | undefined {
+  const sel = dsEl('ds-sheet-select') as HTMLSelectElement | null;
+  const wrap = dsEl('ds-sheet-wrap');
+  if (!sel || !wrap || wrap.hidden || !sel.value) return undefined;
+  return sel.value;
+}
+
 // Strip the extension from a picked file name for the default dataset name.
 function defaultNameFrom(fileName: any): string {
   const base = typeof fileName === 'string' ? fileName : '';
@@ -218,6 +228,10 @@ async function handleSaveDataset(): Promise<void> {
       sourceKind: dsSourceKind || 'csv',
       columns: dsPreview.columns,
       rows: dsPreview.rows,
+      // A file import records WHERE it came from so it can be re-read later.
+      // Pasted text gets none — there is nothing to re-fetch. The path came from
+      // main's own open dialog, and main re-whitelists it before storing.
+      origin: dsFilePath ? { kind: 'file', path: dsFilePath, sheetName: dsChosenSheet() } : undefined,
     });
   } catch (_) {
     window.alert('Failed to save the dataset.');

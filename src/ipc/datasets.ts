@@ -264,7 +264,10 @@ export function register() {
 
   // Persist a dataset under its project. The renderer sends the columns+rows it
   // is holding (the full capped ParseResult, not the display slice).
-  ipcMain.handle('dataset:save', async (_e, { projectId, name, sourceKind, columns, rows }: any = {}) => {
+  // `origin` is untrusted renderer input and is whitelisted by
+  // datasets.sanitizeOrigin before it is stored — an unrecognised one is simply
+  // dropped, leaving a normal (non-refreshable) snapshot.
+  ipcMain.handle('dataset:save', async (_e, { projectId, name, sourceKind, columns, rows, origin }: any = {}) => {
     try {
       const capped: any[] = Array.isArray(rows) ? rows.slice(0, MAX_ROWS) : [];
       const saved = await datasets.saveDataset(projectId, {
@@ -272,6 +275,7 @@ export function register() {
         sourceKind,
         columns: Array.isArray(columns) ? columns : [],
         rows: capped,
+        origin,
       });
       if (!saved) return { ok: false, error: 'Invalid project, or the project no longer exists' };
       return saved;
@@ -576,6 +580,10 @@ export function register() {
         sourceKind: 'combined',
         columns: combined.columns,
         rows: cappedRows,
+        // Both parents + how they were combined, so a refresh can re-run exactly
+        // this combine over freshly refreshed parents. Ids come from main's own
+        // loaded records, not from the renderer payload.
+        origin: { kind: 'combined', leftId: left.id, rightId: right.id, mode, on: onPair },
       });
       if (!saved) return { ok: false, error: 'Invalid project, or the project no longer exists' };
       return { ok: true, dataset: saved, warnings: combined.warnings };
