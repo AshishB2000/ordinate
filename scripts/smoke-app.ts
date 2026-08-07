@@ -1129,10 +1129,24 @@ async function main(): Promise<void> {
        clearFilters: anEditor?.clearFiltersVisible, aiPanel: anEditor?.aiPanelVisible,
      }));
 
-  // Add the saved visual as a card, through the picker.
+  // Add the saved visual as a card, through the picker — a GALLERY of tiles
+  // now, not a name list, with the two create actions above it.
   ok('+ Visual opens the picker', await clickId('dash-add-visual'));
   await win.waitForTimeout(500);
-  ok('the picker adds the saved visual', await pickFirstOption());
+  ok('the picker is a gallery with the create actions above it',
+     await win.evaluate(() => {
+       const tiles = document.querySelectorAll('.vn-pick-modal .vn-pick-tile').length;
+       const labels = [...document.querySelectorAll('.vn-pick-modal .vn-pick-actions .btn')]
+         .map((b) => (b.textContent || '').trim());
+       return tiles > 0 && labels.indexOf('+ New visual') >= 0
+         && labels.some((l) => /Suggest with AI/.test(l));
+     }));
+  ok('the picker adds the saved visual', await win.evaluate(() => {
+    const tile = document.querySelector('.vn-pick-modal .vn-pick-tile') as HTMLElement | null;
+    if (!tile) return false;
+    tile.click();
+    return true;
+  }));
   await win.waitForTimeout(3000); // render + the 600 ms debounced autosave
 
   const cardCount = await win.evaluate(() => document.querySelectorAll('#dash-grid .dash-card').length);

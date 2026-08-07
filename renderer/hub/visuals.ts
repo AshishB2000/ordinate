@@ -427,6 +427,14 @@ interface VizNewChoice {
 interface VizNewOpts {
   datasetId?: string; // preselect (the builder already knows its dataset)
   startAtSuggest?: boolean; // open straight at step 3 and ask immediately
+  /**
+   * Hide the "Build it myself" half of step 2, so the dialog is the AI door
+   * only. Used by the analysis add-visual picker's ✨ action: the same flow,
+   * the same handlers, just without the manual detour it has its own button
+   * for. The step-3 fallback ("Build it myself instead") deliberately stays —
+   * a failed suggestion still needs a way out.
+   */
+  aiOnly?: boolean;
 }
 
 async function openNewVisualModal(opts: VizNewOpts = {}): Promise<VizNewChoice | null> {
@@ -634,6 +642,11 @@ async function openNewVisualModal(opts: VizNewOpts = {}): Promise<VizNewChoice |
       close(null);
       if (typeof selectSection === 'function') selectSection('datasets');
     });
+
+    if (opts.aiOnly) {
+      const manualHalf = q('.js-vn-manual')?.closest('.vn-choice') as HTMLElement | null;
+      if (manualHalf) manualHalf.hidden = true;
+    }
 
     // Without a model the AI route is inert, and says why in the standard line.
     if (!aiReady) {

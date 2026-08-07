@@ -5045,6 +5045,142 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .ds-explorer-ident .ds-source-badge[hidden] { display: none; }
 .ds-back { flex: 0 0 auto; }
 
+/* ── The add-metric dialog (dashboards.ts openMetricDialog) ──────────────────
+   One frame for what used to be four chained modals. The preview reuses the
+   metric card's own value/label classes so what you see is what the card
+   renders. */
+.ws-modal.dash-metric-modal { width: min(420px, calc(100vw - 48px)); }
+.dm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 10px;
+}
+.dm-field-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.dm-aggs {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm, 6px);
+  overflow: hidden;
+  width: fit-content;
+}
+.dm-agg {
+  padding: 5px 12px;
+  background: var(--bg);
+  border: 0;
+  border-right: 1px solid var(--border);
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.dm-agg:last-child { border-right: 0; }
+.dm-agg:hover { color: var(--text); }
+.dm-agg.is-on {
+  background: var(--accent);
+  color: #fff;
+}
+.dm-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 14px 12px;
+  margin: 2px 0 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+
+/* ── The add-visual picker (dashboards.ts openVisualPicker) ──────────────────
+   A gallery of the saved visuals — the Visuals section's tile vocabulary —
+   plus the two create actions. */
+.ws-modal.vn-pick-modal {
+  width: min(720px, calc(100vw - 48px));
+  max-height: calc(100vh - 96px);
+  display: flex;
+  flex-direction: column;
+}
+.vn-pick-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+}
+.vn-pick-note {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+.vn-pick-note[hidden] { display: none; }
+.vn-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.vn-pick-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 0 10px;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  min-width: 0;
+}
+.vn-pick-glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 84px;
+  margin-bottom: 6px;
+  background: var(--accent-soft, var(--surface-2));
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  color: var(--accent);
+}
+.vn-pick-glyph svg { width: 34px; height: 34px; }
+.vn-pick-tile:hover .vn-pick-glyph { border-color: var(--accent); }
+.vn-pick-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vn-pick-meta {
+  font-size: 11px;
+  color: var(--muted);
+}
+/* With nothing saved, the create actions ARE the dialog. */
+.vn-pick-modal--empty .vn-pick-actions {
+  flex-direction: column;
+  align-items: center;
+  padding: 22px 0 4px;
+}
+.vn-pick-modal--empty .vn-pick-actions .btn { min-width: 220px; }
+.vn-pick-modal--empty .vn-pick-note { text-align: center; }
+.vn-pick-empty {
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 14px;
+}
+
 /* ── The combine dialog ──────────────────────────────────────────────────────
    Narrower than the import one: two pickers and a mode, not a preview table. */
 .ds-combine-overlay[hidden] { display: none; }
