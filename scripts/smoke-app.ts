@@ -295,10 +295,52 @@ async function main(): Promise<void> {
     .catch(() => {});
 
   await win.evaluate(async () => {
-    await (window as any).openConnPanel();
-    (window as any).selectSection('sources');
+    // Connect is its own SECTION now, not an overlay over the capture surface, so
+    // opening it IS the navigation. The old follow-up selectSection('sources')
+    // revealed .main *underneath* the overlay; today it navigates straight back
+    // off the page and every tile below this point is present but invisible.
+    (window as any).selectSection('connect');
+    await (window as any).refreshConnPanel();
   });
   await win.waitForTimeout(300);
+
+  // The point of the change: Connect is the WHOLE page. Asserting the tiles
+  // render is not enough — they rendered before too, framed by a Welcome header
+  // and a captures column that had nothing to do with picking a data source.
+  // offsetParent is null for a display:none subtree, so this catches the panel
+  // being reparented back under .main as well as the CSS rule being dropped.
+  const dataPageAlone = await win.evaluate(() => {
+    const shown = (sel: string) => {
+      const el = document.querySelector<HTMLElement>(sel);
+      return !!el && el.offsetParent !== null;
+    };
+    return {
+      connect: shown('#conn-panel'),
+      welcomeHeader: shown('.main-top'),
+      capturesColumn: shown('.sidebar'),
+      navActive: !!document.querySelector('.as-nav-item.active[data-section="connect"]'),
+    };
+  });
+  ok('the Data page renders Connect ALONE — no Welcome header, no captures column',
+    dataPageAlone.connect && !dataPageAlone.welcomeHeader && !dataPageAlone.capturesColumn,
+    JSON.stringify(dataPageAlone));
+  ok('...with the Data nav item marked active', dataPageAlone.navActive);
+
+  // Close must land somewhere real. Before, it just un-hid an overlay and left
+  // whatever was underneath; now it is a navigation, and getting it wrong
+  // strands the user on a hidden section with an empty stage.
+  const closeReturns = await win.evaluate(() => {
+    (window as any).selectSection('home');
+    (window as any).selectSection('connect');
+    (window as any).closeConnPanel();
+    return (document.querySelector('.hub-body') as HTMLElement)?.dataset.section;
+  });
+  ok('Close returns to the previous view', closeReturns === 'home', `landed on ${closeReturns}`);
+  await win.evaluate(async () => {
+    (window as any).selectSection('connect');
+    await (window as any).refreshConnPanel();
+  });
+  await win.waitForTimeout(200);
 
   const logoPicker = await win.evaluate(() => {
     const tiles = [...document.querySelectorAll<HTMLButtonElement>('.conn-tile')];
@@ -506,12 +548,13 @@ async function main(): Promise<void> {
   ok('project opens from the UI (openWorkspace)', opened !== null, opened || 'openWorkspace missing');
   await win.waitForTimeout(1500);
 
-  await win.evaluate(() => {
-    const el = [...document.querySelectorAll('.as-nav-item')].find((b) =>
-      /^\s*Data\s*$/.test(b.textContent || ''),
-    ) as HTMLElement | undefined;
-    if (el) el.click();
-  });
+  // BEHAVIOUR CHANGE, not a weakened assertion: the nav item labelled "Data"
+  // now opens Connect, so clicking it no longer reaches the dataset list. The
+  // list is reached the way the app itself reaches it — projects.ts calls
+  // selectSection('datasets') when a dataset is opened from Home. What this
+  // check exists to prove (a stored Parquet dataset renders, with its real row
+  // count) is unchanged; only the route to the section moved.
+  await win.evaluate(() => { (window as any).selectSection('datasets'); });
   await win.waitForTimeout(2000);
 
   // The dataset must be VISIBLE in the UI, with its real row count — this is

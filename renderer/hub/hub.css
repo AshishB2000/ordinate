@@ -6831,10 +6831,14 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 /* ── Connect data (connected sources: Postgres + URL/API JSON) ── */
 /* Overlays the capture area inside .main-body so the capture surface underneath
    stays intact — closing the panel reveals it unchanged. */
+/* A section body, not an overlay. It used to be `position: absolute; inset: 0`
+   inside .main, which is exactly why the Welcome header and the captures column
+   stayed visible around it — an absolute child cannot escape a parent the
+   [data-section] rule is about to hide. As a .ws-panel sibling it fills the
+   stage on its own and the router hides .main/.sidebar for free. */
 .conn-panel {
-  position: absolute;
-  inset: 0;
-  z-index: 20;
+  flex: 1;
+  min-width: 0;
   overflow: auto;
   padding: 22px;
   background: var(--bg);

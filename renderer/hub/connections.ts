@@ -162,15 +162,32 @@ function connVal(id: string): string {
 }
 
 // ── Panel open/close ─────────────────────────────────────────────────────────
-async function openConnPanel(): Promise<void> {
-  connSetError('');
+// Connect is a SECTION now, so showing it is selectSection's job and this must
+// not also toggle `hidden` — the two would fight, and whichever ran last would
+// win. openConnPanel therefore only routes; refreshConnPanel below is the part
+// that loads content, and the router calls it once the section is active.
+function openConnPanel(): void {
+  if (typeof selectSection === 'function') { selectSection('connect'); return; }
+  // No router in scope (a DOM harness loading this file alone): show it directly
+  // so the panel is still usable rather than silently doing nothing.
   connShow('conn-panel', true);
+  void refreshConnPanel();
+}
+
+// Reset to step 1 and reload the catalogue + saved connections. Called by
+// selectSection whenever the Connect section becomes active, so the picker is
+// never left showing a half-filled form from a previous visit.
+async function refreshConnPanel(): Promise<void> {
+  connSetError('');
   await loadConnCatalog();
   connShowPicker();
   await refreshConnectionList();
 }
 
+// Close returns to whatever was showing before Connect — Home if there was
+// nothing, so this can never strand the user on a hidden section.
 function closeConnPanel(): void {
+  if (typeof leaveSection === 'function') { leaveSection('connect'); return; }
   connShow('conn-panel', false);
 }
 
