@@ -383,6 +383,39 @@ async function main(): Promise<void> {
      vizEmpty.aiDisabled === true && vizEmpty.hintShown && vizEmpty.countHidden === true,
      JSON.stringify(vizEmpty));
 
+  // An empty page that only DESCRIBES the next action is still a blank page.
+  // The band offers the project's real datasets, and — the part worth pinning —
+  // it must not claim "No data yet" to someone who has data. Arriving here via
+  // the nav leaves no project adopted, so this also covers the read path that
+  // resolves an existing project WITHOUT creating one.
+  const startBand = await win.evaluate(() => {
+    const band = document.getElementById('viz-start');
+    const cards = [...document.querySelectorAll('.viz-ds-card')] as HTMLElement[];
+    return {
+      visible: !!band && band.offsetParent !== null,
+      cards: cards.length,
+      noDataCard: !!document.querySelector('.viz-ds-none'),
+      first: (cards[0]?.textContent || '').replace(/\s+/g, ' ').trim(),
+      centred: (() => {
+        const card = document.getElementById('viz-empty');
+        const panel = document.querySelector('.viz-panel');
+        if (!card || !panel) return null;
+        const c = card.getBoundingClientRect();
+        const p = panel.getBoundingClientRect();
+        // Real vertical composition: space ABOVE the card, not just below it.
+        return Math.round(c.top - p.top);
+      })(),
+    };
+  });
+  ok('…and a "Start from a dataset" band offering the project\'s real datasets',
+     startBand.visible && startBand.cards > 0 && !startBand.noDataCard,
+     JSON.stringify(startBand));
+  ok('…listing rows and columns per dataset, not just a name',
+     /rows · \d+ columns/.test(startBand.first), `"${startBand.first}"`);
+  ok('…with the empty block vertically composed rather than pinned to the top',
+     typeof startBand.centred === 'number' && startBand.centred > 40,
+     `${startBand.centred}px above the card`);
+
   await win.evaluate(() => (document.getElementById('viz-new-btn') as HTMLElement)?.click());
   await win.waitForTimeout(2000);
   const noProject = await win.evaluate(() => ({

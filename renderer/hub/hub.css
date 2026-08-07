@@ -5460,6 +5460,131 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 }
 .viz-count[hidden] { display: none; }
 
+/* ── The empty state, centred ──
+   The panel is already a flex column, so the gallery can simply GROW into the
+   space left over — no calc() against a header height that would silently rot
+   the moment the header changes. `:has()` keeps this state-driven from the DOM
+   the JS already produces (#viz-grid carries [hidden] when there is nothing to
+   show) rather than needing a second class to keep in sync. */
+.viz-gallery:has(> .viz-grid[hidden]) { flex: 1; }
+.viz-empty-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 22px;
+  min-height: 0;
+}
+.viz-empty-wrap[hidden] { display: none; }
+/* A full-width card holding one paragraph is what reads as stranded. */
+.viz-empty-wrap > .ws-empty {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+/* ── "Start from a dataset" ──
+   Reuses the .viz-grid card shape so the empty page and the populated page are
+   the same object at different fills, not two designs. */
+.viz-start {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  /* Wider than the 560px card above it, but sized so six cards land as an even
+     3x2 block rather than a ragged 4+2. */
+  max-width: 660px;
+  margin: 0 auto;
+}
+.viz-start[hidden] { display: none; }
+.viz-start-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.viz-start-h {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.viz-start-all[hidden] { display: none; }
+.viz-start-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.viz-ds-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  text-align: left;
+  padding: 12px 13px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  cursor: pointer;
+  transition: border-color 140ms var(--ease), box-shadow 140ms var(--ease),
+    transform 140ms var(--ease);
+}
+.viz-ds-card:hover {
+  border-color: var(--border-2);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .viz-ds-card { transition: border-color 140ms var(--ease); }
+  .viz-ds-card:hover { transform: none; }
+}
+.viz-ds-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.viz-ds-meta {
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.viz-ds-kind {
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--surface-2);
+  border-radius: var(--r-full);
+  padding: 2px 7px;
+}
+/* No datasets at all: one wide card carrying the honest next action, rather
+   than an empty band under an empty card. */
+.viz-ds-none {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 18px;
+  background: var(--surface);
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-lg);
+}
+.viz-ds-none-h {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.viz-ds-none-p {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .viz-empty-hint {
   margin: 10px 0 0;
   font-size: 11.5px;

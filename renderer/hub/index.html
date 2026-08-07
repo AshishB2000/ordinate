@@ -811,15 +811,32 @@
 
           <div class="viz-grid" id="viz-grid"></div>
 
-          <div class="ws-empty" id="viz-empty" hidden>
-            <div class="ws-empty-art viz-glyph-art" id="viz-empty-art" aria-hidden="true"></div>
-            <h3 class="ws-empty-h">No visuals yet</h3>
-            <p class="ws-empty-p">A visual is one saved chart — build it once, then drop it into any analysis or dashboard, or export it on its own.</p>
-            <div class="ws-empty-actions">
-              <button class="btn btn-primary btn-lg" type="button" id="viz-empty-new-btn">+ New visual</button>
-              <button class="btn btn-lg" type="button" id="viz-empty-ai">✨ Start with AI</button>
+          <!-- The whole empty STATE, not just the card: the card plus the
+               "start from a dataset" band are centred together in whatever
+               height the panel has left, so the page reads as composed rather
+               than as one short card stranded at the top of a white page. -->
+          <div class="viz-empty-wrap" id="viz-empty-wrap" hidden>
+            <div class="ws-empty" id="viz-empty">
+              <div class="ws-empty-art viz-glyph-art" id="viz-empty-art" aria-hidden="true"></div>
+              <h3 class="ws-empty-h">No visuals yet</h3>
+              <p class="ws-empty-p">A visual is one saved chart — build it once, then drop it into any analysis or dashboard, or export it on its own.</p>
+              <div class="ws-empty-actions">
+                <button class="btn btn-primary btn-lg" type="button" id="viz-empty-new-btn">+ New visual</button>
+                <button class="btn btn-lg" type="button" id="viz-empty-ai">✨ Start with AI</button>
+              </div>
+              <p class="viz-empty-hint" id="viz-empty-hint" hidden>Connect a model in Execution settings</p>
             </div>
-            <p class="viz-empty-hint" id="viz-empty-hint" hidden>Connect a model in Execution settings</p>
+
+            <!-- Move 3: the project's datasets, so the empty page offers the
+                 next real action instead of only describing one. Populated by
+                 visuals.ts; hidden entirely once the project has visuals. -->
+            <div class="viz-start" id="viz-start" hidden>
+              <div class="viz-start-head">
+                <h3 class="viz-start-h">Start from a dataset</h3>
+                <button class="btn btn-sm btn-ghost" type="button" id="viz-start-all" hidden>See all in Data</button>
+              </div>
+              <div class="viz-grid viz-start-grid" id="viz-start-grid"></div>
+            </div>
           </div>
         </div>
 

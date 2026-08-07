@@ -179,13 +179,106 @@ function paintVizGlyphArt(): void {
   });
 }
 
+// ── "Start from a dataset" (empty state only) ────────────────────────────────
+// What actually fixes a blank page: the next real action, drawn from the
+// project rather than from decoration. Six most-recent datasets as cards that
+// open the create flow with that dataset already chosen; with none, one wide
+// card pointing at the import, which is the honest next step for a user who has
+// nothing at all.
+const VIZ_START_MAX = 6;
+
+async function renderVizStartBand(): Promise<void> {
+  const band = vizEl('viz-start');
+  const grid = vizEl('viz-start-grid');
+  const seeAll = vizEl('viz-start-all');
+  if (!band || !grid) return;
+  grid.innerHTML = '';
+  band.hidden = false;
+
+  // Adopt an EXISTING project if the session has not got one yet — arriving via
+  // the nav rather than by opening a project leaves currentProjectId null, and
+  // showing "No data yet" to someone who has data would be a lie. `create:false`
+  // matters: painting a page must never bring a project into being.
+  const projectId = currentProjectId || (await resolveProjectId({ create: false }));
+
+  let sets: any[] = [];
+  if (projectId) {
+    try {
+      sets = await window.hub.listDatasets(projectId);
+    } catch (_) {
+      sets = [];
+    }
+  }
+  if (!Array.isArray(sets)) sets = [];
+
+  if (seeAll) seeAll.hidden = sets.length <= VIZ_START_MAX;
+
+  if (sets.length === 0) {
+    grid.appendChild(makeVizNoDataCard());
+    return;
+  }
+  // listDatasets is already newest-updated first, so this is "the six you most
+  // likely mean" without a second sort that could disagree with the Data list.
+  sets.slice(0, VIZ_START_MAX).forEach((d) => grid.appendChild(makeVizDatasetCard(d)));
+}
+
+function makeVizDatasetCard(d: any): HTMLElement {
+  const card = document.createElement('button');
+  card.type = 'button';
+  card.className = 'viz-ds-card';
+
+  const name = document.createElement('span');
+  name.className = 'viz-ds-name';
+  name.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
+
+  const meta = document.createElement('span');
+  meta.className = 'viz-ds-meta';
+  const rows = typeof d.rowCount === 'number' ? d.rowCount.toLocaleString() : '—';
+  const cols = typeof d.columnCount === 'number' ? String(d.columnCount) : '—';
+  meta.textContent = rows + ' rows · ' + cols + ' columns';
+
+  const kind = document.createElement('span');
+  kind.className = 'viz-ds-kind';
+  kind.textContent = d && d.sourceKind ? String(d.sourceKind) : 'csv';
+
+  card.appendChild(name);
+  card.appendChild(meta);
+  card.appendChild(kind);
+  // Straight into the builder on this dataset — the popup's step 1 is exactly
+  // the question this card just answered.
+  card.addEventListener('click', () => handleNewVisual({ datasetId: String(d.id) }));
+  return card;
+}
+
+function makeVizNoDataCard(): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'viz-ds-none';
+  const h = document.createElement('h4');
+  h.className = 'viz-ds-none-h';
+  h.textContent = 'No data yet';
+  const p = document.createElement('p');
+  p.className = 'viz-ds-none-p';
+  p.textContent = 'Import a CSV, paste a table, or connect a source — then build your first visual.';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn btn-primary';
+  btn.textContent = 'Import data';
+  btn.addEventListener('click', () => {
+    if (typeof selectSection === 'function') selectSection('datasets');
+  });
+  box.appendChild(h);
+  box.appendChild(p);
+  box.appendChild(btn);
+  return box;
+}
+
 // ── Gallery (the default view: saved visuals as cards) ───────────────────────
 // Same name and same contract as the Week 7 list refresh — only the DOM it
 // produces changed, so workspace.selectSection and every save/delete/duplicate
 // caller is unaffected.
 async function refreshVisualList(): Promise<void> {
   const grid = vizEl('viz-grid');
-  const empty = vizEl('viz-empty');
+  const empty = vizEl('viz-empty-wrap');
   if (!grid) return;
   grid.innerHTML = '';
   let items: any[] = [];
@@ -213,6 +306,9 @@ async function refreshVisualList(): Promise<void> {
   const hero = vizEl('viz-hero');
   if (hero) hero.hidden = items.length === 0 || vizHeroDismissed();
   paintVizGlyphArt();
+  // The dataset band belongs to the empty state only — once there are visuals,
+  // the grid IS the content and a second card grid under it would compete.
+  if (items.length === 0) await renderVizStartBand();
 }
 
 // Flip between the gallery and the (now full-panel) builder. They are mutually
@@ -1114,6 +1210,11 @@ function initVisuals(): void {
   // second path — handleNewVisual owns resolving the project either way.
   const emptyAi = vizEl('viz-empty-ai');
   if (emptyAi) emptyAi.addEventListener('click', () => handleNewVisual({ startAtSuggest: true }));
+
+  const seeAll = vizEl('viz-start-all');
+  if (seeAll) seeAll.addEventListener('click', () => {
+    if (typeof selectSection === 'function') selectSection('datasets');
+  });
 
   const heroDismiss = vizEl('viz-hero-dismiss');
   if (heroDismiss) {
