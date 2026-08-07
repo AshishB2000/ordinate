@@ -4879,6 +4879,9 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   display: flex;
   align-items: stretch;
   gap: 6px;
+  /* Wraps so .ds-refresh-status takes a full-width line of its own beneath the
+     controls rather than being squeezed in beside them. */
+  flex-wrap: wrap;
 }
 .ds-saved-open {
   flex: 1;
@@ -4922,6 +4925,75 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   color: var(--muted);
   margin: 0;
 }
+
+/* ── Freshness: "Data as of …", the ↻ Refresh button, inline status ── */
+.ds-saved-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ds-saved-head .btn[hidden] { display: none; }
+.ds-fresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--muted);
+}
+/* Persists until the next successful refresh — a stale number with a visible
+   cause beats a stale number that looks current. */
+.ds-fresh-dot {
+  font-size: 9px;
+  line-height: 1;
+  color: var(--warn);
+}
+.ds-saved-refresh {
+  padding: 0 10px;
+  font-size: 12px;
+  white-space: nowrap;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  color: var(--muted);
+}
+.ds-saved-refresh:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.ds-saved-refresh:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+/* The spinner is one CSS animation on a pseudo-element — no dependency, no
+   image, and it disappears with the class. */
+.ds-saved-refresh.is-busy::before {
+  content: '';
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 5px;
+  vertical-align: -1px;
+  border: 1.5px solid var(--border-3);
+  border-top-color: var(--accent);
+  border-radius: var(--r-full);
+  animation: ds-spin 0.6s linear infinite;
+}
+@keyframes ds-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-saved-refresh.is-busy::before { animation: none; }
+}
+.ds-refresh-status {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 0 12px 2px;
+}
+.ds-refresh-status[hidden] { display: none; }
+.ds-refresh-status.is-error { color: var(--error); }
 
 /* ── Saved-dataset explorer (Week 5) ── */
 .ds-explorer {
