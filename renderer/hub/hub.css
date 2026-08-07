@@ -4857,83 +4857,130 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   border-radius: 6px;
   box-sizing: border-box;
 }
-.ds-saved {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border-top: 1px solid var(--border);
-  padding-top: 16px;
-}
-.ds-saved-h {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-strong);
-  margin: 0;
-}
+/* ── The saved-dataset list ──────────────────────────────────────────────────
+   The section's CONTENT, and now its first block. It is the shared `.ws-table`
+   (see the list-table rules above); everything here is the column TEMPLATE and
+   the parts of a row that are specific to a dataset. */
+.ds-saved { padding: 0; }
 .ds-saved-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+}
+/* The template, shared by the header labels and every row:
+   Name · Rows · Source · Data as of · Action. */
+.ds-saved-cols,
+.ds-saved-item {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) 90px 116px minmax(150px, 200px) 132px;
+  align-items: center;
+  gap: 12px;
 }
 .ds-saved-item {
-  display: flex;
-  align-items: stretch;
-  gap: 6px;
-  /* Wraps so .ds-refresh-status takes a full-width line of its own beneath the
-     controls rather than being squeezed in beside them. */
-  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  padding: 2px 10px;
 }
+.ds-saved-item:last-child { border-bottom: 0; }
+.ds-saved-item:hover { background: var(--surface-2); }
+/* The name cell IS the click target — a link-like control, because the row now
+   carries the border and the padding. */
 .ds-saved-open {
-  flex: 1;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
   text-align: left;
-  padding: 8px 12px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  padding: 11px 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
   cursor: pointer;
 }
-.ds-saved-open:hover {
-  border-color: var(--accent);
-}
+.ds-saved-open:hover .ds-saved-name { color: var(--accent); }
 .ds-saved-name {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.ds-saved-meta {
+/* The Source column: a small badge, so a kind is recognisable without reading. */
+.ds-source-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--border-2, var(--border));
+  border-radius: 999px;
+  background: var(--bg);
   font-size: 11px;
-  color: var(--muted);
+  font-weight: 500;
+  color: var(--text);
+}
+.ds-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
 }
 .ds-saved-del {
-  padding: 0 10px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  padding: 0 8px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm, 6px);
   cursor: pointer;
-  color: var(--muted);
+  color: var(--text-dim);
 }
 .ds-saved-del:hover {
   border-color: #dc2626;
   color: #dc2626;
 }
-.ds-saved-empty {
+
+/* ── The section header, and the empty state ── */
+.ds-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.ds-head-text { min-width: 0; }
+.ds-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.ds-head-actions .btn[hidden] { display: none; }
+/* A real empty state, not a bare line of grey text: what is missing, why it
+   matters, and the two ways to fix it. */
+.ws-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 24px;
+  text-align: center;
+}
+.ws-empty[hidden] { display: none; }
+.ws-empty-h {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-strong);
+  margin: 0;
+}
+.ws-empty-p {
   font-size: 13px;
   color: var(--muted);
   margin: 0;
+  max-width: 46ch;
 }
+.ws-empty-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+/* The column labels describe rows; with no rows they describe nothing. */
+.ds-saved:has(#ds-saved-empty:not([hidden])) .ds-saved-cols { display: none; }
 
 /* ── Freshness: "Data as of …", the ↻ Refresh button, inline status ── */
-.ds-saved-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.ds-saved-head .btn[hidden] { display: none; }
 .ds-fresh {
   display: inline-flex;
   align-items: center;
@@ -4987,10 +5034,12 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   .ds-saved-refresh.is-busy::before { animation: none; }
 }
 .ds-refresh-status {
-  flex-basis: 100%;
+  /* Spans every column: the row is a grid now, and a refresh failure is a
+     sentence, not something to squeeze into the action cell. */
+  grid-column: 1 / -1;
   font-size: 11px;
   color: var(--muted);
-  padding: 0 12px 2px;
+  padding: 0 0 6px;
 }
 .ds-refresh-status[hidden] { display: none; }
 .ds-refresh-status.is-error { color: var(--error); }
@@ -5702,6 +5751,16 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .an-hero-bar--4 { height: 100%; background: rgba(255, 255, 255, 0.82); }
 .an-hero-bar--5 { height: 72%; }
 
+/* ── The shared list-table ───────────────────────────────────────────────────
+   A card, an uppercase column header, hairline rows. Analyses defined this
+   first and Datasets now uses the SAME one — a second table style would be two
+   places to keep a row looking like a row. Only the COLUMN TEMPLATE is
+   per-section (see `.an-table-cols` and `#ws-datasets` below); everything that
+   makes it a table lives here.
+
+   `.ws-*` is the section-agnostic name; the `.an-*` selectors ride along so the
+   Analyses markup did not have to be rewritten to share them. */
+.ws-table,
 .an-table {
   display: flex;
   flex-direction: column;
@@ -5711,14 +5770,15 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   padding: 14px 16px 16px;
   gap: 10px;
 }
+.ws-table[hidden],
 .an-table[hidden] { display: none; }
 .an-table-head {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
 }
-/* One template, declared once and inherited by the rows below, so a column
-   label can never drift out of line with the cell under it. */
+/* One template per section, declared once and inherited by the rows, so a
+   column label can never drift out of line with the cell under it. */
 .an-table-cols,
 #ws-analyses .dash-list-item {
   display: grid;
@@ -5726,6 +5786,7 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   align-items: center;
   gap: 12px;
 }
+.ws-table-cols,
 .an-table-cols {
   padding: 0 10px 8px;
   border-bottom: 1px solid var(--border);
@@ -5735,6 +5796,22 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   text-transform: uppercase;
   color: var(--text-dim);
 }
+/* A row: hairline separator, quiet hover, no separator on the last one. */
+.ws-row {
+  border-bottom: 1px solid var(--border);
+  padding: 2px 10px;
+}
+.ws-row:last-child { border-bottom: 0; }
+.ws-row:hover { background: var(--surface-2); }
+/* A data cell: secondary text that truncates rather than wrapping the row. */
+.ws-cell {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-col-action,
 .an-col-action { text-align: right; }
 #ws-analyses .dash-list { gap: 0; }
 #ws-analyses .dash-list-item {

@@ -283,6 +283,22 @@ function dsFreshnessText(d: any): string {
   return d && d.originKind ? 'Data as of ' + when : 'Imported ' + when;
 }
 
+/**
+ * The Source column's badge text, one per `Dataset['sourceKind']` (the closed
+ * set in src/datasets.ts). A kind outside it falls back to the raw string rather
+ * than to a guess, so a new source shows up as itself instead of as "Unknown".
+ */
+const DS_SOURCE_LABELS: Record<string, string> = {
+  csv: 'CSV',
+  json: 'JSON',
+  xlsx: 'Excel',
+  paste: 'Paste',
+  url: 'URL',
+  postgres: 'Postgres',
+  combined: 'Combined',
+  capture: 'Screenshot',
+};
+
 const DS_NOT_REFRESHABLE_HINT =
   'This dataset was saved before its source was recorded, or has no re-fetchable source '
   + '(pasted text, or a screenshot capture). Re-importing the file will make it refreshable.';
@@ -320,18 +336,29 @@ function makeSavedItem(d: any): HTMLElement {
   const name = document.createElement('span');
   name.className = 'ds-saved-name';
   name.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
-  const meta = document.createElement('span');
-  meta.className = 'ds-saved-meta';
-  const rowCount = typeof (d && d.rowCount) === 'number' ? d.rowCount : 0;
-  const kind = d && d.sourceKind ? String(d.sourceKind) : '';
-  meta.textContent = rowCount + ' rows · ' + kind + ' · ' + formatSidebarTime(d && d.updatedAt);
   open.appendChild(name);
-  open.appendChild(meta);
+
+  // The row is a TABLE ROW now — rows, source and freshness are their own
+  // columns rather than one run-on "12 rows · csv · 10:52" string, so they line
+  // up down the list and can be compared at a glance. `.ds-saved-meta` stays on
+  // the row count: it is still the cell that answers "how big is this".
+  const rowCount = typeof (d && d.rowCount) === 'number' ? d.rowCount : 0;
+  const meta = document.createElement('span');
+  meta.className = 'ds-saved-meta ws-cell';
+  meta.textContent = rowCount.toLocaleString() + (rowCount === 1 ? ' row' : ' rows');
+
+  const kind = d && d.sourceKind ? String(d.sourceKind) : '';
+  const source = document.createElement('span');
+  source.className = 'ws-cell ds-source-cell';
+  const badge = document.createElement('span');
+  badge.className = 'ds-source-badge';
+  badge.textContent = DS_SOURCE_LABELS[kind] || kind || 'Unknown';
+  source.appendChild(badge);
 
   // Freshness line. A dataset whose last refresh FAILED keeps a warning dot
   // until the next success, so a silently stale number has a visible cause.
   const fresh = document.createElement('span');
-  fresh.className = 'ds-fresh';
+  fresh.className = 'ds-fresh ws-cell';
   if (d && d.lastRefreshStatus === 'error') {
     const dot = document.createElement('span');
     dot.className = 'ds-fresh-dot';
@@ -344,7 +371,6 @@ function makeSavedItem(d: any): HTMLElement {
   freshText.textContent = dsFreshnessText(d);
   fresh.appendChild(freshText);
   if (!(d && d.originKind)) fresh.title = DS_NOT_REFRESHABLE_HINT;
-  open.appendChild(fresh);
   open.addEventListener('click', () => openSavedDataset(String(d.id)));
 
   // Inline status for this row's own refresh — spinner, then either nothing
@@ -355,7 +381,16 @@ function makeSavedItem(d: any): HTMLElement {
   status.hidden = true;
   row.dataset.datasetId = String(d.id);
 
+  // Cells, in the order the column labels in index.html declare them.
   row.appendChild(open);
+  row.appendChild(meta);
+  row.appendChild(source);
+  row.appendChild(fresh);
+
+  // The action cell. Refresh (only where there is something to re-fetch) and
+  // delete sit together at the end of the row, right-aligned under "Action".
+  const actions = document.createElement('span');
+  actions.className = 'ws-col-action ds-row-actions';
 
   if (d && d.originKind) {
     const btn = document.createElement('button');
@@ -367,7 +402,7 @@ function makeSavedItem(d: any): HTMLElement {
       e.stopPropagation();
       handleRefreshDataset(String(d.id), btn, status);
     });
-    row.appendChild(btn);
+    actions.appendChild(btn);
   }
 
   const del = document.createElement('button');
@@ -379,8 +414,11 @@ function makeSavedItem(d: any): HTMLElement {
     e.stopPropagation();
     handleDeleteDataset(String(d.id));
   });
+  actions.appendChild(del);
 
-  row.appendChild(del);
+  row.appendChild(actions);
+  // The refresh message spans the whole row under its cells, so a long reason
+  // is readable instead of being squeezed into the action column.
   row.appendChild(status);
   return row;
 }

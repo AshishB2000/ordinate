@@ -700,9 +700,14 @@ async function main(): Promise<void> {
 
   // The dataset must be VISIBLE in the UI, with its real row count — this is
   // what proves the Parquet store reaches the screen, not just the API.
+  // SCOPED to the list's own row-count cell. A document-wide text search also
+  // matches the import hint ("CSV, JSON or Excel — up to 1,000,000 rows."),
+  // which would pass this check with the dataset absent from the screen —
+  // exactly the failure it exists to catch. The cell groups thousands now, so
+  // the separator is whatever the runtime locale picks, or none.
   const listed: string | null = await win.evaluate(() => {
-    const el = [...document.querySelectorAll('*')].find(
-      (e) => e.children.length === 0 && /1000000 rows/.test(e.textContent || ''),
+    const el = [...document.querySelectorAll('#ds-saved-list .ds-saved-item .ds-saved-meta')].find(
+      (e) => /1[,.\u202f\u00a0\s]?000[,.\u202f\u00a0\s]?000 rows/.test(e.textContent || ''),
     );
     return el ? (el.textContent || '').trim().slice(0, 60) : null;
   });

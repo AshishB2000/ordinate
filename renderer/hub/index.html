@@ -662,8 +662,43 @@
     <!-- ── workspace section placeholders (SHELL — content in later weeks) ── -->
     <section class="ws-panel" id="ws-datasets" data-section="datasets" hidden>
       <div class="ds-panel">
-        <h2 class="ds-h">Datasets</h2>
-        <p class="ds-sub">Import CSV, JSON, or Excel — or paste data — to save a structured dataset in this project.</p>
+        <!-- The section header: what this is, then what you can do to it. The
+             list below is the section's CONTENT — it used to be last, under the
+             whole import flow, which is why the section read as a pile of
+             unrelated blocks rather than "your datasets". -->
+        <div class="ds-head">
+          <div class="ds-head-text">
+            <h2 class="ds-h">Datasets</h2>
+            <p class="ds-sub">Import CSV, JSON, or Excel — or paste data — to save a structured dataset in this project.</p>
+          </div>
+          <div class="ds-head-actions">
+            <button class="btn btn-primary" type="button" id="ds-import-open">+ Import data</button>
+            <button class="btn btn-sm" type="button" id="ds-refresh-all-btn" hidden>↻ Refresh all</button>
+          </div>
+        </div>
+
+        <!-- The saved datasets, as the same list-table Analyses uses. The column
+             labels live here (one template, shared with the rows in hub.css, so
+             a label cannot drift out of line with the cell under it); the rows
+             themselves are built by datasets.ts's makeSavedItem. -->
+        <div class="ds-saved ws-table" id="ds-saved">
+          <div class="ws-table-cols ds-saved-cols">
+            <span>Name</span>
+            <span>Rows</span>
+            <span>Source</span>
+            <span>Data as of</span>
+            <span class="ws-col-action">Action</span>
+          </div>
+          <div class="ds-saved-list" id="ds-saved-list"></div>
+          <div class="ws-empty ds-saved-empty" id="ds-saved-empty" hidden>
+            <h3 class="ws-empty-h">No datasets yet</h3>
+            <p class="ws-empty-p">Import a CSV, JSON or Excel file — or paste data straight in — to save a structured dataset in this project.</p>
+            <div class="ws-empty-actions">
+              <button class="btn btn-primary" type="button" id="ds-empty-import">Import file</button>
+              <button class="btn" type="button" id="ds-empty-paste">Paste data</button>
+            </div>
+          </div>
+        </div>
 
         <div class="ds-toolbar">
           <button class="btn" type="button" id="ds-import-btn">Import file</button>
@@ -767,14 +802,6 @@
           <div class="ds-table-scroll" id="ds-explorer-scroll"></div>
         </div>
 
-        <div class="ds-saved" id="ds-saved">
-          <div class="ds-saved-head">
-            <h3 class="ds-saved-h">Saved datasets</h3>
-            <button class="btn btn-sm" type="button" id="ds-refresh-all-btn" hidden>↻ Refresh all</button>
-          </div>
-          <div class="ds-saved-list" id="ds-saved-list"></div>
-          <p class="ds-saved-empty" id="ds-saved-empty" hidden>No datasets yet.</p>
-        </div>
       </div>
     </section>
     <section class="ws-panel" id="ws-visuals" data-section="visuals" hidden>
@@ -1984,6 +2011,7 @@
 <script src="projects.js"></script>
 <script src="workspace.js"></script>
 <script src="datasets.js"></script>
+<script src="dataSection.js"></script>
 <script src="captureDataset.js"></script>
 <script src="filterValues.js"></script>
 <script src="filterDialog.js"></script>
