@@ -85,7 +85,9 @@
 // names). Both are listed there rather than papered over.
 
 import type { ColumnType, ParsedColumn } from './parse';
-import type { Cell } from './transforms';
+import type { Cell, FilterStep } from './transforms';
+import { applyPipeline } from './transforms';
+import { filterPredicates } from './residentQuery';
 import { relationSql } from './parquetStore';
 import * as duck from './duckdb';
 
@@ -112,6 +114,23 @@ export interface PageRequest {
   /** A user-facing column NAME, resolved against the schema. */
   sortColumn?: string;
   sortDir?: 'asc' | 'desc';
+  /**
+   * Row filters applied BEFORE the search, the sort and the window — so `total`
+   * is the size of the filtered set, which is what the caller labels the grid
+   * with.
+   *
+   * They are compiled by `residentQuery.filterPredicates` on the resident side
+   * and by `transforms.applyPipeline` on the JS side: the SAME two
+   * implementations that already compute the numbers a drill-down claims to
+   * explain, and that are already pinned to each other by
+   * `scripts/test-residentQuery.ts`. Building a third predicate compiler here is
+   * precisely how the rows behind a figure would come to disagree with it.
+   *
+   * A step naming an unknown column or an unknown operator is SKIPPED by both,
+   * never thrown — one dashboard-wide filter has to be able to span
+   * heterogeneous datasets.
+   */
+  filters?: FilterStep[];
 }
 
 export interface PageResult {
@@ -197,9 +216,18 @@ export function readPage(src: PageSource, req: PageRequest): PageResult | null {
  */
 export function pageRowsJs(columns: ParsedColumn[], rows: Cell[][], req: PageRequest): PageResult {
   const cols = Array.isArray(columns) ? columns : [];
-  const r = normalize(cols, req) ?? { offset: 0, limit: 0, needle: '', sort: null };
+  const r = normalize(cols, req) ?? { offset: 0, limit: 0, needle: '', sort: null, filters: [] };
 
   let list: Cell[][] = (Array.isArray(rows) ? rows : []).map((row) => (Array.isArray(row) ? row : []));
+
+  // Filters FIRST, through the pipeline that is already the reference for every
+  // filtered figure in the app — so "the rows behind this number" is answered by
+  // the same fold that produced the number. Its warnings are dropped: the SQL
+  // side cannot emit them (see `PageRequest.filters`), and a skipped step keeps
+  // the SAME rows on both sides, which is what this function exists to define.
+  if (r.filters.length > 0) {
+    list = applyPipeline({ columns: cols, rows: list }, r.filters).rows;
+  }
 
   if (r.needle) {
     const q = r.needle.toLowerCase();
@@ -257,6 +285,8 @@ interface NormalRequest {
   /** Already trimmed. `''` means "no search". */
   needle: string;
   sort: SortSpec | null;
+  /** Never undefined past this point; an empty list means "no filters". */
+  filters: FilterStep[];
 }
 
 /**
@@ -296,6 +326,9 @@ function normalize(cols: ParsedColumn[], req: PageRequest): NormalRequest | null
     limit: Math.min(MAX_LIMIT, Math.max(0, limit)),
     needle,
     sort,
+    // Shape only. WHAT a step may contain is `transforms.sanitizeSteps`'s job and
+    // it runs at the IPC boundary, over untrusted renderer input, before this.
+    filters: Array.isArray(raw.filters) ? raw.filters : [],
   };
 }
 
@@ -400,19 +433,37 @@ function matchExpr(cols: ParsedColumn[], i: number): string {
 }
 
 /**
- * `WHERE` for the search, plus its bound parameters.
+ * The search as ONE predicate, plus its bound parameters, or `null` for "no
+ * search".
  *
  * The needle is pushed once PER COLUMN because `duck.query` binds positionally.
  * `contains(NULL, x)` is NULL, so a null cell is simply not a match — exactly
  * the `v != null` guard.
  */
-function whereClause(cols: ParsedColumn[], needle: string, params: duck.DuckValue[]): string {
-  if (needle === '') return '';
+function searchPredicate(cols: ParsedColumn[], needle: string, params: duck.DuckValue[]): string | null {
+  if (needle === '') return null;
   const preds = cols.map((_, i) => {
     params.push(needle);
     return `contains(${matchExpr(cols, i)}, lower(CAST(? AS VARCHAR)))`;
   });
-  return ` WHERE (${preds.join(' OR ')})`;
+  return `(${preds.join(' OR ')})`;
+}
+
+/**
+ * The whole `WHERE` — filters AND search — shared by the count and the window so
+ * `total` can never describe a different row set than the page.
+ *
+ * Filters are compiled by `residentQuery.filterPredicates` (see `PageRequest`)
+ * and are AND-ed with the search, which mirrors the JS reference: filters run as
+ * a pipeline over the table and the search runs over what survives. Filters go
+ * FIRST because `params` is positional and this is the order the two groups of
+ * `?` appear in the statement.
+ */
+function whereFor(cols: ParsedColumn[], r: NormalRequest, params: duck.DuckValue[]): string {
+  const preds = filterPredicates(cols, r.filters, params);
+  const search = searchPredicate(cols, r.needle, params);
+  if (search) preds.push(search);
+  return preds.length === 0 ? '' : ` WHERE ${preds.join(' AND ')}`;
 }
 
 /** `transforms.colIndex` — exact, case-sensitive, FIRST match.
@@ -465,7 +516,7 @@ function runPage(
   mode: OrdinalMode,
 ): duck.DuckRow[] | null {
   const params: duck.DuckValue[] = [];
-  const where = whereClause(cols, r.needle, params);
+  const where = whereFor(cols, r, params);
   const { from, ord } = orderedFrom(parquetPath, mode);
 
   const order: string[] = [];
@@ -498,10 +549,10 @@ function runPage(
   }
 }
 
-/** Rows matching the search, before paging. `null` means "fall back". */
+/** Rows matching the filters and the search, before paging. `null` = fall back. */
 function countRows(parquetPath: string, cols: ParsedColumn[], r: NormalRequest): number | null {
   const params: duck.DuckValue[] = [];
-  const where = whereClause(cols, r.needle, params);
+  const where = whereFor(cols, r, params);
   const out = duck.query(`SELECT count(*) AS n FROM ${relationSql(parquetPath)}${where};`, params);
   if (out.length !== 1) return null;
   return intOrNull(out[0].n);

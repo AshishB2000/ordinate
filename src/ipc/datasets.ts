@@ -22,6 +22,10 @@ import {
   distinctValuesPageJs,
   MAX_DISTINCT,
 } from '../datasetPage';
+// The visual-filter whitelist, reused verbatim: `dataset:page` now takes the
+// same `FilterStep[]` a visual carries, and two sanitisers for one shape is how
+// they drift apart.
+import { sanitizeFilters } from '../visuals';
 import { explainText, suggestSteps, suggestCalcField } from '../analyze';
 import { compile } from '../formula';
 import * as trace from '../residentTrace';
@@ -328,9 +332,14 @@ export function register() {
   // `pageRowsJs` — the SAME reference implementation `readPage` is asserted
   // against, applied to the hydrated table. One definition of what the grid
   // shows, two ways of getting there.
-  ipcMain.handle('dataset:page', async (_e, { projectId, datasetId, offset, limit, search, sortColumn, sortDir }: any = {}) => {
+  ipcMain.handle('dataset:page', async (_e, { projectId, datasetId, offset, limit, search, sortColumn, sortDir, filters }: any = {}) => {
     try {
-      const req: PageRequest = { offset, limit, search, sortColumn, sortDir };
+      // Filters are untrusted renderer input and go through the SAME whitelist a
+      // saved visual's filters do — `transforms.sanitizeSteps` keeping only
+      // 'filter' steps. An unknown column or operator survives sanitisation and
+      // is then SKIPPED by both paging paths (never thrown), because one
+      // dashboard-wide filter has to be able to span heterogeneous datasets.
+      const req: PageRequest = { offset, limit, search, sortColumn, sortDir, filters: sanitizeFilters(filters) };
 
       const src = await datasets.residentSource(projectId, datasetId);
       if (src) {
