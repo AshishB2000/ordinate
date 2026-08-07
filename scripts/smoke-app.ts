@@ -2290,6 +2290,28 @@ async function main(): Promise<void> {
   ok('…listing the project datasets with rows × columns', popup.open && popup.rows > 0
      && /rows ×/.test(popup.meta) && popup.step2Hidden, JSON.stringify(popup));
 
+  // The focus trap must only ever offer VISIBLE controls. Steps 2 and 3 are in
+  // the DOM but display:none, and focus() on a display:none element is a no-op
+  // that strands focus outside the dialog.
+  const trap = await win.evaluate(() => {
+    const box = document.querySelector('.vn-modal') as HTMLElement;
+    const insideDialog = box.contains(document.activeElement);
+    const hiddenFocusable = [...box.querySelectorAll('button, input, select, textarea')]
+      .filter((el) => (el as HTMLElement).getClientRects().length === 0).length;
+    return {
+      role: box.getAttribute('role'),
+      modal: box.getAttribute('aria-modal'),
+      labelled: !!box.getAttribute('aria-label'),
+      insideDialog,
+      hiddenFocusable,
+    };
+  });
+  ok('…as a labelled aria-modal dialog with focus landing inside it',
+     trap.role === 'dialog' && trap.modal === 'true' && trap.labelled && trap.insideDialog,
+     JSON.stringify(trap));
+  ok('…and the later steps really are display:none, so the trap has to skip them',
+     trap.hiddenFocusable > 0, `${trap.hiddenFocusable} offscreen controls`);
+
   ok('…picking a dataset advances to step 2', await win.evaluate(() => {
     const row = [...document.querySelectorAll('.vn-row')].find(
       (r) => /Sales/i.test(r.textContent || ''),
@@ -2559,6 +2581,65 @@ async function main(): Promise<void> {
   ok('…and Escape closes it, resetting aria-expanded',
      await win.evaluate(() => !document.querySelector('.viz-card-pop')
        && document.querySelector('.viz-card-menu')?.getAttribute('aria-expanded') === 'false'));
+
+  // ── A saved MAP round-trips through the card menu ────────────────────────
+  // A map is the type most likely to be quietly unreachable from a new surface:
+  // it needs geo on the computed data, WebGL, and the VISIBLE window. Drive it
+  // through the card's own Export and Add-to-analysis rather than the builder.
+  const openCardMenu = (nameRe: string) =>
+    win.evaluate((src: string) => {
+      const rx = new RegExp(src, 'i');
+      const card = [...document.querySelectorAll('.viz-card')].find(
+        (c) => rx.test(c.textContent || ''),
+      ) as HTMLElement | undefined;
+      if (!card) return false;
+      (card.querySelector('.viz-card-menu') as HTMLElement).click();
+      return true;
+    }, nameRe);
+  const clickMenuRow = (label: string) =>
+    win.evaluate((l: string) => {
+      const row = [...document.querySelectorAll('.viz-card-pop button')].find(
+        (b) => (b.textContent || '').trim() === l,
+      ) as HTMLElement | undefined;
+      if (!row) return false;
+      row.click();
+      return true;
+    }, label);
+
+  ok('the map visual has a card in the gallery', await openCardMenu('Revenue by state'));
+  ok('…whose menu offers Export', await clickMenuRow('Export'));
+  await win.waitForTimeout(3000);
+  const mapExport = await win.evaluate(() => {
+    const overlay = document.getElementById('export-overlay');
+    const chips = [...document.querySelectorAll('#export-overlay .viz-chip, #export-overlay [class*=chip]')]
+      .map((c) => (c.textContent || '').trim()).filter(Boolean);
+    return { open: !!overlay, chips: chips.slice(0, 8) };
+  });
+  ok('…and Export opens the dialog for a saved map, offering the region map first',
+     mapExport.open && mapExport.chips.some((c) => /Region map/i.test(c)),
+     JSON.stringify(mapExport));
+  await win.keyboard.press('Escape');
+  await win.waitForTimeout(600);
+  ok('…and the export dialog closes again',
+     await win.evaluate(() => !document.getElementById('export-overlay')));
+
+  // Add to analysis: a real write to a real analysis record, from the gallery.
+  ok('the map card menu offers Add to analysis', await openCardMenu('Revenue by state'));
+  ok('…and it opens the analysis picker', await clickMenuRow('Add to analysis'));
+  await win.waitForTimeout(900);
+  ok('…listing the existing analyses plus a New analysis… entry',
+     await win.evaluate(() => {
+       const sel = document.querySelector('.ws-modal-overlay select.ws-modal-input') as HTMLSelectElement;
+       return !!sel && [...sel.options].some((o) => /New analysis/.test(o.textContent || ''));
+     }));
+  ok('…and picking one confirms', await pickFirstOption());
+  await win.waitForTimeout(2500);
+  ok('…the visual is filed away with a toast, and the gallery stays put',
+     await win.evaluate(() => {
+       const toast = document.getElementById('hub-toast');
+       return !!toast && toast.hidden === false && /Added to/.test(toast.textContent || '')
+         && (document.getElementById('viz-gallery') as HTMLElement).hidden === false;
+     }));
 
   // Unstar again so the ordering the reopen check below relies on is restored.
   await win.evaluate(() => (document.querySelector('.viz-card-star') as HTMLElement).click());

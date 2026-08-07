@@ -497,7 +497,9 @@ async function openNewVisualModal(opts: VizNewOpts = {}): Promise<VizNewChoice |
       } else if (n === 2) {
         first = aiReady ? intentEl : (q('.js-vn-manual') as HTMLElement);
       } else {
-        first = regenBtn;
+        // Regenerate is disabled while the model is thinking, and focusing a
+        // disabled button is a no-op that would strand focus outside the dialog.
+        first = regenBtn.disabled ? (q('.js-vn-manual2') as HTMLElement) : regenBtn;
       }
       if (first) first.focus();
     }

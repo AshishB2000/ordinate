@@ -1861,10 +1861,15 @@ function makeModalAccessible(
   box.setAttribute('role', 'dialog');
   box.setAttribute('aria-modal', 'true');
   if (label) box.setAttribute('aria-label', label);
+  // `:not([disabled])` is not enough for a modal with more than one pane: the
+  // hidden panes' controls are still in the DOM, so the wrap-around below could
+  // pick one as first/last and call focus() on a display:none element — which is
+  // a no-op, and leaves focus stranded outside the dialog. getClientRects() is
+  // empty for exactly the elements that cannot take focus for that reason.
   const focusables = (): HTMLElement[] =>
     Array.from(box.querySelectorAll<HTMLElement>(
       'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    ));
+    )).filter((el) => el.getClientRects().length > 0);
   const onTabKey = (e: KeyboardEvent): void => {
     if (e.key !== 'Tab') return;
     const f = focusables();
