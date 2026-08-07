@@ -10,6 +10,18 @@ All notable changes to Ordinate are documented here. Format based on
 ## [Unreleased]
 
 ### Added
+- **See the rows behind any number.** Click a bar, a slice or a point — or pick
+  `⋯ → Show underlying rows` on any visual — and a panel slides over showing exactly the rows that
+  produced it, paged, searchable and sortable. The filters that define the set are listed as chips,
+  so you can see what you are looking at. Search and paging run against the stored data, so this
+  works the same on a million rows as on a hundred. Available everywhere a visual renders, including
+  a published, read-only dashboard: drilling only ever reads.
+- **When the exact rows cannot be identified, the panel says so.** A map region, a chart that plots
+  raw rows rather than groups, a category that is not a stored column, or a mark with a blank label
+  (a missing value and an empty one are different rows) all get a plain sentence explaining why
+  instead of an approximate row set that would quietly contradict the figure above it.
+- **Export the drilled rows to CSV** — exactly the set on screen, with the same filters, search and
+  sort. Plain RFC-4180 text, written straight to the file you pick.
 - **Datasets can be refreshed.** A CSV, an Excel sheet, a URL, a database connection and a combined
   dataset can all be re-fetched from where they came from — not just connections, as before. A
   refresh keeps your prepare pipeline: the fresh rows become the new source and every step is

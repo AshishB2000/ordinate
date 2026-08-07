@@ -55,19 +55,25 @@ interface DrillOpts {
  */
 function wireDrillClick(area: HTMLElement, ctx: DrillOpts): void {
   if (!area || !ctx) return;
+  // The builder re-renders into the SAME element on every chart-type switch, so
+  // bind once and read the context at click time — otherwise one click would
+  // open the panel once per render since the area was created.
+  (area as any)._drillCtx = ctx;
+  if (area.classList.contains('is-drillable')) return;
   area.classList.add('is-drillable');
   area.addEventListener('click', (e) => {
+    const live: DrillOpts = (area as any)._drillCtx || ctx;
     const mark = chartMarkAt(area, e);
     if (!mark) return; // empty canvas, or a map/table: the ⋯ menu handles those
     // `series` is only a split value when the encoding actually splits — on a
     // multi-measure chart the dataset label is a legend entry ("sum of price").
-    const hasSplit = Boolean(ctx.encoding && typeof ctx.encoding.series === 'string' && ctx.encoding.series);
+    const hasSplit = Boolean(live.encoding && typeof live.encoding.series === 'string' && live.encoding.series);
     openDrillPanel({
-      name: ctx.name,
-      projectId: ctx.projectId,
-      datasetId: ctx.datasetId,
-      encoding: ctx.encoding,
-      filters: ctx.filters,
+      name: live.name,
+      projectId: live.projectId,
+      datasetId: live.datasetId,
+      encoding: live.encoding,
+      filters: live.filters,
       mark: { category: mark.category, series: hasSplit ? mark.series : undefined },
       trigger: area,
     });
