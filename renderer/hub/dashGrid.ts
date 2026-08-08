@@ -81,6 +81,19 @@ function openEditorWith(rec: any, title: string): void {
   }
   // Week 10: dashboard-wide filters (a v1 dashboard has none → []).
   if (!Array.isArray(dashCurrent.filters)) dashCurrent.filters = [];
+  // Fresh reader session: no carry-over from whatever sheet was open before,
+  // then seed each control's author-set default (`CardControl.default` and a
+  // reader selection are the same `ControlValue` shape, so this is a direct
+  // set — no conversion). A control with no default stays unset, which
+  // `controlSteps` already treats as "filters nothing".
+  controlState = new Map();
+  for (const page of dashCurrent.pages) {
+    for (const card of (page && Array.isArray(page.cards) ? page.cards : [])) {
+      if (card && card.type === 'control' && card.control && card.control.default) {
+        controlState.set(card.id, card.control.default);
+      }
+    }
+  }
   dashShow('dash-list-view', false);
   dashShow('dash-editor', true);
   applyDashEditorMode();
@@ -133,6 +146,7 @@ function closeDashboardEditor(): void {
   exitDashPresent(); // never leave the app stuck in chrome-hidden mode
   if (dashSaveTimer !== null) { window.clearTimeout(dashSaveTimer); dashSaveTimer = null; }
   dashCurrent = null;
+  controlState = new Map(); // no reader session carries into the next sheet opened
   dashPageIdx = 0;
   dashDirty = false;
   dashDragId = null;
@@ -615,11 +629,12 @@ async function renderVisualCard(card: any, body: HTMLElement): Promise<void> {
   if (!resolved) { dashCardMissing(body, 'This visual was deleted.', true); return; }
   const visual = resolved.visual;
 
-  // Merge dashboard-wide filters (first) with the visual's own filters, then pass the
-  // combined list through the UNCHANGED visual:data channel — it sanitizes + applies
-  // filters (in order, missing-column-tolerant) before aggregation, so one dashboard
-  // filter drives every card. Mirrors mergeDashboardFilters (src/dashboardFilters.ts).
-  const merged = mergeDashFilters(dashCurrent && dashCurrent.filters, visual.filters);
+  // Merge dashboard-wide filters + every control's live selection (effectiveFilters,
+  // dashboards.ts) with the visual's own filters, then pass the combined list through
+  // the UNCHANGED visual:data channel — it sanitizes + applies filters (in order,
+  // missing-column-tolerant) before aggregation, so one dashboard filter drives every
+  // card. Mirrors mergeDashboardFilters (src/dashboardFilters.ts).
+  const merged = mergeDashFilters(effectiveFilters(), visual.filters);
   let res: any;
   try {
     res = await window.hub.computeVisualData(currentProjectId, visual.datasetId, visual.encoding, merged);

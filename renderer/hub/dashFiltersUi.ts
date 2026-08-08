@@ -81,11 +81,12 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
   if (!currentProjectId || !m.datasetId || !m.column || !m.aggregation) { valEl.textContent = '—'; return; }
   let r: any;
   try {
-    // Dashboard-wide filters are applied over the dataset in MAIN before the number is
+    // Dashboard-wide filters + every control's live selection (effectiveFilters,
+    // dashboards.ts) are applied over the dataset in MAIN before the number is
     // computed (still 100% app-computed; the renderer never does the math).
     r = await window.hub.computeMetric(
       currentProjectId, m.datasetId, m.column, m.aggregation,
-      (dashCurrent && Array.isArray(dashCurrent.filters)) ? dashCurrent.filters : [],
+      effectiveFilters(),
     );
   } catch (_) {
     r = { ok: false };

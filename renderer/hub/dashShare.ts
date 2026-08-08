@@ -86,7 +86,7 @@ async function buildMetricExportCard(card: any, layout: any): Promise<any> {
   try {
     r = await window.hub.computeMetric(
       currentProjectId, m.datasetId, m.column, m.aggregation,
-      Array.isArray(dashCurrent.filters) ? dashCurrent.filters : [],
+      effectiveFilters(),
     );
   } catch (_) { r = { ok: false }; }
   if (!r || r.ok === false) return { kind: 'broken', layout, reason: 'Source removed' };
@@ -102,7 +102,7 @@ async function buildVisualExportCard(card: any, layout: any, forCapture: boolean
   const resolved = await resolveCardVisual(card);
   if (!resolved) return { kind: 'broken', layout, reason: 'Source removed' };
   const visual = resolved.visual;
-  const merged = mergeDashFilters(dashCurrent && dashCurrent.filters, visual.filters);
+  const merged = mergeDashFilters(effectiveFilters(), visual.filters);
   let res: any;
   try { res = await window.hub.computeVisualData(currentProjectId, visual.datasetId, visual.encoding, merged); }
   catch (_) { res = { ok: false }; }
