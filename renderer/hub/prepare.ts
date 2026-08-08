@@ -563,173 +563,6 @@ function hideTypeMenu(): void {
   if (m) m.hidden = true;
 }
 
-// ── Combine with another dataset ──────────────────────────────────────────────
-/**
- * The dataset on the LEFT of a combine.
- *
- * Combining is reached from the section header now, where no dataset is open —
- * so the dialog carries its own picker, defaulting to the open one when there
- * is one. `expId` remains the fallback, which is what every caller from inside
- * the explorer still gets.
- */
-function dsCombineLeftId(): string {
-  const sel = pEl('ds-combine-left') as HTMLSelectElement | null;
-  return (sel && sel.value) || expId;
-}
-
-async function populateCombineSelect(): Promise<void> {
-  const sel = pEl('ds-combine-select') as HTMLSelectElement | null;
-  if (!sel || !currentProjectId) return;
-  let items: any[] = [];
-  try {
-    items = await window.hub.listDatasets(currentProjectId);
-  } catch (_) {
-    items = [];
-  }
-  const all = Array.isArray(items) ? items : [];
-
-  // The left side: every dataset, with the open one pre-selected. Re-rendered
-  // only when the set changed, so re-opening the dialog does not discard a
-  // choice the user just made.
-  const leftSel = pEl('ds-combine-left') as HTMLSelectElement | null;
-  let leftId = dsCombineLeftId();
-  if (leftSel) {
-    const want = all.map((d) => String(d.id)).join(',');
-    if (leftSel.dataset.ids !== want) {
-      leftSel.innerHTML = '';
-      all.forEach((d) => {
-        const opt = document.createElement('option');
-        opt.value = String(d.id);
-        opt.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
-        leftSel.appendChild(opt);
-      });
-      leftSel.dataset.ids = want;
-    }
-    if (expId && all.some((d) => String(d.id) === expId)) leftSel.value = expId;
-    else if (!leftSel.value && leftSel.options.length) leftSel.value = leftSel.options[0].value;
-    leftId = leftSel.value;
-  }
-
-  sel.innerHTML = '';
-  const others = all.filter((d) => String(d.id) !== leftId);
-  if (!others.length) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = 'No other datasets';
-    sel.appendChild(opt);
-  } else {
-    others.forEach((d) => {
-      const opt = document.createElement('option');
-      opt.value = String(d.id);
-      opt.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
-      sel.appendChild(opt);
-    });
-  }
-  await syncCombineOn();
-}
-
-// Show/hide the join-key row and (for join) populate both key selects — left from
-// this dataset's columns, right from the picked other dataset's columns.
-async function syncCombineOn(): Promise<void> {
-  const modeSel = pEl('ds-combine-mode') as HTMLSelectElement | null;
-  const onRow = pEl('ds-combine-on');
-  if (!modeSel || !onRow) return;
-  const isJoin = modeSel.value === 'join';
-  onRow.hidden = !isJoin;
-  if (!isJoin) return;
-
-  // Left keys come from whichever dataset is on the left — which is the open
-  // one only when the dialog was opened from inside it. Same metadata read as
-  // the right-hand side below; `expColumns` would be the open dataset's columns
-  // against a different dataset's rows.
-  const leftSel = pEl('ds-combine-on-left') as HTMLSelectElement | null;
-  const leftId = dsCombineLeftId();
-  if (leftSel && currentProjectId) {
-    leftSel.innerHTML = '';
-    let left: any = null;
-    if (leftId === expId) {
-      left = { columns: expColumns };
-    } else {
-      try {
-        left = await window.hub.getDatasetMeta(currentProjectId, leftId);
-      } catch (_) {
-        left = null;
-      }
-    }
-    const cols: any[] = left && Array.isArray(left.columns) ? left.columns : [];
-    cols.forEach((c) => {
-      const o = document.createElement('option');
-      o.value = c && c.name != null ? String(c.name) : '';
-      o.textContent = c && c.name != null ? String(c.name) : '';
-      leftSel.appendChild(o);
-    });
-  }
-
-  const rightSel = pEl('ds-combine-on-right') as HTMLSelectElement | null;
-  const otherSel = pEl('ds-combine-select') as HTMLSelectElement | null;
-  if (rightSel && otherSel && otherSel.value && currentProjectId) {
-    rightSel.innerHTML = '';
-    let other: any = null;
-    try {
-      other = await window.hub.getDatasetMeta(currentProjectId, otherSel.value);
-    } catch (_) {
-      other = null;
-    }
-    const cols: any[] = other && Array.isArray(other.columns) ? other.columns : [];
-    cols.forEach((c) => {
-      const o = document.createElement('option');
-      o.value = c && c.name != null ? String(c.name) : '';
-      o.textContent = c && c.name != null ? String(c.name) : '';
-      rightSel.appendChild(o);
-    });
-  }
-}
-
-function showCombineNote(msg: string): void {
-  const note = pEl('ds-combine-note');
-  if (!note) return;
-  note.textContent = msg;
-  note.hidden = false;
-}
-
-async function handleCombine(): Promise<void> {
-  const leftId = dsCombineLeftId();
-  if (!currentProjectId || !leftId) return;
-  const otherSel = pEl('ds-combine-select') as HTMLSelectElement | null;
-  const modeSel = pEl('ds-combine-mode') as HTMLSelectElement | null;
-  if (!otherSel || !otherSel.value) {
-    showCombineNote('Pick another dataset to combine with.');
-    return;
-  }
-  const mode: 'append' | 'join' = modeSel && modeSel.value === 'join' ? 'join' : 'append';
-  let on: { left: string; right: string } | undefined;
-  if (mode === 'join') {
-    const leftSel = pEl('ds-combine-on-left') as HTMLSelectElement | null;
-    const rightSel = pEl('ds-combine-on-right') as HTMLSelectElement | null;
-    const l = leftSel ? leftSel.value : '';
-    const r = rightSel ? rightSel.value : '';
-    if (!l || !r) {
-      showCombineNote('Pick a join key on each side.');
-      return;
-    }
-    on = { left: l, right: r };
-  }
-  let res: any;
-  try {
-    res = await window.hub.combineDatasets(currentProjectId, leftId, otherSel.value, mode, on);
-  } catch (_) {
-    res = { ok: false, error: 'Failed to combine the datasets.' };
-  }
-  if (!res || res.ok === false) {
-    showCombineNote((res && res.error) || 'Failed to combine the datasets.');
-    return;
-  }
-  const name = res.dataset && res.dataset.name ? String(res.dataset.name) : 'combined dataset';
-  const warns = Array.isArray(res.warnings) && res.warnings.length ? ' (' + res.warnings.join('; ') + ')' : '';
-  showCombineNote('Created "' + name + '" in this project.' + warns);
-  await refreshDatasetList();
-}
-
 // ── AI suggest steps (structure only; never auto-applies) ─────────────────────
 async function handleSuggestSteps(): Promise<void> {
   if (!currentProjectId || !expId) return;
@@ -870,14 +703,8 @@ function resetPreparePanel(): void {
   if (out) out.hidden = true;
   const calcOut = pEl('ds-calc-suggest-out');
   if (calcOut) { calcOut.hidden = true; calcOut.innerHTML = ''; }
-  const note = pEl('ds-combine-note');
-  if (note) {
-    note.hidden = true;
-    note.textContent = '';
-  }
   renderPrepareWarnings([]);
   renderStepsList();
-  populateCombineSelect();
 }
 
 /**
@@ -888,8 +715,9 @@ function resetPreparePanel(): void {
  * (dataSection.ts), so a button that hid it again while its tab was showing
  * would leave that tab blank. The panel's own `hidden` is owned by the tab.
  *
- * Everything else here is unchanged: the step list and the combine picker are
- * still refreshed on the way in, exactly as the toggle did.
+ * Everything else here is unchanged: the step list is still refreshed on the way
+ * in, exactly as the toggle did. (The combine picker it also refreshed is gone —
+ * combining is the composer's job now.)
  */
 function togglePreparePanel(): void {
   const panel = pEl('ds-prepare-panel');
@@ -897,7 +725,6 @@ function togglePreparePanel(): void {
   panel.hidden = false;
   if (typeof dxSelectTab === 'function') dxSelectTab('ds-tab-prepare');
   renderStepsList();
-  populateCombineSelect();
 }
 
 // ── Boot wiring (once) ─────────────────────────────────────────────────────────
@@ -930,15 +757,4 @@ function initPrepare(): void {
   const dismissBtn = pEl('ds-suggest-dismiss');
   if (dismissBtn) dismissBtn.addEventListener('click', () => dismissSuggested());
 
-  const combineSel = pEl('ds-combine-select');
-  if (combineSel) combineSel.addEventListener('change', () => syncCombineOn());
-  const combineMode = pEl('ds-combine-mode');
-  if (combineMode) combineMode.addEventListener('change', () => syncCombineOn());
-  const combineBtn = pEl('ds-combine-btn');
-  if (combineBtn) combineBtn.addEventListener('click', () => handleCombine());
-
-  // Changing the left side re-lists the right (a dataset cannot be combined
-  // with itself) and re-reads the join keys.
-  const combineLeft = pEl('ds-combine-left');
-  if (combineLeft) combineLeft.addEventListener('change', () => { void populateCombineSelect(); });
 }

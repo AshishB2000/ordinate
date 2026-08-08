@@ -577,6 +577,9 @@ require("./src/ipc/projects").register();
 require("./src/ipc/recent").register();
 
 require("./src/ipc/datasets").register();
+// The composer's two handlers. Registered AFTER datasets, which hands it the
+// commitSteps primitive during its own register().
+require("./src/ipc/datasetCompose").register();
 
 require("./src/ipc/connections").register();
 
