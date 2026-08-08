@@ -5682,7 +5682,12 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   font-weight: 600;
   color: var(--muted);
 }
-.viz-encoding .viz-field-label {
+/* Guarded off `.is-wells` (not just `.viz-encoding`): `.an-wells
+   .viz-field-label` is also a 2-class selector, an exact specificity tie this
+   rule would otherwise win or lose purely by source order — see the note on
+   the value-row select override below for why that's not something to rely
+   on. */
+.viz-encoding:not(.is-wells) .viz-field-label {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
