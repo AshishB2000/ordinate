@@ -97,6 +97,11 @@ All notable changes to Ordinate are documented here. Format based on
   see what a step does to your data while you edit it.
 - **Combine datasets moved out of Prepare** and into its own action in the Data header — and is now
   the composer, not a dialog of four selects. There is one flow for making a dataset, not two.
+- **The Visuals builder is a two-pane workbench, not one long scroll.** Building a chart used to mean
+  a single column — encoding form above, chart squeezed below it — so seeing what a change drew meant
+  scrolling past Category/Measures/Filters first. Now: a header carries Back, the visual's name,
+  Dataset, Suggest chart and Save; a fixed-width panel on the left holds the encoding form; and the
+  chart fills the stage beside it in its own card, the same head-and-rail shape as the Prepare tab.
 - **Internal: the ten biggest source files are split by job**, and a CI check now keeps them that
   way — no source file may exceed 800 lines, against an allowlist that can only shrink. Pure code
   movement, no behaviour change: `hub.ts` 2051 → 422, `dashboards.ts` 2340 → 269, and `authoring`,

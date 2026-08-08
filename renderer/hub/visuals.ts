@@ -137,7 +137,7 @@ function initVisuals(): void {
   // without a settings round trip, which reloads this state anyway.
   void refreshVizAiGate();
 
-  // "← Back to visuals": leave the builder and repaint the gallery, so a delete
+  // "← Back": leave the builder and repaint the gallery, so a delete
   // or a rename made while the builder was open shows immediately.
   const cancelBtn = vizEl('viz-cancel-btn');
   if (cancelBtn) cancelBtn.addEventListener('click', () => {
@@ -157,6 +157,8 @@ function initVisuals(): void {
     vizEditingId = '';
     vizCurrentChartType = '';
     vizOverrides = {};
+    const nameEl = vizEl('viz-builder-name');
+    if (nameEl) nameEl.textContent = 'New visual';
     onDatasetChange(dsSel.value);
   });
   // Category / Split / Geo / measures / filters are the encoding form's, and it

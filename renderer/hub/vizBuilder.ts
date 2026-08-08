@@ -35,6 +35,8 @@ async function openVisualBuilder(datasetId?: string): Promise<void> {
   vizEditingId = '';
   vizCurrentChartType = '';
   vizOverrides = {};
+  const nameEl = vizEl('viz-builder-name');
+  if (nameEl) nameEl.textContent = 'New visual';
   ensureVizForm();
   const datasets = await loadDatasetOptions(datasetId || '');
   showVizGallery(false);
@@ -59,6 +61,8 @@ function closeVisualBuilder(): void {
   if (vizForm) vizForm.show(false);
   const sh = vizEl('viz-suggest-hint');
   if (sh) sh.hidden = true;
+  const nameEl = vizEl('viz-builder-name');
+  if (nameEl) nameEl.textContent = 'New visual';
   clearVizArea();
   setVizWarnings([]);
 }
@@ -131,11 +135,15 @@ function clearVizArea(): void {
 async function recomputeVisual(): Promise<void> {
   if (!currentProjectId || !vizDatasetId) return;
   const encoding = vizForm!.getEncoding();
+  const loadingArea = vizEl('viz-area');
+  if (loadingArea) loadingArea.classList.add('is-loading');
   let res: any;
   try {
     res = await window.hub.computeVisualData(currentProjectId, vizDatasetId, encoding, vizForm!.getFilters());
   } catch (_) {
     res = { ok: false, error: 'Could not compute the visual.' };
+  } finally {
+    if (loadingArea) loadingArea.classList.remove('is-loading');
   }
   if (!res || res.ok === false) {
     setVizWarnings([(res && res.error) || 'Could not compute the visual.']);
@@ -164,7 +172,16 @@ async function recomputeVisual(): Promise<void> {
     area.innerHTML = '';
     const m = document.createElement('div');
     m.className = 'cv-chart-fallback';
-    m.textContent = 'Pick a category and at least one measure to draw a chart.';
+    // The ONLY innerHTML here: VIZ_ICONS is a trusted static constant of
+    // hand-written SVG in renderResult.ts, never user or model input. `column`
+    // is a generic stand-in glyph — the empty state has no chart type yet.
+    const glyph = document.createElement('div');
+    glyph.className = 'cv-chart-fallback-glyph';
+    glyph.innerHTML = VIZ_ICONS.column;
+    m.appendChild(glyph);
+    const text = document.createElement('span');
+    text.textContent = 'Pick a category and at least one measure to draw a chart.';
+    m.appendChild(text);
     area.appendChild(m);
     vizPicker = null;
     return;
@@ -228,6 +245,8 @@ async function openSavedVisual(id: string): Promise<void> {
     return;
   }
   vizEditingId = String(visual.id || id);
+  const nameEl = vizEl('viz-builder-name');
+  if (nameEl) nameEl.textContent = String(visual.name || 'Visual');
   vizCurrentChartType = typeof visual.chartType === 'string' ? visual.chartType : '';
   vizOverrides = visual.overrides && typeof visual.overrides === 'object' ? visual.overrides : {};
   const savedFilters = Array.isArray(visual.filters)
