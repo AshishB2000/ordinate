@@ -253,3 +253,8 @@ scripts/**/*.js
 /renderer/hub/dsList.js
 /renderer/hub/dsExplorer.js
 /renderer/hub/dsGrid.js
+
+# visuals.ts split by job (.claude/rules/file-size.md) — emitted siblings.
+/renderer/hub/vizGallery.js
+/renderer/hub/vizNew.js
+/renderer/hub/vizBuilder.js
