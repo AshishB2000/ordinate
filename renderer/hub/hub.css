@@ -5621,6 +5621,8 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 /* Pushes dataset/suggest/save to the right of Back + name, with no empty
    spacer element to carry. */
@@ -5629,6 +5631,7 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   align-items: center;
   gap: 10px;
   margin-left: auto;
+  flex: 0 0 auto;
 }
 .viz-builder-body {
   display: flex;
@@ -5703,7 +5706,7 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   border-radius: 6px;
   max-width: 240px;
 }
-.viz-encoding .viz-select {
+.viz-encoding:not(.is-wells) .viz-select {
   width: 100%;
   padding: 8px;
   border-radius: var(--r-md);
@@ -5753,15 +5756,15 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 }
 /* "+ Add measure" / "+ Add filter" read as an empty SLOT, not a button —
    full-width, dashed, quiet until hovered. */
-.btn.js-enc-add-value,
-.btn.js-enc-add-filter {
+.viz-encoding:not(.is-wells) .btn.js-enc-add-value,
+.viz-encoding:not(.is-wells) .btn.js-enc-add-filter {
   width: 100%;
   background: transparent;
   border: 1px dashed var(--border-2);
   color: var(--muted);
 }
-.btn.js-enc-add-value:hover:not(:disabled),
-.btn.js-enc-add-filter:hover:not(:disabled) {
+.viz-encoding:not(.is-wells) .btn.js-enc-add-value:hover:not(:disabled),
+.viz-encoding:not(.is-wells) .btn.js-enc-add-filter:hover:not(:disabled) {
   background: var(--surface-2);
   border-color: var(--border-3);
   color: var(--text);
