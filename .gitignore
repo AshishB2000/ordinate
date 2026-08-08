@@ -258,3 +258,9 @@ scripts/**/*.js
 /renderer/hub/vizGallery.js
 /renderer/hub/vizNew.js
 /renderer/hub/vizBuilder.js
+
+# analyses.ts split by job (.claude/rules/file-size.md) — emitted siblings.
+/renderer/hub/anList.js
+/renderer/hub/anNew.js
+/renderer/hub/anPublish.js
+/renderer/hub/anDraft.js

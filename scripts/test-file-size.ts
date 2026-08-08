@@ -56,7 +56,6 @@ const CAP = 800;
  * number) is the point; adding one is the failure this file exists to prevent.
  */
 const ALLOWED: Record<string, number> = {
-  'renderer/hub/analyses.ts': 1227,
   'renderer/hub/chartRender.ts': 1097,
   'renderer/hub/connections.ts': 1076,
   'renderer/hub/mapRender.ts': 834,
