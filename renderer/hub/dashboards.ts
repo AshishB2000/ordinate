@@ -314,6 +314,12 @@ function initDashboards(): void {
   if (addF) addF.addEventListener('click', () => handleAddDashFilter());
   const clrF = dashEl('dash-clear-filters');
   if (clrF) clrF.addEventListener('click', () => handleClearDashFilters());
+  // Reset EVERY control card to its published default — unlike Clear all
+  // above (dash-edit-only, a structural edit to the persisted record), this
+  // must work for a reader on a published dashboard, so it carries no
+  // dash-edit-only class and is never gated on dashReadOnly (dashControls.ts).
+  const resetCtrls = dashEl('dash-reset-controls');
+  if (resetCtrls) resetCtrls.addEventListener('click', () => resetAllControls());
   const catC = dashEl('dash-category-select');
   if (catC) catC.addEventListener('click', () => handleDashCategory());
   const perC = dashEl('dash-period-select');

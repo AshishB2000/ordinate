@@ -147,6 +147,14 @@ function dashCardMissing(body: HTMLElement, msg: string, broken?: boolean): void
 // Renderer-side mirror of src/dashboardFilters.mergeDashboardFilters: dashboard filters
 // FIRST, then the card's own, dropping byte-identical steps. Kept tiny + local (the
 // pure main module is node-tested; this is the same rule for the live grid).
+//
+// The dedup key includes `values` (mirrors src/dashboardFilters.stepKey, and
+// dashStepKey below) — omitting it, as an earlier version of this function
+// did, made every `in`/`not in` step on one column collide on the SAME key
+// regardless of which values it carried, so a multi-select control's `in`
+// filter could silently drop (or be dropped by) an unrelated card-level `in`
+// filter on that column. Flagged in Task 2's review, live now that a control
+// card actually emits `in` steps (dashControls.ts).
 function mergeDashFilters(dashFilters: any, cardFilters: any): any[] {
   const dash = Array.isArray(dashFilters) ? dashFilters : [];
   const card = Array.isArray(cardFilters) ? cardFilters : [];
@@ -154,7 +162,7 @@ function mergeDashFilters(dashFilters: any, cardFilters: any): any[] {
   const seen = new Set<string>();
   dash.concat(card).forEach((s: any) => {
     if (!s || s.type !== 'filter') return;
-    const k = JSON.stringify([s.column, s.op, s.value == null ? null : s.value]);
+    const k = dashStepKey(s);
     if (seen.has(k)) return;
     seen.add(k);
     out.push(s);

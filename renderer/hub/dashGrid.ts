@@ -168,6 +168,7 @@ function closeDashboardEditor(): void {
   if (note) note.hidden = true;
   const pub = dashEl('an-pubstate');
   if (pub) pub.hidden = true;
+  dashShow('dash-reset-controls', false); // controlState is gone; nothing left to reset
 }
 
 // Browsers expose crypto.randomUUID in the renderer; used for local page/card
@@ -314,6 +315,9 @@ function renderDashGrid(): void {
   // Which datasets the sheet reads can change with any card edit, so the
   // freshness line is derived from the cards on every grid render.
   refreshDashFreshness();
+  // Whether ANY control differs from its default (dashControls.ts) can change
+  // on every render too — derived, never tracked state of its own.
+  updateResetControlsBtn();
 }
 
 // ── Freshness of the data behind the open sheet ──────────────────────────────
@@ -532,6 +536,10 @@ function dashCardTitle(card: any): string {
     const m = card.metric || {};
     return m.label || ((DASH_AGG_LABELS[m.aggregation as DashAgg] || m.aggregation) + ' of ' + (m.column || ''));
   }
+  // The control's "Label above" (task-3 brief) IS the header title — every
+  // other card type's "what is this" text lives there, not duplicated in the
+  // body, and renderControlCard (dashControls.ts) owns nothing but the widget.
+  if (card.type === 'control') return (card.control && card.control.label) || 'Filter';
   return card.heading || 'Text';
 }
 
@@ -593,6 +601,10 @@ function renderDashCardBody(card: any, body: HTMLElement): void {
   body.innerHTML = '';
   if (card.type === 'visual') { renderVisualCard(card, body); return; }
   if (card.type === 'metric') { renderMetricCard(card, body); return; }
+  // A control card renders as a real, interactive filter widget — NEVER gated
+  // by dashReadOnly (renderControlCard, dashControls.ts): filtering is a read,
+  // allowed on a published snapshot exactly as drilling already is.
+  if (card.type === 'control') { renderControlCard(card, body); return; }
   renderTextCard(card, body);
 }
 
