@@ -83,6 +83,11 @@ All notable changes to Ordinate are documented here. Format based on
 - **Combine datasets moved out of Prepare** and into its own action in the Data header. It creates a
   new dataset rather than transforming one, so it never belonged at the bottom of a pipeline panel,
   and it no longer requires opening some other dataset first to find it.
+- **The Visuals builder is a two-pane workbench, not one long scroll.** Building a chart used to mean
+  a single column — encoding form above, chart squeezed below it — so seeing what a change drew meant
+  scrolling past Category/Measures/Filters first. Now: a header carries Back, the visual's name,
+  Dataset, Suggest chart and Save; a fixed-width panel on the left holds the encoding form; and the
+  chart fills the stage beside it in its own card, the same head-and-rail shape as the Prepare tab.
 - Renamed the project from Screenchart to Ordinate. Screenchart is now the name of one data source
   (screenshot capture) rather than the product. The application bundle and `userData` directory are
   unchanged pending a migration.
