@@ -223,3 +223,6 @@ scripts/**/*.js
 
 # Data-section layout (list-first restructure) — emitted sibling.
 /renderer/hub/dataSection.js
+
+# File-size ratchet (.claude/rules/file-size.md) — emitted sibling.
+/scripts/test-file-size.js
