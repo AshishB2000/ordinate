@@ -83,6 +83,10 @@ All notable changes to Ordinate are documented here. Format based on
 - **Combine datasets moved out of Prepare** and into its own action in the Data header. It creates a
   new dataset rather than transforming one, so it never belonged at the bottom of a pipeline panel,
   and it no longer requires opening some other dataset first to find it.
+- **Internal: the ten biggest source files are split by job**, and a CI check now keeps them that
+  way — no source file may exceed 800 lines, against an allowlist that can only shrink. Pure code
+  movement, no behaviour change: `hub.ts` 2051 → 422, `dashboards.ts` 2340 → 269, and `authoring`,
+  `datasets`, `visuals`, `analyses`, `connections` and `formula` likewise.
 - Renamed the project from Screenchart to Ordinate. Screenchart is now the name of one data source
   (screenshot capture) rather than the product. The application bundle and `userData` directory are
   unchanged pending a migration.

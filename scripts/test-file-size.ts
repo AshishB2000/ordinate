@@ -12,8 +12,8 @@
 //
 //   EDIT IT ONLY TO REMOVE AN ENTRY OR LOWER A COUNT. NEVER TO ADMIT A NEW FILE.
 //
-// That is what makes it a ratchet. A cap alone would be either unlandable (16
-// files over it today) or permanently disabled; a cap plus a shrinking
+// That is what makes it a ratchet. A cap alone would be either unlandable (22
+// files were over it when this landed) or permanently disabled; a cap plus a shrinking
 // allowlist lets the debt be paid down one file at a time while making it
 // impossible to add more. Two assertions carry it:
 //
@@ -56,9 +56,15 @@ const CAP = 800;
  * number) is the point; adding one is the failure this file exists to prevent.
  */
 const ALLOWED: Record<string, number> = {
+  // Not splittable by moving lines: buildChart() is ONE 870-line function and
+  // every per-chart-family block reads its locals (palette, fmt, isRound,
+  // makeValueAxis, …). Breaking it up means inventing a parameter object, which
+  // is a design change with real behaviour risk, not a move. Own PR.
   'renderer/hub/chartRender.ts': 1097,
   'renderer/hub/mapRender.ts': 834,
   'renderer/hub/prepare.ts': 944,
+  // Deliberately last: it is the only check that runs the real app, so breaking
+  // it blinds every other split. Own PR, after these are merged and green.
   'scripts/smoke-app.ts': 3544,
   'scripts/test-analysis.ts': 813,
   'scripts/test-anomaliesResident.ts': 837,
