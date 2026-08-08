@@ -130,9 +130,14 @@ function renderControlCard(card: any, body: HTMLElement): void {
 // ── Dropdown ─────────────────────────────────────────────────────────────────
 // A native <select> — no custom widget earns its keep here (unlike the model
 // pickers customDropdown.ts serves, a filter's option list doesn't need
-// height-capping or a fixed-position escape from clipping). Loaded EAGERLY on
-// first render: a native <select> has no "open" event to hook, so lazy-on-open
-// isn't available the way it is for the multi popover below.
+// height-capping or a fixed-position escape from clipping). A native <select>
+// has no true "before the popup renders" hook, so this can't be as lazy as the
+// multi popover below (which opens on an explicit click into a div this file
+// owns) — but `focus`/`mousedown` both fire before the OS paints the native
+// list, so starting the fetch there gets meaningfully closer to "on first
+// open" than loading unconditionally at render time. A control the reader
+// never focuses never queries. One brief loading flash on the very first open
+// is the accepted trade-off; loaded once, never re-fetched.
 function renderDropdownControl(card: any, wrap: HTMLElement): void {
   const control = card.control;
   const cur = controlCurrentValue(card);
@@ -144,6 +149,16 @@ function renderDropdownControl(card: any, wrap: HTMLElement): void {
   all.value = '';
   all.textContent = 'All';
   sel.appendChild(all);
+  // The current/default value shows as selected text immediately, even before
+  // the real option list loads — never a blank "All" while a real selection
+  // is in effect.
+  if (cur.value) {
+    const cur0 = document.createElement('option');
+    cur0.value = cur.value;
+    cur0.textContent = cur.value;
+    sel.appendChild(cur0);
+    sel.value = cur.value;
+  }
   wrap.appendChild(sel);
 
   const note = document.createElement('p');
@@ -155,38 +170,39 @@ function renderDropdownControl(card: any, wrap: HTMLElement): void {
     renderDashGrid();
   });
 
-  if (!currentProjectId) return;
-  (async () => {
-    let res: any = null;
-    try {
-      res = await window.hub.datasetDistinct(currentProjectId as string, control.datasetId, control.column, 500);
-    } catch (_) {
-      res = null;
-    }
-    // The card may have been torn down (a DIFFERENT control's change
-    // re-rendered the whole grid) by the time this resolves — a detached
-    // <select> is harmless to keep populating, but there's nothing to show.
-    const values: string[] = res && Array.isArray(res.values) ? res.values : [];
-    const total = res && typeof res.total === 'number' ? res.total : values.length;
-    values.forEach((v) => {
-      const o = document.createElement('option');
-      o.value = v;
-      o.textContent = v;
-      sel.appendChild(o);
-    });
-    // The current/default value might not be among the loaded options (a
-    // capped list, or a default set against a value since removed from the
-    // data) — still show it as selected text rather than silently reverting
-    // the widget to "All".
-    if (cur.value && !values.includes(cur.value)) {
-      const extra = document.createElement('option');
-      extra.value = cur.value;
-      extra.textContent = cur.value;
-      sel.appendChild(extra);
-    }
-    sel.value = cur.value || '';
-    if (total > values.length) note.textContent = 'Showing ' + values.length + ' of ' + total + '.';
-  })();
+  let loaded = false;
+  function loadOptions(): void {
+    if (loaded || !currentProjectId) return;
+    loaded = true;
+    (async () => {
+      let res: any = null;
+      try {
+        res = await window.hub.datasetDistinct(currentProjectId as string, control.datasetId, control.column, 500);
+      } catch (_) {
+        res = null;
+      }
+      // The card may have been torn down (a DIFFERENT control's change
+      // re-rendered the whole grid) by the time this resolves — a detached
+      // <select> is harmless to keep populating, but there's nothing to show.
+      const values: string[] = res && Array.isArray(res.values) ? res.values : [];
+      const total = res && typeof res.total === 'number' ? res.total : values.length;
+      const keep = sel.value; // the placeholder <option> above, if one was added
+      values.forEach((v) => {
+        if (v === keep) return; // already present as the placeholder — no duplicate
+        const o = document.createElement('option');
+        o.value = v;
+        o.textContent = v;
+        sel.appendChild(o);
+      });
+      // Still might not be among the loaded page (a capped list, or a default
+      // set against a value since removed from the data) — the placeholder
+      // <option> added at render time already covers that; nothing more to do.
+      sel.value = cur.value || '';
+      if (total > values.length) note.textContent = 'Showing ' + values.length + ' of ' + total + '.';
+    })();
+  }
+  sel.addEventListener('focus', loadOptions);
+  sel.addEventListener('mousedown', loadOptions);
 }
 
 // ── Multi (checkbox-list popover) ───────────────────────────────────────────

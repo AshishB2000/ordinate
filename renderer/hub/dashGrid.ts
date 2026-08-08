@@ -293,6 +293,14 @@ function destroyDashCharts(): void {
 function renderDashGrid(): void {
   const grid = dashEl('dash-grid');
   if (!grid) return;
+  // The multi control's popover (dashControls.ts) is body-mounted OUTSIDE the
+  // grid specifically to escape a card's clipping ancestor, so wiping the grid
+  // below does not remove it — left open, its `anchor` goes stale the instant
+  // its card is torn down, and the next scroll/resize would reposition it off
+  // a detached element. Any card's change (a DIFFERENT control, a drag, a
+  // resize, an add) can trigger this render, so it is closed unconditionally,
+  // not just when a second popover is about to open.
+  if (openControlPopover) openControlPopover();
   destroyDashCharts();
   grid.innerHTML = '';
   const page = dashCurrentPage();
