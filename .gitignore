@@ -233,3 +233,11 @@ scripts/**/*.js
 /renderer/hub/hubNotify.js
 /renderer/hub/hubCapture.js
 /renderer/hub/hubResultMenus.js
+
+# dashboards.ts split by job (.claude/rules/file-size.md) — emitted siblings.
+/renderer/hub/dashList.js
+/renderer/hub/dashGrid.js
+/renderer/hub/dashAdd.js
+/renderer/hub/dashFiltersUi.js
+/renderer/hub/dashAi.js
+/renderer/hub/dashShare.js

@@ -1,0 +1,406 @@
+// The dashboard-wide filter UI: the toolbar chips, and click-a-bar-to-filter.
+//
+// NAMED …Ui ON PURPOSE. src/dashboardFilters.ts is the rule module — pure,
+// node-tested, and the thing that decides what a filter MEANS. This is only the
+// surface that collects one. The two must never be confusable at a glance.
+//
+// Split verbatim out of dashboards.ts — see .claude/rules/file-size.md. Classic
+// global-scope renderer <script>: no import/export. Loads AFTER dashboards.js,
+// which keeps the module-local state (dashCurrent, dashMode, dashReadOnly,
+// dashDirty, chartInstances, …) that every function here reads and writes —
+// that state is NOT duplicated, and there is deliberately no accessor layer
+// around it, because the renderer is one shared global scope by design.
+
+// ── Click-to-filter ──────────────────────────────────────────────────────────
+// Opt-in per visual (overrides.crossFilter, default off): clicking a bar/slice
+// applies that category value as a DASHBOARD filter, so every other card on the
+// sheet narrows with it. Off by default because a click that silently refilters
+// every other card is a surprise, and the sheet already has an explicit filter
+// bar for the deliberate case.
+//
+// The hit-test itself is `chartMarkAt` (chartControls.ts), shared with the
+// drill-down panel — a DOM listener over the stored Chart instance, NOT
+// options.onClick: buildChart is shared with the capture surface and the Visuals
+// builder, and neither of those should grow a dashboard behaviour.
+//
+// Returns true when this card claimed the plain click, so the caller can wire
+// drill-down on it instead. Cross-filter WRITES a filter and drill only READS,
+// so when both are possible the write keeps the gesture and drilling moves to
+// the ⋯ menu — one click never does two things.
+function wireCrossFilter(area: HTMLElement, visual: any): boolean {
+  const ov = (visual && visual.overrides) || {};
+  if (!ov.crossFilter || dashReadOnly) return false;
+  const column = visual && visual.encoding && visual.encoding.category;
+  if (!column) return false; // nothing to filter ON — a click would mean nothing
+  area.classList.add('is-crossfilter');
+  area.addEventListener('click', (e) => {
+    // Maps and tables draw no Chart.js instance, so `chartMarkAt` is null and a
+    // click on one does nothing rather than throwing.
+    const mark = chartMarkAt(area, e);
+    if (!mark) return; // a click on empty canvas is not a filter
+    applyCrossFilter(String(column), mark.category);
+  });
+  return true;
+}
+
+/** Toggle the clicked value on the sheet's filter list, then redraw everything. */
+function applyCrossFilter(column: string, value: unknown): void {
+  if (!dashCurrent || dashReadOnly) return; // a published snapshot is not editable
+  dashCurrent.filters = toggleCrossFilterSteps(dashCurrent.filters, column, value);
+  markDashDirty();
+  renderDashFilterBar();
+  renderDashGrid();
+}
+
+// Renderer-side mirror of src/dashboardFilters.toggleCrossFilter — same rule,
+// same shape. That module is the node-tested one; this is the live grid's copy,
+// exactly as mergeDashFilters above mirrors mergeDashboardFilters.
+function toggleCrossFilterSteps(filters: any, column: string, value: unknown): any[] {
+  const list = (Array.isArray(filters) ? filters : []).filter((s: any) => s && s.type === 'filter');
+  if (!column) return list.slice();
+  const v = value == null ? '' : String(value);
+  const same = (s: any): boolean => s.column === column && s.op === '=';
+  const already = list.some((s: any) => same(s) && String(s.value == null ? '' : s.value) === v);
+  const rest = list.filter((s: any) => !same(s));
+  return already ? rest : rest.concat([{ type: 'filter', column, op: '=', value: v }]);
+}
+
+// The ONE app-computed number (main-only; never the model, never the renderer).
+async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
+  const m = card.metric || {};
+  body.innerHTML = '';
+  const valEl = document.createElement('div');
+  valEl.className = 'dash-metric-value';
+  valEl.textContent = '…';
+  const labelEl = document.createElement('div');
+  labelEl.className = 'dash-metric-label';
+  labelEl.textContent = m.label || ((DASH_AGG_LABELS[m.aggregation as DashAgg] || m.aggregation) + ' of ' + (m.column || ''));
+  body.appendChild(valEl);
+  body.appendChild(labelEl);
+
+  if (!currentProjectId || !m.datasetId || !m.column || !m.aggregation) { valEl.textContent = '—'; return; }
+  let r: any;
+  try {
+    // Dashboard-wide filters are applied over the dataset in MAIN before the number is
+    // computed (still 100% app-computed; the renderer never does the math).
+    r = await window.hub.computeMetric(
+      currentProjectId, m.datasetId, m.column, m.aggregation,
+      (dashCurrent && Array.isArray(dashCurrent.filters)) ? dashCurrent.filters : [],
+    );
+  } catch (_) {
+    r = { ok: false };
+  }
+  if (!r || r.ok === false) { dashCardMissing(body, (r && r.error) || 'Source removed', true); return; }
+  if (r.value == null) { valEl.textContent = '—'; return; }
+  // Reuse the shared chart number formatter (auto/plain/thousands/compact/…).
+  valEl.textContent = fmtWith(r.value, m.format || 'auto');
+}
+
+function renderTextCard(card: any, body: HTMLElement): void {
+  body.innerHTML = '';
+  if (card.heading) {
+    const h = document.createElement('div');
+    h.className = 'dash-card-h';
+    h.textContent = String(card.heading);
+    body.appendChild(h);
+  }
+  if (card.text) {
+    const p = document.createElement('p');
+    p.className = 'dash-card-p';
+    p.textContent = String(card.text);
+    body.appendChild(p);
+  }
+  if (!card.heading && !card.text) {
+    const p = document.createElement('p');
+    p.className = 'dash-card-p';
+    p.textContent = '(empty text card)';
+    body.appendChild(p);
+  }
+}
+
+// A card whose source (visual / dataset) is gone. `broken` marks it with a clear badge
+// (visible in presentation + exports) so a stale link is obvious at a glance rather than
+// a bare dash. Never throws — the card degrades to a placeholder, the rest keep working.
+function dashCardMissing(body: HTMLElement, msg: string, broken?: boolean): void {
+  body.innerHTML = '';
+  const m = document.createElement('div');
+  m.className = 'dash-card-missing';
+  m.textContent = msg;
+  body.appendChild(m);
+  if (!broken) return;
+  const cardEl = body.closest('.dash-card') as HTMLElement | null;
+  if (!cardEl) return;
+  cardEl.classList.add('dash-card--broken');
+  const head = cardEl.querySelector('.dash-card-head') as HTMLElement | null;
+  if (head && !head.querySelector('.dash-card-broken-badge')) {
+    const badge = document.createElement('span');
+    badge.className = 'dash-card-broken-badge';
+    badge.textContent = 'Source removed';
+    // Sit the badge right after the title so it reads before the controls.
+    const title = head.querySelector('.dash-card-title');
+    if (title && title.nextSibling) head.insertBefore(badge, title.nextSibling);
+    else head.appendChild(badge);
+  }
+}
+
+// Renderer-side mirror of src/dashboardFilters.mergeDashboardFilters: dashboard filters
+// FIRST, then the card's own, dropping byte-identical steps. Kept tiny + local (the
+// pure main module is node-tested; this is the same rule for the live grid).
+function mergeDashFilters(dashFilters: any, cardFilters: any): any[] {
+  const dash = Array.isArray(dashFilters) ? dashFilters : [];
+  const card = Array.isArray(cardFilters) ? cardFilters : [];
+  const out: any[] = [];
+  const seen = new Set<string>();
+  dash.concat(card).forEach((s: any) => {
+    if (!s || s.type !== 'filter') return;
+    const k = JSON.stringify([s.column, s.op, s.value == null ? null : s.value]);
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push(s);
+  });
+  return out;
+}
+
+
+// ── Dashboard-wide filters (toolbar) ──────────────────────────────────────────
+// Filter steps reuse the Week 6 FilterStep vocabulary. Value-less operators need no
+// value input.
+const DASH_FILTER_OPS: Array<{ value: string; label: string }> = [
+  { value: '=', label: 'equals' },
+  { value: '!=', label: 'not equals' },
+  { value: '>', label: 'greater than' },
+  { value: '<', label: 'less than' },
+  { value: '>=', label: 'at least' },
+  { value: '<=', label: 'at most' },
+  { value: 'contains', label: 'contains' },
+  { value: 'is_empty', label: 'is empty' },
+  { value: 'not_empty', label: 'is not empty' },
+  { value: 'in', label: 'is any of' },
+  { value: 'not in', label: 'is none of' },
+];
+const DASH_VALUELESS_OPS = new Set(['is_empty', 'not_empty']);
+
+function dashFilters(): any[] {
+  if (!dashCurrent) return [];
+  if (!Array.isArray(dashCurrent.filters)) dashCurrent.filters = [];
+  return dashCurrent.filters;
+}
+
+function dashFilterLabel(step: any): string {
+  const opLabel = (DASH_FILTER_OPS.find((o) => o.value === step.op) || { label: step.op }).label;
+  if (DASH_VALUELESS_OPS.has(step.op)) return `${step.column} ${opLabel}`;
+  if (isListFilterOp(step.op)) {
+    const vals = Array.isArray(step.values) ? step.values : [];
+    // Long lists are summarised — a chip carrying 40 values is unreadable and
+    // pushes every other chip off the bar.
+    const shown = vals.length > 3 ? `${formatFilterValues(vals.slice(0, 3))} +${vals.length - 3}` : formatFilterValues(vals);
+    return `${step.column} ${opLabel} ${shown || '(none)'}`.trim();
+  }
+  return `${step.column} ${opLabel} ${step.value == null ? '' : String(step.value)}`.trim();
+}
+
+function renderDashFilterBar(): void {
+  const chips = dashEl('dash-filter-chips');
+  if (!chips) return;
+  chips.innerHTML = '';
+  const list = dashFilters();
+  list.forEach((step: any, i: number) => {
+    const chip = document.createElement('span');
+    chip.className = 'dash-filter-chip';
+    // The chip's text is the edit affordance — a button, not a span, so it is
+    // keyboard-reachable and announces itself.
+    const txt = document.createElement('button');
+    txt.type = 'button';
+    txt.className = 'dash-filter-chip-txt';
+    txt.textContent = dashFilterLabel(step);
+    txt.setAttribute('aria-label', 'Edit filter: ' + dashFilterLabel(step));
+    txt.addEventListener('click', () => { void handleEditDashFilter(i); });
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'dash-filter-chip-x';
+    x.setAttribute('aria-label', 'Remove filter');
+    x.textContent = '×';
+    x.addEventListener('click', () => removeDashFilterAt(i));
+    chip.appendChild(txt);
+    chip.appendChild(x);
+    chips.appendChild(chip);
+  });
+  if (list.length === 0) {
+    const none = document.createElement('span');
+    none.className = 'dash-filter-none';
+    none.textContent = 'None';
+    chips.appendChild(none);
+  }
+  dashShow('dash-clear-filters', list.length > 0);
+}
+
+// Any filter change re-renders every card with the merged filters, then debounce-saves.
+function afterDashFilterChange(): void {
+  markDashDirty();
+  renderDashFilterBar();
+  renderDashGrid();
+}
+
+function removeDashFilterAt(i: number): void {
+  const list = dashFilters();
+  if (i < 0 || i >= list.length) return;
+  list.splice(i, 1);
+  afterDashFilterChange();
+}
+
+function handleClearDashFilters(): void {
+  if (!dashCurrent) return;
+  dashCurrent.filters = [];
+  afterDashFilterChange();
+}
+
+// Replace any existing filter on the same column (category/period quick controls upsert),
+// else append.
+function upsertDashFilter(step: any): void {
+  const list = dashFilters();
+  const at = list.findIndex((s: any) => s.column === step.column);
+  if (at >= 0) list[at] = step;
+  else list.push(step);
+  afterDashFilterChange();
+}
+
+// Shared picker: choose a project dataset, then a column from it. Returns the loaded
+// dataset + column name, or null if cancelled / nothing to pick. A dashboard filter
+// references a column BY NAME and applies to any card whose dataset has it (skipped
+// elsewhere), so sourcing names/values from one dataset is enough.
+async function pickDatasetAndColumn(
+  columnFilter?: (c: any) => boolean,
+): Promise<{ ds: any; column: string } | null> {
+  if (!currentProjectId) { window.alert('Open a project first.'); return null; }
+  let datasets: any[] = [];
+  try { datasets = await window.hub.listDatasets(currentProjectId); } catch (_) { datasets = []; }
+  if (!Array.isArray(datasets)) datasets = [];
+  const dsId = await dashChooseModal(
+    'Filter — pick a dataset',
+    datasets.map((d) => ({ value: String(d.id), label: d && d.name ? String(d.name) : 'Untitled dataset' })),
+    'Next',
+  );
+  if (dsId === null) return null;
+  let ds: any = null;
+  try { ds = await window.hub.getDatasetMeta(currentProjectId, dsId); } catch (_) { ds = null; }
+  let cols = ds && Array.isArray(ds.columns) ? ds.columns : [];
+  if (columnFilter) cols = cols.filter(columnFilter);
+  const column = await dashChooseModal(
+    'Filter — pick a column',
+    cols.map((c: any) => ({ value: String(c.name), label: String(c.name) + (c.type ? ' (' + c.type + ')' : '') })),
+    'Next',
+  );
+  if (column === null) return null;
+  return { ds, column };
+}
+
+// Distinct non-empty values of a column, as chooser options (capped so the select stays
+// usable). Values are kept as strings — filters compare type-aware in MAIN.
+//
+// Computed in MAIN off the Parquet (`dataset:distinct`). This used to scan
+// `ds.rows` here, which meant hydrating the entire table into the renderer to
+// collect at most 200 options — ~4 s at the 1,000,000-row cap, inside a
+// modal-open path. `src/datasetPage.distinctValuesJs` is the reference this loop
+// became; it kept the same rules, including that "empty" is only `null` and `''`
+// (a whitespace-only value is a legitimate option).
+async function distinctColumnOptions(
+  datasetId: string,
+  column: string,
+): Promise<Array<{ value: string; label: string }>> {
+  if (!currentProjectId || !datasetId || !column) return [];
+  try {
+    const res = await window.hub.datasetDistinct(currentProjectId, datasetId, column, 200);
+    const values = res && Array.isArray(res.values) ? res.values : [];
+    return values.map((v: string) => ({ value: String(v), label: String(v) }));
+  } catch (_) {
+    return [];
+  }
+}
+
+// Mirrors src/dashboardFilters.stepKey — `values` is part of the identity, or
+// two different `in` lists on one column would look like the same chip.
+function dashStepKey(s: any): string {
+  return JSON.stringify([s.column, s.op, s.value == null ? null : s.value, s.values == null ? null : s.values]);
+}
+
+// + Filter: dataset → column → the type-aware dialog. The dialog replaces the
+// old operator-pick + value-prompt pair, which asked the user to know that a
+// dimension wants `in` and a measure wants a range before it would show them
+// anything about the column.
+async function handleAddDashFilter(): Promise<void> {
+  const picked = await pickDatasetAndColumn();
+  if (!picked) return;
+  const cols = picked.ds && Array.isArray(picked.ds.columns) ? picked.ds.columns : [];
+  const col = cols.find((c: any) => c && String(c.name) === picked.column);
+  const steps = await openFilterDialog({
+    projectId: currentProjectId || '',
+    datasetId: String(picked.ds && picked.ds.id ? picked.ds.id : ''),
+    column: picked.column,
+    type: col && col.type ? String(col.type) : 'text',
+  });
+  if (steps === null || steps.length === 0) return;
+
+  const list = dashFilters();
+  // A min/max range arrives as two steps; each is de-duped on its own.
+  for (const step of steps) {
+    const k = dashStepKey(step);
+    if (!list.some((s: any) => dashStepKey(s) === k)) list.push(step);
+  }
+  afterDashFilterChange();
+}
+
+// Clicking a chip re-opens the dialog on that step. Replacing it in place keeps
+// its position in the bar, so an edit does not reshuffle every other chip.
+async function handleEditDashFilter(idx: number): Promise<void> {
+  const list = dashFilters();
+  const step = list[idx];
+  if (!step || !currentProjectId) return;
+  // The bar spans datasets, so the chip's own dataset is whichever one actually
+  // has this column — the same "skip a filter whose column is absent" rule the
+  // merge follows. Falling back to the first dataset keeps the dialog usable
+  // rather than refusing to open.
+  let datasets: any[] = [];
+  try { datasets = await window.hub.listDatasets(currentProjectId); } catch (_) { datasets = []; }
+  let dsId = '';
+  let type = 'text';
+  for (const d of Array.isArray(datasets) ? datasets : []) {
+    let meta: any = null;
+    try { meta = await window.hub.getDatasetMeta(currentProjectId, String(d.id)); } catch (_) { meta = null; }
+    const col = meta && Array.isArray(meta.columns)
+      ? meta.columns.find((c: any) => c && String(c.name) === step.column)
+      : null;
+    if (col) { dsId = String(d.id); type = col.type ? String(col.type) : 'text'; break; }
+  }
+  const steps = await openFilterDialog({
+    projectId: currentProjectId,
+    datasetId: dsId,
+    column: step.column,
+    type,
+    existing: step,
+  });
+  if (steps === null) return;
+  list.splice(idx, 1, ...steps);
+  afterDashFilterChange();
+}
+
+// Category quick control: dataset → column → a distinct value → upsert `=` on that column.
+async function handleDashCategory(): Promise<void> {
+  const picked = await pickDatasetAndColumn();
+  if (!picked) return;
+  const opts = await distinctColumnOptions(String(picked.ds && picked.ds.id ? picked.ds.id : ""), picked.column);
+  const value = await dashChooseModal('Category — pick a value', opts, 'Apply');
+  if (value === null) return;
+  upsertDashFilter({ type: 'filter', column: picked.column, op: '=', value });
+}
+
+// Period quick control: like Category but scoped to date columns (falls back to all if a
+// dataset has none). Kept intentionally simple (single value, `=`) per the brief.
+async function handleDashPeriod(): Promise<void> {
+  const picked = await pickDatasetAndColumn((c) => c && c.type === 'date');
+  if (!picked) return;
+  const opts = await distinctColumnOptions(String(picked.ds && picked.ds.id ? picked.ds.id : ""), picked.column);
+  const value = await dashChooseModal('Period — pick a value', opts, 'Apply');
+  if (value === null) return;
+  upsertDashFilter({ type: 'filter', column: picked.column, op: '=', value });
+}
+

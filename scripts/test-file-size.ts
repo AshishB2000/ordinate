@@ -60,7 +60,6 @@ const ALLOWED: Record<string, number> = {
   'renderer/hub/authoring.ts': 1341,
   'renderer/hub/chartRender.ts': 1097,
   'renderer/hub/connections.ts': 1076,
-  'renderer/hub/dashboards.ts': 2340,
   'renderer/hub/datasets.ts': 1271,
   'renderer/hub/mapRender.ts': 834,
   'renderer/hub/prepare.ts': 944,
