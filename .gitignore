@@ -226,3 +226,10 @@ scripts/**/*.js
 
 # File-size ratchet (.claude/rules/file-size.md) — emitted sibling.
 /scripts/test-file-size.js
+
+# hub.ts split by job (.claude/rules/file-size.md) — emitted siblings.
+/renderer/hub/hubHotkey.js
+/renderer/hub/hubMenus.js
+/renderer/hub/hubNotify.js
+/renderer/hub/hubCapture.js
+/renderer/hub/hubResultMenus.js

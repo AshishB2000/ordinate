@@ -62,7 +62,6 @@ const ALLOWED: Record<string, number> = {
   'renderer/hub/connections.ts': 1076,
   'renderer/hub/dashboards.ts': 2340,
   'renderer/hub/datasets.ts': 1271,
-  'renderer/hub/hub.ts': 2051,
   'renderer/hub/mapRender.ts': 834,
   'renderer/hub/prepare.ts': 944,
   'renderer/hub/visuals.ts': 1284,

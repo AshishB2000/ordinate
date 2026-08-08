@@ -2178,6 +2178,18 @@
 <script src="authoring.js"></script>
 <script src="analyses.js"></script>
 <script src="copilot.js"></script>
+<!-- hub.ts was 2051 lines; these five are it, split by job (.claude/rules/file-size.md).
+     ORDER IS LOAD-BEARING among them, for the same reason it is for the group above:
+     a classic script's top-level const/let is in TDZ until its own file has run, so a
+     file may only READ another's at load time if that other file is already listed.
+     hubMenus declares execMode/execByok/execLocal, which hubNotify's load-time
+     refreshKeyStatus() writes; hubCapture declares the lightbox and thumbnail elements,
+     which hubResultMenus wires at load time. hub.js stays LAST — it is the boot file. -->
+<script src="hubHotkey.js"></script>
+<script src="hubMenus.js"></script>
+<script src="hubNotify.js"></script>
+<script src="hubCapture.js"></script>
+<script src="hubResultMenus.js"></script>
 <script src="hub.js"></script>
 
 <!-- Phase 5 — the Svelte islands bundle. An IIFE assigning ONE global
