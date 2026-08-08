@@ -164,6 +164,19 @@ function makeSavedItem(d: any): HTMLElement {
     actions.appendChild(btn);
   }
 
+  // Combine… opens the composer with THIS dataset as the base. It is the same
+  // page the import flow lands on — one flow, not a second combine dialog.
+  const comb = document.createElement('button');
+  comb.type = 'button';
+  comb.className = 'ds-saved-combine';
+  comb.setAttribute('aria-label', `Combine ${d && d.name ? d.name : 'dataset'} with another dataset`);
+  comb.textContent = 'Combine…';
+  comb.addEventListener('click', (e) => {
+    e.stopPropagation();
+    void openComposerOnDataset(String(d.id), String((d && d.name) || 'Dataset'));
+  });
+  actions.appendChild(comb);
+
   const del = document.createElement('button');
   del.type = 'button';
   del.className = 'ds-saved-del';

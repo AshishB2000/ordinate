@@ -5183,35 +5183,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 
 /* ── The combine dialog ──────────────────────────────────────────────────────
    Narrower than the import one: two pickers and a mode, not a preview table. */
-.ds-combine-overlay[hidden] { display: none; }
-.ws-modal.ds-combine-modal {
-  width: min(560px, calc(100vw - 48px));
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  gap: 0;
-}
-.ds-combine-modal .ds-combine-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.ds-combine-modal .ds-combine-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.ds-combine-modal .ds-combine-row .ds-sheet-label {
-  flex: 0 0 96px;
-}
-.ds-combine-modal .ds-combine-select { flex: 1 1 160px; min-width: 0; }
-.ds-combine-foot {
-  justify-content: flex-end;
-  border-top: 1px solid var(--border);
-  padding: 12px 20px 16px;
-  margin: 0;
-}
 
 /* ── The explorer's tabs ─────────────────────────────────────────────────────
    The underline strip the authoring panel already uses (.an-tabs / .an-tab),
@@ -8624,43 +8595,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   display: flex;
   gap: 8px;
 }
-.ds-combine-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-.ds-combine-h {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-strong);
-  margin: 0;
-}
-.ds-combine-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.ds-combine-select,
-.ds-combine-mode,
-.ds-combine-key {
-  padding: 7px 10px;
-  font-size: 13px;
-  color: var(--text-strong);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  box-sizing: border-box;
-  max-width: 260px;
-}
-.ds-combine-eq {
-  color: var(--muted);
-}
-.ds-combine-note {
-  font-size: 13px;
-}
 
 /* ── AI Copilot panel (Week 11) ─────────────────────────────────────────────
    Theme-aware via the shared CSS vars (no hard-coded colors). CSP forbids inline
@@ -9648,3 +9582,175 @@ body.cap-focus .cap-back {
   gap: 8px;
   flex: 0 0 auto;
 }
+
+/* ── The dataset composer ─────────────────────────────────────────────────────
+   A third view of the Data panel, mutually exclusive with the list and the
+   explorer. `.is-composing` is set by dataSection.ts off #ds-composer's own
+   `hidden` bit, exactly as `.is-exploring` is off the explorer's.
+
+   Note the explicit `[hidden] { display: none }` on every element below that
+   also sets a `display`: an author `display` beats the UA `[hidden]` rule, and
+   that is precisely how eight elements in this section ended up permanently on
+   screen before PR #84 found them. */
+#ws-datasets .ds-panel.is-composing .ds-saved,
+#ws-datasets .ds-panel.is-composing .ds-explorer { display: none; }
+
+.ds-composer { display: flex; flex-direction: column; gap: 12px; min-height: 0; flex: 1 1 auto; }
+.ds-composer[hidden] { display: none; }
+
+.ds-composer-head {
+  display: flex; align-items: center; gap: 10px;
+  padding-bottom: 10px; border-bottom: 1px solid var(--border);
+}
+.ds-composer-head .dc-kicker { color: var(--muted); font-size: 12px; }
+.dc-name {
+  flex: 0 1 280px; min-width: 0;
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 13px;
+}
+.dc-count { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.dc-body { display: flex; gap: 14px; min-height: 0; flex: 1 1 auto; }
+
+/* Sources */
+.dc-sources {
+  flex: 0 0 260px; min-width: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 14px;
+  padding-right: 12px; border-right: 1px solid var(--border);
+}
+.dc-src-group { display: flex; flex-direction: column; gap: 6px; }
+.dc-src-group[hidden] { display: none; }
+.dc-src-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.dc-src-list { display: flex; flex-direction: column; gap: 4px; }
+.dc-src {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); color: var(--text); text-align: left; cursor: grab; font: inherit;
+}
+.dc-src:hover { border-color: var(--accent); background: var(--surface-2); }
+.dc-src:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dc-src-name { font-size: 13px; }
+.dc-src-meta { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.dc-src-used { opacity: .55; cursor: default; }
+.dc-src-empty { font-size: 12px; color: var(--muted); }
+.dc-src-empty[hidden] { display: none; }
+
+/* Canvas — a horizontal chain, never free 2-D placement. */
+.dc-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.dc-canvas {
+  display: flex; align-items: center; gap: 0; flex-wrap: nowrap; overflow-x: auto;
+  min-height: 96px; padding: 14px 16px; border-radius: 10px;
+  background-color: var(--surface-2);
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+.dc-canvas-over { outline: 2px dashed var(--accent); outline-offset: -4px; }
+.dc-canvas-empty { color: var(--muted); font-size: 13px; }
+.dc-chip {
+  position: relative; flex: 0 0 auto;
+  display: flex; flex-direction: column; gap: 2px;
+  min-width: 132px; padding: 9px 12px;
+  border: 1px solid var(--border); border-radius: 9px;
+  background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+}
+.dc-chip-name { font-size: 13px; }
+.dc-chip-meta { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.dc-chip-kind {
+  align-self: flex-start; margin-top: 2px; padding: 1px 6px; border-radius: 999px;
+  background: var(--surface-2); color: var(--muted); font-size: 10px; text-transform: uppercase;
+}
+.dc-chip-x {
+  position: absolute; top: -7px; right: -7px; width: 18px; height: 18px;
+  display: none; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: 50%;
+  background: var(--surface); color: var(--muted); font-size: 10px; cursor: pointer;
+}
+.dc-chip:hover .dc-chip-x,
+.dc-chip-x:focus-visible { display: flex; }
+
+/* The link line + its join badge. */
+.dc-link { flex: 0 0 auto; display: flex; align-items: center; }
+.dc-link::before,
+.dc-link::after { content: ''; width: 18px; height: 1px; background: var(--border); }
+.dc-badge {
+  display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; padding: 0;
+  border: 1px solid var(--border); border-radius: 50%;
+  background: var(--surface); color: var(--accent); cursor: pointer;
+}
+.dc-badge:hover { border-color: var(--accent); }
+.dc-badge:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dc-badge-warn { color: var(--warn); border-color: var(--warn); }
+
+/* Warnings are part of the product, not console noise. */
+.dc-warnings { display: flex; flex-direction: column; gap: 4px; }
+.dc-warnings[hidden] { display: none; }
+.dc-warning {
+  padding: 6px 10px; border-radius: 6px;
+  background: var(--warn-soft); color: var(--text); font-size: 12px;
+}
+
+/* Preview — its header row IS the field mapper. */
+.dc-preview { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.dc-grid-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+.dc-grid-empty { padding: 22px; color: var(--muted); font-size: 13px; text-align: center; }
+.dc-table { border-collapse: collapse; width: max-content; min-width: 100%; font-size: 12px; }
+.dc-table th, .dc-table td { border-bottom: 1px solid var(--border); text-align: left; }
+.dc-table td { padding: 5px 10px; white-space: nowrap; }
+.dc-th { padding: 0; background: var(--surface-2); position: sticky; top: 0; z-index: 1; }
+.dc-th-btn {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 7px 10px; border: 0; background: none; color: var(--text);
+  font: inherit; font-size: 12px; cursor: pointer;
+}
+.dc-th-btn:hover { background: var(--surface-3); }
+.dc-th-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.dc-th-type { color: var(--muted); font-size: 10px; text-transform: uppercase; }
+.dc-th-caret { color: var(--muted); font-size: 9px; }
+.dc-th-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+.dc-th-dropped { width: 26px; padding: 0; background: var(--surface-2); position: sticky; top: 0; z-index: 1; }
+.dc-restore {
+  width: 26px; padding: 7px 0; border: 0; background: none;
+  color: var(--muted); font-size: 12px; cursor: pointer;
+}
+.dc-restore:hover { color: var(--accent); }
+.dc-td-dropped { width: 26px; opacity: .25; }
+.dc-pager { display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
+.dc-pager[hidden] { display: none; }
+.dc-page-label { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* The two popovers. Positioned from JS (element.style is fine under the CSP;
+   only an inline style= ATTRIBUTE in the HTML is not). */
+.dc-pop {
+  position: fixed; z-index: 60; min-width: 220px;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 12px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+}
+.dc-pop[hidden] { display: none; }
+.dc-pop-title { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.dc-pop-label { font-size: 11px; color: var(--muted); }
+.dc-pop-note { font-size: 11px; color: var(--warn); }
+.dc-pop-note[hidden] { display: none; }
+.dc-modes { display: flex; gap: 6px; }
+.dc-mode {
+  flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 7px 4px; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); color: var(--muted); font: inherit; font-size: 11px; cursor: pointer;
+}
+.dc-mode:hover { border-color: var(--accent); }
+.dc-mode-on { border-color: var(--accent); color: var(--accent); background: var(--surface-2); }
+.dc-keys { display: flex; align-items: center; gap: 6px; }
+.dc-keys[hidden] { display: none; }
+.dc-key {
+  flex: 1 1 0; min-width: 0; padding: 5px 7px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 12px;
+}
+.dc-key-eq { color: var(--muted); font-size: 12px; }
+.dc-col-pop { min-width: 210px; }
+.dc-col-name, .dc-col-type {
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 12px;
+}
+.dc-col-drop { align-self: flex-start; color: var(--error); }

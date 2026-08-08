@@ -283,3 +283,5 @@ scripts/**/*.js
 /src/ids.js
 /src/datasetOrigin.js
 /src/ipc/datasetCompose.js
+/renderer/hub/composer.js
+/scripts/smoke-composer.js

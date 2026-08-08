@@ -10,6 +10,21 @@ All notable changes to Ordinate are documented here. Format based on
 ## [Unreleased]
 
 ### Added
+- **Creating a dataset is a page, not a dialog.** Picking any source opens the **composer**: the
+  tables you are combining sit on a canvas with visible join links, the result previews live
+  underneath, and the preview's own header row is where you rename, retype and drop columns. Import
+  is now: pick a source → composer → Save.
+- **Combine as many tables as you like**, not two. Drag or click a saved dataset onto the canvas to
+  chain it on; each link has its own join type and key pair.
+- **Left joins.** A join can now keep every row on the left and leave blanks where there is no
+  match, instead of only keeping rows that match on both sides. Click a join badge to switch between
+  Inner, Left and Append and watch the row count change.
+- **Field mapping is reversible.** Renames and drops land as ordinary prepare steps, so a composed
+  dataset opens in the explorer with its pipeline visible and every mapping removable — exactly like
+  a step added later. A dropped column collapses to a restore stub rather than vanishing.
+- **A composed dataset refreshes.** Re-fetching it refreshes every table it was built from and
+  re-runs the combination over the fresh rows, keeping your prepare pipeline. If one of those tables
+  has been deleted it refuses, says which, and leaves the stored data exactly as it was.
 - **See the rows behind any number.** Click a bar, a slice or a point — or pick
   `⋯ → Show underlying rows` on any visual — and a panel slides over showing exactly the rows that
   produced it, paged, searchable and sortable. The filters that define the set are listed as chips,
@@ -80,9 +95,8 @@ All notable changes to Ordinate are documented here. Format based on
   toolbar that nobody scrolled to, and says "no quality issues found" when there is nothing to
   report. Prepare is a workbench — the steps on the left, the live grid on the right — so you can
   see what a step does to your data while you edit it.
-- **Combine datasets moved out of Prepare** and into its own action in the Data header. It creates a
-  new dataset rather than transforming one, so it never belonged at the bottom of a pipeline panel,
-  and it no longer requires opening some other dataset first to find it.
+- **Combine datasets moved out of Prepare** and into its own action in the Data header — and is now
+  the composer, not a dialog of four selects. There is one flow for making a dataset, not two.
 - **Internal: the ten biggest source files are split by job**, and a CI check now keeps them that
   way — no source file may exceed 800 lines, against an allowlist that can only shrink. Pure code
   movement, no behaviour change: `hub.ts` 2051 → 422, `dashboards.ts` 2340 → 269, and `authoring`,
