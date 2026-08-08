@@ -331,21 +331,25 @@ export function sanitizeCard(raw: unknown): Card | null {
   }
 
   if (type === 'control') {
-    // needs a known kind + a UUID-checked datasetId — unknown kind, same
-    // discipline as the whole-card `type` check above, drops the card; an
-    // invalid datasetId drops it too (unlike metric's datasetId, which never
-    // touches a path, this one is explicitly UUID-checked per the spec).
+    // needs a known kind + a UUID-checked datasetId + a non-empty column —
+    // unknown kind, same discipline as the whole-card `type` check above,
+    // drops the card; an invalid datasetId drops it too (unlike metric's
+    // datasetId, which never touches a path, this one is explicitly
+    // UUID-checked per the spec). `column` is required like metric's own
+    // column/aggregation (it decides what the control actually filters — a
+    // blank one would silently no-op every FilterStep it produces); `label`
+    // stays optional/decorative, so it alone defaults rather than dropping.
     const c = o.control && typeof o.control === 'object' ? (o.control as Record<string, unknown>) : null;
     if (!c) return null;
     const kind =
       typeof c.kind === 'string' && CONTROL_KINDS.has(c.kind) ? (c.kind as ControlKind) : null;
-    if (!kind) return null;
-    if (!isValidId(c.datasetId)) return null;
+    const column = typeof c.column === 'string' ? c.column : '';
+    if (!kind || !isValidId(c.datasetId) || !column) return null;
     const control: CardControl = {
       kind,
       label: typeof c.label === 'string' ? c.label : '',
       datasetId: c.datasetId,
-      column: typeof c.column === 'string' ? c.column : '',
+      column,
     };
     const def = sanitizeControlDefault(kind, c.default);
     if (def) control.default = def;

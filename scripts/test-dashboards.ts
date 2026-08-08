@@ -229,14 +229,36 @@ async function main(): Promise<void> {
     const noPayload = dashboards.sanitizeCard({ type: 'control', layout });
     ok('a control card with no `control` payload is dropped', noPayload === null);
 
-    // label/column are coerced defensively rather than rejected outright.
-    const nonStringFields = dashboards.sanitizeCard({
+    // `label` is decorative — a non-string value is coerced to '' and the
+    // card survives (column here is valid, so this isolates label alone).
+    const nonStringLabel = dashboards.sanitizeCard({
       type: 'control', layout,
-      control: { kind: 'dropdown', label: 42, datasetId: DATASET_ID, column: 99 },
+      control: { kind: 'dropdown', label: 42, datasetId: DATASET_ID, column: 'region' },
     });
-    ok('non-string label/column are coerced to empty strings, card kept',
-      nonStringFields !== null && nonStringFields.control !== undefined
-      && nonStringFields.control.label === '' && nonStringFields.control.column === '');
+    ok('a non-string label is coerced to an empty string, card kept',
+      nonStringLabel !== null && nonStringLabel.control !== undefined && nonStringLabel.control.label === '');
+
+    // `column` is FUNCTIONAL, not decorative — like metric's own column/
+    // aggregation, it is REQUIRED. A non-string or missing column must drop
+    // the whole card, not survive as `column: ''` (which would silently
+    // no-op every FilterStep controlSteps produces from it).
+    const nonStringColumn = dashboards.sanitizeCard({
+      type: 'control', layout,
+      control: { kind: 'dropdown', label: 'Region', datasetId: DATASET_ID, column: 99 },
+    });
+    ok('a non-string column drops the control card', nonStringColumn === null);
+
+    const emptyColumn = dashboards.sanitizeCard({
+      type: 'control', layout,
+      control: { kind: 'dropdown', label: 'Region', datasetId: DATASET_ID, column: '' },
+    });
+    ok('an empty-string column drops the control card', emptyColumn === null);
+
+    const missingColumn = dashboards.sanitizeCard({
+      type: 'control', layout,
+      control: { kind: 'dropdown', label: 'Region', datasetId: DATASET_ID },
+    });
+    ok('a missing column drops the control card', missingColumn === null);
   }
 
   // ── control cards: persist + reload through saveDashboard/getDashboard ───────
