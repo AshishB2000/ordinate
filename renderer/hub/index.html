@@ -2165,6 +2165,12 @@
 <script src="projects.js"></script>
 <script src="workspace.js"></script>
 <script src="datasets.js"></script>
+<!-- datasets.ts was 1271 lines; these five are it, split by job. datasets.js
+     stays first — it keeps the module-local state the rest read. -->
+<script src="dsImport.js"></script>
+<script src="dsList.js"></script>
+<script src="dsExplorer.js"></script>
+<script src="dsGrid.js"></script>
 <script src="dataSection.js"></script>
 <script src="captureDataset.js"></script>
 <script src="filterValues.js"></script>
@@ -2172,12 +2178,55 @@
 <script src="drill.js"></script>
 <script src="prepare.js"></script>
 <script src="connections.js"></script>
+<!-- connections.ts was 1076 lines; these three are it, split by job.
+     connections.js stays first — it keeps the connector contract and the
+     module-local state the other two read. -->
+<script src="connNew.js"></script>
+<script src="connRun.js"></script>
 <script src="encodingForm.js"></script>
 <script src="visuals.js"></script>
+<!-- visuals.ts was 1284 lines; these four are it, split by job. visuals.js
+     stays first — it keeps the module-local state the rest read. -->
+<script src="vizGallery.js"></script>
+<script src="vizNew.js"></script>
+<script src="vizBuilder.js"></script>
 <script src="dashboards.js"></script>
+<!-- dashboards.ts was 2340 lines; these six are it, split by job. dashboards.js
+     stays FIRST of the group — it keeps the module-local state the rest read —
+     and authoring.js / analyses.js stay after all of them, as before. -->
+<script src="dashList.js"></script>
+<script src="dashGrid.js"></script>
+<script src="dashAdd.js"></script>
+<script src="dashFiltersUi.js"></script>
+<script src="dashAi.js"></script>
+<script src="dashShare.js"></script>
 <script src="authoring.js"></script>
+<!-- authoring.ts was 1341 lines; these five are it, split by job. authoring.js
+     stays first — it keeps the module-local state the rest read. -->
+<script src="authoringRail.js"></script>
+<script src="authoringSelect.js"></script>
+<script src="authoringPanes.js"></script>
+<script src="authoringProps.js"></script>
 <script src="analyses.js"></script>
+<!-- analyses.ts was 1227 lines; these five are it, split by job. analyses.js
+     stays first — it keeps the module-local state the rest read. -->
+<script src="anList.js"></script>
+<script src="anNew.js"></script>
+<script src="anPublish.js"></script>
+<script src="anDraft.js"></script>
 <script src="copilot.js"></script>
+<!-- hub.ts was 2051 lines; these five are it, split by job (.claude/rules/file-size.md).
+     ORDER IS LOAD-BEARING among them, for the same reason it is for the group above:
+     a classic script's top-level const/let is in TDZ until its own file has run, so a
+     file may only READ another's at load time if that other file is already listed.
+     hubMenus declares execMode/execByok/execLocal, which hubNotify's load-time
+     refreshKeyStatus() writes; hubCapture declares the lightbox and thumbnail elements,
+     which hubResultMenus wires at load time. hub.js stays LAST — it is the boot file. -->
+<script src="hubHotkey.js"></script>
+<script src="hubMenus.js"></script>
+<script src="hubNotify.js"></script>
+<script src="hubCapture.js"></script>
+<script src="hubResultMenus.js"></script>
 <script src="hub.js"></script>
 
 <!-- Phase 5 — the Svelte islands bundle. An IIFE assigning ONE global

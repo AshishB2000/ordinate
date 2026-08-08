@@ -124,6 +124,7 @@ renderer-safe views and strip every raw key and secret. `executionReady()` gates
   pretended away — they unlock when strict comes back. No `any` without a comment.
 - **Lint is a real gate.** `npm run lint` = oxlint, type-aware, zero findings, blocking in CI. Not
   `typescript-eslint`, which refuses TS 7. Prettier stays advisory.
+- **File size is a real limit** (500 soft / 800 hard, CI-enforced): @.claude/rules/file-size.md
 - **Hub CSP is strict** (`default-src 'none'; style-src 'self'; script-src 'self'`): **no inline
   `style=` in hub HTML** — use `hub.css` classes. `element.style.x` from JS is fine.
 - **Heavy vendor bundles load on FIRST USE** (`lazyScript.ts`): pdfmake, pptxgenjs, docx, MapLibre.

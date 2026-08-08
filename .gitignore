@@ -223,3 +223,53 @@ scripts/**/*.js
 
 # Data-section layout (list-first restructure) — emitted sibling.
 /renderer/hub/dataSection.js
+
+# File-size ratchet (.claude/rules/file-size.md) — emitted sibling.
+/scripts/test-file-size.js
+
+# hub.ts split by job (.claude/rules/file-size.md) — emitted siblings.
+/renderer/hub/hubHotkey.js
+/renderer/hub/hubMenus.js
+/renderer/hub/hubNotify.js
+/renderer/hub/hubCapture.js
+/renderer/hub/hubResultMenus.js
+
+# dashboards.ts split by job (.claude/rules/file-size.md) — emitted siblings.
+/renderer/hub/dashList.js
+/renderer/hub/dashGrid.js
+/renderer/hub/dashAdd.js
+/renderer/hub/dashFiltersUi.js
+/renderer/hub/dashAi.js
+/renderer/hub/dashShare.js
+
+# authoring.ts split by job (.claude/rules/file-size.md) — emitted siblings.
+/renderer/hub/authoringRail.js
+/renderer/hub/authoringSelect.js
+/renderer/hub/authoringPanes.js
+/renderer/hub/authoringProps.js
+
+# datasets.ts split by job (.claude/rules/file-size.md) — emitted siblings.
+/renderer/hub/dsImport.js
+/renderer/hub/dsList.js
+/renderer/hub/dsExplorer.js
+/renderer/hub/dsGrid.js
+
+# visuals.ts split by job (.claude/rules/file-size.md) — emitted siblings.
+/renderer/hub/vizGallery.js
+/renderer/hub/vizNew.js
+/renderer/hub/vizBuilder.js
+
+# analyses.ts split by job (.claude/rules/file-size.md) — emitted siblings.
+/renderer/hub/anList.js
+/renderer/hub/anNew.js
+/renderer/hub/anPublish.js
+/renderer/hub/anDraft.js
+
+# connections.ts split by job (.claude/rules/file-size.md) — emitted siblings.
+/renderer/hub/connNew.js
+/renderer/hub/connRun.js
+
+# formula.ts split into tokenizer / evaluator / parser — emitted siblings.
+/src/formulaTokens.js
+/src/formulaEval.js
+/src/formulaParse.js
