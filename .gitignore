@@ -273,3 +273,7 @@ scripts/**/*.js
 /src/formulaTokens.js
 /src/formulaEval.js
 /src/formulaParse.js
+
+# The dataset composer — emitted siblings.
+/scripts/test-composeTables.js
+/src/combine.js

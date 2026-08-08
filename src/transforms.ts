@@ -121,7 +121,9 @@ const STEP_TYPES: ReadonlySet<string> = new Set([
   'rename_column',
 ]);
 
-function colIndex(columns: ParsedColumn[], name: string): number {
+// The three table helpers combine.ts shares. Exported for that, not as an
+// invitation — everything else in this file is the pipeline core.
+export function colIndex(columns: ParsedColumn[], name: string): number {
   return columns.findIndex((c) => c.name === name);
 }
 
@@ -130,7 +132,7 @@ function isEmptyCell(cell: Cell): boolean {
   return typeof cell === 'string' && cell.trim() === '';
 }
 
-function cellToString(cell: Cell): string {
+export function cellToString(cell: Cell): string {
   return cell == null ? '' : String(cell);
 }
 
@@ -138,7 +140,7 @@ function cellToString(cell: Cell): string {
 // path), set the column's type, then coerce every cell to match. Mutates the
 // (freshly-built, caller-owned) columns/rows arrays. Used after calculated_field
 // and fill_empty, and for combine outputs.
-function retypeColumn(columns: ParsedColumn[], rows: Cell[][], c: number): void {
+export function retypeColumn(columns: ParsedColumn[], rows: Cell[][], c: number): void {
   const strCells = rows.map((r) => cellToString(r[c]));
   const type = detectColumnType(strCells);
   columns[c] = { ...columns[c], type };
@@ -646,109 +648,4 @@ function sanitizeStep(item: unknown): TransformStep | null {
     default:
       return null;
   }
-}
-
-// ── combineTables: cross-dataset (pure; invoked ONLY by the IPC layer) ─────────
-//
-// NEVER called inside applyPipeline — that keeps the pipeline core single-source.
-// `append` unions columns by name and stacks rows (missing → null). `join` does a
-// left/inner join on the `on` pair, concatenating right's non-key columns. Both
-// re-detect column types over the combined cells (the strict-number path).
-
-export function combineTables(
-  left: TableData,
-  right: TableData,
-  mode: 'append' | 'join',
-  on?: { left: string; right: string },
-  limit = 50_000,
-): ApplyResult {
-  if (mode === 'append') return appendTables(left, right);
-  if (mode === 'join') return joinTables(left, right, on, limit);
-  return { columns: [], rows: [], rowCount: 0, warnings: [`Unknown combine mode "${mode}"`] };
-}
-
-function appendTables(left: TableData, right: TableData): ApplyResult {
-  const warnings: string[] = [];
-
-  // Union of column names, left order first then right's new names.
-  const names: string[] = left.columns.map((c) => c.name);
-  const seen = new Set(names);
-  for (const c of right.columns) {
-    if (!seen.has(c.name)) {
-      seen.add(c.name);
-      names.push(c.name);
-    }
-  }
-
-  const leftIdx = new Map(left.columns.map((c, i) => [c.name, i]));
-  const rightIdx = new Map(right.columns.map((c, i) => [c.name, i]));
-
-  const rows: Cell[][] = [];
-  for (const r of left.rows) {
-    rows.push(names.map((n) => (leftIdx.has(n) ? r[leftIdx.get(n) as number] ?? null : null)));
-  }
-  for (const r of right.rows) {
-    rows.push(names.map((n) => (rightIdx.has(n) ? r[rightIdx.get(n) as number] ?? null : null)));
-  }
-
-  const columns: ParsedColumn[] = names.map((name) => ({ name, type: 'text' }));
-  for (let c = 0; c < columns.length; c += 1) retypeColumn(columns, rows, c);
-
-  return { columns, rows, rowCount: rows.length, warnings };
-}
-
-function joinTables(left: TableData, right: TableData, on?: { left: string; right: string }, limit = 50_000): ApplyResult {
-  const warnings: string[] = [];
-  if (!on || typeof on.left !== 'string' || typeof on.right !== 'string') {
-    return { columns: left.columns.map((c) => ({ ...c })), rows: left.rows.map((r) => r.slice()), rowCount: left.rows.length, warnings: ['Join skipped: missing "on" key pair'] };
-  }
-  const li = colIndex(left.columns, on.left);
-  const ri = colIndex(right.columns, on.right);
-  if (li < 0 || ri < 0) {
-    return { columns: left.columns.map((c) => ({ ...c })), rows: left.rows.map((r) => r.slice()), rowCount: left.rows.length, warnings: [`Join skipped: unknown key column(s) "${on.left}"/"${on.right}"`] };
-  }
-
-  // Output columns: all left columns, then right's non-key columns (rename
-  // collisions with a "_right" suffix so no two columns share a name).
-  const usedNames = new Set(left.columns.map((c) => c.name));
-  const rightOutCols: { srcIdx: number; name: string }[] = [];
-  right.columns.forEach((c, i) => {
-    if (i === ri) return; // drop the join key from the right side
-    let name = c.name;
-    if (usedNames.has(name)) name = `${name}_right`;
-    usedNames.add(name);
-    rightOutCols.push({ srcIdx: i, name });
-  });
-
-  // Index right rows by the stringified key value (inner join → matches only).
-  const rightByKey = new Map<string, Cell[][]>();
-  for (const r of right.rows) {
-    const key = cellToString(r[ri]);
-    const bucket = rightByKey.get(key);
-    if (bucket) bucket.push(r);
-    else rightByKey.set(key, [r]);
-  }
-
-  // Bound the OUTPUT at `limit` while building. A many-to-many join on a low-
-  // cardinality/duplicate key is the full cartesian product (50k × 50k = 2.5B rows),
-  // which would OOM the main process BEFORE any post-hoc slice ran. Stop pushing at
-  // the cap (the IPC already intends to slice there) so retypeColumn walks ≤ limit rows.
-  const rows: Cell[][] = [];
-  let capped = false;
-  outer: for (const lr of left.rows) {
-    const key = cellToString(lr[li]);
-    const matches = rightByKey.get(key);
-    if (!matches) continue; // inner join drops unmatched left rows
-    for (const rr of matches) {
-      if (rows.length >= limit) { capped = true; break outer; }
-      rows.push(lr.slice().concat(rightOutCols.map((rc) => rr[rc.srcIdx] ?? null)));
-    }
-  }
-  if (capped) warnings.push(`Join row cap reached — kept first ${limit} matched rows`);
-
-  const columns: ParsedColumn[] = left.columns.map((c) => ({ ...c }));
-  for (const rc of rightOutCols) columns.push({ name: rc.name, type: 'text' });
-  for (let c = 0; c < columns.length; c += 1) retypeColumn(columns, rows, c);
-
-  return { columns, rows, rowCount: rows.length, warnings };
 }

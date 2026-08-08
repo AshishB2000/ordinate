@@ -12,7 +12,7 @@
 // Nothing here parses or fetches on its own: files go through src/fileImport.ts
 // (the same parser and byte ceiling the import uses), URLs and connections go
 // through the connector registry, and a combine goes through
-// transforms.combineTables. A second parser or a second fetcher would be a
+// combine.combineTables. A second parser or a second fetcher would be a
 // second answer to "what is in this source", and the refresh copy is the one
 // nobody would notice drifting.
 //
@@ -23,7 +23,7 @@
 
 import * as datasets from './datasets';
 import type { Dataset, DatasetOrigin } from './datasets';
-import * as transforms from './transforms';
+import * as combine from './combine';
 import { parseFile, sourceKindForPath } from './fileImport';
 import { runConnection } from './connectionRun';
 import { refreshConnectionInto } from './ipc/connections';
@@ -209,7 +209,7 @@ async function refreshCombined(
     return fail(`"${name}" needs both of the datasets it was built from, and one is missing.`);
   }
 
-  const combined = transforms.combineTables(
+  const combined = combine.combineTables(
     { columns: left.columns, rows: left.rows },
     { columns: right.columns, rows: right.rows },
     origin.mode,

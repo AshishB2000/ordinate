@@ -7,6 +7,7 @@ import { parseFile, sourceKindFor } from '../fileImport';
 import { refreshDataset } from '../datasetRefresh';
 import * as datasets from '../datasets';
 import * as transforms from '../transforms';
+import * as combine from '../combine';
 import type { Cell } from '../transforms';
 import { computeColumnSummary, findQualityIssues, ColumnSummary, QualityIssue } from '../datasetStats';
 import {
@@ -606,7 +607,7 @@ export function register() {
       const onPair = on && typeof on === 'object' && typeof on.left === 'string' && typeof on.right === 'string'
         ? { left: on.left, right: on.right }
         : undefined;
-      const combined = transforms.combineTables(
+      const combined = combine.combineTables(
         { columns: left.columns, rows: left.rows },
         { columns: right.columns, rows: right.rows },
         mode,
