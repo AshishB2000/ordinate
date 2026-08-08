@@ -241,3 +241,9 @@ scripts/**/*.js
 /renderer/hub/dashFiltersUi.js
 /renderer/hub/dashAi.js
 /renderer/hub/dashShare.js
+
+# authoring.ts split by job (.claude/rules/file-size.md) — emitted siblings.
+/renderer/hub/authoringRail.js
+/renderer/hub/authoringSelect.js
+/renderer/hub/authoringPanes.js
+/renderer/hub/authoringProps.js

@@ -57,7 +57,6 @@ const CAP = 800;
  */
 const ALLOWED: Record<string, number> = {
   'renderer/hub/analyses.ts': 1227,
-  'renderer/hub/authoring.ts': 1341,
   'renderer/hub/chartRender.ts': 1097,
   'renderer/hub/connections.ts': 1076,
   'renderer/hub/datasets.ts': 1271,
