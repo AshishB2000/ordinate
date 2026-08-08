@@ -317,6 +317,43 @@ function setRowRefreshStatus(id: string, message: string, isError: boolean): voi
   status.textContent = message;
 }
 
+/**
+ * An unattended refresh happened in main. Update THAT row in place — the
+ * freshness line, the row count and any failure message — and nothing else.
+ *
+ * Deliberately not a list re-render: the user may be mid-scroll, mid-select or
+ * typing in a control, and repainting the section under them to report a
+ * background event would be the app taking the page away for its own reasons.
+ */
+function applyAutoRefreshOutcome(o: any): void {
+  if (!o || !o.datasetId) return;
+  const row = document.querySelector('#ds-saved-list .ds-saved-item[data-dataset-id="' + String(o.datasetId) + '"]');
+  if (!row) return; // a different project is open, or the list is not rendered
+
+  if (o.ok) {
+    const meta = row.querySelector('.ds-saved-meta') as HTMLElement | null;
+    if (meta && typeof o.rowsAfter === 'number') {
+      meta.textContent = meta.textContent
+        ? meta.textContent.replace(/[\d,.\u202f\u00a0\s]+rows/, `${o.rowsAfter.toLocaleString()} rows`)
+        : `${o.rowsAfter.toLocaleString()} rows`;
+    }
+    const fresh = row.querySelector('.ds-fresh') as HTMLElement | null;
+    // "just now" through the same formatter every other stamp uses, so the
+    // wording matches the rest of the column rather than being a special case.
+    if (fresh) {
+      const every = fresh.textContent && fresh.textContent.indexOf(' · auto ') >= 0
+        ? fresh.textContent.slice(fresh.textContent.indexOf(' · auto '))
+        : '';
+      fresh.textContent = 'Data as of ' + formatSidebarTime(new Date().toISOString()) + every;
+    }
+  }
+  setRowRefreshStatus(String(o.datasetId), o.ok ? '' : String(o.error || 'Refresh failed.'), !o.ok);
+}
+
+if (window.hub && typeof window.hub.onDatasetRefreshed === 'function') {
+  window.hub.onDatasetRefreshed((o) => applyAutoRefreshOutcome(o));
+}
+
 // Refresh everything refreshable, SEQUENTIALLY. Not Promise.all: a serial loop
 // keeps one slow or hanging source from stalling the whole UI, keeps memory flat
 // (one table in flight rather than N), and lets each row update as it lands.

@@ -276,18 +276,18 @@ function notifyKeyChanged(): void {
 // not focused. Gated on the user's setting; failures are swallowed so they can
 // never block or error the analysis. (The completion SOUND is played in the
 // renderer — see hub.js.)
-function maybeNotifyDone(title?: string): void {
+function maybeNotify(body: string): void {
   try {
     const prefs = config.get().notifications || {};
     if (!prefs.desktop) return;
     if (hubWindow && !hubWindow.isDestroyed() && hubWindow.isFocused()) return;
     if (!Notification.isSupported || !Notification.isSupported()) return;
-    new Notification({
-      title: 'Ordinate',
-      body: title ? `Analysis ready — ${title}` : 'Analysis ready.',
-      silent: false,
-    }).show();
-  } catch (_) { /* never block analysis */ }
+    new Notification({ title: 'Ordinate', body, silent: false }).show();
+  } catch (_) { /* a notification must never block the thing it reports on */ }
+}
+
+function maybeNotifyDone(title?: string): void {
+  maybeNotify(title ? `Analysis ready — ${title}` : 'Analysis ready.');
 }
 
 // Register with the OS the moment the user ENABLES the Desktop toggle — a benign,
@@ -590,6 +590,31 @@ require("./src/ipc/datasetCompose").register();
 {
   const scheduler = require("./src/refreshScheduler");
   scheduler.setEnabledCheck(() => config.get().autoRefresh !== false);
+
+  // A row count that moves this much is worth interrupting someone for; a
+  // smaller drift is what a refresh is FOR, and the freshness line already says
+  // it happened.
+  // ponytail: fixed ±20%; per-dataset threshold when someone asks
+  const BIG_CHANGE = 0.2;
+
+  scheduler.onRefreshed((o: any) => {
+    // Always push to the hub: it updates the freshness line in place. send/on,
+    // not invoke/handle — nothing is asked for and no answer is wanted.
+    if (hubWindow && !hubWindow.isDestroyed()) {
+      hubWindow.webContents.send("hub:dataset-refreshed", o);
+    }
+    // At most ONE notification per dataset per tick, and only for these two.
+    // A success inside the interval is silent by design.
+    if (!o.ok) {
+      maybeNotify(`Couldn't refresh "${o.name}" — ${o.error || 'refresh failed.'}`);
+      return;
+    }
+    const before = o.rowsBefore;
+    if (before > 0 && Math.abs(o.rowsAfter - before) / before > BIG_CHANGE) {
+      maybeNotify(`"${o.name}" changed: ${before.toLocaleString()} → ${o.rowsAfter.toLocaleString()} rows.`);
+    }
+  });
+
   scheduler.start();
   app.on("before-quit", () => scheduler.stop());
 }

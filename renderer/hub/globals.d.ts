@@ -48,6 +48,7 @@ declare global {
       setExecutionMode(mode: string): Promise<any>;
       setMemoryModel(fields: any): Promise<any>;
       setGlobalRules(text: string): Promise<any>;
+      onDatasetRefreshed(cb: (o: any) => void): void;
       setAutoRefreshEnabled(on: boolean): Promise<any>;
       setNotifications(fields: any): Promise<any>;
       bootstrapNotifications(): Promise<any>;

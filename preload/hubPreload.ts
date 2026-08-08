@@ -48,6 +48,10 @@ contextBridge.exposeInMainWorld('hub', {
   // Persist the user's global rules (Instructions / Rules box).
   setGlobalRules: (text: string) => ipcRenderer.invoke('rules:set', { text }),
   // Completion-notification toggles ({ sound?, desktop? }).
+  // Fire-and-forget from main after an unattended refresh: { datasetId, ok,
+  // error, rowsBefore, rowsAfter, name }. The hub updates that row in place.
+  onDatasetRefreshed: (cb: (o: any) => void) =>
+    ipcRenderer.on('hub:dataset-refreshed', (_e, o) => cb(o)),
   setAutoRefreshEnabled: (on: boolean) => ipcRenderer.invoke('autorefresh:set', on),
   setNotifications: (fields: any) => ipcRenderer.invoke('notifications:set', { fields }),
   // Show a benign notification to register the app with the OS when the Desktop
