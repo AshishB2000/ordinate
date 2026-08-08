@@ -73,7 +73,7 @@ const ALLOWED: Record<string, number> = {
   // the real app, not a new one (there is exactly one of these on purpose). A
   // future split still owns its own PR; this is a one-time, reviewed bump, not
   // organic drift.
-  'scripts/smoke-app.ts': 3983,
+  'scripts/smoke-app.ts': 4098,
   'scripts/test-analysis.ts': 813,
   'scripts/test-anomaliesResident.ts': 837,
   'scripts/test-connectorsHttp.ts': 889,

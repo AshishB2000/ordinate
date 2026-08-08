@@ -2291,6 +2291,73 @@ async function main(): Promise<void> {
      withControlCard.cards === 3 && withControlCard.controlCards === 1 && withControlCard.select,
      JSON.stringify(withControlCard));
 
+  // multi and date_range each get a REAL card too, not just a dialog preview —
+  // the dropdown above already proved the dialog mechanics (three tiles,
+  // dataset/column pick, auto-label, Add), so these two just reopen it and
+  // submit; a chart/drill walk this thorough for all three would be
+  // redundant with controlSteps' per-kind node coverage, but a real card is
+  // what proves the multi popover and the date-range widget actually render
+  // and can be interacted with as a READER (below, on the published
+  // dashboard) — a bug unique to either widget's DOM (a CSP violation, a
+  // rendering crash) is exactly what a dialog-preview-only check would miss.
+  const addControlCard = async (
+    kind: 'multi' | 'date_range', column: string,
+  ): Promise<{ ok: boolean; label?: string }> => {
+    if (!(await clickId('dash-add-control'))) return { ok: false };
+    await win.waitForTimeout(400);
+    await win.evaluate(() => {
+      const box = document.querySelector('.dash-control-modal') as HTMLElement;
+      const dsSel = box.querySelector('.dm-field select') as HTMLSelectElement;
+      const opt = [...dsSel.options].find((o) => o.textContent === 'Sales');
+      if (opt) dsSel.value = opt.value;
+      dsSel.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await win.waitForTimeout(600); // column list load
+    await win.evaluate((k: string) => {
+      (document.querySelector(`.dash-control-modal .dc-kind-tile[data-kind="${k}"]`) as HTMLElement).click();
+    }, kind);
+    await win.waitForTimeout(300);
+    const picked = await win.evaluate((col: string) => {
+      const box = document.querySelector('.dash-control-modal') as HTMLElement;
+      const colSel = box.querySelectorAll('.dm-field select')[1] as HTMLSelectElement;
+      const opt = [...colSel.options].find((o) => o.value === col);
+      if (!opt) return false;
+      colSel.value = col;
+      colSel.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }, column);
+    if (!picked) return { ok: false };
+    await win.waitForTimeout(400); // label auto-fills
+    const result = await win.evaluate(() => {
+      const box = document.querySelector('.dash-control-modal') as HTMLElement;
+      const label = (box.querySelector('.dm-field input[type=text]') as HTMLInputElement | null)?.value || '';
+      const btn = [...box.querySelectorAll('.ws-modal-actions .btn')]
+        .find((b) => (b.textContent || '').trim() === 'Add') as HTMLButtonElement | undefined;
+      if (!btn || btn.disabled) return { ok: false, label };
+      btn.click();
+      return { ok: true, label };
+    });
+    await win.waitForTimeout(2000);
+    return result;
+  };
+
+  const multiAdded = await addControlCard('multi', 'region');
+  ok('a real multi control card is added too', multiAdded.ok === true, JSON.stringify(multiAdded));
+  const dateAdded = await addControlCard('date_range', 'sku');
+  ok('a real date_range control card is added too', dateAdded.ok === true, JSON.stringify(dateAdded));
+
+  const withAllControlCards = await win.evaluate(() => ({
+    cards: document.querySelectorAll('#dash-grid .dash-card').length,
+    controlCards: document.querySelectorAll('#dash-grid .dash-card--control').length,
+    dropdown: !!document.querySelector('#dash-grid .dash-card--control .dash-ctrl-select'),
+    multiChip: !!document.querySelector('#dash-grid .dash-card--control .dash-ctrl-chip'),
+    dateInputs: document.querySelectorAll('#dash-grid .dash-card--control .dash-ctrl-date').length,
+  }));
+  ok('all three control kinds now sit on the sheet as real cards',
+     withAllControlCards.cards === 5 && withAllControlCards.controlCards === 3 &&
+       withAllControlCards.dropdown && withAllControlCards.multiChip && withAllControlCards.dateInputs === 2,
+     JSON.stringify(withAllControlCards));
+
   // PUBLISH.
   ok('Publish is clickable', await clickId('an-publish-btn'));
   await win.waitForTimeout(3000);
@@ -2348,11 +2415,11 @@ async function main(): Promise<void> {
       pages: document.querySelectorAll('#dash-pages .dash-page-tab').length,
     };
   });
-  // Three cards: the sheet gained a second visual card above (the oldest-of-many
-  // freshness rule) and a dropdown control card just before publish (Task 4's
+  // Five cards: the sheet gained a second visual card above (the oldest-of-many
+  // freshness rule) and all three control kinds just before publish (Task 4's
   // + Control dialog, exercised above).
   ok('the published dashboard renders in the Dashboards panel',
-     published.inDashPanel && published.cards === 3, JSON.stringify(published));
+     published.inDashPanel && published.cards === 5, JSON.stringify(published));
   ok('it presents itself as read-only, and says why', published.readOnly && published.noteVisible,
      published.noteText);
   ok('with a route back to its analysis', published.routeBack);
@@ -2573,6 +2640,54 @@ async function main(): Promise<void> {
   ok('Reset controls again clears the picked-for-drill value', await clickId('dash-reset-controls'));
   await win.waitForTimeout(1200);
 
+  // ── Reader interaction: multi and date_range controls, as a READER ─────────
+  // Lighter than the dropdown's full chain above (per the brief) — each just
+  // has to prove it genuinely renders and responds on the PUBLISHED,
+  // read-only dashboard, which a dialog-preview-only check (above, at
+  // authoring time) cannot: a CSP violation or a rendering crash unique to
+  // the popover or the two-input widget would only show up here.
+  const multiOpened = await win.evaluate(() => {
+    const chip = document.querySelector('#dash-grid .dash-card--control .dash-ctrl-chip') as HTMLElement | null;
+    if (!chip) return false;
+    chip.click();
+    return true;
+  });
+  ok('the multi control chip opens its popover', multiOpened);
+  await win.waitForTimeout(1000); // loadValues (datasetDistinct)
+  const multiPicked = await win.evaluate(() => {
+    const pop = document.querySelector('.dash-ctrl-popover') as HTMLElement | null;
+    const cb = pop?.querySelector('.fd-list input[type=checkbox]') as HTMLInputElement | null;
+    if (!cb) return { ok: false };
+    cb.click(); // checks it, fires its own 'change' handler
+    const applyBtn = [...(pop?.querySelectorAll('.dash-ctrl-popover-actions .btn') || [])]
+      .find((b) => (b.textContent || '').trim() === 'Apply') as HTMLElement | undefined;
+    if (!applyBtn) return { ok: false };
+    applyBtn.click();
+    return { ok: true };
+  });
+  ok('a reader can check a value in the popover and Apply it', multiPicked.ok === true, JSON.stringify(multiPicked));
+  await win.waitForTimeout(800);
+  const multiChip = await win.evaluate(() =>
+    (document.querySelector('#dash-grid .dash-card--control .dash-ctrl-chip') as HTMLElement | null)?.textContent || '');
+  ok('…and the chip reflects the pick ("N selected", not "All")', /\d+ selected/.test(multiChip), multiChip);
+
+  const dateSet = await win.evaluate(() => {
+    const from = document.querySelector('#dash-grid .dash-card--control .dash-ctrl-date') as HTMLInputElement | null;
+    if (!from) return false;
+    from.value = '2020-01-01';
+    from.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  });
+  ok('a reader can set one side of the date-range control', dateSet);
+  await win.waitForTimeout(800);
+  const dateStuck = await win.evaluate(() =>
+    (document.querySelector('#dash-grid .dash-card--control .dash-ctrl-date') as HTMLInputElement | null)?.value || '');
+  ok('…and the value sticks', dateStuck === '2020-01-01', dateStuck);
+
+  // Back to every control's default, so nothing carries into the flow below.
+  ok('Reset controls clears the multi and date_range picks too', await clickId('dash-reset-controls'));
+  await win.waitForTimeout(1200);
+
   // THE SNAPSHOT GUARANTEE, from the UI: edit the analysis, and the published
   // dashboard must not move until it is published again.
   // Take the route back the read-only banner offers, rather than navigating —
@@ -2783,8 +2898,8 @@ async function main(): Promise<void> {
     cards: document.querySelectorAll('#dash-grid .dash-card').length,
     controlCards: document.querySelectorAll('#dash-grid .dash-card--control').length,
   }));
-  ok('republish carries the new second sheet AND keeps the control card on the first',
-     republished.pages === 2 && republished.cards === 3 && republished.controlCards === 1,
+  ok('republish carries the new second sheet AND keeps all three control cards on the first',
+     republished.pages === 2 && republished.cards === 5 && republished.controlCards === 3,
      JSON.stringify(republished));
 
   // ── Present mode keeps controls usable ──────────────────────────────────────
