@@ -2295,7 +2295,7 @@ html[data-os="win"] .titlebar { padding-right: 146px; }
 .cv-viz-chip.active {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
 }
 
 /* + More — opens the all-charts picker. Accent-led so it reads as the distinct
@@ -5795,10 +5795,41 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 }
 /* .cv-viz-area (shared with dashboards/analyses/export) already makes this a
    flex column; here in the builder stage it also takes all height the chips
-   row leaves behind, so the chart gets a real size instead of a squeezed one. */
+   row leaves behind, so the chart gets a real size instead of a squeezed one.
+   The card treatment (surface/border/radius/padding) is scoped to .viz-area,
+   NOT .cv-viz-area, so it never reaches the shared chart hosts in
+   dashboards/analyses/export. */
 .viz-area {
   flex: 1 1 auto;
   min-height: 260px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  transition: opacity 140ms var(--ease);
+}
+/* Set by visuals.ts around the computeVisualData await; recomputeVisual is a
+   ~100ms resident-path call, so a spinner would just flicker — a small
+   opacity dip is enough of a "this is updating" cue. */
+.viz-area.is-loading { opacity: 0.6; }
+@media (prefers-reduced-motion: reduce) {
+  .viz-area { transition: none; }
+}
+/* The empty-state / can't-render fallback stacks a small glyph above its
+   message here. Scoped to #viz-area so .cv-chart-fallback's shared row
+   layout (dashboards/analyses/export/map fallbacks, which are plain
+   single-line text with no glyph) is untouched. */
+#viz-area .cv-chart-fallback {
+  flex-direction: column;
+  gap: 8px;
+}
+#viz-area .cv-chart-fallback-glyph {
+  color: var(--muted);
+  opacity: 0.7;
+}
+#viz-area .cv-chart-fallback-glyph svg {
+  width: 22px;
+  height: 22px;
 }
 /* ── Gallery: the saved visuals as cards (replaces the Week 7 row list) ── */
 .viz-gallery {
