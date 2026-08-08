@@ -923,6 +923,8 @@ async function openVisualBuilder(datasetId?: string): Promise<void> {
   vizEditingId = '';
   vizCurrentChartType = '';
   vizOverrides = {};
+  const nameEl = vizEl('viz-builder-name');
+  if (nameEl) nameEl.textContent = 'New visual';
   ensureVizForm();
   const datasets = await loadDatasetOptions(datasetId || '');
   showVizGallery(false);
@@ -947,6 +949,8 @@ function closeVisualBuilder(): void {
   if (vizForm) vizForm.show(false);
   const sh = vizEl('viz-suggest-hint');
   if (sh) sh.hidden = true;
+  const nameEl = vizEl('viz-builder-name');
+  if (nameEl) nameEl.textContent = 'New visual';
   clearVizArea();
   setVizWarnings([]);
 }
@@ -1116,6 +1120,8 @@ async function openSavedVisual(id: string): Promise<void> {
     return;
   }
   vizEditingId = String(visual.id || id);
+  const nameEl = vizEl('viz-builder-name');
+  if (nameEl) nameEl.textContent = String(visual.name || 'Visual');
   vizCurrentChartType = typeof visual.chartType === 'string' ? visual.chartType : '';
   vizOverrides = visual.overrides && typeof visual.overrides === 'object' ? visual.overrides : {};
   const savedFilters = Array.isArray(visual.filters)

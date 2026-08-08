@@ -960,29 +960,42 @@
           </div>
         </div>
 
-        <!-- Editor (hidden until "+ New visual" or opening a saved visual) -->
+        <!-- Editor (hidden until "+ New visual" or opening a saved visual). A
+             workbench, same shape as the Prepare tab: a header row, then a left
+             controls rail that scrolls on its own, and a stage (chart-type chips
+             + the chart) that fills the rest. The page itself never scrolls. -->
         <div class="viz-builder" id="viz-builder" hidden>
-          <div class="viz-build-row">
-            <label class="viz-field-label" for="viz-dataset-select">Dataset</label>
-            <select class="viz-select" id="viz-dataset-select" aria-label="Dataset"></select>
-            <button class="btn btn-sm viz-suggest-btn" type="button" id="viz-suggest-btn">✨ Suggest chart</button>
+          <div class="viz-builder-head">
+            <button class="btn" type="button" id="viz-cancel-btn">← Back</button>
+            <span class="viz-builder-name" id="viz-builder-name">New visual</span>
+            <div class="viz-builder-head-actions">
+              <label class="viz-field-label" for="viz-dataset-select">Dataset</label>
+              <select class="viz-select" id="viz-dataset-select" aria-label="Dataset"></select>
+              <button class="btn btn-sm viz-suggest-btn" type="button" id="viz-suggest-btn">✨ Suggest chart</button>
+              <button class="btn btn-primary" type="button" id="viz-save-btn">Save visual</button>
+            </div>
           </div>
-          <div class="viz-suggest-hint" id="viz-suggest-hint" hidden></div>
 
-          <!-- The encoding form mounts HERE, cloned from #viz-encoding-tpl at the
-               bottom of this file by createEncodingForm (encodingForm.js). It is
-               a template rather than markup because phase C mounts a second copy
-               in the analysis authoring panel, and two live copies cannot both
-               own #viz-category-select. -->
-          <div class="viz-encoding-mount" id="viz-encoding-mount"></div>
+          <div class="viz-builder-body">
+            <!-- Controls rail: the encoding form, own scroll. -->
+            <div class="viz-builder-controls">
+              <div class="viz-suggest-hint" id="viz-suggest-hint" hidden></div>
 
-          <div class="viz-warnings" id="viz-warnings" hidden></div>
-          <div class="viz-switcher-mount" id="viz-switcher-mount"></div>
-          <div class="cv-viz-area viz-area" id="viz-area"></div>
+              <!-- The encoding form mounts HERE, cloned from #viz-encoding-tpl at the
+                   bottom of this file by createEncodingForm (encodingForm.js). It is
+                   a template rather than markup because phase C mounts a second copy
+                   in the analysis authoring panel, and two live copies cannot both
+                   own #viz-category-select. -->
+              <div class="viz-encoding-mount" id="viz-encoding-mount"></div>
 
-          <div class="viz-build-actions">
-            <button class="btn btn-primary" type="button" id="viz-save-btn">Save visual</button>
-            <button class="btn" type="button" id="viz-cancel-btn">← Back to visuals</button>
+              <div class="viz-warnings" id="viz-warnings" hidden></div>
+            </div>
+
+            <!-- Stage: chart-type chips, then the chart filling everything left. -->
+            <div class="viz-builder-stage">
+              <div class="viz-switcher-mount" id="viz-switcher-mount"></div>
+              <div class="cv-viz-area viz-area" id="viz-area"></div>
+            </div>
           </div>
         </div>
       </div>
