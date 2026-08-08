@@ -69,7 +69,6 @@ const ALLOWED: Record<string, number> = {
   'src/config.ts': 801,
   'src/connectors/http.ts': 1036,
   'src/connectors/local.ts': 804,
-  'src/formula.ts': 1043,
   'src/localCliRun.ts': 822,
 };
 

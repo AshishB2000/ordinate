@@ -268,3 +268,8 @@ scripts/**/*.js
 # connections.ts split by job (.claude/rules/file-size.md) — emitted siblings.
 /renderer/hub/connNew.js
 /renderer/hub/connRun.js
+
+# formula.ts split into tokenizer / evaluator / parser — emitted siblings.
+/src/formulaTokens.js
+/src/formulaEval.js
+/src/formulaParse.js
