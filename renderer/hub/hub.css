@@ -5099,6 +5099,45 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   border-radius: var(--r-lg);
 }
 
+/* ── The add-control dialog (dashAdd.ts openControlDialog) ───────────────────
+   Same field shell as the metric dialog (.dm-field); the kind row is a wider
+   three-tile version of .dm-aggs and the preview reuses the placed control's
+   own widget classes (.dash-ctrl-select / .dash-ctrl-daterange / .fd-list) so
+   the dialog shows exactly what lands on the sheet. */
+.ws-modal.dash-control-modal { width: min(440px, calc(100vw - 48px)); }
+.dc-kind {
+  display: flex;
+  gap: 8px;
+}
+.dc-kind-tile {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dc-kind-tile:hover { border-color: var(--accent); }
+.dc-kind-tile.is-on {
+  border-color: var(--accent);
+  background: var(--accent-soft, var(--surface-2));
+}
+.dc-kind-tile-label { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.dc-kind-tile-hint { font-size: 11px; color: var(--muted); }
+.dc-preview {
+  padding: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.dc-preview-list { border: 0; padding: 0; max-height: 180px; }
+
 /* ── The add-visual picker (dashboards.ts openVisualPicker) ──────────────────
    A gallery of the saved visuals — the Visuals section's tile vocabulary —
    plus the two create actions. */
@@ -6918,6 +6957,8 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 .an-prop-note[hidden] { display: none; }
 .an-prop-note--info { color: var(--text-dim); }
 .an-prop-del { width: 100%; font-size: 11.5px; }
+/* The control card's default-value actions (authoringProps.ts anRenderControlProps). */
+.an-ctrl-actions { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 4px; }
 
 /* ── Selection, and the affordances that follow it ───────────────────────────
    A selected card says so with a real accent outline. Its controls — the drag

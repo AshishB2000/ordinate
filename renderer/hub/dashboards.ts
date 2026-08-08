@@ -288,6 +288,8 @@ function initDashboards(): void {
   if (addM) addM.addEventListener('click', () => handleAddMetric());
   const addT = dashEl('dash-add-text');
   if (addT) addT.addEventListener('click', () => handleAddText());
+  const addC = dashEl('dash-add-control');
+  if (addC) addC.addEventListener('click', () => handleAddControl());
 
   const save = dashEl('dash-save-btn');
   if (save) save.addEventListener('click', () => handleSaveDashboard());
