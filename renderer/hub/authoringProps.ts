@@ -329,9 +329,14 @@ function anRenderControlProps(card: any, host: HTMLElement): void {
     delete control.default;
     markDashDirty();
     void loadControlColumns().then(() => {
-      control.column = colSel.value;
+      // Only adopt the new selection if the fetch actually produced one —
+      // an empty colSel.value (failed fetch, columnless dataset, or the
+      // selection moving on mid-flight) must never blank out control.column,
+      // or sanitizeCard drops the whole card on next load.
+      if (colSel.value) control.column = colSel.value;
       renderDashGrid();
       anPaintSelection();
+      anRenderProps(card);
     });
   });
   colSel.addEventListener('change', () => {
@@ -341,6 +346,7 @@ function anRenderControlProps(card: any, host: HTMLElement): void {
     markDashDirty();
     renderDashGrid();
     anPaintSelection();
+    anRenderProps(card);
   });
 
   (async () => {

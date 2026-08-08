@@ -107,6 +107,11 @@ function renderControlCard(card: any, body: HTMLElement): void {
   }
   const wrap = document.createElement('div');
   wrap.className = 'dash-ctrl-widget';
+  // Authoring mode wires an arrow-key nudge/resize handler on the card
+  // element (authoringSelect.ts) that preventDefault()s unconditionally.
+  // Stop it here so arrow keys inside the select/date inputs move the
+  // cursor/value instead of the whole card.
+  wrap.addEventListener('keydown', (e) => e.stopPropagation());
   body.appendChild(wrap);
 
   if (control.kind === 'multi') renderMultiControl(card, wrap);

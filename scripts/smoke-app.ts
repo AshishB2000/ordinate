@@ -2710,6 +2710,73 @@ async function main(): Promise<void> {
      routed.name === 'Smoke analysis',
      JSON.stringify(routed));
   ok('and it did NOT wrap a second analysis', routed.analyses === 1, String(routed.analyses));
+
+  // ── THE SAME INVARIANT, on the AUTHORING side ───────────────────────────────
+  // The published-dashboard version above only proves persistDashboard's
+  // read-only early-return (plus main's own refusal) holds for a snapshot —
+  // two guards that were never in doubt at THIS point in the flow. The path a
+  // future regression would actually break is this one: the analysis is open
+  // for authoring, where markDashDirty()/anScheduleWrite() DO reach disk on a
+  // real edit. dashControls.ts's own contract (see its file banner) is that a
+  // control's live value is `controlState`, a renderer-only Map that must
+  // never itself trigger a write — even here, even though other edits on this
+  // same screen do. Same shape as the published-side check: prove a chart
+  // redraws (real effect), then prove the record file didn't move.
+  const analysisId: string | null = await win.evaluate(() => (dashCurrent && dashCurrent.id) || null);
+  ok('the open analysis record has an id to stat on disk',
+     typeof analysisId === 'string' && analysisId.length > 0, String(analysisId));
+  const anRecordPath = path.join(userData, 'projects', r.projectId, 'analyses', analysisId + '.json');
+  ok('the analysis record exists on disk before the interaction', fs.existsSync(anRecordPath), anRecordPath);
+  const anStatBefore = fs.statSync(anRecordPath);
+  const anBytesBefore = fs.readFileSync(anRecordPath);
+
+  const anChartBefore = await chartSnapshot();
+  ok('a chart on the open analysis sheet has rendered data to compare',
+     !!anChartBefore && Array.isArray((anChartBefore as any).labels) && (anChartBefore as any).labels.length > 1,
+     JSON.stringify(anChartBefore));
+
+  // Load the dropdown's real option list the way an author would — on first
+  // focus (dashControls.ts's renderDropdownControl loads lazily), same as the
+  // published-side check above.
+  await win.evaluate(() => {
+    const sel = document.querySelector('#dash-grid .dash-card--control .dash-ctrl-select') as HTMLSelectElement | null;
+    sel?.dispatchEvent(new Event('mousedown', { bubbles: true }));
+    sel?.dispatchEvent(new Event('focus', { bubbles: true }));
+  });
+  await win.waitForTimeout(1000);
+  const pickedRegion3 = await win.evaluate(() => {
+    const sel = document.querySelector('#dash-grid .dash-card--control .dash-ctrl-select') as HTMLSelectElement | null;
+    if (!sel) return { ok: false };
+    const opt = [...sel.options].find((o) => o.value === 'region3');
+    if (!opt) return { ok: false, options: [...sel.options].map((o) => o.value) };
+    sel.value = 'region3';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    return { ok: true };
+  });
+  ok('a control can still be worked while the analysis is open for authoring',
+     pickedRegion3.ok === true, JSON.stringify(pickedRegion3));
+  await win.waitForTimeout(1800); // renderDashGrid + computeVisualData round trip
+
+  const anChartAfter = await chartSnapshot();
+  ok('…and it has a real effect: the chart redraws with different data',
+     !!anChartAfter && JSON.stringify(anChartAfter) !== JSON.stringify(anChartBefore),
+     `before=${JSON.stringify(anChartBefore)} after=${JSON.stringify(anChartAfter)}`);
+
+  const anStatAfter = fs.statSync(anRecordPath);
+  const anBytesAfter = fs.readFileSync(anRecordPath);
+  ok('THE INVARIANT, authoring side: the analysis record file did not move on disk (same mtime)',
+     anStatAfter.mtimeMs === anStatBefore.mtimeMs,
+     `before=${anStatBefore.mtimeMs} after=${anStatAfter.mtimeMs}`);
+  ok('…and its bytes are byte-for-byte identical (same size, same content)',
+     anBytesBefore.equals(anBytesAfter),
+     `${anBytesBefore.length}B -> ${anBytesAfter.length}B`);
+
+  // Back to default, so nothing carries into the "add a sheet" edit right below
+  // (which SHOULD dirty and write the record — this just keeps that write's
+  // diff free of an incidental control pick).
+  ok('Reset controls clears the pick made while authoring', await clickId('dash-reset-controls'));
+  await win.waitForTimeout(1200);
+
   ok('a sheet can be added to the analysis', await win.evaluate(() => {
     const add = document.querySelector('#dash-pages .dash-page-add') as HTMLElement | null;
     if (!add) return false;
