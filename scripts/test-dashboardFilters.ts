@@ -8,13 +8,14 @@
 export {}; // module scope — sibling test scripts share top-level names
 
 // ponytail: compiled siblings of the real pure modules (built by pretest).
-const { mergeDashboardFilters }: typeof import('../src/dashboardFilters') = require('../src/dashboardFilters');
+const { mergeDashboardFilters, controlSteps }: typeof import('../src/dashboardFilters') = require('../src/dashboardFilters');
 const { buildVizData }: typeof import('../src/vizData') = require('../src/vizData');
 const { computeMetric }: typeof import('../src/metricValue') = require('../src/metricValue');
 const { applyPipeline }: typeof import('../src/transforms') = require('../src/transforms');
 type FilterStep = import('../src/transforms').FilterStep;
 type Cell = import('../src/transforms').Cell;
 type ParsedColumn = import('../src/parse').ParsedColumn;
+type ControlValue = import('../src/dashboards').ControlValue;
 
 let failures = 0;
 function ok(label: string, cond: boolean) {
@@ -151,6 +152,66 @@ ok('sum(sales) over the leading-zero-filtered subset is the one row (100)',
   const ci = zeroIn.columns.findIndex((c) => c.name === 'code');
   ok('`in` on leading-zero ids keeps both rows', zeroIn.rows.length === 2);
   ok('…and they are still the STRINGS "007"/"008"', zeroIn.rows[0][ci] === '007' && zeroIn.rows[1][ci] === '008');
+}
+
+// ── controlSteps: dropdown / multi / date_range → 0..2 FilterSteps ───────────
+{
+  const dropdown = { kind: 'dropdown' as const, column: 'region' };
+  const multi = { kind: 'multi' as const, column: 'region' };
+  const dateRange = { kind: 'date_range' as const, column: 'order_date' };
+
+  // dropdown → one `=` step.
+  ok('dropdown selection produces one `=` step',
+    JSON.stringify(controlSteps(dropdown, { value: 'West' })) ===
+    JSON.stringify([{ type: 'filter', column: 'region', op: '=', value: 'West' }]));
+  // dropdown: empty/cleared → [].
+  ok('dropdown with an empty string value → []', controlSteps(dropdown, { value: '' }).length === 0);
+  ok('dropdown with no selection (undefined) → []', controlSteps(dropdown, undefined).length === 0);
+  ok('dropdown with a null selection → []', controlSteps(dropdown, null).length === 0);
+
+  // multi → one `in` step.
+  ok('multi selection produces one `in` step',
+    JSON.stringify(controlSteps(multi, { values: ['West', 'East'] })) ===
+    JSON.stringify([{ type: 'filter', column: 'region', op: 'in', values: ['West', 'East'] }]));
+  // multi: empty/cleared → [].
+  ok('multi with an empty values array → []', controlSteps(multi, { values: [] }).length === 0);
+  ok('multi with no selection (undefined) → []', controlSteps(multi, undefined).length === 0);
+
+  // date_range → up to two steps, `>=` and/or `<=`.
+  ok('date_range with BOTH ends set produces two steps',
+    JSON.stringify(controlSteps(dateRange, { from: '2026-01-01', to: '2026-06-30' })) ===
+    JSON.stringify([
+      { type: 'filter', column: 'order_date', op: '>=', value: '2026-01-01' },
+      { type: 'filter', column: 'order_date', op: '<=', value: '2026-06-30' },
+    ]));
+  // Single-ended range: only `from`.
+  ok('date_range with only `from` produces one `>=` step',
+    JSON.stringify(controlSteps(dateRange, { from: '2026-01-01' })) ===
+    JSON.stringify([{ type: 'filter', column: 'order_date', op: '>=', value: '2026-01-01' }]));
+  // Single-ended range: only `to`.
+  ok('date_range with only `to` produces one `<=` step',
+    JSON.stringify(controlSteps(dateRange, { to: '2026-06-30' })) ===
+    JSON.stringify([{ type: 'filter', column: 'order_date', op: '<=', value: '2026-06-30' }]));
+  // date_range: neither end set → [].
+  ok('date_range with neither end set → []', controlSteps(dateRange, {}).length === 0);
+  ok('date_range with no selection (undefined) → []', controlSteps(dateRange, undefined).length === 0);
+
+  // A `state` shape that doesn't match the control's own kind is ignored, not
+  // mis-read (e.g. a stale multi selection handed to a dropdown control).
+  ok('a mismatched selection shape → []',
+    controlSteps(dropdown, { values: ['West'] } as unknown as ControlValue).length === 0);
+
+  // Values containing quotes/commas/whitespace pass through byte-for-byte — this
+  // layer only builds the FilterStep, it never escapes/quotes (that happens at
+  // the SQL/JS predicate layer, already covered by transforms.ts's own tests).
+  const tricky = `O'Brien, "The" Store  `;
+  ok('a dropdown value with quotes/commas/whitespace passes through unchanged',
+    controlSteps(dropdown, { value: tricky })[0].value === tricky);
+  ok('a multi value with quotes/commas/whitespace passes through unchanged',
+    controlSteps(multi, { values: [tricky, 'Nice, France'] }).length === 1
+    && JSON.stringify((controlSteps(multi, { values: [tricky, 'Nice, France'] })[0] as FilterStep).values) === JSON.stringify([tricky, 'Nice, France']));
+  ok('a date_range value with whitespace passes through unchanged',
+    controlSteps(dateRange, { from: '  2026-01-01  ' })[0].value === '  2026-01-01  ');
 }
 
 if (failures) { console.error('\n' + failures + ' dashboardFilters check(s) FAILED'); process.exit(1); }

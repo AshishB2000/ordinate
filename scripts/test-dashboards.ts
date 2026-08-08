@@ -154,6 +154,107 @@ async function main(): Promise<void> {
   ok('a kept card gets a generated UUID id when missing',
     garbage !== null && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(garbage.pages[0].cards[0].id));
 
+  // ── control cards: sanitizeCard's 'control' branch ────────────────────────────
+  // Exercised directly (not through saveDashboard) — this is a whitelist unit,
+  // same level as the garbage-card table above.
+  {
+    const layout = { x: 0, y: 0, w: 4, h: 2 };
+
+    // A valid card of each kind survives sanitization with its fields intact.
+    const dropdownCard = dashboards.sanitizeCard({
+      type: 'control', layout,
+      control: { kind: 'dropdown', label: 'Region', datasetId: DATASET_ID, column: 'region', default: { value: 'West' } },
+    });
+    ok('a valid dropdown control card survives sanitization', dropdownCard !== null && dropdownCard.control !== undefined);
+    ok('dropdown control keeps kind/label/datasetId/column',
+      dropdownCard !== null && dropdownCard.control !== undefined
+      && dropdownCard.control.kind === 'dropdown' && dropdownCard.control.label === 'Region'
+      && dropdownCard.control.datasetId === DATASET_ID && dropdownCard.control.column === 'region');
+    ok('dropdown control keeps a matching default',
+      dropdownCard !== null && dropdownCard.control !== undefined
+      && JSON.stringify(dropdownCard.control.default) === JSON.stringify({ value: 'West' }));
+
+    const multiCard = dashboards.sanitizeCard({
+      type: 'control', layout,
+      control: { kind: 'multi', label: 'Regions', datasetId: DATASET_ID, column: 'region', default: { values: ['West', 'East'] } },
+    });
+    ok('a valid multi control card survives sanitization', multiCard !== null && multiCard.control !== undefined);
+    ok('multi control keeps its kind and default values',
+      multiCard !== null && multiCard.control !== undefined && multiCard.control.kind === 'multi'
+      && JSON.stringify(multiCard.control.default) === JSON.stringify({ values: ['West', 'East'] }));
+
+    const dateRangeCard = dashboards.sanitizeCard({
+      type: 'control', layout,
+      control: { kind: 'date_range', label: 'Order date', datasetId: DATASET_ID, column: 'order_date', default: { from: '2026-01-01' } },
+    });
+    ok('a valid date_range control card survives sanitization', dateRangeCard !== null && dateRangeCard.control !== undefined);
+    ok('date_range control keeps a single-ended default',
+      dateRangeCard !== null && dateRangeCard.control !== undefined
+      && JSON.stringify(dateRangeCard.control.default) === JSON.stringify({ from: '2026-01-01' }));
+
+    // A control card with no `default` at all is still valid — default is optional.
+    const noDefaultCard = dashboards.sanitizeCard({
+      type: 'control', layout,
+      control: { kind: 'dropdown', label: 'Region', datasetId: DATASET_ID, column: 'region' },
+    });
+    ok('a control card with no default survives, default stays undefined',
+      noDefaultCard !== null && noDefaultCard.control !== undefined && noDefaultCard.control.default === undefined);
+
+    // An unknown `kind` drops the whole card (same discipline as an unknown
+    // top-level card `type`).
+    const badKind = dashboards.sanitizeCard({
+      type: 'control', layout,
+      control: { kind: 'checkbox', label: 'x', datasetId: DATASET_ID, column: 'region' },
+    });
+    ok('an unknown control kind drops the card', badKind === null);
+
+    // A datasetId that is not a valid UUID drops the card (UUID-checked, per spec).
+    const badDatasetId = dashboards.sanitizeCard({
+      type: 'control', layout,
+      control: { kind: 'dropdown', label: 'Region', datasetId: 'not-a-uuid', column: 'region' },
+    });
+    ok('a non-UUID datasetId drops the control card', badDatasetId === null);
+
+    // A `default` shape that does NOT match the card's own kind is stripped —
+    // the card survives (same severity as an unrecognized metric.format above),
+    // just without a default.
+    const mismatchedDefault = dashboards.sanitizeCard({
+      type: 'control', layout,
+      control: { kind: 'dropdown', label: 'Region', datasetId: DATASET_ID, column: 'region', default: { values: ['West'] } },
+    });
+    ok('a default shape mismatched to the kind is stripped, not the whole card',
+      mismatchedDefault !== null && mismatchedDefault.control !== undefined && mismatchedDefault.control.default === undefined);
+
+    // A control card missing its `control` payload entirely is dropped.
+    const noPayload = dashboards.sanitizeCard({ type: 'control', layout });
+    ok('a control card with no `control` payload is dropped', noPayload === null);
+
+    // label/column are coerced defensively rather than rejected outright.
+    const nonStringFields = dashboards.sanitizeCard({
+      type: 'control', layout,
+      control: { kind: 'dropdown', label: 42, datasetId: DATASET_ID, column: 99 },
+    });
+    ok('non-string label/column are coerced to empty strings, card kept',
+      nonStringFields !== null && nonStringFields.control !== undefined
+      && nonStringFields.control.label === '' && nonStringFields.control.column === '');
+  }
+
+  // ── control cards: persist + reload through saveDashboard/getDashboard ───────
+  const withControl = await dashboards.saveDashboard(proj.id, {
+    name: 'Control board',
+    pages: [{ id: MISSING_UUID, name: 'P', cards: [
+      { type: 'control', layout: { x: 0, y: 0, w: 4, h: 2 },
+        control: { kind: 'multi', label: 'Region', datasetId: DATASET_ID, column: 'region', default: { values: ['West'] } } },
+    ] }],
+  });
+  ok('saveDashboard persists a control card', withControl !== null && withControl.pages[0].cards.length === 1
+    && withControl.pages[0].cards[0].type === 'control');
+  const reControl = withControl !== null ? await dashboards.getDashboard(proj.id, withControl.id) : null;
+  const reControlCard = reControl !== null ? reControl.pages[0].cards[0] : null;
+  ok('a control card survives a reload', reControlCard !== null && reControlCard.control !== undefined
+    && reControlCard.control.kind === 'multi' && reControlCard.control.column === 'region'
+    && JSON.stringify(reControlCard.control.default) === JSON.stringify({ values: ['West'] }));
+
   // ── Week 10: dashboard-wide filters persist + reload + sanitize ──────────────
   const withFilters = await dashboards.saveDashboard(proj.id, {
     name: 'Filtered board',

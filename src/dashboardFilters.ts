@@ -19,6 +19,7 @@
 // so the strict-number rule is untouched.
 
 import type { FilterStep } from './transforms';
+import type { CardControl, ControlValue } from './dashboards';
 
 // Byte-for-byte identity of a filter step: same column, op, and operand
 // (null-normalized). `values` is part of the identity, not just `value` — an
@@ -83,4 +84,47 @@ export function toggleCrossFilter(
   const rest = list.filter((s) => !same(s));
   if (already) return rest;
   return rest.concat([{ type: 'filter', column, op: '=', value: v } as FilterStep]);
+}
+
+// ── Control widgets (dropdown / multi-select / date-range) ────────────────────
+// A dashboard `control` card (src/dashboards.ts's `CardControl`) is a
+// DEFINITION only — kind/label/dataset/column/default. This turns that
+// definition plus a CURRENT selection (never itself persisted — the caller
+// owns keeping `state` out of anything written to disk) into 0..2 FilterSteps,
+// the same shape `mergeDashboardFilters` above already knows how to fold in.
+//
+// One rule for all three kinds: an unset/cleared selection filters nothing.
+// A half-built selection (no value picked yet, an empty multi-select, a date
+// range with neither end set) must not narrow the dashboard to zero rows —
+// that reads as "the control is broken", not "no rows match" — so it degrades
+// to [] exactly like `emptyListWarning`'s empty `in`/`not in` list does above.
+export function controlSteps(
+  control: Pick<CardControl, 'kind' | 'column'>,
+  state: ControlValue | null | undefined,
+): FilterStep[] {
+  if (!state) return [];
+  const { column } = control;
+
+  if (control.kind === 'dropdown' && 'value' in state) {
+    const { value } = state;
+    if (!value) return []; // empty/cleared → no step
+    return [{ type: 'filter', column, op: '=', value }];
+  }
+
+  if (control.kind === 'multi' && 'values' in state) {
+    const { values } = state;
+    if (!Array.isArray(values) || values.length === 0) return []; // cleared → no step
+    return [{ type: 'filter', column, op: 'in', values }];
+  }
+
+  if (control.kind === 'date_range') {
+    const from = 'from' in state ? state.from : undefined;
+    const to = 'to' in state ? state.to : undefined;
+    const steps: FilterStep[] = [];
+    if (from) steps.push({ type: 'filter', column, op: '>=', value: from });
+    if (to) steps.push({ type: 'filter', column, op: '<=', value: to });
+    return steps; // neither end set → []
+  }
+
+  return []; // a `state` shape that doesn't match this control's own kind
 }
