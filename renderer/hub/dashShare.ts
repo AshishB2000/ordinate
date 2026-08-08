@@ -43,18 +43,54 @@ const DASH_EXPORT_LIVE_TYPES: Record<string, string> = {
 };
 function dashIsMapType(t: string): boolean { return t === 'map_bubble' || t === 'map_choropleth'; }
 
+// Plain-text "<label>: <value>" for one control card's CURRENT selection, for
+// the export header summary only — an export never gets a live widget (the
+// plan is explicit: "Do NOT export live controls"). Resolution mirrors
+// controlCurrentValue (dashControls.ts, loaded before this file): whatever is
+// in controlState, falling back to the kind's empty value. An inactive
+// control (no active value) returns '' and is skipped from the summary —
+// the same "unset control filters nothing" rule controlStepsRenderer
+// (dashboards.ts) already applies to effectiveFilters(). Date range uses an
+// en dash, matching the live widget's own separator (dashControls.ts).
+function formatControlSummaryPart(card: any): string {
+  const control = card.control;
+  if (!control) return '';
+  const cur = controlCurrentValue(card);
+  let value = '';
+  if (control.kind === 'multi') {
+    value = Array.isArray(cur.values) ? cur.values.join(', ') : '';
+  } else if (control.kind === 'date_range') {
+    const from = cur.from || '';
+    const to = cur.to || '';
+    value = from && to ? from + '–' + to : (from || to);
+  } else {
+    value = cur.value || '';
+  }
+  if (!value) return '';
+  return (control.label || 'Filter') + ': ' + value;
+}
+
 // Build the serializable export bundle. `forCapture` forces EVERY visual to a PNG image
 // (the PNG/PDF one-pager is rendered offscreen where Chart.js isn't loaded); the HTML
 // export keeps core chart types live. Only computed values + labels + PNGs are emitted —
 // never a raw dataset row, never a secret.
 async function assembleExportBundle(forCapture: boolean): Promise<any> {
   const pages: any[] = [];
+  const controlParts: string[] = [];
   const srcPages = (dashCurrent && Array.isArray(dashCurrent.pages)) ? dashCurrent.pages : [];
   for (const page of srcPages) {
     const cards: any[] = [];
     const srcCards = Array.isArray(page.cards) ? page.cards : [];
     for (const card of srcCards) {
       const layout = card.layout || { x: 0, y: 0, w: 6, h: 4 };
+      if (card.type === 'control') {
+        // No grid-cell entry — folded into the header summary instead. Not
+        // "broken": intentionally excluded from the grid, scanned across ALL
+        // pages (dashboard-wide scope, same as effectiveFilters()).
+        const part = formatControlSummaryPart(card);
+        if (part) controlParts.push(part);
+        continue;
+      }
       if (card.type === 'text') {
         cards.push({ kind: 'text', layout, heading: card.heading || '', text: card.text || '' });
         continue;
@@ -73,7 +109,11 @@ async function assembleExportBundle(forCapture: boolean): Promise<any> {
     }
     pages.push({ name: page.name || 'Page', cards });
   }
-  return { name: (dashCurrent && dashCurrent.name) || 'Dashboard', pages };
+  return {
+    name: (dashCurrent && dashCurrent.name) || 'Dashboard',
+    pages,
+    controlsSummary: controlParts.join(' · '),
+  };
 }
 
 async function buildMetricExportCard(card: any, layout: any): Promise<any> {
@@ -144,6 +184,7 @@ function buildDashCaptureHtml(bundle: any): string {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const cols = DASH_GRID_COLS;
   let body = `<h1 class="d-title">${esc(bundle.name)}</h1>`;
+  if (bundle.controlsSummary) body += `<div class="d-controls-summary">${esc(bundle.controlsSummary)}</div>`;
   const multi = Array.isArray(bundle.pages) && bundle.pages.length > 1;
   (bundle.pages || []).forEach((page: any) => {
     if (multi) body += `<h2 class="d-page">${esc(page.name)}</h2>`;
@@ -173,7 +214,8 @@ function buildDashCaptureHtml(bundle: any): string {
     *{box-sizing:border-box}html,body{margin:0;background:#f4f4f5;color:#18181b;
       font-family:-apple-system,system-ui,'Segoe UI',sans-serif}
     .d-root{max-width:1160px;margin:0 auto;padding:24px 20px 40px}
-    .d-title{font-size:22px;font-weight:700;margin:0 0 16px}
+    .d-title{font-size:22px;font-weight:700;margin:0 0 4px}
+    .d-controls-summary{font-size:13px;font-weight:500;color:#6b7280;margin:0 0 16px}
     .d-page{font-size:14px;font-weight:600;color:#6b7280;margin:18px 0 8px}
     .d-grid{display:grid;grid-template-columns:repeat(${cols},1fr);grid-auto-rows:80px;gap:12px;margin-bottom:24px}
     .d-card{background:#fff;border:1px solid #e4e4e7;border-radius:10px;padding:12px;overflow:hidden;
