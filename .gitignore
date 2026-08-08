@@ -264,3 +264,7 @@ scripts/**/*.js
 /renderer/hub/anNew.js
 /renderer/hub/anPublish.js
 /renderer/hub/anDraft.js
+
+# connections.ts split by job (.claude/rules/file-size.md) — emitted siblings.
+/renderer/hub/connNew.js
+/renderer/hub/connRun.js

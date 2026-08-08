@@ -2178,6 +2178,11 @@
 <script src="drill.js"></script>
 <script src="prepare.js"></script>
 <script src="connections.js"></script>
+<!-- connections.ts was 1076 lines; these three are it, split by job.
+     connections.js stays first — it keeps the connector contract and the
+     module-local state the other two read. -->
+<script src="connNew.js"></script>
+<script src="connRun.js"></script>
 <script src="encodingForm.js"></script>
 <script src="visuals.js"></script>
 <!-- visuals.ts was 1284 lines; these four are it, split by job. visuals.js

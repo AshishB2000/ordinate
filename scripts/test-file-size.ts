@@ -57,7 +57,6 @@ const CAP = 800;
  */
 const ALLOWED: Record<string, number> = {
   'renderer/hub/chartRender.ts': 1097,
-  'renderer/hub/connections.ts': 1076,
   'renderer/hub/mapRender.ts': 834,
   'renderer/hub/prepare.ts': 944,
   'scripts/smoke-app.ts': 3544,
