@@ -48,6 +48,11 @@ contextBridge.exposeInMainWorld('hub', {
   // Persist the user's global rules (Instructions / Rules box).
   setGlobalRules: (text: string) => ipcRenderer.invoke('rules:set', { text }),
   // Completion-notification toggles ({ sound?, desktop? }).
+  // Fire-and-forget from main after an unattended refresh: { datasetId, ok,
+  // error, rowsBefore, rowsAfter, name }. The hub updates that row in place.
+  onDatasetRefreshed: (cb: (o: any) => void) =>
+    ipcRenderer.on('hub:dataset-refreshed', (_e, o) => cb(o)),
+  setAutoRefreshEnabled: (on: boolean) => ipcRenderer.invoke('autorefresh:set', on),
   setNotifications: (fields: any) => ipcRenderer.invoke('notifications:set', { fields }),
   // Show a benign notification to register the app with the OS when the Desktop
   // toggle is first enabled → { ok, supported }.
@@ -229,6 +234,12 @@ contextBridge.exposeInMainWorld('hub', {
   ) => ipcRenderer.invoke('dataset:page', { projectId, datasetId, ...req }),
   // Rename columns / correct types; main re-coerces cells on a type change. Returns
   // { ok, dataset } | { ok:false, error }.
+  // `autoRefresh`: 'hourly' | 'daily' | 'weekly' to set, null/'off' to clear,
+  // omitted to leave alone. Same channel as the column patch — one record.
+  setDatasetAutoRefresh: (projectId: string, datasetId: string, autoRefresh: string | null) =>
+    ipcRenderer.invoke('dataset:update', { projectId, datasetId, autoRefresh }),
+  setDatasetWatch: (projectId: string, datasetId: string, watch: boolean) =>
+    ipcRenderer.invoke('dataset:update', { projectId, datasetId, watch }),
   updateDataset: (projectId: string, datasetId: string, columns: any[]) =>
     ipcRenderer.invoke('dataset:update', { projectId, datasetId, columns }),
   // OPTIONAL AI narration of an opened dataset (numbers computed in main, not by
@@ -300,6 +311,9 @@ contextBridge.exposeInMainWorld('hub', {
   connectorCatalog: () => ipcRenderer.invoke('connectors:catalog'),
   // List a project's saved connections (secret-free public view).
   listConnections: (projectId: string) => ipcRenderer.invoke('connections:list', { projectId }),
+  // Global search — NAMES only, across the five things the sidebar's box names.
+  searchWorkspace: (projectId: string, query: string) =>
+    ipcRenderer.invoke('search:query', { projectId, query }),
   // Test a connection with the typed secret; persist metadata + secret only on
   // success. `kind` is the connectorId (the two pre-registry names, 'postgres'
   // and 'url', are the ids of the connectors that replaced them, so an

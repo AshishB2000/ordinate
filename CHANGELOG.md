@@ -10,6 +10,21 @@ All notable changes to Ordinate are documented here. Format based on
 ## [Unreleased]
 
 ### Added
+- **Datasets can refresh themselves.** Set a dataset to re-fetch Hourly, Daily or Weekly and Ordinate
+  keeps it current. It is honest about what that means: schedules run while Ordinate is open, and
+  anything that came due while it was closed catches up when the app launches — the setting says so.
+  A master toggle in Settings turns the whole thing off.
+- **The app tells you when something changed or broke.** A failed refresh notifies you with the
+  reason; a row count that moves more than ±20% notifies you with both numbers. A refresh that went
+  as expected stays silent — the `Data as of` line already says it happened, and it updates in place
+  without the list jumping under you.
+- **Watch a dataset for anomalies.** Turn it on beside the schedule and Ordinate tells you when a
+  refresh brings *new* anomalies — never the same ones twice, and never one that has been resolved
+  and come back unnoticed. The count is computed by the app; no model is involved anywhere in this
+  path. Explaining an anomaly with AI is still something you ask for.
+- **The sidebar's search box works.** It always promised "datasets, analyses, dashboards and
+  connectors" and did nothing at all. Type and it finds them by name — plus visuals — with arrow
+  keys, Enter to open, and Escape to dismiss. It searches names, not row contents.
 - **Creating a dataset is a page, not a dialog.** Picking any source opens the **composer**: the
   tables you are combining sit on a canvas with visible join links, the result previews live
   underneath, and the preview's own header row is where you rename, retype and drop columns. Import

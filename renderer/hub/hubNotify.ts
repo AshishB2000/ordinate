@@ -50,6 +50,7 @@ async function refreshKeyStatus() {
       updateExecBtnIcon();
     }
     if (status && status.notifications) applyNotifPrefs(status.notifications);
+    if (stpAutoRefresh) reflectSwitch(stpAutoRefresh, status ? status.autoRefresh !== false : true);
     // Load global rules into the box (don't clobber while the user is typing).
     if (stpPromptEl && status && typeof status.globalRules === 'string'
         && document.activeElement !== stpPromptEl) {
@@ -99,6 +100,23 @@ async function setNotif(field, value) {
   if (window.hub && typeof window.hub.setNotifications === 'function') {
     try { await window.hub.setNotifications({ [field]: value }); } catch (_) {}
   }
+}
+
+// The master auto-refresh switch. Same reflectSwitch/aria pattern as the two
+// notification toggles it sits beside; the copy in index.html states the honest
+// constraint (no daemon — schedules run while the app is open).
+const stpAutoRefresh = document.getElementById('stp-autorefresh');
+if (stpAutoRefresh) {
+  stpAutoRefresh.addEventListener('click', async () => {
+    const on = !stpAutoRefresh.classList.contains('stp-switch-on');
+    reflectSwitch(stpAutoRefresh, on);
+    try {
+      await window.hub.setAutoRefreshEnabled(on);
+    } catch (_) {
+      reflectSwitch(stpAutoRefresh, !on); // put it back; nothing was saved
+      showToast('Could not change that setting.');
+    }
+  });
 }
 
 if (stpNotifSound) {

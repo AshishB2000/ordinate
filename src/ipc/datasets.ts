@@ -444,10 +444,28 @@ export function register() {
     }
   });
 
-  // Rename columns / correct types. Main re-coerces cells on a type change (via
-  // datasets.updateDataset → parse.coerceValue). Returns the updated dataset.
-  ipcMain.handle('dataset:update', async (_e, { projectId, datasetId, columns }: any = {}) => {
+  // Rename columns / correct types, and set the auto-refresh schedule. Main
+  // re-coerces cells on a type change (via datasets.updateDataset →
+  // parse.coerceValue). Returns the updated dataset.
+  //
+  // The schedule rides on THIS channel rather than getting one of its own: it is
+  // a field of the same record, and a second channel would be a second place to
+  // validate a projectId and a datasetId.
+  ipcMain.handle('dataset:update', async (_e, { projectId, datasetId, columns, autoRefresh, watch }: any = {}) => {
     try {
+      // `undefined` means "not part of this patch"; `null` means "turn it off".
+      if (autoRefresh !== undefined) {
+        const every = autoRefresh === null || autoRefresh === 'off' ? null : String(autoRefresh);
+        const res = await datasets.setAutoRefresh(projectId, datasetId, { every: every as any });
+        if (res === false) return { ok: false, error: 'Could not set the schedule' };
+      }
+      if (watch !== undefined) {
+        // Watch only means anything alongside a schedule; setAutoRefresh keeps
+        // the existing `every` when the patch omits it, and refuses outright if
+        // there is none.
+        const res = await datasets.setAutoRefresh(projectId, datasetId, { watch: Boolean(watch) });
+        if (res === false) return { ok: false, error: 'Set a schedule before watching for anomalies.' };
+      }
       const ds = await datasets.updateDataset(projectId, datasetId, {
         columns: Array.isArray(columns) ? columns : undefined,
       });

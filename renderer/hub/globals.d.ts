@@ -48,6 +48,8 @@ declare global {
       setExecutionMode(mode: string): Promise<any>;
       setMemoryModel(fields: any): Promise<any>;
       setGlobalRules(text: string): Promise<any>;
+      onDatasetRefreshed(cb: (o: any) => void): void;
+      setAutoRefreshEnabled(on: boolean): Promise<any>;
       setNotifications(fields: any): Promise<any>;
       bootstrapNotifications(): Promise<any>;
       deleteData(scope: string): Promise<any>;
@@ -136,6 +138,8 @@ declare global {
       ): Promise<{ values: string[]; total: number }>;
       deleteDataset(projectId: string, id: string): Promise<{ ok: boolean }>;
       datasetStats(projectId: string, datasetId: string): Promise<any>;
+      setDatasetAutoRefresh(projectId: string, datasetId: string, autoRefresh: string | null): Promise<any>;
+      setDatasetWatch(projectId: string, datasetId: string, watch: boolean): Promise<any>;
       updateDataset(projectId: string, datasetId: string, columns: any[]): Promise<any>;
       explainDataset(projectId: string, datasetId: string): Promise<any>;
       // ── Data preparation (reversible transform pipeline) ──
@@ -186,6 +190,7 @@ declare global {
           }[];
         }[]
       >;
+      searchWorkspace(projectId: string, query: string): Promise<any>;
       listConnections(projectId: string): Promise<any[]>;
       testAndSaveConnection(projectId: string, kind: string, config: any, secret: any): Promise<any>;
       listConnectionTables(projectId: string, connId: string): Promise<any>;

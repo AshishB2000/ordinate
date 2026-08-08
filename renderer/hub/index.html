@@ -844,6 +844,7 @@
             </div>
             <div class="ds-explorer-meta">
               <span class="ds-fresh" id="ds-explorer-fresh"></span>
+              <span class="ds-auto-host" id="ds-explorer-auto" hidden></span>
               <button class="btn btn-sm" type="button" id="ds-explorer-refresh" hidden>↻ Refresh</button>
             </div>
           </div>
@@ -1569,6 +1570,18 @@
           <section class="settings-pane" data-cat="notifications" hidden>
             <div class="stp-row">
               <div class="stp-rl">
+                <div class="stp-rt">Auto-refresh datasets</div>
+                <div class="stp-rd">Runs while Ordinate is open. Overdue refreshes catch up when the app launches.</div>
+              </div>
+              <div class="stp-rr">
+                <button id="stp-autorefresh" class="stp-switch" type="button" role="switch"
+                  aria-checked="true" aria-label="Auto-refresh datasets">
+                  <span class="stp-switch-thumb"></span>
+                </button>
+              </div>
+            </div>
+            <div class="stp-row">
+              <div class="stp-rl">
                 <div class="stp-rt">Completion sound</div>
                 <div class="stp-rd">Play a short sound when an analysis finishes.</div>
               </div>
@@ -2261,6 +2274,7 @@
 <script src="anNew.js"></script>
 <script src="anPublish.js"></script>
 <script src="anDraft.js"></script>
+<script src="globalSearch.js"></script>
 <script src="copilot.js"></script>
 <!-- hub.ts was 2051 lines; these five are it, split by job (.claude/rules/file-size.md).
      ORDER IS LOAD-BEARING among them, for the same reason it is for the group above:

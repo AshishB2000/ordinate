@@ -69,6 +69,7 @@ const projects: typeof import('../src/projects') = require('../src/projects');
 const visuals: typeof import('../src/visuals') = require('../src/visuals');
 const analysisStore: typeof import('../src/analysis') = require('../src/analysis');
 const config: typeof import('../src/config') = require('../src/config');
+const configSecrets: typeof import('../src/configSecrets') = require('../src/configSecrets');
 const connections: typeof import('../src/connections') = require('../src/connections');
 const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
 const analysesIpc: typeof import('../src/ipc/analyses') = require('../src/ipc/analyses');
@@ -157,7 +158,7 @@ async function setup(): Promise<void> {
     name: 'Warehouse', connectorId: 'postgres',
     values: { host: 'db.example.com', port: 5432, database: 'sales', user: 'reader' },
   } as any);
-  if (c) config.setConnectionSecret(c.id, { password: SECRET });
+  if (c) configSecrets.setConnectionSecret(c.id, { password: SECRET });
 }
 
 // ── §1 CHART_TYPE_IDS is the REAL list ──────────────────────────────────────

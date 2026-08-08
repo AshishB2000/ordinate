@@ -26,6 +26,7 @@ import type { TableData, TransformStep, ApplyResult } from './transforms';
 import { isValidId } from './ids';
 import type { DatasetOrigin } from './datasetOrigin';
 import { sanitizeOrigin } from './datasetOrigin';
+import { sanitizeAnomalyKeys } from './anomalyWatch';
 export type { DatasetOrigin } from './datasetOrigin';
 export { sanitizeOrigin };
 
@@ -69,7 +70,40 @@ export interface Dataset {
   lastRefreshedAt?: string;
   lastRefreshStatus?: 'ok' | 'error';
   lastRefreshError?: string | null;
+  /**
+   * An unattended refresh schedule. ABSENT means off, which is every dataset
+   * written before this existed and every one the user has not opted in.
+   *
+   * Only a dataset with an `origin` can carry one — there is nothing to re-fetch
+   * otherwise — and `sanitizeAutoRefresh` enforces that on every load, so a
+   * hand-edited record cannot make the scheduler try.
+   *
+   * `lastAutoAt` moves on every attempt, WIN OR LOSE, deliberately: a source
+   * that is failing must wait its whole interval before trying again rather
+   * than retrying every minute. The failure stays visible in
+   * lastRefreshStatus/lastRefreshError, which is where the UI reads it.
+   */
+  autoRefresh?: AutoRefresh;
 }
+
+export interface AutoRefresh {
+  every: AutoRefreshEvery;
+  lastAutoAt?: string;
+  /**
+   * Opt in to anomaly watch. Off by default and stored here rather than in its
+   * own block because it only means anything alongside a schedule — there is
+   * nothing to watch for if nothing re-runs.
+   */
+  watch?: boolean;
+  /**
+   * The anomaly KEYS the last watched run found, so the next one can report only
+   * what is new. Capped (anomalyWatch.MAX_KEYS) and sanitized like everything
+   * else that comes back off disk.
+   */
+  lastAnomalyKeys?: string[];
+}
+
+export type AutoRefreshEvery = 'hourly' | 'daily' | 'weekly';
 
 export interface DatasetSummary {
   id: string;
@@ -86,6 +120,9 @@ export interface DatasetSummary {
   originKind?: DatasetOrigin['kind'];
   lastRefreshedAt?: string;
   lastRefreshStatus?: 'ok' | 'error';
+  // Carried on the SUMMARY so the scheduler can find due datasets from the
+  // metadata alone. Reading a schedule must never hydrate a table.
+  autoRefresh?: AutoRefresh;
 }
 
 let projectsBase: string | null = null;
@@ -227,6 +264,26 @@ function isValidDataset(data: any): data is Dataset {
 // Backward-compatible: a stored v1 dataset (no source/steps) normalizes to
 // steps=[], source=undefined and reads schemaVersion 2 — its columns/rows are the
 // data, exactly as before. Untrusted stored `steps` are re-sanitized on load.
+/**
+ * Whitelist an untrusted `autoRefresh` block, or undefined.
+ *
+ * `hasOrigin` is a parameter rather than something read here because the answer
+ * must be the SANITIZED origin, not the raw one: a record whose origin was just
+ * dropped for being malformed has nothing to re-fetch either, and a schedule
+ * left on it would be a scheduler retrying forever against nothing.
+ */
+function sanitizeAutoRefresh(raw: unknown, hasOrigin: boolean): AutoRefresh | undefined {
+  if (!hasOrigin || !raw || typeof raw !== 'object') return undefined;
+  const o = raw as Record<string, unknown>;
+  if (o.every !== 'hourly' && o.every !== 'daily' && o.every !== 'weekly') return undefined;
+  const out: AutoRefresh = { every: o.every };
+  if (typeof o.lastAutoAt === 'string' && o.lastAutoAt) out.lastAutoAt = o.lastAutoAt;
+  if (o.watch === true) out.watch = true;
+  const keys = sanitizeAnomalyKeys(o.lastAnomalyKeys);
+  if (keys) out.lastAnomalyKeys = keys;
+  return out;
+}
+
 function normalize(data: any, projectId: string): Dataset {
   const createdAt = data.createdAt || new Date().toISOString();
   const kind: Dataset['sourceKind'] = SOURCE_KINDS.has(data.sourceKind) ? data.sourceKind : 'csv';
@@ -258,6 +315,8 @@ function normalize(data: any, projectId: string): Dataset {
   // corrupt origin reads back as "not refreshable" rather than as a file read.
   const origin = sanitizeOrigin(data.origin);
   if (origin) ds.origin = origin;
+  const auto = sanitizeAutoRefresh(data.autoRefresh, Boolean(origin));
+  if (auto) ds.autoRefresh = auto;
   if (typeof data.lastRefreshedAt === 'string' && data.lastRefreshedAt) ds.lastRefreshedAt = data.lastRefreshedAt;
   if (data.lastRefreshStatus === 'ok' || data.lastRefreshStatus === 'error') {
     ds.lastRefreshStatus = data.lastRefreshStatus;
@@ -306,6 +365,7 @@ export async function listDatasets(projectId: string): Promise<DatasetSummary[]>
       if (ds.origin) summary.originKind = ds.origin.kind;
       if (ds.lastRefreshedAt) summary.lastRefreshedAt = ds.lastRefreshedAt;
       if (ds.lastRefreshStatus) summary.lastRefreshStatus = ds.lastRefreshStatus;
+      if (ds.autoRefresh) summary.autoRefresh = ds.autoRefresh;
       out.push(summary);
     } catch (err: any) { // ponytail: fs errors carry .code, JSON errors don't
       if (err.code !== 'ENOENT') {
@@ -538,6 +598,50 @@ export async function markRefresh(
     if (status === 'ok') raw.lastRefreshedAt = new Date().toISOString();
     await writeJsonAtomic(file, raw);
     return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
+ * Set or clear a dataset's auto-refresh schedule, and stamp its last attempt.
+ *
+ * METADATA ONLY, like markRefresh above: it reads and rewrites the record's
+ * JSON without hydrating the table. The scheduler stamps `lastAutoAt` on every
+ * tick it runs, and a blocking hydrate there would freeze every window.
+ *
+ * `every: null` turns it off. A schedule on a dataset with no origin is refused
+ * rather than stored, matching sanitizeAutoRefresh on the way back in.
+ */
+export async function setAutoRefresh(
+  projectId: string,
+  id: string,
+  patch: { every?: AutoRefreshEvery | null; lastAutoAt?: string; watch?: boolean; lastAnomalyKeys?: string[] },
+): Promise<AutoRefresh | null | false> {
+  if (!isValidId(projectId) || !isValidId(id)) return false;
+  const file = datasetFilePath(projectId, id);
+  try {
+    const raw = JSON.parse(await fs.promises.readFile(file, 'utf8'));
+    if (!raw || typeof raw !== 'object') return false;
+    if (patch.every === null) {
+      delete raw.autoRefresh;
+      await writeJsonAtomic(file, raw);
+      return null;
+    }
+    if (!sanitizeOrigin(raw.origin)) return false; // nothing to re-fetch
+    const current = sanitizeAutoRefresh(raw.autoRefresh, true);
+    const every = patch.every ?? (current ? current.every : undefined);
+    if (every !== 'hourly' && every !== 'daily' && every !== 'weekly') return false;
+    const next: AutoRefresh = { every };
+    const lastAutoAt = patch.lastAutoAt ?? (current ? current.lastAutoAt : undefined);
+    if (lastAutoAt) next.lastAutoAt = lastAutoAt;
+    const watch = patch.watch ?? (current ? current.watch : undefined);
+    if (watch) next.watch = true;
+    const keys = sanitizeAnomalyKeys(patch.lastAnomalyKeys ?? (current ? current.lastAnomalyKeys : undefined));
+    if (keys) next.lastAnomalyKeys = keys;
+    raw.autoRefresh = next;
+    await writeJsonAtomic(file, raw);
+    return next;
   } catch (_) {
     return false;
   }
