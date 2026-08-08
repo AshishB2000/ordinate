@@ -247,3 +247,9 @@ scripts/**/*.js
 /renderer/hub/authoringSelect.js
 /renderer/hub/authoringPanes.js
 /renderer/hub/authoringProps.js
+
+# datasets.ts split by job (.claude/rules/file-size.md) — emitted siblings.
+/renderer/hub/dsImport.js
+/renderer/hub/dsList.js
+/renderer/hub/dsExplorer.js
+/renderer/hub/dsGrid.js
