@@ -136,6 +136,8 @@ async function runOrigin(
     }
     case 'combined':
       return refreshCombined(projectId, id, name, origin, walk, warnings);
+    case 'composed':
+      return refreshComposed(projectId, id, name, origin, walk, warnings);
     default:
       return fail('This dataset has no re-fetchable source.');
   }
@@ -221,6 +223,55 @@ async function refreshCombined(
     return fail(`"${name}" could not be rebuilt from its two datasets.`);
   }
   return store(projectId, id, combined.columns, combined.rows, warnings);
+}
+
+// ── composed (the composer's N-table chain) ──────────────────────────────────
+//
+// Same shape as refreshCombined, and deliberately so: refresh every parent
+// first, then re-run the pure fold over their FRESH derived tables. The only
+// real difference is that "one parent is missing" has to name which one — with
+// two you can guess, with six you cannot.
+async function refreshComposed(
+  projectId: string,
+  id: string,
+  name: string,
+  origin: Extract<DatasetOrigin, { kind: 'composed' }>,
+  walk: Walk,
+  warnings: string[],
+): Promise<RefreshResult> {
+  const parentIds = [origin.baseId, ...origin.joins.map((j) => j.datasetId)];
+
+  // The existing visited-set + depth cap generalise unchanged: each recursive
+  // call carries the SAME visited set, so a chain that reaches the same parent
+  // twice refreshes it once, and a cycle terminates.
+  for (const parentId of parentIds) {
+    const res = await refreshDataset(projectId, parentId, { visited: walk.visited, depth: walk.depth + 1 });
+    if (!res.ok) warnings.push(res.error);
+    else warnings.push(...res.warnings);
+  }
+
+  const loaded = await Promise.all(parentIds.map((pid) => datasets.getDataset(projectId, pid)));
+  const missing = parentIds.filter((_, i) => !loaded[i]);
+  if (missing.length) {
+    return fail(
+      `"${name}" is built from ${parentIds.length} datasets and ${missing.length} of them ` +
+      `${missing.length === 1 ? 'is' : 'are'} missing. Its data has been left as it was.`,
+    );
+  }
+
+  const table = (d: Dataset): { columns: Dataset['columns']; rows: Dataset['rows'] } =>
+    ({ columns: d.columns, rows: d.rows });
+
+  const composed = combine.composeTables(
+    table(loaded[0] as Dataset),
+    origin.joins.map((j, i) => ({ table: table(loaded[i + 1] as Dataset), mode: j.mode, on: j.on })),
+    MAX_ROWS, // bound EVERY step — a join is inherently m×n, and so is the next one
+  );
+  if (Array.isArray(composed.warnings)) warnings.push(...composed.warnings);
+  if (!composed.columns.length) {
+    return fail(`"${name}" could not be rebuilt from the datasets it was composed from.`);
+  }
+  return store(projectId, id, composed.columns, composed.rows, warnings);
 }
 
 // ── the one write ────────────────────────────────────────────────────────────

@@ -20,30 +20,14 @@ import * as parquetStore from './parquetStore';
 import * as transforms from './transforms';
 import { runResidentPipeline } from './pipelineDuck';
 import type { TableData, TransformStep, ApplyResult } from './transforms';
-
-/**
- * WHERE a dataset's rows came from, so they can be fetched again.
- *
- * Distinct from `sourceKind`, which is a display/format label and is a closed
- * union of eight values that 35 connectors already collapse onto. This says how
- * to RE-RUN the import, and it is the only thing that makes a dataset
- * refreshable — a record without one is a snapshot, exactly as every dataset was
- * before this existed.
- *
- * `paste` and `capture` deliberately have no origin: pasted text has no
- * re-fetchable source, and a capture already has its own recapture flow.
- */
-export type DatasetOrigin =
-  | { kind: 'file'; path: string; sheetName?: string }
-  | { kind: 'url'; url: string }
-  | { kind: 'connection'; connId: string }
-  | {
-      kind: 'combined';
-      leftId: string;
-      rightId: string;
-      mode: 'append' | 'join';
-      on?: { left: string; right: string };
-    };
+// The origin whitelist and the id check both moved out; re-exported here so
+// `datasets.sanitizeOrigin` and `import type { DatasetOrigin } from './datasets'`
+// keep working for every existing caller and test.
+import { isValidId } from './ids';
+import type { DatasetOrigin } from './datasetOrigin';
+import { sanitizeOrigin } from './datasetOrigin';
+export type { DatasetOrigin } from './datasetOrigin';
+export { sanitizeOrigin };
 
 export interface Dataset {
   id: string;
@@ -111,14 +95,6 @@ function getProjectsBase(): string {
   return projectsBase;
 }
 
-// Ids arrive from the renderer over IPC. Validate the SHAPE before either id ever
-// reaches a filesystem path — an id like ".." or "../../foo" would otherwise
-// escape the project's datasets dir. Copied verbatim from projects.ts.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-function isValidId(id: unknown): id is string {
-  return typeof id === 'string' && UUID_RE.test(id);
-}
-
 function datasetsDir(projectId: string): string {
   return path.join(getProjectsBase(), projectId, 'datasets');
 }
@@ -143,68 +119,6 @@ function sanitizeCapture(raw: any): { entryId: string | null; cropPath: string |
   const cropPath = typeof raw.cropPath === 'string' && raw.cropPath ? raw.cropPath : null;
   if (entryId === null && cropPath === null) return undefined;
   return { entryId, cropPath };
-}
-
-/**
- * Whitelist an untrusted `origin` — from a stored file OR a save IPC payload —
- * into a well-formed DatasetOrigin, or `undefined`. Never throws.
- *
- * This is a SECURITY control, not tidying. `normalize()` runs it on every load,
- * so a hand-edited or corrupted record degrades to "not refreshable" instead of
- * turning into a file read or a fetch at an attacker's chosen target:
- *   • a relative path could escape wherever the refresh happens to resolve it
- *   • `file:`/`javascript:`/`data:` URLs are not fetchable sources
- *   • a non-UUID id would reach a path join in connections/datasets
- * Same whitelist discipline as sanitizeCapture and visuals.sanitizeEncoding:
- * keep only what is recognised, drop the rest, never repair.
- */
-export function sanitizeOrigin(raw: unknown): DatasetOrigin | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const o = raw as Record<string, unknown>;
-  const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
-
-  switch (o.kind) {
-    case 'file': {
-      const p = typeof o.path === 'string' ? o.path : '';
-      // Absolute only. A relative path has no meaning outside the cwd it was
-      // captured in, and main's cwd is not the user's.
-      if (!p || !path.isAbsolute(p)) return undefined;
-      const sheetName = str(o.sheetName);
-      return sheetName ? { kind: 'file', path: p, sheetName } : { kind: 'file', path: p };
-    }
-    case 'url': {
-      const u = str(o.url);
-      if (!u) return undefined;
-      try {
-        const parsed = new URL(u);
-        // http/https ONLY. (The URL connector itself is https-only and will
-        // refuse an http one at fetch time — this is the outer guard that keeps
-        // every other scheme from ever reaching a fetcher.)
-        if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return undefined;
-        return { kind: 'url', url: u };
-      } catch (_) {
-        return undefined;
-      }
-    }
-    case 'connection': {
-      const connId = str(o.connId);
-      return isValidId(connId) ? { kind: 'connection', connId } : undefined;
-    }
-    case 'combined': {
-      const leftId = str(o.leftId);
-      const rightId = str(o.rightId);
-      if (!isValidId(leftId) || !isValidId(rightId)) return undefined;
-      if (o.mode !== 'append' && o.mode !== 'join') return undefined;
-      const out: DatasetOrigin = { kind: 'combined', leftId, rightId, mode: o.mode };
-      const on = o.on as Record<string, unknown> | undefined;
-      if (on && typeof on === 'object' && typeof on.left === 'string' && typeof on.right === 'string') {
-        out.on = { left: on.left, right: on.right };
-      }
-      return out;
-    }
-    default:
-      return undefined;
-  }
 }
 
 // Atomic JSON write: temp sibling then rename (atomic on same fs), so a crash

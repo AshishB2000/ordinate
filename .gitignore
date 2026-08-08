@@ -277,3 +277,9 @@ scripts/**/*.js
 # The dataset composer — emitted siblings.
 /scripts/test-composeTables.js
 /src/combine.js
+
+# Composer engine + IPC, and the two modules split out under the 800-line cap.
+/src/combine.js
+/src/ids.js
+/src/datasetOrigin.js
+/src/ipc/datasetCompose.js
