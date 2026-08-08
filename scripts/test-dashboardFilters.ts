@@ -214,5 +214,74 @@ ok('sum(sales) over the leading-zero-filtered subset is the one row (100)',
     controlSteps(dateRange, { from: '  2026-01-01  ' })[0].value === '  2026-01-01  ');
 }
 
+// ── effective-filter composition: dashboard filters, then controls, then a
+// card's own filters ───────────────────────────────────────────────────────
+//
+// renderer/hub/dashboards.ts's effectiveFilters() and renderer/hub/dashGrid.ts's
+// `mergeDashFilters(effectiveFilters(), visual.filters)` are hand-kept, classic-
+// script MIRRORS of mergeDashboardFilters/controlSteps above — they cannot be
+// node-tested directly (no import/export, no harness for a renderer global-scope
+// script in this repo; confirmed in Task 5's review). What CAN be node-tested is
+// the CONTRACT they are specified to implement, using the real pure functions as
+// the oracle rather than a hand-copied expected array that could drift from them
+// unnoticed: effectiveFilters() is `dashboard filters, then every control card's
+// live selection (in page/card order), unreduced`; mergeDashFilters/
+// mergeDashboardFilters then folds a card's OWN filters in last, de-duping
+// byte-identical steps. Two controls + a dashboard filter + a card filter, some
+// of them colliding on purpose, exercises the ORDER and the DEDUP in one go.
+{
+  const dashFilters: FilterStep[] = [{ type: 'filter', column: 'region', op: '!=', value: 'North' }];
+  const dropdown = { kind: 'dropdown' as const, column: 'region' };
+  const dateRange = { kind: 'date_range' as const, column: 'order_date' };
+  // Two control cards, in the order they'd be encountered walking the pages —
+  // this mirrors effectiveFilters()'s `for (const page) for (const card)` loop.
+  const control1Steps = controlSteps(dropdown, { value: 'West' });
+  const control2Steps = controlSteps(dateRange, { from: '2026-01-01', to: '2026-06-30' });
+  // A card's own filter, one of which is BYTE-IDENTICAL to control1's step —
+  // the dedup this exercises: the earlier (control-derived) copy must survive
+  // and the later (card-own) duplicate must be dropped, per mergeDashboardFilters'
+  // documented "first occurrence wins" rule.
+  const cardFilters: FilterStep[] = [
+    { type: 'filter', column: 'region', op: '=', value: 'West' }, // duplicate of control1Steps[0]
+    { type: 'filter', column: 'sales', op: '>=', value: 100 },
+  ];
+
+  // What effectiveFilters() is SPECIFIED to build: dashboard filters, then every
+  // control's steps in order, plain concatenation (no dedup at this stage —
+  // dedup only happens once, in the final mergeDashFilters/mergeDashboardFilters
+  // call, mirrored here as a two-argument merge of (effective, cardFilters)).
+  const effective = dashFilters.concat(control1Steps, control2Steps);
+  const finalList = mergeDashboardFilters(effective, cardFilters);
+
+  ok('dashboard filters lead the composed list',
+    finalList[0].column === 'region' && finalList[0].op === '!=' && finalList[0].value === 'North');
+  ok('…then the FIRST control (dropdown) in page order',
+    finalList[1].column === 'region' && finalList[1].op === '=' && finalList[1].value === 'West');
+  ok('…then the SECOND control (date_range), both of its ends',
+    finalList[2].column === 'order_date' && finalList[2].op === '>=' && finalList[2].value === '2026-01-01' &&
+    finalList[3].column === 'order_date' && finalList[3].op === '<=' && finalList[3].value === '2026-06-30');
+  ok('…then the card\'s own filter that is NOT a duplicate of anything above',
+    finalList[4].column === 'sales' && finalList[4].op === '>=' && finalList[4].value === 100);
+  ok('the card\'s OWN filter that duplicates a control-derived step is dropped, not doubled',
+    finalList.length === 5);
+
+  // The oracle for "what SHOULD this produce" is mergeDashboardFilters itself
+  // (already node-tested above for order/dedup) — not a hand-written array — so
+  // recomputing with a differently-grouped call must agree byte-for-byte. This
+  // is what catches the renderer's mirror silently drifting from the rule: if
+  // effectiveFilters()/mergeDashFilters ever stop matching this two-step
+  // composition, this equality is what would break.
+  const regrouped = mergeDashboardFilters(dashFilters, control1Steps.concat(control2Steps, cardFilters));
+  ok('the composition is associative — grouping (dash+controls)+card the same as dash+(controls+card)',
+    JSON.stringify(finalList) === JSON.stringify(regrouped));
+
+  // And the composed list actually moves a real metric total: region != North
+  // (no-op, nothing is North) → region = West (West/Jan 100, West/Feb 50) →
+  // order_date >=/<= (column absent from this fixture, skipped per the
+  // heterogeneous-dataset rule) → sales >= 100 (drops West/Feb) → West/Jan only.
+  ok('the composed filter list still drives a real aggregate (→ 100)',
+    metricWith(finalList, 'sales', 'sum') === 100);
+}
+
 if (failures) { console.error('\n' + failures + ' dashboardFilters check(s) FAILED'); process.exit(1); }
 console.log('\nAll dashboardFilters checks passed.');

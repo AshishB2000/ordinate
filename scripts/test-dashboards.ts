@@ -261,6 +261,35 @@ async function main(): Promise<void> {
     ok('a missing column drops the control card', missingColumn === null);
   }
 
+  // ── sanitizer round-trip: a good control card survives publish-by-value ──────
+  // publishAnalysis (src/ipc/analyses.ts) denormalizes exactly ONE way: a plain
+  // `JSON.parse(JSON.stringify(a.sheets))` deep copy — there is no separate
+  // control-specific step. So the guarantee this task adds is: sanitize a valid
+  // control card, JSON round-trip it (the literal mechanism publish uses), then
+  // sanitize the round-tripped copy again — the two must be byte-identical. A
+  // control card that lost a field to that round trip (or that sanitizeCard
+  // treated differently the second time through) would silently drop a filter
+  // on every published dashboard, which is why this compares SANITIZED output to
+  // SANITIZED output rather than assuming the raw round trip is enough on its own.
+  {
+    const layout = { x: 0, y: 0, w: 4, h: 2 };
+    const goodCard = dashboards.sanitizeCard({
+      id: '88888888-8888-4888-8888-888888888888',
+      type: 'control', layout,
+      control: { kind: 'multi', label: 'Region', datasetId: DATASET_ID, column: 'region', default: { values: ['West', 'East'] } },
+    });
+    ok('the source control card sanitizes cleanly', goodCard !== null && goodCard.control !== undefined);
+
+    const roundTripped = JSON.parse(JSON.stringify(goodCard));
+    const reSanitized = dashboards.sanitizeCard(roundTripped);
+    ok('the round-tripped card sanitizes cleanly too', reSanitized !== null && reSanitized.control !== undefined);
+    ok('a good control card is byte-identical after sanitize -> JSON round trip -> sanitize',
+      JSON.stringify(goodCard) === JSON.stringify(reSanitized));
+    ok('…specifically, the control payload itself is untouched',
+      goodCard !== null && reSanitized !== null
+      && JSON.stringify(goodCard.control) === JSON.stringify(reSanitized.control));
+  }
+
   // ── control cards: persist + reload through saveDashboard/getDashboard ───────
   const withControl = await dashboards.saveDashboard(proj.id, {
     name: 'Control board',
