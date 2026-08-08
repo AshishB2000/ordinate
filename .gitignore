@@ -285,3 +285,7 @@ scripts/**/*.js
 /src/ipc/datasetCompose.js
 /renderer/hub/composer.js
 /scripts/smoke-composer.js
+
+# Scheduled refresh + anomaly watch — emitted siblings.
+/src/refreshScheduler.js
+/scripts/test-refreshScheduler.js
