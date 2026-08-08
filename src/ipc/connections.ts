@@ -2,7 +2,7 @@ import { ipcMain } from 'electron';
 import * as connections from '../connections';
 import * as connectionRun from '../connectionRun';
 import * as datasets from '../datasets';
-import * as config from '../config';
+import * as configSecrets from '../configSecrets';
 import { connectorCatalog, getConnector } from '../connectors';
 import type { ConnectorDef, ConnectorField } from '../connectors/types';
 
@@ -14,9 +14,9 @@ import type { ConnectorDef, ConnectorField } from '../connectors/types';
 // becomes { ok:false, error } — the renderer never sees an unhandled rejection.
 //
 // SECURITY: a secret arrives from the renderer form ONLY in the `secret` payload
-// of connection:testAndSave, goes straight into config.setConnectionSecret
+// of connection:testAndSave, goes straight into configSecrets.setConnectionSecret
 // (plaintext in the gitignored config.json), and is read back solely here, in
-// MAIN, via config.getConnectionSecret. Secrets are never written into a
+// MAIN, via configSecrets.getConnectionSecret. Secrets are never written into a
 // project's connections/*.json, never returned to a renderer, and every error
 // string leaving a runner has been through safeError(). connectors:catalog
 // returns form SHAPE only — the `secret` flag on a field travels, a value never
@@ -98,13 +98,13 @@ function storeSecrets(connId: string, secrets: Record<string, string>): void {
     const slot = secretSlot(key);
     if (payload[slot] === undefined) payload[slot] = value; // first writer wins — see KNOWN LIMIT
   }
-  if (payload.password || payload.token) config.setConnectionSecret(connId, payload);
+  if (payload.password || payload.token) configSecrets.setConnectionSecret(connId, payload);
 }
 
 // Read a connection's secrets back, re-keyed by the connector's field keys — the
 // shape ConnectorContext.secrets promises. MAIN ONLY; never returned anywhere.
 function loadSecrets(connId: string, def: ConnectorDef | null): Record<string, string> {
-  const stored = config.getConnectionSecret(connId);
+  const stored = configSecrets.getConnectionSecret(connId);
   const out: Record<string, string> = {};
   const password = typeof stored.password === 'string' ? stored.password : '';
   const token = typeof stored.token === 'string' ? stored.token : '';
@@ -310,7 +310,7 @@ export function register(): void {
   ipcMain.handle('connection:delete', async (_e, { projectId, connId }: any = {}) => {
     try {
       const ok = await connections.deleteConnection(projectId, connId);
-      config.deleteConnectionSecret(connId);
+      configSecrets.deleteConnectionSecret(connId);
       return { ok };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not delete the connection' };

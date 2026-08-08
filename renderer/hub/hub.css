@@ -9903,3 +9903,11 @@ body.cap-focus .cap-back {
   background: var(--surface); color: var(--text); font: inherit; font-size: 12px;
 }
 .dc-col-drop { align-self: flex-start; color: var(--error); }
+
+/* The Auto-refresh picker, beside the freshness line it qualifies. */
+.ds-auto-host[hidden] { display: none; }
+.ds-auto-select {
+  padding: 2px 6px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--muted); font: inherit; font-size: 11px;
+}
+.ds-auto-select:hover { color: var(--text); border-color: var(--accent); }

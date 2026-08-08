@@ -39,7 +39,57 @@ async function refreshDatasetList(): Promise<void> {
 function dsFreshnessText(d: any): string {
   const stamp = (d && d.lastRefreshedAt) || (d && d.updatedAt);
   const when = formatSidebarTime(stamp);
-  return d && d.originKind ? 'Data as of ' + when : 'Imported ' + when;
+  const base = d && d.originKind ? 'Data as of ' + when : 'Imported ' + when;
+  // A schedule is part of how fresh this is, so it belongs on the same line
+  // rather than in a second badge somewhere else.
+  const every = d && d.autoRefresh && d.autoRefresh.every;
+  return every ? `${base} · auto ${every}` : base;
+}
+
+/**
+ * The Auto-refresh picker, used in BOTH places a dataset's freshness is shown:
+ * its row in the list, and the explorer header. One builder, so the two cannot
+ * offer different options or write through different channels.
+ *
+ * Only a dataset with a re-fetchable origin gets one — there is nothing to
+ * schedule otherwise, and main refuses it anyway (datasets.setAutoRefresh).
+ */
+function dsAutoRefreshPicker(d: any, onDone?: () => void): HTMLElement | null {
+  if (!d || !d.originKind) return null;
+  const sel = document.createElement('select');
+  sel.className = 'ds-auto-select';
+  sel.setAttribute('aria-label', `Auto-refresh ${d.name || 'dataset'}`);
+  const opts: Array<[string, string]> = [
+    ['off', 'Auto-refresh: Off'],
+    ['hourly', 'Auto-refresh: Hourly'],
+    ['daily', 'Auto-refresh: Daily'],
+    ['weekly', 'Auto-refresh: Weekly'],
+  ];
+  for (const [value, label] of opts) {
+    const o = document.createElement('option');
+    o.value = value;
+    o.textContent = label;
+    sel.appendChild(o);
+  }
+  sel.value = (d.autoRefresh && d.autoRefresh.every) || 'off';
+  sel.addEventListener('click', (e) => e.stopPropagation()); // the row itself opens the dataset
+  sel.addEventListener('change', async () => {
+    const value = sel.value === 'off' ? null : sel.value;
+    let res: any;
+    try {
+      res = await window.hub.setDatasetAutoRefresh(currentProjectId, String(d.id), value);
+    } catch (_) {
+      res = { ok: false };
+    }
+    if (!res || res.ok === false) {
+      showToast('Could not change the schedule.');
+      sel.value = (d.autoRefresh && d.autoRefresh.every) || 'off';
+      return;
+    }
+    if (onDone) onDone();
+    else await refreshDatasetList();
+  });
+  return sel;
 }
 
 /**
@@ -166,6 +216,9 @@ function makeSavedItem(d: any): HTMLElement {
 
   // Combine… opens the composer with THIS dataset as the base. It is the same
   // page the import flow lands on — one flow, not a second combine dialog.
+  const auto = dsAutoRefreshPicker(d);
+  if (auto) actions.appendChild(auto);
+
   const comb = document.createElement('button');
   comb.type = 'button';
   comb.className = 'ds-saved-combine';

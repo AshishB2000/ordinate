@@ -289,3 +289,4 @@ scripts/**/*.js
 # Scheduled refresh + anomaly watch — emitted siblings.
 /src/refreshScheduler.js
 /scripts/test-refreshScheduler.js
+/src/configSecrets.js

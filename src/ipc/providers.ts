@@ -320,6 +320,11 @@ export function register({ getHubWindow, notifyKeyChanged }: {
   });
 
   // Persist completion-notification toggles ({ sound?, desktop? }).
+  // The master auto-refresh switch. Lives beside the notification prefs because
+  // it is the same kind of thing: a config boolean the renderer may flip and
+  // read back through publicConfig(), which strips every secret.
+  ipcMain.handle('autorefresh:set', (_e, on: any) => config.setAutoRefreshEnabled(Boolean(on)));
+
   ipcMain.handle('notifications:set', (_e, { fields }: any = {}) => {
     return config.setNotifications(fields || {});
   });

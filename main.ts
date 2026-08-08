@@ -581,6 +581,19 @@ require("./src/ipc/datasets").register();
 // commitSteps primitive during its own register().
 require("./src/ipc/datasetCompose").register();
 
+// Unattended dataset refresh. Ordinate has no daemon: this ticks while the app
+// is RUNNING, and anything that came due while it was closed is simply overdue
+// on the first tick after launch. The settings copy says exactly that.
+//
+// The master switch is read on EVERY tick rather than captured here, so turning
+// it off in Settings takes effect at once instead of at the next restart.
+{
+  const scheduler = require("./src/refreshScheduler");
+  scheduler.setEnabledCheck(() => config.get().autoRefresh !== false);
+  scheduler.start();
+  app.on("before-quit", () => scheduler.stop());
+}
+
 require("./src/ipc/connections").register();
 
 require("./src/ipc/visuals").register();

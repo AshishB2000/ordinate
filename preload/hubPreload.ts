@@ -48,6 +48,7 @@ contextBridge.exposeInMainWorld('hub', {
   // Persist the user's global rules (Instructions / Rules box).
   setGlobalRules: (text: string) => ipcRenderer.invoke('rules:set', { text }),
   // Completion-notification toggles ({ sound?, desktop? }).
+  setAutoRefreshEnabled: (on: boolean) => ipcRenderer.invoke('autorefresh:set', on),
   setNotifications: (fields: any) => ipcRenderer.invoke('notifications:set', { fields }),
   // Show a benign notification to register the app with the OS when the Desktop
   // toggle is first enabled → { ok, supported }.
@@ -229,6 +230,10 @@ contextBridge.exposeInMainWorld('hub', {
   ) => ipcRenderer.invoke('dataset:page', { projectId, datasetId, ...req }),
   // Rename columns / correct types; main re-coerces cells on a type change. Returns
   // { ok, dataset } | { ok:false, error }.
+  // `autoRefresh`: 'hourly' | 'daily' | 'weekly' to set, null/'off' to clear,
+  // omitted to leave alone. Same channel as the column patch — one record.
+  setDatasetAutoRefresh: (projectId: string, datasetId: string, autoRefresh: string | null) =>
+    ipcRenderer.invoke('dataset:update', { projectId, datasetId, autoRefresh }),
   updateDataset: (projectId: string, datasetId: string, columns: any[]) =>
     ipcRenderer.invoke('dataset:update', { projectId, datasetId, columns }),
   // OPTIONAL AI narration of an opened dataset (numbers computed in main, not by

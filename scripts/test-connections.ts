@@ -25,7 +25,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 // ponytail: compiled siblings of the .ts sources.
 const connections: typeof import('../src/connections') = require('../src/connections');
 const projects: typeof import('../src/projects') = require('../src/projects');
-const config: typeof import('../src/config') = require('../src/config');
+const configSecrets: typeof import('../src/configSecrets') = require('../src/configSecrets');
 
 let failures = 0;
 function ok(label: string, cond: boolean) {
@@ -116,10 +116,10 @@ async function main(): Promise<void> {
     (await connections.updateConnection(proj.id, '00000000-0000-0000-0000-000000000000', { lastStatus: 'ok' })) === null);
 
   // ── Secret store (config.ts) ────────────────────────────────────────────────
-  ok('getConnectionSecret is empty before set', a !== null && Object.keys(config.getConnectionSecret(a.id)).length === 0);
-  const setRes = a !== null ? config.setConnectionSecret(a.id, { password: SECRET_PW }) : { ok: false };
+  ok('getConnectionSecret is empty before set', a !== null && Object.keys(configSecrets.getConnectionSecret(a.id)).length === 0);
+  const setRes = a !== null ? configSecrets.setConnectionSecret(a.id, { password: SECRET_PW }) : { ok: false };
   ok('setConnectionSecret succeeds for a UUID connId', setRes.ok === true);
-  ok('getConnectionSecret returns the stored password', a !== null && config.getConnectionSecret(a.id).password === SECRET_PW);
+  ok('getConnectionSecret returns the stored password', a !== null && configSecrets.getConnectionSecret(a.id).password === SECRET_PW);
 
   // The password must live ONLY in config.json — NEVER in the connection file,
   // NEVER in the renderer-facing publicConnection view.
@@ -129,8 +129,8 @@ async function main(): Promise<void> {
   ok('publicConnection view does NOT contain the secret', pub !== null && !JSON.stringify(pub).includes(SECRET_PW) && !('password' in (pub as any)) && !('token' in (pub as any)));
 
   // config secret store rejects a non-UUID connId (path/key-injection guard).
-  ok('setConnectionSecret rejects a non-UUID connId', config.setConnectionSecret('../evil', { password: 'x' }).ok === false);
-  ok('getConnectionSecret returns {} for a non-UUID connId', Object.keys(config.getConnectionSecret('../evil')).length === 0);
+  ok('setConnectionSecret rejects a non-UUID connId', configSecrets.setConnectionSecret('../evil', { password: 'x' }).ok === false);
+  ok('getConnectionSecret returns {} for a non-UUID connId', Object.keys(configSecrets.getConnectionSecret('../evil')).length === 0);
 
   // deleteConnection also drops the secret (done by the IPC layer, but assert the
   // secret helper works and the metadata delete removes the file).
@@ -138,8 +138,8 @@ async function main(): Promise<void> {
   ok('deleteConnection returns true', del === true);
   ok('deleteConnection removes the file',
     a !== null && !fs.existsSync(path.join(tmpUserData, 'projects', proj.id, 'connections', a.id + '.json')));
-  if (a !== null) config.deleteConnectionSecret(a.id);
-  ok('deleteConnectionSecret drops the secret', a !== null && Object.keys(config.getConnectionSecret(a.id)).length === 0);
+  if (a !== null) configSecrets.deleteConnectionSecret(a.id);
+  ok('deleteConnectionSecret drops the secret', a !== null && Object.keys(configSecrets.getConnectionSecret(a.id)).length === 0);
 
   list = await connections.listConnections(proj.id);
   ok('listConnections reflects the deletion', list.length === 1 && b !== null && list[0].id === b.id);

@@ -71,7 +71,6 @@ const ALLOWED: Record<string, number> = {
   'src/analysisPlan.ts': 884,
   'src/analyze.ts': 1021,
   'src/anomaliesResident.ts': 870,
-  'src/config.ts': 801,
   'src/connectors/http.ts': 1036,
   'src/connectors/local.ts': 804,
   'src/localCliRun.ts': 822,
