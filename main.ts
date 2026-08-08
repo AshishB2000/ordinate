@@ -580,6 +580,7 @@ require("./src/ipc/datasets").register();
 // The composer's two handlers. Registered AFTER datasets, which hands it the
 // commitSteps primitive during its own register().
 require("./src/ipc/datasetCompose").register();
+require("./src/ipc/search").register();
 
 // Unattended dataset refresh. Ordinate has no daemon: this ticks while the app
 // is RUNNING, and anything that came due while it was closed is simply overdue

@@ -311,6 +311,9 @@ contextBridge.exposeInMainWorld('hub', {
   connectorCatalog: () => ipcRenderer.invoke('connectors:catalog'),
   // List a project's saved connections (secret-free public view).
   listConnections: (projectId: string) => ipcRenderer.invoke('connections:list', { projectId }),
+  // Global search — NAMES only, across the five things the sidebar's box names.
+  searchWorkspace: (projectId: string, query: string) =>
+    ipcRenderer.invoke('search:query', { projectId, query }),
   // Test a connection with the typed secret; persist metadata + secret only on
   // success. `kind` is the connectorId (the two pre-registry names, 'postgres'
   // and 'url', are the ids of the connectors that replaced them, so an

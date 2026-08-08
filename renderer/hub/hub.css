@@ -9918,3 +9918,21 @@ body.cap-focus .cap-back {
 }
 .ds-watch-btn:hover { color: var(--text); border-color: var(--accent); }
 .ds-watch-btn.is-on { color: var(--accent); border-color: var(--accent); background: var(--surface-2); }
+
+/* ── The sidebar's global search results ─────────────────────────────────── */
+.as-search-results[hidden] { display: none; }
+.as-search-results {
+  display: flex; flex-direction: column; gap: 1px;
+  margin: 4px 8px 0; padding: 4px; max-height: 320px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); box-shadow: 0 6px 18px rgb(0 0 0 / 16%);
+}
+.gs-hit {
+  display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: 6px; cursor: pointer;
+}
+.gs-hit:hover, .gs-hit.is-active { background: var(--surface-2); }
+.gs-glyph { color: var(--muted); font-size: 12px; text-align: center; }
+.gs-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gs-sub { color: var(--muted); font-size: 10px; white-space: nowrap; }
+.gs-none { padding: 8px; color: var(--muted); font-size: 12px; }

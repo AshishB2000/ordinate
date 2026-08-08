@@ -190,6 +190,7 @@ declare global {
           }[];
         }[]
       >;
+      searchWorkspace(projectId: string, query: string): Promise<any>;
       listConnections(projectId: string): Promise<any[]>;
       testAndSaveConnection(projectId: string, kind: string, config: any, secret: any): Promise<any>;
       listConnectionTables(projectId: string, connId: string): Promise<any>;

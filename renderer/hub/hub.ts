@@ -84,6 +84,7 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
   initAnalyses();        // analyses.ts
   initAuthoring();       // authoring.ts — the analysis workbench panels
   initCopilot();         // copilot.ts
+  initGlobalSearch();    // globalSearch.ts — the sidebar's search box
 })();
 
 // ── Toast ─────────────────────────────────────────────────────────────────

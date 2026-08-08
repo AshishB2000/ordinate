@@ -292,3 +292,5 @@ scripts/**/*.js
 /src/configSecrets.js
 /src/anomalyWatch.js
 /scripts/test-anomalyWatch.js
+/src/ipc/search.js
+/renderer/hub/globalSearch.js
