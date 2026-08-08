@@ -10,6 +10,14 @@ All notable changes to Ordinate are documented here. Format based on
 ## [Unreleased]
 
 ### Added
+- **Dashboards can carry live filter controls.** Add a dropdown, multi-select or date-range card and
+  every other card on the sheet filters along with it — no editing, no republish. A reader's picks
+  live only in the open window: they are never written to the saved dashboard, so two people looking
+  at the same published dashboard can filter it differently without either one moving the file the
+  other is looking at. Controls work on a published, read-only dashboard exactly as they do on a
+  draft, and stay usable in Present mode — filtering is a read, same as drilling into a chart already
+  was. Drill-down chips and the exported summary both reflect a control's current selection; the
+  export itself never carries a live widget, only the plain-text value it was set to.
 - **See the rows behind any number.** Click a bar, a slice or a point — or pick
   `⋯ → Show underlying rows` on any visual — and a panel slides over showing exactly the rows that
   produced it, paged, searchable and sortable. The filters that define the set are listed as chips,
