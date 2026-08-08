@@ -238,6 +238,8 @@ contextBridge.exposeInMainWorld('hub', {
   // omitted to leave alone. Same channel as the column patch — one record.
   setDatasetAutoRefresh: (projectId: string, datasetId: string, autoRefresh: string | null) =>
     ipcRenderer.invoke('dataset:update', { projectId, datasetId, autoRefresh }),
+  setDatasetWatch: (projectId: string, datasetId: string, watch: boolean) =>
+    ipcRenderer.invoke('dataset:update', { projectId, datasetId, watch }),
   updateDataset: (projectId: string, datasetId: string, columns: any[]) =>
     ipcRenderer.invoke('dataset:update', { projectId, datasetId, columns }),
   // OPTIONAL AI narration of an opened dataset (numbers computed in main, not by

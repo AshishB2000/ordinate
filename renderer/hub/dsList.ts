@@ -93,6 +93,41 @@ function dsAutoRefreshPicker(d: any, onDone?: () => void): HTMLElement | null {
 }
 
 /**
+ * Watch for anomalies — opt-in, and only offered where there is a schedule to
+ * hang it on. Nothing re-runs without one, so there would be nothing to watch.
+ *
+ * The alert this enables carries an app-computed count and no model output; the
+ * AI "explain anomalies" action is unchanged and stays pull, not push.
+ */
+function dsWatchToggle(d: any): HTMLElement | null {
+  if (!d || !d.autoRefresh || !d.autoRefresh.every) return null;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'ds-watch-btn';
+  const on = Boolean(d.autoRefresh.watch);
+  btn.classList.toggle('is-on', on);
+  btn.setAttribute('aria-pressed', String(on));
+  btn.textContent = on ? '◉ Watching' : '◎ Watch';
+  btn.title = 'Notify me when new anomalies appear after an auto-refresh';
+  btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const next = !btn.classList.contains('is-on');
+    let res: any;
+    try {
+      res = await window.hub.setDatasetWatch(currentProjectId, String(d.id), next);
+    } catch (_) {
+      res = { ok: false };
+    }
+    if (!res || res.ok === false) {
+      showToast((res && res.error) || 'Could not change the watch.');
+      return;
+    }
+    await refreshDatasetList();
+  });
+  return btn;
+}
+
+/**
  * The Source column's badge text, one per `Dataset['sourceKind']` (the closed
  * set in src/datasets.ts). A kind outside it falls back to the raw string rather
  * than to a guess, so a new source shows up as itself instead of as "Unknown".
@@ -218,6 +253,8 @@ function makeSavedItem(d: any): HTMLElement {
   // page the import flow lands on — one flow, not a second combine dialog.
   const auto = dsAutoRefreshPicker(d);
   if (auto) actions.appendChild(auto);
+  const watch = dsWatchToggle(d);
+  if (watch) actions.appendChild(watch);
 
   const comb = document.createElement('button');
   comb.type = 'button';

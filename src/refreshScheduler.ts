@@ -28,6 +28,9 @@ import * as datasets from './datasets';
 import type { AutoRefreshEvery, DatasetSummary } from './datasets';
 import * as projects from './projects';
 import { refreshDataset } from './datasetRefresh';
+import { detectAnomalies } from './anomalies';
+import { detectAnomaliesResident } from './anomaliesResident';
+import { diffAnomalies } from './anomalyWatch';
 
 /** How often the tick looks for work. The schedules themselves are hours apart. */
 const TICK_MS = 60_000;
@@ -108,6 +111,8 @@ export interface AutoRefreshOutcome {
   error?: string;
   rowsBefore: number;
   rowsAfter: number;
+  /** Anomalies found this run that were not there last run. App-computed; no model. */
+  newAnomalies?: number;
 }
 
 type Reporter = (outcome: AutoRefreshOutcome) => void;
@@ -153,6 +158,9 @@ export async function tickNow(now = Date.now()): Promise<AutoRefreshOutcome[]> {
         rowsAfter: (after && after.rowCount) || 0,
       };
       if (!outcome.ok) outcome.error = (res as any).error || 'Refresh failed.';
+      if (outcome.ok && m.autoRefresh && m.autoRefresh.watch) {
+        outcome.newAnomalies = await runWatch(m.projectId, m.id, m.autoRefresh.lastAnomalyKeys);
+      }
       outcomes.push(outcome);
       if (report) {
         try { report(outcome); } catch (_) { /* a reporter must never stop the loop */ }
@@ -165,6 +173,36 @@ export async function tickNow(now = Date.now()): Promise<AutoRefreshOutcome[]> {
     running = false;
   }
   return outcomes;
+}
+
+/**
+ * The anomaly watch for one dataset that just refreshed successfully.
+ *
+ * Resident fast path first, JS reference as the fallback — the pairing this
+ * codebase already uses everywhere, and for the same reason: a resident `null`
+ * means "fall back", never "no anomalies".
+ *
+ * Returns how many findings are NEW. Zero (or a failure to read the table at
+ * all) means nothing to say, which is the common case and must stay silent.
+ */
+async function runWatch(projectId: string, id: string, previous?: string[]): Promise<number> {
+  try {
+    let found = null as ReturnType<typeof detectAnomalies> | null;
+    const src = await datasets.residentSource(projectId, id);
+    if (src) found = detectAnomaliesResident(src);
+    if (!found) {
+      const ds = await datasets.getDataset(projectId, id);
+      if (!ds) return 0;
+      found = detectAnomalies(ds.columns, ds.rows);
+    }
+    const { newKeys, keep } = diffAnomalies(found, previous);
+    // Store the CURRENT set even when nothing is new: a resolved anomaly has to
+    // drop out, or it counts as new again the day it returns having never left.
+    await datasets.setAutoRefresh(projectId, id, { lastAnomalyKeys: keep });
+    return newKeys.length;
+  } catch (_) {
+    return 0; // a watch that throws must not take the refresh down with it
+  }
 }
 
 export function start(): void {

@@ -26,6 +26,7 @@ import type { TableData, TransformStep, ApplyResult } from './transforms';
 import { isValidId } from './ids';
 import type { DatasetOrigin } from './datasetOrigin';
 import { sanitizeOrigin } from './datasetOrigin';
+import { sanitizeAnomalyKeys } from './anomalyWatch';
 export type { DatasetOrigin } from './datasetOrigin';
 export { sanitizeOrigin };
 
@@ -88,6 +89,18 @@ export interface Dataset {
 export interface AutoRefresh {
   every: AutoRefreshEvery;
   lastAutoAt?: string;
+  /**
+   * Opt in to anomaly watch. Off by default and stored here rather than in its
+   * own block because it only means anything alongside a schedule — there is
+   * nothing to watch for if nothing re-runs.
+   */
+  watch?: boolean;
+  /**
+   * The anomaly KEYS the last watched run found, so the next one can report only
+   * what is new. Capped (anomalyWatch.MAX_KEYS) and sanitized like everything
+   * else that comes back off disk.
+   */
+  lastAnomalyKeys?: string[];
 }
 
 export type AutoRefreshEvery = 'hourly' | 'daily' | 'weekly';
@@ -265,6 +278,9 @@ function sanitizeAutoRefresh(raw: unknown, hasOrigin: boolean): AutoRefresh | un
   if (o.every !== 'hourly' && o.every !== 'daily' && o.every !== 'weekly') return undefined;
   const out: AutoRefresh = { every: o.every };
   if (typeof o.lastAutoAt === 'string' && o.lastAutoAt) out.lastAutoAt = o.lastAutoAt;
+  if (o.watch === true) out.watch = true;
+  const keys = sanitizeAnomalyKeys(o.lastAnomalyKeys);
+  if (keys) out.lastAnomalyKeys = keys;
   return out;
 }
 
@@ -600,7 +616,7 @@ export async function markRefresh(
 export async function setAutoRefresh(
   projectId: string,
   id: string,
-  patch: { every?: AutoRefreshEvery | null; lastAutoAt?: string },
+  patch: { every?: AutoRefreshEvery | null; lastAutoAt?: string; watch?: boolean; lastAnomalyKeys?: string[] },
 ): Promise<AutoRefresh | null | false> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
   const file = datasetFilePath(projectId, id);
@@ -619,6 +635,10 @@ export async function setAutoRefresh(
     const next: AutoRefresh = { every };
     const lastAutoAt = patch.lastAutoAt ?? (current ? current.lastAutoAt : undefined);
     if (lastAutoAt) next.lastAutoAt = lastAutoAt;
+    const watch = patch.watch ?? (current ? current.watch : undefined);
+    if (watch) next.watch = true;
+    const keys = sanitizeAnomalyKeys(patch.lastAnomalyKeys ?? (current ? current.lastAnomalyKeys : undefined));
+    if (keys) next.lastAnomalyKeys = keys;
     raw.autoRefresh = next;
     await writeJsonAtomic(file, raw);
     return next;

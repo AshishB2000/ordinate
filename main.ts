@@ -612,6 +612,10 @@ require("./src/ipc/datasetCompose").register();
     const before = o.rowsBefore;
     if (before > 0 && Math.abs(o.rowsAfter - before) / before > BIG_CHANGE) {
       maybeNotify(`"${o.name}" changed: ${before.toLocaleString()} → ${o.rowsAfter.toLocaleString()} rows.`);
+      return; // one notification per dataset per tick
+    }
+    if (o.newAnomalies > 0) {
+      maybeNotify(require("./src/anomalyWatch").watchMessage(o.name, o.newAnomalies));
     }
   });
 

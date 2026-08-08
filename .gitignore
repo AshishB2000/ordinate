@@ -290,3 +290,5 @@ scripts/**/*.js
 /src/refreshScheduler.js
 /scripts/test-refreshScheduler.js
 /src/configSecrets.js
+/src/anomalyWatch.js
+/scripts/test-anomalyWatch.js
