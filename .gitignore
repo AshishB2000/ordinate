@@ -239,6 +239,7 @@ scripts/**/*.js
 /renderer/hub/dashGrid.js
 /renderer/hub/dashAdd.js
 /renderer/hub/dashAddControl.js
+/renderer/hub/dashControls.js
 /renderer/hub/dashFiltersUi.js
 /renderer/hub/dashAi.js
 /renderer/hub/dashShare.js

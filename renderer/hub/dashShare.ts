@@ -58,7 +58,12 @@ function formatControlSummaryPart(card: any): string {
   const cur = controlCurrentValue(card);
   let value = '';
   if (control.kind === 'multi') {
-    value = Array.isArray(cur.values) ? cur.values.join(', ') : '';
+    const vals: string[] = Array.isArray(cur.values) ? cur.values : [];
+    // Cap the summary at 5 named values — a multi-select with dozens picked
+    // would otherwise blow the header out to an unreadable single line.
+    value = vals.length > 5
+      ? vals.slice(0, 5).join(', ') + ', and ' + (vals.length - 5) + ' more'
+      : vals.join(', ');
   } else if (control.kind === 'date_range') {
     const from = cur.from || '';
     const to = cur.to || '';

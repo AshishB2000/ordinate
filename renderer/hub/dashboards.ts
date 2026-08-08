@@ -71,7 +71,9 @@ function controlStepsRenderer(control: any, state: any): any[] {
   if (control.kind === 'multi' && 'values' in state) {
     const values = state.values;
     if (!Array.isArray(values) || values.length === 0) return [];
-    return [{ type: 'filter', column, op: 'in', values }];
+    // .slice(): `state` may be the SAME array card.control.default.values
+    // seeded, so this must not hand back a reference into the record.
+    return [{ type: 'filter', column, op: 'in', values: values.slice() }];
   }
   if (control.kind === 'date_range') {
     const from = 'from' in state ? state.from : undefined;

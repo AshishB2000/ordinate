@@ -16,8 +16,11 @@ All notable changes to Ordinate are documented here. Format based on
   at the same published dashboard can filter it differently without either one moving the file the
   other is looking at. Controls work on a published, read-only dashboard exactly as they do on a
   draft, and stay usable in Present mode — filtering is a read, same as drilling into a chart already
-  was. Drill-down chips and the exported summary both reflect a control's current selection; the
-  export itself never carries a live widget, only the plain-text value it was set to.
+  was. An author can set a control's default from the dialog or by trying it on the sheet and saving
+  the current pick; a reader can always get back to that default with the sheet's **Reset controls**
+  button, which appears only once a control has moved off it. Drill-down chips and the exported
+  summary both reflect a control's current selection; the export itself never carries a live widget,
+  only the plain-text value it was set to.
 - **See the rows behind any number.** Click a bar, a slice or a point — or pick
   `⋯ → Show underlying rows` on any visual — and a panel slides over showing exactly the rows that
   produced it, paged, searchable and sortable. The filters that define the set are listed as chips,
@@ -109,6 +112,10 @@ All notable changes to Ordinate are documented here. Format based on
   Screen Recording permission is granted.
 - Multi-step modal dialogs no longer let the keyboard focus trap land on a control in a hidden step,
   which stranded focus outside the dialog.
+- A dashboard-level filter and a card-level filter using `in`/`not in` on the same column could
+  collide and one would silently drop the other, from a dedup key that ignored the values being
+  filtered on. Fixed before it could bite a real user: it only started mattering once a control card
+  could itself emit an `in` filter.
 
 ## [0.1.0] — 2026-07-XX <!-- TODO(ashish): set release date -->
 

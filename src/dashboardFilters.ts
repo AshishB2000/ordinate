@@ -114,7 +114,10 @@ export function controlSteps(
   if (control.kind === 'multi' && 'values' in state) {
     const { values } = state;
     if (!Array.isArray(values) || values.length === 0) return []; // cleared → no step
-    return [{ type: 'filter', column, op: 'in', values }];
+    // .slice(): `state` may be the SAME array the persisted record's
+    // `card.control.default.values` seeded, so this must not hand back a
+    // reference into it.
+    return [{ type: 'filter', column, op: 'in', values: values.slice() }];
   }
 
   if (control.kind === 'date_range') {
