@@ -52,6 +52,25 @@ All notable changes to Ordinate are documented here. Format based on
   you: picking one opens the builder, and you still review and save it.
 
 ### Changed
+- **Adding to an analysis is one dialog, not a chain.** A metric used to be four modals in a row
+  (dataset → column → aggregation → label); it is now a single form with a **live preview of the
+  number** the card will show, computed by the app exactly as the card computes it. Adding a visual
+  is a gallery of your saved visuals rather than a list of names — and it carries `+ New visual` and
+  `✨ Suggest with AI`, so you can make one **without leaving the analysis**. With nothing saved yet,
+  those two are the whole dialog: no more dead end.
+- **Selecting a card opens its Properties.** Editing the card is why you clicked it. Deselecting
+  (Escape, or a click on empty canvas) closes the panel again — unless you opened it yourself from
+  the rail, in which case it stays. The field list no longer moves between panels: it lives beside
+  the wells, and the Data panel has its own browse copy.
+- **An empty sheet now says what a sheet is for**, offering Add a visual / Add a metric / Add text
+  above the two starter layouts, instead of a blank grid.
+- **A selected card shows its outline and controls**; unselected cards show them on hover, so a
+  sheet at rest reads as content rather than a wall of buttons.
+- **The analysis header shows its publish state as a pill** — Draft, Published, or Unpublished
+  changes — instead of hiding it in a tooltip.
+- **The Analyses list is painted like the rest of the app**: a proper header with a count and
+  right-aligned actions, the shared table treatment, and one status pill carrying all three states
+  (it used to say "Published" beside a separate "Unpublished changes" badge).
 - **The Data section is three jobs in three places.** It was one scroll of twelve blocks that
   interleaved importing, exploring and preparing, with the saved datasets — the thing the section is
   for — last, under all of it. Now: your datasets are a table at the top (Name, Rows, Source, Data as

@@ -35,7 +35,7 @@ let anDataset: { name: string; kind: string } | null = null;
 let anSaveTimer: number | null = null;
 
 const AN_FLYOUT_KEY = 'anFlyout'; // id of the one open flyout pane, '' for none
-const AN_PANES = ['an-pane-add', 'an-pane-data', 'an-pane-visuals', 'an-pane-filter', 'an-pane-props'];
+const AN_PANES = ['an-pane-data', 'an-pane-visuals', 'an-pane-filter', 'an-pane-props'];
 
 function anEl(id: string): HTMLElement | null {
   return document.getElementById(id);
@@ -47,6 +47,10 @@ function anEl(id: string): HTMLElement | null {
 // full height, and neither got it. Closing the flyout entirely (click the lit
 // icon again) collapses its grid track to zero, so the sheet takes the window.
 let anFlyout: string | null = null;
+// True while the Properties flyout is open because SELECTING a card opened it
+// (over a closed rail) — deselecting then closes it again. A pane the user
+// opened from the rail sets this false and survives deselection.
+let anPropsAuto = false;
 
 function anSetFlyout(pane: string | null): void {
   anFlyout = pane && AN_PANES.indexOf(pane) >= 0 ? pane : null;
@@ -59,13 +63,6 @@ function anSetFlyout(pane: string | null): void {
   });
   const side = anEl('an-side-left');
   if (side) side.hidden = !anFlyout;
-  // The field list follows the flyout: dragging a field into a well needs both
-  // ends open at once, and only one flyout is. The wells now live under
-  // Properties, so that is where it goes. Moved, never copied — a second
-  // #an-fields would need a second render target and a second set of listeners.
-  const fields = anEl('an-data-body');
-  const fieldHost = anFlyout === 'an-pane-props' ? anEl('an-props-fields') : anEl('an-pane-data');
-  if (fields && fieldHost && fields.parentElement !== fieldHost) fieldHost.appendChild(fields);
   document.querySelectorAll('#an-rail .an-rail-btn').forEach((b) => {
     const el = b as HTMLElement;
     const on = !!anFlyout && el.dataset.pane === anFlyout;
@@ -139,11 +136,21 @@ async function anSelectCard(cardId: string | null): Promise<void> {
   const card = anCardById(cardId);
   anRenderProps(card);
   anRenderInteractions(card);
-  // Selecting a card BINDS Properties, and opens it only when nothing else is
-  // open. Force-switching would yank the user out of Data or the gallery
-  // mid-task — and, because the field list follows the flyout, would move the
-  // list out from under a drag they had already started.
-  if (card && !anFlyout) anSetFlyout('an-pane-props');
+  // Selecting a card OPENS Properties — editing the card is why it was
+  // clicked, and hunting the rail for the right flyout was the complaint.
+  // Deselecting closes it again only when this auto-open put it there; a pane
+  // the user opened from the rail is theirs and stays. Yanking is no longer a
+  // concern now the field list lives in the Build tab permanently: opening
+  // Properties cannot move it out from under a drag.
+  if (card) {
+    if (anFlyout !== 'an-pane-props') {
+      anPropsAuto = anFlyout === null; // remember whether WE opened it over nothing
+      anSetFlyout('an-pane-props');
+    }
+  } else if (anFlyout === 'an-pane-props' && anPropsAuto) {
+    anSetFlyout(null);
+    anPropsAuto = false;
+  }
 
   // Fields + wells are a VISUAL card's business. A text or metric card still
   // selects, and still gets Properties — it just has no encoding to edit.
@@ -203,7 +210,6 @@ function anShowEncoding(on: boolean, hint: string): void {
   const inner = anEl('an-props-inner');
   const propsHint = anEl('an-props-hint');
   const fields = anEl('an-fields');
-  const dataHint = anEl('an-data-hint');
   if (inner) inner.hidden = !on;
   if (propsHint) {
     propsHint.hidden = on;
@@ -212,8 +218,10 @@ function anShowEncoding(on: boolean, hint: string): void {
   if (fields) fields.hidden = !on;
   const search = anEl('an-field-search');
   if (search) search.hidden = !on;
-  if (dataHint) { dataHint.hidden = on; dataHint.textContent = hint || 'Select a visual card to see its fields.'; }
   if (!on && fields) fields.innerHTML = '';
+  // The browse render reads the same state, so a cleared selection empties it
+  // and puts its own hint back.
+  anRenderBrowseFields();
 }
 
 // ── The Data panel ──────────────────────────────────────────────────────────
@@ -245,33 +253,42 @@ function anRenderFields(): void {
     host.appendChild(none);
     return;
   }
-  shown.forEach((col) => {
-    const item = document.createElement('button');
-    item.type = 'button';
-    item.className = 'an-field an-field--' + col.type;
-    item.draggable = true;
-    item.dataset.column = col.name;
-    const icon = document.createElement('span');
-    icon.className = 'an-field-ic';
-    icon.setAttribute('aria-hidden', 'true');
-    if (col.type === 'date') {
-      // Inline SVG, not an emoji: 🗓 renders at a different size and weight to
-      // the letterforms next to it on every platform.
-      icon.innerHTML =
-        '<svg viewBox="0 0 24 24" fill="none"><rect x="4" y="6" width="16" height="14" rx="2" stroke="currentColor" stroke-width="2"/>'
-        + '<path d="M4 10h16M9 3v4M15 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-    } else {
-      icon.textContent = col.type === 'number' ? '#' : 'A';
-    }
-    const name = document.createElement('span');
-    name.className = 'an-field-name';
-    name.textContent = col.name;
-    item.appendChild(icon);
-    item.appendChild(name);
-    // Drag works in the Visuals flyout, where the wells are; in the Data flyout
-    // there is nothing to drop onto, so name the click path in the tooltip.
-    item.title = col.name + ' · ' + col.type + ' — drag or click to add';
+  shown.forEach((col) => host.appendChild(anFieldItem(col, true)));
+  anRenderBrowseFields();
+}
 
+/**
+ * One field row — icon, name, click-to-assign — shared by the two renders of
+ * the list: the PROPERTIES one (draggable; the wells are right below it) and
+ * the DATA flyout's browse one (drag reaches nothing there, so it does not
+ * offer it). One builder, so the two cannot drift.
+ */
+function anFieldItem(col: { name: string; type: string }, draggable: boolean): HTMLElement {
+  const item = document.createElement('button');
+  item.type = 'button';
+  item.className = 'an-field an-field--' + col.type;
+  item.draggable = draggable;
+  item.dataset.column = col.name;
+  const icon = document.createElement('span');
+  icon.className = 'an-field-ic';
+  icon.setAttribute('aria-hidden', 'true');
+  if (col.type === 'date') {
+    // Inline SVG, not an emoji: 🗓 renders at a different size and weight to
+    // the letterforms next to it on every platform.
+    icon.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none"><rect x="4" y="6" width="16" height="14" rx="2" stroke="currentColor" stroke-width="2"/>'
+      + '<path d="M4 10h16M9 3v4M15 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  } else {
+    icon.textContent = col.type === 'number' ? '#' : 'A';
+  }
+  const name = document.createElement('span');
+  name.className = 'an-field-name';
+  name.textContent = col.name;
+  item.appendChild(icon);
+  item.appendChild(name);
+  item.title = col.name + ' · ' + col.type + (draggable ? ' — drag or click to add' : ' — click to add');
+
+  if (draggable) {
     item.addEventListener('dragstart', (e) => {
       // text/plain so the payload survives; the class is what marks the drag as
       // ours, since any text drag would otherwise satisfy a bare drop handler.
@@ -282,13 +299,52 @@ function anRenderFields(): void {
       document.body.classList.add('an-dragging');
     });
     item.addEventListener('dragend', () => document.body.classList.remove('an-dragging'));
-    // Click = fill the next EMPTY well. Same call the drop makes, so the two
-    // routes cannot drift; this one exists because a drag-only well is
-    // unreachable from the keyboard, and unreachable entirely whenever the
-    // field list and the wells are in different flyouts.
-    item.addEventListener('click', () => anDropInto(anNextWell(col.type), col.name));
-    host.appendChild(item);
-  });
+  }
+  // Click = fill the next EMPTY well. Same call a drop makes, so the two routes
+  // cannot drift; it is also what keeps the browse list ASSIGNING rather than
+  // inert, and the wells reachable from the keyboard.
+  item.addEventListener('click', () => anDropInto(anNextWell(col.type), col.name));
+  return item;
+}
+
+/**
+ * The Data flyout's read-only render of the same list — its own elements, its
+ * own search, painted from the same anColumns/anDataset state whenever the
+ * canonical render runs. Two renders of one list; nothing is ever re-parented.
+ */
+function anRenderBrowseFields(): void {
+  const host = anEl('an-browse');
+  if (!host) return;
+  host.innerHTML = '';
+  const on = !!anVisual && anColumns.length > 0;
+
+  const hint = anEl('an-browse-hint');
+  if (hint) hint.hidden = on;
+  const search = anEl('an-browse-search') as HTMLInputElement | null;
+  if (search) search.hidden = !on;
+  const ds = anEl('an-browse-ds');
+  if (ds) ds.hidden = !(on && anDataset);
+  if (on && anDataset) {
+    const kind = anEl('an-browse-kind');
+    const dsName = anEl('an-browse-name');
+    if (kind) kind.textContent = anDataset.kind.toUpperCase();
+    if (dsName) {
+      dsName.textContent = anDataset.name;
+      dsName.title = anDataset.name;
+    }
+  }
+  if (!on) return;
+
+  const q = (search?.value || '').trim().toLowerCase();
+  const shown = q ? anColumns.filter((c) => c.name.toLowerCase().includes(q)) : anColumns;
+  if (!shown.length) {
+    const none = document.createElement('p');
+    none.className = 'an-pane-hint';
+    none.textContent = 'No field matches “' + (search?.value || '').trim() + '”.';
+    host.appendChild(none);
+    return;
+  }
+  shown.forEach((col) => host.appendChild(anFieldItem(col, false)));
 }
 
 // ── The Visuals panel: wells + chart type ───────────────────────────────────
@@ -1173,15 +1229,10 @@ function anMountFilterBar(on: boolean): void {
 function anWireRail(): void {
   document.querySelectorAll('#an-rail .an-rail-btn').forEach((b) => {
     const pane = (b as HTMLElement).dataset.pane || '';
-    b.addEventListener('click', () => anSetFlyout(anFlyout === pane ? null : pane));
-  });
-  ([
-    ['an-add-visual', 'dash-add-visual'],
-    ['an-add-metric', 'dash-add-metric'],
-    ['an-add-text', 'dash-add-text'],
-  ] as Array<[string, string]>).forEach(([id, target]) => {
-    const b = anEl(id);
-    if (b) b.addEventListener('click', () => anClick(target));
+    b.addEventListener('click', () => {
+      anPropsAuto = false; // a rail open is the user's, and survives deselection
+      anSetFlyout(anFlyout === pane ? null : pane);
+    });
   });
 }
 
@@ -1254,6 +1305,23 @@ function initAuthoring(): void {
   // user there beats a second formula editor that has to stay in step with it.
   const search = anEl('an-field-search');
   if (search) search.addEventListener('input', () => anRenderFields());
+  const browseSearch = anEl('an-browse-search');
+  if (browseSearch) browseSearch.addEventListener('input', () => anRenderBrowseFields());
+
+  // Escape deselects, matching the click on empty canvas. Bubble phase and
+  // defaultPrevented-gated, so every surface that already owns its Escape —
+  // modals, the drill panel, mini menus, presentation mode — wins first.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
+    if (dashMode !== 'analysis' || !anSelectedCardId) return;
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+    // An open overlay owns the key even if its handler did not preventDefault.
+    const overlayOpen = [...document.querySelectorAll('.ws-modal-overlay')]
+      .some((o) => (o as HTMLElement).getClientRects().length > 0);
+    if (overlayOpen) return;
+    anSelectCard(null);
+  });
 
   const calc = anEl('an-calc-btn');
   if (calc) {

@@ -5045,6 +5045,142 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .ds-explorer-ident .ds-source-badge[hidden] { display: none; }
 .ds-back { flex: 0 0 auto; }
 
+/* ── The add-metric dialog (dashboards.ts openMetricDialog) ──────────────────
+   One frame for what used to be four chained modals. The preview reuses the
+   metric card's own value/label classes so what you see is what the card
+   renders. */
+.ws-modal.dash-metric-modal { width: min(420px, calc(100vw - 48px)); }
+.dm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 10px;
+}
+.dm-field-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.dm-aggs {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm, 6px);
+  overflow: hidden;
+  width: fit-content;
+}
+.dm-agg {
+  padding: 5px 12px;
+  background: var(--bg);
+  border: 0;
+  border-right: 1px solid var(--border);
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.dm-agg:last-child { border-right: 0; }
+.dm-agg:hover { color: var(--text); }
+.dm-agg.is-on {
+  background: var(--accent);
+  color: #fff;
+}
+.dm-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 14px 12px;
+  margin: 2px 0 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+
+/* ── The add-visual picker (dashboards.ts openVisualPicker) ──────────────────
+   A gallery of the saved visuals — the Visuals section's tile vocabulary —
+   plus the two create actions. */
+.ws-modal.vn-pick-modal {
+  width: min(720px, calc(100vw - 48px));
+  max-height: calc(100vh - 96px);
+  display: flex;
+  flex-direction: column;
+}
+.vn-pick-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+}
+.vn-pick-note {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+.vn-pick-note[hidden] { display: none; }
+.vn-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.vn-pick-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 0 10px;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  min-width: 0;
+}
+.vn-pick-glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 84px;
+  margin-bottom: 6px;
+  background: var(--accent-soft, var(--surface-2));
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  color: var(--accent);
+}
+.vn-pick-glyph svg { width: 34px; height: 34px; }
+.vn-pick-tile:hover .vn-pick-glyph { border-color: var(--accent); }
+.vn-pick-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vn-pick-meta {
+  font-size: 11px;
+  color: var(--muted);
+}
+/* With nothing saved, the create actions ARE the dialog. */
+.vn-pick-modal--empty .vn-pick-actions {
+  flex-direction: column;
+  align-items: center;
+  padding: 22px 0 4px;
+}
+.vn-pick-modal--empty .vn-pick-actions .btn { min-width: 220px; }
+.vn-pick-modal--empty .vn-pick-note { text-align: center; }
+.vn-pick-empty {
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 14px;
+}
+
 /* ── The combine dialog ──────────────────────────────────────────────────────
    Narrower than the import one: two pickers and a mode, not a preview table. */
 .ds-combine-overlay[hidden] { display: none; }
@@ -6106,6 +6242,23 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
    `.dash-list-open` and `.dash-list-badge` are SHARED with the Dashboards list,
    which is still a stacked list — restyling them globally would silently
    re-lay-out that section too. */
+.an-list-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.an-list-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+/* The count rides in the heading, so it must not push itself to the far right
+   the way .ws-badge does in a flex header. */
+.an-count { margin-left: 8px; vertical-align: middle; }
+.an-count[hidden] { display: none; }
+
 .ws-hero {
   display: flex;
   align-items: center;
@@ -6305,7 +6458,8 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   white-space: nowrap;
 }
 .an-status--published { background: var(--ok-soft); color: var(--ok); }
-.an-status--draft { background: var(--surface-3); color: var(--muted); }
+.an-status--dirty { background: var(--warn-soft); color: var(--warn); }
+.an-status--draft { background: var(--surface-2); color: var(--muted); }
 
 .ws-empty {
   display: flex;
@@ -6765,10 +6919,50 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 .an-prop-note--info { color: var(--text-dim); }
 .an-prop-del { width: 100%; font-size: 11.5px; }
 
+/* ── Selection, and the affordances that follow it ───────────────────────────
+   A selected card says so with a real accent outline. Its controls — the drag
+   handle's grab cursor and the move/resize/remove cluster — are visible while
+   it is selected or hovered, and quiet otherwise: a grid where every card
+   shows eight buttons at rest reads as a control panel, not as content.
+
+   ANALYSIS MODE ONLY. A published dashboard is read-only, `.dash-edit-only`
+   already hides these, and nothing here may bring them back. */
 #dash-grid .dash-card.is-selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-line);
 }
+.dash-editor--analysis #dash-grid .dash-card .dash-card-ctrls {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.dash-editor--analysis #dash-grid .dash-card:hover .dash-card-ctrls,
+.dash-editor--analysis #dash-grid .dash-card:focus-within .dash-card-ctrls,
+.dash-editor--analysis #dash-grid .dash-card.is-selected .dash-card-ctrls {
+  opacity: 1;
+}
+/* The drag handle only advertises itself when the card is live to a drag. */
+.dash-editor--analysis #dash-grid .dash-card .dash-card-head { cursor: default; }
+.dash-editor--analysis #dash-grid .dash-card:hover .dash-card-head,
+.dash-editor--analysis #dash-grid .dash-card.is-selected .dash-card-head { cursor: grab; }
+.dash-editor--analysis #dash-grid .dash-card.is-selected .dash-card-head:active { cursor: grabbing; }
+@media (prefers-reduced-motion: reduce) {
+  .dash-editor--analysis #dash-grid .dash-card .dash-card-ctrls { transition: none; }
+}
+
+/* The publish-state pill in the editor head. Same three states as the list's
+   column, same soft-background vocabulary. */
+.an-pubpill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.an-pubpill[hidden] { display: none; }
+.an-pubpill--draft { background: var(--surface-3); color: var(--muted); }
+.an-pubpill--live { background: var(--ok-soft); color: var(--ok); }
+.an-pubpill--dirty { background: var(--warn-soft); color: var(--warn); }
 
 /* ── Create-analysis wizard ─────────────────────────────────────────────────
    Two classes, not one: `.ws-modal` is defined LATER in this file, so a bare
@@ -7327,17 +7521,48 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   text-align: center;
 }
 
+/* The empty sheet: centred, and about what a sheet is for. It was a single
+   left-aligned row offering two layouts, on an otherwise blank grid. */
 .dash-starters {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 56px 24px 64px;
+  text-align: center;
+}
+.dash-starters[hidden] { display: none; }
+.dash-starter-h {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-strong);
+  margin: 0;
+}
+.dash-starter-label {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+.dash-starter-adds {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 10px;
+}
+.dash-starter-layouts {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  padding: 16px 0;
+  justify-content: center;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
 }
-.dash-starters[hidden] { display: none; }
-.dash-starter-label {
-  font-size: 13px;
-  color: var(--muted);
+.dash-starter-or {
+  font-size: 12px;
+  color: var(--text-dim);
 }
 .dash-modal-empty {
   font-size: 13px;
@@ -8863,10 +9088,10 @@ body.an-focus #settings-gear { display: none; }
 
 /* One row up top: ‹ Back · name · spacer · ⋯ · Publish · Save. Rename folds into
    clicking the name; the three add-card buttons moved to the rail's + panel. */
-body.an-focus .dash-editor-head #dash-rename-btn,
-body.an-focus .dash-editor-head #dash-add-visual,
-body.an-focus .dash-editor-head #dash-add-metric,
-body.an-focus .dash-editor-head #dash-add-text { display: none; }
+/* Rename stays hidden in focus mode — the analysis NAME is the rename control
+   there. The three add buttons came BACK to the strip when the rail's + pane
+   was removed: one add path, and it is this one. */
+body.an-focus .dash-editor-head #dash-rename-btn { display: none; }
 body.an-focus .dash-editor-head #dash-name { cursor: pointer; }
 body.an-focus .dash-editor-head #dash-name:hover { text-decoration: underline; }
 /* The publish-state sentence became the Publish button's tooltip. */
