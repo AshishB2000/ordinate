@@ -7,6 +7,7 @@ import { parseFile, sourceKindFor } from '../fileImport';
 import { refreshDataset } from '../datasetRefresh';
 import * as datasets from '../datasets';
 import * as transforms from '../transforms';
+import * as compose from './datasetCompose';
 import type { Cell } from '../transforms';
 import { computeColumnSummary, findQualityIssues, ColumnSummary, QualityIssue } from '../datasetStats';
 import {
@@ -229,6 +230,8 @@ export async function pageFor(
 }
 
 export function register() {
+  compose.setCommitSteps((p, d, st) => commitSteps(p, d, st));
+
   // Open the native file picker (or, when given { filePath } from a prior pick,
   // skip the dialog and re-parse that file with a chosen sheetName). Returns the
   // parsed preview WITHOUT saving.
@@ -508,6 +511,9 @@ export function register() {
 
   // Shared: persist a resolved steps array and shape the { ok, dataset, preview }
   // reply. A null result (invalid/missing dataset) → a uniform error.
+  // Exposed to datasetCompose.ts so the composer's initial field mapping lands
+  // through the SAME path a later edit does — one commit primitive, one cache
+  // invalidation, not two.
   async function commitSteps(projectId: string, datasetId: string, steps: unknown) {
     const res = await datasets.updateSteps(projectId, datasetId, steps);
     if (!res) return { ok: false, error: 'Dataset not found' };
@@ -592,44 +598,23 @@ export function register() {
     }
   });
 
-  // Combine the PREPARED output of two datasets (append or left/inner join) into a
-  // brand-new saved dataset (sourceKind 'combined', steps=[]). The pure combine
-  // lives in transforms.combineTables; this orchestration loads both datasets'
-  // derived columns/rows and passes them in — combineTables is never called inside
-  // applyPipeline, keeping the pipeline core single-source.
+  // Combine two datasets. Kept as a thin delegate to dataset:composeSave — the
+  // two-table combine IS a one-join chain, and two orchestrations for one
+  // operation is how they drift apart. No UI calls this any more (the composer
+  // replaced the combine dialog); it stays for any caller still on the old name.
   ipcMain.handle('dataset:combine', async (_e, { projectId, datasetId, otherDatasetId, mode, on }: any = {}) => {
-    try {
-      const left = await datasets.getDataset(projectId, datasetId);
-      const right = await datasets.getDataset(projectId, otherDatasetId);
-      if (!left || !right) return { ok: false, error: 'One or both datasets were not found' };
-      if (mode !== 'append' && mode !== 'join') return { ok: false, error: 'Combine mode must be "append" or "join"' };
-      const onPair = on && typeof on === 'object' && typeof on.left === 'string' && typeof on.right === 'string'
-        ? { left: on.left, right: on.right }
-        : undefined;
-      const combined = transforms.combineTables(
-        { columns: left.columns, rows: left.rows },
-        { columns: right.columns, rows: right.rows },
-        mode,
-        onPair,
-        MAX_ROWS, // bound the join OUTPUT during the build (append is inherently ≤ L+R)
-      );
-      const cappedRows = combined.rows.slice(0, MAX_ROWS);
-      const saved = await datasets.saveDataset(projectId, {
-        name: `${left.name} + ${right.name}`,
-        sourceKind: 'combined',
-        columns: combined.columns,
-        rows: cappedRows,
-        // Both parents + how they were combined, so a refresh can re-run exactly
-        // this combine over freshly refreshed parents. Ids come from main's own
-        // loaded records, not from the renderer payload.
-        origin: { kind: 'combined', leftId: left.id, rightId: right.id, mode, on: onPair },
-      });
-      if (!saved) return { ok: false, error: 'Invalid project, or the project no longer exists' };
-      return { ok: true, dataset: saved, warnings: combined.warnings };
-    } catch (err: any) {
-      return { ok: false, error: err?.message || 'Failed to combine the datasets' };
-    }
+    const left = await datasets.getDataset(projectId, datasetId).catch(() => null);
+    const right = await datasets.getDataset(projectId, otherDatasetId).catch(() => null);
+    if (!left || !right) return { ok: false, error: 'One or both datasets were not found' };
+    return compose.composeSave({
+      projectId,
+      name: `${left.name} + ${right.name}`,
+      base: { datasetId },
+      joins: [{ datasetId: otherDatasetId, mode, on }],
+    });
   });
+
+
 
   // OPTIONAL AI step suggestions. Builds the SAME compact summary as dataset:explain
   // (app-computed stats as facts, sample rows), asks the model to propose STRUCTURE

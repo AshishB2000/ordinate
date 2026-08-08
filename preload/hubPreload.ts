@@ -258,6 +258,26 @@ contextBridge.exposeInMainWorld('hub', {
     mode: 'append' | 'join',
     on?: { left: string; right: string },
   ) => ipcRenderer.invoke('dataset:combine', { projectId, datasetId, otherDatasetId, mode, on }),
+  // ── The dataset composer ──────────────────────────────────────────────────
+  // One chain shape for both: a `base` that is EITHER { datasetId } or
+  // { inline: { name, columns, rows } } — the file just picked, not saved yet —
+  // and `joins`, each { datasetId | inline, mode, on? }. Preview folds a 50k
+  // sample per parent and returns one page; save folds the lot.
+  composePreview: (
+    projectId: string,
+    base: any,
+    joins: any[],
+    page?: number,
+  ) => ipcRenderer.invoke('dataset:composePreview', { projectId, base, joins, page }),
+  composeSave: (payload: {
+    projectId: string;
+    name: string;
+    base: any;
+    joins: any[];
+    steps?: any[];
+    sourceKind?: string;
+    origin?: any;
+  }) => ipcRenderer.invoke('dataset:composeSave', payload),
   // OPTIONAL AI step suggestions (structure only; app does all math). Returns
   // { ok, steps } | { ok:false, notReady:true } | { ok:false, error }.
   suggestDatasetSteps: (projectId: string, datasetId: string) =>

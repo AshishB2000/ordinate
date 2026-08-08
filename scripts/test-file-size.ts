@@ -62,7 +62,6 @@ const ALLOWED: Record<string, number> = {
   // is a design change with real behaviour risk, not a move. Own PR.
   'renderer/hub/chartRender.ts': 1097,
   'renderer/hub/mapRender.ts': 834,
-  'renderer/hub/prepare.ts': 944,
   // Deliberately last: it is the only check that runs the real app, so breaking
   // it blinds every other split. Own PR, after these are merged and green.
   'scripts/smoke-app.ts': 3544,

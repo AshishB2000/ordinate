@@ -174,9 +174,9 @@ function dxWatchImportSurface(): void {
 }
 
 /**
- * The list and the explorer are mutually exclusive: opening a dataset takes the
- * whole panel, closing it gives the list back. Same swap the Visuals section
- * makes between its gallery and its builder.
+ * The list, the explorer and the composer are mutually exclusive: opening a
+ * dataset — or starting a new one — takes the whole panel, closing it gives the
+ * list back. Same swap the Visuals section makes between gallery and builder.
  *
  * It is driven OFF `#ds-explorer`'s own `hidden`, which datasets.ts already
  * sets when a dataset opens and when Back is pressed. So this adds a view
@@ -187,10 +187,13 @@ function dxWatchExplorer(): void {
   const explorer = dxEl('ds-explorer');
   const panel = document.querySelector('#ws-datasets .ds-panel') as HTMLElement | null;
   if (!explorer || !panel) return;
+  const composer = dxEl('ds-composer');
   const sync = (): void => {
     panel.classList.toggle('is-exploring', !explorer.hidden);
+    panel.classList.toggle('is-composing', !!composer && !composer.hidden);
   };
   new MutationObserver(sync).observe(explorer, { attributes: true, attributeFilter: ['hidden'] });
+  if (composer) new MutationObserver(sync).observe(composer, { attributes: true, attributeFilter: ['hidden'] });
   sync();
 }
 
@@ -300,20 +303,12 @@ function initDataSection(): void {
   const x = dxEl('ds-import-x');
   if (x) x.addEventListener('click', () => dxCloseImport());
 
-  // Combine: its own dialog, opened from the header. `populateCombineSelect`
-  // (prepare.ts) fills both pickers and pre-selects the open dataset when there
-  // is one — so the dialog is filled by the code that owns combining, not here.
+  // Combine opens the COMPOSER — the same page importing lands on. There is no
+  // combine dialog any more: two surfaces for one operation is how they drift.
+  // With no dataset chosen the composer opens empty and its sources panel picks
+  // the base, so this header action needs no picker of its own.
   const combineOpen = dxEl('ds-combine-open');
-  if (combineOpen) {
-    combineOpen.addEventListener('click', () => {
-      dxOpenDialog('ds-combine-modal', '.ds-combine-modal', 'Combine datasets', 'ds-combine-left');
-      if (typeof populateCombineSelect === 'function') void populateCombineSelect();
-      const note = dxEl('ds-combine-note');
-      if (note) note.hidden = true; // last run's outcome is not this one's
-    });
-  }
-  const combineX = dxEl('ds-combine-x');
-  if (combineX) combineX.addEventListener('click', () => dxCloseDialog('ds-combine-modal'));
+  if (combineOpen) combineOpen.addEventListener('click', () => openComposerEmpty());
 
 
 }

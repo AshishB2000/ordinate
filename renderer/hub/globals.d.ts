@@ -151,6 +151,16 @@ declare global {
         mode: 'append' | 'join',
         on?: { left: string; right: string },
       ): Promise<any>;
+      composePreview(projectId: string, base: any, joins: any[], page?: number): Promise<any>;
+      composeSave(payload: {
+        projectId: string;
+        name: string;
+        base: any;
+        joins: any[];
+        steps?: any[];
+        sourceKind?: string;
+        origin?: any;
+      }): Promise<any>;
       suggestDatasetSteps(projectId: string, datasetId: string): Promise<any>;
       suggestCalcField(projectId: string, datasetId: string): Promise<any>;
       // ── Connected data sources (every source is a connector in src/connectors) ──

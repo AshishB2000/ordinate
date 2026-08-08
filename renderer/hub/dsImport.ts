@@ -141,7 +141,7 @@ async function handleImportFile(): Promise<void> {
   dsSourceKind = String(res.sourceKind || 'csv');
   dsSuggestedName = defaultNameFrom(res.fileName);
   dsFilePath = typeof res.filePath === 'string' ? res.filePath : '';
-  renderPreview(res.preview, true);
+  toComposer(res.preview);
 }
 
 async function handleSheetChange(): Promise<void> {
@@ -155,7 +155,7 @@ async function handleSheetChange(): Promise<void> {
     return;
   }
   if (!res || !res.ok || res.canceled) return;
-  renderPreview(res.preview, true);
+  handOffToComposer(res.preview);
 }
 
 async function handleParsePaste(): Promise<void> {
@@ -174,7 +174,7 @@ async function handleParsePaste(): Promise<void> {
   dsSourceKind = 'paste';
   dsSuggestedName = 'Pasted data';
   dsFilePath = '';
-  renderPreview(res.preview, true);
+  handOffToComposer(res.preview);
 }
 
 // The sheet the preview is currently showing, for an xlsx import. Undefined for
@@ -192,6 +192,46 @@ function defaultNameFrom(fileName: any): string {
   const base = typeof fileName === 'string' ? fileName : '';
   const dot = base.lastIndexOf('.');
   return dot > 0 ? base.slice(0, dot) : base;
+}
+
+// ── Hand-off to the composer ─────────────────────────────────────────────────
+//
+// Import is now: pick a source → composer → Save. The dialog's job ends at the
+// parse; the confirm step it used to own (preview + name + Save) is the
+// composer's whole left-to-right flow, and keeping a second copy of it here is
+// how the two would drift.
+//
+// A multi-sheet workbook is the one case that stays in the dialog for a beat:
+// the sheet picker IS part of picking the source, so it renders and the composer
+// opens on the sheet that is chosen.
+function toComposer(res: any): void {
+  const sheetNames: string[] = (res && Array.isArray(res.sheetNames)) ? res.sheetNames : [];
+  if (sheetNames.length > 1 && dsFilePath) {
+    renderPreview(res, false);
+    return;
+  }
+  handOffToComposer(res);
+}
+
+function handOffToComposer(res: any): void {
+  dsPreview = res || null;
+  if (typeof dxCloseDialog === 'function') dxCloseDialog('ds-import-modal');
+  openComposer(
+    {
+      label: dsSuggestedName || 'This import',
+      rows: typeof res.rowCount === 'number' ? res.rowCount : (res.rows || []).length,
+      kind: dsSourceKind || 'csv',
+      ref: { inline: { name: dsSuggestedName || 'This import', columns: res.columns || [], rows: res.rows || [] } },
+      columns: (res.columns || []).map((c: any) => String(c.name)),
+    },
+    {
+      name: dsSuggestedName,
+      sourceKind: dsSourceKind || 'csv',
+      // Only a file import has somewhere to be re-read from. Pasted text gets
+      // none, exactly as before — there is nothing to re-fetch.
+      origin: dsFilePath ? { kind: 'file', path: dsFilePath, sheetName: dsChosenSheet() } : undefined,
+    },
+  );
 }
 
 // ── Save ─────────────────────────────────────────────────────────────────────
