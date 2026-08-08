@@ -65,7 +65,15 @@ const ALLOWED: Record<string, number> = {
   'renderer/hub/prepare.ts': 944,
   // Deliberately last: it is the only check that runs the real app, so breaking
   // it blinds every other split. Own PR, after these are merged and green.
-  'scripts/smoke-app.ts': 3544,
+  //
+  // Grew from 3544 in the dash-controls plan's final task: the plan's own gate
+  // list requires a PERMANENT smoke assertion for the "view state never writes"
+  // safety guarantee (mtime/bytes around a control interaction) plus a real-app
+  // walk of all three control kinds — both belong in the one file that drives
+  // the real app, not a new one (there is exactly one of these on purpose). A
+  // future split still owns its own PR; this is a one-time, reviewed bump, not
+  // organic drift.
+  'scripts/smoke-app.ts': 3983,
   'scripts/test-analysis.ts': 813,
   'scripts/test-anomaliesResident.ts': 837,
   'scripts/test-connectorsHttp.ts': 889,
