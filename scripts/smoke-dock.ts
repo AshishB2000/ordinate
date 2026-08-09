@@ -130,9 +130,36 @@ async function main(): Promise<void> {
   await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
   ok('…and a later sync does NOT re-open it', await win.locator('#dk-panel').isHidden());
 
+  // ── The sidebar "Ask AI" button toggles the DOCK, not Explore ───────────
+  // 498d647 pointed #side-ai-btn at Explore, which already has its own nav
+  // item — a duplicate door, while the dock had no sidebar presence at all.
+  // It is the dock's again. These are the assertions that fail if it ever
+  // drifts back, or if a second button labelled "AI" appears beside it.
+  ok('the sidebar AI button is labelled to distinguish it from Explore',
+    /ask ai/i.test((await win.locator('#side-ai-btn').textContent()) || ''),
+    (await win.locator('#side-ai-btn').textContent() || '').trim());
+  ok('…and the Explore nav item still exists as its own separate entry',
+    (await win.locator('.as-nav-item[data-section="explore"]').count()) === 1);
+  ok('…so exactly one sidebar control mentions AI',
+    (await win.evaluate(() => Array.from(document.querySelectorAll('#app-sidebar button'))
+      .filter((b) => /\bai\b/i.test(b.textContent || '')).length)) === 1);
+  await win.click('#side-ai-btn', { timeout: 8000 });
+  await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
+  ok('clicking it OPENS THE DOCK (it must not navigate to Explore)',
+    await win.locator('#dk-panel').isVisible()
+      && (await win.evaluate(() =>
+        (document.querySelector('.hub-body') as HTMLElement).dataset.section)) !== 'explore');
+  ok('…and reports its state through aria-expanded',
+    (await win.getAttribute('#side-ai-btn', 'aria-expanded')) === 'true');
+  await win.click('#side-ai-btn', { timeout: 8000 });
+  await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
+  ok('…and closes it again — it is a toggle, not a one-way door',
+    await win.locator('#dk-panel').isHidden()
+      && (await win.getAttribute('#side-ai-btn', 'aria-expanded')) === 'false');
+
   // ── Toggle from the dock's own edge affordance ──────────────────────────
-  // #dk-edge is the closed-state tab at the right edge; ⌘L and the sidebar
-  // AI button (Task 2, below) are the other two ways in.
+  // #dk-edge is the closed-state tab at the right edge; ⌘L and #side-ai-btn
+  // are the other two ways in.
   ok('the edge tab starts visible and collapsed (aria-expanded=false)',
     await win.locator('#dk-edge').isVisible());
   ok('…aria-expanded=false',
@@ -436,18 +463,26 @@ async function main(): Promise<void> {
   // exists to guard. Explore is the cheapest condition to drive (a plain
   // section switch) and the most absurd to get wrong: two chats side by side.
   //
-  // Explore is ALSO the case that matters most now that #side-ai-btn opens
-  // Explore instead of the dock (develop's 498d647): the two must not fight
-  // over the same button, and #side-ai-btn must stay usable — clicking it
-  // is how you GET to Explore, so the dock suppressing it would strand the
-  // user with no way in.
+  // Explore is ALSO the case that matters most now that #side-ai-btn toggles
+  // the dock: suppression has to reach EVERY entry point, or the sidebar
+  // button becomes a control that visibly does nothing on the one section
+  // where the dock refuses to appear.
   await win.evaluate(() => { (window as any).selectSection('explore'); });
   await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
   ok('the dock is suppressed on the Explore section', await win.locator('#dk-panel').isHidden());
   ok('…and its own edge-tab entry point is withdrawn too, not just the panel',
     await win.locator('#dk-edge').isHidden());
-  ok('…but #side-ai-btn (which OPENS Explore) is left alone — the dock must not hide it',
-    await win.locator('#side-ai-btn').isVisible());
+  // Disabled, NOT hidden — the sidebar is a fixed list and dropping a row out
+  // of it would make the whole bottom group jump on every visit to Explore.
+  ok('…and the sidebar button is disabled rather than removed (no layout jump)',
+    await win.locator('#side-ai-btn').isVisible()
+      && await win.locator('#side-ai-btn').isDisabled());
+  ok('…so clicking it while suppressed opens nothing',
+    await win.evaluate(() => {
+      (document.getElementById('side-ai-btn') as HTMLButtonElement).click();
+      const p = document.getElementById('dk-panel');
+      return Boolean(p && p.hidden);
+    }));
   // …and it comes back on leaving Explore, so suppression is a gate, not a kill.
   await win.evaluate(() => { (window as any).selectSection('datasets'); });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });

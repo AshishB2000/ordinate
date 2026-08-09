@@ -39,9 +39,11 @@
 // and 498d647 fixed the exact bug that inference caused in Explore. The dock
 // now has its OWN resolver, dkContextRef() below: section-aware, and it
 // falls back to whole-project rather than to another section's stale global.
-// #side-ai-btn also no longer belongs to the dock — it opens Explore
-// (workspace.ts) — so the dock's entry points are ⌘L and its own edge
-// affordance, #dk-edge.
+// #side-ai-btn briefly belonged to Explore (498d647) and now belongs to the
+// dock again: Explore already had its own top-level nav item, so that button
+// was a duplicate door to a place with a door, while the dock had none in the
+// sidebar. The dock's entry points are ⌘L, its own edge affordance #dk-edge,
+// and #side-ai-btn — all three funnel through dkToggle()/dkSync().
 
 // ── Suppression ───────────────────────────────────────────────────────────
 /**
@@ -337,11 +339,10 @@ let dkUserOpened = false;
 function dkSync(): void {
   dkFirstRun(); // may flip `dkOpen` before the read below — self-limiting, never recurses
   const panel = document.getElementById('dk-panel');
-  // #side-ai-btn belongs to Explore now (workspace.ts opens it there) — the
-  // dock must NOT hide or otherwise touch it. #dk-edge is the dock's OWN
-  // closed-state entry point (its other one is ⌘L), so it is the only
-  // element dkSync manages here.
+  // Three entry points now: #dk-edge (the closed-state tab), #side-ai-btn
+  // (the sidebar tool button — workspace.ts wires it to dkToggle) and ⌘L.
   const edge = document.getElementById('dk-edge');
+  const sideBtn = document.getElementById('side-ai-btn') as HTMLButtonElement | null;
   const allowed = dkAllowed();
   const visible = allowed && dkIsOpen();
   // The edge tab is only useful as an OPEN affordance — while the dock is
@@ -350,6 +351,18 @@ function dkSync(): void {
   // same edge.
   if (edge) edge.hidden = !allowed || visible;
   if (edge) edge.setAttribute('aria-expanded', String(visible));
+  // The sidebar button is DISABLED where suppressed, not hidden: it is a
+  // fixed row in a persistent sidebar, so removing it would make the whole
+  // bottom group jump every time you visit Explore. (The two body-class
+  // suppressions, an-focus and cap-focus, hide the entire sidebar anyway —
+  // this only ever fires for Explore, presentation and a published
+  // dashboard.) Unlike #dk-edge it stays visible and enabled while the dock
+  // is OPEN, because it is a toggle: it is how you close the dock from the
+  // sidebar, which is exactly what aria-expanded promises.
+  if (sideBtn) {
+    sideBtn.disabled = !allowed;
+    sideBtn.setAttribute('aria-expanded', String(visible));
+  }
   const justOpened = visible && dkLastVisible !== true && dkUserOpened;
   if (panel) panel.hidden = !visible;
   document.body.classList.toggle('dk-open', visible); // drives the <1100px scrim in hub.css
@@ -607,10 +620,10 @@ function initDock(): void {
   if (closeBtn) closeBtn.addEventListener('click', () => dkSetOpen(false));
   const scrim = document.getElementById('dk-scrim');
   if (scrim) scrim.addEventListener('click', () => dkSetOpen(false));
-  // The dock's own closed-state entry point — #side-ai-btn opens Explore now
-  // (workspace.ts), so this is wired here, not there. dkToggle() itself
-  // checks dkAllowed(); dkSync() keeps #dk-edge hidden while suppressed or
-  // already open.
+  // The dock's own closed-state entry point. (#side-ai-btn is the sidebar's,
+  // wired in workspace.ts beside the rest of the sidebar; both land on the
+  // same dkToggle().) dkToggle() checks dkAllowed(); dkSync() keeps #dk-edge
+  // hidden while suppressed or already open.
   const edge = document.getElementById('dk-edge');
   if (edge) edge.addEventListener('click', () => dkToggle());
 

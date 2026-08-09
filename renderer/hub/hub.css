@@ -4121,11 +4121,17 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 /* `hidden` loses to an explicit `display` — the same trap .an-side, .ds-explorer
    and the import blocks all document, and the same trap `.dk-edge[hidden]`
    (above) has its own explicit rule for. No `.as-tool` currently sets
-   `hidden` from JS (#side-ai-btn always shows — it opens Explore), but this
-   is a correct latent fix kept general on purpose: any future `.as-tool`
-   that does would silently stay on screen and clickable without it. */
+   `hidden` from JS (#side-ai-btn is DISABLED where the dock is suppressed,
+   not hidden — dock.ts's dkSync), but this is a correct latent fix kept
+   general on purpose: any future `.as-tool` that does would silently stay on
+   screen and clickable without it. */
 .as-tool[hidden] { display: none; }
 .as-tool .ic { flex: 0 0 auto; }
+/* Suppressed, not gone (see dkSync). Dimmed and non-interactive so it reads
+   as "not here, not now" rather than as a dead control — and the :hover rule
+   below must not fire on it. */
+.as-tool:disabled { opacity: 0.4; cursor: default; }
+.as-tool:disabled:hover { background: transparent; color: var(--muted); }
 .as-tool:hover { background: var(--surface-2); color: var(--text); }
 .as-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .as-tool--grow { flex: 1 1 auto; }

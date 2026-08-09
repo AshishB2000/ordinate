@@ -738,10 +738,10 @@ async function main(): Promise<void> {
   const navSection = await homeSection();
   ok('home: a sidebar nav item switches the section', navSection === 'visuals', `section=${navSection}`);
 
-  await win.click('#side-ai-btn', { timeout: 4000 }).catch(() => {}); // AI tool button opens Explore
+  await win.click('.as-nav-item[data-section="explore"]', { timeout: 4000 }).catch(() => {}); // #side-ai-btn was a duplicate door; it toggles the dock now (smoke-dock.ts)
   await win.waitForTimeout(400);
   const aiSection = await homeSection();
-  ok('home: the AI tool button opens Explore, the one chat surface', aiSection === 'explore', `section=${aiSection}`);
+  ok('home: the Explore nav item opens the blank-page chat surface', aiSection === 'explore', `section=${aiSection}`);
 
   // Back to Home so the project-open flow below starts from a clean state.
   await win.click('.as-nav-item[data-section="home"]', { timeout: 4000 }).catch(() => {});
