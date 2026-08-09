@@ -106,6 +106,9 @@ function selectSection(section: string): void {
   // Refresh the saved-dashboards list when the Dashboards section becomes active (dashboards.ts).
   if (section === 'dashboards' && typeof refreshDashboardList === 'function') refreshDashboardList();
   // Refresh the AI Copilot chat when the AI section becomes active (copilot.ts).
+  // Unreachable today: #side-ai-btn toggles the AI dock instead of selecting
+  // this section, and no nav item targets it. Retained deliberately — see the
+  // comment above #ws-ai in index.html.
   if (section === 'ai' && typeof refreshCopilot === 'function') refreshCopilot();
   // Repaint Explore's jump strip + composer state when it becomes active (explore.ts).
   if (section === 'explore' && typeof refreshExplore === 'function') void refreshExplore();

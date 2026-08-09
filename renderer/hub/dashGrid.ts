@@ -137,7 +137,6 @@ function closeDashboardEditor(): void {
   exitDashPresent(); // never leave the app stuck in chrome-hidden mode
   if (dashSaveTimer !== null) { window.clearTimeout(dashSaveTimer); dashSaveTimer = null; }
   dashCurrent = null;
-  if (typeof dkSync === 'function') dkSync(); // dock.ts — context line falls back off this dashboard/analysis
   dashPageIdx = 0;
   dashDirty = false;
   dashDragId = null;
@@ -154,6 +153,11 @@ function closeDashboardEditor(): void {
   dashShow('an-list-view', true);
   dashMode = 'dashboard';
   dashReadOnly = false;
+  // dkSync() runs AFTER dashReadOnly is reset, not before. Syncing while it was
+  // still true hid the dock and then immediately re-showed it via
+  // applyDashEditorMode() -> anSyncWorkbench() -> dkSync(), and that round trip
+  // re-ran a full history reload, a resize nudge, and a focus steal.
+  if (typeof dkSync === 'function') dkSync(); // dock.ts — context line falls back off this dashboard/analysis
   applyDashEditorMode();
   const note = dashEl('dash-readonly');
   if (note) note.hidden = true;

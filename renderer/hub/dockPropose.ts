@@ -2,9 +2,10 @@
 // docs/superpowers/plans/2026-08-09-ai-dock.md). Classic global-scope
 // renderer <script>: NO import/export. Loads AFTER dock.js (calls
 // dkClearProposal/dkOfferProposal from dkSend), prepare.js (stepSummaryText,
-// applyStepResult, openStepEditor), renderResult.js (renderVizInArea,
+// applyStepResult, prefillCalcFieldEditor), renderResult.js (renderVizInArea,
 // eligibleChartTypes, countNumericSeries), dashGrid.js (dashCurrentPage,
-// dashUuid, nextFreeRow) and dashAdd.js (pushCard) — see the load-order
+// dashUuid, nextFreeRow), dashAdd.js (pushCard), dsExplorer.js
+// (openSavedDataset) and dataSection.js (dxSelectTab) — see the load-order
 // comment in index.html.
 //
 // Three fixed proposal types, each grounded in an existing IPC channel, each
@@ -40,11 +41,40 @@ function dkDecideProposalType(question: string, answerText: string): 'step' | 'c
   return null;
 }
 
+// Tear down any chart/map a proposal card drew BEFORE detaching it. A chart
+// proposal renders through the shared renderVizInArea, which registers the
+// instance in the chartInstances WeakMap keyed on the container — and for a
+// map_bubble/map_choropleth encoding it spins up a real MapLibre map. A bare
+// .remove() detaches the canvas but leaves the instance in the registry, and
+// (chartRender.ts) "a leaked map holds a live WebGL context", of which a
+// browser grants only a handful. Same idiom as renderResult.ts's own reset and
+// dashGrid.ts's destroyDashCharts — the dock was the one .cv-viz-area host
+// without it.
+function dkDestroyProposalCharts(root: HTMLElement): void {
+  root.querySelectorAll('.cv-viz-area').forEach((el) => {
+    try {
+      const inst = chartInstances.get(el as HTMLElement);
+      if (inst) {
+        (Array.isArray(inst) ? inst : [inst]).forEach((c: any) => { try { c.destroy(); } catch (_) {} });
+        chartInstances.delete(el as HTMLElement);
+      }
+    } catch (_) { /* already gone */ }
+    try { if (typeof destroyMapInContainer === 'function') destroyMapInContainer(el as HTMLElement); } catch (_) {}
+  });
+}
+
+// Detach a proposal card, tearing down anything it drew first. Every removal
+// path goes through here so no site can forget the teardown.
+function dkRemoveProposalCard(card: HTMLElement): void {
+  dkDestroyProposalCharts(card);
+  card.remove();
+}
+
 // Remove any proposal left over from a previous turn. Called before a new
 // question is asked and whenever the transcript is rebuilt from disk truth —
 // a proposal is never persisted (dismiss, or a new turn, leaves no trace).
 function dkClearProposal(): void {
-  document.querySelectorAll('#dk-messages .dk-proposal').forEach((el) => el.remove());
+  document.querySelectorAll('#dk-messages .dk-proposal').forEach((el) => dkRemoveProposalCard(el as HTMLElement));
 }
 
 // Entry point — called by dkSend() (dock.ts) after a successful answer. Silent
@@ -109,7 +139,7 @@ function dkRenderStepCard(datasetId: string, step: any): void {
   body.textContent = stepSummaryText(step); // reused verbatim (prepare.ts) — no second summariser
   card.appendChild(body);
 
-  const dismiss = dkMkBtn('Dismiss', false, () => card.remove());
+  const dismiss = dkMkBtn('Dismiss', false, () => dkRemoveProposalCard(card));
   const apply = dkMkBtn('Apply', true, () => {
     void (async () => {
       if (!currentProjectId) return;
@@ -180,7 +210,7 @@ function dkRenderCalcFieldCard(datasetId: string, res: any): void {
     card.appendChild(warn);
   }
 
-  const dismiss = dkMkBtn('Dismiss', false, () => card.remove());
+  const dismiss = dkMkBtn('Dismiss', false, () => dkRemoveProposalCard(card));
   // Apply does NOT apply — it opens the SAME step editor prepare.ts's own
   // "Suggest a calculated field" uses, prefilled, so the user reviews the
   // formula and clicks the editor's own Save. This never calls addDatasetStep.
@@ -195,27 +225,12 @@ function dkRenderCalcFieldCard(datasetId: string, res: any): void {
       if (typeof selectSection === 'function') selectSection('datasets');
       if (typeof openSavedDataset === 'function') await openSavedDataset(datasetId);
       if (typeof dxSelectTab === 'function') dxSelectTab('ds-tab-prepare', true);
-      if (typeof openStepEditor !== 'function') { apply.disabled = false; return; }
-      openStepEditor('calculated_field', -1);
-      const editor = document.getElementById('ds-step-editor');
-      if (editor) {
-        const inputs = editor.querySelectorAll('.ds-step-input');
-        const nameIn = inputs[0] as HTMLInputElement | undefined;
-        const exprIn = inputs[1] as HTMLInputElement | undefined;
-        if (nameIn) nameIn.value = String(res.name || '');
-        if (exprIn) exprIn.value = String(res.expression || '');
-        const panel = document.createElement('div');
-        panel.className = 'ai-interp';
-        panel.appendChild(mkAiPanel('AI suggestion — review and edit; the app compiles and computes the formula'));
-        if (res.warning) {
-          const w = document.createElement('div');
-          w.className = 'ai-interp-hint';
-          w.textContent = String(res.warning);
-          panel.appendChild(w);
-        }
-        editor.insertBefore(panel, editor.firstChild);
-      }
-      card.remove(); // handed off to Prepare's own editor — nothing left to apply/dismiss here
+      // Prepare owns the positional .ds-step-input contract (buildStepForm), so
+      // the prefill lives THERE and both AI entry points call it — a second copy
+      // here would silently prefill the wrong inputs the day a field is added.
+      if (typeof prefillCalcFieldEditor !== 'function') { apply.disabled = false; return; }
+      prefillCalcFieldEditor(res.name, res.expression, res.warning);
+      dkRemoveProposalCard(card); // handed off to Prepare's own editor — nothing left to apply/dismiss here
     })();
   });
   actions.appendChild(apply);
@@ -278,7 +293,7 @@ function dkRenderChartCard(datasetId: string, question: string, option: any, dat
   const finish = (msg: string): void => {
     actions.remove();
     showToast(msg);
-    card.remove();
+    dkRemoveProposalCard(card);
   };
 
   const save = dkMkBtn('Save as visual', true, () => {
@@ -336,7 +351,7 @@ function dkRenderChartCard(datasetId: string, question: string, option: any, dat
     actions.appendChild(addBtn);
   }
 
-  const dismiss = dkMkBtn('Dismiss', false, () => card.remove());
+  const dismiss = dkMkBtn('Dismiss', false, () => dkRemoveProposalCard(card));
   actions.appendChild(dismiss);
   card.appendChild(actions);
   dkAppendProposal(card);

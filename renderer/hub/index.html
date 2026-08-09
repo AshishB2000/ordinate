@@ -1388,6 +1388,13 @@
       </div>
       </div>
     </section>
+    <!-- The standalone AI section. CURRENTLY UNREACHABLE, deliberately retained:
+         #side-ai-btn used to route here via selectSection('ai') and now toggles
+         the AI dock instead (workspace.ts), and there is no .as-nav-item for
+         data-section="ai", so nothing can select it. Kept rather than deleted
+         because the dock reads the SAME thread through the same shared
+         primitives — removing this is a separate, reviewable decision, not a
+         side effect of shipping the dock. -->
     <section class="ws-panel" id="ws-ai" data-section="ai" hidden>
       <div class="ai-panel">
         <div class="ai-head">

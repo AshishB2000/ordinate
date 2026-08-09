@@ -4118,6 +4118,12 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   font-weight: 500;
   cursor: pointer;
 }
+/* `hidden` loses to an explicit `display` — the same trap .an-side, .ds-explorer
+   and the import blocks all document. Without this, dock.ts's
+   `btn.hidden = !dkAllowed()` sets the attribute but the button stays on screen
+   and clickable in every suppressed state (Explore, presentation, focus modes,
+   a published dashboard), which is precisely what suppression exists to stop. */
+.as-tool[hidden] { display: none; }
 .as-tool .ic { flex: 0 0 auto; }
 .as-tool:hover { background: var(--surface-2); color: var(--text); }
 .as-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

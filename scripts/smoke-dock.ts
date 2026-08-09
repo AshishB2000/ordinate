@@ -151,6 +151,28 @@ async function main(): Promise<void> {
   ok('…and returns focus to the toggle',
     await win.evaluate(() => Boolean(document.activeElement && document.activeElement.id === 'side-ai-btn')));
 
+  // ── ⌘L still works WITH FOCUS INSIDE THE COMPOSER ───────────────────────
+  // The keydown handler ignores INPUT/TEXTAREA/contenteditable so the shortcut
+  // can't hijack typing elsewhere in the app — but #dk-input IS a <textarea>
+  // and the dock focuses it on open, so without an explicit exemption for the
+  // dock's own subtree the shortcut dies the moment focus is in the composer.
+  // A smoke run has no model, so dkRefresh() leaves #dk-input disabled and
+  // focus falls to the panel div — which is exactly why the checks above pass
+  // either way and cannot see this. Force-enable it so the guard is genuinely
+  // exercised; this is the assertion that fails if the exemption is removed.
+  await win.click('#side-ai-btn', { timeout: 8000 });
+  await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
+  await win.evaluate(() => {
+    const i = document.getElementById('dk-input') as HTMLTextAreaElement | null;
+    if (i) { i.disabled = false; i.focus(); }
+  });
+  ok('focus is genuinely inside the composer textarea',
+    await win.evaluate(() => Boolean(document.activeElement && document.activeElement.id === 'dk-input')));
+  await win.keyboard.press(process.platform === 'darwin' ? 'Meta+L' : 'Control+L');
+  await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
+  ok('Cmd/Ctrl+L closes the dock even when the composer has focus',
+    await win.locator('#dk-panel').isHidden());
+
   // ── The resize handle: drag, persist-on-end, min clamp, keyboard ────────
   await win.click('#side-ai-btn', { timeout: 8000 });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
@@ -376,6 +398,29 @@ async function main(): Promise<void> {
     savedVisual ? `${savedVisual.name} / ${savedVisual.chartType}` : '');
   ok('the proposal card cleans itself up after saving',
     (await win.locator('#dk-messages .dk-proposal').count()) === 0);
+
+  // ── dkAllowed(): the suppression table ──────────────────────────────────
+  // The dock's safety predicate. Every caller reaches it through
+  // `typeof dkSync === 'function'`, so a rename would disable suppression
+  // SILENTLY — the same silent-by-construction hazard this whole script
+  // exists to guard. Explore is the cheapest condition to drive (a plain
+  // section switch) and the most absurd to get wrong: two chats side by side.
+  await win.evaluate(() => { (window as any).selectSection('explore'); });
+  await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
+  ok('the dock is suppressed on the Explore section', await win.locator('#dk-panel').isHidden());
+  ok('…and its toggle is withdrawn too, not just the panel',
+    await win.locator('#side-ai-btn').isHidden());
+  // …and it comes back on leaving Explore, so suppression is a gate, not a kill.
+  await win.evaluate(() => { (window as any).selectSection('datasets'); });
+  await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
+  ok('…and it returns when the condition lifts', await win.locator('#dk-panel').isVisible());
+  // Presentation mode is the other cheap one: a body/documentElement class the
+  // predicate reads directly, no dashboard needed to reach it.
+  await win.evaluate(() => { document.documentElement.classList.add('dash-presenting'); (window as any).dkSync(); });
+  await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
+  ok('the dock is suppressed in presentation mode', await win.locator('#dk-panel').isHidden());
+  await win.evaluate(() => { document.documentElement.classList.remove('dash-presenting'); (window as any).dkSync(); });
+  await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
 
   ok('no renderer errors (incl. CSP violations)', errors.length === 0, errors.slice(0, 5).join(' | '));
 

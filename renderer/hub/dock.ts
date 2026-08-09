@@ -63,6 +63,7 @@ function dkSetOpen(open: boolean): void {
 
 function dkToggle(): void {
   if (!dkAllowed()) return;
+  if (!dkIsOpen()) dkUserOpened = true; // a deliberate open — this one may take focus
   dkSetOpen(!dkIsOpen());
 }
 
@@ -223,6 +224,13 @@ let dkLastVisible: boolean | null = null;
 // while the user opens a different project's item from Home) still reloads
 // the right thread instead of showing the previous project's conversation.
 let dkLastProjectId: string | null = null;
+// Set by an explicit user open (toggle button / ⌘L), consumed by the next
+// dkSync(). Focus is only pulled into the dock when the USER opened it — not
+// when it merely became visible again because a suppression condition lifted
+// (leaving presentation or an-focus/cap-focus, closing a dashboard). Those are
+// navigations the user drove elsewhere, and stealing focus into the composer
+// there yanks it out from under them.
+let dkUserOpened = false;
 
 /**
  * Recompute panel/toggle visibility from `dkAllowed()` + `dkIsOpen()`. Safe to
@@ -240,7 +248,7 @@ function dkSync(): void {
   if (btn) btn.classList.toggle('active', allowed && dkIsOpen());
   const visible = allowed && dkIsOpen();
   if (btn) btn.setAttribute('aria-expanded', String(visible));
-  const justOpened = visible && dkLastVisible !== true;
+  const justOpened = visible && dkLastVisible !== true && dkUserOpened;
   if (panel) panel.hidden = !visible;
   document.body.classList.toggle('dk-open', visible); // drives the <1100px scrim in hub.css
   dkRenderContext();
@@ -264,6 +272,7 @@ function dkSync(): void {
     if (input && !input.disabled) input.focus();
     else panel?.focus();
   }
+  dkUserOpened = false; // consumed either way — never carries into a later sync
 }
 
 /**
@@ -419,6 +428,10 @@ async function dkRefresh(): Promise<void> {
   if (!currentProjectId) {
     if (newBtn) newBtn.disabled = true;
     renderCopilotTurns([], 'dk-messages', '');
+    // renderCopilotTurns only removes `.ai-msg` — a proposal card left over
+    // from the closed project is a `.dk-proposal`, so without this its Apply
+    // button would stay on screen pointing at a dataset that's no longer open.
+    if (typeof dkClearProposal === 'function') dkClearProposal();
     dkSetComposerEnabled(false);
     if (input) input.placeholder = 'Open a project to ask a question…';
     dkShowHint('Open a project to ask a question.');
@@ -470,6 +483,12 @@ function dkOnKeydown(e: KeyboardEvent): void {
   if (e.key !== 'l' && e.key !== 'L') return;
   if (!(e.metaKey || e.ctrlKey)) return;
   const t = e.target as HTMLElement | null;
+  // The dock's own subtree is exempted BEFORE the text-field guard below.
+  // dkSync() focuses #dk-input (a <textarea>) the moment the dock becomes
+  // visible/usable, so without this, the text-field guard traps ⌘L the
+  // instant focus is inside the composer — the SECOND open, or any click into
+  // it, would silently stop the shortcut from closing the dock.
+  if (t && t.closest && t.closest('#dk-panel')) { e.preventDefault(); dkToggle(); return; }
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
   e.preventDefault();
   dkToggle();

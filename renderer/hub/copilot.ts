@@ -35,11 +35,18 @@ function buildCopilotContextRef(
   override?: { kind: string; id: string; label: string },
 ): { kind: string; id: string; label: string } {
   if (override && override.id) return override;
-  if (typeof expId === 'string' && expId) {
+  // Each tier is gated on the SECTION that owns it. `expId`/`vizEditingId` are
+  // module-scope and are cleared only by their own surface's close button —
+  // `selectSection` never clears them — so without this gate, opening a dataset
+  // and then navigating to Dashboards leaves the scope reading "dataset · …"
+  // while the user looks at something else, and a dock proposal would be
+  // offered against the dataset they navigated away from. The dashboard tier
+  // below needs no such gate: `dashCurrent` IS nulled when its editor closes.
+  if (currentSection === 'datasets' && typeof expId === 'string' && expId) {
     const name = typeof expName === 'string' && expName ? expName : 'open dataset';
     return { kind: 'dataset', id: expId, label: 'dataset · ' + name };
   }
-  if (typeof vizEditingId === 'string' && vizEditingId) {
+  if (currentSection === 'visuals' && typeof vizEditingId === 'string' && vizEditingId) {
     return { kind: 'visual', id: vizEditingId, label: 'visual · open visual' };
   }
   // Only a DASHBOARD is a copilot context: the editor also opens analyses, and
