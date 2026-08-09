@@ -28,7 +28,8 @@ import * as projects from './projects';
 import type { Dataset } from './datasets';
 import type { ColumnSummary, QualityIssue } from './datasetStats';
 import type { Visual } from './visuals';
-import type { Dashboard } from './dashboards';
+import type { Dashboard, Page } from './dashboards';
+import type { Analysis } from './analysis';
 import type { VizDataResult } from './vizData';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -36,7 +37,7 @@ import type { VizDataResult } from './vizData';
 // Where the FACTS in an assistant turn came from — safe to show to the user as
 // provenance chips. `note` is always 'stats app-computed' (the app did the math).
 export interface CopilotProvenance {
-  kind: 'dataset' | 'visual' | 'dashboard' | 'project';
+  kind: 'dataset' | 'visual' | 'dashboard' | 'analysis' | 'project';
   name: string;            // entity name (safe to show)
   datasetName?: string;    // for visual/dashboard cards, the underlying dataset
   columns?: string[];      // columns whose stats were sent
@@ -151,7 +152,7 @@ async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
 }
 
 const ROLES: ReadonlySet<string> = new Set(['user', 'assistant']);
-const PROV_KINDS: ReadonlySet<string> = new Set(['dataset', 'visual', 'dashboard', 'project']);
+const PROV_KINDS: ReadonlySet<string> = new Set(['dataset', 'visual', 'dashboard', 'analysis', 'project']);
 
 // Re-sanitize an untrusted stored provenance object (whitelist fields only).
 function normalizeProvenance(p: any): CopilotProvenance | undefined {
@@ -525,6 +526,38 @@ export function visualFacts(v: Visual, datasetName: string, viz: VizDataResult):
   };
 }
 
+// The card body shared by dashboardFacts and analysisFacts. `Analysis.sheets` IS
+// `Dashboard.pages` (see the header of src/analysis.ts) — same Page/Card shapes,
+// same metric cards — so the two FACTS blocks must lay the SAME numbers out the
+// SAME way. Only the opening line differs; the grounding prompt is shared across
+// every builder, so a divergent layout here would break grounding for one surface.
+function cardBodyLines(
+  pages: Page[] | undefined,
+  computed: { label: string; value: number | null }[],
+): string[] {
+  const lines: string[] = [];
+  if (computed.length > 0) {
+    lines.push('');
+    lines.push('Metric cards (each a single app-computed number):');
+    computed.forEach((m) => lines.push(`- ${m.label}: ${fmt(m.value)}`));
+  }
+  const otherCards: string[] = [];
+  (pages || []).forEach((p) =>
+    (p.cards || []).forEach((c) => {
+      if (c.type === 'text' && c.heading) otherCards.push(`text card "${c.heading}"`);
+    }),
+  );
+  if (otherCards.length > 0) {
+    lines.push('');
+    lines.push('Other cards: ' + otherCards.join(', ') + '.');
+  }
+  return lines;
+}
+
+function countCards(pages: Page[] | undefined): number {
+  return (pages || []).reduce((n, p) => n + (Array.isArray(p.cards) ? p.cards.length : 0), 0);
+}
+
 // Dashboard: page/card inventory + each metric card's ONE app-computed number
 // (metricValue.computeMetric, passed in) + referenced visual names.
 export function dashboardFacts(
@@ -532,29 +565,55 @@ export function dashboardFacts(
   computed: { label: string; value: number | null }[],
 ): CopilotFacts {
   const pageCount = Array.isArray(d.pages) ? d.pages.length : 0;
-  const cardCount = (d.pages || []).reduce((n, p) => n + (Array.isArray(p.cards) ? p.cards.length : 0), 0);
   const lines: string[] = [GUARD_LINE, ''];
-  lines.push(`Dashboard: "${d.name}" (${pageCount} page(s), ${cardCount} card(s)).`);
-  if (computed.length > 0) {
-    lines.push('');
-    lines.push('Metric cards (each a single app-computed number):');
-    computed.forEach((m) => lines.push(`- ${m.label}: ${fmt(m.value)}`));
-  }
-  const visualNames: string[] = [];
-  (d.pages || []).forEach((p) =>
-    (p.cards || []).forEach((c) => {
-      if (c.type === 'text' && c.heading) visualNames.push(`text card "${c.heading}"`);
-    }),
-  );
-  if (visualNames.length > 0) {
-    lines.push('');
-    lines.push('Other cards: ' + visualNames.join(', ') + '.');
-  }
+  lines.push(`Dashboard: "${d.name}" (${pageCount} page(s), ${countCards(d.pages)} card(s)).`);
+  lines.push(...cardBodyLines(d.pages, computed));
   return {
     text: lines.join('\n'),
     provenance: {
       kind: 'dashboard',
       name: d.name,
+      columns: computed.map((m) => m.label),
+      note: 'stats app-computed',
+    },
+  };
+}
+
+// Analysis: the SAME body as dashboardFacts over the same card shapes, with an
+// opening that says ANALYSIS and names the sheets — an analysis is the mutable
+// draft, so the model must not narrate it as a published dashboard.
+export function analysisFacts(
+  a: Analysis,
+  computed: { label: string; value: number | null }[],
+): CopilotFacts {
+  const sheets = Array.isArray(a.sheets) ? a.sheets : [];
+  const lines: string[] = [GUARD_LINE, ''];
+  lines.push(
+    `Analysis (a draft authoring surface, not a published dashboard): "${a.name}" ` +
+    `(${sheets.length} sheet(s), ${countCards(sheets)} card(s)).`,
+  );
+  // Per-sheet roster, ADDITIVE to the shared body below — "what's on sheet 2" is
+  // unanswerable from a flat card list, and an analysis is authored sheet by sheet.
+  // The shared cardBodyLines() layout is untouched, so the analysis and dashboard
+  // FACTS bodies still cannot drift apart.
+  if (sheets.length === 0) {
+    lines.push('Sheets: (none).');
+  } else {
+    lines.push('Sheets:');
+    sheets.forEach((s, i) => {
+      const cards = Array.isArray(s.cards) ? s.cards : [];
+      const counts = new Map<string, number>();
+      cards.forEach((c) => counts.set(c.type, (counts.get(c.type) || 0) + 1));
+      const breakdown = Array.from(counts.entries()).map(([t, n]) => `${n} ${t}`).join(', ');
+      lines.push(`- Sheet ${i + 1} "${s.name}": ${cards.length} card(s)${breakdown ? ` (${breakdown})` : ''}.`);
+    });
+  }
+  lines.push(...cardBodyLines(sheets, computed));
+  return {
+    text: lines.join('\n'),
+    provenance: {
+      kind: 'analysis',
+      name: a.name,
       columns: computed.map((m) => m.label),
       note: 'stats app-computed',
     },

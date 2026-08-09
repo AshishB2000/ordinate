@@ -5,6 +5,7 @@ import * as projects from '../projects';
 import * as datasets from '../datasets';
 import * as visuals from '../visuals';
 import * as dashboards from '../dashboards';
+import * as analysis from '../analysis';
 import { computeColumnSummary, findQualityIssues } from '../datasetStats';
 import { buildVizData } from '../vizData';
 import { computeMetric } from '../metricValue';
@@ -23,9 +24,38 @@ import { askCopilot } from '../analyze';
 
 type ContextRef = { kind?: string; id?: string };
 
+// One app-computed number per metric card (metricValue.computeMetric) over a
+// dashboard's pages OR an analysis's sheets — the same Page[] shape either way.
+// Each referenced dataset is cached, so twelve cards over one dataset load it
+// once. A missing dataset yields null for that card, never a throw.
+async function computeMetricCards(
+  projectId: string,
+  pages: dashboards.Page[],
+): Promise<{ label: string; value: number | null }[]> {
+  const dsCache = new Map<string, Awaited<ReturnType<typeof datasets.getDataset>>>();
+  const computed: { label: string; value: number | null }[] = [];
+  for (const page of pages || []) {
+    for (const card of page.cards || []) {
+      if (card.type !== 'metric' || !card.metric) continue;
+      const m = card.metric;
+      let ds = dsCache.get(m.datasetId);
+      if (ds === undefined) {
+        ds = await datasets.getDataset(projectId, m.datasetId);
+        dsCache.set(m.datasetId, ds);
+      }
+      const value = ds ? computeMetric(ds.columns, ds.rows, { column: m.column, aggregation: m.aggregation }) : null;
+      computed.push({ label: m.label || `${m.aggregation}(${m.column})`, value });
+    }
+  }
+  return computed;
+}
+
 // Build the app-computed FACTS + provenance for a { kind, id } reference, reusing
 // existing pure helpers. Falls back to a project inventory when nothing resolves.
-async function buildFacts(projectId: string, context: ContextRef): Promise<copilot.CopilotFacts> {
+// Exported for scripts/test-copilot-analysis-facts.ts: the app-computed numbers
+// are the whole contract here, and reaching them through copilot:ask would need a
+// configured model (which returns not_ready before any facts surface).
+export async function buildFacts(projectId: string, context: ContextRef): Promise<copilot.CopilotFacts> {
   const kind = context && typeof context.kind === 'string' ? context.kind : '';
   const id = context && typeof context.id === 'string' ? context.id : '';
 
@@ -56,27 +86,15 @@ async function buildFacts(projectId: string, context: ContextRef): Promise<copil
 
   if (kind === 'dashboard' && id) {
     const d = await dashboards.getDashboard(projectId, id);
-    if (d) {
-      // One app-computed number per metric card (metricValue.computeMetric). Cache
-      // each referenced dataset so a dashboard of many cards over one dataset loads
-      // it once.
-      const dsCache = new Map<string, Awaited<ReturnType<typeof datasets.getDataset>>>();
-      const computed: { label: string; value: number | null }[] = [];
-      for (const page of d.pages || []) {
-        for (const card of page.cards || []) {
-          if (card.type !== 'metric' || !card.metric) continue;
-          const m = card.metric;
-          let ds = dsCache.get(m.datasetId);
-          if (ds === undefined) {
-            ds = await datasets.getDataset(projectId, m.datasetId);
-            dsCache.set(m.datasetId, ds);
-          }
-          const value = ds ? computeMetric(ds.columns, ds.rows, { column: m.column, aggregation: m.aggregation }) : null;
-          computed.push({ label: m.label || `${m.aggregation}(${m.column})`, value });
-        }
-      }
-      return copilot.dashboardFacts(d, computed);
-    }
+    if (d) return copilot.dashboardFacts(d, await computeMetricCards(projectId, d.pages));
+  }
+
+  // An analysis is the mutable authoring surface a dashboard is published from.
+  // `Analysis.sheets` IS `Dashboard.pages` (src/analysis.ts header), so the same
+  // walk produces the same numbers — analysisFacts only labels them differently.
+  if (kind === 'analysis' && id) {
+    const a = await analysis.getAnalysis(projectId, id);
+    if (a) return copilot.analysisFacts(a, await computeMetricCards(projectId, a.sheets));
   }
 
   // Fallback — project inventory (no per-entity figures available).
