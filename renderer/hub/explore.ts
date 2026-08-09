@@ -80,6 +80,20 @@ const XP_JUMP_LIMIT = 10;
 
 // ── Jump back in ──────────────────────────────────────────────────────────────
 
+// The recent list, loaded in ONE place. The jump strip paints it and the context
+// picker offers it as its empty-query suggestions; a second fetch would be a
+// second thing to keep in step. Cross-project and already newest-first from main
+// (src/recent.ts) — filtering to one project is the caller's business, because
+// the strip deliberately shows all of them and the picker deliberately does not.
+async function xpRecentItems(): Promise<any[]> {
+  try {
+    const res = await window.hub.recentItems(XP_JUMP_LIMIT);
+    return Array.isArray(res) ? res : [];
+  } catch (_) {
+    return [];
+  }
+}
+
 // One row per recent item: name, kind, relative time. Clicking routes through
 // projects.ts's openRecentItem — the SAME router the Home rows use, so a new
 // entity kind added there works here with no change.
@@ -178,13 +192,7 @@ async function xpRenderJump(): Promise<void> {
   // No conversations in this project yet — fall back to recent items.
   if (heading) heading.textContent = 'Jump back in';
   if (newBtn) newBtn.hidden = true;
-  let items: any[] = [];
-  try {
-    const res = await window.hub.recentItems(XP_JUMP_LIMIT);
-    items = Array.isArray(res) ? res : [];
-  } catch (_) {
-    items = [];
-  }
+  const items = await xpRecentItems();
   if (empty) empty.hidden = items.length > 0;
   // Hide the whole strip's heading too when there is nothing at all to show.
   if (jump) jump.classList.toggle('xp-jump-bare', items.length === 0);
@@ -224,64 +232,63 @@ async function xpNewThread(): Promise<void> {
   if (input && !input.disabled) input.focus();
 }
 
-// ── Scope: which dataset the question is about ────────────────────────────────
+// ── Scope: what the question is about ─────────────────────────────────────────
 
-// Explore's scope is chosen by hand rather than inferred from an open entity.
-// Empty means whole-project: copilot:ask falls back to a project inventory, so
-// the ask still works — the chip just has to say so.
-let xpDatasetId = '';
-let xpDatasetName = '';
-
-// Explore's scope is ALWAYS explicit — never inferred from whatever entity
-// happens to be open elsewhere in the app. An empty kind/id is what copilot:ask
-// reads as "whole project", and it means exactly what the chip says.
+// Explore points at ONE thing: a dataset, a visual, an analysis, a dashboard —
+// or nothing, which means the whole project. Empty kind/id is what copilot:ask
+// already reads as whole-project (it falls back to a project inventory), so the
+// ask always works; the chip just has to say which it is.
 //
-// This replaces the copilot panel's buildCopilotContextRef(), which inferred
-// scope from expId/vizEditingId/dashCurrent. Routing Explore through that
-// inference was a bug: with a dataset open in the explorer and the chip set to
-// "Whole project", the question would silently have been scoped to that open
-// dataset instead — the chip and the answer disagreeing with no way to tell.
+// Explore's scope is ALWAYS explicit — never inferred from whatever entity
+// happens to be open elsewhere in the app. This replaces the copilot panel's
+// buildCopilotContextRef(), which inferred scope from expId/vizEditingId/
+// dashCurrent. Routing Explore through that inference was a bug: with a dataset
+// open in the explorer and the chip set to "Whole project", the question would
+// silently have been scoped to that open dataset instead — the chip and the
+// answer disagreeing with no way to tell.
+let xpCtxKind = '';
+let xpCtxId = '';
+let xpCtxName = '';
+
 function xpContextRef(): { kind: string; id: string; label: string } {
-  if (!xpDatasetId) return { kind: '', id: '', label: 'whole project' };
-  return { kind: 'dataset', id: xpDatasetId, label: 'dataset · ' + (xpDatasetName || 'dataset') };
+  if (!xpCtxKind || !xpCtxId) return { kind: '', id: '', label: 'whole project' };
+  return { kind: xpCtxKind, id: xpCtxId, label: xpCtxKind + ' · ' + (xpCtxName || xpCtxKind) };
 }
 
-function xpPaintDatasetChip(): void {
-  const chip = xpEl<HTMLButtonElement>('xp-dataset-chip');
+// exploreChart.ts draws only when a DATASET is in scope (visual:suggest needs
+// one). One accessor so "is there a dataset?" is asked in exactly one place.
+function xpDatasetInScope(): string {
+  return xpCtxKind === 'dataset' ? xpCtxId : '';
+}
+
+// Point Explore somewhere else. The single writer of the three state fields —
+// the picker and the deleted-entity reset both come through here.
+function xpSetContext(kind: string, id: string, name: string): void {
+  xpCtxKind = kind && id ? kind : '';
+  xpCtxId = xpCtxKind ? id : '';
+  xpCtxName = xpCtxKind ? name : '';
+  xpPaintContextChip();
+}
+
+// The chip: a kind glyph plus the name. GS_GLYPH (globalSearch.ts) is the app's
+// ONE kind-glyph vocabulary — the same marks the sidebar's search results use.
+// The fallback mark stands for "everything", which is what no kind means here.
+function xpPaintContextChip(): void {
+  const chip = xpEl<HTMLButtonElement>('xp-context-chip');
   if (!chip) return;
-  chip.textContent = xpDatasetId ? xpDatasetName || 'Dataset' : 'Whole project';
-  chip.title = xpDatasetId
-    ? 'Asking about "' + xpDatasetName + '" — click to change'
-    : 'Asking about everything in this project — click to pick one dataset';
-}
-
-// Pick a dataset with the app's shared chooser (dashboards.ts) rather than a
-// bespoke modal — same dialog Visuals and Dashboards already use.
-async function xpPickDataset(): Promise<void> {
-  if (!currentProjectId) return;
-  let list: any[] = [];
-  try {
-    list = await window.hub.listDatasets(currentProjectId);
-  } catch (_) {
-    list = [];
-  }
-  if (!Array.isArray(list)) list = [];
-
-  const WHOLE = '__whole__';
-  const options = [{ value: WHOLE, label: 'Whole project' }].concat(
-    list.map((d: any) => ({ value: String(d.id), label: d && d.name ? String(d.name) : 'Untitled dataset' })),
-  );
-  const choice = await dashChooseModal('Ask about', options, 'Choose');
-  if (choice === null) return;
-  if (choice === WHOLE) {
-    xpDatasetId = '';
-    xpDatasetName = '';
-  } else {
-    const picked = list.find((d: any) => String(d.id) === choice);
-    xpDatasetId = choice;
-    xpDatasetName = picked && picked.name ? String(picked.name) : 'Dataset';
-  }
-  xpPaintDatasetChip();
+  chip.textContent = '';
+  const glyph = document.createElement('span');
+  glyph.className = 'gs-glyph';
+  glyph.textContent = (xpCtxKind && GS_GLYPH[xpCtxKind]) || '◈';
+  const name = document.createElement('span');
+  name.className = 'xp-chip-name';
+  name.textContent = xpCtxKind ? xpCtxName || xpCtxKind : 'Whole project';
+  chip.append(glyph, name);
+  chip.title = xpCtxKind
+    ? 'Every question is answered about the ' + xpCtxKind + ' “' + (xpCtxName || xpCtxKind) +
+      '” — click to point Explore at something else.'
+    : 'Every question is answered about everything in this project — click to point Explore at one ' +
+      'dataset, visual, analysis or dashboard.';
 }
 
 // ── Model chip ────────────────────────────────────────────────────────────────
@@ -374,7 +381,17 @@ async function xpSend(): Promise<void> {
     xpSetComposerEnabled(true);
     if (Array.isArray(res.turns)) xpRenderTurns(res.turns);
     else await xpLoadHistory();
-    xpHideHint();
+    // The entity may have been deleted between picking it and asking. Main says
+    // so by falling back to the project inventory, and the PROVENANCE KIND is
+    // how you can tell: we asked about something specific and got 'project'
+    // back. Reset rather than let the chip keep naming a scope that is gone.
+    const gone = Boolean(ref.kind) && res.provenance && res.provenance.kind === 'project';
+    if (gone) {
+      xpSetContext('', '', '');
+      xpShowHint('That ' + ref.kind + ' is no longer here — this was answered about the whole project.');
+    } else {
+      xpHideHint();
+    }
     // Adopt whichever thread main actually wrote to, so a first question in a
     // project (sent with no threadId) keeps talking to that same conversation
     // instead of silently defaulting again on the next turn.
@@ -460,7 +477,7 @@ async function xpToggleAi(): Promise<void> {
 // the whole surface with readiness + the Copilot OFF switch; a missing model is
 // a soft hint and a disabled composer, never an error dialog.
 async function refreshExplore(): Promise<void> {
-  xpPaintDatasetChip();
+  xpPaintContextChip();
   xpPaintModelChip();
   await xpRenderJump();
   await xpLoadHistory();
@@ -515,8 +532,12 @@ function initExplore(): void {
     });
   }
 
-  const ds = xpEl('xp-dataset-chip');
-  if (ds) ds.addEventListener('click', () => void xpPickDataset());
+  // The context chip opens the picker (explorePicker.ts), which owns its own
+  // dismissal — including ignoring clicks on this chip, so a second click here
+  // toggles it shut instead of closing and reopening it.
+  const ctx = xpEl('xp-context-chip');
+  if (ctx) ctx.addEventListener('click', () => void xpOpenContextPicker());
+  initExplorePicker(); // explorePicker.ts — the picker's own listeners
 
   const newThread = xpEl('xp-new-thread');
   if (newThread) newThread.addEventListener('click', () => void xpNewThread());

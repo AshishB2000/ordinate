@@ -214,21 +214,112 @@ async function main(): Promise<void> {
       return Boolean(g && g.getBoundingClientRect().height < 2);
     }));
 
-  // The dataset chip defaults to whole-project scope and says so.
-  ok('the dataset chip defaults to whole-project scope, and says so',
-    /whole project/i.test((await win.locator('#xp-dataset-chip').textContent()) || ''),
-    (await win.locator('#xp-dataset-chip').textContent()) || '');
+  // The context chip defaults to whole-project scope and says so.
+  ok('the context chip defaults to whole-project scope, and says so',
+    /whole project/i.test((await win.locator('#xp-context-chip').textContent()) || ''),
+    (await win.locator('#xp-context-chip').textContent()) || '');
 
-  await win.click('#xp-dataset-chip', { timeout: 8000 });
-  await win.waitForSelector('.ws-modal-overlay:not([id])', { timeout: 8000 });
-  ok('it opens the app’s shared chooser, not a bespoke modal',
-    (await win.locator('.ws-modal-overlay:not([id]) .ws-modal select.ws-modal-input').count()) === 1);
-  await win.selectOption('.ws-modal-overlay:not([id]) select.ws-modal-input', seeded.datasetId);
-  await win.click('.ws-modal-overlay:not([id]) .ws-modal-actions .btn-primary', { timeout: 8000 });
-  await win.waitForSelector('.ws-modal-overlay:not([id])', { state: 'detached', timeout: 8000 });
+  await win.click('#xp-context-chip', { timeout: 8000 });
+  await win.waitForSelector('#xp-picker:not([hidden])', { timeout: 8000 });
+  ok('it opens the picker, not a modal chooser',
+    (await win.locator('.ws-modal-overlay:not([id])').count()) === 0);
+  ok('…with "Whole project" pinned at the top as the always-available clear',
+    /whole project/i.test((await win.locator('#xp-picker-rows .gs-hit').first().textContent()) || ''),
+    (await win.locator('#xp-picker-rows .gs-hit').first().textContent()) || '');
+  // An empty query shows the recent handful, not nothing — the seeded dataset is
+  // in the recent list, so there is at least one row under the pinned clear.
+  await win.waitForFunction(
+    () => document.querySelectorAll('#xp-picker-rows .gs-hit').length > 1,
+    { timeout: 8000 },
+  );
+  ok('…and the recent handful under it, so an empty query is not an empty list',
+    (await win.locator('#xp-picker-rows .gs-hit').count()) > 1,
+    `${await win.locator('#xp-picker-rows .gs-hit').count()} rows`);
+
+  // Search-as-you-type, over the SAME search:query channel the sidebar box uses.
+  await win.fill('#xp-picker-q', 'Revenue');
+  await win.waitForFunction(
+    () => [...document.querySelectorAll('#xp-picker-rows .gs-hit')]
+      .some((n) => /Revenue by month/.test(n.textContent || '')),
+    { timeout: 8000 },
+  );
+  await win.locator('#xp-picker-rows .gs-hit')
+    .filter({ hasText: 'Revenue by month' }).first()
+    .dispatchEvent('mousedown');
+  // state:'hidden' — the default is 'visible', which would wait forever for a
+  // [hidden] element to become visible.
+  await win.waitForSelector('#xp-picker', { state: 'hidden', timeout: 8000 });
   ok('picking a dataset relabels the chip with its name',
-    /Revenue by month/.test((await win.locator('#xp-dataset-chip').textContent()) || ''),
-    (await win.locator('#xp-dataset-chip').textContent()) || '');
+    /Revenue by month/.test((await win.locator('#xp-context-chip').textContent()) || ''),
+    (await win.locator('#xp-context-chip').textContent()) || '');
+  ok('…with the kind glyph the sidebar’s search results already use',
+    (await win.locator('#xp-context-chip .gs-glyph').textContent()) === '▦',
+    (await win.locator('#xp-context-chip .gs-glyph').textContent()) || '');
+  ok('…and a full-sentence tooltip saying what is in scope',
+    /^Every question is answered about the dataset .+click to point Explore at something else\.$/
+      .test((await win.locator('#xp-context-chip').getAttribute('title')) || ''),
+    (await win.locator('#xp-context-chip').getAttribute('title')) || '');
+
+  // ── Anything, not just a dataset ───────────────────────────────────────────
+  // The point of the phase: a dashboard is not a dataset, and xpContextRef has to
+  // hand copilot:ask that kind — the channel has always taken { kind, id }.
+  await app.evaluate(async (_electronModule, pid: string) => {
+    const req = (process as any).mainModule.require.bind((process as any).mainModule);
+    const dashboards = req('./src/dashboards.js');
+    await dashboards.saveDashboard(pid, { name: 'Quarter review' });
+  }, seeded.projectId);
+
+  await win.click('#xp-context-chip', { timeout: 8000 });
+  await win.waitForSelector('#xp-picker:not([hidden])', { timeout: 8000 });
+  await win.fill('#xp-picker-q', 'Quarter');
+  await win.waitForFunction(
+    () => [...document.querySelectorAll('#xp-picker-rows .gs-hit')]
+      .some((n) => /Quarter review/.test(n.textContent || '')),
+    { timeout: 8000 },
+  );
+  await win.locator('#xp-picker-rows .gs-hit')
+    .filter({ hasText: 'Quarter review' }).first()
+    .dispatchEvent('mousedown');
+  // state:'hidden' — the default is 'visible', which would wait forever for a
+  // [hidden] element to become visible.
+  await win.waitForSelector('#xp-picker', { state: 'hidden', timeout: 8000 });
+  ok('Explore can be pointed at a dashboard, and the chip names it',
+    /Quarter review/.test((await win.locator('#xp-context-chip').textContent()) || ''),
+    (await win.locator('#xp-context-chip').textContent()) || '');
+  ok('…and the ref handed to copilot:ask carries that kind, not "dataset"',
+    await win.evaluate(() => {
+      const ref = (window as any).xpContextRef();
+      return ref.kind === 'dashboard' && Boolean(ref.id) && ref.label === 'dashboard · Quarter review';
+    }));
+
+  // Back to whole project via the pinned clear — the chip must be resettable.
+  await win.click('#xp-context-chip', { timeout: 8000 });
+  await win.waitForSelector('#xp-picker:not([hidden])', { timeout: 8000 });
+  await win.locator('#xp-picker-rows .gs-hit').first().dispatchEvent('mousedown');
+  // state:'hidden' — the default is 'visible', which would wait forever for a
+  // [hidden] element to become visible.
+  await win.waitForSelector('#xp-picker', { state: 'hidden', timeout: 8000 });
+  ok('the pinned "Whole project" row clears the scope again',
+    await win.evaluate(() => {
+      const ref = (window as any).xpContextRef();
+      return ref.kind === '' && ref.id === '' && ref.label === 'whole project';
+    }));
+
+  // Put a dataset back in scope — the chart assertions below need one.
+  await win.click('#xp-context-chip', { timeout: 8000 });
+  await win.waitForSelector('#xp-picker:not([hidden])', { timeout: 8000 });
+  await win.fill('#xp-picker-q', 'Revenue');
+  await win.waitForFunction(
+    () => [...document.querySelectorAll('#xp-picker-rows .gs-hit')]
+      .some((n) => /Revenue by month/.test(n.textContent || '')),
+    { timeout: 8000 },
+  );
+  await win.locator('#xp-picker-rows .gs-hit')
+    .filter({ hasText: 'Revenue by month' }).first()
+    .dispatchEvent('mousedown');
+  // state:'hidden' — the default is 'visible', which would wait forever for a
+  // [hidden] element to become visible.
+  await win.waitForSelector('#xp-picker', { state: 'hidden', timeout: 8000 });
 
   // ── The chart path (exploreChart.ts) ──────────────────────────────────────
   // A full run needs a model, which a smoke run has none of. What IS assertable

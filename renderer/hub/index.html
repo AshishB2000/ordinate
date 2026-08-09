@@ -1413,13 +1413,26 @@
           <div class="xp-messages" id="xp-messages"></div>
           <div class="xp-hint" id="xp-hint" hidden></div>
           <div class="xp-composer">
+            <!-- The context picker (explorePicker.ts). Search-as-you-type over
+                 the SAME search:query channel the sidebar's box uses; "Whole
+                 project" is pinned at the top as the always-available clear. -->
+            <div class="xp-picker" id="xp-picker" hidden>
+              <input class="xp-picker-q" id="xp-picker-q" type="search"
+                placeholder="Search datasets, visuals, analyses, dashboards…"
+                aria-label="Search for something to ask about"
+                autocomplete="off" spellcheck="false" role="combobox"
+                aria-controls="xp-picker-rows" aria-expanded="true" />
+              <div class="xp-picker-rows" id="xp-picker-rows" role="listbox"
+                aria-label="What to ask about"></div>
+            </div>
             <textarea class="xp-input" id="xp-input" rows="1"
               placeholder="Connect a model to ask a question…"
               aria-label="Ask a question about your data" disabled></textarea>
             <div class="xp-composer-row">
               <!-- Neither chip is gated on a model: one chooses what you ask
                    about, the other is how you connect something to ask with. -->
-              <button class="xp-chip" id="xp-dataset-chip" type="button">Whole project</button>
+              <button class="xp-chip" id="xp-context-chip" type="button" aria-haspopup="listbox"
+                ><span class="gs-glyph">◈</span><span class="xp-chip-name">Whole project</span></button>
               <span class="xp-composer-spacer"></span>
               <button class="xp-chip xp-chip-warn" id="xp-model-chip" type="button">Connect a model</button>
               <button class="xp-send" id="xp-send" type="button" aria-label="Send" disabled>
@@ -2349,6 +2362,7 @@
 <script src="anDraft.js"></script>
 <script src="globalSearch.js"></script>
 <script src="explore.js"></script>
+<script src="explorePicker.js"></script>
 <script src="exploreChart.js"></script>
 <!-- hub.ts was 2051 lines; these five are it, split by job (.claude/rules/file-size.md).
      ORDER IS LOAD-BEARING among them, for the same reason it is for the group above:

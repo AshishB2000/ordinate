@@ -45,12 +45,13 @@ function xpVisualName(): string {
 /** Save the drawn chart as a real Visual. Returns its id, or '' on failure. */
 async function xpSaveVisual(): Promise<string> {
   if (xpSavedVisualId) return xpSavedVisualId;
-  if (!currentProjectId || !xpDatasetId || !xpLastEncoding) return '';
+  const datasetId = xpDatasetInScope();
+  if (!currentProjectId || !datasetId || !xpLastEncoding) return '';
   let visual: any = null;
   try {
     visual = await window.hub.saveVisual({
       projectId: currentProjectId,
-      datasetId: xpDatasetId,
+      datasetId,
       name: xpVisualName(),
       chartType: xpLastChartType || 'column',
       encoding: xpLastEncoding,
@@ -120,9 +121,11 @@ function xpBuildChartActions(): HTMLElement {
  * nothing drawable) — the text answer is the deliverable and this is an extra.
  */
 async function xpMaybeRenderChart(question: string): Promise<void> {
-  // Only with a dataset in scope: `visual:suggest` needs one, and a
-  // whole-project question has no single table to chart.
-  if (!currentProjectId || !xpDatasetId) return;
+  // Only with a DATASET in scope: `visual:suggest` needs one, and a question
+  // pointed at a project, visual, analysis or dashboard has no single table to
+  // chart. xpDatasetInScope() (explore.ts) is the one place that is decided.
+  const datasetId = xpDatasetInScope();
+  if (!currentProjectId || !datasetId) return;
 
   const host = xpEl('xp-messages');
   if (!host) return;
@@ -133,7 +136,7 @@ async function xpMaybeRenderChart(question: string): Promise<void> {
 
   let res: any = null;
   try {
-    res = await window.hub.suggestVisual(currentProjectId, xpDatasetId, question);
+    res = await window.hub.suggestVisual(currentProjectId, datasetId, question);
   } catch (_) {
     return;
   }
@@ -145,7 +148,7 @@ async function xpMaybeRenderChart(question: string): Promise<void> {
   // Every figure comes from here — never from the model reply.
   let dataRes: any = null;
   try {
-    dataRes = await window.hub.computeVisualData(currentProjectId, xpDatasetId, option.encoding, []);
+    dataRes = await window.hub.computeVisualData(currentProjectId, datasetId, option.encoding, []);
   } catch (_) {
     return;
   }
@@ -184,7 +187,7 @@ async function xpMaybeRenderChart(question: string): Promise<void> {
   // unsaved suggestion owns no overrides, so it needs no override key either.
   renderVizInArea(area, data, type, null, 'xp', {
     projectId: currentProjectId,
-    datasetId: xpDatasetId,
+    datasetId,
     encoding: option.encoding,
     filters: [],
   });
