@@ -305,3 +305,6 @@ scripts/**/*.js
 # siblings.
 /renderer/hub/dockPropose.js
 /scripts/test-dockReversibility.js
+
+# Dock smoke (Task 4). Emitted sibling.
+/scripts/smoke-dock.js

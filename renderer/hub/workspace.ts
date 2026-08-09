@@ -65,6 +65,11 @@ async function adoptProject(id: string): Promise<boolean> {
   // future header stays in sync without a hard dependency.
   const nameEl = document.getElementById('ws-project-name');
   if (nameEl) nameEl.textContent = project.name || 'Untitled project';
+  // A project can be adopted with no section change (e.g. "+New → Data
+  // source"), which dkSync()'s other call sites never see — without this the
+  // dock keeps showing the PREVIOUS project's transcript until the next
+  // entity-open or section-switch.
+  if (typeof dkSync === 'function') dkSync();
   return true;
 }
 

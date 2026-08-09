@@ -161,7 +161,7 @@
            #exec-mode-btn and #settings-gear moved here from the titlebar; ids
            kept so their existing hub.ts wiring is untouched. -->
       <div class="as-bottom">
-        <button id="side-ai-btn" class="as-tool" type="button">
+        <button id="side-ai-btn" class="as-tool" type="button" aria-expanded="false" aria-controls="dk-panel">
           <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3Z" fill="currentColor"/>
             <path d="M18.5 14l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8Z" fill="currentColor"/>
@@ -1457,10 +1457,14 @@
          whichever section is showing (dock.ts owns visibility). Pushes the
          layout via `.hub-body`'s existing `display: flex` above ~1100px;
          narrower than that it becomes a fixed overlay with #dk-scrim behind
-         it (hub.css). Task 1 ships the shell only — the composer stays
-         disabled until copilot:ask is wired in Task 2. -->
+         it (hub.css). Same conversation as Explore and the AI panel
+         (copilot.ts's thread), with three grounded, reversible, one-click
+         proposal types (dockPropose.ts) and a keyboard-resizable width
+         (#dk-handle, dock.ts) — see docs/superpowers/plans/2026-08-09-ai-dock.md. -->
     <div id="dk-scrim" class="dk-scrim"></div>
-    <aside id="dk-panel" class="dk-panel" hidden aria-label="AI assistant">
+    <aside id="dk-panel" class="dk-panel" hidden tabindex="-1" aria-label="AI assistant">
+      <div id="dk-handle" class="dk-handle" role="separator" aria-orientation="vertical"
+        tabindex="0" aria-label="Resize AI panel" aria-valuemin="300" aria-valuenow="340"></div>
       <div class="dk-head">
         <div class="dk-context" id="dk-context">Based on your workspace</div>
         <div class="dk-head-actions">

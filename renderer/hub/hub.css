@@ -10200,6 +10200,7 @@ body.cap-focus .cap-back {
 :root { --dk-width: 340px; }
 
 .dk-panel {
+  position: relative; /* anchors #dk-handle in both push mode and the <1100px overlay */
   flex: 0 0 var(--dk-width, 340px);
   min-width: 0;
   display: flex;
@@ -10208,6 +10209,27 @@ body.cap-focus .cap-back {
   border-left: 1px solid var(--border);
 }
 .dk-panel[hidden] { display: none; }
+
+/* Drag handle — sits astride the panel's left border so half the hit target
+   reads as "inside" and half as "outside", the same affordance a resizable
+   split pane gets everywhere else. Positioned, not a flex child, so it never
+   consumes column height in `.dk-panel`'s flex layout. */
+.dk-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 5;
+  background: transparent;
+}
+.dk-handle:hover,
+.dk-handle:focus-visible,
+.dk-handle.dk-dragging {
+  background: var(--accent);
+}
+.dk-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .dk-head {
   flex: none;
@@ -10340,6 +10362,10 @@ body.cap-focus .cap-back {
     top: 40px; /* below .titlebar (flex: 0 0 40px) — an overlaid dock must not cover the drag strip */
     right: 0;
     bottom: 0;
+    /* `flex-basis` has no effect once the item is out of flow (position:
+       fixed), so the overlay needs its own explicit width — same --dk-width
+       custom property, so the resize handle still works in overlay mode. */
+    width: var(--dk-width, 340px);
     z-index: 9950;
     box-shadow: var(--shadow-lg);
   }

@@ -24,6 +24,11 @@
 // dock.ts owns only the two integration points — clear the last turn's
 // proposal before a new one, offer a new one after a successful answer —
 // everything about WHICH proposal and how it applies lives in dockPropose.ts.
+//
+// Task 4 finishes it: the #dk-handle drag/keyboard resize (dkClampWidth is
+// the one place [300, 40% of window] is computed, read AND write), the
+// resize nudge on drag/keyboard-settle only, Esc-to-close-and-refocus, and
+// aria-expanded on the toggle in dkSync().
 
 // ── Suppression ───────────────────────────────────────────────────────────
 /**
@@ -61,19 +66,118 @@ function dkToggle(): void {
   dkSetOpen(!dkIsOpen());
 }
 
-// Applied once at boot. The drag handle that WRITES dkWidth lands in Task 4;
-// reading it here now means that task needs no new sync plumbing.
+// [300, 40% of window] — the ONE clamp both the read path (dkApplyWidth) and
+// the write path (dkPersistWidth, drag/keyboard resize) share, so there is
+// exactly one place the bound is computed.
+//
+// `Math.max(window.innerWidth * 0.4, DK_MIN_WIDTH)` is the Task 1 review fix:
+// below a 750px window, 40% is under 300px, so a plain `Math.min(n, 40%)`
+// forced the width BELOW the documented minimum. Wrapping the max in
+// `Math.max(…, DK_MIN_WIDTH)` means the minimum always wins on a narrow
+// window instead of silently losing to a smaller "maximum" — simpler than
+// special-casing the <1100px overlay breakpoint, and correct even though the
+// dock is in overlay mode there too (the overlay still honours --dk-width;
+// see hub.css's media query).
+const DK_MIN_WIDTH = 300;
+function dkClampWidth(n: number): number {
+  const max = Math.max(window.innerWidth * 0.4, DK_MIN_WIDTH);
+  return Math.min(Math.max(n, DK_MIN_WIDTH), max);
+}
+
+// Applied at boot AND after every persisted change (dkPersistWidth calls this
+// rather than setting --dk-width itself) — the ONE place a stored value
+// becomes an applied one.
 function dkApplyWidth(): void {
   let w = 340;
   try {
     const raw = localStorage.getItem('dkWidth');
     const n = raw ? parseInt(raw, 10) : NaN;
-    // Task 4 clamps [300, 40% of window] on WRITE; clamp the same range on
-    // READ so a hand-edited/corrupted localStorage value can't blow the panel
-    // out past that bound in the meantime.
-    if (Number.isFinite(n) && n >= 300) w = Math.min(n, window.innerWidth * 0.4);
+    if (Number.isFinite(n) && n >= DK_MIN_WIDTH) w = dkClampWidth(n);
   } catch (_) { /* default stands */ }
   document.documentElement.style.setProperty('--dk-width', w + 'px');
+  dkSyncHandleAria(w);
+}
+
+function dkCurrentWidth(): number {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--dk-width');
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) ? n : 340;
+}
+
+// The ONLY function that writes `dkWidth` to localStorage — drag and keyboard
+// resize both funnel here, then hand off to dkApplyWidth() (above) rather
+// than a second copy of its clamp-and-set-the-CSS-var logic.
+function dkPersistWidth(n: number): void {
+  const w = dkClampWidth(n);
+  try { localStorage.setItem('dkWidth', String(w)); } catch (_) { /* private mode / quota — just won't survive reload */ }
+  dkApplyWidth();
+}
+
+function dkSyncHandleAria(w: number): void {
+  const handle = document.getElementById('dk-handle');
+  if (!handle) return;
+  handle.setAttribute('aria-valuenow', String(Math.round(w)));
+  handle.setAttribute('aria-valuemax', String(Math.round(Math.max(window.innerWidth * 0.4, DK_MIN_WIDTH))));
+}
+
+// ── Resize handle (drag + keyboard) ─────────────────────────────────────────
+// Live feedback (mousemove / each arrow press) only ever touches the CSS
+// custom property directly — cheap, and NOT a second writer of `dkWidth`.
+// Persisting to localStorage and re-running the canvas resize nudge happens
+// once, at the end of the gesture: mouseup for a drag, a short settle timer
+// for the keyboard (arrow-key repeat fires far faster than one resize per
+// keystroke should cost).
+let dkDragStartX = 0;
+let dkDragStartWidth = 0;
+
+function dkHandleMouseMove(e: MouseEvent): void {
+  // The dock sits on the right edge; the handle is its LEFT edge, so dragging
+  // the mouse left (negative movement) is what WIDENS the panel.
+  const dx = dkDragStartX - e.clientX;
+  const w = dkClampWidth(dkDragStartWidth + dx);
+  document.documentElement.style.setProperty('--dk-width', w + 'px');
+  dkSyncHandleAria(w);
+}
+
+function dkHandleMouseUp(): void {
+  document.removeEventListener('mousemove', dkHandleMouseMove);
+  document.removeEventListener('mouseup', dkHandleMouseUp);
+  const handle = document.getElementById('dk-handle');
+  if (handle) handle.classList.remove('dk-dragging');
+  dkPersistWidth(dkCurrentWidth());
+  dkNudgeCanvasResize(); // once, on drag END — never per mousemove
+}
+
+function dkHandleMouseDown(e: MouseEvent): void {
+  e.preventDefault(); // a text-selection drag would otherwise start under the cursor
+  dkDragStartX = e.clientX;
+  dkDragStartWidth = dkCurrentWidth();
+  const handle = document.getElementById('dk-handle');
+  if (handle) handle.classList.add('dk-dragging');
+  document.addEventListener('mousemove', dkHandleMouseMove);
+  document.addEventListener('mouseup', dkHandleMouseUp);
+}
+
+let dkKeyResizeSettle: ReturnType<typeof setTimeout> | null = null;
+const DK_KEY_STEP = 16;
+
+function dkHandleKeydown(e: KeyboardEvent): void {
+  let delta = 0;
+  if (e.key === 'ArrowLeft') delta = DK_KEY_STEP; // grows the panel — see dkHandleMouseMove
+  else if (e.key === 'ArrowRight') delta = -DK_KEY_STEP;
+  else return;
+  e.preventDefault();
+  const w = dkClampWidth(dkCurrentWidth() + delta);
+  document.documentElement.style.setProperty('--dk-width', w + 'px');
+  dkSyncHandleAria(w);
+  // Settle once key-repeat stops, not once per keystroke — the keyboard
+  // equivalent of "on drag end, not every frame".
+  if (dkKeyResizeSettle) clearTimeout(dkKeyResizeSettle);
+  dkKeyResizeSettle = setTimeout(() => {
+    dkKeyResizeSettle = null;
+    dkPersistWidth(dkCurrentWidth());
+    dkNudgeCanvasResize();
+  }, 300);
 }
 
 // ── Context ──────────────────────────────────────────────────────────────
@@ -126,6 +230,8 @@ function dkSync(): void {
   if (btn) btn.hidden = !allowed; // suppressed = toggle hidden too, no exceptions
   if (btn) btn.classList.toggle('active', allowed && dkIsOpen());
   const visible = allowed && dkIsOpen();
+  if (btn) btn.setAttribute('aria-expanded', String(visible));
+  const justOpened = visible && dkLastVisible !== true;
   if (panel) panel.hidden = !visible;
   document.body.classList.toggle('dk-open', visible); // drives the <1100px scrim in hub.css
   dkRenderContext();
@@ -135,6 +241,20 @@ function dkSync(): void {
   }
   if (dkLastVisible !== null && dkLastVisible !== visible) dkNudgeCanvasResize();
   dkLastVisible = visible;
+  // Opening focuses the composer — but a DISABLED textarea (no model
+  // connected, or no project open yet — the state a fresh install starts in)
+  // silently REFUSES focus, per the HTML spec; that would strand keyboard
+  // focus wherever it happened to be (typically the toggle button itself)
+  // instead of inside the panel that just opened. `#dk-panel` carries
+  // `tabindex="-1"` for exactly this fallback: focus lands somewhere inside
+  // the dock either way, and the input still gets it the moment it becomes
+  // usable (dkRefresh() enables it without touching focus, so this isn't a
+  // second, competing focus write).
+  if (justOpened) {
+    const input = document.getElementById('dk-input') as HTMLTextAreaElement | null;
+    if (input && !input.disabled) input.focus();
+    else panel?.focus();
+  }
 }
 
 /**
@@ -324,6 +444,20 @@ async function dkRefresh(): Promise<void> {
 
 // ── Keyboard ─────────────────────────────────────────────────────────────
 function dkOnKeydown(e: KeyboardEvent): void {
+  if (e.key === 'Escape') {
+    // Bubble phase, gated on `!e.defaultPrevented` — every modal/menu/popover
+    // in this app closes its OWN Escape on the CAPTURE phase (see e.g.
+    // authoringRail.ts, dashAdd.ts, filterDialog.ts), so any of those already
+    // ran and called preventDefault() by the time a bubble-phase listener
+    // like this one sees the event. An open overlay wins; the dock is the
+    // fallback, not a competitor.
+    if (e.defaultPrevented || !dkAllowed() || !dkIsOpen()) return;
+    e.preventDefault();
+    dkSetOpen(false);
+    const toggle = document.getElementById('side-ai-btn');
+    if (toggle) toggle.focus();
+    return;
+  }
   if (e.key !== 'l' && e.key !== 'L') return;
   if (!(e.metaKey || e.ctrlKey)) return;
   const t = e.target as HTMLElement | null;
@@ -336,6 +470,11 @@ function dkOnKeydown(e: KeyboardEvent): void {
 function initDock(): void {
   dkApplyWidth();
   document.addEventListener('keydown', dkOnKeydown);
+  const handle = document.getElementById('dk-handle');
+  if (handle) {
+    handle.addEventListener('mousedown', dkHandleMouseDown);
+    handle.addEventListener('keydown', dkHandleKeydown);
+  }
   const closeBtn = document.getElementById('dk-close');
   if (closeBtn) closeBtn.addEventListener('click', () => dkSetOpen(false));
   const scrim = document.getElementById('dk-scrim');
