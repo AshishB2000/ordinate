@@ -95,7 +95,6 @@ scripts/**/*.js
 /src/copilot.js
 /src/ipc/copilot.js
 /scripts/test-copilot.js
-/renderer/hub/copilot.js
 
 # Week 12 embedded AI actions — emitted siblings.
 /src/anomalies.js

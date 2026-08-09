@@ -10,6 +10,13 @@ All notable changes to Ordinate are documented here. Format based on
 ## [Unreleased]
 
 ### Added
+- **Explore — ask a question about your data.** A page of its own, above Home and on the Home
+  screen: pick a dataset, ask in plain language, and get an answer built from figures the app
+  computed — with chips saying which dataset and columns they came from. Where the question suits
+  one, a real chart appears under the answer, drawn from the app's own numbers and saveable as a
+  visual or added straight to an analysis. Conversations are kept per project, so you can leave one
+  and come back to it, and start a fresh one whenever. The old Copilot panel is gone; this replaces
+  it, and everything still works with no model connected — the AI on/off switch came with it.
 - **Datasets can refresh themselves.** Set a dataset to re-fetch Hourly, Daily or Weekly and Ordinate
   keeps it current. It is honest about what that means: schedules run while Ordinate is open, and
   anything that came due while it was closed catches up when the app launches — the setting says so.

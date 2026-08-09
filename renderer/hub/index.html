@@ -1388,26 +1388,6 @@
       </div>
       </div>
     </section>
-    <section class="ws-panel" id="ws-ai" data-section="ai" hidden>
-      <div class="ai-panel">
-        <div class="ai-head">
-          <h2 class="ai-title">Copilot <span class="ws-badge">optional</span></h2>
-          <div class="ai-head-actions">
-            <button class="btn btn-sm ai-toggle" type="button" id="ai-toggle" aria-pressed="true">Copilot: On</button>
-            <button class="btn btn-sm" type="button" id="ai-clear">Clear</button>
-          </div>
-        </div>
-        <div class="ds-explain-out ds-explain-hint ai-hint" id="ai-hint" hidden></div>
-        <div class="ai-context" id="ai-context" hidden></div>
-        <div class="ai-messages" id="ai-messages">
-          <div class="ai-empty" id="ai-empty">Ask a question about the dataset, visual, or dashboard you have open. Every figure is computed by the app — Copilot only explains it.</div>
-        </div>
-        <div class="ai-composer" id="ai-composer">
-          <textarea class="ai-input" id="ai-input" rows="2" placeholder="Ask about your data…" aria-label="Ask Copilot"></textarea>
-          <button class="btn btn-primary ai-send" type="button" id="ai-send">Send</button>
-        </div>
-      </div>
-    </section>
 
     <!-- ── Explore — the conversational front door ────────────────────
          A place, not a dialog: a full-bleed stage carrying the background,
@@ -1449,7 +1429,13 @@
           <!-- Reads "Conversations" once there are any, "Jump back in" while
                falling back to recent items. explore.ts sets it. -->
           <h2 class="xp-jump-h" id="xp-jump-h">Jump back in</h2>
-          <button class="btn btn-sm" type="button" id="xp-new-thread" hidden>New conversation</button>
+          <div class="xp-jump-actions">
+            <button class="btn btn-sm" type="button" id="xp-new-thread" hidden>New conversation</button>
+            <!-- The hard AI ON/OFF switch. It lived on the retired Copilot panel,
+                 which was the only way to turn it back on — it moves here with
+                 the feature rather than disappearing with the panel. -->
+            <button class="btn btn-sm xp-toggle" type="button" id="xp-ai-toggle" aria-pressed="true">AI: On</button>
+          </div>
         </div>
         <div class="xp-jump-rows" id="xp-jump-rows"></div>
         <p class="xp-jump-empty" id="xp-jump-empty" hidden>Nothing here yet — bring some data in and it will show up.</p>
@@ -2352,7 +2338,6 @@
 <script src="anPublish.js"></script>
 <script src="anDraft.js"></script>
 <script src="globalSearch.js"></script>
-<script src="copilot.js"></script>
 <script src="explore.js"></script>
 <script src="exploreChart.js"></script>
 <!-- hub.ts was 2051 lines; these five are it, split by job (.claude/rules/file-size.md).

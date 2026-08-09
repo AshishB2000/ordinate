@@ -18,6 +18,62 @@ function xpEl<T extends HTMLElement = HTMLElement>(id: string): T | null {
   return document.getElementById(id) as T | null;
 }
 
+// ── Message rendering ─────────────────────────────────────────────────────────
+//
+// Moved here verbatim from the retired copilot panel (renderer/hub/copilot.ts),
+// which Explore replaced. DOM only, textContent NEVER innerHTML — nothing the
+// model returns can inject markup. That rule is the reason these are copied
+// rather than rewritten.
+
+function xpAppendBubble(role: string, text: string, provenance?: any): void {
+  const list = xpEl('xp-messages');
+  if (!list) return;
+  const row = document.createElement('div');
+  row.className = 'xp-msg ' + (role === 'assistant' ? 'xp-msg-assistant' : 'xp-msg-user');
+  const bubble = document.createElement('div');
+  bubble.className = 'xp-bubble';
+  bubble.textContent = text;
+  row.appendChild(bubble);
+
+  if (role === 'assistant' && provenance && typeof provenance === 'object') {
+    const prov = document.createElement('div');
+    prov.className = 'xp-provenance';
+    const chips: string[] = [];
+    if (provenance.kind && provenance.name) chips.push(provenance.kind + ': ' + provenance.name);
+    else if (provenance.kind) chips.push(String(provenance.kind));
+    if (provenance.datasetName) chips.push('dataset: ' + provenance.datasetName);
+    if (Array.isArray(provenance.columns) && provenance.columns.length) {
+      const cols = provenance.columns.slice(0, 6).join(', ');
+      chips.push('columns: ' + cols + (provenance.columns.length > 6 ? '…' : ''));
+    }
+    chips.push(provenance.note ? String(provenance.note) : 'stats app-computed');
+    chips.forEach((c) => {
+      const chip = document.createElement('span');
+      chip.className = 'xp-prov-chip';
+      chip.textContent = c;
+      prov.appendChild(chip);
+    });
+    row.appendChild(prov);
+  }
+  list.appendChild(row);
+}
+
+// Rebuild the whole transcript from an authoritative turns array (disk truth).
+function xpRenderTurns(turns: any[]): void {
+  const list = xpEl('xp-messages');
+  if (!list) return;
+  list.querySelectorAll('.xp-msg').forEach((n) => n.remove());
+  if (Array.isArray(turns)) {
+    turns.forEach((t) => xpAppendBubble(t.role, typeof t.text === 'string' ? t.text : '', t.provenance));
+  }
+  xpScrollToBottom();
+}
+
+function xpScrollToBottom(): void {
+  const list = xpEl('xp-messages');
+  if (list) list.scrollTop = list.scrollHeight;
+}
+
 // How many rows the "Jump back in" strip shows. The recent list itself is
 // cross-project and already sorted newest-first in main (src/recent.ts).
 const XP_JUMP_LIMIT = 10;
@@ -160,7 +216,7 @@ async function xpNewThread(): Promise<void> {
   }
   if (!res || !res.ok || !res.thread || !res.thread.id) return;
   xpThreadId = String(res.thread.id);
-  renderCopilotTurns([], 'xp-messages', '');
+  xpRenderTurns([]);
   xpSetAsked(false);
   xpHideHint();
   await xpRenderJump();
@@ -176,9 +232,17 @@ async function xpNewThread(): Promise<void> {
 let xpDatasetId = '';
 let xpDatasetName = '';
 
-// The explicit context override handed to buildCopilotContextRef (copilot.ts).
-function xpContextRef(): { kind: string; id: string; label: string } | undefined {
-  if (!xpDatasetId) return undefined;
+// Explore's scope is ALWAYS explicit — never inferred from whatever entity
+// happens to be open elsewhere in the app. An empty kind/id is what copilot:ask
+// reads as "whole project", and it means exactly what the chip says.
+//
+// This replaces the copilot panel's buildCopilotContextRef(), which inferred
+// scope from expId/vizEditingId/dashCurrent. Routing Explore through that
+// inference was a bug: with a dataset open in the explorer and the chip set to
+// "Whole project", the question would silently have been scoped to that open
+// dataset instead — the chip and the answer disagreeing with no way to tell.
+function xpContextRef(): { kind: string; id: string; label: string } {
+  if (!xpDatasetId) return { kind: '', id: '', label: 'whole project' };
   return { kind: 'dataset', id: xpDatasetId, label: 'dataset · ' + (xpDatasetName || 'dataset') };
 }
 
@@ -276,15 +340,15 @@ async function xpSend(): Promise<void> {
   const question = input.value.trim();
   if (!question || !currentProjectId) return;
 
-  const ref = buildCopilotContextRef(xpContextRef());
+  const ref = xpContextRef();
 
   // Optimistic: the question and a pending marker appear immediately, and the
   // stage commits to transcript mode before the round-trip.
   xpHideHint();
   xpSetAsked(true);
-  appendCopilotBubble('user', question, undefined, 'xp-messages');
-  appendCopilotBubble('assistant', 'Thinking…', undefined, 'xp-messages');
-  scrollCopilotToBottom('xp-messages');
+  xpAppendBubble('user', question);
+  xpAppendBubble('assistant', 'Thinking…');
+  xpScrollToBottom();
 
   input.value = '';
   xpBusy = true;
@@ -308,7 +372,7 @@ async function xpSend(): Promise<void> {
     // Rebuild from disk truth — main persisted both turns on success. Explore
     // has no inline empty-state node, hence the '' third argument.
     xpSetComposerEnabled(true);
-    if (Array.isArray(res.turns)) renderCopilotTurns(res.turns, 'xp-messages', '');
+    if (Array.isArray(res.turns)) xpRenderTurns(res.turns);
     else await xpLoadHistory();
     xpHideHint();
     // Adopt whichever thread main actually wrote to, so a first question in a
@@ -340,7 +404,7 @@ async function xpSend(): Promise<void> {
 // Repaint the transcript from disk. History is per project and survives reload.
 async function xpLoadHistory(): Promise<void> {
   if (!currentProjectId) {
-    renderCopilotTurns([], 'xp-messages', '');
+    xpRenderTurns([]);
     xpSetAsked(false);
     return;
   }
@@ -354,10 +418,40 @@ async function xpLoadHistory(): Promise<void> {
   // most recent one there, and the renderer must agree with that choice.
   if (res && typeof res.threadId === 'string' && res.threadId) xpThreadId = res.threadId;
   const turns = res && res.ok && Array.isArray(res.turns) ? res.turns : [];
-  renderCopilotTurns(turns, 'xp-messages', '');
+  xpRenderTurns(turns);
   // A project with history opens straight into the transcript; the greeting is
   // for a blank slate, not a permanent header.
   xpSetAsked(turns.length > 0);
+}
+
+// ── The hard AI ON/OFF switch ─────────────────────────────────────────────────
+//
+// Carried over from the retired copilot panel, which owned the ONLY control that
+// could turn config.copilotEnabled back on. Deleting that panel without moving
+// this would have stranded anyone who had switched AI off, with no route back —
+// the switch is a promise that the app stays fully usable without AI, so it has
+// to stay reachable from wherever AI now lives.
+
+function xpPaintAiToggle(enabled: boolean): void {
+  const btn = xpEl<HTMLButtonElement>('xp-ai-toggle');
+  if (!btn) return;
+  btn.textContent = enabled ? 'AI: On' : 'AI: Off';
+  btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+  btn.classList.toggle('xp-toggle-off', !enabled);
+}
+
+async function xpToggleAi(): Promise<void> {
+  let status: any = {};
+  try {
+    status = (await window.hub.getKeyStatus()) || {};
+  } catch (_) {
+    status = {};
+  }
+  const next = status.copilotEnabled === false; // flip
+  try {
+    await window.hub.setCopilotEnabled(next);
+  } catch (_) { /* ignore — refreshExplore re-reads the real state below */ }
+  await refreshExplore();
 }
 
 // ── Panel refresh ─────────────────────────────────────────────────────────────
@@ -379,12 +473,13 @@ async function refreshExplore(): Promise<void> {
   }
   const enabled = status.copilotEnabled !== false;
   const ready = Boolean(status.isReady);
+  xpPaintAiToggle(enabled);
 
   const input = xpEl<HTMLTextAreaElement>('xp-input');
   if (!enabled) {
     xpSetComposerEnabled(false);
-    if (input) input.placeholder = 'AI is off. Turn it back on in Settings to ask a question.';
-    xpShowHint('AI is off. Everything else in Ordinate works exactly as it does now.');
+    if (input) input.placeholder = 'AI is off.';
+    xpShowHint('AI is off. Everything else in Ordinate works exactly as it does now — turn it back on whenever you want it.');
     return;
   }
   if (!ready) {
@@ -425,6 +520,9 @@ function initExplore(): void {
 
   const newThread = xpEl('xp-new-thread');
   if (newThread) newThread.addEventListener('click', () => void xpNewThread());
+
+  const aiToggle = xpEl('xp-ai-toggle');
+  if (aiToggle) aiToggle.addEventListener('click', () => void xpToggleAi());
 
   const model = xpEl('xp-model-chip');
   if (model) {

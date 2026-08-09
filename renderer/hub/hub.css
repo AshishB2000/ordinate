@@ -8748,216 +8748,12 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 /* ── AI Copilot panel (Week 11) ─────────────────────────────────────────────
    Theme-aware via the shared CSS vars (no hard-coded colors). CSP forbids inline
    style attributes in HTML — everything visual lives here. */
-.ai-panel {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 18px 20px;
-  overflow: hidden;
-}
-.ai-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.ai-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: 16px;
-  font-weight: 650;
-  color: var(--text-strong);
-}
-.ai-title .ws-badge { margin-left: 0; }
-.ai-head-actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.ai-toggle.ai-toggle-off {
-  color: var(--muted);
-}
-.ai-hint {
-  margin: 0;
-}
-.ai-context {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--muted);
-}
-.ai-context-label {
-  font-weight: 600;
-  color: var(--text);
-}
-.ai-messages {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 4px 2px;
-}
-.ai-empty {
-  margin: auto;
-  max-width: 420px;
-  text-align: center;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-.ai-msg {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-width: 82%;
-}
-.ai-msg-user {
-  align-self: flex-end;
-  align-items: flex-end;
-}
-.ai-msg-assistant {
-  align-self: flex-start;
-  align-items: flex-start;
-}
-.ai-bubble {
-  padding: 10px 13px;
-  border-radius: var(--r-md);
-  font-size: 13px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.ai-msg-user .ai-bubble {
-  background: var(--accent);
-  color: var(--accent-ink);
-}
-.ai-msg-assistant .ai-bubble {
-  background: var(--surface-2);
-  color: var(--text-strong);
-  border: 1px solid var(--border);
-}
-.ai-provenance {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.ai-chip {
-  padding: 2px 8px;
-  border-radius: var(--r-full);
-  background: var(--surface-3);
-  color: var(--text-dim);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-.ai-composer {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-}
-.ai-input {
-  flex: 1;
-  min-width: 0;
-  resize: none;
-  padding: 10px 12px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--text-strong);
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.4;
-}
-.ai-input:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-.ai-input:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.ai-send {
-  flex: none;
-}
 
 /* ── Embedded AI actions (Week 12) — interpretation clearly marked distinct from
    app-computed facts. Reused by prepare (calc field) + dashboards (summary,
    anomalies). ─────────────────────────────────────────────────────────────── */
-.ai-interp {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px;
-  background: var(--bg-elev, var(--surface-2));
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
 /* Without this the `hidden` attribute lost to `display: flex` and the panel
    painted as an empty bordered bar above every dashboard grid. */
-.ai-interp[hidden] { display: none; }
-.ai-interp-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.ai-badge {
-  flex: none;
-  padding: 2px 8px;
-  border-radius: var(--r-full);
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-.ai-interp-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-}
-.ai-interp-body {
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-strong);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.ai-interp-hint {
-  font-size: 13px;
-  color: var(--muted);
-}
-.ai-facts {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface-3);
-}
-.ai-facts-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-.ai-facts-item {
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--text-strong);
-}
-.ai-facts-item.ai-facts-warn {
-  color: var(--warn);
-}
 .dash-list-head-actions {
   display: flex;
   align-items: center;
@@ -10213,3 +10009,57 @@ body.cap-focus .cap-back {
   margin-bottom: 10px;
 }
 .xp-jump-head .xp-jump-h { margin: 0; }
+
+
+/* Explore transcript bubbles. Inherited from the retired Copilot panel and
+   renamed with it — same DOM, same textContent-only rendering, one owner. */
+.xp-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 82%;
+}
+.xp-msg-user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.xp-msg-assistant {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+.xp-bubble {
+  padding: 10px 13px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.xp-msg-user .xp-bubble {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.xp-msg-assistant .xp-bubble {
+  background: var(--surface-2);
+  color: var(--text-strong);
+  border: 1px solid var(--border);
+}
+.xp-provenance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.xp-prov-chip {
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.xp-jump-actions { display: flex; align-items: center; gap: 8px; }
+/* The AI off state is stated plainly, not alarmingly — running without AI is a
+   supported way to use Ordinate, not a fault. */
+.xp-toggle-off { color: var(--muted); }

@@ -192,7 +192,7 @@ async function main(): Promise<void> {
   await win.waitForTimeout(1200);
   await win.evaluate(() => { (window as any).selectSection('explore'); });
   await win.waitForFunction(
-    () => document.querySelectorAll('#xp-messages .ai-msg').length >= 2,
+    () => document.querySelectorAll('#xp-messages .xp-msg').length >= 2,
     { timeout: 10_000 },
   );
 
@@ -202,12 +202,12 @@ async function main(): Promise<void> {
       return Boolean(p && p.classList.contains('xp-asked'));
     }));
   ok('…rendering both turns into Explore’s own container',
-    (await win.locator('#xp-messages .ai-msg').count()) === 2,
-    `${await win.locator('#xp-messages .ai-msg').count()} bubbles`);
+    (await win.locator('#xp-messages .xp-msg').count()) === 2,
+    `${await win.locator('#xp-messages .xp-msg').count()} bubbles`);
   ok('…with the provenance chips that say where the figures came from',
-    (await win.locator('#xp-messages .ai-provenance .ai-chip').count()) > 0);
+    (await win.locator('#xp-messages .xp-provenance .xp-prov-chip').count()) > 0);
   ok('…including the app-computed note, so the model is never credited with the math',
-    /app-computed/i.test((await win.locator('#xp-messages .ai-provenance').first().textContent()) || ''));
+    /app-computed/i.test((await win.locator('#xp-messages .xp-provenance').first().textContent()) || ''));
   ok('the greeting is collapsed once there is a conversation',
     await win.evaluate(() => {
       const g = document.getElementById('xp-greet');
@@ -265,7 +265,7 @@ async function main(): Promise<void> {
 
   await win.click('#xp-new-thread', { timeout: 8000 });
   await win.waitForFunction(
-    () => document.querySelectorAll('#xp-messages .ai-msg').length === 0,
+    () => document.querySelectorAll('#xp-messages .xp-msg').length === 0,
     { timeout: 8000 },
   );
   ok('starting a new conversation clears the transcript', true);
@@ -289,11 +289,11 @@ async function main(): Promise<void> {
     if (older) older.click();
   });
   await win.waitForFunction(
-    () => document.querySelectorAll('#xp-messages .ai-msg').length === 2,
+    () => document.querySelectorAll('#xp-messages .xp-msg').length === 2,
     { timeout: 8000 },
   );
   ok('clicking a past conversation resumes it with its turns intact',
-    (await win.locator('#xp-messages .ai-msg').count()) === 2);
+    (await win.locator('#xp-messages .xp-msg').count()) === 2);
 
   // ── A pre-threads copilot.json still loads (schemaVersion 1 → 2) ──────────
   // The migration is unit-tested in scripts/test-copilot-threads.ts; what only a
@@ -333,10 +333,49 @@ async function main(): Promise<void> {
   await win.waitForTimeout(1000);
   await win.evaluate(() => { (window as any).selectSection('explore'); });
   await win.waitForFunction(
-    () => document.querySelectorAll('#xp-messages .ai-msg').length === 2,
+    () => document.querySelectorAll('#xp-messages .xp-msg').length === 2,
     { timeout: 10_000 },
   );
   ok('…and the migrated conversation renders in Explore', true);
+
+  // ── The old Copilot panel is gone, not merely unwired ─────────────────────
+  ok('the ws-ai panel no longer exists in the document',
+    (await win.locator('#ws-ai').count()) === 0);
+  ok('…and none of its ids are left behind',
+    await win.evaluate(() =>
+      ['ai-messages', 'ai-input', 'ai-send', 'ai-toggle', 'ai-clear', 'ai-empty', 'ai-context', 'ai-hint']
+        .every((id) => document.getElementById(id) === null)));
+
+  // The AI tool button is the third door into the one chat surface.
+  await win.evaluate(() => { (window as any).selectSection('home'); });
+  await win.waitForTimeout(300);
+  await win.click('#side-ai-btn', { timeout: 8000 });
+  await win.waitForFunction(
+    () => document.querySelector('.hub-body')?.getAttribute('data-section') === 'explore',
+    { timeout: 8000 },
+  );
+  ok('the sidebar AI button opens Explore, not a retired section',
+    (await sectionOf(win)) === 'explore');
+
+  // The hard OFF switch came across with the feature. It was the panel's only
+  // control; losing it would have stranded anyone who had AI switched off.
+  ok('the AI on/off switch survived the panel it used to live on',
+    await win.locator('#xp-ai-toggle').isVisible());
+  ok('…reading On by default', /AI: On/.test((await win.locator('#xp-ai-toggle').textContent()) || ''));
+
+  await win.click('#xp-ai-toggle', { timeout: 8000 });
+  await win.waitForFunction(
+    () => /AI: Off/.test(document.getElementById('xp-ai-toggle')?.textContent || ''),
+    { timeout: 8000 },
+  );
+  ok('turning AI off is reflected in the switch', true);
+
+  await win.click('#xp-ai-toggle', { timeout: 8000 });
+  await win.waitForFunction(
+    () => /AI: On/.test(document.getElementById('xp-ai-toggle')?.textContent || ''),
+    { timeout: 8000 },
+  );
+  ok('…and it can be turned back on — the route back still exists', true);
 
   ok('no renderer errors (incl. CSP violations)', errors.length === 0, errors.slice(0, 3).join(' | '));
 

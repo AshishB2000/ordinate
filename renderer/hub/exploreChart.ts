@@ -128,7 +128,7 @@ async function xpMaybeRenderChart(question: string): Promise<void> {
   if (!host) return;
   // Pin the chart to the turn that produced it before any await, so a fast
   // second question cannot land this chart under the wrong answer.
-  const anchor = host.querySelector('.ai-msg:last-child');
+  const anchor = host.querySelector('.xp-msg:last-child');
   if (!anchor) return;
 
   let res: any = null;
@@ -190,5 +190,5 @@ async function xpMaybeRenderChart(question: string): Promise<void> {
   });
 
   wrap.appendChild(xpBuildChartActions());
-  scrollCopilotToBottom('xp-messages');
+  xpScrollToBottom();
 }

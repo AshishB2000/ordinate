@@ -100,8 +100,6 @@ function selectSection(section: string): void {
   if (section === 'analyses' && typeof refreshAnalysisList === 'function') refreshAnalysisList();
   // Refresh the saved-dashboards list when the Dashboards section becomes active (dashboards.ts).
   if (section === 'dashboards' && typeof refreshDashboardList === 'function') refreshDashboardList();
-  // Refresh the AI Copilot chat when the AI section becomes active (copilot.ts).
-  if (section === 'ai' && typeof refreshCopilot === 'function') refreshCopilot();
   // Repaint Explore's jump strip + composer state when it becomes active (explore.ts).
   if (section === 'explore' && typeof refreshExplore === 'function') void refreshExplore();
   // Reload the connector catalogue when Connect becomes active (connections.ts).
@@ -115,15 +113,17 @@ function leaveSection(section: string): void {
   selectSection(previousSection && previousSection !== section ? previousSection : 'home');
 }
 
-// Wire the persistent sidebar nav (once, on boot). The AI tool button opens the
-// copilot section over the current view; the connect items and "More…" are
-// wired in projects.ts (they resolve a project first).
+// Wire the persistent sidebar nav (once, on boot). The AI tool button opens
+// Explore; the connect items and "More…" are wired in projects.ts (they resolve
+// a project first).
 function initWorkspaceRouter(): void {
   document.querySelectorAll('.as-nav-item').forEach((item) => {
     item.addEventListener('click', () => selectSection((item as HTMLElement).dataset.section || 'home'));
   });
+  // The AI tool button now opens Explore — there is ONE chat surface, and the
+  // 'ai' section it used to open no longer exists.
   const ai = document.getElementById('side-ai-btn');
-  if (ai) ai.addEventListener('click', () => selectSection('ai'));
+  if (ai) ai.addEventListener('click', () => selectSection('explore'));
   // The only way out of the Capture workspace while the nav is hidden. Reuses
   // leaveSection() — the same helper Connect's Close uses — rather than adding a
   // second notion of "where was I".
