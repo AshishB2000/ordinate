@@ -294,3 +294,6 @@ scripts/**/*.js
 /scripts/test-anomalyWatch.js
 /src/ipc/search.js
 /renderer/hub/globalSearch.js
+
+# Explore — the conversational front door. Emitted sibling.
+/renderer/hub/explore.js

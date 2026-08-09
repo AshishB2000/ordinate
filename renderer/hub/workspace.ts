@@ -102,6 +102,8 @@ function selectSection(section: string): void {
   if (section === 'dashboards' && typeof refreshDashboardList === 'function') refreshDashboardList();
   // Refresh the AI Copilot chat when the AI section becomes active (copilot.ts).
   if (section === 'ai' && typeof refreshCopilot === 'function') refreshCopilot();
+  // Repaint Explore's jump strip + composer state when it becomes active (explore.ts).
+  if (section === 'explore' && typeof refreshExplore === 'function') void refreshExplore();
   // Reload the connector catalogue when Connect becomes active (connections.ts).
   if (section === 'connect' && typeof refreshConnPanel === 'function') void refreshConnPanel();
 }
