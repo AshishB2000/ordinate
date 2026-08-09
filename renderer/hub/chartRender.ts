@@ -6,6 +6,35 @@
 // at call time; the chartInstances/mapInstances WeakMaps are defined here and
 // used cross-file by mapRender.js and hub.js.
 
+// ── Shared shapes ───────────────────────────────────────────────────────────
+// The {labels, series} object vizData.buildVizData produces and everything in
+// this file consumes. Declared locally, not imported: renderer files are classic
+// global-scope scripts with no module system, so there is nothing to import from
+// and nothing to export to.
+//
+// `values` is `any[]` on purpose. A cell is whatever the dataset holds — a
+// number, a text value, or null — and it is Ordinate's own ColumnType in the
+// dataset record, not TypeScript, that decides how it may be read. Every
+// consumer below narrows with `typeof v === 'number'` before doing arithmetic,
+// which is the check that actually holds at runtime; a nominal union here would
+// only move that check to a place it cannot be enforced.
+interface ChartSeriesShape {
+  name?: string;
+  values: any[];
+}
+interface ChartDataShape {
+  labels?: any[];
+  series?: ChartSeriesShape[];
+}
+
+// Chart.js 4 and its plugin bundles (treemap/matrix/sankey/financial/boxplot)
+// load as UMD globals with no bundled type definitions, so every value Chart.js
+// hands back across a callback boundary — scriptable option contexts, plugin
+// hook arguments, legend items, tooltip items, element/meta objects — is
+// genuinely untyped here. Naming it says "this is a library boundary", which a
+// bare `any` at 60-odd call sites would not.
+type ChartJsCtx = any;
+
 // ── Chart rendering ────────────────────────────────────────────────────────
 const CHART_PALETTE = ['#2563eb', '#0e7490', '#14b8a6', '#6366f1', '#64748b'];
 
@@ -24,9 +53,9 @@ const mapInstances = new WeakMap();
 
 // The plottable series for a chart: those with a non-empty values array.
 // buildChart and the period dropdown share this so hidden-series indices align.
-function chartSeries(data) {
+function chartSeries(data: ChartDataShape | null | undefined): ChartSeriesShape[] {
   return Array.isArray(data && data.series)
-    ? data.series.filter(s => Array.isArray(s.values) && s.values.length > 0)
+    ? data.series.filter((s: ChartSeriesShape) => Array.isArray(s.values) && s.values.length > 0)
     : [];
 }
 
@@ -39,7 +68,7 @@ const PERIOD_DROPDOWN_TYPES = new Set([
   'stacked_column', 'stacked_bar', 'pct_stacked_column', 'pct_stacked_bar', 'combo',
   'heatmap', 'boxplot',
 ]);
-function chartHasPeriodDropdown(type, seriesCount) {
+function chartHasPeriodDropdown(type: string, seriesCount: number): boolean {
   return seriesCount >= 2 && PERIOD_DROPDOWN_TYPES.has(type);
 }
 
@@ -48,7 +77,7 @@ function chartHasPeriodDropdown(type, seriesCount) {
 // per period (series) — instead of silently dropping all but series[0]. The
 // Periods dropdown filters which minis show; Values/Customize apply to all.
 const SMALL_MULTIPLE_TYPES = new Set(['pie', 'donut', 'gauge', 'treemap', 'funnel', 'histogram']);
-function chartIsSmallMultiple(type, seriesCount) {
+function chartIsSmallMultiple(type: string, seriesCount: number): boolean {
   return seriesCount >= 2 && SMALL_MULTIPLE_TYPES.has(type);
 }
 // Chart types that draw one Chart.js dataset per series, so the period filter can
@@ -72,10 +101,10 @@ const NO_LEGEND_TYPES = new Set([
   'gauge', 'bubble', 'treemap', 'heatmap', 'funnel', 'histogram',
   'sankey', 'candlestick', 'boxplot',
 ]);
-function legendOnByDefault(type, ser) {
+function legendOnByDefault(type: string, ser: ChartSeriesShape[]): boolean {
   if (NO_LEGEND_TYPES.has(type)) return false;
   if (type === 'pie' || type === 'donut') return true;
-  return (ser || []).length > 1 || (ser || []).some(s => s && s.name);
+  return (ser || []).length > 1 || (ser || []).some((s: ChartSeriesShape) => s && !!s.name);
 }
 
 // Which data points the Values menu labels, given a mode and the 2-D value grid
@@ -85,13 +114,13 @@ function legendOnByDefault(type, ser) {
 //   single series → the one global max / min over categories
 //   multi series  → per category column, the max series (and/or min series)  [per-group]
 //   maxmin → union of max and min
-function valueLabelKeys(mode, values) {
-  const keys = new Set();
+function valueLabelKeys(mode: string, values: any[][]): Set<string> {
+  const keys = new Set<string>();
   if (!mode || mode === 'off' || !Array.isArray(values) || !values.length) return keys;
   const S = values.length;
-  const C = Math.max(0, ...values.map(r => (Array.isArray(r) ? r.length : 0)));
-  const num = (s, c) => { const v = values[s] && values[s][c]; return typeof v === 'number' ? v : null; };
-  const add = (s, c) => keys.add(s + ':' + c);
+  const C = Math.max(0, ...values.map((r: any[]) => (Array.isArray(r) ? r.length : 0)));
+  const num = (s: number, c: number): number | null => { const v = values[s] && values[s][c]; return typeof v === 'number' ? v : null; };
+  const add = (s: number, c: number) => keys.add(s + ':' + c);
   if (mode === 'all') {
     for (let s = 0; s < S; s++) for (let c = 0; c < C; c++) if (num(s, c) != null) add(s, c);
     return keys;
@@ -113,12 +142,12 @@ function valueLabelKeys(mode, values) {
   return keys;
 }
 
-function getCSSVar(name) {
+function getCSSVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
 // ── Color helpers (for deriving a full palette from one chosen swatch) ──────
-function hexToHsl(hex) {
+function hexToHsl(hex: string): { h: number; s: number; l: number } | null {
   const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
   if (!m) return null;
   const n = parseInt(m[1], 16);
@@ -135,7 +164,7 @@ function hexToHsl(hex) {
   }
   return { h, s, l };
 }
-function hslToHex(h, s, l) {
+function hslToHex(h: number, s: number, l: number): string {
   h = ((h % 360) + 360) % 360; s = Math.max(0, Math.min(1, s)); l = Math.max(0, Math.min(1, l));
   const c = (1 - Math.abs(2 * l - 1)) * s;
   const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
@@ -147,13 +176,13 @@ function hslToHex(h, s, l) {
   else if (h < 240) [r, g, b] = [0, x, c];
   else if (h < 300) [r, g, b] = [x, 0, c];
   else [r, g, b] = [c, 0, x];
-  const to = (v) => Math.round((v + m) * 255).toString(16).padStart(2, '0');
+  const to = (v: number) => Math.round((v + m) * 255).toString(16).padStart(2, '0');
   return '#' + to(r) + to(g) + to(b);
 }
 // A harmonious n-color palette seeded from one hex: index 0 is the exact seed,
 // the rest rotate hue ±32°, ±64°, … around it (same S/L) so series stay distinct
 // yet clearly related to the chosen color. Falls back to [seed] if hex is unparseable.
-function paletteFromSeed(hex, n) {
+function paletteFromSeed(hex: string, n: number): string[] {
   const base = hexToHsl(hex);
   if (!base) return Array.from({ length: n }, () => hex);
   const seed = '#' + /^#?([0-9a-f]{6})$/i.exec(hex)[1].toLowerCase();   // canonical seed
@@ -170,11 +199,11 @@ function paletteFromSeed(hex, n) {
 // base colors (a gradient walk). Keeps the app's restrained color family — no
 // rainbow — while giving per-category charts (pie/donut/treemap/funnel) a unique
 // color per slice, so the legend genuinely maps one color to one category.
-function interpolatePalette(base, n) {
+function interpolatePalette(base: string[], n: number): string[] {
   if (n <= base.length) return base.slice(0, n);
-  const parse = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
-  const hex = (v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
-  const out = [];
+  const parse = (h: string) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  const hex = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+  const out: string[] = [];
   for (let i = 0; i < n; i++) {
     const t = (i / (n - 1)) * (base.length - 1);
     const lo = Math.floor(t), hi = Math.min(base.length - 1, lo + 1), f = t - lo;
@@ -185,16 +214,16 @@ function interpolatePalette(base, n) {
   return out;
 }
 
-function buildDataTable(table, data) {
+function buildDataTable(table: HTMLTableElement, data: ChartDataShape): void {
   const labels = Array.isArray(data.labels) ? data.labels : [];
-  const series = Array.isArray(data.series) ? data.series : [];
+  const series: ChartSeriesShape[] = Array.isArray(data.series) ? data.series : [];
   table.innerHTML = '';
   const thead = document.createElement('thead');
   const headerRow = document.createElement('tr');
   const thLabel = document.createElement('th');
   thLabel.textContent = 'Label';
   headerRow.appendChild(thLabel);
-  series.forEach((s, si) => {
+  series.forEach((s: ChartSeriesShape, si: number) => {
     const th = document.createElement('th');
     const sw = document.createElement('span');
     sw.className = 'cv-swatch';
@@ -206,12 +235,12 @@ function buildDataTable(table, data) {
   thead.appendChild(headerRow);
   table.appendChild(thead);
   const tbody = document.createElement('tbody');
-  labels.forEach((label, i) => {
+  labels.forEach((label: any, i: number) => {
     const row = document.createElement('tr');
     const tdLabel = document.createElement('td');
     tdLabel.textContent = label;
     row.appendChild(tdLabel);
-    series.forEach(s => {
+    series.forEach((s: ChartSeriesShape) => {
       const td = document.createElement('td');
       td.textContent = (s.values && s.values[i] != null) ? s.values[i] : '';
       row.appendChild(td);
@@ -225,7 +254,17 @@ function buildDataTable(table, data) {
 // overrides: optional per-chart customization { title, color, valueMode, hiddenSeries,
 //            showLegend, showGridlines, xAxisLabel, yAxisLabel }
 //            (legacy showValues:true is still read as valueMode 'all')
-function buildChart(canvas, data, type, overrides) {
+// `overrides` is an open bag of per-chart customization read from a saved visual
+// record, a dashboard tile and the Customize menu alike. It is `any` because the
+// set genuinely grows per chart family (_gaugeValue, _matrixCols, _funnelVals are
+// written back onto `opts` below) and every read here is already guarded; typing
+// it would be a second, weaker copy of a contract the record format owns.
+function buildChart(
+  canvas: HTMLCanvasElement | null,
+  data: ChartDataShape,
+  type: string,
+  overrides?: any,
+): any {
   overrides = overrides || {};
   let labels = Array.isArray(data.labels) ? data.labels : [];
   let series = chartSeries(data);
@@ -234,7 +273,7 @@ function buildChart(canvas, data, type, overrides) {
   // Number formatter for display (axis ticks, value labels, tooltips). When the
   // `numberFormat` override is absent, fmt === _fmtVal, so output is byte-identical
   // to before this control existed (the capture flow never sets numberFormat).
-  const fmt = overrides.numberFormat ? (v) => fmtWith(v, overrides.numberFormat) : _fmtVal;
+  const fmt = overrides.numberFormat ? (v: any) => fmtWith(v, overrides.numberFormat) : _fmtVal;
 
   // Values menu mode: off | all | max | min | maxmin. Back-compat: legacy showValues:true ⇒ all.
   const valueMode = overrides.valueMode || (overrides.showValues ? 'all' : 'maxmin');
@@ -266,7 +305,7 @@ function buildChart(canvas, data, type, overrides) {
   const animDuration = reduceMotion ? 0 : 480;
 
   // ── Chart type resolution ───────────────────────────────────────────────
-  let chartType, opts: any = {};
+  let chartType: string, opts: any = {};
   switch (type) {
     case 'bar':              chartType = 'bar';  opts.indexAxis = 'y'; break;
     case 'column':           chartType = 'bar';  break;
@@ -315,18 +354,18 @@ function buildChart(canvas, data, type, overrides) {
   // keep their natural order (sorting would scramble a time axis / fixed sequence).
   const canSort = (chartType === 'bar' && !isFunnel && !isHistogram) || isRound;
   if (canSort && (overrides.sort === 'asc' || overrides.sort === 'desc')) {
-    const totals = labels.map((_, i) =>
-      series.reduce((sum, s) => sum + (typeof s.values[i] === 'number' ? s.values[i] : 0), 0));
-    const order = labels.map((_, i) => i)
-      .sort((a, b) => overrides.sort === 'asc' ? totals[a] - totals[b] : totals[b] - totals[a]);
-    labels = order.map(i => labels[i]);
-    series = series.map(s => Object.assign({}, s, { values: order.map(i => s.values[i]) }));
+    const totals = labels.map((_: any, i: number) =>
+      series.reduce((sum: number, s: ChartSeriesShape) => sum + (typeof s.values[i] === 'number' ? s.values[i] : 0), 0));
+    const order = labels.map((_: any, i: number) => i)
+      .sort((a: number, b: number) => overrides.sort === 'asc' ? totals[a] - totals[b] : totals[b] - totals[a]);
+    labels = order.map((i: number) => labels[i]);
+    series = series.map((s: ChartSeriesShape) => Object.assign({}, s, { values: order.map((i: number) => s.values[i]) }));
   }
 
   // ── Gradient helpers ────────────────────────────────────────────────────
   // Bar: gradient along the bar's length, darkest at the value end.
-  function makeBarGradient(color) {
-    return (ctx) => {
+  function makeBarGradient(color: string) {
+    return (ctx: ChartJsCtx) => {
       const chart = ctx.chart;
       const { ctx: cx, chartArea } = chart;
       if (!chartArea) return color + 'e0';
@@ -347,8 +386,8 @@ function buildChart(canvas, data, type, overrides) {
   }
 
   // Area fill: opaque near the line, transparent at the bottom.
-  function makeAreaGradient(color) {
-    return (ctx) => {
+  function makeAreaGradient(color: string) {
+    return (ctx: ChartJsCtx) => {
       const chart = ctx.chart;
       const { ctx: cx, chartArea } = chart;
       if (!chartArea) return color + '28';
@@ -360,20 +399,20 @@ function buildChart(canvas, data, type, overrides) {
   }
 
   // ── Datasets ────────────────────────────────────────────────────────────
-  let datasets;
+  let datasets: any[];   // Chart.js dataset objects — shape differs per chart family
   let chartLabels = labels;
   if (isGauge) {
     // Half-circle gauge: the first numeric value drawn against a sensible max,
     // as a 2-slice doughnut (filled arc + faint track). Single_metric finally
     // gets a visual. Degrades to value-vs-1 / value-vs-niceCeil when no total.
-    const niceCeil = (v) => {
+    const niceCeil = (v: number): number => {
       if (!(v > 0)) return 1;
       const mag = Math.pow(10, Math.floor(Math.log10(v)));
       const n = v / mag;
       const step = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10;
       return step * mag;
     };
-    const gv = series[0].values.find(v => typeof v === 'number');
+    const gv = series[0].values.find((v: any) => typeof v === 'number');
     const value = gv == null ? 0 : gv;
     const gmax = (value >= 0 && value <= 1) ? 1 : niceCeil(Math.abs(value));
     const filled = Math.max(0, Math.min(value, gmax));
@@ -389,7 +428,7 @@ function buildChart(canvas, data, type, overrides) {
     opts._gaugeLabel = series[0].name || (labels && labels[0]) || '';   // metric name
   } else if (isTreemap) {
     // Flat treemap of the first series: rectangle area ∝ value, labelled inside.
-    const tree = labels.map((lab, i) => ({
+    const tree = labels.map((lab: any, i: number) => ({
       _label: lab,
       value: typeof series[0].values[i] === 'number' ? Math.abs(series[0].values[i]) : 0,
     }));
@@ -400,12 +439,12 @@ function buildChart(canvas, data, type, overrides) {
       borderWidth: 1,
       borderColor: surfColor,
       spacing: 1,
-      backgroundColor: (ctx) => ctx.type === 'data' ? treePalette[ctx.dataIndex % treePalette.length] : 'transparent',
+      backgroundColor: (ctx: ChartJsCtx) => ctx.type === 'data' ? treePalette[ctx.dataIndex % treePalette.length] : 'transparent',
       labels: {
         display: true,
         color: '#ffffff',
         font: { family: fontFamily, size: 11, weight: '600' },
-        formatter: (ctx) => {
+        formatter: (ctx: ChartJsCtx) => {
           const d = ctx.raw && ctx.raw._data;
           return d ? [String(d._label), fmt(d.value)] : '';
         },
@@ -415,29 +454,29 @@ function buildChart(canvas, data, type, overrides) {
     // Heatmap: rows = labels, cols = series; cell color = value intensity (accent alpha).
     // Period dropdown filters columns by dropping hidden series before building cells.
     const hiddenSet = new Set(Array.isArray(overrides.hiddenSeries) ? overrides.hiddenSeries : []);
-    const visSeries = series.filter((_, j) => !hiddenSet.has(j));
+    const visSeries = series.filter((_: ChartSeriesShape, j: number) => !hiddenSet.has(j));
     const useSeries = visSeries.length ? visSeries : series;   // never empty
-    const cols = useSeries.map(s => s.name || '');
+    const cols = useSeries.map((s: ChartSeriesShape) => s.name || '');
     let vmin = Infinity, vmax = -Infinity;
-    useSeries.forEach(s => s.values.forEach(v => { if (typeof v === 'number') { if (v < vmin) vmin = v; if (v > vmax) vmax = v; } }));
+    useSeries.forEach((s: ChartSeriesShape) => s.values.forEach((v: any) => { if (typeof v === 'number') { if (v < vmin) vmin = v; if (v > vmax) vmax = v; } }));
     if (!isFinite(vmin)) { vmin = 0; vmax = 1; }
     const span = (vmax - vmin) || 1;
     const accent = getCSSVar('--accent') || palette[0];
-    const alphaHex = (f) => Math.round(Math.max(0, Math.min(1, f)) * 255).toString(16).padStart(2, '0');
-    const heat = (v) => (typeof v === 'number') ? accent + alphaHex(0.15 + 0.85 * ((v - vmin) / span)) : gridColor;
-    const cells = [];
-    useSeries.forEach((s, j) => labels.forEach((lab, i) => cells.push({ x: cols[j], y: lab, v: s.values[i] })));
+    const alphaHex = (f: number) => Math.round(Math.max(0, Math.min(1, f)) * 255).toString(16).padStart(2, '0');
+    const heat = (v: any) => (typeof v === 'number') ? accent + alphaHex(0.15 + 0.85 * ((v - vmin) / span)) : gridColor;
+    const cells: any[] = [];
+    useSeries.forEach((s: ChartSeriesShape, j: number) => labels.forEach((lab: any, i: number) => cells.push({ x: cols[j], y: lab, v: s.values[i] })));
     datasets = [{
       data: cells,
-      backgroundColor: (ctx) => heat(ctx.raw && ctx.raw.v),
+      backgroundColor: (ctx: ChartJsCtx) => heat(ctx.raw && ctx.raw.v),
       borderColor: surfColor,
       borderWidth: 1,
-      width: (ctx) => { const a = ctx.chart.chartArea; return a ? a.width / cols.length - 2 : 20; },
-      height: (ctx) => { const a = ctx.chart.chartArea; return a ? a.height / labels.length - 2 : 20; },
+      width: (ctx: ChartJsCtx) => { const a = ctx.chart.chartArea; return a ? a.width / cols.length - 2 : 20; },
+      height: (ctx: ChartJsCtx) => { const a = ctx.chart.chartArea; return a ? a.height / labels.length - 2 : 20; },
     }];
     opts._matrixCols = cols;
     opts._matrixRows = labels;
-    opts._matrixGrid = useSeries.map(s => s.values);   // [colIdx][rowIdx] for value labels
+    opts._matrixGrid = useSeries.map((s: ChartSeriesShape) => s.values);   // [colIdx][rowIdx] for value labels
     opts._matrixVmin = vmin;
     opts._matrixVmax = vmax;
   } else if (isRound) {
@@ -453,13 +492,13 @@ function buildChart(canvas, data, type, overrides) {
       const xVals = series[0].values, yVals = series[1].values;
       datasets = [{
         label: series[0].name + ' vs ' + series[1].name,
-        data: xVals.map((x, i) => ({ x, y: yVals[i] || 0 })),
+        data: xVals.map((x: any, i: number) => ({ x, y: yVals[i] || 0 })),
         backgroundColor: palette[0] + 'cc', borderColor: palette[0], pointRadius: 5,
       }];
     } else {
       datasets = [{
         label: series[0].name || '',
-        data: series[0].values.map((y, i) => ({ x: i, y })),
+        data: series[0].values.map((y: any, i: number) => ({ x: i, y })),
         backgroundColor: palette[0] + 'cc', borderColor: palette[0], pointRadius: 5,
       }];
     }
@@ -469,25 +508,25 @@ function buildChart(canvas, data, type, overrides) {
     const sx = series[0].values;
     const sy = series[1] ? series[1].values : null;
     const sz = series[2] ? series[2].values : null;
-    const sizes = (sz || []).filter(v => typeof v === 'number');
+    const sizes = (sz || []).filter((v: any) => typeof v === 'number');
     // reduce, not Math.min/max(...sizes): a raw scatter/bubble over a >130k-row
     // combined dataset passes one value per row, and argument-spread that wide
     // throws RangeError (chart fails to render). Same guard as transforms/metricValue.
-    const zmin = sizes.length ? sizes.reduce((a, b) => (b < a ? b : a)) : 0;
-    const zmax = sizes.length ? sizes.reduce((a, b) => (b > a ? b : a)) : 0;
-    const rOf = (v) => {
+    const zmin = sizes.length ? sizes.reduce((a: number, b: number) => (b < a ? b : a)) : 0;
+    const zmax = sizes.length ? sizes.reduce((a: number, b: number) => (b > a ? b : a)) : 0;
+    const rOf = (v: any): number => {
       if (typeof v !== 'number') return 8;
       if (zmax === zmin) return 14;
       return 6 + ((v - zmin) / (zmax - zmin)) * 20;  // px radius 6–26
     };
-    const pts = labels.map((_, i) => ({
+    const pts = labels.map((_: any, i: number) => ({
       x: sy ? (typeof sx[i] === 'number' ? sx[i] : 0) : i,
       y: sy ? (typeof sy[i] === 'number' ? sy[i] : 0)
             : (typeof sx[i] === 'number' ? sx[i] : 0),
       r: sz ? rOf(sz[i]) : 12,
     }));
     datasets = [{
-      label: series.map(s => s.name).filter(Boolean).join(' · ') || '',
+      label: series.map((s: ChartSeriesShape) => s.name).filter(Boolean).join(' · ') || '',
       data: pts,
       backgroundColor: palette[0] + 'cc',
       borderColor: palette[0],
@@ -495,14 +534,14 @@ function buildChart(canvas, data, type, overrides) {
   } else if (isFunnel) {
     // Centered funnel: a transparent left "spacer" stack pushes each value bar to
     // the middle, so widths read as a funnel narrowing down the stages.
-    const vals = series[0].values.map(v => typeof v === 'number' ? Math.abs(v) : 0);
-    const maxV = vals.reduce((a, b) => (b > a ? b : a), 0) || 1; // reduce, not spread (see zmin/zmax above)
+    const vals = series[0].values.map((v: any) => typeof v === 'number' ? Math.abs(v) : 0);
+    const maxV = vals.reduce((a: number, b: number) => (b > a ? b : a), 0) || 1; // reduce, not spread (see zmin/zmax above)
     datasets = [
-      { data: vals.map(v => (maxV - v) / 2), backgroundColor: 'transparent', borderWidth: 0, stack: 'f' },
+      { data: vals.map((v: number) => (maxV - v) / 2), backgroundColor: 'transparent', borderWidth: 0, stack: 'f' },
       {
         label: series[0].name || 'Value',
         data: vals,
-        backgroundColor: vals.map((_, i) => palette[i % palette.length]),
+        backgroundColor: vals.map((_: number, i: number) => palette[i % palette.length]),
         borderWidth: 0, borderRadius: 4, stack: 'f',
       },
     ];
@@ -510,7 +549,7 @@ function buildChart(canvas, data, type, overrides) {
     opts._funnelVals = vals;
   } else if (isHistogram) {
     // Distribution of the first numeric series, binned into touching columns.
-    const bins = histogramBins(series[0].values.filter(v => typeof v === 'number'));
+    const bins = histogramBins(series[0].values.filter((v: any) => typeof v === 'number'));
     chartLabels = bins.labels;
     datasets = [{
       label: 'Count',
@@ -529,11 +568,11 @@ function buildChart(canvas, data, type, overrides) {
       : series.length - 1;
     const vals = (series[pIdx] || series[0]).values;
     const flows = labels
-      .map((lab, i) => ({ from: String(lab), to: 'Total', flow: typeof vals[i] === 'number' ? Math.abs(vals[i]) : 0 }))
-      .filter(f => f.flow > 0);
+      .map((lab: any, i: number) => ({ from: String(lab), to: 'Total', flow: typeof vals[i] === 'number' ? Math.abs(vals[i]) : 0 }))
+      .filter((f: { flow: number }) => f.flow > 0);
     datasets = [{
       data: flows,
-      colorFrom: (c) => palette[c.dataIndex % palette.length],
+      colorFrom: (c: ChartJsCtx) => palette[c.dataIndex % palette.length],
       colorTo: () => palette[palette.length - 1],
       colorMode: 'gradient',
       borderWidth: 0,
@@ -541,9 +580,9 @@ function buildChart(canvas, data, type, overrides) {
   } else if (isCandlestick) {
     // OHLC if there are >=4 series (open/high/low/close); otherwise synthesize a
     // candle from the single series + its previous value so it still renders.
-    const get = (idx, i) => (series[idx] && typeof series[idx].values[i] === 'number') ? series[idx].values[i] : null;
-    const pts = labels.map((lab, i) => {
-      let o, h, l, c;
+    const get = (idx: number, i: number) => (series[idx] && typeof series[idx].values[i] === 'number') ? series[idx].values[i] : null;
+    const pts = labels.map((lab: any, i: number) => {
+      let o: number | null, h: number | null, l: number | null, c: number | null;
       if (series.length >= 4) { o = get(0, i); h = get(1, i); l = get(2, i); c = get(3, i); }
       else {
         c = get(0, i);
@@ -567,13 +606,13 @@ function buildChart(canvas, data, type, overrides) {
     // Series dropdown filters boxes; boxplot is a single dataset, so (like the
     // heatmap) we drop hidden series here rather than via setDatasetVisibility.
     const hiddenSet = new Set(Array.isArray(overrides.hiddenSeries) ? overrides.hiddenSeries : []);
-    const visSeries = series.filter((_, j) => !hiddenSet.has(j));
+    const visSeries = series.filter((_: ChartSeriesShape, j: number) => !hiddenSet.has(j));
     const useSeries = visSeries.length ? visSeries : series;
-    const cols = useSeries.map(s => s.name || '');
+    const cols = useSeries.map((s: ChartSeriesShape) => s.name || '');
     chartLabels = cols;
     datasets = [{
       label: 'Distribution',
-      data: useSeries.map(s => s.values.filter(v => typeof v === 'number')),
+      data: useSeries.map((s: ChartSeriesShape) => s.values.filter((v: any) => typeof v === 'number')),
       backgroundColor: palette[0] + '55',
       borderColor: palette[0],
       borderWidth: 1,
@@ -581,7 +620,7 @@ function buildChart(canvas, data, type, overrides) {
       outlierBackgroundColor: palette[4 % palette.length],
     }];
   } else if (isLine) {
-    datasets = series.map((s, i) => ({
+    datasets = series.map((s: ChartSeriesShape, i: number) => ({
       label: s.name || '',
       data: s.values,
       borderColor: palette[i % palette.length],
@@ -597,16 +636,16 @@ function buildChart(canvas, data, type, overrides) {
     }));
   } else {
     // bars / columns (including pct-stacked)
-    const buildBarData = (s, i) => {
+    const buildBarData = (s: ChartSeriesShape, i: number) => {
       if (opts.pct) {
-        const totals = labels.map((_, j) => series.reduce((sum, ss) => sum + (ss.values[j] || 0), 0));
-        return s.values.map((v, j) => totals[j] ? Math.round((v / totals[j]) * 100) : 0);
+        const totals = labels.map((_: any, j: number) => series.reduce((sum: number, ss: ChartSeriesShape) => sum + (ss.values[j] || 0), 0));
+        return s.values.map((v: any, j: number) => totals[j] ? Math.round((v / totals[j]) * 100) : 0);
       }
       return s.values;
     };
     if (opts.combo && series.length >= 2) {
       // Mixed chart: first series as columns, the rest as lines on a 2nd y-axis.
-      datasets = series.map((s, i) => i === 0
+      datasets = series.map((s: ChartSeriesShape, i: number) => i === 0
         ? {
             label: s.name || '',
             data: buildBarData(s, i),
@@ -626,7 +665,7 @@ function buildChart(canvas, data, type, overrides) {
             fill: false, order: 1,
           });
     } else {
-      datasets = series.map((s, i) => ({
+      datasets = series.map((s: ChartSeriesShape, i: number) => ({
         label: s.name || '',
         data: buildBarData(s, i),
         backgroundColor: makeBarGradient(palette[i % palette.length]),
@@ -646,12 +685,15 @@ function buildChart(canvas, data, type, overrides) {
 
   // ── Axis helpers ────────────────────────────────────────────────────────
   // Value axis: faint horizontal gridlines, no frame border.
-  const makeValueAxis = (stacked, pct) => ({
+  // `any` return: the axis object grows a `title`, `beginAtZero` and `min` later
+  // (see the override blocks below), and a literal's inferred type would freeze
+  // the shape at what the first branch happens to set.
+  const makeValueAxis = (stacked: boolean, pct: boolean): any => ({
     stacked: stacked || false,
     ticks: {
       color: textColor, font: tickFont, padding: 6,
       // Readable axis numbers: thousands separators + K/M/B abbreviations.
-      callback: pct ? (v => v + '%') : (v => fmt(v)),
+      callback: pct ? ((v: any) => v + '%') : ((v: any) => fmt(v)),
     },
     grid: { color: gridColor, lineWidth: 1, display: showGridlines },
     border: { display: false },
@@ -661,12 +703,12 @@ function buildChart(canvas, data, type, overrides) {
   // Category axis: no gridlines, no frame border.
   // Tick labels drop a redundant " County" suffix for legibility; tooltips and
   // the data table still show the full label (they read data.labels directly).
-  const makeCategoryAxis = (stacked, rotate) => ({
+  const makeCategoryAxis = (stacked: boolean, rotate: boolean): any => ({
     stacked: stacked || false,
     ticks: {
       color: textColor, font: tickFont, padding: 4,
       ...(rotate ? { maxRotation: 40 } : {}),
-      callback(value) {
+      callback(value: any) {
         const label = (this as any).getLabelForValue(value); // ponytail: Chart.js scale `this`
         return typeof label === 'string' ? label.replace(/ County$/i, '') : label;
       },
@@ -675,7 +717,12 @@ function buildChart(canvas, data, type, overrides) {
     border: { display: false },
   });
 
-  let scales;
+  // `any`: each branch below builds a DIFFERENT axis set (x/y, x only, neither),
+  // and the override blocks after it add `y1`, `title`, `beginAtZero` and `min`
+  // to whichever axes exist. Inferring a union of the branch literals makes every
+  // one of those later writes an error on the branches that lack the key, which
+  // is a description of Chart.js's option bag being open, not a bug to fix here.
+  let scales: any;
   if (isRound || isTreemap || isSankey) {
     scales = {};
   } else if (isCandlestick) {
@@ -700,7 +747,7 @@ function buildChart(canvas, data, type, overrides) {
     };
   } else if (isScatter || isBubble) {
     // scatter / bubble: both axes are value axes with light grid
-    const valTick = { color: textColor, font: tickFont, padding: 6, callback: v => fmt(v) };
+    const valTick = { color: textColor, font: tickFont, padding: 6, callback: (v: any) => fmt(v) };
     scales = {
       x: { ticks: valTick, grid: { color: gridColor, lineWidth: 1 }, border: { display: false } },
       y: { ticks: valTick, grid: { color: gridColor, lineWidth: 1 }, border: { display: false } },
@@ -721,7 +768,7 @@ function buildChart(canvas, data, type, overrides) {
       // secondary axis on the right for the line series; no gridlines of its own
       scales.y1 = {
         position: 'right',
-        ticks: { color: textColor, font: tickFont, padding: 6, callback: v => fmt(v) },
+        ticks: { color: textColor, font: tickFont, padding: 6, callback: (v: any) => fmt(v) },
         grid: { drawOnChartArea: false, display: false },
         border: { display: false },
       };
@@ -750,10 +797,10 @@ function buildChart(canvas, data, type, overrides) {
     boxHeight: 9,
     boxPadding: 5,
     callbacks: {
-      labelColor: (ctx) => {
+      labelColor: (ctx: ChartJsCtx) => {
         // Round charts color per slice (an interpolated array) — read the actual slice
         // color so the tooltip swatch matches it; others color per dataset.
-        let color;
+        let color: string;
         if (isRound) {
           const bg = ctx.chart.data.datasets[ctx.datasetIndex].backgroundColor;
           color = Array.isArray(bg) ? bg[ctx.dataIndex] : bg;
@@ -765,16 +812,16 @@ function buildChart(canvas, data, type, overrides) {
     },
   };
   if (isMatrix) {
-    tooltipConfig.callbacks.title = (items) => { const r = items[0] && items[0].raw; return r ? `${r.y} · ${r.x}` : ''; };
-    tooltipConfig.callbacks.label = (item) => { const r = item.raw; return r && typeof r.v === 'number' ? fmt(r.v) : 'n/a'; };
+    tooltipConfig.callbacks.title = (items: ChartJsCtx[]) => { const r = items[0] && items[0].raw; return r ? `${r.y} · ${r.x}` : ''; };
+    tooltipConfig.callbacks.label = (item: ChartJsCtx) => { const r = item.raw; return r && typeof r.v === 'number' ? fmt(r.v) : 'n/a'; };
   }
   if (isTreemap) {
-    tooltipConfig.callbacks.title = (items) => { const d = items[0] && items[0].raw && items[0].raw._data; return d ? String(d._label) : ''; };
-    tooltipConfig.callbacks.label = (item) => { const d = item.raw && item.raw._data; return d ? fmt(d.value) : ''; };
+    tooltipConfig.callbacks.title = (items: ChartJsCtx[]) => { const d = items[0] && items[0].raw && items[0].raw._data; return d ? String(d._label) : ''; };
+    tooltipConfig.callbacks.label = (item: ChartJsCtx) => { const d = item.raw && item.raw._data; return d ? fmt(d.value) : ''; };
   }
   if (isFunnel) {
-    tooltipConfig.filter = (item) => item.datasetIndex !== 0;   // hide the spacer stack
-    tooltipConfig.callbacks.label = (item) => {
+    tooltipConfig.filter = (item: ChartJsCtx) => item.datasetIndex !== 0;   // hide the spacer stack
+    tooltipConfig.callbacks.label = (item: ChartJsCtx) => {
       const v = opts._funnelVals[item.dataIndex];
       const top = opts._funnelVals[0] || 0;
       const pct = top ? Math.round((v / top) * 100) : null;
@@ -794,13 +841,13 @@ function buildChart(canvas, data, type, overrides) {
     ? { mode: 'nearest', intersect: false, axis: 'xy' } : undefined;
 
   // ── Per-chart inline plugins ─────────────────────────────────────────────
-  const inlinePlugins = [];
+  const inlinePlugins: any[] = [];   // Chart.js plugin objects, hooks typed per-use
 
   if (isGauge) {
     // Print the actual value at the hub of the half-circle.
     inlinePlugins.push({
       id: 'gaugeCenter',
-      afterDraw(chart) {
+      afterDraw(chart: ChartJsCtx) {
         const { ctx, chartArea } = chart;
         if (!chartArea) return;
         const v = opts._gaugeValue;
@@ -830,12 +877,12 @@ function buildChart(canvas, data, type, overrides) {
     // Always print each stage's value, centered on its bar.
     inlinePlugins.push({
       id: 'funnelLabels',
-      afterDatasetsDraw(chart) {
+      afterDatasetsDraw(chart: ChartJsCtx) {
         const { ctx } = chart;
         const meta = chart.getDatasetMeta(1);   // the value dataset
         if (!meta) return;
         const vals = opts._funnelVals;
-        meta.data.forEach((el, i) => {
+        meta.data.forEach((el: ChartJsCtx, i: number) => {
           if (vals[i] == null) return;
           const pos = el.tooltipPosition();
           ctx.save();
@@ -851,7 +898,7 @@ function buildChart(canvas, data, type, overrides) {
   }
 
   // Reads a numeric value out of a Chart.js data point (handles {x,y} scatter points).
-  const numOf = (raw) => {
+  const numOf = (raw: any): number | null => {
     const v = (raw && typeof raw === 'object') ? raw.y : raw;
     return typeof v === 'number' ? v : null;
   };
@@ -861,22 +908,22 @@ function buildChart(canvas, data, type, overrides) {
     // Draw the data value near selected bars/points after the chart renders.
     inlinePlugins.push({
       id: 'valueLabels',
-      afterDatasetsDraw(chart) {
+      afterDatasetsDraw(chart: ChartJsCtx) {
         const { ctx } = chart;
         // Build the value grid from visible datasets only (hidden → all-null row).
-        const grid = chart.data.datasets.map((ds, di) =>
+        const grid = chart.data.datasets.map((ds: ChartJsCtx, di: number) =>
           chart.getDatasetMeta(di).hidden ? [] : (ds.data || []).map(numOf));
         const keys = valueLabelKeys(valueMode, grid);
         // Place each label in the first free vertical slot near its point so labels never
         // overlap. Sparse max/min modes nudge a collision into a small stack (keeping every
         // series' peak/trough visible even when lines nearly coincide); dense 'all' mode
         // just drops overlaps. Nudged slots stay inside the plot; the natural slot doesn't.
-        const placed = [];
-        const overlaps = (x, y, w, h) => placed.some(r =>
+        const placed: { x: number; y: number; w: number; h: number }[] = [];
+        const overlaps = (x: number, y: number, w: number, h: number) => placed.some((r) =>
           x < r.x + r.w + 2 && x + w + 2 > r.x && y < r.y + r.h + 2 && y + h + 2 > r.y);
         // Drop duplicate labels: identical value at the same x (e.g. several near-equal
         // series peaking at the same category) collapses to one, so it never piles up.
-        const seen = new Set();
+        const seen = new Set<string>();
         const area = chart.chartArea;
         const h = 12;
         const offsets = valueMode === 'all'
@@ -886,10 +933,10 @@ function buildChart(canvas, data, type, overrides) {
         ctx.font = `600 10px ${fontFamily}`;
         ctx.fillStyle = titleColor;
         ctx.textAlign = 'center';
-        chart.data.datasets.forEach((dataset, di) => {
+        chart.data.datasets.forEach((dataset: ChartJsCtx, di: number) => {
           const meta = chart.getDatasetMeta(di);
           if (meta.hidden) return;
-          meta.data.forEach((element, j) => {
+          meta.data.forEach((element: ChartJsCtx, j: number) => {
             if (!keys.has(di + ':' + j)) return;
             let displayVal = numOf(dataset.data[j]);
             if (displayVal == null) return;
@@ -938,16 +985,16 @@ function buildChart(canvas, data, type, overrides) {
     // added below the name. White text + shadow keeps it legible on any slice colour.
     inlinePlugins.push({
       id: 'roundLabels',
-      afterDatasetsDraw(chart) {
+      afterDatasetsDraw(chart: ChartJsCtx) {
         const { ctx } = chart;
         const meta = chart.getDatasetMeta(0);
         const ds = chart.data.datasets[0];
         const row = ((ds && ds.data) || []).map(numOf);
-        const total = row.reduce((a, v) => a + (typeof v === 'number' ? Math.abs(v) : 0), 0) || 1;
+        const total = row.reduce((a: number, v: number | null) => a + (typeof v === 'number' ? Math.abs(v) : 0), 0) || 1;
         const cats = chart.data.labels || [];
-        const valueKeys = valueMode !== 'off' ? valueLabelKeys(valueMode, [row]) : new Set();
-        const clip = (s) => (s.length > 14 ? s.slice(0, 13) + '…' : s);
-        meta.data.forEach((el, j) => {
+        const valueKeys = valueMode !== 'off' ? valueLabelKeys(valueMode, [row]) : new Set<string>();
+        const clip = (s: string) => (s.length > 14 ? s.slice(0, 13) + '…' : s);
+        meta.data.forEach((el: ChartJsCtx, j: number) => {
           if (!el) return;
           const val = row[j];
           const frac = (typeof val === 'number' ? Math.abs(val) : 0) / total;
@@ -955,7 +1002,7 @@ function buildChart(canvas, data, type, overrides) {
           const showName = frac >= 0.06 && name !== '';   // only slices big enough to read
           const showVal = val != null && valueKeys.has('0:' + j);
           if (!showName && !showVal) return;
-          const lines = [];
+          const lines: string[] = [];
           if (showName) lines.push(clip(name));
           if (showVal) lines.push(overrides.numberFormat ? fmt(val)
             : (Math.abs(val) >= 10000 ? _fmtVal(val) : String(val)));
@@ -968,7 +1015,7 @@ function buildChart(canvas, data, type, overrides) {
           ctx.shadowColor = 'rgba(0,0,0,0.5)';
           ctx.shadowBlur = 3;
           ctx.fillStyle = '#ffffff';
-          lines.forEach((ln, k) => {
+          lines.forEach((ln: string, k: number) => {
             ctx.font = `${(k === 0 && showName) ? 600 : 500} 10px ${fontFamily}`;
             ctx.fillText(ln, pos.x, y0 + k * lh);
           });
@@ -981,13 +1028,13 @@ function buildChart(canvas, data, type, overrides) {
   if (valueMode !== 'off' && isMatrix) {
     inlinePlugins.push({
       id: 'matrixValueLabels',
-      afterDatasetsDraw(chart) {
+      afterDatasetsDraw(chart: ChartJsCtx) {
         const { ctx } = chart;
         const meta = chart.getDatasetMeta(0);
         const rows = (opts._matrixRows || []).length;
         if (!rows) return;
         const keys = valueLabelKeys(valueMode, opts._matrixGrid || []);   // [colIdx][rowIdx]
-        meta.data.forEach((el, k) => {
+        meta.data.forEach((el: ChartJsCtx, k: number) => {
           const colIdx = Math.floor(k / rows), rowIdx = k % rows;
           if (!keys.has(colIdx + ':' + rowIdx)) return;
           const v = numOf((chart.data.datasets[0].data[k] || {}).v);
@@ -1028,7 +1075,7 @@ function buildChart(canvas, data, type, overrides) {
   // Guard skips single-dataset types (pie/scatter/bubble/…) where 1 dataset ≠ N series.
   const hiddenSeries = new Set(Array.isArray(overrides.hiddenSeries) ? overrides.hiddenSeries : []);
   if (hiddenSeries.size && datasets.length === series.length) {
-    datasets.forEach((ds, i) => { if (hiddenSeries.has(i)) ds.hidden = true; });
+    datasets.forEach((ds: any, i: number) => { if (hiddenSeries.has(i)) ds.hidden = true; });
   }
 
   // ── Build chart ──────────────────────────────────────────────────────────
@@ -1069,9 +1116,9 @@ function buildChart(canvas, data, type, overrides) {
               pointStyle: 'circle',
               // Line/area swatches default to a hollow box (transparent fill). Paint each
               // with its line color so every legend entry reads as a solid colored box.
-              generateLabels(chart) {
+              generateLabels(chart: ChartJsCtx) {
                 const items = window.Chart.defaults.plugins.legend.labels.generateLabels(chart);
-                items.forEach((it) => {
+                items.forEach((it: ChartJsCtx) => {
                   const ds = chart.data.datasets[it.datasetIndex];
                   if (chart.config.type === 'line' || (ds && ds.type === 'line')) {
                     it.fillStyle = it.strokeStyle;
