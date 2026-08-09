@@ -33,6 +33,7 @@ async function openVisualBuilder(datasetId?: string): Promise<void> {
     return;
   }
   vizEditingId = '';
+  if (typeof dkSync === 'function') dkSync(); // dock.ts — no visual open (yet) to base context on
   vizCurrentChartType = '';
   vizOverrides = {};
   const nameEl = vizEl('viz-builder-name');
@@ -54,6 +55,7 @@ async function openVisualBuilder(datasetId?: string): Promise<void> {
 function closeVisualBuilder(): void {
   showVizGallery(true);
   vizEditingId = '';
+  if (typeof dkSync === 'function') dkSync(); // dock.ts — context line falls back off this visual
   vizDatasetId = '';
   vizCurrentChartType = '';
   vizOverrides = {};
@@ -245,6 +247,7 @@ async function openSavedVisual(id: string): Promise<void> {
     return;
   }
   vizEditingId = String(visual.id || id);
+  if (typeof dkSync === 'function') dkSync(); // dock.ts — context line now names this visual
   const nameEl = vizEl('viz-builder-name');
   if (nameEl) nameEl.textContent = String(visual.name || 'Visual');
   vizCurrentChartType = typeof visual.chartType === 'string' ? visual.chartType : '';

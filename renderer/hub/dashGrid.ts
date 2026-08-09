@@ -74,6 +74,10 @@ function openAnalysisFrom(a: any): void {
 // The part both entry points share: bind state, paint the editor.
 function openEditorWith(rec: any, title: string): void {
   dashCurrent = rec;
+  // dock.ts — context line now names this dashboard (buildCopilotContextRef
+  // only resolves a DASHBOARD, not an analysis, to a copilot context; either
+  // way the label must not lag behind what dashMode/dashCurrent just became).
+  if (typeof dkSync === 'function') dkSync();
   dashPageIdx = 0;
   dashDirty = false;
   if (!Array.isArray(dashCurrent.pages) || dashCurrent.pages.length === 0) {
@@ -133,6 +137,7 @@ function closeDashboardEditor(): void {
   exitDashPresent(); // never leave the app stuck in chrome-hidden mode
   if (dashSaveTimer !== null) { window.clearTimeout(dashSaveTimer); dashSaveTimer = null; }
   dashCurrent = null;
+  if (typeof dkSync === 'function') dkSync(); // dock.ts — context line falls back off this dashboard/analysis
   dashPageIdx = 0;
   dashDirty = false;
   dashDragId = null;

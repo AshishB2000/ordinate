@@ -10220,13 +10220,22 @@ body.cap-focus .cap-back {
 .dk-context {
   flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12.5px;
   font-weight: 600;
   color: var(--muted);
 }
+.dk-context-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The "stats app-computed" chip reuses .ai-chip (copilot.ts) as a fixed-size
+   flex item, so it never shrinks or truncates — only the label does. */
+.dk-context .ai-chip { flex: none; }
 .dk-head-actions { flex: none; display: flex; align-items: center; gap: 4px; }
 .dk-icon-btn {
   display: inline-flex;
@@ -10243,6 +10252,17 @@ body.cap-focus .cap-back {
 .dk-icon-btn:hover { background: var(--surface-2); color: var(--text); }
 .dk-icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .dk-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.dk-hint {
+  flex: none;
+  margin: 10px 14px 0;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  color: var(--text);
+  font-size: 12px;
+}
+.dk-hint[hidden] { display: none; }
 
 .dk-messages {
   flex: 1 1 auto;

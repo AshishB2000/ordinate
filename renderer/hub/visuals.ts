@@ -155,6 +155,7 @@ function initVisuals(): void {
   if (dsSel) dsSel.addEventListener('change', () => {
     // Switching dataset starts a fresh build — clear the open visual + its styling/filters.
     vizEditingId = '';
+    if (typeof dkSync === 'function') dkSync(); // dock.ts — context line falls back off the cleared visual
     vizCurrentChartType = '';
     vizOverrides = {};
     const nameEl = vizEl('viz-builder-name');

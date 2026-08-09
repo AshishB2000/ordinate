@@ -89,6 +89,7 @@ function initDatasets(): void {
   if (closeBtn) {
     closeBtn.addEventListener('click', () => {
       expId = ''; // also makes any in-flight page reply drop itself
+      if (typeof dkSync === 'function') dkSync(); // dock.ts — context line falls back off this dataset
       if (expSearchTimer) {
         window.clearTimeout(expSearchTimer);
         expSearchTimer = 0;

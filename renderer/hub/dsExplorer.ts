@@ -96,6 +96,7 @@ async function openSavedDataset(id: string): Promise<void> {
 
   expId = String(ds.id || id);
   expName = ds.name ? String(ds.name) : 'Untitled dataset';
+  if (typeof dkSync === 'function') dkSync(); // dock.ts — context line now names this dataset
   expColumns = normalizeCols(ds.columns);
   // Intentionally empty: rows are never hydrated into the renderer any more.
   // The client-side fallback in explorerDisplayRows() operates on this buffer,
