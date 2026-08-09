@@ -311,3 +311,6 @@ scripts/**/*.js
 
 # Dock smoke (Task 4). Emitted sibling.
 /scripts/smoke-dock.js
+
+# Connect-shortcut smoke. Emitted sibling.
+/scripts/smoke-connect.js

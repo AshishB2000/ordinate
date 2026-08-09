@@ -351,9 +351,23 @@ function runSourceAction(kind: string): void {
   }
 
   if (kind === 'postgres' || kind === 'url' || kind === 'mysql' || kind === 'catalog') {
-    // Open the connect panel — it IS the connectors:catalog picker now, so the
-    // server shortlist entries and "More…" all land on the same searchable
-    // catalog (connections.ts owns which connector is preselected/searched).
+    // The connect panel IS the connectors:catalog picker. A NAMED entry
+    // preselects its connector and lands on that form; only "More…"
+    // (kind: 'catalog') opens the full grid. Before this, all four opened the
+    // same 35-source grid — so clicking "PostgreSQL" made you go find
+    // PostgreSQL, which is the one thing the shortlist exists to save.
+    //
+    // The kind IS the connector id, so passing it through needs no mapping and
+    // no switch over connector names here: src/connectors/ is a registry, the
+    // catalog comes from it live, and an id missing from it falls back to the
+    // picker inside openConnPanel rather than opening a dead panel.
+    const id = kind === 'catalog' ? '' : kind;
+    if (typeof openConnPanel === 'function') {
+      openConnPanel(id); // connections.ts
+      return;
+    }
+    // The panel's own button is the fallback if connections.ts has not loaded —
+    // it opens the picker, which is worse than a preselect but never nothing.
     const open = document.getElementById('conn-connect-btn') as HTMLButtonElement | null;
     if (open) open.click();
   }
