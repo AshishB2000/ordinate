@@ -17,6 +17,17 @@ All notable changes to Ordinate are documented here. Format based on
   visual or added straight to an analysis. Conversations are kept per project, so you can leave one
   and come back to it, and start a fresh one whenever. The old Copilot panel is gone; this replaces
   it, and everything still works with no model connected — the AI on/off switch came with it.
+- **Dashboards can carry live filter controls.** Add a dropdown, multi-select or date-range card and
+  every other card on the sheet filters along with it — no editing, no republish. A reader's picks
+  live only in the open window: they are never written to the saved dashboard, so two people looking
+  at the same published dashboard can filter it differently without either one moving the file the
+  other is looking at. Controls work on a published, read-only dashboard exactly as they do on a
+  draft, and stay usable in Present mode — filtering is a read, same as drilling into a chart already
+  was. An author can set a control's default from the dialog or by trying it on the sheet and saving
+  the current pick; a reader can always get back to that default with the sheet's **Reset controls**
+  button, which appears only once a control has moved off it. Drill-down chips and the exported
+  summary both reflect a control's current selection; the export itself never carries a live widget,
+  only the plain-text value it was set to.
 - **Datasets can refresh themselves.** Set a dataset to re-fetch Hourly, Daily or Weekly and Ordinate
   keeps it current. It is honest about what that means: schedules run while Ordinate is open, and
   anything that came due while it was closed catches up when the app launches — the setting says so.
@@ -142,6 +153,10 @@ All notable changes to Ordinate are documented here. Format based on
   Screen Recording permission is granted.
 - Multi-step modal dialogs no longer let the keyboard focus trap land on a control in a hidden step,
   which stranded focus outside the dialog.
+- A dashboard-level filter and a card-level filter using `in`/`not in` on the same column could
+  collide and one would silently drop the other, from a dedup key that ignored the values being
+  filtered on. Fixed before it could bite a real user: it only started mattering once a control card
+  could itself emit an `in` filter.
 
 ## [0.1.0] — 2026-07-XX <!-- TODO(ashish): set release date -->
 

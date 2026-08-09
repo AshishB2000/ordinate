@@ -35,7 +35,7 @@ import type { FilterStep } from './transforms';
 
 // Re-exported so callers can type an analysis sheet without importing two
 // modules — and so it stays visible that a sheet IS a dashboard Page.
-export type { Page, Card, CardLayout, CardMetric, CardType } from './dashboards';
+export type { Page, Card, CardLayout, CardMetric, CardType, CardControl, ControlValue, ControlKind } from './dashboards';
 import type { Page } from './dashboards';
 
 export interface Analysis {

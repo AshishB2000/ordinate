@@ -31,6 +31,9 @@ const bundle = {
   name: 'Q3 Sales',
   // NON-whitelisted top-level field carrying the sentinel — must be dropped.
   apiKey: SECRET,
+  // Task 5: a control's label + current value, flattened to plain text — the
+  // ONLY trace of control state allowed into an export (never a live widget).
+  controlsSummary: 'Region: West · Jan 1–Mar 31',
   pages: [
     {
       name: 'Overview',
@@ -97,6 +100,12 @@ ok('inlined data keeps the embedded PNG data-URI', !!parsed
   && parsed.pages[0].cards.some((c: any) => c.kind === 'image' && c.png === PNG));
 ok('inlined data keeps the broken-card placeholder', !!parsed
   && parsed.pages[0].cards.some((c: any) => c.kind === 'broken' && c.reason === 'Source removed'));
+ok('inlined data keeps the controls summary', !!parsed && parsed.controlsSummary === 'Region: West · Jan 1–Mar 31');
+
+// ── Controls summary renders as a textContent-only subtitle, never a live widget ──
+ok('renders the controls-summary subtitle element', html.includes('dash-controls-summary'));
+ok('has NO <select>/<input> control widget anywhere (never a live control in an export)',
+  !/<select[\s>]/i.test(html) && !/<input[\s>]/i.test(html));
 
 // ── OFFLINE: no http(s) URL anywhere (a data: PNG is fine) ──────────────────────
 ok('references NO http(s) URL (fully offline)', !/https?:\/\//i.test(html));
@@ -107,6 +116,9 @@ ok('contains NO secret string (whitelist stripped every non-schema field)', !htm
 // ── sanitizeBundle drops unknown fields + unknown card kinds ────────────────────
 const clean = sanitizeBundle(bundle);
 ok('sanitize drops the unknown top-level field', !('apiKey' in (clean as any)));
+ok('sanitize keeps the controls summary string', clean.controlsSummary === 'Region: West · Jan 1–Mar 31');
+ok('sanitize coerces a non-string controlsSummary to an empty string',
+  sanitizeBundle({ ...bundle, controlsSummary: { evil: SECRET } }).controlsSummary === '');
 ok('sanitize drops the unknown card kind', clean.pages[0].cards.every((c) => c.kind !== ('totally-unknown' as any)));
 ok('sanitize keeps exactly the 5 known cards', clean.pages[0].cards.length === 5);
 const chartCard: any = clean.pages[0].cards[0];

@@ -1300,6 +1300,7 @@
           <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-visual">+ Visual</button>
           <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-metric">+ Metric</button>
           <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-text">+ Text</button>
+          <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-control">+ Control</button>
           <button class="btn btn-sm dash-edit-only" type="button" id="dash-legacy-wrap-btn" hidden>Edit as analysis</button>
           <!-- Focus-mode overflow. Present / Export… / Share are one click away
                instead of three buttons in the strip; the menu delegates to the
@@ -1338,6 +1339,13 @@
             <div class="dash-filter-chips" id="dash-filter-chips"></div>
             <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-filter">+ Filter</button>
             <button class="btn btn-sm dash-edit-only" type="button" id="dash-clear-filters" hidden>Clear all</button>
+            <!-- NOT dash-edit-only: unlike Clear all (a structural edit to the
+                 persisted filter list), resetting control cards' live
+                 selections is a read and must work for a reader on a
+                 published dashboard too (task-3 brief: "Present mode keeps
+                 controls usable"). Shown only when a control differs from its
+                 default (updateResetControlsBtn, dashControls.ts). -->
+            <button class="btn btn-sm" type="button" id="dash-reset-controls" hidden>Reset controls</button>
           </div>
           <div class="dash-toolbar-quick">
             <button class="btn btn-sm dash-ctrl dash-edit-only" type="button" id="dash-category-select">Category…</button>
@@ -2320,7 +2328,9 @@
 <script src="dashList.js"></script>
 <script src="dashGrid.js"></script>
 <script src="dashAdd.js"></script>
+<script src="dashAddControl.js"></script>
 <script src="dashFiltersUi.js"></script>
+<script src="dashControls.js"></script>
 <script src="dashAi.js"></script>
 <script src="dashShare.js"></script>
 <script src="authoring.js"></script>
