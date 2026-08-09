@@ -27,7 +27,14 @@ let copilotBusy = false;
 // (dataset → visual → dashboard) matches the workspace nav order; the visible
 // context indicator (renderCopilotContext) always shows the user what won, so the
 // scope is never a mystery — closing an entity falls through to the next.
-function buildCopilotContextRef(): { kind: string; id: string; label: string } {
+// Explore picks its scope BY HAND (an explicit dataset chip); the panel infers
+// it from whatever entity happens to be open. The override is how a caller with
+// its own notion of scope opts out of the inference without either surface
+// growing a second copy of this function.
+function buildCopilotContextRef(
+  override?: { kind: string; id: string; label: string },
+): { kind: string; id: string; label: string } {
+  if (override && override.id) return override;
   if (typeof expId === 'string' && expId) {
     const name = typeof expName === 'string' && expName ? expName : 'open dataset';
     return { kind: 'dataset', id: expId, label: 'dataset · ' + name };
@@ -65,8 +72,17 @@ function renderCopilotContext(): void {
 // ── Message rendering (DOM only — textContent, never innerHTML, so nothing the
 // model returns can inject markup) ─────────────────────────────────────────────
 
-function appendCopilotBubble(role: string, text: string, provenance?: any): void {
-  const list = aiEl('ai-messages');
+// `containerId` defaults to the copilot panel's own list, so every existing
+// caller is unchanged. Explore passes its own transcript id — the rendering
+// (and the textContent-only rule that makes model output inert) is shared, not
+// duplicated.
+function appendCopilotBubble(
+  role: string,
+  text: string,
+  provenance?: any,
+  containerId = 'ai-messages',
+): void {
+  const list = aiEl(containerId);
   if (!list) return;
   const row = document.createElement('div');
   row.className = 'ai-msg ' + (role === 'assistant' ? 'ai-msg-assistant' : 'ai-msg-user');
@@ -99,22 +115,26 @@ function appendCopilotBubble(role: string, text: string, provenance?: any): void
 }
 
 // Rebuild the whole message list from an authoritative turns array (disk truth).
-function renderCopilotTurns(turns: any[]): void {
-  const list = aiEl('ai-messages');
+// `containerId`/`emptyId` default to the copilot panel's own nodes. Explore has
+// a transcript but no inline empty-state node, so it passes '' for the latter.
+function renderCopilotTurns(turns: any[], containerId = 'ai-messages', emptyId = 'ai-empty'): void {
+  const list = aiEl(containerId);
   if (!list) return;
   // Drop existing bubbles, keep the empty-state placeholder node.
   list.querySelectorAll('.ai-msg').forEach((n) => n.remove());
-  const empty = aiEl('ai-empty');
+  const empty = emptyId ? aiEl(emptyId) : null;
   const has = Array.isArray(turns) && turns.length > 0;
   if (empty) empty.hidden = has;
   if (has) {
-    turns.forEach((t) => appendCopilotBubble(t.role, typeof t.text === 'string' ? t.text : '', t.provenance));
+    turns.forEach((t) =>
+      appendCopilotBubble(t.role, typeof t.text === 'string' ? t.text : '', t.provenance, containerId),
+    );
   }
-  scrollCopilotToBottom();
+  scrollCopilotToBottom(containerId);
 }
 
-function scrollCopilotToBottom(): void {
-  const list = aiEl('ai-messages');
+function scrollCopilotToBottom(containerId = 'ai-messages'): void {
+  const list = aiEl(containerId);
   if (list) list.scrollTop = list.scrollHeight;
 }
 

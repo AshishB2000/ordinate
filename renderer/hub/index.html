@@ -1419,14 +1419,21 @@
       <div class="xp-stage">
         <div class="xp-stage-inner">
           <h1 class="xp-greet" id="xp-greet">What do you want to know?</h1>
+          <!-- Empty until the first question; .xp-asked on the panel turns the
+               stage into this scrolling transcript with the composer docked
+               beneath it. One markup tree, two states — not a second view. -->
+          <div class="xp-messages" id="xp-messages"></div>
+          <div class="xp-hint" id="xp-hint" hidden></div>
           <div class="xp-composer">
             <textarea class="xp-input" id="xp-input" rows="1"
               placeholder="Connect a model to ask a question…"
               aria-label="Ask a question about your data" disabled></textarea>
             <div class="xp-composer-row">
-              <button class="xp-chip" id="xp-dataset-chip" type="button" disabled>Choose a dataset</button>
+              <!-- Neither chip is gated on a model: one chooses what you ask
+                   about, the other is how you connect something to ask with. -->
+              <button class="xp-chip" id="xp-dataset-chip" type="button">Whole project</button>
               <span class="xp-composer-spacer"></span>
-              <button class="xp-chip" id="xp-model-chip" type="button" disabled>Connect a model</button>
+              <button class="xp-chip xp-chip-warn" id="xp-model-chip" type="button">Connect a model</button>
               <button class="xp-send" id="xp-send" type="button" aria-label="Send" disabled>
                 <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
                   <path d="M12 19V6M6 12l6-6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>

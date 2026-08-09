@@ -10143,3 +10143,46 @@ body.cap-focus .cap-back {
 .home-xp-sub { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
 .home-xp-go { flex: none; margin-left: auto; display: flex; color: var(--text-faint); }
 .home-xp-band:hover .home-xp-go { color: var(--accent); }
+
+/* ── Explore: hero → transcript ───────────────────────────────────────────────
+   One markup tree, two states. .xp-asked on the panel collapses the greeting,
+   opens the transcript and docks the composer at the bottom of the stage; the
+   composer element itself never moves in the DOM. The greeting collapses rather
+   than display:none-ing so the change reads as a fade, not a jump. */
+.xp-greet {
+  transition: opacity 0.18s var(--ease), height 0.18s var(--ease);
+}
+.xp-messages { display: none; }
+.xp-hint {
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  color: var(--text);
+  font-size: 12.5px;
+}
+.xp-hint[hidden] { display: none; }
+
+.xp-panel.xp-asked .xp-stage { align-items: stretch; padding-top: 18px; }
+.xp-panel.xp-asked .xp-stage-inner { height: 100%; min-height: 0; }
+.xp-panel.xp-asked .xp-greet {
+  opacity: 0;
+  height: 0;
+  margin: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.xp-panel.xp-asked .xp-messages {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+/* Once there is a conversation on screen, the jump strip is in the way of it. */
+.xp-panel.xp-asked .xp-jump { display: none; }
+
+/* The model chip states "nothing connected" the way the sidebar button does —
+   muted rather than alarming, because no model is a normal, supported state. */
+.xp-chip-warn { color: var(--text-dim); border-style: dashed; }
