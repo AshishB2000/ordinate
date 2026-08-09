@@ -297,3 +297,4 @@ scripts/**/*.js
 
 # Explore — the conversational front door. Emitted sibling.
 /renderer/hub/explore.js
+/renderer/hub/exploreChart.js

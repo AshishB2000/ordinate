@@ -230,6 +230,30 @@ async function main(): Promise<void> {
     /Revenue by month/.test((await win.locator('#xp-dataset-chip').textContent()) || ''),
     (await win.locator('#xp-dataset-chip').textContent()) || '');
 
+  // ── The chart path (exploreChart.ts) ──────────────────────────────────────
+  // A full run needs a model, which a smoke run has none of. What IS assertable
+  // — and what actually breaks silently — is that the script loaded at all, and
+  // that its documented contract holds: every failure is silent, so an answer
+  // never gets an error card bolted under it for an extra nobody asked for.
+  ok('the chart script loaded (a missing <script src> fails silently otherwise)',
+    await win.evaluate(() => typeof (window as any).xpMaybeRenderChart === 'function'));
+
+  // A dataset IS in scope by now (the chip test above picked one), so this runs
+  // the real path as far as it can go: visual:suggest answers notReady with no
+  // model connected. That is the branch a first-run user hits every time.
+  const beforeCharts = await win.locator('#xp-messages .xp-chart').count();
+  const threw = await win.evaluate(async () => {
+    try {
+      await (window as any).xpMaybeRenderChart('what is the trend?');
+      return false;
+    } catch (_) {
+      return true;
+    }
+  });
+  ok('…and a notReady suggestion is silent, not an error', !threw);
+  ok('…painting nothing under the answer',
+    (await win.locator('#xp-messages .xp-chart').count()) === beforeCharts);
+
   ok('no renderer errors (incl. CSP violations)', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   await app.close();

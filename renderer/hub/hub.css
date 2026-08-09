@@ -10186,3 +10186,15 @@ body.cap-focus .cap-back {
 /* The model chip states "nothing connected" the way the sidebar button does —
    muted rather than alarming, because no model is a normal, supported state. */
 .xp-chip-warn { color: var(--text-dim); border-style: dashed; }
+
+/* Explore: the chart under an answer. Sits inside the assistant bubble's row,
+   so it scrolls with the turn that produced it. */
+.xp-chart {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.xp-chart-area { height: 260px; min-height: 260px; }
+.xp-chart-actions { display: flex; gap: 8px; margin-top: 8px; }

@@ -216,6 +216,11 @@ async function xpSend(): Promise<void> {
     if (Array.isArray(res.turns)) renderCopilotTurns(res.turns, 'xp-messages', '');
     else await xpLoadHistory();
     xpHideHint();
+    // A chart is a bonus on top of the answer (exploreChart.ts): it needs a
+    // dataset in scope, a usable suggestion and drawable data, and it stays
+    // silent when it cannot have all three. Not awaited — the answer is already
+    // on screen and must not wait on a second model round-trip.
+    void xpMaybeRenderChart(question);
     return;
   }
 
