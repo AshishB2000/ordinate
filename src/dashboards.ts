@@ -1,10 +1,14 @@
 // Dashboard persistence — MAIN PROCESS ONLY.
 // One JSON file per dashboard under userData/projects/<projectId>/dashboards/<id>.json,
 // a `dashboards/` sibling of `datasets/` and `visuals/`. A Dashboard is a grid of
-// cards across one or more pages, saved per project. Cards come in three types:
-// visual (references a saved Visual by id), text (heading + body), and metric
+// cards across one or more pages, saved per project. Cards come in four types:
+// visual (references a saved Visual by id), text (heading + body), metric
 // (a dataset column + aggregation → ONE app-computed number, produced only by the
-// pure src/metricValue.ts helper — never stored, never from the model).
+// pure src/metricValue.ts helper — never stored, never from the model), and
+// control (a dropdown/multi-select/date-range filter widget — this module only
+// carries its DEFINITION; the reader's live selection is never part of the
+// stored record, see src/dashboardFilters.ts's controlSteps for how a selection
+// becomes a FilterStep).
 //
 // Mirrors src/visuals.ts / src/datasets.ts conventions verbatim: the dual-UUID
 // id-validation guard (BOTH projectId AND dashboard id are UUID-checked before
@@ -40,8 +44,29 @@ import type { Visual } from './visuals';
 import { sanitizeSteps } from './transforms';
 import type { FilterStep } from './transforms';
 
-export type CardType = 'visual' | 'text' | 'metric';
+export type CardType = 'visual' | 'text' | 'metric' | 'control';
 export type MetricAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';
+export type ControlKind = 'dropdown' | 'multi' | 'date_range';
+
+/**
+ * The shape of a control's current (or author-set default) selection — one
+ * variant per `ControlKind`. Shared between `CardControl.default` (an
+ * AUTHORING-time value, sanitized/stored below) and `controlSteps`'s `state`
+ * parameter (src/dashboardFilters.ts) — a READER's live selection, which is
+ * deliberately never persisted here or anywhere else.
+ */
+export type ControlValue =
+  | { value: string } // dropdown
+  | { values: string[] } // multi
+  | { from?: string; to?: string }; // date_range (ISO dates as stored text)
+
+export interface CardControl {
+  kind: ControlKind;
+  label: string; // shown above the control
+  datasetId: string; // where options come from (UUID-checked)
+  column: string; // the column it filters
+  default?: ControlValue; // optional author-set initial value
+}
 
 // The fixed column count the renderer's CSS grid uses (kept in sync with the
 // .dash-grid class in hub.css). Exported so callers/tests share one source.
@@ -95,6 +120,7 @@ export interface Card {
   heading?: string; // type 'text'
   text?: string; // type 'text'
   metric?: CardMetric; // type 'metric'
+  control?: CardControl; // type 'control'
 }
 
 export interface Page {
@@ -165,8 +191,9 @@ function dashboardFilePath(projectId: string, id: string): string {
   return path.join(dashboardsDir(projectId), id + '.json');
 }
 
-const CARD_TYPES: ReadonlySet<string> = new Set(['visual', 'text', 'metric']);
+const CARD_TYPES: ReadonlySet<string> = new Set(['visual', 'text', 'metric', 'control']);
 const METRIC_AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
+const CONTROL_KINDS: ReadonlySet<string> = new Set(['dropdown', 'multi', 'date_range']);
 const METRIC_FORMATS: ReadonlySet<string> = new Set([
   'auto',
   'plain',
@@ -242,6 +269,34 @@ export function sanitizeCardVisual(raw: unknown): CardVisual | null {
   };
 }
 
+// Whitelist an untrusted control `default` (or, via controlSteps, a live
+// selection of the same shape) against the ONE variant its own `kind` allows —
+// a dropdown default carrying `{values:[...]}` (the multi shape) is a shape
+// mismatch, not a value error, so it is silently stripped rather than dropping
+// the whole card (same severity as an unrecognized `metric.format` above).
+// Absence (or an object with none of the fields for this kind) → undefined,
+// which callers treat as "no default".
+function sanitizeControlDefault(kind: ControlKind, raw: unknown): ControlValue | undefined {
+  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
+  if (!o) return undefined;
+
+  if (kind === 'dropdown') {
+    return typeof o.value === 'string' ? { value: o.value } : undefined;
+  }
+  if (kind === 'multi') {
+    if (!Array.isArray(o.values)) return undefined;
+    return { values: o.values.filter((v): v is string => typeof v === 'string') };
+  }
+  // date_range
+  const from = typeof o.from === 'string' ? o.from : undefined;
+  const to = typeof o.to === 'string' ? o.to : undefined;
+  if (from === undefined && to === undefined) return undefined;
+  const out: { from?: string; to?: string } = {};
+  if (from !== undefined) out.from = from;
+  if (to !== undefined) out.to = to;
+  return out;
+}
+
 // Whitelist one untrusted card by type. An unknown type, or a type missing its
 // required payload, → null (dropped by sanitizeCards). Each card gets a stable
 // UUID key (a stray/invalid stored id is regenerated).
@@ -272,6 +327,33 @@ export function sanitizeCard(raw: unknown): Card | null {
     if (typeof o.text === 'string') card.text = o.text;
     // A text card with neither heading nor body carries no content → drop it.
     if (card.heading === undefined && card.text === undefined) return null;
+    return card;
+  }
+
+  if (type === 'control') {
+    // needs a known kind + a UUID-checked datasetId + a non-empty column —
+    // unknown kind, same discipline as the whole-card `type` check above,
+    // drops the card; an invalid datasetId drops it too (unlike metric's
+    // datasetId, which never touches a path, this one is explicitly
+    // UUID-checked per the spec). `column` is required like metric's own
+    // column/aggregation (it decides what the control actually filters — a
+    // blank one would silently no-op every FilterStep it produces); `label`
+    // stays optional/decorative, so it alone defaults rather than dropping.
+    const c = o.control && typeof o.control === 'object' ? (o.control as Record<string, unknown>) : null;
+    if (!c) return null;
+    const kind =
+      typeof c.kind === 'string' && CONTROL_KINDS.has(c.kind) ? (c.kind as ControlKind) : null;
+    const column = typeof c.column === 'string' ? c.column : '';
+    if (!kind || !isValidId(c.datasetId) || !column) return null;
+    const control: CardControl = {
+      kind,
+      label: typeof c.label === 'string' ? c.label : '',
+      datasetId: c.datasetId,
+      column,
+    };
+    const def = sanitizeControlDefault(kind, c.default);
+    if (def) control.default = def;
+    card.control = control;
     return card;
   }
 

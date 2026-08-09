@@ -336,7 +336,7 @@ function openMetricDialog(
       try {
         r = await window.hub.computeMetric(
           currentProjectId, dsId, column, aggregation,
-          (dashCurrent && Array.isArray(dashCurrent.filters)) ? dashCurrent.filters : [],
+          effectiveFilters(),
         );
       } catch (_) {
         r = { ok: false };

@@ -81,6 +81,13 @@ export interface ExportPage {
 export interface ExportBundle {
   name: string;
   pages: ExportPage[];
+  // Plain-text "<label>: <value> · <label>: <value>" for every control card's
+  // CURRENT selection, dashboard-wide (Task 5). Controls never get a grid-cell
+  // entry in an export (a static, non-interactive widget would be misleading —
+  // "Do NOT export live controls"), so this is the ONLY trace of control state
+  // that survives into the file: a header subtitle, plain string, never a
+  // structured value per control.
+  controlsSummary?: string;
 }
 
 // Core Chart.js types that render live from inlined data. Anything else (treemap /
@@ -210,7 +217,7 @@ export function sanitizeBundle(raw: unknown): ExportBundle {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const pages = Array.isArray(o.pages) ? o.pages.map(sanitizePage) : [];
   if (pages.length === 0) pages.push({ name: 'Page', cards: [] });
-  return { name: asString(o.name) || 'Dashboard', pages };
+  return { name: asString(o.name) || 'Dashboard', pages, controlsSummary: asString(o.controlsSummary) };
 }
 
 // Serialize a JS value for safe embedding inside a <script> tag: escape `<`/`>` (so a
@@ -233,7 +240,8 @@ function styleBlock(): string {
     html, body { margin: 0; background: #f4f4f5; color: #18181b;
       font-family: -apple-system, system-ui, 'Hanken Grotesk', 'Segoe UI', sans-serif; }
     .dash-root { max-width: 1200px; margin: 0 auto; padding: 24px 20px 40px; }
-    .dash-title { font-size: 22px; font-weight: 700; margin: 0 0 16px; color: #0f1117; }
+    .dash-title { font-size: 22px; font-weight: 700; margin: 0 0 4px; color: #0f1117; }
+    .dash-controls-summary { font-size: 13px; font-weight: 500; color: #6b7280; margin: 0 0 16px; }
     .dash-page { margin-bottom: 28px; }
     .dash-page-title { font-size: 15px; font-weight: 600; color: #6b7280; margin: 0 0 10px; }
     .dash-grid { display: grid; grid-template-columns: repeat(${GRID_COLS}, 1fr);
@@ -269,6 +277,10 @@ function renderScript(): string {
   document.title = D.name || 'Dashboard';
   var h1 = document.createElement('h1'); h1.className = 'dash-title'; h1.textContent = D.name || 'Dashboard';
   root.appendChild(h1);
+  if (typeof D.controlsSummary === 'string' && D.controlsSummary) {
+    var sub = document.createElement('div'); sub.className = 'dash-controls-summary'; sub.textContent = D.controlsSummary;
+    root.appendChild(sub);
+  }
 
   var multiPage = D.pages.length > 1;
   D.pages.forEach(function (page) {

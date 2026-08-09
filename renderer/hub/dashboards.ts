@@ -32,6 +32,12 @@ const DASH_AGG_LABELS: Record<DashAgg, string> = {
 // ── Module-local state ────────────────────────────────────────────────────────
 let dashList: any[] = [];          // summaries (list view)
 let dashCurrent: any = null;       // the open Dashboard (full), or null on the list
+// A control card's CURRENT reader selection: cardId -> ControlValue
+// (src/dashboards.ts's `{value}` / `{values}` / `{from,to}`, same shape as
+// `CardControl.default`). Renderer memory ONLY — never persisted, never sent
+// as part of a dashboard/analysis record, cleared every time a sheet opens or
+// closes so one reader's picks never leak into the next dashboard opened.
+let controlState: Map<string, any> = new Map();
 // WHICH RECORD the editor is bound to. Phase D: an Analysis is the authoring
 // container and its `sheets` ARE dashboard `pages` (src/analysis.ts reuses the
 // type), so ONE editor drives both — the mode only decides which channel the
@@ -45,6 +51,63 @@ let dashPageIdx = 0;               // active page index within dashCurrent.pages
 let dashDirty = false;             // unsaved layout/card edits
 let dashSaveTimer: number | null = null; // debounced autosave
 let dashDragId: string | null = null;    // id of the card being dragged (native HTML5)
+
+// ── Effective filters (dashboard filters + every control's live selection) ────
+//
+// Renderer-side mirror of src/dashboardFilters.controlSteps: same rule, same
+// shape. That module is the node-tested one; src/dashboardFilters.js compiles
+// as CommonJS (tsconfig.main.json, NodeNext) so it defines a bare `exports.*` —
+// loading it via a renderer <script> tag throws (`exports` doesn't exist in
+// that world), exactly why mergeDashFilters above is ALSO a hand-kept mirror
+// rather than a loaded copy. Kept tiny + local on purpose.
+function controlStepsRenderer(control: any, state: any): any[] {
+  if (!control || !state) return [];
+  const column = control.column;
+  if (control.kind === 'dropdown' && 'value' in state) {
+    const value = state.value;
+    if (!value) return [];
+    return [{ type: 'filter', column, op: '=', value }];
+  }
+  if (control.kind === 'multi' && 'values' in state) {
+    const values = state.values;
+    if (!Array.isArray(values) || values.length === 0) return [];
+    // .slice(): `state` may be the SAME array card.control.default.values
+    // seeded, so this must not hand back a reference into the record.
+    return [{ type: 'filter', column, op: 'in', values: values.slice() }];
+  }
+  if (control.kind === 'date_range') {
+    const from = 'from' in state ? state.from : undefined;
+    const to = 'to' in state ? state.to : undefined;
+    const steps: any[] = [];
+    if (from) steps.push({ type: 'filter', column, op: '>=', value: from });
+    if (to) steps.push({ type: 'filter', column, op: '<=', value: to });
+    return steps;
+  }
+  return [];
+}
+
+// THE ONE place a card compute (or the drill-down's sheet-filter argument)
+// reads what filters currently apply: stored dashboard-wide filters, then
+// every control card's live selection turned into steps, dashboard-first,
+// same precedence `mergeDashFilters` already documents. Scans EVERY page of
+// `dashCurrent.pages`, not just the one on screen — a dashboard-wide filter
+// already applies across pages today, and a control is dashboard-wide too,
+// even though the widget itself sits on one page. Zero control cards →
+// exactly `dashCurrent.filters`, unchanged from before this existed.
+function effectiveFilters(): any[] {
+  const base = dashCurrent && Array.isArray(dashCurrent.filters) ? dashCurrent.filters : [];
+  if (!dashCurrent || !Array.isArray(dashCurrent.pages)) return base.slice();
+  const out = base.slice();
+  for (const page of dashCurrent.pages) {
+    const cards = page && Array.isArray(page.cards) ? page.cards : [];
+    for (const card of cards) {
+      if (card && card.type === 'control' && card.control) {
+        out.push(...controlStepsRenderer(card.control, controlState.get(card.id)));
+      }
+    }
+  }
+  return out;
+}
 
 // ── Small DOM helpers ─────────────────────────────────────────────────────────
 function dashEl(id: string): HTMLElement | null {
@@ -227,6 +290,8 @@ function initDashboards(): void {
   if (addM) addM.addEventListener('click', () => handleAddMetric());
   const addT = dashEl('dash-add-text');
   if (addT) addT.addEventListener('click', () => handleAddText());
+  const addC = dashEl('dash-add-control');
+  if (addC) addC.addEventListener('click', () => handleAddControl());
 
   const save = dashEl('dash-save-btn');
   if (save) save.addEventListener('click', () => handleSaveDashboard());
@@ -253,6 +318,12 @@ function initDashboards(): void {
   if (addF) addF.addEventListener('click', () => handleAddDashFilter());
   const clrF = dashEl('dash-clear-filters');
   if (clrF) clrF.addEventListener('click', () => handleClearDashFilters());
+  // Reset EVERY control card to its published default — unlike Clear all
+  // above (dash-edit-only, a structural edit to the persisted record), this
+  // must work for a reader on a published dashboard, so it carries no
+  // dash-edit-only class and is never gated on dashReadOnly (dashControls.ts).
+  const resetCtrls = dashEl('dash-reset-controls');
+  if (resetCtrls) resetCtrls.addEventListener('click', () => resetAllControls());
   const catC = dashEl('dash-category-select');
   if (catC) catC.addEventListener('click', () => handleDashCategory());
   const perC = dashEl('dash-period-select');
