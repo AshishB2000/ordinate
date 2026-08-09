@@ -2,21 +2,15 @@
 // user across the app (docs/superpowers/plans/2026-08-09-ai-dock.md). Classic
 // global-scope renderer <script>: NO import/export. Loads after workspace.js
 // (reads `selectSection`'s `.hub-body[data-section]`), dashboards.js (reads
-// `dashReadOnly`) and chartRender.js (reads the `chartInstances`/
-// `mapInstances` WeakMaps) — see the load-order comment in index.html.
+// `dashReadOnly`) and explore.js (reads `xpAppendBubble`/`xpRenderTurns`/
+// `xpScrollToBottom`) — see the load-order comment in index.html.
 //
 // Task 1 shipped the SHELL: open/close from the sidebar button and ⌘L,
 // suppressed in five places, view state in localStorage, and the canvas
 // resize nudge.
 //
-// Task 2 wires the composer to the SAME thread Explore and the AI panel use
-// (copilot.ts's buildCopilotContextRef/appendCopilotBubble/renderCopilotTurns/
-// scrollCopilotToBottom — dock.js loads after copilot.js and explore.js, see
-// index.html). It does NOT add a second history store, transcript renderer or
-// context resolver — dkSend()/dkLoadHistory() mirror explore.ts's
-// xpSend()/xpLoadHistory() with 'dk-messages' as the container, same as
-// Explore mirrors the original copilot.ts panel. Three surfaces, light
-// duplication, no shared askFlow() — see the plan for why.
+// Task 2 wired the composer to the SAME thread Explore uses, through the
+// panel copilot.ts's rendering primitives — since REWORKED (see below).
 //
 // Task 3 adds proposals: after a successful ask, dkSend() below hands the
 // question/answer to dkOfferProposal() (dockPropose.ts, a second file — this
@@ -29,6 +23,25 @@
 // the one place [300, 40% of window] is computed, read AND write), the
 // resize nudge on drag/keyboard-settle only, Esc-to-close-and-refocus, and
 // aria-expanded on the toggle in dkSync().
+//
+// ── Rework (develop merged in: 498d647 retired the standalone Copilot panel,
+// renderer/hub/copilot.ts) ──────────────────────────────────────────────────
+// The panel's rendering (appendCopilotBubble/renderCopilotTurns/
+// scrollCopilotToBottom) moved to explore.ts as xpAppendBubble/xpRenderTurns/
+// xpScrollToBottom, each taking a `containerId` (defaulting to Explore's own)
+// — the dock calls them with 'dk-messages'. One rendering implementation,
+// two containers, same as before; only the file it lives in changed.
+//
+// The panel's buildCopilotContextRef() — a global priority chain (dataset →
+// visual → dashboard → project) off whatever entity happened to be open
+// ANYWHERE — did NOT move. It was genuinely fragile (expId survives
+// navigating away, so it could resolve a dataset the user left minutes ago)
+// and 498d647 fixed the exact bug that inference caused in Explore. The dock
+// now has its OWN resolver, dkContextRef() below: section-aware, and it
+// falls back to whole-project rather than to another section's stale global.
+// #side-ai-btn also no longer belongs to the dock — it opens Explore
+// (workspace.ts) — so the dock's entry points are ⌘L and its own edge
+// affordance, #dk-edge.
 
 // ── Suppression ───────────────────────────────────────────────────────────
 /**
@@ -192,10 +205,61 @@ function dkHandleKeydown(e: KeyboardEvent): void {
 
 // ── Context ──────────────────────────────────────────────────────────────
 /**
- * Paint the header's "Based on …" line from `buildCopilotContextRef()`
- * (copilot.ts) called with NO override — the dock infers scope from whatever
- * entity is open (dataset → visual → dashboard → whole project); it never
- * picks its own, unlike Explore's explicit dataset chip. Cheap and
+ * The dock's own section-aware context resolver. Resolves from
+ * `currentSection` (workspace.ts) FIRST — an entity is only in scope while
+ * its OWN section is the one on screen — and falls through to whole-project
+ * rather than to another section's stale global. That fallback is the whole
+ * point: it's what makes an implicit context safe, because `dkRenderContext`
+ * below repaints from this on every section switch and entity open/close, so
+ * the header can never silently disagree with what's on screen.
+ *
+ * Deliberately NOT the retired copilot.ts panel's buildCopilotContextRef() —
+ * a global priority chain (dataset → visual → dashboard → project) off
+ * whatever entity happened to be open ANYWHERE, including one the user
+ * navigated away from (expId is never cleared on nav). Routing through that
+ * is exactly what 498d647 fixed in Explore: with a dataset open in the
+ * explorer and Explore's chip set to "Whole project", the question was
+ * silently scoped to that open dataset anyway — the chip and the answer
+ * disagreeing. The dock has no competing chip, so it renders exactly what it
+ * resolved — but only if what it resolves can never outlive its section.
+ */
+function dkContextRef(): { kind: string; id: string; label: string } {
+  if (currentSection === 'datasets') {
+    if (typeof expId === 'string' && expId) {
+      const name = typeof expName === 'string' && expName ? expName : 'open dataset';
+      return { kind: 'dataset', id: expId, label: 'dataset · ' + name };
+    }
+    return { kind: '', id: '', label: 'whole project' };
+  }
+  if (currentSection === 'visuals') {
+    if (typeof vizEditingId === 'string' && vizEditingId) {
+      return { kind: 'visual', id: vizEditingId, label: 'visual · open visual' };
+    }
+    return { kind: '', id: '', label: 'whole project' };
+  }
+  if (currentSection === 'dashboards') {
+    if (typeof dashCurrent !== 'undefined' && dashCurrent && dashCurrent.id && dashMode === 'dashboard') {
+      const name = dashCurrent.name ? String(dashCurrent.name) : 'open dashboard';
+      return { kind: 'dashboard', id: String(dashCurrent.id), label: 'dashboard · ' + name };
+    }
+    return { kind: '', id: '', label: 'whole project' };
+  }
+  // 'analyses' (and anything else) — deliberately whole project, even though
+  // dashCurrent/dashMode === 'analysis' may point at an open analysis record.
+  // Verified src/ipc/copilot.ts's buildFacts() dispatches ONLY on
+  // kind === 'dataset' | 'visual' | 'dashboard' — there is no `analysis`
+  // branch, so a `kind: 'analysis'` context would silently fall through to a
+  // whole-project answer while this header claimed "analysis · X". That is
+  // the exact chip-lies-about-scope bug 498d647 fixed — recreating it here
+  // for a fourth entity kind would be the same mistake with worse cover
+  // (nothing on screen contradicts it, unlike Explore's chip). A real
+  // analysis tier means adding a backend branch in copilot.ts FIRST, not
+  // inferring past its absence.
+  return { kind: '', id: '', label: 'whole project' };
+}
+
+/**
+ * Paint the header's "Based on …" line from `dkContextRef()`. Cheap and
  * synchronous, so `dkSync()` below calls it unconditionally on every section
  * switch, focus-mode toggle and entity open/close — the context line must
  * never lag one step behind what's on screen.
@@ -203,16 +267,18 @@ function dkHandleKeydown(e: KeyboardEvent): void {
 function dkRenderContext(): void {
   const el = document.getElementById('dk-context');
   if (!el) return;
-  const ref = buildCopilotContextRef();
+  const ref = dkContextRef();
   el.textContent = '';
   const label = document.createElement('span');
   label.className = 'dk-context-label';
   label.textContent = 'Based on ' + ref.label;
   el.appendChild(label);
-  // Same "stats app-computed" chip copilot.ts's own renderCopilotContext()
-  // shows beside its context line — .ai-chip, not a new chip style.
+  // Same "stats app-computed" chip Explore's provenance rows use — .xp-prov-chip,
+  // not a new chip style. (Not .ai-chip: that class's CSS did not survive
+  // 498d647's retirement of the copilot panel; .xp-prov-chip is its
+  // surviving equivalent.)
   const chip = document.createElement('span');
-  chip.className = 'ai-chip';
+  chip.className = 'xp-prov-chip';
   chip.textContent = 'stats app-computed';
   el.appendChild(chip);
 }
@@ -242,12 +308,19 @@ let dkUserOpened = false;
  */
 function dkSync(): void {
   const panel = document.getElementById('dk-panel');
-  const btn = document.getElementById('side-ai-btn');
+  // #side-ai-btn belongs to Explore now (workspace.ts opens it there) — the
+  // dock must NOT hide or otherwise touch it. #dk-edge is the dock's OWN
+  // closed-state entry point (its other one is ⌘L), so it is the only
+  // element dkSync manages here.
+  const edge = document.getElementById('dk-edge');
   const allowed = dkAllowed();
-  if (btn) btn.hidden = !allowed; // suppressed = toggle hidden too, no exceptions
-  if (btn) btn.classList.toggle('active', allowed && dkIsOpen());
   const visible = allowed && dkIsOpen();
-  if (btn) btn.setAttribute('aria-expanded', String(visible));
+  // The edge tab is only useful as an OPEN affordance — while the dock is
+  // already visible, #dk-close (inside the panel) and ⌘L are how you leave,
+  // so showing both would just be two controls doing the same thing at the
+  // same edge.
+  if (edge) edge.hidden = !allowed || visible;
+  if (edge) edge.setAttribute('aria-expanded', String(visible));
   const justOpened = visible && dkLastVisible !== true && dkUserOpened;
   if (panel) panel.hidden = !visible;
   document.body.classList.toggle('dk-open', visible); // drives the <1100px scrim in hub.css
@@ -302,11 +375,11 @@ function dkNudgeCanvasResize(): void {
 }
 
 // ── Conversation ─────────────────────────────────────────────────────────
-// Reuses copilot.ts's rendering primitives with 'dk-messages' as the
-// container — same rebuild-from-disk-on-success, same notReady hint, same
-// restore-text-on-failure contract explore.ts's xpSend/xpLoadHistory use.
-// The dock has no inline empty-state node (unlike the AI panel's #ai-empty),
-// so — like Explore — '' is passed for `emptyId`.
+// Reuses explore.ts's xpAppendBubble/xpRenderTurns/xpScrollToBottom with
+// 'dk-messages' as the container — same rebuild-from-disk-on-success, same
+// notReady hint, same restore-text-on-failure contract xpSend/xpLoadHistory
+// use. One rendering implementation, two containers; the dock has no inline
+// empty-state node, same as Explore.
 
 let dkBusy = false; // guards against a re-entrant send while one is in flight
 
@@ -333,12 +406,12 @@ async function dkLoadHistory(): Promise<void> {
   // A proposal is never persisted (dockPropose.ts) — rebuilding from disk
   // truth is exactly the moment to drop whatever the last turn offered.
   if (typeof dkClearProposal === 'function') dkClearProposal();
-  if (!currentProjectId) { renderCopilotTurns([], 'dk-messages', ''); return; }
+  if (!currentProjectId) { xpRenderTurns([], 'dk-messages'); return; }
   let res: any = null;
   try {
     res = await window.hub.copilotHistory(currentProjectId);
   } catch (_) { res = null; }
-  renderCopilotTurns(res && res.ok && Array.isArray(res.turns) ? res.turns : [], 'dk-messages', '');
+  xpRenderTurns(res && res.ok && Array.isArray(res.turns) ? res.turns : [], 'dk-messages');
 }
 
 async function dkSend(): Promise<void> {
@@ -349,15 +422,15 @@ async function dkSend(): Promise<void> {
   if (!question || !currentProjectId) return;
 
   // Context is ALWAYS inferred, never overridden — that's the dock's whole
-  // point (see dkRenderContext above).
-  const ref = buildCopilotContextRef();
+  // point (see dkContextRef/dkRenderContext above).
+  const ref = dkContextRef();
 
   // Optimistic UI: the question + a pending marker appear immediately.
   if (typeof dkClearProposal === 'function') dkClearProposal(); // last turn's proposal, if any, is superseded
   dkHideHint();
-  appendCopilotBubble('user', question, undefined, 'dk-messages');
-  appendCopilotBubble('assistant', 'Thinking…', undefined, 'dk-messages');
-  scrollCopilotToBottom('dk-messages');
+  xpAppendBubble('user', question, undefined, 'dk-messages');
+  xpAppendBubble('assistant', 'Thinking…', undefined, 'dk-messages');
+  xpScrollToBottom('dk-messages');
 
   input.value = '';
   dkBusy = true;
@@ -375,7 +448,7 @@ async function dkSend(): Promise<void> {
   if (res && res.ok) {
     // Rebuild from disk truth — main persisted both turns on success.
     dkSetComposerEnabled(true);
-    if (Array.isArray(res.turns)) renderCopilotTurns(res.turns, 'dk-messages', '');
+    if (Array.isArray(res.turns)) xpRenderTurns(res.turns, 'dk-messages');
     else await dkLoadHistory();
     dkHideHint();
     // A proposal is a bonus, never a requirement of the answer — fire it after
@@ -399,19 +472,17 @@ async function dkSend(): Promise<void> {
 
 /**
  * "New conversation" clears the ONE thread this project has — the same
- * thread Explore and the AI panel read (copilot:clear, already used by
- * copilot.ts's clearCopilot). That means it also empties those two surfaces,
- * not just this panel, so it confirms first exactly like clearCopilot does
- * rather than silently wiping a conversation the user may still want from
- * Explore.
+ * thread Explore reads (copilot:clear). That means it also empties Explore,
+ * not just this panel, so it confirms first rather than silently wiping a
+ * conversation the user may still want from there.
  */
 async function dkNew(): Promise<void> {
   if (!currentProjectId) return;
-  if (!window.confirm('Start a new conversation? This clears the AI chat everywhere it appears — Explore and the AI panel too. This cannot be undone.')) return;
+  if (!window.confirm('Start a new conversation? This clears the AI chat everywhere it appears — including Explore. This cannot be undone.')) return;
   try {
     await window.hub.copilotClear(currentProjectId);
   } catch (_) { /* ignore */ }
-  renderCopilotTurns([], 'dk-messages', '');
+  xpRenderTurns([], 'dk-messages');
   if (typeof dkClearProposal === 'function') dkClearProposal();
 }
 
@@ -427,9 +498,9 @@ async function dkRefresh(): Promise<void> {
 
   if (!currentProjectId) {
     if (newBtn) newBtn.disabled = true;
-    renderCopilotTurns([], 'dk-messages', '');
-    // renderCopilotTurns only removes `.ai-msg` — a proposal card left over
-    // from the closed project is a `.dk-proposal`, so without this its Apply
+    xpRenderTurns([], 'dk-messages');
+    // xpRenderTurns only removes `.xp-msg` — a proposal card left over from
+    // the closed project is a `.dk-proposal`, so without this its Apply
     // button would stay on screen pointing at a dataset that's no longer open.
     if (typeof dkClearProposal === 'function') dkClearProposal();
     dkSetComposerEnabled(false);
@@ -475,8 +546,8 @@ function dkOnKeydown(e: KeyboardEvent): void {
     // fallback, not a competitor.
     if (e.defaultPrevented || !dkAllowed() || !dkIsOpen()) return;
     e.preventDefault();
-    dkSetOpen(false);
-    const toggle = document.getElementById('side-ai-btn');
+    dkSetOpen(false); // runs dkSync() synchronously, which un-hides #dk-edge before the focus() below
+    const toggle = document.getElementById('dk-edge');
     if (toggle) toggle.focus();
     return;
   }
@@ -507,6 +578,12 @@ function initDock(): void {
   if (closeBtn) closeBtn.addEventListener('click', () => dkSetOpen(false));
   const scrim = document.getElementById('dk-scrim');
   if (scrim) scrim.addEventListener('click', () => dkSetOpen(false));
+  // The dock's own closed-state entry point — #side-ai-btn opens Explore now
+  // (workspace.ts), so this is wired here, not there. dkToggle() itself
+  // checks dkAllowed(); dkSync() keeps #dk-edge hidden while suppressed or
+  // already open.
+  const edge = document.getElementById('dk-edge');
+  if (edge) edge.addEventListener('click', () => dkToggle());
 
   const newBtn = document.getElementById('dk-new');
   if (newBtn) newBtn.addEventListener('click', () => void dkNew());
@@ -516,8 +593,7 @@ function initDock(): void {
 
   const input = document.getElementById('dk-input') as HTMLTextAreaElement | null;
   if (input) {
-    // Enter sends; Shift+Enter inserts a newline — same contract as Explore
-    // and the AI panel.
+    // Enter sends; Shift+Enter inserts a newline — same contract as Explore.
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -527,9 +603,9 @@ function initDock(): void {
   }
 
   // Keep the composer honest when the execution path changes (key added or
-  // removed, CLI detected) — same signal Explore and the AI panel subscribe
-  // to. Only matters while the dock is actually visible; the next dkSync()
-  // catches it otherwise.
+  // removed, CLI detected) — same signal Explore subscribes to. Only matters
+  // while the dock is actually visible; the next dkSync() catches it
+  // otherwise.
   if (window.hub && typeof window.hub.onKeyChanged === 'function') {
     window.hub.onKeyChanged(() => {
       if (dkAllowed() && dkIsOpen()) void dkRefresh();

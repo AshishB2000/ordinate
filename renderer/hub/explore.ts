@@ -18,6 +18,68 @@ function xpEl<T extends HTMLElement = HTMLElement>(id: string): T | null {
   return document.getElementById(id) as T | null;
 }
 
+// ── Message rendering ─────────────────────────────────────────────────────────
+//
+// Moved here verbatim from the retired copilot panel (renderer/hub/copilot.ts),
+// which Explore replaced. DOM only, textContent NEVER innerHTML — nothing the
+// model returns can inject markup. That rule is the reason these are copied
+// rather than rewritten.
+//
+// `containerId` defaults to Explore's own list, so every existing call site
+// above is unchanged — exactly the pattern the retired copilot.ts used
+// (`containerId = 'ai-messages'`) for the panel/Explore split. The dock
+// (dock.ts) is the second caller now, passing 'dk-messages'; there is still
+// only ONE rendering implementation.
+
+function xpAppendBubble(role: string, text: string, provenance?: any, containerId = 'xp-messages'): void {
+  const list = xpEl(containerId);
+  if (!list) return;
+  const row = document.createElement('div');
+  row.className = 'xp-msg ' + (role === 'assistant' ? 'xp-msg-assistant' : 'xp-msg-user');
+  const bubble = document.createElement('div');
+  bubble.className = 'xp-bubble';
+  bubble.textContent = text;
+  row.appendChild(bubble);
+
+  if (role === 'assistant' && provenance && typeof provenance === 'object') {
+    const prov = document.createElement('div');
+    prov.className = 'xp-provenance';
+    const chips: string[] = [];
+    if (provenance.kind && provenance.name) chips.push(provenance.kind + ': ' + provenance.name);
+    else if (provenance.kind) chips.push(String(provenance.kind));
+    if (provenance.datasetName) chips.push('dataset: ' + provenance.datasetName);
+    if (Array.isArray(provenance.columns) && provenance.columns.length) {
+      const cols = provenance.columns.slice(0, 6).join(', ');
+      chips.push('columns: ' + cols + (provenance.columns.length > 6 ? '…' : ''));
+    }
+    chips.push(provenance.note ? String(provenance.note) : 'stats app-computed');
+    chips.forEach((c) => {
+      const chip = document.createElement('span');
+      chip.className = 'xp-prov-chip';
+      chip.textContent = c;
+      prov.appendChild(chip);
+    });
+    row.appendChild(prov);
+  }
+  list.appendChild(row);
+}
+
+// Rebuild the whole transcript from an authoritative turns array (disk truth).
+function xpRenderTurns(turns: any[], containerId = 'xp-messages'): void {
+  const list = xpEl(containerId);
+  if (!list) return;
+  list.querySelectorAll('.xp-msg').forEach((n) => n.remove());
+  if (Array.isArray(turns)) {
+    turns.forEach((t) => xpAppendBubble(t.role, typeof t.text === 'string' ? t.text : '', t.provenance, containerId));
+  }
+  xpScrollToBottom(containerId);
+}
+
+function xpScrollToBottom(containerId = 'xp-messages'): void {
+  const list = xpEl(containerId);
+  if (list) list.scrollTop = list.scrollHeight;
+}
+
 // How many rows the "Jump back in" strip shows. The recent list itself is
 // cross-project and already sorted newest-first in main (src/recent.ts).
 const XP_JUMP_LIMIT = 10;
@@ -57,11 +119,71 @@ function xpMakeJumpRow(it: any): HTMLElement {
   return row;
 }
 
-// Repaint the strip. Empty → ONE muted line, deliberately not a card: an empty
-// container with a border reads as a broken feature.
+// One row per past conversation: title, turn count, relative time. Clicking
+// resumes it in place. A thread id is a renderer key only — never a path
+// component; only projectId ever reaches the filesystem.
+function xpMakeThreadRow(t: any): HTMLElement {
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = 'xp-jump-row';
+  row.dataset.threadId = String(t.id || '');
+
+  const name = document.createElement('span');
+  name.className = 'xp-jump-name';
+  name.textContent = t.title || 'Conversation';
+
+  const kind = document.createElement('span');
+  kind.className = 'xp-jump-kind';
+  const n = typeof t.turnCount === 'number' ? t.turnCount : 0;
+  kind.textContent = n === 1 ? '1 turn' : n + ' turns';
+
+  const time = document.createElement('span');
+  time.className = 'xp-jump-time';
+  time.textContent = typeof formatSidebarTime === 'function'
+    ? formatSidebarTime(t.updatedAt || null)
+    : '';
+
+  row.append(name, kind, time);
+  row.addEventListener('click', () => void xpOpenThread(String(t.id || '')));
+  return row;
+}
+
+// Repaint the strip. Past CONVERSATIONS when this project has any; otherwise the
+// cross-project recent list, so a first-time visitor still has somewhere to go.
+// Empty → ONE muted line, deliberately not a card: an empty container with a
+// border reads as a broken feature.
 async function xpRenderJump(): Promise<void> {
   const host = xpEl('xp-jump-rows');
   if (!host) return;
+
+  let threads: any[] = [];
+  if (currentProjectId) {
+    try {
+      const res = await window.hub.copilotThreads(currentProjectId);
+      threads = res && res.ok && Array.isArray(res.threads) ? res.threads : [];
+    } catch (_) {
+      threads = [];
+    }
+  }
+
+  host.textContent = '';
+  const heading = xpEl('xp-jump-h');
+  const newBtn = xpEl<HTMLButtonElement>('xp-new-thread');
+  const empty = xpEl('xp-jump-empty');
+  const jump = xpEl('xp-jump');
+
+  if (threads.length > 0) {
+    if (heading) heading.textContent = 'Conversations';
+    if (newBtn) newBtn.hidden = false;
+    if (empty) empty.hidden = true;
+    if (jump) jump.classList.remove('xp-jump-bare');
+    threads.slice(0, XP_JUMP_LIMIT).forEach((t) => host.appendChild(xpMakeThreadRow(t)));
+    return;
+  }
+
+  // No conversations in this project yet — fall back to recent items.
+  if (heading) heading.textContent = 'Jump back in';
+  if (newBtn) newBtn.hidden = true;
   let items: any[] = [];
   try {
     const res = await window.hub.recentItems(XP_JUMP_LIMIT);
@@ -69,13 +191,43 @@ async function xpRenderJump(): Promise<void> {
   } catch (_) {
     items = [];
   }
-  host.textContent = '';
-  const empty = xpEl('xp-jump-empty');
   if (empty) empty.hidden = items.length > 0;
-  const jump = xpEl('xp-jump');
   // Hide the whole strip's heading too when there is nothing at all to show.
   if (jump) jump.classList.toggle('xp-jump-bare', items.length === 0);
   items.slice(0, XP_JUMP_LIMIT).forEach((it) => host.appendChild(xpMakeJumpRow(it)));
+}
+
+// ── Conversations ─────────────────────────────────────────────────────────────
+
+// Which conversation the composer is talking to. Empty means "the most recent",
+// which is exactly what copilot:ask already defaults to — so it stays empty
+// until the user picks or starts one, and no id is ever invented here.
+let xpThreadId = '';
+
+async function xpOpenThread(id: string): Promise<void> {
+  if (!id) return;
+  xpThreadId = id;
+  await xpLoadHistory();
+}
+
+// Start a fresh conversation. The new thread is empty, so the stage returns to
+// the greeting — that blank slate is the point of asking for one.
+async function xpNewThread(): Promise<void> {
+  if (!currentProjectId) return;
+  let res: any = null;
+  try {
+    res = await window.hub.copilotNewThread(currentProjectId);
+  } catch (_) {
+    res = null;
+  }
+  if (!res || !res.ok || !res.thread || !res.thread.id) return;
+  xpThreadId = String(res.thread.id);
+  xpRenderTurns([]);
+  xpSetAsked(false);
+  xpHideHint();
+  await xpRenderJump();
+  const input = xpEl<HTMLTextAreaElement>('xp-input');
+  if (input && !input.disabled) input.focus();
 }
 
 // ── Scope: which dataset the question is about ────────────────────────────────
@@ -86,9 +238,17 @@ async function xpRenderJump(): Promise<void> {
 let xpDatasetId = '';
 let xpDatasetName = '';
 
-// The explicit context override handed to buildCopilotContextRef (copilot.ts).
-function xpContextRef(): { kind: string; id: string; label: string } | undefined {
-  if (!xpDatasetId) return undefined;
+// Explore's scope is ALWAYS explicit — never inferred from whatever entity
+// happens to be open elsewhere in the app. An empty kind/id is what copilot:ask
+// reads as "whole project", and it means exactly what the chip says.
+//
+// This replaces the copilot panel's buildCopilotContextRef(), which inferred
+// scope from expId/vizEditingId/dashCurrent. Routing Explore through that
+// inference was a bug: with a dataset open in the explorer and the chip set to
+// "Whole project", the question would silently have been scoped to that open
+// dataset instead — the chip and the answer disagreeing with no way to tell.
+function xpContextRef(): { kind: string; id: string; label: string } {
+  if (!xpDatasetId) return { kind: '', id: '', label: 'whole project' };
   return { kind: 'dataset', id: xpDatasetId, label: 'dataset · ' + (xpDatasetName || 'dataset') };
 }
 
@@ -186,15 +346,15 @@ async function xpSend(): Promise<void> {
   const question = input.value.trim();
   if (!question || !currentProjectId) return;
 
-  const ref = buildCopilotContextRef(xpContextRef());
+  const ref = xpContextRef();
 
   // Optimistic: the question and a pending marker appear immediately, and the
   // stage commits to transcript mode before the round-trip.
   xpHideHint();
   xpSetAsked(true);
-  appendCopilotBubble('user', question, undefined, 'xp-messages');
-  appendCopilotBubble('assistant', 'Thinking…', undefined, 'xp-messages');
-  scrollCopilotToBottom('xp-messages');
+  xpAppendBubble('user', question);
+  xpAppendBubble('assistant', 'Thinking…');
+  xpScrollToBottom();
 
   input.value = '';
   xpBusy = true;
@@ -202,7 +362,12 @@ async function xpSend(): Promise<void> {
 
   let res: any = null;
   try {
-    res = await window.hub.copilotAsk(currentProjectId, { kind: ref.kind, id: ref.id }, question);
+    res = await window.hub.copilotAsk(
+      currentProjectId,
+      { kind: ref.kind, id: ref.id },
+      question,
+      xpThreadId || undefined,
+    );
   } catch (_) {
     res = { ok: false, error: 'Something went wrong. Try again.' };
   }
@@ -213,9 +378,19 @@ async function xpSend(): Promise<void> {
     // Rebuild from disk truth — main persisted both turns on success. Explore
     // has no inline empty-state node, hence the '' third argument.
     xpSetComposerEnabled(true);
-    if (Array.isArray(res.turns)) renderCopilotTurns(res.turns, 'xp-messages', '');
+    if (Array.isArray(res.turns)) xpRenderTurns(res.turns);
     else await xpLoadHistory();
     xpHideHint();
+    // Adopt whichever thread main actually wrote to, so a first question in a
+    // project (sent with no threadId) keeps talking to that same conversation
+    // instead of silently defaulting again on the next turn.
+    if (typeof res.threadId === 'string' && res.threadId) xpThreadId = res.threadId;
+    void xpRenderJump(); // the title and turn count just changed
+    // A chart is a bonus on top of the answer (exploreChart.ts): it needs a
+    // dataset in scope, a usable suggestion and drawable data, and it stays
+    // silent when it cannot have all three. Not awaited — the answer is already
+    // on screen and must not wait on a second model round-trip.
+    void xpMaybeRenderChart(question);
     return;
   }
 
@@ -235,21 +410,54 @@ async function xpSend(): Promise<void> {
 // Repaint the transcript from disk. History is per project and survives reload.
 async function xpLoadHistory(): Promise<void> {
   if (!currentProjectId) {
-    renderCopilotTurns([], 'xp-messages', '');
+    xpRenderTurns([]);
     xpSetAsked(false);
     return;
   }
   let res: any = null;
   try {
-    res = await window.hub.copilotHistory(currentProjectId);
+    res = await window.hub.copilotHistory(currentProjectId, xpThreadId || undefined);
   } catch (_) {
     res = null;
   }
+  // Adopt the thread main resolved — an unknown or omitted id falls back to the
+  // most recent one there, and the renderer must agree with that choice.
+  if (res && typeof res.threadId === 'string' && res.threadId) xpThreadId = res.threadId;
   const turns = res && res.ok && Array.isArray(res.turns) ? res.turns : [];
-  renderCopilotTurns(turns, 'xp-messages', '');
+  xpRenderTurns(turns);
   // A project with history opens straight into the transcript; the greeting is
   // for a blank slate, not a permanent header.
   xpSetAsked(turns.length > 0);
+}
+
+// ── The hard AI ON/OFF switch ─────────────────────────────────────────────────
+//
+// Carried over from the retired copilot panel, which owned the ONLY control that
+// could turn config.copilotEnabled back on. Deleting that panel without moving
+// this would have stranded anyone who had switched AI off, with no route back —
+// the switch is a promise that the app stays fully usable without AI, so it has
+// to stay reachable from wherever AI now lives.
+
+function xpPaintAiToggle(enabled: boolean): void {
+  const btn = xpEl<HTMLButtonElement>('xp-ai-toggle');
+  if (!btn) return;
+  btn.textContent = enabled ? 'AI: On' : 'AI: Off';
+  btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+  btn.classList.toggle('xp-toggle-off', !enabled);
+}
+
+async function xpToggleAi(): Promise<void> {
+  let status: any = {};
+  try {
+    status = (await window.hub.getKeyStatus()) || {};
+  } catch (_) {
+    status = {};
+  }
+  const next = status.copilotEnabled === false; // flip
+  try {
+    await window.hub.setCopilotEnabled(next);
+  } catch (_) { /* ignore — refreshExplore re-reads the real state below */ }
+  await refreshExplore();
 }
 
 // ── Panel refresh ─────────────────────────────────────────────────────────────
@@ -271,12 +479,13 @@ async function refreshExplore(): Promise<void> {
   }
   const enabled = status.copilotEnabled !== false;
   const ready = Boolean(status.isReady);
+  xpPaintAiToggle(enabled);
 
   const input = xpEl<HTMLTextAreaElement>('xp-input');
   if (!enabled) {
     xpSetComposerEnabled(false);
-    if (input) input.placeholder = 'AI is off. Turn it back on in Settings to ask a question.';
-    xpShowHint('AI is off. Everything else in Ordinate works exactly as it does now.');
+    if (input) input.placeholder = 'AI is off.';
+    xpShowHint('AI is off. Everything else in Ordinate works exactly as it does now — turn it back on whenever you want it.');
     return;
   }
   if (!ready) {
@@ -314,6 +523,12 @@ function initExplore(): void {
 
   const ds = xpEl('xp-dataset-chip');
   if (ds) ds.addEventListener('click', () => void xpPickDataset());
+
+  const newThread = xpEl('xp-new-thread');
+  if (newThread) newThread.addEventListener('click', () => void xpNewThread());
+
+  const aiToggle = xpEl('xp-ai-toggle');
+  if (aiToggle) aiToggle.addEventListener('click', () => void xpToggleAi());
 
   const model = xpEl('xp-model-chip');
   if (model) {

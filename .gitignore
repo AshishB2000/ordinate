@@ -95,7 +95,6 @@ scripts/**/*.js
 /src/copilot.js
 /src/ipc/copilot.js
 /scripts/test-copilot.js
-/renderer/hub/copilot.js
 
 # Week 12 embedded AI actions — emitted siblings.
 /src/anomalies.js
@@ -238,6 +237,8 @@ scripts/**/*.js
 /renderer/hub/dashList.js
 /renderer/hub/dashGrid.js
 /renderer/hub/dashAdd.js
+/renderer/hub/dashAddControl.js
+/renderer/hub/dashControls.js
 /renderer/hub/dashFiltersUi.js
 /renderer/hub/dashAi.js
 /renderer/hub/dashShare.js
@@ -297,6 +298,7 @@ scripts/**/*.js
 
 # Explore — the conversational front door. Emitted sibling.
 /renderer/hub/explore.js
+/renderer/hub/exploreChart.js
 
 # The AI dock. Emitted sibling.
 /renderer/hub/dock.js

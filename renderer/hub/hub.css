@@ -4119,16 +4119,16 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   cursor: pointer;
 }
 /* `hidden` loses to an explicit `display` — the same trap .an-side, .ds-explorer
-   and the import blocks all document. Without this, dock.ts's
-   `btn.hidden = !dkAllowed()` sets the attribute but the button stays on screen
-   and clickable in every suppressed state (Explore, presentation, focus modes,
-   a published dashboard), which is precisely what suppression exists to stop. */
+   and the import blocks all document, and the same trap `.dk-edge[hidden]`
+   (above) has its own explicit rule for. No `.as-tool` currently sets
+   `hidden` from JS (#side-ai-btn always shows — it opens Explore), but this
+   is a correct latent fix kept general on purpose: any future `.as-tool`
+   that does would silently stay on screen and clickable without it. */
 .as-tool[hidden] { display: none; }
 .as-tool .ic { flex: 0 0 auto; }
 .as-tool:hover { background: var(--surface-2); color: var(--text); }
 .as-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .as-tool--grow { flex: 1 1 auto; }
-.as-tool.active { background: var(--accent-soft); color: var(--accent); } /* dock open (dock.ts) */
 .as-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -5105,6 +5105,45 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
 }
+
+/* ── The add-control dialog (dashAdd.ts openControlDialog) ───────────────────
+   Same field shell as the metric dialog (.dm-field); the kind row is a wider
+   three-tile version of .dm-aggs and the preview reuses the placed control's
+   own widget classes (.dash-ctrl-select / .dash-ctrl-daterange / .fd-list) so
+   the dialog shows exactly what lands on the sheet. */
+.ws-modal.dash-control-modal { width: min(440px, calc(100vw - 48px)); }
+.dc-kind {
+  display: flex;
+  gap: 8px;
+}
+.dc-kind-tile {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dc-kind-tile:hover { border-color: var(--accent); }
+.dc-kind-tile.is-on {
+  border-color: var(--accent);
+  background: var(--accent-soft, var(--surface-2));
+}
+.dc-kind-tile-label { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.dc-kind-tile-hint { font-size: 11px; color: var(--muted); }
+.dc-preview {
+  padding: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.dc-preview-list { border: 0; padding: 0; max-height: 180px; }
 
 /* ── The add-visual picker (dashboards.ts openVisualPicker) ──────────────────
    A gallery of the saved visuals — the Visuals section's tile vocabulary —
@@ -7045,6 +7084,8 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 .an-prop-note[hidden] { display: none; }
 .an-prop-note--info { color: var(--text-dim); }
 .an-prop-del { width: 100%; font-size: 11.5px; }
+/* The control card's default-value actions (authoringProps.ts anRenderControlProps). */
+.an-ctrl-actions { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 4px; }
 
 /* ── Selection, and the affordances that follow it ───────────────────────────
    A selected card says so with a real accent outline. Its controls — the drag
@@ -7646,6 +7687,109 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   color: var(--muted);
   padding: 8px;
   text-align: center;
+}
+
+/* ── Control card (dashControls.ts) ─────────────────────────────────────────
+   Dropdown / multi / date_range — never gated on read-only; interaction here
+   is a read, per the .dash-editor--readonly rule above which only hides
+   STRUCTURE (.dash-card-ctrls et al), never a control's own body. */
+.dash-card--control .dash-card-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+}
+.dash-ctrl-widget {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dash-ctrl-select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.dash-ctrl-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dash-ctrl-note { margin: 0; }
+/* The multi control's closed-state trigger — a chip carrying "N selected". */
+.dash-ctrl-chip {
+  align-self: flex-start;
+  padding: 5px 10px;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.dash-ctrl-chip:hover { border-color: var(--accent); color: var(--accent); }
+.dash-ctrl-daterange {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dash-ctrl-date {
+  flex: 1 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 5px 6px;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.dash-ctrl-date-sep { color: var(--muted); font-size: 12px; }
+/* The per-card Clear affordance — lives in the body (never .dash-card-ctrls)
+   so it stays visible for a reader on a published dashboard. Shown only when
+   the control's live selection differs from its default. */
+.dash-ctrl-clear {
+  align-self: flex-start;
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin-top: 2px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* Body-mounted popover for the multi control — same fixed-position,
+   escape-the-clipping-ancestor technique as .dd-list (customDropdown.ts): the
+   card body is overflow:auto, which would otherwise clip an in-flow list. */
+.dash-ctrl-popover {
+  position: fixed;
+  z-index: 1000000;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 260px;
+  max-height: min(340px, 60vh);
+  overflow-y: auto;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+  color: var(--text);
+  font-family: var(--font-ui);
+}
+.dash-ctrl-popover-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 /* The empty sheet: centred, and about what a sheet is for. It was a single
@@ -8752,152 +8896,18 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   gap: 8px;
 }
 
-/* ── AI Copilot panel (Week 11) ─────────────────────────────────────────────
-   Theme-aware via the shared CSS vars (no hard-coded colors). CSP forbids inline
-   style attributes in HTML — everything visual lives here. */
-.ai-panel {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 18px 20px;
-  overflow: hidden;
-}
-.ai-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.ai-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: 16px;
-  font-weight: 650;
-  color: var(--text-strong);
-}
-.ai-title .ws-badge { margin-left: 0; }
-.ai-head-actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.ai-toggle.ai-toggle-off {
-  color: var(--muted);
-}
-.ai-hint {
-  margin: 0;
-}
-.ai-context {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--muted);
-}
-.ai-context-label {
-  font-weight: 600;
-  color: var(--text);
-}
-.ai-messages {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 4px 2px;
-}
-.ai-empty {
-  margin: auto;
-  max-width: 420px;
-  text-align: center;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-.ai-msg {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-width: 82%;
-}
-.ai-msg-user {
-  align-self: flex-end;
-  align-items: flex-end;
-}
-.ai-msg-assistant {
-  align-self: flex-start;
-  align-items: flex-start;
-}
-.ai-bubble {
-  padding: 10px 13px;
-  border-radius: var(--r-md);
-  font-size: 13px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.ai-msg-user .ai-bubble {
-  background: var(--accent);
-  color: var(--accent-ink);
-}
-.ai-msg-assistant .ai-bubble {
-  background: var(--surface-2);
-  color: var(--text-strong);
-  border: 1px solid var(--border);
-}
-.ai-provenance {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.ai-chip {
-  padding: 2px 8px;
-  border-radius: var(--r-full);
-  background: var(--surface-3);
-  color: var(--text-dim);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-.ai-composer {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-}
-.ai-input {
-  flex: 1;
-  min-width: 0;
-  resize: none;
-  padding: 10px 12px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--text-strong);
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.4;
-}
-.ai-input:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-.ai-input:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.ai-send {
-  flex: none;
-}
-
 /* ── Embedded AI actions (Week 12) — interpretation clearly marked distinct from
-   app-computed facts. Reused by prepare (calc field) + dashboards (summary,
-   anomalies). ─────────────────────────────────────────────────────────────── */
+   app-computed facts. Reused by prepare.ts (calc-field suggestion),
+   dashAi.ts (dashboard summary/anomaly explanations) and dockPropose.ts (the
+   AI dock's proposal cards).
+   RESTORED during the feat/ai-dock merge: 498d647 deleted this block along
+   with the retired copilot.ts panel, but prepare.ts and dashAi.ts still
+   build these classes (mkAiPanel, .ai-interp/.ai-interp-body/.ai-facts*) —
+   verified by grep, not guessed. Deleting it left dashboard AI summaries and
+   the calc-field suggestion panel rendering unstyled on develop already;
+   dockPropose.ts would have shipped a third, silent case. The retired
+   panel-shell rules (.ai-panel/.ai-messages/.ai-msg/.ai-composer/…) are NOT
+   restored — Explore's .xp-* equivalents replaced those for good. ────────── */
 .ai-interp {
   display: flex;
   flex-direction: column;
@@ -8907,8 +8917,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   border: 1px solid var(--border);
   border-radius: 8px;
 }
-/* Without this the `hidden` attribute lost to `display: flex` and the panel
-   painted as an empty bordered bar above every dashboard grid. */
 .ai-interp[hidden] { display: none; }
 .ai-interp-head {
   display: flex;
@@ -8965,6 +8973,9 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 .ai-facts-item.ai-facts-warn {
   color: var(--warn);
 }
+
+/* Without this the `hidden` attribute lost to `display: flex` and the panel
+   painted as an empty bordered bar above every dashboard grid. */
 .dash-list-head-actions {
   display: flex;
   align-items: center;
@@ -10073,7 +10084,7 @@ body.cap-focus .cap-back {
 .xp-jump-rows {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px 18px;
+  gap: 4px 32px;
   max-height: 168px;
   overflow-y: auto;
 }
@@ -10187,8 +10198,16 @@ body.cap-focus .cap-back {
   overflow-y: auto;
   padding-right: 4px;
 }
-/* Once there is a conversation on screen, the jump strip is in the way of it. */
-.xp-panel.xp-asked .xp-jump { display: none; }
+/* A short conversation sits ON the composer, not at the top of a void. Done with
+   margin-top:auto on the first bubble rather than justify-content:flex-end,
+   which clips the top of an overflowing flex container in Chromium. */
+.xp-panel.xp-asked .xp-messages > .xp-msg:first-child { margin-top: auto; }
+/* The strip STAYS during a transcript — it is the only route to another
+   conversation or a new one, and hiding it stranded the user in whichever
+   thread they happened to open. It shrinks instead: the transcript stays the
+   dominant thing on screen without becoming the only reachable one. */
+.xp-panel.xp-asked .xp-jump { padding-top: 10px; padding-bottom: 12px; }
+.xp-panel.xp-asked .xp-jump-rows { max-height: 74px; }
 
 /* The model chip states "nothing connected" the way the sidebar button does —
    muted rather than alarming, because no model is a normal, supported state. */
@@ -10215,6 +10234,35 @@ body.cap-focus .cap-back {
   border-left: 1px solid var(--border);
 }
 .dk-panel[hidden] { display: none; }
+
+/* Closed-state entry point (dock.ts's dkSync). Fixed at the right edge — the
+   dock itself is a flex sibling that reserves NO space while `hidden`, so
+   the window's right edge is free real estate to float a small tab on. Only
+   visible when dkAllowed() && !dkIsOpen(): once the panel is open, #dk-close
+   inside it (and ⌘L) are how you leave, so this would just be a second
+   control doing the same thing at the same edge. */
+.dk-edge {
+  position: fixed;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-right: none;
+  border-radius: var(--r-md) 0 0 var(--r-md);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+}
+.dk-edge[hidden] { display: none; }
+.dk-edge:hover { background: var(--surface-2); color: var(--text); }
+.dk-edge:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* Drag handle — sits astride the panel's left border so half the hit target
    reads as "inside" and half as "outside", the same affordance a resizable
@@ -10261,9 +10309,11 @@ body.cap-focus .cap-back {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The "stats app-computed" chip reuses .ai-chip (copilot.ts) as a fixed-size
-   flex item, so it never shrinks or truncates — only the label does. */
-.dk-context .ai-chip { flex: none; }
+/* The "stats app-computed" chip reuses .xp-prov-chip (explore.ts's provenance
+   pill — the retired copilot.ts panel's .ai-chip did not survive 498d647) as
+   a fixed-size flex item, so it never shrinks or truncates — only the label
+   does. */
+.dk-context .xp-prov-chip { flex: none; }
 .dk-head-actions { flex: none; display: flex; align-items: center; gap: 4px; }
 .dk-icon-btn {
   display: inline-flex;
@@ -10384,3 +10434,80 @@ body.cap-focus .cap-back {
     z-index: 9940;
   }
 }
+
+/* Explore: the chart under an answer. Sits inside the assistant bubble's row,
+   so it scrolls with the turn that produced it. */
+.xp-chart {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.xp-chart-area { height: 260px; min-height: 260px; }
+.xp-chart-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+/* Conversations strip: the heading gains a "New conversation" action once the
+   project has any history to leave behind. */
+.xp-jump-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.xp-jump-head .xp-jump-h { margin: 0; }
+
+
+/* Explore transcript bubbles. Inherited from the retired Copilot panel and
+   renamed with it — same DOM, same textContent-only rendering, one owner. */
+.xp-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 82%;
+}
+.xp-msg-user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.xp-msg-assistant {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+.xp-bubble {
+  padding: 10px 13px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.xp-msg-user .xp-bubble {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.xp-msg-assistant .xp-bubble {
+  background: var(--surface-2);
+  color: var(--text-strong);
+  border: 1px solid var(--border);
+}
+.xp-provenance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.xp-prov-chip {
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.xp-jump-actions { display: flex; align-items: center; gap: 8px; }
+/* The AI off state is stated plainly, not alarmingly — running without AI is a
+   supported way to use Ordinate, not a fault. */
+.xp-toggle-off { color: var(--muted); }

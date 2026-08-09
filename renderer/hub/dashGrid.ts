@@ -74,9 +74,9 @@ function openAnalysisFrom(a: any): void {
 // The part both entry points share: bind state, paint the editor.
 function openEditorWith(rec: any, title: string): void {
   dashCurrent = rec;
-  // dock.ts — context line now names this dashboard (buildCopilotContextRef
-  // only resolves a DASHBOARD, not an analysis, to a copilot context; either
-  // way the label must not lag behind what dashMode/dashCurrent just became).
+  // dock.ts — context line now names this dashboard (dkContextRef only
+  // resolves a DASHBOARD, not an analysis, to a copilot context; either way
+  // the label must not lag behind what dashMode/dashCurrent just became).
   if (typeof dkSync === 'function') dkSync();
   dashPageIdx = 0;
   dashDirty = false;
@@ -85,6 +85,19 @@ function openEditorWith(rec: any, title: string): void {
   }
   // Week 10: dashboard-wide filters (a v1 dashboard has none → []).
   if (!Array.isArray(dashCurrent.filters)) dashCurrent.filters = [];
+  // Fresh reader session: no carry-over from whatever sheet was open before,
+  // then seed each control's author-set default (`CardControl.default` and a
+  // reader selection are the same `ControlValue` shape, so this is a direct
+  // set — no conversion). A control with no default stays unset, which
+  // `controlSteps` already treats as "filters nothing".
+  controlState = new Map();
+  for (const page of dashCurrent.pages) {
+    for (const card of (page && Array.isArray(page.cards) ? page.cards : [])) {
+      if (card && card.type === 'control' && card.control && card.control.default) {
+        controlState.set(card.id, card.control.default);
+      }
+    }
+  }
   dashShow('dash-list-view', false);
   dashShow('dash-editor', true);
   applyDashEditorMode();
@@ -137,6 +150,7 @@ function closeDashboardEditor(): void {
   exitDashPresent(); // never leave the app stuck in chrome-hidden mode
   if (dashSaveTimer !== null) { window.clearTimeout(dashSaveTimer); dashSaveTimer = null; }
   dashCurrent = null;
+  controlState = new Map(); // no reader session carries into the next sheet opened
   dashPageIdx = 0;
   dashDirty = false;
   dashDragId = null;
@@ -163,6 +177,7 @@ function closeDashboardEditor(): void {
   if (note) note.hidden = true;
   const pub = dashEl('an-pubstate');
   if (pub) pub.hidden = true;
+  dashShow('dash-reset-controls', false); // controlState is gone; nothing left to reset
 }
 
 // Browsers expose crypto.randomUUID in the renderer; used for local page/card
@@ -287,6 +302,14 @@ function destroyDashCharts(): void {
 function renderDashGrid(): void {
   const grid = dashEl('dash-grid');
   if (!grid) return;
+  // The multi control's popover (dashControls.ts) is body-mounted OUTSIDE the
+  // grid specifically to escape a card's clipping ancestor, so wiping the grid
+  // below does not remove it — left open, its `anchor` goes stale the instant
+  // its card is torn down, and the next scroll/resize would reposition it off
+  // a detached element. Any card's change (a DIFFERENT control, a drag, a
+  // resize, an add) can trigger this render, so it is closed unconditionally,
+  // not just when a second popover is about to open.
+  if (openControlPopover) openControlPopover();
   destroyDashCharts();
   grid.innerHTML = '';
   const page = dashCurrentPage();
@@ -309,6 +332,9 @@ function renderDashGrid(): void {
   // Which datasets the sheet reads can change with any card edit, so the
   // freshness line is derived from the cards on every grid render.
   refreshDashFreshness();
+  // Whether ANY control differs from its default (dashControls.ts) can change
+  // on every render too — derived, never tracked state of its own.
+  updateResetControlsBtn();
 }
 
 // ── Freshness of the data behind the open sheet ──────────────────────────────
@@ -527,6 +553,10 @@ function dashCardTitle(card: any): string {
     const m = card.metric || {};
     return m.label || ((DASH_AGG_LABELS[m.aggregation as DashAgg] || m.aggregation) + ' of ' + (m.column || ''));
   }
+  // The control's "Label above" (task-3 brief) IS the header title — every
+  // other card type's "what is this" text lives there, not duplicated in the
+  // body, and renderControlCard (dashControls.ts) owns nothing but the widget.
+  if (card.type === 'control') return (card.control && card.control.label) || 'Filter';
   return card.heading || 'Text';
 }
 
@@ -588,6 +618,10 @@ function renderDashCardBody(card: any, body: HTMLElement): void {
   body.innerHTML = '';
   if (card.type === 'visual') { renderVisualCard(card, body); return; }
   if (card.type === 'metric') { renderMetricCard(card, body); return; }
+  // A control card renders as a real, interactive filter widget — NEVER gated
+  // by dashReadOnly (renderControlCard, dashControls.ts): filtering is a read,
+  // allowed on a published snapshot exactly as drilling already is.
+  if (card.type === 'control') { renderControlCard(card, body); return; }
   renderTextCard(card, body);
 }
 
@@ -624,11 +658,12 @@ async function renderVisualCard(card: any, body: HTMLElement): Promise<void> {
   if (!resolved) { dashCardMissing(body, 'This visual was deleted.', true); return; }
   const visual = resolved.visual;
 
-  // Merge dashboard-wide filters (first) with the visual's own filters, then pass the
-  // combined list through the UNCHANGED visual:data channel — it sanitizes + applies
-  // filters (in order, missing-column-tolerant) before aggregation, so one dashboard
-  // filter drives every card. Mirrors mergeDashboardFilters (src/dashboardFilters.ts).
-  const merged = mergeDashFilters(dashCurrent && dashCurrent.filters, visual.filters);
+  // Merge dashboard-wide filters + every control's live selection (effectiveFilters,
+  // dashboards.ts) with the visual's own filters, then pass the combined list through
+  // the UNCHANGED visual:data channel — it sanitizes + applies filters (in order,
+  // missing-column-tolerant) before aggregation, so one dashboard filter drives every
+  // card. Mirrors mergeDashboardFilters (src/dashboardFilters.ts).
+  const merged = mergeDashFilters(effectiveFilters(), visual.filters);
   let res: any;
   try {
     res = await window.hub.computeVisualData(currentProjectId, visual.datasetId, visual.encoding, merged);

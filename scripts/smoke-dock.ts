@@ -114,15 +114,22 @@ async function main(): Promise<void> {
   await win.evaluate((pid: string) => (window as any).openWorkspace(pid), seeded.projectId);
   await win.waitForTimeout(1200);
 
-  // ── Toggle from the sidebar entry ───────────────────────────────────────
-  ok('the toggle starts collapsed (aria-expanded=false)',
-    (await win.getAttribute('#side-ai-btn', 'aria-expanded')) === 'false');
+  // ── Toggle from the dock's own edge affordance ──────────────────────────
+  // #side-ai-btn (the sidebar AI button) opens Explore now (develop's
+  // 498d647) — the dock's entry points are #dk-edge (the closed-state tab at
+  // the right edge) and ⌘L.
+  ok('the edge tab starts visible and collapsed (aria-expanded=false)',
+    await win.locator('#dk-edge').isVisible());
+  ok('…aria-expanded=false',
+    (await win.getAttribute('#dk-edge', 'aria-expanded')) === 'false');
 
-  await win.click('#side-ai-btn', { timeout: 8000 });
+  await win.click('#dk-edge', { timeout: 8000 });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
-  ok('clicking the sidebar button opens the dock', await win.locator('#dk-panel').isVisible());
-  ok('…and marks the toggle aria-expanded=true',
-    (await win.getAttribute('#side-ai-btn', 'aria-expanded')) === 'true');
+  ok('clicking the edge tab opens the dock', await win.locator('#dk-panel').isVisible());
+  ok('…and marks it aria-expanded=true',
+    (await win.getAttribute('#dk-edge', 'aria-expanded')) === 'true');
+  ok('…and the edge tab hides itself while the dock is open (the close affordances are #dk-close/⌘L/Esc)',
+    await win.locator('#dk-edge').isHidden());
   ok('the panel has an aria-label', Boolean((await win.getAttribute('#dk-panel', 'aria-label') || '').length));
   // No model is configured in a smoke run, so #dk-input starts disabled (the
   // HTML spec refuses focus() on a disabled control) — dock.ts's fallback is
@@ -140,7 +147,8 @@ async function main(): Promise<void> {
   await win.keyboard.press(process.platform === 'darwin' ? 'Meta+L' : 'Control+L');
   await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
   ok('Cmd/Ctrl+L closes the dock', await win.locator('#dk-panel').isHidden());
-  ok('…and clears aria-expanded', (await win.getAttribute('#side-ai-btn', 'aria-expanded')) === 'false');
+  ok('…clears aria-expanded on the edge tab', (await win.getAttribute('#dk-edge', 'aria-expanded')) === 'false');
+  ok('…and the edge tab reappears now that the dock is closed', await win.locator('#dk-edge').isVisible());
 
   // ── Esc closes and returns focus to the toggle ──────────────────────────
   await win.keyboard.press(process.platform === 'darwin' ? 'Meta+L' : 'Control+L');
@@ -148,8 +156,8 @@ async function main(): Promise<void> {
   await win.keyboard.press('Escape');
   await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
   ok('Escape closes the dock', await win.locator('#dk-panel').isHidden());
-  ok('…and returns focus to the toggle',
-    await win.evaluate(() => Boolean(document.activeElement && document.activeElement.id === 'side-ai-btn')));
+  ok('…and returns focus to the edge tab',
+    await win.evaluate(() => Boolean(document.activeElement && document.activeElement.id === 'dk-edge')));
 
   // ── ⌘L still works WITH FOCUS INSIDE THE COMPOSER ───────────────────────
   // The keydown handler ignores INPUT/TEXTAREA/contenteditable so the shortcut
@@ -160,7 +168,7 @@ async function main(): Promise<void> {
   // focus falls to the panel div — which is exactly why the checks above pass
   // either way and cannot see this. Force-enable it so the guard is genuinely
   // exercised; this is the assertion that fails if the exemption is removed.
-  await win.click('#side-ai-btn', { timeout: 8000 });
+  await win.click('#dk-edge', { timeout: 8000 });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
   await win.evaluate(() => {
     const i = document.getElementById('dk-input') as HTMLTextAreaElement | null;
@@ -174,7 +182,7 @@ async function main(): Promise<void> {
     await win.locator('#dk-panel').isHidden());
 
   // ── The resize handle: drag, persist-on-end, min clamp, keyboard ────────
-  await win.click('#side-ai-btn', { timeout: 8000 });
+  await win.click('#dk-edge', { timeout: 8000 });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
 
   ok('the handle is a focusable, labelled separator',
@@ -405,11 +413,19 @@ async function main(): Promise<void> {
   // SILENTLY — the same silent-by-construction hazard this whole script
   // exists to guard. Explore is the cheapest condition to drive (a plain
   // section switch) and the most absurd to get wrong: two chats side by side.
+  //
+  // Explore is ALSO the case that matters most now that #side-ai-btn opens
+  // Explore instead of the dock (develop's 498d647): the two must not fight
+  // over the same button, and #side-ai-btn must stay usable — clicking it
+  // is how you GET to Explore, so the dock suppressing it would strand the
+  // user with no way in.
   await win.evaluate(() => { (window as any).selectSection('explore'); });
   await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
   ok('the dock is suppressed on the Explore section', await win.locator('#dk-panel').isHidden());
-  ok('…and its toggle is withdrawn too, not just the panel',
-    await win.locator('#side-ai-btn').isHidden());
+  ok('…and its own edge-tab entry point is withdrawn too, not just the panel',
+    await win.locator('#dk-edge').isHidden());
+  ok('…but #side-ai-btn (which OPENS Explore) is left alone — the dock must not hide it',
+    await win.locator('#side-ai-btn').isVisible());
   // …and it comes back on leaving Explore, so suppression is a gate, not a kill.
   await win.evaluate(() => { (window as any).selectSection('datasets'); });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
@@ -419,6 +435,7 @@ async function main(): Promise<void> {
   await win.evaluate(() => { document.documentElement.classList.add('dash-presenting'); (window as any).dkSync(); });
   await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
   ok('the dock is suppressed in presentation mode', await win.locator('#dk-panel').isHidden());
+  ok('…and its edge tab too', await win.locator('#dk-edge').isHidden());
   await win.evaluate(() => { document.documentElement.classList.remove('dash-presenting'); (window as any).dkSync(); });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
 

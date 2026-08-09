@@ -161,7 +161,7 @@
            #exec-mode-btn and #settings-gear moved here from the titlebar; ids
            kept so their existing hub.ts wiring is untouched. -->
       <div class="as-bottom">
-        <button id="side-ai-btn" class="as-tool" type="button" aria-expanded="false" aria-controls="dk-panel">
+        <button id="side-ai-btn" class="as-tool" type="button">
           <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3Z" fill="currentColor"/>
             <path d="M18.5 14l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8Z" fill="currentColor"/>
@@ -1300,6 +1300,7 @@
           <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-visual">+ Visual</button>
           <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-metric">+ Metric</button>
           <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-text">+ Text</button>
+          <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-control">+ Control</button>
           <button class="btn btn-sm dash-edit-only" type="button" id="dash-legacy-wrap-btn" hidden>Edit as analysis</button>
           <!-- Focus-mode overflow. Present / Export… / Share are one click away
                instead of three buttons in the strip; the menu delegates to the
@@ -1338,6 +1339,13 @@
             <div class="dash-filter-chips" id="dash-filter-chips"></div>
             <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-filter">+ Filter</button>
             <button class="btn btn-sm dash-edit-only" type="button" id="dash-clear-filters" hidden>Clear all</button>
+            <!-- NOT dash-edit-only: unlike Clear all (a structural edit to the
+                 persisted filter list), resetting control cards' live
+                 selections is a read and must work for a reader on a
+                 published dashboard too (task-3 brief: "Present mode keeps
+                 controls usable"). Shown only when a control differs from its
+                 default (updateResetControlsBtn, dashControls.ts). -->
+            <button class="btn btn-sm" type="button" id="dash-reset-controls" hidden>Reset controls</button>
           </div>
           <div class="dash-toolbar-quick">
             <button class="btn btn-sm dash-ctrl dash-edit-only" type="button" id="dash-category-select">Category…</button>
@@ -1388,33 +1396,6 @@
       </div>
       </div>
     </section>
-    <!-- The standalone AI section. CURRENTLY UNREACHABLE, deliberately retained:
-         #side-ai-btn used to route here via selectSection('ai') and now toggles
-         the AI dock instead (workspace.ts), and there is no .as-nav-item for
-         data-section="ai", so nothing can select it. Kept rather than deleted
-         because the dock reads the SAME thread through the same shared
-         primitives — removing this is a separate, reviewable decision, not a
-         side effect of shipping the dock. -->
-    <section class="ws-panel" id="ws-ai" data-section="ai" hidden>
-      <div class="ai-panel">
-        <div class="ai-head">
-          <h2 class="ai-title">Copilot <span class="ws-badge">optional</span></h2>
-          <div class="ai-head-actions">
-            <button class="btn btn-sm ai-toggle" type="button" id="ai-toggle" aria-pressed="true">Copilot: On</button>
-            <button class="btn btn-sm" type="button" id="ai-clear">Clear</button>
-          </div>
-        </div>
-        <div class="ds-explain-out ds-explain-hint ai-hint" id="ai-hint" hidden></div>
-        <div class="ai-context" id="ai-context" hidden></div>
-        <div class="ai-messages" id="ai-messages">
-          <div class="ai-empty" id="ai-empty">Ask a question about the dataset, visual, or dashboard you have open. Every figure is computed by the app — Copilot only explains it.</div>
-        </div>
-        <div class="ai-composer" id="ai-composer">
-          <textarea class="ai-input" id="ai-input" rows="2" placeholder="Ask about your data…" aria-label="Ask Copilot"></textarea>
-          <button class="btn btn-primary ai-send" type="button" id="ai-send">Send</button>
-        </div>
-      </div>
-    </section>
 
     <!-- ── Explore — the conversational front door ────────────────────
          A place, not a dialog: a full-bleed stage carrying the background,
@@ -1452,7 +1433,18 @@
       </div>
 
       <div class="xp-jump" id="xp-jump">
-        <h2 class="xp-jump-h">Jump back in</h2>
+        <div class="xp-jump-head">
+          <!-- Reads "Conversations" once there are any, "Jump back in" while
+               falling back to recent items. explore.ts sets it. -->
+          <h2 class="xp-jump-h" id="xp-jump-h">Jump back in</h2>
+          <div class="xp-jump-actions">
+            <button class="btn btn-sm" type="button" id="xp-new-thread" hidden>New conversation</button>
+            <!-- The hard AI ON/OFF switch. It lived on the retired Copilot panel,
+                 which was the only way to turn it back on — it moves here with
+                 the feature rather than disappearing with the panel. -->
+            <button class="btn btn-sm xp-toggle" type="button" id="xp-ai-toggle" aria-pressed="true">AI: On</button>
+          </div>
+        </div>
         <div class="xp-jump-rows" id="xp-jump-rows"></div>
         <p class="xp-jump-empty" id="xp-jump-empty" hidden>Nothing here yet — bring some data in and it will show up.</p>
       </div>
@@ -1464,10 +1456,21 @@
          whichever section is showing (dock.ts owns visibility). Pushes the
          layout via `.hub-body`'s existing `display: flex` above ~1100px;
          narrower than that it becomes a fixed overlay with #dk-scrim behind
-         it (hub.css). Same conversation as Explore and the AI panel
-         (copilot.ts's thread), with three grounded, reversible, one-click
-         proposal types (dockPropose.ts) and a keyboard-resizable width
-         (#dk-handle, dock.ts) — see docs/superpowers/plans/2026-08-09-ai-dock.md. -->
+         it (hub.css). Same conversation as Explore (the copilot:* thread),
+         with three grounded, reversible, one-click proposal types
+         (dockPropose.ts) and a keyboard-resizable width (#dk-handle,
+         dock.ts) — see docs/superpowers/plans/2026-08-09-ai-dock.md.
+
+         #dk-edge is the dock's own closed-state entry point — its other one
+         is ⌘L. #side-ai-btn (sidebar) opens Explore instead (workspace.ts);
+         the dock does not use it. -->
+    <button id="dk-edge" class="dk-edge" type="button" hidden
+      aria-label="Open AI assistant" aria-expanded="false" aria-controls="dk-panel">
+      <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3Z" fill="currentColor"/>
+        <path d="M18.5 14l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8Z" fill="currentColor"/>
+      </svg>
+    </button>
     <div id="dk-scrim" class="dk-scrim"></div>
     <aside id="dk-panel" class="dk-panel" hidden tabindex="-1" aria-label="AI assistant">
       <div id="dk-handle" class="dk-handle" role="separator" aria-orientation="vertical"
@@ -2379,7 +2382,9 @@
 <script src="dashList.js"></script>
 <script src="dashGrid.js"></script>
 <script src="dashAdd.js"></script>
+<script src="dashAddControl.js"></script>
 <script src="dashFiltersUi.js"></script>
+<script src="dashControls.js"></script>
 <script src="dashAi.js"></script>
 <script src="dashShare.js"></script>
 <script src="authoring.js"></script>
@@ -2397,10 +2402,11 @@
 <script src="anPublish.js"></script>
 <script src="anDraft.js"></script>
 <script src="globalSearch.js"></script>
-<script src="copilot.js"></script>
 <script src="explore.js"></script>
-<!-- The AI dock — reads `selectSection`/`wsBodyEl` (workspace.js) and
-     `dashReadOnly` (dashboards.js) at call time, so it loads after both. -->
+<script src="exploreChart.js"></script>
+<!-- The AI dock — reads `selectSection`/`wsBodyEl` (workspace.js),
+     `dashReadOnly` (dashboards.js) and `xpAppendBubble`/`xpRenderTurns`
+     (explore.js) at call time, so it loads after all three. -->
 <script src="dock.js"></script>
 <!-- Dock proposals (Task 3) — reads stepSummaryText/applyStepResult/
      prefillCalcFieldEditor (prepare.js), renderVizInArea/eligibleChartTypes/

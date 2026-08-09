@@ -105,11 +105,6 @@ function selectSection(section: string): void {
   if (section === 'analyses' && typeof refreshAnalysisList === 'function') refreshAnalysisList();
   // Refresh the saved-dashboards list when the Dashboards section becomes active (dashboards.ts).
   if (section === 'dashboards' && typeof refreshDashboardList === 'function') refreshDashboardList();
-  // Refresh the AI Copilot chat when the AI section becomes active (copilot.ts).
-  // Unreachable today: #side-ai-btn toggles the AI dock instead of selecting
-  // this section, and no nav item targets it. Retained deliberately — see the
-  // comment above #ws-ai in index.html.
-  if (section === 'ai' && typeof refreshCopilot === 'function') refreshCopilot();
   // Repaint Explore's jump strip + composer state when it becomes active (explore.ts).
   if (section === 'explore' && typeof refreshExplore === 'function') void refreshExplore();
   // Reload the connector catalogue when Connect becomes active (connections.ts).
@@ -126,18 +121,19 @@ function leaveSection(section: string): void {
   selectSection(previousSection && previousSection !== section ? previousSection : 'home');
 }
 
-// Wire the persistent sidebar nav (once, on boot). The AI tool button opens the
-// copilot section over the current view; the connect items and "More…" are
-// wired in projects.ts (they resolve a project first).
+// Wire the persistent sidebar nav (once, on boot). The AI tool button opens
+// Explore; the connect items and "More…" are wired in projects.ts (they resolve
+// a project first).
 function initWorkspaceRouter(): void {
   document.querySelectorAll('.as-nav-item').forEach((item) => {
     item.addEventListener('click', () => selectSection((item as HTMLElement).dataset.section || 'home'));
   });
-  // Was `selectSection('ai')` (the old copilot section, still reachable — see
-  // ws-ai in index.html — just no longer from here). Now opens the dock
-  // instead (dock.ts); dkToggle() itself checks dkAllowed().
+  // The AI tool button now opens Explore — there is ONE chat surface, and the
+  // 'ai' section it used to open no longer exists. The dock (dock.ts) has its
+  // own entry points (⌘L, its own edge affordance) — #side-ai-btn is not one
+  // of them.
   const ai = document.getElementById('side-ai-btn');
-  if (ai) ai.addEventListener('click', () => { if (typeof dkToggle === 'function') dkToggle(); });
+  if (ai) ai.addEventListener('click', () => selectSection('explore'));
   // The only way out of the Capture workspace while the nav is hidden. Reuses
   // leaveSection() — the same helper Connect's Close uses — rather than adding a
   // second notion of "where was I".

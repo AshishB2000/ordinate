@@ -108,7 +108,7 @@ function dkAppendProposal(card: HTMLElement): void {
   const list = document.getElementById('dk-messages');
   if (!list) return;
   list.appendChild(card);
-  scrollCopilotToBottom('dk-messages');
+  xpScrollToBottom('dk-messages');
 }
 
 function dkMkBtn(label: string, primary: boolean, cb: () => void): HTMLButtonElement {

@@ -161,6 +161,216 @@ function setAnPropsNote(text: string): void {
   note.hidden = !text;
 }
 
+// A one-line summary of a control's stored default — 'none' when it has none,
+// shape-matched per kind the same way sanitizeControlDefault (src/dashboards.ts)
+// reads it back.
+function describeControlDefault(control: any): string {
+  const d = control && control.default;
+  if (!d) return 'none';
+  if (control.kind === 'multi') {
+    return Array.isArray(d.values) && d.values.length ? d.values.length + ' value(s)' : 'none';
+  }
+  if (control.kind === 'date_range') {
+    const parts: string[] = [];
+    if (d.from) parts.push('from ' + d.from);
+    if (d.to) parts.push('to ' + d.to);
+    return parts.length ? parts.join(' ') : 'none';
+  }
+  return d.value ? String(d.value) : 'none';
+}
+
+/**
+ * The control card's Properties fields: dataset, column, label, default — the
+ * same set `openControlDialog` (dashAdd.ts) collects at creation. `kind` is
+ * shown but NOT editable here: changing it would change what `default`/`column`
+ * mean (a dropdown's `{value}` isn't a multi's `{values}`), so it is locked
+ * after creation — the smaller, safer diff than migrating a live default.
+ *
+ * Every field written here lives directly on the open dashboard/analysis
+ * record (`card.control.*`, not a separate saved entity like a Visual), so the
+ * correct persist call is `markDashDirty()` — the SAME path `anEndGesture`
+ * (drag/resize) already uses for other card-embedded fields — not
+ * `anScheduleWrite()`/`anWriteVisual()`, which only ever writes the referenced
+ * Visual entity and would silently no-op for a card with no `anVisual`.
+ *
+ * The "Use current selection as default" button is the ONLY way this panel
+ * touches `controlState`, and it only READS it (to copy into `control.default`
+ * + persist) — it never writes it. Testing the control itself happens on the
+ * placed card on the canvas, already interactive in authoring mode via
+ * dashControls.ts (Task 3 never gated it on dashMode), so no second live
+ * instance is built here.
+ */
+function anRenderControlProps(card: any, host: HTMLElement): void {
+  const control = card.control;
+
+  const kindLine = document.createElement('p');
+  kindLine.className = 'an-prop-note an-prop-note--info';
+  kindLine.textContent = 'Kind: ' + (CONTROL_KIND_LABELS[control.kind] || control.kind) + ' (fixed after creation).';
+  host.appendChild(kindLine);
+
+  const labelled = (text: string, control0: HTMLElement): void => {
+    const l = document.createElement('span');
+    l.className = 'an-prop-label';
+    l.textContent = text;
+    host.appendChild(l);
+    host.appendChild(control0);
+  };
+
+  const dsSel = document.createElement('select');
+  dsSel.className = 'an-prop-input';
+  dsSel.disabled = true;
+  const dsOpt0 = document.createElement('option');
+  dsOpt0.value = control.datasetId;
+  dsOpt0.textContent = 'Loading…';
+  dsSel.appendChild(dsOpt0);
+  labelled('Dataset', dsSel);
+
+  const colSel = document.createElement('select');
+  colSel.className = 'an-prop-input';
+  colSel.disabled = true;
+  const colOpt0 = document.createElement('option');
+  colOpt0.value = control.column;
+  colOpt0.textContent = control.column;
+  colSel.appendChild(colOpt0);
+  labelled('Column', colSel);
+
+  const labelIn = document.createElement('input');
+  labelIn.type = 'text';
+  labelIn.className = 'an-prop-input';
+  labelIn.value = control.label || '';
+  labelled('Label', labelIn);
+
+  const defSummary = document.createElement('p');
+  defSummary.className = 'an-prop-note an-prop-note--info';
+  defSummary.textContent = 'Default: ' + describeControlDefault(control);
+  host.appendChild(defSummary);
+
+  const defActions = document.createElement('div');
+  defActions.className = 'an-ctrl-actions';
+  const useCurBtn = document.createElement('button');
+  useCurBtn.type = 'button';
+  useCurBtn.className = 'btn btn-sm';
+  useCurBtn.textContent = 'Use current selection as default';
+  useCurBtn.disabled = !controlState.has(card.id);
+  useCurBtn.addEventListener('click', () => {
+    const cur = controlState.get(card.id);
+    if (cur === undefined) return;
+    control.default = cur;
+    markDashDirty();
+    anRenderProps(card);
+  });
+  const clearDefBtn = document.createElement('button');
+  clearDefBtn.type = 'button';
+  clearDefBtn.className = 'btn btn-sm';
+  clearDefBtn.textContent = 'Clear default';
+  clearDefBtn.disabled = control.default === undefined;
+  clearDefBtn.addEventListener('click', () => {
+    delete control.default;
+    markDashDirty();
+    anRenderProps(card);
+  });
+  defActions.appendChild(useCurBtn);
+  defActions.appendChild(clearDefBtn);
+  host.appendChild(defActions);
+
+  const hint = document.createElement('p');
+  hint.className = 'an-prop-note an-prop-note--info';
+  hint.textContent =
+    'Try the control on the sheet, then use the button above to save its current selection as the default. '
+    + 'Just trying it never changes the saved dashboard on its own.';
+  host.appendChild(hint);
+
+  // Label: debounced like every other text field in this panel, so a keypress
+  // doesn't re-render the whole grid.
+  let labelTimer: number | null = null;
+  labelIn.addEventListener('input', () => {
+    control.label = labelIn.value;
+    markDashDirty();
+    if (labelTimer !== null) window.clearTimeout(labelTimer);
+    labelTimer = window.setTimeout(() => {
+      labelTimer = null;
+      renderDashGrid();
+      anPaintSelection();
+    }, 400);
+  });
+
+  // Dataset/column: a select's 'change' fires once on commit, no debounce
+  // needed. Swapping either invalidates the live value and any stored
+  // default (a multi's {values} against a new column's option set, or a
+  // dropdown default naming a value the new column may not even have).
+  async function loadControlColumns(): Promise<void> {
+    colSel.innerHTML = '';
+    colSel.disabled = true;
+    let meta: any = null;
+    try {
+      meta = currentProjectId ? await window.hub.getDatasetMeta(currentProjectId, dsSel.value) : null;
+    } catch (_) {
+      meta = null;
+    }
+    if (anSelectedCardId !== card.id) return; // selection moved on while this awaited
+    const cols: any[] = meta && Array.isArray(meta.columns) ? meta.columns : [];
+    const mapped = cols.map((c, i) => ({ c, i }));
+    const ordered = control.kind === 'date_range'
+      ? mapped.sort((a, b) => Number(b.c && b.c.type === 'date') - Number(a.c && a.c.type === 'date') || a.i - b.i)
+      : mapped;
+    ordered.forEach(({ c }) => {
+      const opt = document.createElement('option');
+      opt.value = String(c.name);
+      opt.textContent = String(c.name) + (c.type ? ' (' + c.type + ')' : '');
+      colSel.appendChild(opt);
+    });
+    if (cols.some((c) => c && c.name === control.column)) colSel.value = control.column;
+    colSel.disabled = false;
+  }
+
+  dsSel.addEventListener('change', () => {
+    control.datasetId = dsSel.value;
+    controlState.delete(card.id);
+    delete control.default;
+    markDashDirty();
+    void loadControlColumns().then(() => {
+      // Only adopt the new selection if the fetch actually produced one —
+      // an empty colSel.value (failed fetch, columnless dataset, or the
+      // selection moving on mid-flight) must never blank out control.column,
+      // or sanitizeCard drops the whole card on next load.
+      if (colSel.value) control.column = colSel.value;
+      renderDashGrid();
+      anPaintSelection();
+      anRenderProps(card);
+    });
+  });
+  colSel.addEventListener('change', () => {
+    control.column = colSel.value;
+    controlState.delete(card.id);
+    delete control.default;
+    markDashDirty();
+    renderDashGrid();
+    anPaintSelection();
+    anRenderProps(card);
+  });
+
+  (async () => {
+    if (!currentProjectId) return;
+    let datasets: any[] = [];
+    try {
+      datasets = await window.hub.listDatasets(currentProjectId);
+    } catch (_) {
+      datasets = [];
+    }
+    if (anSelectedCardId !== card.id) return;
+    dsSel.innerHTML = '';
+    datasets.forEach((d) => {
+      const opt = document.createElement('option');
+      opt.value = String(d.id);
+      opt.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
+      dsSel.appendChild(opt);
+    });
+    dsSel.value = control.datasetId;
+    dsSel.disabled = false;
+    await loadControlColumns();
+  })();
+}
+
 function anRenderProps(card: any): void {
   const host = anEl('an-props');
   const hint = anEl('an-props-hint');
@@ -237,7 +447,9 @@ function anRenderProps(card: any): void {
   };
 
   const display = section('Display settings', true);
-  if (card.type === 'visual' && anVisual) {
+  if (card.type === 'control' && card.control) {
+    anRenderControlProps(card, display);
+  } else if (card.type === 'visual' && anVisual) {
     const nameIn = document.createElement('input');
     nameIn.type = 'text';
     nameIn.className = 'an-prop-input';

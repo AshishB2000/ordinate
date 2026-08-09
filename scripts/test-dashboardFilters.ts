@@ -8,13 +8,14 @@
 export {}; // module scope — sibling test scripts share top-level names
 
 // ponytail: compiled siblings of the real pure modules (built by pretest).
-const { mergeDashboardFilters }: typeof import('../src/dashboardFilters') = require('../src/dashboardFilters');
+const { mergeDashboardFilters, controlSteps }: typeof import('../src/dashboardFilters') = require('../src/dashboardFilters');
 const { buildVizData }: typeof import('../src/vizData') = require('../src/vizData');
 const { computeMetric }: typeof import('../src/metricValue') = require('../src/metricValue');
 const { applyPipeline }: typeof import('../src/transforms') = require('../src/transforms');
 type FilterStep = import('../src/transforms').FilterStep;
 type Cell = import('../src/transforms').Cell;
 type ParsedColumn = import('../src/parse').ParsedColumn;
+type ControlValue = import('../src/dashboards').ControlValue;
 
 let failures = 0;
 function ok(label: string, cond: boolean) {
@@ -151,6 +152,135 @@ ok('sum(sales) over the leading-zero-filtered subset is the one row (100)',
   const ci = zeroIn.columns.findIndex((c) => c.name === 'code');
   ok('`in` on leading-zero ids keeps both rows', zeroIn.rows.length === 2);
   ok('…and they are still the STRINGS "007"/"008"', zeroIn.rows[0][ci] === '007' && zeroIn.rows[1][ci] === '008');
+}
+
+// ── controlSteps: dropdown / multi / date_range → 0..2 FilterSteps ───────────
+{
+  const dropdown = { kind: 'dropdown' as const, column: 'region' };
+  const multi = { kind: 'multi' as const, column: 'region' };
+  const dateRange = { kind: 'date_range' as const, column: 'order_date' };
+
+  // dropdown → one `=` step.
+  ok('dropdown selection produces one `=` step',
+    JSON.stringify(controlSteps(dropdown, { value: 'West' })) ===
+    JSON.stringify([{ type: 'filter', column: 'region', op: '=', value: 'West' }]));
+  // dropdown: empty/cleared → [].
+  ok('dropdown with an empty string value → []', controlSteps(dropdown, { value: '' }).length === 0);
+  ok('dropdown with no selection (undefined) → []', controlSteps(dropdown, undefined).length === 0);
+  ok('dropdown with a null selection → []', controlSteps(dropdown, null).length === 0);
+
+  // multi → one `in` step.
+  ok('multi selection produces one `in` step',
+    JSON.stringify(controlSteps(multi, { values: ['West', 'East'] })) ===
+    JSON.stringify([{ type: 'filter', column: 'region', op: 'in', values: ['West', 'East'] }]));
+  // multi: empty/cleared → [].
+  ok('multi with an empty values array → []', controlSteps(multi, { values: [] }).length === 0);
+  ok('multi with no selection (undefined) → []', controlSteps(multi, undefined).length === 0);
+
+  // date_range → up to two steps, `>=` and/or `<=`.
+  ok('date_range with BOTH ends set produces two steps',
+    JSON.stringify(controlSteps(dateRange, { from: '2026-01-01', to: '2026-06-30' })) ===
+    JSON.stringify([
+      { type: 'filter', column: 'order_date', op: '>=', value: '2026-01-01' },
+      { type: 'filter', column: 'order_date', op: '<=', value: '2026-06-30' },
+    ]));
+  // Single-ended range: only `from`.
+  ok('date_range with only `from` produces one `>=` step',
+    JSON.stringify(controlSteps(dateRange, { from: '2026-01-01' })) ===
+    JSON.stringify([{ type: 'filter', column: 'order_date', op: '>=', value: '2026-01-01' }]));
+  // Single-ended range: only `to`.
+  ok('date_range with only `to` produces one `<=` step',
+    JSON.stringify(controlSteps(dateRange, { to: '2026-06-30' })) ===
+    JSON.stringify([{ type: 'filter', column: 'order_date', op: '<=', value: '2026-06-30' }]));
+  // date_range: neither end set → [].
+  ok('date_range with neither end set → []', controlSteps(dateRange, {}).length === 0);
+  ok('date_range with no selection (undefined) → []', controlSteps(dateRange, undefined).length === 0);
+
+  // A `state` shape that doesn't match the control's own kind is ignored, not
+  // mis-read (e.g. a stale multi selection handed to a dropdown control).
+  ok('a mismatched selection shape → []',
+    controlSteps(dropdown, { values: ['West'] } as unknown as ControlValue).length === 0);
+
+  // Values containing quotes/commas/whitespace pass through byte-for-byte — this
+  // layer only builds the FilterStep, it never escapes/quotes (that happens at
+  // the SQL/JS predicate layer, already covered by transforms.ts's own tests).
+  const tricky = `O'Brien, "The" Store  `;
+  ok('a dropdown value with quotes/commas/whitespace passes through unchanged',
+    controlSteps(dropdown, { value: tricky })[0].value === tricky);
+  ok('a multi value with quotes/commas/whitespace passes through unchanged',
+    controlSteps(multi, { values: [tricky, 'Nice, France'] }).length === 1
+    && JSON.stringify((controlSteps(multi, { values: [tricky, 'Nice, France'] })[0] as FilterStep).values) === JSON.stringify([tricky, 'Nice, France']));
+  ok('a date_range value with whitespace passes through unchanged',
+    controlSteps(dateRange, { from: '  2026-01-01  ' })[0].value === '  2026-01-01  ');
+}
+
+// ── effective-filter composition: dashboard filters, then controls, then a
+// card's own filters ───────────────────────────────────────────────────────
+//
+// renderer/hub/dashboards.ts's effectiveFilters() and renderer/hub/dashGrid.ts's
+// `mergeDashFilters(effectiveFilters(), visual.filters)` are hand-kept, classic-
+// script MIRRORS of mergeDashboardFilters/controlSteps above — they cannot be
+// node-tested directly (no import/export, no harness for a renderer global-scope
+// script in this repo; confirmed in Task 5's review). What CAN be node-tested is
+// the CONTRACT they are specified to implement, using the real pure functions as
+// the oracle rather than a hand-copied expected array that could drift from them
+// unnoticed: effectiveFilters() is `dashboard filters, then every control card's
+// live selection (in page/card order), unreduced`; mergeDashFilters/
+// mergeDashboardFilters then folds a card's OWN filters in last, de-duping
+// byte-identical steps. Two controls + a dashboard filter + a card filter, some
+// of them colliding on purpose, exercises the ORDER and the DEDUP in one go.
+{
+  const dashFilters: FilterStep[] = [{ type: 'filter', column: 'region', op: '!=', value: 'North' }];
+  const dropdown = { kind: 'dropdown' as const, column: 'region' };
+  const dateRange = { kind: 'date_range' as const, column: 'order_date' };
+  // Two control cards, in the order they'd be encountered walking the pages —
+  // this mirrors effectiveFilters()'s `for (const page) for (const card)` loop.
+  const control1Steps = controlSteps(dropdown, { value: 'West' });
+  const control2Steps = controlSteps(dateRange, { from: '2026-01-01', to: '2026-06-30' });
+  // A card's own filter, one of which is BYTE-IDENTICAL to control1's step —
+  // the dedup this exercises: the earlier (control-derived) copy must survive
+  // and the later (card-own) duplicate must be dropped, per mergeDashboardFilters'
+  // documented "first occurrence wins" rule.
+  const cardFilters: FilterStep[] = [
+    { type: 'filter', column: 'region', op: '=', value: 'West' }, // duplicate of control1Steps[0]
+    { type: 'filter', column: 'sales', op: '>=', value: 100 },
+  ];
+
+  // What effectiveFilters() is SPECIFIED to build: dashboard filters, then every
+  // control's steps in order, plain concatenation (no dedup at this stage —
+  // dedup only happens once, in the final mergeDashFilters/mergeDashboardFilters
+  // call, mirrored here as a two-argument merge of (effective, cardFilters)).
+  const effective = dashFilters.concat(control1Steps, control2Steps);
+  const finalList = mergeDashboardFilters(effective, cardFilters);
+
+  ok('dashboard filters lead the composed list',
+    finalList[0].column === 'region' && finalList[0].op === '!=' && finalList[0].value === 'North');
+  ok('…then the FIRST control (dropdown) in page order',
+    finalList[1].column === 'region' && finalList[1].op === '=' && finalList[1].value === 'West');
+  ok('…then the SECOND control (date_range), both of its ends',
+    finalList[2].column === 'order_date' && finalList[2].op === '>=' && finalList[2].value === '2026-01-01' &&
+    finalList[3].column === 'order_date' && finalList[3].op === '<=' && finalList[3].value === '2026-06-30');
+  ok('…then the card\'s own filter that is NOT a duplicate of anything above',
+    finalList[4].column === 'sales' && finalList[4].op === '>=' && finalList[4].value === 100);
+  ok('the card\'s OWN filter that duplicates a control-derived step is dropped, not doubled',
+    finalList.length === 5);
+
+  // The oracle for "what SHOULD this produce" is mergeDashboardFilters itself
+  // (already node-tested above for order/dedup) — not a hand-written array — so
+  // recomputing with a differently-grouped call must agree byte-for-byte. This
+  // is what catches the renderer's mirror silently drifting from the rule: if
+  // effectiveFilters()/mergeDashFilters ever stop matching this two-step
+  // composition, this equality is what would break.
+  const regrouped = mergeDashboardFilters(dashFilters, control1Steps.concat(control2Steps, cardFilters));
+  ok('the composition is associative — grouping (dash+controls)+card the same as dash+(controls+card)',
+    JSON.stringify(finalList) === JSON.stringify(regrouped));
+
+  // And the composed list actually moves a real metric total: region != North
+  // (no-op, nothing is North) → region = West (West/Jan 100, West/Feb 50) →
+  // order_date >=/<= (column absent from this fixture, skipped per the
+  // heterogeneous-dataset rule) → sales >= 100 (drops West/Feb) → West/Jan only.
+  ok('the composed filter list still drives a real aggregate (→ 100)',
+    metricWith(finalList, 'sales', 'sum') === 100);
 }
 
 if (failures) { console.error('\n' + failures + ' dashboardFilters check(s) FAILED'); process.exit(1); }

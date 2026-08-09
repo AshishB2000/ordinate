@@ -94,36 +94,78 @@ async function buildFacts(projectId: string, context: ContextRef): Promise<copil
 }
 
 export function register() {
-  // Load a project's chat history (survives reload).
-  ipcMain.handle('copilot:history', async (_e, { projectId }: any = {}) => {
+  // Load ONE conversation's turns (survives reload). threadId is optional — omit it
+  // and main resolves the most recent thread, which is what the pre-threads
+  // renderer does by simply not sending the field.
+  ipcMain.handle('copilot:history', async (_e, { projectId, threadId }: any = {}) => {
     try {
-      return { ok: true, turns: await copilot.loadHistory(projectId) };
+      const tid = typeof threadId === 'string' && threadId ? threadId : undefined;
+      const turns = await copilot.loadHistory(projectId, tid);
+      // Which thread the turns actually CAME from: an absent or stale id resolves
+      // to the most recent thread (listThreads is newest-touched first), so the
+      // renderer learns what it is now looking at instead of guessing.
+      const threads = await copilot.listThreads(projectId);
+      const resolved = tid && threads.some((t) => t.id === tid) ? tid : (threads.length > 0 ? threads[0].id : null);
+      return { ok: true, turns, threadId: resolved };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to load Copilot history' };
     }
   });
 
+  // List a project's conversations for the thread sidebar — newest-touched first,
+  // no turn bodies. Empty list is a normal answer (no history yet), never an error.
+  ipcMain.handle('copilot:threads', async (_e, { projectId }: any = {}) => {
+    try {
+      return { ok: true, threads: await copilot.listThreads(projectId) };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Failed to list Copilot conversations' };
+    }
+  });
+
+  // Start a new, empty conversation. Persisted immediately so copilot:ask can be
+  // given its id straight away. Titled "Conversation" until its first user turn
+  // renames it — no model call names a thread.
+  ipcMain.handle('copilot:newThread', async (_e, { projectId }: any = {}) => {
+    try {
+      const thread = await copilot.createThread(projectId);
+      if (!thread) return { ok: false, error: 'Could not start a new conversation' };
+      return { ok: true, thread };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Failed to start a new conversation' };
+    }
+  });
+
   // Ask the Copilot a question about the active entity. Builds facts in main from
-  // the referenced entity, replays prior turns, calls askCopilot, and persists BOTH
-  // turns only on a successful reply (a failed ask leaves the thread unchanged, so
-  // the composer can keep the user's text — no orphan question on disk).
-  ipcMain.handle('copilot:ask', async (_e, { projectId, context, question }: any = {}) => {
+  // the referenced entity, replays the prior turns OF THE TARGET THREAD, calls
+  // askCopilot, and persists BOTH turns only on a successful reply (a failed ask
+  // leaves the thread unchanged, so the composer can keep the user's text — no
+  // orphan question on disk). threadId is optional: omit it for the most recent
+  // conversation, which is the pre-threads renderer's behaviour unchanged.
+  ipcMain.handle('copilot:ask', async (_e, { projectId, context, question, threadId }: any = {}) => {
     try {
       const q = typeof question === 'string' ? question.trim() : '';
       if (!q) return { ok: false, error: 'Ask a question first.' };
 
-      const prior = (await copilot.loadHistory(projectId)).map((t) => ({ role: t.role, text: t.text }));
+      const tid = typeof threadId === 'string' && threadId ? threadId : undefined;
+      const prior = (await copilot.loadHistory(projectId, tid)).map((t) => ({ role: t.role, text: t.text }));
       const facts = await buildFacts(projectId, context || {});
       const res = await askCopilot(prior, facts.text, q);
 
       if (res.ok) {
-        await copilot.appendTurn(projectId, { role: 'user', text: q });
+        // Pin the target thread BEFORE the first append. Two reasons: the question
+        // and its answer must land in the SAME conversation even if something else
+        // creates a newer thread between the two writes, and the reply can then tell
+        // the renderer which thread it wrote to (it may have been created just now).
+        let target = tid || (await copilot.latestThreadId(projectId)) || undefined;
+        if (!target) target = (await copilot.createThread(projectId))?.id;
+
+        await copilot.appendTurn(projectId, { role: 'user', text: q }, target);
         const turns = await copilot.appendTurn(projectId, {
           role: 'assistant',
           text: res.text,
           provenance: facts.provenance,
-        });
-        return { ok: true, answer: res.text, provenance: facts.provenance, turns: turns || [] };
+        }, target);
+        return { ok: true, answer: res.text, provenance: facts.provenance, turns: turns || [], threadId: target || null };
       }
       if (res.errorType === 'not_ready') return { ok: false, notReady: true };
       return { ok: false, error: res.message || 'Could not answer the question' };
