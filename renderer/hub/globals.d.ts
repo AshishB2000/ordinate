@@ -320,8 +320,15 @@ declare global {
       exportDashboardPdf(html: string, width: number, defaultName?: string): Promise<any>;
       revealProjectFolder(projectId: string): Promise<any>;
       // ── AI Copilot (Week 11) ──
-      copilotHistory(projectId: string): Promise<any>;
-      copilotAsk(projectId: string, context: { kind?: string; id?: string }, question: string): Promise<any>;
+      copilotHistory(projectId: string, threadId?: string): Promise<any>;
+      copilotThreads(projectId: string): Promise<any>;
+      copilotNewThread(projectId: string): Promise<any>;
+      copilotAsk(
+        projectId: string,
+        context: { kind?: string; id?: string },
+        question: string,
+        threadId?: string,
+      ): Promise<any>;
       copilotClear(projectId: string): Promise<any>;
       setCopilotEnabled(enabled: boolean): Promise<any>;
       providerLogos: Record<string, { path: string; color: string; title: string }>;

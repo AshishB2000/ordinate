@@ -8748,216 +8748,12 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 /* ── AI Copilot panel (Week 11) ─────────────────────────────────────────────
    Theme-aware via the shared CSS vars (no hard-coded colors). CSP forbids inline
    style attributes in HTML — everything visual lives here. */
-.ai-panel {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 18px 20px;
-  overflow: hidden;
-}
-.ai-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.ai-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: 16px;
-  font-weight: 650;
-  color: var(--text-strong);
-}
-.ai-title .ws-badge { margin-left: 0; }
-.ai-head-actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.ai-toggle.ai-toggle-off {
-  color: var(--muted);
-}
-.ai-hint {
-  margin: 0;
-}
-.ai-context {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--muted);
-}
-.ai-context-label {
-  font-weight: 600;
-  color: var(--text);
-}
-.ai-messages {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 4px 2px;
-}
-.ai-empty {
-  margin: auto;
-  max-width: 420px;
-  text-align: center;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-.ai-msg {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-width: 82%;
-}
-.ai-msg-user {
-  align-self: flex-end;
-  align-items: flex-end;
-}
-.ai-msg-assistant {
-  align-self: flex-start;
-  align-items: flex-start;
-}
-.ai-bubble {
-  padding: 10px 13px;
-  border-radius: var(--r-md);
-  font-size: 13px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.ai-msg-user .ai-bubble {
-  background: var(--accent);
-  color: var(--accent-ink);
-}
-.ai-msg-assistant .ai-bubble {
-  background: var(--surface-2);
-  color: var(--text-strong);
-  border: 1px solid var(--border);
-}
-.ai-provenance {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.ai-chip {
-  padding: 2px 8px;
-  border-radius: var(--r-full);
-  background: var(--surface-3);
-  color: var(--text-dim);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-.ai-composer {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-}
-.ai-input {
-  flex: 1;
-  min-width: 0;
-  resize: none;
-  padding: 10px 12px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--text-strong);
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.4;
-}
-.ai-input:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-.ai-input:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.ai-send {
-  flex: none;
-}
 
 /* ── Embedded AI actions (Week 12) — interpretation clearly marked distinct from
    app-computed facts. Reused by prepare (calc field) + dashboards (summary,
    anomalies). ─────────────────────────────────────────────────────────────── */
-.ai-interp {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px;
-  background: var(--bg-elev, var(--surface-2));
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
 /* Without this the `hidden` attribute lost to `display: flex` and the panel
    painted as an empty bordered bar above every dashboard grid. */
-.ai-interp[hidden] { display: none; }
-.ai-interp-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.ai-badge {
-  flex: none;
-  padding: 2px 8px;
-  border-radius: var(--r-full);
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-.ai-interp-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-}
-.ai-interp-body {
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-strong);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.ai-interp-hint {
-  font-size: 13px;
-  color: var(--muted);
-}
-.ai-facts {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface-3);
-}
-.ai-facts-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-.ai-facts-item {
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--text-strong);
-}
-.ai-facts-item.ai-facts-warn {
-  color: var(--warn);
-}
 .dash-list-head-actions {
   display: flex;
   align-items: center;
@@ -9936,3 +9732,338 @@ body.cap-focus .cap-back {
 .gs-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gs-sub { color: var(--muted); font-size: 10px; white-space: nowrap; }
 .gs-none { padding: 8px; color: var(--muted); font-size: 12px; }
+
+/* ── EXPLORE — the conversational front door ──────────────────────────────────
+   A place, not a panel. The stage is FULL-BLEED and edge-aligned with the rest
+   of the app: the background is atmosphere the section sits in, not a card
+   floating in whitespace. Only the composer is width-capped, so the greeting
+   and input read as one centred column while the colour runs to the edges.
+
+   The wash is layered radial-gradients in --accent-soft / --accent-line over
+   --surface. Both tokens flip with [data-theme], so one rule serves both
+   themes; the dark override below only swaps the base, because the same base
+   that reads as a tint on white glows brighter than the app on #232327.
+   Gradients cost no network request, so this stays inside `default-src 'none'`. */
+.xp-panel { overflow: hidden; }
+.xp-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 28px;
+  background:
+    radial-gradient(80% 62% at 18% 8%, var(--accent-soft), transparent 68%),
+    radial-gradient(66% 56% at 84% 22%, var(--accent-soft), transparent 72%),
+    radial-gradient(120% 84% at 50% 108%, var(--accent-line), transparent 76%),
+    var(--surface);
+}
+.xp-stage-inner {
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 20px;
+}
+.xp-greet {
+  margin: 0;
+  text-align: center;
+  font-size: 27px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-strong);
+}
+
+/* The composer is the one capped element. It sits ON the wash, so it keeps a
+   solid --surface fill and a real shadow to lift it off the gradient. */
+.xp-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 12px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-md);
+}
+.xp-composer:focus-within { border-color: var(--accent); }
+.xp-input {
+  border: none;
+  background: none;
+  resize: none;
+  font: inherit;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--text);
+  padding: 4px 4px 0;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.xp-input:focus-visible { outline: none; }
+.xp-input::placeholder { color: var(--text-dim); }
+.xp-input:disabled { background: none; color: var(--text-dim); cursor: not-allowed; }
+
+.xp-composer-row { display: flex; align-items: center; gap: 8px; }
+.xp-composer-spacer { flex: 1 1 auto; }
+.xp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 5px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.xp-chip:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.xp-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.xp-chip:disabled { cursor: not-allowed; opacity: 0.65; }
+.xp-send {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--r-full);
+  background: var(--accent);
+  color: var(--accent-ink);
+  cursor: pointer;
+}
+.xp-send:hover:not(:disabled) { background: var(--accent-2); }
+.xp-send:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.xp-send:disabled { background: var(--surface-3); color: var(--text-faint); cursor: not-allowed; }
+
+/* Jump back in — a strip under the stage, not a card. Two columns, matching the
+   stage's 28px gutters so the whole section shares one edge. */
+.xp-jump {
+  flex: none;
+  padding: 16px 28px 22px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+.xp-jump-h {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+/* Empty state is ONE muted line — an empty bordered container reads as broken. */
+.xp-jump-bare .xp-jump-h { margin-bottom: 6px; }
+.xp-jump-rows {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 32px;
+  max-height: 168px;
+  overflow-y: auto;
+}
+.xp-jump-empty { margin: 0; font-size: 12.5px; color: var(--text-dim); }
+.xp-jump-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 7px 9px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.xp-jump-row:hover { background: var(--surface-2); }
+.xp-jump-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.xp-jump-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--text);
+}
+.xp-jump-kind {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  color: var(--muted);
+  font-size: 11px;
+}
+.xp-jump-time { flex: none; font-size: 11.5px; color: var(--text-dim); }
+
+/* --accent-soft/--accent-line are already lifted for dark, but the BASE must be
+   --bg rather than --surface or the stage glows brighter than the app it sits in. */
+[data-theme="dark"] .xp-stage {
+  background:
+    radial-gradient(80% 62% at 18% 8%, var(--accent-soft), transparent 68%),
+    radial-gradient(66% 56% at 84% 22%, var(--accent-soft), transparent 72%),
+    radial-gradient(120% 84% at 50% 108%, var(--accent-line), transparent 76%),
+    var(--bg);
+}
+
+/* Explore band on Home — a full-width door, same card language as .home-card
+   but spanning the row on its own. */
+.home-xp-band {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: linear-gradient(110deg, var(--accent-soft), var(--surface) 62%);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.home-xp-band:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
+}
+.home-xp-band:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; }
+.home-xp-art { flex: none; display: flex; color: var(--accent); }
+.home-xp-art svg { display: block; }
+.home-xp-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.home-xp-name { font-size: 15px; font-weight: 600; color: var(--text-strong); }
+.home-xp-sub { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.home-xp-go { flex: none; margin-left: auto; display: flex; color: var(--text-faint); }
+.home-xp-band:hover .home-xp-go { color: var(--accent); }
+
+/* ── Explore: hero → transcript ───────────────────────────────────────────────
+   One markup tree, two states. .xp-asked on the panel collapses the greeting,
+   opens the transcript and docks the composer at the bottom of the stage; the
+   composer element itself never moves in the DOM. The greeting collapses rather
+   than display:none-ing so the change reads as a fade, not a jump. */
+.xp-greet {
+  transition: opacity 0.18s var(--ease), height 0.18s var(--ease);
+}
+.xp-messages { display: none; }
+.xp-hint {
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  color: var(--text);
+  font-size: 12.5px;
+}
+.xp-hint[hidden] { display: none; }
+
+.xp-panel.xp-asked .xp-stage { align-items: stretch; padding-top: 18px; }
+.xp-panel.xp-asked .xp-stage-inner { height: 100%; min-height: 0; }
+.xp-panel.xp-asked .xp-greet {
+  opacity: 0;
+  height: 0;
+  margin: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.xp-panel.xp-asked .xp-messages {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+/* A short conversation sits ON the composer, not at the top of a void. Done with
+   margin-top:auto on the first bubble rather than justify-content:flex-end,
+   which clips the top of an overflowing flex container in Chromium. */
+.xp-panel.xp-asked .xp-messages > .xp-msg:first-child { margin-top: auto; }
+/* The strip STAYS during a transcript — it is the only route to another
+   conversation or a new one, and hiding it stranded the user in whichever
+   thread they happened to open. It shrinks instead: the transcript stays the
+   dominant thing on screen without becoming the only reachable one. */
+.xp-panel.xp-asked .xp-jump { padding-top: 10px; padding-bottom: 12px; }
+.xp-panel.xp-asked .xp-jump-rows { max-height: 74px; }
+
+/* The model chip states "nothing connected" the way the sidebar button does —
+   muted rather than alarming, because no model is a normal, supported state. */
+.xp-chip-warn { color: var(--text-dim); border-style: dashed; }
+
+/* Explore: the chart under an answer. Sits inside the assistant bubble's row,
+   so it scrolls with the turn that produced it. */
+.xp-chart {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.xp-chart-area { height: 260px; min-height: 260px; }
+.xp-chart-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+/* Conversations strip: the heading gains a "New conversation" action once the
+   project has any history to leave behind. */
+.xp-jump-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.xp-jump-head .xp-jump-h { margin: 0; }
+
+
+/* Explore transcript bubbles. Inherited from the retired Copilot panel and
+   renamed with it — same DOM, same textContent-only rendering, one owner. */
+.xp-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 82%;
+}
+.xp-msg-user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.xp-msg-assistant {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+.xp-bubble {
+  padding: 10px 13px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.xp-msg-user .xp-bubble {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.xp-msg-assistant .xp-bubble {
+  background: var(--surface-2);
+  color: var(--text-strong);
+  border: 1px solid var(--border);
+}
+.xp-provenance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.xp-prov-chip {
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.xp-jump-actions { display: flex; align-items: center; gap: 8px; }
+/* The AI off state is stated plainly, not alarmingly — running without AI is a
+   supported way to use Ordinate, not a fault. */
+.xp-toggle-off { color: var(--muted); }

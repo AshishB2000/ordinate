@@ -737,7 +737,7 @@ async function main(): Promise<void> {
   await win.click('#side-ai-btn', { timeout: 4000 }).catch(() => {});
   await win.waitForTimeout(400);
   const aiSection = await homeSection();
-  ok('home: the AI tool button opens the AI section', aiSection === 'ai', `section=${aiSection}`);
+  ok('home: the AI tool button opens Explore, the one chat surface', aiSection === 'explore', `section=${aiSection}`);
 
   // Back to Home so the project-open flow below starts from a clean state.
   await win.click('.as-nav-item[data-section="home"]', { timeout: 4000 }).catch(() => {});

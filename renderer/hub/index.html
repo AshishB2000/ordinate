@@ -82,6 +82,15 @@
 
       <!-- primary nav -->
       <nav class="as-nav" aria-label="Sections">
+        <!-- Explore sits ABOVE Home deliberately: asking a question is the
+             fastest route to an answer, so it is the first thing in the nav. -->
+        <button class="as-nav-item" type="button" data-section="explore">
+          <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 3.5l1.7 4.8 4.8 1.7-4.8 1.7L12 16.5l-1.7-4.8L5.5 10l4.8-1.7L12 3.5Z" fill="currentColor"/>
+            <path d="M18.2 15.4l.62 1.78 1.78.62-1.78.62-.62 1.78-.62-1.78-1.78-.62 1.78-.62.62-1.78Z" fill="currentColor"/>
+          </svg>
+          <span>Explore</span>
+        </button>
         <button class="as-nav-item active" type="button" data-section="home">
           <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M4 11.5 12 5l8 6.5M6 10v9h12v-9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
@@ -218,6 +227,27 @@
              ALWAYS shown (paintHome keeps it visible), above Starred and Recent —
              the primary "bring data in" entry points stay reachable on every
              visit, not just first-run. -->
+
+        <!-- Explore band — the AI front door on Home. A direct child of
+             .home-scroll, so it picks up the same 28px gutters and 22px stack
+             gap as every other block here with no CSS of its own. -->
+        <button class="home-xp-band" id="home-xp-band" type="button">
+          <span class="home-xp-art" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none">
+              <path d="M12 3.5l1.7 4.8 4.8 1.7-4.8 1.7L12 16.5l-1.7-4.8L5.5 10l4.8-1.7L12 3.5Z" fill="currentColor"/>
+              <path d="M18.2 15.4l.62 1.78 1.78.62-1.78.62-.62 1.78-.62-1.78-1.78-.62 1.78-.62.62-1.78Z" fill="currentColor"/>
+            </svg>
+          </span>
+          <span class="home-xp-body">
+            <span class="home-xp-name">Explore</span>
+            <span class="home-xp-sub">Ask a question about your data — the app does the math, and shows its work.</span>
+          </span>
+          <span class="home-xp-go" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+              <path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+        </button>
 
         <div class="home-firstrun" id="home-firstrun">
           <div class="home-quick-row">
@@ -1358,24 +1388,57 @@
       </div>
       </div>
     </section>
-    <section class="ws-panel" id="ws-ai" data-section="ai" hidden>
-      <div class="ai-panel">
-        <div class="ai-head">
-          <h2 class="ai-title">Copilot <span class="ws-badge">optional</span></h2>
-          <div class="ai-head-actions">
-            <button class="btn btn-sm ai-toggle" type="button" id="ai-toggle" aria-pressed="true">Copilot: On</button>
-            <button class="btn btn-sm" type="button" id="ai-clear">Clear</button>
+
+    <!-- ── Explore — the conversational front door ────────────────────
+         A place, not a dialog: a full-bleed stage carrying the background,
+         with the greeting and composer centred inside it, over a "Jump back
+         in" strip. The stage is edge-aligned with the rest of the app; only
+         the composer is width-capped. Phase 1 renders it inert — the composer
+         is disabled until copilot:ask is wired. -->
+    <section class="ws-panel xp-panel" id="ws-explore" data-section="explore" hidden>
+      <div class="xp-stage">
+        <div class="xp-stage-inner">
+          <h1 class="xp-greet" id="xp-greet">What do you want to know?</h1>
+          <!-- Empty until the first question; .xp-asked on the panel turns the
+               stage into this scrolling transcript with the composer docked
+               beneath it. One markup tree, two states — not a second view. -->
+          <div class="xp-messages" id="xp-messages"></div>
+          <div class="xp-hint" id="xp-hint" hidden></div>
+          <div class="xp-composer">
+            <textarea class="xp-input" id="xp-input" rows="1"
+              placeholder="Connect a model to ask a question…"
+              aria-label="Ask a question about your data" disabled></textarea>
+            <div class="xp-composer-row">
+              <!-- Neither chip is gated on a model: one chooses what you ask
+                   about, the other is how you connect something to ask with. -->
+              <button class="xp-chip" id="xp-dataset-chip" type="button">Whole project</button>
+              <span class="xp-composer-spacer"></span>
+              <button class="xp-chip xp-chip-warn" id="xp-model-chip" type="button">Connect a model</button>
+              <button class="xp-send" id="xp-send" type="button" aria-label="Send" disabled>
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
+                  <path d="M12 19V6M6 12l6-6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
-        <div class="ds-explain-out ds-explain-hint ai-hint" id="ai-hint" hidden></div>
-        <div class="ai-context" id="ai-context" hidden></div>
-        <div class="ai-messages" id="ai-messages">
-          <div class="ai-empty" id="ai-empty">Ask a question about the dataset, visual, or dashboard you have open. Every figure is computed by the app — Copilot only explains it.</div>
+      </div>
+
+      <div class="xp-jump" id="xp-jump">
+        <div class="xp-jump-head">
+          <!-- Reads "Conversations" once there are any, "Jump back in" while
+               falling back to recent items. explore.ts sets it. -->
+          <h2 class="xp-jump-h" id="xp-jump-h">Jump back in</h2>
+          <div class="xp-jump-actions">
+            <button class="btn btn-sm" type="button" id="xp-new-thread" hidden>New conversation</button>
+            <!-- The hard AI ON/OFF switch. It lived on the retired Copilot panel,
+                 which was the only way to turn it back on — it moves here with
+                 the feature rather than disappearing with the panel. -->
+            <button class="btn btn-sm xp-toggle" type="button" id="xp-ai-toggle" aria-pressed="true">AI: On</button>
+          </div>
         </div>
-        <div class="ai-composer" id="ai-composer">
-          <textarea class="ai-input" id="ai-input" rows="2" placeholder="Ask about your data…" aria-label="Ask Copilot"></textarea>
-          <button class="btn btn-primary ai-send" type="button" id="ai-send">Send</button>
-        </div>
+        <div class="xp-jump-rows" id="xp-jump-rows"></div>
+        <p class="xp-jump-empty" id="xp-jump-empty" hidden>Nothing here yet — bring some data in and it will show up.</p>
       </div>
     </section>
   </div>
@@ -2275,7 +2338,8 @@
 <script src="anPublish.js"></script>
 <script src="anDraft.js"></script>
 <script src="globalSearch.js"></script>
-<script src="copilot.js"></script>
+<script src="explore.js"></script>
+<script src="exploreChart.js"></script>
 <!-- hub.ts was 2051 lines; these five are it, split by job (.claude/rules/file-size.md).
      ORDER IS LOAD-BEARING among them, for the same reason it is for the group above:
      a classic script's top-level const/let is in TDZ until its own file has run, so a

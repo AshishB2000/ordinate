@@ -514,14 +514,23 @@ contextBridge.exposeInMainWorld('hub', {
   // projectId is UUID-guarded in MAIN so the path can never escape userData/projects.
   revealProjectFolder: (projectId: string) => ipcRenderer.invoke('dashboard:revealFolder', { projectId }),
   // ── AI Copilot (Week 11) — per-project, context-aware chat ──
-  // Load a project's chat history (survives reload); returns { ok, turns }.
-  copilotHistory: (projectId: string) => ipcRenderer.invoke('copilot:history', { projectId }),
+  // Load one conversation's turns (survives reload); returns { ok, turns, threadId }.
+  // threadId is optional and defaults to the most recent conversation, so every
+  // pre-threads caller keeps working unchanged.
+  copilotHistory: (projectId: string, threadId?: string) =>
+    ipcRenderer.invoke('copilot:history', { projectId, threadId }),
+  // List a project's conversations, newest-touched first; returns
+  // { ok, threads: [{ id, title, updatedAt, turnCount }] }.
+  copilotThreads: (projectId: string) => ipcRenderer.invoke('copilot:threads', { projectId }),
+  // Start a fresh conversation; returns { ok, thread }.
+  copilotNewThread: (projectId: string) => ipcRenderer.invoke('copilot:newThread', { projectId }),
   // Ask a question about the active entity. context = { kind, id } (kind:
   // 'dataset'|'visual'|'dashboard', else project inventory). Numbers are computed
-  // in MAIN; the model only narrates. Returns { ok, answer, provenance, turns } |
+  // in MAIN; the model only narrates. threadId is optional (most recent).
+  // Returns { ok, answer, provenance, turns, threadId } |
   // { ok:false, notReady:true } | { ok:false, error }.
-  copilotAsk: (projectId: string, context: { kind?: string; id?: string }, question: string) =>
-    ipcRenderer.invoke('copilot:ask', { projectId, context, question }),
+  copilotAsk: (projectId: string, context: { kind?: string; id?: string }, question: string, threadId?: string) =>
+    ipcRenderer.invoke('copilot:ask', { projectId, context, question, threadId }),
   // Clear a project's chat history; returns { ok: boolean }.
   copilotClear: (projectId: string) => ipcRenderer.invoke('copilot:clear', { projectId }),
   // Flip the hard ON/OFF switch; returns { ok, enabled }.
