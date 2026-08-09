@@ -10000,6 +10000,7 @@ body.cap-focus .cap-back {
 /* The composer is the one capped element. It sits ON the wash, so it keeps a
    solid --surface fill and a real shadow to lift it off the gradient. */
 .xp-composer {
+  position: relative; /* the context picker hangs off this */
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -10028,6 +10029,28 @@ body.cap-focus .cap-back {
 
 .xp-composer-row { display: flex; align-items: center; gap: 8px; }
 .xp-composer-spacer { flex: 1 1 auto; }
+
+/* The context picker, anchored above the composer it belongs to. Its rows reuse
+   the .gs-* hit classes above — one hit-row look across the app, not two. */
+.xp-picker[hidden] { display: none; }
+.xp-picker {
+  position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 40;
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 6px; max-height: 300px;
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--surface); box-shadow: var(--shadow-md);
+}
+.xp-picker-q {
+  flex: none;
+  padding: 6px 9px;
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--surface-2); color: var(--text);
+  font: inherit; font-size: 12.5px;
+}
+.xp-picker-q::placeholder { color: var(--text-dim); }
+.xp-picker-q:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.xp-picker-rows { display: flex; flex-direction: column; gap: 1px; overflow-y: auto; }
+.xp-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .xp-chip {
   display: inline-flex;
   align-items: center;

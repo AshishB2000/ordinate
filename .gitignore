@@ -298,6 +298,7 @@ scripts/**/*.js
 
 # Explore — the conversational front door. Emitted sibling.
 /renderer/hub/explore.js
+/renderer/hub/explorePicker.js
 /renderer/hub/exploreChart.js
 
 # The AI dock. Emitted sibling.
