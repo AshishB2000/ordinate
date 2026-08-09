@@ -168,6 +168,15 @@ function renderExplorerIdent(d: any): void {
     fresh.title = d && d.originKind ? '' : DS_NOT_REFRESHABLE_HINT;
   }
 
+  // The same picker the list row carries, beside the same freshness line.
+  const host = dsEl('ds-explorer-auto');
+  if (host) {
+    host.innerHTML = '';
+    const picker = dsAutoRefreshPicker(d, () => { void openSavedDataset(String((d && d.id) || expId || '')); });
+    if (picker) host.appendChild(picker);
+    host.hidden = !picker;
+  }
+
   const btn = dsEl('ds-explorer-refresh') as HTMLButtonElement | null;
   if (btn) {
     btn.hidden = !(d && d.originKind);

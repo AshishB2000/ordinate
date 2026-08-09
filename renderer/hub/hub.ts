@@ -76,6 +76,7 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
   selectSection('home'); // workspace.ts — Home is the default section
   initHome();            // projects.ts
   initDatasets();        // datasets.ts
+  initComposer();        // composer.ts — the full-page create surface
   initPrepare();         // prepare.ts
   initConnections();     // connections.ts
   initVisuals();         // visuals.ts
@@ -83,6 +84,7 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
   initAnalyses();        // analyses.ts
   initAuthoring();       // authoring.ts — the analysis workbench panels
   initCopilot();         // copilot.ts
+  initGlobalSearch();    // globalSearch.ts — the sidebar's search box
 })();
 
 // ── Toast ─────────────────────────────────────────────────────────────────

@@ -56,6 +56,12 @@ interface Config {
   prompt: string;
   globalRules: string;
   notifications: Notifications;
+  /**
+   * The master switch for unattended dataset refresh. ON by default: a schedule
+   * a user set is a schedule they want run, and this exists to stop it globally
+   * (on a metered connection, say), not to make them opt in twice.
+   */
+  autoRefresh: boolean;
   // Week 11 — the AI Copilot panel is OPT-OUTABLE (a hard OFF switch, distinct
   // from execution-readiness). Default true; when false the renderer hides the
   // chat entirely and never calls the model.
@@ -73,7 +79,7 @@ interface Config {
 // A connection id is a generated UUID (see src/connections.ts). Validate the
 // SHAPE before using it as a config key — mirrors the datasets/projects guard.
 const CONN_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-function isConnId(id: unknown): id is string {
+function _unusedIsConnId(id: unknown): id is string {
   return typeof id === 'string' && CONN_UUID_RE.test(id);
 }
 
@@ -149,6 +155,7 @@ const DEFAULTS: Omit<Config, 'providers' | 'byok'> = {
   // an analysis turn finishes. desktop: OS notification when it finishes AND the
   // window isn't focused. Best-effort — never block/error the analysis.
   notifications: { sound: false, desktop: false },
+  autoRefresh: true,
   // AI Copilot panel is ON by default — it stays fully optional (execution-gated),
   // but the user can also switch it OFF entirely from the panel's toggle.
   copilotEnabled: true,
@@ -196,6 +203,9 @@ function sanitize(input: any): Partial<Config> {
   if (THEME_PREFERENCES.includes(input.themePreference)) out.themePreference = input.themePreference;
   if (typeof input.prompt === 'string') out.prompt = input.prompt;
   if (typeof input.globalRules === 'string') out.globalRules = input.globalRules;
+  // Absent means ON, so every config written before this existed keeps working
+  // the way the feature is documented rather than silently disabled.
+  out.autoRefresh = input.autoRefresh === undefined ? true : Boolean(input.autoRefresh);
   if (input.notifications && typeof input.notifications === 'object') {
     out.notifications = {
       sound: Boolean(input.notifications.sound),
@@ -292,7 +302,10 @@ function migrate(cfg: any): Config {
   return cfg;
 }
 
-function persist(cfg: Config): void {
+// Exported for configSecrets.ts, which mutates the secrets map in place (the
+// only writer that does) and must flush it. Not an invitation: everything else
+// goes through save().
+export function persist(cfg: Config): void {
   cache = cfg;
   // Atomic write (temp sibling → rename), mirroring the BI stores. config.json
   // holds every plaintext API key + connection secret; a crash / full disk mid-
@@ -520,44 +533,6 @@ export function setByokActiveProvider(prov: string): { ok: boolean; error?: stri
   return { ok: true };
 }
 
-// ── Connection secrets (pg password / URL token) ────────────────────────────
-// MAIN PROCESS ONLY. Stored plaintext in config.json like API keys, keyed by the
-// connection's generated UUID. Never in a project file, never to a renderer.
-
-// Merge the non-empty secret fields for a connection. connId must be a UUID.
-// ponytail: secret is an IPC payload — validated per-field, empty strings ignored.
-export function setConnectionSecret(
-  connId: unknown,
-  secret: { password?: unknown; token?: unknown },
-): { ok: boolean } {
-  if (!isConnId(connId)) return { ok: false };
-  const cfg = get();
-  const cur: ConnectionSecret = cfg.connectionSecrets[connId] || {};
-  const next: ConnectionSecret = { ...cur };
-  if (secret && typeof secret.password === 'string' && secret.password) next.password = secret.password;
-  if (secret && typeof secret.token === 'string' && secret.token) next.token = secret.token;
-  cfg.connectionSecrets[connId] = next;
-  persist(cfg);
-  return { ok: true };
-}
-
-// Read a connection's secret — MAIN ONLY. Returns {} when none / invalid id.
-export function getConnectionSecret(connId: unknown): ConnectionSecret {
-  if (!isConnId(connId)) return {};
-  return get().connectionSecrets[connId] || {};
-}
-
-// Drop a connection's secret (called on connection:delete).
-export function deleteConnectionSecret(connId: unknown): { ok: boolean } {
-  if (!isConnId(connId)) return { ok: false };
-  const cfg = get();
-  if (connId in cfg.connectionSecrets) {
-    delete cfg.connectionSecrets[connId];
-    persist(cfg);
-  }
-  return { ok: true };
-}
-
 // ── Local CLI detection state ───────────────────────────────────────────────
 
 // Persist a detection scan (full results, incl. internal resolvedPath) + timestamp.
@@ -732,6 +707,7 @@ export function publicConfig() {
     prompt:         cfg.prompt,
     globalRules:    cfg.globalRules || '',
     notifications:  { ...(cfg.notifications || { sound: false, desktop: false }) },
+    autoRefresh:    cfg.autoRefresh !== false,
     // Default true when absent (older config.json predating Week 11).
     copilotEnabled: cfg.copilotEnabled !== false,
     // Home "Starred" pins — a flat "type:id" list, safe to expose (no secrets).
@@ -758,6 +734,12 @@ export function setGlobalRules(text: unknown): { ok: boolean } {
 
 // Merge notification toggles ({ sound?, desktop? }) and persist.
 // ponytail: fields is an IPC payload, validated per-field below.
+/** The master auto-refresh switch. Read by the scheduler on every tick. */
+export function setAutoRefreshEnabled(on: boolean): { ok: boolean; autoRefresh: boolean } {
+  const cfg = save({ autoRefresh: Boolean(on) });
+  return { ok: true, autoRefresh: cfg.autoRefresh };
+}
+
 export function setNotifications(fields: any): { ok: boolean; notifications: Notifications } {
   const cfg = get();
   const cur = cfg.notifications || { sound: false, desktop: false };

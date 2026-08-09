@@ -39,7 +39,92 @@ async function refreshDatasetList(): Promise<void> {
 function dsFreshnessText(d: any): string {
   const stamp = (d && d.lastRefreshedAt) || (d && d.updatedAt);
   const when = formatSidebarTime(stamp);
-  return d && d.originKind ? 'Data as of ' + when : 'Imported ' + when;
+  const base = d && d.originKind ? 'Data as of ' + when : 'Imported ' + when;
+  // A schedule is part of how fresh this is, so it belongs on the same line
+  // rather than in a second badge somewhere else.
+  const every = d && d.autoRefresh && d.autoRefresh.every;
+  return every ? `${base} · auto ${every}` : base;
+}
+
+/**
+ * The Auto-refresh picker, used in BOTH places a dataset's freshness is shown:
+ * its row in the list, and the explorer header. One builder, so the two cannot
+ * offer different options or write through different channels.
+ *
+ * Only a dataset with a re-fetchable origin gets one — there is nothing to
+ * schedule otherwise, and main refuses it anyway (datasets.setAutoRefresh).
+ */
+function dsAutoRefreshPicker(d: any, onDone?: () => void): HTMLElement | null {
+  if (!d || !d.originKind) return null;
+  const sel = document.createElement('select');
+  sel.className = 'ds-auto-select';
+  sel.setAttribute('aria-label', `Auto-refresh ${d.name || 'dataset'}`);
+  const opts: Array<[string, string]> = [
+    ['off', 'Auto-refresh: Off'],
+    ['hourly', 'Auto-refresh: Hourly'],
+    ['daily', 'Auto-refresh: Daily'],
+    ['weekly', 'Auto-refresh: Weekly'],
+  ];
+  for (const [value, label] of opts) {
+    const o = document.createElement('option');
+    o.value = value;
+    o.textContent = label;
+    sel.appendChild(o);
+  }
+  sel.value = (d.autoRefresh && d.autoRefresh.every) || 'off';
+  sel.addEventListener('click', (e) => e.stopPropagation()); // the row itself opens the dataset
+  sel.addEventListener('change', async () => {
+    const value = sel.value === 'off' ? null : sel.value;
+    let res: any;
+    try {
+      res = await window.hub.setDatasetAutoRefresh(currentProjectId, String(d.id), value);
+    } catch (_) {
+      res = { ok: false };
+    }
+    if (!res || res.ok === false) {
+      showToast('Could not change the schedule.');
+      sel.value = (d.autoRefresh && d.autoRefresh.every) || 'off';
+      return;
+    }
+    if (onDone) onDone();
+    else await refreshDatasetList();
+  });
+  return sel;
+}
+
+/**
+ * Watch for anomalies — opt-in, and only offered where there is a schedule to
+ * hang it on. Nothing re-runs without one, so there would be nothing to watch.
+ *
+ * The alert this enables carries an app-computed count and no model output; the
+ * AI "explain anomalies" action is unchanged and stays pull, not push.
+ */
+function dsWatchToggle(d: any): HTMLElement | null {
+  if (!d || !d.autoRefresh || !d.autoRefresh.every) return null;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'ds-watch-btn';
+  const on = Boolean(d.autoRefresh.watch);
+  btn.classList.toggle('is-on', on);
+  btn.setAttribute('aria-pressed', String(on));
+  btn.textContent = on ? '◉ Watching' : '◎ Watch';
+  btn.title = 'Notify me when new anomalies appear after an auto-refresh';
+  btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const next = !btn.classList.contains('is-on');
+    let res: any;
+    try {
+      res = await window.hub.setDatasetWatch(currentProjectId, String(d.id), next);
+    } catch (_) {
+      res = { ok: false };
+    }
+    if (!res || res.ok === false) {
+      showToast((res && res.error) || 'Could not change the watch.');
+      return;
+    }
+    await refreshDatasetList();
+  });
+  return btn;
 }
 
 /**
@@ -164,6 +249,24 @@ function makeSavedItem(d: any): HTMLElement {
     actions.appendChild(btn);
   }
 
+  // Combine… opens the composer with THIS dataset as the base. It is the same
+  // page the import flow lands on — one flow, not a second combine dialog.
+  const auto = dsAutoRefreshPicker(d);
+  if (auto) actions.appendChild(auto);
+  const watch = dsWatchToggle(d);
+  if (watch) actions.appendChild(watch);
+
+  const comb = document.createElement('button');
+  comb.type = 'button';
+  comb.className = 'ds-saved-combine';
+  comb.setAttribute('aria-label', `Combine ${d && d.name ? d.name : 'dataset'} with another dataset`);
+  comb.textContent = 'Combine…';
+  comb.addEventListener('click', (e) => {
+    e.stopPropagation();
+    void openComposerOnDataset(String(d.id), String((d && d.name) || 'Dataset'));
+  });
+  actions.appendChild(comb);
+
   const del = document.createElement('button');
   del.type = 'button';
   del.className = 'ds-saved-del';
@@ -249,6 +352,43 @@ function setRowRefreshStatus(id: string, message: string, isError: boolean): voi
   status.hidden = message === '';
   status.classList.toggle('is-error', isError);
   status.textContent = message;
+}
+
+/**
+ * An unattended refresh happened in main. Update THAT row in place — the
+ * freshness line, the row count and any failure message — and nothing else.
+ *
+ * Deliberately not a list re-render: the user may be mid-scroll, mid-select or
+ * typing in a control, and repainting the section under them to report a
+ * background event would be the app taking the page away for its own reasons.
+ */
+function applyAutoRefreshOutcome(o: any): void {
+  if (!o || !o.datasetId) return;
+  const row = document.querySelector('#ds-saved-list .ds-saved-item[data-dataset-id="' + String(o.datasetId) + '"]');
+  if (!row) return; // a different project is open, or the list is not rendered
+
+  if (o.ok) {
+    const meta = row.querySelector('.ds-saved-meta') as HTMLElement | null;
+    if (meta && typeof o.rowsAfter === 'number') {
+      meta.textContent = meta.textContent
+        ? meta.textContent.replace(/[\d,.\u202f\u00a0\s]+rows/, `${o.rowsAfter.toLocaleString()} rows`)
+        : `${o.rowsAfter.toLocaleString()} rows`;
+    }
+    const fresh = row.querySelector('.ds-fresh') as HTMLElement | null;
+    // "just now" through the same formatter every other stamp uses, so the
+    // wording matches the rest of the column rather than being a special case.
+    if (fresh) {
+      const every = fresh.textContent && fresh.textContent.indexOf(' · auto ') >= 0
+        ? fresh.textContent.slice(fresh.textContent.indexOf(' · auto '))
+        : '';
+      fresh.textContent = 'Data as of ' + formatSidebarTime(new Date().toISOString()) + every;
+    }
+  }
+  setRowRefreshStatus(String(o.datasetId), o.ok ? '' : String(o.error || 'Refresh failed.'), !o.ok);
+}
+
+if (window.hub && typeof window.hub.onDatasetRefreshed === 'function') {
+  window.hub.onDatasetRefreshed((o) => applyAutoRefreshOutcome(o));
 }
 
 // Refresh everything refreshable, SEQUENTIALLY. Not Promise.all: a serial loop

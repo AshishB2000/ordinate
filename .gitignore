@@ -275,3 +275,24 @@ scripts/**/*.js
 /src/formulaTokens.js
 /src/formulaEval.js
 /src/formulaParse.js
+
+# The dataset composer — emitted siblings.
+/scripts/test-composeTables.js
+/src/combine.js
+
+# Composer engine + IPC, and the two modules split out under the 800-line cap.
+/src/combine.js
+/src/ids.js
+/src/datasetOrigin.js
+/src/ipc/datasetCompose.js
+/renderer/hub/composer.js
+/scripts/smoke-composer.js
+
+# Scheduled refresh + anomaly watch — emitted siblings.
+/src/refreshScheduler.js
+/scripts/test-refreshScheduler.js
+/src/configSecrets.js
+/src/anomalyWatch.js
+/scripts/test-anomalyWatch.js
+/src/ipc/search.js
+/renderer/hub/globalSearch.js

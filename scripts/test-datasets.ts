@@ -27,6 +27,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 const datasets: typeof import('../src/datasets') = require('../src/datasets');
 const projects: typeof import('../src/projects') = require('../src/projects');
 const transforms: typeof import('../src/transforms') = require('../src/transforms');
+const combine: typeof import('../src/combine') = require('../src/combine');
 
 let failures = 0;
 function ok(label: string, cond: boolean) {
@@ -274,10 +275,10 @@ async function main(): Promise<void> {
   // ── Week 6: combineTables append + join (pure, exercised via the module) ───
   const left = { columns: [{ name: 'id', type: 'text' as const }, { name: 'x', type: 'number' as const }], rows: [['a', 1], ['b', 2]] };
   const right = { columns: [{ name: 'id', type: 'text' as const }, { name: 'y', type: 'number' as const }], rows: [['a', 10], ['c', 30]] };
-  const app = transforms.combineTables(left, right, 'append');
+  const app = combine.combineTables(left, right, 'append');
   ok('combine append unions columns (id,x,y)', app.columns.map((c) => c.name).join(',') === 'id,x,y');
   ok('combine append stacks all rows', app.rowCount === 4);
-  const joined = transforms.combineTables(left, right, 'join', { left: 'id', right: 'id' });
+  const joined = combine.combineTables(left, right, 'join', { left: 'id', right: 'id' });
   ok('combine join keeps only matching keys (a)', joined.rowCount === 1 && joined.rows[0][0] === 'a');
   ok('combine join concatenates right non-key column y', joined.columns.map((c) => c.name).includes('y'));
 

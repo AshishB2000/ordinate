@@ -62,7 +62,6 @@ const ALLOWED: Record<string, number> = {
   // is a design change with real behaviour risk, not a move. Own PR.
   'renderer/hub/chartRender.ts': 1097,
   'renderer/hub/mapRender.ts': 834,
-  'renderer/hub/prepare.ts': 944,
   // Deliberately last: it is the only check that runs the real app, so breaking
   // it blinds every other split. Own PR, after these are merged and green.
   //
@@ -88,7 +87,6 @@ const ALLOWED: Record<string, number> = {
   'src/analysisPlan.ts': 884,
   'src/analyze.ts': 1021,
   'src/anomaliesResident.ts': 870,
-  'src/config.ts': 801,
   'src/connectors/http.ts': 1036,
   'src/connectors/local.ts': 804,
   'src/localCliRun.ts': 822,

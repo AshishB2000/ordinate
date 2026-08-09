@@ -21,6 +21,36 @@ All notable changes to Ordinate are documented here. Format based on
   button, which appears only once a control has moved off it. Drill-down chips and the exported
   summary both reflect a control's current selection; the export itself never carries a live widget,
   only the plain-text value it was set to.
+- **Datasets can refresh themselves.** Set a dataset to re-fetch Hourly, Daily or Weekly and Ordinate
+  keeps it current. It is honest about what that means: schedules run while Ordinate is open, and
+  anything that came due while it was closed catches up when the app launches — the setting says so.
+  A master toggle in Settings turns the whole thing off.
+- **The app tells you when something changed or broke.** A failed refresh notifies you with the
+  reason; a row count that moves more than ±20% notifies you with both numbers. A refresh that went
+  as expected stays silent — the `Data as of` line already says it happened, and it updates in place
+  without the list jumping under you.
+- **Watch a dataset for anomalies.** Turn it on beside the schedule and Ordinate tells you when a
+  refresh brings *new* anomalies — never the same ones twice, and never one that has been resolved
+  and come back unnoticed. The count is computed by the app; no model is involved anywhere in this
+  path. Explaining an anomaly with AI is still something you ask for.
+- **The sidebar's search box works.** It always promised "datasets, analyses, dashboards and
+  connectors" and did nothing at all. Type and it finds them by name — plus visuals — with arrow
+  keys, Enter to open, and Escape to dismiss. It searches names, not row contents.
+- **Creating a dataset is a page, not a dialog.** Picking any source opens the **composer**: the
+  tables you are combining sit on a canvas with visible join links, the result previews live
+  underneath, and the preview's own header row is where you rename, retype and drop columns. Import
+  is now: pick a source → composer → Save.
+- **Combine as many tables as you like**, not two. Drag or click a saved dataset onto the canvas to
+  chain it on; each link has its own join type and key pair.
+- **Left joins.** A join can now keep every row on the left and leave blanks where there is no
+  match, instead of only keeping rows that match on both sides. Click a join badge to switch between
+  Inner, Left and Append and watch the row count change.
+- **Field mapping is reversible.** Renames and drops land as ordinary prepare steps, so a composed
+  dataset opens in the explorer with its pipeline visible and every mapping removable — exactly like
+  a step added later. A dropped column collapses to a restore stub rather than vanishing.
+- **A composed dataset refreshes.** Re-fetching it refreshes every table it was built from and
+  re-runs the combination over the fresh rows, keeping your prepare pipeline. If one of those tables
+  has been deleted it refuses, says which, and leaves the stored data exactly as it was.
 - **See the rows behind any number.** Click a bar, a slice or a point — or pick
   `⋯ → Show underlying rows` on any visual — and a panel slides over showing exactly the rows that
   produced it, paged, searchable and sortable. The filters that define the set are listed as chips,
@@ -91,9 +121,13 @@ All notable changes to Ordinate are documented here. Format based on
   toolbar that nobody scrolled to, and says "no quality issues found" when there is nothing to
   report. Prepare is a workbench — the steps on the left, the live grid on the right — so you can
   see what a step does to your data while you edit it.
-- **Combine datasets moved out of Prepare** and into its own action in the Data header. It creates a
-  new dataset rather than transforming one, so it never belonged at the bottom of a pipeline panel,
-  and it no longer requires opening some other dataset first to find it.
+- **Combine datasets moved out of Prepare** and into its own action in the Data header — and is now
+  the composer, not a dialog of four selects. There is one flow for making a dataset, not two.
+- **The Visuals builder is a two-pane workbench, not one long scroll.** Building a chart used to mean
+  a single column — encoding form above, chart squeezed below it — so seeing what a change drew meant
+  scrolling past Category/Measures/Filters first. Now: a header carries Back, the visual's name,
+  Dataset, Suggest chart and Save; a fixed-width panel on the left holds the encoding form; and the
+  chart fills the stage beside it in its own card, the same head-and-rail shape as the Prepare tab.
 - **Internal: the ten biggest source files are split by job**, and a CI check now keeps them that
   way — no source file may exceed 800 lines, against an allowlist that can only shrink. Pure code
   movement, no behaviour change: `hub.ts` 2051 → 422, `dashboards.ts` 2340 → 269, and `authoring`,

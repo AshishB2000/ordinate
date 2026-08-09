@@ -20,30 +20,15 @@ import * as parquetStore from './parquetStore';
 import * as transforms from './transforms';
 import { runResidentPipeline } from './pipelineDuck';
 import type { TableData, TransformStep, ApplyResult } from './transforms';
-
-/**
- * WHERE a dataset's rows came from, so they can be fetched again.
- *
- * Distinct from `sourceKind`, which is a display/format label and is a closed
- * union of eight values that 35 connectors already collapse onto. This says how
- * to RE-RUN the import, and it is the only thing that makes a dataset
- * refreshable — a record without one is a snapshot, exactly as every dataset was
- * before this existed.
- *
- * `paste` and `capture` deliberately have no origin: pasted text has no
- * re-fetchable source, and a capture already has its own recapture flow.
- */
-export type DatasetOrigin =
-  | { kind: 'file'; path: string; sheetName?: string }
-  | { kind: 'url'; url: string }
-  | { kind: 'connection'; connId: string }
-  | {
-      kind: 'combined';
-      leftId: string;
-      rightId: string;
-      mode: 'append' | 'join';
-      on?: { left: string; right: string };
-    };
+// The origin whitelist and the id check both moved out; re-exported here so
+// `datasets.sanitizeOrigin` and `import type { DatasetOrigin } from './datasets'`
+// keep working for every existing caller and test.
+import { isValidId } from './ids';
+import type { DatasetOrigin } from './datasetOrigin';
+import { sanitizeOrigin } from './datasetOrigin';
+import { sanitizeAnomalyKeys } from './anomalyWatch';
+export type { DatasetOrigin } from './datasetOrigin';
+export { sanitizeOrigin };
 
 export interface Dataset {
   id: string;
@@ -85,7 +70,40 @@ export interface Dataset {
   lastRefreshedAt?: string;
   lastRefreshStatus?: 'ok' | 'error';
   lastRefreshError?: string | null;
+  /**
+   * An unattended refresh schedule. ABSENT means off, which is every dataset
+   * written before this existed and every one the user has not opted in.
+   *
+   * Only a dataset with an `origin` can carry one — there is nothing to re-fetch
+   * otherwise — and `sanitizeAutoRefresh` enforces that on every load, so a
+   * hand-edited record cannot make the scheduler try.
+   *
+   * `lastAutoAt` moves on every attempt, WIN OR LOSE, deliberately: a source
+   * that is failing must wait its whole interval before trying again rather
+   * than retrying every minute. The failure stays visible in
+   * lastRefreshStatus/lastRefreshError, which is where the UI reads it.
+   */
+  autoRefresh?: AutoRefresh;
 }
+
+export interface AutoRefresh {
+  every: AutoRefreshEvery;
+  lastAutoAt?: string;
+  /**
+   * Opt in to anomaly watch. Off by default and stored here rather than in its
+   * own block because it only means anything alongside a schedule — there is
+   * nothing to watch for if nothing re-runs.
+   */
+  watch?: boolean;
+  /**
+   * The anomaly KEYS the last watched run found, so the next one can report only
+   * what is new. Capped (anomalyWatch.MAX_KEYS) and sanitized like everything
+   * else that comes back off disk.
+   */
+  lastAnomalyKeys?: string[];
+}
+
+export type AutoRefreshEvery = 'hourly' | 'daily' | 'weekly';
 
 export interface DatasetSummary {
   id: string;
@@ -102,6 +120,9 @@ export interface DatasetSummary {
   originKind?: DatasetOrigin['kind'];
   lastRefreshedAt?: string;
   lastRefreshStatus?: 'ok' | 'error';
+  // Carried on the SUMMARY so the scheduler can find due datasets from the
+  // metadata alone. Reading a schedule must never hydrate a table.
+  autoRefresh?: AutoRefresh;
 }
 
 let projectsBase: string | null = null;
@@ -109,14 +130,6 @@ let projectsBase: string | null = null;
 function getProjectsBase(): string {
   if (!projectsBase) projectsBase = path.join(app.getPath('userData'), 'projects');
   return projectsBase;
-}
-
-// Ids arrive from the renderer over IPC. Validate the SHAPE before either id ever
-// reaches a filesystem path — an id like ".." or "../../foo" would otherwise
-// escape the project's datasets dir. Copied verbatim from projects.ts.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-function isValidId(id: unknown): id is string {
-  return typeof id === 'string' && UUID_RE.test(id);
 }
 
 function datasetsDir(projectId: string): string {
@@ -143,68 +156,6 @@ function sanitizeCapture(raw: any): { entryId: string | null; cropPath: string |
   const cropPath = typeof raw.cropPath === 'string' && raw.cropPath ? raw.cropPath : null;
   if (entryId === null && cropPath === null) return undefined;
   return { entryId, cropPath };
-}
-
-/**
- * Whitelist an untrusted `origin` — from a stored file OR a save IPC payload —
- * into a well-formed DatasetOrigin, or `undefined`. Never throws.
- *
- * This is a SECURITY control, not tidying. `normalize()` runs it on every load,
- * so a hand-edited or corrupted record degrades to "not refreshable" instead of
- * turning into a file read or a fetch at an attacker's chosen target:
- *   • a relative path could escape wherever the refresh happens to resolve it
- *   • `file:`/`javascript:`/`data:` URLs are not fetchable sources
- *   • a non-UUID id would reach a path join in connections/datasets
- * Same whitelist discipline as sanitizeCapture and visuals.sanitizeEncoding:
- * keep only what is recognised, drop the rest, never repair.
- */
-export function sanitizeOrigin(raw: unknown): DatasetOrigin | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const o = raw as Record<string, unknown>;
-  const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
-
-  switch (o.kind) {
-    case 'file': {
-      const p = typeof o.path === 'string' ? o.path : '';
-      // Absolute only. A relative path has no meaning outside the cwd it was
-      // captured in, and main's cwd is not the user's.
-      if (!p || !path.isAbsolute(p)) return undefined;
-      const sheetName = str(o.sheetName);
-      return sheetName ? { kind: 'file', path: p, sheetName } : { kind: 'file', path: p };
-    }
-    case 'url': {
-      const u = str(o.url);
-      if (!u) return undefined;
-      try {
-        const parsed = new URL(u);
-        // http/https ONLY. (The URL connector itself is https-only and will
-        // refuse an http one at fetch time — this is the outer guard that keeps
-        // every other scheme from ever reaching a fetcher.)
-        if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return undefined;
-        return { kind: 'url', url: u };
-      } catch (_) {
-        return undefined;
-      }
-    }
-    case 'connection': {
-      const connId = str(o.connId);
-      return isValidId(connId) ? { kind: 'connection', connId } : undefined;
-    }
-    case 'combined': {
-      const leftId = str(o.leftId);
-      const rightId = str(o.rightId);
-      if (!isValidId(leftId) || !isValidId(rightId)) return undefined;
-      if (o.mode !== 'append' && o.mode !== 'join') return undefined;
-      const out: DatasetOrigin = { kind: 'combined', leftId, rightId, mode: o.mode };
-      const on = o.on as Record<string, unknown> | undefined;
-      if (on && typeof on === 'object' && typeof on.left === 'string' && typeof on.right === 'string') {
-        out.on = { left: on.left, right: on.right };
-      }
-      return out;
-    }
-    default:
-      return undefined;
-  }
 }
 
 // Atomic JSON write: temp sibling then rename (atomic on same fs), so a crash
@@ -313,6 +264,26 @@ function isValidDataset(data: any): data is Dataset {
 // Backward-compatible: a stored v1 dataset (no source/steps) normalizes to
 // steps=[], source=undefined and reads schemaVersion 2 — its columns/rows are the
 // data, exactly as before. Untrusted stored `steps` are re-sanitized on load.
+/**
+ * Whitelist an untrusted `autoRefresh` block, or undefined.
+ *
+ * `hasOrigin` is a parameter rather than something read here because the answer
+ * must be the SANITIZED origin, not the raw one: a record whose origin was just
+ * dropped for being malformed has nothing to re-fetch either, and a schedule
+ * left on it would be a scheduler retrying forever against nothing.
+ */
+function sanitizeAutoRefresh(raw: unknown, hasOrigin: boolean): AutoRefresh | undefined {
+  if (!hasOrigin || !raw || typeof raw !== 'object') return undefined;
+  const o = raw as Record<string, unknown>;
+  if (o.every !== 'hourly' && o.every !== 'daily' && o.every !== 'weekly') return undefined;
+  const out: AutoRefresh = { every: o.every };
+  if (typeof o.lastAutoAt === 'string' && o.lastAutoAt) out.lastAutoAt = o.lastAutoAt;
+  if (o.watch === true) out.watch = true;
+  const keys = sanitizeAnomalyKeys(o.lastAnomalyKeys);
+  if (keys) out.lastAnomalyKeys = keys;
+  return out;
+}
+
 function normalize(data: any, projectId: string): Dataset {
   const createdAt = data.createdAt || new Date().toISOString();
   const kind: Dataset['sourceKind'] = SOURCE_KINDS.has(data.sourceKind) ? data.sourceKind : 'csv';
@@ -344,6 +315,8 @@ function normalize(data: any, projectId: string): Dataset {
   // corrupt origin reads back as "not refreshable" rather than as a file read.
   const origin = sanitizeOrigin(data.origin);
   if (origin) ds.origin = origin;
+  const auto = sanitizeAutoRefresh(data.autoRefresh, Boolean(origin));
+  if (auto) ds.autoRefresh = auto;
   if (typeof data.lastRefreshedAt === 'string' && data.lastRefreshedAt) ds.lastRefreshedAt = data.lastRefreshedAt;
   if (data.lastRefreshStatus === 'ok' || data.lastRefreshStatus === 'error') {
     ds.lastRefreshStatus = data.lastRefreshStatus;
@@ -392,6 +365,7 @@ export async function listDatasets(projectId: string): Promise<DatasetSummary[]>
       if (ds.origin) summary.originKind = ds.origin.kind;
       if (ds.lastRefreshedAt) summary.lastRefreshedAt = ds.lastRefreshedAt;
       if (ds.lastRefreshStatus) summary.lastRefreshStatus = ds.lastRefreshStatus;
+      if (ds.autoRefresh) summary.autoRefresh = ds.autoRefresh;
       out.push(summary);
     } catch (err: any) { // ponytail: fs errors carry .code, JSON errors don't
       if (err.code !== 'ENOENT') {
@@ -624,6 +598,50 @@ export async function markRefresh(
     if (status === 'ok') raw.lastRefreshedAt = new Date().toISOString();
     await writeJsonAtomic(file, raw);
     return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
+ * Set or clear a dataset's auto-refresh schedule, and stamp its last attempt.
+ *
+ * METADATA ONLY, like markRefresh above: it reads and rewrites the record's
+ * JSON without hydrating the table. The scheduler stamps `lastAutoAt` on every
+ * tick it runs, and a blocking hydrate there would freeze every window.
+ *
+ * `every: null` turns it off. A schedule on a dataset with no origin is refused
+ * rather than stored, matching sanitizeAutoRefresh on the way back in.
+ */
+export async function setAutoRefresh(
+  projectId: string,
+  id: string,
+  patch: { every?: AutoRefreshEvery | null; lastAutoAt?: string; watch?: boolean; lastAnomalyKeys?: string[] },
+): Promise<AutoRefresh | null | false> {
+  if (!isValidId(projectId) || !isValidId(id)) return false;
+  const file = datasetFilePath(projectId, id);
+  try {
+    const raw = JSON.parse(await fs.promises.readFile(file, 'utf8'));
+    if (!raw || typeof raw !== 'object') return false;
+    if (patch.every === null) {
+      delete raw.autoRefresh;
+      await writeJsonAtomic(file, raw);
+      return null;
+    }
+    if (!sanitizeOrigin(raw.origin)) return false; // nothing to re-fetch
+    const current = sanitizeAutoRefresh(raw.autoRefresh, true);
+    const every = patch.every ?? (current ? current.every : undefined);
+    if (every !== 'hourly' && every !== 'daily' && every !== 'weekly') return false;
+    const next: AutoRefresh = { every };
+    const lastAutoAt = patch.lastAutoAt ?? (current ? current.lastAutoAt : undefined);
+    if (lastAutoAt) next.lastAutoAt = lastAutoAt;
+    const watch = patch.watch ?? (current ? current.watch : undefined);
+    if (watch) next.watch = true;
+    const keys = sanitizeAnomalyKeys(patch.lastAnomalyKeys ?? (current ? current.lastAnomalyKeys : undefined));
+    if (keys) next.lastAnomalyKeys = keys;
+    raw.autoRefresh = next;
+    await writeJsonAtomic(file, raw);
+    return next;
   } catch (_) {
     return false;
   }

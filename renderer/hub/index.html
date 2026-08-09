@@ -564,7 +564,6 @@
 
       </div>
 
-
       </div><!-- /.main-body -->
 
     </section>
@@ -715,40 +714,6 @@
              section header. Every control keeps its id and its handler; the
              left-hand picker is new, because from the list there is no "open
              dataset" for it to mean. -->
-        <div class="ws-modal-overlay ds-combine-overlay" id="ds-combine-modal" hidden>
-          <div class="ws-modal ds-combine-modal">
-            <div class="ds-modal-head">
-              <div class="ws-modal-title">Combine datasets</div>
-              <button class="ds-modal-x" type="button" id="ds-combine-x" aria-label="Close">✕</button>
-            </div>
-            <div class="ds-modal-body">
-              <div class="ds-combine-wrap">
-                <div class="ds-combine-row">
-                  <label class="ds-sheet-label" for="ds-combine-left">This dataset</label>
-                  <select class="ds-combine-select" id="ds-combine-left" aria-label="This dataset"></select>
-                </div>
-                <div class="ds-combine-row">
-                  <label class="ds-sheet-label" for="ds-combine-select">Combine with</label>
-                  <select class="ds-combine-select" id="ds-combine-select" aria-label="Other dataset"></select>
-                  <select class="ds-combine-mode" id="ds-combine-mode" aria-label="Combine mode">
-                    <option value="append">Append rows</option>
-                    <option value="join">Join on key</option>
-                  </select>
-                </div>
-                <div class="ds-combine-row" id="ds-combine-on" hidden>
-                  <select class="ds-combine-key" id="ds-combine-on-left" aria-label="This dataset key"></select>
-                  <span class="ds-combine-eq">=</span>
-                  <select class="ds-combine-key" id="ds-combine-on-right" aria-label="Other dataset key"></select>
-                </div>
-                <div class="ds-combine-note ds-explain-hint" id="ds-combine-note" hidden></div>
-              </div>
-            </div>
-            <div class="ds-save-bar ds-combine-foot">
-              <button class="btn btn-primary" type="button" id="ds-combine-btn">Combine</button>
-            </div>
-          </div>
-        </div>
-
         <!-- ── Import, as a dialog ────────────────────────────────────────────
              The same six blocks as before, with the same ids and the same
              handlers in datasets.ts — only their container changed. They used
@@ -801,6 +766,74 @@
           </div>
         </div>
 
+        <!-- ── The dataset composer: a full-page create surface ──────────────
+             A third view of the Data panel, mutually exclusive with the list and
+             the explorer (same swap, driven off this element's own `hidden`).
+             Opens whenever a source is picked, so importing IS composing.
+             The canvas is a horizontal CHAIN, never free 2-D placement: the
+             engine behind it (combine.composeTables) is a left-to-right fold,
+             and a canvas that implied a graph would be drawing something the app
+             does not run. -->
+        <div class="ds-composer" id="ds-composer" hidden>
+          <div class="ds-composer-head">
+            <button class="btn btn-sm ds-back" type="button" id="dc-back">← Back to datasets</button>
+            <span class="dc-kicker">New dataset</span>
+            <input class="dc-name" id="dc-name" type="text" placeholder="Dataset name" aria-label="Dataset name" />
+            <span class="dc-count" id="dc-count"></span>
+            <button class="btn btn-primary" type="button" id="dc-save">Save</button>
+          </div>
+          <div class="dc-body">
+            <aside class="dc-sources" aria-label="Sources">
+              <div class="dc-src-group" id="dc-src-import-group" hidden>
+                <div class="dc-src-label">This import</div>
+                <div class="dc-src-list" id="dc-src-import"></div>
+              </div>
+              <div class="dc-src-group">
+                <div class="dc-src-label">Saved datasets</div>
+                <div class="dc-src-list" id="dc-src-saved"></div>
+                <div class="dc-src-empty" id="dc-src-empty" hidden>No saved datasets yet.</div>
+              </div>
+            </aside>
+            <div class="dc-main">
+              <div class="dc-canvas" id="dc-canvas" aria-label="Tables being combined"></div>
+              <div class="dc-warnings" id="dc-warnings" hidden></div>
+              <div class="dc-preview">
+                <div class="dc-grid-scroll" id="dc-grid"></div>
+                <div class="dc-pager" id="dc-pager" hidden>
+                  <button class="btn btn-sm" type="button" id="dc-prev">‹ Prev</button>
+                  <span class="dc-page-label" id="dc-page-label"></span>
+                  <button class="btn btn-sm" type="button" id="dc-next">Next ›</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- The join editor. One popover, repositioned per badge. -->
+        <div class="dc-pop" id="dc-join-pop" hidden>
+          <div class="dc-pop-title">Join</div>
+          <div class="dc-modes" id="dc-modes" role="radiogroup" aria-label="Join type"></div>
+          <div class="dc-keys" id="dc-keys">
+            <select class="dc-key" id="dc-key-left" aria-label="Left column"></select>
+            <span class="dc-key-eq">＝</span>
+            <select class="dc-key" id="dc-key-right" aria-label="Right column"></select>
+          </div>
+          <div class="dc-pop-note" id="dc-join-note" hidden></div>
+        </div>
+
+        <!-- The preview header's per-column menu: rename, retype, drop. -->
+        <div class="dc-pop dc-col-pop" id="dc-col-pop" hidden>
+          <label class="dc-pop-label" for="dc-col-name">Name</label>
+          <input class="dc-col-name" id="dc-col-name" type="text" />
+          <label class="dc-pop-label" for="dc-col-type">Type</label>
+          <select class="dc-col-type" id="dc-col-type">
+            <option value="text">Text</option>
+            <option value="number">Number</option>
+            <option value="date">Date</option>
+          </select>
+          <button class="btn btn-sm dc-col-drop" type="button" id="dc-col-drop">Drop column</button>
+        </div>
+
         <!-- ── Saved-dataset explorer (sort / filter / show-hide / rename / retype / stats / quality / AI explain) ── -->
         <div class="ds-explorer" id="ds-explorer" hidden>
           <div class="ds-explorer-head">
@@ -811,6 +844,7 @@
             </div>
             <div class="ds-explorer-meta">
               <span class="ds-fresh" id="ds-explorer-fresh"></span>
+              <span class="ds-auto-host" id="ds-explorer-auto" hidden></span>
               <button class="btn btn-sm" type="button" id="ds-explorer-refresh" hidden>↻ Refresh</button>
             </div>
           </div>
@@ -960,29 +994,42 @@
           </div>
         </div>
 
-        <!-- Editor (hidden until "+ New visual" or opening a saved visual) -->
+        <!-- Editor (hidden until "+ New visual" or opening a saved visual). A
+             workbench, same shape as the Prepare tab: a header row, then a left
+             controls rail that scrolls on its own, and a stage (chart-type chips
+             + the chart) that fills the rest. The page itself never scrolls. -->
         <div class="viz-builder" id="viz-builder" hidden>
-          <div class="viz-build-row">
-            <label class="viz-field-label" for="viz-dataset-select">Dataset</label>
-            <select class="viz-select" id="viz-dataset-select" aria-label="Dataset"></select>
-            <button class="btn btn-sm viz-suggest-btn" type="button" id="viz-suggest-btn">✨ Suggest chart</button>
+          <div class="viz-builder-head">
+            <button class="btn" type="button" id="viz-cancel-btn">← Back</button>
+            <span class="viz-builder-name" id="viz-builder-name">New visual</span>
+            <div class="viz-builder-head-actions">
+              <label class="viz-field-label" for="viz-dataset-select">Dataset</label>
+              <select class="viz-select" id="viz-dataset-select" aria-label="Dataset"></select>
+              <button class="btn btn-sm viz-suggest-btn" type="button" id="viz-suggest-btn">✨ Suggest chart</button>
+              <button class="btn btn-primary" type="button" id="viz-save-btn">Save visual</button>
+            </div>
           </div>
-          <div class="viz-suggest-hint" id="viz-suggest-hint" hidden></div>
 
-          <!-- The encoding form mounts HERE, cloned from #viz-encoding-tpl at the
-               bottom of this file by createEncodingForm (encodingForm.js). It is
-               a template rather than markup because phase C mounts a second copy
-               in the analysis authoring panel, and two live copies cannot both
-               own #viz-category-select. -->
-          <div class="viz-encoding-mount" id="viz-encoding-mount"></div>
+          <div class="viz-builder-body">
+            <!-- Controls rail: the encoding form, own scroll. -->
+            <div class="viz-builder-controls">
+              <div class="viz-suggest-hint" id="viz-suggest-hint" hidden></div>
 
-          <div class="viz-warnings" id="viz-warnings" hidden></div>
-          <div class="viz-switcher-mount" id="viz-switcher-mount"></div>
-          <div class="cv-viz-area viz-area" id="viz-area"></div>
+              <!-- The encoding form mounts HERE, cloned from #viz-encoding-tpl at the
+                   bottom of this file by createEncodingForm (encodingForm.js). It is
+                   a template rather than markup because phase C mounts a second copy
+                   in the analysis authoring panel, and two live copies cannot both
+                   own #viz-category-select. -->
+              <div class="viz-encoding-mount" id="viz-encoding-mount"></div>
 
-          <div class="viz-build-actions">
-            <button class="btn btn-primary" type="button" id="viz-save-btn">Save visual</button>
-            <button class="btn" type="button" id="viz-cancel-btn">← Back to visuals</button>
+              <div class="viz-warnings" id="viz-warnings" hidden></div>
+            </div>
+
+            <!-- Stage: chart-type chips, then the chart filling everything left. -->
+            <div class="viz-builder-stage">
+              <div class="viz-switcher-mount" id="viz-switcher-mount"></div>
+              <div class="cv-viz-area viz-area" id="viz-area"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -1531,6 +1578,18 @@
           <section class="settings-pane" data-cat="notifications" hidden>
             <div class="stp-row">
               <div class="stp-rl">
+                <div class="stp-rt">Auto-refresh datasets</div>
+                <div class="stp-rd">Runs while Ordinate is open. Overdue refreshes catch up when the app launches.</div>
+              </div>
+              <div class="stp-rr">
+                <button id="stp-autorefresh" class="stp-switch" type="button" role="switch"
+                  aria-checked="true" aria-label="Auto-refresh datasets">
+                  <span class="stp-switch-thumb"></span>
+                </button>
+              </div>
+            </div>
+            <div class="stp-row">
+              <div class="stp-rl">
                 <div class="stp-rt">Completion sound</div>
                 <div class="stp-rd">Play a short sound when an analysis finishes.</div>
               </div>
@@ -2003,7 +2062,7 @@
         <select class="viz-select js-enc-cat" id="viz-category-select" aria-label="Category (dimension)"></select>
       </div>
 
-      <div class="viz-build-row viz-values-row" data-well="values">
+      <div class="viz-build-row" data-well="values">
         <label class="viz-field-label">Measures</label>
         <div class="viz-values-list js-enc-values"></div>
         <button class="btn btn-sm js-enc-add-value" type="button">+ Add measure</button>
@@ -2026,7 +2085,7 @@
         </select>
       </div>
 
-      <div class="viz-build-row viz-values-row js-enc-filters-row" data-well="filters">
+      <div class="viz-build-row js-enc-filters-row" data-well="filters">
         <label class="viz-field-label">Filters</label>
         <div class="viz-filters-list js-enc-filters"></div>
         <button class="btn btn-sm js-enc-add-filter" type="button">＋ Add filter</button>
@@ -2179,6 +2238,7 @@
 <script src="dsList.js"></script>
 <script src="dsExplorer.js"></script>
 <script src="dsGrid.js"></script>
+<script src="composer.js"></script>
 <script src="dataSection.js"></script>
 <script src="captureDataset.js"></script>
 <script src="filterValues.js"></script>
@@ -2224,6 +2284,7 @@
 <script src="anNew.js"></script>
 <script src="anPublish.js"></script>
 <script src="anDraft.js"></script>
+<script src="globalSearch.js"></script>
 <script src="copilot.js"></script>
 <!-- hub.ts was 2051 lines; these five are it, split by job (.claude/rules/file-size.md).
      ORDER IS LOAD-BEARING among them, for the same reason it is for the group above:

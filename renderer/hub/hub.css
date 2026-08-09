@@ -2295,7 +2295,7 @@ html[data-os="win"] .titlebar { padding-right: 146px; }
 .cv-viz-chip.active {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
 }
 
 /* + More — opens the all-charts picker. Accent-led so it reads as the distinct
@@ -5222,35 +5222,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 
 /* ── The combine dialog ──────────────────────────────────────────────────────
    Narrower than the import one: two pickers and a mode, not a preview table. */
-.ds-combine-overlay[hidden] { display: none; }
-.ws-modal.ds-combine-modal {
-  width: min(560px, calc(100vw - 48px));
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  gap: 0;
-}
-.ds-combine-modal .ds-combine-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.ds-combine-modal .ds-combine-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.ds-combine-modal .ds-combine-row .ds-sheet-label {
-  flex: 0 0 96px;
-}
-.ds-combine-modal .ds-combine-select { flex: 1 1 160px; min-width: 0; }
-.ds-combine-foot {
-  justify-content: flex-end;
-  border-top: 1px solid var(--border);
-  padding: 12px 20px 16px;
-  margin: 0;
-}
 
 /* ── The explorer's tabs ─────────────────────────────────────────────────────
    The underline strip the authoring panel already uses (.an-tabs / .an-tab),
@@ -5627,36 +5598,114 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   margin: 0;
   max-width: 560px;
 }
+/* The builder is a workbench, same shape as the Prepare tab
+   (.ds-explorer.tab-prepare): a header row, then a body row split into a fixed
+   left controls rail and a stage that takes the rest. .viz-panel's ancestors
+   are real flexbox down to html/body's `height: 100vh` (see top of this
+   file), so `flex: 1; min-height: 0` fills the panel without a viewport-calc
+   fallback — the page itself never scrolls; the rail and the stage do, on
+   their own. */
 .viz-builder {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 16px;
-  background: var(--surface-2);
+  border-radius: var(--r-lg);
+  overflow: hidden;
 }
 .viz-builder[hidden] { display: none; }
-.viz-encoding {
+.viz-builder-head {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 12px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
-.viz-encoding[hidden] { display: none; }
-.viz-build-row {
+.viz-builder-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+/* Pushes dataset/suggest/save to the right of Back + name, with no empty
+   spacer element to carry. */
+.viz-builder-head-actions {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  margin-left: auto;
+  flex: 0 0 auto;
 }
-.viz-values-row {
-  align-items: flex-start;
+.viz-builder-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
 }
+.viz-builder-controls {
+  flex: 0 0 300px;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 16px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.viz-builder-stage {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.viz-encoding {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.viz-encoding[hidden] { display: none; }
+/* Each block reads label-above-field, not label-beside-field: the
+   `min-width: 92px` side-label layout this replaced is what made the form
+   ragged (a long column name pushed every select to a different x). */
+.viz-build-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+/* `.viz-select` and `.viz-field-label` are also worn by the builder HEAD's
+   dataset picker (#viz-dataset-select, an inline row, not this vertical
+   panel), so the base rule below stays what that control needs; the
+   full-width/uppercase panel treatment is layered on with a `.viz-encoding`
+   scope so it never reaches that unrelated control. */
 .viz-field-label {
   font-size: 12px;
   font-weight: 600;
   color: var(--muted);
-  min-width: 92px;
+}
+/* Guarded off `.is-wells` (not just `.viz-encoding`): `.an-wells
+   .viz-field-label` is also a 2-class selector, an exact specificity tie this
+   rule would otherwise win or lose purely by source order — see the note on
+   the value-row select override below for why that's not something to rely
+   on. */
+.viz-encoding:not(.is-wells) .viz-field-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
 }
 .viz-select {
   padding: 6px 8px;
@@ -5667,10 +5716,27 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   border-radius: 6px;
   max-width: 240px;
 }
+.viz-encoding:not(.is-wells) .viz-select {
+  width: 100%;
+  padding: 8px;
+  border-radius: var(--r-md);
+  max-width: none;
+}
 .viz-values-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+/* Measure/filter rows stay ONE line — value select(s) + action — so the
+   full-width rule above is undone for selects nested in a row and they
+   split the row instead. Guarded off `.is-wells`: that variant's `.an-wells`
+   overrides already lay these out as a pill grid, and this rule's higher
+   class-count specificity would otherwise outrank them on `width`. */
+.viz-encoding:not(.is-wells) .viz-value-row .viz-select,
+.viz-encoding:not(.is-wells) .viz-filter-row .viz-select {
+  width: auto;
+  flex: 1 1 0;
+  min-width: 0;
 }
 .viz-value-row {
   display: flex;
@@ -5678,51 +5744,105 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   gap: 6px;
 }
 .viz-value-del {
+  flex: 0 0 auto;
   width: 26px;
   height: 26px;
   line-height: 1;
   font-size: 16px;
-  color: var(--muted);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
   cursor: pointer;
 }
 .viz-value-del:hover:not(:disabled) {
-  border-color: #dc2626;
-  color: #dc2626;
+  border-color: color-mix(in srgb, var(--error) 35%, transparent);
+  color: var(--error);
+  background: var(--error-soft);
 }
 .viz-value-del:disabled {
   opacity: 0.4;
   cursor: default;
 }
+/* "+ Add measure" / "+ Add filter" read as an empty SLOT, not a button —
+   full-width, dashed, quiet until hovered. */
+.viz-encoding:not(.is-wells) .btn.js-enc-add-value,
+.viz-encoding:not(.is-wells) .btn.js-enc-add-filter {
+  width: 100%;
+  background: transparent;
+  border: 1px dashed var(--border-2);
+  color: var(--muted);
+}
+.viz-encoding:not(.is-wells) .btn.js-enc-add-value:hover:not(:disabled),
+.viz-encoding:not(.is-wells) .btn.js-enc-add-filter:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--border-3);
+  color: var(--text);
+}
+/* Hairline seam: encoding blocks say WHAT to plot, Filters says WHICH ROWS —
+   worth a visible break, not just another gap. */
+.js-enc-filters-row {
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
 .viz-warnings {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  margin-top: auto;
+  padding-top: 12px;
 }
 .viz-warnings[hidden] { display: none; }
 .viz-warning {
   font-size: 12px;
-  color: #b45309;
-  background: rgba(217, 119, 6, 0.1);
-  border: 1px solid rgba(217, 119, 6, 0.3);
-  border-radius: 6px;
-  padding: 6px 10px;
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  background: var(--warn-soft);
+  border: 1px solid color-mix(in srgb, var(--warn) 22%, transparent);
+  color: var(--warn);
 }
 .viz-switcher-mount {
   display: flex;
   flex-wrap: wrap;
+  flex: 0 0 auto;
 }
+/* .cv-viz-area (shared with dashboards/analyses/export) already makes this a
+   flex column; here in the builder stage it also takes all height the chips
+   row leaves behind, so the chart gets a real size instead of a squeezed one.
+   The card treatment (surface/border/radius/padding) is scoped to .viz-area,
+   NOT .cv-viz-area, so it never reaches the shared chart hosts in
+   dashboards/analyses/export. */
 .viz-area {
+  flex: 1 1 auto;
   min-height: 260px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  transition: opacity 140ms var(--ease);
 }
-.viz-build-actions {
-  display: flex;
+/* Set by visuals.ts around the computeVisualData await; recomputeVisual is a
+   ~100ms resident-path call, so a spinner would just flicker — a small
+   opacity dip is enough of a "this is updating" cue. */
+.viz-area.is-loading { opacity: 0.6; }
+@media (prefers-reduced-motion: reduce) {
+  .viz-area { transition: none; }
+}
+/* The empty-state / can't-render fallback stacks a small glyph above its
+   message here. Scoped to #viz-area so .cv-chart-fallback's shared row
+   layout (dashboards/analyses/export/map fallbacks, which are plain
+   single-line text with no glyph) is untouched. */
+#viz-area .cv-chart-fallback {
+  flex-direction: column;
   gap: 8px;
-  align-items: center;
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
+}
+#viz-area .cv-chart-fallback-glyph {
+  color: var(--muted);
+  opacity: 0.7;
+}
+#viz-area .cv-chart-fallback-glyph svg {
+  width: 22px;
+  height: 22px;
 }
 /* ── Gallery: the saved visuals as cards (replaces the Week 7 row list) ── */
 .viz-gallery {
@@ -8768,43 +8888,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   display: flex;
   gap: 8px;
 }
-.ds-combine-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-.ds-combine-h {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-strong);
-  margin: 0;
-}
-.ds-combine-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.ds-combine-select,
-.ds-combine-mode,
-.ds-combine-key {
-  padding: 7px 10px;
-  font-size: 13px;
-  color: var(--text-strong);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  box-sizing: border-box;
-  max-width: 260px;
-}
-.ds-combine-eq {
-  color: var(--muted);
-}
-.ds-combine-note {
-  font-size: 13px;
-}
 
 /* ── AI Copilot panel (Week 11) ─────────────────────────────────────────────
    Theme-aware via the shared CSS vars (no hard-coded colors). CSP forbids inline
@@ -9792,3 +9875,208 @@ body.cap-focus .cap-back {
   gap: 8px;
   flex: 0 0 auto;
 }
+
+/* ── The dataset composer ─────────────────────────────────────────────────────
+   A third view of the Data panel, mutually exclusive with the list and the
+   explorer. `.is-composing` is set by dataSection.ts off #ds-composer's own
+   `hidden` bit, exactly as `.is-exploring` is off the explorer's.
+
+   Note the explicit `[hidden] { display: none }` on every element below that
+   also sets a `display`: an author `display` beats the UA `[hidden]` rule, and
+   that is precisely how eight elements in this section ended up permanently on
+   screen before PR #84 found them. */
+#ws-datasets .ds-panel.is-composing .ds-saved,
+#ws-datasets .ds-panel.is-composing .ds-explorer { display: none; }
+
+.ds-composer { display: flex; flex-direction: column; gap: 12px; min-height: 0; flex: 1 1 auto; }
+.ds-composer[hidden] { display: none; }
+
+.ds-composer-head {
+  display: flex; align-items: center; gap: 10px;
+  padding-bottom: 10px; border-bottom: 1px solid var(--border);
+}
+.ds-composer-head .dc-kicker { color: var(--muted); font-size: 12px; }
+.dc-name {
+  flex: 0 1 280px; min-width: 0;
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 13px;
+}
+.dc-count { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.dc-body { display: flex; gap: 14px; min-height: 0; flex: 1 1 auto; }
+
+/* Sources */
+.dc-sources {
+  flex: 0 0 260px; min-width: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 14px;
+  padding-right: 12px; border-right: 1px solid var(--border);
+}
+.dc-src-group { display: flex; flex-direction: column; gap: 6px; }
+.dc-src-group[hidden] { display: none; }
+.dc-src-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.dc-src-list { display: flex; flex-direction: column; gap: 4px; }
+.dc-src {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); color: var(--text); text-align: left; cursor: grab; font: inherit;
+}
+.dc-src:hover { border-color: var(--accent); background: var(--surface-2); }
+.dc-src:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dc-src-name { font-size: 13px; }
+.dc-src-meta { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.dc-src-used { opacity: .55; cursor: default; }
+.dc-src-empty { font-size: 12px; color: var(--muted); }
+.dc-src-empty[hidden] { display: none; }
+
+/* Canvas — a horizontal chain, never free 2-D placement. */
+.dc-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.dc-canvas {
+  display: flex; align-items: center; gap: 0; flex-wrap: nowrap; overflow-x: auto;
+  min-height: 96px; padding: 14px 16px; border-radius: 10px;
+  background-color: var(--surface-2);
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+.dc-canvas-over { outline: 2px dashed var(--accent); outline-offset: -4px; }
+.dc-canvas-empty { color: var(--muted); font-size: 13px; }
+.dc-chip {
+  position: relative; flex: 0 0 auto;
+  display: flex; flex-direction: column; gap: 2px;
+  min-width: 132px; padding: 9px 12px;
+  border: 1px solid var(--border); border-radius: 9px;
+  background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+}
+.dc-chip-name { font-size: 13px; }
+.dc-chip-meta { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.dc-chip-kind {
+  align-self: flex-start; margin-top: 2px; padding: 1px 6px; border-radius: 999px;
+  background: var(--surface-2); color: var(--muted); font-size: 10px; text-transform: uppercase;
+}
+.dc-chip-x {
+  position: absolute; top: -7px; right: -7px; width: 18px; height: 18px;
+  display: none; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: 50%;
+  background: var(--surface); color: var(--muted); font-size: 10px; cursor: pointer;
+}
+.dc-chip:hover .dc-chip-x,
+.dc-chip-x:focus-visible { display: flex; }
+
+/* The link line + its join badge. */
+.dc-link { flex: 0 0 auto; display: flex; align-items: center; }
+.dc-link::before,
+.dc-link::after { content: ''; width: 18px; height: 1px; background: var(--border); }
+.dc-badge {
+  display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; padding: 0;
+  border: 1px solid var(--border); border-radius: 50%;
+  background: var(--surface); color: var(--accent); cursor: pointer;
+}
+.dc-badge:hover { border-color: var(--accent); }
+.dc-badge:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dc-badge-warn { color: var(--warn); border-color: var(--warn); }
+
+/* Warnings are part of the product, not console noise. */
+.dc-warnings { display: flex; flex-direction: column; gap: 4px; }
+.dc-warnings[hidden] { display: none; }
+.dc-warning {
+  padding: 6px 10px; border-radius: 6px;
+  background: var(--warn-soft); color: var(--text); font-size: 12px;
+}
+
+/* Preview — its header row IS the field mapper. */
+.dc-preview { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.dc-grid-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+.dc-grid-empty { padding: 22px; color: var(--muted); font-size: 13px; text-align: center; }
+.dc-table { border-collapse: collapse; width: max-content; min-width: 100%; font-size: 12px; }
+.dc-table th, .dc-table td { border-bottom: 1px solid var(--border); text-align: left; }
+.dc-table td { padding: 5px 10px; white-space: nowrap; }
+.dc-th { padding: 0; background: var(--surface-2); position: sticky; top: 0; z-index: 1; }
+.dc-th-btn {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 7px 10px; border: 0; background: none; color: var(--text);
+  font: inherit; font-size: 12px; cursor: pointer;
+}
+.dc-th-btn:hover { background: var(--surface-3); }
+.dc-th-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.dc-th-type { color: var(--muted); font-size: 10px; text-transform: uppercase; }
+.dc-th-caret { color: var(--muted); font-size: 9px; }
+.dc-th-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+.dc-th-dropped { width: 26px; padding: 0; background: var(--surface-2); position: sticky; top: 0; z-index: 1; }
+.dc-restore {
+  width: 26px; padding: 7px 0; border: 0; background: none;
+  color: var(--muted); font-size: 12px; cursor: pointer;
+}
+.dc-restore:hover { color: var(--accent); }
+.dc-td-dropped { width: 26px; opacity: .25; }
+.dc-pager { display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
+.dc-pager[hidden] { display: none; }
+.dc-page-label { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* The two popovers. Positioned from JS (element.style is fine under the CSP;
+   only an inline style= ATTRIBUTE in the HTML is not). */
+.dc-pop {
+  position: fixed; z-index: 60; min-width: 220px;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 12px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+}
+.dc-pop[hidden] { display: none; }
+.dc-pop-title { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.dc-pop-label { font-size: 11px; color: var(--muted); }
+.dc-pop-note { font-size: 11px; color: var(--warn); }
+.dc-pop-note[hidden] { display: none; }
+.dc-modes { display: flex; gap: 6px; }
+.dc-mode {
+  flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 7px 4px; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); color: var(--muted); font: inherit; font-size: 11px; cursor: pointer;
+}
+.dc-mode:hover { border-color: var(--accent); }
+.dc-mode-on { border-color: var(--accent); color: var(--accent); background: var(--surface-2); }
+.dc-keys { display: flex; align-items: center; gap: 6px; }
+.dc-keys[hidden] { display: none; }
+.dc-key {
+  flex: 1 1 0; min-width: 0; padding: 5px 7px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 12px;
+}
+.dc-key-eq { color: var(--muted); font-size: 12px; }
+.dc-col-pop { min-width: 210px; }
+.dc-col-name, .dc-col-type {
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 12px;
+}
+.dc-col-drop { align-self: flex-start; color: var(--error); }
+
+/* The Auto-refresh picker, beside the freshness line it qualifies. */
+.ds-auto-host[hidden] { display: none; }
+.ds-auto-select {
+  padding: 2px 6px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--muted); font: inherit; font-size: 11px;
+}
+.ds-auto-select:hover { color: var(--text); border-color: var(--accent); }
+
+.ds-watch-btn {
+  padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--surface); color: var(--muted); font: inherit; font-size: 11px; cursor: pointer;
+}
+.ds-watch-btn:hover { color: var(--text); border-color: var(--accent); }
+.ds-watch-btn.is-on { color: var(--accent); border-color: var(--accent); background: var(--surface-2); }
+
+/* ── The sidebar's global search results ─────────────────────────────────── */
+.as-search-results[hidden] { display: none; }
+.as-search-results {
+  display: flex; flex-direction: column; gap: 1px;
+  margin: 4px 8px 0; padding: 4px; max-height: 320px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); box-shadow: 0 6px 18px rgb(0 0 0 / 16%);
+}
+.gs-hit {
+  display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: 6px; cursor: pointer;
+}
+.gs-hit:hover, .gs-hit.is-active { background: var(--surface-2); }
+.gs-glyph { color: var(--muted); font-size: 12px; text-align: center; }
+.gs-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gs-sub { color: var(--muted); font-size: 10px; white-space: nowrap; }
+.gs-none { padding: 8px; color: var(--muted); font-size: 12px; }

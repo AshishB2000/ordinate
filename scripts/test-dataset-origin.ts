@@ -78,6 +78,32 @@ async function main(): Promise<void> {
   ok('an unparseable URL → undefined', san({ kind: 'url', url: 'not a url' }) === undefined);
   ok('a non-UUID connId → undefined', san({ kind: 'connection', connId: '../SECRET' }) === undefined);
   ok('an empty connId → undefined', san({ kind: 'connection', connId: '' }) === undefined);
+  // ── composed (the composer's N-table chain) ────────────────────────────────
+  const UUID_C = '33333333-3333-4333-8333-333333333333';
+  const comp = (joins: any): any => san({ kind: 'composed', baseId: UUID_A, joins });
+
+  ok('a composed origin with a UUID base and one join is accepted',
+     comp([{ datasetId: UUID_B, mode: 'inner', on: { left: 'id', right: 'ref' } }])?.kind === 'composed');
+  ok('…and keeps every link, in order',
+     JSON.stringify(comp([{ datasetId: UUID_B, mode: 'left' }, { datasetId: UUID_C, mode: 'append' }])?.joins)
+       === JSON.stringify([{ datasetId: UUID_B, mode: 'left' }, { datasetId: UUID_C, mode: 'append' }]));
+  ok("…and normalises the legacy 'join' spelling to 'inner' on the way in",
+     comp([{ datasetId: UUID_B, mode: 'join' }])?.joins[0].mode === 'inner');
+  ok('…and drops a half-specified key pair rather than storing it',
+     comp([{ datasetId: UUID_B, mode: 'inner', on: { left: 'id' } }])?.joins[0].on === undefined);
+
+  // ONE bad link drops the WHOLE origin. A chain missing a link is a different
+  // dataset, and refreshing into it silently would be worse than not refreshing.
+  ok('a composed origin with a non-UUID base → undefined',
+     san({ kind: 'composed', baseId: '../x', joins: [{ datasetId: UUID_B, mode: 'inner' }] }) === undefined);
+  ok('a composed origin with a non-UUID in ANY link → undefined',
+     comp([{ datasetId: UUID_B, mode: 'inner' }, { datasetId: 'not-a-uuid', mode: 'inner' }]) === undefined);
+  ok('a composed origin with an unknown mode in ANY link → undefined',
+     comp([{ datasetId: UUID_B, mode: 'inner' }, { datasetId: UUID_C, mode: 'right' }]) === undefined);
+  ok('a composed origin with no joins → undefined (that is not a chain)', comp([]) === undefined);
+  ok('a composed origin with a non-array joins → undefined', comp('nope') === undefined);
+  ok('a composed origin with a non-object link → undefined', comp([UUID_B]) === undefined);
+
   ok('a combined origin with a non-UUID parent → undefined',
      san({ kind: 'combined', leftId: '../x', rightId: UUID_B, mode: 'append' }) === undefined);
   ok('a combined origin with an unknown mode → undefined',
