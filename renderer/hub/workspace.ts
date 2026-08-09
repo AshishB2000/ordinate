@@ -106,6 +106,9 @@ function selectSection(section: string): void {
   if (section === 'explore' && typeof refreshExplore === 'function') void refreshExplore();
   // Reload the connector catalogue when Connect becomes active (connections.ts).
   if (section === 'connect' && typeof refreshConnPanel === 'function') void refreshConnPanel();
+  // Recompute the AI dock's visibility for the new section (dock.ts) — this is
+  // what forces it closed on Explore and re-shows it everywhere else.
+  if (typeof dkSync === 'function') dkSync();
 }
 
 // Leave `section` for whatever was showing before it, falling back to Home.
@@ -122,8 +125,11 @@ function initWorkspaceRouter(): void {
   document.querySelectorAll('.as-nav-item').forEach((item) => {
     item.addEventListener('click', () => selectSection((item as HTMLElement).dataset.section || 'home'));
   });
+  // Was `selectSection('ai')` (the old copilot section, still reachable — see
+  // ws-ai in index.html — just no longer from here). Now opens the dock
+  // instead (dock.ts); dkToggle() itself checks dkAllowed().
   const ai = document.getElementById('side-ai-btn');
-  if (ai) ai.addEventListener('click', () => selectSection('ai'));
+  if (ai) ai.addEventListener('click', () => { if (typeof dkToggle === 'function') dkToggle(); });
   // The only way out of the Capture workspace while the nav is hidden. Reuses
   // leaveSection() — the same helper Connect's Close uses — rather than adding a
   // second notion of "where was I".
@@ -146,6 +152,7 @@ function initWorkspaceRouter(): void {
  */
 function setCaptureFocus(on: boolean): void {
   document.body.classList.toggle('cap-focus', on);
+  if (typeof dkSync === 'function') dkSync(); // dock.ts — cap-focus suppresses the dock
   if (!on) return;
   const h = document.getElementById('main-title-h');
   const sub = document.getElementById('main-title-sub');

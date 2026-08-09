@@ -734,11 +734,11 @@ async function main(): Promise<void> {
   const navSection = await homeSection();
   ok('home: a sidebar nav item switches the section', navSection === 'visuals', `section=${navSection}`);
 
-  await win.click('#side-ai-btn', { timeout: 4000 }).catch(() => {});
+  await win.click('#side-ai-btn', { timeout: 4000 }).catch(() => {}); // AI dock (Task 1): toggles in place, not the old `ai` section
   await win.waitForTimeout(400);
-  const aiSection = await homeSection();
-  ok('home: the AI tool button opens the AI section', aiSection === 'ai', `section=${aiSection}`);
-
+  const dk = await win.evaluate(() => ({ section: document.querySelector('.hub-body')?.getAttribute('data-section'), open: document.getElementById('dk-panel')?.hidden === false }));
+  ok('home: the AI tool button opens the dock, not a section', dk.open && dk.section === 'visuals', JSON.stringify(dk));
+  await win.click('#side-ai-btn', { timeout: 4000 }).catch(() => {}); // close it — later checks assume the pre-dock layout
   // Back to Home so the project-open flow below starts from a clean state.
   await win.click('.as-nav-item[data-section="home"]', { timeout: 4000 }).catch(() => {});
   await win.waitForTimeout(300);

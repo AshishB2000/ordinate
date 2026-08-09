@@ -52,6 +52,10 @@ function anSyncWorkbench(): void {
   // made this surface feel stuffed — the nav is 176px of chrome you cannot use
   // while authoring, and "‹ Back" in the editor head already returns to it.
   document.body.classList.toggle('an-focus', on);
+  // dock.ts — re-evaluate now, not just on an-focus: this same function is
+  // dashGrid.ts's post-`applyDashEditorMode()` hook, so it also runs right
+  // after `dashReadOnly` gets its final value for the open record.
+  if (typeof dkSync === 'function') dkSync();
   anMountTopStrip(on);
   anMountFilterBar(on);
   // The analysis name IS the rename control in focus mode (the separate Rename

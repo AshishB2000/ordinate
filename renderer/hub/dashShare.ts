@@ -18,6 +18,7 @@ function enterDashPresent(): void {
   if (dashPresenting || !dashCurrent) return;
   dashPresenting = true;
   document.documentElement.classList.add('dash-presenting');
+  if (typeof dkSync === 'function') dkSync(); // dock.ts — presentation mode suppresses the dock
   dashShow('dash-present-exit', true);
   dashPresentKeyHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); exitDashPresent(); } };
   document.addEventListener('keydown', dashPresentKeyHandler, true);
@@ -28,6 +29,7 @@ function exitDashPresent(): void {
   if (!dashPresenting) return;
   dashPresenting = false;
   document.documentElement.classList.remove('dash-presenting');
+  if (typeof dkSync === 'function') dkSync(); // dock.ts — re-evaluate now that presenting is off
   dashShow('dash-present-exit', false);
   if (dashPresentKeyHandler) { document.removeEventListener('keydown', dashPresentKeyHandler, true); dashPresentKeyHandler = null; }
   renderDashGrid();

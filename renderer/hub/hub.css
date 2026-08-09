@@ -4122,6 +4122,7 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .as-tool:hover { background: var(--surface-2); color: var(--text); }
 .as-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .as-tool--grow { flex: 1 1 auto; }
+.as-tool.active { background: var(--accent-soft); color: var(--accent); } /* dock open (dock.ts) */
 .as-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -10186,3 +10187,132 @@ body.cap-focus .cap-back {
 /* The model chip states "nothing connected" the way the sidebar button does —
    muted rather than alarming, because no model is a normal, supported state. */
 .xp-chip-warn { color: var(--text-dim); border-style: dashed; }
+
+/* ── AI dock — docked, toggleable panel on the right edge (dock.ts) ─────────
+   A sibling of `.ws-panel`/`.sidebar`/`.main` inside `.hub-body` (which is
+   `display: flex`), so an open dock PUSHES those over rather than covering
+   them — same flex row the Sources section's `.sidebar`+`.main` pair already
+   shares. `--dk-width` is set from localStorage by dock.ts; the fallback
+   below covers the instant before that runs. Below ~1100px there isn't room
+   to push without crushing the canvas, so it switches to a fixed overlay with
+   a scrim instead (same breakpoint the plan specifies). Task 1 ships the
+   shell only — the composer is disabled until Task 2 wires copilot:ask. */
+:root { --dk-width: 340px; }
+
+.dk-panel {
+  flex: 0 0 var(--dk-width, 340px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+}
+.dk-panel[hidden] { display: none; }
+
+.dk-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.dk-context {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.dk-head-actions { flex: none; display: flex; align-items: center; gap: 4px; }
+.dk-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.dk-icon-btn:hover { background: var(--surface-2); color: var(--text); }
+.dk-icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.dk-messages {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.dk-composer {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 0 12px 12px;
+  padding: 8px 8px 8px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+}
+.dk-composer:focus-within { border-color: var(--accent); }
+.dk-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: none;
+  resize: none;
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.dk-input:focus-visible { outline: none; }
+.dk-input::placeholder { color: var(--text-dim); }
+.dk-input:disabled { color: var(--text-dim); cursor: not-allowed; }
+.dk-send {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--r-full);
+  background: var(--accent);
+  color: var(--accent-ink);
+  cursor: pointer;
+}
+.dk-send:hover:not(:disabled) { background: var(--accent-2); }
+.dk-send:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dk-send:disabled { background: var(--surface-3); color: var(--text-faint); cursor: not-allowed; }
+
+.dk-scrim { display: none; }
+
+@media (max-width: 1100px) {
+  .dk-panel {
+    position: fixed;
+    top: 40px; /* below .titlebar (flex: 0 0 40px) — an overlaid dock must not cover the drag strip */
+    right: 0;
+    bottom: 0;
+    z-index: 9950;
+    box-shadow: var(--shadow-lg);
+  }
+  body.dk-open .dk-scrim {
+    display: block;
+    position: fixed;
+    top: 40px;
+    left: 0; right: 0; bottom: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 9940;
+  }
+}

@@ -1450,6 +1450,44 @@
         <p class="xp-jump-empty" id="xp-jump-empty" hidden>Nothing here yet — bring some data in and it will show up.</p>
       </div>
     </section>
+
+    <!-- ── AI dock — docked, toggleable panel that follows across the app ──
+         A sibling of the sidebar/section panels above, not another
+         .ws-panel: it does not swap by [data-section], it layers over
+         whichever section is showing (dock.ts owns visibility). Pushes the
+         layout via `.hub-body`'s existing `display: flex` above ~1100px;
+         narrower than that it becomes a fixed overlay with #dk-scrim behind
+         it (hub.css). Task 1 ships the shell only — the composer stays
+         disabled until copilot:ask is wired in Task 2. -->
+    <div id="dk-scrim" class="dk-scrim"></div>
+    <aside id="dk-panel" class="dk-panel" hidden aria-label="AI assistant">
+      <div class="dk-head">
+        <div class="dk-context" id="dk-context">Based on your workspace</div>
+        <div class="dk-head-actions">
+          <button id="dk-new" class="dk-icon-btn" type="button" aria-label="New conversation" title="New conversation">
+            <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button id="dk-close" class="dk-icon-btn" type="button" aria-label="Close AI panel">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="dk-messages" id="dk-messages"></div>
+      <div class="dk-composer">
+        <textarea class="dk-input" id="dk-input" rows="1"
+          placeholder="Ask about what you're looking at…"
+          aria-label="Ask about what you're looking at" disabled></textarea>
+        <button class="dk-send" id="dk-send" type="button" aria-label="Send" disabled>
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" aria-hidden="true">
+            <path d="M12 19V6M6 12l6-6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+    </aside>
   </div>
 
   <!-- ── image lightbox ───────────────────────────────────────────── -->
@@ -2349,6 +2387,9 @@
 <script src="globalSearch.js"></script>
 <script src="copilot.js"></script>
 <script src="explore.js"></script>
+<!-- The AI dock — reads `selectSection`/`wsBodyEl` (workspace.js) and
+     `dashReadOnly` (dashboards.js) at call time, so it loads after both. -->
+<script src="dock.js"></script>
 <!-- hub.ts was 2051 lines; these five are it, split by job (.claude/rules/file-size.md).
      ORDER IS LOAD-BEARING among them, for the same reason it is for the group above:
      a classic script's top-level const/let is in TDZ until its own file has run, so a
