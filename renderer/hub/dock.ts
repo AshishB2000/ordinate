@@ -17,6 +17,13 @@
 // xpSend()/xpLoadHistory() with 'dk-messages' as the container, same as
 // Explore mirrors the original copilot.ts panel. Three surfaces, light
 // duplication, no shared askFlow() — see the plan for why.
+//
+// Task 3 adds proposals: after a successful ask, dkSend() below hands the
+// question/answer to dkOfferProposal() (dockPropose.ts, a second file — this
+// one was already ~360 lines before Task 3, see .claude/rules/file-size.md).
+// dock.ts owns only the two integration points — clear the last turn's
+// proposal before a new one, offer a new one after a successful answer —
+// everything about WHICH proposal and how it applies lives in dockPropose.ts.
 
 // ── Suppression ───────────────────────────────────────────────────────────
 /**
@@ -185,6 +192,9 @@ function dkHideHint(): void {
 }
 
 async function dkLoadHistory(): Promise<void> {
+  // A proposal is never persisted (dockPropose.ts) — rebuilding from disk
+  // truth is exactly the moment to drop whatever the last turn offered.
+  if (typeof dkClearProposal === 'function') dkClearProposal();
   if (!currentProjectId) { renderCopilotTurns([], 'dk-messages', ''); return; }
   let res: any = null;
   try {
@@ -205,6 +215,7 @@ async function dkSend(): Promise<void> {
   const ref = buildCopilotContextRef();
 
   // Optimistic UI: the question + a pending marker appear immediately.
+  if (typeof dkClearProposal === 'function') dkClearProposal(); // last turn's proposal, if any, is superseded
   dkHideHint();
   appendCopilotBubble('user', question, undefined, 'dk-messages');
   appendCopilotBubble('assistant', 'Thinking…', undefined, 'dk-messages');
@@ -229,6 +240,9 @@ async function dkSend(): Promise<void> {
     if (Array.isArray(res.turns)) renderCopilotTurns(res.turns, 'dk-messages', '');
     else await dkLoadHistory();
     dkHideHint();
+    // A proposal is a bonus, never a requirement of the answer — fire it after
+    // the transcript has settled and never let it block the composer.
+    if (typeof dkOfferProposal === 'function') void dkOfferProposal(ref, question, String(res.answer || ''));
     return;
   }
 
@@ -260,6 +274,7 @@ async function dkNew(): Promise<void> {
     await window.hub.copilotClear(currentProjectId);
   } catch (_) { /* ignore */ }
   renderCopilotTurns([], 'dk-messages', '');
+  if (typeof dkClearProposal === 'function') dkClearProposal();
 }
 
 // Reconcile the composer with project/readiness state and reload history.

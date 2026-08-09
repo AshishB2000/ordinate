@@ -300,3 +300,8 @@ scripts/**/*.js
 
 # The AI dock. Emitted sibling.
 /renderer/hub/dock.js
+
+# Dock proposals (Task 3) — split out of dock.ts, see file-size.md. Emitted
+# siblings.
+/renderer/hub/dockPropose.js
+/scripts/test-dockReversibility.js
