@@ -2403,10 +2403,11 @@
      `dashReadOnly` (dashboards.js) at call time, so it loads after both. -->
 <script src="dock.js"></script>
 <!-- Dock proposals (Task 3) — reads stepSummaryText/applyStepResult/
-     openStepEditor (prepare.js), renderVizInArea/eligibleChartTypes/
+     prefillCalcFieldEditor (prepare.js), renderVizInArea/eligibleChartTypes/
      countNumericSeries (renderResult.js), dashCurrentPage/dashUuid/
-     nextFreeRow (dashGrid.js) and pushCard (dashAdd.js), so it loads after
-     dock.js AND after all four of those. -->
+     nextFreeRow (dashGrid.js), pushCard (dashAdd.js), openSavedDataset
+     (dsExplorer.js) and dxSelectTab (dataSection.js), so it loads after
+     dock.js AND after all six of those. -->
 <script src="dockPropose.js"></script>
 <!-- hub.ts was 2051 lines; these five are it, split by job (.claude/rules/file-size.md).
      ORDER IS LOAD-BEARING among them, for the same reason it is for the group above:
