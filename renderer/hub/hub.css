@@ -4118,6 +4118,13 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   font-weight: 500;
   cursor: pointer;
 }
+/* `hidden` loses to an explicit `display` — the same trap .an-side, .ds-explorer
+   and the import blocks all document, and the same trap `.dk-edge[hidden]`
+   (above) has its own explicit rule for. No `.as-tool` currently sets
+   `hidden` from JS (#side-ai-btn always shows — it opens Explore), but this
+   is a correct latent fix kept general on purpose: any future `.as-tool`
+   that does would silently stay on screen and clickable without it. */
+.as-tool[hidden] { display: none; }
 .as-tool .ic { flex: 0 0 auto; }
 .as-tool:hover { background: var(--surface-2); color: var(--text); }
 .as-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -8889,13 +8896,84 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   gap: 8px;
 }
 
-/* ── AI Copilot panel (Week 11) ─────────────────────────────────────────────
-   Theme-aware via the shared CSS vars (no hard-coded colors). CSP forbids inline
-   style attributes in HTML — everything visual lives here. */
-
 /* ── Embedded AI actions (Week 12) — interpretation clearly marked distinct from
-   app-computed facts. Reused by prepare (calc field) + dashboards (summary,
-   anomalies). ─────────────────────────────────────────────────────────────── */
+   app-computed facts. Reused by prepare.ts (calc-field suggestion),
+   dashAi.ts (dashboard summary/anomaly explanations) and dockPropose.ts (the
+   AI dock's proposal cards).
+   RESTORED during the feat/ai-dock merge: 498d647 deleted this block along
+   with the retired copilot.ts panel, but prepare.ts and dashAi.ts still
+   build these classes (mkAiPanel, .ai-interp/.ai-interp-body/.ai-facts*) —
+   verified by grep, not guessed. Deleting it left dashboard AI summaries and
+   the calc-field suggestion panel rendering unstyled on develop already;
+   dockPropose.ts would have shipped a third, silent case. The retired
+   panel-shell rules (.ai-panel/.ai-messages/.ai-msg/.ai-composer/…) are NOT
+   restored — Explore's .xp-* equivalents replaced those for good. ────────── */
+.ai-interp {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--bg-elev, var(--surface-2));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.ai-interp[hidden] { display: none; }
+.ai-interp-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ai-badge {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.ai-interp-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.ai-interp-body {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-strong);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ai-interp-hint {
+  font-size: 13px;
+  color: var(--muted);
+}
+.ai-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-3);
+}
+.ai-facts-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.ai-facts-item {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-strong);
+}
+.ai-facts-item.ai-facts-warn {
+  color: var(--warn);
+}
+
 /* Without this the `hidden` attribute lost to `display: flex` and the panel
    painted as an empty bordered bar above every dashboard grid. */
 .dash-list-head-actions {
@@ -10134,6 +10212,228 @@ body.cap-focus .cap-back {
 /* The model chip states "nothing connected" the way the sidebar button does —
    muted rather than alarming, because no model is a normal, supported state. */
 .xp-chip-warn { color: var(--text-dim); border-style: dashed; }
+
+/* ── AI dock — docked, toggleable panel on the right edge (dock.ts) ─────────
+   A sibling of `.ws-panel`/`.sidebar`/`.main` inside `.hub-body` (which is
+   `display: flex`), so an open dock PUSHES those over rather than covering
+   them — same flex row the Sources section's `.sidebar`+`.main` pair already
+   shares. `--dk-width` is set from localStorage by dock.ts; the fallback
+   below covers the instant before that runs. Below ~1100px there isn't room
+   to push without crushing the canvas, so it switches to a fixed overlay with
+   a scrim instead (same breakpoint the plan specifies). Task 1 ships the
+   shell only — the composer is disabled until Task 2 wires copilot:ask. */
+:root { --dk-width: 340px; }
+
+.dk-panel {
+  position: relative; /* anchors #dk-handle in both push mode and the <1100px overlay */
+  flex: 0 0 var(--dk-width, 340px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+}
+.dk-panel[hidden] { display: none; }
+
+/* Closed-state entry point (dock.ts's dkSync). Fixed at the right edge — the
+   dock itself is a flex sibling that reserves NO space while `hidden`, so
+   the window's right edge is free real estate to float a small tab on. Only
+   visible when dkAllowed() && !dkIsOpen(): once the panel is open, #dk-close
+   inside it (and ⌘L) are how you leave, so this would just be a second
+   control doing the same thing at the same edge. */
+.dk-edge {
+  position: fixed;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-right: none;
+  border-radius: var(--r-md) 0 0 var(--r-md);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+}
+.dk-edge[hidden] { display: none; }
+.dk-edge:hover { background: var(--surface-2); color: var(--text); }
+.dk-edge:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Drag handle — sits astride the panel's left border so half the hit target
+   reads as "inside" and half as "outside", the same affordance a resizable
+   split pane gets everywhere else. Positioned, not a flex child, so it never
+   consumes column height in `.dk-panel`'s flex layout. */
+.dk-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 5;
+  background: transparent;
+}
+.dk-handle:hover,
+.dk-handle:focus-visible,
+.dk-handle.dk-dragging {
+  background: var(--accent);
+}
+.dk-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.dk-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.dk-context {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.dk-context-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The "stats app-computed" chip reuses .xp-prov-chip (explore.ts's provenance
+   pill — the retired copilot.ts panel's .ai-chip did not survive 498d647) as
+   a fixed-size flex item, so it never shrinks or truncates — only the label
+   does. */
+.dk-context .xp-prov-chip { flex: none; }
+.dk-head-actions { flex: none; display: flex; align-items: center; gap: 4px; }
+.dk-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.dk-icon-btn:hover { background: var(--surface-2); color: var(--text); }
+.dk-icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dk-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.dk-hint {
+  flex: none;
+  margin: 10px 14px 0;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  color: var(--text);
+  font-size: 12px;
+}
+.dk-hint[hidden] { display: none; }
+
+.dk-messages {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.dk-composer {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 0 12px 12px;
+  padding: 8px 8px 8px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+}
+.dk-composer:focus-within { border-color: var(--accent); }
+.dk-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: none;
+  resize: none;
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.dk-input:focus-visible { outline: none; }
+.dk-input::placeholder { color: var(--text-dim); }
+.dk-input:disabled { color: var(--text-dim); cursor: not-allowed; }
+.dk-send {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--r-full);
+  background: var(--accent);
+  color: var(--accent-ink);
+  cursor: pointer;
+}
+.dk-send:hover:not(:disabled) { background: var(--accent-2); }
+.dk-send:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dk-send:disabled { background: var(--surface-3); color: var(--text-faint); cursor: not-allowed; }
+
+/* Dock proposals (Task 3, dockPropose.ts). The card box itself reuses
+   .ai-interp (badge/border/background) — these only add spacing in the
+   transcript and size the chart-proposal tile for the narrow panel. */
+.dk-proposal {
+  margin: 10px 0 4px;
+}
+.dk-proposal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.dk-proposal-chart {
+  min-height: 200px;
+}
+
+.dk-scrim { display: none; }
+
+@media (max-width: 1100px) {
+  .dk-panel {
+    position: fixed;
+    top: 40px; /* below .titlebar (flex: 0 0 40px) — an overlaid dock must not cover the drag strip */
+    right: 0;
+    bottom: 0;
+    /* `flex-basis` has no effect once the item is out of flow (position:
+       fixed), so the overlay needs its own explicit width — same --dk-width
+       custom property, so the resize handle still works in overlay mode. */
+    width: var(--dk-width, 340px);
+    z-index: 9950;
+    box-shadow: var(--shadow-lg);
+  }
+  body.dk-open .dk-scrim {
+    display: block;
+    position: fixed;
+    top: 40px;
+    left: 0; right: 0; bottom: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 9940;
+  }
+}
 
 /* Explore: the chart under an answer. Sits inside the assistant bubble's row,
    so it scrolls with the turn that produced it. */

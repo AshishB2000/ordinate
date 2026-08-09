@@ -74,6 +74,10 @@ function openAnalysisFrom(a: any): void {
 // The part both entry points share: bind state, paint the editor.
 function openEditorWith(rec: any, title: string): void {
   dashCurrent = rec;
+  // dock.ts — context line now names this dashboard (dkContextRef only
+  // resolves a DASHBOARD, not an analysis, to a copilot context; either way
+  // the label must not lag behind what dashMode/dashCurrent just became).
+  if (typeof dkSync === 'function') dkSync();
   dashPageIdx = 0;
   dashDirty = false;
   if (!Array.isArray(dashCurrent.pages) || dashCurrent.pages.length === 0) {
@@ -163,6 +167,11 @@ function closeDashboardEditor(): void {
   dashShow('an-list-view', true);
   dashMode = 'dashboard';
   dashReadOnly = false;
+  // dkSync() runs AFTER dashReadOnly is reset, not before. Syncing while it was
+  // still true hid the dock and then immediately re-showed it via
+  // applyDashEditorMode() -> anSyncWorkbench() -> dkSync(), and that round trip
+  // re-ran a full history reload, a resize nudge, and a focus steal.
+  if (typeof dkSync === 'function') dkSync(); // dock.ts — context line falls back off this dashboard/analysis
   applyDashEditorMode();
   const note = dashEl('dash-readonly');
   if (note) note.hidden = true;

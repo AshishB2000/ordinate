@@ -24,9 +24,15 @@ function xpEl<T extends HTMLElement = HTMLElement>(id: string): T | null {
 // which Explore replaced. DOM only, textContent NEVER innerHTML — nothing the
 // model returns can inject markup. That rule is the reason these are copied
 // rather than rewritten.
+//
+// `containerId` defaults to Explore's own list, so every existing call site
+// above is unchanged — exactly the pattern the retired copilot.ts used
+// (`containerId = 'ai-messages'`) for the panel/Explore split. The dock
+// (dock.ts) is the second caller now, passing 'dk-messages'; there is still
+// only ONE rendering implementation.
 
-function xpAppendBubble(role: string, text: string, provenance?: any): void {
-  const list = xpEl('xp-messages');
+function xpAppendBubble(role: string, text: string, provenance?: any, containerId = 'xp-messages'): void {
+  const list = xpEl(containerId);
   if (!list) return;
   const row = document.createElement('div');
   row.className = 'xp-msg ' + (role === 'assistant' ? 'xp-msg-assistant' : 'xp-msg-user');
@@ -59,18 +65,18 @@ function xpAppendBubble(role: string, text: string, provenance?: any): void {
 }
 
 // Rebuild the whole transcript from an authoritative turns array (disk truth).
-function xpRenderTurns(turns: any[]): void {
-  const list = xpEl('xp-messages');
+function xpRenderTurns(turns: any[], containerId = 'xp-messages'): void {
+  const list = xpEl(containerId);
   if (!list) return;
   list.querySelectorAll('.xp-msg').forEach((n) => n.remove());
   if (Array.isArray(turns)) {
-    turns.forEach((t) => xpAppendBubble(t.role, typeof t.text === 'string' ? t.text : '', t.provenance));
+    turns.forEach((t) => xpAppendBubble(t.role, typeof t.text === 'string' ? t.text : '', t.provenance, containerId));
   }
-  xpScrollToBottom();
+  xpScrollToBottom(containerId);
 }
 
-function xpScrollToBottom(): void {
-  const list = xpEl('xp-messages');
+function xpScrollToBottom(containerId = 'xp-messages'): void {
+  const list = xpEl(containerId);
   if (list) list.scrollTop = list.scrollHeight;
 }
 

@@ -653,24 +653,39 @@ async function handleSuggestCalcField(): Promise<void> {
 
   // Success — open the editor prefilled; nothing is applied until the user Saves.
   if (out) { out.hidden = true; out.innerHTML = ''; }
+  prefillCalcFieldEditor(res.name, res.expression, res.warning);
+}
+
+/**
+ * Open the step editor on a NEW calculated_field and prefill it from a
+ * suggestion. Nothing is applied — the user reviews, edits and clicks Save,
+ * which is what routes through addDatasetStep and lets formula.ts compile it.
+ *
+ * Shared by BOTH AI entry points (this panel's ✨ Suggest, and the AI dock's
+ * calc-field proposal card). The positional `.ds-step-input` [0]=name /
+ * [1]=expression contract is owned by buildStepForm above; keeping ONE copy
+ * means adding a field there can't silently prefill the wrong inputs in a
+ * second place that nobody remembered to update.
+ */
+function prefillCalcFieldEditor(name: unknown, expression: unknown, warning?: unknown): void {
   openStepEditor('calculated_field', -1);
   const editor = pEl('ds-step-editor');
   if (!editor) return;
   const inputs = editor.querySelectorAll('.ds-step-input');
   const nameIn = inputs[0] as HTMLInputElement | undefined;
   const exprIn = inputs[1] as HTMLInputElement | undefined;
-  if (nameIn) nameIn.value = String(res.name || '');
-  if (exprIn) exprIn.value = String(res.expression || '');
+  if (nameIn) nameIn.value = String(name || '');
+  if (exprIn) exprIn.value = String(expression || '');
 
   // Prepend an AI-interpretation label into the editor so the user knows this is a
   // suggestion to review/edit before saving.
   const panel = document.createElement('div');
   panel.className = 'ai-interp';
   panel.appendChild(mkAiPanel('AI suggestion — review and edit; the app compiles and computes the formula'));
-  if (res.warning) {
+  if (warning) {
     const warn = document.createElement('div');
     warn.className = 'ai-interp-hint';
-    warn.textContent = String(res.warning);
+    warn.textContent = String(warning);
     panel.appendChild(warn);
   }
   editor.insertBefore(panel, editor.firstChild);

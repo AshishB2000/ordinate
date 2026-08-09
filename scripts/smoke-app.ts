@@ -738,7 +738,7 @@ async function main(): Promise<void> {
   const navSection = await homeSection();
   ok('home: a sidebar nav item switches the section', navSection === 'visuals', `section=${navSection}`);
 
-  await win.click('#side-ai-btn', { timeout: 4000 }).catch(() => {});
+  await win.click('#side-ai-btn', { timeout: 4000 }).catch(() => {}); // AI tool button opens Explore
   await win.waitForTimeout(400);
   const aiSection = await homeSection();
   ok('home: the AI tool button opens Explore, the one chat surface', aiSection === 'explore', `section=${aiSection}`);

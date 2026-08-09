@@ -65,6 +65,11 @@ async function adoptProject(id: string): Promise<boolean> {
   // future header stays in sync without a hard dependency.
   const nameEl = document.getElementById('ws-project-name');
   if (nameEl) nameEl.textContent = project.name || 'Untitled project';
+  // A project can be adopted with no section change (e.g. "+New → Data
+  // source"), which dkSync()'s other call sites never see — without this the
+  // dock keeps showing the PREVIOUS project's transcript until the next
+  // entity-open or section-switch.
+  if (typeof dkSync === 'function') dkSync();
   return true;
 }
 
@@ -104,6 +109,9 @@ function selectSection(section: string): void {
   if (section === 'explore' && typeof refreshExplore === 'function') void refreshExplore();
   // Reload the connector catalogue when Connect becomes active (connections.ts).
   if (section === 'connect' && typeof refreshConnPanel === 'function') void refreshConnPanel();
+  // Recompute the AI dock's visibility for the new section (dock.ts) — this is
+  // what forces it closed on Explore and re-shows it everywhere else.
+  if (typeof dkSync === 'function') dkSync();
 }
 
 // Leave `section` for whatever was showing before it, falling back to Home.
@@ -121,7 +129,9 @@ function initWorkspaceRouter(): void {
     item.addEventListener('click', () => selectSection((item as HTMLElement).dataset.section || 'home'));
   });
   // The AI tool button now opens Explore — there is ONE chat surface, and the
-  // 'ai' section it used to open no longer exists.
+  // 'ai' section it used to open no longer exists. The dock (dock.ts) has its
+  // own entry points (⌘L, its own edge affordance) — #side-ai-btn is not one
+  // of them.
   const ai = document.getElementById('side-ai-btn');
   if (ai) ai.addEventListener('click', () => selectSection('explore'));
   // The only way out of the Capture workspace while the nav is hidden. Reuses
@@ -146,6 +156,7 @@ function initWorkspaceRouter(): void {
  */
 function setCaptureFocus(on: boolean): void {
   document.body.classList.toggle('cap-focus', on);
+  if (typeof dkSync === 'function') dkSync(); // dock.ts — cap-focus suppresses the dock
   if (!on) return;
   const h = document.getElementById('main-title-h');
   const sub = document.getElementById('main-title-sub');

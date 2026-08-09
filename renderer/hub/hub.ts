@@ -73,6 +73,7 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
 // section and is otherwise untouched.
 (function initWorkspaceShell() {
   initWorkspaceRouter(); // workspace.ts — wires the persistent sidebar nav
+  initDock();             // dock.ts — the AI dock shell (⌘L + width var + close/scrim)
   selectSection('home'); // workspace.ts — Home is the default section
   initHome();            // projects.ts
   initDatasets();        // datasets.ts

@@ -299,3 +299,14 @@ scripts/**/*.js
 # Explore — the conversational front door. Emitted sibling.
 /renderer/hub/explore.js
 /renderer/hub/exploreChart.js
+
+# The AI dock. Emitted sibling.
+/renderer/hub/dock.js
+
+# Dock proposals (Task 3) — split out of dock.ts, see file-size.md. Emitted
+# siblings.
+/renderer/hub/dockPropose.js
+/scripts/test-dockReversibility.js
+
+# Dock smoke (Task 4). Emitted sibling.
+/scripts/smoke-dock.js
