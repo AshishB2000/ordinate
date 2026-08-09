@@ -121,19 +121,28 @@ function leaveSection(section: string): void {
   selectSection(previousSection && previousSection !== section ? previousSection : 'home');
 }
 
-// Wire the persistent sidebar nav (once, on boot). The AI tool button opens
-// Explore; the connect items and "More…" are wired in projects.ts (they resolve
-// a project first).
+// Wire the persistent sidebar nav (once, on boot). The AI tool button toggles
+// the dock; the connect items and "More…" are wired in projects.ts (they
+// resolve a project first).
 function initWorkspaceRouter(): void {
   document.querySelectorAll('.as-nav-item').forEach((item) => {
     item.addEventListener('click', () => selectSection((item as HTMLElement).dataset.section || 'home'));
   });
-  // The AI tool button now opens Explore — there is ONE chat surface, and the
-  // 'ai' section it used to open no longer exists. The dock (dock.ts) has its
-  // own entry points (⌘L, its own edge affordance) — #side-ai-btn is not one
-  // of them.
+  // The AI tool button toggles the DOCK (dock.ts), not Explore.
+  //
+  // 498d647 pointed it at Explore, which left two chat surfaces sharing one
+  // button — except Explore already has its own top-level nav item, first in
+  // the nav above. So this was never Explore's only door; it was a SECOND
+  // door to a place that already had one, while the dock had no sidebar
+  // presence at all. Pointing it at the dock deletes the duplicate rather
+  // than adding a second thing labelled "AI": Explore keeps its nav item
+  // (blank page, pick a dataset, start cold) and "Ask AI" down here is the
+  // contextual one that knows what you're already looking at.
+  //
+  // dkToggle() checks dkAllowed() itself, and dkSync() disables this button
+  // wherever the dock is suppressed — the predicate is NOT duplicated here.
   const ai = document.getElementById('side-ai-btn');
-  if (ai) ai.addEventListener('click', () => selectSection('explore'));
+  if (ai && typeof dkToggle === 'function') ai.addEventListener('click', () => dkToggle());
   // The only way out of the Capture workspace while the nav is hidden. Reuses
   // leaveSection() — the same helper Connect's Close uses — rather than adding a
   // second notion of "where was I".

@@ -438,15 +438,18 @@ async function main(): Promise<void> {
       ['ai-messages', 'ai-input', 'ai-send', 'ai-toggle', 'ai-clear', 'ai-empty', 'ai-context', 'ai-hint']
         .every((id) => document.getElementById(id) === null)));
 
-  // The AI tool button is the third door into the one chat surface.
+  // Explore's own nav item is the door. #side-ai-btn used to be a second one;
+  // it toggles the AI dock now (smoke-dock.ts), because Explore already had
+  // this entry and the dock had none — so the assertion here is that the nav
+  // item is a real, sufficient route on its own.
   await win.evaluate(() => { (window as any).selectSection('home'); });
   await win.waitForTimeout(300);
-  await win.click('#side-ai-btn', { timeout: 8000 });
+  await win.click('.as-nav-item[data-section="explore"]', { timeout: 8000 });
   await win.waitForFunction(
     () => document.querySelector('.hub-body')?.getAttribute('data-section') === 'explore',
     { timeout: 8000 },
   );
-  ok('the sidebar AI button opens Explore, not a retired section',
+  ok('the Explore nav item opens Explore, not a retired section',
     (await sectionOf(win)) === 'explore');
 
   // The hard OFF switch came across with the feature. It was the panel's only

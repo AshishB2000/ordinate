@@ -107,21 +107,92 @@ async function main(): Promise<void> {
       { type: 'filter', column: 'revenue', op: '>', value: 0 },
     ];
     await datasets.updateSteps(proj.id, ds.id, seedSteps);
-    return { projectId: proj.id, datasetId: ds.id };
+    // …plus a real analysis with two half-width visual cards, for the
+    // an-focus layout check at the end of this file.
+    const analysis = req('./src/analysis.js');
+    await analysis.init();
+    const visualsMod = req('./src/visuals.js');
+    const viz = await visualsMod.saveVisual(proj.id, {
+      name: 'Revenue by region',
+      datasetId: ds.id,
+      chartType: 'bar',
+      encoding: { category: 'region', values: [{ column: 'revenue', aggregation: 'sum' }] },
+      filters: [],
+    });
+    const an = await analysis.saveAnalysis(proj.id, {
+      name: 'Sales review',
+      sheets: [{
+        name: 'Page 1',
+        cards: [
+          { type: 'visual', visualId: viz.id, layout: { x: 0, y: 0, w: 6, h: 4 } },
+          { type: 'visual', visualId: viz.id, layout: { x: 6, y: 0, w: 6, h: 4 } },
+        ],
+      }],
+    });
+    return { projectId: proj.id, datasetId: ds.id, analysisId: an.id };
   });
   ok('seeded a project and a dataset with a real 2-step pipeline', Boolean(seeded.projectId && seeded.datasetId));
 
   await win.evaluate((pid: string) => (window as any).openWorkspace(pid), seeded.projectId);
   await win.waitForTimeout(1200);
 
+  // ── First run opens the dock exactly once ───────────────────────────────
+  // Discoverability: a panel nobody opens is a panel nobody knows about, so
+  // the first run that can actually use it (a project open, not suppressed)
+  // opens it for you and writes the `dkSeen` sentinel. This smoke run boots
+  // into a fresh --user-data-dir, so localStorage is genuinely empty and this
+  // is genuinely a first run.
+  ok('first run opens the dock by itself', await win.locator('#dk-panel').isVisible());
+  ok('…and records the sentinel so it never does it again',
+    (await win.evaluate(() => localStorage.getItem('dkSeen'))) === '1');
+  // The second half of "once": close it, force another full sync, and it must
+  // stay closed. This is the assertion that fails if the sentinel check is
+  // ever dropped or inverted.
+  await win.evaluate(() => { (window as any).dkSetOpen(false); (window as any).dkSync(); });
+  await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
+  ok('…and a later sync does NOT re-open it', await win.locator('#dk-panel').isHidden());
+
+  // ── The sidebar "Ask AI" button toggles the DOCK, not Explore ───────────
+  // 498d647 pointed #side-ai-btn at Explore, which already has its own nav
+  // item — a duplicate door, while the dock had no sidebar presence at all.
+  // It is the dock's again. These are the assertions that fail if it ever
+  // drifts back, or if a second button labelled "AI" appears beside it.
+  ok('the sidebar AI button is labelled to distinguish it from Explore',
+    /ask ai/i.test((await win.locator('#side-ai-btn').textContent()) || ''),
+    (await win.locator('#side-ai-btn').textContent() || '').trim());
+  ok('…and the Explore nav item still exists as its own separate entry',
+    (await win.locator('.as-nav-item[data-section="explore"]').count()) === 1);
+  ok('…so exactly one sidebar control mentions AI',
+    (await win.evaluate(() => Array.from(document.querySelectorAll('#app-sidebar button'))
+      .filter((b) => /\bai\b/i.test(b.textContent || '')).length)) === 1);
+  await win.click('#side-ai-btn', { timeout: 8000 });
+  await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
+  ok('clicking it OPENS THE DOCK (it must not navigate to Explore)',
+    await win.locator('#dk-panel').isVisible()
+      && (await win.evaluate(() =>
+        (document.querySelector('.hub-body') as HTMLElement).dataset.section)) !== 'explore');
+  ok('…and reports its state through aria-expanded',
+    (await win.getAttribute('#side-ai-btn', 'aria-expanded')) === 'true');
+  await win.click('#side-ai-btn', { timeout: 8000 });
+  await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
+  ok('…and closes it again — it is a toggle, not a one-way door',
+    await win.locator('#dk-panel').isHidden()
+      && (await win.getAttribute('#side-ai-btn', 'aria-expanded')) === 'false');
+
   // ── Toggle from the dock's own edge affordance ──────────────────────────
-  // #side-ai-btn (the sidebar AI button) opens Explore now (develop's
-  // 498d647) — the dock's entry points are #dk-edge (the closed-state tab at
-  // the right edge) and ⌘L.
+  // #dk-edge is the closed-state tab at the right edge; ⌘L and #side-ai-btn
+  // are the other two ways in.
   ok('the edge tab starts visible and collapsed (aria-expanded=false)',
     await win.locator('#dk-edge').isVisible());
   ok('…aria-expanded=false',
     (await win.getAttribute('#dk-edge', 'aria-expanded')) === 'false');
+  // Legibility: the closed tab must SAY something. Icon-only in --muted read
+  // as an edge ornament and went unclicked — this is that regression guard.
+  ok('…and carries a visible text label, not just an icon',
+    /\S/.test((await win.locator('#dk-edge .dk-edge-label').textContent()) || ''),
+    await win.locator('#dk-edge .dk-edge-label').textContent() || '(none)');
+  ok('…which is also its accessible name (no aria-label to drift from it)',
+    (await win.getAttribute('#dk-edge', 'aria-label')) === null);
 
   await win.click('#dk-edge', { timeout: 8000 });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
@@ -399,11 +470,13 @@ async function main(): Promise<void> {
     const visualsMod = req('./src/visuals.js');
     return visualsMod.listVisuals(args.pid);
   }, { pid: seeded.projectId });
-  const savedVisual = visuals.find((v: any) => v.datasetId === seeded.datasetId);
+  // By NAME, not by datasetId: the seeded analysis above owns a visual on the
+  // same dataset, so datasetId no longer identifies this one.
+  const savedVisual = visuals.find((v: any) => v.name === question);
   ok('a real visual record was created from the proposal', Boolean(savedVisual), JSON.stringify(visuals));
-  ok('…named from the question, and drawn as the proposed chart type',
-    Boolean(savedVisual) && savedVisual.name === question && savedVisual.chartType === 'bar',
-    savedVisual ? `${savedVisual.name} / ${savedVisual.chartType}` : '');
+  ok('…against the right dataset, and drawn as the proposed chart type',
+    Boolean(savedVisual) && savedVisual.datasetId === seeded.datasetId && savedVisual.chartType === 'bar',
+    savedVisual ? `${savedVisual.datasetId} / ${savedVisual.chartType}` : '');
   ok('the proposal card cleans itself up after saving',
     (await win.locator('#dk-messages .dk-proposal').count()) === 0);
 
@@ -414,18 +487,26 @@ async function main(): Promise<void> {
   // exists to guard. Explore is the cheapest condition to drive (a plain
   // section switch) and the most absurd to get wrong: two chats side by side.
   //
-  // Explore is ALSO the case that matters most now that #side-ai-btn opens
-  // Explore instead of the dock (develop's 498d647): the two must not fight
-  // over the same button, and #side-ai-btn must stay usable — clicking it
-  // is how you GET to Explore, so the dock suppressing it would strand the
-  // user with no way in.
+  // Explore is ALSO the case that matters most now that #side-ai-btn toggles
+  // the dock: suppression has to reach EVERY entry point, or the sidebar
+  // button becomes a control that visibly does nothing on the one section
+  // where the dock refuses to appear.
   await win.evaluate(() => { (window as any).selectSection('explore'); });
   await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
   ok('the dock is suppressed on the Explore section', await win.locator('#dk-panel').isHidden());
   ok('…and its own edge-tab entry point is withdrawn too, not just the panel',
     await win.locator('#dk-edge').isHidden());
-  ok('…but #side-ai-btn (which OPENS Explore) is left alone — the dock must not hide it',
-    await win.locator('#side-ai-btn').isVisible());
+  // Disabled, NOT hidden — the sidebar is a fixed list and dropping a row out
+  // of it would make the whole bottom group jump on every visit to Explore.
+  ok('…and the sidebar button is disabled rather than removed (no layout jump)',
+    await win.locator('#side-ai-btn').isVisible()
+      && await win.locator('#side-ai-btn').isDisabled());
+  ok('…so clicking it while suppressed opens nothing',
+    await win.evaluate(() => {
+      (document.getElementById('side-ai-btn') as HTMLButtonElement).click();
+      const p = document.getElementById('dk-panel');
+      return Boolean(p && p.hidden);
+    }));
   // …and it comes back on leaving Explore, so suppression is a gate, not a kill.
   await win.evaluate(() => { (window as any).selectSection('datasets'); });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
@@ -438,6 +519,97 @@ async function main(): Promise<void> {
   ok('…and its edge tab too', await win.locator('#dk-edge').isHidden());
   await win.evaluate(() => { document.documentElement.classList.remove('dash-presenting'); (window as any).dkSync(); });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
+
+  // ── an-focus is NOT a suppression any more — and the layout proves it ────
+  // The dock used to be forced closed inside an open analysis because the plan
+  // assumed the workbench owned the full width. It was measured instead (the
+  // table in docs/superpowers/plans/2026-08-09-ai-dock.md) and it does not.
+  // This is that measurement, reduced to the assertions that would catch a
+  // regression: the dock is ALLOWED here, and with its 340px taken at the
+  // tightest supported push width nothing overflows and the one-row editor
+  // head stays one row.
+  //
+  // It matters most here that #dk-edge got a label in Task 1: focus mode hides
+  // the whole sidebar, so the edge tab and ⌘L are the only two ways in.
+  // Enter the analysis with the dock ALREADY open — the transition that used
+  // to slam it shut.
+  await win.evaluate(() => { (window as any).selectSection('analyses'); });
+  await win.waitForTimeout(400);
+  await win.evaluate((id: string) => (window as any).openAnalysis(id), seeded.analysisId);
+  await win.waitForFunction(() => document.body.classList.contains('an-focus'), { timeout: 10_000 });
+  ok('an analysis really is open in focus mode', await win.evaluate(() => document.body.classList.contains('an-focus')));
+  ok('the dock SURVIVES opening an analysis (an-focus is no longer a suppression)',
+    await win.locator('#dk-panel').isVisible());
+  ok('…and the whole sidebar is gone with it, so #side-ai-btn cannot be the way back in',
+    await win.locator('#side-ai-btn').isHidden());
+
+  // …and it can be re-opened from inside, where the labelled edge tab and ⌘L
+  // are the only two entry points left.
+  await win.evaluate(() => { (window as any).dkSetOpen(false); });
+  await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
+  ok('…so the labelled edge tab is offered here, and it is the way in',
+    await win.locator('#dk-edge').isVisible());
+  await win.click('#dk-edge', { timeout: 8000 });
+  await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
+  ok('…and clicking it opens the dock inside the open analysis',
+    await win.locator('#dk-panel').isVisible());
+
+  // 1180px is the tightest width the dock still PUSHES at (below ~1100 it
+  // becomes an overlay and takes no layout space at all), and the flyout open
+  // is the widest the chrome ever gets. That combination is the worst case.
+  // Back to the DEFAULT 340px — the resize tests above left it at the 300px
+  // minimum, and 340 is the width the plan doc's table was measured at.
+  await win.evaluate(() => { (window as any).dkPersistWidth(340); });
+  await app.evaluate(({ BrowserWindow }, _a) => { BrowserWindow.getAllWindows()[0].setContentSize(1180, 900); }, null);
+  await win.waitForTimeout(700);
+  await win.evaluate(() => {
+    const btn = document.querySelector('#an-rail .an-rail-btn[data-pane="an-pane-data"]') as HTMLElement | null;
+    const side = document.querySelector('.an-side') as HTMLElement | null;
+    if (btn && (!side || side.hidden)) btn.click();
+  });
+  await win.waitForTimeout(600);
+  const layout = await win.evaluate(() => {
+    const box = (sel: string) => {
+      const el = document.querySelector(sel) as HTMLElement | null;
+      return el && !el.hidden && el.offsetParent !== null ? Math.round(el.getBoundingClientRect().width) : 0;
+    };
+    const head = document.querySelector('body.an-focus .dash-editor-head') as HTMLElement | null;
+    const grid = document.querySelector('#dash-grid') as HTMLElement | null;
+    const doc = document.documentElement;
+    return {
+      rail: box('#an-rail'),
+      flyout: box('.an-side'),
+      sheet: box('.an-workbench.is-active > .dash-editor'),
+      dock: box('#dk-panel'),
+      headH: head ? Math.round(head.getBoundingClientRect().height) : 0,
+      headOvf: head ? head.scrollWidth - head.clientWidth : 0,
+      gridOvf: grid ? grid.scrollWidth - grid.clientWidth : 0,
+      pageOvf: doc.scrollWidth - doc.clientWidth,
+      pushed: getComputedStyle(document.getElementById('dk-panel')!).position !== 'fixed',
+    };
+  });
+  ok('…in PUSH mode at 1180px, taking its full 340px of real layout width',
+    layout.pushed && layout.dock === 340, JSON.stringify(layout));
+  ok('…the 48px rail and 252px flyout are not squeezed by it',
+    layout.rail === 48 && layout.flyout === 252, JSON.stringify(layout));
+  // 358px in a 1180px window is the sheet width that produced focus mode in
+  // the first place (hub.css:6680). The worst case here measured 540px.
+  ok('…the sheet absorbs the whole 340px and still clears the 358px that made focus mode',
+    layout.sheet > 500, `sheet=${layout.sheet}px`);
+  ok('…the editor head stays ONE row (it wrapped Save onto a second line at 665px)',
+    layout.headH < 70, `headH=${layout.headH}px`);
+  ok('…and nothing overflows horizontally — head, grid or document',
+    layout.headOvf <= 0 && layout.gridOvf <= 0 && layout.pageOvf <= 0, JSON.stringify(layout));
+
+  // Leave the analysis: the dock must survive the transition either way.
+  await win.evaluate(() => {
+    const back = [...document.querySelectorAll('.dash-editor-head button')]
+      .find((b) => /Back/.test(b.textContent || '')) as HTMLElement | undefined;
+    back?.click();
+  });
+  await win.waitForFunction(() => !document.body.classList.contains('an-focus'), { timeout: 10_000 });
+  ok('closing the analysis leaves the dock open, not stranded',
+    await win.locator('#dk-panel').isVisible());
 
   ok('no renderer errors (incl. CSP violations)', errors.length === 0, errors.slice(0, 5).join(' | '));
 

@@ -39,9 +39,11 @@
 // and 498d647 fixed the exact bug that inference caused in Explore. The dock
 // now has its OWN resolver, dkContextRef() below: section-aware, and it
 // falls back to whole-project rather than to another section's stale global.
-// #side-ai-btn also no longer belongs to the dock — it opens Explore
-// (workspace.ts) — so the dock's entry points are ⌘L and its own edge
-// affordance, #dk-edge.
+// #side-ai-btn briefly belonged to Explore (498d647) and now belongs to the
+// dock again: Explore already had its own top-level nav item, so that button
+// was a duplicate door to a place with a door, while the dock had none in the
+// sidebar. The dock's entry points are ⌘L, its own edge affordance #dk-edge,
+// and #side-ai-btn — all three funnel through dkToggle()/dkSync().
 
 // ── Suppression ───────────────────────────────────────────────────────────
 /**
@@ -56,7 +58,16 @@ function dkAllowed(): boolean {
   // was built, not a typo. Check the element each one actually uses; do not
   // "fix" this into a single selector.
   if (document.documentElement.classList.contains('dash-presenting')) return false;
-  if (document.body.classList.contains('an-focus')) return false; // analyses workbench owns the width
+  // NOT suppressed in `an-focus`. The plan's "the analyses workbench already
+  // owns the full width" was an assumption, and an open analysis is the
+  // surface where a contextual assistant is worth the most. Measured in the
+  // real app instead (full table in
+  // docs/superpowers/plans/2026-08-09-ai-dock.md): at 1180px with BOTH the
+  // 48px rail and the 252px flyout open, a 340px dock leaves the sheet 540px
+  // and each of two half-width cards 247px; at 1440px, 800px and 377px. The
+  // editor head stays one row (47px) in all eight combinations, and head,
+  // grid and document horizontal overflow are 0 everywhere. Focus mode hides
+  // the 176px sidebar, which is most of what the dock takes back.
   if (document.body.classList.contains('cap-focus')) return false; // capture surface is deliberately bare
   const body = document.querySelector('.hub-body') as HTMLElement | null;
   if (body && body.dataset.section === 'explore') return false; // Explore IS the chat
@@ -72,6 +83,34 @@ function dkIsOpen(): boolean {
 function dkSetOpen(open: boolean): void {
   try { localStorage.setItem('dkOpen', open ? '1' : '0'); } catch (_) { /* private mode / quota — just won't survive reload */ }
   dkSync();
+}
+
+/**
+ * Open the dock ONCE, ever, on the first run that can actually use it — the
+ * dock is then discovered by having been used, which is the only thing that
+ * reliably teaches a panel exists. Called from the top of `dkSync()`, the one
+ * function every entry point already routes through.
+ *
+ * Three deliberate details:
+ *  - It writes `dkOpen` directly rather than calling `dkSetOpen()`, which
+ *    would re-enter `dkSync()`. The caller recomputes everything from
+ *    `dkIsOpen()` immediately after, so a second pass is pure recursion.
+ *  - `dkSeen` is written ONLY when it actually opens. A boot that lands
+ *    somewhere suppressed (`dkAllowed()`) or before any project is open would
+ *    otherwise burn the one chance on a dock the user never saw — this defers
+ *    to the next sync instead, which is why the check lives in `dkSync()` and
+ *    not in `initDock()`.
+ *  - It does NOT set `dkUserOpened`. The user did not ask for this; pulling
+ *    keyboard focus into the composer would be a louder surprise than the
+ *    panel itself.
+ */
+function dkFirstRun(): void {
+  try {
+    if (localStorage.getItem('dkSeen') === '1') return;
+    if (!dkAllowed() || !currentProjectId) return;
+    localStorage.setItem('dkSeen', '1');
+    localStorage.setItem('dkOpen', '1');
+  } catch (_) { /* private mode / quota — no first-run open, and nothing else breaks */ }
 }
 
 function dkToggle(): void {
@@ -293,7 +332,7 @@ let dkLastProjectId: string | null = null;
 // Set by an explicit user open (toggle button / ⌘L), consumed by the next
 // dkSync(). Focus is only pulled into the dock when the USER opened it — not
 // when it merely became visible again because a suppression condition lifted
-// (leaving presentation or an-focus/cap-focus, closing a dashboard). Those are
+// (leaving presentation or cap-focus, closing a dashboard). Those are
 // navigations the user drove elsewhere, and stealing focus into the composer
 // there yanks it out from under them.
 let dkUserOpened = false;
@@ -307,12 +346,12 @@ let dkUserOpened = false;
  * the active project changed under it.
  */
 function dkSync(): void {
+  dkFirstRun(); // may flip `dkOpen` before the read below — self-limiting, never recurses
   const panel = document.getElementById('dk-panel');
-  // #side-ai-btn belongs to Explore now (workspace.ts opens it there) — the
-  // dock must NOT hide or otherwise touch it. #dk-edge is the dock's OWN
-  // closed-state entry point (its other one is ⌘L), so it is the only
-  // element dkSync manages here.
+  // Three entry points now: #dk-edge (the closed-state tab), #side-ai-btn
+  // (the sidebar tool button — workspace.ts wires it to dkToggle) and ⌘L.
   const edge = document.getElementById('dk-edge');
+  const sideBtn = document.getElementById('side-ai-btn') as HTMLButtonElement | null;
   const allowed = dkAllowed();
   const visible = allowed && dkIsOpen();
   // The edge tab is only useful as an OPEN affordance — while the dock is
@@ -321,6 +360,17 @@ function dkSync(): void {
   // same edge.
   if (edge) edge.hidden = !allowed || visible;
   if (edge) edge.setAttribute('aria-expanded', String(visible));
+  // The sidebar button is DISABLED where suppressed, not hidden: it is a
+  // fixed row in a persistent sidebar, so removing it would make the whole
+  // bottom group jump every time you visit Explore. (cap-focus hides the
+  // entire sidebar anyway, so this only ever fires for Explore, presentation
+  // and a published dashboard.) Unlike #dk-edge it stays visible and enabled
+  // while the dock is OPEN, because it is a toggle: it is how you close the
+  // dock from the sidebar, which is exactly what aria-expanded promises.
+  if (sideBtn) {
+    sideBtn.disabled = !allowed;
+    sideBtn.setAttribute('aria-expanded', String(visible));
+  }
   const justOpened = visible && dkLastVisible !== true && dkUserOpened;
   if (panel) panel.hidden = !visible;
   document.body.classList.toggle('dk-open', visible); // drives the <1100px scrim in hub.css
@@ -578,10 +628,10 @@ function initDock(): void {
   if (closeBtn) closeBtn.addEventListener('click', () => dkSetOpen(false));
   const scrim = document.getElementById('dk-scrim');
   if (scrim) scrim.addEventListener('click', () => dkSetOpen(false));
-  // The dock's own closed-state entry point — #side-ai-btn opens Explore now
-  // (workspace.ts), so this is wired here, not there. dkToggle() itself
-  // checks dkAllowed(); dkSync() keeps #dk-edge hidden while suppressed or
-  // already open.
+  // The dock's own closed-state entry point. (#side-ai-btn is the sidebar's,
+  // wired in workspace.ts beside the rest of the sidebar; both land on the
+  // same dkToggle().) dkToggle() checks dkAllowed(); dkSync() keeps #dk-edge
+  // hidden while suppressed or already open.
   const edge = document.getElementById('dk-edge');
   if (edge) edge.addEventListener('click', () => dkToggle());
 
