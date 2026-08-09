@@ -11,16 +11,20 @@
 // A smoke run has no model configured, so the AI-backed suggestion IPCs
 // (dataset:suggestSteps, dataset:suggestCalcField, visual:suggest) all return
 // `notReady` — there is no way to drive the real heuristic-into-suggestion
-// path here. What CAN be driven for real: dkRenderStepCard / dkRenderCalcField
-// Card / dkRenderChartCard are plain global functions that take an
-// already-fetched proposal object and own everything from "render the card"
-// through "Apply does the real thing" — nothing about THAT half of the flow
-// depends on a model. So this test calls them directly with a fixture
-// proposal (bypassing only the notReady-gated suggest call), then clicks the
-// real Apply button and asserts the REAL effect: the pipeline gains exactly
-// one step (not a replace), the calc-field editor opens prefilled, and a
-// chart proposal's "Save as visual" creates a real visual record. It also
-// exercises the actual notReady path once, for real, with no model
+// path with a genuine model answer here. Two levels of real coverage instead:
+//
+//  1. The HANDOFF: dkOfferProposal() → dkOfferStepProposal() →
+//     window.hub.suggestDatasetSteps() → dkRenderStepCard() — stubbing ONLY
+//     the suggestion IPC (no model needed to answer with a canned response)
+//     so the actual call chain between "the answer came back" and "a card
+//     renders" runs for real. A rename anywhere in that chain fails this.
+//  2. dkRenderStepCard / dkRenderCalcFieldCard / dkRenderChartCard called
+//     DIRECTLY with a fixture proposal — real coverage of "render the card,
+//     then Apply does the real thing": the pipeline gains exactly one step
+//     (not a replace), the calc-field editor opens prefilled, and a chart
+//     proposal's "Save as visual" creates a real visual record.
+//
+// It also exercises the actual notReady path once, for real, with no model
 // configured — proving dkOfferProposal stays silent rather than erroring.
 //
 // This does NOT cover: the heuristic that decides which of the three types to
@@ -223,6 +227,56 @@ async function main(): Promise<void> {
   await win.waitForTimeout(500);
   ok('with no model configured, a real suggest call offers no card (silent notReady)',
     (await win.locator('#dk-messages .dk-proposal').count()) === 0);
+
+  // ── The offer→render HANDOFF itself ──────────────────────────────────────
+  // The three blocks below drive dkRenderStepCard/dkRenderCalcFieldCard/
+  // dkRenderChartCard DIRECTLY with a fixture — real coverage of "render the
+  // card, then Apply does the real thing", but NOT of the call from
+  // dkOfferProposal() INTO those functions (dkOfferProposal →
+  // dkOfferStepProposal → window.hub.suggestDatasetSteps → the REAL
+  // dataset:suggestSteps IPC → dkRenderStepCard). A rename or signature
+  // change anywhere in that handoff would slip past the direct-call tests
+  // below undetected.
+  //
+  // `window.hub.suggestDatasetSteps` itself can't be stubbed from here —
+  // contextBridge exposes it non-writable/non-configurable by design (a
+  // renderer-side security property, confirmed via
+  // Object.getOwnPropertyDescriptor; a plain assignment fails silently, no
+  // throw). So the stub goes at the ACTUAL boundary that needs a model: the
+  // `dataset:suggestSteps` IPC handler (src/ipc/datasets.ts) calls
+  // `analyze.suggestSteps(summaryText)` — reassign THAT function in the main
+  // process (same module-cache singleton `require('../analyze')` resolves
+  // to), then trigger the real IPC round trip from the renderer with no
+  // fakery on the renderer side at all: preload → ipcMain.handle → the
+  // stubbed model call → sanitizeSteps → back to dkOfferStepProposal →
+  // dkRenderStepCard.
+  await app.evaluate(async (_electronModule) => {
+    const req = (process as any).mainModule.require.bind((process as any).mainModule);
+    const analyze = req('./src/analyze.js');
+    (analyze as any)._realSuggestSteps = analyze.suggestSteps;
+    analyze.suggestSteps = async () => ({ ok: true, steps: [{ type: 'trim', column: 'region' }] });
+  });
+  const handoff = await win.evaluate((args: any) => {
+    document.querySelectorAll('#dk-messages .dk-proposal').forEach((n) => n.remove());
+    return Promise.resolve((window as any).dkOfferProposal(
+      { kind: 'dataset', id: args.datasetId },
+      'why are there blank rows',
+      '412 rows have a blank region',
+    )).then(() => ({
+      cards: document.querySelectorAll('#dk-messages .dk-proposal').length,
+      summary: (document.querySelector('#dk-messages .dk-proposal .ai-interp-body') || {}).textContent || '',
+    }));
+  }, seeded);
+  await app.evaluate(async (_electronModule) => {
+    const req = (process as any).mainModule.require.bind((process as any).mainModule);
+    const analyze = req('./src/analyze.js');
+    analyze.suggestSteps = (analyze as any)._realSuggestSteps; // restore before the next test needs the real thing
+  });
+  ok('dkOfferProposal → the real dataset:suggestSteps IPC → dkRenderStepCard renders a card (the offer→render handoff)',
+    handoff.cards === 1, `${handoff.cards} cards`);
+  ok('…summarising the STUBBED suggestion, proving the render used what the IPC actually returned',
+    /trim/i.test(handoff.summary), handoff.summary);
+  await win.evaluate(() => document.querySelectorAll('#dk-messages .dk-proposal').forEach((n) => n.remove()));
 
   // ── 1. Prepare-step proposal: Apply APPENDS, never replaces ─────────────
   const proposedStep = { type: 'drop_column', column: 'note' };

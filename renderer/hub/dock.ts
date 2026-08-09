@@ -131,6 +131,15 @@ let dkDragStartX = 0;
 let dkDragStartWidth = 0;
 
 function dkHandleMouseMove(e: MouseEvent): void {
+  // Widening the panel drags the cursor AWAY from the handle (it's on the
+  // panel's left edge), so releasing outside the OS window is plausible —
+  // and when that happens, `mouseup` never reaches `document`. Without this
+  // guard the listener would stay attached and keep resizing on any later
+  // mouse movement with no button held, until an unrelated click happened to
+  // fire `mouseup` and clean up. `e.buttons` reflects the CURRENT button
+  // state on every move, so a release outside the window is caught on the
+  // very next move inside it — treat it exactly like a real mouseup.
+  if (e.buttons !== 1) { dkHandleMouseUp(); return; }
   // The dock sits on the right edge; the handle is its LEFT edge, so dragging
   // the mouse left (negative movement) is what WIDENS the panel.
   const dx = dkDragStartX - e.clientX;
