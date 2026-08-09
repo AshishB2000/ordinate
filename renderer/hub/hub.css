@@ -9862,7 +9862,7 @@ body.cap-focus .cap-back {
 .xp-jump-rows {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px 18px;
+  gap: 4px 32px;
   max-height: 168px;
   overflow-y: auto;
 }
@@ -9976,6 +9976,10 @@ body.cap-focus .cap-back {
   overflow-y: auto;
   padding-right: 4px;
 }
+/* A short conversation sits ON the composer, not at the top of a void. Done with
+   margin-top:auto on the first bubble rather than justify-content:flex-end,
+   which clips the top of an overflowing flex container in Chromium. */
+.xp-panel.xp-asked .xp-messages > .xp-msg:first-child { margin-top: auto; }
 /* The strip STAYS during a transcript — it is the only route to another
    conversation or a new one, and hiding it stranded the user in whichever
    thread they happened to open. It shrinks instead: the transcript stays the

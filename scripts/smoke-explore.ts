@@ -295,6 +295,7 @@ async function main(): Promise<void> {
   ok('clicking a past conversation resumes it with its turns intact',
     (await win.locator('#xp-messages .xp-msg').count()) === 2);
 
+
   // ── A pre-threads copilot.json still loads (schemaVersion 1 → 2) ──────────
   // The migration is unit-tested in scripts/test-copilot-threads.ts; what only a
   // real run can prove is that a file written by the SHIPPED previous version is
