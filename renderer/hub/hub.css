@@ -10180,8 +10180,12 @@ body.cap-focus .cap-back {
   overflow-y: auto;
   padding-right: 4px;
 }
-/* Once there is a conversation on screen, the jump strip is in the way of it. */
-.xp-panel.xp-asked .xp-jump { display: none; }
+/* The strip STAYS during a transcript — it is the only route to another
+   conversation or a new one, and hiding it stranded the user in whichever
+   thread they happened to open. It shrinks instead: the transcript stays the
+   dominant thing on screen without becoming the only reachable one. */
+.xp-panel.xp-asked .xp-jump { padding-top: 10px; padding-bottom: 12px; }
+.xp-panel.xp-asked .xp-jump-rows { max-height: 74px; }
 
 /* The model chip states "nothing connected" the way the sidebar button does —
    muted rather than alarming, because no model is a normal, supported state. */
@@ -10198,3 +10202,14 @@ body.cap-focus .cap-back {
 }
 .xp-chart-area { height: 260px; min-height: 260px; }
 .xp-chart-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+/* Conversations strip: the heading gains a "New conversation" action once the
+   project has any history to leave behind. */
+.xp-jump-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.xp-jump-head .xp-jump-h { margin: 0; }

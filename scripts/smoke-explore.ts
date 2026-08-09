@@ -254,6 +254,90 @@ async function main(): Promise<void> {
   ok('…painting nothing under the answer',
     (await win.locator('#xp-messages .xp-chart').count()) === beforeCharts);
 
+  // ── Conversations ─────────────────────────────────────────────────────────
+  ok('the strip becomes Conversations once the project has one',
+    /conversations/i.test((await win.locator('#xp-jump-h').textContent()) || ''),
+    (await win.locator('#xp-jump-h').textContent()) || '');
+  ok('…listing it, titled from the first question asked',
+    /What is the trend in amount\?/.test((await win.locator('#xp-jump-rows').textContent()) || ''),
+    (await win.locator('#xp-jump-rows').textContent()) || '');
+  ok('…and offering a way to start a fresh one', await win.locator('#xp-new-thread').isVisible());
+
+  await win.click('#xp-new-thread', { timeout: 8000 });
+  await win.waitForFunction(
+    () => document.querySelectorAll('#xp-messages .ai-msg').length === 0,
+    { timeout: 8000 },
+  );
+  ok('starting a new conversation clears the transcript', true);
+  ok('…and returns the stage to its blank slate',
+    await win.evaluate(() => {
+      const p = document.getElementById('ws-explore');
+      return Boolean(p && !p.classList.contains('xp-asked'));
+    }));
+  await win.waitForFunction(
+    () => document.querySelectorAll('#xp-jump-rows .xp-jump-row').length >= 2,
+    { timeout: 8000 },
+  );
+  ok('…leaving the previous conversation listed, not replaced',
+    (await win.locator('#xp-jump-rows .xp-jump-row').count()) >= 2,
+    `${await win.locator('#xp-jump-rows .xp-jump-row').count()} rows`);
+
+  // Resume the older conversation — its turns come back.
+  await win.evaluate(() => {
+    const rows = [...document.querySelectorAll('#xp-jump-rows .xp-jump-row')] as HTMLElement[];
+    const older = rows.find((r) => /What is the trend in amount\?/.test(r.textContent || ''));
+    if (older) older.click();
+  });
+  await win.waitForFunction(
+    () => document.querySelectorAll('#xp-messages .ai-msg').length === 2,
+    { timeout: 8000 },
+  );
+  ok('clicking a past conversation resumes it with its turns intact',
+    (await win.locator('#xp-messages .ai-msg').count()) === 2);
+
+  // ── A pre-threads copilot.json still loads (schemaVersion 1 → 2) ──────────
+  // The migration is unit-tested in scripts/test-copilot-threads.ts; what only a
+  // real run can prove is that a file written by the SHIPPED previous version is
+  // still readable through the IPC the renderer actually calls.
+  const legacy: any = await app.evaluate(async (electronModule) => {
+    const req = (process as any).mainModule.require.bind((process as any).mainModule);
+    const nodeFs = req('fs');
+    const nodePath = req('path');
+    const projects = req('./src/projects.js');
+    const copilot = req('./src/copilot.js');
+    const proj = await projects.createProject('Legacy chat');
+    // Exactly the v1 shape: { projectId, turns, schemaVersion: 1 }.
+    const file = nodePath.join(
+      electronModule.app.getPath('userData'), 'projects', proj.id, 'copilot.json',
+    );
+    nodeFs.writeFileSync(file, JSON.stringify({
+      projectId: proj.id,
+      schemaVersion: 1,
+      turns: [
+        { id: 'a', role: 'user', text: 'Legacy question', createdAt: new Date().toISOString() },
+        { id: 'b', role: 'assistant', text: 'Legacy answer', createdAt: new Date().toISOString() },
+      ],
+    }, null, 2), 'utf8');
+    const threads = await copilot.listThreads(proj.id);
+    const turns = await copilot.loadHistory(proj.id);
+    return { projectId: proj.id, threadCount: threads.length, title: threads[0] && threads[0].title, turns: turns.map((t: any) => t.text) };
+  });
+  ok('a pre-threads copilot.json migrates to exactly one conversation',
+    legacy.threadCount === 1, `${legacy.threadCount} threads`);
+  ok('…titled from its first user turn', legacy.title === 'Legacy question', String(legacy.title));
+  ok('…with its history intact and in order',
+    legacy.turns.length === 2 && legacy.turns[0] === 'Legacy question' && legacy.turns[1] === 'Legacy answer',
+    legacy.turns.join(' | '));
+
+  await win.evaluate((pid: string) => (window as any).openWorkspace(pid), legacy.projectId);
+  await win.waitForTimeout(1000);
+  await win.evaluate(() => { (window as any).selectSection('explore'); });
+  await win.waitForFunction(
+    () => document.querySelectorAll('#xp-messages .ai-msg').length === 2,
+    { timeout: 10_000 },
+  );
+  ok('…and the migrated conversation renders in Explore', true);
+
   ok('no renderer errors (incl. CSP violations)', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   await app.close();

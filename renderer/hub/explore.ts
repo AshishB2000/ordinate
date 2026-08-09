@@ -57,11 +57,71 @@ function xpMakeJumpRow(it: any): HTMLElement {
   return row;
 }
 
-// Repaint the strip. Empty → ONE muted line, deliberately not a card: an empty
-// container with a border reads as a broken feature.
+// One row per past conversation: title, turn count, relative time. Clicking
+// resumes it in place. A thread id is a renderer key only — never a path
+// component; only projectId ever reaches the filesystem.
+function xpMakeThreadRow(t: any): HTMLElement {
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = 'xp-jump-row';
+  row.dataset.threadId = String(t.id || '');
+
+  const name = document.createElement('span');
+  name.className = 'xp-jump-name';
+  name.textContent = t.title || 'Conversation';
+
+  const kind = document.createElement('span');
+  kind.className = 'xp-jump-kind';
+  const n = typeof t.turnCount === 'number' ? t.turnCount : 0;
+  kind.textContent = n === 1 ? '1 turn' : n + ' turns';
+
+  const time = document.createElement('span');
+  time.className = 'xp-jump-time';
+  time.textContent = typeof formatSidebarTime === 'function'
+    ? formatSidebarTime(t.updatedAt || null)
+    : '';
+
+  row.append(name, kind, time);
+  row.addEventListener('click', () => void xpOpenThread(String(t.id || '')));
+  return row;
+}
+
+// Repaint the strip. Past CONVERSATIONS when this project has any; otherwise the
+// cross-project recent list, so a first-time visitor still has somewhere to go.
+// Empty → ONE muted line, deliberately not a card: an empty container with a
+// border reads as a broken feature.
 async function xpRenderJump(): Promise<void> {
   const host = xpEl('xp-jump-rows');
   if (!host) return;
+
+  let threads: any[] = [];
+  if (currentProjectId) {
+    try {
+      const res = await window.hub.copilotThreads(currentProjectId);
+      threads = res && res.ok && Array.isArray(res.threads) ? res.threads : [];
+    } catch (_) {
+      threads = [];
+    }
+  }
+
+  host.textContent = '';
+  const heading = xpEl('xp-jump-h');
+  const newBtn = xpEl<HTMLButtonElement>('xp-new-thread');
+  const empty = xpEl('xp-jump-empty');
+  const jump = xpEl('xp-jump');
+
+  if (threads.length > 0) {
+    if (heading) heading.textContent = 'Conversations';
+    if (newBtn) newBtn.hidden = false;
+    if (empty) empty.hidden = true;
+    if (jump) jump.classList.remove('xp-jump-bare');
+    threads.slice(0, XP_JUMP_LIMIT).forEach((t) => host.appendChild(xpMakeThreadRow(t)));
+    return;
+  }
+
+  // No conversations in this project yet — fall back to recent items.
+  if (heading) heading.textContent = 'Jump back in';
+  if (newBtn) newBtn.hidden = true;
   let items: any[] = [];
   try {
     const res = await window.hub.recentItems(XP_JUMP_LIMIT);
@@ -69,13 +129,43 @@ async function xpRenderJump(): Promise<void> {
   } catch (_) {
     items = [];
   }
-  host.textContent = '';
-  const empty = xpEl('xp-jump-empty');
   if (empty) empty.hidden = items.length > 0;
-  const jump = xpEl('xp-jump');
   // Hide the whole strip's heading too when there is nothing at all to show.
   if (jump) jump.classList.toggle('xp-jump-bare', items.length === 0);
   items.slice(0, XP_JUMP_LIMIT).forEach((it) => host.appendChild(xpMakeJumpRow(it)));
+}
+
+// ── Conversations ─────────────────────────────────────────────────────────────
+
+// Which conversation the composer is talking to. Empty means "the most recent",
+// which is exactly what copilot:ask already defaults to — so it stays empty
+// until the user picks or starts one, and no id is ever invented here.
+let xpThreadId = '';
+
+async function xpOpenThread(id: string): Promise<void> {
+  if (!id) return;
+  xpThreadId = id;
+  await xpLoadHistory();
+}
+
+// Start a fresh conversation. The new thread is empty, so the stage returns to
+// the greeting — that blank slate is the point of asking for one.
+async function xpNewThread(): Promise<void> {
+  if (!currentProjectId) return;
+  let res: any = null;
+  try {
+    res = await window.hub.copilotNewThread(currentProjectId);
+  } catch (_) {
+    res = null;
+  }
+  if (!res || !res.ok || !res.thread || !res.thread.id) return;
+  xpThreadId = String(res.thread.id);
+  renderCopilotTurns([], 'xp-messages', '');
+  xpSetAsked(false);
+  xpHideHint();
+  await xpRenderJump();
+  const input = xpEl<HTMLTextAreaElement>('xp-input');
+  if (input && !input.disabled) input.focus();
 }
 
 // ── Scope: which dataset the question is about ────────────────────────────────
@@ -202,7 +292,12 @@ async function xpSend(): Promise<void> {
 
   let res: any = null;
   try {
-    res = await window.hub.copilotAsk(currentProjectId, { kind: ref.kind, id: ref.id }, question);
+    res = await window.hub.copilotAsk(
+      currentProjectId,
+      { kind: ref.kind, id: ref.id },
+      question,
+      xpThreadId || undefined,
+    );
   } catch (_) {
     res = { ok: false, error: 'Something went wrong. Try again.' };
   }
@@ -216,6 +311,11 @@ async function xpSend(): Promise<void> {
     if (Array.isArray(res.turns)) renderCopilotTurns(res.turns, 'xp-messages', '');
     else await xpLoadHistory();
     xpHideHint();
+    // Adopt whichever thread main actually wrote to, so a first question in a
+    // project (sent with no threadId) keeps talking to that same conversation
+    // instead of silently defaulting again on the next turn.
+    if (typeof res.threadId === 'string' && res.threadId) xpThreadId = res.threadId;
+    void xpRenderJump(); // the title and turn count just changed
     // A chart is a bonus on top of the answer (exploreChart.ts): it needs a
     // dataset in scope, a usable suggestion and drawable data, and it stays
     // silent when it cannot have all three. Not awaited — the answer is already
@@ -246,10 +346,13 @@ async function xpLoadHistory(): Promise<void> {
   }
   let res: any = null;
   try {
-    res = await window.hub.copilotHistory(currentProjectId);
+    res = await window.hub.copilotHistory(currentProjectId, xpThreadId || undefined);
   } catch (_) {
     res = null;
   }
+  // Adopt the thread main resolved — an unknown or omitted id falls back to the
+  // most recent one there, and the renderer must agree with that choice.
+  if (res && typeof res.threadId === 'string' && res.threadId) xpThreadId = res.threadId;
   const turns = res && res.ok && Array.isArray(res.turns) ? res.turns : [];
   renderCopilotTurns(turns, 'xp-messages', '');
   // A project with history opens straight into the transcript; the greeting is
@@ -319,6 +422,9 @@ function initExplore(): void {
 
   const ds = xpEl('xp-dataset-chip');
   if (ds) ds.addEventListener('click', () => void xpPickDataset());
+
+  const newThread = xpEl('xp-new-thread');
+  if (newThread) newThread.addEventListener('click', () => void xpNewThread());
 
   const model = xpEl('xp-model-chip');
   if (model) {

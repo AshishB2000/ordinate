@@ -1445,7 +1445,12 @@
       </div>
 
       <div class="xp-jump" id="xp-jump">
-        <h2 class="xp-jump-h">Jump back in</h2>
+        <div class="xp-jump-head">
+          <!-- Reads "Conversations" once there are any, "Jump back in" while
+               falling back to recent items. explore.ts sets it. -->
+          <h2 class="xp-jump-h" id="xp-jump-h">Jump back in</h2>
+          <button class="btn btn-sm" type="button" id="xp-new-thread" hidden>New conversation</button>
+        </div>
         <div class="xp-jump-rows" id="xp-jump-rows"></div>
         <p class="xp-jump-empty" id="xp-jump-empty" hidden>Nothing here yet — bring some data in and it will show up.</p>
       </div>
