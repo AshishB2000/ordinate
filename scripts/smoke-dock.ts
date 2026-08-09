@@ -107,7 +107,29 @@ async function main(): Promise<void> {
       { type: 'filter', column: 'revenue', op: '>', value: 0 },
     ];
     await datasets.updateSteps(proj.id, ds.id, seedSteps);
-    return { projectId: proj.id, datasetId: ds.id };
+    // …plus a real analysis with two half-width visual cards, for the
+    // an-focus layout check at the end of this file.
+    const analysis = req('./src/analysis.js');
+    await analysis.init();
+    const visualsMod = req('./src/visuals.js');
+    const viz = await visualsMod.saveVisual(proj.id, {
+      name: 'Revenue by region',
+      datasetId: ds.id,
+      chartType: 'bar',
+      encoding: { category: 'region', values: [{ column: 'revenue', aggregation: 'sum' }] },
+      filters: [],
+    });
+    const an = await analysis.saveAnalysis(proj.id, {
+      name: 'Sales review',
+      sheets: [{
+        name: 'Page 1',
+        cards: [
+          { type: 'visual', visualId: viz.id, layout: { x: 0, y: 0, w: 6, h: 4 } },
+          { type: 'visual', visualId: viz.id, layout: { x: 6, y: 0, w: 6, h: 4 } },
+        ],
+      }],
+    });
+    return { projectId: proj.id, datasetId: ds.id, analysisId: an.id };
   });
   ok('seeded a project and a dataset with a real 2-step pipeline', Boolean(seeded.projectId && seeded.datasetId));
 
@@ -448,11 +470,13 @@ async function main(): Promise<void> {
     const visualsMod = req('./src/visuals.js');
     return visualsMod.listVisuals(args.pid);
   }, { pid: seeded.projectId });
-  const savedVisual = visuals.find((v: any) => v.datasetId === seeded.datasetId);
+  // By NAME, not by datasetId: the seeded analysis above owns a visual on the
+  // same dataset, so datasetId no longer identifies this one.
+  const savedVisual = visuals.find((v: any) => v.name === question);
   ok('a real visual record was created from the proposal', Boolean(savedVisual), JSON.stringify(visuals));
-  ok('…named from the question, and drawn as the proposed chart type',
-    Boolean(savedVisual) && savedVisual.name === question && savedVisual.chartType === 'bar',
-    savedVisual ? `${savedVisual.name} / ${savedVisual.chartType}` : '');
+  ok('…against the right dataset, and drawn as the proposed chart type',
+    Boolean(savedVisual) && savedVisual.datasetId === seeded.datasetId && savedVisual.chartType === 'bar',
+    savedVisual ? `${savedVisual.datasetId} / ${savedVisual.chartType}` : '');
   ok('the proposal card cleans itself up after saving',
     (await win.locator('#dk-messages .dk-proposal').count()) === 0);
 
@@ -495,6 +519,97 @@ async function main(): Promise<void> {
   ok('…and its edge tab too', await win.locator('#dk-edge').isHidden());
   await win.evaluate(() => { document.documentElement.classList.remove('dash-presenting'); (window as any).dkSync(); });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
+
+  // ── an-focus is NOT a suppression any more — and the layout proves it ────
+  // The dock used to be forced closed inside an open analysis because the plan
+  // assumed the workbench owned the full width. It was measured instead (the
+  // table in docs/superpowers/plans/2026-08-09-ai-dock.md) and it does not.
+  // This is that measurement, reduced to the assertions that would catch a
+  // regression: the dock is ALLOWED here, and with its 340px taken at the
+  // tightest supported push width nothing overflows and the one-row editor
+  // head stays one row.
+  //
+  // It matters most here that #dk-edge got a label in Task 1: focus mode hides
+  // the whole sidebar, so the edge tab and ⌘L are the only two ways in.
+  // Enter the analysis with the dock ALREADY open — the transition that used
+  // to slam it shut.
+  await win.evaluate(() => { (window as any).selectSection('analyses'); });
+  await win.waitForTimeout(400);
+  await win.evaluate((id: string) => (window as any).openAnalysis(id), seeded.analysisId);
+  await win.waitForFunction(() => document.body.classList.contains('an-focus'), { timeout: 10_000 });
+  ok('an analysis really is open in focus mode', await win.evaluate(() => document.body.classList.contains('an-focus')));
+  ok('the dock SURVIVES opening an analysis (an-focus is no longer a suppression)',
+    await win.locator('#dk-panel').isVisible());
+  ok('…and the whole sidebar is gone with it, so #side-ai-btn cannot be the way back in',
+    await win.locator('#side-ai-btn').isHidden());
+
+  // …and it can be re-opened from inside, where the labelled edge tab and ⌘L
+  // are the only two entry points left.
+  await win.evaluate(() => { (window as any).dkSetOpen(false); });
+  await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
+  ok('…so the labelled edge tab is offered here, and it is the way in',
+    await win.locator('#dk-edge').isVisible());
+  await win.click('#dk-edge', { timeout: 8000 });
+  await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
+  ok('…and clicking it opens the dock inside the open analysis',
+    await win.locator('#dk-panel').isVisible());
+
+  // 1180px is the tightest width the dock still PUSHES at (below ~1100 it
+  // becomes an overlay and takes no layout space at all), and the flyout open
+  // is the widest the chrome ever gets. That combination is the worst case.
+  // Back to the DEFAULT 340px — the resize tests above left it at the 300px
+  // minimum, and 340 is the width the plan doc's table was measured at.
+  await win.evaluate(() => { (window as any).dkPersistWidth(340); });
+  await app.evaluate(({ BrowserWindow }, _a) => { BrowserWindow.getAllWindows()[0].setContentSize(1180, 900); }, null);
+  await win.waitForTimeout(700);
+  await win.evaluate(() => {
+    const btn = document.querySelector('#an-rail .an-rail-btn[data-pane="an-pane-data"]') as HTMLElement | null;
+    const side = document.querySelector('.an-side') as HTMLElement | null;
+    if (btn && (!side || side.hidden)) btn.click();
+  });
+  await win.waitForTimeout(600);
+  const layout = await win.evaluate(() => {
+    const box = (sel: string) => {
+      const el = document.querySelector(sel) as HTMLElement | null;
+      return el && !el.hidden && el.offsetParent !== null ? Math.round(el.getBoundingClientRect().width) : 0;
+    };
+    const head = document.querySelector('body.an-focus .dash-editor-head') as HTMLElement | null;
+    const grid = document.querySelector('#dash-grid') as HTMLElement | null;
+    const doc = document.documentElement;
+    return {
+      rail: box('#an-rail'),
+      flyout: box('.an-side'),
+      sheet: box('.an-workbench.is-active > .dash-editor'),
+      dock: box('#dk-panel'),
+      headH: head ? Math.round(head.getBoundingClientRect().height) : 0,
+      headOvf: head ? head.scrollWidth - head.clientWidth : 0,
+      gridOvf: grid ? grid.scrollWidth - grid.clientWidth : 0,
+      pageOvf: doc.scrollWidth - doc.clientWidth,
+      pushed: getComputedStyle(document.getElementById('dk-panel')!).position !== 'fixed',
+    };
+  });
+  ok('…in PUSH mode at 1180px, taking its full 340px of real layout width',
+    layout.pushed && layout.dock === 340, JSON.stringify(layout));
+  ok('…the 48px rail and 252px flyout are not squeezed by it',
+    layout.rail === 48 && layout.flyout === 252, JSON.stringify(layout));
+  // 358px in a 1180px window is the sheet width that produced focus mode in
+  // the first place (hub.css:6680). The worst case here measured 540px.
+  ok('…the sheet absorbs the whole 340px and still clears the 358px that made focus mode',
+    layout.sheet > 500, `sheet=${layout.sheet}px`);
+  ok('…the editor head stays ONE row (it wrapped Save onto a second line at 665px)',
+    layout.headH < 70, `headH=${layout.headH}px`);
+  ok('…and nothing overflows horizontally — head, grid or document',
+    layout.headOvf <= 0 && layout.gridOvf <= 0 && layout.pageOvf <= 0, JSON.stringify(layout));
+
+  // Leave the analysis: the dock must survive the transition either way.
+  await win.evaluate(() => {
+    const back = [...document.querySelectorAll('.dash-editor-head button')]
+      .find((b) => /Back/.test(b.textContent || '')) as HTMLElement | undefined;
+    back?.click();
+  });
+  await win.waitForFunction(() => !document.body.classList.contains('an-focus'), { timeout: 10_000 });
+  ok('closing the analysis leaves the dock open, not stranded',
+    await win.locator('#dk-panel').isVisible());
 
   ok('no renderer errors (incl. CSP violations)', errors.length === 0, errors.slice(0, 5).join(' | '));
 

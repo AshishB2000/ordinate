@@ -58,7 +58,16 @@ function dkAllowed(): boolean {
   // was built, not a typo. Check the element each one actually uses; do not
   // "fix" this into a single selector.
   if (document.documentElement.classList.contains('dash-presenting')) return false;
-  if (document.body.classList.contains('an-focus')) return false; // analyses workbench owns the width
+  // NOT suppressed in `an-focus`. The plan's "the analyses workbench already
+  // owns the full width" was an assumption, and an open analysis is the
+  // surface where a contextual assistant is worth the most. Measured in the
+  // real app instead (full table in
+  // docs/superpowers/plans/2026-08-09-ai-dock.md): at 1180px with BOTH the
+  // 48px rail and the 252px flyout open, a 340px dock leaves the sheet 540px
+  // and each of two half-width cards 247px; at 1440px, 800px and 377px. The
+  // editor head stays one row (47px) in all eight combinations, and head,
+  // grid and document horizontal overflow are 0 everywhere. Focus mode hides
+  // the 176px sidebar, which is most of what the dock takes back.
   if (document.body.classList.contains('cap-focus')) return false; // capture surface is deliberately bare
   const body = document.querySelector('.hub-body') as HTMLElement | null;
   if (body && body.dataset.section === 'explore') return false; // Explore IS the chat
@@ -323,7 +332,7 @@ let dkLastProjectId: string | null = null;
 // Set by an explicit user open (toggle button / ⌘L), consumed by the next
 // dkSync(). Focus is only pulled into the dock when the USER opened it — not
 // when it merely became visible again because a suppression condition lifted
-// (leaving presentation or an-focus/cap-focus, closing a dashboard). Those are
+// (leaving presentation or cap-focus, closing a dashboard). Those are
 // navigations the user drove elsewhere, and stealing focus into the composer
 // there yanks it out from under them.
 let dkUserOpened = false;
@@ -353,12 +362,11 @@ function dkSync(): void {
   if (edge) edge.setAttribute('aria-expanded', String(visible));
   // The sidebar button is DISABLED where suppressed, not hidden: it is a
   // fixed row in a persistent sidebar, so removing it would make the whole
-  // bottom group jump every time you visit Explore. (The two body-class
-  // suppressions, an-focus and cap-focus, hide the entire sidebar anyway —
-  // this only ever fires for Explore, presentation and a published
-  // dashboard.) Unlike #dk-edge it stays visible and enabled while the dock
-  // is OPEN, because it is a toggle: it is how you close the dock from the
-  // sidebar, which is exactly what aria-expanded promises.
+  // bottom group jump every time you visit Explore. (cap-focus hides the
+  // entire sidebar anyway, so this only ever fires for Explore, presentation
+  // and a published dashboard.) Unlike #dk-edge it stays visible and enabled
+  // while the dock is OPEN, because it is a toggle: it is how you close the
+  // dock from the sidebar, which is exactly what aria-expanded promises.
   if (sideBtn) {
     sideBtn.disabled = !allowed;
     sideBtn.setAttribute('aria-expanded', String(visible));
