@@ -53,7 +53,10 @@ function dkApplyWidth(): void {
   try {
     const raw = localStorage.getItem('dkWidth');
     const n = raw ? parseInt(raw, 10) : NaN;
-    if (Number.isFinite(n) && n >= 300) w = n;
+    // Task 4 clamps [300, 40% of window] on WRITE; clamp the same range on
+    // READ so a hand-edited/corrupted localStorage value can't blow the panel
+    // out past that bound in the meantime.
+    if (Number.isFinite(n) && n >= 300) w = Math.min(n, window.innerWidth * 0.4);
   } catch (_) { /* default stands */ }
   document.documentElement.style.setProperty('--dk-width', w + 'px');
 }
@@ -124,4 +127,7 @@ function initDock(): void {
   if (closeBtn) closeBtn.addEventListener('click', () => dkSetOpen(false));
   const scrim = document.getElementById('dk-scrim');
   if (scrim) scrim.addEventListener('click', () => dkSetOpen(false));
+  // Self-contained: don't rely on whatever `selectSection` call happens to run
+  // right after this in hub.ts's boot sequence to compute the first state.
+  dkSync();
 }
