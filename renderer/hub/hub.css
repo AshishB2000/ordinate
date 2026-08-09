@@ -10263,7 +10263,15 @@ body.cap-focus .cap-back {
    the window's right edge is free real estate to float a small tab on. Only
    visible when dkAllowed() && !dkIsOpen(): once the panel is open, #dk-close
    inside it (and ⌘L) are how you leave, so this would just be a second
-   control doing the same thing at the same edge. */
+   control doing the same thing at the same edge.
+
+   It carries a WORD. The first version was a 32x44 icon-only tab in
+   --surface/--muted, i.e. the same grey a decorative edge treatment would
+   be, and it read as one — nobody clicked it. A label and an accent tint are
+   the whole fix: it now says what it does at rest, without a tour, a coach
+   mark or an onboarding overlay. The text runs vertically because the tab is
+   30px wide, and widening it into the canvas is exactly the cost the
+   icon-only version was buying. */
 .dk-edge {
   position: fixed;
   top: 50%;
@@ -10271,20 +10279,31 @@ body.cap-focus .cap-back {
   transform: translateY(-50%);
   z-index: 30;
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 44px;
-  border: 1px solid var(--border);
+  gap: 7px;
+  width: 30px;
+  padding: 13px 0;
+  border: 1px solid var(--accent-line);
   border-right: none;
   border-radius: var(--r-md) 0 0 var(--r-md);
-  background: var(--surface);
-  color: var(--muted);
+  background: var(--accent-soft);
+  color: var(--accent);
   cursor: pointer;
   box-shadow: var(--shadow-lg);
 }
+/* `writing-mode` rotates the glyphs as well as the flow, so the icon above it
+   must stay upright — it is a separate flex child, untouched by this. */
+.dk-edge-label {
+  writing-mode: vertical-rl;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
 .dk-edge[hidden] { display: none; }
-.dk-edge:hover { background: var(--surface-2); color: var(--text); }
+.dk-edge:hover { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .dk-edge:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* Drag handle — sits astride the panel's left border so half the hit target

@@ -1478,11 +1478,14 @@
          is ⌘L. #side-ai-btn (sidebar) opens Explore instead (workspace.ts);
          the dock does not use it. -->
     <button id="dk-edge" class="dk-edge" type="button" hidden
-      aria-label="Open AI assistant" aria-expanded="false" aria-controls="dk-panel">
+      title="Ask AI about what you're looking at (⌘L)" aria-expanded="false" aria-controls="dk-panel">
       <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3Z" fill="currentColor"/>
         <path d="M18.5 14l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8Z" fill="currentColor"/>
       </svg>
+      <!-- The visible label IS the accessible name now — no aria-label to
+           drift out of sync with it (WCAG 2.5.3). -->
+      <span class="dk-edge-label">Ask AI</span>
     </button>
     <div id="dk-scrim" class="dk-scrim"></div>
     <aside id="dk-panel" class="dk-panel" hidden tabindex="-1" aria-label="AI assistant">

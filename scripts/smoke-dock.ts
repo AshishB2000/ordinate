@@ -114,14 +114,36 @@ async function main(): Promise<void> {
   await win.evaluate((pid: string) => (window as any).openWorkspace(pid), seeded.projectId);
   await win.waitForTimeout(1200);
 
+  // ── First run opens the dock exactly once ───────────────────────────────
+  // Discoverability: a panel nobody opens is a panel nobody knows about, so
+  // the first run that can actually use it (a project open, not suppressed)
+  // opens it for you and writes the `dkSeen` sentinel. This smoke run boots
+  // into a fresh --user-data-dir, so localStorage is genuinely empty and this
+  // is genuinely a first run.
+  ok('first run opens the dock by itself', await win.locator('#dk-panel').isVisible());
+  ok('…and records the sentinel so it never does it again',
+    (await win.evaluate(() => localStorage.getItem('dkSeen'))) === '1');
+  // The second half of "once": close it, force another full sync, and it must
+  // stay closed. This is the assertion that fails if the sentinel check is
+  // ever dropped or inverted.
+  await win.evaluate(() => { (window as any).dkSetOpen(false); (window as any).dkSync(); });
+  await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
+  ok('…and a later sync does NOT re-open it', await win.locator('#dk-panel').isHidden());
+
   // ── Toggle from the dock's own edge affordance ──────────────────────────
-  // #side-ai-btn (the sidebar AI button) opens Explore now (develop's
-  // 498d647) — the dock's entry points are #dk-edge (the closed-state tab at
-  // the right edge) and ⌘L.
+  // #dk-edge is the closed-state tab at the right edge; ⌘L and the sidebar
+  // AI button (Task 2, below) are the other two ways in.
   ok('the edge tab starts visible and collapsed (aria-expanded=false)',
     await win.locator('#dk-edge').isVisible());
   ok('…aria-expanded=false',
     (await win.getAttribute('#dk-edge', 'aria-expanded')) === 'false');
+  // Legibility: the closed tab must SAY something. Icon-only in --muted read
+  // as an edge ornament and went unclicked — this is that regression guard.
+  ok('…and carries a visible text label, not just an icon',
+    /\S/.test((await win.locator('#dk-edge .dk-edge-label').textContent()) || ''),
+    await win.locator('#dk-edge .dk-edge-label').textContent() || '(none)');
+  ok('…which is also its accessible name (no aria-label to drift from it)',
+    (await win.getAttribute('#dk-edge', 'aria-label')) === null);
 
   await win.click('#dk-edge', { timeout: 8000 });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });

@@ -74,6 +74,34 @@ function dkSetOpen(open: boolean): void {
   dkSync();
 }
 
+/**
+ * Open the dock ONCE, ever, on the first run that can actually use it — the
+ * dock is then discovered by having been used, which is the only thing that
+ * reliably teaches a panel exists. Called from the top of `dkSync()`, the one
+ * function every entry point already routes through.
+ *
+ * Three deliberate details:
+ *  - It writes `dkOpen` directly rather than calling `dkSetOpen()`, which
+ *    would re-enter `dkSync()`. The caller recomputes everything from
+ *    `dkIsOpen()` immediately after, so a second pass is pure recursion.
+ *  - `dkSeen` is written ONLY when it actually opens. A boot that lands
+ *    somewhere suppressed (`dkAllowed()`) or before any project is open would
+ *    otherwise burn the one chance on a dock the user never saw — this defers
+ *    to the next sync instead, which is why the check lives in `dkSync()` and
+ *    not in `initDock()`.
+ *  - It does NOT set `dkUserOpened`. The user did not ask for this; pulling
+ *    keyboard focus into the composer would be a louder surprise than the
+ *    panel itself.
+ */
+function dkFirstRun(): void {
+  try {
+    if (localStorage.getItem('dkSeen') === '1') return;
+    if (!dkAllowed() || !currentProjectId) return;
+    localStorage.setItem('dkSeen', '1');
+    localStorage.setItem('dkOpen', '1');
+  } catch (_) { /* private mode / quota — no first-run open, and nothing else breaks */ }
+}
+
 function dkToggle(): void {
   if (!dkAllowed()) return;
   if (!dkIsOpen()) dkUserOpened = true; // a deliberate open — this one may take focus
@@ -307,6 +335,7 @@ let dkUserOpened = false;
  * the active project changed under it.
  */
 function dkSync(): void {
+  dkFirstRun(); // may flip `dkOpen` before the read below — self-limiting, never recurses
   const panel = document.getElementById('dk-panel');
   // #side-ai-btn belongs to Explore now (workspace.ts opens it there) — the
   // dock must NOT hide or otherwise touch it. #dk-edge is the dock's OWN
