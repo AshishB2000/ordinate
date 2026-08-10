@@ -1,12 +1,25 @@
-// Chart rendering — the Chart.js engine (buildChart + its inline value-label
-// plugins), the series/legend/value-label helpers, the palette-derivation
-// color helpers, and the data-table builder. Extracted from hub.js as a pure
-// structural move (no logic changes). Classic script sharing global scope:
-// the Chart.js UMD globals load earlier; hub.js's _fmtVal/histogramBins resolve
-// at call time; the chartInstances/mapInstances WeakMaps are defined here and
-// used cross-file by mapRender.js and hub.js.
+// Chart rendering — the Chart.js engine: buildChart, its inline value-label
+// plugins, and the series/value-label helpers they need. Classic script sharing
+// global scope: the Chart.js UMD globals load earlier; hub.js's
+// _fmtVal/histogramBins resolve at call time; the chartInstances/mapInstances
+// WeakMaps are defined here and used cross-file by mapRender.js and hub.js.
+//
+// Three neighbours were split out of this file and load BEFORE it (index.html):
+//   chartTraits.js   — what a chart id is (period-filterable, small-multiple, …)
+//   chartPalette.js  — CHART_PALETTE, getCSSVar, the hex/HSL derivation helpers
+//   chartTable.js    — buildDataTable, which renders a <table>, not a chart
+// What is left is buildChart and the Chart.js construction, which is this file's
+// actual job. It stays over the 800-line cap and stays on the allowlist in
+// scripts/test-file-size.ts: buildChart is ONE function whose per-chart-family
+// blocks all read the same locals (palette, fmt, isRound, makeValueAxis, …), so
+// breaking it up means inventing a parameter object — a design change with real
+// behaviour risk, not a move. That is its own PR.
 
 // ── Shared shapes ───────────────────────────────────────────────────────────
+// Referenced by chartTraits.ts and chartTable.ts as well. They live here, with
+// the pipeline they describe, rather than in one of those leaf files: interfaces
+// and type aliases emit no JavaScript, so a sibling reading them creates no
+// runtime dependency and no load-order constraint.
 // The {labels, series} object vizData.buildVizData produces and everything in
 // this file consumes. Declared locally, not imported: renderer files are classic
 // global-scope scripts with no module system, so there is nothing to import from
@@ -36,8 +49,6 @@ interface ChartDataShape {
 type ChartJsCtx = any;
 
 // ── Chart rendering ────────────────────────────────────────────────────────
-const CHART_PALETTE = ['#2563eb', '#0e7490', '#14b8a6', '#6366f1', '#64748b'];
-
 // Treemap/matrix/sankey/financial UMD bundles self-register with the global Chart;
 // the boxplot plugin does not, so register it here (no-op if already registered).
 if (window.Chart && window.ChartBoxPlot && window.ChartBoxPlot.BoxPlotController) {
@@ -57,54 +68,6 @@ function chartSeries(data: ChartDataShape | null | undefined): ChartSeriesShape[
   return Array.isArray(data && data.series)
     ? data.series.filter((s: ChartSeriesShape) => Array.isArray(s.values) && s.values.length > 0)
     : [];
-}
-
-// Chart types whose series can be filtered by the period dropdown. The bar/line
-// families draw one dataset per series; heatmap maps each series to a column and
-// filters them by rebuilding its cells.
-const PERIOD_DROPDOWN_TYPES = new Set([
-  'line', 'area', 'stacked_area', 'line_markers',
-  'column', 'bar', 'clustered_column', 'clustered_bar',
-  'stacked_column', 'stacked_bar', 'pct_stacked_column', 'pct_stacked_bar', 'combo',
-  'heatmap', 'boxplot',
-]);
-function chartHasPeriodDropdown(type: string, seriesCount: number): boolean {
-  return seriesCount >= 2 && PERIOD_DROPDOWN_TYPES.has(type);
-}
-
-// Share/magnitude types that can't stack several series into one chart. When the
-// data is grouped (>=2 series) we render a small-multiples grid — one mini chart
-// per period (series) — instead of silently dropping all but series[0]. The
-// Periods dropdown filters which minis show; Values/Customize apply to all.
-const SMALL_MULTIPLE_TYPES = new Set(['pie', 'donut', 'gauge', 'treemap', 'funnel', 'histogram']);
-function chartIsSmallMultiple(type: string, seriesCount: number): boolean {
-  return seriesCount >= 2 && SMALL_MULTIPLE_TYPES.has(type);
-}
-// Chart types that draw one Chart.js dataset per series, so the period filter can
-// hide them live via setDatasetVisibility. Others (heatmap) rebuild instead.
-const PER_SERIES_DATASET_TYPES = new Set([
-  'line', 'area', 'stacked_area', 'line_markers',
-  'column', 'bar', 'clustered_column', 'clustered_bar',
-  'stacked_column', 'stacked_bar', 'pct_stacked_column', 'pct_stacked_bar', 'combo',
-]);
-
-// Types whose renderers don't draw value labels (gauge prints its own center value;
-// treemap/funnel already print values in place).
-const NO_VALUE_LABEL_TYPES = new Set([
-  'treemap', 'funnel', 'sankey', 'candlestick', 'boxplot', 'gauge',
-]);
-
-// Legend on by default for every chart except plugin/synthetic types whose Chart.js
-// legend would be a single meaningless entry. A single-series chart only gets one if
-// the series is named (otherwise the legend swatch would be blank).
-const NO_LEGEND_TYPES = new Set([
-  'gauge', 'bubble', 'treemap', 'heatmap', 'funnel', 'histogram',
-  'sankey', 'candlestick', 'boxplot',
-]);
-function legendOnByDefault(type: string, ser: ChartSeriesShape[]): boolean {
-  if (NO_LEGEND_TYPES.has(type)) return false;
-  if (type === 'pie' || type === 'donut') return true;
-  return (ser || []).length > 1 || (ser || []).some((s: ChartSeriesShape) => s && !!s.name);
 }
 
 // Which data points the Values menu labels, given a mode and the 2-D value grid
@@ -140,114 +103,6 @@ function valueLabelKeys(mode: string, values: any[][]): Set<string> {
     if (wantMin && minC >= 0) add(s, minC);
   }
   return keys;
-}
-
-function getCSSVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
-// ── Color helpers (for deriving a full palette from one chosen swatch) ──────
-function hexToHsl(hex: string): { h: number; s: number; l: number } | null {
-  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
-  if (!m) return null;
-  const n = parseInt(m[1], 16);
-  let r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
-  const max = Math.max(r, g, b), min = Math.min(r, g, b);
-  let h = 0, s = 0; const l = (max + min) / 2;
-  const d = max - min;
-  if (d) {
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
-    else if (max === g) h = (b - r) / d + 2;
-    else h = (r - g) / d + 4;
-    h *= 60;
-  }
-  return { h, s, l };
-}
-function hslToHex(h: number, s: number, l: number): string {
-  h = ((h % 360) + 360) % 360; s = Math.max(0, Math.min(1, s)); l = Math.max(0, Math.min(1, l));
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = l - c / 2;
-  let r = 0, g = 0, b = 0;
-  if (h < 60) [r, g, b] = [c, x, 0];
-  else if (h < 120) [r, g, b] = [x, c, 0];
-  else if (h < 180) [r, g, b] = [0, c, x];
-  else if (h < 240) [r, g, b] = [0, x, c];
-  else if (h < 300) [r, g, b] = [x, 0, c];
-  else [r, g, b] = [c, 0, x];
-  const to = (v: number) => Math.round((v + m) * 255).toString(16).padStart(2, '0');
-  return '#' + to(r) + to(g) + to(b);
-}
-// A harmonious n-color palette seeded from one hex: index 0 is the exact seed,
-// the rest rotate hue ±32°, ±64°, … around it (same S/L) so series stay distinct
-// yet clearly related to the chosen color. Falls back to [seed] if hex is unparseable.
-function paletteFromSeed(hex: string, n: number): string[] {
-  const base = hexToHsl(hex);
-  if (!base) return Array.from({ length: n }, () => hex);
-  const seed = '#' + /^#?([0-9a-f]{6})$/i.exec(hex)[1].toLowerCase();   // canonical seed
-  const s = Math.max(0.35, Math.min(0.85, base.s));   // keep colors lively, not washed/neon
-  const l = Math.max(0.42, Math.min(0.62, base.l));
-  const offsets = [0, 32, -32, 64, -64, 96, -96, 128, -128];
-  return Array.from({ length: n }, (_, i) => {
-    if (i === 0) return seed;                          // series 1 = the exact chosen color
-    return hslToHex(base.h + (offsets[i] || (i * 40)), s, l);
-  });
-}
-
-// Expand a small base palette to n DISTINCT colors by interpolating through the
-// base colors (a gradient walk). Keeps the app's restrained color family — no
-// rainbow — while giving per-category charts (pie/donut/treemap/funnel) a unique
-// color per slice, so the legend genuinely maps one color to one category.
-function interpolatePalette(base: string[], n: number): string[] {
-  if (n <= base.length) return base.slice(0, n);
-  const parse = (h: string) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
-  const hex = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
-  const out: string[] = [];
-  for (let i = 0; i < n; i++) {
-    const t = (i / (n - 1)) * (base.length - 1);
-    const lo = Math.floor(t), hi = Math.min(base.length - 1, lo + 1), f = t - lo;
-    const [r1, g1, b1] = parse(base[lo]);
-    const [r2, g2, b2] = parse(base[hi]);
-    out.push('#' + hex(r1 + f * (r2 - r1)) + hex(g1 + f * (g2 - g1)) + hex(b1 + f * (b2 - b1)));
-  }
-  return out;
-}
-
-function buildDataTable(table: HTMLTableElement, data: ChartDataShape): void {
-  const labels = Array.isArray(data.labels) ? data.labels : [];
-  const series: ChartSeriesShape[] = Array.isArray(data.series) ? data.series : [];
-  table.innerHTML = '';
-  const thead = document.createElement('thead');
-  const headerRow = document.createElement('tr');
-  const thLabel = document.createElement('th');
-  thLabel.textContent = 'Label';
-  headerRow.appendChild(thLabel);
-  series.forEach((s: ChartSeriesShape, si: number) => {
-    const th = document.createElement('th');
-    const sw = document.createElement('span');
-    sw.className = 'cv-swatch';
-    sw.style.background = CHART_PALETTE[si % CHART_PALETTE.length];
-    th.appendChild(sw);
-    th.append(s.name || '');
-    headerRow.appendChild(th);
-  });
-  thead.appendChild(headerRow);
-  table.appendChild(thead);
-  const tbody = document.createElement('tbody');
-  labels.forEach((label: any, i: number) => {
-    const row = document.createElement('tr');
-    const tdLabel = document.createElement('td');
-    tdLabel.textContent = label;
-    row.appendChild(tdLabel);
-    series.forEach((s: ChartSeriesShape) => {
-      const td = document.createElement('td');
-      td.textContent = (s.values && s.values[i] != null) ? s.values[i] : '';
-      row.appendChild(td);
-    });
-    tbody.appendChild(row);
-  });
-  table.appendChild(tbody);
 }
 
 // Build a Chart.js instance for the given data + type id. Returns instance or null.
