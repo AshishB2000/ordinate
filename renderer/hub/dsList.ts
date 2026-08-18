@@ -8,6 +8,17 @@
 // global-scope renderer <script>: no import/export.
 
 // ── Saved-dataset list ───────────────────────────────────────────────────────
+// Reflect "no datasets" onto the list view so the header toolbar and the empty
+// -state card are MUTUALLY EXCLUSIVE (hub.css): with no data the card is the
+// focal call-to-action, so the toolbar's Import/Paste — the same two actions —
+// stay hidden and appear exactly once. Once a dataset exists the toolbar takes
+// over and the card is gone. Same is-* state pattern dataSection.ts already
+// toggles on the panel for explore/compose.
+function dsMarkEmpty(isEmpty: boolean): void {
+  const view = document.querySelector('#ws-datasets .ds-list-view');
+  if (view) view.classList.toggle('is-empty', isEmpty);
+}
+
 async function refreshDatasetList(): Promise<void> {
   const list = dsEl('ds-saved-list');
   const empty = dsEl('ds-saved-empty');
@@ -15,6 +26,7 @@ async function refreshDatasetList(): Promise<void> {
   list.innerHTML = '';
   if (!currentProjectId) {
     if (empty) empty.hidden = false;
+    dsMarkEmpty(true);
     return;
   }
   let items: any[] = [];
@@ -25,6 +37,7 @@ async function refreshDatasetList(): Promise<void> {
   }
   if (!Array.isArray(items)) items = [];
   if (empty) empty.hidden = items.length > 0;
+  dsMarkEmpty(items.length === 0);
   items.forEach((d) => list.appendChild(makeSavedItem(d)));
   // "Refresh all" only appears when there is something it could refresh.
   const all = dsEl('ds-refresh-all-btn');

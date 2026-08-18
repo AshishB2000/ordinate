@@ -4808,6 +4808,11 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   flex-wrap: wrap;
 }
 .ds-head-actions .btn[hidden] { display: none; }
+/* With no datasets, the empty-state card below IS the call to action (Import /
+   Paste). The header toolbar would repeat those same two actions, so it hides
+   until a dataset exists — one home for Import/Paste per state, never both.
+   `is-empty` is set by dsList.ts's refreshDatasetList off the dataset count. */
+.ds-list-view.is-empty .ds-head-actions { display: none; }
 /* A real empty state, not a bare line of grey text: what is missing, why it
    matters, and the two ways to fix it. */
 .ws-empty {
