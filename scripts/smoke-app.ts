@@ -461,12 +461,14 @@ async function main(): Promise<void> {
       connect: shown('#conn-panel'),
       welcomeHeader: shown('.main-top'),
       capturesColumn: shown('.sidebar'),
-      navActive: !!document.querySelector('.as-nav-item.active[data-section="connect"]'),
+      navActive: !!document.querySelector('.as-nav-item.active[data-section="datasets"]'),
     };
   });
   ok('the Data page renders Connect ALONE — no Welcome header, no captures column',
     dataPageAlone.connect && !dataPageAlone.welcomeHeader && !dataPageAlone.capturesColumn,
     JSON.stringify(dataPageAlone));
+  // Connect is an ACTION inside the Data area, so the "Data" nav item (which
+  // points at datasets) stays lit here via its data-section-alt="connect".
   ok('...with the Data nav item marked active', dataPageAlone.navActive);
 
   // Close must land somewhere real. Before, it just un-hid an overlay and left
@@ -759,13 +761,11 @@ async function main(): Promise<void> {
   ok('project opens from the UI (openWorkspace)', opened !== null, opened || 'openWorkspace missing');
   await win.waitForTimeout(1500);
 
-  // BEHAVIOUR CHANGE, not a weakened assertion: the nav item labelled "Data"
-  // now opens Connect, so clicking it no longer reaches the dataset list. The
-  // list is reached the way the app itself reaches it — projects.ts calls
-  // selectSection('datasets') when a dataset is opened from Home. What this
-  // check exists to prove (a stored Parquet dataset renders, with its real row
-  // count) is unchanged; only the route to the section moved.
-  await win.evaluate(() => { (window as any).selectSection('datasets'); });
+  // The "Data" nav item points at the dataset list now, so reach it the way a
+  // user does — one click on the nav. What this proves (a stored Parquet dataset
+  // renders with its real row count) is unchanged; only the route is more
+  // faithful than the old direct selectSection() call.
+  await win.click('.as-nav-item[data-section="datasets"]', { timeout: 8000 }).catch(() => {});
   await win.waitForTimeout(2000);
 
   // The dataset must be VISIBLE in the UI, with its real row count — this is

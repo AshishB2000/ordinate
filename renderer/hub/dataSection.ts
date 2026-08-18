@@ -19,20 +19,6 @@ function dxEl(id: string): HTMLElement | null {
   return document.getElementById(id);
 }
 
-/**
- * Click one of the section's EXISTING controls.
- *
- * The new header and empty-state buttons are alternative doors to the controls
- * that were already there — `#ds-import-btn` opens the native file picker,
- * `#ds-paste-toggle` reveals the paste box. Routing to them by a synthetic
- * click means there is still exactly ONE handler per action, in datasets.ts,
- * and this file cannot drift away from what it triggers.
- */
-function dxClick(id: string): void {
-  const el = dxEl(id) as HTMLButtonElement | null;
-  if (el) el.click();
-}
-
 // ── The import dialog ───────────────────────────────────────────────────────
 //
 // The dialog is markup that already exists (#ds-import-modal in index.html);
@@ -95,44 +81,56 @@ function dxCloseDialog(overlayId: string): void {
   }
 }
 
-/** Watches the save bar, so a SUCCESSFUL save closes the import dialog. */
-let dxSaveWatch: MutationObserver | null = null;
-
 function dxImportOpen(): boolean {
   return dxDialogOpen('ds-import-modal');
 }
 
+/** Set the dialog title so it names whichever surface is showing. */
+function dxSetImportTitle(title: string): void {
+  const el = dxEl('ds-import-title');
+  if (el) el.textContent = title;
+}
+
 /**
- * Open the import dialog on step one.
+ * Open the dialog on the SHEET picker.
  *
- * `then` runs once it is on screen — that is how `+ Import data` and the empty
- * state's `Import file` reach the native file picker: open the frame first, so
- * the parsed preview has somewhere to land.
+ * This is the one case a file import needs the dialog at all: an xlsx with more
+ * than one sheet has to be asked which sheet before it hands off to the
+ * composer. `renderPreview` (dsImport.ts) reveals the sheet picker and preview;
+ * `dxWatchImportSurface` calls this to put a frame around them. The paste box is
+ * hidden — it belongs to the other entry point.
  */
 function dxOpenImport(then?: () => void): void {
-  if (!dxOpenDialog('ds-import-modal', '.ds-import-modal', 'Import data', 'ds-import-btn')) return;
-
-  // A save that SUCCEEDS ends with datasets.ts hiding the save bar
-  // (clearPreview) and repainting the list; a save that fails alerts and leaves
-  // the bar up. So "the bar went away" is exactly "the dataset was written" —
-  // which lets the dialog close itself without datasets.ts having to know it is
-  // in a dialog at all.
-  const bar = dxEl('ds-save-bar');
-  if (bar && !dxSaveWatch) {
-    dxSaveWatch = new MutationObserver(() => {
-      if (bar.hidden && dxImportOpen()) dxCloseImport();
-    });
-    dxSaveWatch.observe(bar, { attributes: true, attributeFilter: ['hidden'] });
-  }
-
+  dxSetImportTitle('Choose a sheet');
+  const paste = dxEl('ds-paste-wrap');
+  if (paste) paste.hidden = true;
+  if (!dxOpenDialog('ds-import-modal', '.ds-import-modal', 'Choose a sheet', 'ds-sheet-select')) return;
   if (then) then();
 }
 
-function dxCloseImport(): void {
-  if (dxSaveWatch) {
-    dxSaveWatch.disconnect();
-    dxSaveWatch = null;
+/**
+ * Open the dialog as the PASTE surface.
+ *
+ * "Paste data" — from the header, the empty state, or the sidebar rail — lands
+ * straight here: the paste box, ready to type into, with no intermediate
+ * chooser. The file-only blocks (sheet picker, preview) are hidden so a prior
+ * multi-sheet import cannot leave them showing under the textarea.
+ */
+function openPasteDialog(): void {
+  dxSetImportTitle('Paste data');
+  for (const id of ['ds-sheet-wrap', 'ds-warnings', 'ds-preview', 'ds-save-bar']) {
+    const el = dxEl(id);
+    if (el) el.hidden = true;
   }
+  const paste = dxEl('ds-paste-wrap');
+  if (paste) paste.hidden = false;
+  if (!dxOpenDialog('ds-import-modal', '.ds-import-modal', 'Paste data', 'ds-paste-input')) {
+    // Already open (a second click): just make sure the box has focus.
+    (dxEl('ds-paste-input') as HTMLTextAreaElement | null)?.focus();
+  }
+}
+
+function dxCloseImport(): void {
   dxCloseDialog('ds-import-modal');
 }
 
@@ -140,15 +138,13 @@ function dxCloseImport(): void {
 /**
  * PUBLIC entry point for the other surfaces that start an import.
  *
- * `projects.ts`'s source rail (CSV / Excel, Paste data) drives the very same
- * controls, and they now live inside the dialog — so it opens the dialog first
- * rather than acting on hidden elements.
+ * `projects.ts`'s source rail (CSV / Excel, Paste data) routes through here. A
+ * file import opens the native picker directly — no dialog stands between the
+ * click and the OS file chooser; paste opens the paste surface.
  */
 function openImportDialog(mode?: 'file' | 'paste'): void {
-  dxOpenImport(() => {
-    if (mode === 'file') dxClick('ds-import-btn');
-    else if (mode === 'paste') dxClick('ds-paste-toggle');
-  });
+  if (mode === 'paste') { openPasteDialog(); return; }
+  if (typeof handleImportFile === 'function') handleImportFile(); // datasets.ts
 }
 
 /**
@@ -289,16 +285,31 @@ function initDataSection(): void {
   dxWatchExplorer();
   initDataTabs();
 
-  // Every door into importing opens the dialog first, then triggers the control
-  // that already existed — one handler per action, still in datasets.ts.
+  // Each door does ONE thing directly — no chooser modal in between. Import goes
+  // straight to the native file picker (handleImportFile, datasets.ts); Paste
+  // opens the paste surface; Connect opens the 35-source catalog. One handler
+  // per action, still in datasets.ts / connections.ts.
   const importOpen = dxEl('ds-import-open');
-  if (importOpen) importOpen.addEventListener('click', () => dxOpenImport());
+  if (importOpen) importOpen.addEventListener('click', () => { if (typeof handleImportFile === 'function') handleImportFile(); });
 
   const emptyImport = dxEl('ds-empty-import');
-  if (emptyImport) emptyImport.addEventListener('click', () => dxOpenImport(() => dxClick('ds-import-btn')));
+  if (emptyImport) emptyImport.addEventListener('click', () => { if (typeof handleImportFile === 'function') handleImportFile(); });
+
+  const pasteOpen = dxEl('ds-paste-open');
+  if (pasteOpen) pasteOpen.addEventListener('click', () => openPasteDialog());
 
   const emptyPaste = dxEl('ds-empty-paste');
-  if (emptyPaste) emptyPaste.addEventListener('click', () => dxOpenImport(() => dxClick('ds-paste-toggle')));
+  if (emptyPaste) emptyPaste.addEventListener('click', () => openPasteDialog());
+
+  // "Connect data" is the door to the connectors catalog that used to be the
+  // "Data" nav item. openConnPanel routes through selectSection('connect'), and
+  // the Data nav item stays lit there via its data-section-alt (workspace.ts).
+  const connectOpen = dxEl('ds-connect-open');
+  if (connectOpen) {
+    connectOpen.addEventListener('click', () => {
+      if (typeof openConnPanel === 'function') openConnPanel(''); // connections.ts
+    });
+  }
 
   const x = dxEl('ds-import-x');
   if (x) x.addEventListener('click', () => dxCloseImport());

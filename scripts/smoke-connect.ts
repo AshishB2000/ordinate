@@ -21,8 +21,8 @@
 //
 // NOT COVERED HERE: the Screenshot entry, which is not a connector at all — it
 // opens the full-screen Capture workspace, and smoke-app.ts already asserts that
-// (`capture: the left nav is gone entirely`). CSV / Excel and Paste data open the
-// import dialog and are likewise smoke-app.ts's.
+// (`capture: the left nav is gone entirely`). CSV / Excel starts a file import
+// (native picker) and Paste data opens the paste surface — neither is a connector.
 //
 // Separate script, not more lines in smoke-app.ts, for the reason
 // smoke-composer.ts / smoke-explore.ts / smoke-dock.ts already are: smoke-app.ts
@@ -138,18 +138,19 @@ async function main(): Promise<void> {
   ok('More… still opens the full source picker', more.picker && !more.form, JSON.stringify(more));
 
   // ── A preselect is a ONE-SHOT handoff ─────────────────────────────────────
-  // The Connect NAV item is the route that proves it: it calls
-  // selectSection('connect') directly, so it reaches refreshConnPanel WITHOUT
-  // going through openConnPanel and never clears the pending id itself. If the
-  // preselect were sticky, walking in through the nav right after using a named
-  // shortcut would reopen that connector's form instead of the picker.
+  // selectSection('connect') reaches refreshConnPanel WITHOUT going through
+  // openConnPanel, so it never clears the pending id itself. If the preselect
+  // were sticky, walking into Connect this way right after a named shortcut would
+  // reopen that connector's form instead of the picker. (Connect has no nav item
+  // of its own now — it is an aliased action under "Data" — so this drives the
+  // section switch directly, which is the exact route the router takes.)
   await clickRail('postgres');
   const beforeNav = await step();
   await goHome();
-  await win.click('.as-nav-item[data-section="connect"]', { timeout: 8000 }).catch(() => {});
+  await win.evaluate(() => { (window as any).selectSection('connect'); });
   await waitForConnect();
   const viaNav = await step();
-  ok('the Connect nav item opens the picker — a shortcut preselect does not stick',
+  ok('entering Connect fresh opens the picker — a shortcut preselect does not stick',
      beforeNav.form && viaNav.picker && !viaNav.form,
      `afterShortcut=${JSON.stringify(beforeNav)} viaNav=${JSON.stringify(viaNav)}`);
 

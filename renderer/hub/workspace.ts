@@ -85,8 +85,16 @@ function selectSection(section: string): void {
   currentSection = section;
   const body = wsBodyEl();
   if (body) body.dataset.section = section;
+  // A nav item lights for its own section OR any it lists in data-section-alt.
+  // That is what keeps "Data" (data-section="datasets") highlighted while the
+  // Connect panel (section "connect") is showing: connecting a source is an
+  // action inside the Data area, not a place of its own, so the nav must not go
+  // dark when it opens. Without the alias, changing "Data" to point at datasets
+  // would leave NOTHING highlighted on the Connect section.
   document.querySelectorAll('.as-nav-item').forEach((item) => {
-    (item as HTMLElement).classList.toggle('active', (item as HTMLElement).dataset.section === section);
+    const el = item as HTMLElement;
+    const alt = (el.dataset.sectionAlt || '').split(/\s+/).filter(Boolean);
+    el.classList.toggle('active', el.dataset.section === section || alt.indexOf(section) >= 0);
   });
   // Only the matching non-Sources placeholder is shown; Sources uses the
   // existing sidebar+main (handled entirely in CSS off [data-section]).
