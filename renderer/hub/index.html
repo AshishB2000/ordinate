@@ -737,11 +737,14 @@
                live source (the 35-source catalog). "Connect data" is the door to
                the catalog that used to hide behind the "Data" nav item — it lives
                here now, next to the other ways to add data. -->
+          <!-- ONE primary (Import file); the rest are quiet .btn-ghost so the row
+               reads as a hierarchy, not a solid bold bar. Four peer buttons at
+               weight 600 all looked equally loud. -->
           <div class="ds-head-actions">
             <button class="btn btn-primary" type="button" id="ds-import-open">+ Import file</button>
-            <button class="btn" type="button" id="ds-paste-open">Paste data</button>
-            <button class="btn" type="button" id="ds-connect-open">Connect data</button>
-            <button class="btn" type="button" id="ds-combine-open">Combine datasets</button>
+            <button class="btn btn-ghost" type="button" id="ds-paste-open">Paste data</button>
+            <button class="btn btn-ghost" type="button" id="ds-connect-open">Connect data</button>
+            <button class="btn btn-ghost" type="button" id="ds-combine-open">Combine datasets</button>
             <button class="btn btn-sm" type="button" id="ds-refresh-all-btn" hidden>↻ Refresh all</button>
           </div>
         </div>
