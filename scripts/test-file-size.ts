@@ -60,7 +60,15 @@ const ALLOWED: Record<string, number> = {
   // every per-chart-family block reads its locals (palette, fmt, isRound,
   // makeValueAxis, …). Breaking it up means inventing a parameter object, which
   // is a design change with real behaviour risk, not a move. Own PR.
-  'renderer/hub/chartRender.ts': 1097,
+  //
+  // 1097 -> 999, and that is the floor for moves. Everything around buildChart
+  // that could leave HAS left: chartTraits.ts (facts about chart ids),
+  // chartPalette.ts (CHART_PALETTE, getCSSVar, the hex/HSL derivation helpers)
+  // and chartTable.ts (buildDataTable renders a <table>, not a chart) — each
+  // under 100 lines. What remains is that one function plus the ~90 lines of
+  // shapes, WeakMaps and value-label helpers it reads, so the next reduction is
+  // the parameter-object redesign named above, not another extraction.
+  'renderer/hub/chartRender.ts': 999,
   'renderer/hub/mapRender.ts': 834,
   // Deliberately last: it is the only check that runs the real app, so breaking
   // it blinds every other split. Own PR, after these are merged and green.
