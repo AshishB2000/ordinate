@@ -76,7 +76,13 @@ html[data-os="win"] .titlebar { padding-right: 146px; }
   border-radius: var(--r-md);
   font-family: var(--font-ui);
   font-size: 13.5px;
-  font-weight: 600;
+  /* 500, not 600. A button is not a heading. At 600 every .btn matched the
+     weight of the section heading above it, so a toolbar row read as bold as
+     the title — which is why "the type is too bold" and the Datasets toolbar
+     complaint are the same defect. The fix is here, once, rather than a
+     per-toolbar override in each section's block.
+     .btn-primary re-asserts 600 below; .btn-danger already sets its own. */
+  font-weight: 500;
   border: 1px solid var(--border-2);
   background: var(--surface-2);
   color: var(--text);
@@ -111,6 +117,10 @@ html[data-os="win"] .titlebar { padding-right: 146px; }
   background: var(--accent);
   border-color: transparent;
   color: var(--accent-ink);
+  /* Explicit, because .btn is 500 now and this used to INHERIT its 600. The one
+     primary action per screen keeps the extra weight, so it stays legible as
+     the primary by more than colour alone. */
+  font-weight: 600;
   box-shadow: 0 1px 0 rgba(255,255,255,0.12) inset, 0 5px 14px -6px var(--accent);
 }
 
@@ -4329,12 +4339,10 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   .win[data-view="home"] .home-view { grid-template-columns: minmax(0, 1fr); }
   .home-connect { display: none; }
 }
-.home-title {
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--text-strong);
-  margin: 0;
-}
+/* .home-title lives with the rest of the Home block further down — this
+   duplicate was fully overridden by it (same selector, same properties, later in
+   the file) and was reporting a size and weight the app had not used for some
+   time. Two rules for one heading is how the drift this change fixes started. */
 .home-sub {
   font-size: 13px;
   color: var(--muted);
@@ -10422,10 +10430,13 @@ body.cap-focus .cap-back {
    whatever the window is and the page loses its spine on a wide monitor. */
 .home-scroll > * { max-width: 1080px; width: 100%; }
 
+/* Byte-identical to .ds-h and .viz-h. Home is a section like the other five and
+   does not get its own heavier, larger heading — it was the only 700 and the
+   only 30px in the set. The letter-spacing goes with it: matching means
+   matching, and neither .ds-h nor .viz-h tracks its heading. */
 .home-title {
-  font-size: 30px;
-  font-weight: 700;
-  letter-spacing: -0.022em;
+  font-size: 18px;
+  font-weight: 600;
   color: var(--text-strong);
   margin: 0;
 }
@@ -10478,7 +10489,9 @@ body.cap-focus .cap-back {
 }
 .home-hero-name {
   font-size: 20px;          /* the middle tier the old scale was missing */
-  font-weight: 650;
+  /* 600, the app's heading weight. 650 exists in hub.css but only on 11-13.5px
+     labels in the Execution panel — never on a heading this size. */
+  font-weight: 600;
   letter-spacing: -0.012em;
   color: var(--accent-ink);
 }
@@ -10640,7 +10653,10 @@ body.cap-focus .cap-back {
 .home-row-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
 .home-row-name {
   font-size: 14px;
-  font-weight: 550;
+  /* 500. 550 was a one-off token nothing else in hub.css used; the comparable
+     .viz-card-name is 600, so resolving to 500 keeps this lighter rather than
+     raising it. */
+  font-weight: 500;
   color: var(--text-strong);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -10725,7 +10741,7 @@ body.cap-focus .cap-back {
   padding: 6px 14px;
   font: inherit;
   font-size: 12.5px;
-  font-weight: 550;
+  font-weight: 500;   /* a button, so the same weight .btn now carries */
   color: var(--text-strong);
   background: var(--surface);
   border: 1px solid var(--border-2);
