@@ -4154,113 +4154,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 
 /* ── HOME section — recent / starred, over a first-run quick start ────────── */
 .home-panel { overflow: hidden; }
-.home-scroll {
-  flex: 1;
-  min-width: 0;
-  overflow-y: auto;
-  padding: 22px 28px 32px;
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-}
-.home-sec { display: flex; flex-direction: column; gap: 10px; }
-.home-sec[hidden] { display: none; }
-.home-sec-h { font-size: 13px; font-weight: 600; color: var(--text-strong); margin: 0; }
-.home-rows {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  overflow: hidden;
-  background: var(--surface);
-}
-.home-showall {
-  align-self: flex-end;
-  border: none;
-  background: none;
-  color: var(--accent);
-  font: inherit;
-  font-size: 12.5px;
-  cursor: pointer;
-}
-.home-showall[hidden] { display: none; }
-.home-showall:hover { text-decoration: underline; }
-.home-firstrun { display: flex; flex-direction: column; gap: 16px; }
-.home-firstrun[hidden] { display: none; }
-
-/* Recent / Starred rows — a full-width button per record inside .home-rows. */
-.home-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 10px 14px;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.home-row:last-child { border-bottom: none; }
-.home-row:hover { background: var(--surface-2); }
-/* Empty-state placeholder row: muted, non-interactive, no hover. */
-.home-row-empty { cursor: default; }
-.home-row-empty:hover { background: transparent; }
-.home-row-emptytext { font-size: 13px; color: var(--text-dim); }
-.home-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.home-row-star {
-  flex: 0 0 auto;
-  width: 18px;
-  text-align: center;
-  color: var(--text-faint);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-}
-.home-row-star:hover { color: var(--accent); }
-.home-row-star.is-on { color: var(--accent); }
-.home-row-name {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: 13.5px;
-  font-weight: 500;
-  color: var(--text-strong);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.home-row-chip {
-  flex: 0 0 auto;
-  padding: 1px 8px;
-  border-radius: var(--r-full);
-  font-size: 11px;
-  font-weight: 600;
-  background: var(--surface-3);
-  color: var(--text-dim);
-}
-.home-chip-dataset   { background: var(--accent-soft); color: var(--accent); }
-.home-chip-analysis  { background: var(--surface-3); color: var(--text-dim); }
-.home-chip-dashboard { background: var(--surface-3); color: var(--text-dim); }
-.home-row-proj {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 180px;
-  font-size: 12px;
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.home-row-time {
-  flex: 0 0 auto;
-  font-size: 12px;
-  color: var(--text-dim);
-  min-width: 64px;
-  text-align: right;
-}
-@media (max-width: 760px) { .home-row-proj { display: none; } }
 
 /* ── HOME: the start page ─────────────────────────────────────────────────
    Three panes: Connect rail | Open + Quick start | Discover. The rail and the
@@ -4382,56 +4275,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
 }
-/* First-run cards. Two columns; the capture card is the hero and spans both,
-   because screen capture is the one thing no other BI tool does. Each card is a
-   real button wired by data-source to the same action as the sidebar Connect
-   entries. Art is inline SVG drawn with currentColor + --accent so one asset
-   serves both themes (CSP allows no external image and no inline style). */
-.home-quick-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-.home-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 15px 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
-  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
-}
-.home-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--accent);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
-}
-.home-card:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; }
-.home-card--hero {
-  grid-column: 1 / -1;
-  gap: 20px;
-  padding: 20px 22px;
-  background: linear-gradient(180deg, var(--accent-soft), var(--surface) 70%);
-}
-
-.home-card-art { flex: none; color: var(--muted); display: flex; }
-.home-card-art svg { display: block; }
-.home-card--hero .home-card-art { color: var(--accent); }
-.home-card-art .art-line { stroke: currentColor; }
-.home-card-art .art-fill { fill: var(--accent); }
-.home-card-art .art-stroke { stroke: var(--accent); }
-.home-card-art .art-faint { stroke: var(--accent-line); }
-
-.home-card-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.home-card-name { font-size: 14px; font-weight: 600; color: var(--text-strong); }
-.home-card--hero .home-card-name { font-size: 17px; }
-.home-card-sub { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
-.home-card-sub .home-kbd { margin: 0 1px; }
-
 /* RIGHT — Discover. Deliberately LOCAL: no feed, no external fetch. */
 .home-discover {
   border-left: 1px solid var(--border);
@@ -10162,35 +10005,6 @@ body.cap-focus .cap-back {
     var(--bg);
 }
 
-/* Explore band on Home — a full-width door, same card language as .home-card
-   but spanning the row on its own. */
-.home-xp-band {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 15px 18px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: linear-gradient(110deg, var(--accent-soft), var(--surface) 62%);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
-}
-.home-xp-band:hover {
-  transform: translateY(-2px);
-  border-color: var(--accent);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
-}
-.home-xp-band:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; }
-.home-xp-art { flex: none; display: flex; color: var(--accent); }
-.home-xp-art svg { display: block; }
-.home-xp-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.home-xp-name { font-size: 15px; font-weight: 600; color: var(--text-strong); }
-.home-xp-sub { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
-.home-xp-go { flex: none; margin-left: auto; display: flex; color: var(--text-faint); }
-.home-xp-band:hover .home-xp-go { color: var(--accent); }
-
 /* ── Explore: hero → transcript ───────────────────────────────────────────────
    One markup tree, two states. .xp-asked on the panel collapses the greeting,
    opens the transcript and docks the composer at the bottom of the stage; the
@@ -10559,3 +10373,383 @@ body.cap-focus .cap-back {
 /* The AI off state is stated plainly, not alarmingly — running without AI is a
    supported way to use Ordinate, not a fault. */
 .xp-toggle-off { color: var(--muted); }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HOME — the workspace front page.
+
+   THE PROBLEM THIS SOLVES. Six blocks used to share one treatment: same radius,
+   same 1px hairline, same white/pale-blue fill on a near-white page. Nothing
+   was dominant, so the eye had no entry point; two pale-blue bands sat directly
+   on each other at equal weight and cancelled out; the type scale ran 28px then
+   everything at 13-15px with no middle tier; and one blue did the New button,
+   both band tints, the active nav item and a link, so the accent signalled
+   nothing because it signalled everything.
+
+   THE FIX IS HIERARCHY, NOT COLOUR. Three rules hold this page together:
+
+     1. ONE dominant element (.home-hero). It is the only large accent field on
+        the page and the only type above 20px besides the page title.
+     2. EVERY other block drops a full step. Quick-start is a compact row of
+        neutral buttons; Starred and Recent are neutral surfaces with no accent
+        at all. The accent's one remaining job is "the way forward" — the hero
+        and the +New button, nothing else.
+     3. THREE PLANES, not one. The page sits on --bg, panels sit on --surface
+        with a hairline, and the hero lifts off both with a shadow. That is what
+        stops six equal rectangles reading as a form.
+
+   TYPE SCALE (the missing middle tier is 20px):
+     30  page title            .home-title
+     20  hero headline         .home-hero-name        <- was absent entirely
+     14  row name / hero sub   .home-row-name
+     12.5 meta, quick-start    .home-row-meta
+     11  section eyebrow       .home-sec-h (uppercase, tracked)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.home-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  /* min-height + flex column is what makes Recent able to take the remaining
+     height, so the page never dead-ends in white on a tall window. */
+  min-height: 0;
+  padding: 26px 30px 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+/* One measure for the whole page. Without it the hero and the rows stretch to
+   whatever the window is and the page loses its spine on a wide monitor. */
+.home-scroll > * { max-width: 1080px; width: 100%; }
+
+.home-title {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+  color: var(--text-strong);
+  margin: 0;
+}
+
+/* ── 1. The one dominant element ─────────────────────────────────────────── */
+.home-hero {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  padding: 26px 26px 26px 24px;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: var(--r-xl);
+  color: var(--accent-ink);
+  /* A real field of accent, not a 8%-alpha wash. This is the one place on Home
+     allowed to do this, which is precisely what makes it read as the entry
+     point rather than as another card. */
+  background:
+    radial-gradient(120% 160% at 12% 0%, rgba(255, 255, 255, 0.22), transparent 58%),
+    linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+  box-shadow: var(--shadow-md);
+  transition: transform 0.14s var(--ease), box-shadow 0.14s var(--ease);
+}
+.home-hero:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.home-hero:active { transform: translateY(0); }
+.home-hero:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 3px; }
+
+.home-hero-art {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--r-lg);
+  color: var(--accent-ink);
+  background: rgba(255, 255, 255, 0.16);
+}
+.home-hero-art svg { display: block; }
+.home-hero-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.home-hero-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+}
+.home-hero-name {
+  font-size: 20px;          /* the middle tier the old scale was missing */
+  font-weight: 650;
+  letter-spacing: -0.012em;
+  color: var(--accent-ink);
+}
+.home-hero-sub {
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.82);
+  max-width: 62ch;
+}
+.home-hero-cta {
+  flex: none;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-full);
+  color: var(--accent-ink);
+  background: rgba(255, 255, 255, 0.18);
+  transition: transform 0.14s var(--ease), background 0.14s var(--ease);
+}
+.home-hero:hover .home-hero-cta { background: rgba(255, 255, 255, 0.3); transform: translateX(2px); }
+
+/* ── 2. Quick-start — day-one furniture, one compact row ─────────────────── */
+.home-quick { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.home-quick[hidden] { display: none; }
+.home-quick-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  flex: none;
+}
+.home-quick-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.home-quick-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+/* Neutral on hover, NOT accent: these are secondary to the hero and colouring
+   them on hover would put the accent back in a second place. */
+.home-quick-btn:hover { background: var(--surface-2); border-color: var(--border-3); color: var(--text-strong); }
+.home-quick-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.home-quick-ic { display: flex; color: var(--muted); flex: none; }
+.home-quick-btn:hover .home-quick-ic { color: var(--text); }
+.home-quick-text { white-space: nowrap; }
+.home-quick-count { font-size: 11.5px; color: var(--text-dim); white-space: nowrap; }
+.home-quick-btn .home-kbd { margin-left: 2px; }
+
+/* ── 3 + 4. Starred and Recent ───────────────────────────────────────────── */
+.home-sec { display: flex; flex-direction: column; gap: 9px; min-height: 0; }
+.home-sec[hidden] { display: none; }
+/* Recent takes the remaining height so the page reaches the bottom of the
+   window in BOTH states — populated (rows + breathing room) and empty (the
+   empty state centres in the space instead of leaving 250px of white). */
+.home-sec--grow { flex: 1 1 auto; }
+
+.home-sec-head { display: flex; align-items: baseline; gap: 10px; }
+.home-sec-h {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0;
+}
+.home-sec-count { font-size: 11px; font-weight: 600; color: var(--text-faint); letter-spacing: 0.04em; }
+.home-sec-count:empty { display: none; }
+.home-showall {
+  margin-left: auto;
+  border: none;
+  background: none;
+  padding: 0;
+  /* Neutral, not accent — see the "one job" rule at the top of this block. */
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.home-showall[hidden] { display: none; }
+.home-showall:hover { color: var(--text-strong); text-decoration: underline; }
+
+.home-rows {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+/* An empty section is a single designed panel, so it must not also wear the
+   row-list chrome — otherwise it reads as a panel inside a panel. */
+.home-rows.is-empty {
+  border: 1px dashed var(--border-2);
+  background: transparent;
+  box-shadow: none;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+/* flex: 1 0 auto — grow to fill the leftover height, but NEVER shrink below
+   content. That is what satisfies both halves of the brief at once: with a few
+   rows the panel stretches to the bottom of the window (no dead white), and
+   with many it grows past the fold and the PAGE scrolls. An internal
+   overflow-y:auto did fill the space, but it clipped the last row mid-height
+   and buried it behind a nested scrollbar; `flex-shrink: 0` is what keeps
+   `overflow: hidden` (which the border radius needs) from ever cutting a row. */
+.home-sec--grow .home-rows { flex: 1 0 auto; }
+
+/* One row: type glyph · name over a meta line · time · star. Two lines, because
+   a name and a timestamp left the two questions that actually matter — what
+   kind of thing is this, and how big is it — unanswered. */
+.home-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 14px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+.home-row:last-child { border-bottom: none; }
+.home-row:hover { background: var(--surface-2); }
+.home-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.home-row-icon {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.home-row:hover .home-row-icon { background: var(--surface-3); color: var(--text); }
+
+.home-row-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.home-row-name {
+  font-size: 14px;
+  font-weight: 550;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Separators are CSS ::before content, so they are decorative and never
+   announced. The row carries an explicit aria-label (homePage.ts) because the
+   spans it is built from would otherwise run together into one word. */
+.home-row-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 0;
+}
+.home-row-meta > * + *::before { content: '·'; margin-right: 7px; color: var(--text-faint); }
+.home-row-kind { flex: none; }
+.home-row-size { flex: none; font-variant-numeric: tabular-nums; }
+.home-row-proj { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.home-row-time {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.home-row-star {
+  flex: none;
+  width: 24px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-faint);
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+.home-row-star:hover { color: var(--warn); }
+/* Gold, not accent: "pinned" is a different signal from "the way forward", and
+   giving it the accent is exactly how the accent stopped meaning anything. */
+.home-row-star.is-on { color: var(--warn); }
+.home-row-star:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+@media (max-width: 860px) { .home-row-proj { display: none; } }
+
+/* ── Designed empty states ───────────────────────────────────────────────────
+   Empty is what every user sees on day one, so it is a first impression, not an
+   error path. A glyph, a headline, one line of guidance, and — for Recent — the
+   actual next action rather than advice about it. */
+.home-empty {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  text-align: center;
+  padding: 26px 22px;
+}
+.home-empty-art {
+  font-size: 22px;
+  line-height: 1;
+  color: var(--text-dim);
+  width: 46px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  margin-bottom: 3px;
+}
+.home-empty-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.home-empty-line {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+  max-width: 46ch;
+}
+.home-empty-action {
+  margin-top: 7px;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--text-strong);
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-full);
+  cursor: pointer;
+}
+.home-empty-action:hover { background: var(--surface-2); border-color: var(--border-3); }
+.home-empty-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Starred is compact even when empty — it must not claim height it has not
+   earned, which is what pushed Recent off the bottom of the page before. */
+/* Grid, not a row of three: art spans both lines on the left, with the headline
+   over the sentence on the right — a flex row would sit them side by side. */
+.home-empty--starred {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: center;
+  justify-items: start;
+  text-align: left;
+  padding: 15px 18px;
+}
+.home-empty--starred .home-empty-art { grid-row: 1 / 3; width: 34px; height: 34px; font-size: 16px; margin: 0; align-self: center; }
+.home-empty--starred .home-empty-title { font-size: 13px; }
+.home-empty--starred .home-empty-line { font-size: 12px; }

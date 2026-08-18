@@ -158,6 +158,14 @@ export interface DashboardSummary {
   id: string;
   name: string;
   pageCount: number;
+  /**
+   * Tiles across every page. FREE: listDashboards has already read and
+   * normalized the whole record to get pageCount, so this is a sum over data
+   * already in memory — no extra file read, no lookup, and still nothing is
+   * opened or computed. Home shows it so a dashboard row says how much is in
+   * there rather than just its name.
+   */
+  cardCount: number;
   updatedAt: string;
   /**
    * Provenance, carried into the summary so the LIST can mark a record
@@ -477,6 +485,7 @@ export async function listDashboards(projectId: string): Promise<DashboardSummar
         id: d.id,
         name: d.name,
         pageCount: d.pages.length,
+        cardCount: d.pages.reduce((n, page) => n + page.cards.length, 0),
         updatedAt: d.updatedAt,
         analysisId: d.analysisId,
         publishedAt: d.publishedAt,

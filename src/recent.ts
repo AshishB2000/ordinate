@@ -18,6 +18,28 @@ import * as dashboards from './dashboards';
 
 export type RecentType = 'dataset' | 'analysis' | 'dashboard';
 
+/**
+ * What the record IS, in numbers — carried so a Home row can say more than a
+ * name and a timestamp ("1,240 rows x 5 columns" rather than just "Regional
+ * sales 2026").
+ *
+ * STILL FREE. Every field here is already present on the summary its lister
+ * returns: rowCount/columnCount on DatasetSummary, sheetCount on
+ * AnalysisSummary, pageCount/cardCount on DashboardSummary. This module reads
+ * no additional file, opens no record and computes no figure — the promise at
+ * the top of this file is unchanged.
+ *
+ * All optional: an older record, or a lister that stops carrying a count, must
+ * degrade to a row with no meta line rather than to a row printing "undefined".
+ */
+export interface RecentMeta {
+  rowCount?: number;
+  columnCount?: number;
+  sheetCount?: number;
+  pageCount?: number;
+  cardCount?: number;
+}
+
 export interface RecentItem {
   type: RecentType;
   id: string;
@@ -25,14 +47,15 @@ export interface RecentItem {
   projectName: string;
   name: string;
   updatedAt: string;
+  meta?: RecentMeta;
 }
 
 export interface RecentGroup {
   projectId: string;
   projectName: string;
-  datasets: { id: string; name: string; updatedAt: string }[];
-  analyses: { id: string; name: string; updatedAt: string }[];
-  dashboards: { id: string; name: string; updatedAt: string }[];
+  datasets: { id: string; name: string; updatedAt: string; meta?: RecentMeta }[];
+  analyses: { id: string; name: string; updatedAt: string; meta?: RecentMeta }[];
+  dashboards: { id: string; name: string; updatedAt: string; meta?: RecentMeta }[];
 }
 
 /**
@@ -59,6 +82,7 @@ export function buildRecent(groups: RecentGroup[], limit: number): RecentItem[] 
         projectName: g.projectName,
         name: d.name,
         updatedAt: d.updatedAt,
+        meta: d.meta,
       });
     }
     for (const a of g.analyses) {
@@ -69,6 +93,7 @@ export function buildRecent(groups: RecentGroup[], limit: number): RecentItem[] 
         projectName: g.projectName,
         name: a.name,
         updatedAt: a.updatedAt,
+        meta: a.meta,
       });
     }
     for (const b of g.dashboards) {
@@ -79,6 +104,7 @@ export function buildRecent(groups: RecentGroup[], limit: number): RecentItem[] 
         projectName: g.projectName,
         name: b.name,
         updatedAt: b.updatedAt,
+        meta: b.meta,
       });
     }
   }
@@ -127,9 +153,24 @@ export async function listRecent(limit = 50): Promise<RecentItem[]> {
       return {
         projectId: p.id,
         projectName: p.name,
-        datasets: ds.map((d) => ({ id: d.id, name: d.name, updatedAt: d.updatedAt })),
-        analyses: an.map((a) => ({ id: a.id, name: a.name, updatedAt: a.updatedAt })),
-        dashboards: db.map((b) => ({ id: b.id, name: b.name, updatedAt: b.updatedAt })),
+        datasets: ds.map((d) => ({
+          id: d.id,
+          name: d.name,
+          updatedAt: d.updatedAt,
+          meta: { rowCount: d.rowCount, columnCount: d.columnCount },
+        })),
+        analyses: an.map((a) => ({
+          id: a.id,
+          name: a.name,
+          updatedAt: a.updatedAt,
+          meta: { sheetCount: a.sheetCount },
+        })),
+        dashboards: db.map((b) => ({
+          id: b.id,
+          name: b.name,
+          updatedAt: b.updatedAt,
+          meta: { pageCount: b.pageCount, cardCount: b.cardCount },
+        })),
       };
     }),
   );

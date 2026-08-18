@@ -231,106 +231,112 @@
              `npm start` shows. See docs/phase-5/01-toolchain.md. -->
         <div id="svelte-island-host"></div>
 
-        <!-- The three quick-start doors plus a one-line Discover/capture hint.
-             ALWAYS shown (paintHome keeps it visible), above Starred and Recent —
-             the primary "bring data in" entry points stay reachable on every
-             visit, not just first-run. -->
-
-        <!-- Explore band — the AI front door on Home. A direct child of
-             .home-scroll, so it picks up the same 28px gutters and 22px stack
-             gap as every other block here with no CSS of its own. -->
-        <button class="home-xp-band" id="home-xp-band" type="button">
-          <span class="home-xp-art" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="26" height="26" fill="none">
+        <!-- ── 1. THE ONE DOMINANT ELEMENT ────────────────────────────────
+             Explore. It is the fastest route to an answer and it is already
+             first in the nav, so on Home it gets real presence rather than
+             sharing a weight with five other blocks. This is the ONLY place on
+             the page the accent is allowed to fill a large area — everything
+             below it is neutral, which is what makes this read as the entry
+             point instead of as one more card.
+             Wired by initExplore() (explore.ts), not projects.ts. -->
+        <button class="home-hero" id="home-xp-band" type="button">
+          <span class="home-hero-art" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="30" height="30" fill="none">
               <path d="M12 3.5l1.7 4.8 4.8 1.7-4.8 1.7L12 16.5l-1.7-4.8L5.5 10l4.8-1.7L12 3.5Z" fill="currentColor"/>
               <path d="M18.2 15.4l.62 1.78 1.78.62-1.78.62-.62 1.78-.62-1.78-1.78-.62 1.78-.62.62-1.78Z" fill="currentColor"/>
             </svg>
           </span>
-          <span class="home-xp-body">
-            <span class="home-xp-name">Explore</span>
-            <span class="home-xp-sub">Ask a question about your data — the app does the math, and shows its work.</span>
+          <span class="home-hero-body">
+            <span class="home-hero-eyebrow">Explore</span>
+            <span class="home-hero-name">Ask a question about your data</span>
+            <span class="home-hero-sub">The app does the math and shows its work — you get the figures, the steps behind them, and a chart you can keep.</span>
           </span>
-          <span class="home-xp-go" aria-hidden="true">
+          <span class="home-hero-cta" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
-              <path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </span>
         </button>
 
-        <div class="home-firstrun" id="home-firstrun">
+        <!-- ── 2. QUICK-START ───────────────────────────────────────────────
+             Day-one furniture, so it is one compact row of icon buttons rather
+             than three big cards taking a third of the page on every visit
+             forever. Same data-source contract as the sidebar Connect entries —
+             one listener in projects.ts covers both. The capture button keeps
+             the hotkey affordance: #home-disc-hotkey is rewritten by
+             fillDiscover() with the REAL configured shortcut. -->
+        <div class="home-quick" id="home-firstrun">
+          <span class="home-quick-label">Bring data in</span>
           <div class="home-quick-row">
-            <!-- HERO — screen capture, the one thing no other BI tool does. Spans
-                 the full row, most saturated art. -->
-            <button class="home-card home-card--hero" type="button" data-source="capture">
-              <span class="home-card-art" aria-hidden="true">
-                <svg viewBox="0 0 80 72" width="80" height="72" fill="none">
-                  <rect class="art-fill" x="20" y="40" width="9" height="20" rx="1.5"/>
-                  <rect class="art-fill" x="33" y="28" width="9" height="32" rx="1.5"/>
-                  <rect class="art-fill" x="46" y="46" width="9" height="14" rx="1.5"/>
-                  <rect class="art-fill" x="59" y="22" width="9" height="38" rx="1.5"/>
-                  <path class="art-line" d="M14 61 H72" stroke-width="1.5" stroke-linecap="round"/>
-                  <rect class="art-stroke" x="10" y="14" width="42" height="40" rx="2.5"
-                        stroke-width="1.7" stroke-dasharray="4 3.5"/>
-                  <rect class="art-fill" x="7" y="11" width="6" height="6" rx="1.2"/>
-                  <rect class="art-fill" x="49" y="51" width="6" height="6" rx="1.2"/>
+            <button class="home-quick-btn" type="button" data-source="capture">
+              <span class="home-quick-ic" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+                  <rect x="3.5" y="5" width="13" height="11" rx="1.6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 2.4"/>
+                  <path d="M9 20h11.5V9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M7 13v-2.5M10 13V9m3 4v-1.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
                 </svg>
               </span>
-              <span class="home-card-body">
-                <span class="home-card-name">Grab it off your screen</span>
-                <!-- The ⌘⌥S here is a DEFAULT, overwritten by fillDiscover() from the
-                     real configured hotkey. The id used to live on the discover line
-                     below; when that line was removed this became the only place the
-                     hotkey is shown on Home, so the id moved with it — otherwise a
-                     user who rebound the shortcut would be told to press the wrong keys. -->
-                <span class="home-card-sub">Any chart or table on screen. Press <kbd id="home-disc-hotkey" class="home-kbd">⌘⌥S</kbd>.</span>
-              </span>
+              <span class="home-quick-text">Screenshot</span>
+              <kbd id="home-disc-hotkey" class="home-kbd">⌘⌥S</kbd>
             </button>
 
-            <button class="home-card" type="button" data-source="file">
-              <span class="home-card-art" aria-hidden="true">
-                <svg viewBox="0 0 72 72" width="72" height="72" fill="none">
-                  <path class="art-line" d="M20 10 H44 L56 22 V62 H20 Z" stroke-width="1.8" stroke-linejoin="round"/>
-                  <path class="art-line" d="M44 10 V22 H56" stroke-width="1.8" stroke-linejoin="round"/>
-                  <path class="art-faint" d="M26 34 H50 M26 42 H50 M26 50 H50" stroke-width="1.4"/>
-                  <path class="art-faint" d="M34 30 V54 M42 30 V54" stroke-width="1.4"/>
+            <button class="home-quick-btn" type="button" data-source="file">
+              <span class="home-quick-ic" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+                  <path d="M6 3h8l4 4v14H6V3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                  <path d="M14 3v4h4" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                  <path d="M9 12h6M9 16h6M12 12v4" stroke="currentColor" stroke-width="1.4"/>
                 </svg>
               </span>
-              <span class="home-card-body">
-                <span class="home-card-name">Bring a file</span>
-                <span class="home-card-sub">CSV, JSON or Excel — up to 1,000,000 rows.</span>
-              </span>
+              <span class="home-quick-text">CSV / Excel</span>
             </button>
 
-            <button class="home-card" type="button" data-source="postgres">
-              <span class="home-card-art" aria-hidden="true">
-                <svg viewBox="0 0 72 72" width="72" height="72" fill="none">
-                  <path class="art-line" d="M18 16 V50 a18 6 0 0 0 36 0 V16" stroke-width="1.7" stroke-linecap="round"/>
-                  <ellipse class="art-fill" cx="36" cy="16" rx="18" ry="6"/>
-                  <path class="art-line" d="M18 28 a18 6 0 0 0 36 0" stroke-width="1.5"/>
-                  <path class="art-line" d="M18 39 a18 6 0 0 0 36 0" stroke-width="1.5"/>
+            <button class="home-quick-btn" type="button" data-source="paste">
+              <span class="home-quick-ic" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+                  <path d="M9 4h6v2.5H9V4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                  <path d="M15 5.2h3V21H6V5.2h3" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                  <path d="M9 11h6M9 15h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
                 </svg>
               </span>
-              <span class="home-card-body">
-                <span class="home-card-name">Query a database</span>
-                <span class="home-card-sub">Postgres, MySQL and <span id="firstrun-db-count">33</span> more. Read-only.</span>
+              <span class="home-quick-text">Paste data</span>
+            </button>
+
+            <button class="home-quick-btn" type="button" data-source="postgres">
+              <span class="home-quick-ic" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+                  <ellipse cx="12" cy="6" rx="7" ry="2.8" stroke="currentColor" stroke-width="1.6"/>
+                  <path d="M5 6v12c0 1.6 3.1 2.8 7 2.8s7-1.2 7-2.8V6M5 12c0 1.6 3.1 2.8 7 2.8s7-1.2 7-2.8" stroke="currentColor" stroke-width="1.6"/>
+                </svg>
               </span>
+              <span class="home-quick-text">Database</span>
+              <span class="home-quick-count"><span id="firstrun-db-count">33</span> sources</span>
             </button>
           </div>
         </div>
 
-        <!-- Starred — ALWAYS rendered; a muted placeholder when nothing is
-             pinned. paintHome() fills #home-starred-rows. -->
+        <!-- ── 3. STARRED ───────────────────────────────────────────────────
+             Compact: it is empty until the user makes it otherwise, so it must
+             not claim height it has not earned. Empty is a DESIGNED state
+             (homePage.ts makeEmptyState), not a sentence in a box. -->
         <section class="home-sec" id="home-starred">
-          <h2 class="home-sec-h">Starred</h2>
+          <div class="home-sec-head">
+            <h2 class="home-sec-h">Starred</h2>
+          </div>
           <div class="home-rows" id="home-starred-rows"></div>
         </section>
 
-        <!-- Recent — ALWAYS rendered; a muted placeholder when there is nothing
-             yet. Cross-project, newest first. -->
-        <section class="home-sec" id="home-recent">
-          <h2 class="home-sec-h">Recent</h2>
+        <!-- ── 4. RECENT ────────────────────────────────────────────────────
+             The tall, dense region that carries the page to the bottom
+             (.home-sec--grow takes the remaining height, so neither state
+             dead-ends in white). Rows show what the record IS — rows x columns,
+             sheets, tiles — from metadata recent.ts already had. -->
+        <section class="home-sec home-sec--grow" id="home-recent">
+          <div class="home-sec-head">
+            <h2 class="home-sec-h">Recent<span class="home-sec-count" id="home-recent-count"></span></h2>
+            <button class="home-showall" id="home-showall" type="button" hidden>Show all →</button>
+          </div>
           <div class="home-rows" id="home-recent-rows"></div>
-          <button class="home-showall" id="home-showall" type="button" hidden>Show all →</button>
         </section>
       </div>
     </section>
@@ -2380,6 +2386,10 @@
 <script src="customDropdown.js"></script>
 <script src="execMenu.js"></script>
 <script src="settingsPanels.js"></script>
+<!-- Home's surface (Starred, Recent, the row + empty-state rendering) before
+     projects.js, which owns Home's ACTIONS and whose initHome() calls
+     initHomePage(). -->
+<script src="homePage.js"></script>
 <script src="projects.js"></script>
 <script src="workspace.js"></script>
 <script src="datasets.js"></script>
