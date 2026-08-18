@@ -394,186 +394,11 @@ function applyHomeSearch(): void {
   if (none) none.hidden = !(q !== '' && cards.length > 0 && shown === 0);
 }
 
-// Print the REAL capture hotkey on the "Grab it off your screen" card. The
-// markup carries ⌘⌥S as a default; this replaces it with whatever the user
-// actually bound, so the card never instructs them to press the wrong keys.
-//
-// This used to fill a second line under the cards ("…AI is optional. Your data
-// stays on this machine.") and the key-status half of it went with that line.
-// The hotkey half did not, because the card still shows a shortcut.
-async function fillDiscover(): Promise<void> {
-  const keyEl = document.getElementById('home-disc-hotkey');
-  if (!keyEl) return;
-  try {
-    // `hotkey:label` resolves { label, accelerator } — not a bare string.
-    const res: any = await window.hub.getHotkeyLabel();
-    const label = res && typeof res === 'object' ? res.label : res;
-    if (label) keyEl.textContent = String(label);
-  } catch (_) { /* keep the default printed in the markup */ }
-}
-
-// ── Recent + Starred (cross-project) ─────────────────────────────────────────
-
-// How many Recent rows show before "Show all"; the main-process list is already
-// capped (recent.ts). Purely a view limit, so expanding never re-reads disk.
-const RECENT_COLLAPSED = 8;
-let recentExpanded = false;
-let recentItems: any[] = [];
-let starredSet = new Set<string>();
-
-// The pin key stored in config.starred — matches "type:id" (e.g. "analysis:<id>").
-function starKey(it: any): string {
-  return String(it.type || '') + ':' + String(it.id || '');
-}
-
-// Fetch the recent list AND the starred pins, then paint both Home sections.
-// Called on boot and whenever Home is (re)shown (selectSection).
-async function renderRecent(): Promise<void> {
-  const [list, starred] = await Promise.all([
-    window.hub.recentItems().catch(() => []),
-    window.hub.getStarred().catch(() => []),
-  ]);
-  recentItems = Array.isArray(list) ? list : [];
-  starredSet = new Set(Array.isArray(starred) ? starred : []);
-  paintHome();
-}
-
-// Split the one recent list into Starred (pinned) and Recent (the rest). Starred
-// hides entirely when empty; the first-run block shows only when there is
-// nothing at all.
-function paintHome(): void {
-  const starredSec = document.getElementById('home-starred');
-  const starredRows = document.getElementById('home-starred-rows');
-  const recentSec = document.getElementById('home-recent');
-  const recentRows = document.getElementById('home-recent-rows');
-  const firstrun = document.getElementById('home-firstrun');
-  const showall = document.getElementById('home-showall') as HTMLButtonElement | null;
-
-  const starred = recentItems.filter((it) => starredSet.has(starKey(it)));
-  const rest = recentItems.filter((it) => !starredSet.has(starKey(it)));
-
-  // Starred and Recent ALWAYS render — a heading plus a muted placeholder when
-  // empty. Hiding them left a large void under the first-run cards; a structured
-  // "nothing here yet" reads as waiting rather than broken.
-  if (starredSec) starredSec.hidden = false;
-  if (starredRows) {
-    starredRows.innerHTML = '';
-    if (starred.length) starred.forEach((it) => starredRows.appendChild(makeRecentRow(it)));
-    else starredRows.appendChild(makeEmptyRow('Star anything to pin it here.'));
-  }
-
-  const shown = recentExpanded ? rest : rest.slice(0, RECENT_COLLAPSED);
-  if (recentSec) recentSec.hidden = false;
-  if (recentRows) {
-    recentRows.innerHTML = '';
-    if (rest.length) shown.forEach((it) => recentRows.appendChild(makeRecentRow(it)));
-    else
-      recentRows.appendChild(
-        makeEmptyRow('Nothing yet. Datasets, analyses and dashboards you open will show up here.'),
-      );
-  }
-  if (showall) {
-    const more = rest.length > RECENT_COLLAPSED;
-    showall.hidden = !more;
-    showall.textContent = recentExpanded ? 'Show less' : 'Show all →';
-  }
-
-  // The quick-start cards + capture hint stay on EVERY visit (above Starred),
-  // not just first-run — they are the primary "bring data in" doors, so they
-  // remain reachable even once Starred and Recent have content.
-  if (firstrun) firstrun.hidden = false;
-}
-
-// One row: star toggle · name · type chip · project · relative time. The whole
-// row opens the item; the star toggles the pin without opening.
-function makeRecentRow(it: any): HTMLElement {
-  const row = document.createElement('button');
-  row.type = 'button';
-  row.className = 'home-row';
-  row.dataset.type = String(it.type || '');
-  row.dataset.id = String(it.id || '');
-  row.dataset.projectId = String(it.projectId || '');
-
-  const on = starredSet.has(starKey(it));
-  const star = document.createElement('span');
-  star.className = 'home-row-star' + (on ? ' is-on' : '');
-  star.setAttribute('role', 'button');
-  star.setAttribute('tabindex', '0');
-  star.setAttribute('aria-label', on ? 'Unstar' : 'Star');
-  star.setAttribute('aria-pressed', on ? 'true' : 'false');
-  star.textContent = on ? '★' : '☆';
-  star.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleStar(it);
-  });
-  star.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleStar(it);
-    }
-  });
-
-  const name = document.createElement('span');
-  name.className = 'home-row-name';
-  name.textContent = it.name || 'Untitled';
-
-  const chip = document.createElement('span');
-  chip.className = 'home-row-chip home-chip-' + row.dataset.type;
-  chip.textContent =
-    it.type === 'dataset' ? 'Dataset' : it.type === 'analysis' ? 'Analysis' : 'Dashboard';
-
-  const proj = document.createElement('span');
-  proj.className = 'home-row-proj';
-  proj.textContent = it.projectName || '';
-
-  const time = document.createElement('span');
-  time.className = 'home-row-time';
-  time.textContent = formatSidebarTime(it.updatedAt || null); // hub.ts
-
-  row.append(star, name, chip, proj, time);
-  row.addEventListener('click', () => openRecentItem(it));
-  return row;
-}
-
-// A muted, non-interactive placeholder row for an empty Starred/Recent section.
-function makeEmptyRow(text: string): HTMLElement {
-  const row = document.createElement('div');
-  row.className = 'home-row home-row-empty';
-  const span = document.createElement('span');
-  span.className = 'home-row-emptytext';
-  span.textContent = text;
-  row.appendChild(span);
-  return row;
-}
-
-// Toggle a pin, persist the whole list (one setter), and repaint. No re-fetch of
-// the recent list — only the star state changed.
-function toggleStar(it: any): void {
-  const key = starKey(it);
-  if (starredSet.has(key)) starredSet.delete(key);
-  else starredSet.add(key);
-  if (window.hub.setStarred) window.hub.setStarred([...starredSet]);
-  paintHome();
-}
-
-// Opening a Recent/Starred item sets the active project implicitly from the
-// record's own project id (the whole point of dropping the project front door),
-// then lands on the item — best-effort open of the exact record if its opener
-// exists.
-async function openRecentItem(it: any): Promise<void> {
-  await openWorkspace(String(it.projectId)); // workspace.ts — sets currentProjectId
-  if (it.type === 'dataset') {
-    selectSection('datasets');
-    if (typeof openSavedDataset === 'function') openSavedDataset(String(it.id));
-  } else if (it.type === 'analysis') {
-    selectSection('analyses');
-    if (typeof openAnalysis === 'function') openAnalysis(String(it.id));
-  } else if (it.type === 'dashboard') {
-    selectSection('dashboards');
-    if (typeof openDashboard === 'function') openDashboard(String(it.id));
-  }
-}
+// Home's own surface — Starred, Recent, the quick-start hotkey and the row
+// rendering — moved to homePage.ts when this file passed 600 lines. That file
+// owns what Home SHOWS; this one still owns what its buttons DO (resolving a
+// project, the +New menu, the data-source doors), which is why initHome() below
+// calls initHomePage() rather than the other way round.
 
 // Fill the Connect "More…" count from the LIVE connectors:catalog, never a
 // literal — the shortlist is five, but the real number of sources is whatever
@@ -586,10 +411,12 @@ async function fillConnectorCount(): Promise<void> {
     const cat = await window.hub.connectorCatalog();
     const n = Array.isArray(cat) ? cat.length : 0;
     if (n > 0) countEl.textContent = String(n);
-    // First-run card 3 names Postgres + MySQL explicitly, so "and N more" is the
-    // rest of the live catalog. Leave the markup fallback if the count is odd.
+    // The quick-start Database button reads "Database — N sources", so N is the
+    // WHOLE catalog. It used to be n - 2, because the card it replaced named
+    // Postgres and MySQL first and said "and N more"; carrying that subtraction
+    // over to the new copy would have quietly under-reported the catalog by two.
     const dbCount = document.getElementById('firstrun-db-count');
-    if (dbCount && n > 2) dbCount.textContent = String(n - 2);
+    if (dbCount && n > 0) dbCount.textContent = String(n);
   } catch (_) {
     /* leave "More…" without a count if the catalog channel is unavailable */
   }
@@ -625,15 +452,8 @@ function initHome(): void {
   const more = document.getElementById('as-connect-more');
   if (more) more.addEventListener('click', () => startFromSource('catalog'));
 
-  const showall = document.getElementById('home-showall');
-  if (showall) {
-    showall.addEventListener('click', () => {
-      recentExpanded = !recentExpanded;
-      paintHome();
-    });
-  }
-
-  fillDiscover();
+  // homePage.ts: Show all/less, the capture hotkey, and the first paint of
+  // Starred + Recent.
+  if (typeof initHomePage === 'function') initHomePage();
   fillConnectorCount();
-  renderRecent();
 }
