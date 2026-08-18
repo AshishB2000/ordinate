@@ -767,8 +767,8 @@ function folderConnector(spec: {
 
 const parquetFolder = folderConnector({
   id: 'parquet-folder',
-  label: 'Parquet files',
-  blurb: 'Query a folder of .parquet files. Each file is a table, read in place.',
+  label: 'Parquet folder',
+  blurb: 'Connect a FOLDER of .parquet files as read-only SQL — each file is a table, read in place.',
   ext: '.parquet',
   help: 'Absolute path to a folder containing .parquet files. Each file becomes one table.',
   reader: (file) => `read_parquet(${strLit(file)})`,
@@ -776,8 +776,8 @@ const parquetFolder = folderConnector({
 
 const csvFolder = folderConnector({
   id: 'csv-folder',
-  label: 'CSV files',
-  blurb: 'Query a folder of .csv files. Each file is a table, read in place as text.',
+  label: 'CSV folder',
+  blurb: 'Connect a FOLDER of .csv files as read-only SQL — each file is a table, read in place as text.',
   ext: '.csv',
   help: 'Absolute path to a folder containing .csv files. Every column is read as text.',
   // all_varchar: CSV has no types, and a sniffed type is a guess that can lose a

@@ -319,16 +319,17 @@ function openNewMenu(trigger: HTMLElement): void {
 // — the user is already on Sources and can carry on by hand — rather than a
 // ReferenceError that kills the whole click.
 function runSourceAction(kind: string): void {
-  // openWorkspace() lands on Sources, but the file picker and the paste box
-  // live in the DATASETS panel — acting on them from Sources targets a hidden
-  // section, which is how the paste box silently failed to take focus.
+  // openWorkspace() lands on Sources, but importing belongs to the DATASETS
+  // panel — the paste surface and the composer both live there, so land the user
+  // on it first. (This is also what lights the "Data" nav item for the result.)
   if (kind === 'file' || kind === 'paste') {
     if (typeof selectSection === 'function') selectSection('datasets'); // workspace.ts
   }
 
-  // Importing is a DIALOG now (dataSection.ts), and both of these controls live
-  // inside it — acting on them directly would target hidden elements, which is
-  // the same failure the selectSection() call above exists to prevent.
+  // CSV / Excel imports a FILE: straight to the native picker, no chooser modal.
+  // Paste opens the paste surface, which focuses its own box. openImportDialog
+  // (dataSection.ts) routes both; the handleImportFile fallback covers the panel
+  // script not having loaded.
   if (kind === 'file') {
     if (typeof openImportDialog === 'function') openImportDialog('file');
     else if (typeof handleImportFile === 'function') handleImportFile(); // datasets.ts
@@ -336,8 +337,6 @@ function runSourceAction(kind: string): void {
   }
   if (kind === 'paste') {
     if (typeof openImportDialog === 'function') openImportDialog('paste');
-    const box = document.getElementById('ds-paste-input') as HTMLTextAreaElement | null;
-    if (box) { box.scrollIntoView({ block: 'center' }); box.focus(); }
     return;
   }
   // "Screenshot" is a destination, not an action: openWorkspace() has already

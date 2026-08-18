@@ -25,17 +25,10 @@ function dsShow(id: string, show: boolean): void {
 
 // ── Boot wiring (once) ───────────────────────────────────────────────────────
 function initDatasets(): void {
-  const importBtn = dsEl('ds-import-btn');
-  if (importBtn) importBtn.addEventListener('click', () => handleImportFile());
-
-  const pasteToggle = dsEl('ds-paste-toggle');
-  if (pasteToggle) {
-    pasteToggle.addEventListener('click', () => {
-      const wrap = dsEl('ds-paste-wrap');
-      if (wrap) wrap.hidden = !wrap.hidden;
-    });
-  }
-
+  // The import/paste CHOOSER buttons are gone — each entry point (dataSection.ts)
+  // now does one thing directly: file import opens the native picker, paste opens
+  // the paste box. The Parse button inside that box is the one control this file
+  // still wires; handleImportFile is called straight from dataSection.ts.
   const parseBtn = dsEl('ds-paste-parse');
   if (parseBtn) parseBtn.addEventListener('click', () => handleParsePaste());
 

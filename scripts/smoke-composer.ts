@@ -87,8 +87,7 @@ async function main(): Promise<void> {
   // bare name inside the page. The hub CSP forbids eval, so it is declared above.
   await win.evaluate((pid: string) => (window as any).openWorkspace(pid), seeded.projectId);
   await win.waitForTimeout(1500);
-  // The nav item labelled "Data" opens Connect; the dataset list is reached the
-  // way the app reaches it (projects.ts does the same on opening a dataset).
+  // The "Data" nav item points at the dataset list; reach it as the app does.
   await win.evaluate(() => { (window as any).selectSection('datasets'); });
   await win.waitForTimeout(1500);
 
@@ -96,10 +95,11 @@ async function main(): Promise<void> {
   ok('#ds-combine-modal no longer exists in the document',
     (await win.locator('#ds-combine-modal').count()) === 0);
 
-  // ── Import → composer ──────────────────────────────────────────────────────
-  await win.click('#ds-import-open', { timeout: 8000 });
+  // ── Paste → composer ───────────────────────────────────────────────────────
+  // "Paste data" opens the paste surface directly — no import/paste chooser
+  // modal in between (that duplicated the buttons already on the page).
+  await win.click('#ds-paste-open', { timeout: 8000 });
   await win.waitForSelector('#ds-import-modal:not([hidden])', { timeout: 8000 });
-  await win.click('#ds-paste-toggle', { timeout: 8000 });
   await win.fill('#ds-paste-input', CSV);
   await win.click('#ds-paste-parse', { timeout: 8000 });
 

@@ -97,7 +97,15 @@
           </svg>
           <span>Home</span>
         </button>
-        <button class="as-nav-item" type="button" data-section="connect">
+        <!-- "Data" points at YOUR data — the saved datasets in #ws-datasets, the
+             destination. Connecting a source is an ACTION that lives inside that
+             section (the "Connect data" button), so this nav item stays lit while
+             the Connect panel is showing too: data-section-alt lists the extra
+             sections it owns, and selectSection lights it for any of them. Before,
+             this opened the 35-source catalog and #ws-datasets had no nav entry at
+             all — "Data" meant the catalog in the nav and the datasets everywhere
+             else. -->
+        <button class="as-nav-item" type="button" data-section="datasets" data-section-alt="connect">
           <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <ellipse cx="12" cy="6" rx="7" ry="3" stroke="currentColor" stroke-width="1.7"/>
             <path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" stroke="currentColor" stroke-width="1.7"/>
@@ -137,8 +145,12 @@
            connectors:catalog in a later phase. -->
       <div class="as-connect">
         <div class="as-section-h">Connect</div>
+        <!-- This shortcut IMPORTS a single file into a dataset — it is not the
+             csv-folder CONNECTOR. It wore that connector's logo (data-logo-id=
+             "csv-folder"), which is how an import action ended up carrying a
+             connection's identity. An import gets an import mark. -->
         <button class="as-connect-item" type="button" data-source="file">
-          <span class="as-source-logo" data-logo-id="csv-folder" data-logo-label="CSV / Excel" aria-hidden="true"></span>CSV / Excel
+          <span class="as-source-logo" data-logo-id="home-import" data-logo-label="CSV / Excel" aria-hidden="true"></span>CSV / Excel
         </button>
         <button class="as-connect-item" type="button" data-source="paste">
           <span class="as-source-logo" data-logo-id="home-paste" data-logo-label="Paste data" aria-hidden="true"></span>Paste data
@@ -714,8 +726,15 @@
             <h2 class="ds-h">Datasets</h2>
             <p class="ds-sub">Import CSV, JSON, or Excel — or paste data — to save a structured dataset in this project.</p>
           </div>
+          <!-- Three ways to bring data in, three distinct actions: import a FILE
+               (native picker, straight to the composer), PASTE text, or CONNECT a
+               live source (the 35-source catalog). "Connect data" is the door to
+               the catalog that used to hide behind the "Data" nav item — it lives
+               here now, next to the other ways to add data. -->
           <div class="ds-head-actions">
-            <button class="btn btn-primary" type="button" id="ds-import-open">+ Import data</button>
+            <button class="btn btn-primary" type="button" id="ds-import-open">+ Import file</button>
+            <button class="btn" type="button" id="ds-paste-open">Paste data</button>
+            <button class="btn" type="button" id="ds-connect-open">Connect data</button>
             <button class="btn" type="button" id="ds-combine-open">Combine datasets</button>
             <button class="btn btn-sm" type="button" id="ds-refresh-all-btn" hidden>↻ Refresh all</button>
           </div>
@@ -764,19 +783,21 @@
              The shell is .ws-modal-overlay / .ws-modal, the same one
              dashChooseModal uses; dataSection.ts wires Escape, the backdrop and
              the focus trap through the shared makeModalAccessible. -->
+        <!-- This dialog no longer offers "Import file / Paste data" — those two
+             buttons only duplicated the ones already on the page behind it. It is
+             now a purpose-built surface with a reason to exist: the PASTE box
+             (opened by "Paste data"), and the SHEET picker + preview an xlsx with
+             several sheets needs before it hands off to the composer. File import
+             skips it entirely and opens the native picker. dataSection.ts sets the
+             title to match which of the two is showing. -->
         <div class="ws-modal-overlay ds-import-overlay" id="ds-import-modal" hidden>
           <div class="ws-modal ds-import-modal">
             <div class="ds-modal-head">
-              <div class="ws-modal-title" id="ds-import-title">Import data</div>
+              <div class="ws-modal-title" id="ds-import-title">Paste data</div>
               <button class="ds-modal-x" type="button" id="ds-import-x" aria-label="Close">✕</button>
             </div>
 
             <div class="ds-modal-body">
-              <div class="ds-toolbar">
-                <button class="btn" type="button" id="ds-import-btn">Import file</button>
-                <button class="btn" type="button" id="ds-paste-toggle">Paste data</button>
-              </div>
-
               <div class="ds-paste-wrap" id="ds-paste-wrap" hidden>
                 <textarea class="ds-paste-input" id="ds-paste-input" placeholder="Paste CSV, TSV, or JSON here…"></textarea>
                 <div class="ds-paste-actions">

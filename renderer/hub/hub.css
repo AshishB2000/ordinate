@@ -4730,11 +4730,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   margin: 0;
   max-width: 520px;
 }
-.ds-toolbar {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
 .ds-paste-wrap {
   display: flex;
   flex-direction: column;
@@ -4953,13 +4948,21 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  /* Wrap the actions below the title when they no longer fit beside it — the AI
+     dock narrows this panel, and with several actions ("Import file", "Paste
+     data", "Connect data", "Combine datasets") an unwrapped row crushed the
+     title to a single clipped letter and stacked its subtitle one word per line. */
+  flex-wrap: wrap;
 }
-.ds-head-text { min-width: 0; }
+/* Keep a real width so the title/subtitle never collapse to nothing; grow to
+   push the actions to the right when there is room. */
+.ds-head-text { min-width: 220px; flex: 1 1 220px; }
 .ds-head-actions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex: 0 0 auto;
+  flex-wrap: wrap;
 }
 .ds-head-actions .btn[hidden] { display: none; }
 /* A real empty state, not a bare line of grey text: what is missing, why it

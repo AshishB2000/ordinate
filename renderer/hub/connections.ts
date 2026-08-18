@@ -122,6 +122,14 @@ type ConnLogo = { path?: string; color?: string; title?: string; src?: string };
 const CONN_LOGOS: Record<string, ConnLogo> =
   (window.hub && window.hub.connectorLogos) || {};
 const CONN_ACTION_LOGOS: Record<string, ConnLogo> = {
+  // The sidebar "CSV / Excel" shortcut IMPORTS a file — a down-arrow into a tray,
+  // not a data-source logo. It is an action mark like home-paste, so it lives
+  // here rather than in the per-source CONN_LOGOS the catalog draws from.
+  'home-import': {
+    path: 'M11 3h2v7h3l-4 4-4-4h3V3Z M4 13v6a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-6h-2v5H6v-5H4Z',
+    color: 'currentColor',
+    title: 'Import file',
+  },
   'home-paste': {
     path: 'M9 2h6a2 2 0 0 1 2 2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2-2Zm0 4h6V4H9v2Zm-2 3v2h10V9H7Zm0 4v2h10v-2H7Zm0 4v2h7v-2H7Z',
     color: 'currentColor',
