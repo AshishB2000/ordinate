@@ -10519,6 +10519,20 @@ body.cap-focus .cap-back {
   color: var(--text-strong);
   border: 1px solid var(--border);
 }
+/* A subtle blinking caret while an answer is streaming in token-by-token. CSS
+   only (hub CSP forbids inline style=): the class is added on the first delta and
+   removed when the bubble is replaced by the authoritative answer on resolve. */
+.xp-bubble.xp-streaming::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--accent);
+  animation: xp-caret-blink 1s steps(2, start) infinite;
+}
+@keyframes xp-caret-blink { 50% { opacity: 0; } }
 .xp-provenance {
   display: flex;
   flex-wrap: wrap;

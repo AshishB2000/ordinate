@@ -329,7 +329,10 @@ declare global {
         context: { kind?: string; id?: string },
         question: string,
         threadId?: string,
+        askId?: string,
       ): Promise<any>;
+      // Live narration deltas for the in-flight copilotAsk with this askId.
+      onCopilotChunk(cb: (d: { askId: string; delta: string }) => void): void;
       copilotClear(projectId: string): Promise<any>;
       setCopilotEnabled(enabled: boolean): Promise<any>;
       providerLogos: Record<string, { path: string; color: string; title: string }>;

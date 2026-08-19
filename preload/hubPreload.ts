@@ -531,8 +531,14 @@ contextBridge.exposeInMainWorld('hub', {
   // in MAIN; the model only narrates. threadId is optional (most recent).
   // Returns { ok, answer, provenance, turns, threadId } |
   // { ok:false, notReady:true } | { ok:false, error }.
-  copilotAsk: (projectId: string, context: { kind?: string; id?: string }, question: string, threadId?: string) =>
-    ipcRenderer.invoke('copilot:ask', { projectId, context, question, threadId }),
+  copilotAsk: (projectId: string, context: { kind?: string; id?: string }, question: string, threadId?: string, askId?: string) =>
+    ipcRenderer.invoke('copilot:ask', { projectId, context, question, threadId, askId }),
+  // Live narration deltas for an in-flight copilotAsk, fire-and-forget from main
+  // as tokens arrive: { askId, delta }. The renderer matches askId to the bubble
+  // it is streaming into and drops any chunk it doesn't recognise (stale ask, or
+  // the other surface's stream). The handle's resolution remains authoritative.
+  onCopilotChunk: (cb: (d: { askId: string; delta: string }) => void) =>
+    ipcRenderer.on('copilot:ask:chunk', (_e, d) => cb(d)),
   // Clear a project's chat history; returns { ok: boolean }.
   copilotClear: (projectId: string) => ipcRenderer.invoke('copilot:clear', { projectId }),
   // Flip the hard ON/OFF switch; returns { ok, enabled }.

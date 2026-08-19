@@ -159,7 +159,20 @@ export function register() {
   // leaves the thread unchanged, so the composer can keep the user's text — no
   // orphan question on disk). threadId is optional: omit it for the most recent
   // conversation, which is the pre-threads renderer's behaviour unchanged.
-  ipcMain.handle('copilot:ask', async (_e, { projectId, context, question, threadId }: any = {}) => {
+  //
+  // STREAMING (additive) changes ONLY how the narration text arrives. The handle
+  // contract is unchanged: it still resolves last with the FULL text + provenance
+  // + persisted turns, persistence still saves BOTH turns only on success, and a
+  // failed ask still leaves the thread untouched. When the renderer supplies an
+  // `askId` we ALSO forward each token to THAT renderer on the fire-and-forget
+  // `copilot:ask:chunk` channel as it arrives (scoped by askId so a stale ask and
+  // the two surfaces never cross). There is NO separate done event — the handle's
+  // resolution below IS the done signal, and its result is authoritative; the
+  // renderer treats the streamed text as a live preview and reconciles to it.
+  // Provenance is built from app-computed facts BELOW, independent of the reply
+  // text — streaming never derives a chip or a number from a token. Errors still
+  // travel through the handle only (never the stream): one error path, unchanged.
+  ipcMain.handle('copilot:ask', async (event, { projectId, context, question, threadId, askId }: any = {}) => {
     try {
       const q = typeof question === 'string' ? question.trim() : '';
       if (!q) return { ok: false, error: 'Ask a question first.' };
@@ -167,7 +180,13 @@ export function register() {
       const tid = typeof threadId === 'string' && threadId ? threadId : undefined;
       const prior = (await copilot.loadHistory(projectId, tid)).map((t) => ({ role: t.role, text: t.text }));
       const facts = await buildFacts(projectId, context || {});
-      const res = await askCopilot(prior, facts.text, q);
+      // Only BYOK models actually stream (analyzeStream.ts); with no model or a
+      // local CLI, onDelta never fires, so no chunk traffic and the not_ready /
+      // error paths stay exactly as they were.
+      const onDelta = (typeof askId === 'string' && askId)
+        ? (delta: string) => { try { event.sender.send('copilot:ask:chunk', { askId, delta }); } catch (_) { /* window gone */ } }
+        : undefined;
+      const res = await askCopilot(prior, facts.text, q, onDelta);
 
       if (res.ok) {
         // Pin the target thread BEFORE the first append. Two reasons: the question
