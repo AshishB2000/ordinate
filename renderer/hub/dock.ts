@@ -476,16 +476,21 @@ async function dkSend(): Promise<void> {
   // point (see dkContextRef/dkRenderContext above).
   const ref = dkContextRef();
 
+  // A per-ask id so main streams this answer's tokens back to THIS bubble. The
+  // streaming machinery lives in explore.ts (one rendering + one registry for
+  // both surfaces); the shared askId keeps the dock's stream out of Explore's.
+  const askId = xpNewAskId();
+
   // Optimistic UI: the question + a pending marker appear immediately.
   if (typeof dkClearProposal === 'function') dkClearProposal(); // last turn's proposal, if any, is superseded
   dkHideHint();
   xpAppendBubble('user', question, undefined, 'dk-messages');
   xpAppendBubble('assistant', 'Thinking…', undefined, 'dk-messages');
-  // Live activity region under the pending bubble (askActivity.ts) — the same
-  // engine Ask uses, mounted here into 'dk-messages'. Empty with no model.
-  const askId = typeof xpActivityId === 'function' ? xpActivityId() : '';
-  if (askId && typeof xpActivityStart === 'function') xpActivityStart(askId, 'dk-messages');
   xpScrollToBottom('dk-messages');
+  // Both side channels ride the ONE askId above: streaming fills the pending
+  // bubble, the activity region shows the app's work beneath it (askActivity.ts).
+  xpBeginStream(askId, 'dk-messages'); // the "Thinking…" bubble just appended is the stream target
+  if (typeof xpActivityStart === 'function') xpActivityStart(askId, 'dk-messages');
 
   input.value = '';
   dkBusy = true;
@@ -493,12 +498,13 @@ async function dkSend(): Promise<void> {
 
   let res: any = null;
   try {
-    res = await window.hub.copilotAsk(currentProjectId, { kind: ref.kind, id: ref.id }, question, undefined, askId || undefined);
+    res = await window.hub.copilotAsk(currentProjectId, { kind: ref.kind, id: ref.id }, question, undefined, askId);
   } catch (_) {
     res = { ok: false, error: 'Something went wrong. Try again.' };
   }
 
   dkBusy = false;
+  xpEndStream(askId); // streamed text was a preview; the next step reconciles from disk truth
 
   if (res && res.ok) {
     // Rebuild from disk truth — main persisted both turns on success.

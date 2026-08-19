@@ -86,6 +86,61 @@ function xpScrollToBottom(containerId = 'xp-messages'): void {
   if (list) list.scrollTop = list.scrollHeight;
 }
 
+// ── Streaming (token-by-token narration) ────────────────────────────────────
+//
+// Main streams an in-flight answer over `copilot:ask:chunk` { askId, delta } as
+// the model produces it (BYOK only — see src/analyzeStream.ts). The bubble the
+// tokens fill is the SAME optimistic assistant bubble xpSend/dkSend already
+// appended ("Thinking…"): the first delta clears that placeholder and each
+// subsequent one is appended to `bubble.textContent`, NEVER innerHTML — a
+// streamed token can carry markup, exactly the reason xpAppendBubble is
+// textContent-only (see its header).
+//
+// ONE registry serves both surfaces. A UUID askId means only the matching
+// in-flight ask paints, so a late chunk from a stale ask (the user asked again)
+// or the other surface's stream can never write into this bubble. The stream is
+// only ever a live PREVIEW: on the handle's resolution the caller reconciles by
+// rebuilding the transcript from disk truth (authoritative text + provenance
+// chips), which is why xpEndStream is called before that rebuild — a chunk that
+// somehow arrives afterwards finds no target and is dropped.
+interface XpStreamTarget { bubble: HTMLElement; container: string; started: boolean }
+const xpStreamTargets: Record<string, XpStreamTarget> = {};
+
+// Adopt the LAST assistant bubble in a container as askId's streaming target —
+// that is the optimistic "Thinking…" bubble the caller just appended.
+function xpBeginStream(askId: string, containerId = 'xp-messages'): void {
+  if (!askId) return;
+  const list = xpEl(containerId);
+  if (!list) return;
+  const bubbles = list.querySelectorAll('.xp-msg-assistant .xp-bubble');
+  const bubble = bubbles.length ? (bubbles[bubbles.length - 1] as HTMLElement) : null;
+  if (bubble) xpStreamTargets[askId] = { bubble, container: containerId, started: false };
+}
+
+function xpEndStream(askId: string): void {
+  if (askId) delete xpStreamTargets[askId];
+}
+
+// A fresh ask id. crypto.randomUUID is available in the hub renderer; the
+// fallback only matters for an ancient engine and just needs to be unique enough
+// to distinguish two in-flight asks.
+function xpNewAskId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  } catch (_) { /* fall through */ }
+  return 'ask-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+}
+
+// One delta from main. Drops anything whose askId isn't a live target.
+function xpOnStreamChunk(askId: string, delta: string): void {
+  const t = askId ? xpStreamTargets[askId] : null;
+  if (!t) return;
+  if (!t.started) { t.bubble.textContent = ''; t.started = true; } // clear "Thinking…" on first token
+  t.bubble.textContent += delta; // textContent, NEVER innerHTML — a token can carry markup
+  t.bubble.classList.add('xp-streaming'); // CSS-only caret while it grows
+  xpScrollToBottom(t.container);
+}
+
 // How many rows the "Jump back in" strip shows. The recent list itself is
 // cross-project and already sorted newest-first in main (src/recent.ts).
 const XP_JUMP_LIMIT = 10;
@@ -478,6 +533,10 @@ async function xpSend(): Promise<void> {
 
   const ref = xpContextRef();
 
+  // A per-ask id so main can stream this answer's tokens back to THIS bubble and
+  // the renderer can ignore a stale ask's late chunks (see xpOnStreamChunk).
+  const askId = xpNewAskId();
+
   // Optimistic: the question and a pending marker appear immediately, and the
   // stage commits to transcript mode before the round-trip.
   xpHideHint();
@@ -488,12 +547,12 @@ async function xpSend(): Promise<void> {
   xpSetAsked(true);
   xpAppendBubble('user', question);
   xpAppendBubble('assistant', 'Thinking…');
-  // Live activity region under the pending bubble — the app showing its work
-  // while the answer is prepared (askActivity.ts). askId scopes the stream; main
-  // emits nothing when no model is configured, so this stays empty there.
-  const askId = typeof xpActivityId === 'function' ? xpActivityId() : '';
-  if (askId && typeof xpActivityStart === 'function') xpActivityStart(askId, 'xp-messages');
   xpScrollToBottom();
+  // Both side channels ride the ONE askId: streaming fills the pending bubble,
+  // the activity region shows the app's work beneath it (askActivity.ts). Main
+  // emits nothing on either with no model, so both stay empty there.
+  xpBeginStream(askId); // the "Thinking…" bubble just appended is the stream target
+  if (typeof xpActivityStart === 'function') xpActivityStart(askId, 'xp-messages');
 
   input.value = '';
   xpBusy = true;
@@ -506,13 +565,17 @@ async function xpSend(): Promise<void> {
       { kind: ref.kind, id: ref.id },
       question,
       xpThreadId || undefined,
-      askId || undefined,
+      askId,
     );
   } catch (_) {
     res = { ok: false, error: 'Something went wrong. Try again.' };
   }
 
   xpBusy = false;
+  // Stop streaming into the optimistic bubble: whether we succeeded or failed,
+  // the next step rebuilds the transcript from disk truth (or drops the bubbles),
+  // and the streamed text was only ever a preview.
+  xpEndStream(askId);
 
   if (res && res.ok) {
     // Rebuild from disk truth — main persisted both turns on success. Explore
@@ -521,8 +584,7 @@ async function xpSend(): Promise<void> {
     if (Array.isArray(res.turns)) xpRenderTurns(res.turns);
     else await xpLoadHistory();
     // Collapse the activity region to its quiet summary, re-anchored above the
-    // answer that just rendered. (xpLoadHistory below already cleared a stale one
-    // if this was the no-turns branch, so nothing to collapse then.)
+    // answer that just rendered (askActivity.ts).
     if (askId && typeof xpActivityCollapse === 'function') xpActivityCollapse(askId);
     // The entity may have been deleted between picking it and asking. Main says
     // so by falling back to the project inventory, and the PROVENANCE KIND is
@@ -553,8 +615,7 @@ async function xpSend(): Promise<void> {
 
   // Failure: main left the thread unchanged, so reload from disk to drop the
   // optimistic bubbles, and restore the typed text so nothing is lost. The
-  // activity region goes with the pending bubble — no orphan chips (xpLoadHistory
-  // clears the mount, but be explicit for the mid-way error case).
+  // activity region goes with the pending bubble — no orphan chips.
   if (askId && typeof xpActivityClear === 'function') xpActivityClear(askId);
   await xpLoadHistory();
   input.value = question;
@@ -725,6 +786,15 @@ function initExplore(): void {
     window.hub.onKeyChanged(() => {
       if (currentSection === 'explore') void refreshExplore();
       else xpPaintModelChip();
+    });
+  }
+
+  // The ONE streaming subscription for the whole hub. The registry it feeds
+  // (xpStreamTargets) is shared, so the dock's asks stream through here too — the
+  // askId picks the right bubble regardless of which surface sent the question.
+  if (window.hub && typeof window.hub.onCopilotChunk === 'function') {
+    window.hub.onCopilotChunk((d) => {
+      if (d && typeof d.askId === 'string') xpOnStreamChunk(d.askId, typeof d.delta === 'string' ? d.delta : '');
     });
   }
 }

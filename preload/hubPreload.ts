@@ -531,12 +531,20 @@ contextBridge.exposeInMainWorld('hub', {
   // in MAIN; the model only narrates. threadId is optional (most recent).
   // Returns { ok, answer, provenance, turns, threadId } |
   // { ok:false, notReady:true } | { ok:false, error }.
-  // askId (feat/ask-activity) is an OPTIONAL renderer-generated tag: when
-  // present and a model is configured, main pushes each real operation back over
-  // copilot:ask:activity scoped by that id (see onAskActivity). Omitting it keeps
-  // the old behaviour with no chips.
+  // askId is an OPTIONAL renderer-generated tag scoping the TWO fire-and-forget
+  // side channels an in-flight ask has (one spine, one id): copilot:ask:chunk
+  // streams the answer's tokens (feat/ask-streaming, onCopilotChunk), and
+  // copilot:ask:activity pushes each real operation as an activity step
+  // (feat/ask-activity, onAskActivity). Omitting it keeps the old behaviour —
+  // no streaming, no chips.
   copilotAsk: (projectId: string, context: { kind?: string; id?: string }, question: string, threadId?: string, askId?: string) =>
     ipcRenderer.invoke('copilot:ask', { projectId, context, question, threadId, askId }),
+  // Live narration deltas for an in-flight copilotAsk, fire-and-forget from main
+  // as tokens arrive: { askId, delta }. The renderer matches askId to the bubble
+  // it is streaming into and drops any chunk it doesn't recognise (stale ask, or
+  // the other surface's stream). The handle's resolution remains authoritative.
+  onCopilotChunk: (cb: (d: { askId: string; delta: string }) => void) =>
+    ipcRenderer.on('copilot:ask:chunk', (_e, d) => cb(d)),
   // Subscribe to live activity steps for an in-flight ask. Fire-and-forget push
   // from main ({ askId, step }); the renderer routes by askId and renders each
   // step as a chip. Ephemeral — nothing here is persisted.

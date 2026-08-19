@@ -29,14 +29,10 @@ interface XpActState {
 }
 const xpActs: Map<string, XpActState> = new Map();
 
-/** A renderer-generated id scoping one ask's activity stream, so a stale ask's
- *  chips are dropped and Ask/dock never cross. */
-function xpActivityId(): string {
-  try {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
-  } catch (_) { /* fall through */ }
-  return 'ask-' + Date.now() + '-' + Math.round(Math.random() * 1e9);
-}
+// The ask id is generated ONCE per ask by xpNewAskId() (explore.ts) and shared
+// with the streaming channel — one spine, one id, so a chip stream and a token
+// stream for the same ask carry the same scope and a stale ask's late events
+// (either kind) are dropped together.
 
 /** Drop every activity region in a container — the pending one AND any collapsed
  *  summary from a previous turn. Ephemeral: this just detaches DOM, nothing is

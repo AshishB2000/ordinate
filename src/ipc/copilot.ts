@@ -217,7 +217,18 @@ export function register() {
   // leaves the thread unchanged, so the composer can keep the user's text — no
   // orphan question on disk). threadId is optional: omit it for the most recent
   // conversation, which is the pre-threads renderer's behaviour unchanged.
-  ipcMain.handle('copilot:ask', async (_e, { projectId, context, question, threadId, askId }: any = {}) => {
+  //
+  // Two additive side channels ride the ONE askId (see below). STREAMING
+  // (feat/ask-streaming) forwards each narration token on `copilot:ask:chunk`;
+  // ACTIVITY (feat/ask-activity) forwards each real operation on
+  // `copilot:ask:activity`. Neither changes the handle contract: it still
+  // resolves last with the FULL text + provenance + persisted turns, persistence
+  // still saves BOTH turns only on success, a failed ask still leaves the thread
+  // untouched, and errors travel through the handle only (never a side channel).
+  // Provenance and every activity step are built from app-computed facts BELOW,
+  // independent of the reply text — neither derives a chip or a number from a
+  // token.
+  ipcMain.handle('copilot:ask', async (event, { projectId, context, question, threadId, askId }: any = {}) => {
     try {
       const q = typeof question === 'string' ? question.trim() : '';
       if (!q) return { ok: false, error: 'Ask a question first.' };
@@ -230,9 +241,19 @@ export function register() {
       // dropped and Ask/dock never cross. Every step is emitted from buildFacts
       // (real ops) plus the one 'model' step below that brackets the narration.
       const aid = typeof askId === 'string' && askId ? askId : '';
+      // ACTIVITY chips: push each real operation to the window that asked. Wired
+      // ONLY when an askId is present AND a model is configured — so with no model
+      // the ask short-circuits to not_ready and the chips stay invisible. Scoped
+      // by askId so a stale ask's chips are dropped and Ask/dock never cross.
       const emit: ActivityEmit = aid && config.executionReady()
-        ? (step) => { try { _e.sender.send('copilot:ask:activity', { askId: aid, step }); } catch (_) { /* window gone */ } }
+        ? (step) => { try { event.sender.send('copilot:ask:activity', { askId: aid, step }); } catch (_) { /* window gone */ } }
         : NO_ACTIVITY;
+      // STREAMING deltas: only BYOK models actually stream (analyzeStream.ts);
+      // with no model or a local CLI, onDelta never fires, so no chunk traffic and
+      // the not_ready / error paths stay exactly as they were.
+      const onDelta = aid
+        ? (delta: string) => { try { event.sender.send('copilot:ask:chunk', { askId: aid, delta }); } catch (_) { /* window gone */ } }
+        : undefined;
 
       const tid = typeof threadId === 'string' && threadId ? threadId : undefined;
       const prior = (await copilot.loadHistory(projectId, tid)).map((t) => ({ role: t.role, text: t.text }));
@@ -240,7 +261,7 @@ export function register() {
       // The single, real model call — the ONLY 'model' step, bracketing the one
       // narration this app makes. No agent loop, so there is nothing else to say.
       emit({ kind: 'model', label: 'Asked the model to narrate' });
-      const res = await askCopilot(prior, facts.text, q);
+      const res = await askCopilot(prior, facts.text, q, onDelta);
 
       if (res.ok) {
         // Pin the target thread BEFORE the first append. Two reasons: the question

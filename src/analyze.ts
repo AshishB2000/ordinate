@@ -7,6 +7,7 @@ import { runLocalCli } from './localCliRun';
 import { computeMetrics, deriveChartData } from './calc';
 import { writeHeadline, verifyHeadlineNumbers } from './headline';
 import { SUGGESTABLE_CHART_TYPES } from './visuals';
+import { streamProvider } from './analyzeStream';
 
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -142,20 +143,20 @@ const FOLLOWUP_FORMAT_HINT =
   'but always provide a meaningful analysis answering the question.]';
 
 // Typed error constructors — raw provider text / status never reaches the renderer.
-type TypedError = { ok: false; errorType: string; message: string; detail?: string };
-function errNetwork(): TypedError {
+export type TypedError = { ok: false; errorType: string; message: string; detail?: string };
+export function errNetwork(): TypedError {
   return { ok: false, errorType: 'network', message: 'No connection — check your internet and try again.' };
 }
-function errAuth(): TypedError {
+export function errAuth(): TypedError {
   return { ok: false, errorType: 'auth', message: 'Your API key was rejected. Check it in Settings.' };
 }
 function errNoKey(): TypedError {
   return { ok: false, errorType: 'auth', message: 'No API key saved — add one in Settings.' };
 }
-function errRateLimit(): TypedError {
+export function errRateLimit(): TypedError {
   return { ok: false, errorType: 'rate_limit', message: 'Too many requests — wait a moment and try again.' };
 }
-function errProvider(): TypedError {
+export function errProvider(): TypedError {
   return { ok: false, errorType: 'provider', message: 'The AI provider had an error. Try again.' };
 }
 function errBadReply(): TypedError {
@@ -163,12 +164,10 @@ function errBadReply(): TypedError {
 }
 // Distinct from errBadReply: the provider hit the max_tokens cap and cut the reply
 // off mid-JSON. Retrying the SAME capture won't help — the user must raise the cap.
-function errTruncated(): TypedError {
+export function errTruncated(): TypedError {
   return { ok: false, errorType: 'truncated', message: 'Response was cut off — try raising Max tokens in Settings.' };
 }
-function errUnknown(): TypedError {
-  return { ok: false, errorType: 'unknown', message: 'Something went wrong. Try again.' };
-}
+function errUnknown(): TypedError { return { ok: false, errorType: 'unknown', message: 'Something went wrong. Try again.' }; }
 
 // Heuristic: do the user's global rules ask for a SHORT output? The model already
 // shortens the prose analysis directly; this flag also trims the headline (which is
@@ -347,7 +346,7 @@ const DEFAULT_MAX_TOKENS = 4096;
 // first user turn only). Each adapter translates this into its own wire shape, so
 // switching providers mid-thread Just Works. toNeutral() also upgrades any legacy
 // Anthropic-format messages persisted before this rework.
-type NeutralMsg = { role: string; text: string; image?: string };
+export type NeutralMsg = { role: string; text: string; image?: string };
 function userImageMsg(text: string, base64: string): NeutralMsg { return { role: 'user', text, image: base64 }; }
 
 // ponytail: legacy persisted messages come in several historical shapes — any.
@@ -366,7 +365,7 @@ function toNeutral(m: any): NeutralMsg {
 }
 function normalizeThread(msgs: any): NeutralMsg[] { return (msgs || []).map(toNeutral); }
 
-function parseMaxTokens(v: any): number {
+export function parseMaxTokens(v: any): number {
   const n = parseInt(v, 10);
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_MAX_TOKENS;
 }
@@ -381,7 +380,7 @@ type BuildArgs = {
   baseUrl: string;
 };
 // ponytail: wire bodies/headers are provider-specific JSON — any.
-type WireReq = { url: string; headers: any; body: any };
+export type WireReq = { url: string; headers: any; body: any };
 
 function buildAnthropic({ systemPrompt, messages, model, maxTokens, apiKey, baseUrl }: BuildArgs): WireReq {
   const toContent = (m: NeutralMsg) => {
@@ -438,7 +437,7 @@ function extractGemini(json: any): string {
 }
 function cutoffGemini(json: any): boolean { return !!json && json.candidates && json.candidates[0] && json.candidates[0].finishReason === 'MAX_TOKENS'; }
 
-const ADAPTERS: Record<string, { label: string; build: (a: BuildArgs) => WireReq; extract: (json: any) => string; cutoff: (json: any) => boolean }> = {
+export const ADAPTERS: Record<string, { label: string; build: (a: BuildArgs) => WireReq; extract: (json: any) => string; cutoff: (json: any) => boolean }> = {
   anthropic: { label: 'Anthropic API', build: buildAnthropic, extract: extractAnthropic, cutoff: cutoffAnthropic },
   openai:    { label: 'OpenAI API',    build: buildOpenAI,    extract: extractOpenAI,    cutoff: cutoffOpenAI },
   gemini:    { label: 'Gemini API',    build: buildGemini,    extract: extractGemini,    cutoff: cutoffGemini },
@@ -447,11 +446,12 @@ const ADAPTERS: Record<string, { label: string; build: (a: BuildArgs) => WireReq
 
 // Shared HTTP call + typed error mapping. opts: { apiKey, baseUrl, model, maxTokens }.
 // Returns { rawText } on success or { error: <typed error> } on failure.
-type ProviderOpts = { apiKey?: string | null; baseUrl?: string; model: string; maxTokens?: number | string };
-type CallResult = { rawText?: string; error?: TypedError };
-async function callProvider(provider: string, systemPrompt: string, messages: NeutralMsg[], opts: ProviderOpts): Promise<CallResult> {
+export type ProviderOpts = { apiKey?: string | null; baseUrl?: string; model: string; maxTokens?: number | string };
+export type CallResult = { rawText?: string; error?: TypedError };
+async function callProvider(provider: string, systemPrompt: string, messages: NeutralMsg[], opts: ProviderOpts, onDelta?: (delta: string) => void): Promise<CallResult> {
   const adapter = ADAPTERS[provider];
   if (!adapter) return { error: errProvider() };
+  if (onDelta) return streamProvider(provider, systemPrompt, messages, opts, onDelta); // streaming twin (analyzeStream.ts): same errors/60s cap; buffered path below is unchanged
 
   const baseUrl = (opts.baseUrl || '').replace(/\/+$/, '');
   if (!baseUrl) return { error: Object.assign(errProvider(), { detail: `${adapter.label} · no base URL set` }) };
@@ -550,7 +550,7 @@ function resolveByok():
 // routable — keep this list in sync with src/localCliRun.js.
 const RUNNABLE_LOCAL_CLIS = ['claude', 'antigravity', 'codex', 'grok', 'opencode', 'cursor'];
 
-async function dispatch(systemPrompt: string, messages: NeutralMsg[]): Promise<CallResult> {
+async function dispatch(systemPrompt: string, messages: NeutralMsg[], onDelta?: (delta: string) => void): Promise<CallResult> {
   const cfg = config.get();
   if ((cfg.executionMode || 'byok') === 'local') {
     const activeId = cfg.localCli && cfg.localCli.activeId;
@@ -561,11 +561,11 @@ async function dispatch(systemPrompt: string, messages: NeutralMsg[]): Promise<C
           : errProvider2('No local CLI selected — pick a runnable local CLI in Execution mode.'),
       };
     }
-    return runLocalCli(activeId as string, systemPrompt, messages, {});
+    return runLocalCli(activeId as string, systemPrompt, messages, {}); // onDelta unused → local CLI is reveal-on-complete (buffered)
   }
   const creds = resolveByok();
   if (creds.error) return { error: creds.error };
-  return callProvider(creds.provider, systemPrompt, messages, creds);
+  return callProvider(creds.provider, systemPrompt, messages, creds, onDelta);
 }
 
 function errProvider2(message: string): TypedError { return { ok: false, errorType: 'provider', message }; }
@@ -654,7 +654,7 @@ const CHAT_SYSTEM_PROMPT =
 export async function askCopilot(
   historyTurns: { role: 'user' | 'assistant'; text: string }[],
   contextFacts: string,
-  question: string,
+  question: string, onDelta?: (delta: string) => void,
 ): Promise<{ ok: true; text: string } | TypedError> {
   if (!config.executionReady()) {
     return { ok: false, errorType: 'not_ready', message: 'Connect a model in Execution settings to use Copilot.' };
@@ -666,7 +666,7 @@ export async function askCopilot(
     ...prior,
     { role: 'user', text: (contextFacts || '') + '\n\n---\n\nQuestion: ' + question },
   ];
-  const { rawText, error } = await dispatch(CHAT_SYSTEM_PROMPT, messages);
+  const { rawText, error } = await dispatch(CHAT_SYSTEM_PROMPT, messages, onDelta);
   if (error) return error;
   const text = (rawText || '').trim();
   return text ? { ok: true, text } : errBadReply();
