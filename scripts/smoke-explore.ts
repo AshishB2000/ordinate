@@ -246,6 +246,14 @@ async function main(): Promise<void> {
     (await win.locator('#xp-messages .xp-provenance .xp-prov-chip').count()) > 0);
   ok('…including the app-computed note, so the model is never credited with the math',
     /app-computed/i.test((await win.locator('#xp-messages .xp-provenance').first().textContent()) || ''));
+  // Activity chips (feat/ask-activity) are LIVE scaffolding, never persisted: a
+  // historical turn rebuilt from disk shows its provenance chips (above) and NO
+  // replayed activity region. The engine is loaded but silent here.
+  ok('the activity engine is loaded (a missing <script src> fails silently otherwise)',
+    await win.evaluate(() => typeof (window as any).xpActivityStart === 'function'
+      && typeof (window as any).xpActivityCollapse === 'function'));
+  ok('…and NO activity region is replayed for a historical turn (activity is not persisted)',
+    (await win.locator('#xp-messages .xp-activity').count()) === 0);
   ok('the greeting is collapsed once there is a conversation',
     await win.evaluate(() => {
       const g = document.getElementById('xp-greet');

@@ -548,7 +548,11 @@ async function xpSend(): Promise<void> {
   xpAppendBubble('user', question);
   xpAppendBubble('assistant', 'Thinking…');
   xpScrollToBottom();
+  // Both side channels ride the ONE askId: streaming fills the pending bubble,
+  // the activity region shows the app's work beneath it (askActivity.ts). Main
+  // emits nothing on either with no model, so both stay empty there.
   xpBeginStream(askId); // the "Thinking…" bubble just appended is the stream target
+  if (typeof xpActivityStart === 'function') xpActivityStart(askId, 'xp-messages');
 
   input.value = '';
   xpBusy = true;
@@ -579,6 +583,9 @@ async function xpSend(): Promise<void> {
     xpSetComposerEnabled(true);
     if (Array.isArray(res.turns)) xpRenderTurns(res.turns);
     else await xpLoadHistory();
+    // Collapse the activity region to its quiet summary, re-anchored above the
+    // answer that just rendered (askActivity.ts).
+    if (askId && typeof xpActivityCollapse === 'function') xpActivityCollapse(askId);
     // The entity may have been deleted between picking it and asking. Main says
     // so by falling back to the project inventory, and the PROVENANCE KIND is
     // how you can tell: we asked about something specific and got 'project'
@@ -607,7 +614,9 @@ async function xpSend(): Promise<void> {
   }
 
   // Failure: main left the thread unchanged, so reload from disk to drop the
-  // optimistic bubbles, and restore the typed text so nothing is lost.
+  // optimistic bubbles, and restore the typed text so nothing is lost. The
+  // activity region goes with the pending bubble — no orphan chips.
+  if (askId && typeof xpActivityClear === 'function') xpActivityClear(askId);
   await xpLoadHistory();
   input.value = question;
   if (res && res.notReady) {
@@ -623,9 +632,11 @@ async function xpSend(): Promise<void> {
 async function xpLoadHistory(): Promise<void> {
   // A proposal is never persisted (dockPropose.ts) — rebuilding from disk truth
   // is exactly the moment to drop whatever the last turn offered. xpRenderTurns
-  // only removes .xp-msg, so a .dk-proposal (and any chart it drew) would
-  // otherwise linger across a thread switch or reload.
+  // only removes .xp-msg, so a .dk-proposal (and any chart it drew), and an
+  // activity region (askActivity.ts), would otherwise linger across a thread
+  // switch or reload. Both are live scaffolding, never persisted.
   if (typeof dkClearProposal === 'function') dkClearProposal('xp-messages');
+  if (typeof xpActivityClearContainer === 'function') xpActivityClearContainer('xp-messages');
   if (!currentProjectId) {
     xpRenderTurns([]);
     xpSetAsked(false);

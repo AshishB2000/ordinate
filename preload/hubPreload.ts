@@ -531,6 +531,12 @@ contextBridge.exposeInMainWorld('hub', {
   // in MAIN; the model only narrates. threadId is optional (most recent).
   // Returns { ok, answer, provenance, turns, threadId } |
   // { ok:false, notReady:true } | { ok:false, error }.
+  // askId is an OPTIONAL renderer-generated tag scoping the TWO fire-and-forget
+  // side channels an in-flight ask has (one spine, one id): copilot:ask:chunk
+  // streams the answer's tokens (feat/ask-streaming, onCopilotChunk), and
+  // copilot:ask:activity pushes each real operation as an activity step
+  // (feat/ask-activity, onAskActivity). Omitting it keeps the old behaviour —
+  // no streaming, no chips.
   copilotAsk: (projectId: string, context: { kind?: string; id?: string }, question: string, threadId?: string, askId?: string) =>
     ipcRenderer.invoke('copilot:ask', { projectId, context, question, threadId, askId }),
   // Live narration deltas for an in-flight copilotAsk, fire-and-forget from main
@@ -539,6 +545,11 @@ contextBridge.exposeInMainWorld('hub', {
   // the other surface's stream). The handle's resolution remains authoritative.
   onCopilotChunk: (cb: (d: { askId: string; delta: string }) => void) =>
     ipcRenderer.on('copilot:ask:chunk', (_e, d) => cb(d)),
+  // Subscribe to live activity steps for an in-flight ask. Fire-and-forget push
+  // from main ({ askId, step }); the renderer routes by askId and renders each
+  // step as a chip. Ephemeral — nothing here is persisted.
+  onAskActivity: (cb: (o: { askId: string; step: any }) => void) =>
+    ipcRenderer.on('copilot:ask:activity', (_e, o) => cb(o)),
   // Clear a project's chat history; returns { ok: boolean }.
   copilotClear: (projectId: string) => ipcRenderer.invoke('copilot:clear', { projectId }),
   // Flip the hard ON/OFF switch; returns { ok, enabled }.
