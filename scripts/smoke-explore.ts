@@ -260,6 +260,41 @@ async function main(): Promise<void> {
       return gone('.xp-mark') && gone('#xp-sub') && gone('#xp-suggests');
     }));
 
+  // ── Streaming: the answer fills the SAME "Thinking…" bubble token-by-token ──
+  // No model is connected in the smoke env, so we can't drive a real SSE round
+  // trip; instead we exercise the SHIPPED renderer accumulator (xpBeginStream /
+  // xpOnStreamChunk — the exact code a `copilot:ask:chunk` event calls) against
+  // the live DOM. It proves the placeholder is cleared on the first token, the
+  // bubble GROWS across ≥2 paints, the CSS caret class is applied, a stale askId
+  // is ignored, and everything is cleaned up so later bubble-count checks hold.
+  const stream = await win.evaluate(() => {
+    const w = window as any;
+    const before = document.querySelectorAll('#xp-messages .xp-msg').length;
+    w.xpAppendBubble('assistant', 'Thinking…', undefined, 'xp-messages');
+    const askId = 'smoke-ask-1';
+    w.xpBeginStream(askId, 'xp-messages');
+    const bubble = document.querySelector('#xp-messages .xp-msg-assistant:last-child .xp-bubble') as HTMLElement;
+    w.xpOnStreamChunk(askId, 'Hel');
+    const afterFirst = bubble.textContent;
+    const caret = bubble.classList.contains('xp-streaming');
+    w.xpOnStreamChunk(askId, 'lo');
+    const afterSecond = bubble.textContent;
+    // A chunk for a DIFFERENT ask must not touch this bubble.
+    w.xpOnStreamChunk('some-other-ask', 'XXX');
+    const afterStale = bubble.textContent;
+    // Clean up: end the stream and drop the injected bubble so the transcript is
+    // exactly what it was (later checks assert the count).
+    w.xpEndStream(askId);
+    bubble.closest('.xp-msg')?.remove();
+    const after = document.querySelectorAll('#xp-messages .xp-msg').length;
+    return { afterFirst, caret, afterSecond, afterStale, restored: before === after };
+  });
+  ok('the first streamed token clears "Thinking…" and shows just that token', stream.afterFirst === 'Hel', String(stream.afterFirst));
+  ok('…the bubble carries the CSS streaming caret while it grows', stream.caret === true);
+  ok('…a second token appends, so the bubble grows across paints', stream.afterSecond === 'Hello', String(stream.afterSecond));
+  ok('…a chunk for a different askId never paints into this bubble', stream.afterStale === 'Hello');
+  ok('…and the streamed preview bubble is fully cleaned up on end', stream.restored === true);
+
   // The context chip defaults to whole-project scope and says so.
   ok('the context chip defaults to whole-project scope, and says so',
     /whole project/i.test((await win.locator('#xp-context-chip').textContent()) || ''),

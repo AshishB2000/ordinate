@@ -474,12 +474,18 @@ async function dkSend(): Promise<void> {
   // point (see dkContextRef/dkRenderContext above).
   const ref = dkContextRef();
 
+  // A per-ask id so main streams this answer's tokens back to THIS bubble. The
+  // streaming machinery lives in explore.ts (one rendering + one registry for
+  // both surfaces); the shared askId keeps the dock's stream out of Explore's.
+  const askId = xpNewAskId();
+
   // Optimistic UI: the question + a pending marker appear immediately.
   if (typeof dkClearProposal === 'function') dkClearProposal(); // last turn's proposal, if any, is superseded
   dkHideHint();
   xpAppendBubble('user', question, undefined, 'dk-messages');
   xpAppendBubble('assistant', 'Thinking…', undefined, 'dk-messages');
   xpScrollToBottom('dk-messages');
+  xpBeginStream(askId, 'dk-messages'); // the "Thinking…" bubble just appended is the stream target
 
   input.value = '';
   dkBusy = true;
@@ -487,12 +493,13 @@ async function dkSend(): Promise<void> {
 
   let res: any = null;
   try {
-    res = await window.hub.copilotAsk(currentProjectId, { kind: ref.kind, id: ref.id }, question);
+    res = await window.hub.copilotAsk(currentProjectId, { kind: ref.kind, id: ref.id }, question, undefined, askId);
   } catch (_) {
     res = { ok: false, error: 'Something went wrong. Try again.' };
   }
 
   dkBusy = false;
+  xpEndStream(askId); // streamed text was a preview; the next step reconciles from disk truth
 
   if (res && res.ok) {
     // Rebuild from disk truth — main persisted both turns on success.
