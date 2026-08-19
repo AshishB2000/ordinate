@@ -247,6 +247,7 @@ async function xpNewThread(): Promise<void> {
   }
   if (!res || !res.ok || !res.thread || !res.thread.id) return;
   xpThreadId = String(res.thread.id);
+  if (typeof dkClearProposal === 'function') dkClearProposal('xp-messages'); // fresh slate — drop any leftover proposal
   xpRenderTurns([]);
   xpSetAsked(false);
   xpHideHint();
@@ -480,6 +481,10 @@ async function xpSend(): Promise<void> {
   // Optimistic: the question and a pending marker appear immediately, and the
   // stage commits to transcript mode before the round-trip.
   xpHideHint();
+  // Supersede the previous turn's proposal, if any — a proposal belongs to the
+  // turn that produced it (dockPropose.ts). Same order the dock uses: clear
+  // before the round-trip, offer after a successful answer.
+  if (typeof dkClearProposal === 'function') dkClearProposal('xp-messages');
   xpSetAsked(true);
   xpAppendBubble('user', question);
   xpAppendBubble('assistant', 'Thinking…');
@@ -525,11 +530,14 @@ async function xpSend(): Promise<void> {
     // instead of silently defaulting again on the next turn.
     if (typeof res.threadId === 'string' && res.threadId) xpThreadId = res.threadId;
     void xpRenderJump(); // the title and turn count just changed
-    // A chart is a bonus on top of the answer (exploreChart.ts): it needs a
-    // dataset in scope, a usable suggestion and drawable data, and it stays
-    // silent when it cannot have all three. Not awaited — the answer is already
-    // on screen and must not wait on a second model round-trip.
-    void xpMaybeRenderChart(question);
+    // One grounded proposal on top of the answer — the SAME engine the dock
+    // uses (dockPropose.ts), mounted into Ask's own transcript ('xp-messages').
+    // It needs a dataset in scope, a usable suggestion and drawable data, and
+    // stays silent when it can't have all three (a bonus, never an error). This
+    // supersedes exploreChart.ts's old always-a-chart path: Ask now gets the
+    // full step/calc/chart engine, one proposal per turn. Not awaited — the
+    // answer is already on screen and must not wait on a second round-trip.
+    if (typeof dkOfferProposal === 'function') void dkOfferProposal({ kind: ref.kind, id: ref.id }, question, String(res.answer || ''), 'xp-messages');
     return;
   }
 
@@ -548,6 +556,11 @@ async function xpSend(): Promise<void> {
 
 // Repaint the transcript from disk. History is per project and survives reload.
 async function xpLoadHistory(): Promise<void> {
+  // A proposal is never persisted (dockPropose.ts) — rebuilding from disk truth
+  // is exactly the moment to drop whatever the last turn offered. xpRenderTurns
+  // only removes .xp-msg, so a .dk-proposal (and any chart it drew) would
+  // otherwise linger across a thread switch or reload.
+  if (typeof dkClearProposal === 'function') dkClearProposal('xp-messages');
   if (!currentProjectId) {
     xpRenderTurns([]);
     xpSetAsked(false);

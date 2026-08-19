@@ -299,7 +299,6 @@ scripts/**/*.js
 # Explore — the conversational front door. Emitted sibling.
 /renderer/hub/explore.js
 /renderer/hub/explorePicker.js
-/renderer/hub/exploreChart.js
 
 # The AI dock. Emitted sibling.
 /renderer/hub/dock.js
@@ -311,6 +310,9 @@ scripts/**/*.js
 
 # Dock smoke (Task 4). Emitted sibling.
 /scripts/smoke-dock.js
+
+# Ask actions smoke (feat/ask-actions). Emitted sibling.
+/scripts/smoke-ask-actions.js
 
 # Connect-shortcut smoke. Emitted sibling.
 /scripts/smoke-connect.js

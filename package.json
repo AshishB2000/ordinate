@@ -27,7 +27,7 @@
     "dist:win": "electron-builder --win --publish never",
     "bench:pipeline": "npm run build:ts && node scripts/bench-pipeline.js",
     "bench:resident": "npm run build:ts && node scripts/bench-resident.js",
-    "smoke": "npm run build && node scripts/smoke-app.js && node scripts/smoke-composer.js && node scripts/smoke-explore.js && node scripts/smoke-dock.js && node scripts/smoke-connect.js",
+    "smoke": "npm run build && node scripts/smoke-app.js && node scripts/smoke-composer.js && node scripts/smoke-explore.js && node scripts/smoke-dock.js && node scripts/smoke-ask-actions.js && node scripts/smoke-connect.js",
     "build:icons": "node scripts/build-icons.js",
     "build:appicon": "electron scripts/build-appicon.js"
   },

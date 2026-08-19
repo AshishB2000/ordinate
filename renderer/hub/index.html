@@ -2530,17 +2530,22 @@
 <script src="globalSearch.js"></script>
 <script src="explore.js"></script>
 <script src="explorePicker.js"></script>
-<script src="exploreChart.js"></script>
+<!-- exploreChart.js was retired in feat/ask-actions: its always-a-chart path
+     under every Ask answer is superseded by the shared proposal engine
+     (dockPropose.js), which Ask now mounts into #xp-messages — one engine, one
+     proposal per turn. -->
 <!-- The AI dock — reads `selectSection`/`wsBodyEl` (workspace.js),
      `dashReadOnly` (dashboards.js) and `xpAppendBubble`/`xpRenderTurns`
      (explore.js) at call time, so it loads after all three. -->
 <script src="dock.js"></script>
-<!-- Dock proposals (Task 3) — reads stepSummaryText/applyStepResult/
-     prefillCalcFieldEditor (prepare.js), renderVizInArea/eligibleChartTypes/
-     countNumericSeries (renderResult.js), dashCurrentPage/dashUuid/
-     nextFreeRow (dashGrid.js), pushCard (dashAdd.js), openSavedDataset
-     (dsExplorer.js) and dxSelectTab (dataSection.js), so it loads after
-     dock.js AND after all six of those. -->
+<!-- Dock proposals (Task 3) — the ONE proposal engine, mounted in two places
+     (#dk-messages here, #xp-messages from Ask). Reads stepSummaryText/
+     applyStepResult/prefillCalcFieldEditor (prepare.js), renderVizInArea/
+     eligibleChartTypes/countNumericSeries (renderResult.js), dashCurrentPage/
+     dashUuid/nextFreeRow/openAnalysis (dashGrid.js), pushCard (dashAdd.js),
+     openSavedDataset (dsExplorer.js), dxSelectTab (dataSection.js) and
+     xpScrollToBottom (explore.js), so it loads after dock.js AND after all of
+     those. -->
 <script src="dockPropose.js"></script>
 <!-- hub.ts was 2051 lines; these five are it, split by job (.claude/rules/file-size.md).
      ORDER IS LOAD-BEARING among them, for the same reason it is for the group above:

@@ -369,29 +369,43 @@ async function main(): Promise<void> {
   // [hidden] element to become visible.
   await win.waitForSelector('#xp-picker', { state: 'hidden', timeout: 8000 });
 
-  // ── The chart path (exploreChart.ts) ──────────────────────────────────────
-  // A full run needs a model, which a smoke run has none of. What IS assertable
-  // — and what actually breaks silently — is that the script loaded at all, and
-  // that its documented contract holds: every failure is silent, so an answer
-  // never gets an error card bolted under it for an extra nobody asked for.
-  ok('the chart script loaded (a missing <script src> fails silently otherwise)',
-    await win.evaluate(() => typeof (window as any).xpMaybeRenderChart === 'function'));
+  // ── The proposal path (dockPropose.ts, mounted into Ask) ──────────────────
+  // exploreChart.ts's always-a-chart path was retired: Ask now offers ONE
+  // grounded proposal per turn through the same engine the dock uses, mounted
+  // into #xp-messages. A full run needs a model, which a smoke run has none of.
+  // What IS assertable — and what actually breaks silently — is that the engine
+  // is reachable from Ask's load point, and that its documented contract holds:
+  // every failure is silent, so an answer never gets an error card bolted under
+  // it for an extra nobody asked for.
+  ok('the proposal engine is reachable from Ask (a missing <script src> or load-order slip fails silently otherwise)',
+    await win.evaluate(() => typeof (window as any).dkOfferProposal === 'function'
+      && typeof (window as any).dkClearProposal === 'function'));
+  // The retired file is really gone, not merely unwired — no second chart path
+  // can drift back in beside the engine.
+  ok('…and exploreChart.ts is retired (its symbols no longer exist)',
+    await win.evaluate(() => typeof (window as any).xpMaybeRenderChart === 'undefined'));
 
   // A dataset IS in scope by now (the chip test above picked one), so this runs
   // the real path as far as it can go: visual:suggest answers notReady with no
-  // model connected. That is the branch a first-run user hits every time.
-  const beforeCharts = await win.locator('#xp-messages .xp-chart').count();
-  const threw = await win.evaluate(async () => {
+  // model connected. That is the branch a first-run user hits every time — and
+  // the point of the phase is that the ACTIONS stay invisible without a model.
+  const beforeCards = await win.locator('#xp-messages .dk-proposal').count();
+  const threw = await win.evaluate(async (id: string) => {
     try {
-      await (window as any).xpMaybeRenderChart('what is the trend?');
+      await (window as any).dkOfferProposal(
+        { kind: 'dataset', id },
+        'chart the trend over time', // matches the chart heuristic, so it reaches visual:suggest
+        'Amount rises across the three months.',
+        'xp-messages',
+      );
       return false;
     } catch (_) {
       return true;
     }
-  });
+  }, seeded.datasetId);
   ok('…and a notReady suggestion is silent, not an error', !threw);
-  ok('…painting nothing under the answer',
-    (await win.locator('#xp-messages .xp-chart').count()) === beforeCharts);
+  ok('…offering no proposal card, so the answer stands alone without a model',
+    (await win.locator('#xp-messages .dk-proposal').count()) === beforeCards);
 
   // ── Conversations ─────────────────────────────────────────────────────────
   ok('the strip becomes Conversations once the project has one',
