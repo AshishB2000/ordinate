@@ -1,18 +1,24 @@
-// Explore — the conversational front door (Phase 1: the surface).
+// Ask — the conversational front door. (The section id 'explore', this file's
+// name and the xp- prefix all predate the rename to Ask; they stay because
+// renaming them is churn across workspace.ts and five smoke suites with no
+// user-visible gain. Identifiers keep the old name; user-visible strings say
+// Ask.)
 //
 // Classic global-scope renderer <script> — NO import/export; symbols are shared
 // with the other hub scripts (workspace.ts owns the section router and
 // currentProjectId, projects.ts owns the recent-item router, hub.ts owns
 // formatSidebarTime).
 //
-// Explore is a PLACE, not a panel: a full-bleed stage with a greeting and a
-// composer, over a "Jump back in" strip. Phase 1 builds the surface only — the
-// composer is deliberately inert until Phase 2 wires copilot:ask. Nothing here
-// computes, rounds or formats a figure; that stays main-process work.
+// Ask is a PLACE, not a panel: a full-bleed stage with a brand mark, a
+// personal greeting and one composer card, over a "Jump back in" strip.
+// Nothing here computes, rounds or formats a figure; that stays main-process
+// work — the greeting's name and the starter suggestions are strings built
+// from record NAMES, never from data.
 //
-// NAMING — `xp` is Explore's reserved prefix. `exp*` is the dataset explorer
-// (expId/expName), `ex-`/`exec-` is execution mode, `ai-` is the copilot panel.
-// A collision with any of those silently breaks an unrelated surface.
+// NAMING — `xp` is this surface's reserved prefix. `exp*` is the dataset
+// explorer (expId/expName), `ex-`/`exec-` is execution mode, `ai-` is the
+// copilot panel. A collision with any of those silently breaks an unrelated
+// surface.
 
 function xpEl<T extends HTMLElement = HTMLElement>(id: string): T | null {
   return document.getElementById(id) as T | null;
@@ -110,6 +116,11 @@ function xpMakeJumpRow(it: any): HTMLElement {
   row.dataset.type = String(it.type || '');
   row.dataset.id = String(it.id || '');
 
+  // GS_GLYPH (globalSearch.ts) — the app's one kind-glyph vocabulary.
+  const glyph = document.createElement('span');
+  glyph.className = 'gs-glyph';
+  glyph.textContent = GS_GLYPH[String(it.type || '')] || '•';
+
   const name = document.createElement('span');
   name.className = 'xp-jump-name';
   name.textContent = it.name || 'Untitled';
@@ -126,7 +137,7 @@ function xpMakeJumpRow(it: any): HTMLElement {
     ? formatSidebarTime(it.updatedAt || null)
     : '';
 
-  row.append(name, kind, time);
+  row.append(glyph, name, kind, time);
   row.addEventListener('click', () => {
     if (typeof openRecentItem === 'function') openRecentItem(it);
   });
@@ -141,6 +152,12 @@ function xpMakeThreadRow(t: any): HTMLElement {
   row.type = 'button';
   row.className = 'xp-jump-row';
   row.dataset.threadId = String(t.id || '');
+
+  // Conversations are not a GS_GLYPH kind (they are not searchable records) —
+  // a quote mark is the speech glyph, same monochrome vocabulary.
+  const glyph = document.createElement('span');
+  glyph.className = 'gs-glyph';
+  glyph.textContent = '❝';
 
   const name = document.createElement('span');
   name.className = 'xp-jump-name';
@@ -157,7 +174,7 @@ function xpMakeThreadRow(t: any): HTMLElement {
     ? formatSidebarTime(t.updatedAt || null)
     : '';
 
-  row.append(name, kind, time);
+  row.append(glyph, name, kind, time);
   row.addEventListener('click', () => void xpOpenThread(String(t.id || '')));
   return row;
 }
@@ -233,6 +250,7 @@ async function xpNewThread(): Promise<void> {
   xpRenderTurns([]);
   xpSetAsked(false);
   xpHideHint();
+  void xpRenderSuggests(); // back on the blank slate — offer the starters again, fresh
   await xpRenderJump();
   const input = xpEl<HTMLTextAreaElement>('xp-input');
   if (input && !input.disabled) input.focus();
@@ -292,22 +310,126 @@ function xpPaintContextChip(): void {
   chip.append(glyph, name);
   chip.title = xpCtxKind
     ? 'Every question is answered about the ' + xpCtxKind + ' “' + (xpCtxName || xpCtxKind) +
-      '” — click to point Explore at something else.'
-    : 'Every question is answered about everything in this project — click to point Explore at one ' +
+      '” — click to point Ask at something else.'
+    : 'Every question is answered about everything in this project — click to point Ask at one ' +
       'dataset, visual, analysis or dashboard.';
 }
 
 // ── Model chip ────────────────────────────────────────────────────────────────
 
-// Mirrors the sidebar's execution button (execMenu.ts) — the SAME state, not a
-// second picker. Clicking opens the existing exec-mode menu.
+// Mirrors the exec buttons' state (execMenu.ts) — the SAME state, not a second
+// picker. Clicking opens the existing exec-mode menu, anchored to this chip.
+//
+// The mark is agentIconHTML — the exec buttons' ONE logo renderer — so the chip
+// shows the same provider/agent glyph the menu does. innerHTML is safe here for
+// the same reason it is on those buttons: every string in it is app-owned
+// (asset paths from src/icons.ts, labels from the BYOK/CLI display tables);
+// nothing model-returned ever reaches this function.
 function xpPaintModelChip(): void {
   const chip = xpEl<HTMLButtonElement>('xp-model-chip');
   if (!chip) return;
   const active = typeof execActiveConnected === 'function' ? execActiveConnected() : null;
-  chip.textContent = active ? active.label : 'Connect a model';
+  chip.textContent = '';
+  if (active && typeof agentIconHTML === 'function') {
+    const mark = document.createElement('span');
+    mark.className = 'xp-model-mark';
+    mark.setAttribute('aria-hidden', 'true');
+    mark.innerHTML = agentIconHTML(active.id, active.label, 14);
+    chip.appendChild(mark);
+  }
+  const name = document.createElement('span');
+  name.className = 'xp-chip-name';
+  name.textContent = active ? active.label : 'Connect a model';
+  chip.appendChild(name);
+  // The caret marks it as a picker, like the menu's other openers.
+  const caret = document.createElement('span');
+  caret.className = 'xp-chip-caret';
+  caret.setAttribute('aria-hidden', 'true');
+  caret.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none"'
+    + ' stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">'
+    + '<path d="M6 9l6 6 6-6"/></svg>';
+  chip.appendChild(caret);
   chip.classList.toggle('xp-chip-warn', !active);
   chip.disabled = false; // always clickable — it is how you connect one
+}
+
+// ── Greeting ──────────────────────────────────────────────────────────────────
+
+// The OS account name, fetched once (app:userName). null = not asked yet;
+// '' = asked and unavailable, which pins the timeless fallback for the session.
+let xpUserName: string | null = null;
+
+// Pure: pick the greeting line. Time-of-day is renderer-local on purpose — the
+// greeting should match the clock on the user's wall, no IPC needed. With no
+// name there is nothing to greet, so the timeless question (the markup's own
+// static text) stands.
+function xpGreetingText(name: string, hour: number): string {
+  if (!name) return 'What do you want to know?';
+  if (hour >= 5 && hour < 12) return 'Good morning, ' + name;
+  if (hour >= 12 && hour < 17) return 'Good afternoon, ' + name;
+  if (hour >= 17 && hour < 22) return 'Good evening, ' + name;
+  return 'Good to see you, ' + name; // late night — "Good night" reads as a goodbye
+}
+
+async function xpPaintGreeting(): Promise<void> {
+  const el = xpEl('xp-greet');
+  if (!el) return;
+  if (xpUserName === null) {
+    try {
+      const res = window.hub && typeof window.hub.userName === 'function'
+        ? await window.hub.userName() : '';
+      xpUserName = typeof res === 'string' ? res : '';
+    } catch (_) {
+      xpUserName = '';
+    }
+  }
+  el.textContent = xpGreetingText(xpUserName, new Date().getHours());
+}
+
+// ── Starter suggestions ───────────────────────────────────────────────────────
+
+// Up to three prompts built from REAL dataset names — strings only, no model
+// call and no figures (the app does the math when one is actually asked).
+// Clicking fills the composer and focuses it; it NEVER auto-sends, because a
+// suggestion is a draft to edit, not a button that spends a model round-trip.
+// The strip hides itself when the project has no data; transcript mode hides
+// it via CSS (.xp-asked), so a suggestion never floats over a conversation.
+function xpMakeSuggestChip(prompt: string): HTMLElement {
+  const chip = document.createElement('button');
+  chip.type = 'button';
+  chip.className = 'xp-suggest';
+  chip.textContent = prompt;
+  chip.addEventListener('click', () => {
+    const input = xpEl<HTMLTextAreaElement>('xp-input');
+    if (!input) return;
+    input.value = prompt;
+    if (!input.disabled) input.focus(); // a disabled control refuses focus(), per spec
+  });
+  return chip;
+}
+
+async function xpRenderSuggests(): Promise<void> {
+  const host = xpEl('xp-suggests');
+  if (!host) return;
+  host.textContent = '';
+  host.hidden = true;
+  if (!currentProjectId) return;
+  let list: any[] = [];
+  try {
+    const res = await window.hub.listDatasets(currentProjectId);
+    list = Array.isArray(res) ? res : [];
+  } catch (_) {
+    list = [];
+  }
+  // Names only — DatasetSummary carries no columns, and hydrating a table
+  // (dataset:get clones every row) just to word a prompt would be absurd.
+  const names = list.map((d) => String(d && d.name ? d.name : '').trim()).filter(Boolean);
+  if (!names.length) return;
+  const prompts: string[] = ['What stands out in ' + names[0] + '?'];
+  if (names.length > 1) prompts.push('How do ' + names[0] + ' and ' + names[1] + ' compare?');
+  prompts.push('Summarise ' + names[0] + ' in plain terms');
+  prompts.slice(0, 3).forEach((p) => host.appendChild(xpMakeSuggestChip(p)));
+  host.hidden = false;
 }
 
 // ── Composer state ────────────────────────────────────────────────────────────
@@ -485,6 +607,8 @@ async function xpToggleAi(): Promise<void> {
 async function refreshExplore(): Promise<void> {
   xpPaintContextChip();
   xpPaintModelChip();
+  void xpPaintGreeting();  // not awaited — the static text stands until the name lands
+  void xpRenderSuggests(); // not awaited — chips are a bonus, never a gate on the surface
   await xpRenderJump();
   await xpLoadHistory();
 
@@ -554,11 +678,15 @@ function initExplore(): void {
   const model = xpEl('xp-model-chip');
   if (model) {
     model.addEventListener('click', (e) => {
-      // openExecMenu's dismiss handler runs on capture and ignores only clicks
-      // inside the menu or its own sidebar button — without this the menu opens
-      // and closes on the same click. Mirrors hubMenus.ts's own handler.
+      // openExecMenu's dismiss handler ignores only clicks inside the menu or
+      // inside its ANCHOR — without this stopPropagation the menu opens and
+      // closes on the same click. Mirrors hubMenus.ts's own handler.
       e.stopPropagation();
-      if (typeof openExecMenu === 'function') openExecMenu();
+      // The chip IS the anchor. Calling with no argument would fall back to
+      // execBtnVisible(), and after the top-bar relayout the only exec button
+      // (#exec-mode-btn-cap) is display:none outside capture — a zero rect
+      // that would position the menu off a phantom at the viewport origin.
+      if (typeof openExecMenu === 'function') openExecMenu(model);
     });
   }
 

@@ -1,6 +1,7 @@
-// End-to-end smoke test of EXPLORE — launches the REAL app.
+// End-to-end smoke test of ASK — launches the REAL app.
 //
-// Explore is a new section reachable two ways (the sidebar nav item and a band
+// Ask (section id 'explore' — the id predates the rename) is a section
+// reachable two ways (the sidebar nav item and a band
 // on Home), so the thing worth proving is the routing and the chrome, not the
 // model: that both doors land on the same section, that the stage renders, and
 // that the composer is inert until a model is connected. A smoke run has no
@@ -66,8 +67,15 @@ async function main(): Promise<void> {
   await win.waitForSelector('.as-nav-item[data-section="explore"]', { timeout: 60_000 });
 
   // ── The nav entry ──────────────────────────────────────────────────────────
-  ok('Explore is in the sidebar nav',
+  ok('the Ask section is in the sidebar nav (its id stays "explore")',
     (await win.locator('.as-nav-item[data-section="explore"]').count()) === 1);
+
+  // The rename guard: the surface is called Ask everywhere a user reads it,
+  // while data-section, the xp- prefix and IPC names keep the old identifier.
+  // This is the assertion that fails if either half of that split drifts.
+  ok('…labelled "Ask", not "Explore"',
+    ((await win.locator('.as-nav-item[data-section="explore"] span').textContent()) || '').trim() === 'Ask',
+    ((await win.locator('.as-nav-item[data-section="explore"] span').textContent()) || '').trim());
 
   ok('…above Home, because asking is the fastest route to an answer',
     await win.evaluate(() => {
@@ -81,7 +89,7 @@ async function main(): Promise<void> {
     () => document.querySelector('.hub-body')?.getAttribute('data-section') === 'explore',
     { timeout: 8000 },
   );
-  ok('the nav item opens the Explore section', (await sectionOf(win)) === 'explore');
+  ok('the nav item opens the Ask section', (await sectionOf(win)) === 'explore');
   ok('…and marks itself active',
     (await win.locator('.as-nav-item.active[data-section="explore"]').count()) === 1);
 
@@ -112,6 +120,19 @@ async function main(): Promise<void> {
     }));
 
   ok('the greeting is on screen', await win.locator('#xp-greet').isVisible());
+  ok('…reading as a personal greeting or the timeless question, never blank',
+    await win.evaluate(() => {
+      const t = ((document.getElementById('xp-greet') || {}).textContent || '').trim();
+      // Time-of-day + the OS account name when app:userName resolves one, the
+      // markup's static question when it returns '' — both are correct.
+      return /^Good (morning|afternoon|evening|to see you), .+$/.test(t)
+        || t === 'What do you want to know?';
+    }),
+    (await win.locator('#xp-greet').textContent()) || '');
+  ok('…under the brand mark', await win.locator('.xp-mark').isVisible());
+  ok('…and over the product sub-line', await win.locator('#xp-sub').isVisible());
+  ok('the starter suggestions stay hidden while no project is open',
+    await win.locator('#xp-suggests').isHidden());
 
   // ── Inert until a model is connected (no model in a smoke run) ─────────────
   ok('the composer is disabled with no model configured',
@@ -133,7 +154,7 @@ async function main(): Promise<void> {
     () => document.querySelector('.hub-body')?.getAttribute('data-section') === 'home',
     { timeout: 8000 },
   );
-  ok('the Explore band is on Home', await win.locator('#home-xp-band').isVisible());
+  ok('the Ask band is on Home', await win.locator('#home-xp-band').isVisible());
 
   await win.click('#home-xp-band', { timeout: 8000 });
   await win.waitForFunction(
@@ -157,8 +178,25 @@ async function main(): Promise<void> {
       const m = document.getElementById('exec-menu');
       return Boolean(m && !(m as HTMLElement).hidden);
     }));
+  // The anchor regression guard. openExecMenu used to position off
+  // execBtnVisible(), and after the top-bar relayout the only exec button
+  // (#exec-mode-btn-cap) is display:none outside capture — a zero rect, so an
+  // un-anchored open would pin the menu to the viewport origin. The chip now
+  // passes itself as the anchor; this asserts the menu really hangs off it
+  // (openExecMenu places it 6px above or below its anchor) and stays on screen.
+  ok('…anchored to the chip that opened it, not to the removed exec button',
+    await win.evaluate(() => {
+      const m = document.getElementById('exec-menu')!.getBoundingClientRect();
+      const c = document.getElementById('xp-model-chip')!.getBoundingClientRect();
+      const onScreen = m.left >= 0 && m.top >= 0
+        && m.right <= window.innerWidth && m.bottom <= window.innerHeight;
+      const adjacent = Math.abs(m.top - (c.bottom + 6)) < 2 || Math.abs(c.top - 6 - m.bottom) < 2;
+      return onScreen && adjacent;
+    }));
   await win.keyboard.press('Escape');
   await win.waitForTimeout(250);
+  ok('…and closing it clears the chip’s aria-expanded (the tracked opener)',
+    (await win.getAttribute('#xp-model-chip', 'aria-expanded')) !== 'true');
 
   // ── Scope: seed a project + dataset, then drive the dataset chip ───────────
   // The chooser is the app's shared dashChooseModal, so this also proves Explore
@@ -201,7 +239,7 @@ async function main(): Promise<void> {
       const p = document.getElementById('ws-explore');
       return Boolean(p && p.classList.contains('xp-asked'));
     }));
-  ok('…rendering both turns into Explore’s own container',
+  ok('…rendering both turns into Ask’s own container',
     (await win.locator('#xp-messages .xp-msg').count()) === 2,
     `${await win.locator('#xp-messages .xp-msg').count()} bubbles`);
   ok('…with the provenance chips that say where the figures came from',
@@ -212,6 +250,14 @@ async function main(): Promise<void> {
     await win.evaluate(() => {
       const g = document.getElementById('xp-greet');
       return Boolean(g && g.getBoundingClientRect().height < 2);
+    }));
+  ok('…and the hero furniture goes with it — mark, sub-line and suggestions all hidden',
+    await win.evaluate(() => {
+      const gone = (sel: string) => {
+        const el = document.querySelector(sel);
+        return !el || (el as HTMLElement).offsetParent === null;
+      };
+      return gone('.xp-mark') && gone('#xp-sub') && gone('#xp-suggests');
     }));
 
   // The context chip defaults to whole-project scope and says so.
@@ -256,7 +302,9 @@ async function main(): Promise<void> {
     (await win.locator('#xp-context-chip .gs-glyph').textContent()) === '▦',
     (await win.locator('#xp-context-chip .gs-glyph').textContent()) || '');
   ok('…and a full-sentence tooltip saying what is in scope',
-    /^Every question is answered about the dataset .+click to point Explore at something else\.$/
+    // "point Ask at" — the surface was renamed Explore → Ask; the section id
+    // and the xp- prefix deliberately were not.
+    /^Every question is answered about the dataset .+click to point Ask at something else\.$/
       .test((await win.locator('#xp-context-chip').getAttribute('title')) || ''),
     (await win.locator('#xp-context-chip').getAttribute('title')) || '');
 
@@ -283,7 +331,7 @@ async function main(): Promise<void> {
   // state:'hidden' — the default is 'visible', which would wait forever for a
   // [hidden] element to become visible.
   await win.waitForSelector('#xp-picker', { state: 'hidden', timeout: 8000 });
-  ok('Explore can be pointed at a dashboard, and the chip names it',
+  ok('Ask can be pointed at a dashboard, and the chip names it',
     /Quarter review/.test((await win.locator('#xp-context-chip').textContent()) || ''),
     (await win.locator('#xp-context-chip').textContent()) || '');
   ok('…and the ref handed to copilot:ask carries that kind, not "dataset"',
@@ -365,6 +413,38 @@ async function main(): Promise<void> {
       const p = document.getElementById('ws-explore');
       return Boolean(p && !p.classList.contains('xp-asked'));
     }));
+
+  // ── Starter suggestions — the blank slate WITH data is their one home ──────
+  // Built from real dataset names, no model call. This project has exactly one
+  // dataset ('Revenue by month'), so the chips must name it.
+  await win.waitForSelector('#xp-suggests:not([hidden])', { timeout: 8000 });
+  ok('the blank slate offers starter suggestions built from real dataset names',
+    await win.evaluate(() => {
+      const chips = [...document.querySelectorAll('#xp-suggests .xp-suggest')];
+      return chips.length >= 1 && chips.length <= 3
+        && chips.every((c) => /Revenue by month/.test(c.textContent || ''));
+    }),
+    (await win.locator('#xp-suggests').textContent()) || '');
+  // Clicking FILLS the composer — it must never auto-send: no model is
+  // connected, and a suggestion is a draft to edit, not a spend button.
+  const beforeMsgs = await win.locator('#xp-messages .xp-msg').count();
+  await win.evaluate(() => {
+    (document.querySelector('#xp-suggests .xp-suggest') as HTMLButtonElement).click();
+  });
+  await win.waitForTimeout(250);
+  ok('clicking a suggestion fills the composer with its prompt',
+    await win.evaluate(() => {
+      const input = document.getElementById('xp-input') as HTMLTextAreaElement;
+      return /Revenue by month/.test(input.value);
+    }),
+    await win.evaluate(() => (document.getElementById('xp-input') as HTMLTextAreaElement).value));
+  ok('…and never auto-sends it',
+    (await win.locator('#xp-messages .xp-msg').count()) === beforeMsgs
+      && await win.evaluate(() => {
+        const p = document.getElementById('ws-explore');
+        return Boolean(p && !p.classList.contains('xp-asked'));
+      }));
+  await win.evaluate(() => { (document.getElementById('xp-input') as HTMLTextAreaElement).value = ''; });
   await win.waitForFunction(
     () => document.querySelectorAll('#xp-jump-rows .xp-jump-row').length >= 2,
     { timeout: 8000 },
@@ -428,7 +508,7 @@ async function main(): Promise<void> {
     () => document.querySelectorAll('#xp-messages .xp-msg').length === 2,
     { timeout: 10_000 },
   );
-  ok('…and the migrated conversation renders in Explore', true);
+  ok('…and the migrated conversation renders in Ask', true);
 
   // ── The old Copilot panel is gone, not merely unwired ─────────────────────
   ok('the ws-ai panel no longer exists in the document',
@@ -449,7 +529,7 @@ async function main(): Promise<void> {
     () => document.querySelector('.hub-body')?.getAttribute('data-section') === 'explore',
     { timeout: 8000 },
   );
-  ok('the Explore nav item opens Explore, not a retired section',
+  ok('the Ask nav item opens Ask, not a retired section',
     (await sectionOf(win)) === 'explore');
 
   // The hard OFF switch came across with the feature. It was the panel's only
@@ -482,10 +562,10 @@ main()
     try { fs.rmSync(userData, { recursive: true, force: true }); } catch (_) { /* temp dir */ }
     console.log('');
     if (failures) {
-      console.error(`${failures} Explore smoke check(s) FAILED.`);
+      console.error(`${failures} Ask smoke check(s) FAILED.`);
       process.exit(1);
     }
-    console.log('All Explore smoke checks passed.');
+    console.log('All Ask smoke checks passed.');
   })
   .catch((err) => {
     console.error(err);

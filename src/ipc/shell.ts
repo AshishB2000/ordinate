@@ -1,4 +1,5 @@
 import { ipcMain, shell, app } from 'electron';
+import * as os from 'os';
 import { providerLogos, agentLogos, connectorLogos } from '../icons';
 
 // Shell / logos IPC — synchronous brand-glyph payloads for the sandboxed hub
@@ -14,6 +15,19 @@ export function register() {
   // App version straight from package.json (via app.getVersion), read once by the
   // hub preload at load. Keeps the About panel's version dynamic — never hardcoded.
   ipcMain.on('app:version', (e) => { e.returnValue = app.getVersion(); });
+
+  // The OS account's username, first letter capitalised, for Ask's greeting —
+  // display only, it never reaches a path, a prompt or the network. '' on any
+  // failure (os.userInfo throws on some locked-down accounts), and the renderer
+  // treats '' as "no name": it falls back to the timeless greeting.
+  ipcMain.handle('app:userName', () => {
+    try {
+      const raw = String(os.userInfo().username || '').trim();
+      return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : '';
+    } catch (_) {
+      return '';
+    }
+  });
 
   ipcMain.on('shell:open', (_e, url: any) => {
     if (typeof url === 'string' && /^https?:\/\//.test(url)) {

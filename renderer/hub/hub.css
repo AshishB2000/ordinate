@@ -9925,17 +9925,22 @@ body.cap-focus .cap-back {
 .gs-sub { color: var(--muted); font-size: 10px; white-space: nowrap; }
 .gs-none { padding: 8px; color: var(--muted); font-size: 12px; }
 
-/* ── EXPLORE — the conversational front door ──────────────────────────────────
+/* ── ASK — the conversational front door ──────────────────────────────────────
+   (The xp- prefix and the 'explore' section id predate the rename to Ask.)
    A place, not a panel. The stage is FULL-BLEED and edge-aligned with the rest
    of the app: the background is atmosphere the section sits in, not a card
    floating in whitespace. Only the composer is width-capped, so the greeting
    and input read as one centred column while the colour runs to the edges.
 
    The wash is layered radial-gradients in --accent-soft / --accent-line over
-   --surface. Both tokens flip with [data-theme], so one rule serves both
-   themes; the dark override below only swaps the base, because the same base
-   that reads as a tint on white glows brighter than the app on #232327.
-   Gradients cost no network request, so this stays inside `default-src 'none'`. */
+   --surface, with a fine DOT LATTICE beneath it — a repeating radial-gradient,
+   not an image, so there is nothing for the CSP to police and the two theme
+   variants are two colour stops rather than two assets. The dot layer comes
+   LAST in the list (background layers paint first-on-top), i.e. under the
+   washes; its colour is restated in the dark override below, which already
+   restates the whole stack to swap the base. Both accent tokens flip with
+   [data-theme]. Gradients cost no network request, so this stays inside
+   `default-src 'none'`. */
 .xp-panel { overflow: hidden; }
 .xp-stage {
   flex: 1;
@@ -9948,7 +9953,10 @@ body.cap-focus .cap-back {
     radial-gradient(80% 62% at 18% 8%, var(--accent-soft), transparent 68%),
     radial-gradient(66% 56% at 84% 22%, var(--accent-soft), transparent 72%),
     radial-gradient(120% 84% at 50% 108%, var(--accent-line), transparent 76%),
+    radial-gradient(circle at 1px 1px, rgba(15, 23, 42, 0.05) 1px, transparent 1.5px),
     var(--surface);
+  background-size: auto, auto, auto, 22px 22px;
+  background-repeat: no-repeat, no-repeat, no-repeat, repeat;
 }
 .xp-stage-inner {
   width: 100%;
@@ -9958,6 +9966,15 @@ body.cap-focus .cap-back {
   align-items: stretch;
   gap: 20px;
 }
+/* The brand mark — the splash's own logo.png, decorative, centred over the
+   greeting. Small on purpose: it identifies the app, it does not advertise it. */
+.xp-mark {
+  align-self: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+}
 .xp-greet {
   margin: 0;
   text-align: center;
@@ -9966,18 +9983,33 @@ body.cap-focus .cap-back {
   letter-spacing: -0.02em;
   color: var(--text-strong);
 }
+/* The sub-line under the greeting — the Home hero's product promise, one voice
+   across surfaces. Negative top margin tucks it to the greeting so the pair
+   reads as one block inside the column's 20px gap rhythm. */
+.xp-sub {
+  margin: -10px 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
 
-/* The composer is the one capped element. It sits ON the wash, so it keeps a
-   solid --surface fill and a real shadow to lift it off the gradient. */
+/* The composer is the one capped element — the single floating card on the
+   stage. It sits ON the wash, so it keeps a solid --surface fill and a real
+   shadow to lift it off the gradient. 640px, tighter than the 720px column, so
+   the card reads as an object on the field rather than another column edge;
+   --r-lg (13px) is the existing token nearest the card shape this wants. */
 .xp-composer {
   position: relative; /* the context picker hangs off this */
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 12px 12px 10px;
   background: var(--surface);
   border: 1px solid var(--border-2);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   box-shadow: var(--shadow-md);
 }
 .xp-composer:focus-within { border-color: var(--accent); }
@@ -10041,6 +10073,41 @@ body.cap-focus .cap-back {
 .xp-chip:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .xp-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .xp-chip:disabled { cursor: not-allowed; opacity: 0.65; }
+/* The model chip's agent mark and caret (explore.ts paints them). The mark
+   reuses agentIconHTML's .exec-agent-* classes, sized down to chip scale. */
+.xp-model-mark { display: inline-flex; align-items: center; flex: none; }
+.xp-model-mark .exec-agent-mono { width: 14px; height: 14px; font-size: 9px; }
+.xp-chip-caret { display: inline-flex; align-items: center; flex: none; opacity: 0.7; }
+
+/* Starter suggestions — quiet pills under the composer, matching its 640px cap
+   so the group hangs from the card's own edges. Empty-state only: .xp-asked
+   hides them below, and explore.ts hides the strip when there is no data. */
+.xp-suggests {
+  width: 100%;
+  max-width: 640px;
+  margin: -8px auto 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.xp-suggests[hidden] { display: none; }
+.xp-suggest {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.xp-suggest:hover { border-color: var(--accent); color: var(--accent); background: var(--surface); }
+.xp-suggest:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .xp-send {
   flex: none;
   display: inline-flex;
@@ -10097,6 +10164,7 @@ body.cap-focus .cap-back {
 }
 .xp-jump-row:hover { background: var(--surface-2); }
 .xp-jump-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.xp-jump-row .gs-glyph { flex: none; }
 .xp-jump-name {
   flex: 1 1 auto;
   min-width: 0;
@@ -10123,10 +10191,17 @@ body.cap-focus .cap-back {
     radial-gradient(80% 62% at 18% 8%, var(--accent-soft), transparent 68%),
     radial-gradient(66% 56% at 84% 22%, var(--accent-soft), transparent 72%),
     radial-gradient(120% 84% at 50% 108%, var(--accent-line), transparent 76%),
+    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.05) 1px, transparent 1.5px),
     var(--bg);
+  /* Restated, not inherited: the `background` shorthand above implicitly
+     resets size/repeat to initial, and this rule out-specifies the base one —
+     without these two lines the dark lattice silently becomes one
+     element-sized gradient (i.e. no dots at all). */
+  background-size: auto, auto, auto, 22px 22px;
+  background-repeat: no-repeat, no-repeat, no-repeat, repeat;
 }
 
-/* ── Explore: hero → transcript ───────────────────────────────────────────────
+/* ── Ask: hero → transcript ───────────────────────────────────────────────────
    One markup tree, two states. .xp-asked on the panel collapses the greeting,
    opens the transcript and docks the composer at the bottom of the stage; the
    composer element itself never moves in the DOM. The greeting collapses rather
@@ -10153,6 +10228,12 @@ body.cap-focus .cap-back {
   overflow: hidden;
   pointer-events: none;
 }
+/* The hero-only furniture goes with the greeting: the mark and sub-line are
+   introductions, and the starter chips must never float over a transcript
+   (explore.ts also hides the chips when the project has no data). */
+.xp-panel.xp-asked .xp-mark,
+.xp-panel.xp-asked .xp-sub,
+.xp-panel.xp-asked .xp-suggests { display: none; }
 .xp-panel.xp-asked .xp-messages {
   display: flex;
   flex: 1;
