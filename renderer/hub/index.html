@@ -2547,6 +2547,12 @@
      xpScrollToBottom (explore.js), so it loads after dock.js AND after all of
      those. -->
 <script src="dockPropose.js"></script>
+<!-- Ask activity chips (feat/ask-activity) — the live "app showing its work"
+     region for an in-flight ask, mounted into both 'xp-messages' (explore.js)
+     and 'dk-messages' (dock.js). Reads xpScrollToBottom (explore.js); xpSend and
+     dkSend call its helpers at ask time; initAskActivity() (hub.js) wires the
+     one main→renderer subscription. Loads after explore.js and dock.js. -->
+<script src="askActivity.js"></script>
 <!-- hub.ts was 2051 lines; these five are it, split by job (.claude/rules/file-size.md).
      ORDER IS LOAD-BEARING among them, for the same reason it is for the group above:
      a classic script's top-level const/let is in TDZ until its own file has run, so a

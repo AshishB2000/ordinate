@@ -85,6 +85,7 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
   initAnalyses();        // analyses.ts
   initAuthoring();       // authoring.ts — the analysis workbench panels
   initExplore();         // explore.ts — the conversational front door
+  initAskActivity();     // askActivity.ts — live activity chips for an in-flight ask
   initGlobalSearch();    // globalSearch.ts — the sidebar's search box
 })();
 

@@ -488,6 +488,11 @@ async function xpSend(): Promise<void> {
   xpSetAsked(true);
   xpAppendBubble('user', question);
   xpAppendBubble('assistant', 'Thinking…');
+  // Live activity region under the pending bubble — the app showing its work
+  // while the answer is prepared (askActivity.ts). askId scopes the stream; main
+  // emits nothing when no model is configured, so this stays empty there.
+  const askId = typeof xpActivityId === 'function' ? xpActivityId() : '';
+  if (askId && typeof xpActivityStart === 'function') xpActivityStart(askId, 'xp-messages');
   xpScrollToBottom();
 
   input.value = '';
@@ -501,6 +506,7 @@ async function xpSend(): Promise<void> {
       { kind: ref.kind, id: ref.id },
       question,
       xpThreadId || undefined,
+      askId || undefined,
     );
   } catch (_) {
     res = { ok: false, error: 'Something went wrong. Try again.' };
@@ -514,6 +520,10 @@ async function xpSend(): Promise<void> {
     xpSetComposerEnabled(true);
     if (Array.isArray(res.turns)) xpRenderTurns(res.turns);
     else await xpLoadHistory();
+    // Collapse the activity region to its quiet summary, re-anchored above the
+    // answer that just rendered. (xpLoadHistory below already cleared a stale one
+    // if this was the no-turns branch, so nothing to collapse then.)
+    if (askId && typeof xpActivityCollapse === 'function') xpActivityCollapse(askId);
     // The entity may have been deleted between picking it and asking. Main says
     // so by falling back to the project inventory, and the PROVENANCE KIND is
     // how you can tell: we asked about something specific and got 'project'
@@ -542,7 +552,10 @@ async function xpSend(): Promise<void> {
   }
 
   // Failure: main left the thread unchanged, so reload from disk to drop the
-  // optimistic bubbles, and restore the typed text so nothing is lost.
+  // optimistic bubbles, and restore the typed text so nothing is lost. The
+  // activity region goes with the pending bubble — no orphan chips (xpLoadHistory
+  // clears the mount, but be explicit for the mid-way error case).
+  if (askId && typeof xpActivityClear === 'function') xpActivityClear(askId);
   await xpLoadHistory();
   input.value = question;
   if (res && res.notReady) {
@@ -558,9 +571,11 @@ async function xpSend(): Promise<void> {
 async function xpLoadHistory(): Promise<void> {
   // A proposal is never persisted (dockPropose.ts) — rebuilding from disk truth
   // is exactly the moment to drop whatever the last turn offered. xpRenderTurns
-  // only removes .xp-msg, so a .dk-proposal (and any chart it drew) would
-  // otherwise linger across a thread switch or reload.
+  // only removes .xp-msg, so a .dk-proposal (and any chart it drew), and an
+  // activity region (askActivity.ts), would otherwise linger across a thread
+  // switch or reload. Both are live scaffolding, never persisted.
   if (typeof dkClearProposal === 'function') dkClearProposal('xp-messages');
+  if (typeof xpActivityClearContainer === 'function') xpActivityClearContainer('xp-messages');
   if (!currentProjectId) {
     xpRenderTurns([]);
     xpSetAsked(false);

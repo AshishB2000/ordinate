@@ -423,6 +423,11 @@ async function main(): Promise<void> {
   await win.waitForTimeout(500);
   ok('with no model configured, a real suggest call offers no card (silent notReady)',
     (await win.locator('#dk-messages .dk-proposal').count()) === 0);
+  // Activity chips (feat/ask-activity) are invisible without a model too: main
+  // emits nothing on the not_ready path, so the dock mount shows no region.
+  ok('…and no activity region renders in the dock without a model',
+    (await win.evaluate(() => typeof (window as any).xpActivityStart === 'function'))
+      && (await win.locator('#dk-messages .xp-activity').count()) === 0);
 
   // ── The offer→render HANDOFF itself ──────────────────────────────────────
   // The three blocks below drive dkRenderStepCard/dkRenderCalcFieldCard/

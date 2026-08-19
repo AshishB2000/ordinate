@@ -24,6 +24,34 @@ import { askCopilot } from '../analyze';
 
 type ContextRef = { kind?: string; id?: string };
 
+// ── Activity stream (feat/ask-activity) ─────────────────────────────────────
+// This app has NO agent loop and NO model tool-calls: copilot:ask computes facts
+// (buildFacts, below) and makes ONE narration call (askCopilot). So the ONLY
+// honest "activity" to surface is the discrete operations buildFacts actually
+// performs — each step maps 1:1 to a function that ran THIS turn, with a
+// truthful label and count. There are NO model-reasoning steps (there is no
+// reasoning to report), and NO step ever carries a data VALUE dressed as a
+// finding — counts of columns/rows/issues/metrics are facts; a value like
+// "South = 4200" is not, and stays in the answer/provenance. `label`/`detail`
+// are always app-authored, never model output. See buildFacts for the exact
+// ordered set per kind; the whitelist here is what the renderer is allowed to
+// render (textContent only).
+export type ActivityKind = 'read' | 'compute' | 'quality' | 'model' | 'inventory';
+export interface ActivityStep {
+  kind: ActivityKind;
+  label: string;
+  detail?: string;
+  count?: number;
+}
+export type ActivityEmit = (step: ActivityStep) => void;
+const NO_ACTIVITY: ActivityEmit = () => { /* default — non-ask callers and the not_ready path emit nothing */ };
+
+// Small English-plural helper so a count of 1 reads right ("1 column", not
+// "1 columns"). App-authored strings only — nothing here is model output.
+function plural(n: number, one: string, many = one + 's'): string {
+  return n + ' ' + (n === 1 ? one : many);
+}
+
 // One app-computed number per metric card (metricValue.computeMetric) over a
 // dashboard's pages OR an analysis's sheets — the same Page[] shape either way.
 // Each referenced dataset is cached, so twelve cards over one dataset load it
@@ -55,17 +83,29 @@ async function computeMetricCards(
 // Exported for scripts/test-copilot-analysis-facts.ts: the app-computed numbers
 // are the whole contract here, and reaching them through copilot:ask would need a
 // configured model (which returns not_ready before any facts surface).
-export async function buildFacts(projectId: string, context: ContextRef): Promise<copilot.CopilotFacts> {
+export async function buildFacts(
+  projectId: string,
+  context: ContextRef,
+  emit: ActivityEmit = NO_ACTIVITY,
+): Promise<copilot.CopilotFacts> {
   const kind = context && typeof context.kind === 'string' ? context.kind : '';
   const id = context && typeof context.id === 'string' ? context.id : '';
 
+  // Every emit() below fires ONLY after its operation actually ran and only on
+  // the branch that ran it — so the chip set is a truthful record of this turn's
+  // work, never a fixed script. `emit` defaults to a no-op, so the unit test
+  // (scripts/test-copilot-analysis-facts.ts) and any non-ask caller see the
+  // exact same behaviour as before, and the computed numbers are untouched.
   if (kind === 'dataset' && id) {
     const ds = await datasets.getDataset(projectId, id);
     if (ds) {
+      emit({ kind: 'read', label: 'Read ' + ds.name, detail: plural(ds.rowCount, 'row') });
       const summaries = ds.columns.map((col, c) =>
         computeColumnSummary(col, ds.rows.map((row) => (row ? row[c] ?? null : null))),
       );
+      emit({ kind: 'compute', label: 'Summarised ' + plural(ds.columns.length, 'column'), count: ds.columns.length });
       const issues = findQualityIssues(ds.columns, ds.rows);
+      emit({ kind: 'quality', label: 'Checked data quality', detail: plural(issues.length, 'issue') + ' found', count: issues.length });
       return copilot.datasetFacts(ds, summaries, issues);
     }
   }
@@ -73,20 +113,28 @@ export async function buildFacts(projectId: string, context: ContextRef): Promis
   if (kind === 'visual' && id) {
     const v = await visuals.getVisual(projectId, id);
     if (v) {
+      emit({ kind: 'read', label: 'Read ' + v.name });
       const ds = await datasets.getDataset(projectId, v.datasetId);
+      emit({ kind: 'read', label: 'Read ' + (ds ? ds.name : '(missing dataset)') });
       const viz = buildVizData(
         ds ? ds.columns : [],
         ds ? ds.rows : [],
         v.encoding,
         v.filters,
       );
+      emit({ kind: 'compute', label: 'Built chart data' });
       return copilot.visualFacts(v, ds ? ds.name : '(missing dataset)', viz);
     }
   }
 
   if (kind === 'dashboard' && id) {
     const d = await dashboards.getDashboard(projectId, id);
-    if (d) return copilot.dashboardFacts(d, await computeMetricCards(projectId, d.pages));
+    if (d) {
+      emit({ kind: 'read', label: 'Read ' + d.name });
+      const cards = await computeMetricCards(projectId, d.pages);
+      emit({ kind: 'compute', label: 'Computed ' + plural(cards.length, 'metric'), count: cards.length });
+      return copilot.dashboardFacts(d, cards);
+    }
   }
 
   // An analysis is the mutable authoring surface a dashboard is published from.
@@ -94,7 +142,12 @@ export async function buildFacts(projectId: string, context: ContextRef): Promis
   // walk produces the same numbers — analysisFacts only labels them differently.
   if (kind === 'analysis' && id) {
     const a = await analysis.getAnalysis(projectId, id);
-    if (a) return copilot.analysisFacts(a, await computeMetricCards(projectId, a.sheets));
+    if (a) {
+      emit({ kind: 'read', label: 'Read ' + a.name });
+      const cards = await computeMetricCards(projectId, a.sheets);
+      emit({ kind: 'compute', label: 'Computed ' + plural(cards.length, 'metric'), count: cards.length });
+      return copilot.analysisFacts(a, cards);
+    }
   }
 
   // Fallback — project inventory (no per-entity figures available).
@@ -104,6 +157,11 @@ export async function buildFacts(projectId: string, context: ContextRef): Promis
     visuals.listVisuals(projectId),
     dashboards.listDashboards(projectId),
   ]);
+  emit({
+    kind: 'inventory',
+    label: 'Scanned the project',
+    detail: plural(dsList.length, 'dataset') + ', ' + plural(vList.length, 'visual') + ', ' + plural(dashList.length, 'dashboard'),
+  });
   return copilot.projectFacts(proj ? proj.name : 'Untitled project', {
     datasets: dsList.map((x) => x.name),
     visuals: vList.map((x) => x.name),
@@ -159,14 +217,29 @@ export function register() {
   // leaves the thread unchanged, so the composer can keep the user's text — no
   // orphan question on disk). threadId is optional: omit it for the most recent
   // conversation, which is the pre-threads renderer's behaviour unchanged.
-  ipcMain.handle('copilot:ask', async (_e, { projectId, context, question, threadId }: any = {}) => {
+  ipcMain.handle('copilot:ask', async (_e, { projectId, context, question, threadId, askId }: any = {}) => {
     try {
       const q = typeof question === 'string' ? question.trim() : '';
       if (!q) return { ok: false, error: 'Ask a question first.' };
 
+      // Activity chips (feat/ask-activity): a fire-and-forget push of each real
+      // operation to the window that asked. Wired ONLY when the renderer passed
+      // an askId AND a model is actually configured — so with no model the ask
+      // short-circuits to not_ready and the chips stay invisible, exactly as the
+      // brief requires. askId scopes the stream so a stale ask's chips are
+      // dropped and Ask/dock never cross. Every step is emitted from buildFacts
+      // (real ops) plus the one 'model' step below that brackets the narration.
+      const aid = typeof askId === 'string' && askId ? askId : '';
+      const emit: ActivityEmit = aid && config.executionReady()
+        ? (step) => { try { _e.sender.send('copilot:ask:activity', { askId: aid, step }); } catch (_) { /* window gone */ } }
+        : NO_ACTIVITY;
+
       const tid = typeof threadId === 'string' && threadId ? threadId : undefined;
       const prior = (await copilot.loadHistory(projectId, tid)).map((t) => ({ role: t.role, text: t.text }));
-      const facts = await buildFacts(projectId, context || {});
+      const facts = await buildFacts(projectId, context || {}, emit);
+      // The single, real model call — the ONLY 'model' step, bracketing the one
+      // narration this app makes. No agent loop, so there is nothing else to say.
+      emit({ kind: 'model', label: 'Asked the model to narrate' });
       const res = await askCopilot(prior, facts.text, q);
 
       if (res.ok) {

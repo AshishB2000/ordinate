@@ -10534,6 +10534,59 @@ body.cap-focus .cap-back {
   letter-spacing: 0.02em;
 }
 
+/* Ask activity (askActivity.ts) — the live "app showing its work" region while
+   an answer is prepared. Ephemeral, never persisted. Shares the provenance
+   chip's quiet look so it reads as the same family, not a second chip system. */
+.xp-activity {
+  margin: 2px 0 6px;
+}
+.xp-activity-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.xp-activity-chip {
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  /* A subtle live cue while streaming; instant ops just appear (no theatre). */
+  animation: xp-activity-in 140ms ease-out;
+}
+@keyframes xp-activity-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: none; }
+}
+/* The one model step is the narration itself — mark it faintly distinct. */
+.xp-activity-model { color: var(--accent); background: var(--accent-soft, var(--surface-3)); }
+
+/* Collapsed: a quiet one-line summary that expands to the full chip list. */
+.xp-activity-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+.xp-activity-summary:hover { color: var(--text); }
+.xp-activity-caret { font-size: 9px; opacity: 0.7; }
+.xp-activity-summary-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.xp-activity-collapsed .xp-activity-chips { margin-top: 4px; }
+
 .xp-jump-actions { display: flex; align-items: center; gap: 8px; }
 /* The AI off state is stated plainly, not alarmingly — running without AI is a
    supported way to use Ordinate, not a fault. */

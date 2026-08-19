@@ -531,8 +531,17 @@ contextBridge.exposeInMainWorld('hub', {
   // in MAIN; the model only narrates. threadId is optional (most recent).
   // Returns { ok, answer, provenance, turns, threadId } |
   // { ok:false, notReady:true } | { ok:false, error }.
-  copilotAsk: (projectId: string, context: { kind?: string; id?: string }, question: string, threadId?: string) =>
-    ipcRenderer.invoke('copilot:ask', { projectId, context, question, threadId }),
+  // askId (feat/ask-activity) is an OPTIONAL renderer-generated tag: when
+  // present and a model is configured, main pushes each real operation back over
+  // copilot:ask:activity scoped by that id (see onAskActivity). Omitting it keeps
+  // the old behaviour with no chips.
+  copilotAsk: (projectId: string, context: { kind?: string; id?: string }, question: string, threadId?: string, askId?: string) =>
+    ipcRenderer.invoke('copilot:ask', { projectId, context, question, threadId, askId }),
+  // Subscribe to live activity steps for an in-flight ask. Fire-and-forget push
+  // from main ({ askId, step }); the renderer routes by askId and renders each
+  // step as a chip. Ephemeral — nothing here is persisted.
+  onAskActivity: (cb: (o: { askId: string; step: any }) => void) =>
+    ipcRenderer.on('copilot:ask:activity', (_e, o) => cb(o)),
   // Clear a project's chat history; returns { ok: boolean }.
   copilotClear: (projectId: string) => ipcRenderer.invoke('copilot:clear', { projectId }),
   // Flip the hard ON/OFF switch; returns { ok, enabled }.

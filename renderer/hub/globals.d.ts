@@ -31,6 +31,17 @@ interface DropdownApi {
 }
 
 declare global {
+  /** One live activity step pushed from main during an in-flight ask
+   *  (src/ipc/copilot.ts ActivityStep). App-authored strings + counts only —
+   *  NEVER model output, NEVER a data value. Rendered as a chip by
+   *  askActivity.ts. */
+  interface ActivityStep {
+    kind: 'read' | 'compute' | 'quality' | 'model' | 'inventory';
+    label: string;
+    detail?: string;
+    count?: number;
+  }
+
   // ── Preload bridge (preload/hubPreload.js) ────────────────────────────────
   // Methods mirror the contextBridge surface 1:1. Payloads/results are typed
   // loosely (any) — ponytail: big IPC envelopes, tighten per-method as needed.
@@ -329,7 +340,9 @@ declare global {
         context: { kind?: string; id?: string },
         question: string,
         threadId?: string,
+        askId?: string,
       ): Promise<any>;
+      onAskActivity(cb: (o: { askId: string; step: ActivityStep }) => void): void;
       copilotClear(projectId: string): Promise<any>;
       setCopilotEnabled(enabled: boolean): Promise<any>;
       providerLogos: Record<string, { path: string; color: string; title: string }>;

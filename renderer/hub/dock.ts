@@ -452,9 +452,11 @@ function dkHideHint(): void {
 }
 
 async function dkLoadHistory(): Promise<void> {
-  // A proposal is never persisted (dockPropose.ts) — rebuilding from disk
-  // truth is exactly the moment to drop whatever the last turn offered.
+  // A proposal is never persisted (dockPropose.ts), and neither is an activity
+  // region (askActivity.ts) — rebuilding from disk truth is exactly the moment
+  // to drop whatever the last turn offered.
   if (typeof dkClearProposal === 'function') dkClearProposal();
+  if (typeof xpActivityClearContainer === 'function') xpActivityClearContainer('dk-messages');
   if (!currentProjectId) { xpRenderTurns([], 'dk-messages'); return; }
   let res: any = null;
   try {
@@ -479,6 +481,10 @@ async function dkSend(): Promise<void> {
   dkHideHint();
   xpAppendBubble('user', question, undefined, 'dk-messages');
   xpAppendBubble('assistant', 'Thinking…', undefined, 'dk-messages');
+  // Live activity region under the pending bubble (askActivity.ts) — the same
+  // engine Ask uses, mounted here into 'dk-messages'. Empty with no model.
+  const askId = typeof xpActivityId === 'function' ? xpActivityId() : '';
+  if (askId && typeof xpActivityStart === 'function') xpActivityStart(askId, 'dk-messages');
   xpScrollToBottom('dk-messages');
 
   input.value = '';
@@ -487,7 +493,7 @@ async function dkSend(): Promise<void> {
 
   let res: any = null;
   try {
-    res = await window.hub.copilotAsk(currentProjectId, { kind: ref.kind, id: ref.id }, question);
+    res = await window.hub.copilotAsk(currentProjectId, { kind: ref.kind, id: ref.id }, question, undefined, askId || undefined);
   } catch (_) {
     res = { ok: false, error: 'Something went wrong. Try again.' };
   }
@@ -499,6 +505,7 @@ async function dkSend(): Promise<void> {
     dkSetComposerEnabled(true);
     if (Array.isArray(res.turns)) xpRenderTurns(res.turns, 'dk-messages');
     else await dkLoadHistory();
+    if (askId && typeof xpActivityCollapse === 'function') xpActivityCollapse(askId);
     dkHideHint();
     // A proposal is a bonus, never a requirement of the answer — fire it after
     // the transcript has settled and never let it block the composer.
@@ -507,7 +514,9 @@ async function dkSend(): Promise<void> {
   }
 
   // Failure: main left the thread unchanged, so reload from disk to drop the
-  // optimistic bubbles, and restore the typed text so nothing is lost.
+  // optimistic bubbles, and restore the typed text so nothing is lost. The
+  // activity region goes with the pending bubble — no orphan chips.
+  if (askId && typeof xpActivityClear === 'function') xpActivityClear(askId);
   await dkLoadHistory();
   input.value = question;
   if (res && res.notReady) {
