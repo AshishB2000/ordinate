@@ -10432,6 +10432,21 @@ body.cap-focus .cap-back {
 .dk-proposal-chart {
   min-height: 200px;
 }
+/* The one proposal engine (dockPropose.ts) mounts this SAME chart tile in two
+   places: the ~340px dock panel and — since the Ask actions work — the full-width
+   Ask transcript (#xp-messages). The canvas the tile holds sits in a shared
+   `.cv-canvas-wrap`, whose height is `clamp(300px, 44vh, 480px)` (≈396px at 900px
+   tall) — a big viewport-scaled box tuned for a full analysis panel. In the dock
+   that reads fine, but in the Ask column it makes the proposal card balloon past
+   half the viewport, earn its own inner scrollbar and shove the answer bubble it
+   belongs to off-screen. Give ONLY the Ask mount's canvas box a compact fixed
+   height so the card stays small and the answer above it stays visible; the dock
+   keeps the shared sizing (this rule is scoped to #xp-messages). It sets height on
+   `.cv-canvas-wrap` — the box Chart.js actually measures — not on the outer tile,
+   whose height a bare cap would not propagate down to the canvas. */
+#xp-messages .dk-proposal-chart .cv-canvas-wrap {
+  height: 240px;
+}
 
 .dk-scrim { display: none; }
 
