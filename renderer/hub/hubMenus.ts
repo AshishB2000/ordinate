@@ -58,21 +58,35 @@ const SHARE_LINKS = {
   whatsapp: `https://wa.me/?text=${_enc(SHARE_TEXT + ' ' + SHARE_URL)}`,
 };
 
-const settingsGear = document.getElementById('settings-gear');
+// TWO settings buttons, never two ids. #settings-gear lives in the app sidebar;
+// #settings-gear-cap lives in the capture surface's own footer, which is the
+// only place visible when body.cap-focus hides that sidebar. Everything below
+// anchors, focuses and dismisses off whichever is CURRENTLY visible — anchoring
+// off a hidden element yields a zeroed rect and drops the menu at 0,0.
+const settingsGear    = document.getElementById('settings-gear');
+const settingsGearCap = document.getElementById('settings-gear-cap');
+function settingsGears(): HTMLElement[] {
+  return [settingsGear, settingsGearCap].filter(Boolean) as HTMLElement[];
+}
+function settingsGearVisible(): HTMLElement | null {
+  const all = settingsGears();
+  return all.find((b) => b.offsetParent !== null) || all[0] || null;
+}
 const settingsMenu = document.getElementById('settings-menu');
 const menuThemeSeg = document.getElementById('menu-theme-seg');
 let _smDismiss = null;
 let _smEsc = null;
 
 function openSettingsMenu() {
-  if (!settingsMenu || !settingsGear) return;
+  const gear = settingsGearVisible();
+  if (!settingsMenu || !gear) return;
   closeExecMenu();
   settingsMenu.hidden = false;
   // Anchor the panel by the gear, right-aligned, clamped to the viewport. The
   // gear sits at the bottom of the sidebar, so anchoring BELOW it drops the menu
   // off the bottom of the window. Open toward whichever side has more room
   // (upward here), pinning the far edge and capping height to the space free.
-  const r = settingsGear.getBoundingClientRect();
+  const r = gear.getBoundingClientRect();
   let left = r.right - settingsMenu.offsetWidth;
   if (left < 12) left = 12;
   settingsMenu.style.left = left + 'px';
@@ -86,12 +100,12 @@ function openSettingsMenu() {
     settingsMenu.style.maxHeight = (window.innerHeight - r.bottom - 18) + 'px';
   }
   settingsMenu.style.overflowY = 'auto';
-  settingsGear.setAttribute('aria-expanded', 'true');
+  gear.setAttribute('aria-expanded', 'true');
   reflectThemeControls();
   _smDismiss = (e) => {
-    if (!settingsMenu.contains(e.target) && !settingsGear.contains(e.target)) closeSettingsMenu();
+    if (!settingsMenu.contains(e.target) && !gear.contains(e.target)) closeSettingsMenu();
   };
-  _smEsc = (e) => { if (e.key === 'Escape') { closeSettingsMenu(); settingsGear.focus(); } };
+  _smEsc = (e) => { if (e.key === 'Escape') { closeSettingsMenu(); gear.focus(); } };
   document.addEventListener('click', _smDismiss, true);
   document.addEventListener('keydown', _smEsc, true);
 }
@@ -99,17 +113,19 @@ function openSettingsMenu() {
 function closeSettingsMenu() {
   if (!settingsMenu) return;
   settingsMenu.hidden = true;
-  if (settingsGear) settingsGear.setAttribute('aria-expanded', 'false');
+  // Reset BOTH: whichever opened it is the only one that was set, and clearing
+  // the other is a no-op rather than a branch.
+  settingsGears().forEach((b) => b.setAttribute('aria-expanded', 'false'));
   if (_smDismiss) { document.removeEventListener('click', _smDismiss, true); _smDismiss = null; }
   if (_smEsc)     { document.removeEventListener('keydown', _smEsc, true);  _smEsc = null; }
 }
 
-if (settingsGear) {
-  settingsGear.addEventListener('click', (e) => {
+settingsGears().forEach((gear) => {
+  gear.addEventListener('click', (e) => {
     e.stopPropagation();
     if (settingsMenu.hidden) openSettingsMenu(); else closeSettingsMenu();
   });
-}
+});
 
 if (menuThemeSeg) {
   menuThemeSeg.addEventListener('click', (e) => {
@@ -124,7 +140,7 @@ if (settingsMenu) {
       const url = SHARE_LINKS[(btn as HTMLElement).dataset.share];
       if (url && window.hub && window.hub.openExternal) window.hub.openExternal(url);
       closeSettingsMenu();
-      if (settingsGear) settingsGear.focus();
+      const g = settingsGearVisible(); if (g) g.focus();
     });
   });
 }
@@ -134,7 +150,20 @@ if (smGithubBtn) {
   smGithubBtn.addEventListener('click', () => {
     if (window.hub && window.hub.openExternal) window.hub.openExternal(GITHUB_URL);
     closeSettingsMenu();
-    if (settingsGear) settingsGear.focus();
+    const g = settingsGearVisible(); if (g) g.focus();
+  });
+}
+
+// The folded Help rows. Same data-help -> HELP_LINKS lookup the help menu used,
+// now scoped to the settings menu that absorbed them.
+if (settingsMenu) {
+  settingsMenu.querySelectorAll('.sm-row[data-help]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const url = HELP_LINKS[(btn as HTMLElement).dataset.help];
+      if (url && window.hub && window.hub.openExternal) window.hub.openExternal(url);
+      closeSettingsMenu();
+      const g = settingsGearVisible(); if (g) g.focus();
+    });
   });
 }
 
@@ -146,64 +175,10 @@ if (smSettingsBtn) {
   });
 }
 
-// ── Help menu popup (bottom-left help button) ───────────────────────────────
-// Same anchored-panel pattern as the settings menu, but opens UPWARD from the
-// sidebar footer. Each row opens its HELP_LINKS URL in the default browser.
-const helpBtn  = document.getElementById('help-btn');
-const helpMenu = document.getElementById('help-menu');
-let _hmDismiss = null;
-let _hmEsc = null;
-
-function openHelpMenu() {
-  if (!helpMenu || !helpBtn) return;
-  closeSettingsMenu();
-  closeExecMenu();
-  helpMenu.hidden = false;
-  // Anchor above the button (footer sits at the bottom), left-aligned, clamped.
-  const r = helpBtn.getBoundingClientRect();
-  let left = r.left;
-  if (left + helpMenu.offsetWidth > window.innerWidth - 12) {
-    left = window.innerWidth - 12 - helpMenu.offsetWidth;
-  }
-  if (left < 12) left = 12;
-  let top = r.top - helpMenu.offsetHeight - 6;
-  if (top < 12) top = r.bottom + 6; // not enough room above → drop below
-  helpMenu.style.left = left + 'px';
-  helpMenu.style.top  = top + 'px';
-  helpBtn.setAttribute('aria-expanded', 'true');
-  _hmDismiss = (e) => {
-    if (!helpMenu.contains(e.target) && !helpBtn.contains(e.target)) closeHelpMenu();
-  };
-  _hmEsc = (e) => { if (e.key === 'Escape') { closeHelpMenu(); helpBtn.focus(); } };
-  document.addEventListener('click', _hmDismiss, true);
-  document.addEventListener('keydown', _hmEsc, true);
-}
-
-function closeHelpMenu() {
-  if (!helpMenu) return;
-  helpMenu.hidden = true;
-  if (helpBtn) helpBtn.setAttribute('aria-expanded', 'false');
-  if (_hmDismiss) { document.removeEventListener('click', _hmDismiss, true); _hmDismiss = null; }
-  if (_hmEsc)     { document.removeEventListener('keydown', _hmEsc, true);  _hmEsc = null; }
-}
-
-if (helpBtn) {
-  helpBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (helpMenu.hidden) openHelpMenu(); else closeHelpMenu();
-  });
-}
-
-if (helpMenu) {
-  helpMenu.querySelectorAll('.sm-row[data-help]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const url = HELP_LINKS[(btn as HTMLElement).dataset.help];
-      if (url && window.hub && window.hub.openExternal) window.hub.openExternal(url);
-      closeHelpMenu();
-      if (helpBtn) helpBtn.focus();
-    });
-  });
-}
+// The Help menu is GONE. Its button lived in the capture footer, which now
+// holds Settings only; its four remaining rows (docs, feature request, what's
+// new, website) moved into the settings menu, where one handler drives them off
+// the same data-help contract. The fifth row, GitHub, was already there.
 
 // ── Execution mode menu popup (top-right chip button) ───────────────────────
 // Reflects the REAL execution state (M1–M4): MODE = Cloud (BYOK providers) /
@@ -231,7 +206,19 @@ const AGENT_LOGOS = (window.hub && window.hub.agentLogos) || {};
 // that's NOT listed here falls back to a styled brand badge.
 console.log('[logos] file assets present for:', Object.keys(AGENT_LOGOS).sort().join(', ') || '(none)');
 
+// TWO exec buttons, never two ids — same reasoning as the settings gears above.
+// #exec-mode-btn sits at the bottom of the app sidebar; #exec-mode-btn-cap sits
+// at the right end of the capture top bar. hub.css shows the latter only in
+// body.cap-focus, where the former is hidden, so exactly one is ever visible.
 const execBtn          = document.getElementById('exec-mode-btn');
+const execBtnCap       = document.getElementById('exec-mode-btn-cap');
+function execBtns(): HTMLElement[] {
+  return [execBtn, execBtnCap].filter(Boolean) as HTMLElement[];
+}
+function execBtnVisible(): HTMLElement | null {
+  const all = execBtns();
+  return all.find((b) => b.offsetParent !== null) || all[0] || null;
+}
 const execMenu         = document.getElementById('exec-menu');
 const execModeSeg      = document.getElementById('exec-mode-seg');
 const execAgentList    = document.getElementById('exec-agent-list');
@@ -303,12 +290,12 @@ function onExecModelChange() {
   execLocal.models = { ...(execLocal.models || {}), [id]: val };
 }
 
-if (execBtn) {
-  execBtn.addEventListener('click', (e) => {
+execBtns().forEach((btn) => {
+  btn.addEventListener('click', (e) => {
     e.stopPropagation();
     if (execMenu.hidden) openExecMenu(); else closeExecMenu();
   });
-}
+});
 
 if (execModeSeg) {
   execModeSeg.addEventListener('click', async (e) => {

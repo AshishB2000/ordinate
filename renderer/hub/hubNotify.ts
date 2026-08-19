@@ -14,19 +14,16 @@
 // which are declared there.
 
 // ── Key status ────────────────────────────────────────────────────────────
-const keyBadge      = document.getElementById('key-badge');
-const keyBadgeLabel = document.getElementById('key-badge-label');
+// The #key-badge chip that used to live in the capture footer is gone: the AI
+// selector in the capture top bar already shows the same state as an icon, so
+// the chip was a second, wordier copy of it. Its lookups and branches went with
+// it rather than lingering as null-guarded dead code. #api-banner is a
+// different element and is still rendered.
 const apiBanner     = document.getElementById('api-banner');
 
 // Reflect execution READINESS (Local CLI connected OR a validated BYOK provider),
 // not just an API key. The status pill + the empty-state banner follow this.
 function applyReadiness(ready) {
-  if (keyBadge) {
-    keyBadge.className = ready ? 'api-chip key-ok' : 'api-chip key-missing';
-  }
-  if (keyBadgeLabel) {
-    keyBadgeLabel.textContent = ready ? 'AI connected' : 'AI not connected';
-  }
   if (apiBanner) {
     // Use style.display directly — author CSS (display:flex) must not fight the hidden attr.
     apiBanner.style.display = ready ? 'none' : 'flex';

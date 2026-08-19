@@ -3298,13 +3298,20 @@ img.exec-agent-img-tile { background: #f4f4f5; padding: 2px; box-sizing: border-
   line-height: 1.4;
 }
 
-/* the top-right button shows the active agent's logo */
-#exec-mode-btn .exec-agent-logo { color: currentColor; }
+/* The exec button shows the active agent's logo. Both of them: #exec-mode-btn in
+   the app sidebar and #exec-mode-btn-cap in the capture top bar, which are the
+   same control in two places rather than two controls. Extending these three
+   selectors is what keeps them looking identical without a second copy of the
+   rules. */
+#exec-mode-btn .exec-agent-logo,
+#exec-mode-btn-cap .exec-agent-logo { color: currentColor; }
 /* size only — color comes from the base .exec-agent-mono / brand classes so the
    button badge matches the brand badge shown in the agent list. */
-#exec-mode-btn .exec-agent-mono { width: 18px; height: 18px; font-size: 11px; }
+#exec-mode-btn .exec-agent-mono,
+#exec-mode-btn-cap .exec-agent-mono { width: 18px; height: 18px; font-size: 11px; }
 /* "no AI connected" state — neutral muted mark, no provider logo */
-#exec-mode-btn.exec-btn-empty { color: var(--muted); }
+#exec-mode-btn.exec-btn-empty,
+#exec-mode-btn-cap.exec-btn-empty { color: var(--muted); }
 
 .exec-model-sel {
   width: 100%;
@@ -9455,6 +9462,26 @@ body.cap-focus .hub-body { padding: 0; }
    the user straight back out). */
 body.cap-focus .hotkey-hint,
 body.cap-focus #conn-connect-btn { display: none; }
+
+/* The AI selector in the capture top bar, and the capture footer that now holds
+   Settings, follow the same rule .cap-back does: rendered ONLY in focus mode.
+   That is what guarantees execMenu.ts / hubMenus.ts never see both of a pair
+   visible at once — outside focus mode the app sidebar owns both controls.
+   It matters beyond tidiness: the `sources` section renders this same legacy
+   surface WITHOUT cap-focus (a capture fired from the hotkey lands there), and
+   there the app sidebar is present too. Without these rules both buttons of
+   each pair would be on screen together. */
+.exec-btn-cap { display: none; }
+body.cap-focus .exec-btn-cap {
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-left: 8px;
+}
+/* The footer holds one button now, so it no longer needs space-between; and
+   outside focus mode it would be an empty bordered strip under the captures
+   column, because its only control is focus-mode-only. */
+.side-bottom { display: none; }
+body.cap-focus .side-bottom { display: flex; justify-content: flex-start; }
 
 /* Back is rendered ONLY in focus mode — outside it the nav is present and this
    button would be a second, redundant way home. */
