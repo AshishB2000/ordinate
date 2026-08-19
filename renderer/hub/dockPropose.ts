@@ -1,17 +1,28 @@
 // Dock proposals — the reason the dock exists (Task 3,
 // docs/superpowers/plans/2026-08-09-ai-dock.md). Classic global-scope
 // renderer <script>: NO import/export. Loads AFTER dock.js (calls
-// dkClearProposal/dkOfferProposal from dkSend), prepare.js (stepSummaryText,
-// applyStepResult, prefillCalcFieldEditor), renderResult.js (renderVizInArea,
-// eligibleChartTypes, countNumericSeries), dashGrid.js (dashCurrentPage,
-// dashUuid, nextFreeRow), dashAdd.js (pushCard), dsExplorer.js
-// (openSavedDataset) and dataSection.js (dxSelectTab) — see the load-order
-// comment in index.html.
+// dkClearProposal/dkOfferProposal from dkSend), explore.js (xpScrollToBottom —
+// the ask surface is the SECOND caller now; see below), prepare.js
+// (stepSummaryText, applyStepResult, prefillCalcFieldEditor), renderResult.js
+// (renderVizInArea, eligibleChartTypes, countNumericSeries), dashGrid.js
+// (dashCurrentPage, dashUuid, nextFreeRow, openAnalysis), dashAdd.js
+// (pushCard), dsExplorer.js (openSavedDataset) and dataSection.js
+// (dxSelectTab) — see the load-order comment in index.html.
 //
 // Three fixed proposal types, each grounded in an existing IPC channel, each
 // reversible, each requiring a click. ONE proposal per turn, decided by a
 // cheap heuristic on the question/answer text — never a gallery, never more
 // than one extra model call per turn.
+//
+// ONE engine, TWO mounts. The dock (#dk-messages) was the first caller; Ask
+// (explore.ts, #xp-messages) is the second. The mount is a `containerId`
+// threaded from dkOfferProposal down to dkAppendProposal / dkClearProposal,
+// defaulting to 'dk-messages' so every dock call site is byte-for-byte
+// unchanged. This is the same pattern explore.ts's own xpAppendBubble uses to
+// serve both surfaces from one renderer — NOT a second copy for Ask. Retiring
+// exploreChart.ts's parallel chart path (it drew a chart under every Ask
+// answer, outside the one-proposal-per-turn rule) is what makes that honest:
+// Ask now offers the SAME grounded step/calc/chart proposal the dock does.
 //
 // ⚠️ The one rule that matters most: a prepare-step proposal calls
 // `addDatasetStep` (APPENDS one step) and NEVER `setDatasetSteps` (which
@@ -49,7 +60,8 @@ function dkDecideProposalType(question: string, answerText: string): 'step' | 'c
 // (chartRender.ts) "a leaked map holds a live WebGL context", of which a
 // browser grants only a handful. Same idiom as renderResult.ts's own reset and
 // dashGrid.ts's destroyDashCharts — the dock was the one .cv-viz-area host
-// without it.
+// without it. Unchanged by the two-mount split: it walks the CARD's own
+// subtree, so it tears down an Ask card exactly as it does a dock one.
 function dkDestroyProposalCharts(root: HTMLElement): void {
   root.querySelectorAll('.cv-viz-area').forEach((el) => {
     try {
@@ -70,25 +82,29 @@ function dkRemoveProposalCard(card: HTMLElement): void {
   card.remove();
 }
 
-// Remove any proposal left over from a previous turn. Called before a new
-// question is asked and whenever the transcript is rebuilt from disk truth —
-// a proposal is never persisted (dismiss, or a new turn, leaves no trace).
-function dkClearProposal(): void {
-  document.querySelectorAll('#dk-messages .dk-proposal').forEach((el) => dkRemoveProposalCard(el as HTMLElement));
+// Remove any proposal left over from a previous turn, in ONE mount. Called
+// before a new question is asked and whenever the transcript is rebuilt from
+// disk truth — a proposal is never persisted (dismiss, or a new turn, leaves no
+// trace). `containerId` defaults to the dock so every dock caller is unchanged;
+// Ask passes 'xp-messages'.
+function dkClearProposal(containerId = 'dk-messages'): void {
+  document.querySelectorAll('#' + containerId + ' .dk-proposal').forEach((el) => dkRemoveProposalCard(el as HTMLElement));
 }
 
-// Entry point — called by dkSend() (dock.ts) after a successful answer. Silent
-// on anything that doesn't pan out: no dataset in scope, no heuristic match,
-// notReady, a failed suggestion, or an encoding that can't be drawn. The text
-// answer already stands; a proposal is a bonus, never an error.
-async function dkOfferProposal(ref: { kind: string; id: string }, question: string, answerText: string): Promise<void> {
+// Entry point — called by dkSend() (dock.ts) and xpSend() (explore.ts) after a
+// successful answer. Silent on anything that doesn't pan out: no dataset in
+// scope, no heuristic match, notReady, a failed suggestion, or an encoding that
+// can't be drawn. The text answer already stands; a proposal is a bonus, never
+// an error. `containerId` picks the mount — the dock by default, 'xp-messages'
+// for Ask.
+async function dkOfferProposal(ref: { kind: string; id: string }, question: string, answerText: string, containerId = 'dk-messages'): Promise<void> {
   if (!currentProjectId || !ref || ref.kind !== 'dataset' || !ref.id) return;
   const kind = dkDecideProposalType(question, answerText);
   if (!kind) return;
   try {
-    if (kind === 'step') await dkOfferStepProposal(ref.id);
-    else if (kind === 'calc') await dkOfferCalcFieldProposal(ref.id);
-    else await dkOfferChartProposal(ref.id, question);
+    if (kind === 'step') await dkOfferStepProposal(ref.id, containerId);
+    else if (kind === 'calc') await dkOfferCalcFieldProposal(ref.id, containerId);
+    else await dkOfferChartProposal(ref.id, question, containerId);
   } catch (_) { /* a proposal is a bonus, never an error */ }
 }
 
@@ -104,11 +120,11 @@ function dkProposalCard(labelText: string): { card: HTMLElement; actions: HTMLEl
   return { card, actions };
 }
 
-function dkAppendProposal(card: HTMLElement): void {
-  const list = document.getElementById('dk-messages');
+function dkAppendProposal(card: HTMLElement, containerId = 'dk-messages'): void {
+  const list = document.getElementById(containerId);
   if (!list) return;
   list.appendChild(card);
-  xpScrollToBottom('dk-messages');
+  xpScrollToBottom(containerId);
 }
 
 function dkMkBtn(label: string, primary: boolean, cb: () => void): HTMLButtonElement {
@@ -121,7 +137,7 @@ function dkMkBtn(label: string, primary: boolean, cb: () => void): HTMLButtonEle
 }
 
 // ── 1. Prepare step — appends ONE step, never replaces the pipeline ─────────
-async function dkOfferStepProposal(datasetId: string): Promise<void> {
+async function dkOfferStepProposal(datasetId: string, containerId = 'dk-messages'): Promise<void> {
   let res: any;
   try {
     res = await window.hub.suggestDatasetSteps(currentProjectId, datasetId);
@@ -129,10 +145,10 @@ async function dkOfferStepProposal(datasetId: string): Promise<void> {
     return;
   }
   if (!res || res.ok === false || res.notReady || !Array.isArray(res.steps) || !res.steps.length) return;
-  dkRenderStepCard(datasetId, res.steps[0]); // first of possibly several — one proposal per turn
+  dkRenderStepCard(datasetId, res.steps[0], containerId); // first of possibly several — one proposal per turn
 }
 
-function dkRenderStepCard(datasetId: string, step: any): void {
+function dkRenderStepCard(datasetId: string, step: any, containerId = 'dk-messages'): void {
   const { card, actions } = dkProposalCard('Suggested step — review before it changes the pipeline');
   const body = document.createElement('div');
   body.className = 'ai-interp-body';
@@ -181,11 +197,11 @@ function dkRenderStepCard(datasetId: string, step: any): void {
   actions.appendChild(apply);
   actions.appendChild(dismiss);
   card.appendChild(actions);
-  dkAppendProposal(card);
+  dkAppendProposal(card, containerId);
 }
 
 // ── 2. Calculated field — Apply opens the editor prefilled; it never appends ─
-async function dkOfferCalcFieldProposal(datasetId: string): Promise<void> {
+async function dkOfferCalcFieldProposal(datasetId: string, containerId = 'dk-messages'): Promise<void> {
   let res: any;
   try {
     res = await window.hub.suggestCalcField(currentProjectId, datasetId);
@@ -193,10 +209,10 @@ async function dkOfferCalcFieldProposal(datasetId: string): Promise<void> {
     return;
   }
   if (!res || res.ok === false || res.notReady || !res.expression) return;
-  dkRenderCalcFieldCard(datasetId, res);
+  dkRenderCalcFieldCard(datasetId, res, containerId);
 }
 
-function dkRenderCalcFieldCard(datasetId: string, res: any): void {
+function dkRenderCalcFieldCard(datasetId: string, res: any, containerId = 'dk-messages'): void {
   const step = { type: 'calculated_field', name: res.name, expression: res.expression };
   const { card, actions } = dkProposalCard('Suggested calculated field — review before it’s added');
   const body = document.createElement('div');
@@ -236,11 +252,11 @@ function dkRenderCalcFieldCard(datasetId: string, res: any): void {
   actions.appendChild(apply);
   actions.appendChild(dismiss);
   card.appendChild(actions);
-  dkAppendProposal(card);
+  dkAppendProposal(card, containerId);
 }
 
 // ── 3. A chart — computed by main, drawn with the same path visual cards use ─
-async function dkOfferChartProposal(datasetId: string, question: string): Promise<void> {
+async function dkOfferChartProposal(datasetId: string, question: string, containerId = 'dk-messages'): Promise<void> {
   let res: any;
   try {
     res = await window.hub.suggestVisual(currentProjectId, datasetId, question);
@@ -265,10 +281,66 @@ async function dkOfferChartProposal(datasetId: string, question: string): Promis
 
   const eligible = eligibleChartTypes(dataRes.recommendedShape, countNumericSeries(data), data.labels.length);
   const type = eligible.indexOf(option.chartType) >= 0 ? option.chartType : (eligible[0] || 'table');
-  dkRenderChartCard(datasetId, question, option, data, type);
+  dkRenderChartCard(datasetId, question, option, data, type, containerId);
 }
 
-function dkRenderChartCard(datasetId: string, question: string, option: any, data: any, type: string): void {
+// A one-sheet analysis payload holding a single visual card — the same shape
+// the Analyses UI produces for "New analysis… + add this visual"
+// (vizGallery.ts handleAddVisualToAnalysis: one Sheet, one visual card, the
+// grid editor's own 6×6 default at nextFreeRow of an empty sheet, i.e. y:0).
+// analysis:create sanitises this through saveAnalysis → sanitizePages, so a
+// malformed card would be dropped rather than trusted; a UUID visualId is what
+// keeps it. Kept as its own function so "what a turn-into-analysis writes" is
+// one named, reviewable thing.
+function dkAnalysisSheets(visualId: string): any[] {
+  return [{
+    id: dashUuid(),
+    name: 'Sheet 1',
+    cards: [{ id: dashUuid(), type: 'visual', visualId: String(visualId), layout: { x: 0, y: 0, w: 6, h: 6 } }],
+  }];
+}
+
+// Turn a proposed chart into real, saved, editable work: save the visual, wrap
+// it in a fresh one-sheet analysis named from the user's QUESTION (never model
+// text — `name` is derived in dkRenderChartCard the same way xpVisualName is),
+// then NAVIGATE there so the user SEES it. Reversible: it is a new record they
+// can delete, which is the whole safety story. Grounded entirely in existing
+// IPC (saveVisual + analysis:create) — no new channel. Returns true on success.
+async function dkTurnIntoAnalysis(datasetId: string, name: string, chartType: string, encoding: any): Promise<boolean> {
+  if (!currentProjectId) return false;
+  // 1. saveVisual — exactly what "Save as visual" / "Add to dashboard" do.
+  let vis: any;
+  try {
+    vis = await window.hub.saveVisual({
+      projectId: currentProjectId, datasetId, name, chartType,
+      encoding, overrides: {}, filters: [],
+    });
+  } catch (_) {
+    vis = null;
+  }
+  if (!vis || vis.ok === false || !vis.id) return false;
+
+  // 2. analysis:create with that one visual on one sheet. `analysis:create`
+  //    accepts sheets straight in, so this is a single write, not create-then-
+  //    update — the same record the Analyses UI would build by value.
+  let an: any;
+  try {
+    an = await window.hub.createAnalysis({ projectId: currentProjectId, name, sheets: dkAnalysisSheets(String(vis.id)) });
+  } catch (_) {
+    an = null;
+  }
+  if (!an || an.ok === false || !an.id) return false;
+
+  // 3. Navigate to the new analysis through the SAME router the Analyses
+  //    section and the recent-item strip use (workspace.ts selectSection +
+  //    anNew.ts openAnalysis) — so the user lands on the authoring surface with
+  //    their chart already on it.
+  if (typeof selectSection === 'function') selectSection('analyses');
+  if (typeof openAnalysis === 'function') await openAnalysis(String(an.id));
+  return true;
+}
+
+function dkRenderChartCard(datasetId: string, question: string, option: any, data: any, type: string, containerId = 'dk-messages'): void {
   const { card, actions } = dkProposalCard('Suggested chart');
   if (option.why) {
     const why = document.createElement('div');
@@ -288,6 +360,10 @@ function dkRenderChartCard(datasetId: string, question: string, option: any, dat
   // computeVisualData above; nothing here is drawn from what the model said.
   renderVizInArea(area, data, type, null, '');
 
+  // The name is the user's QUESTION, bounded — never model text — with the
+  // app's encoding-derived name as the fallback for an empty question. This is
+  // xpVisualName's exact rule (exploreChart.ts, now retired), reused so the
+  // saved visual and the analysis share one honest, user-derived title.
   const name = truncate(question.trim(), 60) || (typeof suggestVisualName === 'function' ? suggestVisualName(option.encoding, type) : 'Untitled visual');
 
   const finish = (msg: string): void => {
@@ -319,11 +395,14 @@ function dkRenderChartCard(datasetId: string, question: string, option: any, dat
   });
   actions.appendChild(save);
 
-  // Only offered when a dashboard/analysis sheet is actually open — pushCard
-  // (dashAdd.ts) appends to dashCurrentPage(), which is null with nothing
-  // open, and the dock can be open anywhere, including nowhere. Omitting an
-  // inapplicable action matches "a proposal only appears when its context
-  // supports it".
+  // "Add to dashboard" is offered ONLY when a dashboard/analysis sheet is
+  // actually open — pushCard (dashAdd.ts) appends to dashCurrentPage(), which
+  // is null with nothing open, and this card can appear anywhere (the dock is
+  // section-wide; Ask has no sheet at all). Calling pushCard with a null page
+  // would throw into the smoke run's zero-console-error gate. Option (b) of the
+  // brief: rather than grow a "create a dashboard first" flow, we OMIT the
+  // button when there is no page and rely on "Turn into analysis" below, which
+  // is always available and gives the chart a saved home either way.
   const page = typeof dashCurrentPage === 'function' ? dashCurrentPage() : null;
   if (page && !dashReadOnly) {
     const addBtn = dkMkBtn('Add to dashboard', false, () => {
@@ -351,8 +430,38 @@ function dkRenderChartCard(datasetId: string, question: string, option: any, dat
     actions.appendChild(addBtn);
   }
 
+  // "Turn into analysis" — the always-available route from a chat answer to
+  // real, saved, editable work. Offered on EVERY chart card (Part C: an
+  // additional button, not a fourth mutually-exclusive proposal type), because
+  // an analysis is a saved home for a chart no matter what section you asked
+  // from. On success we navigate away, so there is nothing to finish() — the
+  // card leaves with the section change; on failure we re-enable and toast,
+  // matching the two buttons above (the answer itself still stands).
+  const analyse = dkMkBtn('Turn into analysis', false, () => {
+    void (async () => {
+      if (!currentProjectId) return;
+      analyse.disabled = true;
+      let done = false;
+      try {
+        done = await dkTurnIntoAnalysis(datasetId, name, type, option.encoding);
+      } catch (_) {
+        done = false;
+      }
+      if (!done) {
+        analyse.disabled = false;
+        showToast('Could not turn that into an analysis.');
+        return;
+      }
+      // Navigated to the new analysis — tear the card down so no leaked chart
+      // instance survives the section change (dkRemoveProposalCard runs the
+      // same teardown a dismiss would).
+      dkRemoveProposalCard(card);
+    })();
+  });
+  actions.appendChild(analyse);
+
   const dismiss = dkMkBtn('Dismiss', false, () => dkRemoveProposalCard(card));
   actions.appendChild(dismiss);
   card.appendChild(actions);
-  dkAppendProposal(card);
+  dkAppendProposal(card, containerId);
 }
