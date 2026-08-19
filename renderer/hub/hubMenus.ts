@@ -206,10 +206,12 @@ const AGENT_LOGOS = (window.hub && window.hub.agentLogos) || {};
 // that's NOT listed here falls back to a styled brand badge.
 console.log('[logos] file assets present for:', Object.keys(AGENT_LOGOS).sort().join(', ') || '(none)');
 
-// TWO exec buttons, never two ids — same reasoning as the settings gears above.
-// #exec-mode-btn sits at the bottom of the app sidebar; #exec-mode-btn-cap sits
-// at the right end of the capture top bar. hub.css shows the latter only in
-// body.cap-focus, where the former is hidden, so exactly one is ever visible.
+// ONE exec button now: #exec-mode-btn-cap, at the right end of the capture top
+// bar (hub.css shows it only in body.cap-focus). The sidebar's #exec-mode-btn
+// was removed in the top-bar relayout, so `execBtn` below is expected to be
+// null — the lookup and the array stay because execMenu.ts drives whichever
+// buttons exist through execBtns()/execBtnVisible(), and that is what makes
+// this a markup-only removal rather than an edit to a ~500-line subsystem.
 const execBtn          = document.getElementById('exec-mode-btn');
 const execBtnCap       = document.getElementById('exec-mode-btn-cap');
 function execBtns(): HTMLElement[] {
@@ -342,8 +344,12 @@ if (execOpenSettings) {
 }
 
 // Reflect the active agent's logo on the button before the menu is ever opened.
+// Guarded on execBtns().length, NOT on `execBtn`: that was the sidebar button,
+// and gating this on it specifically meant that removing it left
+// #exec-mode-btn-cap with no icon until the menu was opened by hand. The
+// condition that actually matters is "is there any exec button to paint".
 (function initExecButtonIcon() {
-  if (!execBtn || !window.hub || typeof window.hub.getKeyStatus !== 'function') return;
+  if (!execBtns().length || !window.hub || typeof window.hub.getKeyStatus !== 'function') return;
   window.hub.getKeyStatus().then(status => {
     execMode = (status && status.executionMode) || 'local';
     execByok = (status && status.byok) || execByok;

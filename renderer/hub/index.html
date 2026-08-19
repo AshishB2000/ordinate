@@ -53,32 +53,81 @@
        drags the window. -->
   <div class="titlebar"></div>
 
-  <!-- ── hub body ──────────────────────────────────────────────────────
-       One persistent sidebar (search · nav · connect · AI · settings) beside a
-       content stage that swaps by [data-section]. Home is just another section
-       now — there is no separate "pick a project" front door. Default is home. -->
-  <div class="hub-body" data-section="home">
+  <!-- ── top bar ───────────────────────────────────────────────────────
+       Window-wide chrome: global search centred on the WINDOW, "Ask AI" at the
+       right end. Both used to live in the sidebar, which is the SECTION nav —
+       a column for choosing where you are, not for tools that act on wherever
+       you already are.
 
-    <!-- ── persistent sidebar ─────────────────────────────────────────
-         Always present, across every section. Top-to-bottom: search · primary
-         nav · Connect shortlist · AI + Settings pinned at the bottom. This is
-         the ONE nav — workspace.ts owns it (selectSection toggles .as-nav-item
-         and the matching .ws-panel[data-section]). Sources is NOT here: the
-         Connect section below is Sources, in a better form. AI is a tool
-         button, not a place. -->
-    <aside id="app-sidebar" class="app-sidebar" aria-label="Navigation">
+       It is a sibling of .titlebar, never a child. That strip is
+       `-webkit-app-region: drag` with per-OS padding reserving the macOS
+       traffic lights (78px left) and the Windows control overlay (146px
+       right); putting an input in there means opting every child back out of
+       drag AND centring against two asymmetric paddings that change per OS.
+       A separate row keeps the drag strip empty and the centring honest.
 
-      <!-- search — pinned above the nav, searches everything (phase: search) -->
-      <div class="as-search">
+       Hidden in body.cap-focus (hub.css) — that surface is deliberately bare,
+       dkAllowed() returns false there, and the sidebar is hidden too. -->
+  <div class="hub-topbar">
+    <!-- Left spacer: equal-flex with the right cluster so the search centres on
+         the WINDOW rather than on the space left over beside "Ask AI". -->
+    <div class="hub-topbar-side"></div>
+    <!-- position:relative — the results dropdown anchors to this, not to the
+         48px bar it would otherwise be clipped by. -->
+    <div class="hub-search-wrap">
+      <div class="hub-search">
         <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"/>
           <path d="M20 20l-3.6-3.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
         </svg>
-        <input id="global-search" class="as-search-input" type="search" placeholder="Search"
+        <input id="global-search" class="hub-search-input" type="search" placeholder="Search"
           aria-label="Search datasets, analyses, dashboards and connectors"
           autocomplete="off" spellcheck="false" />
       </div>
-      <div id="global-search-results" class="as-search-results" hidden></div>
+      <div id="global-search-results" class="hub-search-results" hidden></div>
+    </div>
+    <div class="hub-topbar-side hub-topbar-right">
+      <!-- The ONE AI entry point in the chrome (⌘L is the other way in). It was
+           two doors that looked nothing alike: this button in the sidebar, and
+           #dk-edge, a vertical tab floating at the window's right edge. The tab
+           is gone — this bar is visible in body.an-focus, where the sidebar is
+           NOT, so the case that justified the tab (focus mode hides the
+           sidebar, leaving only ⌘L) is exactly what the move fixes.
+
+           It is "Ask AI", not "AI": Explore is the other chat surface and has
+           its own nav item. Explore starts cold from a blank page; this one
+           already knows what you are looking at.
+
+           Styled to read like the capture page's header cluster (.main-top).
+           The visible label IS the accessible name — no aria-label to drift
+           out of sync with it (WCAG 2.5.3). -->
+      <button id="side-ai-btn" class="btn btn-sm hub-ai-btn" type="button"
+        title="Ask AI about what you're looking at (⌘L)"
+        aria-expanded="false" aria-controls="dk-panel">
+        <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3Z" fill="currentColor"/>
+          <path d="M18.5 14l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8Z" fill="currentColor"/>
+        </svg>
+        <span>Ask AI</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── hub body ──────────────────────────────────────────────────────
+       One persistent sidebar (nav · connect · settings) beside a content stage
+       that swaps by [data-section]. Home is just another section now — there is
+       no separate "pick a project" front door. Default is home. -->
+  <div class="hub-body" data-section="home">
+
+    <!-- ── persistent sidebar ─────────────────────────────────────────
+         Always present, across every section. Top-to-bottom: primary nav ·
+         Connect shortlist · Settings pinned at the bottom. This is the ONE nav
+         — workspace.ts owns it (selectSection toggles .as-nav-item and the
+         matching .ws-panel[data-section]). Sources is NOT here: the Connect
+         section below is Sources, in a better form. Search and Ask AI moved to
+         the top bar above: both are window-wide tools, and this column is for
+         choosing a section. -->
+    <aside id="app-sidebar" class="app-sidebar" aria-label="Navigation">
 
       <!-- primary nav -->
       <nav class="as-nav" aria-label="Sections">
@@ -169,46 +218,24 @@
         </button>
       </div>
 
-      <!-- bottom: Ask AI (a tool — toggles the DOCK over the current view,
-           workspace.ts) + Settings. #exec-mode-btn and #settings-gear moved
-           here from the titlebar; ids kept so their existing hub.ts wiring is
-           untouched.
+      <!-- bottom: Settings, and only Settings.
 
-           It is "Ask AI", not "AI": Explore is the other chat surface and it
-           has its own nav item above. Two entries, two labels, two jobs —
-           Explore starts cold from a blank page, this one already knows what
-           you are looking at. -->
+           "Ask AI" moved to the top bar (a window-wide tool, not a section).
+           #exec-mode-btn was DELETED here: it was an icon-only popup opener
+           wedged between a tool and a menu, and this group now has one job.
+           execMenu.ts and the #exec-menu markup are untouched — the capture
+           page's #exec-mode-btn-cap still opens it, and every other consumer
+           already reaches both through execBtns()/execBtnVisible(). -->
       <div class="as-bottom">
-        <button id="side-ai-btn" class="as-tool" type="button"
-          title="Ask AI about what you're looking at (⌘L)"
-          aria-expanded="false" aria-controls="dk-panel">
+        <button id="settings-gear" class="as-tool" type="button"
+          aria-haspopup="true" aria-expanded="false" aria-label="Settings menu">
           <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3Z" fill="currentColor"/>
-            <path d="M18.5 14l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8Z" fill="currentColor"/>
+            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
+              stroke="currentColor" stroke-width="1.7"/>
           </svg>
-          <span>Ask AI</span>
+          <span>Settings</span>
         </button>
-        <div class="as-bottom-row">
-          <button id="exec-mode-btn" class="as-icon-btn" type="button"
-            aria-haspopup="true" aria-expanded="false" aria-label="Execution mode">
-            <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect width="16" height="16" x="4" y="4" rx="2"/>
-              <rect width="6" height="6" x="9" y="9" rx="1"/>
-              <path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/>
-              <path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/>
-            </svg>
-          </button>
-          <button id="settings-gear" class="as-tool as-tool--grow" type="button"
-            aria-haspopup="true" aria-expanded="false" aria-label="Settings menu">
-            <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
-                stroke="currentColor" stroke-width="1.7"/>
-            </svg>
-            <span>Settings</span>
-          </button>
-        </div>
       </div>
     </aside>
 
@@ -421,11 +448,12 @@
           <span class="kbd" id="hotkey-hint">⌘ ⌥ S</span>
         </div>
         <button id="conn-connect-btn" class="btn" type="button">Connect data</button>
-        <!-- AI selector, capture page only. A SECOND button, id #exec-mode-btn-cap
-             — never a duplicate of #exec-mode-btn, which stays live in the app
-             sidebar for every other page. execMenu.ts drives whichever of the
-             two is currently visible; hub.css shows this one only in
-             body.cap-focus, so exactly one ever is. -->
+        <!-- AI selector, capture page only. Since the top-bar relayout removed
+             the sidebar's #exec-mode-btn, this is the ONLY opener left for
+             #exec-menu; hub.css shows it only in body.cap-focus. execMenu.ts
+             drives whichever exec buttons exist (execBtns()/execBtnVisible()),
+             so it needed no change when the other one went away. Execution mode
+             stays fully configurable at Settings → Execution everywhere else. -->
         <button id="exec-mode-btn-cap" class="as-icon-btn exec-btn-cap exec-btn-empty" type="button"
           aria-haspopup="true" aria-expanded="false" aria-label="No AI connected" title="No AI connected"></button>
         <button id="new-capture" class="btn btn-primary" type="button">
@@ -1518,21 +1546,19 @@
          (dockPropose.ts) and a keyboard-resizable width (#dk-handle,
          dock.ts) — see docs/superpowers/plans/2026-08-09-ai-dock.md.
 
-         Three entry points: #dk-edge (the closed-state tab below),
-         #side-ai-btn (the sidebar "Ask AI" tool button, wired in
-         workspace.ts) and ⌘L. Explore — the blank-page chat — is a separate
-         surface with its own nav item; these two are not the same thing and
-         are not labelled as if they were. -->
-    <button id="dk-edge" class="dk-edge" type="button" hidden
-      title="Ask AI about what you're looking at (⌘L)" aria-expanded="false" aria-controls="dk-panel">
-      <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3Z" fill="currentColor"/>
-        <path d="M18.5 14l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8Z" fill="currentColor"/>
-      </svg>
-      <!-- The visible label IS the accessible name now — no aria-label to
-           drift out of sync with it (WCAG 2.5.3). -->
-      <span class="dk-edge-label">Ask AI</span>
-    </button>
+         TWO entry points: #side-ai-btn (the "Ask AI" button at the right end
+         of the top bar, wired in workspace.ts) and ⌘L. There used to be a
+         third — #dk-edge, a vertical tab pinned to the window's right edge —
+         and it is gone. It existed because the sidebar, where #side-ai-btn
+         then lived, is hidden in body.an-focus, leaving the tab as the only
+         mouse way in. The top bar is NOT hidden there, so the button itself
+         now covers that case and the second door earned nothing but clutter.
+         (body.cap-focus hides the top bar, but dkAllowed() is false there —
+         the dock is suppressed, not merely unreachable.)
+
+         Explore — the blank-page chat — is a separate surface with its own
+         nav item; these two are not the same thing and are not labelled as if
+         they were. -->
     <div id="dk-scrim" class="dk-scrim"></div>
     <aside id="dk-panel" class="dk-panel" hidden tabindex="-1" aria-label="AI assistant">
       <div id="dk-handle" class="dk-handle" role="separator" aria-orientation="vertical"
@@ -2062,6 +2088,14 @@
   </div>
 
   <!-- ── execution mode menu (anchored under the chip button) ── -->
+  <!-- Execution-mode menu. NOTE: its sidebar opener #exec-mode-btn was removed
+       in the top-bar relayout, so the only opener left is #exec-mode-btn-cap on
+       the capture page (body.cap-focus). Everything here still works and every
+       setting is also reachable at Settings → Execution
+       (section.settings-pane[data-cat="exec"]). Whether this menu keeps a
+       second home in the new chrome is a separate decision, deliberately not
+       taken here — a chrome relayout is the wrong place to delete a ~500-line
+       subsystem. -->
   <div id="exec-menu" class="settings-menu exec-menu" role="menu" aria-label="Execution mode" hidden>
 
     <!-- a. Mode -->
