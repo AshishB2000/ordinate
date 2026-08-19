@@ -152,29 +152,39 @@ async function main(): Promise<void> {
   await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
   ok('…and a later sync does NOT re-open it', await win.locator('#dk-panel').isHidden());
 
-  // ── The top bar's "Ask AI" button toggles the DOCK, not Explore ─────────
+  // ── The top bar's Agent toggle toggles the DOCK, not Explore ────────────
   // 498d647 pointed #side-ai-btn at Explore, which already has its own nav
   // item — a duplicate door, while the dock had no chrome presence at all.
   // It is the dock's again. These are the assertions that fail if it ever
-  // drifts back, or if a second button labelled "AI" appears beside it.
-  ok('the AI button is labelled to distinguish it from Explore',
-    /ask ai/i.test((await win.locator('#side-ai-btn').textContent()) || ''),
-    (await win.locator('#side-ai-btn').textContent() || '').trim());
+  // drifts back, or if a second AI door appears beside it.
+  //
+  // Icon-only, so the accessible name is aria-label — the labelled version
+  // asserted the visible text WAS the name (nothing to drift, WCAG 2.5.3);
+  // with no visible text, aria-label is the correct mechanism, and the
+  // tooltip carries the distinction from Explore.
+  ok('the Agent toggle is named "Agent" via aria-label (icon-only, no visible text)',
+    /agent/i.test((await win.getAttribute('#side-ai-btn', 'aria-label')) || '')
+      && !/\S/.test((await win.locator('#side-ai-btn').textContent()) || ''),
+    (await win.getAttribute('#side-ai-btn', 'aria-label')) || '(none)');
+  ok('…with the works-on-what-you-see tooltip distinguishing it from Explore',
+    /looking at/i.test((await win.getAttribute('#side-ai-btn', 'title')) || ''),
+    (await win.getAttribute('#side-ai-btn', 'title')) || '(none)');
   ok('…and the Explore nav item still exists as its own separate entry',
     (await win.locator('.as-nav-item[data-section="explore"]').count()) === 1);
-  // It lives in the TOP BAR now, not the sidebar — search and Ask AI are
-  // window-wide tools and the sidebar is the section nav.
+  // It lives in the TOP BAR now, not the sidebar — search and the Agent
+  // toggle are window-wide tools and the sidebar is the section nav.
   ok('…and it sits in the top bar, not in the section nav',
     (await win.locator('.hub-topbar #side-ai-btn').count()) === 1
       && (await win.locator('#app-sidebar #side-ai-btn').count()) === 0);
   // Was "exactly one SIDEBAR control mentions AI". Widened to the whole
   // persistent chrome, which is the stronger claim and the point of the
   // relayout: #dk-edge was a second door to this same panel that looked
-  // nothing like this button, and it is gone.
-  ok('…so exactly one control in the whole chrome mentions AI',
+  // nothing like this button, and it is gone. Accessible names count too —
+  // the toggle itself is icon-only, so its name lives in aria-label.
+  ok('…so exactly one control in the whole chrome names the AI surface',
     (await win.evaluate(() => Array.from(
       document.querySelectorAll('#app-sidebar button, .hub-topbar button, .dk-edge'))
-      .filter((b) => /\bai\b/i.test(b.textContent || '')).length)) === 1);
+      .filter((b) => /\bai\b|agent/i.test((b.textContent || '') + ' ' + (b.getAttribute('aria-label') || ''))).length)) === 1);
   await win.click('#side-ai-btn', { timeout: 8000 });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
   ok('clicking it OPENS THE DOCK (it must not navigate to Explore)',
@@ -207,14 +217,15 @@ async function main(): Promise<void> {
     (await win.getAttribute('#side-ai-btn', 'aria-expanded')) === 'false');
   ok('…and points at the panel it controls',
     (await win.getAttribute('#side-ai-btn', 'aria-controls')) === 'dk-panel');
-  // Legibility: the closed control must SAY something. The icon-only version of
-  // the old tab read as an edge ornament and went unclicked — this is that
-  // regression guard, carried over.
-  ok('…and carries a visible text label, not just an icon',
-    /\S/.test((await win.locator('#side-ai-btn span').first().textContent()) || ''),
-    await win.locator('#side-ai-btn span').first().textContent() || '(none)');
-  ok('…which is also its accessible name (no aria-label to drift from it — WCAG 2.5.3)',
-    (await win.getAttribute('#side-ai-btn', 'aria-label')) === null);
+  // Icon-only ON PURPOSE — the panel glyph reads as "collapse/expand the
+  // right panel". The old tab's icon-only failure was a MUTED GREY ornament
+  // floating at the window edge; a bordered header cell with a divider, a
+  // hover state and an accent active state is a control, not a decoration.
+  // With no visible text, aria-label is the accessible name (WCAG 4.1.2) and
+  // the title carries the long description.
+  ok('…and it is icon-only with aria-label as the accessible name',
+    !/\S/.test((await win.locator('#side-ai-btn').textContent()) || '')
+      && /agent/i.test((await win.getAttribute('#side-ai-btn', 'aria-label')) || ''));
   ok('…and the removed edge tab is really gone, not just hidden',
     (await win.locator('#dk-edge').count()) === 0);
 
@@ -226,7 +237,9 @@ async function main(): Promise<void> {
   ok('…and it STAYS visible while the dock is open (a header button that vanished would leave a hole)',
     await win.locator('#side-ai-btn').isVisible()
       && !(await win.locator('#side-ai-btn').isDisabled()));
-  ok('the panel has an aria-label', Boolean((await win.getAttribute('#dk-panel', 'aria-label') || '').length));
+  ok('the panel has an aria-label naming the surface',
+    /agent/i.test((await win.getAttribute('#dk-panel', 'aria-label')) || ''),
+    (await win.getAttribute('#dk-panel', 'aria-label')) || '(none)');
   // No model is configured in a smoke run, so #dk-input starts disabled (the
   // HTML spec refuses focus() on a disabled control) — dock.ts's fallback is
   // to focus the panel itself (tabindex="-1") so keyboard focus lands INSIDE
@@ -612,7 +625,7 @@ async function main(): Promise<void> {
   //
   // THIS is the case that justified #dk-edge, and the reason deleting it is
   // safe rather than merely tidy. Focus mode hides the whole sidebar, so while
-  // "Ask AI" lived down there the edge tab was the only MOUSE way into the
+  // the AI button lived down there the edge tab was the only MOUSE way into the
   // dock — losing it would have left ⌘L alone, an undiscoverable single point
   // of entry. The top bar is deliberately NOT hidden in an-focus (hub.css), so
   // the button survives here and takes over that job.
@@ -631,9 +644,18 @@ async function main(): Promise<void> {
     await win.locator('#dk-panel').isVisible());
   ok('…and the sidebar really is hidden here (the condition that made an edge tab necessary)',
     await win.locator('#app-sidebar').isHidden());
-  ok('…but the top bar is NOT, so the AI button survives focus mode',
+  ok('…but the top bar is NOT, so the Agent toggle survives focus mode',
     await win.locator('.hub-topbar').isVisible()
       && await win.locator('#side-ai-btn').isVisible());
+  // The bar the workbench now sits under is 48px the old sizing did not know
+  // about: body.an-focus #ws-analyses was calc(100vh - 40px) — the titlebar
+  // alone — which left the workbench's bottom 48px clipped under .win's
+  // overflow:hidden. This is the guard for that (100vh - 88px now).
+  ok('…and the workbench bottom lands inside the window, not clipped under it',
+    await win.evaluate(() => {
+      const r = document.getElementById('ws-analyses')!.getBoundingClientRect();
+      return Math.round(r.bottom) <= window.innerHeight + 1;
+    }));
 
   // …and it can be re-opened from inside, where the top-bar button and ⌘L are
   // the two entry points left.

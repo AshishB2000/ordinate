@@ -352,7 +352,7 @@ let dkUserOpened = false;
 function dkSync(): void {
   dkFirstRun(); // may flip `dkOpen` before the read below — self-limiting, never recurses
   const panel = document.getElementById('dk-panel');
-  // Two entry points now: #side-ai-btn (the top bar's "Ask AI" button —
+  // Two entry points now: #side-ai-btn (the top bar's Agent toggle —
   // workspace.ts wires it to dkToggle) and ⌘L.
   const sideBtn = document.getElementById('side-ai-btn') as HTMLButtonElement | null;
   const allowed = dkAllowed();
@@ -630,8 +630,8 @@ function initDock(): void {
   if (closeBtn) closeBtn.addEventListener('click', () => dkSetOpen(false));
   const scrim = document.getElementById('dk-scrim');
   if (scrim) scrim.addEventListener('click', () => dkSetOpen(false));
-  // No entry point is wired here any more. #side-ai-btn (the top bar's "Ask
-  // AI") is wired in workspace.ts beside the rest of the chrome, and ⌘L is
+  // No entry point is wired here any more. #side-ai-btn (the top bar's Agent
+  // toggle) is wired in workspace.ts beside the rest of the chrome, and ⌘L is
   // handled by dkOnKeydown above; both land on the same dkToggle(), which
   // checks dkAllowed(). The dock's own #dk-edge tab was removed — see the
   // header comment.

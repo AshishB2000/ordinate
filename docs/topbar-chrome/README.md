@@ -14,7 +14,7 @@ section shot can show.
 | | before | after |
 | --- | --- | --- |
 | global search | sidebar, top of the nav column | top bar, centred on the window |
-| "Ask AI" | sidebar bottom, above a 2-up row | top bar, right end |
+| the AI door | "Ask AI", labelled, sidebar bottom | the **Agent** toggle — icon-only, top bar right end |
 | `#dk-edge` (2nd AI door) | floating tab at the window's right edge | **deleted** |
 | `#exec-mode-btn` | sidebar bottom, icon-only | **deleted** (see "What this costs") |
 | sidebar bottom | `Ask AI` · `#exec-mode-btn` · `Settings` | `Settings` |
@@ -28,7 +28,7 @@ Read off `getBoundingClientRect()` in the running app, not from the CSS.
 | `.hub-topbar` | *(absent)* | `0…1440`, y `40…88`, **h 48** |
 | search box centre | **115px** (sidebar column) | **720px** — exactly window centre |
 | search box width | 148px | 520px (the `flex: 0 1 520px` cap) |
-| `#side-ai-btn` | y `820…852`, centre 105px | right edge **1428px** (12px bar padding), y `49…79` |
+| `#side-ai-btn` | y `820…852`, centre 105px | `1396…1428` (12px bar padding), y `48…80` — a 32px icon button |
 | `#dk-edge` | `1410…1440`, y `407…493` | *(element absent)* |
 | `#exec-mode-btn` | `10…42`, y `856…888` | *(element absent)* |
 | sidebar top | y 40 | y 88 (below the bar) |
@@ -149,3 +149,36 @@ suites pass clean. `smoke-app.js` reports its one known **environmental** failur
 MapLibre's OSM tile fetch is `net::ERR_TUNNEL_CONNECTION_FAILED` in the offline
 sandbox. It is a network fetch from `maplibre-gl-csp.js`, reproduces independently
 of this branch, and nothing here touches maps.
+
+## Follow-up in the second commit — the toggle the brief specified
+
+The first commit moved the button but kept its label and name. The brief's §4
+is explicit — icon-only, the classic panel glyph (NOT a sparkle), no text
+label, surface renamed **"Agent"** — so the second commit aligns it:
+
+- `#side-ai-btn` is icon-only: a rounded rect with an inset vertical line at
+  its right third, `aria-label="Agent"` as the accessible name (nothing
+  visible to be the name — WCAG 4.1.2), tooltip **"Agent — works on what
+  you're looking at (⌘L)"** keeping the old sentence shape that distinguishes
+  it from Explore. A thin divider (`.hub-topbar-div`) separates it from the
+  rest of the bar, and `[aria-expanded="true"]` paints the accent active
+  state — visible in the re-taken `after-search-open.png`, where the dock is
+  open. `#dk-panel`'s aria-label is "Agent" too. Ids, IPC channels and the
+  `copilot:*` thread are unrenamed; `.js-vn-ask` still reads "Ask AI" because
+  it submits a question rather than toggling the dock.
+- **`body.an-focus` heights were still sized against 40px of chrome.** The bar
+  deliberately stays visible in focus mode, so `#ws-analyses` at
+  `calc(100vh - 40px)` overflowed the window by exactly 48px — measured
+  `wsBottom: 948` in a 900px window, the workbench's bottom clipped under
+  `.win`'s `overflow: hidden`. Now `calc(100vh - 88px)` (and `.an-side` to
+  match): measured `wsBottom: 900`, overflow 0. `smoke-dock.ts` gained the
+  regression guard.
+- `.dash-presenting` hides `.hub-topbar` beside `.titlebar` it already hides —
+  presentation suppresses the dock, so the bar there was a search box and a
+  disabled toggle over a full-bleed dashboard.
+
+The five `after-*.png` were re-taken on the corrected build; `before-*` are
+unchanged. The smoke assertions that pinned the visible label were rewritten
+against `aria-label` — icon-only makes that the correct accessible-name
+mechanism, so the old "the visible label IS the accessible name" guard became
+"aria-label IS the accessible name".
