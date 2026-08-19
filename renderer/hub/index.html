@@ -383,21 +383,20 @@
         <div class="side-empty-sub">Your analyzed charts and tables will show up here.</div>
       </div>
 
-      <!-- footer: key badge + help menu button -->
+      <!-- footer: Settings only. The AI status chip moved into the selector in
+           the top bar (which shows the same state as an icon), and Help folded
+           into the settings menu, which is the one menu this button opens.
+           #settings-gear-cap is a SECOND id, not a duplicate of #settings-gear
+           in the app sidebar; hub.css shows this footer only in body.cap-focus,
+           where that sidebar is hidden. -->
       <div class="side-bottom">
-        <span id="key-badge" class="api-chip key-missing" aria-live="polite">
-          <span class="key-dot" aria-hidden="true"></span>
-          <span id="key-badge-label">AI not connected</span>
-        </span>
-        <button id="help-btn" class="side-gear" type="button"
-          aria-haspopup="true" aria-expanded="false" aria-label="Help menu">
+        <button id="settings-gear-cap" class="side-gear" type="button"
+          aria-haspopup="true" aria-expanded="false" aria-label="Settings menu">
           <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/>
-            <path d="M9.5 9.2a2.5 2.5 0 0 1 4.86.8c0 1.7-2.5 2.2-2.5 3.7"
-              stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-            <circle cx="12" cy="17" r="0.9" fill="currentColor"/>
+            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" stroke="currentColor" stroke-width="1.7"/>
           </svg>
-          Help
+          Settings
         </button>
       </div>
 
@@ -422,6 +421,13 @@
           <span class="kbd" id="hotkey-hint">⌘ ⌥ S</span>
         </div>
         <button id="conn-connect-btn" class="btn" type="button">Connect data</button>
+        <!-- AI selector, capture page only. A SECOND button, id #exec-mode-btn-cap
+             — never a duplicate of #exec-mode-btn, which stays live in the app
+             sidebar for every other page. execMenu.ts drives whichever of the
+             two is currently visible; hub.css shows this one only in
+             body.cap-focus, so exactly one ever is. -->
+        <button id="exec-mode-btn-cap" class="as-icon-btn exec-btn-cap exec-btn-empty" type="button"
+          aria-haspopup="true" aria-expanded="false" aria-label="No AI connected" title="No AI connected"></button>
         <button id="new-capture" class="btn btn-primary" type="button">
           <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M3 8.5A2 2 0 0 1 5 6.5h1.2l.8-1.4A1.5 1.5 0 0 1 8.3 4.3h7.4a1.5 1.5 0 0 1 1.3.8l.8 1.4H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
@@ -2148,29 +2154,11 @@
 
     <div class="sm-sep"></div>
 
-    <!-- c. GitHub -->
-    <button class="sm-row" id="sm-github" type="button" role="menuitem">
-      <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2A10 10 0 0 0 8.84 21.5c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/></svg>
-      <span>GitHub</span>
-      <svg class="sm-row-ext" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </button>
-
-    <div class="sm-sep"></div>
-
-    <!-- d. Settings -->
-    <button class="sm-row" id="sm-settings" type="button" role="menuitem">
-      <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" stroke="currentColor" stroke-width="1.7"/>
-      </svg>
-      <span>Settings</span>
-    </button>
-  </div>
-
-  <!-- ── help menu (anchored above the bottom-left Help button) ── -->
-  <div id="help-menu" class="settings-menu" role="menu" aria-label="Help" hidden>
-
-    <!-- 1. Get help -->
+    <!-- c. Help — folded in when the bottom-left Help button was removed. These
+         four rows had no other entry point in the app, so deleting the help
+         menu outright would have lost them. GitHub is NOT among them: it
+         already had a live route immediately below. Same data-help contract, so
+         one handler still serves them. -->
     <button class="sm-row" id="help-get" type="button" role="menuitem" data-help="help">
       <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/>
@@ -2181,7 +2169,6 @@
       <svg class="sm-row-ext" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
 
-    <!-- 2. Request a feature -->
     <button class="sm-row" id="help-feature" type="button" role="menuitem" data-help="feature">
       <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M12 3a6 6 0 0 0-3.5 10.9c.5.4.8.9.8 1.5v.6h5.4v-.6c0-.6.3-1.1.8-1.5A6 6 0 0 0 12 3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
@@ -2191,7 +2178,6 @@
       <svg class="sm-row-ext" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
 
-    <!-- 3. What's new -->
     <button class="sm-row" id="help-whatsnew" type="button" role="menuitem" data-help="whatsnew">
       <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="m12 3 1.9 4.7L19 9.3l-4 3.3 1.3 5L12 15.2 7.7 17.6 9 12.6l-4-3.3 5.1-.6L12 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
@@ -2200,7 +2186,6 @@
       <svg class="sm-row-ext" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
 
-    <!-- 4. Website -->
     <button class="sm-row" id="help-website" type="button" role="menuitem" data-help="website">
       <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/>
@@ -2212,11 +2197,22 @@
 
     <div class="sm-sep"></div>
 
-    <!-- 5. GitHub -->
-    <button class="sm-row" id="help-github" type="button" role="menuitem" data-help="github">
+    <!-- d. GitHub -->
+    <button class="sm-row" id="sm-github" type="button" role="menuitem">
       <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2A10 10 0 0 0 8.84 21.5c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/></svg>
       <span>GitHub</span>
       <svg class="sm-row-ext" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+
+    <div class="sm-sep"></div>
+
+    <!-- e. Settings -->
+    <button class="sm-row" id="sm-settings" type="button" role="menuitem">
+      <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" stroke="currentColor" stroke-width="1.7"/>
+      </svg>
+      <span>Settings</span>
     </button>
   </div>
 

@@ -51,19 +51,24 @@ const EXEC_BTN_NEUTRAL =
 
 // Paint the top-right button: the connected active source's logo, or a neutral
 // muted mark when nothing is connected.
+// Paints BOTH exec buttons, unconditionally — the hidden one costs a few DOM
+// writes and is then already correct the moment it appears. Updating only the
+// visible one is how you get a stale icon on the sidebar button after switching
+// mode from the capture page.
 function updateExecBtnIcon(): void {
-  if (!execBtn) return;
   const active = execActiveConnected();
-  if (active) {
-    execBtn.innerHTML = agentIconHTML(active.id, active.label, 18);
-    execBtn.classList.remove('exec-btn-empty');
-    execBtn.setAttribute('aria-label', `Execution: ${active.label}`);
-    execBtn.title = active.label;
-  } else {
-    execBtn.innerHTML = EXEC_BTN_NEUTRAL;
-    execBtn.classList.add('exec-btn-empty');
-    execBtn.setAttribute('aria-label', 'No AI connected');
-    execBtn.title = 'No AI connected';
+  for (const btn of execBtns()) {
+    if (active) {
+      btn.innerHTML = agentIconHTML(active.id, active.label, 18);
+      btn.classList.remove('exec-btn-empty');
+      btn.setAttribute('aria-label', `Execution: ${active.label}`);
+      btn.title = active.label;
+    } else {
+      btn.innerHTML = EXEC_BTN_NEUTRAL;
+      btn.classList.add('exec-btn-empty');
+      btn.setAttribute('aria-label', 'No AI connected');
+      btn.title = 'No AI connected';
+    }
   }
 }
 
@@ -405,18 +410,25 @@ function openLocalSettings(): void {
 }
 
 function openExecMenu(): void {
-  if (!execMenu || !execBtn) return;
+  // Whichever button is on screen right now — the sidebar one everywhere, the
+  // capture top-bar one in body.cap-focus.
+  const btn = execBtnVisible();
+  if (!execMenu || !btn) return;
   closeSettingsMenu();
   execMenu.hidden = false;
-  const r = execBtn.getBoundingClientRect();
+  const r = btn.getBoundingClientRect();
   let left = r.right - execMenu.offsetWidth;
   if (left < 12) left = 12;
   execMenu.style.left = left + 'px';
-  // The exec button sits at the bottom of the sidebar, so a menu anchored BELOW
-  // it drops off the bottom of the window and can't be seen. Open toward whichever
-  // side has more room (upward here), pinning the FAR edge so the menu stays on
-  // screen as the agent list fills in asynchronously, and cap its height to the
-  // space available so a short window scrolls instead of clipping.
+  // Open toward whichever side has more room, pinning the FAR edge so the menu
+  // stays on screen as the agent list fills in asynchronously, and capping its
+  // height to the space available so a short window scrolls instead of clipping.
+  //
+  // This one branch serves both buttons with no second positioning path: the
+  // sidebar button sits at the BOTTOM, so more room above wins and the menu
+  // opens upward; the capture button sits in the TOP bar, so more room below
+  // wins and the same branch opens it downward. Verified in the real app rather
+  // than assumed — see the open-menu screenshot on the PR.
   if (r.top > window.innerHeight - r.bottom) {
     execMenu.style.top = 'auto';
     execMenu.style.bottom = (window.innerHeight - r.top + 6) + 'px';
@@ -427,7 +439,7 @@ function openExecMenu(): void {
     execMenu.style.maxHeight = (window.innerHeight - r.bottom - 18) + 'px';
   }
   execMenu.style.overflowY = 'auto';
-  execBtn.setAttribute('aria-expanded', 'true');
+  btn.setAttribute('aria-expanded', 'true');
   refreshExecMenu();
   // Scan PATH once so Local status is fresh without first opening Settings.
   if (!execDidScan && window.hub && typeof window.hub.detectLocalClis === 'function') {
@@ -443,12 +455,12 @@ function openExecMenu(): void {
     // A model dropdown's list is mounted in <body> (outside the menu) — clicks in
     // it must not dismiss the menu.
     if (t.closest && t.closest('.dd-list')) return;
-    if (!execMenu.contains(t) && !execBtn.contains(t)) closeExecMenu();
+    if (!execMenu.contains(t) && !btn.contains(t)) closeExecMenu();
   };
   _execEsc = (e: KeyboardEvent) => {
     if (e.key !== 'Escape') return;
     if (document.querySelector('.dd-list')) return; // let an open dropdown handle Escape first
-    closeExecMenu(); execBtn.focus();
+    closeExecMenu(); btn.focus();
   };
   document.addEventListener('click', _execDismiss, true);
   document.addEventListener('keydown', _execEsc, true);
@@ -458,7 +470,9 @@ function closeExecMenu(): void {
   if (!execMenu) return;
   if (execModelCli && typeof execModelCli.close === 'function') execModelCli.close();
   execMenu.hidden = true;
-  if (execBtn) execBtn.setAttribute('aria-expanded', 'false');
+  // Clear on BOTH: only the opener was ever set, and clearing the other is a
+  // no-op rather than a branch.
+  execBtns().forEach((b) => b.setAttribute('aria-expanded', 'false'));
   if (_execDismiss) { document.removeEventListener('click', _execDismiss, true); _execDismiss = null; }
   if (_execEsc)     { document.removeEventListener('keydown', _execEsc, true);  _execEsc = null; }
 }
