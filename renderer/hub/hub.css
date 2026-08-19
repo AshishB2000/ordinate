@@ -6329,11 +6329,153 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   margin: 0;
 }
 
+/* ── Dashboards reskin (feat/dash-reskin) ───────────────────────────────────
+   The Dashboards list is a card GRID and its editor chrome is grouped into
+   zones, matching the Home/Ask design generation. `.dash-list-item`,
+   `.dash-list-open`, `.dash-list-name` and `.dash-list-badge` are SHARED with
+   the Analyses list (which re-scopes them under #ws-analyses). So EVERY rule
+   here is scoped under #ws-dashboards — adding any of it to the bare
+   `.dash-list*` rules above would silently re-lay-out the Analyses table too.
+   The bare rules stay as the Analyses base; the Analyses list is untouched. */
+
+/* List → responsive card grid (was a flat 6px-gap column). */
+#ws-dashboards .dash-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+/* Each row becomes a card: the border/lift live on the item; the open button
+   inside sheds its own border/background (the card carries them). */
+#ws-dashboards .dash-list-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.12s var(--ease), transform 0.12s var(--ease), box-shadow 0.12s var(--ease);
+}
+#ws-dashboards .dash-list-item:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+#ws-dashboards .dash-list-open {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  padding: 14px 14px 13px;
+  border: 0;
+  background: none;
+  border-radius: var(--r-lg);
+}
+/* Neutralise the bare `.dash-list-open:hover { border-color: accent }` — the
+   card owns the hover border now, not the button. */
+#ws-dashboards .dash-list-open:hover { border-color: transparent; }
+#ws-dashboards .dash-list-open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+#ws-dashboards .dash-tile-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+  min-width: 0;
+}
+/* Heading tier per the type-weight rules (PR #99): 600, outranking buttons. */
+#ws-dashboards .dash-list-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+#ws-dashboards .dash-list-meta {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+/* The read-only pill sits inline in the title row; the flex gap spaces it, so
+   drop the bare badge's own left margin. It stays quiet (not the accent). */
+#ws-dashboards .dash-tile-pill { margin-left: 0; }
+/* Rename/delete: hover-revealed, top-right, not a permanent button per card. */
+#ws-dashboards .dash-tile-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.12s var(--ease);
+}
+#ws-dashboards .dash-list-item:hover .dash-tile-actions,
+#ws-dashboards .dash-list-item:focus-within .dash-tile-actions {
+  opacity: 1;
+}
+#ws-dashboards .dash-tile-btn {
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+@media (prefers-reduced-motion: reduce) {
+  #ws-dashboards .dash-list-item { transition: none; }
+  #ws-dashboards .dash-list-item:hover { transform: none; }
+  #ws-dashboards .dash-tile-actions { transition: none; }
+}
+/* The empty state is the designed makeEmptyState() card (homePage.ts) — the
+   same glyph + title + line + action Home shows. Give its container room to
+   centre in, matching Home's is-empty panel. */
+#ws-dashboards .dash-list-empty {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 240px;
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-lg);
+}
+#ws-dashboards .dash-list-empty[hidden] { display: none; }
+
+/* Editor chrome → three zones (identity · add · commit). The zones are real
+   flex groups in the standalone/published dashboard editor, but collapse to
+   `display: contents` under body.an-focus so the analysis workbench header —
+   which the same markup serves — keeps its carefully-tuned single-row layout
+   byte-for-byte (all its `body.an-focus .dash-editor-head .btn/#id` rules apply
+   to the buttons directly, and the zone borders paint nothing). The second
+   spacer is likewise hidden in focus mode so that side keeps its single-spacer
+   arrangement. This is grouping only — every id and handler is unchanged. */
+.dash-head-zone {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.dash-head-zone--add {
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.dash-head-spacer { flex: 1 1 0; }
+body.an-focus .dash-head-zone { display: contents; }
+body.an-focus .dash-head-zone--add { background: none; padding: 0; }
+body.an-focus .dash-head-spacer--2 { display: none; }
+
 /* ── Analyses page: hero, table, empty state ────────────────────────────────
    Everything here is scoped under #ws-analyses on purpose. `.dash-list-item`,
    `.dash-list-open` and `.dash-list-badge` are SHARED with the Dashboards list,
-   which is still a stacked list — restyling them globally would silently
-   re-lay-out that section too. */
+   which re-scopes its own card-grid look under #ws-dashboards (above) —
+   restyling the bare shared classes would silently re-lay-out this table. */
 .an-list-head {
   display: flex;
   align-items: flex-start;
@@ -7523,16 +7665,18 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px; /* was 8px — the new design generation's softer corner */
   background: var(--surface-2);
 }
 .dash-card-head {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 6px;
+  /* Roomier than the old 4px, and a quieter (transparent → card surface) head so
+     the CHART in the body is the loudest thing on the tile, not this strip. */
+  padding: 7px 9px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  background: transparent;
   cursor: grab;
 }
 .dash-card-head:active { cursor: grabbing; }

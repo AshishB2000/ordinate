@@ -1353,19 +1353,26 @@
         <div class="dash-list-head">
           <div>
             <h2 class="viz-h">Dashboards</h2>
-            <p class="viz-sub">The read surface: snapshots published from an analysis, plus standalone dashboards. A published one is read-only — edit its analysis and republish. Every number is computed by the app, from live data.</p>
+            <p class="viz-sub" title="Snapshots published from an analysis, plus standalone dashboards. A published one is read-only — edit its analysis and republish. Every number is computed by the app, from live data.">Read-only snapshots published from your analyses.</p>
           </div>
           <div class="dash-list-head-actions">
             <button class="btn btn-primary" type="button" id="dash-new-btn">New dashboard</button>
           </div>
         </div>
         <div class="dash-list" id="dash-list"></div>
-        <p class="dash-list-empty" id="dash-list-empty" hidden>No dashboards yet.</p>
+        <div class="dash-list-empty" id="dash-list-empty" hidden></div>
       </div>
 
       <div class="dash-editor-host" id="dash-editor-host">
       <!-- Editor view: page tabs + toolbar + grid canvas -->
       <div class="dash-editor" id="dash-editor" hidden>
+        <!-- Three zones (identity · add · commit), grouped by CSS. The IDENTITY
+             items stay FLAT direct children (Back must remain a visible direct
+             child — smoke-app reads .dash-editor-head's children for it); only
+             the add and commit groups are wrapped. Element ORDER is unchanged
+             from the flat strip so body.an-focus — where the two zones collapse
+             to display:contents — keeps its exact single-row layout. Every id
+             and handler is unchanged: this is grouping only. -->
         <div class="dash-editor-head">
           <button class="btn btn-sm" type="button" id="dash-back-btn">‹ Back</button>
           <span class="dash-name" id="dash-name"></span>
@@ -1374,27 +1381,32 @@
                hosts: analyses and published dashboards share this editor. -->
           <span class="dash-fresh" id="dash-fresh" hidden></span>
           <button class="btn btn-sm" type="button" id="dash-refresh-data" hidden>↻ Refresh data</button>
-          <span class="dash-editor-spacer"></span>
-          <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-visual">+ Visual</button>
-          <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-metric">+ Metric</button>
-          <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-text">+ Text</button>
-          <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-control">+ Control</button>
-          <button class="btn btn-sm dash-edit-only" type="button" id="dash-legacy-wrap-btn" hidden>Edit as analysis</button>
-          <!-- Focus-mode overflow. Present / Export… / Share are one click away
-               instead of three buttons in the strip; the menu delegates to the
-               real buttons in .dash-toolbar-actions, so there is one handler per
-               action, not two. Shown by CSS in focus mode only. -->
-          <button class="btn btn-sm an-more-btn" type="button" id="an-more-btn"
-            aria-haspopup="true" aria-label="More actions" title="More actions">⋯</button>
-          <!-- The publish STATE, as a pill beside the button: never published /
-               published & current / unpublished changes. Focus mode hides the
-               #an-pubstate paragraph, which left the state as a tooltip only —
-               a fact you had to hover to learn. Filled by anRenderPubState from
-               the same analysisHasUnpublishedChanges the list uses. -->
-          <span class="an-pubpill dash-an-only" id="an-pubpill" hidden></span>
-          <button class="btn btn-sm dash-an-only" type="button" id="an-republish-btn" hidden>Republish…</button>
-          <button class="btn btn-primary btn-sm dash-an-only" type="button" id="an-publish-btn">Publish</button>
-          <button class="btn btn-primary btn-sm dash-edit-only" type="button" id="dash-save-btn">Save</button>
+          <span class="dash-head-spacer"></span>
+          <div class="dash-head-zone dash-head-zone--add">
+            <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-visual">+ Visual</button>
+            <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-metric">+ Metric</button>
+            <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-text">+ Text</button>
+            <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-control">+ Control</button>
+            <button class="btn btn-sm dash-edit-only" type="button" id="dash-legacy-wrap-btn" hidden>Edit as analysis</button>
+          </div>
+          <span class="dash-head-spacer dash-head-spacer--2"></span>
+          <div class="dash-head-zone dash-head-zone--commit">
+            <!-- Focus-mode overflow. Present / Export… / Share are one click away
+                 instead of three buttons in the strip; the menu delegates to the
+                 real buttons in .dash-toolbar-actions, so there is one handler per
+                 action, not two. Shown by CSS in focus mode only. -->
+            <button class="btn btn-sm an-more-btn" type="button" id="an-more-btn"
+              aria-haspopup="true" aria-label="More actions" title="More actions">⋯</button>
+            <!-- The publish STATE, as a pill beside the button: never published /
+                 published & current / unpublished changes. Focus mode hides the
+                 #an-pubstate paragraph, which left the state as a tooltip only —
+                 a fact you had to hover to learn. Filled by anRenderPubState from
+                 the same analysisHasUnpublishedChanges the list uses. -->
+            <span class="an-pubpill dash-an-only" id="an-pubpill" hidden></span>
+            <button class="btn btn-sm dash-an-only" type="button" id="an-republish-btn" hidden>Republish…</button>
+            <button class="btn btn-primary btn-sm dash-an-only" type="button" id="an-publish-btn">Publish</button>
+            <button class="btn btn-primary btn-sm dash-edit-only" type="button" id="dash-save-btn">Save</button>
+          </div>
         </div>
 
         <!-- Why this dashboard cannot be edited here, and where to go instead.
