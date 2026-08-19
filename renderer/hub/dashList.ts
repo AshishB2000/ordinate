@@ -31,59 +31,106 @@ async function refreshDashboardList(): Promise<void> {
   }
   if (!Array.isArray(items)) items = [];
   dashList = items;
-  if (empty) empty.hidden = items.length > 0;
+  if (empty) {
+    empty.hidden = items.length > 0;
+    // A DESIGNED empty state (makeEmptyState, homePage.ts) — the same glyph +
+    // title + line + action shape Home and Ask use — rather than a bare muted
+    // sentence. Rendered fresh each refresh; the action delegates to the ONE
+    // existing New-dashboard handler.
+    empty.innerHTML = '';
+    if (items.length === 0 && typeof makeEmptyState === 'function') {
+      empty.appendChild(makeEmptyState({
+        variant: 'dash',
+        glyph: '▤',
+        title: 'No dashboards yet',
+        line: 'Publish a dashboard from an analysis, or start a standalone one.',
+        actionLabel: 'New dashboard',
+        onAction: () => void handleNewDashboard(),
+      }));
+    }
+  }
   items.forEach((d) => list.appendChild(makeDashListItem(d)));
 }
 
+// One dashboard as a CARD (not a flat row). Keeps the shared hooks smoke-app
+// queries — the outer `.dash-list-item`, the open control `.dash-list-open`, and
+// the `.dash-list-badge` read-only pill — and adds `.dash-tile*` classes the
+// #ws-dashboards-scoped CSS styles. The Analyses list reuses the shared classes
+// under #ws-analyses and is untouched by this (all new visuals are scoped to
+// #ws-dashboards), so it stays pixel-identical.
 function makeDashListItem(d: any): HTMLElement {
   const row = document.createElement('div');
-  row.className = 'dash-list-item';
+  row.className = 'dash-list-item dash-tile';
 
-  const open = document.createElement('button');
-  open.type = 'button';
-  open.className = 'dash-list-open';
-  const name = document.createElement('span');
-  name.className = 'dash-list-name';
-  name.textContent = d && d.name ? String(d.name) : 'Untitled dashboard';
   // A published dashboard is read-only. Say so BEFORE it is opened — the
   // summary carries analysisId precisely so this costs no extra read.
   const published = Boolean(d && d.analysisId);
+  if (published) row.classList.add('is-published');
+
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.className = 'dash-list-open dash-tile-open';
+
+  const titleRow = document.createElement('span');
+  titleRow.className = 'dash-tile-title';
+  const name = document.createElement('span');
+  name.className = 'dash-list-name dash-tile-name';
+  name.textContent = d && d.name ? String(d.name) : 'Untitled dashboard';
+  titleRow.appendChild(name);
+  // The read-only state is real meaning, kept visible as a quiet pill — not
+  // hidden. `.dash-list-badge` is the hook smoke-app asserts on.
   if (published) {
     const badge = document.createElement('span');
-    badge.className = 'dash-list-badge';
+    badge.className = 'dash-list-badge dash-tile-pill';
     badge.textContent = 'Published · read-only';
-    name.appendChild(badge);
+    titleRow.appendChild(badge);
   }
+
   const meta = document.createElement('span');
-  meta.className = 'dash-list-meta';
+  meta.className = 'dash-list-meta dash-tile-meta';
   const pages = d && typeof d.pageCount === 'number' ? d.pageCount : 1;
+  const tiles = d && typeof d.cardCount === 'number' ? d.cardCount : 0;
+  // pages · tiles · updated — every part is already in the summary (cardCount is
+  // a free sum over the record listDashboards already read), so nothing here is
+  // an extra read or a computed figure.
+  const when = published && d.publishedAt
+    ? 'published ' + formatSidebarTime(d.publishedAt)
+    : formatSidebarTime(d && d.updatedAt);
   meta.textContent = pages + (pages === 1 ? ' page · ' : ' pages · ') +
-    (published && d.publishedAt
-      ? 'published ' + formatSidebarTime(d.publishedAt)
-      : formatSidebarTime(d && d.updatedAt));
-  open.appendChild(name);
+    tiles + (tiles === 1 ? ' tile · ' : ' tiles · ') + when;
+
+  open.appendChild(titleRow);
   open.appendChild(meta);
   open.addEventListener('click', () => openDashboard(String(d.id)));
 
+  // Rename/delete are hover-revealed icons (CSS), not permanent buttons beside
+  // every card. The aria-labels are preserved: smoke-app asserts a published
+  // card does NOT offer "Rename dashboard" (main refuses that write) while a
+  // standalone one does.
+  const actions = document.createElement('div');
+  actions.className = 'dash-tile-actions';
+
   const ren = document.createElement('button');
   ren.type = 'button';
-  ren.className = 'dash-list-btn';
+  ren.className = 'dash-list-btn dash-tile-btn';
   ren.setAttribute('aria-label', 'Rename dashboard');
   ren.textContent = '✎';
   ren.addEventListener('click', (e) => { e.stopPropagation(); handleRenameDashboard(String(d.id), name.textContent || ''); });
 
   const del = document.createElement('button');
   del.type = 'button';
-  del.className = 'dash-list-btn';
+  del.className = 'dash-list-btn dash-tile-btn';
   del.setAttribute('aria-label', 'Delete dashboard');
   del.textContent = '🗑';
   del.addEventListener('click', (e) => { e.stopPropagation(); handleDeleteDashboard(String(d.id)); });
 
-  row.appendChild(open);
   // Renaming a published snapshot is a write main refuses — offering the button
   // would just fail. Deleting is still allowed: a snapshot can be discarded.
-  if (!published) row.appendChild(ren);
-  row.appendChild(del);
+  if (!published) actions.appendChild(ren);
+  actions.appendChild(del);
+
+  row.appendChild(open);
+  row.appendChild(actions);
   return row;
 }
 
