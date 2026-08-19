@@ -134,14 +134,16 @@
 
       <!-- primary nav -->
       <nav class="as-nav" aria-label="Sections">
-        <!-- Explore sits ABOVE Home deliberately: asking a question is the
-             fastest route to an answer, so it is the first thing in the nav. -->
+        <!-- Ask sits ABOVE Home deliberately: asking a question is the
+             fastest route to an answer, so it is the first thing in the nav.
+             The section id 'explore' predates the rename to Ask — ids, the
+             xp- prefix and IPC names all keep the old name on purpose. -->
         <button class="as-nav-item" type="button" data-section="explore">
           <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 3.5l1.7 4.8 4.8 1.7-4.8 1.7L12 16.5l-1.7-4.8L5.5 10l4.8-1.7L12 3.5Z" fill="currentColor"/>
             <path d="M18.2 15.4l.62 1.78 1.78.62-1.78.62-.62 1.78-.62-1.78-1.78-.62 1.78-.62.62-1.78Z" fill="currentColor"/>
           </svg>
-          <span>Explore</span>
+          <span>Ask</span>
         </button>
         <button class="as-nav-item active" type="button" data-section="home">
           <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -290,7 +292,7 @@
             </svg>
           </span>
           <span class="home-hero-body">
-            <span class="home-hero-eyebrow">Explore</span>
+            <span class="home-hero-eyebrow">Ask</span>
             <span class="home-hero-name">Ask a question about your data</span>
             <span class="home-hero-sub">The app does the math and shows its work — you get the figures, the steps behind them, and a chart you can keep.</span>
           </span>
@@ -1473,16 +1475,29 @@
       </div>
     </section>
 
-    <!-- ── Explore — the conversational front door ────────────────────
+    <!-- ── Ask — the conversational front door ─────────────────────────
+         (Section id 'explore' predates the rename to Ask; ids, the xp-
+         prefix and IPC names keep the old name on purpose — renaming them
+         is churn across workspace.ts and five smoke suites with no
+         user-visible gain.)
+
          A place, not a dialog: a full-bleed stage carrying the background,
-         with the greeting and composer centred inside it, over a "Jump back
-         in" strip. The stage is edge-aligned with the rest of the app; only
-         the composer is width-capped. Phase 1 renders it inert — the composer
-         is disabled until copilot:ask is wired. -->
+         with a brand mark, a personal greeting and one floating composer
+         card centred inside it, over a "Jump back in" strip. The stage is
+         edge-aligned with the rest of the app; only the composer is
+         width-capped. -->
     <section class="ws-panel xp-panel" id="ws-explore" data-section="explore" hidden>
       <div class="xp-stage">
         <div class="xp-stage-inner">
+          <!-- The splash's own logo asset — file: is in img-src. Decorative. -->
+          <img class="xp-mark" src="logo.png" width="40" height="40" alt="" aria-hidden="true">
+          <!-- explore.ts writes the time-of-day + name greeting here; this
+               static text is the no-name fallback AND what shows before the
+               app:userName round-trip lands. -->
           <h1 class="xp-greet" id="xp-greet">What do you want to know?</h1>
+          <!-- Same voice as the Home hero — one product promise, not a slogan
+               per surface. Hidden with the greeting in transcript mode. -->
+          <p class="xp-sub" id="xp-sub">The app does the math and shows its work — you get the figures, the steps behind them, and a chart you can keep.</p>
           <!-- Empty until the first question; .xp-asked on the panel turns the
                stage into this scrolling transcript with the composer docked
                beneath it. One markup tree, two states — not a second view. -->
@@ -1510,7 +1525,10 @@
               <button class="xp-chip" id="xp-context-chip" type="button" aria-haspopup="listbox"
                 ><span class="gs-glyph">◈</span><span class="xp-chip-name">Whole project</span></button>
               <span class="xp-composer-spacer"></span>
-              <button class="xp-chip xp-chip-warn" id="xp-model-chip" type="button">Connect a model</button>
+              <!-- explore.ts repaints this with the active agent's logo + label
+                   + caret (agentIconHTML — the exec buttons' one renderer).
+                   This static text is only the pre-paint state. -->
+              <button class="xp-chip xp-chip-warn" id="xp-model-chip" type="button" aria-haspopup="menu">Connect a model</button>
               <button class="xp-send" id="xp-send" type="button" aria-label="Send" disabled>
                 <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
                   <path d="M12 19V6M6 12l6-6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1518,6 +1536,12 @@
               </button>
             </div>
           </div>
+          <!-- Starter suggestions — explore.ts fills up to 3 chips built from
+               REAL dataset names (no model call, no figures: the strings are
+               prompts, the app does the math when one is asked). Clicking
+               fills the composer and focuses it, never auto-sends. Hidden in
+               transcript mode (.xp-asked) and when the project has no data. -->
+          <div class="xp-suggests" id="xp-suggests" hidden></div>
         </div>
       </div>
 

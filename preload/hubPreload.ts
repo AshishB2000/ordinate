@@ -155,6 +155,8 @@ contextBridge.exposeInMainWorld('hub', {
   listProjects: () => ipcRenderer.invoke('projects:list'),
   // Cross-project recent list (datasets/analyses/dashboards, newest first).
   recentItems: (limit?: number) => ipcRenderer.invoke('recent:list', { limit }),
+  // OS account username (capitalised) for Ask's greeting; '' when unavailable.
+  userName: () => ipcRenderer.invoke('app:userName'),
   // Home "Starred" pins — a flat "type:id" list. get reads; set replaces.
   getStarred: () => ipcRenderer.invoke('starred:get'),
   setStarred: (ids: string[]) => ipcRenderer.invoke('starred:set', { ids }),

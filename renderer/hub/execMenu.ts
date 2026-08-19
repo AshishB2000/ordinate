@@ -409,10 +409,20 @@ function openLocalSettings(): void {
   if (toggle) toggle.scrollIntoView({ block: 'nearest' });
 }
 
-function openExecMenu(): void {
-  // Whichever button is on screen right now — the sidebar one everywhere, the
-  // capture top-bar one in body.cap-focus.
-  const btn = execBtnVisible();
+function openExecMenu(anchor?: HTMLElement | null): void {
+  // Anchor to WHATEVER opened the menu. The parameter exists because the menu
+  // now has openers that are not exec buttons at all — Ask's model chip — and
+  // the fallback lookup below cannot find those. It is also load-bearing for
+  // another reason: after the top-bar relayout the only exec button left,
+  // #exec-mode-btn-cap, is display:none outside body.cap-focus, so from any
+  // other surface execBtnVisible() returns a hidden element whose rect is all
+  // zeros and the menu would position itself off a phantom at the viewport
+  // origin. Callers that ARE exec buttons keep calling with no argument.
+  //
+  // The dismiss/Escape closures below capture this same `btn`, so an anchored
+  // open also gets "clicking the opener doesn't insta-close" and "Escape
+  // returns focus to the opener" for free.
+  const btn = anchor || execBtnVisible();
   if (!execMenu || !btn) return;
   closeSettingsMenu();
   execMenu.hidden = false;
@@ -440,6 +450,7 @@ function openExecMenu(): void {
   }
   execMenu.style.overflowY = 'auto';
   btn.setAttribute('aria-expanded', 'true');
+  _execOpener = btn;
   refreshExecMenu();
   // Scan PATH once so Local status is fresh without first opening Settings.
   if (!execDidScan && window.hub && typeof window.hub.detectLocalClis === 'function') {
@@ -470,9 +481,11 @@ function closeExecMenu(): void {
   if (!execMenu) return;
   if (execModelCli && typeof execModelCli.close === 'function') execModelCli.close();
   execMenu.hidden = true;
-  // Clear on BOTH: only the opener was ever set, and clearing the other is a
-  // no-op rather than a branch.
+  // Clear on BOTH exec buttons: only the opener was ever set, and clearing the
+  // other is a no-op rather than a branch. The tracked opener covers anchors
+  // that are not exec buttons at all (Ask's model chip).
   execBtns().forEach((b) => b.setAttribute('aria-expanded', 'false'));
+  if (_execOpener) { _execOpener.setAttribute('aria-expanded', 'false'); _execOpener = null; }
   if (_execDismiss) { document.removeEventListener('click', _execDismiss, true); _execDismiss = null; }
   if (_execEsc)     { document.removeEventListener('keydown', _execEsc, true);  _execEsc = null; }
 }

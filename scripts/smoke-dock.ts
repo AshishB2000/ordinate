@@ -152,8 +152,9 @@ async function main(): Promise<void> {
   await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
   ok('…and a later sync does NOT re-open it', await win.locator('#dk-panel').isHidden());
 
-  // ── The top bar's Agent toggle toggles the DOCK, not Explore ────────────
-  // 498d647 pointed #side-ai-btn at Explore, which already has its own nav
+  // ── The top bar's Agent toggle toggles the DOCK, not Ask ────────────────
+  // 498d647 pointed #side-ai-btn at Ask (then named Explore; the section id
+  // is still 'explore'), which already has its own nav
   // item — a duplicate door, while the dock had no chrome presence at all.
   // It is the dock's again. These are the assertions that fail if it ever
   // drifts back, or if a second AI door appears beside it.
@@ -161,15 +162,15 @@ async function main(): Promise<void> {
   // Icon-only, so the accessible name is aria-label — the labelled version
   // asserted the visible text WAS the name (nothing to drift, WCAG 2.5.3);
   // with no visible text, aria-label is the correct mechanism, and the
-  // tooltip carries the distinction from Explore.
+  // tooltip carries the distinction from the Ask section.
   ok('the Agent toggle is named "Agent" via aria-label (icon-only, no visible text)',
     /agent/i.test((await win.getAttribute('#side-ai-btn', 'aria-label')) || '')
       && !/\S/.test((await win.locator('#side-ai-btn').textContent()) || ''),
     (await win.getAttribute('#side-ai-btn', 'aria-label')) || '(none)');
-  ok('…with the works-on-what-you-see tooltip distinguishing it from Explore',
+  ok('…with the works-on-what-you-see tooltip distinguishing it from Ask',
     /looking at/i.test((await win.getAttribute('#side-ai-btn', 'title')) || ''),
     (await win.getAttribute('#side-ai-btn', 'title')) || '(none)');
-  ok('…and the Explore nav item still exists as its own separate entry',
+  ok('…and the Ask nav item (section id \'explore\') still exists as its own separate entry',
     (await win.locator('.as-nav-item[data-section="explore"]').count()) === 1);
   // It lives in the TOP BAR now, not the sidebar — search and the Agent
   // toggle are window-wide tools and the sidebar is the section nav.
@@ -187,7 +188,7 @@ async function main(): Promise<void> {
       .filter((b) => /\bai\b|agent/i.test((b.textContent || '') + ' ' + (b.getAttribute('aria-label') || ''))).length)) === 1);
   await win.click('#side-ai-btn', { timeout: 8000 });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
-  ok('clicking it OPENS THE DOCK (it must not navigate to Explore)',
+  ok('clicking it OPENS THE DOCK (it must not navigate to the Ask section)',
     await win.locator('#dk-panel').isVisible()
       && (await win.evaluate(() =>
         (document.querySelector('.hub-body') as HTMLElement).dataset.section)) !== 'explore');
@@ -578,17 +579,17 @@ async function main(): Promise<void> {
   // The dock's safety predicate. Every caller reaches it through
   // `typeof dkSync === 'function'`, so a rename would disable suppression
   // SILENTLY — the same silent-by-construction hazard this whole script
-  // exists to guard. Explore is the cheapest condition to drive (a plain
+  // exists to guard. Ask (section id 'explore') is the cheapest condition to drive (a plain
   // section switch) and the most absurd to get wrong: two chats side by side.
   //
-  // Explore is ALSO the case that matters most now that #side-ai-btn toggles
+  // Ask is ALSO the case that matters most now that #side-ai-btn toggles
   // the dock: suppression has to reach EVERY entry point, or the top-bar
   // button becomes a control that visibly does nothing on the one section
   // where the dock refuses to appear. With #dk-edge gone there are two entry
   // points to cover instead of three, and this is the one that has a face.
   await win.evaluate(() => { (window as any).selectSection('explore'); });
   await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
-  ok('the dock is suppressed on the Explore section', await win.locator('#dk-panel').isHidden());
+  ok('the dock is suppressed on the Ask section (id \'explore\')', await win.locator('#dk-panel').isHidden());
   // Disabled, NOT hidden — the top bar is fixed chrome and dropping a control
   // out of it would leave a hole and reflow its neighbours on every visit.
   ok('…and the AI button is disabled rather than removed (no hole in the bar)',
@@ -600,7 +601,7 @@ async function main(): Promise<void> {
       const p = document.getElementById('dk-panel');
       return Boolean(p && p.hidden);
     }));
-  // …and it comes back on leaving Explore, so suppression is a gate, not a kill.
+  // …and it comes back on leaving Ask, so suppression is a gate, not a kill.
   await win.evaluate(() => { (window as any).selectSection('datasets'); });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
   ok('…and it returns when the condition lifts', await win.locator('#dk-panel').isVisible());

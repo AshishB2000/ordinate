@@ -238,6 +238,10 @@ const execOpenSettings = document.getElementById('exec-open-settings');
 
 let _execDismiss = null;
 let _execEsc = null;
+// Whatever anchored the last openExecMenu() — an exec button OR Ask's model
+// chip. Tracked so closeExecMenu can clear aria-expanded on non-exec openers,
+// which its execBtns() sweep cannot reach.
+let _execOpener: HTMLElement | null = null;
 let execMode  = 'local';                                   // 'byok' | 'local'
 let execByok: any  = { activeProvider: 'anthropic', providers: {} };
 let execLocal: any = { activeId: null, clis: [] };
