@@ -152,19 +152,39 @@ async function main(): Promise<void> {
   await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
   ok('…and a later sync does NOT re-open it', await win.locator('#dk-panel').isHidden());
 
-  // ── The sidebar "Ask AI" button toggles the DOCK, not Explore ───────────
+  // ── The top bar's Agent toggle toggles the DOCK, not Explore ────────────
   // 498d647 pointed #side-ai-btn at Explore, which already has its own nav
-  // item — a duplicate door, while the dock had no sidebar presence at all.
+  // item — a duplicate door, while the dock had no chrome presence at all.
   // It is the dock's again. These are the assertions that fail if it ever
-  // drifts back, or if a second button labelled "AI" appears beside it.
-  ok('the sidebar AI button is labelled to distinguish it from Explore',
-    /ask ai/i.test((await win.locator('#side-ai-btn').textContent()) || ''),
-    (await win.locator('#side-ai-btn').textContent() || '').trim());
+  // drifts back, or if a second AI door appears beside it.
+  //
+  // Icon-only, so the accessible name is aria-label — the labelled version
+  // asserted the visible text WAS the name (nothing to drift, WCAG 2.5.3);
+  // with no visible text, aria-label is the correct mechanism, and the
+  // tooltip carries the distinction from Explore.
+  ok('the Agent toggle is named "Agent" via aria-label (icon-only, no visible text)',
+    /agent/i.test((await win.getAttribute('#side-ai-btn', 'aria-label')) || '')
+      && !/\S/.test((await win.locator('#side-ai-btn').textContent()) || ''),
+    (await win.getAttribute('#side-ai-btn', 'aria-label')) || '(none)');
+  ok('…with the works-on-what-you-see tooltip distinguishing it from Explore',
+    /looking at/i.test((await win.getAttribute('#side-ai-btn', 'title')) || ''),
+    (await win.getAttribute('#side-ai-btn', 'title')) || '(none)');
   ok('…and the Explore nav item still exists as its own separate entry',
     (await win.locator('.as-nav-item[data-section="explore"]').count()) === 1);
-  ok('…so exactly one sidebar control mentions AI',
-    (await win.evaluate(() => Array.from(document.querySelectorAll('#app-sidebar button'))
-      .filter((b) => /\bai\b/i.test(b.textContent || '')).length)) === 1);
+  // It lives in the TOP BAR now, not the sidebar — search and the Agent
+  // toggle are window-wide tools and the sidebar is the section nav.
+  ok('…and it sits in the top bar, not in the section nav',
+    (await win.locator('.hub-topbar #side-ai-btn').count()) === 1
+      && (await win.locator('#app-sidebar #side-ai-btn').count()) === 0);
+  // Was "exactly one SIDEBAR control mentions AI". Widened to the whole
+  // persistent chrome, which is the stronger claim and the point of the
+  // relayout: #dk-edge was a second door to this same panel that looked
+  // nothing like this button, and it is gone. Accessible names count too —
+  // the toggle itself is icon-only, so its name lives in aria-label.
+  ok('…so exactly one control in the whole chrome names the AI surface',
+    (await win.evaluate(() => Array.from(
+      document.querySelectorAll('#app-sidebar button, .hub-topbar button, .dk-edge'))
+      .filter((b) => /\bai\b|agent/i.test((b.textContent || '') + ' ' + (b.getAttribute('aria-label') || ''))).length)) === 1);
   await win.click('#side-ai-btn', { timeout: 8000 });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
   ok('clicking it OPENS THE DOCK (it must not navigate to Explore)',
@@ -179,29 +199,47 @@ async function main(): Promise<void> {
     await win.locator('#dk-panel').isHidden()
       && (await win.getAttribute('#side-ai-btn', 'aria-expanded')) === 'false');
 
-  // ── Toggle from the dock's own edge affordance ──────────────────────────
-  // #dk-edge is the closed-state tab at the right edge; ⌘L and #side-ai-btn
-  // are the other two ways in.
-  ok('the edge tab starts visible and collapsed (aria-expanded=false)',
-    await win.locator('#dk-edge').isVisible());
+  // ── The closed→open→closed cycle and the aria contract ──────────────────
+  // These assertions used to run against #dk-edge, the vertical tab that was
+  // pinned to the window's right edge. The TAB is gone; the COVERAGE is not —
+  // it was only ever the vehicle for this contract, and the top-bar button is
+  // the vehicle now.
+  //
+  // The one behaviour that deliberately CHANGED: #dk-edge hid itself while the
+  // dock was open (it was an open-affordance only, so showing it beside
+  // #dk-close would have been two controls doing one job at the same edge).
+  // A header button cannot do that — vanishing would leave a hole in the bar
+  // and reflow its neighbours — so this one stays visible and toggles, which
+  // is what aria-expanded promises anyway. Asserted below, not assumed.
+  ok('the AI button starts visible and collapsed',
+    await win.locator('#side-ai-btn').isVisible());
   ok('…aria-expanded=false',
-    (await win.getAttribute('#dk-edge', 'aria-expanded')) === 'false');
-  // Legibility: the closed tab must SAY something. Icon-only in --muted read
-  // as an edge ornament and went unclicked — this is that regression guard.
-  ok('…and carries a visible text label, not just an icon',
-    /\S/.test((await win.locator('#dk-edge .dk-edge-label').textContent()) || ''),
-    await win.locator('#dk-edge .dk-edge-label').textContent() || '(none)');
-  ok('…which is also its accessible name (no aria-label to drift from it)',
-    (await win.getAttribute('#dk-edge', 'aria-label')) === null);
+    (await win.getAttribute('#side-ai-btn', 'aria-expanded')) === 'false');
+  ok('…and points at the panel it controls',
+    (await win.getAttribute('#side-ai-btn', 'aria-controls')) === 'dk-panel');
+  // Icon-only ON PURPOSE — the panel glyph reads as "collapse/expand the
+  // right panel". The old tab's icon-only failure was a MUTED GREY ornament
+  // floating at the window edge; a bordered header cell with a divider, a
+  // hover state and an accent active state is a control, not a decoration.
+  // With no visible text, aria-label is the accessible name (WCAG 4.1.2) and
+  // the title carries the long description.
+  ok('…and it is icon-only with aria-label as the accessible name',
+    !/\S/.test((await win.locator('#side-ai-btn').textContent()) || '')
+      && /agent/i.test((await win.getAttribute('#side-ai-btn', 'aria-label')) || ''));
+  ok('…and the removed edge tab is really gone, not just hidden',
+    (await win.locator('#dk-edge').count()) === 0);
 
-  await win.click('#dk-edge', { timeout: 8000 });
+  await win.click('#side-ai-btn', { timeout: 8000 });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
-  ok('clicking the edge tab opens the dock', await win.locator('#dk-panel').isVisible());
+  ok('clicking it opens the dock', await win.locator('#dk-panel').isVisible());
   ok('…and marks it aria-expanded=true',
-    (await win.getAttribute('#dk-edge', 'aria-expanded')) === 'true');
-  ok('…and the edge tab hides itself while the dock is open (the close affordances are #dk-close/⌘L/Esc)',
-    await win.locator('#dk-edge').isHidden());
-  ok('the panel has an aria-label', Boolean((await win.getAttribute('#dk-panel', 'aria-label') || '').length));
+    (await win.getAttribute('#side-ai-btn', 'aria-expanded')) === 'true');
+  ok('…and it STAYS visible while the dock is open (a header button that vanished would leave a hole)',
+    await win.locator('#side-ai-btn').isVisible()
+      && !(await win.locator('#side-ai-btn').isDisabled()));
+  ok('the panel has an aria-label naming the surface',
+    /agent/i.test((await win.getAttribute('#dk-panel', 'aria-label')) || ''),
+    (await win.getAttribute('#dk-panel', 'aria-label')) || '(none)');
   // No model is configured in a smoke run, so #dk-input starts disabled (the
   // HTML spec refuses focus() on a disabled control) — dock.ts's fallback is
   // to focus the panel itself (tabindex="-1") so keyboard focus lands INSIDE
@@ -214,12 +252,64 @@ async function main(): Promise<void> {
       return Boolean(a && panel && (a.id === 'dk-input' || a === panel));
     }));
 
+  // ── Global search: reachable from the top bar, and NOT clipped by it ─────
+  // New coverage for the relayout. In the sidebar the results box was an
+  // in-flow block that simply pushed the nav down; in a 48px bar that layout
+  // would be clipped by the bar's own height, so it became an absolutely
+  // positioned dropdown anchored under the input. Two ways that goes wrong and
+  // one of them is invisible to a DOM-only check:
+  //   1. it renders INSIDE the bar's box and gets cut off, and
+  //   2. it renders BEHIND the content stage or an open dock.
+  // Run with the dock still OPEN, because below ~1100px .dk-panel is a fixed
+  // overlay at z-index 9950 and the dropdown has to clear it.
+  await win.fill('#global-search', 'Regional');
+  await win.waitForSelector('#global-search-results:not([hidden])', { timeout: 8000 });
+  const searchBox: any = await win.evaluate(() => {
+    const bar = document.querySelector('.hub-topbar') as HTMLElement;
+    const box = document.getElementById('global-search-results') as HTMLElement;
+    const r = box.getBoundingClientRect();
+    const barR = bar.getBoundingClientRect();
+    // What is actually painted at the dropdown's own top-centre point? If the
+    // stage or the dock covers it, this resolves to something outside the box.
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + 4);
+    return {
+      visible: r.height > 0 && r.width > 0,
+      belowBar: r.top >= barR.bottom - 1,
+      overflowsBar: r.bottom > barR.bottom,
+      onTop: Boolean(hit && box.contains(hit)),
+      hitId: hit ? (hit.id || hit.className || hit.tagName) : '(nothing)',
+    };
+  });
+  ok('typing in the top bar opens the results dropdown', searchBox.visible);
+  ok('…anchored BELOW the bar, not laid out inside it', searchBox.belowBar);
+  ok('…extending past the 48px bar rather than being clipped to it', searchBox.overflowsBar);
+  ok('…and painted ON TOP of the content stage and the open dock, not behind them',
+    searchBox.onTop, String(searchBox.hitId));
+  await win.fill('#global-search', '');
+  // state: 'hidden' — the default waits for VISIBLE, which a hidden box never is.
+  await win.waitForSelector('#global-search-results', { state: 'hidden', timeout: 8000 });
+  ok('…and clearing the query closes it again', await win.locator('#global-search-results').isHidden());
+  // Newly relevant after the relayout: search and the ⌘L target now sit in the
+  // same strip of chrome, inches apart. dock.ts's keydown handler bails on
+  // INPUT/TEXTAREA/contenteditable so the shortcut cannot hijack typing — which
+  // means ⌘L must do NOTHING while the caret is in the search box, even though
+  // the button it mirrors is right there. Asserted, then focus is released so
+  // the ⌘L checks below run from neutral ground.
+  await win.focus('#global-search');
+  await win.keyboard.press(process.platform === 'darwin' ? 'Meta+L' : 'Control+L');
+  await win.waitForTimeout(250);
+  ok('⌘L is inert while the caret is in the search box (it must not hijack typing)',
+    await win.locator('#dk-panel').isVisible());
+  await win.evaluate(() => (document.getElementById('global-search') as HTMLInputElement).blur());
+
   // ── ⌘L closes it too (the second entry point) ───────────────────────────
   await win.keyboard.press(process.platform === 'darwin' ? 'Meta+L' : 'Control+L');
   await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
   ok('Cmd/Ctrl+L closes the dock', await win.locator('#dk-panel').isHidden());
-  ok('…clears aria-expanded on the edge tab', (await win.getAttribute('#dk-edge', 'aria-expanded')) === 'false');
-  ok('…and the edge tab reappears now that the dock is closed', await win.locator('#dk-edge').isVisible());
+  ok('…and clears aria-expanded on the AI button (the shortcut and the button share one state)',
+    (await win.getAttribute('#side-ai-btn', 'aria-expanded')) === 'false');
+  ok('…which is still there, unchanged, either way',
+    await win.locator('#side-ai-btn').isVisible());
 
   // ── Esc closes and returns focus to the toggle ──────────────────────────
   await win.keyboard.press(process.platform === 'darwin' ? 'Meta+L' : 'Control+L');
@@ -227,8 +317,12 @@ async function main(): Promise<void> {
   await win.keyboard.press('Escape');
   await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
   ok('Escape closes the dock', await win.locator('#dk-panel').isHidden());
-  ok('…and returns focus to the edge tab',
-    await win.evaluate(() => Boolean(document.activeElement && document.activeElement.id === 'dk-edge')));
+  // Focus must land on a control that is actually focusable at that moment.
+  // This is why the button staying visible-and-enabled while open matters: the
+  // old #dk-edge had to be un-hidden by dkSync() first, and a hidden element
+  // silently refuses focus().
+  ok('…and returns focus to the AI button',
+    await win.evaluate(() => Boolean(document.activeElement && document.activeElement.id === 'side-ai-btn')));
 
   // ── ⌘L still works WITH FOCUS INSIDE THE COMPOSER ───────────────────────
   // The keydown handler ignores INPUT/TEXTAREA/contenteditable so the shortcut
@@ -239,7 +333,7 @@ async function main(): Promise<void> {
   // focus falls to the panel div — which is exactly why the checks above pass
   // either way and cannot see this. Force-enable it so the guard is genuinely
   // exercised; this is the assertion that fails if the exemption is removed.
-  await win.click('#dk-edge', { timeout: 8000 });
+  await win.click('#side-ai-btn', { timeout: 8000 });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
   await win.evaluate(() => {
     const i = document.getElementById('dk-input') as HTMLTextAreaElement | null;
@@ -253,7 +347,7 @@ async function main(): Promise<void> {
     await win.locator('#dk-panel').isHidden());
 
   // ── The resize handle: drag, persist-on-end, min clamp, keyboard ────────
-  await win.click('#dk-edge', { timeout: 8000 });
+  await win.click('#side-ai-btn', { timeout: 8000 });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
 
   ok('the handle is a focusable, labelled separator',
@@ -488,17 +582,16 @@ async function main(): Promise<void> {
   // section switch) and the most absurd to get wrong: two chats side by side.
   //
   // Explore is ALSO the case that matters most now that #side-ai-btn toggles
-  // the dock: suppression has to reach EVERY entry point, or the sidebar
+  // the dock: suppression has to reach EVERY entry point, or the top-bar
   // button becomes a control that visibly does nothing on the one section
-  // where the dock refuses to appear.
+  // where the dock refuses to appear. With #dk-edge gone there are two entry
+  // points to cover instead of three, and this is the one that has a face.
   await win.evaluate(() => { (window as any).selectSection('explore'); });
   await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
   ok('the dock is suppressed on the Explore section', await win.locator('#dk-panel').isHidden());
-  ok('…and its own edge-tab entry point is withdrawn too, not just the panel',
-    await win.locator('#dk-edge').isHidden());
-  // Disabled, NOT hidden — the sidebar is a fixed list and dropping a row out
-  // of it would make the whole bottom group jump on every visit to Explore.
-  ok('…and the sidebar button is disabled rather than removed (no layout jump)',
+  // Disabled, NOT hidden — the top bar is fixed chrome and dropping a control
+  // out of it would leave a hole and reflow its neighbours on every visit.
+  ok('…and the AI button is disabled rather than removed (no hole in the bar)',
     await win.locator('#side-ai-btn').isVisible()
       && await win.locator('#side-ai-btn').isDisabled());
   ok('…so clicking it while suppressed opens nothing',
@@ -516,7 +609,8 @@ async function main(): Promise<void> {
   await win.evaluate(() => { document.documentElement.classList.add('dash-presenting'); (window as any).dkSync(); });
   await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
   ok('the dock is suppressed in presentation mode', await win.locator('#dk-panel').isHidden());
-  ok('…and its edge tab too', await win.locator('#dk-edge').isHidden());
+  ok('…and its AI button is disabled too, not just the panel hidden',
+    await win.locator('#side-ai-btn').isDisabled());
   await win.evaluate(() => { document.documentElement.classList.remove('dash-presenting'); (window as any).dkSync(); });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
 
@@ -529,8 +623,16 @@ async function main(): Promise<void> {
   // tightest supported push width nothing overflows and the one-row editor
   // head stays one row.
   //
-  // It matters most here that #dk-edge got a label in Task 1: focus mode hides
-  // the whole sidebar, so the edge tab and ⌘L are the only two ways in.
+  // THIS is the case that justified #dk-edge, and the reason deleting it is
+  // safe rather than merely tidy. Focus mode hides the whole sidebar, so while
+  // the AI button lived down there the edge tab was the only MOUSE way into the
+  // dock — losing it would have left ⌘L alone, an undiscoverable single point
+  // of entry. The top bar is deliberately NOT hidden in an-focus (hub.css), so
+  // the button survives here and takes over that job.
+  //
+  // The two assertions below therefore INVERT on purpose: this used to assert
+  // #side-ai-btn was hidden in focus mode and that the edge tab was the way
+  // back in. Both are now the opposite, and that inversion IS the feature.
   // Enter the analysis with the dock ALREADY open — the transition that used
   // to slam it shut.
   await win.evaluate(() => { (window as any).selectSection('analyses'); });
@@ -540,16 +642,29 @@ async function main(): Promise<void> {
   ok('an analysis really is open in focus mode', await win.evaluate(() => document.body.classList.contains('an-focus')));
   ok('the dock SURVIVES opening an analysis (an-focus is no longer a suppression)',
     await win.locator('#dk-panel').isVisible());
-  ok('…and the whole sidebar is gone with it, so #side-ai-btn cannot be the way back in',
-    await win.locator('#side-ai-btn').isHidden());
+  ok('…and the sidebar really is hidden here (the condition that made an edge tab necessary)',
+    await win.locator('#app-sidebar').isHidden());
+  ok('…but the top bar is NOT, so the Agent toggle survives focus mode',
+    await win.locator('.hub-topbar').isVisible()
+      && await win.locator('#side-ai-btn').isVisible());
+  // The bar the workbench now sits under is 48px the old sizing did not know
+  // about: body.an-focus #ws-analyses was calc(100vh - 40px) — the titlebar
+  // alone — which left the workbench's bottom 48px clipped under .win's
+  // overflow:hidden. This is the guard for that (100vh - 88px now).
+  ok('…and the workbench bottom lands inside the window, not clipped under it',
+    await win.evaluate(() => {
+      const r = document.getElementById('ws-analyses')!.getBoundingClientRect();
+      return Math.round(r.bottom) <= window.innerHeight + 1;
+    }));
 
-  // …and it can be re-opened from inside, where the labelled edge tab and ⌘L
-  // are the only two entry points left.
+  // …and it can be re-opened from inside, where the top-bar button and ⌘L are
+  // the two entry points left.
   await win.evaluate(() => { (window as any).dkSetOpen(false); });
   await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
-  ok('…so the labelled edge tab is offered here, and it is the way in',
-    await win.locator('#dk-edge').isVisible());
-  await win.click('#dk-edge', { timeout: 8000 });
+  ok('…so with the dock closed inside focus mode the button is still offered, enabled',
+    await win.locator('#side-ai-btn').isVisible()
+      && !(await win.locator('#side-ai-btn').isDisabled()));
+  await win.click('#side-ai-btn', { timeout: 8000 });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
   ok('…and clicking it opens the dock inside the open analysis',
     await win.locator('#dk-panel').isVisible());

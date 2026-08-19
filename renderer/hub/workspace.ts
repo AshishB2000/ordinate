@@ -136,16 +136,17 @@ function initWorkspaceRouter(): void {
   document.querySelectorAll('.as-nav-item').forEach((item) => {
     item.addEventListener('click', () => selectSection((item as HTMLElement).dataset.section || 'home'));
   });
-  // The AI tool button toggles the DOCK (dock.ts), not Explore.
+  // The Agent toggle (top bar, right cell) toggles the DOCK (dock.ts), not
+  // Explore.
   //
   // 498d647 pointed it at Explore, which left two chat surfaces sharing one
   // button — except Explore already has its own top-level nav item, first in
-  // the nav above. So this was never Explore's only door; it was a SECOND
-  // door to a place that already had one, while the dock had no sidebar
-  // presence at all. Pointing it at the dock deletes the duplicate rather
-  // than adding a second thing labelled "AI": Explore keeps its nav item
-  // (blank page, pick a dataset, start cold) and "Ask AI" down here is the
-  // contextual one that knows what you're already looking at.
+  // the nav. So this was never Explore's only door; it was a SECOND door to
+  // a place that already had one, while the dock had no chrome presence at
+  // all. Pointing it at the dock deletes the duplicate rather than adding a
+  // second thing labelled "AI": Explore keeps its nav item (blank page, pick
+  // a dataset, start cold) and the Agent toggle is the contextual one that
+  // works on what you're already looking at (its tooltip says so).
   //
   // dkToggle() checks dkAllowed() itself, and dkSync() disables this button
   // wherever the dock is suppressed — the predicate is NOT duplicated here.

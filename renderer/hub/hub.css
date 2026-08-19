@@ -49,6 +49,80 @@ html[data-os="win"] .titlebar { padding-right: 146px; }
 /* Buttons stay clickable inside the drag region. */
 .titlebar button { -webkit-app-region: no-drag; }
 
+/* ── top bar ──────────────────────────────────────────────────────────
+   A sibling of .titlebar, never a child: that strip is a drag region with
+   per-OS padding reserving the macOS traffic lights and the Windows control
+   overlay, so an input inside it would have to opt back out of drag AND centre
+   against two asymmetric paddings that differ per OS.
+
+   Three columns with the two sides on EQUAL flex, so the search centres on the
+   WINDOW rather than on the space left over beside the Agent toggle: the sides grow and
+   shrink together, and the middle holds still as the window resizes. */
+.hub-topbar {
+  flex: 0 0 48px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+/* Equal flex on BOTH sides is what does the centring; `min-width: 0` lets them
+   shrink below their content instead of shoving the search off-centre. */
+.hub-topbar-side { flex: 1 1 0; min-width: 0; display: flex; align-items: center; }
+.hub-topbar-right { justify-content: flex-end; }
+/* The anchor for the results dropdown — the input and the dropdown under it are
+   the same box, so the width cap lives here rather than on either one.
+
+   It STRETCHES to the full bar height on purpose, and centres the input itself,
+   so that the dropdown's `top: 100%` resolves to the bar's bottom edge rather
+   than the input's. Left at the default (shrink to the 32px input, centred in a
+   48px bar) the dropdown hangs from 8px above the bar's border and overlaps it. */
+.hub-search-wrap {
+  position: relative;
+  flex: 0 1 520px;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+/* The capture surface is deliberately bare: it hides the sidebar too (below),
+   and dkAllowed() returns false there, so the Agent toggle would be a disabled
+   control marooned in an otherwise empty bar. */
+body.cap-focus .hub-topbar { display: none; }
+
+/* the thin divider before the Agent toggle */
+.hub-topbar-div { width: 0; height: 20px; border-left: 1px solid var(--border); flex: 0 0 auto; margin-right: 10px; }
+
+/* The Agent toggle. Icon-only, so aria-label carries the name; the active
+   state is the same accent-soft/accent pair .as-nav-item.active uses, and the
+   button stays visible while the dock is open — it is the collapse control
+   too (dock.ts's dkSync tracks aria-expanded). */
+.hub-ai-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.hub-ai-btn .ic { flex: 0 0 auto; }
+.hub-ai-btn:hover { background: var(--surface-2); color: var(--text); }
+.hub-ai-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Suppressed, not gone (dock.ts's dkSync disables rather than hides it, so the
+   bar does not reflow on every visit to Explore). Dimmed and inert so it reads
+   as "not here, not now" rather than as a dead control — and :hover must not
+   fire on it. */
+.hub-ai-btn:disabled { opacity: 0.4; cursor: default; }
+.hub-ai-btn:disabled:hover { background: transparent; color: var(--muted); }
+.hub-ai-btn[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+
 .glyph { display: inline-flex; color: var(--text-strong); }
 
 .tb-title {
@@ -3298,19 +3372,15 @@ img.exec-agent-img-tile { background: #f4f4f5; padding: 2px; box-sizing: border-
   line-height: 1.4;
 }
 
-/* The exec button shows the active agent's logo. Both of them: #exec-mode-btn in
-   the app sidebar and #exec-mode-btn-cap in the capture top bar, which are the
-   same control in two places rather than two controls. Extending these three
-   selectors is what keeps them looking identical without a second copy of the
-   rules. */
-#exec-mode-btn .exec-agent-logo,
+/* The exec button shows the active agent's logo. #exec-mode-btn (the app
+   sidebar's) was removed in the top-bar relayout, leaving #exec-mode-btn-cap on
+   the capture page as the only one — its selectors are kept alone here rather
+   than folded into a class, because the id is what execMenu.ts paints. */
 #exec-mode-btn-cap .exec-agent-logo { color: currentColor; }
 /* size only — color comes from the base .exec-agent-mono / brand classes so the
    button badge matches the brand badge shown in the agent list. */
-#exec-mode-btn .exec-agent-mono,
 #exec-mode-btn-cap .exec-agent-mono { width: 18px; height: 18px; font-size: 11px; }
 /* "no AI connected" state — neutral muted mark, no provider logo */
-#exec-mode-btn.exec-btn-empty,
 #exec-mode-btn-cap.exec-btn-empty { color: var(--muted); }
 
 .exec-model-sel {
@@ -3988,22 +4058,23 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   overflow: hidden;
 }
 
-/* search — pinned above the nav */
-.as-search {
+/* Global search — lives in the top bar (.hub-topbar), not in this column. It
+   searches the whole window, so it is not a section-nav control. The single
+   ruleset for its results dropdown is below, beside .gs-hit. */
+.hub-search {
   display: flex;
   align-items: center;
   gap: 7px;
   height: 32px;
   padding: 0 9px;
-  margin-bottom: 6px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   color: var(--text-faint);
 }
-.as-search .ic { flex: 0 0 auto; }
-.as-search:focus-within { border-color: var(--accent); }
-.as-search-input {
+.hub-search .ic { flex: 0 0 auto; }
+.hub-search:focus-within { border-color: var(--accent); }
+.hub-search-input {
   flex: 1 1 auto;
   min-width: 0;
   border: none;
@@ -4013,21 +4084,7 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   font-size: 12.5px;
   color: var(--text);
 }
-.as-search-input::placeholder { color: var(--text-faint); }
-
-/* search results dropdown (populated by the search wiring in a later phase) */
-.as-search-results {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  max-height: 260px;
-  overflow-y: auto;
-  margin: -2px 0 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--surface);
-}
-.as-search-results[hidden] { display: none; }
+.hub-search-input::placeholder { color: var(--text-faint); }
 
 /* primary nav */
 .as-nav { display: flex; flex-direction: column; gap: 2px; }
@@ -4110,7 +4167,9 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .as-connect-more:hover { text-decoration: underline; }
 .as-count::before { content: " "; }
 
-/* bottom tools — AI + settings, pinned to the base */
+/* bottom tools — Settings, pinned to the base. The AI door moved to the top
+   bar (the Agent toggle) and #exec-mode-btn was removed, so this group has one
+   member and one job. */
 .as-bottom {
   margin-top: auto;
   padding-top: 10px;
@@ -4119,7 +4178,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   flex-direction: column;
   gap: 4px;
 }
-.as-bottom-row { display: flex; align-items: center; gap: 4px; }
 .as-tool {
   display: inline-flex;
   align-items: center;
@@ -4136,22 +4194,18 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   cursor: pointer;
 }
 /* `hidden` loses to an explicit `display` — the same trap .an-side, .ds-explorer
-   and the import blocks all document, and the same trap `.dk-edge[hidden]`
-   (above) has its own explicit rule for. No `.as-tool` currently sets
-   `hidden` from JS (#side-ai-btn is DISABLED where the dock is suppressed,
-   not hidden — dock.ts's dkSync), but this is a correct latent fix kept
-   general on purpose: any future `.as-tool` that does would silently stay on
-   screen and clickable without it. */
+   and the import blocks all document. No `.as-tool` currently sets `hidden`
+   from JS, but this is a correct latent fix kept general on purpose: any
+   future one that does would silently stay on screen and clickable without it. */
 .as-tool[hidden] { display: none; }
 .as-tool .ic { flex: 0 0 auto; }
-/* Suppressed, not gone (see dkSync). Dimmed and non-interactive so it reads
-   as "not here, not now" rather than as a dead control — and the :hover rule
-   below must not fire on it. */
+/* Kept general: no `.as-tool` is disabled today (the dock's suppression now
+   dims #side-ai-btn in the top bar instead — see .hub-ai-btn:disabled), and
+   the :hover rule below must not fire on one that is. */
 .as-tool:disabled { opacity: 0.4; cursor: default; }
 .as-tool:disabled:hover { background: transparent; color: var(--muted); }
 .as-tool:hover { background: var(--surface-2); color: var(--text); }
 .as-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.as-tool--grow { flex: 1 1 auto; }
 .as-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -7920,6 +7974,7 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 
 .dash-presenting .sidebar,
 .dash-presenting .titlebar,
+.dash-presenting .hub-topbar,
 .dash-presenting .dash-editor-head,
 .dash-presenting .dash-toolbar,
 .dash-presenting .dash-starters,
@@ -9054,9 +9109,12 @@ body.an-focus #ws-analyses { padding: 0; }
    settings gears. Emptying it leaves a bare 40px drag strip.
    ponytail: content hidden, not the strip. Removing the strip means giving the
    window a new drag region and re-placing the traffic lights. */
+/* #exec-mode-btn was dropped from this list with the button itself. The top bar
+   deliberately stays VISIBLE here: focus mode hides the sidebar, and that is
+   exactly the case the removed #dk-edge tab existed to cover — the Agent
+   toggle in the bar is the mouse way into the dock inside an open analysis. */
 body.an-focus .titlebar .glyph,
 body.an-focus .titlebar .tb-title,
-body.an-focus #exec-mode-btn,
 body.an-focus #settings-gear { display: none; }
 
 /* One row up top: ‹ Back · name · spacer · ⋯ · Publish · Save. Rename folds into
@@ -9077,7 +9135,10 @@ body.an-focus .an-more-btn { display: inline-flex; }
    row and the workbench takes the rest. Height lives on the PANEL now, not on
    the workbench — the strip is outside it. */
 body.an-focus #ws-analyses {
-  height: calc(100vh - 40px);
+  /* the chrome above is .titlebar (40px) + .hub-topbar (48px) — the bar stays
+     in focus mode (see the comment above), so sizing against 40px left the
+     workbench's bottom 48px clipped under .win's overflow:hidden */
+  height: calc(100vh - 88px);
   min-height: 0;
 }
 body.an-focus .an-workbench.is-active {
@@ -9105,7 +9166,7 @@ body.an-focus .an-workbench.is-active > .dash-editor > .dash-ai-out {
   margin-left: 16px;
   margin-right: 16px;
 }
-body.an-focus .an-side { max-height: calc(100vh - 40px); }
+body.an-focus .an-side { max-height: calc(100vh - 88px); } /* titlebar + top bar, as above */
 
 /* The editor head is one row in focus mode. At 665px it was wrapping Save onto
    a second line, which pushed the sheet down and looked broken. */
@@ -9829,11 +9890,28 @@ body.cap-focus .cap-back {
 .ds-watch-btn:hover { color: var(--text); border-color: var(--accent); }
 .ds-watch-btn.is-on { color: var(--accent); border-color: var(--accent); background: var(--surface-2); }
 
-/* ── The sidebar's global search results ─────────────────────────────────── */
-.as-search-results[hidden] { display: none; }
-.as-search-results {
+/* ── Global search results ────────────────────────────────────────────────
+   The top bar's search dropdown, and the ONLY ruleset for it. There used to be
+   two — one here and one up beside the old sidebar search — and this one won
+   purely by coming later in the file, so edits to the other silently did
+   nothing. Keep it that way: one box, one ruleset.
+
+   ABSOLUTE, not in flow. In the sidebar this was a block that pushed the nav
+   down; in a 48px bar that would be clipped by the bar itself, so it hangs off
+   .hub-search-wrap (position: relative) instead. `top: 100%` puts it directly
+   under the input and `left/right: 0` matches its width without restating the
+   cap.
+
+   z-index 9960 is deliberate, not a round number: below ~1100px .dk-panel stops
+   being a flex sibling and becomes a fixed overlay at z-index 9950 with a 9940
+   scrim, and a 520px centred dropdown overlaps a 340px right-edge panel at that
+   width. Anything lower and the results render BEHIND an open dock. It stays
+   under the full-window settings/modal layers (100000+), which should cover it. */
+.hub-search-results[hidden] { display: none; }
+.hub-search-results {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 9960;
   display: flex; flex-direction: column; gap: 1px;
-  margin: 4px 8px 0; padding: 4px; max-height: 320px; overflow-y: auto;
+  margin: 4px 0 0; padding: 4px; max-height: 320px; overflow-y: auto;
   border: 1px solid var(--border); border-radius: 8px;
   background: var(--surface); box-shadow: 0 6px 18px rgb(0 0 0 / 16%);
 }
@@ -10121,53 +10199,12 @@ body.cap-focus .cap-back {
 }
 .dk-panel[hidden] { display: none; }
 
-/* Closed-state entry point (dock.ts's dkSync). Fixed at the right edge — the
-   dock itself is a flex sibling that reserves NO space while `hidden`, so
-   the window's right edge is free real estate to float a small tab on. Only
-   visible when dkAllowed() && !dkIsOpen(): once the panel is open, #dk-close
-   inside it (and ⌘L) are how you leave, so this would just be a second
-   control doing the same thing at the same edge.
-
-   It carries a WORD. The first version was a 32x44 icon-only tab in
-   --surface/--muted, i.e. the same grey a decorative edge treatment would
-   be, and it read as one — nobody clicked it. A label and an accent tint are
-   the whole fix: it now says what it does at rest, without a tour, a coach
-   mark or an onboarding overlay. The text runs vertically because the tab is
-   30px wide, and widening it into the canvas is exactly the cost the
-   icon-only version was buying. */
-.dk-edge {
-  position: fixed;
-  top: 50%;
-  right: 0;
-  transform: translateY(-50%);
-  z-index: 30;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  width: 30px;
-  padding: 13px 0;
-  border: 1px solid var(--accent-line);
-  border-right: none;
-  border-radius: var(--r-md) 0 0 var(--r-md);
-  background: var(--accent-soft);
-  color: var(--accent);
-  cursor: pointer;
-  box-shadow: var(--shadow-lg);
-}
-/* `writing-mode` rotates the glyphs as well as the flow, so the icon above it
-   must stay upright — it is a separate flex child, untouched by this. */
-.dk-edge-label {
-  writing-mode: vertical-rl;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  white-space: nowrap;
-}
-.dk-edge[hidden] { display: none; }
-.dk-edge:hover { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-.dk-edge:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* The closed-state edge tab (#dk-edge, .dk-edge/.dk-edge-label) was removed in
+   the top-bar relayout. It was a vertical tab floating at the window's right
+   edge — a second door to this panel, looking nothing like the first. It earned
+   its keep only in body.an-focus, which hides the sidebar the old labelled
+   "Ask AI" button lived in; the top bar is NOT hidden there, so the Agent
+   toggle covers that case and ⌘L is the other way in. */
 
 /* Drag handle — sits astride the panel's left border so half the hit target
    reads as "inside" and half as "outside", the same affordance a resizable
@@ -10320,7 +10357,11 @@ body.cap-focus .cap-back {
 @media (max-width: 1100px) {
   .dk-panel {
     position: fixed;
-    top: 40px; /* below .titlebar (flex: 0 0 40px) — an overlaid dock must not cover the drag strip */
+    /* Below the whole chrome stack: .titlebar (40px) + .hub-topbar (48px). An
+       overlaid dock must not cover the drag strip, and now must not cover the
+       top bar either — burying global search and the Agent toggle under the
+       panel it opens is how a toggle becomes a one-way door. */
+    top: 88px;
     right: 0;
     bottom: 0;
     /* `flex-basis` has no effect once the item is out of flow (position:
@@ -10333,7 +10374,7 @@ body.cap-focus .cap-back {
   body.dk-open .dk-scrim {
     display: block;
     position: fixed;
-    top: 40px;
+    top: 88px; /* matches .dk-panel above — chrome stays reachable behind the scrim */
     left: 0; right: 0; bottom: 0;
     background: rgba(15, 23, 42, 0.45);
     z-index: 9940;
