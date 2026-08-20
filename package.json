@@ -2,7 +2,7 @@
   "name": "screenchart",
   "version": "0.1.0",
   "description": "Screenshot a chart or table, press a hotkey, get a plain-English explanation or an auto-drawn chart.",
-  "main": "main.js",
+  "main": "src/main.js",
   "author": "Screenchart",
   "homepage": "https://screenshot.app",
   "scripts": {
@@ -17,7 +17,7 @@
     "pretest": "npm run build",
     "test": "node --test --test-reporter=spec \"scripts/test-*.js\"",
     "test:coverage": "node --test --experimental-test-coverage \"scripts/test-*.js\"",
-    "lint": "oxlint --type-aware --tsconfig=tsconfig.main.json src scripts preload main.ts && oxlint --type-aware --tsconfig=tsconfig.renderer.json renderer",
+    "lint": "oxlint --type-aware --tsconfig=tsconfig.main.json src scripts preload && oxlint --type-aware --tsconfig=tsconfig.renderer.json renderer",
     "icons:verify": "node scripts/verify-icons.js",
     "predist:mac": "npm run build && npm i --force --no-save --no-audit --no-fund @duckdb/node-bindings-darwin-x64@1.5.5-r.3",
     "dist:mac": "electron-builder --mac --publish never",

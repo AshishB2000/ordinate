@@ -56,11 +56,11 @@ app.on('second-instance', () => {
   }
 });
 
-import { captureFrozenFrame, cropToRect, getActiveDisplay } from './src/app/capture';
-import * as config from './src/app/config';
-import * as localCli from './src/cli/localCli';
-import * as localCliRun from './src/cli/localCliRun';
-import { analyze, analyzeFollowup } from './src/ai/analyze';
+import { captureFrozenFrame, cropToRect, getActiveDisplay } from './app/capture';
+import * as config from './app/config';
+import * as localCli from './cli/localCli';
+import * as localCliRun from './cli/localCliRun';
+import { analyze, analyzeFollowup } from './ai/analyze';
 
 console.log('[boot] Ordinate', app.getVersion(), '| packaged =', app.isPackaged);
 
@@ -75,11 +75,11 @@ function persistableResult(result: any): any {
   const { _messages, ...rest } = result;
   return rest;
 }
-import * as history from './src/app/history';
-import * as projects from './src/app/projects';
-import * as datasets from './src/data/datasets';
-import * as copilot from './src/ai/copilot';
-import { resolveUserPath } from './src/cli/userPath';
+import * as history from './app/history';
+import * as projects from './app/projects';
+import * as datasets from './data/datasets';
+import * as copilot from './ai/copilot';
+import { resolveUserPath } from './cli/userPath';
 
 // Packaged macOS/Linux GUI launches inherit a stripped PATH (no Homebrew, nvm,
 // ~/.local/bin…), which would make Local CLI detection (claude, agy) find nothing.
@@ -90,10 +90,10 @@ if (app.isPackaged) {
   console.log('[userPath] recovered PATH —', recovered.split(':').length, 'dirs');
 }
 
-import { createOverlayWindow } from './src/windows/overlayWindow';
-import { createHubWindow } from './src/windows/hubWindow';
+import { createOverlayWindow } from './windows/overlayWindow';
+import { createHubWindow } from './windows/hubWindow';
 
-import { platformDefaultHotkey, hotkeyLabel } from './src/app/hotkey';
+import { platformDefaultHotkey, hotkeyLabel } from './app/hotkey';
 
 let overlayWindow: BrowserWindow | null = null;
 let hubWindow: BrowserWindow | null = null;
@@ -446,13 +446,13 @@ ipcMain.handle('key:status', () => config.publicConfig());
 
 // NOTE: these IPC registrations stay as positional require(...).register(...)
 // calls (not hoisted imports) so module load order matches the original main.js.
-require("./src/ipc/geo").register();
+require("./ipc/geo").register();
 
-require("./src/ipc/theme").register({ getHubWindow: () => hubWindow });
+require("./ipc/theme").register({ getHubWindow: () => hubWindow });
 
-require("./src/ipc/providers").register({ getHubWindow: () => hubWindow, notifyKeyChanged });
+require("./ipc/providers").register({ getHubWindow: () => hubWindow, notifyKeyChanged });
 
-require("./src/ipc/cli").register({ notifyKeyChanged });
+require("./ipc/cli").register({ notifyKeyChanged });
 
 // ── IPC: hotkey ───────────────────────────────────────────────────────────
 
@@ -489,7 +489,7 @@ ipcMain.handle('hotkey:save', (_e, { accelerator }) => {
   return { ok: false, error: 'Could not register — it may be in use by another app' };
 });
 
-require("./src/ipc/shell").register();
+require("./ipc/shell").register();
 
 // ── IPC: hub capture actions ──────────────────────────────────────────────
 
@@ -561,26 +561,26 @@ ipcMain.on('hub:followup', (_e, { entryId, text }) => {
   });
 });
 
-require("./src/ipc/historyIpc").register({
+require("./ipc/historyIpc").register({
   entryData, entryThreads, entryDataUrls,
   removeSummary: (id: string) => { historySummaries = historySummaries.filter(s => s.id !== id); },
 });
 
-require("./src/ipc/clipboard").register();
+require("./ipc/clipboard").register();
 
-require("./src/ipc/fileSave").register();
+require("./ipc/fileSave").register();
 
-require("./src/ipc/capture").register();
+require("./ipc/capture").register();
 
-require("./src/ipc/projects").register();
+require("./ipc/projects").register();
 
-require("./src/ipc/recent").register();
+require("./ipc/recent").register();
 
-require("./src/ipc/datasets").register();
+require("./ipc/datasets").register();
 // The composer's two handlers. Registered AFTER datasets, which hands it the
 // commitSteps primitive during its own register().
-require("./src/ipc/datasetCompose").register();
-require("./src/ipc/search").register();
+require("./ipc/datasetCompose").register();
+require("./ipc/search").register();
 
 // Unattended dataset refresh. Ordinate has no daemon: this ticks while the app
 // is RUNNING, and anything that came due while it was closed is simply overdue
@@ -589,7 +589,7 @@ require("./src/ipc/search").register();
 // The master switch is read on EVERY tick rather than captured here, so turning
 // it off in Settings takes effect at once instead of at the next restart.
 {
-  const scheduler = require("./src/app/refreshScheduler");
+  const scheduler = require("./app/refreshScheduler");
   scheduler.setEnabledCheck(() => config.get().autoRefresh !== false);
 
   // A row count that moves this much is worth interrupting someone for; a
@@ -616,7 +616,7 @@ require("./src/ipc/search").register();
       return; // one notification per dataset per tick
     }
     if (o.newAnomalies > 0) {
-      maybeNotify(require("./src/analysis/anomalyWatch").watchMessage(o.name, o.newAnomalies));
+      maybeNotify(require("./analysis/anomalyWatch").watchMessage(o.name, o.newAnomalies));
     }
   });
 
@@ -624,24 +624,24 @@ require("./src/ipc/search").register();
   app.on("before-quit", () => scheduler.stop());
 }
 
-require("./src/ipc/connections").register();
+require("./ipc/connections").register();
 
-require("./src/ipc/visuals").register();
+require("./ipc/visuals").register();
 
-require("./src/ipc/dashboards").register();
+require("./ipc/dashboards").register();
 
 // Analyses — the AUTHORING container a dashboard is published FROM. Also owns
 // `analysis:draft`, which replaced the deleted `dashboard:draft`.
-require("./src/ipc/analyses").register();
+require("./ipc/analyses").register();
 
-require("./src/ipc/dashboardExport").register();
+require("./ipc/dashboardExport").register();
 
-require("./src/ipc/copilot").register();
+require("./ipc/copilot").register();
 
 // Phase 3c — the Mosaic connector (mosaic:view / mosaic:query). Registering is
 // free: the DuckDB connection is hardened lazily on the FIRST Mosaic call, so a
 // session that never opens a Mosaic chart pays nothing and the bridge stays lazy.
-require("./src/ipc/mosaic").register();
+require("./ipc/mosaic").register();
 
 // Phase 7 — pre-register the folders the local-file connectors have been pointed
 // at, BEFORE anything can harden the connection.
@@ -657,9 +657,9 @@ require("./src/ipc/mosaic").register();
 // every launch for a feature they do not use — the exact laziness the comment
 // above is protecting.
 try {
-  const localDirs = require("./src/connectors/local").registeredDirs(app.getPath("userData"));
+  const localDirs = require("./connectors/local").registeredDirs(app.getPath("userData"));
   if (Array.isArray(localDirs) && localDirs.length) {
-    require("./src/ipc/mosaic")
+    require("./ipc/mosaic")
       .hardenConnection([app.getPath("userData"), ...localDirs])
       .catch(() => { /* best-effort: a failure costs a restart, never correctness */ });
   }
@@ -668,7 +668,7 @@ try {
 // Week 13 — capture → dataset bridge. resolveCropPath hands the on-disk crop path
 // from main's per-entry state (entryData, then the summaries cache) so a renderer-
 // sent path is never trusted; both maps already carry cropPath per entryId.
-require("./src/ipc/captureDataset").register({
+require("./ipc/captureDataset").register({
   resolveCropPath: (entryId: any) => {
     const data = entryData.get(entryId);
     if (data && typeof data.cropPath === 'string' && data.cropPath) return data.cropPath;

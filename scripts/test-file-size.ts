@@ -102,7 +102,7 @@ const ALLOWED: Record<string, number> = {
 
 // Roots to walk. `scripts` is included for the hand-written build tools that
 // have no `.ts` sibling as much as for the test sources themselves.
-const ROOTS = ['main.ts', 'src', 'renderer', 'preload', 'scripts'];
+const ROOTS = ['src', 'renderer', 'preload', 'scripts'];
 
 // Not sources: dependencies, the committed vgplot bundle (build output of
 // scripts/build-vendor.js), and the esbuild-generated Svelte island bundle.
