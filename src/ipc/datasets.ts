@@ -29,7 +29,7 @@ import {
 // they drift apart.
 import { sanitizeFilters } from '../visuals';
 import { explainText, suggestSteps, suggestCalcField } from '../analyze';
-import { compile } from '../formula';
+import { compile } from '../formula/formula';
 import * as trace from '../residentTrace';
 
 // Datasets (file-based data sources) IPC — pick+parse/paste/save/list/get/delete.

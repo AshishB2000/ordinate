@@ -45,8 +45,8 @@
 
 import type { ParsedColumn } from './parse';
 import type { Cell, FilterStep, TransformStep } from './transforms';
-import type { FValue } from './formula';
-import { compile } from './formula';
+import type { FValue } from './formula/formula';
+import { compile } from './formula/formula';
 import type { ColumnSummary } from './datasetStats';
 import * as datasets from './datasets';
 import * as visuals from './visuals';

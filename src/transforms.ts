@@ -15,8 +15,8 @@
 
 import type { ParsedColumn } from './parse';
 import { detectColumnType, coerceValue } from './parse';
-import { compile } from './formula';
-import type { FValue } from './formula';
+import { compile } from './formula/formula';
+import type { FValue } from './formula/formula';
 import { runOnDuckDb } from './pipelineDuck';
 import type { FilterOp } from './filterOps';
 import { FILTER_OPS, LIST_OPS, emptyListWarning } from './filterOps';

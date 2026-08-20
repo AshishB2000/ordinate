@@ -4,7 +4,7 @@
 import { net } from 'electron';
 import * as config from './config';
 import { runLocalCli } from './localCliRun';
-import { computeMetrics, deriveChartData } from './calc';
+import { computeMetrics, deriveChartData } from './formula/calc';
 import { writeHeadline, verifyHeadlineNumbers } from './headline';
 import { SUGGESTABLE_CHART_TYPES } from './visuals';
 import { streamProvider } from './analyzeStream';
