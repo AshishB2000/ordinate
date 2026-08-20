@@ -65,11 +65,11 @@ const path = require('path') as typeof import('path');
 const os = require('os') as typeof import('os');
 
 // ponytail: compiled siblings of the src/ modules under test.
-const transforms: typeof import('../src/transforms') = require('../src/transforms');
-const combine: typeof import('../src/combine') = require('../src/combine');
-const vizData: typeof import('../src/vizData') = require('../src/vizData');
-const datasetStats: typeof import('../src/datasetStats') = require('../src/datasetStats');
-const metricValue: typeof import('../src/metricValue') = require('../src/metricValue');
+const transforms: typeof import('../src/data/transforms') = require('../src/data/transforms');
+const combine: typeof import('../src/data/combine') = require('../src/data/combine');
+const vizData: typeof import('../src/analysis/vizData') = require('../src/analysis/vizData');
+const datasetStats: typeof import('../src/data/datasetStats') = require('../src/data/datasetStats');
+const metricValue: typeof import('../src/analysis/metricValue') = require('../src/analysis/metricValue');
 
 const { applyPipeline } = transforms;
 const { combineTables } = combine;
@@ -77,10 +77,10 @@ const { buildVizData } = vizData;
 const { computeColumnSummary } = datasetStats;
 const { computeMetric } = metricValue;
 
-type ParsedColumn = import('../src/parse').ParsedColumn;
-type Cell = import('../src/transforms').Cell;
-type TableData = import('../src/transforms').TableData;
-type TransformStep = import('../src/transforms').TransformStep;
+type ParsedColumn = import('../src/data/parse').ParsedColumn;
+type Cell = import('../src/data/transforms').Cell;
+type TableData = import('../src/data/transforms').TableData;
+type TransformStep = import('../src/data/transforms').TransformStep;
 
 // ── Deterministic data generation ────────────────────────────────────────────
 // xorshift32, NOT Math.random(): the same seed must produce the same table on

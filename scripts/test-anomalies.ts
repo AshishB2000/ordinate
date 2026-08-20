@@ -5,8 +5,8 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 
-const { detectAnomalies, buildAnomaliesFacts } = require('../src/anomalies') as typeof import('../src/anomalies');
-import type { Anomaly, AnomalyKind } from '../src/anomalies';
+const { detectAnomalies, buildAnomaliesFacts } = require('../src/analysis/anomalies') as typeof import('../src/analysis/anomalies');
+import type { Anomaly, AnomalyKind } from '../src/analysis/anomalies';
 
 let failures = 0;
 function ok(label: string, cond: boolean) {

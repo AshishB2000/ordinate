@@ -1,7 +1,7 @@
 import { ipcMain, app, dialog, BrowserWindow, MessageBoxOptions } from 'electron';
-import * as config from '../config';
-import { testProvider } from '../analyze';
-import * as history from '../history';
+import * as config from '../app/config';
+import { testProvider } from '../ai/analyze';
+import * as history from '../app/history';
 
 // Key / provider management IPC — Ollama endpoint, key validate/save/clear,
 // provider + execution-mode activation, BYOK provider config/test/reveal, global

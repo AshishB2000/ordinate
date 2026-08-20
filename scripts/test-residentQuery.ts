@@ -19,14 +19,14 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import * as rq from '../src/residentQuery';
-import * as pq from '../src/parquetStore';
-import * as duck from '../src/duckdb';
-import * as metricValue from '../src/metricValue';
-import * as vizData from '../src/vizData';
-import type { ParsedColumn } from '../src/parse';
-import type { Cell, FilterStep } from '../src/transforms';
-import type { VizEncoding } from '../src/visuals';
+import * as rq from '../src/engine/residentQuery';
+import * as pq from '../src/engine/parquetStore';
+import * as duck from '../src/engine/duckdb';
+import * as metricValue from '../src/analysis/metricValue';
+import * as vizData from '../src/analysis/vizData';
+import type { ParsedColumn } from '../src/data/parse';
+import type { Cell, FilterStep } from '../src/data/transforms';
+import type { VizEncoding } from '../src/analysis/visuals';
 
 let failures = 0;
 function ok(label: string, cond: boolean): void {
@@ -87,7 +87,7 @@ function diffMetric(label: string, f: Fixture, column: string, filters?: FilterS
 // The reference path for a filtered metric is exactly what ipc/dashboards.ts
 // does today: applyPipeline the filters in JS, then computeMetric the result.
 function applyFilters(f: Fixture, filters: FilterStep[]): Cell[][] {
-  const transforms: typeof import('../src/transforms') = require('../src/transforms');
+  const transforms: typeof import('../src/data/transforms') = require('../src/data/transforms');
   return transforms.applyPipeline({ columns: f.columns, rows: f.rows }, filters).rows;
 }
 

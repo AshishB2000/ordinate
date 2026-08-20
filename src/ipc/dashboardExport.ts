@@ -1,8 +1,8 @@
 import { ipcMain, dialog, app, shell } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
-import { buildSelfContainedHtml } from '../dashboardExport';
-import { captureHtmlToPng, captureHtmlToPdf } from '../reportCapture';
+import { buildSelfContainedHtml } from '../analysis/dashboardExport';
+import { captureHtmlToPng, captureHtmlToPdf } from '../app/reportCapture';
 
 // Dashboard EXPORT + SHARE IPC — MAIN PROCESS.
 //

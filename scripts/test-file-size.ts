@@ -92,17 +92,17 @@ const ALLOWED: Record<string, number> = {
   'scripts/test-analysis.ts': 813,
   'scripts/test-anomaliesResident.ts': 837,
   'scripts/test-connectorsHttp.ts': 889,
-  'src/analysisPlan.ts': 884,
-  'src/analyze.ts': 1021,
-  'src/anomaliesResident.ts': 870,
+  'src/analysis/analysisPlan.ts': 884,
+  'src/ai/analyze.ts': 1021,
+  'src/engine/anomaliesResident.ts': 870,
   'src/connectors/http.ts': 1036,
   'src/connectors/local.ts': 804,
-  'src/localCliRun.ts': 822,
+  'src/cli/localCliRun.ts': 822,
 };
 
 // Roots to walk. `scripts` is included for the hand-written build tools that
 // have no `.ts` sibling as much as for the test sources themselves.
-const ROOTS = ['main.ts', 'src', 'renderer', 'preload', 'scripts'];
+const ROOTS = ['src', 'renderer', 'preload', 'scripts'];
 
 // Not sources: dependencies, the committed vgplot bundle (build output of
 // scripts/build-vendor.js), and the esbuild-generated Svelte island bundle.

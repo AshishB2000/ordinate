@@ -22,8 +22,8 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled siblings of the real modules.
-const dashboards: typeof import('../src/dashboards') = require('../src/dashboards');
-const projects: typeof import('../src/projects') = require('../src/projects');
+const dashboards: typeof import('../src/analysis/dashboards') = require('../src/analysis/dashboards');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 
 let failures = 0;
 function ok(label: string, cond: boolean) {

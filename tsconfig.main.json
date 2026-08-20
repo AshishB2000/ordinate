@@ -11,5 +11,5 @@
     "types": ["node"],
     "tsBuildInfoFile": "node_modules/.cache/tsc/main.tsbuildinfo"
   },
-  "include": ["main.ts", "src/**/*.ts", "preload/**/*.ts", "scripts/**/*.ts"]
+  "include": ["src/**/*.ts", "preload/**/*.ts", "scripts/**/*.ts"]
 }

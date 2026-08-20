@@ -5,9 +5,9 @@
 export {}; // module scope — sibling test scripts share top-level names
 
 // ponytail: compiled sibling of ../src/formula.ts.
-const formula: typeof import('../src/formula') = require('../src/formula');
+const formula: typeof import('../src/formula/formula') = require('../src/formula/formula');
 const { compile } = formula;
-import type { FValue } from '../src/formula';
+import type { FValue } from '../src/formula/formula';
 
 let failures = 0;
 function ok(label: string, cond: boolean) {
@@ -255,7 +255,7 @@ ok('CASE without WHEN → error', isErr('CASE x END'));
 (() => {
   const fs = require('fs');
   const path = require('path');
-  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'formula.ts'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'formula', 'formula.ts'), 'utf8');
   const stripped = src.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
   ok('source contains no eval(', !/\beval\s*\(/.test(stripped));
   ok('source contains no new Function', !/new\s+Function\s*\(/.test(stripped));

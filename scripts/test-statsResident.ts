@@ -32,10 +32,10 @@ const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const Module: any = require('module');
 
-type Cell = import('../src/transforms').Cell;
-type ParsedColumn = import('../src/parse').ParsedColumn;
-type ColumnSummary = import('../src/datasetStats').ColumnSummary;
-type QualityIssue = import('../src/datasetStats').QualityIssue;
+type Cell = import('../src/data/transforms').Cell;
+type ParsedColumn = import('../src/data/parse').ParsedColumn;
+type ColumnSummary = import('../src/data/datasetStats').ColumnSummary;
+type QualityIssue = import('../src/data/datasetStats').QualityIssue;
 type IpcHandler = (event: unknown, payload?: unknown) => Promise<any>;
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-stats-resident-'));
@@ -61,11 +61,11 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled siblings of the REAL modules (built by pretest).
-const parquetStore: typeof import('../src/parquetStore') = require('../src/parquetStore');
-const datasetStats: typeof import('../src/datasetStats') = require('../src/datasetStats');
-const statsResident: typeof import('../src/statsResident') = require('../src/statsResident');
-const projects: typeof import('../src/projects') = require('../src/projects');
-const datasets: typeof import('../src/datasets') = require('../src/datasets');
+const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
+const datasetStats: typeof import('../src/data/datasetStats') = require('../src/data/datasetStats');
+const statsResident: typeof import('../src/engine/statsResident') = require('../src/engine/statsResident');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
+const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const datasetsIpc: typeof import('../src/ipc/datasets') = require('../src/ipc/datasets');
 
 datasetsIpc.register();

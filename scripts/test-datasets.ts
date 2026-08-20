@@ -24,10 +24,10 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled siblings of ../src/datasets.ts + ../src/projects.ts.
-const datasets: typeof import('../src/datasets') = require('../src/datasets');
-const projects: typeof import('../src/projects') = require('../src/projects');
-const transforms: typeof import('../src/transforms') = require('../src/transforms');
-const combine: typeof import('../src/combine') = require('../src/combine');
+const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
+const transforms: typeof import('../src/data/transforms') = require('../src/data/transforms');
+const combine: typeof import('../src/data/combine') = require('../src/data/combine');
 
 let failures = 0;
 function ok(label: string, cond: boolean) {

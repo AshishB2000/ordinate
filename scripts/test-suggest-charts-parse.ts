@@ -35,10 +35,10 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled siblings of the .ts sources under test.
-const analyze: typeof import('../src/analyze') = require('../src/analyze');
-const config: any = require('../src/config');
-const localCliRun: any = require('../src/localCliRun');
-const visuals: typeof import('../src/visuals') = require('../src/visuals');
+const analyze: typeof import('../src/ai/analyze') = require('../src/ai/analyze');
+const config: any = require('../src/app/config');
+const localCliRun: any = require('../src/cli/localCliRun');
+const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 
 let failures = 0;
 function ok(label: string, cond: boolean, detail?: string): void {

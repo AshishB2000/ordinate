@@ -8,14 +8,14 @@
 export {}; // module scope — sibling test scripts share top-level names
 
 // ponytail: compiled siblings of the real pure modules (built by pretest).
-const { mergeDashboardFilters, controlSteps }: typeof import('../src/dashboardFilters') = require('../src/dashboardFilters');
-const { buildVizData }: typeof import('../src/vizData') = require('../src/vizData');
-const { computeMetric }: typeof import('../src/metricValue') = require('../src/metricValue');
-const { applyPipeline }: typeof import('../src/transforms') = require('../src/transforms');
-type FilterStep = import('../src/transforms').FilterStep;
-type Cell = import('../src/transforms').Cell;
-type ParsedColumn = import('../src/parse').ParsedColumn;
-type ControlValue = import('../src/dashboards').ControlValue;
+const { mergeDashboardFilters, controlSteps }: typeof import('../src/analysis/dashboardFilters') = require('../src/analysis/dashboardFilters');
+const { buildVizData }: typeof import('../src/analysis/vizData') = require('../src/analysis/vizData');
+const { computeMetric }: typeof import('../src/analysis/metricValue') = require('../src/analysis/metricValue');
+const { applyPipeline }: typeof import('../src/data/transforms') = require('../src/data/transforms');
+type FilterStep = import('../src/data/transforms').FilterStep;
+type Cell = import('../src/data/transforms').Cell;
+type ParsedColumn = import('../src/data/parse').ParsedColumn;
+type ControlValue = import('../src/analysis/dashboards').ControlValue;
 
 let failures = 0;
 function ok(label: string, cond: boolean) {

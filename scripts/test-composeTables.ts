@@ -25,9 +25,9 @@
 //   npm run build:ts && node scripts/test-composeTables.js
 
 // ponytail: compiled sibling of ../src/combine.ts.
-const combine: typeof import('../src/combine') = require('../src/combine');
-import type { Cell, TableData } from '../src/transforms';
-import type { ParsedColumn } from '../src/parse';
+const combine: typeof import('../src/data/combine') = require('../src/data/combine');
+import type { Cell, TableData } from '../src/data/transforms';
+import type { ParsedColumn } from '../src/data/parse';
 
 const { combineTables, composeTables, normalizeCombineMode } = combine;
 

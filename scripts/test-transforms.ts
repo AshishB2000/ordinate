@@ -5,12 +5,12 @@
 export {}; // module scope — sibling test scripts share top-level names
 
 // ponytail: compiled sibling of ../src/transforms.ts.
-const transforms: typeof import('../src/transforms') = require('../src/transforms');
-const combine: typeof import('../src/combine') = require('../src/combine');
+const transforms: typeof import('../src/data/transforms') = require('../src/data/transforms');
+const combine: typeof import('../src/data/combine') = require('../src/data/combine');
 const { applyPipeline, sanitizeSteps } = transforms;
 const { combineTables } = combine;
-import type { TableData, TransformStep, Cell } from '../src/transforms';
-import type { ParsedColumn } from '../src/parse';
+import type { TableData, TransformStep, Cell } from '../src/data/transforms';
+import type { ParsedColumn } from '../src/data/parse';
 
 let failures = 0;
 function ok(label: string, cond: boolean) {

@@ -15,10 +15,10 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import * as pq from '../src/parquetStore';
-import * as duck from '../src/duckdb';
-import type { ParsedColumn } from '../src/parse';
-import type { Cell } from '../src/transforms';
+import * as pq from '../src/engine/parquetStore';
+import * as duck from '../src/engine/duckdb';
+import type { ParsedColumn } from '../src/data/parse';
+import type { Cell } from '../src/data/transforms';
 
 let failures = 0;
 function ok(label: string, cond: boolean): void {

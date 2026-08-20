@@ -84,9 +84,9 @@ async function main(): Promise<void> {
   // not fresh copies, so this is the shipped code path.
   const r: any = await app.evaluate(async () => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const projects = req('./src/projects.js');
-    const datasets = req('./src/datasets.js');
-    const visuals = req('./src/visuals.js');
+    const projects = req('./src/app/projects.js');
+    const datasets = req('./src/data/datasets.js');
+    const visuals = req('./src/analysis/visuals.js');
     const out: any = {};
 
     await projects.init();
@@ -123,8 +123,8 @@ async function main(): Promise<void> {
     // dashboard:metric actually use since Phase 2.5. At a million rows the old
     // hydrate-then-fold would dominate this test's runtime while exercising a
     // path the app no longer takes.
-    const residentQuery = req('./src/residentQuery.js');
-    const datasetPage = req('./src/datasetPage.js');
+    const residentQuery = req('./src/engine/residentQuery.js');
+    const datasetPage = req('./src/engine/datasetPage.js');
     const src = await datasets.residentSource(proj.id, ds.id);
     out.hasResidentSource = !!src;
 
@@ -154,7 +154,7 @@ async function main(): Promise<void> {
     //   1. the chart returns only the 3 listed groups,
     //   2. the metric changes (a skipped predicate would return the full sum),
     //   3. residentTrace says 'resident', not 'skipped' or 'failed'.
-    const trace = req('./src/residentTrace.js');
+    const trace = req('./src/engine/residentTrace.js');
     const ipcVisuals = req('./src/ipc/visuals.js');
     const inFilter = [
       { type: 'filter', column: 'region', op: 'in', values: ['region0', 'region2', 'region4'] },
@@ -251,7 +251,7 @@ async function main(): Promise<void> {
     // file origin — the fixture for the refresh chain further down. Everything
     // else in this file is saved from in-memory rows; this one has to be a file,
     // because the whole point is re-reading it after it changes.
-    const fileImport = req('./src/fileImport.js');
+    const fileImport = req('./src/data/fileImport.js');
     const csvPath = nodePath.join(userDataDir, 'refreshable.csv');
     nodeFs.writeFileSync(csvPath, 'city,visits\nOslo,10\nBergen,20\n', 'utf8');
     const parsed = await fileImport.parseFile(csvPath, 'csv');
@@ -1761,7 +1761,7 @@ async function main(): Promise<void> {
   // which is what made this first report "not saved" for a write that worked.
   const persisted = await app.evaluate(async (_electron, arg: any) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const visuals = req('./src/visuals.js');
+    const visuals = req('./src/analysis/visuals.js');
     const v = await visuals.getVisual(arg.projectId, arg.visualId);
     return { hasOverrides: !!v && !!v.overrides, showLegend: v && v.overrides && v.overrides.showLegend };
   }, { projectId: r.projectId, visualId: r.mapVisualId });
@@ -1824,7 +1824,7 @@ async function main(): Promise<void> {
   await win.waitForTimeout(1800);
   const savedInteract = await app.evaluate(async (_electron, arg: any) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const visuals = req('./src/visuals.js');
+    const visuals = req('./src/analysis/visuals.js');
     const v = await visuals.getVisual(arg.projectId, arg.visualId);
     return { crossFilter: v && v.overrides && v.overrides.crossFilter };
   }, { projectId: r.projectId, visualId: r.mapVisualId });

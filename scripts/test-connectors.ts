@@ -34,9 +34,9 @@ Module._load = function (request: string, ...rest: any[]): any {
 // ponytail: compiled siblings of the .ts sources.
 const registry: typeof import('../src/connectors') = require('../src/connectors');
 const types: typeof import('../src/connectors/types') = require('../src/connectors/types');
-const connections: typeof import('../src/connections') = require('../src/connections');
-const connectionRun: typeof import('../src/connectionRun') = require('../src/connectionRun');
-const projects: typeof import('../src/projects') = require('../src/projects');
+const connections: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
+const connectionRun: typeof import('../src/connectors/connectionRun') = require('../src/connectors/connectionRun');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 
 let failures = 0;
 function ok(label: string, cond: boolean, extra?: unknown): void {

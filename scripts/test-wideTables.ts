@@ -25,13 +25,13 @@ Module._load = function (request: string, ...rest: any[]): any {
   return origLoad.apply(this, [request, ...rest]);
 };
 
-const datasets: typeof import('../src/datasets') = require('../src/datasets');
-const projects: typeof import('../src/projects') = require('../src/projects');
-const datasetStats: typeof import('../src/datasetStats') = require('../src/datasetStats');
-const statsResident: typeof import('../src/statsResident') = require('../src/statsResident');
-const datasetPage: typeof import('../src/datasetPage') = require('../src/datasetPage');
-const residentQuery: typeof import('../src/residentQuery') = require('../src/residentQuery');
-const duck: typeof import('../src/duckdb') = require('../src/duckdb');
+const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
+const datasetStats: typeof import('../src/data/datasetStats') = require('../src/data/datasetStats');
+const statsResident: typeof import('../src/engine/statsResident') = require('../src/engine/statsResident');
+const datasetPage: typeof import('../src/engine/datasetPage') = require('../src/engine/datasetPage');
+const residentQuery: typeof import('../src/engine/residentQuery') = require('../src/engine/residentQuery');
+const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 
 let failures = 0;
 function ok(label: string, cond: boolean, extra?: string): void {

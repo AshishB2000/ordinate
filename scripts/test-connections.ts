@@ -23,9 +23,9 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled siblings of the .ts sources.
-const connections: typeof import('../src/connections') = require('../src/connections');
-const projects: typeof import('../src/projects') = require('../src/projects');
-const configSecrets: typeof import('../src/configSecrets') = require('../src/configSecrets');
+const connections: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
+const configSecrets: typeof import('../src/app/configSecrets') = require('../src/app/configSecrets');
 
 let failures = 0;
 function ok(label: string, cond: boolean) {

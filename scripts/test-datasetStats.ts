@@ -5,7 +5,7 @@
 export {}; // module scope — sibling test scripts share top-level names
 
 // ponytail: compiled sibling of ../src/datasetStats.ts.
-const stats: typeof import('../src/datasetStats') = require('../src/datasetStats');
+const stats: typeof import('../src/data/datasetStats') = require('../src/data/datasetStats');
 const { computeColumnSummary, findQualityIssues } = stats;
 
 let failures = 0;

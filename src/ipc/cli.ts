@@ -1,9 +1,9 @@
 import { ipcMain } from 'electron';
-import * as config from '../config';
-import * as localCli from '../localCli';
-import { testLocalCli } from '../analyze';
-import * as liveModels from '../models';
-import { listAntigravityModels, listGrokModels, listOpenCodeModels, listCursorModels } from '../localCliRun';
+import * as config from '../app/config';
+import * as localCli from '../cli/localCli';
+import { testLocalCli } from '../ai/analyze';
+import * as liveModels from '../ai/models';
+import { listAntigravityModels, listGrokModels, listOpenCodeModels, listCursorModels } from '../cli/localCliRun';
 
 // Local CLI detection + model IPC — cli:detect/detectOne/setActive/test/models/
 // saveModel and the shared models:list. Extracted from main.js as a pure

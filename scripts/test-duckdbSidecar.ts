@@ -18,8 +18,8 @@
 //
 //   npm run build:ts && node scripts/test-duckdbSidecar.js
 
-import * as duck from '../src/duckdb';
-import * as side from '../src/duckdbSidecar';
+import * as duck from '../src/engine/duckdb';
+import * as side from '../src/engine/duckdbSidecar';
 
 let failures = 0;
 function ok(label: string, cond: boolean): void {

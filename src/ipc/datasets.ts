@@ -1,21 +1,21 @@
 import { ipcMain, dialog } from 'electron';
 import * as path from 'path';
-import { parsePaste } from '../parse';
+import { parsePaste } from '../data/parse';
 // One parser and one byte ceiling, shared with the refresh service — see
 // src/fileImport.ts for why they moved out of this file.
-import { parseFile, sourceKindFor } from '../fileImport';
-import { refreshDataset } from '../datasetRefresh';
-import * as datasets from '../datasets';
-import * as transforms from '../transforms';
+import { parseFile, sourceKindFor } from '../data/fileImport';
+import { refreshDataset } from '../data/datasetRefresh';
+import * as datasets from '../data/datasets';
+import * as transforms from '../data/transforms';
 import * as compose from './datasetCompose';
-import type { Cell } from '../transforms';
-import { computeColumnSummary, findQualityIssues, ColumnSummary, QualityIssue } from '../datasetStats';
+import type { Cell } from '../data/transforms';
+import { computeColumnSummary, findQualityIssues, ColumnSummary, QualityIssue } from '../data/datasetStats';
 import {
   computeColumnSummariesResident,
   findQualityIssuesResident,
   sampleRowsResident,
   StatsSource,
-} from '../statsResident';
+} from '../engine/statsResident';
 import {
   readPage,
   pageRowsJs,
@@ -23,14 +23,14 @@ import {
   readDistinctPage,
   distinctValuesPageJs,
   MAX_DISTINCT,
-} from '../datasetPage';
+} from '../engine/datasetPage';
 // The visual-filter whitelist, reused verbatim: `dataset:page` now takes the
 // same `FilterStep[]` a visual carries, and two sanitisers for one shape is how
 // they drift apart.
-import { sanitizeFilters } from '../visuals';
-import { explainText, suggestSteps, suggestCalcField } from '../analyze';
-import { compile } from '../formula';
-import * as trace from '../residentTrace';
+import { sanitizeFilters } from '../analysis/visuals';
+import { explainText, suggestSteps, suggestCalcField } from '../ai/analyze';
+import { compile } from '../formula/formula';
+import * as trace from '../engine/residentTrace';
 
 // Datasets (file-based data sources) IPC — pick+parse/paste/save/list/get/delete.
 // All are ipcMain.handle (request/response). Native open dialog runs in MAIN;

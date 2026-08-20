@@ -31,10 +31,10 @@ const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const Module: any = require('module');
 
-type Cell = import('../src/transforms').Cell;
-type ParsedColumn = import('../src/parse').ParsedColumn;
-type Anomaly = import('../src/anomalies').Anomaly;
-type AnomalyOptions = import('../src/anomalies').AnomalyOptions;
+type Cell = import('../src/data/transforms').Cell;
+type ParsedColumn = import('../src/data/parse').ParsedColumn;
+type Anomaly = import('../src/analysis/anomalies').Anomaly;
+type AnomalyOptions = import('../src/analysis/anomalies').AnomalyOptions;
 type IpcHandler = (event: unknown, payload?: unknown) => Promise<any>;
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-anom-resident-'));
@@ -60,12 +60,12 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled siblings of the REAL modules (built by pretest).
-const parquetStore: typeof import('../src/parquetStore') = require('../src/parquetStore');
-const anomalies: typeof import('../src/anomalies') = require('../src/anomalies');
-const anomaliesResident: typeof import('../src/anomaliesResident') = require('../src/anomaliesResident');
-const projects: typeof import('../src/projects') = require('../src/projects');
-const datasets: typeof import('../src/datasets') = require('../src/datasets');
-const dashboards: typeof import('../src/dashboards') = require('../src/dashboards');
+const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
+const anomalies: typeof import('../src/analysis/anomalies') = require('../src/analysis/anomalies');
+const anomaliesResident: typeof import('../src/engine/anomaliesResident') = require('../src/engine/anomaliesResident');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
+const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
+const dashboards: typeof import('../src/analysis/dashboards') = require('../src/analysis/dashboards');
 const dashboardsIpc: typeof import('../src/ipc/dashboards') = require('../src/ipc/dashboards');
 
 dashboardsIpc.register();

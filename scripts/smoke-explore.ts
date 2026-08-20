@@ -203,9 +203,9 @@ async function main(): Promise<void> {
   // did not grow a bespoke modal.
   const seeded: any = await app.evaluate(async (_electronModule) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const projects = req('./src/projects.js');
-    const datasets = req('./src/datasets.js');
-    const copilot = req('./src/copilot.js');
+    const projects = req('./src/app/projects.js');
+    const datasets = req('./src/data/datasets.js');
+    const copilot = req('./src/ai/copilot.js');
     await projects.init();
     const proj = await projects.createProject('Explore smoke');
     const ds = await datasets.saveDataset(proj.id, {
@@ -356,7 +356,7 @@ async function main(): Promise<void> {
   // hand copilot:ask that kind — the channel has always taken { kind, id }.
   await app.evaluate(async (_electronModule, pid: string) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const dashboards = req('./src/dashboards.js');
+    const dashboards = req('./src/analysis/dashboards.js');
     await dashboards.saveDashboard(pid, { name: 'Quarter review' });
   }, seeded.projectId);
 
@@ -532,8 +532,8 @@ async function main(): Promise<void> {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
     const nodeFs = req('fs');
     const nodePath = req('path');
-    const projects = req('./src/projects.js');
-    const copilot = req('./src/copilot.js');
+    const projects = req('./src/app/projects.js');
+    const copilot = req('./src/ai/copilot.js');
     const proj = await projects.createProject('Legacy chat');
     // Exactly the v1 shape: { projectId, turns, schemaVersion: 1 }.
     const file = nodePath.join(

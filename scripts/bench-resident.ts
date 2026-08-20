@@ -46,13 +46,13 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import * as pq from '../src/parquetStore';
-import * as rq from '../src/residentQuery';
-import * as duck from '../src/duckdb';
-import * as metricValue from '../src/metricValue';
-import * as vizData from '../src/vizData';
-import type { ParsedColumn } from '../src/parse';
-import type { Cell, FilterStep } from '../src/transforms';
+import * as pq from '../src/engine/parquetStore';
+import * as rq from '../src/engine/residentQuery';
+import * as duck from '../src/engine/duckdb';
+import * as metricValue from '../src/analysis/metricValue';
+import * as vizData from '../src/analysis/vizData';
+import type { ParsedColumn } from '../src/data/parse';
+import type { Cell, FilterStep } from '../src/data/transforms';
 
 // ── args ─────────────────────────────────────────────────────────────────────
 

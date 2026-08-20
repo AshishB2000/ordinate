@@ -26,8 +26,8 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled siblings of the .ts sources under test.
-const copilot: typeof import('../src/copilot') = require('../src/copilot');
-const projects: typeof import('../src/projects') = require('../src/projects');
+const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 
 let failures = 0;
 function ok(label: string, cond: boolean): void {

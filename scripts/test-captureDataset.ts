@@ -22,9 +22,9 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled siblings.
-const cd: typeof import('../src/captureDataset') = require('../src/captureDataset');
-const datasets: typeof import('../src/datasets') = require('../src/datasets');
-const projects: typeof import('../src/projects') = require('../src/projects');
+const cd: typeof import('../src/data/captureDataset') = require('../src/data/captureDataset');
+const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 
 let failures = 0;
 function ok(label: string, cond: boolean) {

@@ -1,5 +1,5 @@
 import { ipcMain, nativeTheme, BrowserWindow } from 'electron';
-import * as config from '../config';
+import * as config from '../app/config';
 import { setHubTitleBarOverlay } from '../windows/hubWindow';
 
 // ── Theme preference (single source of truth) ───────────────────────────────

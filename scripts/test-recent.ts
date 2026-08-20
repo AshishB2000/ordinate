@@ -8,7 +8,7 @@ export {}; // module scope — sibling test scripts share top-level names
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { buildRecent } = require('../src/recent.js') as typeof import('../src/recent');
+const { buildRecent } = require('../src/app/recent.js') as typeof import('../src/app/recent');
 
 // Two projects, each with one dataset/analysis/dashboard, all distinct
 // timestamps chosen so the expected newest-first order interleaves the two

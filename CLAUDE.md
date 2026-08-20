@@ -24,7 +24,7 @@ Re-litigate with numbers, not opinion.
   `<id>.parquet`, plus `<id>.source.parquet` for the immutable prepare source. 500k rows ≈ 0.3 MB.
   Row cap **1,000,000**. Per-project directories under `userData/projects/<id>/`.
 - **DuckDB** (`@duckdb/node-api`, prebuilt N-API, no `electron-rebuild`) behind a **synchronous**
-  bridge in `src/duckdb.ts`: DuckDB runs in a worker and the main thread blocks on `Atomics.wait`
+  bridge in `src/engine/duckdb.ts`: DuckDB runs in a worker and the main thread blocks on `Atomics.wait`
   over a growable `SharedArrayBuffer`. `queryAsync`/`execAsync` exist on the same connection for
   interactive callers — **a blocking call freezes all windows, the menu bar and the hotkey.**
   All columns are stored VARCHAR with Ordinate's own `ColumnType` in the JSON record; a typed column
@@ -39,7 +39,7 @@ Re-litigate with numbers, not opinion.
 to answer a question. Each returns `null` on any failure and the caller falls back to the pure-JS
 original. **The JS implementations are the reference**, so changing one means changing or
 re-verifying the other; every module is paired with a *differential* test comparing the two with
-`Object.is`. A broken fast path is not wrong, only ~600× slower, so `src/residentTrace.ts` also
+`Object.is`. A broken fast path is not wrong, only ~600× slower, so `src/engine/residentTrace.ts` also
 records `resident`/`skipped`/`failed` per call site and warns once per op on `failed`.
 
 Non-negotiable in this layer:
@@ -64,7 +64,7 @@ prompts unrounded); a leading U+FEFF is lost on every string the bridge returns 
 
 ### Workspace
 
-- **Sources** — `src/parse.ts` centralises parsing (strict `isFiniteNumber`, so `007`, zips and
+- **Sources** — `src/data/parse.ts` centralises parsing (strict `isFiniteNumber`, so `007`, zips and
   >15-digit ids stay text). **`src/connectors/` is a REGISTRY of 35 read-only sources — one
   connector is one entry, never a union type**; wire-compatible sources share a driver
   (`postgres.ts` 11, `mysql.ts` 8, `http.ts` 7, `mssql.ts` 3, `oracle.ts` 2 **thin mode only, never
@@ -83,7 +83,7 @@ prompts unrounded); a leading U+FEFF is lost on every string the bridge returns 
 - **Analyses** — the QuickSight-style split (analysis = mutable authoring surface, dashboard =
   published read-only snapshot, copied **by value** on publish). Spec: `docs/analysis/00-model.md`.
 - **AI (all optional, `not_ready` without a model)** — copilot, suggest steps/calc-field/chart,
-  draft layout, summaries, and *explaining* anomalies. `src/anomalies.ts` is a pure detector; the
+  draft layout, summaries, and *explaining* anomalies. `src/analysis/anomalies.ts` is a pure detector; the
   model only puts app-found figures into words.
 
 ### Windows, renderer, IPC
@@ -93,7 +93,7 @@ hub, not `BrowserWindow`s. Renderer files are **global-scope classic scripts** �
 shared globals are declared in `renderer/hub/globals.d.ts`.
 
 IPC: `invoke`/`handle` for request-response, `send`/`on` for fire-and-forget. **New handlers go in
-the matching `src/ipc/*.ts` `register(deps)`, never in `main.js`.** Renderers reach main only via
+the matching `src/ipc/*.ts` `register(deps)`, never in `src/main.js`.** Renderers reach main only via
 `contextBridge` (`contextIsolation: true`, `nodeIntegration: false`).
 
 **Config** (`src/config.js`, main only, v2): `publicConfig()`/`publicByok()` are the only
@@ -141,8 +141,14 @@ renderer-safe views and strip every raw key and secret. `executionReady()` gates
 
 ## File placement
 
-`main.ts` → app/IPC wiring/windows. `src/` → main-process modules. `src/ipc/` → one file per area.
-`src/windows/` → BrowserWindow factories. `renderer/{hub,overlay}/` → windows.
+`src/main.ts` → app/IPC wiring/windows (the Electron entry point; `package.json` `main` is
+`src/main.js`). `src/` groups the main process by import-graph cluster — `src/engine/` (DuckDB
+bridge, worker/sidecar, resident fast paths), `src/data/` (parse, datasets, transforms),
+`src/formula/` (tokenizer/parser/evaluator), `src/analysis/` (analyses, dashboards, visuals,
+anomalies), `src/ai/` (analyze, copilot, models), `src/cli/` (local CLI detection + run),
+`src/app/` (config, projects, history, icons, capture), `src/connectors/` (the 35-source registry
+plus the connection store). `src/ipc/` → one file per area. `src/windows/` → BrowserWindow
+factories. `renderer/{hub,overlay}/` → windows.
 `renderer/theme.css` → shared CSS vars. `preload/` → one contextBridge per window.
 `scripts/` → build + `test-*.js` self-checks. `assets/`, `geo/` → icons + GeoJSON.
 

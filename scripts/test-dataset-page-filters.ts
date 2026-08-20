@@ -29,10 +29,10 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import * as dp from '../src/datasetPage';
-import * as pq from '../src/parquetStore';
-import type { ParsedColumn } from '../src/parse';
-import type { Cell, FilterStep } from '../src/transforms';
+import * as dp from '../src/engine/datasetPage';
+import * as pq from '../src/engine/parquetStore';
+import type { ParsedColumn } from '../src/data/parse';
+import type { Cell, FilterStep } from '../src/data/transforms';
 
 let failures = 0;
 function ok(label: string, cond: boolean): void {

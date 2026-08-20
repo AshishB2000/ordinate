@@ -52,7 +52,7 @@ Module._load = function (request: string, ...rest: any[]): any {
   return origLoad.apply(this, [request, ...rest]);
 };
 
-const duck: typeof import('../src/duckdb') = require('../src/duckdb');
+const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 const mosaic: typeof import('../src/ipc/mosaic') = require('../src/ipc/mosaic');
 const local: typeof import('../src/connectors/local') = require('../src/connectors/local');
 type ConnectorContext = import('../src/connectors/types').ConnectorContext;

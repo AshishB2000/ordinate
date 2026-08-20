@@ -1,8 +1,8 @@
 import { ipcMain } from 'electron';
-import * as connections from '../connections';
-import * as connectionRun from '../connectionRun';
-import * as datasets from '../datasets';
-import * as configSecrets from '../configSecrets';
+import * as connections from '../connectors/connections';
+import * as connectionRun from '../connectors/connectionRun';
+import * as datasets from '../data/datasets';
+import * as configSecrets from '../app/configSecrets';
 import { connectorCatalog, getConnector } from '../connectors';
 import type { ConnectorDef, ConnectorField } from '../connectors/types';
 
@@ -144,7 +144,7 @@ async function runSaved(
   projectId: string,
   connId: string,
   tableOrQuery?: { table?: string; query?: string },
-): Promise<{ ok: true; result: import('../parse').ParseResult } | { ok: false; error: string }> {
+): Promise<{ ok: true; result: import('../data/parse').ParseResult } | { ok: false; error: string }> {
   const conn = await connections.getConnection(projectId, connId);
   if (!conn) return { ok: false, error: 'Connection not found' };
   const def = getConnector(conn.connectorId);
@@ -172,7 +172,7 @@ export async function refreshConnectionInto(
   connId: string,
   datasetId: string,
   outWarnings?: string[],
-): Promise<{ ok: true; dataset: import('../datasets').Dataset } | { ok: false; error: string }> {
+): Promise<{ ok: true; dataset: import('../data/datasets').Dataset } | { ok: false; error: string }> {
   try {
     const res = await runSaved(projectId, connId);
     if (!res.ok) {

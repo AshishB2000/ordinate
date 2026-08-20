@@ -8,9 +8,9 @@
 // chain and paints what comes back; it never computes a joined row.
 
 import { ipcMain } from 'electron';
-import * as datasets from '../datasets';
-import * as combine from '../combine';
-import type { Cell, TableData } from '../transforms';
+import * as datasets from '../data/datasets';
+import * as combine from '../data/combine';
+import type { Cell, TableData } from '../data/transforms';
 
 const MAX_ROWS = 1_000_000;
 

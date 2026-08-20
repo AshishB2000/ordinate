@@ -63,19 +63,19 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled siblings of the real modules.
-const plan: typeof import('../src/analysisPlan') = require('../src/analysisPlan');
-const datasets: typeof import('../src/datasets') = require('../src/datasets');
-const projects: typeof import('../src/projects') = require('../src/projects');
-const visuals: typeof import('../src/visuals') = require('../src/visuals');
-const analysisStore: typeof import('../src/analysis') = require('../src/analysis');
-const config: typeof import('../src/config') = require('../src/config');
-const configSecrets: typeof import('../src/configSecrets') = require('../src/configSecrets');
-const connections: typeof import('../src/connections') = require('../src/connections');
+const plan: typeof import('../src/analysis/analysisPlan') = require('../src/analysis/analysisPlan');
+const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
+const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
+const analysisStore: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
+const config: typeof import('../src/app/config') = require('../src/app/config');
+const configSecrets: typeof import('../src/app/configSecrets') = require('../src/app/configSecrets');
+const connections: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
 const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
 const analysesIpc: typeof import('../src/ipc/analyses') = require('../src/ipc/analyses');
 
-type ParsedColumn = import('../src/parse').ParsedColumn;
-type Cell = import('../src/transforms').Cell;
+type ParsedColumn = import('../src/data/parse').ParsedColumn;
+type Cell = import('../src/data/transforms').Cell;
 
 let failures = 0;
 function ok(label: string, cond: boolean, extra?: string): void {
@@ -501,7 +501,7 @@ async function checkInjection(): Promise<void> {
 
   // No eval / new Function anywhere in the plan module (static guarantee, the
   // same one test-formula.ts makes about the evaluator).
-  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'analysisPlan.ts'), 'utf8')
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'analysis', 'analysisPlan.ts'), 'utf8')
     .replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
   ok('analysisPlan source contains no eval(', !/\beval\s*\(/.test(src));
   ok('analysisPlan source contains no new Function', !/new\s+Function\s*\(/.test(src));
@@ -646,7 +646,7 @@ async function checkRoundedRatioTyping(): Promise<void> {
   ok('a ROUNDED ratio types as number', (await build('Ratio', 'round((revenue - cost) / revenue, 4)')) === 'number');
   await datasets.updateSteps(projectId, salesId, []);
   ok('the draft prompt tells the model to round every division',
-     fs.readFileSync(path.join(__dirname, '..', 'src', 'analyze.ts'), 'utf8').includes('ALWAYS wrap a '));
+     fs.readFileSync(path.join(__dirname, '..', 'src', 'ai', 'analyze.ts'), 'utf8').includes('ALWAYS wrap a '));
 }
 
 // ── §9 Garbage in ──────────────────────────────────────────────────────────

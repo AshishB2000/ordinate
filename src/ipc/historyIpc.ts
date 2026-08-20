@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import * as history from '../history';
+import * as history from '../app/history';
 
 // History / persistence IPC — load & delete persisted threads, and persist
 // per-chart customization overrides. Extracted from main.js as a pure structural

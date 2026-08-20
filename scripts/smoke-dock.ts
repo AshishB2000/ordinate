@@ -84,8 +84,8 @@ async function main(): Promise<void> {
   // it's the exact case the plan calls out.)
   const seeded: any = await app.evaluate(async (_electronModule) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const projects = req('./src/projects.js');
-    const datasets = req('./src/datasets.js');
+    const projects = req('./src/app/projects.js');
+    const datasets = req('./src/data/datasets.js');
     await projects.init();
     const proj = await projects.createProject('Dock smoke');
     const ds = await datasets.saveDataset(proj.id, {
@@ -109,9 +109,9 @@ async function main(): Promise<void> {
     await datasets.updateSteps(proj.id, ds.id, seedSteps);
     // …plus a real analysis with two half-width visual cards, for the
     // an-focus layout check at the end of this file.
-    const analysis = req('./src/analysis.js');
+    const analysis = req('./src/analysis/analysis.js');
     await analysis.init();
-    const visualsMod = req('./src/visuals.js');
+    const visualsMod = req('./src/analysis/visuals.js');
     const viz = await visualsMod.saveVisual(proj.id, {
       name: 'Revenue by region',
       datasetId: ds.id,
@@ -453,7 +453,7 @@ async function main(): Promise<void> {
   // dkRenderStepCard.
   await app.evaluate(async (_electronModule) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const analyze = req('./src/analyze.js');
+    const analyze = req('./src/ai/analyze.js');
     (analyze as any)._realSuggestSteps = analyze.suggestSteps;
     analyze.suggestSteps = async () => ({ ok: true, steps: [{ type: 'trim', column: 'region' }] });
   });
@@ -470,7 +470,7 @@ async function main(): Promise<void> {
   }, seeded);
   await app.evaluate(async (_electronModule) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const analyze = req('./src/analyze.js');
+    const analyze = req('./src/ai/analyze.js');
     analyze.suggestSteps = (analyze as any)._realSuggestSteps; // restore before the next test needs the real thing
   });
   ok('dkOfferProposal → the real dataset:suggestSteps IPC → dkRenderStepCard renders a card (the offer→render handoff)',
@@ -495,7 +495,7 @@ async function main(): Promise<void> {
 
   const afterStep: any = await app.evaluate(async (_electronModule, args: any) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const datasets = req('./src/datasets.js');
+    const datasets = req('./src/data/datasets.js');
     const ds = await datasets.getDataset(args.pid, args.did);
     return { steps: ds.steps, columns: ds.columns.map((c: any) => c.name) };
   }, { pid: seeded.projectId, did: seeded.datasetId });
@@ -529,7 +529,7 @@ async function main(): Promise<void> {
   ok('the dataset pipeline is UNCHANGED by opening the editor (still 3 steps)',
     (await app.evaluate(async (_electronModule, args: any) => {
       const req = (process as any).mainModule.require.bind((process as any).mainModule);
-      const datasets = req('./src/datasets.js');
+      const datasets = req('./src/data/datasets.js');
       const ds = await datasets.getDataset(args.pid, args.did);
       return ds.steps.length;
     }, { pid: seeded.projectId, did: seeded.datasetId })) === 3);
@@ -567,7 +567,7 @@ async function main(): Promise<void> {
 
   const visuals: any = await app.evaluate(async (_electronModule, args: any) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const visualsMod = req('./src/visuals.js');
+    const visualsMod = req('./src/analysis/visuals.js');
     return visualsMod.listVisuals(args.pid);
   }, { pid: seeded.projectId });
   // By NAME, not by datasetId: the seeded analysis above owns a visual on the
