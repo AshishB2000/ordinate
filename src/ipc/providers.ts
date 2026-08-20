@@ -3,25 +3,23 @@ import * as config from '../config';
 import { testProvider } from '../analyze';
 import * as history from '../history';
 
-// PRESERVED VERBATIM from the JS original: these four identifiers are NOT in
-// scope in this module (they are module-level state in main.js and are not
-// passed via deps here). The ambient declarations emit nothing, so the compiled
-// output keeps the identical bare references inside wipeHistory (a latent
-// ReferenceError if data:delete runs with scope history/everything).
-// oxlint-disable-next-line no-unused-vars -- ambient: assigned here, read in main.ts.
-declare let historySummaries: any[];
-declare const entryData: Map<string, any>;
-declare const entryThreads: Map<string, any>;
-declare const entryDataUrls: Map<string, string>;
-
 // Key / provider management IPC — Ollama endpoint, key validate/save/clear,
 // provider + execution-mode activation, BYOK provider config/test/reveal, global
 // rules, notifications, and the 'delete my data' flow. Extracted from main.js as a
 // pure structural move; notifyKeyChanged + the (reassigned) hubWindow ref arrive
-// via deps. No logic changes.
-export function register({ getHubWindow, notifyKeyChanged }: {
+// via deps. The in-memory entry Maps also arrive via deps (same instances,
+// mutated in place) and the REASSIGNED `historySummaries` list is reset through a
+// callback — the same shape src/ipc/historyIpc.ts uses for `removeSummary`.
+// Previously these four identifiers were only `declare`d here, which emits
+// nothing, so wipeHistory() referenced undefined bare identifiers and threw a
+// ReferenceError whenever data:delete ran with scope 'history' or 'everything'.
+export function register({ getHubWindow, notifyKeyChanged, entryData, entryThreads, entryDataUrls, clearHistorySummaries }: {
   getHubWindow: () => BrowserWindow | null | undefined;
   notifyKeyChanged: () => void;
+  entryData: Map<string, any>;
+  entryThreads: Map<string, any>;
+  entryDataUrls: Map<string, string>;
+  clearHistorySummaries: () => void;
 }) {
   // Save local Ollama endpoint (no API key needed).
   // ponytail: untrusted renderer payloads — any, validated field-by-field below.
@@ -76,9 +74,11 @@ export function register({ getHubWindow, notifyKeyChanged }: {
           break;
         }
         case 'gemini': {
+          // Key in the AUTH HEADER, never the URL/query string (repo policy in
+          // src/models.ts:3 — matches its working x-goog-api-key request).
           res = await net.fetch(
-            'https://generativelanguage.googleapis.com/v1beta/models?key=' + encodeURIComponent(key),
-            { signal: ctrl.signal }
+            'https://generativelanguage.googleapis.com/v1beta/models',
+            { headers: { 'x-goog-api-key': key }, signal: ctrl.signal }
           );
           if (res.ok) {
             const json = await res.json();
@@ -176,9 +176,10 @@ export function register({ getHubWindow, notifyKeyChanged }: {
         }
         case 'gemini': {
           if (!key) { clearTimeout(timer); return { ok: false, models: [] }; }
+          // Key in the AUTH HEADER, never the URL/query string (src/models.ts:3).
           res = await net.fetch(
-            'https://generativelanguage.googleapis.com/v1beta/models?key=' + encodeURIComponent(key),
-            { signal: ctrl.signal }
+            'https://generativelanguage.googleapis.com/v1beta/models',
+            { headers: { 'x-goog-api-key': key }, signal: ctrl.signal }
           );
           if (res.ok) {
             const json = await res.json();
@@ -373,7 +374,7 @@ export function register({ getHubWindow, notifyKeyChanged }: {
       try { const dir = await history.clearAll(); removed.push(dir + ' (all threads: thread.json + crop.png)'); } catch (_) {}
       try { await fsp.rm(tmpDir, { recursive: true, force: true }); removed.push(tmpDir + ' (temp capture images)'); } catch (_) {}
       entryData.clear(); entryThreads.clear(); entryDataUrls.clear();
-      historySummaries = [];
+      clearHistorySummaries();
       if (hubWindow && !hubWindow.isDestroyed()) hubWindow.webContents.send('hub:history', []);
     }
 
