@@ -36,11 +36,11 @@
 // of 06 §2), so `TRY_CAST(cN AS DOUBLE)` round-trips a `number` column exactly and
 // a `007`/zip/long-id `text` column is never touched by a cast.
 
-import type { ColumnType } from '../parse';
-import { coerceValue } from '../parse';
-import type { Aggregation, AggFn, Cell, TransformStep } from '../transforms';
-import type { FilterOp } from '../filterOps';
-import { FILTER_OPS, COMPARE_OPS, LIST_OPS, emptyListWarning } from '../filterOps';
+import type { ColumnType } from '../data/parse';
+import { coerceValue } from '../data/parse';
+import type { Aggregation, AggFn, Cell, TransformStep } from '../data/transforms';
+import type { FilterOp } from '../data/filterOps';
+import { FILTER_OPS, COMPARE_OPS, LIST_OPS, emptyListWarning } from '../data/filterOps';
 
 // ── Public shapes ────────────────────────────────────────────────────────────
 

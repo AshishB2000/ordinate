@@ -25,8 +25,8 @@ import * as datasets from './datasets';
 import type { Dataset, DatasetOrigin } from './datasets';
 import * as combine from './combine';
 import { parseFile, sourceKindForPath } from './fileImport';
-import { runConnection } from './connectionRun';
-import { refreshConnectionInto } from './ipc/connections';
+import { runConnection } from '../connectionRun';
+import { refreshConnectionInto } from '../ipc/connections';
 
 /**
  * Row ceiling for a refreshed table. Deliberately the same 1,000,000 the import

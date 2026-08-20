@@ -25,9 +25,9 @@ Module._load = function (request: string, ...rest: any[]): any {
   return origLoad.apply(this, [request, ...rest]);
 };
 
-const datasets: typeof import('../src/datasets') = require('../src/datasets');
+const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/projects') = require('../src/projects');
-const datasetStats: typeof import('../src/datasetStats') = require('../src/datasetStats');
+const datasetStats: typeof import('../src/data/datasetStats') = require('../src/data/datasetStats');
 const statsResident: typeof import('../src/engine/statsResident') = require('../src/engine/statsResident');
 const datasetPage: typeof import('../src/engine/datasetPage') = require('../src/engine/datasetPage');
 const residentQuery: typeof import('../src/engine/residentQuery') = require('../src/engine/residentQuery');

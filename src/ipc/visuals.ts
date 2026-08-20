@@ -2,7 +2,7 @@ import { ipcMain, app, dialog } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as visuals from '../visuals';
-import * as datasets from '../datasets';
+import * as datasets from '../data/datasets';
 import { buildVizData, recommendChartType } from '../vizData';
 import type { VizDataResult } from '../vizData';
 import { aggregateResident } from '../engine/residentQuery';
@@ -10,18 +10,18 @@ import type { ResidentMeasure } from '../engine/residentQuery';
 import * as trace from '../engine/residentTrace';
 import { sanitizeEncoding, sanitizeChartType } from '../visuals';
 import type { VizEncoding } from '../visuals';
-import type { Cell, FilterStep } from '../transforms';
-import type { ParsedColumn } from '../parse';
-import { coerceValue } from '../parse';
-import { FILTER_OPS, LIST_OPS } from '../filterOps';
+import type { Cell, FilterStep } from '../data/transforms';
+import type { ParsedColumn } from '../data/parse';
+import { coerceValue } from '../data/parse';
+import { FILTER_OPS, LIST_OPS } from '../data/filterOps';
 // The drill-down panel pages rows through the SAME two-path decision the Explore
 // grid uses — see `pageFor`'s note on why there is only one of them.
 import { pageFor } from './datasets';
 import { MAX_LIMIT } from '../engine/datasetPage';
 import type { PageRequest } from '../engine/datasetPage';
 import { computeColumnSummariesResident } from '../engine/statsResident';
-import { computeColumnSummary } from '../datasetStats';
-import type { ColumnSummary } from '../datasetStats';
+import { computeColumnSummary } from '../data/datasetStats';
+import type { ColumnSummary } from '../data/datasetStats';
 import { suggestCharts } from '../analyze';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus

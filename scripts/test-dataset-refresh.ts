@@ -31,9 +31,9 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled siblings of the .ts sources under test.
-const datasets: typeof import('../src/datasets') = require('../src/datasets');
+const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/projects') = require('../src/projects');
-const refresh: typeof import('../src/datasetRefresh') = require('../src/datasetRefresh');
+const refresh: typeof import('../src/data/datasetRefresh') = require('../src/data/datasetRefresh');
 const connectionRun: any = require('../src/connectionRun');
 const ipcConnections: any = require('../src/ipc/connections');
 
@@ -54,7 +54,7 @@ function writeCsv(name: string, text: string): string {
 
 // Save a dataset from a real file, exactly as the import path does.
 async function importCsv(projectId: string, name: string, filePath: string) {
-  const { parseFile } = require('../src/fileImport');
+  const { parseFile } = require('../src/data/fileImport');
   const parsed = await parseFile(filePath, 'csv');
   return datasets.saveDataset(projectId, {
     name,

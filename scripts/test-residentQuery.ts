@@ -24,8 +24,8 @@ import * as pq from '../src/engine/parquetStore';
 import * as duck from '../src/engine/duckdb';
 import * as metricValue from '../src/metricValue';
 import * as vizData from '../src/vizData';
-import type { ParsedColumn } from '../src/parse';
-import type { Cell, FilterStep } from '../src/transforms';
+import type { ParsedColumn } from '../src/data/parse';
+import type { Cell, FilterStep } from '../src/data/transforms';
 import type { VizEncoding } from '../src/visuals';
 
 let failures = 0;
@@ -87,7 +87,7 @@ function diffMetric(label: string, f: Fixture, column: string, filters?: FilterS
 // The reference path for a filtered metric is exactly what ipc/dashboards.ts
 // does today: applyPipeline the filters in JS, then computeMetric the result.
 function applyFilters(f: Fixture, filters: FilterStep[]): Cell[][] {
-  const transforms: typeof import('../src/transforms') = require('../src/transforms');
+  const transforms: typeof import('../src/data/transforms') = require('../src/data/transforms');
   return transforms.applyPipeline({ columns: f.columns, rows: f.rows }, filters).rows;
 }
 

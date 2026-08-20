@@ -29,11 +29,11 @@ Module._load = function (request: string, ...rest: any[]): any {
 // Compiled siblings of the real modules.
 const visuals: typeof import('../src/visuals') = require('../src/visuals');
 const vizData: typeof import('../src/vizData') = require('../src/vizData');
-const datasets: typeof import('../src/datasets') = require('../src/datasets');
+const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/projects') = require('../src/projects');
 
-type ParsedColumn = import('../src/parse').ParsedColumn;
-type Cell = import('../src/transforms').Cell;
+type ParsedColumn = import('../src/data/parse').ParsedColumn;
+type Cell = import('../src/data/transforms').Cell;
 
 let failures = 0;
 function ok(label: string, cond: boolean): void {

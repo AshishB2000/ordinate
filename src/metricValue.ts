@@ -11,7 +11,7 @@
 // the single-function analogue of the group-less path in transforms.aggregate()
 // / the numeric branch of datasetStats.computeColumnSummary().
 
-import type { ParsedColumn } from './parse';
+import type { ParsedColumn } from './data/parse';
 
 // A stored cell is the coerced value from Dataset.rows[*][colIndex]: a JS number
 // for numeric columns, the original string for text/date, or null for empties.

@@ -25,8 +25,8 @@ import * as os from 'os';
 import * as path from 'path';
 import * as dp from '../src/engine/datasetPage';
 import * as pq from '../src/engine/parquetStore';
-import type { ParsedColumn } from '../src/parse';
-import type { Cell } from '../src/transforms';
+import type { ParsedColumn } from '../src/data/parse';
+import type { Cell } from '../src/data/transforms';
 
 let failures = 0;
 function ok(label: string, cond: boolean): void {

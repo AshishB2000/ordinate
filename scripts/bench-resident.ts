@@ -51,8 +51,8 @@ import * as rq from '../src/engine/residentQuery';
 import * as duck from '../src/engine/duckdb';
 import * as metricValue from '../src/metricValue';
 import * as vizData from '../src/vizData';
-import type { ParsedColumn } from '../src/parse';
-import type { Cell, FilterStep } from '../src/transforms';
+import type { ParsedColumn } from '../src/data/parse';
+import type { Cell, FilterStep } from '../src/data/transforms';
 
 // ── args ─────────────────────────────────────────────────────────────────────
 

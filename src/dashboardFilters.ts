@@ -18,7 +18,7 @@
 // number is still produced by the tested pure pipeline (buildVizData / computeMetric),
 // so the strict-number rule is untouched.
 
-import type { FilterStep } from './transforms';
+import type { FilterStep } from './data/transforms';
 import type { CardControl, ControlValue } from './dashboards';
 
 // Byte-for-byte identity of a filter step: same column, op, and operand

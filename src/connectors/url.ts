@@ -12,7 +12,7 @@
 // It has no tables to list, so listTables returns an empty list rather than an
 // error — "this source has no table picker" is not a failure.
 
-import { parseJson } from '../parse';
+import { parseJson } from '../data/parse';
 import type {
   ConnectorContext,
   ConnectorDef,

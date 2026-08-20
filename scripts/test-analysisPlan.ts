@@ -64,7 +64,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 
 // ponytail: compiled siblings of the real modules.
 const plan: typeof import('../src/analysisPlan') = require('../src/analysisPlan');
-const datasets: typeof import('../src/datasets') = require('../src/datasets');
+const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/projects') = require('../src/projects');
 const visuals: typeof import('../src/visuals') = require('../src/visuals');
 const analysisStore: typeof import('../src/analysis') = require('../src/analysis');
@@ -74,8 +74,8 @@ const connections: typeof import('../src/connections') = require('../src/connect
 const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
 const analysesIpc: typeof import('../src/ipc/analyses') = require('../src/ipc/analyses');
 
-type ParsedColumn = import('../src/parse').ParsedColumn;
-type Cell = import('../src/transforms').Cell;
+type ParsedColumn = import('../src/data/parse').ParsedColumn;
+type Cell = import('../src/data/transforms').Cell;
 
 let failures = 0;
 function ok(label: string, cond: boolean, extra?: string): void {

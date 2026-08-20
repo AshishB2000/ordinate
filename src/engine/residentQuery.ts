@@ -79,11 +79,11 @@
 // which costs far more than the case is worth. Pinned by a test so it stays
 // visible rather than being discovered by a user.
 
-import type { ColumnType, ParsedColumn } from '../parse';
-import { coerceValue } from '../parse';
-import type { Cell, FilterStep } from '../transforms';
-import type { FilterOp } from '../filterOps';
-import { FILTER_OPS, COMPARE_OPS, LIST_OPS } from '../filterOps';
+import type { ColumnType, ParsedColumn } from '../data/parse';
+import { coerceValue } from '../data/parse';
+import type { Cell, FilterStep } from '../data/transforms';
+import type { FilterOp } from '../data/filterOps';
+import { FILTER_OPS, COMPARE_OPS, LIST_OPS } from '../data/filterOps';
 import type { MetricAggregation } from '../metricValue';
 import { sqlEmpty } from './sqlGen';
 import { relationSql } from './parquetStore';

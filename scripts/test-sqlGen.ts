@@ -20,7 +20,7 @@ const sqlGen: typeof import('../src/engine/sqlGen') = require('../src/engine/sql
 const { execFileSync } = require('child_process') as typeof import('child_process');
 
 type SqlColumn = import('../src/engine/sqlGen').SqlColumn;
-type TransformStep = import('../src/transforms').TransformStep;
+type TransformStep = import('../src/data/transforms').TransformStep;
 
 let failures = 0;
 function ok(label: string, cond: boolean): void {

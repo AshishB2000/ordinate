@@ -41,8 +41,8 @@ import { app } from 'electron';
 import * as projects from './projects';
 import { sanitizeChartType, sanitizeEncoding, sanitizeOverrides, sanitizeFilters } from './visuals';
 import type { Visual } from './visuals';
-import { sanitizeSteps } from './transforms';
-import type { FilterStep } from './transforms';
+import { sanitizeSteps } from './data/transforms';
+import type { FilterStep } from './data/transforms';
 
 export type CardType = 'visual' | 'text' | 'metric' | 'control';
 export type MetricAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';

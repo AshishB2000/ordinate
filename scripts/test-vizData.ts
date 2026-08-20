@@ -7,7 +7,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 
-type ParsedColumn = import('../src/parse').ParsedColumn;
+type ParsedColumn = import('../src/data/parse').ParsedColumn;
 
 // ponytail: compiled sibling of ../src/vizData.ts.
 const vizData: typeof import('../src/vizData') = require('../src/vizData');
@@ -175,7 +175,7 @@ const badCat = buildVizData(cols, rows, { category: 'nope', values: [{ column: '
 ok('unknown category column → empty shape + warning', badCat.data.labels.length === 0 && badCat.warnings.length > 0);
 
 // ── filters applied BEFORE aggregation (transforms filter steps) ─────────────
-type FilterStep = import('../src/transforms').FilterStep;
+type FilterStep = import('../src/data/transforms').FilterStep;
 
 // A filter narrows the rows first; the SAME app-computed aggregation then runs over
 // the subset — so the total equals the hand-computed subtotal, not the grand total.

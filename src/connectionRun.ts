@@ -13,7 +13,7 @@
 // through safeError(), so a driver string carrying a DSN or a password is
 // redacted before it can reach a renderer.
 
-import { finalizeTable, ParseResult } from './parse';
+import { finalizeTable, ParseResult } from './data/parse';
 import { getConnector } from './connectors';
 import { safeError } from './connectors/types';
 import type { ConnectorColumn, ConnectorContext, ConnectorDef } from './connectors/types';

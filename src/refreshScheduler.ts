@@ -24,10 +24,10 @@
 // The DUE CHECK is a pure exported function taking `now`, so it can be tested
 // directly rather than by waiting for wall-clock time to pass.
 
-import * as datasets from './datasets';
-import type { AutoRefreshEvery, DatasetSummary } from './datasets';
+import * as datasets from './data/datasets';
+import type { AutoRefreshEvery, DatasetSummary } from './data/datasets';
 import * as projects from './projects';
-import { refreshDataset } from './datasetRefresh';
+import { refreshDataset } from './data/datasetRefresh';
 import { detectAnomalies } from './anomalies';
 import { detectAnomaliesResident } from './engine/anomaliesResident';
 import { diffAnomalies } from './anomalyWatch';

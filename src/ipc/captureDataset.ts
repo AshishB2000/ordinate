@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
-import * as datasets from '../datasets';
-import * as captureDataset from '../captureDataset';
-import type { ParsedColumn } from '../parse';
+import * as datasets from '../data/datasets';
+import * as captureDataset from '../data/captureDataset';
+import type { ParsedColumn } from '../data/parse';
 
 // Capture → dataset IPC — turns a capture's `extractedTable` into a saved,
 // reusable dataset (sourceKind 'capture') and supports recapture (replace/append).

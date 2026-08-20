@@ -1,15 +1,15 @@
 import { ipcMain, dialog } from 'electron';
 import * as path from 'path';
-import { parsePaste } from '../parse';
+import { parsePaste } from '../data/parse';
 // One parser and one byte ceiling, shared with the refresh service — see
 // src/fileImport.ts for why they moved out of this file.
-import { parseFile, sourceKindFor } from '../fileImport';
-import { refreshDataset } from '../datasetRefresh';
-import * as datasets from '../datasets';
-import * as transforms from '../transforms';
+import { parseFile, sourceKindFor } from '../data/fileImport';
+import { refreshDataset } from '../data/datasetRefresh';
+import * as datasets from '../data/datasets';
+import * as transforms from '../data/transforms';
 import * as compose from './datasetCompose';
-import type { Cell } from '../transforms';
-import { computeColumnSummary, findQualityIssues, ColumnSummary, QualityIssue } from '../datasetStats';
+import type { Cell } from '../data/transforms';
+import { computeColumnSummary, findQualityIssues, ColumnSummary, QualityIssue } from '../data/datasetStats';
 import {
   computeColumnSummariesResident,
   findQualityIssuesResident,

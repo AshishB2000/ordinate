@@ -18,7 +18,7 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 
-const transforms = require('../src/transforms');
+const transforms = require('../src/data/transforms');
 const { runResidentPipeline } = require('../src/engine/pipelineDuck');
 const parquetStore = require('../src/engine/parquetStore');
 const trace = require('../src/engine/residentTrace');

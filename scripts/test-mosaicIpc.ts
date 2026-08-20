@@ -51,7 +51,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 const mosaic: typeof import('../src/ipc/mosaic') = require('../src/ipc/mosaic');
-const datasets: typeof import('../src/datasets') = require('../src/datasets');
+const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/projects') = require('../src/projects');
 const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
 const residentQuery: typeof import('../src/engine/residentQuery') = require('../src/engine/residentQuery');

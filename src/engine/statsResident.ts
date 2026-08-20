@@ -86,9 +86,9 @@
 // wrote; it is inherited verbatim from `residentQuery`/`sqlGen` and listed here
 // rather than papered over.
 
-import type { ParsedColumn } from '../parse';
-import type { ColumnSummary, QualityIssue } from '../datasetStats';
-import type { Cell } from '../transforms';
+import type { ParsedColumn } from '../data/parse';
+import type { ColumnSummary, QualityIssue } from '../data/datasetStats';
+import type { Cell } from '../data/transforms';
 import { sqlEmpty } from './sqlGen';
 import { relationSql } from './parquetStore';
 import * as duck from './duckdb';

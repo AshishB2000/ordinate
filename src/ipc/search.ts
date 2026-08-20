@@ -13,7 +13,7 @@
 // box, it is a freeze.
 
 import { ipcMain } from 'electron';
-import * as datasets from '../datasets';
+import * as datasets from '../data/datasets';
 import * as visuals from '../visuals';
 import * as analysis from '../analysis';
 import * as dashboards from '../dashboards';

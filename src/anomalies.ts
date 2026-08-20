@@ -13,8 +13,8 @@
 // datasetStats.findQualityIssues verbatim (no duplication). duplicate_rows from
 // that helper is intentionally dropped — a duplicate row is not an "unusual change".
 
-import type { ColumnType } from './parse';
-import { findQualityIssues } from './datasetStats';
+import type { ColumnType } from './data/parse';
+import { findQualityIssues } from './data/datasetStats';
 
 // A stored cell is the coerced value from Dataset.rows[*][colIndex]: a JS number
 // for numeric columns, the original string for text/date, or null for empties.

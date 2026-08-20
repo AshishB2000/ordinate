@@ -19,7 +19,7 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 
-const transforms = require('../src/transforms');
+const transforms = require('../src/data/transforms');
 const pipelineDuck = require('../src/engine/pipelineDuck');
 const parquetStore = require('../src/engine/parquetStore');
 

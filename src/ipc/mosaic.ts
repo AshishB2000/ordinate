@@ -1,6 +1,6 @@
 import { ipcMain, app } from 'electron';
 import * as fs from 'fs';
-import * as datasets from '../datasets';
+import * as datasets from '../data/datasets';
 import * as datasetView from '../engine/datasetView';
 import * as duck from '../engine/duckdb';
 

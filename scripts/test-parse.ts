@@ -4,7 +4,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 
-const parse: typeof import('../src/parse') = require('../src/parse');
+const parse: typeof import('../src/data/parse') = require('../src/data/parse');
 
 let failures = 0;
 function ok(label: string, cond: boolean): void {

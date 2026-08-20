@@ -7,7 +7,7 @@
 // stores records, this decides what a re-fetchable source is allowed to be.
 
 import * as path from 'path';
-import { isValidId } from './ids';
+import { isValidId } from '../ids';
 import type { CombineMode } from './combine';
 import { normalizeCombineMode } from './combine';
 

@@ -31,8 +31,8 @@ const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const Module: any = require('module');
 
-type Cell = import('../src/transforms').Cell;
-type ParsedColumn = import('../src/parse').ParsedColumn;
+type Cell = import('../src/data/transforms').Cell;
+type ParsedColumn = import('../src/data/parse').ParsedColumn;
 type Anomaly = import('../src/anomalies').Anomaly;
 type AnomalyOptions = import('../src/anomalies').AnomalyOptions;
 type IpcHandler = (event: unknown, payload?: unknown) => Promise<any>;
@@ -64,7 +64,7 @@ const parquetStore: typeof import('../src/engine/parquetStore') = require('../sr
 const anomalies: typeof import('../src/anomalies') = require('../src/anomalies');
 const anomaliesResident: typeof import('../src/engine/anomaliesResident') = require('../src/engine/anomaliesResident');
 const projects: typeof import('../src/projects') = require('../src/projects');
-const datasets: typeof import('../src/datasets') = require('../src/datasets');
+const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const dashboards: typeof import('../src/dashboards') = require('../src/dashboards');
 const dashboardsIpc: typeof import('../src/ipc/dashboards') = require('../src/ipc/dashboards');
 

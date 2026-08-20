@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import * as dashboards from '../dashboards';
-import * as datasets from '../datasets';
+import * as datasets from '../data/datasets';
 import * as visuals from '../visuals';
 import * as copilot from '../copilot';
 import * as anomalies from '../anomalies';
@@ -9,8 +9,8 @@ import * as residentQuery from '../engine/residentQuery';
 import * as trace from '../engine/residentTrace';
 import { computeMetric } from '../metricValue';
 import type { MetricAggregation } from '../metricValue';
-import { applyPipeline } from '../transforms';
-import type { FilterStep } from '../transforms';
+import { applyPipeline } from '../data/transforms';
+import type { FilterStep } from '../data/transforms';
 import { summarizeDashboard, explainAnomalies } from '../analyze';
 
 // Dashboards IPC — list/get/save/update/delete a Dashboard, plus `dashboard:metric`

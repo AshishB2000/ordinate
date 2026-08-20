@@ -77,7 +77,7 @@ function persistableResult(result: any): any {
 }
 import * as history from './src/history';
 import * as projects from './src/projects';
-import * as datasets from './src/datasets';
+import * as datasets from './src/data/datasets';
 import * as copilot from './src/copilot';
 import { resolveUserPath } from './src/userPath';
 

@@ -204,7 +204,7 @@ async function main(): Promise<void> {
   const seeded: any = await app.evaluate(async (_electronModule) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
     const projects = req('./src/projects.js');
-    const datasets = req('./src/datasets.js');
+    const datasets = req('./src/data/datasets.js');
     const copilot = req('./src/copilot.js');
     await projects.init();
     const proj = await projects.createProject('Explore smoke');

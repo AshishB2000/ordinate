@@ -68,7 +68,7 @@ async function main(): Promise<void> {
     const lookup = arg.lookup;
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
     const projects = req('./src/projects.js');
-    const datasets = req('./src/datasets.js');
+    const datasets = req('./src/data/datasets.js');
     await projects.init();
     const proj = await projects.createProject('Composer smoke');
     const ds = await datasets.saveDataset(proj.id, {
@@ -191,7 +191,7 @@ async function main(): Promise<void> {
   // The mapping must have landed as REAL prepare steps on the saved record.
   const saved: any = await app.evaluate(async (_electronModule, pid: any) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const datasets = req('./src/datasets.js');
+    const datasets = req('./src/data/datasets.js');
     const list = await datasets.listDatasets(pid);
     const summary = list.find((d: any) => d.name === 'Composed sales');
     if (!summary) return { missing: list.map((d: any) => d.name).join(',') };
@@ -221,8 +221,8 @@ async function main(): Promise<void> {
   // ── Refresh the composed dataset end to end ────────────────────────────────
   const refreshed: any = await app.evaluate(async (_electronModule, pid: any) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const datasets = req('./src/datasets.js');
-    const { refreshDataset } = req('./src/datasetRefresh.js');
+    const datasets = req('./src/data/datasets.js');
+    const { refreshDataset } = req('./src/data/datasetRefresh.js');
     const list = await datasets.listDatasets(pid);
     const summary = list.find((d: any) => d.name === 'Composed sales');
     const res = await refreshDataset(pid, summary.id);
@@ -238,8 +238,8 @@ async function main(): Promise<void> {
   const orphaned: any = await app.evaluate(async (_electronModule, arg: any) => {
     const pid = arg.pid; const lookupId = arg.lookupId;
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const datasets = req('./src/datasets.js');
-    const { refreshDataset } = req('./src/datasetRefresh.js');
+    const datasets = req('./src/data/datasets.js');
+    const { refreshDataset } = req('./src/data/datasetRefresh.js');
     await datasets.deleteDataset(pid, lookupId);
     const list = await datasets.listDatasets(pid);
     const summary = list.find((d: any) => d.name === 'Composed sales');

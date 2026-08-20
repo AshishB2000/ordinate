@@ -85,7 +85,7 @@ async function main(): Promise<void> {
   const r: any = await app.evaluate(async () => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
     const projects = req('./src/projects.js');
-    const datasets = req('./src/datasets.js');
+    const datasets = req('./src/data/datasets.js');
     const visuals = req('./src/visuals.js');
     const out: any = {};
 
@@ -251,7 +251,7 @@ async function main(): Promise<void> {
     // file origin — the fixture for the refresh chain further down. Everything
     // else in this file is saved from in-memory rows; this one has to be a file,
     // because the whole point is re-reading it after it changes.
-    const fileImport = req('./src/fileImport.js');
+    const fileImport = req('./src/data/fileImport.js');
     const csvPath = nodePath.join(userDataDir, 'refreshable.csv');
     nodeFs.writeFileSync(csvPath, 'city,visits\nOslo,10\nBergen,20\n', 'utf8');
     const parsed = await fileImport.parseFile(csvPath, 'csv');

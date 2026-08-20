@@ -50,8 +50,8 @@
 
 import * as fs from 'fs';
 import { randomUUID } from 'crypto';
-import type { ParsedColumn } from '../parse';
-import type { Cell } from '../transforms';
+import type { ParsedColumn } from '../data/parse';
+import type { Cell } from '../data/transforms';
 import * as duck from './duckdb';
 
 export interface ParquetTable {

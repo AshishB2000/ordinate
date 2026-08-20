@@ -85,7 +85,7 @@ async function main(): Promise<void> {
   const seeded: any = await app.evaluate(async (_electronModule) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
     const projects = req('./src/projects.js');
-    const datasets = req('./src/datasets.js');
+    const datasets = req('./src/data/datasets.js');
     await projects.init();
     const proj = await projects.createProject('Dock smoke');
     const ds = await datasets.saveDataset(proj.id, {
@@ -495,7 +495,7 @@ async function main(): Promise<void> {
 
   const afterStep: any = await app.evaluate(async (_electronModule, args: any) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const datasets = req('./src/datasets.js');
+    const datasets = req('./src/data/datasets.js');
     const ds = await datasets.getDataset(args.pid, args.did);
     return { steps: ds.steps, columns: ds.columns.map((c: any) => c.name) };
   }, { pid: seeded.projectId, did: seeded.datasetId });
@@ -529,7 +529,7 @@ async function main(): Promise<void> {
   ok('the dataset pipeline is UNCHANGED by opening the editor (still 3 steps)',
     (await app.evaluate(async (_electronModule, args: any) => {
       const req = (process as any).mainModule.require.bind((process as any).mainModule);
-      const datasets = req('./src/datasets.js');
+      const datasets = req('./src/data/datasets.js');
       const ds = await datasets.getDataset(args.pid, args.did);
       return ds.steps.length;
     }, { pid: seeded.projectId, did: seeded.datasetId })) === 3);

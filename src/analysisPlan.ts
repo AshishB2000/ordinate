@@ -43,12 +43,12 @@
 // and work with nothing configured, so a user can hand-write or edit a plan and
 // still get the preview + build. `analysis:draft` returns `not_ready`.
 
-import type { ParsedColumn } from './parse';
-import type { Cell, FilterStep, TransformStep } from './transforms';
+import type { ParsedColumn } from './data/parse';
+import type { Cell, FilterStep, TransformStep } from './data/transforms';
 import type { FValue } from './formula/formula';
 import { compile } from './formula/formula';
-import type { ColumnSummary } from './datasetStats';
-import * as datasets from './datasets';
+import type { ColumnSummary } from './data/datasetStats';
+import * as datasets from './data/datasets';
 import * as visuals from './visuals';
 import type { VizEncoding } from './visuals';
 import type { VizDataResult } from './vizData';
