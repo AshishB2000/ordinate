@@ -15,9 +15,9 @@
 // declared-vs-runtime type split in `stepFilter`/`aggregate`, and removes column
 // -name injection. TRY_CAST is never used to *decide* a type — only to compare.
 
-import { detectColumnType, coerceValue } from './parse';
-import type { ParsedColumn } from './parse';
-import type { ApplyResult, Cell, TableData, TransformStep } from './transforms';
+import { detectColumnType, coerceValue } from '../parse';
+import type { ParsedColumn } from '../parse';
+import type { ApplyResult, Cell, TableData, TransformStep } from '../transforms';
 import { generateSql, ORD } from './sqlGen';
 import type { SqlColumn } from './sqlGen';
 import * as duck from './duckdb';

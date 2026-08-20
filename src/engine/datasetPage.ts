@@ -84,9 +84,9 @@
 // See the notes on `matchExpr` (case folding) and `colIndex` (duplicate column
 // names). Both are listed there rather than papered over.
 
-import type { ColumnType, ParsedColumn } from './parse';
-import type { Cell, FilterStep } from './transforms';
-import { applyPipeline } from './transforms';
+import type { ColumnType, ParsedColumn } from '../parse';
+import type { Cell, FilterStep } from '../transforms';
+import { applyPipeline } from '../transforms';
 import { filterPredicates } from './residentQuery';
 import { relationSql } from './parquetStore';
 import * as duck from './duckdb';

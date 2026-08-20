@@ -1,8 +1,8 @@
 import { ipcMain, app } from 'electron';
 import * as fs from 'fs';
 import * as datasets from '../datasets';
-import * as datasetView from '../datasetView';
-import * as duck from '../duckdb';
+import * as datasetView from '../engine/datasetView';
+import * as duck from '../engine/duckdb';
 
 // Mosaic database connector over Electron IPC — MAIN PROCESS.
 //

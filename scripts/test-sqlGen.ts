@@ -16,10 +16,10 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 
-const sqlGen: typeof import('../src/sqlGen') = require('../src/sqlGen');
+const sqlGen: typeof import('../src/engine/sqlGen') = require('../src/engine/sqlGen');
 const { execFileSync } = require('child_process') as typeof import('child_process');
 
-type SqlColumn = import('../src/sqlGen').SqlColumn;
+type SqlColumn = import('../src/engine/sqlGen').SqlColumn;
 type TransformStep = import('../src/transforms').TransformStep;
 
 let failures = 0;

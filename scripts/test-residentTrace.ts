@@ -11,7 +11,7 @@
 export {}; // module scope — sibling test scripts share top-level names
 
 // ponytail: compiled sibling of ../src/residentTrace.ts.
-const trace: typeof import('../src/residentTrace') = require('../src/residentTrace');
+const trace: typeof import('../src/engine/residentTrace') = require('../src/engine/residentTrace');
 
 let failures = 0;
 function ok(label: string, cond: boolean) {

@@ -19,9 +19,9 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import * as rq from '../src/residentQuery';
-import * as pq from '../src/parquetStore';
-import * as duck from '../src/duckdb';
+import * as rq from '../src/engine/residentQuery';
+import * as pq from '../src/engine/parquetStore';
+import * as duck from '../src/engine/duckdb';
 import * as metricValue from '../src/metricValue';
 import * as vizData from '../src/vizData';
 import type { ParsedColumn } from '../src/parse';

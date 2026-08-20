@@ -134,9 +134,9 @@
 // is inherited verbatim from `residentQuery`/`sqlGen`/`statsResident` and listed
 // here rather than papered over.
 
-import type { ParsedColumn } from './parse';
-import type { Anomaly, AnomalyKind, AnomalyOptions } from './anomalies';
-import type { ColumnSummary, QualityIssue } from './datasetStats';
+import type { ParsedColumn } from '../parse';
+import type { Anomaly, AnomalyKind, AnomalyOptions } from '../anomalies';
+import type { ColumnSummary, QualityIssue } from '../datasetStats';
 import { sqlEmpty } from './sqlGen';
 import { relationSql } from './parquetStore';
 import * as statsResident from './statsResident';

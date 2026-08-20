@@ -94,7 +94,7 @@ const ALLOWED: Record<string, number> = {
   'scripts/test-connectorsHttp.ts': 889,
   'src/analysisPlan.ts': 884,
   'src/analyze.ts': 1021,
-  'src/anomaliesResident.ts': 870,
+  'src/engine/anomaliesResident.ts': 870,
   'src/connectors/http.ts': 1036,
   'src/connectors/local.ts': 804,
   'src/localCliRun.ts': 822,

@@ -20,8 +20,8 @@ const os = require('os');
 const fs = require('fs');
 
 const transforms = require('../src/transforms');
-const pipelineDuck = require('../src/pipelineDuck');
-const parquetStore = require('../src/parquetStore');
+const pipelineDuck = require('../src/engine/pipelineDuck');
+const parquetStore = require('../src/engine/parquetStore');
 
 // A representative pipeline: one of each shape that costs something — a
 // row-wise expression, a predicate, and an aggregate.

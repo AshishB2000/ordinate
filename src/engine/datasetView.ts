@@ -109,7 +109,7 @@
 // view VALUES are passed through untouched and inherit the bridge's behaviour
 // like any other query.)
 
-import type { ColumnType, ParsedColumn } from './parse';
+import type { ColumnType, ParsedColumn } from '../parse';
 import { relationSql } from './parquetStore';
 import * as duck from './duckdb';
 

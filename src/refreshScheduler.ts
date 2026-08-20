@@ -29,7 +29,7 @@ import type { AutoRefreshEvery, DatasetSummary } from './datasets';
 import * as projects from './projects';
 import { refreshDataset } from './datasetRefresh';
 import { detectAnomalies } from './anomalies';
-import { detectAnomaliesResident } from './anomaliesResident';
+import { detectAnomaliesResident } from './engine/anomaliesResident';
 import { diffAnomalies } from './anomalyWatch';
 
 /** How often the tick looks for work. The schedules themselves are hours apart. */

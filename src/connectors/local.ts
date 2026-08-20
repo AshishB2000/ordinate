@@ -215,7 +215,7 @@ import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import * as duck from '../duckdb';
+import * as duck from '../engine/duckdb';
 import { hardenConnection, hardeningState } from '../ipc/mosaic';
 import type {
   ConnectorColumn,

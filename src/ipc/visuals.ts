@@ -5,9 +5,9 @@ import * as visuals from '../visuals';
 import * as datasets from '../datasets';
 import { buildVizData, recommendChartType } from '../vizData';
 import type { VizDataResult } from '../vizData';
-import { aggregateResident } from '../residentQuery';
-import type { ResidentMeasure } from '../residentQuery';
-import * as trace from '../residentTrace';
+import { aggregateResident } from '../engine/residentQuery';
+import type { ResidentMeasure } from '../engine/residentQuery';
+import * as trace from '../engine/residentTrace';
 import { sanitizeEncoding, sanitizeChartType } from '../visuals';
 import type { VizEncoding } from '../visuals';
 import type { Cell, FilterStep } from '../transforms';
@@ -17,9 +17,9 @@ import { FILTER_OPS, LIST_OPS } from '../filterOps';
 // The drill-down panel pages rows through the SAME two-path decision the Explore
 // grid uses — see `pageFor`'s note on why there is only one of them.
 import { pageFor } from './datasets';
-import { MAX_LIMIT } from '../datasetPage';
-import type { PageRequest } from '../datasetPage';
-import { computeColumnSummariesResident } from '../statsResident';
+import { MAX_LIMIT } from '../engine/datasetPage';
+import type { PageRequest } from '../engine/datasetPage';
+import { computeColumnSummariesResident } from '../engine/statsResident';
 import { computeColumnSummary } from '../datasetStats';
 import type { ColumnSummary } from '../datasetStats';
 import { suggestCharts } from '../analyze';

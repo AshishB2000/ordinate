@@ -510,8 +510,9 @@ function spawn(): void {
   dataSab = payload;
   dataView = new Uint8Array(payload);
 
-  // The worker is the emitted sibling of src/duckdbWorker.ts, resolved relative
-  // to this file (CommonJS emit → __dirname is src/, packaged or not).
+  // The worker is the emitted sibling of src/engine/duckdbWorker.ts, resolved
+  // relative to this file (CommonJS emit → __dirname is src/engine/, packaged or
+  // not). This resolves ONLY because the whole engine cluster shares a directory.
   const workerPath = path.join(__dirname, 'duckdbWorker.js');
   Atomics.store(ctl, SIG, PENDING);
   const w = new Worker(workerPath, {

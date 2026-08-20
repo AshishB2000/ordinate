@@ -19,9 +19,9 @@ const fs = require('fs');
 const path = require('path');
 
 const transforms = require('../src/transforms');
-const { runResidentPipeline } = require('../src/pipelineDuck');
-const parquetStore = require('../src/parquetStore');
-const trace = require('../src/residentTrace');
+const { runResidentPipeline } = require('../src/engine/pipelineDuck');
+const parquetStore = require('../src/engine/parquetStore');
+const trace = require('../src/engine/residentTrace');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-resident-'));
 process.on('exit', () => { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (_) {} });

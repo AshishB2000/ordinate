@@ -69,7 +69,7 @@ const datasets: typeof import('../src/datasets') = require('../src/datasets');
 const dashboardsStore: typeof import('../src/dashboards') = require('../src/dashboards');
 const transforms: typeof import('../src/transforms') = require('../src/transforms');
 const metricValue: typeof import('../src/metricValue') = require('../src/metricValue');
-const residentQuery: typeof import('../src/residentQuery') = require('../src/residentQuery');
+const residentQuery: typeof import('../src/engine/residentQuery') = require('../src/engine/residentQuery');
 const dashboardsIpc: typeof import('../src/ipc/dashboards') = require('../src/ipc/dashboards');
 
 dashboardsIpc.register();

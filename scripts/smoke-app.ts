@@ -123,8 +123,8 @@ async function main(): Promise<void> {
     // dashboard:metric actually use since Phase 2.5. At a million rows the old
     // hydrate-then-fold would dominate this test's runtime while exercising a
     // path the app no longer takes.
-    const residentQuery = req('./src/residentQuery.js');
-    const datasetPage = req('./src/datasetPage.js');
+    const residentQuery = req('./src/engine/residentQuery.js');
+    const datasetPage = req('./src/engine/datasetPage.js');
     const src = await datasets.residentSource(proj.id, ds.id);
     out.hasResidentSource = !!src;
 
@@ -154,7 +154,7 @@ async function main(): Promise<void> {
     //   1. the chart returns only the 3 listed groups,
     //   2. the metric changes (a skipped predicate would return the full sum),
     //   3. residentTrace says 'resident', not 'skipped' or 'failed'.
-    const trace = req('./src/residentTrace.js');
+    const trace = req('./src/engine/residentTrace.js');
     const ipcVisuals = req('./src/ipc/visuals.js');
     const inFilter = [
       { type: 'filter', column: 'region', op: 'in', values: ['region0', 'region2', 'region4'] },

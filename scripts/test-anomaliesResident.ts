@@ -60,9 +60,9 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled siblings of the REAL modules (built by pretest).
-const parquetStore: typeof import('../src/parquetStore') = require('../src/parquetStore');
+const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
 const anomalies: typeof import('../src/anomalies') = require('../src/anomalies');
-const anomaliesResident: typeof import('../src/anomaliesResident') = require('../src/anomaliesResident');
+const anomaliesResident: typeof import('../src/engine/anomaliesResident') = require('../src/engine/anomaliesResident');
 const projects: typeof import('../src/projects') = require('../src/projects');
 const datasets: typeof import('../src/datasets') = require('../src/datasets');
 const dashboards: typeof import('../src/dashboards') = require('../src/dashboards');

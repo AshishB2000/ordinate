@@ -14,8 +14,8 @@
 
 import { applyPipeline } from '../src/transforms';
 import type { Cell, TableData, TransformStep } from '../src/transforms';
-import { runOnDuckDb } from '../src/pipelineDuck';
-import * as duck from '../src/duckdb';
+import { runOnDuckDb } from '../src/engine/pipelineDuck';
+import * as duck from '../src/engine/duckdb';
 
 let failures = 0;
 function ok(cond: boolean, label: string): void {

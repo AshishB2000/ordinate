@@ -23,8 +23,8 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import * as dp from '../src/datasetPage';
-import * as pq from '../src/parquetStore';
+import * as dp from '../src/engine/datasetPage';
+import * as pq from '../src/engine/parquetStore';
 import type { ParsedColumn } from '../src/parse';
 import type { Cell } from '../src/transforms';
 

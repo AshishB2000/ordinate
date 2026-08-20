@@ -54,7 +54,7 @@ import type { VizEncoding } from './visuals';
 import type { VizDataResult } from './vizData';
 import * as analysis from './analysis';
 import * as dashboards from './dashboards';
-import { computeColumnSummariesResident, sampleRowsResident } from './statsResident';
+import { computeColumnSummariesResident, sampleRowsResident } from './engine/statsResident';
 // INVERTED IMPORT, deliberately. `vizDataFor` lives beside `residentVizData` in
 // src/ipc/visuals.ts because that is where the resident-vs-JS decision for a
 // chart already lives, and `register()` is inert until called (the same reason

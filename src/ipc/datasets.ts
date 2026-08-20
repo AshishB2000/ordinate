@@ -15,7 +15,7 @@ import {
   findQualityIssuesResident,
   sampleRowsResident,
   StatsSource,
-} from '../statsResident';
+} from '../engine/statsResident';
 import {
   readPage,
   pageRowsJs,
@@ -23,14 +23,14 @@ import {
   readDistinctPage,
   distinctValuesPageJs,
   MAX_DISTINCT,
-} from '../datasetPage';
+} from '../engine/datasetPage';
 // The visual-filter whitelist, reused verbatim: `dataset:page` now takes the
 // same `FilterStep[]` a visual carries, and two sanitisers for one shape is how
 // they drift apart.
 import { sanitizeFilters } from '../visuals';
 import { explainText, suggestSteps, suggestCalcField } from '../analyze';
 import { compile } from '../formula/formula';
-import * as trace from '../residentTrace';
+import * as trace from '../engine/residentTrace';
 
 // Datasets (file-based data sources) IPC — pick+parse/paste/save/list/get/delete.
 // All are ipcMain.handle (request/response). Native open dialog runs in MAIN;

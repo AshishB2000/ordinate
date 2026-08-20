@@ -10,7 +10,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 
-const duckdb: typeof import('../src/duckdb') = require('../src/duckdb');
+const duckdb: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 const fsd = require('fs') as typeof import('fs');
 const osd = require('os') as typeof import('os');
 const pathd = require('path') as typeof import('path');
