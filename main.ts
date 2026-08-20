@@ -450,7 +450,11 @@ require("./src/ipc/geo").register();
 
 require("./src/ipc/theme").register({ getHubWindow: () => hubWindow });
 
-require("./src/ipc/providers").register({ getHubWindow: () => hubWindow, notifyKeyChanged });
+require("./src/ipc/providers").register({
+  getHubWindow: () => hubWindow, notifyKeyChanged,
+  entryData, entryThreads, entryDataUrls,
+  clearHistorySummaries: () => { historySummaries = []; },
+});
 
 require("./src/ipc/cli").register({ notifyKeyChanged });
 
