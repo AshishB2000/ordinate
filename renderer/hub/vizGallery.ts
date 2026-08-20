@@ -183,6 +183,9 @@ async function refreshVisualList(): Promise<void> {
   const grid = vizEl('viz-grid');
   const empty = vizEl('viz-empty-wrap');
   if (!grid) return;
+  // Destroy the previous paint's live thumbnail charts BEFORE their canvases
+  // are discarded (vizThumbs.ts) — repeated section switches must not leak.
+  vizThumbsReset();
   grid.innerHTML = '';
   let items: any[] = [];
   if (currentProjectId) {
@@ -247,6 +250,9 @@ function makeVisualCard(v: any): HTMLElement {
   // hand-written SVG in renderResult.ts, never user or model input.
   glyph.innerHTML = VIZ_ICONS[chartType] || VIZ_ICONS.column;
   tile.appendChild(glyph);
+  // Live thumbnail (vizThumbs.ts): rendered lazily when the tile scrolls into
+  // view; maps and tables keep the glyph, and any failure leaves it in place.
+  vizThumbObserve(tile, v);
 
   const name = document.createElement('span');
   name.className = 'viz-card-name';

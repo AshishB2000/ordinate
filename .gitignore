@@ -222,6 +222,8 @@ scripts/**/*.js
 /renderer/hub/vizGallery.js
 /renderer/hub/vizNew.js
 /renderer/hub/vizBuilder.js
+# vizThumbs.ts is NEW (gallery thumbnails), not part of that split — same emit rule.
+/renderer/hub/vizThumbs.js
 
 # analyses.ts split by job (.claude/rules/file-size.md) — emitted siblings.
 /renderer/hub/anList.js

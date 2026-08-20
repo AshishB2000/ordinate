@@ -4001,7 +4001,7 @@ async function main(): Promise<void> {
   // latency tracks the host, not the code.
   await win
     .waitForFunction(
-      () => !!document.querySelector('svg[class*="plot-"], canvas'),
+      () => !!document.querySelector('svg[class*="plot-"], #viz-area canvas'), // #viz-area: gallery thumbs are canvases too
       undefined,
       { timeout: 60_000 },
     )
@@ -4016,7 +4016,7 @@ async function main(): Promise<void> {
       marks: svg ? svg.querySelectorAll('rect, path, circle, line').length : 0,
       // The injection the build removes. One of these means style-src fired.
       styleEls: document.querySelectorAll('style').length,
-      canvases: document.querySelectorAll('canvas').length,
+      canvases: document.querySelectorAll('#viz-area canvas').length, // scoped: gallery thumbs are canvases too
     };
   });
   ok('vgplot rendered an SVG (not a Chart.js canvas)', mosaic.drew,
