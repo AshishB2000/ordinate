@@ -356,7 +356,7 @@ async function main(): Promise<void> {
   // hand copilot:ask that kind — the channel has always taken { kind, id }.
   await app.evaluate(async (_electronModule, pid: string) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const dashboards = req('./src/dashboards.js');
+    const dashboards = req('./src/analysis/dashboards.js');
     await dashboards.saveDashboard(pid, { name: 'Quarter review' });
   }, seeded.projectId);
 

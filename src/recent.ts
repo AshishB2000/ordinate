@@ -13,8 +13,8 @@
 // Import style mirrors src/analysis.ts — NodeNext CommonJS, strict main world.
 import * as projects from './projects';
 import * as datasets from './data/datasets';
-import * as analysis from './analysis';
-import * as dashboards from './dashboards';
+import * as analysis from './analysis/analysis';
+import * as dashboards from './analysis/dashboards';
 
 export type RecentType = 'dataset' | 'analysis' | 'dashboard';
 

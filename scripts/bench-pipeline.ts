@@ -67,9 +67,9 @@ const os = require('os') as typeof import('os');
 // ponytail: compiled siblings of the src/ modules under test.
 const transforms: typeof import('../src/data/transforms') = require('../src/data/transforms');
 const combine: typeof import('../src/data/combine') = require('../src/data/combine');
-const vizData: typeof import('../src/vizData') = require('../src/vizData');
+const vizData: typeof import('../src/analysis/vizData') = require('../src/analysis/vizData');
 const datasetStats: typeof import('../src/data/datasetStats') = require('../src/data/datasetStats');
-const metricValue: typeof import('../src/metricValue') = require('../src/metricValue');
+const metricValue: typeof import('../src/analysis/metricValue') = require('../src/analysis/metricValue');
 
 const { applyPipeline } = transforms;
 const { combineTables } = combine;

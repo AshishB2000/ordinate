@@ -14,7 +14,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { SUGGESTABLE_CHART_TYPES } from '../src/visuals';
+import { SUGGESTABLE_CHART_TYPES } from '../src/analysis/visuals';
 
 let failures = 0;
 function ok(label: string, cond: boolean, detail?: string): void {

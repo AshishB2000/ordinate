@@ -109,9 +109,9 @@ async function main(): Promise<void> {
     await datasets.updateSteps(proj.id, ds.id, seedSteps);
     // …plus a real analysis with two half-width visual cards, for the
     // an-focus layout check at the end of this file.
-    const analysis = req('./src/analysis.js');
+    const analysis = req('./src/analysis/analysis.js');
     await analysis.init();
-    const visualsMod = req('./src/visuals.js');
+    const visualsMod = req('./src/analysis/visuals.js');
     const viz = await visualsMod.saveVisual(proj.id, {
       name: 'Revenue by region',
       datasetId: ds.id,
@@ -567,7 +567,7 @@ async function main(): Promise<void> {
 
   const visuals: any = await app.evaluate(async (_electronModule, args: any) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const visualsMod = req('./src/visuals.js');
+    const visualsMod = req('./src/analysis/visuals.js');
     return visualsMod.listVisuals(args.pid);
   }, { pid: seeded.projectId });
   // By NAME, not by datasetId: the seeded analysis above owns a visual on the

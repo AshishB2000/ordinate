@@ -34,7 +34,7 @@ const Module: any = require('module');
 type Cell = import('../src/data/transforms').Cell;
 type FilterStep = import('../src/data/transforms').FilterStep;
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
-type MetricAggregation = import('../src/metricValue').MetricAggregation;
+type MetricAggregation = import('../src/analysis/metricValue').MetricAggregation;
 type IpcHandler = (event: unknown, payload?: unknown) => Promise<any>;
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-metric-rewire-'));
@@ -66,9 +66,9 @@ Module._load = function (request: string, ...rest: any[]): any {
 // ponytail: compiled siblings of the REAL modules (built by pretest).
 const projects: typeof import('../src/projects') = require('../src/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
-const dashboardsStore: typeof import('../src/dashboards') = require('../src/dashboards');
+const dashboardsStore: typeof import('../src/analysis/dashboards') = require('../src/analysis/dashboards');
 const transforms: typeof import('../src/data/transforms') = require('../src/data/transforms');
-const metricValue: typeof import('../src/metricValue') = require('../src/metricValue');
+const metricValue: typeof import('../src/analysis/metricValue') = require('../src/analysis/metricValue');
 const residentQuery: typeof import('../src/engine/residentQuery') = require('../src/engine/residentQuery');
 const dashboardsIpc: typeof import('../src/ipc/dashboards') = require('../src/ipc/dashboards');
 

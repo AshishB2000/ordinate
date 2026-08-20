@@ -22,11 +22,11 @@ import * as path from 'path';
 import * as rq from '../src/engine/residentQuery';
 import * as pq from '../src/engine/parquetStore';
 import * as duck from '../src/engine/duckdb';
-import * as metricValue from '../src/metricValue';
-import * as vizData from '../src/vizData';
+import * as metricValue from '../src/analysis/metricValue';
+import * as vizData from '../src/analysis/vizData';
 import type { ParsedColumn } from '../src/data/parse';
 import type { Cell, FilterStep } from '../src/data/transforms';
-import type { VizEncoding } from '../src/visuals';
+import type { VizEncoding } from '../src/analysis/visuals';
 
 let failures = 0;
 function ok(label: string, cond: boolean): void {

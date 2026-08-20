@@ -1,9 +1,9 @@
 import { ipcMain } from 'electron';
-import * as analysis from '../analysis';
-import * as dashboards from '../dashboards';
-import * as visuals from '../visuals';
+import * as analysis from '../analysis/analysis';
+import * as dashboards from '../analysis/dashboards';
+import * as visuals from '../analysis/visuals';
 import { draftDashboard } from '../analyze';
-import * as plan from '../analysisPlan';
+import * as plan from '../analysis/analysisPlan';
 
 // Analyses IPC — list/get/create/rename/update/delete an Analysis (the AUTHORING
 // container), plus the two channels that only exist here:

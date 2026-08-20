@@ -135,7 +135,7 @@
 // here rather than papered over.
 
 import type { ParsedColumn } from '../data/parse';
-import type { Anomaly, AnomalyKind, AnomalyOptions } from '../anomalies';
+import type { Anomaly, AnomalyKind, AnomalyOptions } from '../analysis/anomalies';
 import type { ColumnSummary, QualityIssue } from '../data/datasetStats';
 import { sqlEmpty } from './sqlGen';
 import { relationSql } from './parquetStore';

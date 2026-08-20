@@ -36,8 +36,8 @@ Module._load = function (request: string, ...rest: any[]): any {
 // ponytail: compiled siblings of the .ts sources under test.
 const projects: typeof import('../src/projects') = require('../src/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
-const visuals: typeof import('../src/visuals') = require('../src/visuals');
-const dashboards: typeof import('../src/dashboards') = require('../src/dashboards');
+const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
+const dashboards: typeof import('../src/analysis/dashboards') = require('../src/analysis/dashboards');
 const datasetStats: typeof import('../src/data/datasetStats') = require('../src/data/datasetStats');
 const ipcCopilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
 

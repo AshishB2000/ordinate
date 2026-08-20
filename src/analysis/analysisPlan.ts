@@ -43,25 +43,25 @@
 // and work with nothing configured, so a user can hand-write or edit a plan and
 // still get the preview + build. `analysis:draft` returns `not_ready`.
 
-import type { ParsedColumn } from './data/parse';
-import type { Cell, FilterStep, TransformStep } from './data/transforms';
-import type { FValue } from './formula/formula';
-import { compile } from './formula/formula';
-import type { ColumnSummary } from './data/datasetStats';
-import * as datasets from './data/datasets';
+import type { ParsedColumn } from '../data/parse';
+import type { Cell, FilterStep, TransformStep } from '../data/transforms';
+import type { FValue } from '../formula/formula';
+import { compile } from '../formula/formula';
+import type { ColumnSummary } from '../data/datasetStats';
+import * as datasets from '../data/datasets';
 import * as visuals from './visuals';
 import type { VizEncoding } from './visuals';
 import type { VizDataResult } from './vizData';
 import * as analysis from './analysis';
 import * as dashboards from './dashboards';
-import { computeColumnSummariesResident, sampleRowsResident } from './engine/statsResident';
+import { computeColumnSummariesResident, sampleRowsResident } from '../engine/statsResident';
 // INVERTED IMPORT, deliberately. `vizDataFor` lives beside `residentVizData` in
 // src/ipc/visuals.ts because that is where the resident-vs-JS decision for a
 // chart already lives, and `register()` is inert until called (the same reason
 // scripts/test-analysis.ts imports src/ipc/analyses.ts directly). Reaching for
 // it here — rather than reimplementing the decision — is what makes guarantee 2
 // above structural instead of aspirational.
-import { vizDataFor } from './ipc/visuals';
+import { vizDataFor } from '../ipc/visuals';
 
 // ── The CLOSED chart-type vocabulary ───────────────────────────────────────
 //

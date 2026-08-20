@@ -38,11 +38,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
-import * as projects from './projects';
+import * as projects from '../projects';
 import { sanitizeChartType, sanitizeEncoding, sanitizeOverrides, sanitizeFilters } from './visuals';
 import type { Visual } from './visuals';
-import { sanitizeSteps } from './data/transforms';
-import type { FilterStep } from './data/transforms';
+import { sanitizeSteps } from '../data/transforms';
+import type { FilterStep } from '../data/transforms';
 
 export type CardType = 'visual' | 'text' | 'metric' | 'control';
 export type MetricAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';

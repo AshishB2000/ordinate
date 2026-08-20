@@ -62,11 +62,11 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled siblings of the real modules.
-const analysis: typeof import('../src/analysis') = require('../src/analysis');
-const dashboards: typeof import('../src/dashboards') = require('../src/dashboards');
+const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
+const dashboards: typeof import('../src/analysis/dashboards') = require('../src/analysis/dashboards');
 const projects: typeof import('../src/projects') = require('../src/projects');
-const visuals: typeof import('../src/visuals') = require('../src/visuals');
-const dashboardExport: typeof import('../src/dashboardExport') = require('../src/dashboardExport');
+const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
+const dashboardExport: typeof import('../src/analysis/dashboardExport') = require('../src/analysis/dashboardExport');
 const analysesIpc: typeof import('../src/ipc/analyses') = require('../src/ipc/analyses');
 
 let failures = 0;

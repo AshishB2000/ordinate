@@ -62,7 +62,7 @@ async function main(): Promise<void> {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
     const projects = req('./src/projects.js');
     const datasets = req('./src/data/datasets.js');
-    const analysis = req('./src/analysis.js');
+    const analysis = req('./src/analysis/analysis.js');
     await projects.init();
     await analysis.init();
     const proj = await projects.createProject('Ask actions smoke');
@@ -94,7 +94,7 @@ async function main(): Promise<void> {
 
   const listAnalyses = (pid: string): Promise<any[]> => app.evaluate(async (_m, p: string) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    return req('./src/analysis.js').listAnalyses(p);
+    return req('./src/analysis/analysis.js').listAnalyses(p);
   }, pid);
 
   // ── The chart data is app-computed, never model text ────────────────────
@@ -135,7 +135,7 @@ async function main(): Promise<void> {
     `${analysesBefore} -> ${after.length}: ${after.map((a: any) => a.name).join(', ')}`);
   const full: any = newAn ? await app.evaluate(async (_m, args: any) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    return req('./src/analysis.js').getAnalysis(args.pid, args.id);
+    return req('./src/analysis/analysis.js').getAnalysis(args.pid, args.id);
   }, { pid: seeded.projectId, id: newAn.id }) : null;
   const card0 = full && full.sheets && full.sheets[0] && full.sheets[0].cards ? full.sheets[0].cards[0] : null;
   ok('…holding exactly one sheet with the saved visual on it',

@@ -3,12 +3,12 @@ import * as config from '../config';
 import * as copilot from '../copilot';
 import * as projects from '../projects';
 import * as datasets from '../data/datasets';
-import * as visuals from '../visuals';
-import * as dashboards from '../dashboards';
-import * as analysis from '../analysis';
+import * as visuals from '../analysis/visuals';
+import * as dashboards from '../analysis/dashboards';
+import * as analysis from '../analysis/analysis';
 import { computeColumnSummary, findQualityIssues } from '../data/datasetStats';
-import { buildVizData } from '../vizData';
-import { computeMetric } from '../metricValue';
+import { buildVizData } from '../analysis/vizData';
+import { computeMetric } from '../analysis/metricValue';
 import { askCopilot } from '../analyze';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle

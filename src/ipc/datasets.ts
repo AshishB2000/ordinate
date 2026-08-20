@@ -27,7 +27,7 @@ import {
 // The visual-filter whitelist, reused verbatim: `dataset:page` now takes the
 // same `FilterStep[]` a visual carries, and two sanitisers for one shape is how
 // they drift apart.
-import { sanitizeFilters } from '../visuals';
+import { sanitizeFilters } from '../analysis/visuals';
 import { explainText, suggestSteps, suggestCalcField } from '../analyze';
 import { compile } from '../formula/formula';
 import * as trace from '../engine/residentTrace';

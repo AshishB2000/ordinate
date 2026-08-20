@@ -6,7 +6,7 @@ import * as config from './config';
 import { runLocalCli } from './localCliRun';
 import { computeMetrics, deriveChartData } from './formula/calc';
 import { writeHeadline, verifyHeadlineNumbers } from './headline';
-import { SUGGESTABLE_CHART_TYPES } from './visuals';
+import { SUGGESTABLE_CHART_TYPES } from './analysis/visuals';
 import { streamProvider } from './analyzeStream';
 
 const ANTHROPIC_VERSION = '2023-06-01';

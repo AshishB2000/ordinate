@@ -14,10 +14,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
-import * as projects from './projects';
-import * as datasets from './data/datasets';
-import { sanitizeSteps } from './data/transforms';
-import type { FilterStep } from './data/transforms';
+import * as projects from '../projects';
+import * as datasets from '../data/datasets';
+import { sanitizeSteps } from '../data/transforms';
+import type { FilterStep } from '../data/transforms';
 
 export type VizAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max' | 'none';
 

@@ -27,10 +27,10 @@ import { app } from 'electron';
 import * as projects from './projects';
 import type { Dataset } from './data/datasets';
 import type { ColumnSummary, QualityIssue } from './data/datasetStats';
-import type { Visual } from './visuals';
-import type { Dashboard, Page } from './dashboards';
-import type { Analysis } from './analysis';
-import type { VizDataResult } from './vizData';
+import type { Visual } from './analysis/visuals';
+import type { Dashboard, Page } from './analysis/dashboards';
+import type { Analysis } from './analysis/analysis';
+import type { VizDataResult } from './analysis/vizData';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

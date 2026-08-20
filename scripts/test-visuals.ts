@@ -22,7 +22,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled siblings of the real modules.
-const visuals: typeof import('../src/visuals') = require('../src/visuals');
+const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/projects') = require('../src/projects');
 

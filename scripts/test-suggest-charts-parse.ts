@@ -38,7 +38,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 const analyze: typeof import('../src/analyze') = require('../src/analyze');
 const config: any = require('../src/config');
 const localCliRun: any = require('../src/localCliRun');
-const visuals: typeof import('../src/visuals') = require('../src/visuals');
+const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 
 let failures = 0;
 function ok(label: string, cond: boolean, detail?: string): void {

@@ -10,7 +10,7 @@ export {}; // module scope — sibling test scripts share top-level names
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
 
 // ponytail: compiled sibling of ../src/vizData.ts.
-const vizData: typeof import('../src/vizData') = require('../src/vizData');
+const vizData: typeof import('../src/analysis/vizData') = require('../src/analysis/vizData');
 const { buildVizData } = vizData;
 
 let failures = 0;

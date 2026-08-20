@@ -616,7 +616,7 @@ require("./src/ipc/search").register();
       return; // one notification per dataset per tick
     }
     if (o.newAnomalies > 0) {
-      maybeNotify(require("./src/anomalyWatch").watchMessage(o.name, o.newAnomalies));
+      maybeNotify(require("./src/analysis/anomalyWatch").watchMessage(o.name, o.newAnomalies));
     }
   });
 

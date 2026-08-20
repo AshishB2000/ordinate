@@ -86,7 +86,7 @@ async function main(): Promise<void> {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
     const projects = req('./src/projects.js');
     const datasets = req('./src/data/datasets.js');
-    const visuals = req('./src/visuals.js');
+    const visuals = req('./src/analysis/visuals.js');
     const out: any = {};
 
     await projects.init();
@@ -1761,7 +1761,7 @@ async function main(): Promise<void> {
   // which is what made this first report "not saved" for a write that worked.
   const persisted = await app.evaluate(async (_electron, arg: any) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const visuals = req('./src/visuals.js');
+    const visuals = req('./src/analysis/visuals.js');
     const v = await visuals.getVisual(arg.projectId, arg.visualId);
     return { hasOverrides: !!v && !!v.overrides, showLegend: v && v.overrides && v.overrides.showLegend };
   }, { projectId: r.projectId, visualId: r.mapVisualId });
@@ -1824,7 +1824,7 @@ async function main(): Promise<void> {
   await win.waitForTimeout(1800);
   const savedInteract = await app.evaluate(async (_electron, arg: any) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const visuals = req('./src/visuals.js');
+    const visuals = req('./src/analysis/visuals.js');
     const v = await visuals.getVisual(arg.projectId, arg.visualId);
     return { crossFilter: v && v.overrides && v.overrides.crossFilter };
   }, { projectId: r.projectId, visualId: r.mapVisualId });

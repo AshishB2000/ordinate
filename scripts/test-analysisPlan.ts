@@ -63,11 +63,11 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled siblings of the real modules.
-const plan: typeof import('../src/analysisPlan') = require('../src/analysisPlan');
+const plan: typeof import('../src/analysis/analysisPlan') = require('../src/analysis/analysisPlan');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/projects') = require('../src/projects');
-const visuals: typeof import('../src/visuals') = require('../src/visuals');
-const analysisStore: typeof import('../src/analysis') = require('../src/analysis');
+const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
+const analysisStore: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const config: typeof import('../src/config') = require('../src/config');
 const configSecrets: typeof import('../src/configSecrets') = require('../src/configSecrets');
 const connections: typeof import('../src/connections') = require('../src/connections');
@@ -501,7 +501,7 @@ async function checkInjection(): Promise<void> {
 
   // No eval / new Function anywhere in the plan module (static guarantee, the
   // same one test-formula.ts makes about the evaluator).
-  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'analysisPlan.ts'), 'utf8')
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'analysis', 'analysisPlan.ts'), 'utf8')
     .replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
   ok('analysisPlan source contains no eval(', !/\beval\s*\(/.test(src));
   ok('analysisPlan source contains no new Function', !/new\s+Function\s*\(/.test(src));

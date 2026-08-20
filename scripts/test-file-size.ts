@@ -92,7 +92,7 @@ const ALLOWED: Record<string, number> = {
   'scripts/test-analysis.ts': 813,
   'scripts/test-anomaliesResident.ts': 837,
   'scripts/test-connectorsHttp.ts': 889,
-  'src/analysisPlan.ts': 884,
+  'src/analysis/analysisPlan.ts': 884,
   'src/analyze.ts': 1021,
   'src/engine/anomaliesResident.ts': 870,
   'src/connectors/http.ts': 1036,

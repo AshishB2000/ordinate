@@ -8,7 +8,7 @@
 export {}; // module scope — sibling test scripts share top-level names
 
 // ponytail: compiled sibling of the real pure module (built by pretest).
-const { buildSelfContainedHtml, sanitizeBundle }: typeof import('../src/dashboardExport') = require('../src/dashboardExport');
+const { buildSelfContainedHtml, sanitizeBundle }: typeof import('../src/analysis/dashboardExport') = require('../src/analysis/dashboardExport');
 
 let failures = 0;
 function ok(label: string, cond: boolean) {

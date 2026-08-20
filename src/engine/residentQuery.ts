@@ -84,7 +84,7 @@ import { coerceValue } from '../data/parse';
 import type { Cell, FilterStep } from '../data/transforms';
 import type { FilterOp } from '../data/filterOps';
 import { FILTER_OPS, COMPARE_OPS, LIST_OPS } from '../data/filterOps';
-import type { MetricAggregation } from '../metricValue';
+import type { MetricAggregation } from '../analysis/metricValue';
 import { sqlEmpty } from './sqlGen';
 import { relationSql } from './parquetStore';
 import * as duck from './duckdb';

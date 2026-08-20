@@ -26,7 +26,7 @@ import type { TableData, TransformStep, ApplyResult } from './transforms';
 import { isValidId } from '../ids';
 import type { DatasetOrigin } from './datasetOrigin';
 import { sanitizeOrigin } from './datasetOrigin';
-import { sanitizeAnomalyKeys } from '../anomalyWatch';
+import { sanitizeAnomalyKeys } from '../analysis/anomalyWatch';
 export type { DatasetOrigin } from './datasetOrigin';
 export { sanitizeOrigin };
 

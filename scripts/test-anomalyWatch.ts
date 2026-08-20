@@ -25,7 +25,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 
-const watch: typeof import('../src/anomalyWatch') = require('../src/anomalyWatch');
+const watch: typeof import('../src/analysis/anomalyWatch') = require('../src/analysis/anomalyWatch');
 const { anomalyKey, diffAnomalies, sanitizeAnomalyKeys, watchMessage, MAX_KEYS } = watch;
 
 let failures = 0;

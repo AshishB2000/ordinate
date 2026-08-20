@@ -29,9 +29,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
-import * as projects from './projects';
+import * as projects from '../projects';
 import { sanitizePages, sanitizeDashboardFilters } from './dashboards';
-import type { FilterStep } from './data/transforms';
+import type { FilterStep } from '../data/transforms';
 
 // Re-exported so callers can type an analysis sheet without importing two
 // modules — and so it stays visible that a sheet IS a dashboard Page.

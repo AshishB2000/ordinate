@@ -59,14 +59,14 @@ Module._load = function (request: string, ...rest: any[]): any {
 // ponytail: compiled siblings.
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/projects') = require('../src/projects');
-const vizData: typeof import('../src/vizData') = require('../src/vizData');
-const visualsMod: typeof import('../src/visuals') = require('../src/visuals');
+const vizData: typeof import('../src/analysis/vizData') = require('../src/analysis/vizData');
+const visualsMod: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
 
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
 type Cell = import('../src/data/transforms').Cell;
 type FilterStep = import('../src/data/transforms').FilterStep;
-type VizEncoding = import('../src/visuals').VizEncoding;
+type VizEncoding = import('../src/analysis/visuals').VizEncoding;
 
 let failures = 0;
 function ok(label: string, cond: boolean): void {

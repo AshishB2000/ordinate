@@ -10,9 +10,9 @@
 // pipeline uses) or a verbatim numeric dataset cell; a non-numeric cell becomes
 // `null` (never a string, never a re-stringified figure).
 
-import type { ParsedColumn } from './data/parse';
-import type { Cell, FilterStep, TableData } from './data/transforms';
-import { applyPipeline } from './data/transforms';
+import type { ParsedColumn } from '../data/parse';
+import type { Cell, FilterStep, TableData } from '../data/transforms';
+import { applyPipeline } from '../data/transforms';
 import type { VizEncoding, VizMeasure } from './visuals';
 
 // === the buildChart input shape (chartRender.ts). A series is "plottable" when

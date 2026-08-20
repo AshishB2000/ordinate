@@ -8,8 +8,8 @@
 export {}; // module scope — sibling test scripts share top-level names
 
 // ponytail: compiled siblings of the real pure modules (built by pretest).
-const { toggleCrossFilter, mergeDashboardFilters }: typeof import('../src/dashboardFilters') =
-  require('../src/dashboardFilters');
+const { toggleCrossFilter, mergeDashboardFilters }: typeof import('../src/analysis/dashboardFilters') =
+  require('../src/analysis/dashboardFilters');
 type FilterStep = import('../src/data/transforms').FilterStep;
 
 let failures = 0;

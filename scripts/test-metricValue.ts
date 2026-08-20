@@ -4,7 +4,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 
-const { computeMetric } = require('../src/metricValue') as typeof import('../src/metricValue');
+const { computeMetric } = require('../src/analysis/metricValue') as typeof import('../src/analysis/metricValue');
 
 let failures = 0;
 function ok(label: string, cond: boolean) {
