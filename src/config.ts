@@ -7,7 +7,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
-import * as localCli from './localCli';
+import * as localCli from './cli/localCli';
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
 interface LegacyProviderEntry { apiKey?: string | null; endpoint?: string; model: string }

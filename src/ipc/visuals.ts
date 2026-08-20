@@ -22,7 +22,7 @@ import type { PageRequest } from '../engine/datasetPage';
 import { computeColumnSummariesResident } from '../engine/statsResident';
 import { computeColumnSummary } from '../data/datasetStats';
 import type { ColumnSummary } from '../data/datasetStats';
-import { suggestCharts } from '../analyze';
+import { suggestCharts } from '../ai/analyze';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus
 // `visual:data` which loads a dataset and runs the PURE bridge (src/vizData.ts) to

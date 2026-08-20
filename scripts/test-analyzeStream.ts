@@ -30,8 +30,8 @@ Module._load = function (request: string, ...rest: any[]): any {
   return origLoad.apply(this, [request, ...rest]);
 };
 
-const analyze: typeof import('../src/analyze') = require('../src/analyze');
-const stream: typeof import('../src/analyzeStream') = require('../src/analyzeStream');
+const analyze: typeof import('../src/ai/analyze') = require('../src/ai/analyze');
+const stream: typeof import('../src/ai/analyzeStream') = require('../src/ai/analyzeStream');
 
 let failures = 0;
 function ok(label: string, cond: boolean): void {

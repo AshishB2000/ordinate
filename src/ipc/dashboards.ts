@@ -2,7 +2,7 @@ import { ipcMain } from 'electron';
 import * as dashboards from '../analysis/dashboards';
 import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
-import * as copilot from '../copilot';
+import * as copilot from '../ai/copilot';
 import * as anomalies from '../analysis/anomalies';
 import * as anomaliesResident from '../engine/anomaliesResident';
 import * as residentQuery from '../engine/residentQuery';
@@ -11,7 +11,7 @@ import { computeMetric } from '../analysis/metricValue';
 import type { MetricAggregation } from '../analysis/metricValue';
 import { applyPipeline } from '../data/transforms';
 import type { FilterStep } from '../data/transforms';
-import { summarizeDashboard, explainAnomalies } from '../analyze';
+import { summarizeDashboard, explainAnomalies } from '../ai/analyze';
 
 // Dashboards IPC — list/get/save/update/delete a Dashboard, plus `dashboard:metric`
 // which loads a dataset and runs the PURE src/metricValue.ts helper to produce the

@@ -28,7 +28,7 @@ import {
 // same `FilterStep[]` a visual carries, and two sanitisers for one shape is how
 // they drift apart.
 import { sanitizeFilters } from '../analysis/visuals';
-import { explainText, suggestSteps, suggestCalcField } from '../analyze';
+import { explainText, suggestSteps, suggestCalcField } from '../ai/analyze';
 import { compile } from '../formula/formula';
 import * as trace from '../engine/residentTrace';
 

@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import * as config from '../config';
-import * as copilot from '../copilot';
+import * as copilot from '../ai/copilot';
 import * as projects from '../projects';
 import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
@@ -9,7 +9,7 @@ import * as analysis from '../analysis/analysis';
 import { computeColumnSummary, findQualityIssues } from '../data/datasetStats';
 import { buildVizData } from '../analysis/vizData';
 import { computeMetric } from '../analysis/metricValue';
-import { askCopilot } from '../analyze';
+import { askCopilot } from '../ai/analyze';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
 // (request/response). Every handler is wrapped so a throw becomes { ok:false, error }

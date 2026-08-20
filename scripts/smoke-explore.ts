@@ -205,7 +205,7 @@ async function main(): Promise<void> {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
     const projects = req('./src/projects.js');
     const datasets = req('./src/data/datasets.js');
-    const copilot = req('./src/copilot.js');
+    const copilot = req('./src/ai/copilot.js');
     await projects.init();
     const proj = await projects.createProject('Explore smoke');
     const ds = await datasets.saveDataset(proj.id, {
@@ -533,7 +533,7 @@ async function main(): Promise<void> {
     const nodeFs = req('fs');
     const nodePath = req('path');
     const projects = req('./src/projects.js');
-    const copilot = req('./src/copilot.js');
+    const copilot = req('./src/ai/copilot.js');
     const proj = await projects.createProject('Legacy chat');
     // Exactly the v1 shape: { projectId, turns, schemaVersion: 1 }.
     const file = nodePath.join(

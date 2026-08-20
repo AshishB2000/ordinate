@@ -1,6 +1,6 @@
 import { ipcMain, app, dialog, BrowserWindow, MessageBoxOptions } from 'electron';
 import * as config from '../config';
-import { testProvider } from '../analyze';
+import { testProvider } from '../ai/analyze';
 import * as history from '../history';
 
 // PRESERVED VERBATIM from the JS original: these four identifiers are NOT in

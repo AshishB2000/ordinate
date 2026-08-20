@@ -7,7 +7,7 @@
 
 import { net } from 'electron';
 import { spawn, ChildProcess } from 'child_process';
-import * as config from './config';
+import * as config from '../config';
 
 const TIMEOUT_MS = 12000;
 export const BYOK: string[] = ['anthropic', 'openai', 'gemini', 'gateway'];

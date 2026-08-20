@@ -453,7 +453,7 @@ async function main(): Promise<void> {
   // dkRenderStepCard.
   await app.evaluate(async (_electronModule) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const analyze = req('./src/analyze.js');
+    const analyze = req('./src/ai/analyze.js');
     (analyze as any)._realSuggestSteps = analyze.suggestSteps;
     analyze.suggestSteps = async () => ({ ok: true, steps: [{ type: 'trim', column: 'region' }] });
   });
@@ -470,7 +470,7 @@ async function main(): Promise<void> {
   }, seeded);
   await app.evaluate(async (_electronModule) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const analyze = req('./src/analyze.js');
+    const analyze = req('./src/ai/analyze.js');
     analyze.suggestSteps = (analyze as any)._realSuggestSteps; // restore before the next test needs the real thing
   });
   ok('dkOfferProposal → the real dataset:suggestSteps IPC → dkRenderStepCard renders a card (the offer→render handoff)',

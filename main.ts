@@ -58,9 +58,9 @@ app.on('second-instance', () => {
 
 import { captureFrozenFrame, cropToRect, getActiveDisplay } from './src/capture';
 import * as config from './src/config';
-import * as localCli from './src/localCli';
-import * as localCliRun from './src/localCliRun';
-import { analyze, analyzeFollowup } from './src/analyze';
+import * as localCli from './src/cli/localCli';
+import * as localCliRun from './src/cli/localCliRun';
+import { analyze, analyzeFollowup } from './src/ai/analyze';
 
 console.log('[boot] Ordinate', app.getVersion(), '| packaged =', app.isPackaged);
 
@@ -78,8 +78,8 @@ function persistableResult(result: any): any {
 import * as history from './src/history';
 import * as projects from './src/projects';
 import * as datasets from './src/data/datasets';
-import * as copilot from './src/copilot';
-import { resolveUserPath } from './src/userPath';
+import * as copilot from './src/ai/copilot';
+import { resolveUserPath } from './src/cli/userPath';
 
 // Packaged macOS/Linux GUI launches inherit a stripped PATH (no Homebrew, nvm,
 // ~/.local/bin…), which would make Local CLI detection (claude, agy) find nothing.

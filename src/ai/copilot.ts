@@ -24,13 +24,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
-import * as projects from './projects';
-import type { Dataset } from './data/datasets';
-import type { ColumnSummary, QualityIssue } from './data/datasetStats';
-import type { Visual } from './analysis/visuals';
-import type { Dashboard, Page } from './analysis/dashboards';
-import type { Analysis } from './analysis/analysis';
-import type { VizDataResult } from './analysis/vizData';
+import * as projects from '../projects';
+import type { Dataset } from '../data/datasets';
+import type { ColumnSummary, QualityIssue } from '../data/datasetStats';
+import type { Visual } from '../analysis/visuals';
+import type { Dashboard, Page } from '../analysis/dashboards';
+import type { Analysis } from '../analysis/analysis';
+import type { VizDataResult } from '../analysis/vizData';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

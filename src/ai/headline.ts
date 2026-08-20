@@ -269,7 +269,7 @@ if (require.main === module) {
   // Explicit annotation (not a cast): assert.ok is an assertion function, and
   // TS requires the call target itself to carry a declared type (TS2775).
   const assert: typeof import('assert') = require('assert');
-  const { computeMetrics }: typeof import('./formula/calc') = require('./formula/calc');
+  const { computeMetrics }: typeof import('../formula/calc') = require('../formula/calc');
 
   const table = {
     columns: [

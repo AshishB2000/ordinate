@@ -93,11 +93,11 @@ const ALLOWED: Record<string, number> = {
   'scripts/test-anomaliesResident.ts': 837,
   'scripts/test-connectorsHttp.ts': 889,
   'src/analysis/analysisPlan.ts': 884,
-  'src/analyze.ts': 1021,
+  'src/ai/analyze.ts': 1021,
   'src/engine/anomaliesResident.ts': 870,
   'src/connectors/http.ts': 1036,
   'src/connectors/local.ts': 804,
-  'src/localCliRun.ts': 822,
+  'src/cli/localCliRun.ts': 822,
 };
 
 // Roots to walk. `scripts` is included for the hand-written build tools that

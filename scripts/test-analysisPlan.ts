@@ -646,7 +646,7 @@ async function checkRoundedRatioTyping(): Promise<void> {
   ok('a ROUNDED ratio types as number', (await build('Ratio', 'round((revenue - cost) / revenue, 4)')) === 'number');
   await datasets.updateSteps(projectId, salesId, []);
   ok('the draft prompt tells the model to round every division',
-     fs.readFileSync(path.join(__dirname, '..', 'src', 'analyze.ts'), 'utf8').includes('ALWAYS wrap a '));
+     fs.readFileSync(path.join(__dirname, '..', 'src', 'ai', 'analyze.ts'), 'utf8').includes('ALWAYS wrap a '));
 }
 
 // ── §9 Garbage in ──────────────────────────────────────────────────────────
