@@ -65,12 +65,12 @@ Module._load = function (request: string, ...rest: any[]): any {
 // ponytail: compiled siblings of the real modules.
 const plan: typeof import('../src/analysis/analysisPlan') = require('../src/analysis/analysisPlan');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
-const projects: typeof import('../src/projects') = require('../src/projects');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const analysisStore: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
-const config: typeof import('../src/config') = require('../src/config');
-const configSecrets: typeof import('../src/configSecrets') = require('../src/configSecrets');
-const connections: typeof import('../src/connections') = require('../src/connections');
+const config: typeof import('../src/app/config') = require('../src/app/config');
+const configSecrets: typeof import('../src/app/configSecrets') = require('../src/app/configSecrets');
+const connections: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
 const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
 const analysesIpc: typeof import('../src/ipc/analyses') = require('../src/ipc/analyses');
 

@@ -1,8 +1,8 @@
 import { ipcMain } from 'electron';
-import * as connections from '../connections';
-import * as connectionRun from '../connectionRun';
+import * as connections from '../connectors/connections';
+import * as connectionRun from '../connectors/connectionRun';
 import * as datasets from '../data/datasets';
-import * as configSecrets from '../configSecrets';
+import * as configSecrets from '../app/configSecrets';
 import { connectorCatalog, getConnector } from '../connectors';
 import type { ConnectorDef, ConnectorField } from '../connectors/types';
 

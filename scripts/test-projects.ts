@@ -24,7 +24,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: the compiled sibling of ../src/projects.ts.
-const projects: typeof import('../src/projects') = require('../src/projects');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 
 let failures = 0;
 function ok(label: string, cond: boolean) {

@@ -76,7 +76,7 @@ export function safeColor(hex: string): string {
 // committed-build-artifact pattern as renderer/hub/vendor/. The generator fails
 // loudly when an upstream export disappears, so a missing icon is a build error
 // rather than a badge that silently replaces a logo.
-const ICON_ASSET = path.join(__dirname, '..', 'assets', 'provider-icons.json');
+const ICON_ASSET = path.join(__dirname, '..', '..', 'assets', 'provider-icons.json');
 
 export type BrandGlyph = { path: string; color: string; title: string; export: string };
 export type BrandImage = { src: string; title: string };
@@ -94,7 +94,7 @@ export const providerLogos = (() => {
   return out;
 })();
 
-const CONNECTOR_DIR = path.join(__dirname, '..', 'renderer', 'hub', 'assets', 'connectors');
+const CONNECTOR_DIR = path.join(__dirname, '..', '..', 'renderer', 'hub', 'assets', 'connectors');
 
 export const connectorLogos = (() => {
   const out: Record<string, BrandGlyph | BrandImage> = {};
@@ -126,7 +126,7 @@ export const connectorLogos = (() => {
 // or <agentId>.png into renderer/hub/assets/agents/ and it's auto-discovered:
 // MAIN reads it and ships a data-URI the renderer renders as an <img> (CSP allows
 // img-src data:). When no file exists, the renderer falls back to the styled badge.
-const AGENT_DIR = path.join(__dirname, '..', 'renderer', 'hub', 'assets', 'agents');
+const AGENT_DIR = path.join(__dirname, '..', '..', 'renderer', 'hub', 'assets', 'agents');
 
 export const agentLogos = (() => {
   const out: Record<string, string> = {};

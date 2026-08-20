@@ -25,7 +25,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 
 // ponytail: compiled siblings of ../src/datasets.ts + ../src/projects.ts.
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
-const projects: typeof import('../src/projects') = require('../src/projects');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const transforms: typeof import('../src/data/transforms') = require('../src/data/transforms');
 const combine: typeof import('../src/data/combine') = require('../src/data/combine');
 

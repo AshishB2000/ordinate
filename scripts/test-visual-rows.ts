@@ -58,7 +58,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 
 // ponytail: compiled siblings.
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
-const projects: typeof import('../src/projects') = require('../src/projects');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const vizData: typeof import('../src/analysis/vizData') = require('../src/analysis/vizData');
 const visualsMod: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');

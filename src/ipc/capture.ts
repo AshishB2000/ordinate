@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow } from 'electron';
-import { captureHtmlToPng } from '../reportCapture';
+import { captureHtmlToPng } from '../app/reportCapture';
 
 // Snapshot a rectangular region of the hub window's rendered page to a PNG data URL.
 // Used to export the MAP (MapLibre's WebGL canvas + the DOM legend / value chips /

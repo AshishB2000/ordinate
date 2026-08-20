@@ -13,10 +13,10 @@
 // through safeError(), so a driver string carrying a DSN or a password is
 // redacted before it can reach a renderer.
 
-import { finalizeTable, ParseResult } from './data/parse';
-import { getConnector } from './connectors';
-import { safeError } from './connectors/types';
-import type { ConnectorColumn, ConnectorContext, ConnectorDef } from './connectors/types';
+import { finalizeTable, ParseResult } from '../data/parse';
+import { getConnector } from './index';
+import { safeError } from './types';
+import type { ConnectorColumn, ConnectorContext, ConnectorDef } from './types';
 
 // The bounds fed into every ConnectorContext. Unchanged from the pre-registry
 // runner: the same 1M row cap as the file path (parse.ts MAX_ROWS) and the same

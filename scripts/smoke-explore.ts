@@ -203,7 +203,7 @@ async function main(): Promise<void> {
   // did not grow a bespoke modal.
   const seeded: any = await app.evaluate(async (_electronModule) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const projects = req('./src/projects.js');
+    const projects = req('./src/app/projects.js');
     const datasets = req('./src/data/datasets.js');
     const copilot = req('./src/ai/copilot.js');
     await projects.init();
@@ -532,7 +532,7 @@ async function main(): Promise<void> {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
     const nodeFs = req('fs');
     const nodePath = req('path');
-    const projects = req('./src/projects.js');
+    const projects = req('./src/app/projects.js');
     const copilot = req('./src/ai/copilot.js');
     const proj = await projects.createProject('Legacy chat');
     // Exactly the v1 shape: { projectId, turns, schemaVersion: 1 }.

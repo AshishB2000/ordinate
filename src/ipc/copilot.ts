@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
-import * as config from '../config';
+import * as config from '../app/config';
 import * as copilot from '../ai/copilot';
-import * as projects from '../projects';
+import * as projects from '../app/projects';
 import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
 import * as dashboards from '../analysis/dashboards';

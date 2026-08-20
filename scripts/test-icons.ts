@@ -4,7 +4,7 @@ import * as path from 'path';
 
 process.env.SCREENCHART_USER_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-icons-'));
 
-const icons = require('../src/icons') as Record<string, any>;
+const icons = require('../src/app/icons') as Record<string, any>;
 const { connectorCatalog } = require('../src/connectors') as {
   connectorCatalog: () => { id: string }[];
 };

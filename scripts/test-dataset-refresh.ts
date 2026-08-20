@@ -32,9 +32,9 @@ Module._load = function (request: string, ...rest: any[]): any {
 
 // ponytail: compiled siblings of the .ts sources under test.
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
-const projects: typeof import('../src/projects') = require('../src/projects');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const refresh: typeof import('../src/data/datasetRefresh') = require('../src/data/datasetRefresh');
-const connectionRun: any = require('../src/connectionRun');
+const connectionRun: any = require('../src/connectors/connectionRun');
 const ipcConnections: any = require('../src/ipc/connections');
 
 let failures = 0;

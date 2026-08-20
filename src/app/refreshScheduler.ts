@@ -24,13 +24,13 @@
 // The DUE CHECK is a pure exported function taking `now`, so it can be tested
 // directly rather than by waiting for wall-clock time to pass.
 
-import * as datasets from './data/datasets';
-import type { AutoRefreshEvery, DatasetSummary } from './data/datasets';
+import * as datasets from '../data/datasets';
+import type { AutoRefreshEvery, DatasetSummary } from '../data/datasets';
 import * as projects from './projects';
-import { refreshDataset } from './data/datasetRefresh';
-import { detectAnomalies } from './analysis/anomalies';
-import { detectAnomaliesResident } from './engine/anomaliesResident';
-import { diffAnomalies } from './analysis/anomalyWatch';
+import { refreshDataset } from '../data/datasetRefresh';
+import { detectAnomalies } from '../analysis/anomalies';
+import { detectAnomaliesResident } from '../engine/anomaliesResident';
+import { diffAnomalies } from '../analysis/anomalyWatch';
 
 /** How often the tick looks for work. The schedules themselves are hours apart. */
 const TICK_MS = 60_000;

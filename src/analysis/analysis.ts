@@ -29,7 +29,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
-import * as projects from '../projects';
+import * as projects from '../app/projects';
 import { sanitizePages, sanitizeDashboardFilters } from './dashboards';
 import type { FilterStep } from '../data/transforms';
 

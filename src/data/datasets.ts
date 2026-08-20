@@ -15,7 +15,7 @@ import { randomUUID } from 'crypto';
 import { app } from 'electron';
 import type { ParsedColumn } from './parse';
 import { coerceValue } from './parse';
-import * as projects from '../projects';
+import * as projects from '../app/projects';
 import * as parquetStore from '../engine/parquetStore';
 import * as transforms from './transforms';
 import { runResidentPipeline } from '../engine/pipelineDuck';
@@ -23,7 +23,7 @@ import type { TableData, TransformStep, ApplyResult } from './transforms';
 // The origin whitelist and the id check both moved out; re-exported here so
 // `datasets.sanitizeOrigin` and `import type { DatasetOrigin } from './datasets'`
 // keep working for every existing caller and test.
-import { isValidId } from '../ids';
+import { isValidId } from '../app/ids';
 import type { DatasetOrigin } from './datasetOrigin';
 import { sanitizeOrigin } from './datasetOrigin';
 import { sanitizeAnomalyKeys } from '../analysis/anomalyWatch';

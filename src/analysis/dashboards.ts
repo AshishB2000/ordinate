@@ -38,7 +38,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
-import * as projects from '../projects';
+import * as projects from '../app/projects';
 import { sanitizeChartType, sanitizeEncoding, sanitizeOverrides, sanitizeFilters } from './visuals';
 import type { Visual } from './visuals';
 import { sanitizeSteps } from '../data/transforms';

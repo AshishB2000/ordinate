@@ -84,7 +84,7 @@ async function main(): Promise<void> {
   // it's the exact case the plan calls out.)
   const seeded: any = await app.evaluate(async (_electronModule) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const projects = req('./src/projects.js');
+    const projects = req('./src/app/projects.js');
     const datasets = req('./src/data/datasets.js');
     await projects.init();
     const proj = await projects.createProject('Dock smoke');

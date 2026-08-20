@@ -1,6 +1,6 @@
 import { ipcMain, shell, app } from 'electron';
 import * as os from 'os';
-import { providerLogos, agentLogos, connectorLogos } from '../icons';
+import { providerLogos, agentLogos, connectorLogos } from '../app/icons';
 
 // Shell / logos IPC — synchronous brand-glyph payloads for the sandboxed hub
 // preload, external-URL opening, and the macOS System-Settings deep links.

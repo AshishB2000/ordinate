@@ -1,7 +1,7 @@
 import { ipcMain, app, dialog, BrowserWindow, MessageBoxOptions } from 'electron';
-import * as config from '../config';
+import * as config from '../app/config';
 import { testProvider } from '../ai/analyze';
-import * as history from '../history';
+import * as history from '../app/history';
 
 // PRESERVED VERBATIM from the JS original: these four identifiers are NOT in
 // scope in this module (they are module-level state in main.js and are not

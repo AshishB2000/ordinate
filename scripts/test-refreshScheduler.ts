@@ -26,7 +26,7 @@ export {}; // module scope — sibling test scripts share top-level names
 
 // ponytail: compiled sibling of ../src/refreshScheduler.ts. Required (not
 // imported) so this file does not pull Electron in through the module graph.
-const sched: typeof import('../src/refreshScheduler') = require('../src/refreshScheduler');
+const sched: typeof import('../src/app/refreshScheduler') = require('../src/app/refreshScheduler');
 const { dueDatasets } = sched;
 
 let failures = 0;

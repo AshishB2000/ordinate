@@ -64,7 +64,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
 const datasetStats: typeof import('../src/data/datasetStats') = require('../src/data/datasetStats');
 const statsResident: typeof import('../src/engine/statsResident') = require('../src/engine/statsResident');
-const projects: typeof import('../src/projects') = require('../src/projects');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const datasetsIpc: typeof import('../src/ipc/datasets') = require('../src/ipc/datasets');
 

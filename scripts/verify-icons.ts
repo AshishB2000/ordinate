@@ -6,7 +6,7 @@
 // This reads the SAME mapping the app ships (src/icons.js), so what you see here
 // is exactly what renders — no guessing.
 
-import { providerLogos, PROVIDER_SI } from '../src/icons';
+import { providerLogos, PROVIDER_SI } from '../src/app/icons';
 
 // Every providerId a logo may be drawn for (BYOK providers + local CLIs).
 const ALL = [

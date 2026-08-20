@@ -21,7 +21,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled sibling of ../src/history.ts.
-const history: typeof import('../src/history') = require('../src/history');
+const history: typeof import('../src/app/history') = require('../src/app/history');
 
 let failures = 0;
 function ok(label: string, cond: boolean): void {

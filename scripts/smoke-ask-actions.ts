@@ -60,7 +60,7 @@ async function main(): Promise<void> {
   // ── Seed a project + dataset ────────────────────────────────────────────
   const seeded: any = await app.evaluate(async (_electronModule) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const projects = req('./src/projects.js');
+    const projects = req('./src/app/projects.js');
     const datasets = req('./src/data/datasets.js');
     const analysis = req('./src/analysis/analysis.js');
     await projects.init();

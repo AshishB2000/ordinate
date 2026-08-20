@@ -56,8 +56,8 @@ app.on('second-instance', () => {
   }
 });
 
-import { captureFrozenFrame, cropToRect, getActiveDisplay } from './src/capture';
-import * as config from './src/config';
+import { captureFrozenFrame, cropToRect, getActiveDisplay } from './src/app/capture';
+import * as config from './src/app/config';
 import * as localCli from './src/cli/localCli';
 import * as localCliRun from './src/cli/localCliRun';
 import { analyze, analyzeFollowup } from './src/ai/analyze';
@@ -75,8 +75,8 @@ function persistableResult(result: any): any {
   const { _messages, ...rest } = result;
   return rest;
 }
-import * as history from './src/history';
-import * as projects from './src/projects';
+import * as history from './src/app/history';
+import * as projects from './src/app/projects';
 import * as datasets from './src/data/datasets';
 import * as copilot from './src/ai/copilot';
 import { resolveUserPath } from './src/cli/userPath';
@@ -93,7 +93,7 @@ if (app.isPackaged) {
 import { createOverlayWindow } from './src/windows/overlayWindow';
 import { createHubWindow } from './src/windows/hubWindow';
 
-import { platformDefaultHotkey, hotkeyLabel } from './src/hotkey';
+import { platformDefaultHotkey, hotkeyLabel } from './src/app/hotkey';
 
 let overlayWindow: BrowserWindow | null = null;
 let hubWindow: BrowserWindow | null = null;
@@ -589,7 +589,7 @@ require("./src/ipc/search").register();
 // The master switch is read on EVERY tick rather than captured here, so turning
 // it off in Settings takes effect at once instead of at the next restart.
 {
-  const scheduler = require("./src/refreshScheduler");
+  const scheduler = require("./src/app/refreshScheduler");
   scheduler.setEnabledCheck(() => config.get().autoRefresh !== false);
 
   // A row count that moves this much is worth interrupting someone for; a

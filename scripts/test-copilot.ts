@@ -29,7 +29,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 
 // ponytail: compiled siblings of the .ts sources under test.
 const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
-const projects: typeof import('../src/projects') = require('../src/projects');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const analyze: typeof import('../src/ai/analyze') = require('../src/ai/analyze');
 const datasetStats: typeof import('../src/data/datasetStats') = require('../src/data/datasetStats');

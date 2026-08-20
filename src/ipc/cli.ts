@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import * as config from '../config';
+import * as config from '../app/config';
 import * as localCli from '../cli/localCli';
 import { testLocalCli } from '../ai/analyze';
 import * as liveModels from '../ai/models';

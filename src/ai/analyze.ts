@@ -2,7 +2,7 @@
 // Runs in the MAIN PROCESS ONLY — the API key never leaves main.
 
 import { net } from 'electron';
-import * as config from '../config';
+import * as config from '../app/config';
 import { runLocalCli } from '../cli/localCliRun';
 import { computeMetrics, deriveChartData } from '../formula/calc';
 import { writeHeadline, verifyHeadlineNumbers } from './headline';

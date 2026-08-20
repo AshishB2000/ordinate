@@ -17,7 +17,7 @@ import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
 import * as analysis from '../analysis/analysis';
 import * as dashboards from '../analysis/dashboards';
-import * as connections from '../connections';
+import * as connections from '../connectors/connections';
 
 /** Enough to be useful, few enough to read without scrolling. */
 const MAX_RESULTS = 20;

@@ -84,7 +84,7 @@ async function main(): Promise<void> {
   // not fresh copies, so this is the shipped code path.
   const r: any = await app.evaluate(async () => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const projects = req('./src/projects.js');
+    const projects = req('./src/app/projects.js');
     const datasets = req('./src/data/datasets.js');
     const visuals = req('./src/analysis/visuals.js');
     const out: any = {};

@@ -25,7 +25,7 @@ import * as datasets from './datasets';
 import type { Dataset, DatasetOrigin } from './datasets';
 import * as combine from './combine';
 import { parseFile, sourceKindForPath } from './fileImport';
-import { runConnection } from '../connectionRun';
+import { runConnection } from '../connectors/connectionRun';
 import { refreshConnectionInto } from '../ipc/connections';
 
 /**

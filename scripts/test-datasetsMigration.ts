@@ -21,7 +21,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
-const projects: typeof import('../src/projects') = require('../src/projects');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 

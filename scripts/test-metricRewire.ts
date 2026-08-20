@@ -64,7 +64,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled siblings of the REAL modules (built by pretest).
-const projects: typeof import('../src/projects') = require('../src/projects');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const dashboardsStore: typeof import('../src/analysis/dashboards') = require('../src/analysis/dashboards');
 const transforms: typeof import('../src/data/transforms') = require('../src/data/transforms');

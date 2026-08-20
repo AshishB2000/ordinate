@@ -30,7 +30,7 @@ import * as fsp from 'fs/promises';
 import { spawn } from 'child_process';
 import type { ChildProcess } from 'child_process';
 import { app, nativeImage } from 'electron';
-import * as config from '../config';
+import * as config from '../app/config';
 import { wrapCommand } from './disclaim';
 
 const TIMEOUT_MS = 90000;      // CLI cold-starts are slower than HTTP.

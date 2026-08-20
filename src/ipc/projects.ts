@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import * as projects from '../projects';
+import * as projects from '../app/projects';
 
 // Projects (workspace shell) IPC — list/create/rename/delete/open. All are
 // ipcMain.handle (request/response) since the renderer needs the returned data.

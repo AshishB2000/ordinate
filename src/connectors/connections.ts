@@ -26,8 +26,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
-import * as projects from './projects';
-import type { ConnectorDef } from './connectors/types';
+import * as projects from '../app/projects';
+import type { ConnectorDef } from './types';
 
 /** v1's fixed union, kept ONLY so the migration can name what it reads. */
 export type LegacyConnectionKind = 'postgres' | 'url';
@@ -109,12 +109,12 @@ function isValidId(id: unknown): id is string {
 // driver failed to load, so a registry failure degrades validation, never the
 // store. (It also keeps `require('./connections')` from pulling four database
 // drivers into a self-check that only touches disk.)
-type Registry = typeof import('./connectors');
+type Registry = typeof import('./index');
 let registryCache: Registry | null | undefined;
 function registry(): Registry | null {
   if (registryCache === undefined) {
     try {
-      registryCache = require('./connectors') as Registry;
+      registryCache = require('./index') as Registry;
     } catch (err: unknown) {
       console.error('[connections] Connector registry unavailable:', err instanceof Error ? err.message : err);
       registryCache = null;
