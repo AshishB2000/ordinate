@@ -31,7 +31,6 @@ config.json
 
 # TypeScript: ALL runtime .js is compiled output of a sibling .ts source
 # (in-place emit) — sources are the .ts files, never commit emitted .js.
-/main.js
 src/**/*.js
 preload/**/*.js
 renderer/**/*.js
@@ -39,101 +38,73 @@ scripts/**/*.js
 !/scripts/build-appicon.js
 # Week 2 workspace/projects data layer — emitted siblings (also covered by the
 # globs above; listed explicitly per the in-place-emit convention).
-/src/projects.js
 /src/ipc/projects.js
 /scripts/test-projects.js
 /renderer/hub/projects.js
 /renderer/hub/workspace.js
 # Week 3 file-based data sources — emitted siblings.
-/src/parse.js
-/src/parseXlsx.js
-/src/datasets.js
 /src/ipc/datasets.js
 /scripts/test-parse.js
 /scripts/test-datasets.js
 /renderer/hub/datasets.js
 # Week 4 connected data sources — emitted siblings.
-/src/connections.js
-/src/connectionRun.js
 /src/ipc/connections.js
 /scripts/test-connections.js
 /renderer/hub/connections.js
 # Week 5 dataset exploration — emitted siblings.
-/src/datasetStats.js
 /scripts/test-datasetStats.js
 # Week 6 data preparation — emitted siblings.
-/src/filterOps.js
-/src/formula.js
-/src/transforms.js
 /scripts/test-formula.js
 /scripts/test-transforms.js
 /renderer/hub/prepare.js
 # Week 7 manual visualization — emitted siblings.
-/src/vizData.js
-/src/visuals.js
 /src/ipc/visuals.js
 /scripts/test-vizData.js
 /scripts/test-visuals.js
 /scripts/test-viz-filter.js
 /renderer/hub/visuals.js
 # Week 9 dashboards — emitted siblings.
-/src/dashboards.js
-/src/metricValue.js
 /src/ipc/dashboards.js
 /renderer/hub/dashboards.js
 /scripts/test-metricValue.js
 /scripts/test-dashboards.js
 # Week 10 dashboard filters — emitted siblings.
-/src/dashboardFilters.js
 /scripts/test-dashboardFilters.js
 # Week 10 dashboard export + share — emitted siblings.
-/src/dashboardExport.js
-/src/reportCapture.js
 /src/ipc/dashboardExport.js
 /scripts/test-dashboardExport.js
 # Week 11 persistent AI Copilot — emitted siblings.
-/src/copilot.js
 /src/ipc/copilot.js
 /scripts/test-copilot.js
 
 # Week 12 embedded AI actions — emitted siblings.
-/src/anomalies.js
 /scripts/test-anomalies.js
 # Week 13 capture → reusable dataset — emitted siblings.
-/src/captureDataset.js
 /src/ipc/captureDataset.js
 /scripts/test-captureDataset.js
 /renderer/hub/captureDataset.js
 # Hardening self-check — emitted sibling (also covered by scripts/**/*.js).
 /scripts/test-history.js
 # Phase 1 DuckDB synchronous bridge — emitted siblings.
-/src/duckdb.js
-/src/duckdbWorker.js
 /scripts/test-duckdb.js
 # Phase 1 compute benchmark — emitted sibling.
 /scripts/bench-pipeline.js
 *.tsbuildinfo
 
 # Phase 1 DuckDB SQL generator — emitted siblings.
-/src/sqlGen.js
 /scripts/test-sqlGen.js
-/src/pipelineDuck.js
 /scripts/test-pipelineDuck.js
 
 # Phase 2 Parquet storage — emitted siblings.
-/src/parquetStore.js
 /scripts/test-parquetStore.js
 /scripts/test-datasetsMigration.js
 
 # Phase 3 resident Parquet query — emitted siblings.
-/src/residentQuery.js
 /scripts/test-residentQuery.js
-/src/residentTrace.js
 /scripts/test-residentTrace.js
 /scripts/bench-resident.js
 
 # Phase 3b typed dataset VIEW over the Parquet store — emitted siblings.
-/src/datasetView.js
 /scripts/test-datasetView.js
 
 # Phase 2.5 visual:data resident rewire — emitted sibling.
@@ -143,16 +114,13 @@ scripts/**/*.js
 /scripts/test-metricRewire.js
 
 # Resident dataset stats (dataset:stats / dataset:explain off Parquet) — emitted siblings.
-/src/statsResident.js
 /scripts/test-statsResident.js
 /scripts/smoke-app.js
 
 # Server-side paged read for the Explore grid — emitted siblings.
-/src/datasetPage.js
 /scripts/test-datasetPage.js
 
 # Resident anomaly detection (dashboard:explainAnomalies off Parquet) — emitted siblings.
-/src/anomaliesResident.js
 /scripts/test-anomaliesResident.js
 /scripts/test-wideTables.js
 
@@ -200,19 +168,14 @@ scripts/**/*.js
 /scripts/test-cssVars.js
 
 # DuckDB sidecar (docs/phase-6 §4, option b1) — emitted siblings.
-/src/duckdbEngine.js
-/src/duckdbSidecar.js
-/src/duckdbSidecarChild.js
 /scripts/test-duckdbSidecar.js
 
 # Analysis (the authoring container a dashboard is published from) — emitted siblings.
-/src/analysis.js
 /src/ipc/analyses.js
 /renderer/hub/analyses.js
 /scripts/test-analysis.js
 
 # The AI analysis plan (facts → envelope → validation → preview → build).
-/src/analysisPlan.js
 /scripts/test-analysisPlan.js
 
 # Drill-down (the rows behind a number) — emitted siblings.
@@ -271,27 +234,17 @@ scripts/**/*.js
 /renderer/hub/connRun.js
 
 # formula.ts split into tokenizer / evaluator / parser — emitted siblings.
-/src/formulaTokens.js
-/src/formulaEval.js
-/src/formulaParse.js
 
 # The dataset composer — emitted siblings.
 /scripts/test-composeTables.js
-/src/combine.js
 
 # Composer engine + IPC, and the two modules split out under the 800-line cap.
-/src/combine.js
-/src/ids.js
-/src/datasetOrigin.js
 /src/ipc/datasetCompose.js
 /renderer/hub/composer.js
 /scripts/smoke-composer.js
 
 # Scheduled refresh + anomaly watch — emitted siblings.
-/src/refreshScheduler.js
 /scripts/test-refreshScheduler.js
-/src/configSecrets.js
-/src/anomalyWatch.js
 /scripts/test-anomalyWatch.js
 /src/ipc/search.js
 /renderer/hub/globalSearch.js
