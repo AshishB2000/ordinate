@@ -448,18 +448,29 @@ body.cap-focus .hub-topbar { display: none; }
   background: var(--bg);
 }
 
-/* main header */
+/* main header. Wraps: the title flex-grows to fill the space beside the
+   actions, and the header wraps to a second row when it is too narrow to seat
+   both — so the actions drop below the title instead of clipping past the
+   panel edge (which they did when the AI dock squeezed this column). */
 .main-top {
   flex: 0 0 auto;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 8px 10px;
   padding: 12px 22px;
   border-bottom: 1px solid var(--border);
   background: var(--titlebar);
 }
 
-.main-title { min-width: 0; }
+/* Claims the space between "‹ Back" and the actions, but holds a 160px floor so
+   a tight header wraps the actions below rather than crushing the title to one
+   word per line. The floor + the ellipsis on each line is what truncates the
+   text instead of collapsing it. */
+.main-title {
+  flex: 1 1 160px;
+  min-width: 160px;
+}
 
 .main-title h2 {
   font-size: 15px;
@@ -467,12 +478,35 @@ body.cap-focus .hub-topbar { display: none; }
   color: var(--text-strong);
   margin: 0;
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .main-title p {
   font-size: 11.5px;
   color: var(--muted);
   margin: 2px 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The action cluster travels as one unit: natural width on the right, and when
+   the header can't seat it beside the title it wraps as a whole to row two (and
+   its own buttons wrap within it before any of them clips). */
+.main-top-actions {
+  flex: 0 0 auto;
+  /* Capped at the row width so that on a very narrow column the cluster wraps
+     its own buttons instead of sizing to their max-content and spilling past
+     the panel edge — without the cap a flex item takes its content width and
+     `.main` (overflow:hidden) would clip the last button. */
+  max-width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 10px;
 }
 
 .hotkey-hint { display: flex; align-items: center; gap: 3px; }
@@ -497,44 +531,54 @@ body.cap-focus .hub-topbar { display: none; }
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 32px 24px;
+  padding: 28px 24px;
 }
 
+/* The onboarding is framed as a card now, the same surface/border/radius
+   generation Home and Dashboards use — it reads as one panel that fits any
+   width rather than free copy that grew a scrollbar when the column narrowed.
+   Fixed max-width caps the line length independent of the column, so its
+   height is stable whether the AI dock is open or closed. */
 .state-narrow {
   width: 100%;
-  max-width: 460px;
+  max-width: 440px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
+  padding: 30px 30px 28px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
 }
 
 /* camera icon */
 .empty-mark {
-  width: 62px;
-  height: 62px;
+  width: 56px;
+  height: 56px;
   border-radius: var(--r-xl);
   background: var(--accent-soft);
   color: var(--accent);
   display: grid;
   place-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .empty-h {
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -0.025em;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   color: var(--text-strong);
-  margin: 0 0 10px;
-  line-height: 1.2;
+  margin: 0 0 8px;
+  line-height: 1.25;
 }
 
 .empty-sub {
-  font-size: 13.5px;
+  font-size: 13px;
   color: var(--muted);
-  line-height: 1.6;
-  margin: 0 0 22px;
+  line-height: 1.55;
+  margin: 0 0 20px;
 }
 
 /* numbered steps */
@@ -543,8 +587,8 @@ body.cap-focus .hub-topbar { display: none; }
   text-align: left;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-bottom: 22px;
+  gap: 9px;
+  margin-bottom: 20px;
 }
 
 .step {
@@ -553,18 +597,20 @@ body.cap-focus .hub-topbar { display: none; }
   gap: 12px;
 }
 
+/* Numbered chips share the accent tint the camera mark uses, so the step list
+   reads as part of the same family rather than three grey bullets. */
 .step-n {
   flex: 0 0 22px;
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: var(--surface-3);
-  border: 1px solid var(--border-2);
+  background: var(--accent-soft);
+  border: 1px solid transparent;
   display: grid;
   place-items: center;
   font-size: 11px;
   font-weight: 700;
-  color: var(--muted);
+  color: var(--accent);
   margin-top: 1px;
   font-family: var(--font-mono);
 }
@@ -6587,13 +6633,19 @@ body.an-focus .dash-head-spacer--2 { display: none; }
   gap: 8px;
 }
 /* One template per section, declared once and inherited by the rows, so a
-   column label can never drift out of line with the cell under it. */
+   column label can never drift out of line with the cell under it. The fixed
+   tracks are sized to their actual content — a bare sheet count, the widest
+   status pill ("Unpublished changes"), a short relative date — so the grid's
+   minimum width stays well under this column even with the AI dock open. NAME
+   is the only elastic track and truncates with an ellipsis; the old 82/190/150
+   tracks were oversized and pushed "Last updated" off the right edge into a
+   horizontal scrollbar. */
 .an-table-cols,
 #ws-analyses .dash-list-item {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) 82px 190px 150px 56px;
+  grid-template-columns: minmax(150px, 1fr) 60px 150px 116px 56px;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 .ws-table-cols,
 .an-table-cols {
