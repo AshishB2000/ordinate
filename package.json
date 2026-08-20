@@ -82,7 +82,6 @@
       "!native/**",
       "!assets/icons/**",
       "!**/*.md",
-      "!verify-logos.mjs",
       "!**/node_modules/oracledb/build/**",
       "!**/*.map",
       "!**/*.ts",
