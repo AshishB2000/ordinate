@@ -16,6 +16,7 @@
 //   • the system prompt still forbids numbers and still whitelists the columns
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -40,14 +41,6 @@ const config: any = require('../src/app/config');
 const localCliRun: any = require('../src/cli/localCliRun');
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 
-let failures = 0;
-function ok(label: string, cond: boolean, detail?: string): void {
-  if (cond) console.log('ok   ' + label + (detail ? '  ' + detail : ''));
-  else {
-    console.error('FAIL ' + label + (detail ? '  ' + detail : ''));
-    failures++;
-  }
-}
 
 // ── The stubbed model ───────────────────────────────────────────────────────
 // analyze reaches the provider through exactly two module-level bindings, both
@@ -161,8 +154,8 @@ async function main(): Promise<void> {
   ok('with no model it is a soft not_ready, not an error dialog',
      res.ok === false && res.errorType === 'not_ready');
 
-  if (failures) {
-    console.error(`\n${failures} check(s) FAILED.`);
+  if (failureCount()) {
+    console.error(`\n${failureCount()} check(s) FAILED.`);
     process.exit(1);
   }
   console.log('\nAll suggestCharts checks passed.');

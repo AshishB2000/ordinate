@@ -10,7 +10,7 @@
 // PlanetScale really reject information_schema?) is UNVERIFIED here and is
 // called out as such in the module's comments.
 //
-// What that still buys: the failures this family is actually prone to are all
+// What that still buys: the failureCount() this family is actually prone to are all
 // declarative. A wrong default port, a MariaDB connector emitting MySQL's
 // timeout spelling (silently unbounded), multipleStatements creeping back on
 // (`SELECT 1; DROP TABLE x;` — the exact bug class already found in this
@@ -19,6 +19,7 @@
 // damage if they ship.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 // ponytail: compiled siblings of the .ts sources.
 const mysqlConn: typeof import('../src/connectors/mysql') = require('../src/connectors/mysql');
@@ -26,15 +27,6 @@ const connTypes: typeof import('../src/connectors/types') = require('../src/conn
 
 type Ctx = import('../src/connectors/types').ConnectorContext;
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: unknown): void {
-  if (cond) {
-    console.log('ok   ' + label);
-  } else {
-    console.error('FAIL ' + label + (extra === undefined ? '' : '  → ' + JSON.stringify(extra)));
-    failures++;
-  }
-}
 
 function ctx(over: Partial<Ctx> = {}): Ctx {
   return {
@@ -275,8 +267,8 @@ async function main(): Promise<void> {
   ok('every connector has a valid category', CONNECTORS.every((c) => CATEGORIES.includes(c.category)), CONNECTORS.map((c) => c.category));
 
   console.log('');
-  if (failures) {
-    console.error(`${failures} check(s) failed.`);
+  if (failureCount()) {
+    console.error(`${failureCount()} check(s) failed.`);
     process.exit(1);
   }
   console.log('All connectors/mysql checks passed.');

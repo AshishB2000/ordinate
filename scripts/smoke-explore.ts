@@ -16,6 +16,7 @@
 //   npm run smoke   (runs this after smoke-composer.js)
 
 export {}; // module scope — sibling scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -25,14 +26,6 @@ const { _electron }: typeof import('playwright') = require('playwright');
 const REPO = path.resolve(__dirname, '..');
 const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-explore-'));
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: string): void {
-  if (cond) console.log('ok   ' + label + (extra ? '  ' + extra : ''));
-  else {
-    console.error('FAIL ' + label + (extra ? '  ' + extra : ''));
-    failures++;
-  }
-}
 
 /** Which section the shell currently shows. */
 function sectionOf(win: any): Promise<string | null> {
@@ -618,8 +611,8 @@ main()
   .then(() => {
     try { fs.rmSync(userData, { recursive: true, force: true }); } catch (_) { /* temp dir */ }
     console.log('');
-    if (failures) {
-      console.error(`${failures} Ask smoke check(s) FAILED.`);
+    if (failureCount()) {
+      console.error(`${failureCount()} Ask smoke check(s) FAILED.`);
       process.exit(1);
     }
     console.log('All Ask smoke checks passed.');

@@ -6,6 +6,7 @@
 // (never coerced to a number). No Electron, no fs, no framework: all pure modules.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 // ponytail: compiled siblings of the real pure modules (built by pretest).
 const { mergeDashboardFilters, controlSteps }: typeof import('../src/analysis/dashboardFilters') = require('../src/analysis/dashboardFilters');
@@ -17,11 +18,6 @@ type Cell = import('../src/data/transforms').Cell;
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
 type ControlValue = import('../src/analysis/dashboards').ControlValue;
 
-let failures = 0;
-function ok(label: string, cond: boolean) {
-  if (cond) console.log('ok   ' + label);
-  else { console.error('FAIL ' + label); failures++; }
-}
 
 // A tiny dataset. `code` is a leading-zero id STORED AS TEXT — it must stay a string
 // throughout filtering (the strict-number rule: "007" never becomes 7).
@@ -283,5 +279,5 @@ ok('sum(sales) over the leading-zero-filtered subset is the one row (100)',
     metricWith(finalList, 'sales', 'sum') === 100);
 }
 
-if (failures) { console.error('\n' + failures + ' dashboardFilters check(s) FAILED'); process.exit(1); }
+if (failureCount()) { console.error('\n' + failureCount() + ' dashboardFilters check(s) FAILED'); process.exit(1); }
 console.log('\nAll dashboardFilters checks passed.');

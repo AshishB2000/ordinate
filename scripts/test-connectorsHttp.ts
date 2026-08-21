@@ -15,6 +15,7 @@
 // No framework. Plain Node, ok(label, cond, extra), non-zero exit on failure.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const http: typeof import('http') = require('http');
 
@@ -29,15 +30,6 @@ type Def = import('../src/connectors/types').ConnectorDef;
 type Rows = import('../src/connectors/types').ConnectorRows;
 type Err = import('../src/connectors/types').ConnectorError;
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: unknown): void {
-  if (cond) {
-    console.log('ok   ' + label);
-  } else {
-    console.error('FAIL ' + label + (extra === undefined ? '' : '  → ' + JSON.stringify(extra)));
-    failures++;
-  }
-}
 
 // ── stub server ──────────────────────────────────────────────────────────────
 
@@ -876,8 +868,8 @@ async function main(): Promise<void> {
   await testGuards();
   await testNextUriRebase();
 
-  if (failures) {
-    console.error(`\n${failures} check(s) FAILED`);
+  if (failureCount()) {
+    console.error(`\n${failureCount()} check(s) FAILED`);
     process.exit(1);
   }
   console.log('\nAll connectors/http checks passed.');

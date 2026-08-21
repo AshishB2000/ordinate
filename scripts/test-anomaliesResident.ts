@@ -25,6 +25,7 @@
 //   npm run build:ts && node scripts/test-anomaliesResident.js
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -71,11 +72,6 @@ const dashboardsIpc: typeof import('../src/ipc/dashboards') = require('../src/ip
 dashboardsIpc.register();
 const explainHandler = handlers.get('dashboard:explainAnomalies');
 
-let failures = 0;
-function ok(label: string, cond: boolean): void {
-  if (cond) console.log('ok   ' + label);
-  else { console.error('FAIL ' + label); failures++; }
-}
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-anom-fixtures-'));
 let fileSeq = 0;
@@ -826,12 +822,12 @@ async function main(): Promise<void> {
 }
 
 void main()
-  .catch((err) => { console.error('FAIL unexpected error', err); failures += 1; })
+  .catch((err) => { ok('unexpected error', false, err); })
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch { /* best effort */ }
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best effort */ }
     Module._load = origLoad;
-    if (failures) { console.error('\n' + failures + ' anomalies-resident check(s) FAILED'); process.exit(1); }
+    if (failureCount()) { console.error('\n' + failureCount() + ' anomalies-resident check(s) FAILED'); process.exit(1); }
     console.log('\nAll anomalies-resident checks passed.');
     process.exit(0); // the DuckDB worker keeps the loop alive otherwise
   });

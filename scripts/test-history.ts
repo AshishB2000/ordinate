@@ -4,6 +4,7 @@
 // history module against real disk. No framework — ok() counter, process.exit(1).
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -23,11 +24,6 @@ Module._load = function (request: string, ...rest: any[]): any {
 // ponytail: compiled sibling of ../src/history.ts.
 const history: typeof import('../src/app/history') = require('../src/app/history');
 
-let failures = 0;
-function ok(label: string, cond: boolean): void {
-  if (cond) console.log('ok   ' + label);
-  else { console.error('FAIL ' + label); failures++; }
-}
 
 async function main(): Promise<void> {
   await history.init();
@@ -66,10 +62,10 @@ async function main(): Promise<void> {
 }
 
 main()
-  .catch((e) => { console.error(e); failures++; })
+  .catch((e) => { ok('unexpected error', false, e); })
   .finally(() => {
     Module._load = origLoad;
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) { /* noop */ }
-    if (failures) { console.error('\n' + failures + ' history check(s) FAILED'); process.exit(1); }
+    if (failureCount()) { console.error('\n' + failureCount() + ' history check(s) FAILED'); process.exit(1); }
     console.log('\nAll history checks passed.');
   });

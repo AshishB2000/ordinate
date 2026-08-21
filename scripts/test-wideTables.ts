@@ -12,6 +12,7 @@
 // a bad one is not wrong, just slow, and nothing notices.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -33,14 +34,6 @@ const datasetPage: typeof import('../src/engine/datasetPage') = require('../src/
 const residentQuery: typeof import('../src/engine/residentQuery') = require('../src/engine/residentQuery');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: string): void {
-  if (cond) console.log('ok   ' + label + (extra ? '  ' + extra : ''));
-  else {
-    console.error('FAIL ' + label + (extra ? '  ' + extra : ''));
-    failures++;
-  }
-}
 
 // Mixed types, a leading-zero id column, and enough distinct values that the
 // stats/dominant-category paths actually have work to do.
@@ -223,8 +216,8 @@ async function main(): Promise<void> {
   fs.rmSync(tmpUserData, { recursive: true, force: true });
 
   console.log('');
-  if (failures) {
-    console.error(`${failures} wide-table check(s) FAILED.`);
+  if (failureCount()) {
+    console.error(`${failureCount()} wide-table check(s) FAILED.`);
     process.exit(1);
   }
   console.log('All wide-table checks passed.');

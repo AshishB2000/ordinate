@@ -22,11 +22,7 @@ function pngSize(file: string): { width: number; height: number } | null {
   return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
 }
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra = ''): void {
-  if (cond) console.log('ok   ' + label + (extra ? '  ' + extra : ''));
-  else { console.error('FAIL ' + label + (extra ? '  ' + extra : '')); failures++; }
-}
+import { ok, failureCount } from './selfcheck';
 
 const mapped = icons.CONNECTOR_SI || {};
 const logos = icons.connectorLogos || {};
@@ -89,5 +85,5 @@ ok('app-icon generator is tracked as source',
   fs.existsSync(path.join(ROOT, 'scripts', 'build-appicon.js')));
 
 fs.rmSync(process.env.SCREENCHART_USER_DATA, { recursive: true, force: true });
-if (failures) process.exit(1);
+if (failureCount()) process.exit(1);
 console.log('\nAll connector icon checks passed.');

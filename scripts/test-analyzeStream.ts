@@ -14,6 +14,7 @@
 //   npm run build:ts && node scripts/test-analyzeStream.js
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
@@ -33,11 +34,6 @@ Module._load = function (request: string, ...rest: any[]): any {
 const analyze: typeof import('../src/ai/analyze') = require('../src/ai/analyze');
 const stream: typeof import('../src/ai/analyzeStream') = require('../src/ai/analyzeStream');
 
-let failures = 0;
-function ok(label: string, cond: boolean): void {
-  if (cond) console.log('ok   ' + label);
-  else { console.error('FAIL ' + label); failures++; }
-}
 
 // The answer every fixture reconstructs — split across two deltas so a broken
 // accumulator that keeps only the last frame is caught.
@@ -151,5 +147,5 @@ Module._load = origLoad;
 try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) { /* best effort */ }
 
 console.log('');
-if (failures) { console.error(`${failures} analyzeStream check(s) FAILED.`); process.exit(1); }
+if (failureCount()) { console.error(`${failureCount()} analyzeStream check(s) FAILED.`); process.exit(1); }
 console.log('All analyzeStream checks passed.');

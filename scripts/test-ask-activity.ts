@@ -19,6 +19,7 @@
 // a fresh temp dir, then run the REAL modules against real disk. No framework.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -43,11 +44,6 @@ const ipcCopilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copi
 
 type Step = import('../src/ipc/copilot').ActivityStep;
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: string): void {
-  if (cond) console.log('ok   ' + label);
-  else { console.error('FAIL ' + label + (extra ? '  ' + extra : '')); failures++; }
-}
 
 // The cell values planted in the fixture. NONE of them may appear in ANY step —
 // that is the whole point of the feature (the model narrates values; the chips
@@ -161,7 +157,7 @@ main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) { /* temp dir */ }
     Module._load = origLoad;
-    if (failures) { console.error('\n' + failures + ' ask-activity check(s) FAILED'); process.exit(1); }
+    if (failureCount()) { console.error('\n' + failureCount() + ' ask-activity check(s) FAILED'); process.exit(1); }
     console.log('\nAll ask-activity checks passed.');
   })
   .catch((err) => {

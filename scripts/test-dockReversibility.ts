@@ -12,20 +12,13 @@
 // counter, no framework.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 // ponytail: compiled sibling of ../src/transforms.ts.
 const transforms: typeof import('../src/data/transforms') = require('../src/data/transforms');
 const { applyPipeline } = transforms;
 import type { TableData, TransformStep, Cell } from '../src/data/transforms';
 
-let failures = 0;
-function ok(label: string, cond: boolean) {
-  if (cond) console.log('ok   ' + label);
-  else {
-    console.error('FAIL ' + label);
-    failures++;
-  }
-}
 
 // A fixed, immutable source — exactly what the app stores once a dataset has
 // steps (src/datasets.ts's `existing.source`, frozen the first time steps
@@ -112,8 +105,8 @@ ok(
   sameTable(preApply, postRemove),
 );
 
-if (failures) {
-  console.error('\n' + failures + ' dock reversibility check(s) FAILED');
+if (failureCount()) {
+  console.error('\n' + failureCount() + ' dock reversibility check(s) FAILED');
   process.exit(1);
 }
 console.log('\nAll dock reversibility checks passed.');

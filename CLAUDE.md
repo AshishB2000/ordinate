@@ -154,8 +154,10 @@ factories. `renderer/{hub,overlay}/` → windows.
 
 ## Testing
 
-- **56 self-check files**, pure logic, no framework: `npm test` is `node --test "scripts/test-*.js"`,
-  so **adding a suite needs no wiring**. All 56 report every run, in parallel.
+- **Self-check files**, pure logic, no framework: `npm test` is `node --test "scripts/test-*.js"`,
+  so **adding a suite needs no wiring** — which is also why no count is written here: it would rot.
+  Every suite reports every run, in parallel, through the shared `scripts/selfcheck.ts`
+  (`ok`/`failureCount`/`finish`) — never a per-file `ok` copy.
 - **Differential tests are the house style.** Two implementations means asserting they agree with
   `Object.is`, not against hand-written values. Several also spy on `datasets.getDataset` to prove
   the table was never hydrated, so a fast path that stops firing fails loudly instead of passing
@@ -170,7 +172,7 @@ factories. `renderer/{hub,overlay}/` → windows.
 ```bash
 npm start          # run the app
 npm run smoke      # launch the REAL app and drive it
-npm test           # all 56 suites, parallel
+npm test           # every test suite, parallel
 npm run lint       # oxlint — BLOCKING, zero findings
 npm run dist:mac   # / dist:win — installers
 npm run build:appicon   # regenerate icon.png/.icns/.ico from assets/icons/ordinate.svg

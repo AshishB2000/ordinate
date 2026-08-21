@@ -3,17 +3,10 @@
 // require the compiled sibling and assert against real return values. No framework.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const parse: typeof import('../src/data/parse') = require('../src/data/parse');
 
-let failures = 0;
-function ok(label: string, cond: boolean): void {
-  if (cond) console.log('ok   ' + label);
-  else {
-    console.error('FAIL ' + label);
-    failures++;
-  }
-}
 
 // ── RFC-4180 CSV: quoted commas, "" escapes, embedded newline ────────────────
 {
@@ -166,8 +159,8 @@ function ok(label: string, cond: boolean): void {
      r.warnings.some((w) => w.includes(String(CAP + 5))));
 }
 
-if (failures) {
-  console.error('\n' + failures + ' parse check(s) FAILED');
+if (failureCount()) {
+  console.error('\n' + failureCount() + ' parse check(s) FAILED');
   process.exit(1);
 }
 console.log('\nAll parse checks passed.');

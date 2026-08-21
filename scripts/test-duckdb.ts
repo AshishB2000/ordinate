@@ -9,20 +9,13 @@
 // No framework — plain asserts, same shape as the sibling test-*.ts scripts.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const duckdb: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 const fsd = require('fs') as typeof import('fs');
 const osd = require('os') as typeof import('os');
 const pathd = require('path') as typeof import('path');
 
-let failures = 0;
-function ok(label: string, cond: boolean): void {
-  if (cond) console.log('ok   ' + label);
-  else {
-    console.error('FAIL ' + label);
-    failures++;
-  }
-}
 
 // Assert that `fn` throws a DuckDBError carrying the expected code.
 function throwsWith(label: string, code: string, fn: () => unknown): void {
@@ -622,8 +615,8 @@ void (async () => {
     ok('shutdown: still idempotent with nothing in flight', true);
   }
 
-  if (failures) {
-    console.error('\n' + failures + ' duckdb check(s) FAILED');
+  if (failureCount()) {
+    console.error('\n' + failureCount() + ' duckdb check(s) FAILED');
     process.exit(1);
   }
   console.log('\nAll duckdb checks passed.');

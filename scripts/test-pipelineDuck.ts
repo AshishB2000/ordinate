@@ -17,15 +17,7 @@ import type { Cell, TableData, TransformStep } from '../src/data/transforms';
 import { runOnDuckDb } from '../src/engine/pipelineDuck';
 import * as duck from '../src/engine/duckdb';
 
-let failures = 0;
-function ok(cond: boolean, label: string): void {
-  if (cond) {
-    console.log(`ok   ${label}`);
-  } else {
-    failures++;
-    console.error(`FAIL ${label}`);
-  }
-}
+import { ok, failureCount } from './selfcheck';
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -75,22 +67,22 @@ function compare(label: string, src: TableData, steps: TransformStep[]): void {
   const viaJs = foldOnly(src, steps);
 
   ok(
-    JSON.stringify(viaSql.columns) === JSON.stringify(viaJs.columns),
     `${label}: columns + types identical`,
+    JSON.stringify(viaSql.columns) === JSON.stringify(viaJs.columns),
   );
-  ok(viaSql.rowCount === viaJs.rowCount, `${label}: rowCount ${viaSql.rowCount} = ${viaJs.rowCount}`);
+  ok(`${label}: rowCount ${viaSql.rowCount} = ${viaJs.rowCount}`, viaSql.rowCount === viaJs.rowCount);
 
   const sqlCells = viaSql.rows.map((r) => r.map(describe).join('|')).join('\n');
   const jsCells = viaJs.rows.map((r) => r.map(describe).join('|')).join('\n');
-  ok(sqlCells === jsCells, `${label}: every cell identical in value, JS type and row order`);
+  ok(`${label}: every cell identical in value, JS type and row order`, sqlCells === jsCells);
   if (sqlCells !== jsCells && process.env.SC_DIFF) {
     console.error('  sql:', sqlCells.slice(0, 400));
     console.error('  js :', jsCells.slice(0, 400));
   }
 
   ok(
-    JSON.stringify(viaSql.warnings) === JSON.stringify(viaJs.warnings),
     `${label}: warnings identical (${JSON.stringify(viaJs.warnings)})`,
+    JSON.stringify(viaSql.warnings) === JSON.stringify(viaJs.warnings),
   );
 }
 
@@ -121,10 +113,10 @@ function compareBig(label: string, src: TableData, steps: TransformStep[]): void
   // Build the reference by folding manually: applyPipeline on a copy whose row
   // count is unchanged but with the bridge disabled for this call.
   const ref = foldReference(src, steps);
-  ok(viaSql.rowCount === ref.rowCount, `${label}: rowCount ${viaSql.rowCount} = ${ref.rowCount}`);
+  ok(`${label}: rowCount ${viaSql.rowCount} = ${ref.rowCount}`, viaSql.rowCount === ref.rowCount);
   const a = viaSql.rows.map((r) => r.map(describe).join('|')).join('\n');
   const b = ref.rows.map((r) => r.map(describe).join('|')).join('\n');
-  ok(a === b, `${label}: ${viaSql.rowCount} rows identical incl. order`);
+  ok(`${label}: ${viaSql.rowCount} rows identical incl. order`, a === b);
 }
 
 // The fold, reached without going through applyPipeline's DuckDB branch.
@@ -221,7 +213,7 @@ compare('value containing a quote', table, [
   const after = runOnDuckDb(table, [{ type: 'filter', column: 'city', op: '=', value: 'Paris' }], {
     force: true,
   });
-  ok(after !== null && after.rowCount === 3, 'bridge still usable after injection attempts');
+  ok('bridge still usable after injection attempts', after !== null && after.rowCount === 3);
 }
 
 console.log('');
@@ -252,30 +244,30 @@ console.log('— large table: row-order stability under parallel execution —')
     );
     if (r) orders.add(r.rows.map((x) => String(x[0])).join(','));
   }
-  ok(orders.size === 1, `group order identical across 5 runs (got ${orders.size} distinct)`);
+  ok(`group order identical across 5 runs (got ${orders.size} distinct)`, orders.size === 1);
 }
 
 console.log('');
 console.log('— threshold behaviour —');
 ok(
-  runOnDuckDb(table, [{ type: 'filter', column: 'city', op: '=', value: 'Paris' }]) === null,
   'small table declines the SQL path (fold is cheaper)',
+  runOnDuckDb(table, [{ type: 'filter', column: 'city', op: '=', value: 'Paris' }]) === null,
 );
 ok(
+  'calculated_field declines (formula→SQL is out of Phase 1 scope)',
   runOnDuckDb(table, [{ type: 'calculated_field', name: 'x', expression: '1+1' }], { force: true }) ===
     null,
-  'calculated_field declines (formula→SQL is out of Phase 1 scope)',
 );
 ok(
-  applyPipeline(table, [{ type: 'filter', column: 'city', op: '=', value: 'Paris' }]).rowCount === 3,
   'applyPipeline still correct when the SQL path declines',
+  applyPipeline(table, [{ type: 'filter', column: 'city', op: '=', value: 'Paris' }]).rowCount === 3,
 );
 
 duck.shutdown();
 
 console.log('');
-if (failures) {
-  console.error(`${failures} check(s) FAILED.`);
+if (failureCount()) {
+  console.error(`${failureCount()} check(s) FAILED.`);
   process.exit(1);
 }
 console.log('All pipelineDuck differential checks passed.');

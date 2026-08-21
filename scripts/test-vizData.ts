@@ -6,6 +6,7 @@
 // yields a sane empty shape instead of throwing. No framework.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
 
@@ -13,11 +14,6 @@ type ParsedColumn = import('../src/data/parse').ParsedColumn;
 const vizData: typeof import('../src/analysis/vizData') = require('../src/analysis/vizData');
 const { buildVizData } = vizData;
 
-let failures = 0;
-function ok(label: string, cond: boolean) {
-  if (cond) console.log('ok   ' + label);
-  else { console.error('FAIL ' + label); failures++; }
-}
 
 const cols: ParsedColumn[] = [
   { name: 'city', type: 'text' },
@@ -248,5 +244,5 @@ try {
 }
 ok('malformed encoding does not throw', threw === false);
 
-if (failures) { console.error('\n' + failures + ' vizData check(s) FAILED'); process.exit(1); }
+if (failureCount()) { console.error('\n' + failureCount() + ' vizData check(s) FAILED'); process.exit(1); }
 console.log('\nAll vizData checks passed.');

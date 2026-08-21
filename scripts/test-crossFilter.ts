@@ -6,17 +6,13 @@
 // No Electron, no fs, no framework — same shape as test-dashboardFilters.ts.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 // ponytail: compiled siblings of the real pure modules (built by pretest).
 const { toggleCrossFilter, mergeDashboardFilters }: typeof import('../src/analysis/dashboardFilters') =
   require('../src/analysis/dashboardFilters');
 type FilterStep = import('../src/data/transforms').FilterStep;
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: string) {
-  if (cond) console.log('ok   ' + label + (extra ? '  ' + extra : ''));
-  else { console.error('FAIL ' + label + (extra ? '  ' + extra : '')); failures++; }
-}
 
 const F = (column: string, value: string): FilterStep =>
   ({ type: 'filter', column, op: '=', value } as FilterStep);
@@ -78,5 +74,5 @@ ok('the produced step survives the per-card merge, dashboard-first',
 ok('…and an identical card-level filter is de-duped, not applied twice',
   mergeDashboardFilters(one, one).length === 1);
 
-if (failures) { console.error('\n' + failures + ' crossFilter check(s) FAILED'); process.exit(1); }
+if (failureCount()) { console.error('\n' + failureCount() + ' crossFilter check(s) FAILED'); process.exit(1); }
 console.log('\nAll crossFilter checks passed.');

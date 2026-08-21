@@ -3,6 +3,7 @@
 // mirror the pure helpers there — keep them in sync if the originals change.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 // ── mirror of valueLabelKeys(mode, values) ────────────────────────────────
 function valueLabelKeys(mode: string | null | undefined, values: (number | null)[][]): Set<string> {
@@ -55,11 +56,9 @@ function chartHasPeriodDropdown(type: string, seriesCount: number): boolean {
 }
 
 // ── asserts ────────────────────────────────────────────────────────────────
-let failures = 0;
 function eq(label: string, got: unknown, want: unknown) {
   const g = JSON.stringify(got), w = JSON.stringify(want);
-  if (g !== w) { console.error(`FAIL ${label}\n  got:  ${g}\n  want: ${w}`); failures++; }
-  else { console.log(`ok   ${label}`); }
+  ok(label, g === w, `got: ${g}  want: ${w}`);
 }
 const sorted = (set: Set<string>) => Array.from(set).sort();
 
@@ -97,5 +96,5 @@ eq('heatmap 3 series → dropdown', chartHasPeriodDropdown('heatmap', 3), true);
 eq('pie 3 series → no dropdown', chartHasPeriodDropdown('pie', 3), false);
 eq('scatter 2 series → no dropdown', chartHasPeriodDropdown('scatter', 2), false);
 
-if (failures) { console.error(`\n${failures} assertion(s) failed`); process.exit(1); }
+if (failureCount()) { console.error(`\n${failureCount()} assertion(s) failed`); process.exit(1); }
 console.log('\nAll value-label / dropdown checks passed.');

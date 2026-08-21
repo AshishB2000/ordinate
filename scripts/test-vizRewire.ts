@@ -18,6 +18,7 @@
 //   npm run build:ts && node scripts/test-vizRewire.js
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const assert: typeof import('assert') = require('assert');
 const fs: typeof import('fs') = require('fs');
@@ -63,14 +64,6 @@ type Cell = import('../src/data/transforms').Cell;
 type FilterStep = import('../src/data/transforms').FilterStep;
 type VizEncoding = import('../src/analysis/visuals').VizEncoding;
 
-let failures = 0;
-function ok(label: string, cond: boolean): void {
-  if (cond) console.log('ok   ' + label);
-  else {
-    console.error('FAIL ' + label);
-    failures++;
-  }
-}
 
 // ── Differential harness ─────────────────────────────────────────────────────
 
@@ -434,8 +427,7 @@ async function main(): Promise<void> {
 
 main()
   .catch((err) => {
-    console.error('FAIL unexpected error:', err);
-    failures++;
+    ok('unexpected error', false, err);
   })
   .finally(() => {
     try {
@@ -443,8 +435,8 @@ main()
     } catch {
       /* best effort */
     }
-    if (failures > 0) {
-      console.error(`\n${failures} vizRewire check(s) failed.`);
+    if (failureCount() > 0) {
+      console.error(`\n${failureCount()} vizRewire check(s) failed.`);
       process.exit(1);
     }
     console.log('\nAll vizRewire checks passed.');

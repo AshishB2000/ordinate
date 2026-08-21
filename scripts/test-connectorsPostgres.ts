@@ -29,6 +29,7 @@
 //   npx tsc … && node scripts/test-connectorsPostgres.js
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const Module: any = require('module');
 import type { ConnectorContext, ConnectorDef } from '../src/connectors/types';
@@ -93,23 +94,6 @@ const CONNECTORS = mod.CONNECTORS;
 
 // ── Harness ──────────────────────────────────────────────────────────────────
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: unknown): void {
-  if (cond) {
-    console.log('ok   ' + label);
-  } else {
-    console.error('FAIL ' + label + (extra === undefined ? '' : '  ' + inspect(extra)));
-    failures += 1;
-  }
-}
-
-function inspect(v: unknown): string {
-  try {
-    return typeof v === 'string' ? v : JSON.stringify(v);
-  } catch {
-    return String(v);
-  }
-}
 
 const PASSWORD = 'sup3r-s3cret-pw';
 
@@ -599,8 +583,8 @@ async function main(): Promise<void> {
 
   // ── done ───────────────────────────────────────────────────────────────────
 
-  if (failures > 0) {
-    console.error(`\n${failures} failing assertion(s)`);
+  if (failureCount() > 0) {
+    console.error(`\n${failureCount()} failing assertion(s)`);
     process.exit(1);
   }
   console.log('\nall connectors/postgres checks passed');

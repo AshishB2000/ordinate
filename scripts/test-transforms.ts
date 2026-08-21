@@ -3,6 +3,7 @@
 // pure). Mirrors test-datasetStats.ts style: ok() counter, no framework.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 // ponytail: compiled sibling of ../src/transforms.ts.
 const transforms: typeof import('../src/data/transforms') = require('../src/data/transforms');
@@ -12,14 +13,6 @@ const { combineTables } = combine;
 import type { TableData, TransformStep, Cell } from '../src/data/transforms';
 import type { ParsedColumn } from '../src/data/parse';
 
-let failures = 0;
-function ok(label: string, cond: boolean) {
-  if (cond) console.log('ok   ' + label);
-  else {
-    console.error('FAIL ' + label);
-    failures++;
-  }
-}
 function approx(a: unknown, b: number): boolean {
   return typeof a === 'number' && Math.abs(a - b) < 1e-9;
 }
@@ -452,8 +445,8 @@ function fixture(): TableData {
   ok('group: large-group max correct', res.rows[0][2] === 199_999);
 }
 
-if (failures) {
-  console.error('\n' + failures + ' transforms check(s) FAILED');
+if (failureCount()) {
+  console.error('\n' + failureCount() + ' transforms check(s) FAILED');
   process.exit(1);
 }
 console.log('\nAll transforms checks passed.');

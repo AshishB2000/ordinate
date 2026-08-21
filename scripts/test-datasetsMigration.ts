@@ -6,6 +6,7 @@
 // on disk and asserting the upgrade is the house pattern (test-visuals.ts:167).
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -25,14 +26,6 @@ const projects: typeof import('../src/app/projects') = require('../src/app/proje
 const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 
-let failures = 0;
-function ok(label: string, cond: boolean): void {
-  if (cond) console.log('ok   ' + label);
-  else {
-    console.error('FAIL ' + label);
-    failures++;
-  }
-}
 
 const UUID = '11111111-2222-4333-8444-555555555555';
 
@@ -266,8 +259,8 @@ async function main(): Promise<void> {
   fs.rmSync(tmpUserData, { recursive: true, force: true });
 
   console.log('');
-  if (failures) {
-    console.error(`${failures} check(s) FAILED.`);
+  if (failureCount()) {
+    console.error(`${failureCount()} check(s) FAILED.`);
     process.exit(1);
   }
   console.log('All dataset migration checks passed.');

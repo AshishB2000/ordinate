@@ -21,14 +21,7 @@
 import * as duck from '../src/engine/duckdb';
 import * as side from '../src/engine/duckdbSidecar';
 
-let failures = 0;
-function ok(label: string, cond: boolean): void {
-  if (cond) console.log('ok   ' + label);
-  else {
-    console.error('FAIL ' + label);
-    failures++;
-  }
-}
+import { ok, failureCount } from './selfcheck';
 
 function done(): never {
   try {
@@ -41,8 +34,8 @@ function done(): never {
   } catch {
     /* ignore */
   }
-  if (failures > 0) {
-    console.error(`\n${failures} check(s) failed`);
+  if (failureCount() > 0) {
+    console.error(`\n${failureCount()} check(s) failed`);
     process.exit(1);
   }
   console.log('\nAll duckdbSidecar checks passed');

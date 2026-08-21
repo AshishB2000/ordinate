@@ -5,6 +5,7 @@
 // exercise the REAL dashboards + projects modules against real disk. No framework.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -25,11 +26,6 @@ Module._load = function (request: string, ...rest: any[]): any {
 const dashboards: typeof import('../src/analysis/dashboards') = require('../src/analysis/dashboards');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 
-let failures = 0;
-function ok(label: string, cond: boolean) {
-  if (cond) console.log('ok   ' + label);
-  else { console.error('FAIL ' + label); failures++; }
-}
 
 const MISSING_UUID = '00000000-0000-0000-0000-000000000000';
 const VISUAL_ID = '22222222-2222-4222-8222-222222222222';
@@ -448,7 +444,7 @@ main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) {}
     Module._load = origLoad;
-    if (failures) { console.error('\n' + failures + ' dashboards check(s) FAILED'); process.exit(1); }
+    if (failureCount()) { console.error('\n' + failureCount() + ' dashboards check(s) FAILED'); process.exit(1); }
     console.log('\nAll dashboards checks passed.');
   })
   .catch((err) => {

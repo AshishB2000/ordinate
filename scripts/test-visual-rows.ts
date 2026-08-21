@@ -16,6 +16,7 @@
 //   npm run build:ts && node scripts/test-visual-rows.js
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -68,14 +69,6 @@ type Cell = import('../src/data/transforms').Cell;
 type FilterStep = import('../src/data/transforms').FilterStep;
 type VizEncoding = import('../src/analysis/visuals').VizEncoding;
 
-let failures = 0;
-function ok(label: string, cond: boolean): void {
-  if (cond) console.log('ok   ' + label);
-  else {
-    console.error('FAIL ' + label);
-    failures++;
-  }
-}
 
 // ── Fixture ──────────────────────────────────────────────────────────────────
 
@@ -514,8 +507,8 @@ async function main(): Promise<void> {
 main()
   .then(() => {
     cleanup();
-    if (failures > 0) {
-      console.error(`\n${failures} check(s) failed`);
+    if (failureCount() > 0) {
+      console.error(`\n${failureCount()} check(s) failed`);
       process.exit(1);
     }
     console.log('\nAll visual:rows checks passed');
