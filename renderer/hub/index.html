@@ -449,28 +449,32 @@
           <h2 id="main-title-h">Welcome</h2>
           <p id="main-title-sub">Capture any chart, table, or data to begin</p>
         </div>
-        <div class="tb-spacer"></div>
-        <div class="hotkey-hint" aria-label="Keyboard shortcut">
-          <span class="kbd" id="hotkey-hint">⌘ ⌥ S</span>
+        <!-- Actions are grouped so they wrap below the title as a unit on a
+             narrow header rather than clipping past the panel edge. The title
+             flex-grows to claim the space between; see `.main-top-actions`. -->
+        <div class="main-top-actions">
+          <div class="hotkey-hint" aria-label="Keyboard shortcut">
+            <span class="kbd" id="hotkey-hint">⌘ ⌥ S</span>
+          </div>
+          <button id="conn-connect-btn" class="btn" type="button">Connect data</button>
+          <!-- AI selector, capture page only. Since the top-bar relayout removed
+               the sidebar's #exec-mode-btn, this is the ONLY opener left for
+               #exec-menu; hub.css shows it only in body.cap-focus. execMenu.ts
+               drives whichever exec buttons exist (execBtns()/execBtnVisible()),
+               so it needed no change when the other one went away. Execution mode
+               stays fully configurable at Settings → Execution everywhere else. -->
+          <button id="exec-mode-btn-cap" class="as-icon-btn exec-btn-cap exec-btn-empty" type="button"
+            aria-haspopup="true" aria-expanded="false" aria-label="No AI connected" title="No AI connected"></button>
+          <button id="new-capture" class="btn btn-primary" type="button">
+            <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M3 8.5A2 2 0 0 1 5 6.5h1.2l.8-1.4A1.5 1.5 0 0 1 8.3 4.3h7.4a1.5 1.5 0 0 1 1.3.8l.8 1.4H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
+                stroke="currentColor" stroke-width="1.7"/>
+              <circle cx="12" cy="13" r="3.4" stroke="currentColor" stroke-width="1.7"/>
+              <path d="M12 8.5v-3M10.5 7H13.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+            New capture
+          </button>
         </div>
-        <button id="conn-connect-btn" class="btn" type="button">Connect data</button>
-        <!-- AI selector, capture page only. Since the top-bar relayout removed
-             the sidebar's #exec-mode-btn, this is the ONLY opener left for
-             #exec-menu; hub.css shows it only in body.cap-focus. execMenu.ts
-             drives whichever exec buttons exist (execBtns()/execBtnVisible()),
-             so it needed no change when the other one went away. Execution mode
-             stays fully configurable at Settings → Execution everywhere else. -->
-        <button id="exec-mode-btn-cap" class="as-icon-btn exec-btn-cap exec-btn-empty" type="button"
-          aria-haspopup="true" aria-expanded="false" aria-label="No AI connected" title="No AI connected"></button>
-        <button id="new-capture" class="btn btn-primary" type="button">
-          <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M3 8.5A2 2 0 0 1 5 6.5h1.2l.8-1.4A1.5 1.5 0 0 1 8.3 4.3h7.4a1.5 1.5 0 0 1 1.3.8l.8 1.4H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
-              stroke="currentColor" stroke-width="1.7"/>
-            <circle cx="12" cy="13" r="3.4" stroke="currentColor" stroke-width="1.7"/>
-            <path d="M12 8.5v-3M10.5 7H13.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-          </svg>
-          New capture
-        </button>
       </div>
 
       <!-- Hotkey registration failure — shown when globalShortcut.register() returns false -->
