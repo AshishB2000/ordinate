@@ -68,13 +68,16 @@ jobs:
       # passed." — a green test reported as a failure. That is worse than having
       # no artifact: it trains everyone to ignore a red smoke job, which is the
       # one job that catches a CSP violation or a blank render.
-      - name: Upload the window screenshot
+      # ALL the smoke screenshots, not just the final window: smoke-app writes
+      # ~23 per-scenario diagnostic shots into SMOKE_ARTIFACT_DIR, and on a red
+      # run those are what say WHICH scenario broke.
+      - name: Upload the smoke screenshots
         if: always()
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: app-window-screenshot
-          path: ${{ runner.temp }}/app-window.png
+          name: smoke-screenshots
+          path: ${{ runner.temp }}/*.png
           if-no-files-found: warn
           # The default is 90 days. A ~400 KB screenshot per PR run, kept for
           # three months, is what filled the quota in the first place; nobody has
