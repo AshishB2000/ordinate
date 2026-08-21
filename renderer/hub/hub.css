@@ -5688,6 +5688,10 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 }
 .viz-select {
   padding: 6px 8px;
+  /* Native <select>s default to the OS UI font, which reads unstyled next to
+     the app's inputs — pin the same family/size .ws-modal-input uses. The
+     dropdown LIST itself stays OS-rendered (not styleable with CSS alone). */
+  font-family: var(--font-ui);
   font-size: 13px;
   color: var(--text-strong);
   background: var(--bg);
@@ -5695,6 +5699,13 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   border-radius: 6px;
   max-width: 240px;
 }
+.viz-select:hover { border-color: var(--accent); }
+.viz-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+.viz-select:disabled { opacity: 0.55; cursor: not-allowed; }
 .viz-encoding:not(.is-wells) .viz-select {
   width: 100%;
   padding: 8px;
@@ -5900,6 +5911,22 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   width: 40px;
   height: 40px;
 }
+/* Live thumbnail (vizThumbs.ts): a small real chart rendered into the tile.
+   The tile is the positioning context; the host insets the canvas so bars and
+   arcs never kiss the tile border. pointer-events off — the card is ONE button
+   and the thumb is presentation, not a control. The glyph stays in the DOM as
+   the fallback and is hidden only once a chart actually rendered. */
+.viz-card-tile { position: relative; }
+.viz-thumb {
+  position: absolute;
+  inset: 10px 12px 8px;
+  pointer-events: none;
+}
+.viz-thumb canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+.viz-card-tile--thumb .viz-card-glyph { display: none; }
 .viz-card-name {
   font-size: 13px;
   font-weight: 600;

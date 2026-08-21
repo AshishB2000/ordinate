@@ -2514,6 +2514,9 @@
 <script src="visuals.js"></script>
 <!-- visuals.ts was 1284 lines; these four are it, split by job. visuals.js
      stays first — it keeps the module-local state the rest read. -->
+<!-- Live gallery thumbnails — before vizGallery.js, which calls
+     vizThumbsReset()/vizThumbObserve(); needs buildChart (chartRender.js, above). -->
+<script src="vizThumbs.js"></script>
 <script src="vizGallery.js"></script>
 <script src="vizNew.js"></script>
 <script src="vizBuilder.js"></script>
