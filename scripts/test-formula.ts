@@ -3,20 +3,13 @@
 // counter, no framework, process.exit(1) on failure.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 // ponytail: compiled sibling of ../src/formula.ts.
 const formula: typeof import('../src/formula/formula') = require('../src/formula/formula');
 const { compile } = formula;
 import type { FValue } from '../src/formula/formula';
 
-let failures = 0;
-function ok(label: string, cond: boolean) {
-  if (cond) console.log('ok   ' + label);
-  else {
-    console.error('FAIL ' + label);
-    failures++;
-  }
-}
 
 function approx(a: unknown, b: number): boolean {
   return typeof a === 'number' && Math.abs(a - b) < 1e-9;
@@ -26,8 +19,7 @@ function approx(a: unknown, b: number): boolean {
 function ev(expr: string, row: Record<string, FValue> = {}): FValue {
   const r = compile(expr);
   if (!r.ok) {
-    console.error('  (unexpected compile error for `' + expr + '`: ' + r.error + ')');
-    failures++;
+    ok('compile `' + expr + '`', false, r.error);
     return null;
   }
   return r.fn.evaluate(row);
@@ -261,8 +253,8 @@ ok('CASE without WHEN → error', isErr('CASE x END'));
   ok('source contains no new Function', !/new\s+Function\s*\(/.test(stripped));
 })();
 
-if (failures) {
-  console.error('\n' + failures + ' formula check(s) FAILED');
+if (failureCount()) {
+  console.error('\n' + failureCount() + ' formula check(s) FAILED');
   process.exit(1);
 }
 console.log('\nAll formula checks passed.');

@@ -23,20 +23,13 @@
 //   npm run build:ts && node scripts/test-refreshScheduler.js
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 // ponytail: compiled sibling of ../src/refreshScheduler.ts. Required (not
 // imported) so this file does not pull Electron in through the module graph.
 const sched: typeof import('../src/app/refreshScheduler') = require('../src/app/refreshScheduler');
 const { dueDatasets } = sched;
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: string): void {
-  if (cond) console.log('ok   ' + label + (extra ? '  ' + extra : ''));
-  else {
-    console.error('FAIL ' + label + (extra ? '  ' + extra : ''));
-    failures++;
-  }
-}
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -118,8 +111,8 @@ ok('a three-day gap catches up the hourly and daily, but not the weekly',
   ids(dueDatasets(afterThreeDaysClosed, NOW)) === 'hourly,daily');
 
 console.log('');
-if (failures) {
-  console.error(`${failures} scheduler check(s) FAILED.`);
+if (failureCount()) {
+  console.error(`${failureCount()} scheduler check(s) FAILED.`);
   process.exit(1);
 }
 console.log('All scheduler checks passed.');

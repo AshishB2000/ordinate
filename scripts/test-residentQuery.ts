@@ -28,14 +28,7 @@ import type { ParsedColumn } from '../src/data/parse';
 import type { Cell, FilterStep } from '../src/data/transforms';
 import type { VizEncoding } from '../src/analysis/visuals';
 
-let failures = 0;
-function ok(label: string, cond: boolean): void {
-  if (cond) console.log('ok   ' + label);
-  else {
-    console.error('FAIL ' + label);
-    failures++;
-  }
-}
+import { ok, failureCount } from './selfcheck';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-resident-'));
 let seq = 0;
@@ -698,8 +691,8 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
 
 cleanup();
 duck.shutdown();
-if (failures > 0) {
-  console.error(`\n${failures} residentQuery check(s) failed`);
+if (failureCount() > 0) {
+  console.error(`\n${failureCount()} residentQuery check(s) failed`);
   process.exit(1);
 }
 console.log('\nAll residentQuery checks passed.');

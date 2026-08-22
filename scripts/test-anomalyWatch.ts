@@ -24,18 +24,11 @@
 //   npm run build:ts && node scripts/test-anomalyWatch.js
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const watch: typeof import('../src/analysis/anomalyWatch') = require('../src/analysis/anomalyWatch');
 const { anomalyKey, diffAnomalies, sanitizeAnomalyKeys, watchMessage, MAX_KEYS } = watch;
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: string): void {
-  if (cond) console.log('ok   ' + label + (extra ? '  ' + extra : ''));
-  else {
-    console.error('FAIL ' + label + (extra ? '  ' + extra : ''));
-    failures++;
-  }
-}
 
 function anom(kind: string, column?: string, detail = 'x', severity: 'info' | 'warn' = 'warn'): any {
   return { kind, column, severity, detail, facts: {} };
@@ -113,8 +106,8 @@ ok('one anomaly reads as singular', watchMessage('Q3 Sales', 1) === '1 new anoma
 ok('more than one reads as plural', watchMessage('Q3 Sales', 3) === '3 new anomalies in "Q3 Sales".');
 
 console.log('');
-if (failures) {
-  console.error(`${failures} anomaly-watch check(s) FAILED.`);
+if (failureCount()) {
+  console.error(`${failureCount()} anomaly-watch check(s) FAILED.`);
   process.exit(1);
 }
 console.log('All anomaly-watch checks passed.');

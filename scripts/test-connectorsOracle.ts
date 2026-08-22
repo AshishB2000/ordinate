@@ -15,19 +15,12 @@
 // never calls initOracleClient().
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const path: typeof import('path') = require('path');
 const fs: typeof import('fs') = require('fs');
 const Module: { _load(request: string, ...rest: unknown[]): unknown } = require('module');
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: unknown): void {
-  if (cond) console.log('ok   ' + label);
-  else {
-    console.error('FAIL ' + label + (extra === undefined ? '' : '  → ' + String(extra)));
-    failures++;
-  }
-}
 
 // ── the assertion that matters most, made against the REAL driver ─────────────
 // Done BEFORE the fake is installed: Thin mode is why this connector can ship
@@ -377,8 +370,8 @@ async function main(): Promise<void> {
   ok('the 12c version floor and the 11g ROWNUM alternative are both documented',
     /ROWNUM/.test(srcTs) && /12\.1|12c/.test(srcTs));
 
-  console.log(failures === 0 ? '\nAll oracle connector checks passed.' : `\n${failures} check(s) FAILED.`);
-  if (failures > 0) process.exit(1);
+  console.log(failureCount() === 0 ? '\nAll oracle connector checks passed.' : `\n${failureCount()} check(s) FAILED.`);
+  if (failureCount() > 0) process.exit(1);
 }
 
 main().catch((err) => {

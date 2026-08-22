@@ -15,6 +15,7 @@
 //   - VARCHAR ordering is byte-wise UTF-8, JS is UTF-16 code-unit.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const sqlGen: typeof import('../src/engine/sqlGen') = require('../src/engine/sqlGen');
 const { execFileSync } = require('child_process') as typeof import('child_process');
@@ -22,14 +23,6 @@ const { execFileSync } = require('child_process') as typeof import('child_proces
 type SqlColumn = import('../src/engine/sqlGen').SqlColumn;
 type TransformStep = import('../src/data/transforms').TransformStep;
 
-let failures = 0;
-function ok(label: string, cond: boolean): void {
-  if (cond) console.log('ok   ' + label);
-  else {
-    console.error('FAIL ' + label);
-    failures++;
-  }
-}
 
 // city:text, sku:text, units:number, price:number — the test-transforms fixture.
 const COLS: SqlColumn[] = [
@@ -547,8 +540,8 @@ if (!duckdbAvailable()) {
   }
 }
 
-if (failures) {
-  console.error('\n' + failures + ' sqlGen check(s) FAILED');
+if (failureCount()) {
+  console.error('\n' + failureCount() + ' sqlGen check(s) FAILED');
   process.exit(1);
 }
 console.log('\nAll sqlGen checks passed.');

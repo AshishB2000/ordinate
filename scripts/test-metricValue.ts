@@ -3,14 +3,10 @@
 // No framework — the shared ok(label, cond) harness the sibling test scripts use.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const { computeMetric } = require('../src/analysis/metricValue') as typeof import('../src/analysis/metricValue');
 
-let failures = 0;
-function ok(label: string, cond: boolean) {
-  if (cond) console.log('ok   ' + label);
-  else { console.error('FAIL ' + label); failures++; }
-}
 
 type Col = { name: string; type: 'text' | 'number' | 'date' };
 type Cell = string | number | null;
@@ -101,5 +97,5 @@ ok('no rows → 0 (count)', computeMetric(columns, [], { column: 'pop', aggregat
   ok('min of the id text column → null', computeMetric(cols, r, { column: 'zip', aggregation: 'min' }) === null);
 }
 
-if (failures) { console.error('\n' + failures + ' metricValue check(s) FAILED'); process.exit(1); }
+if (failureCount()) { console.error('\n' + failureCount() + ' metricValue check(s) FAILED'); process.exit(1); }
 console.log('\nAll metricValue checks passed.');

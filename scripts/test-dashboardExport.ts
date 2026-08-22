@@ -6,18 +6,11 @@
 // while legit app-computed labels/values survive. No Electron, no fs, no framework.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 // ponytail: compiled sibling of the real pure module (built by pretest).
 const { buildSelfContainedHtml, sanitizeBundle }: typeof import('../src/analysis/dashboardExport') = require('../src/analysis/dashboardExport');
 
-let failures = 0;
-function ok(label: string, cond: boolean) {
-  if (cond) console.log('ok   ' + label);
-  else {
-    console.error('FAIL ' + label);
-    failures++;
-  }
-}
 
 // A recognizable, definitely-not-a-real-URL fake Chart.js UMD so the test never reads
 // the 200 KB real file (and so the whole document is guaranteed http-free).
@@ -132,8 +125,8 @@ ok('a non-number chart value is coerced to null (never leaks a string)',
     pages: [{ name: 'p', cards: [{ kind: 'chart', layout: {}, data: { labels: ['a'], series: [{ label: 's', values: ['not-a-number'] }] } }] }],
   }).pages[0].cards[0].data!.series[0].values[0] === null);
 
-if (failures) {
-  console.error('\n' + failures + ' dashboardExport check(s) FAILED');
+if (failureCount()) {
+  console.error('\n' + failureCount() + ' dashboardExport check(s) FAILED');
   process.exit(1);
 }
 console.log('\nAll dashboardExport checks passed.');

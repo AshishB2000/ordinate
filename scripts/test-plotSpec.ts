@@ -14,6 +14,7 @@
 // and it was verified separately by driving the real app.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -48,11 +49,6 @@ const {
 const ALL_CHART_TYPE_IDS: string[] = result.ALL_CHART_TYPE_IDS;
 const VIZ_LABELS: Record<string, string> = result.VIZ_LABELS;
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: string): void {
-  if (cond) console.log('ok   ' + label + (extra ? '  ' + extra : ''));
-  else { console.error('FAIL ' + label + (extra ? '  ' + extra : '')); failures++; }
-}
 
 // ── The two lists PARTITION every wired chart type ──────────────────────────
 // The whole reason coverage is spelled out as two explicit sets rather than one
@@ -231,5 +227,5 @@ ok('a hostile VIEW name would be quoted too',
 ok('a fully raw mark emits no GROUP BY', mosaicSpecSql(rawScatter).indexOf('GROUP BY') === -1,
    mosaicSpecSql(rawScatter));
 
-if (failures) { console.error('\n' + failures + ' assertion(s) failed'); process.exit(1); }
+if (failureCount()) { console.error('\n' + failureCount() + ' assertion(s) failed'); process.exit(1); }
 console.log('\nAll Mosaic plot-spec checks passed.');

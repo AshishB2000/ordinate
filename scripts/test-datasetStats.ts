@@ -3,16 +3,12 @@
 // electron/fs/DOM). Mirrors test-datasets.ts style: ok() helper, no framework.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 // ponytail: compiled sibling of ../src/datasetStats.ts.
 const stats: typeof import('../src/data/datasetStats') = require('../src/data/datasetStats');
 const { computeColumnSummary, findQualityIssues } = stats;
 
-let failures = 0;
-function ok(label: string, cond: boolean) {
-  if (cond) console.log('ok   ' + label);
-  else { console.error('FAIL ' + label); failures++; }
-}
 
 function approx(a: number, b: number): boolean {
   return Math.abs(a - b) < 1e-9;
@@ -130,8 +126,8 @@ ok('duplicate_rows: none reported when all rows unique',
 const emptyIssues = findQualityIssues(cols, []);
 ok('empty table: no issues', emptyIssues.length === 0);
 
-if (failures) {
-  console.error('\n' + failures + ' datasetStats check(s) FAILED');
+if (failureCount()) {
+  console.error('\n' + failureCount() + ' datasetStats check(s) FAILED');
   process.exit(1);
 }
 console.log('\nAll datasetStats checks passed.');

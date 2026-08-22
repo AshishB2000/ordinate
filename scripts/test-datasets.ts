@@ -4,6 +4,7 @@
 // the REAL datasets + projects modules against real disk. No framework.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const assert: typeof import('assert') = require('assert');
 const fs: typeof import('fs') = require('fs');
@@ -29,11 +30,6 @@ const projects: typeof import('../src/app/projects') = require('../src/app/proje
 const transforms: typeof import('../src/data/transforms') = require('../src/data/transforms');
 const combine: typeof import('../src/data/combine') = require('../src/data/combine');
 
-let failures = 0;
-function ok(label: string, cond: boolean) {
-  if (cond) console.log('ok   ' + label);
-  else { console.error('FAIL ' + label); failures++; }
-}
 
 async function main(): Promise<void> {
   await projects.init();
@@ -310,7 +306,7 @@ main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) {}
     Module._load = origLoad;
-    if (failures) { console.error('\n' + failures + ' datasets check(s) FAILED'); process.exit(1); }
+    if (failureCount()) { console.error('\n' + failureCount() + ' datasets check(s) FAILED'); process.exit(1); }
     console.log('\nAll datasets checks passed.');
   })
   .catch((err) => {

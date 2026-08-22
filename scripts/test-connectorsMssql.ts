@@ -14,20 +14,13 @@
 // error — with only the socket faked out.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const path: typeof import('path') = require('path');
 const fs: typeof import('fs') = require('fs');
 const { EventEmitter }: typeof import('events') = require('events');
 const Module: { _load(request: string, ...rest: unknown[]): unknown } = require('module');
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: unknown): void {
-  if (cond) console.log('ok   ' + label);
-  else {
-    console.error('FAIL ' + label + (extra === undefined ? '' : '  → ' + String(extra)));
-    failures++;
-  }
-}
 
 // ── the fake tedious driver ───────────────────────────────────────────────────
 
@@ -363,8 +356,8 @@ async function main(): Promise<void> {
   ok('the ORDER BY-in-a-derived-table limitation is documented',
     /1033|ORDER BY clause is invalid/.test(src));
 
-  console.log(failures === 0 ? '\nAll mssql connector checks passed.' : `\n${failures} check(s) FAILED.`);
-  if (failures > 0) process.exit(1);
+  console.log(failureCount() === 0 ? '\nAll mssql connector checks passed.' : `\n${failureCount()} check(s) FAILED.`);
+  if (failureCount() > 0) process.exit(1);
 }
 
 main().catch((err) => {

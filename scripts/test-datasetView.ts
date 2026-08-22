@@ -26,14 +26,7 @@ import * as duck from '../src/engine/duckdb';
 import type { ParsedColumn } from '../src/data/parse';
 import type { Cell } from '../src/data/transforms';
 
-let failures = 0;
-function ok(label: string, cond: boolean): void {
-  if (cond) console.log('ok   ' + label);
-  else {
-    console.error('FAIL ' + label);
-    failures++;
-  }
-}
+import { ok, failureCount } from './selfcheck';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-dsview-'));
 let seq = 0;
@@ -333,7 +326,7 @@ if (!duck.isAvailable()) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 8. LIFECYCLE — idempotent ensureView, dropView, and clean failures.
+// 8. LIFECYCLE — idempotent ensureView, dropView, and clean failureCount().
 // ─────────────────────────────────────────────────────────────────────────────
 {
   const cols: ParsedColumn[] = [{ name: 'a', type: 'number' }];
@@ -446,7 +439,7 @@ if (!duck.isAvailable()) {
   // sorted MULTISET of (label, value) pairs instead, which stays faithful to two
   // groups that share a label — and neither GROUP BY promises an order.
   const pairs = (labels: (string | number | null)[], values: (number | null)[]): string =>
-    JSON.stringify(labels.map((l, i) => `${l == null ? '' : String(l)} ${values[i]}`).sort());
+    JSON.stringify(labels.map((l, i) => `${l == null ? '' : String(l)}\u0000${values[i]}`).sort());
 
   for (const measure of ['revenue', 'units']) {
     // Path A — through the view, exactly what a chart layer would generate.
@@ -494,8 +487,8 @@ if (!duck.isAvailable()) {
 
 cleanup();
 duck.shutdown();
-if (failures > 0) {
-  console.error(`\n${failures} datasetView check(s) failed`);
+if (failureCount() > 0) {
+  console.error(`\n${failureCount()} datasetView check(s) failed`);
   process.exit(1);
 }
 console.log('\nAll datasetView checks passed.');

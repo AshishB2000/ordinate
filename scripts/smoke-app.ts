@@ -11,6 +11,7 @@
 // Uses a throwaway userData dir, so a developer's real projects are untouched.
 
 export {}; // module scope — sibling scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -34,14 +35,6 @@ const REPO = path.resolve(__dirname, '..');
 const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-smoke-'));
 const shotDir = process.env.SMOKE_ARTIFACT_DIR || userData;
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: string): void {
-  if (cond) console.log('ok   ' + label + (extra ? '  ' + extra : ''));
-  else {
-    console.error('FAIL ' + label + (extra ? '  ' + extra : ''));
-    failures++;
-  }
-}
 
 async function main(): Promise<void> {
   const app = await _electron.launch({
@@ -4152,8 +4145,8 @@ async function main(): Promise<void> {
   fs.rmSync(userData, { recursive: true, force: true });
 
   console.log('');
-  if (failures) {
-    console.error(`${failures} smoke check(s) FAILED.`);
+  if (failureCount()) {
+    console.error(`${failureCount()} smoke check(s) FAILED.`);
     process.exit(1);
   }
   console.log('All app smoke checks passed.');

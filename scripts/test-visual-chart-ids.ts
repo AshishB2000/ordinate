@@ -16,14 +16,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { SUGGESTABLE_CHART_TYPES } from '../src/analysis/visuals';
 
-let failures = 0;
-function ok(label: string, cond: boolean, detail?: string): void {
-  if (cond) console.log('ok   ' + label + (detail ? '  ' + detail : ''));
-  else {
-    console.error('FAIL ' + label + (detail ? '  ' + detail : ''));
-    failures++;
-  }
-}
+import { ok, failureCount } from './selfcheck';
 
 // Parse `const ALL_CHART_TYPE_IDS = [ 'a', 'b', … ];` out of the renderer source.
 function parseRendererIds(src: string): string[] | null {
@@ -64,8 +57,8 @@ function main(): void {
     ok(`'${t}' is deliberately NOT suggestable`, SUGGESTABLE_CHART_TYPES.indexOf(t) < 0);
   });
 
-  if (failures) {
-    console.error(`\n${failures} check(s) FAILED.`);
+  if (failureCount()) {
+    console.error(`\n${failureCount()} check(s) FAILED.`);
     process.exit(1);
   }
   console.log('\nAll chart-id checks passed.');

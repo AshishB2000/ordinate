@@ -4,15 +4,11 @@
 // test scripts use. (It DOES import datasetStats, which is Electron-free too.)
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const { detectAnomalies, buildAnomaliesFacts } = require('../src/analysis/anomalies') as typeof import('../src/analysis/anomalies');
 import type { Anomaly, AnomalyKind } from '../src/analysis/anomalies';
 
-let failures = 0;
-function ok(label: string, cond: boolean) {
-  if (cond) console.log('ok   ' + label);
-  else { console.error('FAIL ' + label); failures++; }
-}
 
 type Col = { name: string; type: 'text' | 'number' | 'date' };
 type Cell = string | number | null;
@@ -171,5 +167,5 @@ ok('null-ish input → [] (no throw)', detectAnomalies(null as any, null as any)
   ok('empty facts still safe (no crash, says none detected)', emptyFacts.includes('No anomalies were detected'));
 }
 
-if (failures) { console.error('\n' + failures + ' anomalies check(s) FAILED'); process.exit(1); }
+if (failureCount()) { console.error('\n' + failureCount() + ' anomalies check(s) FAILED'); process.exit(1); }
 console.log('\nAll anomalies checks passed.');

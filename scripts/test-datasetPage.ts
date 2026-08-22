@@ -28,14 +28,7 @@ import * as pq from '../src/engine/parquetStore';
 import type { ParsedColumn } from '../src/data/parse';
 import type { Cell } from '../src/data/transforms';
 
-let failures = 0;
-function ok(label: string, cond: boolean): void {
-  if (cond) console.log('ok   ' + label);
-  else {
-    console.error('FAIL ' + label);
-    failures++;
-  }
-}
+import { ok, failureCount } from './selfcheck';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-page-'));
 let seq = 0;
@@ -505,8 +498,8 @@ ok('isPageResident(): true when the bridge is up', dp.isPageResident() === true)
 // ─────────────────────────────────────────────────────────────────────────────
 
 cleanup();
-if (failures > 0) {
-  console.error(`\n${failures} check(s) failed`);
+if (failureCount() > 0) {
+  console.error(`\n${failureCount()} check(s) failed`);
   process.exit(1);
 }
 console.log('\nAll datasetPage checks passed');

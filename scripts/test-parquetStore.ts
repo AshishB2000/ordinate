@@ -20,14 +20,7 @@ import * as duck from '../src/engine/duckdb';
 import type { ParsedColumn } from '../src/data/parse';
 import type { Cell } from '../src/data/transforms';
 
-let failures = 0;
-function ok(label: string, cond: boolean): void {
-  if (cond) console.log('ok   ' + label);
-  else {
-    console.error('FAIL ' + label);
-    failures++;
-  }
-}
+import { ok, failureCount } from './selfcheck';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-parquet-'));
 let seq = 0;
@@ -318,7 +311,7 @@ ok('isSupported(): true when the bridge is up', pq.isSupported() === true);
   fs.writeFileSync(truncated, bytes.subarray(0, Math.max(1, bytes.length - 32)));
   ok('robust: a truncated Parquet file returns null', pq.readTable(truncated) === null);
 
-  ok('robust: the bridge is still usable after those failures', pq.readTable(good) !== null);
+  ok('robust: the bridge is still usable after those failureCount()', pq.readTable(good) !== null);
 }
 
 // ── Path safety ──────────────────────────────────────────────────────────────
@@ -337,7 +330,7 @@ ok('isSupported(): true when the bridge is up', pq.isSupported() === true);
   ok('path: writeTable rejects an empty path', throws(() => pq.writeTable('', [], [])));
   ok('path: relationSql rejects a non-.parquet path', throws(() => pq.relationSql(path.join(dir, 'x.csv'))));
   ok('path: relationSql rejects a null byte', throws(() => pq.relationSql('/a\u0000/b.parquet')));
-  ok('path: readTable returns null (never throws) for a bad path', pq.readTable(path.join(dir, 'x.json')) === null && pq.readTable(' .parquet') === null);
+  ok('path: readTable returns null (never throws) for a bad path', pq.readTable(path.join(dir, 'x.json')) === null && pq.readTable('\u0000.parquet') === null);
 
   // A single quote in a directory name must not break out of the SQL literal.
   const oddDir = path.join(dir, "it's a dir");
@@ -439,8 +432,8 @@ duck.shutdown();
 cleanup();
 
 console.log('');
-if (failures) {
-  console.error(failures + ' parquetStore check(s) FAILED');
+if (failureCount()) {
+  console.error(failureCount() + ' parquetStore check(s) FAILED');
   process.exit(1);
 }
 console.log('All parquetStore checks passed.');

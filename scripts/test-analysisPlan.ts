@@ -36,6 +36,7 @@
 //   npm run build:ts && node scripts/test-analysisPlan.js
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -77,11 +78,6 @@ const analysesIpc: typeof import('../src/ipc/analyses') = require('../src/ipc/an
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
 type Cell = import('../src/data/transforms').Cell;
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: string): void {
-  if (cond) console.log('ok   ' + label + (extra ? '  ' + extra : ''));
-  else { console.error('FAIL ' + label + (extra ? '  ' + extra : '')); failures++; }
-}
 
 // ── The hydration spy ───────────────────────────────────────────────────────
 // analysisPlan.js and ipc/visuals.js both resolve `datasets.getDataset` off the
@@ -768,8 +764,8 @@ async function checkChannels(): Promise<void> {
   await checkGarbage();
   await checkChannels();
 
-  if (failures) {
-    console.error('\n' + failures + ' analysis-plan check(s) FAILED');
+  if (failureCount()) {
+    console.error('\n' + failureCount() + ' analysis-plan check(s) FAILED');
     process.exit(1);
   }
   console.log('\nAll analysis-plan checks passed.');

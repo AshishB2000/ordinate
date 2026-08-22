@@ -22,6 +22,7 @@
 //      hardcoded — so adding one does not mean editing this file.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
@@ -33,14 +34,6 @@ const CSS_FILES = [
   'renderer/overlay/overlay.css',
 ];
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: string): void {
-  if (cond) console.log('ok   ' + label + (extra ? '  ' + extra : ''));
-  else {
-    console.error('FAIL ' + label + (extra ? '  ' + extra : ''));
-    failures++;
-  }
-}
 
 // Strip comments so a commented-out rule cannot register a definition or a use.
 function decomment(css: string): string {
@@ -136,8 +129,8 @@ console.log(`     (${withFallback.length} use(s) rely on a var() fallback for an
   + ')');
 
 console.log('');
-if (failures) {
-  console.error(`${failures} CSS variable check(s) FAILED.`);
+if (failureCount()) {
+  console.error(`${failureCount()} CSS variable check(s) FAILED.`);
   process.exit(1);
 }
 console.log('All CSS variable checks passed.');

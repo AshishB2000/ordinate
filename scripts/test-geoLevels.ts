@@ -15,6 +15,7 @@
 // Run: node scripts/test-geoLevels.js   (exits non-zero on failure)
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -42,11 +43,6 @@ const WORLD = loadWindowAsset('world-countries.js', '__GEO_WORLD__');
 const STATES = loadWindowAsset('us-states.js', '__GEO_US_STATES__');
 const COUNTIES = require('../assets/geo/us-counties.json') as { features: any[] };
 
-let failures = 0;
-function ok(label: string, cond: boolean) {
-  if (cond) console.log('ok   ' + label);
-  else { console.error('FAIL ' + label); failures++; }
-}
 
 // Feature-property lookups against the real assets.
 function worldProps(name: string) {
@@ -305,5 +301,5 @@ ok('D3: PRECONDITION — a non-string item name throws (upstream callers coerce)
 ok('D3: a non-string FEATURE name also throws (assets are generated, always strings)',
   (() => { try { matchGeoItem([{ name: 'x' }], { name: 22554 }); return false; } catch (_) { return true; } })());
 
-if (failures) { console.error('\n' + failures + ' assertion(s) failed'); process.exit(1); }
+if (failureCount()) { console.error('\n' + failureCount() + ' assertion(s) failed'); process.exit(1); }
 console.log('\nAll geo-level join checks passed.');

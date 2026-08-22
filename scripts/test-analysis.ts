@@ -37,6 +37,7 @@
 //   npm run build:ts && node scripts/test-analysis.js
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -69,11 +70,6 @@ const visuals: typeof import('../src/analysis/visuals') = require('../src/analys
 const dashboardExport: typeof import('../src/analysis/dashboardExport') = require('../src/analysis/dashboardExport');
 const analysesIpc: typeof import('../src/ipc/analyses') = require('../src/ipc/analyses');
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: string) {
-  if (cond) console.log('ok   ' + label + (extra ? '  ' + extra : ''));
-  else { console.error('FAIL ' + label + (extra ? '  ' + extra : '')); failures++; }
-}
 
 const MISSING_UUID = '00000000-0000-0000-0000-000000000000';
 const VISUAL_ID = '22222222-2222-4222-8222-222222222222';
@@ -804,7 +800,7 @@ main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) {}
     Module._load = origLoad;
-    if (failures) { console.error('\n' + failures + ' analysis check(s) FAILED'); process.exit(1); }
+    if (failureCount()) { console.error('\n' + failureCount() + ' analysis check(s) FAILED'); process.exit(1); }
     console.log('\nAll analysis checks passed.');
   })
   .catch((err) => {

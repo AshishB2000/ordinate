@@ -31,6 +31,7 @@
 // and this script goes red. That is the point of pinning it here.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -59,14 +60,6 @@ type ConnectorContext = import('../src/connectors/types').ConnectorContext;
 type ConnectorDef = import('../src/connectors/types').ConnectorDef;
 type ConnectorRows = import('../src/connectors/types').ConnectorRows;
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: string): void {
-  if (cond) console.log('ok   ' + label + (extra ? '  ' + extra : ''));
-  else {
-    console.error('FAIL ' + label + (extra ? '  ' + extra : ''));
-    failures++;
-  }
-}
 
 function connector(id: string): ConnectorDef {
   const c = local.CONNECTORS.find((d) => d.id === id);
@@ -521,8 +514,8 @@ run()
   .then(() => {
     duck.shutdown();
     const label = sub ? `test-connectorsLocal[${sub}]` : 'test-connectorsLocal';
-    if (failures) {
-      console.error(`\n${label}: ${failures} FAILED`);
+    if (failureCount()) {
+      console.error(`\n${label}: ${failureCount()} FAILED`);
       process.exitCode = 1;
     } else {
       console.log(`\n${label}: all assertions passed`);

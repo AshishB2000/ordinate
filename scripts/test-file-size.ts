@@ -36,14 +36,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-let failures = 0;
-function ok(label: string, cond: boolean): void {
-  if (cond) console.log('ok   ' + label);
-  else {
-    console.error('FAIL ' + label);
-    failures++;
-  }
-}
+import { ok, failureCount } from './selfcheck';
 
 const REPO = path.resolve(__dirname, '..');
 
@@ -88,10 +81,10 @@ const ALLOWED: Record<string, number> = {
   // side — editing an open analysis, where markDashDirty/anScheduleWrite DO
   // reach disk — and that side had no coverage at all. Added the analogous
   // mtime/bytes check there, same file, same reasoning as above.
-  'scripts/smoke-app.ts': 4165,
-  'scripts/test-analysis.ts': 813,
-  'scripts/test-anomaliesResident.ts': 837,
-  'scripts/test-connectorsHttp.ts': 889,
+  'scripts/smoke-app.ts': 4158,
+  'scripts/test-analysis.ts': 809,
+  'scripts/test-anomaliesResident.ts': 833,
+  'scripts/test-connectorsHttp.ts': 881,
   'src/analysis/analysisPlan.ts': 884,
   'src/ai/analyze.ts': 1021,
   'src/engine/anomaliesResident.ts': 870,
@@ -192,8 +185,8 @@ console.log(`     ${over} file(s) over the ${CAP}-line cap, ${soft} over the 500
 console.log(`     ALLOWED holds ${Object.keys(ALLOWED).length} entr(ies); the branch is done when it is empty.`);
 
 console.log('');
-if (failures) {
-  console.error(`${failures} file-size check(s) FAILED.`);
+if (failureCount()) {
+  console.error(`${failureCount()} file-size check(s) FAILED.`);
   process.exit(1);
 }
 console.log('All file-size checks passed.');

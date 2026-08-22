@@ -16,6 +16,7 @@
 // is unchanged.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
@@ -26,14 +27,6 @@ const BUNDLE_CSS = path.join(REPO, 'renderer', 'hub', 'svelte', 'bundle.css');
 const MAIN_TS = path.join(REPO, 'renderer', 'hub', 'svelte', 'main.ts');
 const INDEX = path.join(REPO, 'renderer', 'hub', 'index.html');
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: string): void {
-  if (cond) console.log('ok   ' + label + (extra ? '  ' + extra : ''));
-  else {
-    console.error('FAIL ' + label + (extra ? '  ' + extra : ''));
-    failures++;
-  }
-}
 
 // `pretest` runs `npm run build`, which includes build:svelte — so a missing
 // bundle here means the build did not run, not that the test is misordered.
@@ -104,8 +97,8 @@ ok('hub CSP still has no blob: or worker-src', !/blob:|worker-src/.test(cspLine)
 ok("hub CSP style-src is still exactly 'self'", /style-src 'self';/.test(cspLine));
 
 console.log('');
-if (failures) {
-  console.error(`${failures} Svelte toolchain check(s) FAILED.`);
+if (failureCount()) {
+  console.error(`${failureCount()} Svelte toolchain check(s) FAILED.`);
   process.exit(1);
 }
 console.log('All Svelte toolchain checks passed.');

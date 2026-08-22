@@ -15,6 +15,7 @@
 //     error string and a renderer.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -38,12 +39,6 @@ const connections: typeof import('../src/connectors/connections') = require('../
 const connectionRun: typeof import('../src/connectors/connectionRun') = require('../src/connectors/connectionRun');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: unknown): void {
-  if (cond) { console.log('ok   ' + label); return; }
-  console.error('FAIL ' + label + (extra === undefined ? '' : '  → ' + String(extra)));
-  failures++;
-}
 
 const CATEGORIES = new Set(['Databases', 'Cloud warehouses', 'Query engines', 'Files & local']);
 const FAMILIES = new Set(['postgres', 'mysql', 'mssql', 'oracle', 'http', 'duckdb']);
@@ -359,7 +354,7 @@ main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) {}
     Module._load = origLoad;
-    if (failures) { console.error('\n' + failures + ' connector check(s) FAILED'); process.exit(1); }
+    if (failureCount()) { console.error('\n' + failureCount() + ' connector check(s) FAILED'); process.exit(1); }
     console.log('\nAll connector checks passed.');
   })
   .catch((err) => {

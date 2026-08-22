@@ -32,6 +32,7 @@
 //   npm run build:ts && node scripts/test-mosaicIpc.js
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -57,14 +58,6 @@ const parquetStore: typeof import('../src/engine/parquetStore') = require('../sr
 const residentQuery: typeof import('../src/engine/residentQuery') = require('../src/engine/residentQuery');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: string): void {
-  if (cond) console.log('ok   ' + label + (extra ? '  ' + extra : ''));
-  else {
-    console.error('FAIL ' + label + (extra ? '  ' + extra : ''));
-    failures++;
-  }
-}
 
 function cleanup(): void {
   for (const d of [root, outside]) {
@@ -359,7 +352,7 @@ async function main(): Promise<void> {
       // stays faithful to two groups that share a label. Neither GROUP BY
       // promises an order.
       const pair = (l: string | number | null, v: number | null): string =>
-        `${l == null ? '' : String(l)} ${Object.is(v, null) ? 'null' : String(v)}`;
+        `${l == null ? '' : String(l)}\u0000${Object.is(v, null) ? 'null' : String(v)}`;
       const a = viaChannel.map((r) => pair(r.g as string | null, r.m == null ? null : Number(r.m))).sort();
       const b = viaResident.labels.map((l, i) => pair(l, viaResident.series[0].values[i])).sort();
 
@@ -508,8 +501,8 @@ async function main(): Promise<void> {
   cleanup();
 
   console.log('');
-  if (failures) {
-    console.error(`${failures} mosaic IPC check(s) FAILED.`);
+  if (failureCount()) {
+    console.error(`${failureCount()} mosaic IPC check(s) FAILED.`);
     process.exit(1);
   }
   console.log('All mosaic IPC checks passed.');

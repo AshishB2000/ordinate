@@ -3,6 +3,7 @@
 // (VIZ_LABELS/VIZ_ICONS live in renderResult.js since the hub.js renderer extraction.)
 
 import * as fs from 'fs';
+import { ok, failureCount } from './selfcheck';
 import * as path from 'path';
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'hub', 'renderResult.js'), 'utf8');
@@ -42,10 +43,9 @@ function topLevelKeys(body: string): string[] {
 const labelKeys = topLevelKeys(objectBody('VIZ_LABELS'));
 const iconKeys = new Set(topLevelKeys(objectBody('VIZ_ICONS')));
 
-let failures = 0;
 const missing = labelKeys.filter(k => !iconKeys.has(k));
-if (missing.length) { console.error('FAIL missing VIZ_ICONS for: ' + missing.join(', ')); failures++; }
-else console.log('ok   every VIZ_LABELS type has an icon (' + labelKeys.length + ' types)');
+ok('every VIZ_LABELS type has an icon (' + labelKeys.length + ' types)', missing.length === 0,
+  'missing VIZ_ICONS for: ' + missing.join(', '));
 
 // Each icon must contain a balanced <svg ...> ... </svg>.
 const svgPattern = /<svg[\s\S]*?<\/svg>/;
@@ -56,13 +56,11 @@ while ((m = wrapper.exec(src)) !== null) {
   // _vi wraps the inner in <svg>…</svg>; inner should not itself contain a stray </svg>
   if (m[1].includes('<svg') || m[1].includes('</svg>')) bad++;
 }
-if (checked === 0) { console.error('FAIL no _vi() icon definitions found'); failures++; }
-else if (bad) { console.error('FAIL ' + bad + ' icon(s) contain a nested/stray <svg>'); failures++; }
-else console.log('ok   ' + checked + ' icon glyphs parse as inner SVG bodies');
+ok(checked + ' icon glyphs parse as inner SVG bodies', checked > 0 && bad === 0,
+  checked === 0 ? 'no _vi() icon definitions found' : bad + ' icon(s) contain a nested/stray <svg>');
 
 // sanity: the assembled svg wrapper is well-formed
-if (!svgPattern.test(src) || !src.includes("'<svg")) { console.error('FAIL _vi wrapper malformed'); failures++; }
-else console.log('ok   _vi wrapper emits a <svg>…</svg>');
+ok('_vi wrapper emits a <svg>…</svg>', svgPattern.test(src) && src.includes("'<svg"));
 
-if (failures) { console.error('\n' + failures + ' assertion(s) failed'); process.exit(1); }
+if (failureCount()) { console.error('\n' + failureCount() + ' assertion(s) failed'); process.exit(1); }
 console.log('\nAll viz-icon checks passed.');

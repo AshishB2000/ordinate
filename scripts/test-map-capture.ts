@@ -7,6 +7,7 @@
 // it counted .leaflet-tile DOM nodes and no longer exists in the product.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 
 // Main-process capture box validation: round + reject non-positive sizes.
@@ -22,8 +23,6 @@ function captureBox(rect: any) {
   return (box.width <= 0 || box.height <= 0) ? null : box;
 }
 
-let failures = 0;
-function ok(label: string, cond: boolean) { if (cond) console.log('ok   ' + label); else { console.error('FAIL ' + label); failures++; } }
 
 
 // captureBox: rounds, clamps origin, rejects empty.
@@ -33,5 +32,5 @@ ok('negative size → rejected', captureBox({ x: 0, y: 0, width: -5, height: 540
 ok('negative origin clamped to 0', captureBox({ x: -8, y: -3, width: 100, height: 100 })!.x === 0);
 ok('missing rect → rejected', captureBox(null) === null);
 
-if (failures) { console.error('\n' + failures + ' assertion(s) failed'); process.exit(1); }
+if (failureCount()) { console.error('\n' + failureCount() + ' assertion(s) failed'); process.exit(1); }
 console.log('\nAll map-capture guard checks passed.');

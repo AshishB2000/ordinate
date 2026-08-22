@@ -11,6 +11,7 @@
 // Module._load so userData points at a temp dir, run the REAL module, no framework.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -29,11 +30,6 @@ Module._load = function (request: string, ...rest: any[]): any {
 const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 
-let failures = 0;
-function ok(label: string, cond: boolean): void {
-  if (cond) console.log('ok   ' + label);
-  else { console.error('FAIL ' + label); failures++; }
-}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -278,7 +274,7 @@ main()
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) {}
     Module._load = origLoad;
     console.log('');
-    if (failures) { console.error(failures + ' copilot thread check(s) FAILED'); process.exit(1); }
+    if (failureCount()) { console.error(failureCount() + ' copilot thread check(s) FAILED'); process.exit(1); }
     console.log('All copilot thread checks passed.');
   })
   .catch((err) => {

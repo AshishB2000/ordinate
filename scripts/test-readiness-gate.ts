@@ -4,6 +4,7 @@
 // adoptByokModeIfLocalUnready). KEEP IN SYNC with those two functions.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 
 const RUNNABLE_LOCAL = ['claude', 'antigravity', 'codex', 'grok', 'opencode', 'cursor'];
@@ -42,8 +43,6 @@ function adoptByokModeIfLocalUnready(cfg: any, prov: string): boolean {
   return true;
 }
 
-let failures = 0;
-function ok(label: string, cond: boolean) { if (cond) console.log('ok   ' + label); else { console.error('FAIL ' + label); failures++; } }
 
 // THE BUG: BYOK connected + tested, but mode still local → gate ignores BYOK.
 const bug = {
@@ -75,5 +74,5 @@ const unverified = {
 };
 ok('byok mode + unverified provider → NOT ready', executionReady(unverified) === false);
 
-if (failures) { console.error('\n' + failures + ' readiness-gate check(s) FAILED'); process.exit(1); }
+if (failureCount()) { console.error('\n' + failureCount() + ' readiness-gate check(s) FAILED'); process.exit(1); }
 console.log('\nAll readiness-gate checks passed.');

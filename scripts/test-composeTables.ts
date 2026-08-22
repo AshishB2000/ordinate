@@ -31,14 +31,7 @@ import type { ParsedColumn } from '../src/data/parse';
 
 const { combineTables, composeTables, normalizeCombineMode } = combine;
 
-let failures = 0;
-function ok(label: string, cond: boolean): void {
-  if (cond) console.log('ok   ' + label);
-  else {
-    console.error('FAIL ' + label);
-    failures++;
-  }
-}
+import { ok, failureCount } from './selfcheck';
 
 /** Build a TableData from a header row + cells; types come out of the strict sniffer. */
 function table(names: string[], rows: Cell[][]): TableData {
@@ -179,8 +172,8 @@ ok('step 1 alone is already at the cap, so step 2 folded over 100 rows not 1,600
   cappedStep1.rows.length === 100);
 
 console.log('');
-if (failures) {
-  console.error(`${failures} compose check(s) FAILED.`);
+if (failureCount()) {
+  console.error(`${failureCount()} compose check(s) FAILED.`);
   process.exit(1);
 }
 console.log('All compose checks passed.');

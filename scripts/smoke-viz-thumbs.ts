@@ -19,6 +19,7 @@
 //   npm run smoke   (runs after smoke-ask-actions.js)
 
 export {}; // module scope — sibling scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -28,14 +29,6 @@ const { _electron }: typeof import('playwright') = require('playwright');
 const REPO = path.resolve(__dirname, '..');
 const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-vizthumb-'));
 
-let failures = 0;
-function ok(label: string, cond: boolean, extra?: string): void {
-  if (cond) console.log('ok   ' + label + (extra ? '  ' + extra : ''));
-  else {
-    console.error('FAIL ' + label + (extra ? '  ' + extra : ''));
-    failures++;
-  }
-}
 
 async function main(): Promise<void> {
   const app = await _electron.launch({
@@ -140,10 +133,10 @@ async function main(): Promise<void> {
 }
 
 main()
-  .catch((err) => { console.error('FAIL smoke-viz-thumbs crashed:', err); failures++; })
+  .catch((err) => { ok('smoke-viz-thumbs crashed', false, err); })
   .finally(() => {
     try { fs.rmSync(userData, { recursive: true, force: true }); } catch (_) { /* best effort */ }
     console.log('');
-    if (failures) { console.error(`${failures} viz-thumbs smoke check(s) FAILED.`); process.exit(1); }
+    if (failureCount()) { console.error(`${failureCount()} viz-thumbs smoke check(s) FAILED.`); process.exit(1); }
     console.log('All viz-thumbs smoke checks passed.');
   });

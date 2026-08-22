@@ -2,6 +2,7 @@
 // node-runnable (browser globals), so these mirror the pure helpers — keep in sync.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 // Share/magnitude types that render as small multiples (one mini per series) when grouped.
 const SMALL_MULTIPLE_TYPES = new Set(['pie', 'donut', 'gauge', 'treemap', 'funnel', 'histogram']);
@@ -25,8 +26,6 @@ function visibleMiniCount(seriesNames: string[], hiddenArr: number[] | null | un
   return seriesNames.filter((_, i) => !hidden.has(i)).length;
 }
 
-let failures = 0;
-function ok(label: string, cond: boolean) { if (cond) console.log('ok   ' + label); else { console.error('FAIL ' + label); failures++; } }
 
 // Share types group into small multiples only with >=2 series.
 ok('pie + 3 series → small multiples', chartIsSmallMultiple('pie', 3));
@@ -50,5 +49,5 @@ ok('3 periods, none hidden → 3 minis', visibleMiniCount(['2023', '2024', '2025
 ok('3 periods, 1 hidden → 2 minis', visibleMiniCount(['2023', '2024', '2025'], [1]) === 2);
 ok('3 periods, 2 hidden → 1 mini', visibleMiniCount(['2023', '2024', '2025'], [0, 2]) === 1);
 
-if (failures) { console.error('\n' + failures + ' assertion(s) failed'); process.exit(1); }
+if (failureCount()) { console.error('\n' + failureCount() + ' assertion(s) failed'); process.exit(1); }
 console.log('\nAll small-multiples checks passed.');

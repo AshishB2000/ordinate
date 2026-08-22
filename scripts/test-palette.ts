@@ -2,6 +2,7 @@
 // node-runnable (browser globals), so these mirror the pure helpers — keep in sync.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 function hexToHsl(hex: string): { h: number; s: number; l: number } | null {
   const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
@@ -48,8 +49,6 @@ function paletteFromSeed(hex: string, n: number): string[] {
   });
 }
 
-let failures = 0;
-function ok(label: string, cond: boolean) { if (cond) console.log('ok   ' + label); else { console.error('FAIL ' + label); failures++; } }
 const isHex = (c: string) => /^#[0-9a-f]{6}$/i.test(c);
 
 const SEED = '#4f7cd4';
@@ -102,5 +101,5 @@ ok('n>base → all distinct', new Set(ten).size === 10);
 ok('endpoints anchor on the base palette', ten[0] === BASE[0] && ten[9] === BASE[BASE.length - 1]);
 ok('single category → one color', JSON.stringify(interpolatePalette(BASE, 1)) === JSON.stringify(['#2563eb']));
 
-if (failures) { console.error('\n' + failures + ' assertion(s) failed'); process.exit(1); }
+if (failureCount()) { console.error('\n' + failureCount() + ' assertion(s) failed'); process.exit(1); }
 console.log('\nAll palette checks passed.');

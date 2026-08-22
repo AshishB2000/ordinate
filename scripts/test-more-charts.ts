@@ -3,6 +3,7 @@
 // keep in sync with canRenderType()/needsText() and the CHART_*_MIN tables.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 const CHART_SERIES_MIN: Record<string, number> = {
   clustered_column: 2, clustered_bar: 2, stacked_column: 2, stacked_bar: 2,
@@ -28,8 +29,6 @@ function needsText(type: string, numSeries: number, numLabels: number, hasGeo: b
   return parts.join(' and ') || 'different data';
 }
 
-let failures = 0;
-function ok(label: string, cond: boolean) { if (cond) console.log('ok   ' + label); else { console.error('FAIL ' + label); failures++; } }
 
 // Renderable vs not — the gate between a best-effort chart and the friendly message.
 ok('scatter needs 2 series → 1 series cannot render', !canRenderType('scatter', 1, 5, false));
@@ -68,5 +67,5 @@ ok('Recommended never leaks into Other', !t.other.includes('line'));
 ok('Selected and Other are disjoint', t.selected.every(x => !t.other.includes(x)));
 ok('every non-recommended pool type appears once', POOL.filter(x => x !== 'column' && x !== 'line').every(x => (t.selected.includes(x) ? 1 : 0) + (t.other.includes(x) ? 1 : 0) === 1));
 
-if (failures) { console.error('\n' + failures + ' assertion(s) failed'); process.exit(1); }
+if (failureCount()) { console.error('\n' + failureCount() + ' assertion(s) failed'); process.exit(1); }
 console.log('\nAll +More renderability checks passed.');

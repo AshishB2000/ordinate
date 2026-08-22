@@ -9,18 +9,11 @@
 // uselessness.
 
 export {}; // module scope — sibling test scripts share top-level names
+import { ok, failureCount } from './selfcheck';
 
 // ponytail: compiled sibling of ../src/residentTrace.ts.
 const trace: typeof import('../src/engine/residentTrace') = require('../src/engine/residentTrace');
 
-let failures = 0;
-function ok(label: string, cond: boolean) {
-  if (cond) console.log('ok   ' + label);
-  else {
-    console.error('FAIL ' + label);
-    failures++;
-  }
-}
 
 // Capture console.warn so the assertions can be about what a user would see.
 const realWarn = console.warn;
@@ -45,7 +38,7 @@ trace.record('metric', 'skipped');
 let snap = trace.snapshot();
 ok('counts resident hits', snap.metric.resident === 2);
 ok('counts skips', snap.metric.skipped === 1);
-ok('no failures yet', snap.metric.failed === 0);
+ok('no failureCount() yet', snap.metric.failed === 0);
 ok('failureCount agrees', trace.failureCount() === 0);
 
 trace.reset();
@@ -88,7 +81,7 @@ trace.reset();
 cap = captureWarnings(() => {
   for (let i = 0; i < 500; i += 1) trace.record('metric', 'failed', 'call ' + i);
 });
-ok('500 identical failures warn exactly once', cap.warnings.length === 1);
+ok('500 identical failureCount() warn exactly once', cap.warnings.length === 1);
 ok('...but all 500 are still counted', trace.snapshot().metric.failed === 500);
 ok('...and the LAST detail is retained, not the first',
   trace.snapshot().metric.lastFailure === 'call 499');
@@ -121,8 +114,8 @@ ok('reset() re-arms the warning, not just the counters', cap.warnings.length ===
 
 trace.reset();
 
-if (failures) {
-  console.error('\n' + failures + ' resident-trace check(s) FAILED');
+if (failureCount()) {
+  console.error('\n' + failureCount() + ' resident-trace check(s) FAILED');
   process.exit(1);
 }
 console.log('\nAll resident-trace checks passed.');
