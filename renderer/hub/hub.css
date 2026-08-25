@@ -10890,7 +10890,7 @@ body.cap-focus .cap-back {
 }
 /* One measure for the whole page. Without it the hero and the rows stretch to
    whatever the window is and the page loses its spine on a wide monitor. */
-.home-scroll > * { max-width: 1080px; width: 100%; }
+.home-scroll > * { max-width: 1080px; width: 100%; margin-inline: auto; }
 
 /* Byte-identical to .ds-h and .viz-h. Home is a section like the other five and
    does not get its own heavier, larger heading — it was the only 700 and the
