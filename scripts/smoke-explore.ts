@@ -63,11 +63,11 @@ async function main(): Promise<void> {
   ok('the Ask section is in the sidebar nav (its id stays "explore")',
     (await win.locator('.as-nav-item[data-section="explore"]').count()) === 1);
 
-  // The rename guard: the surface is called Ask everywhere a user reads it,
+  // The rename guard: the surface is called Assistant everywhere a user reads it,
   // while data-section, the xp- prefix and IPC names keep the old identifier.
   // This is the assertion that fails if either half of that split drifts.
-  ok('…labelled "Ask", not "Explore"',
-    ((await win.locator('.as-nav-item[data-section="explore"] span').textContent()) || '').trim() === 'Ask',
+  ok('…labelled "Assistant", not "Explore"',
+    ((await win.locator('.as-nav-item[data-section="explore"] span').textContent()) || '').trim() === 'Assistant',
     ((await win.locator('.as-nav-item[data-section="explore"] span').textContent()) || '').trim());
 
   ok('…above Home, because asking is the fastest route to an answer',
