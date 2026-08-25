@@ -67,7 +67,6 @@ scripts/**/*.js
 /src/ipc/dashboards.js
 /renderer/hub/dashboards.js
 /scripts/test-metricValue.js
-/scripts/test-dashboards.js
 # Week 10 dashboard filters — emitted siblings.
 /scripts/test-dashboardFilters.js
 # Week 10 dashboard export + share — emitted siblings.
@@ -197,7 +196,6 @@ scripts/**/*.js
 /renderer/hub/hubResultMenus.js
 
 # dashboards.ts split by job (.claude/rules/file-size.md) — emitted siblings.
-/renderer/hub/dashList.js
 /renderer/hub/dashGrid.js
 /renderer/hub/dashAdd.js
 /renderer/hub/dashAddControl.js
@@ -228,7 +226,6 @@ scripts/**/*.js
 # analyses.ts split by job (.claude/rules/file-size.md) — emitted siblings.
 /renderer/hub/anList.js
 /renderer/hub/anNew.js
-/renderer/hub/anPublish.js
 /renderer/hub/anDraft.js
 
 # connections.ts split by job (.claude/rules/file-size.md) — emitted siblings.

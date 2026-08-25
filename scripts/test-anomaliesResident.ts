@@ -3,8 +3,8 @@
 //
 // EVERY assertion about an anomaly is DIFFERENTIAL. The resident list is compared
 // against `anomalies.detectAnomalies` applied to the SAME bytes read back through
-// `parquetStore.readTable` — which is literally the code `dashboard:explainAnomalies`
-// ran before the rewire. A hand-written expectation can agree with a bug on both
+// `parquetStore.readTable` — the reference JS path the resident detector must
+// match byte for byte. A hand-written expectation can agree with a bug on both
 // sides; an equivalence assertion cannot.
 //
 // The comparison is deliberately harsher than a `deepStrictEqual`:
@@ -16,11 +16,6 @@
 //   • Scalars are compared with `Object.is`, so `null` can never pass as `0`,
 //     `-0` can never pass as `0`, and a `1.0000000000000002` can never pass as
 //     a `1`.
-//
-// The last section drives the SHIPPED `dashboard:explainAnomalies` handler for
-// real (electron stubbed, `register()` called) and spies on
-// `datasets.getDataset`, so "the resident path was taken" is asserted as "the
-// table was never hydrated" rather than assumed.
 //
 //   npm run build:ts && node scripts/test-anomaliesResident.js
 
@@ -66,11 +61,6 @@ const anomalies: typeof import('../src/analysis/anomalies') = require('../src/an
 const anomaliesResident: typeof import('../src/engine/anomaliesResident') = require('../src/engine/anomaliesResident');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
-const dashboards: typeof import('../src/analysis/dashboards') = require('../src/analysis/dashboards');
-const dashboardsIpc: typeof import('../src/ipc/dashboards') = require('../src/ipc/dashboards');
-
-dashboardsIpc.register();
-const explainHandler = handlers.get('dashboard:explainAnomalies');
 
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-anom-fixtures-'));
@@ -724,101 +714,6 @@ async function main(): Promise<void> {
     ok('float: the whole list still matches byte for byte', got !== null && sameList(want, got));
   }
 
-  // ── 15. Through the SHIPPED handler, with a hydration spy ─────────────────
-  // `ipc/dashboards.js` resolves `datasets.getDataset` off the module namespace
-  // at CALL time, so replacing the export here is observed by the shipped
-  // handler. Counting the calls is how "the resident path was taken" is PROVEN.
-  {
-    const realGetDataset = datasets.getDataset;
-    let hydrations = 0;
-    (datasets as any).getDataset = async (...args: any[]): Promise<any> => {
-      hydrations += 1;
-      return (realGetDataset as any)(...args);
-    };
-
-    const proj = await projects.createProject('Anomaly rewire');
-    const columns = [T('region'), N('sales'), D('day')];
-    const rows: Cell[][] = [];
-    // Above ANOMALY_MIN_ROWS in ipc/dashboards.ts, so the handler takes the
-    // resident path; the tiny dataset below it exercises the fallback.
-    for (let i = 0; i < 6_000; i += 1) {
-      rows.push([
-        i % 4 === 0 ? 'south' : 'north',
-        i === 5999 ? 500000 : (i % 11) - 5,
-        i < 3000 ? '2023' : '2024',
-      ]);
-    }
-    const rec = await datasets.saveDataset(proj.id, {
-      name: 'sales', sourceKind: 'csv', columns, rows,
-    });
-    ok('handler fixture saved', rec !== null);
-    if (!rec) return;
-
-    // The reference is the pre-rewire code, over the rows the loader returns.
-    const ds = await realGetDataset(proj.id, rec.id);
-    const wantList = anomalies.detectAnomalies(ds!.columns, ds!.rows);
-    const wantFacts = anomalies.buildAnomaliesFacts(ds!.name, wantList);
-    ok('handler fixture actually has anomalies to explain', wantList.length > 0);
-
-    const dash = await dashboards.saveDashboard(proj.id, {
-      name: 'D', pages: [{
-        name: 'Page 1',
-        cards: [{
-          type: 'metric',
-          layout: { x: 0, y: 0, w: 3, h: 2 },
-          metric: { datasetId: rec.id, column: 'sales', aggregation: 'sum', label: 'Sales' },
-        }],
-      }],
-    } as any);
-    ok('handler fixture dashboard saved', Boolean(dash && (dash as any).id));
-
-    hydrations = 0;
-    const t0 = process.hrtime.bigint();
-    const out = await (explainHandler as IpcHandler)(null, { projectId: proj.id, id: (dash as any).id });
-    const t1 = process.hrtime.bigint();
-    ok('dashboard:explainAnomalies still answers with the app-detected list ' +
-      `[${ms(t1 - t0)} ms]`, out.ok === false ? Array.isArray(out.anomalies) : Array.isArray(out.anomalies));
-    ok('dashboard:explainAnomalies: no model configured → notReady, list still returned',
-      out.notReady === true);
-    ok('dashboard:explainAnomalies: the table was NEVER hydrated (resident path taken)',
-      hydrations === 0);
-    ok('dashboard:explainAnomalies: the list is byte-identical to the pre-rewire answer',
-      sameList(wantList, out.anomalies as Anomaly[]));
-
-    // The FACTS block is what the model actually reads; it must be unchanged.
-    ok('dashboard:explainAnomalies: buildAnomaliesFacts over the resident list is unchanged',
-      anomalies.buildAnomaliesFacts('sales', out.anomalies as Anomaly[]) === wantFacts);
-
-    // A dataset that is NOT resident must still work, through the JS path.
-    hydrations = 0;
-    const small = await datasets.saveDataset(proj.id, {
-      name: 'tiny', sourceKind: 'csv', columns: [T('c')],
-      rows: [['A'], ['A'], ['A'], ['B']],
-    });
-    const dash2 = await dashboards.saveDashboard(proj.id, {
-      name: 'D2', pages: [{
-        name: 'Page 1',
-        cards: [{
-          type: 'metric',
-          layout: { x: 0, y: 0, w: 3, h: 2 },
-          metric: { datasetId: small!.id, column: 'c', aggregation: 'count', label: 'C' },
-        }],
-      }],
-    } as any);
-    const out2 = await (explainHandler as IpcHandler)(null, { projectId: proj.id, id: (dash2 as any).id });
-    ok('a below-threshold dataset falls back to the JS path and still answers',
-      Array.isArray(out2.anomalies) && out2.anomalies.length > 0 && hydrations === 1);
-
-    const missing = await (explainHandler as IpcHandler)(null, {
-      projectId: proj.id, id: '00000000-0000-4000-8000-000000000000',
-    });
-    ok('dashboard:explainAnomalies: an unknown dashboard returns { ok:false, error }',
-      missing.ok === false && missing.error === 'Dashboard not found');
-    const noArgs = await (explainHandler as IpcHandler)(null);
-    ok('dashboard:explainAnomalies: a missing payload returns { ok:false }', noArgs.ok === false);
-
-    (datasets as any).getDataset = realGetDataset;
-  }
 }
 
 void main()

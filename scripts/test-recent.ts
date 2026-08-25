@@ -10,23 +10,21 @@ const assert = require('node:assert');
 
 const { buildRecent } = require('../src/app/recent.js') as typeof import('../src/app/recent');
 
-// Two projects, each with one dataset/analysis/dashboard, all distinct
-// timestamps chosen so the expected newest-first order interleaves the two
-// projects and all three types.
+// Two projects, each with one dataset and one analysis, all distinct timestamps
+// chosen so the expected newest-first order interleaves the two projects and
+// both types.
 const groups = [
   {
     projectId: 'p1',
     projectName: 'Alpha',
     datasets: [{ id: 'd1', name: 'DS one', updatedAt: '2026-01-01T00:00:00.000Z' }],
     analyses: [{ id: 'a1', name: 'An one', updatedAt: '2026-01-05T00:00:00.000Z' }],
-    dashboards: [{ id: 'b1', name: 'Db one', updatedAt: '2026-01-03T00:00:00.000Z' }],
   },
   {
     projectId: 'p2',
     projectName: 'Beta',
     datasets: [{ id: 'd2', name: 'DS two', updatedAt: '2026-01-06T00:00:00.000Z' }],
     analyses: [{ id: 'a2', name: 'An two', updatedAt: '2026-01-02T00:00:00.000Z' }],
-    dashboards: [{ id: 'b2', name: 'Db two', updatedAt: '2026-01-04T00:00:00.000Z' }],
   },
 ];
 
@@ -34,7 +32,7 @@ test('orders strictly newest-updatedAt first, across projects and types', () => 
   const out = buildRecent(groups, 50);
   assert.deepStrictEqual(
     out.map((i) => i.id),
-    ['d2', 'a1', 'b2', 'b1', 'a2', 'd1'],
+    ['d2', 'a1', 'a2', 'd1'],
   );
 });
 
@@ -44,7 +42,6 @@ test('carries type and projectName through for every item', () => {
 
   assert.strictEqual(byId.get('d1')!.type, 'dataset');
   assert.strictEqual(byId.get('a1')!.type, 'analysis');
-  assert.strictEqual(byId.get('b1')!.type, 'dashboard');
 
   assert.strictEqual(byId.get('d1')!.projectName, 'Alpha');
   assert.strictEqual(byId.get('d1')!.projectId, 'p1');
@@ -73,7 +70,7 @@ test('empty input and all-empty groups contribute nothing', () => {
   assert.deepStrictEqual(buildRecent([], 50), []);
   assert.deepStrictEqual(
     buildRecent(
-      [{ projectId: 'p', projectName: 'Empty', datasets: [], analyses: [], dashboards: [] }],
+      [{ projectId: 'p', projectName: 'Empty', datasets: [], analyses: [] }],
       50,
     ),
     [],
@@ -91,12 +88,11 @@ test('equal timestamps preserve input order (stable sort)', () => {
         { id: 'second', name: 'second', updatedAt: ts },
       ],
       analyses: [{ id: 'third', name: 'third', updatedAt: ts }],
-      dashboards: [{ id: 'fourth', name: 'fourth', updatedAt: ts }],
     },
   ];
   const out = buildRecent(tied, 50);
   assert.deepStrictEqual(
     out.map((i) => i.id),
-    ['first', 'second', 'third', 'fourth'],
+    ['first', 'second', 'third'],
   );
 });

@@ -398,21 +398,6 @@ contextBridge.exposeInMainWorld('hub', {
   // the Coordinator with { consolidate: false }). type: 'json' (default) | 'exec'.
   // Returns { ok, rows, rowCount, truncated } | { ok:false, error }.
   mosaicQuery: (sql: string, type?: string) => ipcRenderer.invoke('mosaic:query', { sql, type }),
-  // ── Dashboards (a grid of cards — visual/text/metric — across one or more pages) ──
-  // List a project's saved dashboards (newest-updated first).
-  listDashboards: (projectId: string) => ipcRenderer.invoke('dashboard:list', { projectId }),
-  // Load a single dashboard (full pages/cards) by id; returns Dashboard or null.
-  getDashboard: (projectId: string, id: string) => ipcRenderer.invoke('dashboard:get', { projectId, id }),
-  // Persist a new dashboard; returns the saved Dashboard or { ok:false, error }.
-  // Optional dashboard-wide `filters` (transforms filter steps) are merged into every card.
-  saveDashboard: (payload: { projectId: string; name: string; pages?: any; filters?: any }) =>
-    ipcRenderer.invoke('dashboard:save', payload),
-  // Patch an existing dashboard's name / pages / dashboard-wide filters; returns
-  // { ok, dashboard } | { ok:false, error }. Any omitted field keeps its stored value.
-  updateDashboard: (projectId: string, id: string, patch: { name?: string; pages?: any; filters?: any }) =>
-    ipcRenderer.invoke('dashboard:update', { projectId, id, ...patch }),
-  // Delete a dashboard; returns { ok: boolean }.
-  deleteDashboard: (projectId: string, id: string) => ipcRenderer.invoke('dashboard:delete', { projectId, id }),
   // ── The AI ANALYSIS PLAN: draft → (edit →) preview → build ────────────────
   //
   // OPTIONAL AI plan draft (STRUCTURE ONLY — the model names datasets, columns,
@@ -476,25 +461,6 @@ contextBridge.exposeInMainWorld('hub', {
   // deleting) that visual afterwards cannot change the published dashboard.
   // Data is NOT snapshotted: a published dashboard reads live data through a
   // frozen definition. Pass `dashboardId` to REPUBLISH over one this analysis
-  // published before; anything else publishes a new dashboard.
-  // { ok, dashboard, created } | { ok:false, error }.
-  publishAnalysis: (projectId: string, id: string, opts?: { dashboardId?: string; name?: string }) =>
-    ipcRenderer.invoke('analysis:publish', { projectId, id, ...(opts || {}) }),
-  // The implicit wrap of a LEGACY standalone dashboard. Call it when the user
-  // opens one FOR EDITING — never on list, never on open-to-view: that is what
-  // keeps a read a read. Idempotent. { ok, analysis, created } | { ok:false, error }.
-  analysisForDashboard: (projectId: string, dashboardId: string) =>
-    ipcRenderer.invoke('analysis:forDashboard', { projectId, dashboardId }),
-  // OPTIONAL AI executive summary (prose). MAIN recomputes every card's figure and
-  // feeds them as FACTS; the model only narrates, never recomputes. Returns
-  // { ok, text, provenance } | { ok:false, notReady:true } | { ok:false, error }.
-  summarizeDashboard: (projectId: string, id: string) => ipcRenderer.invoke('dashboard:summary', { projectId, id }),
-  // OPTIONAL anomaly explanation — the APP detects anomalies (pure, computed), the
-  // model only contextualizes them. Returns the raw app-detected list alongside the
-  // prose. { ok, text, anomalies } (text may be null when none) |
-  // { ok:false, notReady:true, anomalies } | { ok:false, error }.
-  explainDashboardAnomalies: (projectId: string, id: string) =>
-    ipcRenderer.invoke('dashboard:explainAnomalies', { projectId, id }),
   // The ONE app-computed number a metric card shows (computed in MAIN, never the
   // model, never the renderer). Optional dashboard-wide `filters` are applied (in MAIN)
   // over the dataset BEFORE the number is computed. Returns

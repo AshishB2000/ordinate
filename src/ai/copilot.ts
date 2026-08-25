@@ -28,7 +28,7 @@ import * as projects from '../app/projects';
 import type { Dataset } from '../data/datasets';
 import type { ColumnSummary, QualityIssue } from '../data/datasetStats';
 import type { Visual } from '../analysis/visuals';
-import type { Dashboard, Page } from '../analysis/dashboards';
+import type { Page } from '../analysis/dashboards';
 import type { Analysis } from '../analysis/analysis';
 import type { VizDataResult } from '../analysis/vizData';
 
@@ -37,7 +37,7 @@ import type { VizDataResult } from '../analysis/vizData';
 // Where the FACTS in an assistant turn came from — safe to show to the user as
 // provenance chips. `note` is always 'stats app-computed' (the app did the math).
 export interface CopilotProvenance {
-  kind: 'dataset' | 'visual' | 'dashboard' | 'analysis' | 'project';
+  kind: 'dataset' | 'visual' | 'analysis' | 'project';
   name: string;            // entity name (safe to show)
   datasetName?: string;    // for visual/dashboard cards, the underlying dataset
   columns?: string[];      // columns whose stats were sent
@@ -152,7 +152,7 @@ async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
 }
 
 const ROLES: ReadonlySet<string> = new Set(['user', 'assistant']);
-const PROV_KINDS: ReadonlySet<string> = new Set(['dataset', 'visual', 'dashboard', 'analysis', 'project']);
+const PROV_KINDS: ReadonlySet<string> = new Set(['dataset', 'visual', 'analysis', 'project']);
 
 // Re-sanitize an untrusted stored provenance object (whitelist fields only).
 function normalizeProvenance(p: any): CopilotProvenance | undefined {
@@ -526,11 +526,9 @@ export function visualFacts(v: Visual, datasetName: string, viz: VizDataResult):
   };
 }
 
-// The card body shared by dashboardFacts and analysisFacts. `Analysis.sheets` IS
-// `Dashboard.pages` (see the header of src/analysis.ts) — same Page/Card shapes,
-// same metric cards — so the two FACTS blocks must lay the SAME numbers out the
-// SAME way. Only the opening line differs; the grounding prompt is shared across
-// every builder, so a divergent layout here would break grounding for one surface.
+// The card body for analysisFacts: metric cards (each a single app-computed
+// number) then the text-card inventory. Kept as its own function so the layout
+// the grounding prompt expects lives in one place.
 function cardBodyLines(
   pages: Page[] | undefined,
   computed: { label: string; value: number | null }[],
@@ -558,30 +556,9 @@ function countCards(pages: Page[] | undefined): number {
   return (pages || []).reduce((n, p) => n + (Array.isArray(p.cards) ? p.cards.length : 0), 0);
 }
 
-// Dashboard: page/card inventory + each metric card's ONE app-computed number
-// (metricValue.computeMetric, passed in) + referenced visual names.
-export function dashboardFacts(
-  d: Dashboard,
-  computed: { label: string; value: number | null }[],
-): CopilotFacts {
-  const pageCount = Array.isArray(d.pages) ? d.pages.length : 0;
-  const lines: string[] = [GUARD_LINE, ''];
-  lines.push(`Dashboard: "${d.name}" (${pageCount} page(s), ${countCards(d.pages)} card(s)).`);
-  lines.push(...cardBodyLines(d.pages, computed));
-  return {
-    text: lines.join('\n'),
-    provenance: {
-      kind: 'dashboard',
-      name: d.name,
-      columns: computed.map((m) => m.label),
-      note: 'stats app-computed',
-    },
-  };
-}
-
-// Analysis: the SAME body as dashboardFacts over the same card shapes, with an
-// opening that says ANALYSIS and names the sheets — an analysis is the mutable
-// draft, so the model must not narrate it as a published dashboard.
+// Dashboard facts (internally an Analysis record): the sheet roster plus each
+// metric card's ONE app-computed number, for the model to narrate. The provenance
+// kind stays 'analysis' — the internal record type — while the prose says Dashboard.
 export function analysisFacts(
   a: Analysis,
   computed: { label: string; value: number | null }[],
@@ -589,13 +566,11 @@ export function analysisFacts(
   const sheets = Array.isArray(a.sheets) ? a.sheets : [];
   const lines: string[] = [GUARD_LINE, ''];
   lines.push(
-    `Analysis (a draft authoring surface, not a published dashboard): "${a.name}" ` +
+    `Dashboard: "${a.name}" ` +
     `(${sheets.length} sheet(s), ${countCards(sheets)} card(s)).`,
   );
   // Per-sheet roster, ADDITIVE to the shared body below — "what's on sheet 2" is
-  // unanswerable from a flat card list, and an analysis is authored sheet by sheet.
-  // The shared cardBodyLines() layout is untouched, so the analysis and dashboard
-  // FACTS bodies still cannot drift apart.
+  // unanswerable from a flat card list, and a dashboard is authored sheet by sheet.
   if (sheets.length === 0) {
     lines.push('Sheets: (none).');
   } else {
@@ -621,7 +596,7 @@ export function analysisFacts(
 }
 
 // Project fallback when nothing specific is open: names of the project's datasets,
-// visuals, and dashboards (no numbers to compute — pure inventory).
+// visuals, and dashboards (the analysis records; no numbers to compute — pure inventory).
 export function projectFacts(
   name: string,
   inventory: { datasets: string[]; visuals: string[]; dashboards: string[] },

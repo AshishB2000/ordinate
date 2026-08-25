@@ -349,8 +349,8 @@ async function main(): Promise<void> {
   // hand copilot:ask that kind — the channel has always taken { kind, id }.
   await app.evaluate(async (_electronModule, pid: string) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const dashboards = req('./src/analysis/dashboards.js');
-    await dashboards.saveDashboard(pid, { name: 'Quarter review' });
+    const analysis = req('./src/analysis/analysis.js');
+    await analysis.saveAnalysis(pid, { name: 'Quarter review' });
   }, seeded.projectId);
 
   await win.click('#xp-context-chip', { timeout: 8000 });
@@ -373,7 +373,7 @@ async function main(): Promise<void> {
   ok('…and the ref handed to copilot:ask carries that kind, not "dataset"',
     await win.evaluate(() => {
       const ref = (window as any).xpContextRef();
-      return ref.kind === 'dashboard' && Boolean(ref.id) && ref.label === 'dashboard · Quarter review';
+      return ref.kind === 'analysis' && Boolean(ref.id) && ref.label === 'analysis · Quarter review';
     }));
 
   // Back to whole project via the pinned clear — the chip must be resettable.

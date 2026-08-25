@@ -1,7 +1,7 @@
 // Cross-project "Recent" list — MAIN PROCESS ONLY.
 //
-// Phase 2 of the home-page rebuild. Flattens the datasets, analyses and
-// dashboards of EVERY project into one time-ordered list, newest-updated
+// Phase 2 of the home-page rebuild. Flattens the datasets and analyses (the
+// Dashboards surface) of EVERY project into one time-ordered list, newest-updated
 // first, so the home page can show "pick up where you left off" without the
 // user having to open a project first.
 //
@@ -14,9 +14,8 @@
 import * as projects from './projects';
 import * as datasets from '../data/datasets';
 import * as analysis from '../analysis/analysis';
-import * as dashboards from '../analysis/dashboards';
 
-export type RecentType = 'dataset' | 'analysis' | 'dashboard';
+export type RecentType = 'dataset' | 'analysis';
 
 /**
  * What the record IS, in numbers — carried so a Home row can say more than a
@@ -25,7 +24,7 @@ export type RecentType = 'dataset' | 'analysis' | 'dashboard';
  *
  * STILL FREE. Every field here is already present on the summary its lister
  * returns: rowCount/columnCount on DatasetSummary, sheetCount on
- * AnalysisSummary, pageCount/cardCount on DashboardSummary. This module reads
+ * AnalysisSummary. This module reads
  * no additional file, opens no record and computes no figure — the promise at
  * the top of this file is unchanged.
  *
@@ -36,8 +35,6 @@ export interface RecentMeta {
   rowCount?: number;
   columnCount?: number;
   sheetCount?: number;
-  pageCount?: number;
-  cardCount?: number;
 }
 
 export interface RecentItem {
@@ -55,18 +52,17 @@ export interface RecentGroup {
   projectName: string;
   datasets: { id: string; name: string; updatedAt: string; meta?: RecentMeta }[];
   analyses: { id: string; name: string; updatedAt: string; meta?: RecentMeta }[];
-  dashboards: { id: string; name: string; updatedAt: string; meta?: RecentMeta }[];
 }
 
 /**
- * Flatten every group's datasets/analyses/dashboards into one RecentItem[],
+ * Flatten every group's datasets and analyses into one RecentItem[],
  * newest-updatedAt first, capped to `limit`.
  *
  * PURE — no disk, no async. The sort compares updatedAt so a later timestamp
  * sorts first; ISO-8601 strings compare lexicographically, but this does not
  * assume any particular format, only that a larger string is "later". Equal
  * timestamps preserve input order (stable), so a project's own datasets →
- * analyses → dashboards ordering, and the project scan order, stay predictable.
+ * analyses ordering, and the project scan order, stay predictable.
  *
  * The `limit` cap is what keeps this a cheap, bounded, metadata-only response
  * even as the number of projects grows.
@@ -94,17 +90,6 @@ export function buildRecent(groups: RecentGroup[], limit: number): RecentItem[] 
         name: a.name,
         updatedAt: a.updatedAt,
         meta: a.meta,
-      });
-    }
-    for (const b of g.dashboards) {
-      items.push({
-        type: 'dashboard',
-        id: b.id,
-        projectId: g.projectId,
-        projectName: g.projectName,
-        name: b.name,
-        updatedAt: b.updatedAt,
-        meta: b.meta,
       });
     }
   }
@@ -145,10 +130,9 @@ export async function listRecent(limit = 50): Promise<RecentItem[]> {
 
   const groups: RecentGroup[] = await Promise.all(
     projectList.map(async (p): Promise<RecentGroup> => {
-      const [ds, an, db] = await Promise.all([
+      const [ds, an] = await Promise.all([
         datasets.listDatasets(p.id).catch(() => []),
         analysis.listAnalyses(p.id).catch(() => []),
-        dashboards.listDashboards(p.id).catch(() => []),
       ]);
       return {
         projectId: p.id,
@@ -164,12 +148,6 @@ export async function listRecent(limit = 50): Promise<RecentItem[]> {
           name: a.name,
           updatedAt: a.updatedAt,
           meta: { sheetCount: a.sheetCount },
-        })),
-        dashboards: db.map((b) => ({
-          id: b.id,
-          name: b.name,
-          updatedAt: b.updatedAt,
-          meta: { pageCount: b.pageCount, cardCount: b.cardCount },
         })),
       };
     }),

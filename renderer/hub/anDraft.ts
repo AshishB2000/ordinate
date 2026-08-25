@@ -37,16 +37,16 @@ async function handleDraftAnalysis(): Promise<void> {
   try {
     res = await window.hub.draftDashboard(currentProjectId);
   } catch (_) {
-    res = { ok: false, error: 'Could not draft an analysis.' };
+    res = { ok: false, error: 'Could not draft a dashboard.' };
   }
-  if (btn) { btn.disabled = false; btn.textContent = label || '✨ AI draft analysis'; }
+  if (btn) { btn.disabled = false; btn.textContent = label || '✨ AI draft dashboard'; }
 
   if (res && res.notReady) {
-    window.alert('Connect a model in Execution settings to draft an analysis.');
+    window.alert('Connect a model in Execution settings to draft a dashboard.');
     return;
   }
   if (!res || res.ok === false) {
-    window.alert((res && res.error) || 'Could not draft an analysis.');
+    window.alert((res && res.error) || 'Could not draft a dashboard.');
     return;
   }
 
@@ -67,7 +67,7 @@ async function anMaterialiseDraft(res: any, preferredName?: string): Promise<voi
   // version flag. A `plan` means the Phase E pipeline owns the write (it has to:
   // calculated fields and visuals are records this renderer cannot mint).
   // Otherwise the draft is already a sheet array and createAnalysis takes it.
-  const name = (preferredName || '').trim() || res.name || 'AI analysis';
+  const name = (preferredName || '').trim() || res.name || 'AI dashboard';
   let saved: any = null;
   try {
     if (res.plan && typeof window.hub.buildAnalysisPlan === 'function') {
@@ -77,7 +77,7 @@ async function anMaterialiseDraft(res: any, preferredName?: string): Promise<voi
         (preferredName || '').trim() ? { ...res.plan, name } : res.plan;
       const built = await window.hub.buildAnalysisPlan(currentProjectId, planToBuild);
       if (built && built.ok === false) {
-        window.alert(built.error || 'Failed to build the analysis.');
+        window.alert(built.error || 'Failed to build the dashboard.');
         return;
       }
       // Accept either { ok, analysis } or a bare Analysis — whichever main returns.
@@ -94,14 +94,13 @@ async function anMaterialiseDraft(res: any, preferredName?: string): Promise<voi
   }
 
   await refreshAnalysisList();
-  anLastPublishedName = null;
   if (saved && saved.ok !== false && saved.id) {
     openAnalysisFrom(saved);
     return;
   }
   // The write may well have succeeded even if we cannot recognise what came
   // back — the refreshed list above is the honest fallback, and it is visible.
-  window.alert((saved && saved.error) || 'The analysis was not opened. Check the list below.');
+  window.alert((saved && saved.error) || 'The dashboard was not opened. Check the list below.');
 }
 
 // Review-before-create. Everything the model produced, plus everything main
@@ -126,7 +125,7 @@ function anDraftReviewModal(draft: any): Promise<boolean> {
 
     const name = document.createElement('div');
     name.className = 'an-draft-name';
-    name.textContent = draft && draft.name ? String(draft.name) : 'AI analysis';
+    name.textContent = draft && draft.name ? String(draft.name) : 'AI dashboard';
     scroll.appendChild(name);
 
     // The model's own reasoning, labelled as interpretation — the same badge the
@@ -226,7 +225,7 @@ function anDraftReviewModal(draft: any): Promise<boolean> {
 
     const foot = document.createElement('p');
     foot.className = 'an-draft-foot';
-    foot.textContent = 'Every figure here was computed by the app, not written by the model. You can edit everything after, and nothing is published until you publish it.';
+    foot.textContent = 'Every figure here was computed by the app, not written by the model. You can edit everything after it is created.';
     box.appendChild(foot);
 
     const actions = document.createElement('div');
@@ -238,7 +237,7 @@ function anDraftReviewModal(draft: any): Promise<boolean> {
     const ok = document.createElement('button');
     ok.type = 'button';
     ok.className = 'btn btn-primary';
-    ok.textContent = 'Create analysis';
+    ok.textContent = 'Create dashboard';
 
     let a11y: { onTabKey: (e: KeyboardEvent) => void; release: () => void } | null = null;
     function close(val: boolean): void {

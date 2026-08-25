@@ -127,19 +127,8 @@ export async function buildFacts(
     }
   }
 
-  if (kind === 'dashboard' && id) {
-    const d = await dashboards.getDashboard(projectId, id);
-    if (d) {
-      emit({ kind: 'read', label: 'Read ' + d.name });
-      const cards = await computeMetricCards(projectId, d.pages);
-      emit({ kind: 'compute', label: 'Computed ' + plural(cards.length, 'metric'), count: cards.length });
-      return copilot.dashboardFacts(d, cards);
-    }
-  }
-
-  // An analysis is the mutable authoring surface a dashboard is published from.
-  // `Analysis.sheets` IS `Dashboard.pages` (src/analysis.ts header), so the same
-  // walk produces the same numbers — analysisFacts only labels them differently.
+  // The analysis record IS the Dashboard the user sees (the authoring surface).
+  // Its `sheets` are `Page[]`, so the metric walk is identical to any card grid.
   if (kind === 'analysis' && id) {
     const a = await analysis.getAnalysis(projectId, id);
     if (a) {
@@ -155,7 +144,7 @@ export async function buildFacts(
   const [dsList, vList, dashList] = await Promise.all([
     datasets.listDatasets(projectId),
     visuals.listVisuals(projectId),
-    dashboards.listDashboards(projectId),
+    analysis.listAnalyses(projectId),
   ]);
   emit({
     kind: 'inventory',

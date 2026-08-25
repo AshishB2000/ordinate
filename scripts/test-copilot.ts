@@ -1,6 +1,6 @@
 // Self-check for src/copilot.ts — the per-project chat store (persist/append/
 // clear round-trip + the UUID traversal guard) AND the PURE context-fact builders
-// (datasetFacts/visualFacts/dashboardFacts emit the app-computed numbers, the
+// (datasetFacts/visualFacts/projectFacts emit the app-computed numbers, the
 // "app-computed" guard line, correct provenance, and fabricate NO figures). Also
 // exercises the askCopilot not_ready path (no model configured → soft error, no
 // network call). Like test-datasets.ts, we stub the 'electron' module (via
@@ -165,22 +165,6 @@ async function main(): Promise<void> {
   ok('visualFacts embeds the computed series values', vFacts.text.includes('Paris=100') && vFacts.text.includes('Berlin=300'));
   ok('visualFacts provenance names the visual + dataset',
     vFacts.provenance.kind === 'visual' && vFacts.provenance.name === 'Pop chart' && vFacts.provenance.datasetName === 'Cities');
-
-  // dashboardFacts — one app-computed number per metric card.
-  const dashFixture: any = {
-    name: 'Overview',
-    pages: [{ id: 'p1', name: 'Page 1', cards: [
-      { id: 'c1', type: 'metric', layout: { x: 0, y: 0, w: 3, h: 2 }, metric: { datasetId: ds!.id, column: 'pop', aggregation: 'sum', label: 'Total pop' } },
-    ] }],
-  };
-  const dashFacts = copilot.dashboardFacts(dashFixture, [{ label: 'Total pop', value: 600 }]);
-  ok('dashboardFacts has the guard line', /computed by the app/i.test(dashFacts.text));
-  ok('dashboardFacts embeds the app-computed metric (600)', dashFacts.text.includes('Total pop: 600'));
-  ok('dashboardFacts provenance kind is dashboard', dashFacts.provenance.kind === 'dashboard' && dashFacts.provenance.name === 'Overview');
-
-  // A null metric value is rendered as n/a (never a guessed figure).
-  const nullMetric = copilot.dashboardFacts(dashFixture, [{ label: 'Missing', value: null }]);
-  ok('dashboardFacts renders a null metric as n/a (no fabrication)', nullMetric.text.includes('Missing: n/a'));
 
   // projectFacts fallback — inventory only, no figures.
   const pFacts = copilot.projectFacts('Copilot project', { datasets: ['Cities'], visuals: [], dashboards: [] });

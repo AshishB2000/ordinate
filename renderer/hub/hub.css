@@ -6402,123 +6402,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   margin: 0;
 }
 
-/* ── Dashboards reskin (feat/dash-reskin) ───────────────────────────────────
-   The Dashboards list is a card GRID and its editor chrome is grouped into
-   zones, matching the Home/Ask design generation. `.dash-list-item`,
-   `.dash-list-open`, `.dash-list-name` and `.dash-list-badge` are SHARED with
-   the Analyses list (which re-scopes them under #ws-analyses). So EVERY rule
-   here is scoped under #ws-dashboards — adding any of it to the bare
-   `.dash-list*` rules above would silently re-lay-out the Analyses table too.
-   The bare rules stay as the Analyses base; the Analyses list is untouched. */
-
-/* List → responsive card grid (was a flat 6px-gap column). */
-#ws-dashboards .dash-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
-  align-content: start;
-}
-/* Each row becomes a card: the border/lift live on the item; the open button
-   inside sheds its own border/background (the card carries them). */
-#ws-dashboards .dash-list-item {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
-  transition: border-color 0.12s var(--ease), transform 0.12s var(--ease), box-shadow 0.12s var(--ease);
-}
-#ws-dashboards .dash-list-item:hover {
-  border-color: var(--accent);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-#ws-dashboards .dash-list-open {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  width: 100%;
-  padding: 14px 14px 13px;
-  border: 0;
-  background: none;
-  border-radius: var(--r-lg);
-}
-/* Neutralise the bare `.dash-list-open:hover { border-color: accent }` — the
-   card owns the hover border now, not the button. */
-#ws-dashboards .dash-list-open:hover { border-color: transparent; }
-#ws-dashboards .dash-list-open:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-#ws-dashboards .dash-tile-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  width: 100%;
-  min-width: 0;
-}
-/* Heading tier per the type-weight rules (PR #99): 600, outranking buttons. */
-#ws-dashboards .dash-list-name {
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--text-strong);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-}
-#ws-dashboards .dash-list-meta {
-  font-size: 11.5px;
-  color: var(--muted);
-}
-/* The read-only pill sits inline in the title row; the flex gap spaces it, so
-   drop the bare badge's own left margin. It stays quiet (not the accent). */
-#ws-dashboards .dash-tile-pill { margin-left: 0; }
-/* Rename/delete: hover-revealed, top-right, not a permanent button per card. */
-#ws-dashboards .dash-tile-actions {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  display: flex;
-  gap: 4px;
-  opacity: 0;
-  transition: opacity 0.12s var(--ease);
-}
-#ws-dashboards .dash-list-item:hover .dash-tile-actions,
-#ws-dashboards .dash-list-item:focus-within .dash-tile-actions {
-  opacity: 1;
-}
-#ws-dashboards .dash-tile-btn {
-  min-width: 26px;
-  height: 26px;
-  padding: 0 6px;
-  border-radius: var(--r-sm);
-  background: var(--surface);
-}
-@media (prefers-reduced-motion: reduce) {
-  #ws-dashboards .dash-list-item { transition: none; }
-  #ws-dashboards .dash-list-item:hover { transform: none; }
-  #ws-dashboards .dash-tile-actions { transition: none; }
-}
-/* The empty state is the designed makeEmptyState() card (homePage.ts) — the
-   same glyph + title + line + action Home shows. Give its container room to
-   centre in, matching Home's is-empty panel. */
-#ws-dashboards .dash-list-empty {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 240px;
-  border: 1px dashed var(--border-2);
-  border-radius: var(--r-lg);
-}
-#ws-dashboards .dash-list-empty[hidden] { display: none; }
-
 /* Editor chrome → three zones (identity · add · commit). The zones are real
    flex groups in the standalone/published dashboard editor, but collapse to
    `display: contents` under body.an-focus so the analysis workbench header —
@@ -6546,9 +6429,8 @@ body.an-focus .dash-head-spacer--2 { display: none; }
 
 /* ── Analyses page: hero, table, empty state ────────────────────────────────
    Everything here is scoped under #ws-analyses on purpose. `.dash-list-item`,
-   `.dash-list-open` and `.dash-list-badge` are SHARED with the Dashboards list,
-   which re-scopes its own card-grid look under #ws-dashboards (above) —
-   restyling the bare shared classes would silently re-lay-out this table. */
+   `.dash-list-open` and `.dash-list-badge` are the bare shared list classes;
+   scoping under #ws-analyses keeps this table's look local. */
 .an-list-head {
   display: flex;
   align-items: flex-start;
@@ -6670,7 +6552,7 @@ body.an-focus .dash-head-spacer--2 { display: none; }
 .an-table-cols,
 #ws-analyses .dash-list-item {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) 60px 150px 116px 56px;
+  grid-template-columns: minmax(150px, 1fr) 60px 116px 56px;
   align-items: center;
   gap: 10px;
 }
@@ -6760,19 +6642,6 @@ body.an-focus .dash-head-spacer--2 { display: none; }
   border-color: var(--border-2);
   color: var(--text);
 }
-/* Status pill. `--dirty` already exists for the unpublished-changes badge; these
-   two are the other two states a row can be in. */
-.an-status {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: var(--r-full);
-  font-size: 11px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-.an-status--published { background: var(--ok-soft); color: var(--ok); }
-.an-status--dirty { background: var(--warn-soft); color: var(--warn); }
-.an-status--draft { background: var(--surface-2); color: var(--muted); }
 
 .ws-empty {
   display: flex;
@@ -6858,7 +6727,7 @@ body.an-focus .dash-head-spacer--2 { display: none; }
   max-height: calc(100vh - 78px);
   overflow-y: auto;
 }
-/* `hidden` loses to an explicit `display` — the same trap .dash-an-only hit. */
+/* `hidden` loses to an explicit `display`. */
 .an-side[hidden] { display: none; }
 .an-pane[hidden] { display: none; }
 .an-pane-head {
@@ -7266,19 +7135,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 
 /* The publish-state pill in the editor head. Same three states as the list's
    column, same soft-background vocabulary. */
-.an-pubpill {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: var(--r-full);
-  font-size: 11px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-.an-pubpill[hidden] { display: none; }
-.an-pubpill--draft { background: var(--surface-3); color: var(--muted); }
-.an-pubpill--live { background: var(--ok-soft); color: var(--ok); }
-.an-pubpill--dirty { background: var(--warn-soft); color: var(--warn); }
-
 /* ── Create-analysis wizard ─────────────────────────────────────────────────
    Two classes, not one: `.ws-modal` is defined LATER in this file, so a bare
    `.an-wiz` loses the cascade on every property they share (width, padding) at
@@ -7588,10 +7444,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 
 /* Mode + read-only are CLASSES on #dash-editor, never inline styles (hub CSP),
    mirroring how .dash-presenting hides its chrome. */
-.dash-an-only { display: none; }
-.dash-editor--analysis .dash-an-only { display: inline-flex; }
-.dash-an-only[hidden] { display: none; }
-.dash-editor--analysis .dash-db-only { display: none; }
 
 /* A PUBLISHED dashboard is a snapshot: main refuses every non-publish write, so
    the UI removes the affordances rather than offering an edit that will fail. */
@@ -7602,44 +7454,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 .dash-editor--readonly .dash-filter-chip-x,
 .dash-editor--readonly .dash-starters { display: none; }
 .dash-editor--readonly .dash-card-head { cursor: default; }
-
-.dash-readonly {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 8px 12px;
-  border: 1px solid var(--border-2);
-  border-radius: 8px;
-  background: var(--surface-2);
-}
-.dash-readonly[hidden] { display: none; }
-.dash-readonly-badge {
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--border-3);
-  background: var(--surface-3);
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.dash-readonly-text {
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
-  color: var(--text);
-}
-
-/* Publish state of the open analysis (never published / last published + the
-   unpublished-changes hint). */
-.an-pubstate {
-  font-size: 12px;
-  color: var(--muted);
-}
-.an-pubstate[hidden] { display: none; }
-.an-pubstate-dirty { color: var(--accent); font-weight: 600; }
 
 /* List badges: "Published" on a dashboard row, "Unpublished changes" on an
    analysis row. */
@@ -9349,7 +9163,6 @@ body.an-focus .dash-editor-head #dash-rename-btn { display: none; }
 body.an-focus .dash-editor-head #dash-name { cursor: pointer; }
 body.an-focus .dash-editor-head #dash-name:hover { text-decoration: underline; }
 /* The publish-state sentence became the Publish button's tooltip. */
-body.an-focus .an-pubstate { display: none; }
 
 .an-more-btn { display: none; }
 body.an-focus .an-more-btn { display: inline-flex; }

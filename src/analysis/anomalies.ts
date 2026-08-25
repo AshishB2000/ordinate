@@ -5,7 +5,7 @@
 //
 // THE APP DETECTS; THE MODEL ONLY EXPLAINS. Every figure in every finding is
 // computed here (strict finite-number discipline, same as metricValue /
-// datasetStats). The optional AI narrator (analyze.explainAnomalies) is fed these
+// datasetStats). The optional AI narrator is fed these
 // findings as FACTS and must never recompute one — the analyze→compute→display
 // contract, applied to anomaly detection itself.
 //

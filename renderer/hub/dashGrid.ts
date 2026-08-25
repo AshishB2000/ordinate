@@ -15,22 +15,6 @@
 // around it, because the renderer is one shared global scope by design.
 
 // ── Editor: open / close ──────────────────────────────────────────────────────
-async function openDashboard(id: string): Promise<void> {
-  if (!currentProjectId) return;
-  let d: any = null;
-  try {
-    d = await window.hub.getDashboard(currentProjectId, id);
-  } catch (_) {
-    d = null;
-  }
-  if (!d) {
-    window.alert('That dashboard could not be loaded.');
-    await refreshDashboardList();
-    return;
-  }
-  openDashboardFrom(d);
-}
-
 // Re-parent the ONE editor element into the host of whichever section owns it.
 // Both hosts are `display: contents` (hub.css), so the editor stays a direct
 // flex item of its .ws-panel and the layout is unchanged. Cheaper and far less
@@ -40,17 +24,6 @@ function mountDashEditor(hostId: string): void {
   const ed = dashEl('dash-editor');
   const host = dashEl(hostId);
   if (ed && host && ed.parentElement !== host) host.appendChild(ed);
-}
-
-function openDashboardFrom(d: any): void {
-  dashMode = 'dashboard';
-  // A published dashboard carries the id of the analysis it was snapshotted
-  // from. That is PROVENANCE, never a lookup (nothing here loads the analysis to
-  // render) — it only tells us the record is read-only.
-  dashReadOnly = Boolean(d && d.analysisId);
-  mountDashEditor('dash-editor-host');
-  openEditorWith(d, d && d.name ? d.name : 'Untitled dashboard');
-  renderDashReadOnlyNote(d);
 }
 
 // Open an ANALYSIS in the same editor. `sheets` and `pages` are the same type
@@ -66,9 +39,7 @@ function openAnalysisFrom(a: any): void {
   }
   a.pages = a.sheets; // alias, NOT a copy — one array, two names
   dashShow('an-list-view', false);
-  openEditorWith(a, a && a.name ? a.name : 'Untitled analysis');
-  renderDashReadOnlyNote(null);
-  renderAnalysisPubState();
+  openEditorWith(a, a && a.name ? a.name : 'Untitled dashboard');
 }
 
 // The part both entry points share: bind state, paint the editor.
@@ -98,11 +69,8 @@ function openEditorWith(rec: any, title: string): void {
       }
     }
   }
-  dashShow('dash-list-view', false);
   dashShow('dash-editor', true);
   applyDashEditorMode();
-  const aiOut = dashEl('dash-ai-out');
-  if (aiOut) { aiOut.hidden = true; aiOut.innerHTML = ''; }
   const nameEl = dashEl('dash-name');
   if (nameEl) nameEl.textContent = title;
   renderDashFilterBar();
@@ -125,27 +93,6 @@ function applyDashEditorMode(): void {
   anSyncWorkbench();
 }
 
-// The read-only explanation, with the route back to the authoring surface.
-// `d` null (or an unpublished record) hides it.
-function renderDashReadOnlyNote(d: any): void {
-  const note = dashEl('dash-readonly');
-  const txt = dashEl('dash-readonly-text');
-  const btn = dashEl('dash-open-analysis');
-  const wrap = dashEl('dash-legacy-wrap-btn');
-  if (!note || !txt || !btn) return;
-  // A LEGACY standalone dashboard (no analysisId) stays editable exactly as it
-  // was, and gets the one-way "wrap it in an analysis" affordance — the explicit
-  // user action §4.1 of docs/analysis/00-model.md names as the migration trigger.
-  if (wrap) wrap.hidden = !(d && !d.analysisId);
-  if (!d || !d.analysisId) { note.hidden = true; return; }
-  note.hidden = false;
-  txt.textContent =
-    'This dashboard is a published snapshot' +
-    (d.publishedAt ? ' from ' + formatSidebarTime(d.publishedAt) : '') +
-    '. It cannot be edited here — change its analysis and publish again. Its figures are still recomputed from live data every time you open it.';
-  btn.hidden = false;
-}
-
 function closeDashboardEditor(): void {
   exitDashPresent(); // never leave the app stuck in chrome-hidden mode
   if (dashSaveTimer !== null) { window.clearTimeout(dashSaveTimer); dashSaveTimer = null; }
@@ -163,9 +110,8 @@ function closeDashboardEditor(): void {
   // dashCurrent is null now, so this drops the workbench columns and clears the
   // selection — closing an analysis must not leave panels bound to a dead card.
   anSyncWorkbench();
-  dashShow('dash-list-view', true);
   dashShow('an-list-view', true);
-  dashMode = 'dashboard';
+  dashMode = 'analysis';
   dashReadOnly = false;
   // dkSync() runs AFTER dashReadOnly is reset, not before. Syncing while it was
   // still true hid the dock and then immediately re-showed it via

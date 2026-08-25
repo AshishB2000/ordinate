@@ -20,10 +20,9 @@
 // writes, graceful skip of missing/corrupt files, and a normalize() that fills
 // defaults + re-sanitizes every stored (untrusted) sheet/card/layout on load.
 //
-// An Analysis references visuals and datasets by id and validates NEITHER — a
-// dangling reference degrades gracefully at render time, exactly as it does for
-// a Dashboard. `publishedDashboardIds` is PROVENANCE, not ownership: deleting an
-// analysis never touches the dashboards it published.
+// An Analysis (the user-facing Dashboard) references visuals and datasets by id
+// and validates NEITHER — a dangling reference degrades gracefully at render
+// time.
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -58,18 +57,9 @@ export interface Analysis {
    */
   filters: FilterStep[];
 
-  /**
-   * Every dashboard this analysis has published, newest last. PROVENANCE only:
-   * deleting an analysis does not delete these, and a stale id (dashboard since
-   * deleted) is inert, never fatal.
-   */
-  publishedDashboardIds: string[];
-
   createdAt: string;
   /** Bumped by any sheet/filter/name edit. */
   updatedAt: string;
-  /** null until the first publish; with updatedAt it answers "unpublished changes?". */
-  lastPublishedAt: string | null;
   schemaVersion: 1;
 }
 
@@ -77,9 +67,7 @@ export interface AnalysisSummary {
   id: string;
   name: string;
   sheetCount: number;
-  publishedCount: number;
   updatedAt: string;
-  lastPublishedAt: string | null;
 }
 
 let projectsBase: string | null = null;
@@ -115,29 +103,6 @@ async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
   await fs.promises.rename(tmp, file); // atomic on same fs
 }
 
-/**
- * Whitelist an untrusted `publishedDashboardIds`: UUID-shaped strings only,
- * first-seen order, de-duplicated. Existence is deliberately NOT checked — a
- * read must stay a read, and a dangling id is inert (nothing resolves it; the
- * publish path re-checks before it writes).
- */
-export function sanitizePublishedIds(raw: unknown): string[] {
-  const arr = Array.isArray(raw) ? raw : [];
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const v of arr) {
-    if (!isValidId(v) || seen.has(v)) continue;
-    seen.add(v);
-    out.push(v);
-  }
-  return out;
-}
-
-// A stored timestamp is a plain string or null; anything else normalizes to null.
-function sanitizeTimestamp(raw: unknown): string | null {
-  return typeof raw === 'string' && raw.trim() ? raw : null;
-}
-
 // Basic shape validation for a parsed analysis JSON (skips corrupt files).
 function isValidAnalysis(data: any): boolean {
   return Boolean(data) && typeof data.id === 'string' && data.id.length > 0;
@@ -152,13 +117,11 @@ function normalize(data: any, projectId: string): Analysis {
   return {
     id: String(data.id),
     projectId,
-    name: typeof data.name === 'string' && data.name.trim() ? data.name : 'Untitled analysis',
+    name: typeof data.name === 'string' && data.name.trim() ? data.name : 'Untitled dashboard',
     sheets: sanitizePages(data.sheets),
     filters: sanitizeDashboardFilters(data.filters),
-    publishedDashboardIds: sanitizePublishedIds(data.publishedDashboardIds),
     createdAt,
     updatedAt: data.updatedAt || createdAt,
-    lastPublishedAt: sanitizeTimestamp(data.lastPublishedAt),
     schemaVersion: 1,
   };
 }
@@ -195,9 +158,7 @@ export async function listAnalyses(projectId: string): Promise<AnalysisSummary[]
         id: a.id,
         name: a.name,
         sheetCount: a.sheets.length,
-        publishedCount: a.publishedDashboardIds.length,
         updatedAt: a.updatedAt,
-        lastPublishedAt: a.lastPublishedAt,
       });
     } catch (err: any) {
       if (err.code !== 'ENOENT') {
@@ -226,7 +187,7 @@ export async function getAnalysis(projectId: string, id: string): Promise<Analys
 
 // Create a new analysis file. Id is generated (never derived from the name).
 // Rejects (returns null) when projectId is not a UUID or the parent project does
-// not exist (mirrors saveDashboard). Referenced visualId/datasetId are NOT
+// not exist. Referenced visualId/datasetId are NOT
 // checked — dangling references degrade gracefully at render time. An analysis
 // always gets at least one sheet (a default empty one if none supplied).
 export async function saveAnalysis(
@@ -235,8 +196,6 @@ export async function saveAnalysis(
     name: string;
     sheets?: unknown;
     filters?: unknown;
-    publishedDashboardIds?: unknown;
-    lastPublishedAt?: unknown;
   },
 ): Promise<Analysis | null> {
   if (!isValidId(projectId)) return null;
@@ -248,13 +207,11 @@ export async function saveAnalysis(
   const analysis: Analysis = {
     id,
     projectId,
-    name: typeof input.name === 'string' && input.name.trim() ? input.name.trim() : 'Untitled analysis',
+    name: typeof input.name === 'string' && input.name.trim() ? input.name.trim() : 'Untitled dashboard',
     sheets: sanitizePages(input.sheets),
     filters: sanitizeDashboardFilters(input.filters),
-    publishedDashboardIds: sanitizePublishedIds(input.publishedDashboardIds),
     createdAt: now,
     updatedAt: now,
-    lastPublishedAt: sanitizeTimestamp(input.lastPublishedAt),
     schemaVersion: 1,
   };
   await fs.promises.mkdir(analysesDir(projectId), { recursive: true });
@@ -263,16 +220,10 @@ export async function saveAnalysis(
 }
 
 // Patch an existing analysis in place, bumping updatedAt. Array fields are
-// REPLACED wholesale, never merged (mirrors updateDashboard exactly); an omitted
+// REPLACED wholesale, never merged; an omitted
 // field keeps its stored value. Returns null if either id is invalid or the
 // analysis doesn't exist.
 //
-// `opts.bumpUpdatedAt: false` leaves `updatedAt` alone. Exactly one caller uses
-// it: `analysis:publish`, writing back `publishedDashboardIds`/`lastPublishedAt`.
-// `updatedAt` means "last CONTENT edit" (see the field comment), and publishing
-// edits no sheet, filter or name — bumping it there would make
-// `updatedAt > lastPublishedAt`, i.e. "this analysis has unpublished changes",
-// true the instant a publish finished.
 export async function updateAnalysis(
   projectId: string,
   id: string,
@@ -280,10 +231,7 @@ export async function updateAnalysis(
     name?: string;
     sheets?: unknown;
     filters?: unknown;
-    publishedDashboardIds?: unknown;
-    lastPublishedAt?: unknown;
   },
-  opts: { bumpUpdatedAt?: boolean } = {},
 ): Promise<Analysis | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   const existing = await getAnalysis(projectId, id);
@@ -294,15 +242,7 @@ export async function updateAnalysis(
     name: typeof patch.name === 'string' && patch.name.trim() ? patch.name.trim() : existing.name,
     sheets: patch.sheets !== undefined ? sanitizePages(patch.sheets) : existing.sheets,
     filters: patch.filters !== undefined ? sanitizeDashboardFilters(patch.filters) : existing.filters,
-    publishedDashboardIds:
-      patch.publishedDashboardIds !== undefined
-        ? sanitizePublishedIds(patch.publishedDashboardIds)
-        : existing.publishedDashboardIds,
-    lastPublishedAt:
-      patch.lastPublishedAt !== undefined
-        ? sanitizeTimestamp(patch.lastPublishedAt)
-        : existing.lastPublishedAt,
-    updatedAt: opts.bumpUpdatedAt === false ? existing.updatedAt : new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
   await fs.promises.mkdir(analysesDir(projectId), { recursive: true });
   await writeJsonAtomic(analysisFilePath(projectId, id), updated);
@@ -310,8 +250,6 @@ export async function updateAnalysis(
 }
 
 // Delete an analysis file. Returns true on success (force → missing is success).
-// Deliberately does NOT touch any dashboard this analysis published: a published
-// dashboard is a standalone snapshot and must outlive its author.
 export async function deleteAnalysis(projectId: string, id: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
   try {

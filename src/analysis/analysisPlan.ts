@@ -337,7 +337,7 @@ export function validatePlan(raw: unknown, ctx: PlanContext): ValidatedPlan {
   const dropped: PlanDrop[] = [];
   const o = looksLikeObject(raw) ? raw : {};
 
-  const name = str(o.name) || 'AI analysis';
+  const name = str(o.name) || 'AI dashboard';
   const rationale = str(o.rationale);
 
   // ── 1. Calculated fields. A formula MUST compile before it is stored. ────
@@ -878,7 +878,7 @@ export async function buildPlan(
 
   // 3. The Analysis.
   const saved = await analysis.saveAnalysis(projectId, { name: plan.name, sheets });
-  if (!saved) return { ok: false, error: 'Could not create the analysis' };
+  if (!saved) return { ok: false, error: 'Could not create the dashboard' };
 
   return { ok: true, analysis: saved, visualIds, calculatedFields: appliedCalc, dropped, warnings };
 }

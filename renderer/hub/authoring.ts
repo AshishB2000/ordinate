@@ -113,11 +113,10 @@ function anMountTopStrip(on: boolean): void {
   const panel = anEl('ws-analyses');
   const bench = anEl('an-editor-host');
   if (!head || !editor || !panel || !bench) return;
-  // `dash-editor--analysis` normally sits on #dash-editor and is what shows
-  // .dash-an-only (Publish, Republish) and hides .dash-db-only. Once the head
-  // leaves the editor that class is no longer an ancestor, so it travels with
-  // it — the same fix .dash-toolbar needed when it moved into the Filters pane.
-  // Without this Publish is display:none while ⋯ beside it renders fine.
+  // `dash-editor--analysis` normally sits on #dash-editor and drives the
+  // workbench layout. Once the head leaves the editor that class is no longer an
+  // ancestor, so it travels with the head — the same fix .dash-toolbar needed
+  // when it moved into the Filters pane.
   head.classList.toggle('dash-editor--analysis', on);
   if (on) {
     // Above the workbench, so the rail, the flyout and the sheet all sit under it.
