@@ -322,7 +322,7 @@ function openVisualCardMenu(anchor: HTMLButtonElement, v: any): void {
       add('Open', () => openSavedVisual(id));
       add('Rename', () => handleRenameVisual(id, v && v.name ? String(v.name) : ''));
       add('Duplicate', () => handleDuplicateVisual(id));
-      add('Add to analysis', () => handleAddVisualToAnalysis(id));
+      add('Add to dashboard', () => handleAddVisualToAnalysis(id));
       add('Export', () => handleExportVisual(id));
       add('Delete', () => handleDeleteVisual(id));
     },
@@ -406,17 +406,17 @@ async function handleAddVisualToAnalysis(id: string): Promise<void> {
 
   const NEW = '__new__';
   const options = list
-    .map((a) => ({ value: String(a.id), label: a && a.name ? String(a.name) : 'Untitled analysis' }))
-    .concat([{ value: NEW, label: 'New analysis…' }]);
-  const choice = await dashChooseModal('Add to analysis', options, 'Add');
+    .map((a) => ({ value: String(a.id), label: a && a.name ? String(a.name) : 'Untitled dashboard' }))
+    .concat([{ value: NEW, label: 'New dashboard…' }]);
+  const choice = await dashChooseModal('Add to dashboard', options, 'Add');
   if (choice === null) return;
 
   let analysis: any = null;
   if (choice === NEW) {
-    const name = await promptModal('Name the analysis', 'Untitled analysis', 'Create');
+    const name = await promptModal('Name the dashboard', 'Untitled dashboard', 'Create');
     if (name === null) return;
     try {
-      analysis = await window.hub.createAnalysis({ projectId: currentProjectId, name: name.trim() || 'Untitled analysis' });
+      analysis = await window.hub.createAnalysis({ projectId: currentProjectId, name: name.trim() || 'Untitled dashboard' });
     } catch (_) {
       analysis = null;
     }
@@ -428,7 +428,7 @@ async function handleAddVisualToAnalysis(id: string): Promise<void> {
     }
   }
   if (!analysis || !analysis.id) {
-    showToast('That analysis could not be opened');
+    showToast('That dashboard could not be opened');
     return;
   }
 
@@ -451,10 +451,10 @@ async function handleAddVisualToAnalysis(id: string): Promise<void> {
     saved = null;
   }
   if (!saved || saved.ok === false) {
-    showToast('Could not add it to that analysis');
+    showToast('Could not add it to that dashboard');
     return;
   }
-  showToast('Added to ' + (analysis.name ? String(analysis.name) : 'the analysis'));
+  showToast('Added to ' + (analysis.name ? String(analysis.name) : 'the dashboard'));
 }
 
 // Optimistic: the star flips immediately, then the list repaints (favourites

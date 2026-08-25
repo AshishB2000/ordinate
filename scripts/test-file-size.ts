@@ -81,12 +81,10 @@ const ALLOWED: Record<string, number> = {
   // side — editing an open analysis, where markDashDirty/anScheduleWrite DO
   // reach disk — and that side had no coverage at all. Added the analogous
   // mtime/bytes check there, same file, same reasoning as above.
-  'scripts/smoke-app.ts': 4158,
-  'scripts/test-analysis.ts': 809,
-  'scripts/test-anomaliesResident.ts': 833,
+  'scripts/smoke-app.ts': 3737,
   'scripts/test-connectorsHttp.ts': 881,
   'src/analysis/analysisPlan.ts': 884,
-  'src/ai/analyze.ts': 1021,
+  'src/ai/analyze.ts': 984,
   'src/engine/anomaliesResident.ts': 870,
   'src/connectors/http.ts': 1036,
   'src/connectors/local.ts': 804,

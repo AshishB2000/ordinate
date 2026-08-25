@@ -1,6 +1,6 @@
 // Global search — MAIN PROCESS.
 //
-// The sidebar's search box has promised "datasets, analyses, dashboards and
+// The sidebar's search box has promised "datasets, visuals, dashboards and
 // connectors" since it was built, and until now nothing in the renderer even
 // referenced it. This is what makes the label true.
 //
@@ -16,14 +16,13 @@ import { ipcMain } from 'electron';
 import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
 import * as analysis from '../analysis/analysis';
-import * as dashboards from '../analysis/dashboards';
 import * as connections from '../connectors/connections';
 
 /** Enough to be useful, few enough to read without scrolling. */
 const MAX_RESULTS = 20;
 
 export interface SearchHit {
-  kind: 'dataset' | 'visual' | 'analysis' | 'dashboard' | 'connection';
+  kind: 'dataset' | 'visual' | 'analysis' | 'connection';
   id: string;
   name: string;
   /** A dim second line: rows, chart type, sheet count — whatever the list already knows. */
@@ -61,13 +60,7 @@ async function search(projectId: string, query: string): Promise<SearchHit[]> {
   try {
     for (const a of await analysis.listAnalyses(projectId)) {
       const sheets = Array.isArray((a as any).sheets) ? (a as any).sheets.length : (a as any).sheetCount;
-      if (matches(a.name, q)) push('analysis', a.id, a.name, sheets ? `${sheets} sheet${sheets === 1 ? '' : 's'}` : 'analysis');
-    }
-  } catch (_) { /* ignore */ }
-
-  try {
-    for (const d of await dashboards.listDashboards(projectId)) {
-      if (matches(d.name, q)) push('dashboard', d.id, d.name, (d as any).analysisId ? 'published' : 'dashboard');
+      if (matches(a.name, q)) push('analysis', a.id, a.name, sheets ? `${sheets} sheet${sheets === 1 ? '' : 's'}` : 'dashboard');
     }
   } catch (_) { /* ignore */ }
 

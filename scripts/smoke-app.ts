@@ -864,7 +864,7 @@ async function main(): Promise<void> {
       return true;
     });
 
-  ok('the Analyses section is in the workspace nav', await clickExact('Analyses'));
+  ok('the Dashboards section is in the workspace nav', await clickExact('Dashboards'));
   await win.waitForTimeout(800);
 
   // A fresh project has no analyses, so the EMPTY STATE is the real first
@@ -883,14 +883,13 @@ async function main(): Promise<void> {
       createVisible: vis('an-empty-new'),
       aiVisible: vis('an-empty-draft'),
       aiLabel: (document.getElementById('an-empty-draft')?.textContent || '').trim(),
-      // The table and its hero belong to the populated state only.
+      // The table belongs to the populated state only.
       tableVisible: vis('an-table'),
-      heroVisible: vis('an-hero'),
     };
   });
-  ok('an empty Analyses page shows the empty state, not a bare table',
-     emptyState.emptyVisible && emptyState.h > 150 && !emptyState.tableVisible &&
-     !emptyState.heroVisible, JSON.stringify(emptyState));
+  ok('an empty Dashboards page shows the empty state, not a bare table',
+     emptyState.emptyVisible && emptyState.h > 150 && !emptyState.tableVisible,
+     JSON.stringify(emptyState));
   ok('the empty state offers both doors — blank and AI',
      emptyState.createVisible && emptyState.aiVisible && /AI/.test(emptyState.aiLabel),
      `"${emptyState.heading}" / "${emptyState.aiLabel}"`);
@@ -905,7 +904,7 @@ async function main(): Promise<void> {
   // has NO model configured, which is the case that matters most here — the AI
   // half must be visibly unavailable while Skip still works, or "AI is optional"
   // is a claim rather than a behaviour.
-  ok('Create analysis opens the wizard', await clickId('an-empty-new'));
+  ok('Create dashboard opens the wizard', await clickId('an-empty-new'));
   await win.waitForTimeout(700);
 
   const wiz1 = await win.evaluate(() => {
@@ -979,7 +978,7 @@ async function main(): Promise<void> {
   });
   ok('picking a dataset selects it and frees Next',
      picked.selected === 1 && picked.nextEnabled, JSON.stringify(picked));
-  ok('…and prefills the analysis name from it', picked.name === 'Sales analysis', `"${picked.name}"`);
+  ok('…and prefills the dashboard name from it', picked.name === 'Sales dashboard', `"${picked.name}"`);
 
   const wizShot = path.join(shotDir, 'wizard-step1.png');
   await win.screenshot({ path: wizShot });
@@ -1039,7 +1038,7 @@ async function main(): Promise<void> {
      wiz2.noteText);
   ok('…and step 3 is dimmed rather than removed', wiz2.step3Skipped);
   ok('…a non-AI route finishes here, so the button says Create',
-     wiz2.nextLabel === 'Create analysis' && !wiz2.nextDisabled, `"${wiz2.nextLabel}"`);
+     wiz2.nextLabel === 'Create dashboard' && !wiz2.nextDisabled, `"${wiz2.nextLabel}"`);
   ok('…Skip is not offered on this step (the primary button is the finish)', !wiz2.skipVisible);
   ok('…and Back is offered', wiz2.backVisible);
 
@@ -1131,11 +1130,12 @@ async function main(): Promise<void> {
   await win.evaluate(() =>
     ([...document.querySelectorAll('.an-wiz-foot .btn-primary')][0] as HTMLElement).click());
   await win.waitForTimeout(2000);
-  ok('Create analysis creates it and closes the wizard',
+  ok('Create dashboard creates it and closes the wizard',
      await win.evaluate(() => !document.querySelector('.an-wiz')));
 
-  // The editor must be INSIDE the Analyses panel, in analysis mode, and — the
-  // check a DOM assertion cannot make — actually have a box on screen.
+  // The editor must be INSIDE the Dashboards panel (id #ws-analyses internally),
+  // in analysis mode, and — the check a DOM assertion cannot make — actually
+  // have a box on screen.
   const anEditor = await win.evaluate(() => {
     const ed = document.getElementById('dash-editor');
     if (!ed) return null;
@@ -1145,53 +1145,34 @@ async function main(): Promise<void> {
       analysisMode: ed.classList.contains('dash-editor--analysis'),
       w: Math.round(r.width),
       h: Math.round(r.height),
-      // The publish state is no longer a line on the sheet — it is the Publish
-      // button's tooltip. Read it from there, or this asserts a hidden node.
-      pubstate: (document.getElementById('an-publish-btn')?.getAttribute('title') || '').trim().slice(0, 60),
-      publishVisible: (document.getElementById('an-publish-btn') as HTMLElement | null)?.offsetParent != null,
-      // The head strip is the ONE add path again — the rail's + pane went away
-      // with the Analyses-v2 dialogs, and removing it meant un-hiding these.
+      // The head strip is the ONE add path — the rail's + pane went away with the
+      // Analyses-v2 dialogs, and removing it meant un-hiding these.
       addVisualVisible:
         (document.getElementById('dash-add-visual') as HTMLElement | null)?.offsetParent != null,
       addAllVisible: ['dash-add-visual', 'dash-add-metric', 'dash-add-text']
         .every((id) => (document.getElementById(id) as HTMLElement | null)?.offsetParent != null),
-      // Rename stays off the strip: the analysis NAME is the rename control.
+      // Rename stays off the strip: the dashboard NAME is the rename control.
       stripLean: (document.getElementById('dash-rename-btn') as HTMLElement | null)?.offsetParent == null,
       moreVisible: (document.getElementById('an-more-btn') as HTMLElement | null)?.offsetParent != null,
-      summaryVisible: (document.getElementById('dash-summary-btn') as HTMLElement | null)?.offsetParent != null,
       sheetTabs: document.querySelectorAll('#dash-pages .dash-page-tab').length,
-      // `hidden` on a .btn was a no-op until hub.css got `.btn[hidden]` — the
-      // rule that hid these three lost to `display: inline-flex`. Nothing but a
-      // rendered window can tell the difference, which is why they are asserted
-      // by VISIBILITY (offsetParent) and not by the attribute.
-      republishVisible: (document.getElementById('an-republish-btn') as HTMLElement | null)?.offsetParent != null,
-      legacyWrapVisible: (document.getElementById('dash-legacy-wrap-btn') as HTMLElement | null)?.offsetParent != null,
+      // Clear-all is hidden until a filter exists (asserted by VISIBILITY, since
+      // `hidden` on a .btn only wins with hub.css's `.btn[hidden]`).
       clearFiltersVisible: (document.getElementById('dash-clear-filters') as HTMLElement | null)?.offsetParent != null,
-      aiPanelVisible: (document.getElementById('dash-ai-out') as HTMLElement | null)?.offsetParent != null,
     };
   });
-  ok('the analysis editor opened inside the Analyses panel',
+  ok('the dashboard editor opened inside the panel',
      !!anEditor && anEditor.inAnalysesPanel && anEditor.analysisMode,
      JSON.stringify(anEditor));
-  ok('the analysis editor has a real box (not zero-height)',
+  ok('the dashboard editor has a real box (not zero-height)',
      !!anEditor && anEditor.w > 200 && anEditor.h > 200, `${anEditor?.w}x${anEditor?.h}`);
-  ok('an unpublished analysis says so', !!anEditor && /Not published yet/.test(anEditor.pubstate),
-     anEditor?.pubstate || '');
-  ok('Publish and the three add buttons are offered on an analysis',
-     !!anEditor && anEditor.publishVisible && anEditor.addVisualVisible && anEditor.addAllVisible);
+  ok('the three add buttons are offered on the dashboard',
+     !!anEditor && anEditor.addVisualVisible && anEditor.addAllVisible);
   ok('…and the strip sheds Rename (the name is the rename control) but keeps ⋯',
      !!anEditor && anEditor.stripLean && anEditor.moreVisible,
      JSON.stringify({ lean: anEditor?.stripLean, more: anEditor?.moreVisible }));
-  ok('the dashboard-only AI actions are hidden on an analysis',
-     !!anEditor && anEditor.summaryVisible === false);
-  ok('the analysis opens with one sheet', anEditor?.sheetTabs === 1, String(anEditor?.sheetTabs));
-  ok('nothing that should be hidden is painted (Republish / Edit-as-analysis / Clear all / AI panel)',
-     !!anEditor && !anEditor.republishVisible && !anEditor.legacyWrapVisible &&
-     !anEditor.clearFiltersVisible && !anEditor.aiPanelVisible,
-     JSON.stringify({
-       republish: anEditor?.republishVisible, legacyWrap: anEditor?.legacyWrapVisible,
-       clearFilters: anEditor?.clearFiltersVisible, aiPanel: anEditor?.aiPanelVisible,
-     }));
+  ok('the dashboard opens with one sheet', anEditor?.sheetTabs === 1, String(anEditor?.sheetTabs));
+  ok('Clear-all stays hidden until there is a filter',
+     !!anEditor && !anEditor.clearFiltersVisible, JSON.stringify({ clearFilters: anEditor?.clearFiltersVisible }));
 
   // Add the saved visual as a card, through the picker — a GALLERY of tiles
   // now, not a name list, with the two create actions above it.
@@ -2351,131 +2332,7 @@ async function main(): Promise<void> {
        withAllControlCards.dropdown && withAllControlCards.multiChip && withAllControlCards.dateInputs === 2,
      JSON.stringify(withAllControlCards));
 
-  // PUBLISH.
-  ok('Publish is clickable', await clickId('an-publish-btn'));
-  await win.waitForTimeout(3000);
-  const afterPublish = await win.evaluate(() => ({
-    pubstate: (document.getElementById('an-pubstate')?.textContent || '').trim(),
-    republishVisible: (document.getElementById('an-republish-btn') as HTMLElement | null)?.offsetParent != null,
-  }));
-  ok('the analysis reports it published, and to which dashboard',
-     /Published/.test(afterPublish.pubstate) && /Smoke analysis/.test(afterPublish.pubstate),
-     afterPublish.pubstate.slice(0, 120));
-  ok('Republish appears once there is something to republish over', afterPublish.republishVisible);
-
-  // The published dashboard, in the Dashboards surface.
-  ok('the Dashboards section is reachable', await clickExact('Dashboards'));
-  await win.waitForTimeout(1500);
-  const dashRow = await win.evaluate(() => {
-    const rows = [...document.querySelectorAll('#dash-list .dash-list-item')];
-    const row = rows.find((r) => /Smoke analysis/.test(r.textContent || ''));
-    return row
-      ? {
-          text: (row.textContent || '').trim().slice(0, 90),
-          badge: !!row.querySelector('.dash-list-badge'),
-          renameOffered: !!row.querySelector('[aria-label="Rename dashboard"]'),
-        }
-      : null;
-  });
-  ok('the published dashboard is listed', !!dashRow, dashRow ? dashRow.text : 'not found');
-  ok('and it is marked read-only in the list', !!dashRow && dashRow.badge, dashRow ? dashRow.text : '');
-  ok('and its list Rename is withdrawn (main would refuse the write)',
-     !!dashRow && dashRow.renameOffered === false);
-
-  ok('the published dashboard opens', await win.evaluate(() => {
-    const rows = [...document.querySelectorAll('#dash-list .dash-list-item')];
-    const row = rows.find((r) => /Smoke analysis/.test(r.textContent || ''));
-    const open = row?.querySelector('.dash-list-open') as HTMLElement | undefined;
-    if (!open) return false;
-    open.click();
-    return true;
-  }));
-  await win.waitForTimeout(3000);
-  const published = await win.evaluate(() => {
-    const ed = document.getElementById('dash-editor');
-    const note = document.getElementById('dash-readonly') as HTMLElement | null;
-    return {
-      inDashPanel: !!ed?.closest('#ws-dashboards'),
-      readOnly: !!ed?.classList.contains('dash-editor--readonly'),
-      noteVisible: !!note && note.offsetParent !== null,
-      noteText: (note?.textContent || '').trim().slice(0, 140),
-      routeBack: (document.getElementById('dash-open-analysis') as HTMLElement | null)?.offsetParent != null,
-      addVisual: (document.getElementById('dash-add-visual') as HTMLElement | null)?.offsetParent != null,
-      save: (document.getElementById('dash-save-btn') as HTMLElement | null)?.offsetParent != null,
-      cardCtrls: [...document.querySelectorAll('#dash-grid .dash-card-ctrls')]
-        .filter((c) => (c as HTMLElement).offsetParent !== null).length,
-      cards: document.querySelectorAll('#dash-grid .dash-card').length,
-      pages: document.querySelectorAll('#dash-pages .dash-page-tab').length,
-    };
-  });
-  // Five cards: the sheet gained a second visual card above (the oldest-of-many
-  // freshness rule) and all three control kinds just before publish (Task 4's
-  // + Control dialog, exercised above).
-  ok('the published dashboard renders in the Dashboards panel',
-     published.inDashPanel && published.cards === 5, JSON.stringify(published));
-  ok('it presents itself as read-only, and says why', published.readOnly && published.noteVisible,
-     published.noteText);
-  ok('with a route back to its analysis', published.routeBack);
-  ok('every edit affordance is withdrawn (add / save / card controls)',
-     !published.addVisual && !published.save && published.cardCtrls === 0,
-     JSON.stringify({ addVisual: published.addVisual, save: published.save, ctrls: published.cardCtrls }));
-
-  // THE INVARIANT. A published dashboard is a snapshot; an authoring panel that
-  // can mutate a card, plus the 600 ms autosave debounce, would clobber it. The
-  // panels must therefore not be on screen here AT ALL — and clicking a card
-  // must not bind them, which is the failure mode a visibility check alone would
-  // miss (a hidden-but-live panel still writes).
-  const noPanels = await win.evaluate(() => {
-    const vis = (id: string) => (document.getElementById(id) as HTMLElement | null)?.offsetParent != null;
-    const before = {
-      left: vis('an-side-left'),
-      rail: vis('an-rail'),
-      active: !!document.getElementById('an-editor-host')?.classList.contains('is-active'),
-    };
-    (document.querySelector('#dash-grid .dash-card') as HTMLElement | null)?.click();
-    return {
-      ...before,
-      // After clicking a card in dashboard mode: still nothing bound.
-      selectedAfterClick: document.querySelectorAll('#dash-grid .dash-card.is-selected').length,
-      fieldsAfterClick: document.querySelectorAll('#an-fields .an-field').length,
-    };
-  });
-  ok('a published dashboard shows NO authoring panels',
-     !noPanels.left && !noPanels.rail && !noPanels.active, JSON.stringify(noPanels));
-  ok('…and clicking one of its cards binds nothing',
-     noPanels.selectedAfterClick === 0 && noPanels.fieldsAfterClick === 0,
-     JSON.stringify({ sel: noPanels.selectedAfterClick, fields: noPanels.fieldsAfterClick }));
-
-  const pubShot = path.join(shotDir, 'published-dashboard.png');
-  await win.screenshot({ path: pubShot });
-  ok('published dashboard screenshot captured', fs.existsSync(pubShot) && fs.statSync(pubShot).size > 5000,
-     `${Math.round(fs.statSync(pubShot).size / 1024)} KB -> ${pubShot}`);
-
-  // ── THE CORE SAFETY-GUARANTEE: a reader's filter never writes the record ───
-  // The plan's central promise, and the single most important assertion this
-  // task adds: change a dropdown control on the PUBLISHED (read-only) dashboard,
-  // prove a chart on the page actually redraws with DIFFERENT data — not just
-  // "didn't crash" — AND prove the dashboard's .json record on disk did not move
-  // (same mtime, byte-identical) around the interaction. `controlState`
-  // (dashboards.ts) is a renderer-only Map, never sent over IPC and never part
-  // of any saved record; this is the one check that would fail loudly if that
-  // stopped being true. A prior, throwaway version of this lived only as a
-  // manual script during Task 3 and was deleted — this is its permanent
-  // replacement.
-  const dashboardId: string | null = await win.evaluate(() => (dashCurrent && dashCurrent.id) || null);
-  ok('the open dashboard record has an id to stat on disk',
-     typeof dashboardId === 'string' && dashboardId.length > 0, String(dashboardId));
-  const dashRecordPath = path.join(userData, 'projects', r.projectId, 'dashboards', dashboardId + '.json');
-  ok('the dashboard record exists on disk before the interaction', fs.existsSync(dashRecordPath), dashRecordPath);
-  const recordStatBefore = fs.statSync(dashRecordPath);
-  const recordBytesBefore = fs.readFileSync(dashRecordPath);
-
-  // WAIT FOR THE CONDITION, never a fixed sleep — renderVisualCard is async
-  // (a computeVisualData IPC round trip per card), same reasoning as the
-  // Visuals-builder drill wait above. Both visual cards on this sheet draw the
-  // SAME saved visual ('Sales by region'), so either one proves the point —
-  // read whichever `.dash-viz-area` chartInstances actually has a live chart
-  // for, rather than assuming DOM order matches render-completion order.
+  // Snapshot the first live chart's labels+values, to prove a control redraws it.
   const chartSnapshot = async () => {
     await win
       .waitForFunction(() => {
@@ -2494,227 +2351,15 @@ async function main(): Promise<void> {
       };
     });
   };
-  const chartBefore = await chartSnapshot();
-  ok('a chart on the published dashboard has rendered data to compare',
-     !!chartBefore && Array.isArray((chartBefore as any).labels) && (chartBefore as any).labels.length > 1,
-     JSON.stringify(chartBefore));
-
-  // Load the dropdown's real option list the way a reader would — on first
-  // focus (dashControls.ts's renderDropdownControl loads lazily).
-  await win.evaluate(() => {
-    const sel = document.querySelector('#dash-grid .dash-card--control .dash-ctrl-select') as HTMLSelectElement | null;
-    sel?.dispatchEvent(new Event('mousedown', { bubbles: true }));
-    sel?.dispatchEvent(new Event('focus', { bubbles: true }));
-  });
-  await win.waitForTimeout(1000);
-  const pickedRegion1 = await win.evaluate(() => {
-    const sel = document.querySelector('#dash-grid .dash-card--control .dash-ctrl-select') as HTMLSelectElement | null;
-    if (!sel) return { ok: false };
-    const opt = [...sel.options].find((o) => o.value === 'region1');
-    if (!opt) return { ok: false, options: [...sel.options].map((o) => o.value) };
-    sel.value = 'region1';
-    sel.dispatchEvent(new Event('change', { bubbles: true }));
-    return { ok: true };
-  });
-  ok('a reader can pick "region1" on the dropdown control', pickedRegion1.ok === true, JSON.stringify(pickedRegion1));
-  await win.waitForTimeout(1800); // renderDashGrid + computeVisualData round trip
-
-  const chartAfter = await chartSnapshot();
-  ok('changing the control redraws a chart with DIFFERENT rendered data',
-     !!chartAfter && JSON.stringify(chartAfter) !== JSON.stringify(chartBefore),
-     `before=${JSON.stringify(chartBefore)} after=${JSON.stringify(chartAfter)}`);
-  ok('…narrowed down to the one region picked',
-     !!chartAfter && Array.isArray((chartAfter as any).labels) &&
-       (chartAfter as any).labels.length === 1 && (chartAfter as any).labels[0] === 'region1',
-     JSON.stringify(chartAfter));
-
-  const recordStatAfter = fs.statSync(dashRecordPath);
-  const recordBytesAfter = fs.readFileSync(dashRecordPath);
-  ok('THE INVARIANT: the dashboard record file did not move on disk (same mtime)',
-     recordStatAfter.mtimeMs === recordStatBefore.mtimeMs,
-     `before=${recordStatBefore.mtimeMs} after=${recordStatAfter.mtimeMs}`);
-  ok('…and its bytes are byte-for-byte identical (same size, same content)',
-     recordBytesBefore.equals(recordBytesAfter),
-     `${recordBytesBefore.length}B -> ${recordBytesAfter.length}B`);
-
-  // ── Reset controls ──────────────────────────────────────────────────────────
-  // Appears once ANY control differs from its default (dashControls.ts's
-  // updateResetControlsBtn), and one click returns every control to it.
-  const resetShown = await win.evaluate(() =>
-    (document.getElementById('dash-reset-controls') as HTMLElement | null)?.hidden === false);
-  ok('Reset controls appears once a control differs from its default', resetShown);
-  ok('Reset controls is clickable', await clickId('dash-reset-controls'));
-  await win.waitForTimeout(1500);
-  const afterReset = await win.evaluate(() => ({
-    selVal: (document.querySelector('#dash-grid .dash-card--control .dash-ctrl-select') as HTMLSelectElement | null)?.value,
-    resetHidden: (document.getElementById('dash-reset-controls') as HTMLElement | null)?.hidden,
-  }));
-  const chartAfterReset = await chartSnapshot();
-  ok('Reset controls clears the dropdown back to "All", and Reset itself disappears again',
-     afterReset.selVal === '' && afterReset.resetHidden === true, JSON.stringify(afterReset));
-  ok('…and the chart is back to its original, unfiltered data',
-     JSON.stringify(chartAfterReset) === JSON.stringify(chartBefore),
-     `reset=${JSON.stringify(chartAfterReset)} original=${JSON.stringify(chartBefore)}`);
-
-  // ── Drill-down chips show a control-derived filter ─────────────────────────
-  // dashGrid.ts's renderVisualCard builds `drill.filters = mergeDashFilters(
-  // effectiveFilters(), visual.filters)` — the SAME merged list a control
-  // contributes to. Set the control again, drill a bar, and read the panel's
-  // chips (Task 2's brief required this be verified; confirmed by code trace
-  // only until now).
-  // "Reset controls" just rebuilt the card, so its <select> is fresh and has
-  // NOT lazily loaded its option list yet — setting `.value` to an option
-  // that doesn't exist yet is a silent no-op in a real browser, same as the
-  // very first pick above, so focus/mousedown has to happen first here too.
-  await win.evaluate(() => {
-    const sel = document.querySelector('#dash-grid .dash-card--control .dash-ctrl-select') as HTMLSelectElement | null;
-    sel?.dispatchEvent(new Event('mousedown', { bubbles: true }));
-    sel?.dispatchEvent(new Event('focus', { bubbles: true }));
-  });
-  await win.waitForTimeout(1000);
-  const pickedRegion2 = await win.evaluate(() => {
-    const sel = document.querySelector('#dash-grid .dash-card--control .dash-ctrl-select') as HTMLSelectElement | null;
-    if (!sel) return { ok: false };
-    const opt = [...sel.options].find((o) => o.value === 'region2');
-    if (!opt) return { ok: false, options: [...sel.options].map((o) => o.value) };
-    sel.value = 'region2';
-    sel.dispatchEvent(new Event('change', { bubbles: true }));
-    return { ok: true };
-  });
-  ok('a reader can pick "region2" on the dropdown control for the drill check',
-     pickedRegion2.ok === true, JSON.stringify(pickedRegion2));
-  // Wait for the RE-FILTERED chart specifically (one bar, "region2") — not
-  // just "some chart exists", which is true even of the stale pre-filter
-  // render and would click the wrong bar mid-transition.
-  await win
-    .waitForFunction(() => {
-      const areas = [...document.querySelectorAll('#dash-grid .dash-viz-area')] as HTMLElement[];
-      return areas.some((a) => {
-        const chart: any = chartInstances.get(a);
-        const labels = chart && chart.data && chart.data.labels;
-        return !!a.querySelector('canvas') && Array.isArray(labels) && labels.length === 1 && labels[0] === 'region2';
-      });
-    }, undefined, { timeout: 30_000 })
-    .catch(() => {});
-  const drillClick = await win.evaluate(() => {
-    const areas = [...document.querySelectorAll('#dash-grid .dash-viz-area')] as HTMLElement[];
-    const area = areas.find((a) => {
-      const chart: any = chartInstances.get(a);
-      const labels = chart && chart.data && chart.data.labels;
-      return Array.isArray(labels) && labels.length === 1 && labels[0] === 'region2';
-    });
-    const chart: any = area && chartInstances.get(area);
-    if (!area || !chart) return { ok: false };
-    const meta = chart.getDatasetMeta(0);
-    const el = meta && meta.data && meta.data[0];
-    if (!el) return { ok: false };
-    const p = el.getProps(['x', 'y', 'base'], true);
-    if (typeof p.base !== 'number') return { ok: false };
-    const canvas = area.querySelector('canvas') as HTMLCanvasElement;
-    const rect = canvas.getBoundingClientRect();
-    canvas.dispatchEvent(new MouseEvent('click', {
-      clientX: rect.left + p.x, clientY: rect.top + (p.y + p.base) / 2, bubbles: true,
-    }));
-    return { ok: true };
-  });
-  await win.waitForTimeout(1500);
-  const dashDrill = await win.evaluate(() => ({
-    open: !!document.querySelector('.drill-backdrop:not([hidden])'),
-    chips: [...document.querySelectorAll('.drill-chip')].map((c) => (c.textContent || '').trim()),
-  }));
-  ok('drilling a card on the published dashboard opens the panel',
-     drillClick.ok === true && dashDrill.open, JSON.stringify(dashDrill));
-  ok('…and its chips include the control-derived filter',
-     dashDrill.chips.some((c) => /^region = region2$/.test(c)), JSON.stringify(dashDrill.chips));
-  await win.keyboard.press('Escape');
-  await win.waitForTimeout(400);
-
-  // Back to the control's default, so nothing carries into the flow below.
-  ok('Reset controls again clears the picked-for-drill value', await clickId('dash-reset-controls'));
-  await win.waitForTimeout(1200);
-
-  // ── Reader interaction: multi and date_range controls, as a READER ─────────
-  // Lighter than the dropdown's full chain above (per the brief) — each just
-  // has to prove it genuinely renders and responds on the PUBLISHED,
-  // read-only dashboard, which a dialog-preview-only check (above, at
-  // authoring time) cannot: a CSP violation or a rendering crash unique to
-  // the popover or the two-input widget would only show up here.
-  const multiOpened = await win.evaluate(() => {
-    const chip = document.querySelector('#dash-grid .dash-card--control .dash-ctrl-chip') as HTMLElement | null;
-    if (!chip) return false;
-    chip.click();
-    return true;
-  });
-  ok('the multi control chip opens its popover', multiOpened);
-  await win.waitForTimeout(1000); // loadValues (datasetDistinct)
-  const multiPicked = await win.evaluate(() => {
-    const pop = document.querySelector('.dash-ctrl-popover') as HTMLElement | null;
-    const cb = pop?.querySelector('.fd-list input[type=checkbox]') as HTMLInputElement | null;
-    if (!cb) return { ok: false };
-    cb.click(); // checks it, fires its own 'change' handler
-    const applyBtn = [...(pop?.querySelectorAll('.dash-ctrl-popover-actions .btn') || [])]
-      .find((b) => (b.textContent || '').trim() === 'Apply') as HTMLElement | undefined;
-    if (!applyBtn) return { ok: false };
-    applyBtn.click();
-    return { ok: true };
-  });
-  ok('a reader can check a value in the popover and Apply it', multiPicked.ok === true, JSON.stringify(multiPicked));
-  await win.waitForTimeout(800);
-  const multiChip = await win.evaluate(() =>
-    (document.querySelector('#dash-grid .dash-card--control .dash-ctrl-chip') as HTMLElement | null)?.textContent || '');
-  ok('…and the chip reflects the pick ("N selected", not "All")', /\d+ selected/.test(multiChip), multiChip);
-
-  const dateSet = await win.evaluate(() => {
-    const from = document.querySelector('#dash-grid .dash-card--control .dash-ctrl-date') as HTMLInputElement | null;
-    if (!from) return false;
-    from.value = '2020-01-01';
-    from.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
-  });
-  ok('a reader can set one side of the date-range control', dateSet);
-  await win.waitForTimeout(800);
-  const dateStuck = await win.evaluate(() =>
-    (document.querySelector('#dash-grid .dash-card--control .dash-ctrl-date') as HTMLInputElement | null)?.value || '');
-  ok('…and the value sticks', dateStuck === '2020-01-01', dateStuck);
-
-  // Back to every control's default, so nothing carries into the flow below.
-  ok('Reset controls clears the multi and date_range picks too', await clickId('dash-reset-controls'));
-  await win.waitForTimeout(1200);
-
-  // THE SNAPSHOT GUARANTEE, from the UI: edit the analysis, and the published
-  // dashboard must not move until it is published again.
-  // Take the route back the read-only banner offers, rather than navigating —
-  // that button is `analysis:forDashboard`, and on a PUBLISHED dashboard it must
-  // resolve the existing analysis rather than wrap a second one.
-  ok('the banner routes back to the analysis', await clickId('dash-open-analysis'));
-  await win.waitForTimeout(2500);
-  const routed = await win.evaluate(() => {
-    const ed = document.getElementById('dash-editor');
-    return {
-      inAnalysesPanel: !!ed?.closest('#ws-analyses'),
-      analysisMode: !!ed?.classList.contains('dash-editor--analysis'),
-      navActive: (document.querySelector('.as-nav-item.active') as HTMLElement | null)?.textContent?.trim(),
-      name: (document.getElementById('dash-name')?.textContent || '').trim(),
-      analyses: document.querySelectorAll('#an-list .dash-list-item').length,
-    };
-  });
-  ok('…landing in the Analyses section with that analysis open',
-     routed.inAnalysesPanel && routed.analysisMode && routed.navActive === 'Analyses' &&
-     routed.name === 'Smoke analysis',
-     JSON.stringify(routed));
-  ok('and it did NOT wrap a second analysis', routed.analyses === 1, String(routed.analyses));
 
   // ── THE SAME INVARIANT, on the AUTHORING side ───────────────────────────────
-  // The published-dashboard version above only proves persistDashboard's
-  // read-only early-return (plus main's own refusal) holds for a snapshot —
-  // two guards that were never in doubt at THIS point in the flow. The path a
-  // future regression would actually break is this one: the analysis is open
-  // for authoring, where markDashDirty()/anScheduleWrite() DO reach disk on a
-  // real edit. dashControls.ts's own contract (see its file banner) is that a
+  // The path a future regression would break: the dashboard is open for
+  // authoring, where markDashDirty()/anScheduleWrite() DO reach disk on a real
+  // edit. dashControls.ts's own contract (see its file banner) is that a
   // control's live value is `controlState`, a renderer-only Map that must
   // never itself trigger a write — even here, even though other edits on this
-  // same screen do. Same shape as the published-side check: prove a chart
-  // redraws (real effect), then prove the record file didn't move.
+  // same screen do. Prove a chart redraws (real effect), then prove the record
+  // file didn't move.
   const analysisId: string | null = await win.evaluate(() => (dashCurrent && dashCurrent.id) || null);
   ok('the open analysis record has an id to stat on disk',
      typeof analysisId === 'string' && analysisId.length > 0, String(analysisId));
@@ -2729,8 +2374,7 @@ async function main(): Promise<void> {
      JSON.stringify(anChartBefore));
 
   // Load the dropdown's real option list the way an author would — on first
-  // focus (dashControls.ts's renderDropdownControl loads lazily), same as the
-  // published-side check above.
+  // focus (dashControls.ts's renderDropdownControl loads lazily).
   await win.evaluate(() => {
     const sel = document.querySelector('#dash-grid .dash-card--control .dash-ctrl-select') as HTMLSelectElement | null;
     sel?.dispatchEvent(new Event('mousedown', { bubbles: true }));
@@ -2779,31 +2423,13 @@ async function main(): Promise<void> {
   await win.waitForTimeout(3000); // debounced save
   const twoSheets = await win.evaluate(() => ({
     tabs: document.querySelectorAll('#dash-pages .dash-page-tab').length,
-    pubstate: (document.getElementById('an-pubstate')?.textContent || '').trim(),
   }));
-  ok('the analysis now has two sheets', twoSheets.tabs === 2, String(twoSheets.tabs));
-  ok('and it reports unpublished changes', /Unpublished changes/.test(twoSheets.pubstate),
-     twoSheets.pubstate.slice(0, 120));
-
-  ok('back to Dashboards', await clickExact('Dashboards'));
-  await win.waitForTimeout(1200);
-  await win.evaluate(() => {
-    const open = [...document.querySelectorAll('#dash-list .dash-list-open')].find((b) =>
-      /Smoke analysis/.test(b.textContent || ''),
-    ) as HTMLElement | undefined;
-    if (open) open.click();
-  });
-  await win.waitForTimeout(2500);
-  const stillOne = await win.evaluate(() =>
-    document.querySelectorAll('#dash-pages .dash-page-tab').length,
-  );
-  ok('the PUBLISHED dashboard did not move when the analysis was edited', stillOne === 1,
-     `${stillOne} page tab(s)`);
+  ok('the dashboard now has two sheets', twoSheets.tabs === 2, String(twoSheets.tabs));
 
   ok('no unexpected alert during the analysis flow', dialogs.length === 0, dialogs.join(' | '));
 
-  // The analyses LIST, with the unpublished-changes badge on it.
-  ok('back to Analyses', await clickExact('Analyses'));
+  // The dashboards LIST.
+  ok('back to Dashboards', await clickExact('Dashboards'));
   await win.waitForTimeout(1200);
   const anRow = await win.evaluate(() => {
     const row = [...document.querySelectorAll('#an-list .dash-list-item')].find((r) =>
@@ -2821,8 +2447,6 @@ async function main(): Promise<void> {
     return {
       found: !!row,
       text: row ? (row.textContent || '').trim().slice(0, 100) : '',
-      badge: (row?.querySelector('.dash-list-badge') as HTMLElement | null)?.textContent || '',
-      status: (row?.querySelector('.an-status') as HTMLElement | null)?.textContent || '',
       headers: cols.map((c) => (c.textContent || '').trim()),
       colLefts,
       cellLefts,
@@ -2830,28 +2454,19 @@ async function main(): Promise<void> {
                colLefts.every((x, i) => Math.abs(x - cellLefts[i]) <= 1),
       tableVisible: vis('an-table'),
       emptyVisible: vis('an-list-empty'),
-      heroVisible: vis('an-hero'),
     };
   });
-  ok('the analysis is listed with its sheet count and publish state', !!anRow?.found,
+  ok('the dashboard is listed with its sheet count', !!anRow?.found,
      anRow ? anRow.text : 'not found');
-  // The drifted state IS the status pill now — it used to be a second badge
-  // beside the name while the pill said "Published", two controls for one fact.
-  ok('and the list flags unpublished changes', anRow?.status === 'Unpublished changes',
-     anRow?.status || '(none)');
-  ok('…in the pill, not a second badge on the name', anRow?.badge === '');
   ok('a populated page shows the table and hides the empty state',
      !!anRow && anRow.tableVisible && !anRow.emptyVisible, JSON.stringify({
        table: anRow?.tableVisible, empty: anRow?.emptyVisible }));
-  ok('the intro banner rides with the table until dismissed', !!anRow && anRow.heroVisible);
   ok('the table declares its columns',
      JSON.stringify(anRow?.headers) ===
-       JSON.stringify(['Name', 'Sheets', 'Status', 'Last updated', 'Action']),
+       JSON.stringify(['Name', 'Sheets', 'Last updated', 'Action']),
      JSON.stringify(anRow?.headers));
   ok('and every row cell lines up under its column label', !!anRow && anRow.aligned,
      `cols=${JSON.stringify(anRow?.colLefts)} cells=${JSON.stringify(anRow?.cellLefts)}`);
-  ok('the row carries a status pill', /^(Draft|Published|Unpublished changes)$/.test(anRow?.status || ''),
-     anRow?.status || '(none)');
 
   // The ⋯ row menu. Rename and Delete used to be two bare glyphs in the row; now
   // they live behind this. A popup is appended to <body> and positioned with
@@ -2904,12 +2519,11 @@ async function main(): Promise<void> {
   ok('analyses list screenshot captured', fs.existsSync(listShot) && fs.statSync(listShot).size > 5000,
      `${Math.round(fs.statSync(listShot).size / 1024)} KB -> ${listShot}`);
 
-  // ── Republish keeps the control card ────────────────────────────────────────
-  // "Smoke analysis" has unpublished changes (the second sheet, added a few
-  // steps up) and still carries the dropdown control card added before the
-  // first publish. Publish again and confirm BOTH the new sheet and the
-  // control card survive publish-by-value a second time.
-  ok('open the analysis to republish it', await win.evaluate(() => {
+  // ── Re-open the dashboard ───────────────────────────────────────────────────
+  // Re-open the dashboard from the list so Present mode and Export below have an
+  // open sheet to act on — and prove the second sheet and all three control
+  // cards persisted through the edit and reload.
+  ok('open the dashboard from the list', await win.evaluate(() => {
     const row = [...document.querySelectorAll('#an-list .dash-list-item')]
       .find((r) => /Smoke analysis/.test(r.textContent || '')) as HTMLElement | undefined;
     const openBtn = row?.querySelector('.dash-list-open') as HTMLElement | undefined;
@@ -2917,50 +2531,15 @@ async function main(): Promise<void> {
     openBtn.click();
     return true;
   }));
-  await win.waitForTimeout(2000);
-  // Republish opens a picker first (handlePublishAnalysis(chooseTarget=true),
-  // anPublish.ts) — "Replace <this dashboard>" or "Publish as a new dashboard" —
-  // unlike the FIRST publish, which goes straight through. The existing
-  // dashboard is the first, default-selected option; confirm it via the
-  // modal's own Publish button (same dashChooseModal shape as Export's picker).
-  ok('Republish is clickable', await clickId('an-republish-btn'));
-  await win.waitForTimeout(500);
-  ok('the republish picker confirms over the existing dashboard', await win.evaluate(() => {
-    const box = [...document.querySelectorAll('.ws-modal-overlay')]
-      .filter((o) => (o as HTMLElement).getClientRects().length > 0)
-      .map((o) => o.querySelector('.ws-modal'))[0] as HTMLElement | undefined;
-    const btn = box?.querySelector('.ws-modal-actions .btn-primary') as HTMLElement | undefined;
-    if (!btn) return false;
-    btn.click();
-    return true;
-  }));
-  await win.waitForTimeout(3000);
-  const afterRepublish = await win.evaluate(() => ({
-    pubstate: (document.getElementById('an-pubstate')?.textContent || '').trim(),
-  }));
-  ok('the analysis reports published again, no longer drifted',
-     /Published/.test(afterRepublish.pubstate) && !/Unpublished changes/.test(afterRepublish.pubstate),
-     afterRepublish.pubstate.slice(0, 120));
-
-  ok('back to Dashboards to check the republished snapshot', await clickExact('Dashboards'));
-  await win.waitForTimeout(1200);
-  ok('the republished dashboard opens', await win.evaluate(() => {
-    const row = [...document.querySelectorAll('#dash-list .dash-list-item')]
-      .find((r) => /Smoke analysis/.test(r.textContent || '')) as HTMLElement | undefined;
-    const openBtn = row?.querySelector('.dash-list-open') as HTMLElement | undefined;
-    if (!openBtn) return false;
-    openBtn.click();
-    return true;
-  }));
   await win.waitForTimeout(2500);
-  const republished = await win.evaluate(() => ({
+  const reopened = await win.evaluate(() => ({
     pages: document.querySelectorAll('#dash-pages .dash-page-tab').length,
     cards: document.querySelectorAll('#dash-grid .dash-card').length,
     controlCards: document.querySelectorAll('#dash-grid .dash-card--control').length,
   }));
-  ok('republish carries the new second sheet AND keeps all three control cards on the first',
-     republished.pages === 2 && republished.cards === 5 && republished.controlCards === 3,
-     JSON.stringify(republished));
+  ok('it reopens with the second sheet and all three control cards intact',
+     reopened.pages === 2 && reopened.cards === 5 && reopened.controlCards === 3,
+     JSON.stringify(reopened));
 
   // ── Present mode keeps controls usable ──────────────────────────────────────
   // Renderer-only, no window, no IPC (dashShare.ts) — a reader presenting a
@@ -3062,7 +2641,7 @@ async function main(): Promise<void> {
   ok('…and no live control widget leaked into the export (never a real <select> for it)',
      !/dash-ctrl-select/.test(exportHtml));
 
-  ok('back to Analyses', await clickExact('Analyses'));
+  ok('back to Dashboards', await clickExact('Dashboards'));
   await win.waitForTimeout(1200);
 
   // ── A starter route actually scaffolds ────────────────────────────────────
@@ -3071,7 +2650,7 @@ async function main(): Promise<void> {
   // built to avoid, so assert the cards land. Runs LAST in this section and
   // makes a SECOND analysis, which is why it sits below the list-count
   // assertions rather than above them.
-  ok('a second Create analysis opens the wizard', await clickId('an-new-btn'));
+  ok('a second Create dashboard opens the wizard', await clickId('an-new-btn'));
   await win.waitForTimeout(700);
   await win.evaluate(() => {
     (document.querySelector('.an-wiz-row') as HTMLElement).click();   // any dataset
@@ -3114,7 +2693,7 @@ async function main(): Promise<void> {
      fs.existsSync(starterShot) && fs.statSync(starterShot).size > 5000,
      `${Math.round(fs.statSync(starterShot).size / 1024)} KB -> ${starterShot}`);
 
-  ok('back to Analyses after the starter', await clickExact('Analyses'));
+  ok('back to Analyses after the starter', await clickExact('Dashboards'));
   await win.waitForTimeout(1200);
 
   // ── The AI draft review dialog, on a synthetic Phase E envelope ───────────
@@ -3199,7 +2778,7 @@ async function main(): Promise<void> {
       rationale: (document.querySelector('.an-draft-rationale .ai-interp-body')?.textContent || '').trim().slice(0, 40),
       calc: (document.querySelector('.an-draft-calc-formula')?.textContent || '').trim(),
       createVisible: [...document.querySelectorAll('.an-draft-modal .ws-modal-actions .btn')]
-        .some((b) => /Create analysis/.test(b.textContent || '') && (b as HTMLElement).offsetParent !== null),
+        .some((b) => /Create dashboard/.test(b.textContent || '') && (b as HTMLElement).offsetParent !== null),
       // Nothing may stand in for a figure the app did not compute.
       fakeFigure: /(^|\s)(0|—|N\/A)(\s|$)/.test(note?.textContent || ''),
     };
@@ -3555,7 +3134,7 @@ async function main(): Promise<void> {
   });
   ok('the ⋯ menu opens with every action enabled',
      menu.expanded === 'true' && menu.labels.length === 6 && menu.disabled.length === 0
-     && menu.labels.indexOf('Add to analysis') >= 0 && menu.labels.indexOf('Export') >= 0,
+     && menu.labels.indexOf('Add to dashboard') >= 0 && menu.labels.indexOf('Export') >= 0,
      JSON.stringify(menu));
   await win.keyboard.press('Escape');
   await win.waitForTimeout(400);
@@ -3605,15 +3184,15 @@ async function main(): Promise<void> {
      await win.evaluate(() => !document.getElementById('export-overlay')));
 
   // Add to analysis: a real write to a real analysis record, from the gallery.
-  ok('the map card menu offers Add to analysis', await openCardMenu('Revenue by state'));
-  ok('…and it opens the analysis picker', await clickMenuRow('Add to analysis'));
+  ok('the map card menu offers Add to dashboard', await openCardMenu('Revenue by state'));
+  ok('…and it opens the dashboard picker', await clickMenuRow('Add to dashboard'));
   await win.waitForTimeout(900);
-  ok('…listing the existing analyses plus a New analysis… entry',
+  ok('…listing the existing dashboards plus a New dashboard… entry',
      await win.evaluate(() => {
        const sel = [...document.querySelectorAll('.ws-modal-overlay')]
          .filter((o) => (o as HTMLElement).getClientRects().length > 0)
          .map((o) => o.querySelector('select.ws-modal-input'))[0] as HTMLSelectElement;
-       return !!sel && [...sel.options].some((o) => /New analysis/.test(o.textContent || ''));
+       return !!sel && [...sel.options].some((o) => /New dashboard/.test(o.textContent || ''));
      }));
   ok('…and picking one confirms', await pickFirstOption());
   await win.waitForTimeout(2500);

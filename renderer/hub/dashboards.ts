@@ -38,14 +38,14 @@ let dashCurrent: any = null;       // the open Dashboard (full), or null on the 
 // as part of a dashboard/analysis record, cleared every time a sheet opens or
 // closes so one reader's picks never leak into the next dashboard opened.
 let controlState: Map<string, any> = new Map();
-// WHICH RECORD the editor is bound to. Phase D: an Analysis is the authoring
-// container and its `sheets` ARE dashboard `pages` (src/analysis.ts reuses the
-// type), so ONE editor drives both — the mode only decides which channel the
-// save goes down and which list Back returns to.
-let dashMode: 'dashboard' | 'analysis' = 'dashboard';
-// A PUBLISHED dashboard (Dashboard.analysisId !== null) is a snapshot. Main
-// refuses every non-publish write to it (src/dashboards.ts updateDashboard), so
-// the editor must not offer edits that will fail — this flag removes them.
+// WHICH RECORD the editor is bound to. The editor now only ever holds an
+// Analysis (the single Dashboards surface); its `sheets` ARE the card `pages`.
+// ponytail: `dashMode` is vestigial — it is always 'analysis' now that the
+// published-snapshot mode is gone. The union type is kept so lingering
+// comparisons stay valid; do not churn 18 files to remove it.
+let dashMode: 'dashboard' | 'analysis' = 'analysis';
+// Kept for the dock/editor-mode class toggle; always false now that there is no
+// read-only published snapshot.
 let dashReadOnly = false;
 let dashPageIdx = 0;               // active page index within dashCurrent.pages
 let dashDirty = false;             // unsaved layout/card edits
@@ -201,28 +201,8 @@ function scheduleDashSave(): void {
 }
 
 async function persistDashboard(): Promise<void> {
-  if (!dashCurrent || !currentProjectId) return;
-  // A PUBLISHED dashboard is a read-only snapshot: main refuses the write
-  // (src/dashboards.ts updateDashboard), so don't fire the autosave at it. This
-  // check is a courtesy that keeps the debounce quiet — the guarantee is the
-  // main-process one, not this line.
-  if (dashMode === 'dashboard' && dashCurrent.analysisId) { dashDirty = false; return; }
-  if (dashMode === 'analysis') { await persistAnalysis(); return; }
-  try {
-    const res = await window.hub.updateDashboard(currentProjectId, dashCurrent.id, {
-      name: dashCurrent.name,
-      pages: dashCurrent.pages,
-      filters: Array.isArray(dashCurrent.filters) ? dashCurrent.filters : [],
-    });
-    if (res && res.ok && res.dashboard) {
-      // Adopt main's sanitized copy (dropped/clamped cards) without a full
-      // re-render if nothing visibly changed; keep the open page index.
-      dashCurrent = res.dashboard;
-      if (!Array.isArray(dashCurrent.filters)) dashCurrent.filters = [];
-      if (dashPageIdx >= dashCurrent.pages.length) dashPageIdx = 0;
-    }
-    dashDirty = false;
-  } catch (_) { /* keep dashDirty so an explicit Save can retry */ }
+  // The editor only ever holds an analysis now, so this is the analysis save.
+  await persistAnalysis();
 }
 
 // The analysis half of persistDashboard: same edits, different channel. Sheets
@@ -243,34 +223,23 @@ async function persistAnalysis(): Promise<void> {
       if (dashPageIdx >= dashCurrent.pages.length) dashPageIdx = 0;
     }
     dashDirty = false;
-    renderAnalysisPubState(); // an edit means "unpublished changes" — say so
   } catch (_) { /* keep dashDirty so an explicit Save can retry */ }
 }
 
 async function handleSaveDashboard(): Promise<void> {
   if (dashSaveTimer !== null) { window.clearTimeout(dashSaveTimer); dashSaveTimer = null; }
   await persistDashboard();
-  if (dashMode === 'analysis') await refreshAnalysisListKeepEditor();
-  else await refreshDashboardListKeepEditor();
+  await refreshAnalysisListKeepEditor();
 }
 
 async function handleBackToList(): Promise<void> {
-  const wasAnalysis = dashMode === 'analysis';
   if (dashDirty) await persistDashboard();
   closeDashboardEditor();
-  if (wasAnalysis) await refreshAnalysisList();
-  else await refreshDashboardList();
+  await refreshAnalysisList();
 }
 
 // ── Boot wiring (once) ────────────────────────────────────────────────────────
 function initDashboards(): void {
-  const newBtn = dashEl('dash-new-btn');
-  if (newBtn) newBtn.addEventListener('click', () => handleNewDashboard());
-  const summaryBtn = dashEl('dash-summary-btn');
-  if (summaryBtn) summaryBtn.addEventListener('click', () => handleDashSummary());
-  const anomaliesBtn = dashEl('dash-anomalies-btn');
-  if (anomaliesBtn) anomaliesBtn.addEventListener('click', () => handleDashAnomalies());
-
   const back = dashEl('dash-back-btn');
   if (back) back.addEventListener('click', () => handleBackToList());
 
@@ -280,8 +249,7 @@ function initDashboards(): void {
   const rename = dashEl('dash-rename-btn');
   if (rename) rename.addEventListener('click', () => {
     if (!dashCurrent) return;
-    if (dashMode === 'analysis') handleRenameAnalysis(dashCurrent.id, dashCurrent.name || '');
-    else handleRenameDashboard(dashCurrent.id, dashCurrent.name || '');
+    handleRenameAnalysis(dashCurrent.id, dashCurrent.name || '');
   });
 
   const addV = dashEl('dash-add-visual');

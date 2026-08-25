@@ -81,7 +81,7 @@
           <path d="M20 20l-3.6-3.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
         </svg>
         <input id="global-search" class="hub-search-input" type="search" placeholder="Search"
-          aria-label="Search datasets, analyses, dashboards and connectors"
+          aria-label="Search datasets, dashboards and connectors"
           autocomplete="off" spellcheck="false" />
       </div>
       <div id="global-search-results" class="hub-search-results" hidden></div>
@@ -178,15 +178,6 @@
           <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="1.7"/>
             <path d="M8 14v3M12 10v7M16 8v9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-          </svg>
-          <span>Analyses</span>
-        </button>
-        <button class="as-nav-item" type="button" data-section="dashboards">
-          <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <rect x="4" y="4" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.7"/>
-            <rect x="13" y="4" width="7" height="4" rx="1.5" stroke="currentColor" stroke-width="1.7"/>
-            <rect x="4" y="13" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.7"/>
-            <rect x="13" y="10" width="7" height="10" rx="1.5" stroke="currentColor" stroke-width="1.7"/>
           </svg>
           <span>Dashboards</span>
         </button>
@@ -1055,7 +1046,7 @@
                 <!-- Filled and shown by refreshVisualList; hidden at zero. -->
                 <span class="viz-count" id="viz-count" hidden></span>
               </div>
-              <p class="viz-sub">Saved charts you can drop into any analysis or dashboard.</p>
+              <p class="viz-sub">Saved charts you can drop into any dashboard.</p>
             </div>
             <button class="btn btn-primary" type="button" id="viz-new-btn">+ New visual</button>
           </div>
@@ -1066,7 +1057,7 @@
           <div class="ws-hero" id="viz-hero" hidden>
             <div class="ws-hero-copy">
               <h3 class="ws-hero-h">One chart, saved once, used everywhere.</h3>
-              <p class="ws-hero-p">Pick a dataset, describe what you want to see or build it yourself, then reuse it across analyses and dashboards. Every number is computed by the app.</p>
+              <p class="ws-hero-p">Pick a dataset, describe what you want to see or build it yourself, then reuse it across dashboards. Every number is computed by the app.</p>
               <div class="ws-hero-actions">
                 <button class="btn btn-primary" type="button" id="viz-hero-new">+ New visual</button>
                 <button class="btn btn-ghost" type="button" id="viz-hero-dismiss">Dismiss</button>
@@ -1085,7 +1076,7 @@
             <div class="ws-empty" id="viz-empty">
               <div class="ws-empty-art viz-glyph-art" id="viz-empty-art" aria-hidden="true"></div>
               <h3 class="ws-empty-h">No visuals yet</h3>
-              <p class="ws-empty-p">A visual is one saved chart — build it once, then drop it into any analysis or dashboard, or export it on its own.</p>
+              <p class="ws-empty-p">A visual is one saved chart — build it once, then drop it into any dashboard, or export it on its own.</p>
               <div class="ws-empty-actions">
                 <button class="btn btn-primary btn-lg" type="button" id="viz-empty-new-btn">+ New visual</button>
                 <button class="btn btn-lg" type="button" id="viz-empty-ai">✨ Start with AI</button>
@@ -1159,38 +1150,17 @@
              its primary action. -->
         <div class="an-list-head">
           <div class="an-list-head-text">
-            <h2 class="viz-h">Analyses<span class="ws-badge an-count" id="an-count" hidden></span></h2>
+            <h2 class="viz-h">Dashboards<span class="ws-badge an-count" id="an-count" hidden></span></h2>
           </div>
           <div class="an-list-head-actions">
-            <button class="btn" type="button" id="an-draft-btn">✨ AI draft analysis</button>
-            <button class="btn btn-primary" type="button" id="an-new-btn">Create analysis</button>
-          </div>
-        </div>
-        <!-- Dismissible intro. Explains the analysis/dashboard split ONCE; the
-             state lives in localStorage, so dismissing it is permanent per
-             machine and the list gets the whole page back. -->
-        <div class="ws-hero" id="an-hero" hidden>
-          <div class="ws-hero-copy">
-            <h3 class="ws-hero-h">Build an analysis, publish a dashboard</h3>
-            <p class="ws-hero-p">Lay out sheets of charts, metrics and text over your datasets, with analysis-wide filters. Publishing takes a snapshot people open read-only — every number still computed by the app, from live data.</p>
-            <div class="ws-hero-actions">
-              <button class="btn btn-primary" type="button" id="an-hero-new">Create analysis</button>
-              <button class="btn btn-ghost" type="button" id="an-hero-dismiss">Dismiss</button>
-            </div>
-          </div>
-          <div class="ws-hero-art" aria-hidden="true">
-            <span class="ws-hero-bar ws-hero-bar--1"></span>
-            <span class="ws-hero-bar ws-hero-bar--2"></span>
-            <span class="ws-hero-bar ws-hero-bar--3"></span>
-            <span class="ws-hero-bar ws-hero-bar--4"></span>
-            <span class="ws-hero-bar ws-hero-bar--5"></span>
+            <button class="btn" type="button" id="an-draft-btn">✨ AI draft dashboard</button>
+            <button class="btn btn-primary" type="button" id="an-new-btn">Create dashboard</button>
           </div>
         </div>
         <div class="an-table ws-table" id="an-table" hidden>
           <div class="an-table-cols ws-table-cols">
             <span>Name</span>
             <span>Sheets</span>
-            <span>Status</span>
             <span>Last updated</span>
             <span class="an-col-action">Action</span>
           </div>
@@ -1205,19 +1175,17 @@
             <span class="ws-hero-bar ws-hero-bar--4"></span>
             <span class="ws-hero-bar ws-hero-bar--3"></span>
           </div>
-          <h3 class="ws-empty-h">No analyses yet</h3>
-          <p class="ws-empty-p">An analysis is where you build: sheets of charts, metrics and text over your datasets. Start from a blank sheet, or describe what you want and let the AI draft the sheets, charts and calculated fields — you review all of it before anything is created.</p>
+          <h3 class="ws-empty-h">No dashboards yet</h3>
+          <p class="ws-empty-p">A dashboard is where you build: sheets of charts, metrics and text over your datasets. Start from a blank sheet, or describe what you want and let the AI draft the sheets, charts and calculated fields — you review all of it before anything is created.</p>
           <div class="ws-empty-actions">
-            <button class="btn btn-primary btn-lg" type="button" id="an-empty-new">Create analysis</button>
+            <button class="btn btn-primary btn-lg" type="button" id="an-empty-new">Create dashboard</button>
             <button class="btn btn-lg" type="button" id="an-empty-draft">✨ Get started with AI</button>
           </div>
         </div>
       </div>
-      <!-- The authoring workbench. These panels live in the ANALYSES section
-           ONLY — #dash-editor is re-parented in between them (CSS `order`), and
-           the Dashboards host has no panels at all. That is not a styling
-           choice: a published dashboard is a read-only snapshot, and a panel
-           that can mutate a card, plus the 600 ms autosave, would clobber it. -->
+      <!-- The authoring workbench. #dash-editor is re-parented into this host
+           (CSS `order` places the canvas between the rail and the flyout
+           panels); the shared editor markup lives at the end of this section. -->
       <div class="dash-editor-host an-workbench" id="an-editor-host">
         <!-- ── Tool rail ─────────────────────────────────────────────────────
              A thin vertical strip of icon-only buttons, one per panel. Exactly
@@ -1350,25 +1318,6 @@
           </section>
         </aside>
       </div>
-    </section>
-    <section class="ws-panel" id="ws-dashboards" data-section="dashboards" hidden>
-      <!-- List view: saved dashboards + New button -->
-      <div class="dash-panel" id="dash-list-view">
-        <div class="dash-list-head">
-          <div>
-            <h2 class="viz-h">Dashboards</h2>
-            <p class="viz-sub" title="Snapshots published from an analysis, plus standalone dashboards. A published one is read-only — edit its analysis and republish. Every number is computed by the app, from live data.">Read-only snapshots published from your analyses.</p>
-          </div>
-          <div class="dash-list-head-actions">
-            <button class="btn btn-primary" type="button" id="dash-new-btn">New dashboard</button>
-          </div>
-        </div>
-        <div class="dash-list" id="dash-list"></div>
-        <div class="dash-list-empty" id="dash-list-empty" hidden></div>
-      </div>
-
-      <div class="dash-editor-host" id="dash-editor-host">
-      <!-- Editor view: page tabs + toolbar + grid canvas -->
       <div class="dash-editor" id="dash-editor" hidden>
         <!-- Three zones (identity · add · commit), grouped by CSS. The IDENTITY
              items stay FLAT direct children (Back must remain a visible direct
@@ -1391,7 +1340,6 @@
             <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-metric">+ Metric</button>
             <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-text">+ Text</button>
             <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-control">+ Control</button>
-            <button class="btn btn-sm dash-edit-only" type="button" id="dash-legacy-wrap-btn" hidden>Edit as analysis</button>
           </div>
           <span class="dash-head-spacer dash-head-spacer--2"></span>
           <div class="dash-head-zone dash-head-zone--commit">
@@ -1401,30 +1349,9 @@
                  action, not two. Shown by CSS in focus mode only. -->
             <button class="btn btn-sm an-more-btn" type="button" id="an-more-btn"
               aria-haspopup="true" aria-label="More actions" title="More actions">⋯</button>
-            <!-- The publish STATE, as a pill beside the button: never published /
-                 published & current / unpublished changes. Focus mode hides the
-                 #an-pubstate paragraph, which left the state as a tooltip only —
-                 a fact you had to hover to learn. Filled by anRenderPubState from
-                 the same analysisHasUnpublishedChanges the list uses. -->
-            <span class="an-pubpill dash-an-only" id="an-pubpill" hidden></span>
-            <button class="btn btn-sm dash-an-only" type="button" id="an-republish-btn" hidden>Republish…</button>
-            <button class="btn btn-primary btn-sm dash-an-only" type="button" id="an-publish-btn">Publish</button>
             <button class="btn btn-primary btn-sm dash-edit-only" type="button" id="dash-save-btn">Save</button>
           </div>
         </div>
-
-        <!-- Why this dashboard cannot be edited here, and where to go instead.
-             Shown only for a PUBLISHED dashboard (Dashboard.analysisId set) —
-             main refuses the write, so the UI must not pretend otherwise. -->
-        <div class="dash-readonly" id="dash-readonly" hidden>
-          <span class="dash-readonly-badge">Read-only</span>
-          <span class="dash-readonly-text" id="dash-readonly-text"></span>
-          <button class="btn btn-sm" type="button" id="dash-open-analysis">Open its analysis ›</button>
-        </div>
-
-        <!-- Publish state of the open ANALYSIS: never published / last published,
-             plus the unpublished-changes hint. -->
-        <div class="an-pubstate" id="an-pubstate" hidden></div>
 
         <!-- Toolbar: dashboard-wide filters + quick controls + present/export/share -->
         <div class="dash-toolbar" id="dash-toolbar">
@@ -1447,10 +1374,6 @@
           </div>
           <span class="dash-editor-spacer"></span>
           <div class="dash-toolbar-actions">
-            <!-- Both channels take a dashboardId (they narrate a finished
-                 artifact), so they are hidden while an ANALYSIS is open. -->
-            <button class="btn btn-sm dash-db-only" type="button" id="dash-summary-btn">✨ Summary</button>
-            <button class="btn btn-sm dash-db-only" type="button" id="dash-anomalies-btn">✨ Explain anomalies</button>
             <button class="btn btn-sm" type="button" id="dash-present-btn">Present</button>
             <button class="btn btn-sm" type="button" id="dash-export-btn">Export…</button>
             <button class="btn btn-sm" type="button" id="dash-share-btn">Share</button>
@@ -1459,9 +1382,6 @@
 
         <!-- Exit affordance shown only in presentation mode -->
         <button class="dash-present-exit" type="button" id="dash-present-exit" hidden aria-label="Exit presentation (Esc)">✕ Exit</button>
-
-        <!-- AI interpretation panel (summary / anomaly explanation) — above the grid -->
-        <div class="ai-interp" id="dash-ai-out" hidden></div>
 
         <div class="dash-pages" id="dash-pages"></div>
 
@@ -1488,8 +1408,8 @@
           </div>
         </div>
       </div>
-      </div>
     </section>
+
 
     <!-- ── Ask — the conversational front door ─────────────────────────
          (Section id 'explore' predates the rename to Ask; ids, the xp-
@@ -1525,7 +1445,7 @@
                  project" is pinned at the top as the always-available clear. -->
             <div class="xp-picker" id="xp-picker" hidden>
               <input class="xp-picker-q" id="xp-picker-q" type="search"
-                placeholder="Search datasets, visuals, analyses, dashboards…"
+                placeholder="Search datasets, visuals, dashboards…"
                 aria-label="Search for something to ask about"
                 autocomplete="off" spellcheck="false" role="combobox"
                 aria-controls="xp-picker-rows" aria-expanded="true" />
@@ -2524,7 +2444,6 @@
 <!-- dashboards.ts was 2340 lines; these six are it, split by job. dashboards.js
      stays FIRST of the group — it keeps the module-local state the rest read —
      and authoring.js / analyses.js stay after all of them, as before. -->
-<script src="dashList.js"></script>
 <script src="dashGrid.js"></script>
 <script src="dashAdd.js"></script>
 <script src="dashAddControl.js"></script>
@@ -2544,7 +2463,6 @@
      stays first — it keeps the module-local state the rest read. -->
 <script src="anList.js"></script>
 <script src="anNew.js"></script>
-<script src="anPublish.js"></script>
 <script src="anDraft.js"></script>
 <script src="globalSearch.js"></script>
 <script src="explore.js"></script>

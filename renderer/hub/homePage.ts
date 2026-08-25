@@ -68,7 +68,7 @@ async function renderRecent(): Promise<void> {
 
 const HOME_TYPE_LABEL: Record<string, string> = {
   dataset: 'Dataset',
-  analysis: 'Analysis',
+  analysis: 'Dashboard',
   dashboard: 'Dashboard',
 };
 
@@ -133,11 +133,6 @@ function homeMetaText(it: any): string {
   }
   if (it.type === 'analysis') {
     if (typeof m.sheetCount === 'number') parts.push(homeNum(m.sheetCount) + (m.sheetCount === 1 ? ' sheet' : ' sheets'));
-    return parts.join(' · ');
-  }
-  if (it.type === 'dashboard') {
-    if (typeof m.cardCount === 'number') parts.push(homeNum(m.cardCount) + (m.cardCount === 1 ? ' tile' : ' tiles'));
-    if (typeof m.pageCount === 'number' && m.pageCount > 1) parts.push(homeNum(m.pageCount) + ' pages');
     return parts.join(' · ');
   }
   return '';
@@ -306,7 +301,7 @@ function paintHome(): void {
           variant: 'starred',
           glyph: '☆',
           title: 'Nothing pinned yet',
-          line: 'Star a dataset, analysis or dashboard and it stays here, across every project.',
+          line: 'Star a dataset or dashboard and it stays here, across every project.',
         }),
       );
   }
@@ -323,7 +318,7 @@ function paintHome(): void {
           variant: 'recent',
           glyph: '◴',
           title: 'Your work will collect here',
-          line: 'Every dataset, analysis and dashboard you open shows up in this list — newest first, across all projects.',
+          line: 'Every dataset and dashboard you open shows up in this list — newest first, across all projects.',
           actionLabel: 'Bring in some data',
           // The same door the quick-start row opens, so the empty state ends in
           // the action it is describing rather than in advice.
@@ -365,9 +360,6 @@ async function openRecentItem(it: any): Promise<void> {
   } else if (it.type === 'analysis') {
     selectSection('analyses');
     if (typeof openAnalysis === 'function') openAnalysis(String(it.id));
-  } else if (it.type === 'dashboard') {
-    selectSection('dashboards');
-    if (typeof openDashboard === 'function') openDashboard(String(it.id));
   }
 }
 

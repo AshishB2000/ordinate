@@ -3,7 +3,7 @@
 // Part B's headline: a chat answer that produced a chart can be turned into
 // real, saved, editable work with one click. The proposal engine (dockPropose.ts)
 // now mounts into Ask's transcript (#xp-messages) as well as the dock, and its
-// chart card carries a "Turn into analysis" button that runs saveVisual +
+// chart card carries a "Turn into dashboard" button that runs saveVisual +
 // analysis:create and then NAVIGATES to the new record.
 //
 // A smoke run has no model, so the model-backed suggestion IPC can never draw a
@@ -99,7 +99,7 @@ async function main(): Promise<void> {
     Boolean(chartData && chartData.data && Array.isArray(chartData.data.labels) && chartData.data.labels.length > 0),
     JSON.stringify(chartData));
 
-  // ── The Ask chart card offers "Turn into analysis", and it works ────────
+  // ── The Ask chart card offers "Turn into dashboard", and it works ────────
   const encoding = { category: 'month', values: [{ column: 'amount', aggregation: 'sum' }] };
   const analysisQ = 'Amount by month as an analysis';
   const analysesBefore = (await listAnalyses(seeded.projectId)).length;
@@ -111,19 +111,19 @@ async function main(): Promise<void> {
   await win.waitForSelector('#xp-messages .dk-proposal .dk-proposal-chart canvas', { timeout: 8000 });
   ok('the engine mounts a chart card into Ask (#xp-messages), not only the dock',
     (await win.locator('#xp-messages .dk-proposal .dk-proposal-chart canvas').count()) > 0);
-  const turnBtn = win.locator('#xp-messages .dk-proposal').last().locator('button', { hasText: 'Turn into analysis' });
-  ok('the chart card offers "Turn into analysis" beside Save', (await turnBtn.count()) === 1);
+  const turnBtn = win.locator('#xp-messages .dk-proposal').last().locator('button', { hasText: 'Turn into dashboard' });
+  ok('the chart card offers "Turn into dashboard" beside Save', (await turnBtn.count()) === 1);
 
   await turnBtn.click();
   // Success NAVIGATES to Analyses and opens the new record in focus mode
   // (openAnalysis → openAnalysisFrom → body.an-focus): the user SEES the result.
   await win.waitForFunction(() => document.querySelector('.hub-body')?.getAttribute('data-section') === 'analyses'
     && document.body.classList.contains('an-focus'), { timeout: 10_000 });
-  ok('…clicking it navigates to Analyses and opens the new analysis (the user SEES it)', true);
+  ok('…clicking it navigates to Dashboards and opens the new dashboard (the user SEES it)', true);
 
   const after = await listAnalyses(seeded.projectId);
   const newAn = after.find((a: any) => a.name === analysisQ);
-  ok('a NEW analysis, named from the QUESTION, was written to disk',
+  ok('a NEW dashboard, named from the QUESTION, was written to disk',
     after.length === analysesBefore + 1 && Boolean(newAn),
     `${analysesBefore} -> ${after.length}: ${after.map((a: any) => a.name).join(', ')}`);
   const full: any = newAn ? await app.evaluate(async (_m, args: any) => {

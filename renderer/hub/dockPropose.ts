@@ -437,7 +437,7 @@ function dkRenderChartCard(datasetId: string, question: string, option: any, dat
   // from. On success we navigate away, so there is nothing to finish() — the
   // card leaves with the section change; on failure we re-enable and toast,
   // matching the two buttons above (the answer itself still stands).
-  const analyse = dkMkBtn('Turn into analysis', false, () => {
+  const analyse = dkMkBtn('Turn into dashboard', false, () => {
     void (async () => {
       if (!currentProjectId) return;
       analyse.disabled = true;
@@ -449,7 +449,7 @@ function dkRenderChartCard(datasetId: string, question: string, option: any, dat
       }
       if (!done) {
         analyse.disabled = false;
-        showToast('Could not turn that into an analysis.');
+        showToast('Could not turn that into a dashboard.');
         return;
       }
       // Navigated to the new analysis — tear the card down so no leaked chart

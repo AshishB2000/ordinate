@@ -268,16 +268,6 @@ declare global {
         | { ok: true; rows: Record<string, string | number | null>[]; rowCount: number; truncated: boolean }
         | { ok: false; error: string }
       >;
-      // ── Dashboards (a grid of cards — visual/text/metric — across pages) ──
-      listDashboards(projectId: string): Promise<any[]>;
-      getDashboard(projectId: string, id: string): Promise<any>;
-      saveDashboard(payload: { projectId: string; name: string; pages?: any; filters?: any }): Promise<any>;
-      updateDashboard(
-        projectId: string,
-        id: string,
-        patch: { name?: string; pages?: any; filters?: any },
-      ): Promise<any>;
-      deleteDashboard(projectId: string, id: string): Promise<{ ok: boolean }>;
       // Channel `analysis:draft` (the old `dashboard:draft` was deleted, not
       // aliased). Phase E widened the reply to
       //   { ok, name, rationale, sheets: [{ name, visuals: VisualPreview[] }],
@@ -310,16 +300,6 @@ declare global {
         patch: { name?: string; sheets?: any; filters?: any },
       ): Promise<any>;
       deleteAnalysis(projectId: string, id: string): Promise<{ ok: boolean }>;
-      // Channel `analysis:publish` — snapshots the analysis into a dashboard
-      // (each visual's DEFINITION copied by value; data stays live).
-      publishAnalysis(
-        projectId: string,
-        id: string,
-        opts?: { dashboardId?: string; name?: string },
-      ): Promise<any>;
-      analysisForDashboard(projectId: string, dashboardId: string): Promise<any>;
-      summarizeDashboard(projectId: string, id: string): Promise<any>;
-      explainDashboardAnomalies(projectId: string, id: string): Promise<any>;
       computeMetric(
         projectId: string,
         datasetId: string,

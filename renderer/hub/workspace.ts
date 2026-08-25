@@ -109,10 +109,9 @@ function selectSection(section: string): void {
   if (section === 'sources' && typeof refreshConnectionList === 'function') refreshConnectionList();
   // Refresh the saved-visuals list when the Visuals section becomes active (visuals.ts).
   if (section === 'visuals' && typeof refreshVisualList === 'function') refreshVisualList();
-  // Refresh the analyses list when the Analyses section becomes active (analyses.ts).
+  // Refresh the dashboards list when the Dashboards section becomes active
+  // (analyses.ts — the section id stays "analyses" internally).
   if (section === 'analyses' && typeof refreshAnalysisList === 'function') refreshAnalysisList();
-  // Refresh the saved-dashboards list when the Dashboards section becomes active (dashboards.ts).
-  if (section === 'dashboards' && typeof refreshDashboardList === 'function') refreshDashboardList();
   // Repaint Explore's jump strip + composer state when it becomes active (explore.ts).
   if (section === 'explore' && typeof refreshExplore === 'function') void refreshExplore();
   // Reload the connector catalogue when Connect becomes active (connections.ts).

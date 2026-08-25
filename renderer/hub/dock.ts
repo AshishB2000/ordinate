@@ -280,24 +280,9 @@ function dkContextRef(): { kind: string; id: string; label: string } {
     }
     return { kind: '', id: '', label: 'whole project' };
   }
-  if (currentSection === 'dashboards') {
-    if (typeof dashCurrent !== 'undefined' && dashCurrent && dashCurrent.id && dashMode === 'dashboard') {
-      const name = dashCurrent.name ? String(dashCurrent.name) : 'open dashboard';
-      return { kind: 'dashboard', id: String(dashCurrent.id), label: 'dashboard · ' + name };
-    }
-    return { kind: '', id: '', label: 'whole project' };
-  }
-  // 'analyses' (and anything else) — deliberately whole project, even though
-  // dashCurrent/dashMode === 'analysis' may point at an open analysis record.
-  // Verified src/ipc/copilot.ts's buildFacts() dispatches ONLY on
-  // kind === 'dataset' | 'visual' | 'dashboard' — there is no `analysis`
-  // branch, so a `kind: 'analysis'` context would silently fall through to a
-  // whole-project answer while this header claimed "analysis · X". That is
-  // the exact chip-lies-about-scope bug 498d647 fixed — recreating it here
-  // for a fourth entity kind would be the same mistake with worse cover
-  // (nothing on screen contradicts it, unlike Explore's chip). A real
-  // analysis tier means adding a backend branch in copilot.ts FIRST, not
-  // inferring past its absence.
+  // 'analyses' (now the Dashboards surface) and anything else — deliberately
+  // whole project. Wiring the open dashboard in as dock context would be a
+  // behaviour change, out of scope for this delete-and-relabel.
   return { kind: '', id: '', label: 'whole project' };
 }
 

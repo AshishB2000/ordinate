@@ -31,7 +31,6 @@ const GS_GLYPH: Record<string, string> = {
   dataset: '▦',
   visual: '▮',
   analysis: '◫',
-  dashboard: '▤',
   connection: '⚯',
 };
 
@@ -132,10 +131,6 @@ async function gsOpen(i: number): Promise<void> {
     case 'analysis':
       selectSection('analyses');
       await openAnalysis(h.id);
-      break;
-    case 'dashboard':
-      selectSection('dashboards');
-      await openDashboard(h.id);
       break;
     case 'connection':
       // Connections have no per-record open surface; the panel is the answer.

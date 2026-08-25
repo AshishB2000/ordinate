@@ -68,14 +68,15 @@ Module._load = function (request: string, ...rest: any[]): any {
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const dashboardsStore: typeof import('../src/analysis/dashboards') = require('../src/analysis/dashboards');
+const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const transforms: typeof import('../src/data/transforms') = require('../src/data/transforms');
 const metricValue: typeof import('../src/analysis/metricValue') = require('../src/analysis/metricValue');
 const residentQuery: typeof import('../src/engine/residentQuery') = require('../src/engine/residentQuery');
 const dashboardsIpc: typeof import('../src/ipc/dashboards') = require('../src/ipc/dashboards');
+const ipcCopilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
 
 dashboardsIpc.register();
 const metricHandler = handlers.get('dashboard:metric');
-const summaryHandler = handlers.get('dashboard:summary');
 
 
 function fmt(v: number | null): string {
@@ -392,9 +393,11 @@ async function main(): Promise<void> {
   }
 
   // ── 7. The per-call dataset cache is not defeated ──────────────────────────
-  // computeMetricCards resolves a dataset ONCE per call. Exercised through the
-  // shipped `dashboard:summary` handler, which calls it before asking the model
-  // (and then returns notReady here, since no model is configured).
+  // computeMetricCards (src/ipc/copilot.ts) resolves a dataset ONCE per call.
+  // Exercised through its surviving consumer, buildFacts({kind:'analysis'}):
+  // three metric cards over ONE dataset must hydrate it exactly once. This walk
+  // always hydrates — unlike dashboard:metric it does not take the resident
+  // branch — so the count is 1 regardless of the bridge or the row count.
   {
     const cards = (datasetId: string) => [0, 1, 2].map((i) => ({
       type: 'metric',
@@ -402,23 +405,20 @@ async function main(): Promise<void> {
       metric: { datasetId, column: i === 2 ? 'note' : 'sales', aggregation: i === 1 ? 'avg' : i === 2 ? 'count' : 'sum' },
     }));
 
-    const dSmall = await dashboardsStore.saveDashboard(proj.id, {
-      name: 'small cards', pages: [{ name: 'Page 1', cards: cards(small.id) }],
+    const aSmall = await analysis.saveAnalysis(proj.id, {
+      name: 'small cards', sheets: [{ name: 'Page 1', cards: cards(small.id) }],
     });
     resetSpy();
-    const rSmall = await (summaryHandler as IpcHandler)(null, { projectId: proj.id, id: dSmall!.id });
+    const rSmall = await ipcCopilot.buildFacts(proj.id, { kind: 'analysis', id: aSmall!.id });
     ok('3 metric cards on one small dataset hydrate it exactly once', hydrations === 1);
-    ok('dashboard:summary still answers without a model', rSmall.ok === false);
+    ok('analysis facts still answer with app-computed numbers', rSmall.provenance.kind === 'analysis');
 
-    const dLarge = await dashboardsStore.saveDashboard(proj.id, {
-      name: 'large cards', pages: [{ name: 'Page 1', cards: cards(large.id) }],
+    const aLarge = await analysis.saveAnalysis(proj.id, {
+      name: 'large cards', sheets: [{ name: 'Page 1', cards: cards(large.id) }],
     });
     resetSpy();
-    await (summaryHandler as IpcHandler)(null, { projectId: proj.id, id: dLarge!.id });
-    ok(resident
-      ? '3 metric cards on one resident dataset never hydrate it'
-      : '3 metric cards on one dataset hydrate it exactly once (no bridge)',
-      hydrations === (resident ? 0 : 1));
+    await ipcCopilot.buildFacts(proj.id, { kind: 'analysis', id: aLarge!.id });
+    ok('3 metric cards on one large dataset also hydrate it exactly once', hydrations === 1);
   }
 }
 

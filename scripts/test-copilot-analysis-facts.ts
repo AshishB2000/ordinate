@@ -1,13 +1,10 @@
 // Self-check for ANALYSIS facts — copilot.analysisFacts + the ipc/copilot
-// buildFacts 'analysis' branch. Three things are pinned here:
+// buildFacts 'analysis' branch. Two things are pinned here:
 //   1. an analysis with metric cards yields FACTS carrying the APP-computed
-//      numbers and provenance.kind === 'analysis' (and says "Analysis", naming
-//      its sheets, so a draft is never narrated as a published dashboard);
+//      numbers and provenance.kind === 'analysis', with a per-sheet roster so
+//      "what's on sheet 2" is answerable from the FACTS alone;
 //   2. a card pointing at a MISSING dataset yields null → "n/a" and still
-//      returns usable FACTS — it must not throw;
-//   3. DIFFERENTIAL: the same card set, as an analysis and as a dashboard,
-//      produces the SAME numbers (Object.is) — which is what "Analysis.sheets
-//      and Dashboard.pages differ in name only" (src/analysis.ts) claims.
+//      returns usable FACTS — it must not throw.
 // Like test-copilot.ts we stub the 'electron' module (via Module._load) to point
 // userData at a fresh temp dir, then run the REAL modules against real disk.
 // No framework.
@@ -34,7 +31,6 @@ Module._load = function (request: string, ...rest: any[]): any {
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
-const dashboards: typeof import('../src/analysis/dashboards') = require('../src/analysis/dashboards');
 const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
 const ipcCopilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
 
@@ -102,7 +98,7 @@ async function main(): Promise<void> {
   ok('analysis facts embed the app-computed count (3)', facts.text.includes('City count: 3'));
   ok('provenance.kind is analysis', facts.provenance.kind === 'analysis');
   ok('provenance names the analysis', facts.provenance.name === 'Q3 draft');
-  ok('facts say ANALYSIS, not dashboard', /^Analysis \(/m.test(facts.text.split('\n')[2]));
+  ok('facts open with the header line naming the analysis', /^Dashboard: "Q3 draft" \(/.test(facts.text.split('\n')[2]));
   // A per-sheet roster, not a flat list of names: "what's on sheet 2" has to be
   // answerable from the FACTS alone, or the model has nothing to narrate from.
   ok('facts name the sheets',
@@ -130,19 +126,12 @@ async function main(): Promise<void> {
   const unknown = await ipcCopilot.buildFacts(proj.id, { kind: 'analysis', id: GHOST_DATASET_ID });
   ok('an unknown analysis id falls back to project facts', unknown.provenance.kind === 'project');
 
-  // ── 3. Differential: same cards as an analysis vs. a dashboard ──────────────
-  const d = await dashboards.saveDashboard(proj.id, {
-    name: 'Q3 published',
-    pages: [{ name: 'Overview', cards }, { name: 'Detail', cards: [] }],
-  });
-  const dashFacts = await ipcCopilot.buildFacts(proj.id, { kind: 'dashboard', id: d!.id });
+  // The three metric cards produce three app-computed values (the middle two
+  // real, the third n/a), pulled straight from the FACTS text.
   const an = metricValues(facts.text);
-  const dash = metricValues(dashFacts.text);
-  ok('both surfaces report the same number of metric cards', an.length === 3 && dash.length === 3);
-  ok('analysis and dashboard produce the SAME numbers (Object.is)',
-    an.length === dash.length && an.every((v, i) => Object.is(v, dash[i])));
-  ok('only the framing differs — the dashboard says dashboard',
-    dashFacts.provenance.kind === 'dashboard' && dashFacts.text.includes('Dashboard: "Q3 published"'));
+  ok('the metric cards yield three app-computed values', an.length === 3);
+  ok('the values are the app-computed figures (600, 3, null)',
+    Object.is(an[0], 600) && Object.is(an[1], 3) && Object.is(an[2], null));
 
   // The pure builder agrees with the IPC path it is called from.
   const direct = copilot.analysisFacts(a!, [{ label: 'Total pop', value: 600 }]);

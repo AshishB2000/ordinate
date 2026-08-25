@@ -1,44 +1,32 @@
-// Dashboard persistence — MAIN PROCESS ONLY.
-// One JSON file per dashboard under userData/projects/<projectId>/dashboards/<id>.json,
-// a `dashboards/` sibling of `datasets/` and `visuals/`. A Dashboard is a grid of
-// cards across one or more pages, saved per project. Cards come in four types:
-// visual (references a saved Visual by id), text (heading + body), metric
-// (a dataset column + aggregation → ONE app-computed number, produced only by the
-// pure src/metricValue.ts helper — never stored, never from the model), and
-// control (a dropdown/multi-select/date-range filter widget — this module only
-// carries its DEFINITION; the reader's live selection is never part of the
-// stored record, see src/dashboardFilters.ts's controlSteps for how a selection
-// becomes a FilterStep).
+// Card / Page shapes and their defensive sanitizers — MAIN PROCESS ONLY.
+// The filename is historical (this module once persisted a separate "Dashboard"
+// record; that published-snapshot artifact was deleted when Analyses became the
+// single Dashboard surface). What remains, and what the rest of the app imports
+// from here, is the shared structural vocabulary: the Card/Page/CardLayout/
+// CardMetric/CardVisual/CardControl types and GRID_COLS, plus the sanitizers that
+// clamp untrusted renderer/disk input onto them. An Analysis sheet IS a `Page`;
+// `src/analysis/analysis.ts` re-exports these types and calls sanitizePages /
+// sanitizeDashboardFilters, and `src/ipc/dashboards.ts` uses sanitizeDashboardFilters
+// for the metric-card filter path.
 //
-// Mirrors src/visuals.ts / src/datasets.ts conventions verbatim: the dual-UUID
-// id-validation guard (BOTH projectId AND dashboard id are UUID-checked before
-// either touches a path, so a dashboard path can never escape
-// userData/projects/<projectId>/dashboards), atomic JSON writes, graceful skip of
-// missing/corrupt files, and a normalize() that fills defaults + re-sanitizes every
-// stored (untrusted) card/page/layout on load.
+// Cards come in four types: visual (references a saved Visual by id), text
+// (heading + body), metric (a dataset column + aggregation → ONE app-computed
+// number, produced only by the pure metricValue.ts helper — never stored, never
+// from the model), and control (a dropdown/multi-select/date-range filter widget —
+// only its DEFINITION lives here; the reader's live selection becomes a FilterStep
+// via dashboardFilters.ts's controlSteps).
 //
-// A dashboard does NOT validate that referenced visualId/datasetId still exist —
-// a dangling reference is handled gracefully at render time (the card shows a
-// placeholder), so deleting a visual/dataset never corrupts a dashboard.
+// A card does NOT validate that referenced visualId/datasetId still exist — a
+// dangling reference is handled gracefully at render time (the card shows a
+// placeholder), so deleting a visual/dataset never corrupts a sheet.
 //
-// ── schema v3: a Card is TWO-SHAPED ────────────────────────────────────────
-// An authoring card (on an analysis sheet, or on a legacy dashboard) REFERENCES
-// a visual by id. A PUBLISHED card carries an inline `CardVisual` — a by-value
-// copy of the Visual's definition taken at publish time. That copy is the whole
-// snapshot guarantee: editing (or deleting) the source Visual afterwards cannot
-// change one byte of the published dashboard.
-//
-// This module therefore takes a VALUE import of ./visuals for its three
+// This module takes a VALUE import of ./visuals for its three CardVisual
 // sanitizers. There is no cycle (visuals.ts imports projects/datasets/transforms
 // and never dashboards), and calling the real sanitizers is deliberate: a
 // CardVisual is untrusted renderer/disk input and duplicating a security
 // whitelist is how whitelists drift.
 
-import * as fs from 'fs';
-import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
-import * as projects from '../app/projects';
 import { sanitizeChartType, sanitizeEncoding, sanitizeOverrides, sanitizeFilters } from './visuals';
 import type { Visual } from './visuals';
 import { sanitizeSteps } from '../data/transforms';
@@ -94,8 +82,9 @@ export interface CardMetric {
  * published dashboard shows current data through a frozen definition.
  *
  * Derived with `Pick<Visual, …>` on purpose: if `Visual` grows a field, this
- * type does not silently acquire it, and the copy site in `analysis:publish` is
- * the one place that has to decide whether a published card should carry it.
+ * type does not silently acquire it. This inline-snapshot shape is vestigial —
+ * nothing populates `card.visual` now that publishing is gone — but the
+ * sanitizer keeps handling it defensively so an old on-disk record never throws.
  */
 export type CardVisual = Pick<
   Visual,
@@ -129,74 +118,12 @@ export interface Page {
   cards: Card[];
 }
 
-export interface Dashboard {
-  id: string;
-  projectId: string;
-  name: string;
-  pages: Page[];
-  // Dashboard-wide row filters (Week 10, schema v2). Reuses the Week 6 transforms
-  // FilterStep so `applyPipeline`/`buildVizData` apply them verbatim. Merged into
-  // every card (dashboard filters first) before aggregation, so one filter drives
-  // all cards — 100% app-computed, strict-number rule intact. A v1 file (no
-  // `filters`) normalizes to [], i.e. behaves exactly as Week 9 (backward-compatible).
-  filters: FilterStep[];
-
-  // ── schema v3: a dashboard is the PUBLISHED SNAPSHOT of an Analysis ────────
-  // `analysisId` is PROVENANCE ONLY. It must NEVER become a lookup — "load the
-  // analysis to render the dashboard" would destroy the snapshot guarantee, and
-  // a published dashboard has to render with its analysis deleted. null = a
-  // legacy standalone dashboard, or one created before its analysis existed.
-  analysisId: string | null;
-  // When this snapshot was taken; null on a legacy record.
-  publishedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  schemaVersion: 3;
-}
-
-export interface DashboardSummary {
-  id: string;
-  name: string;
-  pageCount: number;
-  /**
-   * Tiles across every page. FREE: listDashboards has already read and
-   * normalized the whole record to get pageCount, so this is a sum over data
-   * already in memory — no extra file read, no lookup, and still nothing is
-   * opened or computed. Home shows it so a dashboard row says how much is in
-   * there rather than just its name.
-   */
-  cardCount: number;
-  updatedAt: string;
-  /**
-   * Provenance, carried into the summary so the LIST can mark a record
-   * read-only without opening it. Still never a lookup — nothing loads the
-   * analysis to render or describe a dashboard.
-   */
-  analysisId: string | null;
-  publishedAt: string | null;
-}
-
-let projectsBase: string | null = null;
-
-function getProjectsBase(): string {
-  if (!projectsBase) projectsBase = path.join(app.getPath('userData'), 'projects');
-  return projectsBase;
-}
-
 // Ids arrive from the renderer over IPC. Validate the SHAPE before either id ever
 // reaches a filesystem path — an id like ".." would otherwise escape the project's
 // dashboards dir. Copied verbatim from visuals.ts.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function isValidId(id: unknown): id is string {
   return typeof id === 'string' && UUID_RE.test(id);
-}
-
-function dashboardsDir(projectId: string): string {
-  return path.join(getProjectsBase(), projectId, 'dashboards');
-}
-
-function dashboardFilePath(projectId: string, id: string): string {
-  return path.join(dashboardsDir(projectId), id + '.json');
 }
 
 const CARD_TYPES: ReadonlySet<string> = new Set(['visual', 'text', 'metric', 'control']);
@@ -210,17 +137,6 @@ const METRIC_FORMATS: ReadonlySet<string> = new Set([
   'percent',
   'currency',
 ]);
-
-// Atomic JSON write: temp sibling then rename (atomic on same fs). Copied from
-// visuals.ts.
-async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
-  // Unique tmp per write: a fixed name lets two overlapping writes to the same
-  // record share one temp path and interleave into a corrupt file (or ENOENT on
-  // the second rename). A per-write suffix degrades the race to clean last-writer-wins.
-  const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
-  await fs.promises.rename(tmp, file); // atomic on same fs
-}
 
 // ── Defensive whitelisting (never throw — "keep known keys, clamp, drop rest") ──
 
@@ -422,184 +338,4 @@ export function sanitizePages(raw: unknown): Page[] {
 // (This module does import visuals.ts as of v3, for the CardVisual sanitizers.)
 export function sanitizeDashboardFilters(raw: unknown): FilterStep[] {
   return sanitizeSteps(raw).filter((s): s is FilterStep => s.type === 'filter');
-}
-
-// Basic shape validation for a parsed dashboard.json (skips corrupt files).
-function isValidDashboard(data: any): boolean {
-  return Boolean(data) && typeof data.id === 'string' && data.id.length > 0;
-}
-
-// Coerce a parsed object into a well-formed Dashboard (fills defaults, guarantees
-// schemaVersion 1 + ≥1 page, and re-sanitizes every card on load).
-//
-// v1/v2 → v3 IS AN IN-MEMORY UPGRADE THAT WRITES NOTHING. This is the same
-// contract v1→v2 already had for `filters` ("absent (v1) → []"), and it is what
-// lets the implicit-analysis wrap be triggered by an EDIT rather than by a read:
-// listing and opening a legacy dashboard leave the bytes on disk untouched, and
-// the file stays v2 until something actually writes it.
-function normalize(data: any, projectId: string): Dashboard {
-  const createdAt = data.createdAt || new Date().toISOString();
-  return {
-    id: String(data.id),
-    projectId,
-    name: typeof data.name === 'string' && data.name.trim() ? data.name : 'Untitled dashboard',
-    pages: sanitizePages(data.pages),
-    filters: sanitizeDashboardFilters(data.filters), // absent (v1) → []
-    analysisId: isValidId(data.analysisId) ? data.analysisId : null, // absent (v1/v2) → null
-    publishedAt: typeof data.publishedAt === 'string' && data.publishedAt ? data.publishedAt : null,
-    createdAt,
-    updatedAt: data.updatedAt || createdAt,
-    schemaVersion: 3,
-  };
-}
-
-// No-op stub kept for symmetry with visuals.init(). The per-project dashboards/
-// dir is created lazily on first saveDashboard.
-export async function init(): Promise<void> {
-  // Intentionally empty — per-project dashboards/ dirs are created on demand.
-}
-
-// Return summaries for a project's dashboards, newest-updated first. Skips
-// corrupt/missing files quietly (ENOENT silent; real damage logged).
-export async function listDashboards(projectId: string): Promise<DashboardSummary[]> {
-  if (!isValidId(projectId)) return [];
-  const dir = dashboardsDir(projectId);
-  let dirents;
-  try {
-    dirents = await fs.promises.readdir(dir, { withFileTypes: true });
-  } catch (_) {
-    return []; // no dashboards dir yet
-  }
-
-  const out: DashboardSummary[] = [];
-  for (const dirent of dirents) {
-    if (!dirent.isFile() || !dirent.name.endsWith('.json')) continue;
-    const id = dirent.name.slice(0, -'.json'.length);
-    if (!isValidId(id)) continue; // skip stray/tmp files
-    try {
-      const raw = await fs.promises.readFile(dashboardFilePath(projectId, id), 'utf8');
-      const data = JSON.parse(raw);
-      if (!isValidDashboard(data)) continue;
-      const d = normalize(data, projectId);
-      out.push({
-        id: d.id,
-        name: d.name,
-        pageCount: d.pages.length,
-        cardCount: d.pages.reduce((n, page) => n + page.cards.length, 0),
-        updatedAt: d.updatedAt,
-        analysisId: d.analysisId,
-        publishedAt: d.publishedAt,
-      });
-    } catch (err: any) {
-      if (err.code !== 'ENOENT') {
-        console.error('[dashboards] Skipping corrupt or unreadable dashboard:', id, err.message);
-      }
-    }
-  }
-
-  out.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  return out;
-}
-
-// Load a single dashboard. Returns null if either id is invalid, or the file is
-// missing/corrupt.
-export async function getDashboard(projectId: string, id: string): Promise<Dashboard | null> {
-  if (!isValidId(projectId) || !isValidId(id)) return null;
-  try {
-    const raw = await fs.promises.readFile(dashboardFilePath(projectId, id), 'utf8');
-    const data = JSON.parse(raw);
-    if (!isValidDashboard(data)) return null;
-    return normalize(data, projectId);
-  } catch (_) {
-    return null;
-  }
-}
-
-// Create a new dashboard file. Id is generated (never derived from the name).
-// Rejects (returns null) when projectId is not a UUID or the parent project does
-// not exist (mirrors saveVisual). Referenced visualId/datasetId are NOT checked —
-// dangling references degrade gracefully at render time. A dashboard always gets
-// at least one page (a default empty page if none supplied).
-export async function saveDashboard(
-  projectId: string,
-  input: { name: string; pages?: unknown; filters?: unknown; analysisId?: unknown; publishedAt?: unknown },
-): Promise<Dashboard | null> {
-  if (!isValidId(projectId)) return null;
-  const parent = await projects.getProject(projectId);
-  if (!parent) return null;
-
-  const id = randomUUID();
-  const now = new Date().toISOString();
-  const dashboard: Dashboard = {
-    id,
-    projectId,
-    name: typeof input.name === 'string' && input.name.trim() ? input.name.trim() : 'Untitled dashboard',
-    pages: sanitizePages(input.pages),
-    filters: sanitizeDashboardFilters(input.filters),
-    analysisId: isValidId(input.analysisId) ? input.analysisId : null,
-    publishedAt: typeof input.publishedAt === 'string' && input.publishedAt ? input.publishedAt : null,
-    createdAt: now,
-    updatedAt: now,
-    schemaVersion: 3,
-  };
-  await fs.promises.mkdir(dashboardsDir(projectId), { recursive: true });
-  await writeJsonAtomic(dashboardFilePath(projectId, id), dashboard);
-  return dashboard;
-}
-
-// Patch an existing dashboard's name and/or full pages array in place, bumping
-// updatedAt. Returns null if either id is invalid or the dashboard doesn't exist.
-//
-// ── A PUBLISHED DASHBOARD IS READ-ONLY, AND IT IS ENFORCED HERE ─────────────
-// `analysisId !== null` means "this file is a snapshot someone published". Any
-// write to it that is not itself a publish is REFUSED (null), no matter which
-// main-process caller made it. The guard lives in the store, not in the
-// renderer, because the renderer's ~600 ms autosave debounce would otherwise
-// overwrite a snapshot the moment a card was nudged — and a renderer-side check
-// is a courtesy, not a guarantee.
-//
-// `opts.publish` is the ONE way past it, and only two callers may set it:
-// `analysis:publish` (writing the new snapshot) and the implicit wrap (stamping
-// provenance onto a legacy dashboard). Neither is a user edit of the snapshot's
-// contents.
-export async function updateDashboard(
-  projectId: string,
-  id: string,
-  patch: { name?: string; pages?: unknown; filters?: unknown; analysisId?: unknown; publishedAt?: unknown },
-  opts: { publish?: boolean } = {},
-): Promise<Dashboard | null> {
-  if (!isValidId(projectId) || !isValidId(id)) return null;
-  const existing = await getDashboard(projectId, id);
-  if (!existing) return null;
-  if (existing.analysisId !== null && !opts.publish) return null; // read-only snapshot
-
-  const updated: Dashboard = {
-    ...existing,
-    name: typeof patch.name === 'string' && patch.name.trim() ? patch.name.trim() : existing.name,
-    pages: patch.pages !== undefined ? sanitizePages(patch.pages) : existing.pages,
-    filters: patch.filters !== undefined ? sanitizeDashboardFilters(patch.filters) : existing.filters,
-    analysisId:
-      patch.analysisId !== undefined
-        ? (isValidId(patch.analysisId) ? patch.analysisId : null)
-        : existing.analysisId,
-    publishedAt:
-      patch.publishedAt !== undefined
-        ? (typeof patch.publishedAt === 'string' && patch.publishedAt ? patch.publishedAt : null)
-        : existing.publishedAt,
-    updatedAt: new Date().toISOString(),
-  };
-  await fs.promises.mkdir(dashboardsDir(projectId), { recursive: true });
-  await writeJsonAtomic(dashboardFilePath(projectId, id), updated);
-  return updated;
-}
-
-// Delete a dashboard file. Returns true on success (force → missing is success).
-export async function deleteDashboard(projectId: string, id: string): Promise<boolean> {
-  if (!isValidId(projectId) || !isValidId(id)) return false;
-  try {
-    await fs.promises.rm(dashboardFilePath(projectId, id), { force: true });
-    return true;
-  } catch (_) {
-    return false;
-  }
 }

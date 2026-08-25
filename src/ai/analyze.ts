@@ -890,43 +890,6 @@ export async function draftDashboard(
   return { ok: true, structure: parsed };
 }
 
-// Week 12 — OPTIONAL prose narration of a dashboard / of detected anomalies. Twins
-// of explainText: both delegate to narrate() (its exact body — guard → single user
-// turn → dispatch → trimmed prose | errBadReply). The caller (ipc/dashboards) builds
-// the FACTS block from app-computed numbers (copilot.dashboardFacts /
-// anomalies.buildAnomaliesFacts); the model only narrates and never recomputes.
-const SUMMARY_SYSTEM_PROMPT =
-  'You are an executive-summary writer for Ordinate. You are given the APP-COMPUTED metric and chart values ' +
-  'of a dashboard as FACTS. Write a short executive summary (2-5 sentences) of what the dashboard shows — the ' +
-  'headline story, standouts, and any risk/concentration worth flagging. Plain prose, no markdown/bullets. ' +
-  'NEVER invent, round, or recompute a figure — cite ONLY the exact numbers given; if a number is not in the ' +
-  'facts, do not state one.';
-const ANOMALY_SYSTEM_PROMPT =
-  'You explain data anomalies for Ordinate. You are given anomalies the APP already detected, each with its ' +
-  'app-computed figures, as FACTS. In plain prose (2-5 sentences, no markdown/bullets) explain what these ' +
-  'anomalies likely mean and what to check — CONTEXTUALIZE them, do not list them mechanically. NEVER invent, ' +
-  'round, or recompute a figure; the app found and measured every anomaly — cite its numbers exactly.';
-
-// Shared prose one-shot (the exact body of explainText, parameterized by prompt +
-// a caller-supplied not_ready message so each action names itself in the hint).
-async function narrate(systemPrompt: string, factsText: string, notReadyMessage: string): Promise<{ ok: true; text: string } | TypedError> {
-  if (!config.executionReady()) {
-    return { ok: false, errorType: 'not_ready', message: notReadyMessage };
-  }
-  const messages: NeutralMsg[] = [{ role: 'user', text: factsText }];
-  const { rawText, error } = await dispatch(systemPrompt, messages);
-  if (error) return error;
-  const text = (rawText || '').trim();
-  if (!text) return errBadReply();
-  return { ok: true, text };
-}
-export async function summarizeDashboard(factsText: string): Promise<{ ok: true; text: string } | TypedError> {
-  return narrate(SUMMARY_SYSTEM_PROMPT, factsText, 'Connect a model in Execution settings to summarize the dashboard.');
-}
-export async function explainAnomalies(factsText: string): Promise<{ ok: true; text: string } | TypedError> {
-  return narrate(ANOMALY_SYSTEM_PROMPT, factsText, 'Connect a model in Execution settings to explain anomalies.');
-}
-
 // Tolerant single-object parse shared by the Week 12 structure wrappers: strip
 // accidental code fences, then slice the first {…last } if the whole text is not
 // clean JSON. Returns the parsed object or null (an array / non-object → null).

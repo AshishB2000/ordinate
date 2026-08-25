@@ -11,7 +11,7 @@
 //      does not change the computed facts.
 //   2. Each kind emits its exact ordered step set, mapping 1:1 to the functions
 //      that ran (dataset: read → compute → quality; visual: read → read →
-//      compute; dashboard: read → compute; unknown → project inventory).
+//      compute; analysis: read → compute; unknown → project inventory).
 //   3. NO emitted step contains a data VALUE — not a cell, not a metric total.
 //      Counts of columns/rows/issues/metrics are facts and are allowed; a value
 //      like the app-computed sum (600) is not, and must never leak into a chip.
@@ -38,7 +38,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
-const dashboards: typeof import('../src/analysis/dashboards') = require('../src/analysis/dashboards');
+const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const datasetStats: typeof import('../src/data/datasetStats') = require('../src/data/datasetStats');
 const ipcCopilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
 
@@ -125,18 +125,18 @@ async function main(): Promise<void> {
     vcap[0].label === 'Read Pop by city' && vcap[1].label === 'Read Cities' && vcap[2].label === 'Built chart data');
   ok('no visual step carries a data value', carriesDataValue(vcap, CELL_VALUES) === null);
 
-  // ── 4. Dashboard ask: read → compute, and the metric TOTAL never leaks ────
+  // ── 4. Analysis ask: read → compute, and the metric TOTAL never leaks ─────
   const cards = [
     { type: 'metric', layout: { x: 0, y: 0, w: 3, h: 2 },
       metric: { datasetId: ds.id, column: 'pop', aggregation: 'sum', label: 'Total pop' } },
     { type: 'metric', layout: { x: 3, y: 0, w: 3, h: 2 },
       metric: { datasetId: ds.id, column: 'city', aggregation: 'count', label: 'City count' } },
   ];
-  const dash = await dashboards.saveDashboard(proj.id, { name: 'City board', pages: [{ name: 'P1', cards }] });
+  const an = await analysis.saveAnalysis(proj.id, { name: 'City board', sheets: [{ name: 'P1', cards }] });
   const dcap: Step[] = [];
-  const dFacts = await ipcCopilot.buildFacts(proj.id, { kind: 'dashboard', id: dash!.id }, (s) => dcap.push(s));
-  ok('dashboard emits exactly read → compute', JSON.stringify(kinds(dcap)) === JSON.stringify(['read', 'compute']), JSON.stringify(kinds(dcap)));
-  ok('…naming the dashboard, then counting the metrics computed (a count, not a total)',
+  const dFacts = await ipcCopilot.buildFacts(proj.id, { kind: 'analysis', id: an!.id }, (s) => dcap.push(s));
+  ok('analysis emits exactly read → compute', JSON.stringify(kinds(dcap)) === JSON.stringify(['read', 'compute']), JSON.stringify(kinds(dcap)));
+  ok('…naming the analysis, then counting the metrics computed (a count, not a total)',
     dcap[0].label === 'Read City board' && dcap[1].label === 'Computed 2 metrics' && dcap[1].count === 2);
   // The app-computed sum (600) IS in the facts the model narrates — and must NOT
   // be in any chip. This is the guardrail the whole feature turns on.

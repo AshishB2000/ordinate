@@ -299,17 +299,10 @@ async function newAnalysis(): Promise<void> {
   if (typeof anCreateWizard === 'function') anCreateWizard(); // analyses.ts
 }
 
-async function newDashboard(): Promise<void> {
-  if (!(await ensureProjectAndOpen())) return;
-  selectSection('dashboards'); // workspace.ts
-  if (typeof handleNewDashboard === 'function') handleNewDashboard(); // dashboards.ts
-}
-
 // Open the +New menu anchored to the button, reusing the shared row-menu popup.
 function openNewMenu(trigger: HTMLElement): void {
   openRowMenu(trigger, [
-    { label: 'Analysis', onClick: () => newAnalysis() },
-    { label: 'Dashboard', onClick: () => newDashboard() },
+    { label: 'Dashboard', onClick: () => newAnalysis() },
     { label: 'Data source', onClick: () => startFromSource('catalog') },
   ]);
 }

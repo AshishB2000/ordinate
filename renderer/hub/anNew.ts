@@ -57,7 +57,7 @@ async function anCreateWizard(): Promise<void> {
   const titles = document.createElement('div');
   const h = document.createElement('div');
   h.className = 'ws-modal-title';
-  h.textContent = 'Create analysis';
+  h.textContent = 'Create dashboard';
   const sub = document.createElement('p');
   sub.className = 'an-wiz-sub';
   titles.appendChild(h);
@@ -142,11 +142,11 @@ async function anCreateWizard(): Promise<void> {
   const nameWrap = document.createElement('label');
   nameWrap.className = 'an-wiz-name';
   const nameLab = document.createElement('span');
-  nameLab.textContent = 'Analysis name';
+  nameLab.textContent = 'Dashboard name';
   const nameIn = document.createElement('input');
   nameIn.type = 'text';
   nameIn.className = 'ws-modal-input';
-  nameIn.placeholder = 'Untitled analysis';
+  nameIn.placeholder = 'Untitled dashboard';
   // Tracks the dataset until the user types their own, then stops fighting them.
   let nameTouched = false;
   nameIn.addEventListener('input', () => { nameTouched = true; });
@@ -166,7 +166,7 @@ async function anCreateWizard(): Promise<void> {
     noneEl.hidden = sets.length !== 0;
     nameWrap.hidden = sets.length === 0;
     if (sets.length === 0) {
-      noneEl.textContent = 'This project has no datasets yet. Create one first — an analysis is built on data.';
+      noneEl.textContent = 'This project has no datasets yet. Create one first — a dashboard is built on data.';
       return;
     }
     if (shown.length === 0) {
@@ -205,7 +205,7 @@ async function anCreateWizard(): Promise<void> {
       [radio, nm, rc, cc, sk, up].forEach((c) => row.appendChild(c));
       row.addEventListener('click', () => {
         selectedId = String(d.id);
-        if (!nameTouched) nameIn.value = String(d.name || '').trim() + ' analysis';
+        if (!nameTouched) nameIn.value = String(d.name || '').trim() + ' dashboard';
         renderRows();
         sync();
       });
@@ -351,8 +351,8 @@ async function anCreateWizard(): Promise<void> {
     pane3.hidden = step !== 3;
     sub.textContent =
       step === 1 ? 'Choose the dataset to build from. You can add more sheets and datasets later.'
-      : step === 2 ? 'Pick a starting layout, or let a model design the whole analysis for you.'
-      : 'Describe the analysis and the AI will draft it. You review everything before it is created.';
+      : step === 2 ? 'Pick a starting layout, or let a model design the whole dashboard for you.'
+      : 'Describe the dashboard and the AI will draft it. You review everything before it is created.';
 
     // Step 3 exists only on the AI route, so the rail dims it otherwise rather
     // than pretending there is a third step everyone has to walk through.
@@ -381,13 +381,13 @@ async function anCreateWizard(): Promise<void> {
     // left to ask, so it says Create rather than marching through a dead step.
     next.textContent =
       step === 1 ? 'Next'
-      : step === 2 ? (startFrom === 'ai' ? 'Next' : 'Create analysis')
+      : step === 2 ? (startFrom === 'ai' ? 'Next' : 'Create dashboard')
       : 'Draft with AI';
     next.disabled = step === 1 ? !selectedId : false;
     if (step === 3) setTimeout(() => ta.focus(), 0);
   }
 
-  const chosenName = (): string => nameIn.value.trim() || 'Untitled analysis';
+  const chosenName = (): string => nameIn.value.trim() || 'Untitled dashboard';
 
   // Non-AI path: create it, open it, then scaffold.
   //
@@ -402,13 +402,12 @@ async function anCreateWizard(): Promise<void> {
       res = await window.hub.createAnalysis({ projectId: currentProjectId, name: chosenName() });
     } catch (_) { res = null; }
     if (!res || res.ok === false || !res.id) {
-      window.alert((res && res.error) || 'Failed to create the analysis.');
+      window.alert((res && res.error) || 'Failed to create the dashboard.');
       return;
     }
     close();
     await refreshAnalysisList();
-    anLastPublishedName = null;
-    openAnalysisFrom(res);
+      openAnalysisFrom(res);
     if (kind === 'kpis' || kind === 'twoup') await applyStarter(kind);
   }
 
@@ -433,7 +432,7 @@ async function anCreateWizard(): Promise<void> {
         intent: ta.value.trim(),
       });
     } catch (_) {
-      res = { ok: false, error: 'Could not draft an analysis.' };
+      res = { ok: false, error: 'Could not draft a dashboard.' };
     }
     next.disabled = false;
     skip.disabled = false;
@@ -449,7 +448,7 @@ async function anCreateWizard(): Promise<void> {
       return;
     }
     if (!res || res.ok === false) {
-      window.alert((res && res.error) || 'Could not draft an analysis.');
+      window.alert((res && res.error) || 'Could not draft a dashboard.');
       return;
     }
     close();
@@ -467,7 +466,7 @@ async function anCreateWizard(): Promise<void> {
   // not a decision, and Next is live immediately.
   if (sets.length === 1) {
     selectedId = String(sets[0].id);
-    nameIn.value = String(sets[0].name || '').trim() + ' analysis';
+    nameIn.value = String(sets[0].name || '').trim() + ' dashboard';
   }
   renderRows();
   sync();
@@ -476,7 +475,7 @@ async function anCreateWizard(): Promise<void> {
 
 async function handleRenameAnalysis(id: string, currentName: string): Promise<void> {
   if (!currentProjectId) return;
-  const name = await promptModal('Rename analysis', currentName || 'Untitled analysis', 'Save');
+  const name = await promptModal('Rename dashboard', currentName || 'Untitled dashboard', 'Save');
   if (name === null) return;
   try {
     await window.hub.renameAnalysis(currentProjectId, id, name);
@@ -496,7 +495,7 @@ async function handleRenameAnalysis(id: string, currentName: string): Promise<vo
 // confirmation says so, because "delete" usually means the opposite.
 async function handleDeleteAnalysis(id: string): Promise<void> {
   if (!currentProjectId) return;
-  if (!window.confirm('Delete this analysis? Dashboards it already published are kept — they are standalone snapshots. This cannot be undone.')) return;
+  if (!window.confirm('Delete this dashboard? This cannot be undone.')) return;
   try {
     await window.hub.deleteAnalysis(currentProjectId, id);
   } catch (_) { /* ignore */ }
@@ -513,11 +512,10 @@ async function openAnalysis(id: string): Promise<void> {
     a = null;
   }
   if (!a) {
-    window.alert('That analysis could not be loaded.');
+    window.alert('That dashboard could not be loaded.');
     await refreshAnalysisList();
     return;
   }
-  anLastPublishedName = null;
   openAnalysisFrom(a);
 }
 
