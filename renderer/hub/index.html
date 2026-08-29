@@ -134,11 +134,12 @@
 
       <!-- primary nav -->
       <nav class="as-nav" aria-label="Sections">
-        <!-- Ask sits ABOVE Home deliberately: asking a question is the
-             fastest route to an answer, so it is the first thing in the nav.
-             The section id 'explore' predates the rename to Ask — ids, the
-             xp- prefix and IPC names all keep the old name on purpose. -->
-        <button class="as-nav-item" type="button" data-section="explore">
+        <!-- Assistant sits ABOVE Home deliberately: asking a question is the
+             fastest route to an answer. It is NOT a section — the standalone Ask
+             page was deleted and its chat now lives in the dock, so this item
+             carries `data-dock-toggle` and workspace.ts toggles the dock in place
+             instead of navigating. -->
+        <button class="as-nav-item" type="button" data-dock-toggle aria-controls="dk-panel">
           <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 3.5l1.7 4.8 4.8 1.7-4.8 1.7L12 16.5l-1.7-4.8L5.5 10l4.8-1.7L12 3.5Z" fill="currentColor"/>
             <path d="M18.2 15.4l.62 1.78 1.78.62-1.78.62-.62 1.78-.62-1.78-1.78-.62 1.78-.62.62-1.78Z" fill="currentColor"/>
@@ -236,17 +237,23 @@
       </div>
     </aside>
 
-    <!-- ── home section — recent / starred, or first-run quick start ──
-         A .ws-panel like the others, toggled by selectSection('home'). Starred
-         (phase 3) and Recent (phase 2) fill in later; until then the first-run
-         block is what shows. -->
+    <!-- ── home section — greeting + ask bar over a two-column body ──
+         A .ws-panel like the others, toggled by selectSection('home'), which
+         paints it via refreshHome() (homeAsk.ts → homeData.ts) and renderRecent()
+         (homePage.ts). Header: greeting/subtitle + New. Hero: the ask bar (opens
+         the DOCK on submit). Body: LEFT = filter pills + Starred + Recent; RIGHT
+         = "Your data" + "Saved visuals". -->
     <section class="ws-panel home-panel" id="home-view" data-section="home">
       <div class="home-scroll">
+        <!-- Header: greeting (homeAsk writes #home-greet/#home-greet-sub) and the
+             +New menu (projects.ts openNewMenu — wiring unchanged). -->
         <div class="home-head">
-          <h1 class="home-title">Home</h1>
+          <div class="home-greet-block">
+            <h1 class="home-greet" id="home-greet">Welcome back</h1>
+            <p class="home-greet-sub" id="home-greet-sub"></p>
+          </div>
           <!-- "+ New" opens a menu of the things a user actually creates
-               (Analysis / Dashboard / data source). Projects are demoted — the
-               front door no longer leads with them; they are still created
+               (Dashboard / data source). Projects are demoted — created
                implicitly on disk. Menu built in projects.ts (openRowMenu). -->
           <button id="home-new-project" class="btn btn-primary" type="button"
             aria-haspopup="true" aria-expanded="false">
@@ -267,113 +274,134 @@
              `npm start` shows. See docs/phase-5/01-toolchain.md. -->
         <div id="svelte-island-host"></div>
 
-        <!-- ── 1. THE ONE DOMINANT ELEMENT ────────────────────────────────
-             Explore. It is the fastest route to an answer and it is already
-             first in the nav, so on Home it gets real presence rather than
-             sharing a weight with five other blocks. This is the ONLY place on
-             the page the accent is allowed to fill a large area — everything
-             below it is neutral, which is what makes this read as the entry
-             point instead of as one more card.
-             Wired by initExplore() (explore.ts), not projects.ts. -->
-        <button class="home-hero" id="home-xp-band" type="button">
-          <span class="home-hero-art" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="30" height="30" fill="none">
-              <path d="M12 3.5l1.7 4.8 4.8 1.7-4.8 1.7L12 16.5l-1.7-4.8L5.5 10l4.8-1.7L12 3.5Z" fill="currentColor"/>
-              <path d="M18.2 15.4l.62 1.78 1.78.62-1.78.62-.62 1.78-.62-1.78-1.78-.62 1.78-.62.62-1.78Z" fill="currentColor"/>
-            </svg>
-          </span>
-          <span class="home-hero-body">
-            <span class="home-hero-eyebrow">Assistant</span>
-            <span class="home-hero-name">Ask for a number, a chart, or a dashboard.</span>
-            <span class="home-hero-sub">The app does the math and shows its work — you get the figures, the steps behind them, and a chart you can keep.</span>
-          </span>
-          <span class="home-hero-cta" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
-              <path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </span>
-        </button>
-
-        <!-- ── 2. QUICK-START ───────────────────────────────────────────────
-             Day-one furniture, so it is one compact row of icon buttons rather
-             than three big cards taking a third of the page on every visit
-             forever. Same data-source contract as the sidebar Connect entries —
-             one listener in projects.ts covers both. The capture button keeps
-             the hotkey affordance: #home-disc-hotkey is rewritten by
-             fillDiscover() with the REAL configured shortcut. -->
-        <div class="home-quick" id="home-firstrun">
-          <span class="home-quick-label">Bring data in</span>
-          <div class="home-quick-row">
-            <button class="home-quick-btn" type="button" data-source="capture">
-              <span class="home-quick-ic" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
-                  <rect x="3.5" y="5" width="13" height="11" rx="1.6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 2.4"/>
-                  <path d="M9 20h11.5V9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-                  <path d="M7 13v-2.5M10 13V9m3 4v-1.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-                </svg>
-              </span>
-              <span class="home-quick-text">Screenshot</span>
-              <kbd id="home-disc-hotkey" class="home-kbd">⌘⌥S</kbd>
-            </button>
-
-            <button class="home-quick-btn" type="button" data-source="file">
-              <span class="home-quick-ic" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
-                  <path d="M6 3h8l4 4v14H6V3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-                  <path d="M14 3v4h4" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-                  <path d="M9 12h6M9 16h6M12 12v4" stroke="currentColor" stroke-width="1.4"/>
-                </svg>
-              </span>
-              <span class="home-quick-text">CSV / Excel</span>
-            </button>
-
-            <button class="home-quick-btn" type="button" data-source="paste">
-              <span class="home-quick-ic" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
-                  <path d="M9 4h6v2.5H9V4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-                  <path d="M15 5.2h3V21H6V5.2h3" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-                  <path d="M9 11h6M9 15h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-                </svg>
-              </span>
-              <span class="home-quick-text">Paste data</span>
-            </button>
-
-            <button class="home-quick-btn" type="button" data-source="postgres">
-              <span class="home-quick-ic" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
-                  <ellipse cx="12" cy="6" rx="7" ry="2.8" stroke="currentColor" stroke-width="1.6"/>
-                  <path d="M5 6v12c0 1.6 3.1 2.8 7 2.8s7-1.2 7-2.8V6M5 12c0 1.6 3.1 2.8 7 2.8s7-1.2 7-2.8" stroke="currentColor" stroke-width="1.6"/>
-                </svg>
-              </span>
-              <span class="home-quick-text">Database</span>
-              <span class="home-quick-count"><span id="firstrun-db-count">33</span> sources</span>
+        <!-- ── THE HERO: the ask bar ─────────────────────────────────────────
+             The one dominant element and the fastest route to an answer.
+             Submitting (Enter or the send button) opens the DOCK and sends the
+             question (homeAsk.ts → dkAsk). The suggestion chips are built from
+             real dataset names and FILL the bar on click, never auto-send. -->
+        <div class="home-ask">
+          <div class="home-ask-bar">
+            <span class="home-ask-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+                <path d="M12 3.5l1.7 4.8 4.8 1.7-4.8 1.7L12 16.5l-1.7-4.8L5.5 10l4.8-1.7L12 3.5Z" fill="currentColor"/>
+                <path d="M18.2 15.4l.62 1.78 1.78.62-1.78.62-.62 1.78-.62-1.78-1.78-.62 1.78-.62.62-1.78Z" fill="currentColor"/>
+              </svg>
+            </span>
+            <input class="home-ask-input" id="home-ask-input" type="text"
+              placeholder="Ask about your data…" aria-label="Ask about your data"
+              autocomplete="off" spellcheck="false" />
+            <button class="home-ask-send" id="home-ask-send" type="button" aria-label="Ask">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
+                <path d="M12 19V6M6 12l6-6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
             </button>
           </div>
+          <!-- homeAsk.ts fills up to 3 starter chips from real dataset names. -->
+          <div class="home-ask-suggests" id="home-ask-suggests" hidden></div>
         </div>
 
-        <!-- ── 3. STARRED ───────────────────────────────────────────────────
-             Compact: it is empty until the user makes it otherwise, so it must
-             not claim height it has not earned. Empty is a DESIGNED state
-             (homePage.ts makeEmptyState), not a sentence in a box. -->
-        <section class="home-sec" id="home-starred">
-          <div class="home-sec-head">
-            <h2 class="home-sec-h">Starred</h2>
-          </div>
-          <div class="home-rows" id="home-starred-rows"></div>
-        </section>
+        <!-- ── TWO-COLUMN BODY ──────────────────────────────────────────────
+             LEFT = filter pills + Starred + Recent (homePage.ts keeps every id
+             here); RIGHT = "Your data" + "Saved visuals" (homeData.ts fills the
+             dynamic halves; the Connect buttons are static so projects.ts's one
+             [data-source] listener wires them). -->
+        <div class="home-cols">
+          <div class="home-col-main">
+            <!-- All / Datasets / Dashboards — a view filter over Recent only
+                 (homePage.ts). Starred is never filtered. -->
+            <div class="home-filter" id="home-filter" role="tablist" aria-label="Filter recent">
+              <button class="home-pill is-active" type="button" data-filter="all" role="tab">All</button>
+              <button class="home-pill" type="button" data-filter="dataset" role="tab">Datasets</button>
+              <button class="home-pill" type="button" data-filter="dashboard" role="tab">Dashboards</button>
+            </div>
 
-        <!-- ── 4. RECENT ────────────────────────────────────────────────────
-             The tall, dense region that carries the page to the bottom
-             (.home-sec--grow takes the remaining height, so neither state
-             dead-ends in white). Rows show what the record IS — rows x columns,
-             sheets, tiles — from metadata recent.ts already had. -->
-        <section class="home-sec home-sec--grow" id="home-recent">
-          <div class="home-sec-head">
-            <h2 class="home-sec-h">Recent<span class="home-sec-count" id="home-recent-count"></span></h2>
-            <button class="home-showall" id="home-showall" type="button" hidden>Show all →</button>
+            <section class="home-sec" id="home-starred">
+              <div class="home-sec-head">
+                <h2 class="home-sec-h">Starred</h2>
+              </div>
+              <div class="home-rows" id="home-starred-rows"></div>
+            </section>
+
+            <section class="home-sec home-sec--grow" id="home-recent">
+              <div class="home-sec-head">
+                <h2 class="home-sec-h">Recent<span class="home-sec-count" id="home-recent-count"></span></h2>
+                <button class="home-showall" id="home-showall" type="button" hidden>Show all →</button>
+              </div>
+              <div class="home-rows" id="home-recent-rows"></div>
+            </section>
           </div>
-          <div class="home-rows" id="home-recent-rows"></div>
-        </section>
+
+          <aside class="home-col-side">
+            <!-- "Your data": the project's datasets (homeData fills
+                 #home-data-list) over the Connect shortcuts. The shortcuts are
+                 static markup so projects.ts wires them and fillConnectorCount /
+                 fillDiscover keep #firstrun-db-count / #home-disc-hotkey. -->
+            <section class="home-card" id="home-data">
+              <div class="home-card-head">
+                <h2 class="home-card-h">Your data</h2>
+              </div>
+              <div class="home-data-list" id="home-data-list"></div>
+              <div class="home-data-connect">
+                <span class="home-quick-label">Connect</span>
+                <div class="home-quick-row">
+                  <button class="home-quick-btn" type="button" data-source="file">
+                    <span class="home-quick-ic" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+                        <path d="M6 3h8l4 4v14H6V3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                        <path d="M14 3v4h4" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                        <path d="M9 12h6M9 16h6M12 12v4" stroke="currentColor" stroke-width="1.4"/>
+                      </svg>
+                    </span>
+                    <span class="home-quick-text">CSV / Excel</span>
+                  </button>
+
+                  <button class="home-quick-btn" type="button" data-source="paste">
+                    <span class="home-quick-ic" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+                        <path d="M9 4h6v2.5H9V4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                        <path d="M15 5.2h3V21H6V5.2h3" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                        <path d="M9 11h6M9 15h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                      </svg>
+                    </span>
+                    <span class="home-quick-text">Paste data</span>
+                  </button>
+
+                  <button class="home-quick-btn" type="button" data-source="postgres">
+                    <span class="home-quick-ic" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+                        <ellipse cx="12" cy="6" rx="7" ry="2.8" stroke="currentColor" stroke-width="1.6"/>
+                        <path d="M5 6v12c0 1.6 3.1 2.8 7 2.8s7-1.2 7-2.8V6M5 12c0 1.6 3.1 2.8 7 2.8s7-1.2 7-2.8" stroke="currentColor" stroke-width="1.6"/>
+                      </svg>
+                    </span>
+                    <span class="home-quick-text">Database</span>
+                    <span class="home-quick-count"><span id="firstrun-db-count">33</span> sources</span>
+                  </button>
+
+                  <button class="home-quick-btn" type="button" data-source="capture">
+                    <span class="home-quick-ic" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+                        <rect x="3.5" y="5" width="13" height="11" rx="1.6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 2.4"/>
+                        <path d="M9 20h11.5V9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M7 13v-2.5M10 13V9m3 4v-1.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                      </svg>
+                    </span>
+                    <span class="home-quick-text">Screenshot</span>
+                    <kbd id="home-disc-hotkey" class="home-kbd">⌘⌥S</kbd>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <!-- "Saved visuals": live thumbnails (homeData reuses vizThumbs.ts).
+                 Hidden by homeData when the project has no visuals. -->
+            <section class="home-card" id="home-viz" hidden>
+              <div class="home-card-head">
+                <h2 class="home-card-h">Saved visuals</h2>
+              </div>
+              <div class="home-viz-strip" id="home-viz-strip"></div>
+            </section>
+          </aside>
+        </div>
       </div>
     </section>
 
@@ -1411,125 +1439,42 @@
     </section>
 
 
-    <!-- ── Ask — the conversational front door ─────────────────────────
-         (Section id 'explore' predates the rename to Ask; ids, the xp-
-         prefix and IPC names keep the old name on purpose — renaming them
-         is churn across workspace.ts and five smoke suites with no
-         user-visible gain.)
-
-         A place, not a dialog: a full-bleed stage carrying the background,
-         with a brand mark, a personal greeting and one floating composer
-         card centred inside it, over a "Jump back in" strip. The stage is
-         edge-aligned with the rest of the app; only the composer is
-         width-capped. -->
-    <section class="ws-panel xp-panel" id="ws-explore" data-section="explore" hidden>
-      <div class="xp-stage">
-        <div class="xp-stage-inner">
-          <!-- The splash's own logo asset — file: is in img-src. Decorative. -->
-          <img class="xp-mark" src="logo.png" width="40" height="40" alt="" aria-hidden="true">
-          <!-- explore.ts writes the time-of-day + name greeting here; this
-               static text is the no-name fallback AND what shows before the
-               app:userName round-trip lands. -->
-          <h1 class="xp-greet" id="xp-greet">What do you want to know?</h1>
-          <!-- Same voice as the Home hero — one product promise, not a slogan
-               per surface. Hidden with the greeting in transcript mode. -->
-          <p class="xp-sub" id="xp-sub">The app does the math and shows its work — you get the figures, the steps behind them, and a chart you can keep.</p>
-          <!-- Empty until the first question; .xp-asked on the panel turns the
-               stage into this scrolling transcript with the composer docked
-               beneath it. One markup tree, two states — not a second view. -->
-          <div class="xp-messages" id="xp-messages"></div>
-          <div class="xp-hint" id="xp-hint" hidden></div>
-          <div class="xp-composer">
-            <!-- The context picker (explorePicker.ts). Search-as-you-type over
-                 the SAME search:query channel the sidebar's box uses; "Whole
-                 project" is pinned at the top as the always-available clear. -->
-            <div class="xp-picker" id="xp-picker" hidden>
-              <input class="xp-picker-q" id="xp-picker-q" type="search"
-                placeholder="Search datasets, visuals, dashboards…"
-                aria-label="Search for something to ask about"
-                autocomplete="off" spellcheck="false" role="combobox"
-                aria-controls="xp-picker-rows" aria-expanded="true" />
-              <div class="xp-picker-rows" id="xp-picker-rows" role="listbox"
-                aria-label="What to ask about"></div>
-            </div>
-            <textarea class="xp-input" id="xp-input" rows="1"
-              placeholder="Connect a model to ask a question…"
-              aria-label="Ask a question about your data" disabled></textarea>
-            <div class="xp-composer-row">
-              <!-- Neither chip is gated on a model: one chooses what you ask
-                   about, the other is how you connect something to ask with. -->
-              <button class="xp-chip" id="xp-context-chip" type="button" aria-haspopup="listbox"
-                ><span class="gs-glyph">◈</span><span class="xp-chip-name">Whole project</span></button>
-              <span class="xp-composer-spacer"></span>
-              <!-- explore.ts repaints this with the active agent's logo + label
-                   + caret (agentIconHTML — the exec buttons' one renderer).
-                   This static text is only the pre-paint state. -->
-              <button class="xp-chip xp-chip-warn" id="xp-model-chip" type="button" aria-haspopup="menu">Connect a model</button>
-              <button class="xp-send" id="xp-send" type="button" aria-label="Send" disabled>
-                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
-                  <path d="M12 19V6M6 12l6-6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-          <!-- Starter suggestions — explore.ts fills up to 3 chips built from
-               REAL dataset names (no model call, no figures: the strings are
-               prompts, the app does the math when one is asked). Clicking
-               fills the composer and focuses it, never auto-sends. Hidden in
-               transcript mode (.xp-asked) and when the project has no data. -->
-          <div class="xp-suggests" id="xp-suggests" hidden></div>
-        </div>
-      </div>
-
-      <div class="xp-jump" id="xp-jump">
-        <div class="xp-jump-head">
-          <!-- Reads "Conversations" once there are any, "Jump back in" while
-               falling back to recent items. explore.ts sets it. -->
-          <h2 class="xp-jump-h" id="xp-jump-h">Jump back in</h2>
-          <div class="xp-jump-actions">
-            <button class="btn btn-sm" type="button" id="xp-new-thread" hidden>New conversation</button>
-            <!-- The hard AI ON/OFF switch. It lived on the retired Copilot panel,
-                 which was the only way to turn it back on — it moves here with
-                 the feature rather than disappearing with the panel. -->
-            <button class="btn btn-sm xp-toggle" type="button" id="xp-ai-toggle" aria-pressed="true">AI: On</button>
-          </div>
-        </div>
-        <div class="xp-jump-rows" id="xp-jump-rows"></div>
-        <p class="xp-jump-empty" id="xp-jump-empty" hidden>Nothing here yet — bring some data in and it will show up.</p>
-      </div>
-    </section>
-
     <!-- ── AI dock — docked, toggleable panel that follows across the app ──
          A sibling of the sidebar/section panels above, not another
          .ws-panel: it does not swap by [data-section], it layers over
          whichever section is showing (dock.ts owns visibility). Pushes the
          layout via `.hub-body`'s existing `display: flex` above ~1100px;
          narrower than that it becomes a fixed overlay with #dk-scrim behind
-         it (hub.css). Same conversation as Explore (the copilot:* thread),
-         with three grounded, reversible, one-click proposal types
-         (dockPropose.ts) and a keyboard-resizable width (#dk-handle,
-         dock.ts) — see docs/superpowers/plans/2026-08-09-ai-dock.md.
+         it (hub.css). It carries the copilot:* thread (multi-thread, with a
+         header switcher and an AI on/off toggle) and three grounded,
+         reversible, one-click proposal types (dockPropose.ts) and a
+         keyboard-resizable width (#dk-handle, dock.ts) — see
+         docs/superpowers/plans/2026-08-09-ai-dock.md.
 
-         TWO entry points: #side-ai-btn (the Agent toggle at the right end
-         of the top bar, wired in workspace.ts) and ⌘L. There used to be a
-         third — #dk-edge, a vertical tab pinned to the window's right edge —
-         and it is gone. It existed because the sidebar, where #side-ai-btn
-         then lived, is hidden in body.an-focus, leaving the tab as the only
-         mouse way in. The top bar is NOT hidden there, so the button itself
-         now covers that case and the second door earned nothing but clutter.
-         (body.cap-focus hides the top bar, but dkAllowed() is false there —
-         the dock is suppressed, not merely unreachable.)
-
-         Explore — the blank-page chat — is a separate surface with its own
-         nav item; these two are not the same thing and are not labelled as if
-         they were. -->
+         The dock is now the ONLY assistant surface — the standalone Ask page
+         was deleted and its chat merged in here. THREE entry points: the
+         "Assistant" nav item (data-dock-toggle, wired in workspace.ts),
+         #side-ai-btn (the Agent toggle at the right end of the top bar) and
+         ⌘L; all funnel through dkToggle(). The Home ask bar is a fourth door —
+         it sends its question straight in via dkAsk(). (An old #dk-edge tab was
+         removed in the top-bar relayout; body.cap-focus hides the top bar, but
+         dkAllowed() is false there — the dock is suppressed, not unreachable.) -->
     <div id="dk-scrim" class="dk-scrim"></div>
     <aside id="dk-panel" class="dk-panel" hidden tabindex="-1" aria-label="Agent">
       <div id="dk-handle" class="dk-handle" role="separator" aria-orientation="vertical"
         tabindex="0" aria-label="Resize AI panel" aria-valuemin="300" aria-valuenow="340"></div>
       <div class="dk-head">
-        <div class="dk-context" id="dk-context">Based on your workspace</div>
+        <button class="dk-thread-title" id="dk-thread-title" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Conversations">
+          <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 5h16v11H8l-4 4V5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+          </svg>
+          <span class="dk-thread-title-text" id="dk-thread-title-text">New conversation</span>
+          <svg class="dk-thread-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
         <div class="dk-head-actions">
+          <button id="dk-ai-toggle" class="dk-ai-toggle" type="button" aria-pressed="true" title="Turn AI off">AI: On</button>
           <button id="dk-new" class="dk-icon-btn" type="button" aria-label="New conversation" title="New conversation">
             <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -1542,6 +1487,8 @@
           </button>
         </div>
       </div>
+      <div class="dk-thread-list" id="dk-thread-list" role="menu" hidden></div>
+      <div class="dk-context" id="dk-context">Based on your workspace</div>
       <div class="dk-hint" id="dk-hint" hidden></div>
       <div class="dk-messages" id="dk-messages"></div>
       <div class="dk-composer">
@@ -2406,8 +2353,13 @@
 <script src="settingsPanels.js"></script>
 <!-- Home's surface (Starred, Recent, the row + empty-state rendering) before
      projects.js, which owns Home's ACTIONS and whose initHome() calls
-     initHomePage(). -->
+     initHomePage(). homeAsk (greeting + ask bar → dkAsk) and homeData ("Your
+     data" + saved-visuals strip) are the other two Home-surface files; they read
+     viz/dock/project globals at CALL time (refreshHome fires from selectSection),
+     so their order relative to those later scripts does not matter. -->
 <script src="homePage.js"></script>
+<script src="homeAsk.js"></script>
+<script src="homeData.js"></script>
 <script src="projects.js"></script>
 <script src="workspace.js"></script>
 <script src="datasets.js"></script>
@@ -2465,30 +2417,28 @@
 <script src="anNew.js"></script>
 <script src="anDraft.js"></script>
 <script src="globalSearch.js"></script>
-<script src="explore.js"></script>
-<script src="explorePicker.js"></script>
-<!-- exploreChart.js was retired in feat/ask-actions: its always-a-chart path
-     under every Ask answer is superseded by the shared proposal engine
-     (dockPropose.js), which Ask now mounts into #xp-messages — one engine, one
-     proposal per turn. -->
-<!-- The AI dock — reads `selectSection`/`wsBodyEl` (workspace.js),
-     `dashReadOnly` (dashboards.js) and `xpAppendBubble`/`xpRenderTurns`
-     (explore.js) at call time, so it loads after all three. -->
+<!-- Shared AI transcript + streaming primitives; loads before every AI mount.
+     (The standalone Ask page — explore.js/explorePicker.js/exploreChart.js — was
+     deleted; the dock is the only assistant surface now. askCore.js holds the
+     transcript/streaming primitives it and dockPropose/askActivity share.) -->
+<script src="askCore.js"></script>
+<!-- The AI dock — the one assistant surface. Reads `selectSection`/`wsBodyEl`
+     (workspace.js), `dashReadOnly` (dashboards.js) and `xpAppendBubble`/
+     `xpRenderTurns` (askCore.js) at call time, so it loads after all three. -->
 <script src="dock.js"></script>
-<!-- Dock proposals (Task 3) — the ONE proposal engine, mounted in two places
-     (#dk-messages here, #xp-messages from Ask). Reads stepSummaryText/
-     applyStepResult/prefillCalcFieldEditor (prepare.js), renderVizInArea/
-     eligibleChartTypes/countNumericSeries (renderResult.js), dashCurrentPage/
-     dashUuid/nextFreeRow/openAnalysis (dashGrid.js), pushCard (dashAdd.js),
-     openSavedDataset (dsExplorer.js), dxSelectTab (dataSection.js) and
-     xpScrollToBottom (explore.js), so it loads after dock.js AND after all of
-     those. -->
+<!-- Dock proposals (Task 3) — the ONE proposal engine, mounted in the dock
+     (#dk-messages). Reads stepSummaryText/applyStepResult/prefillCalcFieldEditor
+     (prepare.js), renderVizInArea/eligibleChartTypes/countNumericSeries
+     (renderResult.js), dashCurrentPage/dashUuid/nextFreeRow/openAnalysis
+     (dashGrid.js), pushCard (dashAdd.js), openSavedDataset (dsExplorer.js),
+     dxSelectTab (dataSection.js) and xpScrollToBottom (askCore.js), so it loads
+     after dock.js AND after all of those. -->
 <script src="dockPropose.js"></script>
 <!-- Ask activity chips (feat/ask-activity) — the live "app showing its work"
-     region for an in-flight ask, mounted into both 'xp-messages' (explore.js)
-     and 'dk-messages' (dock.js). Reads xpScrollToBottom (explore.js); xpSend and
-     dkSend call its helpers at ask time; initAskActivity() (hub.js) wires the
-     one main→renderer subscription. Loads after explore.js and dock.js. -->
+     region for an in-flight ask, mounted into 'dk-messages' (dock.js). Reads
+     xpScrollToBottom (askCore.js); dkSend calls its helpers at ask time;
+     initAskActivity() (hub.js) wires the one main→renderer subscription. Loads
+     after dock.js. -->
 <script src="askActivity.js"></script>
 <!-- hub.ts was 2051 lines; these five are it, split by job (.claude/rules/file-size.md).
      ORDER IS LOAD-BEARING among them, for the same reason it is for the group above:

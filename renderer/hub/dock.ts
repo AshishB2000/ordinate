@@ -416,6 +416,11 @@ function dkNudgeCanvasResize(): void {
 // empty-state node, same as Explore.
 
 let dkBusy = false; // guards against a re-entrant send while one is in flight
+// The thread the dock is showing. '' → the project's most-recent thread (main
+// resolves an absent id to it). The dock is now multi-thread like the retired
+// Assistant page — "New conversation" starts a PARALLEL thread (copilotNewThread)
+// rather than wiping the one (the old copilotClear).
+let dkThreadId = '';
 
 function dkSetComposerEnabled(enabled: boolean): void {
   const input = document.getElementById('dk-input') as HTMLTextAreaElement | null;
@@ -445,9 +450,116 @@ async function dkLoadHistory(): Promise<void> {
   if (!currentProjectId) { xpRenderTurns([], 'dk-messages'); return; }
   let res: any = null;
   try {
-    res = await window.hub.copilotHistory(currentProjectId);
+    res = await window.hub.copilotHistory(currentProjectId, dkThreadId || undefined);
   } catch (_) { res = null; }
+  if (res && res.ok && typeof res.threadId === 'string') dkThreadId = res.threadId;
   xpRenderTurns(res && res.ok && Array.isArray(res.turns) ? res.turns : [], 'dk-messages');
+  dkRenderThreadTitle();
+}
+
+// ── Thread title + switcher (the multi-thread model, rehomed from the page) ──
+// The header shows the active conversation's title (its first user turn, the way
+// main titles a thread) and, on click, this project's conversations to switch to.
+function dkRenderThreadTitle(): void {
+  const el = document.getElementById('dk-thread-title-text');
+  if (!el) return;
+  const first = document.querySelector('#dk-messages .xp-msg-user .xp-bubble') as HTMLElement | null;
+  const t = first && first.textContent ? first.textContent.trim() : '';
+  el.textContent = t ? (t.length > 40 ? t.slice(0, 40) + '\u2026' : t) : 'New conversation';
+}
+
+function dkMakeThreadRow(t: any): HTMLElement {
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = 'dk-thread-row';
+  row.setAttribute('role', 'menuitem');
+  if (String(t.id || '') === dkThreadId) row.classList.add('is-active');
+  const name = document.createElement('span');
+  name.className = 'dk-thread-row-name';
+  name.textContent = t.title || 'Conversation';
+  const meta = document.createElement('span');
+  meta.className = 'dk-thread-row-meta';
+  const n = typeof t.turnCount === 'number' ? t.turnCount : 0;
+  meta.textContent = n === 1 ? '1 turn' : n + ' turns';
+  row.append(name, meta);
+  row.addEventListener('click', () => void dkOpenThread(String(t.id || '')));
+  return row;
+}
+
+async function dkRenderThreadList(): Promise<void> {
+  const host = document.getElementById('dk-thread-list');
+  if (!host || !currentProjectId) return;
+  host.textContent = '';
+  let threads: any[] = [];
+  try {
+    const res: any = await window.hub.copilotThreads(currentProjectId);
+    if (res && res.ok && Array.isArray(res.threads)) threads = res.threads;
+  } catch (_) { threads = []; }
+  if (!threads.length) {
+    const empty = document.createElement('div');
+    empty.className = 'dk-thread-empty';
+    empty.textContent = 'No past conversations yet.';
+    host.appendChild(empty);
+    return;
+  }
+  threads.forEach((t) => host.appendChild(dkMakeThreadRow(t)));
+}
+
+function dkSetThreadListOpen(open: boolean): void {
+  const list = document.getElementById('dk-thread-list');
+  const title = document.getElementById('dk-thread-title');
+  if (list) list.hidden = !open;
+  if (title) title.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+async function dkToggleThreadList(): Promise<void> {
+  const list = document.getElementById('dk-thread-list');
+  if (!list) return;
+  const willOpen = Boolean(list.hidden);
+  if (willOpen) await dkRenderThreadList();
+  dkSetThreadListOpen(willOpen);
+}
+
+async function dkOpenThread(id: string): Promise<void> {
+  if (!id) return;
+  dkThreadId = id;
+  dkSetThreadListOpen(false);
+  if (typeof dkClearProposal === 'function') dkClearProposal();
+  await dkLoadHistory();
+}
+
+// ── AI on/off — the one control that turns config.copilotEnabled back on ─────
+// Rehomed from the retired page. Always clickable, even while the composer is
+// disabled (that is the whole point — it is the way back on).
+function dkPaintAiToggle(enabled: boolean): void {
+  const btn = document.getElementById('dk-ai-toggle') as HTMLButtonElement | null;
+  if (!btn) return;
+  btn.textContent = enabled ? 'AI: On' : 'AI: Off';
+  btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+  btn.title = enabled ? 'Turn AI off' : 'Turn AI on';
+  btn.classList.toggle('dk-ai-toggle--off', !enabled);
+}
+
+async function dkToggleAi(): Promise<void> {
+  let status: any = {};
+  try { status = (await window.hub.getKeyStatus()) || {}; } catch (_) { status = {}; }
+  const next = status.copilotEnabled === false; // flip
+  try { await window.hub.setCopilotEnabled(next); } catch (_) { /* dkRefresh re-reads truth */ }
+  await dkRefresh();
+}
+
+// Entry point for the Home ask bar: open the dock and send the question.
+async function dkAsk(question: string): Promise<void> {
+  const q = (question || '').trim();
+  if (!q) return;
+  dkSetOpen(true);
+  // dkSetOpen → dkSync fires an ASYNC history reload (void dkRefresh) when the
+  // dock has just become visible. Await a reconcile here first, or that reload
+  // lands mid-send and wipes the optimistic bubbles dkSend is about to append.
+  await dkRefresh();
+  const input = document.getElementById('dk-input') as HTMLTextAreaElement | null;
+  if (input) input.value = q;
+  await dkSend();
 }
 
 async function dkSend(): Promise<void> {
@@ -483,7 +595,7 @@ async function dkSend(): Promise<void> {
 
   let res: any = null;
   try {
-    res = await window.hub.copilotAsk(currentProjectId, { kind: ref.kind, id: ref.id }, question, undefined, askId);
+    res = await window.hub.copilotAsk(currentProjectId, { kind: ref.kind, id: ref.id }, question, dkThreadId || undefined, askId);
   } catch (_) {
     res = { ok: false, error: 'Something went wrong. Try again.' };
   }
@@ -493,6 +605,8 @@ async function dkSend(): Promise<void> {
 
   if (res && res.ok) {
     // Rebuild from disk truth — main persisted both turns on success.
+    if (typeof res.threadId === 'string') dkThreadId = res.threadId;
+    dkRenderThreadTitle();
     dkSetComposerEnabled(true);
     if (Array.isArray(res.turns)) xpRenderTurns(res.turns, 'dk-messages');
     else await dkLoadHistory();
@@ -519,20 +633,17 @@ async function dkSend(): Promise<void> {
   }
 }
 
-/**
- * "New conversation" clears the ONE thread this project has — the same
- * thread Explore reads (copilot:clear). That means it also empties Explore,
- * not just this panel, so it confirms first rather than silently wiping a
- * conversation the user may still want from there.
- */
+// "New conversation" starts a PARALLEL thread — non-destructive. The previous
+// thread stays on disk and in the switcher; nothing is wiped, so no confirm.
 async function dkNew(): Promise<void> {
   if (!currentProjectId) return;
-  if (!window.confirm('Start a new conversation? This clears the AI chat everywhere it appears — including Explore. This cannot be undone.')) return;
   try {
-    await window.hub.copilotClear(currentProjectId);
-  } catch (_) { /* ignore */ }
+    const res: any = await window.hub.copilotNewThread(currentProjectId);
+    dkThreadId = res && res.ok && res.thread ? String(res.thread.id) : '';
+  } catch (_) { dkThreadId = ''; }
   xpRenderTurns([], 'dk-messages');
   if (typeof dkClearProposal === 'function') dkClearProposal();
+  dkRenderThreadTitle();
 }
 
 // Reconcile the composer with project/readiness state and reload history.
@@ -547,6 +658,7 @@ async function dkRefresh(): Promise<void> {
 
   if (!currentProjectId) {
     if (newBtn) newBtn.disabled = true;
+    dkThreadId = '';
     xpRenderTurns([], 'dk-messages');
     // xpRenderTurns only removes `.xp-msg` — a proposal card left over from
     // the closed project is a `.dk-proposal`, so without this its Apply
@@ -566,10 +678,11 @@ async function dkRefresh(): Promise<void> {
   } catch (_) { status = {}; }
   const enabled = status.copilotEnabled !== false;
   const ready = Boolean(status.isReady);
+  dkPaintAiToggle(enabled);
 
   if (!enabled) {
     dkSetComposerEnabled(false);
-    if (input) input.placeholder = 'AI is off. Turn it back on in Settings to ask a question.';
+    if (input) input.placeholder = 'AI is off. Turn it back on with the AI toggle above.';
     dkShowHint('AI is off. Everything else in Ordinate works exactly as it does now.');
     return;
   }
@@ -637,6 +750,19 @@ function initDock(): void {
   // header comment.
   const newBtn = document.getElementById('dk-new');
   if (newBtn) newBtn.addEventListener('click', () => void dkNew());
+
+  const title = document.getElementById('dk-thread-title');
+  if (title) title.addEventListener('click', () => void dkToggleThreadList());
+  const aiToggle = document.getElementById('dk-ai-toggle');
+  if (aiToggle) aiToggle.addEventListener('click', () => void dkToggleAi());
+  // Close the thread list on any click outside it and its trigger.
+  document.addEventListener('mousedown', (e) => {
+    const list = document.getElementById('dk-thread-list');
+    if (!list || list.hidden) return;
+    const tgt = e.target as Node;
+    if (list.contains(tgt) || (title && title.contains(tgt))) return;
+    dkSetThreadListOpen(false);
+  });
 
   const send = document.getElementById('dk-send');
   if (send) send.addEventListener('click', () => void dkSend());

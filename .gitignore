@@ -248,9 +248,13 @@ scripts/**/*.js
 /src/ipc/search.js
 /renderer/hub/globalSearch.js
 
-# Explore — the conversational front door. Emitted sibling.
-/renderer/hub/explore.js
-/renderer/hub/explorePicker.js
+# Home surface — greeting + ask bar (homeAsk) and the "Your data" + saved-visuals
+# column (homeData), split from homePage.ts to the mockup. Emitted siblings.
+/renderer/hub/homeAsk.js
+/renderer/hub/homeData.js
+
+# Shared AI transcript/streaming primitives (askCore). Emitted sibling.
+/renderer/hub/askCore.js
 
 # The AI dock. Emitted sibling.
 /renderer/hub/dock.js

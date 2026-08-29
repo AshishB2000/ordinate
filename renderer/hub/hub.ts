@@ -73,8 +73,11 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
 // section and is otherwise untouched.
 (function initWorkspaceShell() {
   initWorkspaceRouter(); // workspace.ts — wires the persistent sidebar nav
+  initAskCore();          // askCore.ts — the ONE streaming subscription, shared by every AI mount
   initDock();             // dock.ts — the AI dock shell (⌘L + width var + close/scrim)
-  selectSection('home'); // workspace.ts — Home is the default section
+  initHomeAsk();         // homeAsk.ts — Home greeting + ask bar (before selectSection paints it)
+  initHomeData();        // homeData.ts — Home "Your data" + saved-visuals strip
+  selectSection('home'); // workspace.ts — Home is the default section (paints via refreshHome)
   initHome();            // projects.ts
   initDatasets();        // datasets.ts
   initComposer();        // composer.ts — the full-page create surface
@@ -84,7 +87,6 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
   initDashboards();      // dashboards.ts
   initAnalyses();        // analyses.ts
   initAuthoring();       // authoring.ts — the analysis workbench panels
-  initExplore();         // explore.ts — the conversational front door
   initAskActivity();     // askActivity.ts — live activity chips for an in-flight ask
   initGlobalSearch();    // globalSearch.ts — the sidebar's search box
 })();

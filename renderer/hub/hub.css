@@ -4087,9 +4087,10 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
    The sidebar (search · nav · connect · AI · settings) is ALWAYS present; the
    stage swaps by .hub-body[data-section] and Home is just another .ws-panel,
    so there is no view toggle — JS flips the attribute/classes only (CSP-safe).
-   The legacy .home-view / .home-connect / .home-discover / .ws-nav /
-   .project-card rules further down no longer match any element and are inert;
-   they are removed in a later cleanup, not load-bearing here. */
+   (The dead project-gallery CSS — .home-view / .home-connect / .home-discover /
+   .project-card — was removed with the gallery itself; the shared .project-card-popup
+   row menu stays because the +New and Analyses menus still use it. The Home
+   surface proper lives in its own block far below.) */
 
 /* ── persistent sidebar ─────────────────────────────────────────────────── */
 .app-sidebar {
@@ -4272,151 +4273,15 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 /* ── HOME section — recent / starred, over a first-run quick start ────────── */
 .home-panel { overflow: hidden; }
 
-/* ── HOME: the start page ─────────────────────────────────────────────────
-   Three panes: Connect rail | Open + Quick start | Discover. The rail and the
-   Discover panel drop out on narrow windows so the centre column is never
-   squeezed to nothing — the hub has no minimum width and users do make it
-   small. Each pane scrolls on its own; the section itself does not. */
-.home-view {
-  /* Still a flex CHILD of .win even though its own display is grid — without
-     flex:1 the section collapses to content height and the panes stop partway
-     down the window. */
-  flex: 1;
-  min-height: 0;
-  grid-template-columns: 232px minmax(0, 1fr) 280px;
-  overflow: hidden;
-  background: var(--bg);
-}
-
-/* LEFT — Connect. Uses the app's own surfaces and accent, NOT a slab of colour
-   borrowed from another product: it has to read as part of Ordinate in both
-   themes, and a hardcoded dark rail would look pasted on in light mode.
-   Shares --bg with the centre column and is set apart by the border alone, so
-   the start page reads as one surface with a divider rather than three tinted
-   slabs — the rail is a list of links, not a region competing for attention. */
-.home-connect {
-  background: var(--bg);
-  border-right: 1px solid var(--border);
-  color: var(--text);
-  padding: 22px 0 24px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-.home-connect-title {
-  font-size: 21px;
-  font-weight: 600;
-  margin: 0;
-  padding: 0 20px;
-  color: var(--text-strong);
-  letter-spacing: -0.01em;
-}
-.home-connect-group { display: flex; flex-direction: column; }
-.home-connect-h {
-  font-size: 11.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  padding: 0 20px 6px;
-}
-.home-connect-item {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  padding: 7px 20px;
-  border: 0;
-  border-left: 2px solid transparent;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: 13.5px;
-  text-align: left;
-  cursor: pointer;
-}
-.home-connect-item:hover {
-  background: var(--accent-soft);
-  border-left-color: var(--accent);
-  color: var(--text-strong);
-}
-.home-connect-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-/* One accent per source kind, all derived from the app's own accent blue so the
-   rail reads as a family rather than a paint chart. */
-.home-connect-dot { width: 9px; height: 9px; border-radius: 2px; flex: 0 0 auto; }
-.home-dot-file  { background: var(--accent); }
-.home-dot-paste { background: var(--accent); opacity: 0.55; }
-.home-dot-pg    { background: var(--accent); opacity: 0.78; }
-.home-dot-url   { background: var(--accent); opacity: 0.4; }
-.home-dot-cap   { background: var(--accent); opacity: 0.9; }
-.home-connect-note {
-  margin: auto 20px 0;
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-
-/* CENTRE */
-.home-main {
-  min-width: 0;
-  overflow-y: auto;
-  padding: 24px 28px 32px;
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-}
+/* Home header row: greeting block (left) + "+ New" (right). */
 .home-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
 }
-.home-head-actions { display: flex; align-items: center; gap: 10px; }
-.home-search {
-  width: 190px;
-  padding: 6px 10px;
-  font: inherit;
-  font-size: 13px;
-  color: var(--text);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-}
-.home-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.home-section-h {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-strong);
-  margin: 0 0 10px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
-}
-/* RIGHT — Discover. Deliberately LOCAL: no feed, no external fetch. */
-.home-discover {
-  border-left: 1px solid var(--border);
-  background: var(--surface);
-  padding: 24px 20px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.home-discover-title {
-  font-size: 21px;
-  font-weight: 600;
-  color: var(--text-strong);
-  margin: 0 0 2px;
-  letter-spacing: -0.01em;
-}
-.home-disc-card {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 13px 14px;
-}
-.home-disc-h { font-size: 13px; font-weight: 600; color: var(--text-strong); margin-bottom: 5px; }
-.home-disc-p { font-size: 12.5px; line-height: 1.55; color: var(--muted); margin: 0; }
+/* The capture hotkey pill on the Home "Connect" Screenshot button (#home-disc-hotkey,
+   rewritten by fillDiscover() with the real shortcut). */
 .home-kbd {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11.5px;
@@ -4426,94 +4291,8 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   border: 1px solid var(--border);
   color: var(--text);
 }
-.home-disc-link {
-  margin-top: 9px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--accent);
-  font: inherit;
-  font-size: 12.5px;
-  cursor: pointer;
-}
-.home-disc-link:hover { text-decoration: underline; }
-
-@media (max-width: 1040px) {
-  .win[data-view="home"] .home-view { grid-template-columns: 232px minmax(0, 1fr); }
-  .home-discover { display: none; }
-}
-@media (max-width: 820px) {
-  .win[data-view="home"] .home-view { grid-template-columns: minmax(0, 1fr); }
-  .home-connect { display: none; }
-}
-/* .home-title lives with the rest of the Home block further down — this
-   duplicate was fully overridden by it (same selector, same properties, later in
-   the file) and was reporting a size and weight the app had not used for some
-   time. Two rules for one heading is how the drift this change fixes started. */
-.home-sub {
-  font-size: 13px;
-  color: var(--muted);
-  margin: 4px 0 0;
-}
-.home-gallery {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 14px;
-  align-content: start;
-}
-.project-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  position: relative;
-  text-align: left;
-  padding: 16px;
-  border: 1px solid var(--border-2);
-  border-radius: var(--r-lg);
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-  transition: transform 0.12s var(--ease), border-color 0.12s, box-shadow 0.12s;
-}
-.project-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--accent-line);
-  box-shadow: var(--shadow-md);
-}
-.project-card:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; }
-.project-card-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-strong);
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.project-card-time {
-  font-size: 12px;
-  color: var(--text-dim);
-}
-.project-card-menu {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--r-sm);
-  color: var(--text-faint);
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-}
-.project-card-menu:hover { background: var(--surface-3); color: var(--text); }
-.project-card-menu:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-
-/* card ⋯ popup (Rename / Delete) */
+/* Shared row ⋯ popup (Rename / Delete) — still used by the +New menu and the
+   Analyses/encoding row menus (projects.ts openRowMenu). */
 .project-card-popup {
   display: flex;
   flex-direction: column;
@@ -4538,32 +4317,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .project-card-popup-item:hover { background: var(--surface-2); }
 .project-card-popup-danger { color: var(--error); }
 .project-card-popup-danger:hover { background: var(--error-soft); }
-
-/* HOME empty state */
-.home-empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  text-align: center;
-  color: var(--muted);
-}
-.home-empty[hidden] { display: none; }
-.home-empty-mark { color: var(--text-faint); margin-bottom: 4px; }
-.home-empty-h {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-strong);
-  margin: 0;
-}
-.home-empty-sub {
-  font-size: 13px;
-  color: var(--muted);
-  margin: 0 0 8px;
-  max-width: 320px;
-}
 
 /* ── WORKSPACE: left section nav ──────────────────────────────────────────── */
 .ws-nav {
@@ -10352,12 +10105,16 @@ body.cap-focus .cap-back {
   padding: 12px 14px;
   border-bottom: 1px solid var(--border);
 }
+/* The "Based on …" line is now its OWN row under the header (the header carries
+   the thread title + switcher instead), so it must NOT grow into the column —
+   flex:none, with its own horizontal padding since it left .dk-head's. */
 .dk-context {
-  flex: 1 1 auto;
+  flex: none;
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 6px;
+  padding: 10px 14px 0;
   font-size: 12.5px;
   font-weight: 600;
   color: var(--muted);
@@ -10389,6 +10146,103 @@ body.cap-focus .cap-back {
 .dk-icon-btn:hover { background: var(--surface-2); color: var(--text); }
 .dk-icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .dk-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Thread title + switcher ──────────────────────────────────────────────
+   The header's active-conversation title; clicking it opens the thread list
+   popover (#dk-thread-list). It grows to fill the head so .dk-head-actions
+   pins to the right. */
+.dk-thread-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 7px;
+  border: none;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dk-thread-title:hover { background: var(--surface-2); }
+.dk-thread-title:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dk-thread-title .ic { flex: none; color: var(--muted); }
+.dk-thread-title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dk-thread-caret { flex: none; color: var(--text-faint); }
+
+/* The switcher popover — absolute under the head (.dk-panel is position:relative),
+   scrollable, above the transcript. */
+.dk-thread-list {
+  position: absolute;
+  top: 50px;
+  left: 10px;
+  right: 10px;
+  z-index: 8;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+}
+.dk-thread-list[hidden] { display: none; }
+.dk-thread-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 7px 9px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.dk-thread-row:hover { background: var(--surface-2); }
+.dk-thread-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.dk-thread-row.is-active { background: var(--accent-soft); }
+.dk-thread-row.is-active .dk-thread-row-name { color: var(--accent); font-weight: 600; }
+.dk-thread-row-name {
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dk-thread-row-meta { flex: none; font-size: 11px; color: var(--text-faint); }
+.dk-thread-empty { padding: 10px 9px; font-size: 12.5px; color: var(--muted); }
+
+/* ── AI on/off toggle (the one control that turns config.copilotEnabled back
+   on). Always clickable, even while the composer is disabled — that is the way
+   back on. Stated plainly, not alarmingly: running without AI is supported. */
+.dk-ai-toggle {
+  flex: none;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dk-ai-toggle:hover { color: var(--text); border-color: var(--border-3); }
+.dk-ai-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dk-ai-toggle--off { color: var(--text-dim); }
 
 .dk-hint {
   flex: none;
@@ -10659,34 +10513,20 @@ body.cap-focus .cap-back {
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   HOME — the workspace front page.
+   HOME — the workspace front page (rebuilt to the mockup).
 
-   THE PROBLEM THIS SOLVES. Six blocks used to share one treatment: same radius,
-   same 1px hairline, same white/pale-blue fill on a near-white page. Nothing
-   was dominant, so the eye had no entry point; two pale-blue bands sat directly
-   on each other at equal weight and cancelled out; the type scale ran 28px then
-   everything at 13-15px with no middle tier; and one blue did the New button,
-   both band tints, the active nav item and a link, so the accent signalled
-   nothing because it signalled everything.
+   Layout, top to bottom:
+     - a greeting header (.home-greet + .home-greet-sub) with the +New button;
+     - the HERO: one ask bar (.home-ask). Submitting opens the dock and sends
+       (homeAsk.ts → dkAsk); starter chips fill it, never auto-send;
+     - a two-column body (.home-cols): LEFT = filter pills + Starred + Recent;
+       RIGHT = a "Your data" card and a "Saved visuals" strip (.home-card).
 
-   THE FIX IS HIERARCHY, NOT COLOUR. Three rules hold this page together:
-
-     1. ONE dominant element (.home-hero). It is the only large accent field on
-        the page and the only type above 20px besides the page title.
-     2. EVERY other block drops a full step. Quick-start is a compact row of
-        neutral buttons; Starred and Recent are neutral surfaces with no accent
-        at all. The accent's one remaining job is "the way forward" — the hero
-        and the +New button, nothing else.
-     3. THREE PLANES, not one. The page sits on --bg, panels sit on --surface
-        with a hairline, and the hero lifts off both with a shadow. That is what
-        stops six equal rectangles reading as a form.
-
-   TYPE SCALE (the missing middle tier is 20px):
-     30  page title            .home-title
-     20  hero headline         .home-hero-name        <- was absent entirely
-     14  row name / hero sub   .home-row-name
-     12.5 meta, quick-start    .home-row-meta
-     11  section eyebrow       .home-sec-h (uppercase, tracked)
+   HIERARCHY, NOT COLOUR. The accent's one job is "the way forward" — the ask
+   bar's focus ring / send and the +New button, nothing else. Every list and
+   card is a neutral --surface panel with a hairline on the --bg page; the ask
+   bar lifts off both with a shadow so the eye lands on it first. Below ~900px
+   the two columns stack (see the media query at the end of the block).
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .home-scroll {
@@ -10705,93 +10545,207 @@ body.cap-focus .cap-back {
    whatever the window is and the page loses its spine on a wide monitor. */
 .home-scroll > * { max-width: 1080px; width: 100%; margin-inline: auto; }
 
-/* Byte-identical to .ds-h and .viz-h. Home is a section like the other five and
-   does not get its own heavier, larger heading — it was the only 700 and the
-   only 30px in the set. The letter-spacing goes with it: matching means
-   matching, and neither .ds-h nor .viz-h tracks its heading. */
-.home-title {
-  font-size: 18px;
+/* ── Greeting header ─────────────────────────────────────────────────────── */
+.home-greet-block { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.home-greet {
+  font-size: 24px;
   font-weight: 600;
+  letter-spacing: -0.015em;
   color: var(--text-strong);
   margin: 0;
 }
+.home-greet-sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-/* ── 1. The one dominant element ─────────────────────────────────────────── */
-.home-hero {
+/* ── THE HERO: the ask bar ───────────────────────────────────────────────── */
+.home-ask { display: flex; flex-direction: column; gap: 10px; }
+.home-ask-bar {
   display: flex;
   align-items: center;
-  gap: 20px;
-  width: 100%;
-  padding: 26px 26px 26px 24px;
+  gap: 10px;
+  padding: 10px 10px 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-xl);
+  /* The one element that lifts off both planes, so the eye lands here first. */
+  box-shadow: var(--shadow-md);
+  transition: border-color 0.14s var(--ease), box-shadow 0.14s var(--ease);
+}
+.home-ask-bar:focus-within { border-color: var(--accent); box-shadow: var(--shadow-lg); }
+.home-ask-icon { flex: none; display: flex; color: var(--accent); }
+.home-ask-icon svg { display: block; }
+.home-ask-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  font: inherit;
+  font-size: 15px;
+  color: var(--text);
+}
+.home-ask-input::placeholder { color: var(--text-dim); }
+.home-ask-send {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: var(--r-lg);
+  background: var(--accent);
+  color: var(--accent-ink);
+  cursor: pointer;
+  transition: filter 0.12s var(--ease);
+}
+.home-ask-send:hover { filter: brightness(1.06); }
+.home-ask-send:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.home-ask-send svg { display: block; }
+
+/* Starter chips — reuse the retired page's pill look (.xp-suggest), inline. */
+.home-ask-suggests { display: flex; flex-wrap: wrap; gap: 6px; }
+.home-ask-suggests[hidden] { display: none; }
+.home-ask-chip {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-ask-chip:hover { border-color: var(--accent); color: var(--accent); }
+.home-ask-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ── Two-column body ─────────────────────────────────────────────────────── */
+.home-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 22px;
+  /* Columns top-align at their own content height; the whole page scrolls
+     (.home-scroll) rather than either column owning an inner scroll — Recent is
+     already capped to 8 rows with a "Show all". */
+  align-items: start;
+}
+.home-col-main { display: flex; flex-direction: column; gap: 18px; min-width: 0; min-height: 0; }
+.home-col-side { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+
+/* Filter pills — All / Datasets / Dashboards, over the Recent list. */
+.home-filter { display: flex; gap: 6px; }
+.home-pill {
+  padding: 5px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.home-pill:hover { color: var(--text); border-color: var(--border-3); }
+.home-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.home-pill.is-active {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Right-column cards ("Your data", "Saved visuals"). */
+.home-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.home-card[hidden] { display: none; }
+.home-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.home-card-h { font-size: 13px; font-weight: 600; color: var(--text-strong); margin: 0; }
+
+/* "Your data": the dataset list (homeData fills #home-data-list). */
+.home-data-list { display: flex; flex-direction: column; gap: 2px; max-height: 210px; overflow-y: auto; }
+.home-data-empty { font-size: 12.5px; color: var(--muted); margin: 2px 0; }
+.home-data-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: left;
+  padding: 7px 8px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.home-data-row:hover { background: var(--surface-2); }
+.home-data-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.home-data-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-data-meta { font-size: 11.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+
+/* The static Connect shortcuts under the dataset list (reuse .home-quick*). */
+.home-data-connect { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+
+/* "Saved visuals": live thumbnails (homeData reuses vizThumbs.ts). */
+.home-viz-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.home-viz-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  overflow: hidden;
   text-align: left;
   font: inherit;
   cursor: pointer;
-  border: 1px solid transparent;
-  border-radius: var(--r-xl);
-  color: var(--accent-ink);
-  /* A real field of accent, not a 8%-alpha wash. This is the one place on Home
-     allowed to do this, which is precisely what makes it read as the entry
-     point rather than as another card. */
-  background:
-    radial-gradient(120% 160% at 12% 0%, rgba(255, 255, 255, 0.22), transparent 58%),
-    linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
-  box-shadow: var(--shadow-md);
-  transition: transform 0.14s var(--ease), box-shadow 0.14s var(--ease);
+  transition: border-color 0.12s, box-shadow 0.12s;
 }
-.home-hero:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
-.home-hero:active { transform: translateY(0); }
-.home-hero:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 3px; }
+.home-viz-card:hover { border-color: var(--accent-line); box-shadow: var(--shadow-sm); }
+.home-viz-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* The tile reuses .viz-card-tile (aspect-ratio + thumbnail positioning); this
+   only trims the gallery card's larger margins for the strip. */
+.home-viz-tile { margin-bottom: 0; border-bottom: 1px solid var(--border); }
+.home-viz-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-strong);
+  padding: 0 8px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-.home-hero-art {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 52px;
-  height: 52px;
-  border-radius: var(--r-lg);
-  color: var(--accent-ink);
-  background: rgba(255, 255, 255, 0.16);
+/* Stack the two columns on a narrow window — the side cards drop below Recent. */
+@media (max-width: 900px) {
+  .home-cols { grid-template-columns: minmax(0, 1fr); }
 }
-.home-hero-art svg { display: block; }
-.home-hero-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.home-hero-eyebrow {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.72);
-}
-.home-hero-name {
-  font-size: 20px;          /* the middle tier the old scale was missing */
-  /* 600, the app's heading weight. 650 exists in hub.css but only on 11-13.5px
-     labels in the Execution panel — never on a heading this size. */
-  font-weight: 600;
-  letter-spacing: -0.012em;
-  color: var(--accent-ink);
-}
-.home-hero-sub {
-  font-size: 13px;
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.82);
-  max-width: 62ch;
-}
-.home-hero-cta {
-  flex: none;
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--r-full);
-  color: var(--accent-ink);
-  background: rgba(255, 255, 255, 0.18);
-  transition: transform 0.14s var(--ease), background 0.14s var(--ease);
-}
-.home-hero:hover .home-hero-cta { background: rgba(255, 255, 255, 0.3); transform: translateX(2px); }
 
-/* ── 2. Quick-start — day-one furniture, one compact row ─────────────────── */
+/* ── Quick-start row (reused for the "Your data" Connect shortcuts) ───────── */
 .home-quick { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .home-quick[hidden] { display: none; }
 .home-quick-label {
