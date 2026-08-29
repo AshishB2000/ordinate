@@ -101,8 +101,13 @@ function selectSection(section: string): void {
   document.querySelectorAll('.ws-panel').forEach((panel) => {
     (panel as HTMLElement).hidden = (panel as HTMLElement).dataset.section !== section;
   });
-  // Repaint the cross-project Recent list when Home becomes active (projects.ts).
-  if (section === 'home' && typeof renderRecent === 'function') renderRecent();
+  // Repaint Home when it becomes active: the cross-project Recent/Starred list
+  // (homePage.ts) and the greeting + ask bar + data/visuals column (homeAsk.ts's
+  // refreshHome, which also drives homeData.ts).
+  if (section === 'home') {
+    if (typeof renderRecent === 'function') renderRecent();
+    if (typeof refreshHome === 'function') void refreshHome();
+  }
   // Refresh the datasets list when its section becomes active (datasets.ts).
   if (section === 'datasets' && typeof refreshDatasetList === 'function') refreshDatasetList();
   // Refresh the saved-connections list when Sources becomes active (connections.ts).
@@ -112,8 +117,6 @@ function selectSection(section: string): void {
   // Refresh the dashboards list when the Dashboards section becomes active
   // (analyses.ts — the section id stays "analyses" internally).
   if (section === 'analyses' && typeof refreshAnalysisList === 'function') refreshAnalysisList();
-  // Repaint Explore's jump strip + composer state when it becomes active (explore.ts).
-  if (section === 'explore' && typeof refreshExplore === 'function') void refreshExplore();
   // Reload the connector catalogue when Connect becomes active (connections.ts).
   if (section === 'connect' && typeof refreshConnPanel === 'function') void refreshConnPanel();
   // Recompute the AI dock's visibility for the new section (dock.ts) — this is
@@ -133,7 +136,18 @@ function leaveSection(section: string): void {
 // resolve a project first).
 function initWorkspaceRouter(): void {
   document.querySelectorAll('.as-nav-item').forEach((item) => {
-    item.addEventListener('click', () => selectSection((item as HTMLElement).dataset.section || 'home'));
+    const el = item as HTMLElement;
+    item.addEventListener('click', () => {
+      // The "Assistant" nav item is not a section any more — the standalone Ask
+      // page was deleted and its chat now lives in the dock. It carries
+      // `data-dock-toggle` and toggles the dock in place instead of navigating
+      // (dkToggle checks dkAllowed() itself).
+      if (el.dataset.dockToggle !== undefined) {
+        if (typeof dkToggle === 'function') dkToggle();
+        return;
+      }
+      selectSection(el.dataset.section || 'home');
+    });
   });
   // The Agent toggle (top bar, right cell) toggles the DOCK (dock.ts), not
   // Explore.

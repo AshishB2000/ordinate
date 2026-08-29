@@ -16,7 +16,6 @@ const { spawnSync }: typeof import('child_process') = require('child_process');
 const SMOKES = [
   'smoke-app',
   'smoke-composer',
-  'smoke-explore',
   'smoke-dock',
   'smoke-ask-actions',
   'smoke-viz-thumbs',

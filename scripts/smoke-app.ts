@@ -733,10 +733,10 @@ async function main(): Promise<void> {
   const navSection = await homeSection();
   ok('home: a sidebar nav item switches the section', navSection === 'visuals', `section=${navSection}`);
 
-  await win.click('.as-nav-item[data-section="explore"]', { timeout: 4000 }).catch(() => {}); // #side-ai-btn was a duplicate door; it toggles the dock now (smoke-dock.ts)
-  await win.waitForTimeout(400);
-  const aiSection = await homeSection();
-  ok('home: the Explore nav item opens the blank-page chat surface', aiSection === 'explore', `section=${aiSection}`);
+  await win.click('.as-nav-item[data-dock-toggle]', { timeout: 4000 }).catch(() => {}); // Assistant nav TOGGLES the dock now (page merged in); ask-bar→dock is smoke-dock
+  await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 }).catch(() => {});
+  ok('home: the Assistant nav item toggles the dock, not a dead section', (await win.locator('.as-nav-item[data-dock-toggle]').count()) === 1 && (await win.locator('.as-nav-item[data-section="explore"]').count()) === 0 && (await win.locator('#dk-panel').isVisible()) && (await homeSection()) !== 'explore');
+  await win.evaluate(() => { (window as any).dkSetOpen(false); });
 
   // Back to Home so the project-open flow below starts from a clean state.
   await win.click('.as-nav-item[data-section="home"]', { timeout: 4000 }).catch(() => {});

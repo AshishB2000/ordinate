@@ -2,7 +2,7 @@
 //
 // Part B's headline: a chat answer that produced a chart can be turned into
 // real, saved, editable work with one click. The proposal engine (dockPropose.ts)
-// now mounts into Ask's transcript (#xp-messages) as well as the dock, and its
+// now mounts into Ask's transcript (#dk-messages) as well as the dock, and its
 // chart card carries a "Turn into dashboard" button that runs saveVisual +
 // analysis:create and then NAVIGATES to the new record.
 //
@@ -71,19 +71,17 @@ async function main(): Promise<void> {
 
   await win.evaluate((pid: string) => (window as any).openWorkspace(pid), seeded.projectId);
   await win.waitForTimeout(1000);
-  // Land on Ask and flip it to transcript mode so #xp-messages is the visible,
-  // laid-out scroll region the card mounts into (in hero mode it is collapsed,
-  // which would leave the chart canvas at 0×0). A real answer bubble gives it
-  // height and stands in for the answer the proposal would sit under.
-  const enterAskTranscript = async (): Promise<void> => {
-    await win.evaluate(() => { (window as any).selectSection('explore'); });
+  // Open the DOCK — the one AI surface now — so #dk-messages is the visible,
+  // laid-out scroll region the proposal card mounts into. A real answer bubble
+  // gives it height and stands in for the answer the proposal would sit under.
+  const enterDockTranscript = async (): Promise<void> => {
+    await win.evaluate(() => { (window as any).dkSetOpen(true); });
     await win.waitForTimeout(400);
     await win.evaluate(() => {
-      (window as any).xpSetAsked(true);
-      (window as any).xpAppendBubble('assistant', 'Amount rises across the three months.', undefined, 'xp-messages');
+      (window as any).xpAppendBubble('assistant', 'Amount rises across the three months.', undefined, 'dk-messages');
     });
   };
-  await enterAskTranscript();
+  await enterDockTranscript();
 
   const listAnalyses = (pid: string): Promise<any[]> => app.evaluate(async (_m, p: string) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
@@ -104,14 +102,14 @@ async function main(): Promise<void> {
   const analysisQ = 'Amount by month as an analysis';
   const analysesBefore = (await listAnalyses(seeded.projectId)).length;
   await win.evaluate((args: any) => {
-    document.querySelectorAll('#xp-messages .dk-proposal').forEach((n) => n.remove());
+    document.querySelectorAll('#dk-messages .dk-proposal').forEach((n) => n.remove());
     (window as any).dkRenderChartCard(args.did, args.question,
-      { encoding: args.encoding, why: 'By month' }, args.data, 'bar', 'xp-messages');
+      { encoding: args.encoding, why: 'By month' }, args.data, 'bar', 'dk-messages');
   }, { did: seeded.datasetId, question: analysisQ, encoding, data: chartData.data });
-  await win.waitForSelector('#xp-messages .dk-proposal .dk-proposal-chart canvas', { timeout: 8000 });
-  ok('the engine mounts a chart card into Ask (#xp-messages), not only the dock',
-    (await win.locator('#xp-messages .dk-proposal .dk-proposal-chart canvas').count()) > 0);
-  const turnBtn = win.locator('#xp-messages .dk-proposal').last().locator('button', { hasText: 'Turn into dashboard' });
+  await win.waitForSelector('#dk-messages .dk-proposal .dk-proposal-chart canvas', { timeout: 8000 });
+  ok('the engine mounts a chart card into the dock (#dk-messages)',
+    (await win.locator('#dk-messages .dk-proposal .dk-proposal-chart canvas').count()) > 0);
+  const turnBtn = win.locator('#dk-messages .dk-proposal').last().locator('button', { hasText: 'Turn into dashboard' });
   ok('the chart card offers "Turn into dashboard" beside Save', (await turnBtn.count()) === 1);
 
   await turnBtn.click();
@@ -135,23 +133,23 @@ async function main(): Promise<void> {
     Boolean(full) && full.sheets.length === 1 && full.sheets[0].cards.length === 1
       && card0.type === 'visual' && Boolean(card0.visualId), JSON.stringify(full && full.sheets));
   ok('…and the proposal card tore itself down after navigating (no leaked chart)',
-    (await win.locator('#xp-messages .dk-proposal').count()) === 0);
+    (await win.locator('#dk-messages .dk-proposal').count()) === 0);
 
   // ── Teardown runs on the Ask mount ──────────────────────────────────────
-  // dkClearProposal takes a container now; Ask passes 'xp-messages'. A leaked
+  // dkClearProposal takes a container now; Ask passes 'dk-messages'. A leaked
   // chart holds a live WebGL context (chartRender.ts) — draw one, clear the
   // mount, prove the card AND its canvas are gone (a bare .remove() would leave
   // the instance registered).
-  await enterAskTranscript();
+  await enterDockTranscript();
   await win.evaluate((args: any) => {
-    document.querySelectorAll('#xp-messages .dk-proposal').forEach((n) => n.remove());
-    (window as any).dkRenderChartCard(args.did, 'trend', { encoding: args.encoding }, args.data, 'bar', 'xp-messages');
+    document.querySelectorAll('#dk-messages .dk-proposal').forEach((n) => n.remove());
+    (window as any).dkRenderChartCard(args.did, 'trend', { encoding: args.encoding }, args.data, 'bar', 'dk-messages');
   }, { did: seeded.datasetId, encoding, data: chartData.data });
-  await win.waitForSelector('#xp-messages .dk-proposal .dk-proposal-chart canvas', { timeout: 8000 });
-  await win.evaluate(() => (window as any).dkClearProposal('xp-messages'));
+  await win.waitForSelector('#dk-messages .dk-proposal .dk-proposal-chart canvas', { timeout: 8000 });
+  await win.evaluate(() => (window as any).dkClearProposal('dk-messages'));
   ok('dkClearProposal on the Ask mount tears the card down (teardown ran, no leaked canvas)',
-    (await win.locator('#xp-messages .dk-proposal').count()) === 0
-      && (await win.locator('#xp-messages .dk-proposal-chart canvas').count()) === 0);
+    (await win.locator('#dk-messages .dk-proposal').count()) === 0
+      && (await win.locator('#dk-messages .dk-proposal-chart canvas').count()) === 0);
 
   ok('no renderer errors (incl. CSP violations)', errors.length === 0, errors.slice(0, 5).join(' | '));
 

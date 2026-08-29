@@ -28,6 +28,21 @@ let recentExpanded = false;
 let recentItems: any[] = [];
 let starredSet = new Set<string>();
 
+// The active Recent filter pill: 'all' | 'dataset' | 'dashboard'. A view filter
+// only — persisted in this module var, never re-fetched, so switching pills
+// cannot race renderRecent(). Starred is deliberately NOT filtered (a pin is a
+// pin); only the Recent list narrows.
+let recentFilter = 'all';
+
+// Recent rows are datasets or analyses; an "analysis" record IS a user-facing
+// dashboard (same rename as everywhere else), so the Dashboards pill matches
+// both 'analysis' and the legacy 'dashboard' type.
+function recentMatchesFilter(it: any): boolean {
+  if (recentFilter === 'dataset') return it.type === 'dataset';
+  if (recentFilter === 'dashboard') return it.type === 'analysis' || it.type === 'dashboard';
+  return true; // 'all'
+}
+
 // The pin key stored in config.starred — matches "type:id" (e.g. "analysis:<id>").
 function starKey(it: any): string {
   return String(it.type || '') + ':' + String(it.id || '');
@@ -286,7 +301,7 @@ function paintHome(): void {
   const count = document.getElementById('home-recent-count');
 
   const starred = recentItems.filter((it) => starredSet.has(starKey(it)));
-  const rest = recentItems.filter((it) => !starredSet.has(starKey(it)));
+  const rest = recentItems.filter((it) => !starredSet.has(starKey(it)) && recentMatchesFilter(it));
 
   if (starredSec) starredSec.hidden = false;
   if (starredRows) {
@@ -374,9 +389,27 @@ function initHomePage(): void {
       paintHome();
     });
   }
-  // The Explore hero is NOT wired here: initExplore() (explore.ts) already
-  // binds #home-xp-band, deliberately keeping every Explore entry point in one
-  // file. A second listener would fire selectSection twice per click.
+  // All / Datasets / Dashboards filter pills over the Recent list. One listener
+  // on the container; each pill carries its filter in data-filter. Re-filters in
+  // place (paintHome, no re-fetch); the active pill is a module var.
+  const filter = document.getElementById('home-filter');
+  if (filter) {
+    filter.addEventListener('click', (e) => {
+      const pill = (e.target as HTMLElement).closest('.home-pill') as HTMLElement | null;
+      if (!pill || !filter.contains(pill)) return;
+      const next = pill.dataset.filter || 'all';
+      if (next === recentFilter) return;
+      recentFilter = next;
+      recentExpanded = false; // a narrower list starts collapsed, so "Show all" stays honest
+      filter.querySelectorAll('.home-pill').forEach((p) => {
+        (p as HTMLElement).classList.toggle('is-active', (p as HTMLElement).dataset.filter === recentFilter);
+      });
+      paintHome();
+    });
+  }
+  // The ask-bar hero is wired by initHomeAsk() (homeAsk.ts), and its greeting +
+  // the "Your data"/"Saved visuals" column by refreshHome() — not here. This
+  // file owns only the Recent/Starred list, its filter pills and the hotkey.
   fillDiscover();
   renderRecent();
 }

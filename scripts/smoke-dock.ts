@@ -163,8 +163,9 @@ async function main(): Promise<void> {
   ok('…with the works-on-what-you-see tooltip distinguishing it from Ask',
     /looking at/i.test((await win.getAttribute('#side-ai-btn', 'title')) || ''),
     (await win.getAttribute('#side-ai-btn', 'title')) || '(none)');
-  ok('…and the Ask nav item (section id \'explore\') still exists as its own separate entry',
-    (await win.locator('.as-nav-item[data-section="explore"]').count()) === 1);
+  ok('…and the Assistant nav item now toggles the DOCK (data-dock-toggle), not a dead section',
+    (await win.locator('.as-nav-item[data-dock-toggle]').count()) === 1
+      && (await win.locator('.as-nav-item[data-section="explore"]').count()) === 0);
   // It lives in the TOP BAR now, not the sidebar — search and the Agent
   // toggle are window-wide tools and the sidebar is the section nav.
   ok('…and it sits in the top bar, not in the section nav',
@@ -577,17 +578,15 @@ async function main(): Promise<void> {
   // The dock's safety predicate. Every caller reaches it through
   // `typeof dkSync === 'function'`, so a rename would disable suppression
   // SILENTLY — the same silent-by-construction hazard this whole script
-  // exists to guard. Ask (section id 'explore') is the cheapest condition to drive (a plain
-  // section switch) and the most absurd to get wrong: two chats side by side.
-  //
-  // Ask is ALSO the case that matters most now that #side-ai-btn toggles
-  // the dock: suppression has to reach EVERY entry point, or the top-bar
-  // button becomes a control that visibly does nothing on the one section
-  // where the dock refuses to appear. With #dk-edge gone there are two entry
-  // points to cover instead of three, and this is the one that has a face.
-  await win.evaluate(() => { (window as any).selectSection('explore'); });
+  // exists to guard. Presentation mode is the cheapest condition to drive (a
+  // documentElement class the predicate reads directly), and suppression has to
+  // reach EVERY entry point (the top-bar button AND the Assistant nav item), or a
+  // control visibly does nothing where the dock refuses to appear.
+  await win.evaluate(() => { (window as any).dkSetOpen(true); });
+  await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
+  await win.evaluate(() => { document.documentElement.classList.add('dash-presenting'); (window as any).dkSync(); });
   await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
-  ok('the dock is suppressed on the Ask section (id \'explore\')', await win.locator('#dk-panel').isHidden());
+  ok('the dock is suppressed in presentation mode', await win.locator('#dk-panel').isHidden());
   // Disabled, NOT hidden — the top bar is fixed chrome and dropping a control
   // out of it would leave a hole and reflow its neighbours on every visit.
   ok('…and the AI button is disabled rather than removed (no hole in the bar)',
@@ -599,19 +598,50 @@ async function main(): Promise<void> {
       const p = document.getElementById('dk-panel');
       return Boolean(p && p.hidden);
     }));
-  // …and it comes back on leaving Ask, so suppression is a gate, not a kill.
-  await win.evaluate(() => { (window as any).selectSection('datasets'); });
-  await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
-  ok('…and it returns when the condition lifts', await win.locator('#dk-panel').isVisible());
-  // Presentation mode is the other cheap one: a body/documentElement class the
-  // predicate reads directly, no dashboard needed to reach it.
-  await win.evaluate(() => { document.documentElement.classList.add('dash-presenting'); (window as any).dkSync(); });
-  await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
-  ok('the dock is suppressed in presentation mode', await win.locator('#dk-panel').isHidden());
-  ok('…and its AI button is disabled too, not just the panel hidden',
-    await win.locator('#side-ai-btn').isDisabled());
   await win.evaluate(() => { document.documentElement.classList.remove('dash-presenting'); (window as any).dkSync(); });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
+  ok('…and it returns when the condition lifts', await win.locator('#dk-panel').isVisible());
+
+  // ── The rehomed AI on/off toggle + the multi-thread switcher ────────────
+  // Both moved off the retired Assistant page into the dock header. The toggle
+  // is the ONLY control that turns config.copilotEnabled back on, so it must be
+  // present and flip; the switcher is the conversations model, kept.
+  await win.evaluate(() => { (window as any).dkSetOpen(true); });
+  await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
+  ok('the dock header carries the thread title, the AI toggle, and New',
+    (await win.locator('#dk-thread-title').count()) === 1
+      && (await win.locator('#dk-ai-toggle').count()) === 1
+      && (await win.locator('#dk-new').count()) === 1);
+  await win.click('#dk-ai-toggle', { timeout: 8000 });
+  await win.waitForTimeout(600);
+  ok('turning AI off disables the composer and reports it',
+    (await win.getAttribute('#dk-ai-toggle', 'aria-pressed')) === 'false'
+      && await win.locator('#dk-input').isDisabled());
+  await win.click('#dk-ai-toggle', { timeout: 8000 });
+  await win.waitForTimeout(600);
+  ok('…and turning it back on flips it — the toggle is the way back',
+    (await win.getAttribute('#dk-ai-toggle', 'aria-pressed')) === 'true');
+  // "New conversation" is NON-DESTRUCTIVE now (copilotNewThread, not copilotClear):
+  // it must not raise a confirm dialog.
+  let dkConfirmed = false;
+  win.once('dialog', (d) => { dkConfirmed = true; void d.dismiss(); });
+  await win.click('#dk-new', { timeout: 8000 });
+  await win.waitForTimeout(400);
+  ok('New conversation starts a parallel thread with no destructive confirm', dkConfirmed === false);
+  await win.click('#dk-thread-title', { timeout: 8000 });
+  await win.waitForSelector('#dk-thread-list:not([hidden])', { timeout: 8000 });
+  ok('the thread title opens the conversations switcher', await win.locator('#dk-thread-list').isVisible());
+  await win.click('#dk-thread-title', { timeout: 8000 });
+  await win.waitForSelector('#dk-thread-list', { state: 'hidden', timeout: 8000 });
+  // The Home ask bar drives dkAsk(question), which opens the dock and sends —
+  // the merge's headline gate (Home → docked assistant).
+  await win.evaluate(() => { (window as any).dkSetOpen(false); });
+  ok('dkAsk (the Home ask bar\'s entry point) opens the dock',
+    await win.evaluate(async () => {
+      await (window as any).dkAsk('what is in my data?');
+      const pnl = document.getElementById('dk-panel');
+      return Boolean(pnl && !pnl.hidden);
+    }));
 
   // ── an-focus is NOT a suppression any more — and the layout proves it ────
   // The dock used to be forced closed inside an open analysis because the plan
