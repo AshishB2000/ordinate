@@ -357,7 +357,7 @@ function dkRenderPlanCard(res: any, containerId = 'dk-messages'): void {
   sheets.forEach((sheet: any) => {
     const visuals: any[] = Array.isArray(sheet && sheet.visuals) ? sheet.visuals : [];
     visuals.forEach((v: any) => {
-      if (typeof anDraftVisualEl === 'function') grid.appendChild(anDraftVisualEl(v));
+      if (typeof anDraftVisualEl === 'function') grid.appendChild(anDraftVisualEl(v, true));
     });
   });
   if (grid.childNodes.length) card.appendChild(grid);
@@ -371,6 +371,11 @@ function dkRenderPlanCard(res: any, containerId = 'dk-messages'): void {
       if (!currentProjectId) return;
       build.disabled = true;
       try {
+        // The dock is section-wide, so a build fired from Sources or Home would
+        // otherwise create the dashboard and leave the user staring at whatever
+        // they were on — anBuildDraft opens the editor, but only the Dashboards
+        // section renders it. Same order dkTurnIntoAnalysis uses.
+        if (typeof selectSection === 'function') selectSection('analyses');
         // anBuildDraft is the review modal's own build half. The card the user
         // just read IS the review, so it is called directly and the modal is
         // skipped — but the plan-vs-sheets decision stays in one place.

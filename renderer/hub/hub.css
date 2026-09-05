@@ -7570,6 +7570,12 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   position: relative;
   overflow: hidden;
 }
+/* renderVizInArea nests the canvas one level deeper than this rule assumed:
+   .cv-viz-area > .cv-chart-wrapper > .cv-canvas-wrap. The wrapper is an
+   auto-height flex column, so `height:100%` on the canvas wrap resolved against
+   nothing and collapsed the plot to ~16px inside an otherwise correct 150px
+   box. Both levels have to be told to fill the fixed-height preview. */
+.an-draft-viz .cv-chart-wrapper,
 .an-draft-viz .cv-canvas-wrap { height: 100%; min-height: 0; }
 .an-draft-dropped {
   display: flex;
@@ -10892,8 +10898,14 @@ body.cap-focus .cap-back {
   max-height: 420px;
   overflow-y: auto;
 }
-/* A dock tile is a glance, not a workbench — the modal's 200px is too tall here. */
-.dk-plan-grid .an-draft-viz { height: 130px; min-height: 130px; }
+/* A dock tile is a glance, not a workbench. Shorter than the modal's 200px, but
+   not so short the plot loses its axes — 150px is what reads at 300px wide. */
+.dk-plan-grid .an-draft-viz { height: 150px; min-height: 150px; }
+/* flex-shrink defaults to 1, so three tiles in a 420px-capped flex column were
+   squashed BELOW their own height — and Chart.js measured the squashed box, so
+   every plot drew as a ~15px sliver. The tiles keep their height; the grid
+   scrolls instead. */
+.dk-plan-grid > .an-draft-visual { flex: 0 0 auto; }
 .dk-plan-grid .an-draft-visual { padding: 8px; }
 .dk-plan-grid .an-draft-visual-title { font-size: 12px; }
 /* The dropped list is inside the card, so it inherits the card's own padding. */

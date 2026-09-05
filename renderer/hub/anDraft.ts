@@ -309,9 +309,9 @@ function anDraftSectionLabel(text: string): HTMLElement {
 // existing render path already takes, so this REUSES renderVizInArea and adds no
 // charting code. `data === null` means the app could not compute it yet — show
 // the model's note verbatim and draw nothing.
-function anDraftVisualEl(v: any): HTMLElement {
+function anDraftVisualEl(v: any, compact?: boolean): HTMLElement {
   const wrap = document.createElement('div');
-  wrap.className = 'an-draft-visual';
+  wrap.className = 'an-draft-visual' + (compact ? ' an-draft-visual--compact' : '');
 
   const head = document.createElement('div');
   head.className = 'an-draft-visual-head';
@@ -353,7 +353,13 @@ function anDraftVisualEl(v: any): HTMLElement {
   // sized inside a not-yet-laid-out modal renders at zero height.
   window.setTimeout(() => {
     try {
-      renderVizInArea(area, data, type || 'column', { id: 'draft-preview', chartOverrides: {} }, 'v');
+      // `compact` (the dock's proposal card) passes a null entry, which is what
+      // turns the ⋯ Customize menu off — the same opt-out vizNew's preview and
+      // the dock's chart card already use. In a 300px dock those controls
+      // overlay the plot and squeeze the chart to a sliver, and a proposal is a
+      // glance at what would be built, not a place to restyle it.
+      const entry = compact ? null : { id: 'draft-preview', chartOverrides: {} };
+      renderVizInArea(area, data, type || 'column', entry, 'v');
     } catch (_) {
       area.textContent = 'This one could not be drawn.';
     }
