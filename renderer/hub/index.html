@@ -98,16 +98,15 @@
            Icon-only, the panel glyph: it reads as "collapse/expand the right
            panel", which is what it does — and it stays visible while the dock
            is open because it is the collapse control too (aria-expanded
-           tracks the dock, dkSync). The surface is "Agent"; the tooltip
-           carries the distinction from Explore (Explore starts cold from a
-           blank page, this one works on what you are looking at). Icon-only
-           means aria-label IS the accessible name. The id says "ai" — it is
+           tracks the dock, dkSync). The surface is the "Assistant" — one name
+           for it everywhere, chrome and copy alike. Icon-only means aria-label
+           IS the accessible name. The id says "ai" — it is
            historical: two smoke suites use it as their boot-readiness
            selector and workspace.ts wires it by id, so the NAME changes and
            the id does not. -->
       <button id="side-ai-btn" class="hub-ai-btn" type="button"
-        title="Agent — works on what you're looking at (⌘L)"
-        aria-label="Agent" aria-expanded="false" aria-controls="dk-panel">
+        title="Assistant — works on what you're looking at (⌘L)"
+        aria-label="Assistant" aria-expanded="false" aria-controls="dk-panel">
         <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.7"/>
           <path d="M15 4.8v14.4" stroke="currentColor" stroke-width="1.7"/>
@@ -483,7 +482,7 @@
                so it needed no change when the other one went away. Execution mode
                stays fully configurable at Settings → Execution everywhere else. -->
           <button id="exec-mode-btn-cap" class="as-icon-btn exec-btn-cap exec-btn-empty" type="button"
-            aria-haspopup="true" aria-expanded="false" aria-label="No AI connected" title="No AI connected"></button>
+            aria-haspopup="true" aria-expanded="false" aria-label="No model connected" title="No model connected"></button>
           <button id="new-capture" class="btn btn-primary" type="button">
             <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M3 8.5A2 2 0 0 1 5 6.5h1.2l.8-1.4A1.5 1.5 0 0 1 8.3 4.3h7.4a1.5 1.5 0 0 1 1.3.8l.8 1.4H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
@@ -1031,7 +1030,7 @@
                 <button class="btn" type="button" id="ds-step-add">+ Add step</button>
                 <div class="ds-step-type-menu" id="ds-step-type-menu" hidden></div>
               </div>
-              <button class="btn" type="button" id="ds-suggest-btn">AI suggest steps</button>
+              <button class="btn" type="button" id="ds-suggest-btn">Suggest steps with the Assistant</button>
               <button class="btn" type="button" id="ds-calc-suggest-btn">✨ Suggest calculated field</button>
             </div>
 
@@ -1107,9 +1106,9 @@
               <p class="ws-empty-p">A visual is one saved chart — build it once, then drop it into any dashboard, or export it on its own.</p>
               <div class="ws-empty-actions">
                 <button class="btn btn-primary btn-lg" type="button" id="viz-empty-new-btn">+ New visual</button>
-                <button class="btn btn-lg" type="button" id="viz-empty-ai">✨ Start with AI</button>
+                <button class="btn btn-lg" type="button" id="viz-empty-ai">✨ Start with the Assistant</button>
               </div>
-              <p class="viz-empty-hint" id="viz-empty-hint" hidden>Connect a model in Execution settings</p>
+              <p class="viz-empty-hint" id="viz-empty-hint" hidden>Connect a model in Settings → Execution to use the Assistant.</p>
             </div>
 
             <!-- Move 3: the project's datasets, so the empty page offers the
@@ -1181,7 +1180,7 @@
             <h2 class="viz-h">Dashboards<span class="ws-badge an-count" id="an-count" hidden></span></h2>
           </div>
           <div class="an-list-head-actions">
-            <button class="btn" type="button" id="an-draft-btn">✨ AI draft dashboard</button>
+            <button class="btn" type="button" id="an-draft-btn">✨ Draft with the Assistant</button>
             <button class="btn btn-primary" type="button" id="an-new-btn">Create dashboard</button>
           </div>
         </div>
@@ -1204,10 +1203,10 @@
             <span class="ws-hero-bar ws-hero-bar--3"></span>
           </div>
           <h3 class="ws-empty-h">No dashboards yet</h3>
-          <p class="ws-empty-p">A dashboard is where you build: sheets of charts, metrics and text over your datasets. Start from a blank sheet, or describe what you want and let the AI draft the sheets, charts and calculated fields — you review all of it before anything is created.</p>
+          <p class="ws-empty-p">A dashboard is where you build: sheets of charts, metrics and text over your datasets. Start from a blank sheet, or describe what you want and let the Assistant draft the sheets, charts and calculated fields — you review all of it before anything is created.</p>
           <div class="ws-empty-actions">
             <button class="btn btn-primary btn-lg" type="button" id="an-empty-new">Create dashboard</button>
-            <button class="btn btn-lg" type="button" id="an-empty-draft">✨ Get started with AI</button>
+            <button class="btn btn-lg" type="button" id="an-empty-draft">✨ Draft with the Assistant</button>
           </div>
         </div>
       </div>
@@ -1460,9 +1459,9 @@
          removed in the top-bar relayout; body.cap-focus hides the top bar, but
          dkAllowed() is false there — the dock is suppressed, not unreachable.) -->
     <div id="dk-scrim" class="dk-scrim"></div>
-    <aside id="dk-panel" class="dk-panel" hidden tabindex="-1" aria-label="Agent">
+    <aside id="dk-panel" class="dk-panel" hidden tabindex="-1" aria-label="Assistant">
       <div id="dk-handle" class="dk-handle" role="separator" aria-orientation="vertical"
-        tabindex="0" aria-label="Resize AI panel" aria-valuemin="300" aria-valuenow="340"></div>
+        tabindex="0" aria-label="Resize the Assistant" aria-valuemin="300" aria-valuenow="340"></div>
       <div class="dk-head">
         <button class="dk-thread-title" id="dk-thread-title" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Conversations">
           <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -1474,13 +1473,13 @@
           </svg>
         </button>
         <div class="dk-head-actions">
-          <button id="dk-ai-toggle" class="dk-ai-toggle" type="button" aria-pressed="true" title="Turn AI off">AI: On</button>
+          <button id="dk-ai-toggle" class="dk-ai-toggle" type="button" aria-pressed="true" title="Turn the Assistant off">Assistant: On</button>
           <button id="dk-new" class="dk-icon-btn" type="button" aria-label="New conversation" title="New conversation">
             <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
             </svg>
           </button>
-          <button id="dk-close" class="dk-icon-btn" type="button" aria-label="Close AI panel">
+          <button id="dk-close" class="dk-icon-btn" type="button" aria-label="Close the Assistant">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
@@ -2238,8 +2237,8 @@
               <textarea class="ws-modal-input vn-textarea js-vn-intent" rows="3"
                         placeholder="e.g. profile registrations year over year"
                         aria-label="Describe the visual you want"></textarea>
-              <p class="vn-note js-vn-note" hidden>Connect a model in Execution settings to suggest a chart.</p>
-              <button class="btn btn-primary js-vn-ask" type="button">Ask AI</button>
+              <p class="vn-note js-vn-note" hidden>Connect a model in Settings → Execution to use the Assistant.</p>
+              <button class="btn btn-primary js-vn-ask" type="button">Ask the Assistant</button>
             </div>
             <div class="vn-choice">
               <h4 class="vn-choice-h">Build it myself</h4>

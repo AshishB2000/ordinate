@@ -132,7 +132,7 @@ function openVisualPicker(
         return b;
       };
       mk('+ New visual', 'new');
-      const ai = mk('✨ Suggest with AI', 'ai');
+      const ai = mk('✨ Suggest with the Assistant', 'ai');
       // The standard not_ready treatment: disabled, with the standard sentence.
       // Painted async — the dialog opens instantly and the button un-disables
       // if a model turns out to be configured.
@@ -140,7 +140,7 @@ function openVisualPicker(
       const note = document.createElement('p');
       note.className = 'vn-pick-note';
       note.hidden = true;
-      note.textContent = 'Connect a model in Execution settings to suggest a chart.';
+      note.textContent = AI_NOT_CONFIGURED;
       actions.appendChild(note);
       window.hub.getKeyStatus().then((st: any) => {
         if (done) return;

@@ -890,9 +890,9 @@ async function main(): Promise<void> {
   ok('an empty Dashboards page shows the empty state, not a bare table',
      emptyState.emptyVisible && emptyState.h > 150 && !emptyState.tableVisible,
      JSON.stringify(emptyState));
-  ok('the empty state offers both doors — blank and AI',
-     emptyState.createVisible && emptyState.aiVisible && /AI/.test(emptyState.aiLabel),
-     `"${emptyState.heading}" / "${emptyState.aiLabel}"`);
+  ok('the empty state offers both doors — blank and the Assistant',
+     emptyState.createVisible && emptyState.aiVisible && /Assistant/.test(emptyState.aiLabel),
+     `"${emptyState.heading}" / "${emptyState.aiLabel}"`);  // one name, everywhere
 
   const emptyShot = path.join(shotDir, 'analyses-empty.png');
   await win.screenshot({ path: emptyShot });
@@ -1028,7 +1028,7 @@ async function main(): Promise<void> {
   ok('step 2 offers four ways to start',
      wiz2.count === 4 &&
        JSON.stringify(wiz2.titles) ===
-         JSON.stringify(['Blank sheet', 'KPIs + chart', 'Two-up', '✨ Let AI design it']),
+         JSON.stringify(['Blank sheet', 'KPIs + chart', 'Two-up', '✨ Let the Assistant design it']),
      JSON.stringify(wiz2.titles));
   ok('…step 1 is ticked off behind it', wiz2.doneTick === '✓', `"${wiz2.doneTick}"`);
   ok('…Blank is preselected, so the step answers itself',
@@ -1184,7 +1184,7 @@ async function main(): Promise<void> {
        const labels = [...document.querySelectorAll('.vn-pick-modal .vn-pick-actions .btn')]
          .map((b) => (b.textContent || '').trim());
        return tiles > 0 && labels.indexOf('+ New visual') >= 0
-         && labels.some((l) => /Suggest with AI/.test(l));
+         && labels.some((l) => /Suggest with the Assistant/.test(l));
      }));
   ok('the picker adds the saved visual', await win.evaluate(() => {
     const tile = document.querySelector('.vn-pick-modal .vn-pick-tile') as HTMLElement | null;
@@ -1945,8 +1945,8 @@ async function main(): Promise<void> {
   });
   ok('the ✨ Suggest a visual button is offered, above the chart types',
      ai.present && /Suggest a visual/.test(ai.label) && ai.aboveChips, JSON.stringify(ai));
-  ok('…with no model it is DISABLED and says so',
-     ai.disabled && ai.noteVisible && /needs? a model/i.test(ai.noteText), ai.noteText);
+  ok('…with no model it is DISABLED and says the one shared sentence',
+     ai.disabled && ai.noteVisible && /Execution to use the Assistant/.test(ai.noteText), ai.noteText);
   ok('…while the app-computed chart types still work, and say they are the app\'s',
      ai.chips > 0 && /recommended by the app itself/i.test(ai.noteText) && !!ai.activeChip,
      `${ai.chips} chips, active="${ai.activeChip}"`);

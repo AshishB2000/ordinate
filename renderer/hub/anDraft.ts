@@ -39,10 +39,10 @@ async function handleDraftAnalysis(): Promise<void> {
   } catch (_) {
     res = { ok: false, error: 'Could not draft a dashboard.' };
   }
-  if (btn) { btn.disabled = false; btn.textContent = label || '✨ AI draft dashboard'; }
+  if (btn) { btn.disabled = false; btn.textContent = label || '✨ Draft with the Assistant'; }
 
   if (res && res.notReady) {
-    window.alert('Connect a model in Execution settings to draft a dashboard.');
+    window.alert(AI_NOT_CONFIGURED);
     return;
   }
   if (!res || res.ok === false) {
@@ -67,7 +67,7 @@ async function anMaterialiseDraft(res: any, preferredName?: string): Promise<voi
   // version flag. A `plan` means the Phase E pipeline owns the write (it has to:
   // calculated fields and visuals are records this renderer cannot mint).
   // Otherwise the draft is already a sheet array and createAnalysis takes it.
-  const name = (preferredName || '').trim() || res.name || 'AI dashboard';
+  const name = (preferredName || '').trim() || res.name || 'Assistant dashboard';
   let saved: any = null;
   try {
     if (res.plan && typeof window.hub.buildAnalysisPlan === 'function') {
@@ -117,7 +117,7 @@ function anDraftReviewModal(draft: any): Promise<boolean> {
 
     const h = document.createElement('div');
     h.className = 'ws-modal-title';
-    h.textContent = 'AI draft — review before creating';
+    h.textContent = 'Assistant draft — review before creating';
     box.appendChild(h);
 
     const scroll = document.createElement('div');
@@ -125,7 +125,7 @@ function anDraftReviewModal(draft: any): Promise<boolean> {
 
     const name = document.createElement('div');
     name.className = 'an-draft-name';
-    name.textContent = draft && draft.name ? String(draft.name) : 'AI dashboard';
+    name.textContent = draft && draft.name ? String(draft.name) : 'Assistant dashboard';
     scroll.appendChild(name);
 
     // The model's own reasoning, labelled as interpretation — the same badge the
@@ -271,7 +271,7 @@ function anDraftReviewModal(draft: any): Promise<boolean> {
     box.appendChild(actions);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
-    a11y = makeModalAccessible(box, 'AI draft — review before creating', ok);
+    a11y = makeModalAccessible(box, 'Assistant draft — review before creating', ok);
   });
 }
 

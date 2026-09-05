@@ -235,7 +235,7 @@ async function anCreateWizard(): Promise<void> {
     { id: 'blank', title: 'Blank sheet', body: 'One empty sheet. Add cards as you go.', art: ['b-full'] },
     { id: 'kpis', title: 'KPIs + chart', body: 'A KPI strip across the top, with a wide chart beneath it.', art: ['b-strip', 'b-wide'] },
     { id: 'twoup', title: 'Two-up', body: 'Two charts side by side, with a notes card below.', art: ['b-half', 'b-half', 'b-strip'] },
-    { id: 'ai', title: '✨ Let AI design it', body: 'Describe what you want and a model proposes the sheets. You review it first.', art: ['b-ai'] },
+    { id: 'ai', title: '✨ Let the Assistant design it', body: 'Describe what you want and a model proposes the sheets. You review it first.', art: ['b-ai'] },
   ];
   const startCards = START_OPTS.map((o) => {
     const c = document.createElement('button');
@@ -267,7 +267,7 @@ async function anCreateWizard(): Promise<void> {
   const startNote = document.createElement('p');
   startNote.className = 'an-wiz-note';
   startNote.textContent =
-    'No model is configured, so AI drafting is unavailable. Everything else works without one — pick any of the other three, or connect a model in Settings → Execution.';
+    'No model is configured, so drafting is unavailable. Everything else works without one — pick any of the other three. ' + AI_NOT_CONFIGURED;
   startNote.hidden = true;
   pane2.appendChild(startNote);
 
@@ -352,7 +352,7 @@ async function anCreateWizard(): Promise<void> {
     sub.textContent =
       step === 1 ? 'Choose the dataset to build from. You can add more sheets and datasets later.'
       : step === 2 ? 'Pick a starting layout, or let a model design the whole dashboard for you.'
-      : 'Describe the dashboard and the AI will draft it. You review everything before it is created.';
+      : 'Describe the dashboard and the Assistant will draft it. You review everything before it is created.';
 
     // Step 3 exists only on the AI route, so the rail dims it otherwise rather
     // than pretending there is a third step everyone has to walk through.
@@ -382,7 +382,7 @@ async function anCreateWizard(): Promise<void> {
     next.textContent =
       step === 1 ? 'Next'
       : step === 2 ? (startFrom === 'ai' ? 'Next' : 'Create dashboard')
-      : 'Draft with AI';
+      : 'Draft with the Assistant';
     next.disabled = step === 1 ? !selectedId : false;
     if (step === 3) setTimeout(() => ta.focus(), 0);
   }
@@ -436,7 +436,7 @@ async function anCreateWizard(): Promise<void> {
     }
     next.disabled = false;
     skip.disabled = false;
-    next.textContent = label || 'Draft with AI';
+    next.textContent = label || 'Draft with the Assistant';
     // Step 2 gates this route on aiReady, so notReady here means the model went
     // away between opening the wizard and pressing the button. Send them back to
     // the step that can still produce an analysis rather than stranding them.
