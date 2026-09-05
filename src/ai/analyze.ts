@@ -623,7 +623,7 @@ const EXPLAIN_SYSTEM_PROMPT =
   'recompute any number — use only the exact figures given to you as facts.';
 export async function explainText(userPrompt: string): Promise<{ ok: true; text: string } | TypedError> {
   if (!config.executionReady()) {
-    return { ok: false, errorType: 'not_ready', message: 'Connect a model in Execution settings to explain datasets.' };
+    return { ok: false, errorType: 'not_ready', message: config.AI_NOT_CONFIGURED };
   }
   const messages: NeutralMsg[] = [{ role: 'user', text: userPrompt }];
   const { rawText, error } = await dispatch(EXPLAIN_SYSTEM_PROMPT, messages);
@@ -643,7 +643,7 @@ export async function explainText(userPrompt: string): Promise<{ ok: true; text:
 // does NOT go through parseReply(). No model configured → a soft not_ready error so
 // the renderer shows a gentle hint, never an error dialog.
 const CHAT_SYSTEM_PROMPT =
-  'You are Ordinate Copilot, a data analysis assistant for the user\'s current workspace. ' +
+  'You are the Ordinate Assistant, a data analysis assistant for the user\'s current workspace. ' +
   'You are given FACTS about the active project/dataset/visual/dashboard — columns, types, ' +
   'already-computed statistics, sample rows, and computed chart/metric values. ' +
   'Answer in plain, concise prose (no markdown, no code fences, no bullet lists unless asked). ' +
@@ -657,7 +657,7 @@ export async function askCopilot(
   question: string, onDelta?: (delta: string) => void,
 ): Promise<{ ok: true; text: string } | TypedError> {
   if (!config.executionReady()) {
-    return { ok: false, errorType: 'not_ready', message: 'Connect a model in Execution settings to use Copilot.' };
+    return { ok: false, errorType: 'not_ready', message: config.AI_NOT_CONFIGURED };
   }
   const prior: NeutralMsg[] = (Array.isArray(historyTurns) ? historyTurns : [])
     .filter((t) => t && (t.role === 'user' || t.role === 'assistant') && typeof t.text === 'string')
@@ -695,7 +695,7 @@ const SUGGEST_STEPS_SYSTEM_PROMPT =
   'Return ONLY the JSON array (use [] if no preparation is warranted).';
 export async function suggestSteps(summaryText: string): Promise<{ ok: true; steps: unknown[] } | TypedError> {
   if (!config.executionReady()) {
-    return { ok: false, errorType: 'not_ready', message: 'Connect a model in Execution settings to suggest steps.' };
+    return { ok: false, errorType: 'not_ready', message: config.AI_NOT_CONFIGURED };
   }
   const messages: NeutralMsg[] = [{ role: 'user', text: summaryText }];
   const { rawText, error } = await dispatch(SUGGEST_STEPS_SYSTEM_PROMPT, messages);
@@ -755,7 +755,7 @@ export async function suggestCharts(
   count: number,
 ): Promise<{ ok: true; options: Array<Record<string, unknown>> } | TypedError> {
   if (!config.executionReady()) {
-    return { ok: false, errorType: 'not_ready', message: 'Connect a model in Execution settings to suggest a chart.' };
+    return { ok: false, errorType: 'not_ready', message: config.AI_NOT_CONFIGURED };
   }
   const n = Number.isFinite(count) && count > 0 ? Math.min(Math.floor(count), 6) : 3;
   let userText = summaryText + '\n\nPropose up to ' + n + ' charts.';
@@ -822,7 +822,7 @@ export async function suggestCalcField(
   summaryText: string,
 ): Promise<{ ok: true; name: unknown; expression: unknown } | TypedError> {
   if (!config.executionReady()) {
-    return { ok: false, errorType: 'not_ready', message: 'Connect a model in Execution settings to suggest a calculated field.' };
+    return { ok: false, errorType: 'not_ready', message: config.AI_NOT_CONFIGURED };
   }
   const messages: NeutralMsg[] = [{ role: 'user', text: summaryText }];
   const { rawText, error } = await dispatch(SUGGEST_CALC_FIELD_SYSTEM_PROMPT, messages);
@@ -880,7 +880,7 @@ export async function draftDashboard(
   inventoryText: string,
 ): Promise<{ ok: true; structure: unknown } | TypedError> {
   if (!config.executionReady()) {
-    return { ok: false, errorType: 'not_ready', message: 'Connect a model in Execution settings to draft an analysis.' };
+    return { ok: false, errorType: 'not_ready', message: config.AI_NOT_CONFIGURED };
   }
   const messages: NeutralMsg[] = [{ role: 'user', text: inventoryText }];
   const { rawText, error } = await dispatch(DRAFT_DASHBOARD_SYSTEM_PROMPT, messages);

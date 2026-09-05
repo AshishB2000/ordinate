@@ -1,3 +1,17 @@
+/**
+ * The one "no model configured" sentence, for every surface in the hub that
+ * has to say it — the dock, Prepare, Explain, the chart and dashboard
+ * suggesters, the analysis wizard. It used to be six near-copies ("…to use
+ * Copilot.", "…to suggest a chart.", "…to draft a dashboard."), which named
+ * the feature three different ways and pointed at "Execution settings", a
+ * screen that is labelled Settings → Execution.
+ *
+ * Lives here because this file already owns the model-connection chrome, and
+ * it loads (index.html) before every file that reads it. Classic global-scope
+ * script: the `const` is the global lexical scope, read inside functions only.
+ */
+const AI_NOT_CONFIGURED = 'Connect a model in Settings → Execution to use the Assistant.';
+
 // Execution-mode menu — the top-right chip popup: agent rows (cloud/local),
 // model selectors, and the open/close/refresh logic. Extracted from hub.js as
 // a pure structural move (no logic changes). The exec STATE (execMode/execByok/
@@ -66,8 +80,8 @@ function updateExecBtnIcon(): void {
     } else {
       btn.innerHTML = EXEC_BTN_NEUTRAL;
       btn.classList.add('exec-btn-empty');
-      btn.setAttribute('aria-label', 'No AI connected');
-      btn.title = 'No AI connected';
+      btn.setAttribute('aria-label', 'No model connected');
+      btn.title = 'No model connected';
     }
   }
 }
@@ -147,7 +161,7 @@ function renderLocalAgents(): void {
   if (!shown.length) {
     const empty = document.createElement('div');
     empty.className = 'exec-agent-empty';
-    empty.textContent = 'No CLIs detected. Open Execution settings to scan.';
+    empty.textContent = 'No CLIs detected. Open Settings → Execution to scan.';
     execAgentList.appendChild(empty);
   }
   shown.forEach((cli: any) => {

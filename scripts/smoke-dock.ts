@@ -129,35 +129,33 @@ async function main(): Promise<void> {
   await win.evaluate((pid: string) => (window as any).openWorkspace(pid), seeded.projectId);
   await win.waitForTimeout(1200);
 
-  // ── First run opens the dock exactly once ───────────────────────────────
-  // Discoverability: a panel nobody opens is a panel nobody knows about, so
-  // the first run that can actually use it (a project open, not suppressed)
-  // opens it for you and writes the `dkSeen` sentinel. This smoke run boots
-  // into a fresh --user-data-dir, so localStorage is genuinely empty and this
-  // is genuinely a first run.
-  ok('first run opens the dock by itself', await win.locator('#dk-panel').isVisible());
-  ok('…and records the sentinel so it never does it again',
-    (await win.evaluate(() => localStorage.getItem('dkSeen'))) === '1');
-  // The second half of "once": close it, force another full sync, and it must
-  // stay closed. This is the assertion that fails if the sentinel check is
-  // ever dropped or inverted.
+  // ── The dock stays SHUT until asked for ─────────────────────────────────
+  // It used to open itself on the first usable sync, for discoverability — over
+  // Data, Visuals and Dashboards, before anyone asked, and with no model onto
+  // its own "connect a model" notice. A fresh --user-data-dir means this is
+  // genuinely a first run.
+  const dkOpenKey = () => win.evaluate(() => localStorage.getItem('dkOpen'));
+  ok('a first run does NOT open the dock by itself, and writes no open-state key',
+    (await win.locator('#dk-panel').isHidden()) && (await dkOpenKey()) === null,
+    String(await dkOpenKey()));
+  await win.evaluate(() => { (window as any).dkSetOpen(true); (window as any).dkSync(); });
+  await win.waitForSelector('#dk-panel', { state: 'visible', timeout: 8000 });
+  ok('…but opens on request, and a later sync keeps it open',
+    await win.locator('#dk-panel').isVisible() && (await dkOpenKey()) === '1');
   await win.evaluate(() => { (window as any).dkSetOpen(false); (window as any).dkSync(); });
   await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
-  ok('…and a later sync does NOT re-open it', await win.locator('#dk-panel').isHidden());
+  ok('…and closes on request, staying closed through another sync',
+    await win.locator('#dk-panel').isHidden());
 
-  // ── The top bar's Agent toggle toggles the DOCK, not Ask ────────────────
-  // 498d647 pointed #side-ai-btn at Ask (then named Explore; the section id
-  // is still 'explore'), which already has its own nav
-  // item — a duplicate door, while the dock had no chrome presence at all.
-  // It is the dock's again. These are the assertions that fail if it ever
-  // drifts back, or if a second AI door appears beside it.
-  //
-  // Icon-only, so the accessible name is aria-label — the labelled version
-  // asserted the visible text WAS the name (nothing to drift, WCAG 2.5.3);
-  // with no visible text, aria-label is the correct mechanism, and the
-  // tooltip carries the distinction from the Ask section.
-  ok('the Agent toggle is named "Agent" via aria-label (icon-only, no visible text)',
-    /agent/i.test((await win.getAttribute('#side-ai-btn', 'aria-label')) || '')
+  // ── The top bar's toggle opens the DOCK ─────────────────────────────────
+  // 498d647 once pointed #side-ai-btn at the Ask PAGE, which had its own nav
+  // item — a duplicate door, while the dock had no chrome presence at all. The
+  // page is gone (#117) and the button is the dock's; these assertions fail if
+  // a second AI door, or a second NAME for it, ever appears beside it.
+  // Icon-only, so the accessible name is aria-label (WCAG 2.5.3). "Assistant",
+  // not "Agent": one surface, one name, on both of its doors.
+  ok('the toggle is named "Assistant" via aria-label (icon-only, no visible text)',
+    /assistant/i.test((await win.getAttribute('#side-ai-btn', 'aria-label')) || '')
       && !/\S/.test((await win.locator('#side-ai-btn').textContent()) || ''),
     (await win.getAttribute('#side-ai-btn', 'aria-label')) || '(none)');
   ok('…with the works-on-what-you-see tooltip distinguishing it from Ask',
@@ -171,15 +169,17 @@ async function main(): Promise<void> {
   ok('…and it sits in the top bar, not in the section nav',
     (await win.locator('.hub-topbar #side-ai-btn').count()) === 1
       && (await win.locator('#app-sidebar #side-ai-btn').count()) === 0);
-  // Was "exactly one SIDEBAR control mentions AI". Widened to the whole
-  // persistent chrome, which is the stronger claim and the point of the
-  // relayout: #dk-edge was a second door to this same panel that looked
-  // nothing like this button, and it is gone. Accessible names count too —
-  // the toggle itself is icon-only, so its name lives in aria-label.
-  ok('…so exactly one control in the whole chrome names the AI surface',
-    (await win.evaluate(() => Array.from(
-      document.querySelectorAll('#app-sidebar button, .hub-topbar button, .dk-edge'))
-      .filter((b) => /\bai\b|agent/i.test((b.textContent || '') + ' ' + (b.getAttribute('aria-label') || ''))).length)) === 1);
+  // Was "exactly ONE control names the AI surface" — true only because the two
+  // doors were named differently ("Assistant" in the nav, "Agent" here). Two
+  // doors to one dock is deliberate; the defect is a second NAME. #dk-edge, the
+  // third door, is gone. Icon-only names live in aria-label, so those count.
+  const chromeDoors = await win.evaluate(() => Array.from(
+    document.querySelectorAll('#app-sidebar button, .hub-topbar button, .dk-edge'))
+    .map((b) => ((b.textContent || '') + ' ' + (b.getAttribute('aria-label') || '')).trim())
+    .filter((n) => /\bai\b|agent|assistant|copilot/i.test(n)));
+  ok('…so the chrome has exactly two doors to the dock, both called the Assistant',
+    chromeDoors.length === 2 && chromeDoors.every((n) => /assistant/i.test(n)),
+    JSON.stringify(chromeDoors));
   await win.click('#side-ai-btn', { timeout: 8000 });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
   ok('clicking it OPENS THE DOCK (it must not navigate to the Ask section)',
@@ -220,7 +220,7 @@ async function main(): Promise<void> {
   // the title carries the long description.
   ok('…and it is icon-only with aria-label as the accessible name',
     !/\S/.test((await win.locator('#side-ai-btn').textContent()) || '')
-      && /agent/i.test((await win.getAttribute('#side-ai-btn', 'aria-label')) || ''));
+      && /assistant/i.test((await win.getAttribute('#side-ai-btn', 'aria-label')) || ''));
   ok('…and the removed edge tab is really gone, not just hidden',
     (await win.locator('#dk-edge').count()) === 0);
 
@@ -233,7 +233,7 @@ async function main(): Promise<void> {
     await win.locator('#side-ai-btn').isVisible()
       && !(await win.locator('#side-ai-btn').isDisabled()));
   ok('the panel has an aria-label naming the surface',
-    /agent/i.test((await win.getAttribute('#dk-panel', 'aria-label')) || ''),
+    /assistant/i.test((await win.getAttribute('#dk-panel', 'aria-label')) || ''),
     (await win.getAttribute('#dk-panel', 'aria-label')) || '(none)');
   // No model is configured in a smoke run, so #dk-input starts disabled (the
   // HTML spec refuses focus() on a disabled control) — dock.ts's fallback is
@@ -587,10 +587,12 @@ async function main(): Promise<void> {
   await win.evaluate(() => { document.documentElement.classList.add('dash-presenting'); (window as any).dkSync(); });
   await win.waitForSelector('#dk-panel', { state: 'hidden', timeout: 8000 });
   ok('the dock is suppressed in presentation mode', await win.locator('#dk-panel').isHidden());
-  // Disabled, NOT hidden — the top bar is fixed chrome and dropping a control
-  // out of it would leave a hole and reflow its neighbours on every visit.
-  ok('…and the AI button is disabled rather than removed (no hole in the bar)',
-    await win.locator('#side-ai-btn').isVisible()
+  // Disabled, NOT removed. The old "no hole in the bar" half cannot hold here:
+  // presentation mode hides `.hub-topbar` outright (`display: none !important`),
+  // so the button is legitimately off screen — the assertion, not the app, was
+  // wrong. What must hold is that it stays in the DOM and is inert.
+  ok('…and the Assistant button is disabled rather than removed',
+    (await win.locator('#side-ai-btn').count()) === 1
       && await win.locator('#side-ai-btn').isDisabled());
   ok('…so clicking it while suppressed opens nothing',
     await win.evaluate(() => {
@@ -608,19 +610,41 @@ async function main(): Promise<void> {
   // present and flip; the switcher is the conversations model, kept.
   await win.evaluate(() => { (window as any).dkSetOpen(true); });
   await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 8000 });
-  ok('the dock header carries the thread title, the AI toggle, and New',
+  ok('the dock header carries the thread title, the Assistant toggle, and New',
     (await win.locator('#dk-thread-title').count()) === 1
       && (await win.locator('#dk-ai-toggle').count()) === 1
       && (await win.locator('#dk-new').count()) === 1);
-  await win.click('#dk-ai-toggle', { timeout: 8000 });
-  await win.waitForTimeout(600);
-  ok('turning AI off disables the composer and reports it',
-    (await win.getAttribute('#dk-ai-toggle', 'aria-pressed')) === 'false'
-      && await win.locator('#dk-input').isDisabled());
-  await win.click('#dk-ai-toggle', { timeout: 8000 });
-  await win.waitForTimeout(600);
-  ok('…and turning it back on flips it — the toggle is the way back',
-    (await win.getAttribute('#dk-ai-toggle', 'aria-pressed')) === 'true');
+  // The pill has THREE states and a smoke run is in the third: no model, so it
+  // is not a toggle at all. It used to read the on/off preference alone and say
+  // "AI: On" directly above the panel's own "connect a model" notice. The
+  // on/off half needs a world where there IS something to turn off, so paint it
+  // — dkPaintAiToggle(enabled, ready) is the one function that decides.
+  const pill = async (): Promise<string> => JSON.stringify([
+    await win.locator('#dk-ai-toggle').textContent(),
+    await win.getAttribute('#dk-ai-toggle', 'aria-pressed'),
+    await win.getAttribute('#dk-ai-toggle', 'title'),
+  ]);
+  ok('…and with no model the pill says so, and carries the one shared sentence',
+    (await pill()) === JSON.stringify(
+      ['No model', null, 'Connect a model in Settings → Execution to use the Assistant.']),
+    await pill());
+  await win.evaluate(() => (window as any).dkPaintAiToggle(true, true));
+  const pillOn = await pill();
+  await win.evaluate(() => (window as any).dkPaintAiToggle(false, true));
+  ok('with a model it is a real toggle, naming the Assistant both ways — never "AI"',
+    /^\["Assistant: On","true"/.test(pillOn) && /^\["Assistant: Off","false"/.test(await pill()),
+    pillOn + ' / ' + (await pill()));
+  // …and turning it off for real still disables the composer.
+  await win.evaluate(async () => {
+    await (window as any).window.hub.setCopilotEnabled(false);
+    await (window as any).dkRefresh();
+  });
+  ok('turning the Assistant off disables the composer and reports it',
+    await win.locator('#dk-input').isDisabled());
+  await win.evaluate(async () => {
+    await (window as any).window.hub.setCopilotEnabled(true);
+    await (window as any).dkRefresh();
+  });
   // "New conversation" is NON-DESTRUCTIVE now (copilotNewThread, not copilotClear):
   // it must not raise a confirm dialog.
   let dkConfirmed = false;

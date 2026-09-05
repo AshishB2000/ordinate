@@ -83,6 +83,14 @@ async function main(): Promise<void> {
     const out: any = {};
 
     await projects.init();
+    // Datasets but no visuals — the state the Visuals empty page describes and
+    // the main project never can. Created FIRST so 'Smoke test' stays newest.
+    const bare = await projects.createProject('Empty gallery');
+    await datasets.saveDataset(bare.id, { name: 'Signups', sourceKind: 'csv',
+      columns: [{ name: 'city', type: 'text' }, { name: 'n', type: 'number' }],
+      rows: [['Austin', 12], ['Denver', 7], ['Reno', 3]] });
+    out.bareProjectId = bare.id;
+
     const proj = await projects.createProject('Smoke test');
     out.projectId = proj && proj.id;
 
@@ -313,51 +321,39 @@ async function main(): Promise<void> {
   // The first paint is a SPLASH. Screenshotting here yields a loading screen
   // that passes every size and DOM check while proving nothing — this cost a
   // false pass once already, so wait it out rather than trusting byte count.
+  // Three reloads in this file need it, so it is one helper, not three copies.
+  const killSplash = () => win.evaluate(() => {
+    const s = document.querySelector('#splash, .splash, [class*=splash], [id*=splash]');
+    if (s) s.remove();
+  }).catch(() => {});
   await win.waitForTimeout(3000);
-  await win
-    .evaluate(() => {
-      const s = document.querySelector('#splash, .splash, [class*=splash], [id*=splash]');
-      if (s) s.remove();
-    })
-    .catch(() => {});
+  await killSplash();
 
-  // Reload so the renderer picks up the project written above, then open it.
+  // Reload so the renderer picks up the project written above.
   await win.reload();
   await win.waitForLoadState('domcontentloaded');
   await win.waitForTimeout(3000);
-  await win
-    .evaluate(() => {
-      const s = document.querySelector('#splash, .splash, [class*=splash], [id*=splash]');
-      if (s) s.remove();
-    })
-    .catch(() => {});
+  await killSplash();
 
-  // ── The no-project dead end ───────────────────────────────────────────────
-  // FIRST UI interaction in this file, deliberately. The renderer's
-  // currentProjectId is a script-scope `let`, not a window property, so a test
-  // cannot fake the null state — it can only run before anything fills it in.
-  // Placed later, this assertion passes with the bug still present, because the
-  // home-screen checks below adopt a project on the way past.
-  //
-  // Null currentProjectId is the state a fresh install is permanently in.
-  // "+ New visual" used to alert "Open a project first" and stop — a dead end,
-  // since projects are demoted by design and there is no picker in the nav to
-  // send anyone to. It must resolve one implicitly and open the popup.
   await win.evaluate(() => {
     (window as any).__alerts = [];
     window.alert = (m?: any) => { (window as any).__alerts.push(String(m)); };
   });
-  await win.evaluate(() => {
-    const el = [...document.querySelectorAll('.as-nav-item')].find(
-      (b) => (b.textContent || '').trim() === 'Visuals') as HTMLElement | undefined;
-    el?.click();
-  });
-  await win.waitForTimeout(900);
 
-  // The empty state is the SHARED .ws-empty treatment, not a bespoke dashed box
-  // — the whole point of hoisting those classes. Asserted from a laid-out page:
-  // a glyph cluster that renders zero <svg> children, or an AI door that is not
-  // actually gated, both look fine to a DOM-presence check.
+  // ── The Visuals empty state ───────────────────────────────────────────────
+  // The SHARED .ws-empty treatment, not a bespoke dashed box — the point of
+  // hoisting those classes. Asserted from a laid-out page: a glyph cluster with
+  // zero <svg> children, or an ungated AI door, both pass a DOM-presence check.
+  // Against the BARE project, adopted EXPLICITLY: the page only exists for a
+  // project with no visuals, and since the Home rebuild boot adopts the newest
+  // one (refreshHome → resolveProjectId), so "arrived with nothing adopted" is
+  // unreachable. Without it these read a gallery holding two cards.
+  await win.evaluate(async (id: string) => {
+    await (window as any).adoptProject(id); // MUST await: the click below repaints the gallery
+    ([...document.querySelectorAll('.as-nav-item')]
+      .find((b) => (b.textContent || '').trim() === 'Visuals') as HTMLElement | undefined)?.click();
+  }, r.bareProjectId);
+  await win.waitForTimeout(900);
   const vizEmpty = await win.evaluate(() => {
     const box = document.getElementById('viz-empty');
     const art = document.getElementById('viz-empty-art');
@@ -382,9 +378,8 @@ async function main(): Promise<void> {
 
   // An empty page that only DESCRIBES the next action is still a blank page.
   // The band offers the project's real datasets, and — the part worth pinning —
-  // it must not claim "No data yet" to someone who has data. Arriving here via
-  // the nav leaves no project adopted, so this also covers the read path that
-  // resolves an existing project WITHOUT creating one.
+  // it must not claim "No data yet" to someone who has data: the bare project
+  // has one dataset and no visuals, which is exactly that case.
   const startBand = await win.evaluate(() => {
     const band = document.getElementById('viz-start');
     const cards = [...document.querySelectorAll('.viz-ds-card')] as HTMLElement[];
@@ -419,13 +414,23 @@ async function main(): Promise<void> {
   ok('…and the card reads as a panel, not a strip',
      startBand.cardH >= 200, `${startBand.cardH}px tall`);
 
+  // Back to the main project below, gallery repainted with it.
+  await win.evaluate(async (id: string) => {
+    await (window as any).adoptProject(id); (window as any).selectSection('visuals');
+  }, r.projectId);
+  await win.waitForTimeout(900);
+
+  // "+ New visual" used to alert "Open a project first" and stop — a dead end,
+  // since projects are demoted and there is no nav picker to send anyone to.
+  // That branch needs a null currentProjectId, unreachable now, so what is left
+  // to pin is the outcome: the popup opens and nothing alerts.
   await win.evaluate(() => (document.getElementById('viz-new-btn') as HTMLElement)?.click());
   await win.waitForTimeout(2000);
   const noProject = await win.evaluate(() => ({
     alerts: (window as any).__alerts as string[],
     modalOpen: !!document.querySelector('.vn-modal'),
   }));
-  ok('+ New visual with no project adopted opens the popup instead of a dead end',
+  ok('+ New visual opens the popup instead of a dead end, and never alerts',
      noProject.modalOpen && noProject.alerts.length === 0, JSON.stringify(noProject));
   await win.evaluate(() => (document.querySelector('.js-vn-cancel') as HTMLElement)?.click());
   await win.waitForTimeout(400);
@@ -890,9 +895,9 @@ async function main(): Promise<void> {
   ok('an empty Dashboards page shows the empty state, not a bare table',
      emptyState.emptyVisible && emptyState.h > 150 && !emptyState.tableVisible,
      JSON.stringify(emptyState));
-  ok('the empty state offers both doors — blank and AI',
-     emptyState.createVisible && emptyState.aiVisible && /AI/.test(emptyState.aiLabel),
-     `"${emptyState.heading}" / "${emptyState.aiLabel}"`);
+  ok('the empty state offers both doors — blank and the Assistant',
+     emptyState.createVisible && emptyState.aiVisible && /Assistant/.test(emptyState.aiLabel),
+     `"${emptyState.heading}" / "${emptyState.aiLabel}"`);  // one name, everywhere
 
   const emptyShot = path.join(shotDir, 'analyses-empty.png');
   await win.screenshot({ path: emptyShot });
@@ -1028,7 +1033,7 @@ async function main(): Promise<void> {
   ok('step 2 offers four ways to start',
      wiz2.count === 4 &&
        JSON.stringify(wiz2.titles) ===
-         JSON.stringify(['Blank sheet', 'KPIs + chart', 'Two-up', '✨ Let AI design it']),
+         JSON.stringify(['Blank sheet', 'KPIs + chart', 'Two-up', '✨ Let the Assistant design it']),
      JSON.stringify(wiz2.titles));
   ok('…step 1 is ticked off behind it', wiz2.doneTick === '✓', `"${wiz2.doneTick}"`);
   ok('…Blank is preselected, so the step answers itself',
@@ -1184,7 +1189,7 @@ async function main(): Promise<void> {
        const labels = [...document.querySelectorAll('.vn-pick-modal .vn-pick-actions .btn')]
          .map((b) => (b.textContent || '').trim());
        return tiles > 0 && labels.indexOf('+ New visual') >= 0
-         && labels.some((l) => /Suggest with AI/.test(l));
+         && labels.some((l) => /Suggest with the Assistant/.test(l));
      }));
   ok('the picker adds the saved visual', await win.evaluate(() => {
     const tile = document.querySelector('.vn-pick-modal .vn-pick-tile') as HTMLElement | null;
@@ -1945,8 +1950,8 @@ async function main(): Promise<void> {
   });
   ok('the ✨ Suggest a visual button is offered, above the chart types',
      ai.present && /Suggest a visual/.test(ai.label) && ai.aboveChips, JSON.stringify(ai));
-  ok('…with no model it is DISABLED and says so',
-     ai.disabled && ai.noteVisible && /needs? a model/i.test(ai.noteText), ai.noteText);
+  ok('…with no model it is DISABLED and says the one shared sentence',
+     ai.disabled && ai.noteVisible && /Execution to use the Assistant/.test(ai.noteText), ai.noteText);
   ok('…while the app-computed chart types still work, and say they are the app\'s',
      ai.chips > 0 && /recommended by the app itself/i.test(ai.noteText) && !!ai.activeChip,
      `${ai.chips} chips, active="${ai.activeChip}"`);
@@ -3507,12 +3512,7 @@ async function main(): Promise<void> {
   await win.reload();
   await win.waitForLoadState('domcontentloaded');
   await win.waitForTimeout(3000);
-  await win
-    .evaluate(() => {
-      const s = document.querySelector('#splash, .splash, [class*=splash], [id*=splash]');
-      if (s) s.remove();
-    })
-    .catch(() => {});
+  await killSplash();
 
   // ── The Svelte island (Phase 5) ───────────────────────────────────────────
   // docs/phase-5/01-toolchain.md §10 names `npm run smoke` as "the check

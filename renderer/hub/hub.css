@@ -139,6 +139,23 @@ body.cap-focus .hub-topbar { display: none; }
 
 .tb-spacer { flex: 1; }
 
+/* ── `hidden` actually hides, everywhere ──────────────────────────────────
+   An author `display` beats the UA stylesheet's `[hidden] { display: none }`
+   — same specificity, and every class rule in this file comes later — so
+   `el.hidden = true` did nothing to any element whose own class set a display.
+   That was patched one class at a time, 107 times, and it kept coming back:
+   the dataset explorer still shipped an empty grey capture strip, an empty
+   Columns menu, an empty step editor and a live "Apply steps / Dismiss" panel,
+   all marked `hidden` in index.html and all on screen.
+   Settle it once, for every element, instead of writing the 108th patch — the
+   107 per-class rules this replaces are deleted.
+   `!important` is safe here: nothing in the hub reveals a `[hidden]` element
+   through CSS (the three `:not([hidden])` rules only style the shown state),
+   and the surfaces that toggle visibility from JS with `style.display`
+   (#api-banner, #hotkey-fail-banner, #settings-panel, #permission-panel,
+   #capture-history) use an `is-hidden` class, never the attribute. */
+[hidden] { display: none !important; }
+
 /* ── buttons ──────────────────────────────────────────────────────── */
 .btn {
   display: inline-flex;
@@ -166,12 +183,6 @@ body.cap-focus .hub-topbar { display: none; }
 }
 
 .btn .ic { display: block; }
-/* `display: inline-flex` above BEATS the UA's `[hidden] { display: none }`, so
-   until this rule existed `el.hidden = true` did nothing to a .btn — the
-   dashboard toolbar's "Clear all" showed with zero filters, and every
-   conditionally-hidden button in the analysis surface showed unconditionally.
-   Same defect, same fix, for the AI interpretation panel below. */
-.btn[hidden] { display: none; }
 
 .btn-sm {
   height: 30px;
@@ -808,7 +819,6 @@ body.cap-focus .hub-topbar { display: none; }
   overflow-y: auto;
   padding: 8px 24px 24px;
 }
-.settings-pane[hidden] { display: none; }
 
 .stp-body {
   flex: 1;
@@ -2165,7 +2175,6 @@ body.cap-focus .hub-topbar { display: none; }
   box-shadow: 0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.1);
 }
 
-.img-action-menu[hidden] { display: none; }
 
 .img-act-btn {
   display: flex;
@@ -2205,7 +2214,6 @@ body.cap-focus .hub-topbar { display: none; }
   justify-content: center;
 }
 
-.lightbox[hidden] { display: none; }
 
 .lightbox-backdrop {
   position: absolute;
@@ -2952,7 +2960,6 @@ body.cap-focus .hub-topbar { display: none; }
   transition: opacity 0.3s ease;
 }
 
-.hub-toast[hidden] { display: none; }
 .hub-toast.hub-toast-fade { opacity: 0; }
 
 /* ── Chart ⋯ menu ─────────────────────────────────────────────────────── */
@@ -3013,7 +3020,6 @@ body.cap-focus .hub-topbar { display: none; }
   padding: 5px 0;
 }
 
-.chart-menu[hidden] { display: none; }
 
 /* Action items */
 .chart-menu-section { padding: 2px 0; }
@@ -3074,7 +3080,6 @@ body.cap-focus .hub-topbar { display: none; }
   border-top: 1px solid var(--border);
 }
 
-.chart-menu-customize[hidden] { display: none; }
 
 .cm-field { margin-bottom: 8px; }
 
@@ -3115,10 +3120,6 @@ body.cap-focus .hub-topbar { display: none; }
   background-repeat: no-repeat;
   background-position: right 8px center;
 }
-#cm-legend-pos-field[hidden],
-#cm-sort-field[hidden],
-#cm-y-zero-row[hidden],
-#cm-smooth-row[hidden] { display: none; }
 
 /* Color swatches */
 .cm-swatches {
@@ -3233,7 +3234,6 @@ body.cap-focus .hub-topbar { display: none; }
   flex-direction: column;
   gap: 12px;
 }
-.settings-menu[hidden] { display: none; }
 
 .sm-section { display: flex; flex-direction: column; gap: 7px; }
 .sm-label {
@@ -3557,7 +3557,6 @@ select.model-picker::-ms-expand { display: none; }
     var(--bg);
   overflow: hidden;
 }
-.splash[hidden] { display: none; }
 
 /* faint grid texture, masked to fade toward the edges */
 .splash::before {
@@ -3694,9 +3693,6 @@ select.model-picker::-ms-expand { display: none; }
 
 /* ── Execution mode pane (Local CLI / BYOK) ─────────────────────────────────── */
 .ex-panel { display: flex; flex-direction: column; }
-/* `display:flex` above outranks the UA [hidden] rule, so the attribute alone
-   won't hide a panel — restore it explicitly (matches .settings-pane[hidden] etc.). */
-.ex-panel[hidden] { display: none; }
 
 /* Local CLI stub */
 .ex-stub {
@@ -3741,9 +3737,6 @@ select.model-picker::-ms-expand { display: none; }
   font-size: 12.5px; color: var(--muted);
   padding: 8px 2px;
 }
-/* display:flex above overrides the UA [hidden] rule, so the JS `hidden = true`
-   wouldn't visually clear the spinner — restore it (same fix as .ex-cli-list). */
-.ex-local-scanning[hidden] { display: none; }
 
 .ex-cli-group { margin-top: 10px; }
 
@@ -3766,7 +3759,7 @@ button.ex-collapse .ex-collapse-caret { display: none; } /* group header reads a
 .ex-byok-card.open .ex-byok-head .ex-collapse-caret { transform: rotate(90deg); }
 
 .ex-cli-list { display: flex; flex-direction: column; gap: 6px; }
-.ex-cli-list[hidden] { display: none; } /* let the collapse toggle actually hide it */
+/* let the collapse toggle actually hide it */
 
 .ex-cli-row {
   display: flex; align-items: flex-start; gap: 11px;
@@ -3879,9 +3872,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   padding: 4px 12px 13px;
   border-top: 1px solid var(--border);
 }
-/* the explicit display:flex above would otherwise defeat the hidden attribute,
-   so collapsed cards (body.hidden) must force display:none */
-.ex-byok-body[hidden] { display: none; }
 .ex-byok-field { display: flex; flex-direction: column; gap: 5px; }
 .ex-byok-flabel { font-size: 11.5px; font-weight: 600; color: var(--text); }
 .ex-byok-model { max-width: 260px; }
@@ -4240,11 +4230,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   font-weight: 500;
   cursor: pointer;
 }
-/* `hidden` loses to an explicit `display` — the same trap .an-side, .ds-explorer
-   and the import blocks all document. No `.as-tool` currently sets `hidden`
-   from JS, but this is a correct latent fix kept general on purpose: any
-   future one that does would silently stay on screen and clickable without it. */
-.as-tool[hidden] { display: none; }
 .as-tool .ic { flex: 0 0 auto; }
 /* Kept general: no `.as-tool` is disabled today (the dock's suppression now
    dims #side-ai-btn in the top bar instead — see .hub-ai-btn:disabled), and
@@ -4395,7 +4380,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   flex-direction: column;
   background: var(--bg);
 }
-.ws-panel[hidden] { display: none; }
 .ws-placeholder {
   flex: 1;
   display: flex;
@@ -4640,17 +4624,22 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   align-items: center;
   gap: 4px;
 }
+/* Combine…, ↻ Refresh and the trash are `.btn.btn-sm` now, so they carry the
+   app's height (30px), radius and type instead of three private button styles
+   — Combine… had none at all and rendered as a raw UA button, 21px tall with
+   square corners, beside a 36px `.btn` in the same panel. What is left here is
+   only what makes each one itself. */
 .ds-saved-del {
-  padding: 0 8px;
+  width: 30px;      /* square: the trash is icon-only, .btn-sm's 11px side padding is for text */
+  padding: 0;
   background: none;
-  border: 1px solid transparent;
-  border-radius: var(--r-sm, 6px);
-  cursor: pointer;
+  border-color: transparent;
   color: var(--text-dim);
 }
 .ds-saved-del:hover {
-  border-color: #dc2626;
-  color: #dc2626;
+  background: var(--error-soft);
+  border-color: var(--error);
+  color: var(--error);
 }
 
 /* ── The section header, and the empty state ── */
@@ -4675,7 +4664,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   flex: 0 0 auto;
   flex-wrap: wrap;
 }
-.ds-head-actions .btn[hidden] { display: none; }
 /* With no datasets, the empty-state card below IS the call to action (Import /
    Paste). The header toolbar would repeat those same two actions, so it hides
    until a dataset exists — one home for Import/Paste per state, never both.
@@ -4691,7 +4679,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   padding: 40px 24px;
   text-align: center;
 }
-.ws-empty[hidden] { display: none; }
 .ws-empty-h {
   font-size: 15px;
   font-weight: 600;
@@ -4718,16 +4705,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
    PERMANENTLY, whatever datasets.ts set `.hidden` to. That is a good part of why
    this section read as one long pile of blocks, and the import dialog's two-step
    flow depends on the attribute working. */
-.ds-paste-wrap[hidden],
-.ds-sheet-wrap[hidden],
-.ds-warnings[hidden],
-.ds-preview[hidden],
-.ds-save-bar[hidden] { display: none; }
-
-/* Eighth element caught by the same trap: .ds-explorer sets `display`, so
-   `hidden` alone left it on screen — Back to datasets gave the list back with
-   the explorer still under it. */
-.ds-explorer[hidden] { display: none; }
 
 /* Narrow windows: drop "Data as of" rather than let the Action column fall off
    the edge of the card. The freshness of the open dataset is in the explorer
@@ -4773,8 +4750,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   gap: 10px;
   flex: 0 0 auto;
 }
-.ds-explorer-meta .btn[hidden],
-.ds-explorer-ident .ds-source-badge[hidden] { display: none; }
 .ds-back { flex: 0 0 auto; }
 
 /* ── The add-metric dialog (dashboards.ts openMetricDialog) ──────────────────
@@ -4892,7 +4867,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   color: var(--muted);
   margin: 0;
 }
-.vn-pick-note[hidden] { display: none; }
 .vn-pick-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -4983,7 +4957,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
-.ds-tabp[hidden] { display: none; }
 
 /* The tab body. A column for Data and Quality; Prepare turns it into a
    workbench — the step machinery in a side rail, the live grid beside it, so a
@@ -5026,18 +4999,12 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 }
 #ds-tabp-quality:has(#ds-quality:not([hidden])) .ds-quality-none { display: none; }
 
-/* `hidden` loses to an explicit `display` — the same trap .an-side documents,
-   and the same one the import blocks hit. Without these the Prepare panel and
-   the quality strip are on screen whatever their tab says. */
-.ds-prepare-panel[hidden],
-.ds-quality[hidden] { display: none; }
 
 /* ── The import dialog ───────────────────────────────────────────────────────
    Wider than the stock .ws-modal (which is min(360px, …)) because it holds a
    preview table; `.ws-modal` is defined LATER in this file, so the class pair
    is what wins on specificity — the same trick .an-draft-modal uses. A column
    so the save bar can sit at the bottom as the footer while the body scrolls. */
-.ds-import-overlay[hidden] { display: none; }
 .ws-modal.ds-import-modal {
   width: min(880px, calc(100vw - 48px));
   max-height: calc(100vh - 72px);
@@ -5098,16 +5065,7 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   line-height: 1;
   color: var(--warn);
 }
-.ds-saved-refresh {
-  padding: 0 10px;
-  font-size: 12px;
-  white-space: nowrap;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  cursor: pointer;
-  color: var(--muted);
-}
+.ds-saved-refresh { color: var(--muted); }
 .ds-saved-refresh:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent);
@@ -5144,7 +5102,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   color: var(--muted);
   padding: 0 0 6px;
 }
-.ds-refresh-status[hidden] { display: none; }
 .ds-refresh-status.is-error { color: var(--error); }
 
 /* ── Saved-dataset explorer (Week 5) ── */
@@ -5346,7 +5303,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   border-radius: var(--r-lg);
   overflow: hidden;
 }
-.viz-builder[hidden] { display: none; }
 .viz-builder-head {
   display: flex;
   align-items: center;
@@ -5407,7 +5363,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   flex-direction: column;
   gap: 16px;
 }
-.viz-encoding[hidden] { display: none; }
 /* Each block reads label-above-field, not label-beside-field: the
    `min-width: 92px` side-label layout this replaced is what made the form
    ragged (a long column name pushed every select to a different x). */
@@ -5535,7 +5490,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   margin-top: auto;
   padding-top: 12px;
 }
-.viz-warnings[hidden] { display: none; }
 .viz-warning {
   font-size: 12px;
   border-radius: var(--r-md);
@@ -5593,7 +5547,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   flex-direction: column;
   gap: 16px;
 }
-.viz-gallery[hidden] { display: none; }
 .viz-gallery-head {
   display: flex;
   /* baseline, so "+ New visual" sits on the same line as the Visuals heading
@@ -5612,7 +5565,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: 14px;
 }
-.viz-grid[hidden] { display: none; }
 
 .viz-card {
   position: relative; /* anchors the star + ⋯ overlays onto the tile */
@@ -5786,7 +5738,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   padding: 2px 8px;
   white-space: nowrap;
 }
-.viz-count[hidden] { display: none; }
 
 /* ── The empty state ──
    TOP-ALIGNED, like every other section: content flows from the header down and
@@ -5800,7 +5751,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   flex-direction: column;
   gap: 22px;
 }
-.viz-empty-wrap[hidden] { display: none; }
 /* Reads as a panel rather than a strip. .ws-empty already centres and stacks
    its children; this only gives them room. */
 .viz-empty-wrap > .ws-empty {
@@ -5818,7 +5768,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   gap: 10px;
   width: 100%;
 }
-.viz-start[hidden] { display: none; }
 .viz-start-head {
   display: flex;
   align-items: baseline;
@@ -5833,7 +5782,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   text-transform: uppercase;
   color: var(--text-dim);
 }
-.viz-start-all[hidden] { display: none; }
 .viz-start-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 .viz-ds-card {
   display: flex;
@@ -5912,7 +5860,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   font-size: 11.5px;
   color: var(--text-dim);
 }
-.viz-empty-hint[hidden] { display: none; }
 
 /* ── "+ New visual" popup (cloned from #viz-new-tpl) ── */
 .ws-modal.vn-modal {
@@ -5941,7 +5888,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   flex-direction: column;
   gap: 10px;
 }
-.vn-pane[hidden] { display: none; }
 .vn-sub {
   font-size: 12px;
   color: var(--muted);
@@ -5954,7 +5900,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   max-height: 320px;
   overflow: auto;
 }
-.vn-rows[hidden] { display: none; }
 .vn-row {
   display: flex;
   flex-direction: column;
@@ -5987,7 +5932,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   border: 1px dashed var(--border-2);
   border-radius: var(--r-sm);
 }
-.vn-none[hidden] { display: none; }
 .vn-choices {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -6020,8 +5964,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   color: var(--muted);
   margin: 0;
 }
-.vn-note[hidden] { display: none; }
-.vn-actions .js-vn-back[hidden] { display: none; }
 .vn-options {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -6082,13 +6024,11 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   border-radius: 6px;
   max-width: 160px;
 }
-.viz-filter-val[hidden] { display: none; }
 .viz-suggest-btn { margin-left: auto; }
 .viz-suggest-hint {
   font-size: 12px;
   color: var(--muted);
 }
-.viz-suggest-hint[hidden] { display: none; }
 
 /* ── Week 9: Dashboards (grid of visual/metric/text cards across pages) ── */
 .dash-panel {
@@ -6100,7 +6040,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   flex-direction: column;
   gap: 16px;
 }
-.dash-panel[hidden] { display: none; }
 .dash-list-head {
   display: flex;
   align-items: flex-start;
@@ -6199,7 +6138,6 @@ body.an-focus .dash-head-spacer--2 { display: none; }
 /* The count rides in the heading, so it must not push itself to the far right
    the way .ws-badge does in a flex header. */
 .an-count { margin-left: 8px; vertical-align: middle; }
-.an-count[hidden] { display: none; }
 
 .ws-hero {
   display: flex;
@@ -6212,7 +6150,6 @@ body.an-focus .dash-head-spacer--2 { display: none; }
   color: #fff;
   overflow: hidden;
 }
-.ws-hero[hidden] { display: none; }
 .ws-hero-copy { max-width: 640px; }
 .ws-hero-h {
   margin: 0 0 6px;
@@ -6287,8 +6224,6 @@ body.an-focus .dash-head-spacer--2 { display: none; }
   padding: 14px 16px 16px;
   gap: 10px;
 }
-.ws-table[hidden],
-.an-table[hidden] { display: none; }
 .an-table-head {
   display: flex;
   justify-content: flex-end;
@@ -6407,7 +6342,6 @@ body.an-focus .dash-head-spacer--2 { display: none; }
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
 }
-.ws-empty[hidden] { display: none; }
 .ws-empty-art {
   display: flex;
   align-items: flex-end;
@@ -6480,9 +6414,6 @@ body.an-focus .dash-head-spacer--2 { display: none; }
   max-height: calc(100vh - 78px);
   overflow-y: auto;
 }
-/* `hidden` loses to an explicit `display`. */
-.an-side[hidden] { display: none; }
-.an-pane[hidden] { display: none; }
 .an-pane-head {
   display: flex;
   align-items: center;
@@ -6585,7 +6516,6 @@ body.an-focus .dash-head-spacer--2 { display: none; }
   line-height: 1.5;
   color: var(--muted);
 }
-.an-pane-hint[hidden] { display: none; }
 .an-calc-btn { font-size: 11px; padding: 3px 8px; align-self: flex-start; margin-top: 8px; }
 
 /* #an-data-body hosted inside the Visuals pane: it is a section of that pane
@@ -6600,7 +6530,6 @@ body.an-focus .dash-head-spacer--2 { display: none; }
 
 /* Fields */
 .an-fields { display: flex; flex-direction: column; gap: 1px; max-height: 250px; overflow-y: auto; }
-.an-fields[hidden] { display: none; }
 .an-field {
   display: flex;
   align-items: center;
@@ -6638,7 +6567,6 @@ body.an-focus .dash-head-spacer--2 { display: none; }
 /* ── Wells ──────────────────────────────────────────────────────────────────
    A bordered drop zone per encoding slot, a PILL per field, and a dashed line
    saying what belongs in an empty one. */
-#an-props-inner[hidden] { display: none; }
 
 /* ── Properties tabs ─────────────────────────────────────────────────────────
    A hairline rail with the active tab underlined in the accent — the same
@@ -6667,7 +6595,6 @@ body.an-focus .dash-head-spacer--2 { display: none; }
 .an-tab:hover { color: var(--text); }
 .an-tab.is-on { color: var(--accent); border-bottom-color: var(--accent); }
 .an-tabp { display: flex; flex-direction: column; gap: 12px; }
-.an-tabp[hidden] { display: none; }
 
 /* A cross-filter-enabled chart is clickable, so it says so. Only the chart area
    picks up the cursor — the card chrome around it is still just chrome. */
@@ -6850,7 +6777,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   line-height: 1.5;
   color: var(--warn);
 }
-.an-prop-note[hidden] { display: none; }
 .an-prop-note--info { color: var(--text-dim); }
 .an-prop-del { width: 100%; font-size: 11.5px; }
 /* The control card's default-value actions (authoringProps.ts anRenderControlProps). */
@@ -6983,7 +6909,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   padding: 18px 22px 4px;
 }
 .an-wiz-pane { display: flex; flex-direction: column; gap: 14px; }
-.an-wiz-pane[hidden] { display: none; }
 
 .an-wiz-bar { display: flex; gap: 10px; align-items: center; }
 .an-wiz-search { flex: 1; }
@@ -6992,7 +6917,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   border-radius: var(--r-md);
   overflow: hidden;
 }
-.an-wiz-table[hidden] { display: none; }
 /* Shared template — the labels and the rows are separate elements, so this is
    the only thing keeping them in the same columns. */
 .an-wiz-cols,
@@ -7067,7 +6991,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   color: var(--muted);
 }
 .an-wiz-name { display: flex; flex-direction: column; gap: 6px; }
-.an-wiz-name[hidden] { display: none; }
 .an-wiz-name > span { font-size: 11.5px; font-weight: 600; color: var(--text); }
 
 /* Step 2 — starting layout. The thumbnails are CSS blocks rather than images:
@@ -7144,7 +7067,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 .an-wiz-ta:focus { outline: none; border-color: var(--accent); }
 .an-wiz-ta:disabled { opacity: 0.5; cursor: not-allowed; }
 .an-wiz-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.an-wiz-chips[hidden] { display: none; }
 .an-wiz-chip {
   padding: 5px 10px;
   border: 1px solid var(--border-2);
@@ -7166,7 +7088,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   font-size: 12px;
   line-height: 1.5;
 }
-.an-wiz-note[hidden] { display: none; }
 
 .an-wiz-foot {
   padding: 14px 22px 18px;
@@ -7174,7 +7095,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   align-items: center;
 }
 .an-wiz-spacer { flex: 1; }
-.an-wiz-back[hidden] { display: none; }
 
 /* Editor */
 .dash-editor {
@@ -7186,7 +7106,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   flex-direction: column;
   gap: 12px;
 }
-.dash-editor[hidden] { display: none; }
 
 /* ── Phase D: one editor, two hosts ────────────────────────────────────────
    The SAME #dash-editor element is re-parented between #an-editor-host (in the
@@ -7247,8 +7166,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   color: var(--muted);
   white-space: nowrap;
 }
-.dash-fresh[hidden] { display: none; }
-#dash-refresh-data[hidden] { display: none; }
 
 .dash-pages {
   display: flex;
@@ -7518,7 +7435,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   padding: 56px 24px 64px;
   text-align: center;
 }
-.dash-starters[hidden] { display: none; }
 .dash-starter-h {
   font-size: 15px;
   font-weight: 600;
@@ -7759,7 +7675,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   border-radius: 6px;
   cursor: pointer;
 }
-.dash-present-exit[hidden] { display: none; }
 .dash-present-exit:hover { border-color: var(--accent); color: var(--accent); }
 
 .dash-presenting .sidebar,
@@ -7819,7 +7734,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   flex-direction: column;
   gap: 14px;
 }
-.conn-panel[hidden] { display: none; }
 .conn-head {
   display: flex;
   align-items: center;
@@ -7856,7 +7770,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 /* `display: flex` beats the `hidden` attribute's UA `display: none`, so every
    flex/grid container in this panel needs its own [hidden] rule. Without it the
    picker and the form paint on top of each other. */
-.conn-form[hidden] { display: none; }
 
 /* ── Connector picker (Step 1) — grouped, searchable tiles ── */
 .conn-picker {
@@ -7869,7 +7782,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
      its sections do not compress. */
   flex: 0 0 auto;
 }
-.conn-picker[hidden] { display: none; }
 .conn-search-row {
   display: flex;
   align-items: center;
@@ -7895,7 +7807,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   flex-direction: column;
   gap: 8px;
 }
-.conn-group[hidden] { display: none; }
 .conn-group-h {
   font-size: 12px;
   font-weight: 600;
@@ -8092,11 +8003,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
    the UA rule loses without an explicit override. The run box, its table/query
    rows and the save bar were painting on an untouched panel. The ds-* ones are
    ID-scoped so the shared dataset rules are left alone. */
-.conn-run[hidden] { display: none; }
-.conn-preview[hidden] { display: none; }
-.conn-field-row[hidden] { display: none; }
-#conn-run-warnings[hidden] { display: none; }
-#conn-save-bar[hidden] { display: none; }
 .conn-run-head {
   display: flex;
   align-items: center;
@@ -8634,7 +8540,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   border: 1px solid var(--border);
   border-radius: 8px;
 }
-.ai-interp[hidden] { display: none; }
 .ai-interp-head {
   display: flex;
   align-items: center;
@@ -8758,7 +8663,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   line-height: 1.45;
   color: var(--muted);
 }
-.an-ai-note[hidden] { display: none; }
 
 /* ── Direct manipulation on the sheet ────────────────────────────────────────
    Drag the card to move, drag its right/bottom edge to resize. A ghost shows the
@@ -8824,7 +8728,6 @@ body.an-grabbing { user-select: none; cursor: grabbing; }
   font-size: 11.5px;
 }
 .an-field-search:focus { outline: none; border-color: var(--accent); background: var(--surface); }
-.an-field-search[hidden] { display: none; }
 
 /* Change visual type: one row naming the current type, with a chevron into the
    full picker. */
@@ -9000,13 +8903,6 @@ body.an-focus .dash-editor-head #dash-name {
 .an-wells .enc-pill-name:hover { text-decoration: underline; }
 .an-wells .enc-empty.enc-single { cursor: pointer; }
 .an-wells .enc-empty.enc-single:hover { border-color: var(--accent); color: var(--accent); }
-.an-wells select.viz-select[hidden] { display: none; }
-
-/* `hidden` is a no-op against an explicit `display`. The pill is `display:grid`
-   and the placeholder `display:block`, so both need this to actually hide —
-   the same trap `.btn[hidden]` hit in the dashboard editor. */
-.an-wells .enc-pill[hidden],
-.an-wells .enc-empty[hidden] { display: none; }
 
 /* ── The tool rail ───────────────────────────────────────────────────────────
    A 48px vertical strip pinned to the far left, full editor height. Palette is
@@ -9071,7 +8967,6 @@ body.an-focus .dash-editor-head #dash-name {
   margin-bottom: 8px;
   min-width: 0;
 }
-.an-ds[hidden] { display: none; }
 .an-ds-badge {
   flex: none;
   padding: 2px 6px;
@@ -9364,7 +9259,6 @@ body.cap-focus .cap-back {
   justify-content: flex-end;
   background: rgba(0, 0, 0, 0.35);
 }
-.drill-backdrop[hidden] { display: none; }
 .drill-panel {
   display: flex;
   flex-direction: column;
@@ -9417,7 +9311,6 @@ body.cap-focus .cap-back {
   gap: 6px;
   margin-top: 10px;
 }
-.drill-chips[hidden] { display: none; }
 .drill-chip {
   font-size: 12px;
   padding: 3px 8px;
@@ -9433,7 +9326,6 @@ body.cap-focus .cap-back {
   margin-top: 8px;
 }
 .drill-tools { padding: 12px 20px 0; }
-.drill-tools[hidden] { display: none; }
 .drill-search { max-width: 320px; }
 /* The refusal sentence: shown INSTEAD of the grid, never alongside it. */
 .drill-note {
@@ -9446,7 +9338,6 @@ body.cap-focus .cap-back {
   line-height: 1.5;
   color: var(--text-strong);
 }
-.drill-note[hidden] { display: none; }
 .drill-scroll {
   flex: 1 1 auto;
   overflow: auto;
@@ -9454,7 +9345,6 @@ body.cap-focus .cap-back {
   border: 1px solid var(--border);
   border-radius: 6px;
 }
-.drill-scroll[hidden] { display: none; }
 .drill-table { width: max-content; min-width: 100%; }
 .drill-th-btn {
   background: none;
@@ -9496,16 +9386,11 @@ body.cap-focus .cap-back {
    A third view of the Data panel, mutually exclusive with the list and the
    explorer. `.is-composing` is set by dataSection.ts off #ds-composer's own
    `hidden` bit, exactly as `.is-exploring` is off the explorer's.
-
-   Note the explicit `[hidden] { display: none }` on every element below that
-   also sets a `display`: an author `display` beats the UA `[hidden]` rule, and
-   that is precisely how eight elements in this section ended up permanently on
-   screen before PR #84 found them. */
+ */
 #ws-datasets .ds-panel.is-composing .ds-saved,
 #ws-datasets .ds-panel.is-composing .ds-explorer { display: none; }
 
 .ds-composer { display: flex; flex-direction: column; gap: 12px; min-height: 0; flex: 1 1 auto; }
-.ds-composer[hidden] { display: none; }
 
 .ds-composer-head {
   display: flex; align-items: center; gap: 10px;
@@ -9528,7 +9413,6 @@ body.cap-focus .cap-back {
   padding-right: 12px; border-right: 1px solid var(--border);
 }
 .dc-src-group { display: flex; flex-direction: column; gap: 6px; }
-.dc-src-group[hidden] { display: none; }
 .dc-src-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 .dc-src-list { display: flex; flex-direction: column; gap: 4px; }
 .dc-src {
@@ -9542,7 +9426,6 @@ body.cap-focus .cap-back {
 .dc-src-meta { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .dc-src-used { opacity: .55; cursor: default; }
 .dc-src-empty { font-size: 12px; color: var(--muted); }
-.dc-src-empty[hidden] { display: none; }
 
 /* Canvas — a horizontal chain, never free 2-D placement. */
 .dc-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
@@ -9593,7 +9476,6 @@ body.cap-focus .cap-back {
 
 /* Warnings are part of the product, not console noise. */
 .dc-warnings { display: flex; flex-direction: column; gap: 4px; }
-.dc-warnings[hidden] { display: none; }
 .dc-warning {
   padding: 6px 10px; border-radius: 6px;
   background: var(--warn-soft); color: var(--text); font-size: 12px;
@@ -9625,7 +9507,6 @@ body.cap-focus .cap-back {
 .dc-restore:hover { color: var(--accent); }
 .dc-td-dropped { width: 26px; opacity: .25; }
 .dc-pager { display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
-.dc-pager[hidden] { display: none; }
 .dc-page-label { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 
 /* The two popovers. Positioned from JS (element.style is fine under the CSP;
@@ -9636,11 +9517,9 @@ body.cap-focus .cap-back {
   padding: 12px; border: 1px solid var(--border); border-radius: 10px;
   background: var(--surface); box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
 }
-.dc-pop[hidden] { display: none; }
 .dc-pop-title { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 .dc-pop-label { font-size: 11px; color: var(--muted); }
 .dc-pop-note { font-size: 11px; color: var(--warn); }
-.dc-pop-note[hidden] { display: none; }
 .dc-modes { display: flex; gap: 6px; }
 .dc-mode {
   flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 3px;
@@ -9650,7 +9529,6 @@ body.cap-focus .cap-back {
 .dc-mode:hover { border-color: var(--accent); }
 .dc-mode-on { border-color: var(--accent); color: var(--accent); background: var(--surface-2); }
 .dc-keys { display: flex; align-items: center; gap: 6px; }
-.dc-keys[hidden] { display: none; }
 .dc-key {
   flex: 1 1 0; min-width: 0; padding: 5px 7px;
   border: 1px solid var(--border); border-radius: 6px;
@@ -9665,7 +9543,6 @@ body.cap-focus .cap-back {
 .dc-col-drop { align-self: flex-start; color: var(--error); }
 
 /* The Auto-refresh picker, beside the freshness line it qualifies. */
-.ds-auto-host[hidden] { display: none; }
 .ds-auto-select {
   padding: 2px 6px; border: 1px solid var(--border); border-radius: 6px;
   background: var(--surface); color: var(--muted); font: inherit; font-size: 11px;
@@ -9696,7 +9573,6 @@ body.cap-focus .cap-back {
    scrim, and a 520px centred dropdown overlaps a 340px right-edge panel at that
    width. Anything lower and the results render BEHIND an open dock. It stays
    under the full-window settings/modal layers (100000+), which should cover it. */
-.hub-search-results[hidden] { display: none; }
 .hub-search-results {
   position: absolute; top: 100%; left: 0; right: 0; z-index: 9960;
   display: flex; flex-direction: column; gap: 1px;
@@ -9823,7 +9699,6 @@ body.cap-focus .cap-back {
 
 /* The context picker, anchored above the composer it belongs to. Its rows reuse
    the .gs-* hit classes above — one hit-row look across the app, not two. */
-.xp-picker[hidden] { display: none; }
 .xp-picker {
   position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 40;
   display: flex; flex-direction: column; gap: 4px;
@@ -9880,7 +9755,6 @@ body.cap-focus .cap-back {
   justify-content: center;
   gap: 6px;
 }
-.xp-suggests[hidden] { display: none; }
 .xp-suggest {
   padding: 5px 12px;
   border: 1px solid var(--border);
@@ -10006,7 +9880,6 @@ body.cap-focus .cap-back {
   color: var(--text);
   font-size: 12.5px;
 }
-.xp-hint[hidden] { display: none; }
 
 .xp-panel.xp-asked .xp-stage { align-items: stretch; padding-top: 18px; }
 .xp-panel.xp-asked .xp-stage-inner { height: 100%; min-height: 0; }
@@ -10067,7 +9940,6 @@ body.cap-focus .cap-back {
   background: var(--surface);
   border-left: 1px solid var(--border);
 }
-.dk-panel[hidden] { display: none; }
 
 /* The closed-state edge tab (#dk-edge, .dk-edge/.dk-edge-label) was removed in
    the top-bar relayout. It was a vertical tab floating at the window's right
@@ -10194,7 +10066,6 @@ body.cap-focus .cap-back {
   border-radius: var(--r-md);
   box-shadow: var(--shadow-lg);
 }
-.dk-thread-list[hidden] { display: none; }
 .dk-thread-row {
   display: flex;
   align-items: baseline;
@@ -10243,6 +10114,13 @@ body.cap-focus .cap-back {
 .dk-ai-toggle:hover { color: var(--text); border-color: var(--border-3); }
 .dk-ai-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .dk-ai-toggle--off { color: var(--text-dim); }
+/* No model configured: not a toggle, a signpost. Muted and dashed so it does
+   not read as an active "on" state above a body that says the opposite. */
+.dk-ai-toggle--none {
+  color: var(--text-faint);
+  border-style: dashed;
+  font-weight: 500;
+}
 
 .dk-hint {
   flex: none;
@@ -10253,7 +10131,6 @@ body.cap-focus .cap-back {
   color: var(--text);
   font-size: 12px;
 }
-.dk-hint[hidden] { display: none; }
 
 .dk-messages {
   flex: 1 1 auto;
@@ -10611,7 +10488,6 @@ body.cap-focus .cap-back {
 
 /* Starter chips — reuse the retired page's pill look (.xp-suggest), inline. */
 .home-ask-suggests { display: flex; flex-wrap: wrap; gap: 6px; }
-.home-ask-suggests[hidden] { display: none; }
 .home-ask-chip {
   padding: 5px 12px;
   border: 1px solid var(--border);
@@ -10674,7 +10550,6 @@ body.cap-focus .cap-back {
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
 }
-.home-card[hidden] { display: none; }
 .home-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .home-card-h { font-size: 13px; font-weight: 600; color: var(--text-strong); margin: 0; }
 
@@ -10747,7 +10622,6 @@ body.cap-focus .cap-back {
 
 /* ── Quick-start row (reused for the "Your data" Connect shortcuts) ───────── */
 .home-quick { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.home-quick[hidden] { display: none; }
 .home-quick-label {
   font-size: 11px;
   font-weight: 700;
@@ -10784,7 +10658,6 @@ body.cap-focus .cap-back {
 
 /* ── 3 + 4. Starred and Recent ───────────────────────────────────────────── */
 .home-sec { display: flex; flex-direction: column; gap: 9px; min-height: 0; }
-.home-sec[hidden] { display: none; }
 /* Recent takes the remaining height so the page reaches the bottom of the
    window in BOTH states — populated (rows + breathing room) and empty (the
    empty state centres in the space instead of leaving 250px of white). */
@@ -10815,7 +10688,6 @@ body.cap-focus .cap-back {
   font-size: 12px;
   cursor: pointer;
 }
-.home-showall[hidden] { display: none; }
 .home-showall:hover { color: var(--text-strong); text-decoration: underline; }
 
 .home-rows {
