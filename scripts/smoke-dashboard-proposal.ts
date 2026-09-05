@@ -146,6 +146,25 @@ async function main(): Promise<void> {
   ok('…drawing a real chart, not a placeholder',
     (await win.locator('#dk-messages .dk-plan-grid canvas').count()) > 0);
 
+  // A canvas that EXISTS is not a chart anyone can read. The first cut of this
+  // card drew every plot as a ~15px sliver inside a correct 150px box, and every
+  // presence assertion above passed while it did — so the height is asserted,
+  // and so is staying inside the box (the fix for the sliver overflowed the
+  // review modal's tiles by 2px before it was scoped to the dock).
+  const box = await win.evaluate(() => {
+    const tile = document.querySelector('#dk-messages .dk-plan-grid .an-draft-visual');
+    const viz = tile && tile.querySelector('.an-draft-viz');
+    const cv = tile && tile.querySelector('canvas');
+    if (!viz || !cv) return null;
+    const v = viz.getBoundingClientRect();
+    const c = cv.getBoundingClientRect();
+    return { viz: Math.round(v.height), canvas: Math.round(c.height), over: Math.round(c.bottom - v.bottom) };
+  });
+  ok('…at a readable height, not a sliver in a correctly-sized box',
+    Boolean(box) && box!.canvas > 80, JSON.stringify(box));
+  ok('…and inside its own box, not printing through the tile below',
+    Boolean(box) && box!.over <= 1, JSON.stringify(box));
+
   // The numbers came from previewPlan reading Parquet — the stub supplied none.
   // Read what Chart.js ACTUALLY drew. `chartInstances` is a top-level const in a
   // classic script, so it never lands on `window`; Chart.getChart(canvas) is the

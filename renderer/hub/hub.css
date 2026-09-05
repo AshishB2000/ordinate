@@ -7570,12 +7570,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   position: relative;
   overflow: hidden;
 }
-/* renderVizInArea nests the canvas one level deeper than this rule assumed:
-   .cv-viz-area > .cv-chart-wrapper > .cv-canvas-wrap. The wrapper is an
-   auto-height flex column, so `height:100%` on the canvas wrap resolved against
-   nothing and collapsed the plot to ~16px inside an otherwise correct 150px
-   box. Both levels have to be told to fill the fixed-height preview. */
-.an-draft-viz .cv-chart-wrapper,
 .an-draft-viz .cv-canvas-wrap { height: 100%; min-height: 0; }
 .an-draft-dropped {
   display: flex;
@@ -10906,6 +10900,18 @@ body.cap-focus .cap-back {
    every plot drew as a ~15px sliver. The tiles keep their height; the grid
    scrolls instead. */
 .dk-plan-grid > .an-draft-visual { flex: 0 0 auto; }
+/* renderVizInArea nests the canvas one level deeper than the .an-draft-viz rule
+   above assumes: .cv-viz-area > .cv-chart-wrapper > .cv-canvas-wrap. The wrapper
+   is an auto-height flex column, so at this tile's smaller size `height:100%` on
+   the canvas wrap resolved against nothing and collapsed the plot to ~16px in an
+   otherwise correct 150px box. Scoped to the dock: the review modal's own tiles
+   lay out correctly as they are, and telling the wrapper to fill there pushed
+   its chart 2px past the box (caught by smoke-app). */
+.dk-plan-grid .an-draft-viz .cv-chart-wrapper { height: 100%; min-height: 0; }
+/* .cv-viz-area carries margin-top:2px for the surfaces it was written for, which
+   inside a fixed-height tile pushes the plot exactly 2px past the bottom. The
+   box clips it, but "clipped" is not "fits". */
+.dk-plan-grid .an-draft-viz .cv-viz-area { margin-top: 0; }
 .dk-plan-grid .an-draft-visual { padding: 8px; }
 .dk-plan-grid .an-draft-visual-title { font-size: 12px; }
 /* The dropped list is inside the card, so it inherits the card's own padding. */
