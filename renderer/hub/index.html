@@ -1208,6 +1208,11 @@
             <button class="btn btn-primary btn-lg" type="button" id="an-empty-new">Create dashboard</button>
             <button class="btn btn-lg" type="button" id="an-empty-draft">✨ Draft with the Assistant</button>
           </div>
+          <!-- Build intents over the project's REAL datasets, filled by
+               anRenderEmptyChips (anList.ts). Each opens the Assistant with that
+               sentence, so the wizard is no longer the only door to a draft.
+               Hidden until there is a dataset to name. -->
+          <div class="ws-empty-chips" id="an-empty-chips" hidden></div>
         </div>
       </div>
       <!-- The authoring workbench. #dash-editor is re-parented into this host

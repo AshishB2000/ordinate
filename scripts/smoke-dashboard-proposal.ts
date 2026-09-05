@@ -229,6 +229,50 @@ async function main(): Promise<void> {
   ok('a "none" action proposes nothing at all',
     (await win.locator('#dk-messages .dk-proposal').count()) === 0);
 
+  // ── The other two doors into the same flow ────────────────────────────────
+  // A SECOND project, empty of dashboards: the one just built would hide the
+  // empty state the chips live in.
+  const p2: any = await app.evaluate(async (_electronModule) => {
+    const req = (process as any).mainModule.require.bind((process as any).mainModule);
+    const projects = req('./src/app/projects.js');
+    const datasets = req('./src/data/datasets.js');
+    const proj = await projects.createProject('Chips smoke');
+    await datasets.saveDataset(proj.id, {
+      name: 'Adidas US Sales',
+      sourceKind: 'csv',
+      columns: [{ name: 'region', type: 'text' }, { name: 'amount', type: 'number' }],
+      rows: [['North', '10'], ['South', '20']],
+    });
+    return { projectId: proj.id };
+  });
+  await win.evaluate((pid: string) => (window as any).openWorkspace(pid), p2.projectId);
+  await win.waitForTimeout(1000);
+  await win.evaluate(() => { (window as any).selectSection('analyses'); });
+  await win.waitForSelector('#an-empty-chips:not([hidden])', { timeout: 10_000 });
+
+  const chipText = (await win.locator('#an-empty-chips .ws-empty-chip').first().textContent()) || '';
+  ok('an empty Dashboards page offers build-intent chips',
+    (await win.locator('#an-empty-chips .ws-empty-chip').count()) >= 1, chipText);
+  ok('…naming a dataset the project actually has, not a generic prompt',
+    /Adidas US Sales/.test(chipText), chipText);
+
+  await win.evaluate(() => { (window as any).dkSetOpen(false); });
+  await win.waitForTimeout(300);
+  await win.locator('#an-empty-chips .ws-empty-chip').first().click();
+  await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 10_000 });
+  ok('clicking a chip opens the Assistant, so the wizard is no longer the only door',
+    await win.locator('#dk-panel').isVisible());
+
+  // The Home ask bar routes through the same dkAsk → dkSend path, so a
+  // build-shaped question there reaches the identical flow.
+  await win.evaluate(() => { (window as any).dkSetOpen(false); (window as any).selectSection('home'); });
+  await win.waitForTimeout(400);
+  await win.fill('#home-ask-input', 'build me a sales dashboard for Adidas US Sales');
+  await win.press('#home-ask-input', 'Enter');
+  await win.waitForSelector('#dk-panel:not([hidden])', { timeout: 10_000 });
+  ok('a build-shaped question in the Home ask bar opens the Assistant and runs the same flow',
+    await win.locator('#dk-panel').isVisible());
+
   ok('no renderer errors (incl. CSP violations)', errors.length === 0, errors.slice(0, 5).join(' | '));
 
   await app.close();

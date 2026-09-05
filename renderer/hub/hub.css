@@ -10898,3 +10898,26 @@ body.cap-focus .cap-back {
 .dk-plan-grid .an-draft-visual-title { font-size: 12px; }
 /* The dropped list is inside the card, so it inherits the card's own padding. */
 .dk-proposal .an-draft-section { margin-top: 10px; }
+
+/* Build-intent chips on an empty Dashboards page. Same language as the wizard's
+   .an-wiz-chip examples, but these ASK rather than fill a textarea. */
+.ws-empty-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+.ws-empty-chips[hidden] { display: none; }
+.ws-empty-chip {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.ws-empty-chip:hover { border-color: var(--accent); color: var(--accent); }
+.ws-empty-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

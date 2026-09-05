@@ -27,6 +27,50 @@ async function refreshAnalysisList(): Promise<void> {
   items.forEach((a) => list.appendChild(makeAnListItem(a)));
   anShowList(items.length);
   anRenderCount(items.length);
+  if (!items.length) void anRenderEmptyChips();
+}
+
+/** How many build-intent chips the empty state offers. Three: enough to show
+ *  the shape of the thing, few enough that they read as examples. */
+const AN_CHIP_MAX = 3;
+
+/**
+ * Build intents over the project's REAL datasets.
+ *
+ * The empty state used to offer exactly two doors, and the AI one fired a draft
+ * with NO intent — the model got the project inventory and guessed. A chip names
+ * a dataset the user actually has and opens the Assistant with that sentence, so
+ * the draft starts from something they chose. The dock then runs the ordinary
+ * ask → suggestedAction → proposal path; nothing here talks to a model.
+ */
+async function anRenderEmptyChips(): Promise<void> {
+  const host = dashEl('an-empty-chips');
+  if (!host) return;
+  host.innerHTML = '';
+  host.hidden = true;
+  if (!currentProjectId) return;
+
+  let sets: any[] = [];
+  try {
+    sets = await window.hub.listDatasets(currentProjectId);
+  } catch (_) {
+    sets = [];
+  }
+  // No datasets means no honest suggestion to make — "build a dashboard from
+  // nothing" is not a starting point, and the two buttons above still stand.
+  if (!Array.isArray(sets) || !sets.length) return;
+
+  sets.slice(0, AN_CHIP_MAX).forEach((d: any) => {
+    const name = d && d.name ? String(d.name) : 'my data';
+    const text = 'Build an overview of ' + name;
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'ws-empty-chip';
+    chip.textContent = text;
+    chip.addEventListener('click', () => { if (typeof dkAsk === 'function') void dkAsk(text); });
+    host.appendChild(chip);
+  });
+  host.hidden = false;
 }
 
 /** How many analyses, beside the heading. Hidden at zero — the empty state

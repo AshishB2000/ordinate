@@ -35,8 +35,16 @@ function initAnalyses(): void {
     const b = dashEl(id);
     if (b) b.addEventListener('click', () => anCreateWizard());
   });
-  ['an-draft-btn', 'an-empty-draft'].forEach((id) => {
-    const b = dashEl(id);
-    if (b) b.addEventListener('click', () => handleDraftAnalysis());
-  });
+  // The table-header button keeps the one-shot draft (model → review modal).
+  const draft = dashEl('an-draft-btn');
+  if (draft) draft.addEventListener('click', () => handleDraftAnalysis());
+  // The EMPTY-STATE one opens the Assistant instead. On an empty page there is
+  // nothing for an intent-less draft to go on, and asking in words is both the
+  // better start and the door the chips below it use.
+  const emptyDraft = dashEl('an-empty-draft');
+  if (emptyDraft) {
+    emptyDraft.addEventListener('click', () => {
+      if (typeof dkAsk === 'function') void dkAsk('Build me a dashboard from my data');
+    });
+  }
 }
