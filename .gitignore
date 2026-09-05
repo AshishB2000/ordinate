@@ -275,3 +275,7 @@ scripts/**/*.js
 
 # Connect-shortcut smoke. Emitted sibling.
 /scripts/smoke-connect.js
+
+# Assistant builds dashboards from a conversation — emitted siblings.
+/src/ai/suggestedAction.js
+/scripts/test-suggestedAction.js
