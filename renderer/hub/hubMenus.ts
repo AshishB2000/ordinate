@@ -46,7 +46,7 @@ const SHARE_URL  = GITHUB_URL;
 // NOTE: LinkedIn (share-offsite) and Facebook (sharer) accept a URL only and
 // ignore SHARE_TEXT — they pull the page's own OpenGraph title/description. The
 // other four carry the text. Colon (not em-dash) so the encoded text reads clean.
-const SHARE_TEXT = 'Ordinate: screenshot any chart, table, or data and get instant AI analysis. Local-first, bring your own key.';
+const SHARE_TEXT = 'Ordinate: screenshot any chart, table, or data and get instant analysis in plain English. Local-first, bring your own model.';
 
 const _enc = encodeURIComponent;
 const SHARE_LINKS = {
