@@ -62,6 +62,21 @@ async function anMaterialiseDraft(res: any, preferredName?: string): Promise<voi
   if (!currentProjectId) return;
   const approved = await anDraftReviewModal(res);
   if (!approved) return;
+  await anBuildDraft(res, preferredName);
+}
+
+/**
+ * Build an already-APPROVED draft and open it. Split out of anMaterialiseDraft
+ * so a caller that has already shown the user the plan does not show it twice:
+ * the dock's dashboard proposal card IS the review (dockPropose.ts), so it
+ * calls this directly and skips the modal above.
+ *
+ * The plan-vs-sheets decision below is the reason this is one function and not
+ * two copies — that decision is exactly what the original comment warned would
+ * drift.
+ */
+async function anBuildDraft(res: any, preferredName?: string): Promise<void> {
+  if (!currentProjectId) return;
 
   // Two ways to materialise, decided by what main actually sent — never by a
   // version flag. A `plan` means the Phase E pipeline owns the write (it has to:
@@ -146,33 +161,7 @@ function anDraftReviewModal(draft: any): Promise<boolean> {
     // below the fold in a multi-visual draft, and a list of the model's
     // mistakes that the user has to scroll to find defeats the point of
     // showing it: they approve the plan having seen only the parts that worked.
-    const dropped: any[] = Array.isArray(draft && draft.dropped) ? draft.dropped : [];
-    if (dropped.length) {
-      scroll.appendChild(anDraftSectionLabel(
-        dropped.length + (dropped.length === 1 ? ' thing was dropped' : ' things were dropped'),
-      ));
-      const why = document.createElement('div');
-      why.className = 'an-draft-note';
-      why.textContent = 'The app refused these because it could not verify them. They are listed so the draft is not flattered by hiding its own mistakes.';
-      scroll.appendChild(why);
-      dropped.forEach((d: any) => {
-        const row = document.createElement('div');
-        row.className = 'an-draft-dropped';
-        const where = document.createElement('span');
-        where.className = 'an-draft-dropped-where';
-        where.textContent = String((d && d.where) || '');
-        const kind = document.createElement('span');
-        kind.className = 'an-draft-dropped-kind';
-        kind.textContent = String((d && d.kind) || 'dropped');
-        const msg = document.createElement('span');
-        msg.className = 'an-draft-dropped-msg';
-        msg.textContent = String((d && d.message) || '');
-        row.appendChild(kind);
-        if (where.textContent) row.appendChild(where);
-        row.appendChild(msg);
-        scroll.appendChild(row);
-      });
-    }
+    anDraftAppendDropped(scroll, draft && draft.dropped);
 
     // Calculated fields the plan wants to add, shown with their formulas: they
     // are new columns in the user's data and must not arrive unannounced.
@@ -272,6 +261,40 @@ function anDraftReviewModal(draft: any): Promise<boolean> {
     overlay.appendChild(box);
     document.body.appendChild(overlay);
     a11y = makeModalAccessible(box, 'AI draft — review before creating', ok);
+  });
+}
+
+// WHAT THE APP REFUSED, rendered wherever a plan is shown — the review modal and
+// the dock's proposal card both call this, so neither can quietly stop showing
+// it. `dropped` is never collapsed and never behind a toggle: a draft that hides
+// its own mistakes flatters the model, and the user approves having seen only
+// the parts that worked.
+function anDraftAppendDropped(host: HTMLElement, raw: unknown): void {
+  const dropped: any[] = Array.isArray(raw) ? raw : [];
+  if (!dropped.length) return;
+  host.appendChild(anDraftSectionLabel(
+    dropped.length + (dropped.length === 1 ? ' thing was dropped' : ' things were dropped'),
+  ));
+  const why = document.createElement('div');
+  why.className = 'an-draft-note';
+  why.textContent = 'The app refused these because it could not verify them. They are listed so the draft is not flattered by hiding its own mistakes.';
+  host.appendChild(why);
+  dropped.forEach((d: any) => {
+    const row = document.createElement('div');
+    row.className = 'an-draft-dropped';
+    const where = document.createElement('span');
+    where.className = 'an-draft-dropped-where';
+    where.textContent = String((d && d.where) || '');
+    const kind = document.createElement('span');
+    kind.className = 'an-draft-dropped-kind';
+    kind.textContent = String((d && d.kind) || 'dropped');
+    const msg = document.createElement('span');
+    msg.className = 'an-draft-dropped-msg';
+    msg.textContent = String((d && d.message) || '');
+    row.appendChild(kind);
+    if (where.textContent) row.appendChild(where);
+    row.appendChild(msg);
+    host.appendChild(row);
   });
 }
 

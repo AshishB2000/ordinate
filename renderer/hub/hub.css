@@ -10998,3 +10998,31 @@ body.cap-focus .cap-back {
 .home-empty--starred .home-empty-art { grid-row: 1 / 3; width: 34px; height: 34px; font-size: 16px; margin: 0; align-self: center; }
 .home-empty--starred .home-empty-title { font-size: 13px; }
 .home-empty--starred .home-empty-line { font-size: 12px; }
+
+/* ── Dashboard proposal card (dockPropose.ts) ────────────────────────────────
+   The plan pipeline's own preview, mounted in a dock 300px wide instead of a
+   modal. Everything here is SIZE: the tiles are the review modal's
+   anDraftVisualEl unchanged, so the numbers, the null-data note and the dropped
+   list are all the ones that surface already renders. */
+.dk-plan-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+  margin-top: 2px;
+}
+.dk-plan-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  /* Several tiles in a narrow dock: cap the run and scroll rather than pushing
+     the Build button below the fold, where a proposal reads as unfinished. */
+  max-height: 420px;
+  overflow-y: auto;
+}
+/* A dock tile is a glance, not a workbench — the modal's 200px is too tall here. */
+.dk-plan-grid .an-draft-viz { height: 130px; min-height: 130px; }
+.dk-plan-grid .an-draft-visual { padding: 8px; }
+.dk-plan-grid .an-draft-visual-title { font-size: 12px; }
+/* The dropped list is inside the card, so it inherits the card's own padding. */
+.dk-proposal .an-draft-section { margin-top: 10px; }

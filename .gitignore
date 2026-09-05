@@ -279,3 +279,4 @@ scripts/**/*.js
 # Assistant builds dashboards from a conversation — emitted siblings.
 /src/ai/suggestedAction.js
 /scripts/test-suggestedAction.js
+/scripts/smoke-dashboard-proposal.js
