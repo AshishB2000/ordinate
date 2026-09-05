@@ -89,6 +89,10 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
   initAuthoring();       // authoring.ts — the analysis workbench panels
   initAskActivity();     // askActivity.ts — live activity chips for an in-flight ask
   initGlobalSearch();    // globalSearch.ts — the sidebar's search box
+  // execMenu.ts — one pass over every Assistant door, after the sections that
+  // own them are wired. Readiness cannot change without a settings round trip,
+  // which reloads the hub, so once is enough.
+  void gateAssistantDoors();
 })();
 
 // ── Toast ─────────────────────────────────────────────────────────────────

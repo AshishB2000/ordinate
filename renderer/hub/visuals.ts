@@ -132,11 +132,6 @@ function initVisuals(): void {
     });
   }
 
-  // Gate the AI door on the SAME readiness the create popup asks (publicConfig
-  // .isReady). Done once at boot rather than per render: it cannot change
-  // without a settings round trip, which reloads this state anyway.
-  void refreshVizAiGate();
-
   // "← Back": leave the builder and repaint the gallery, so a delete
   // or a rename made while the builder was open shows immediately.
   const cancelBtn = vizEl('viz-cancel-btn');
