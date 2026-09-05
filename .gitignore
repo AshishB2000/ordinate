@@ -275,3 +275,4 @@ scripts/**/*.js
 
 # Connect-shortcut smoke. Emitted sibling.
 /scripts/smoke-connect.js
+/scripts/smoke-dashboards.js

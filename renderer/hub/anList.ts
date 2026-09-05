@@ -35,7 +35,7 @@ function anRenderCount(n: number): void {
   const chip = dashEl('an-count');
   if (!chip) return;
   chip.hidden = n === 0;
-  chip.textContent = String(n);
+  chip.textContent = n + (n === 1 ? ' dashboard' : ' dashboards');
 }
 
 // Refresh the summaries without tearing down an open editor.

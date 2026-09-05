@@ -19,25 +19,6 @@ const VIZ_ART_TYPES = ['column', 'line', 'donut', 'treemap'];
 // Analyses motif.
 const VIZ_ART_FOCUS = 1;
 
-// Disable the empty state's AI door when no model is configured, and say why.
-// Readiness comes from publicConfig.isReady — the one source the create popup
-// and the analysis wizard already ask, so there is no second definition of
-// "ready" that could disagree with them.
-async function refreshVizAiGate(): Promise<void> {
-  const btn = vizEl('viz-empty-ai') as HTMLButtonElement | null;
-  const hint = vizEl('viz-empty-hint');
-  if (!btn) return;
-  let ready = false;
-  try {
-    const st: any = await window.hub.getKeyStatus();
-    ready = !!(st && st.isReady);
-  } catch (_) {
-    ready = false;
-  }
-  btn.disabled = !ready;
-  if (hint) hint.hidden = ready;
-}
-
 // The five chart tokens from renderer/theme.css. Deliberately the SAME palette
 // the charts themselves draw with, so a card's tile colour and the chart it
 // opens are from one family rather than two.

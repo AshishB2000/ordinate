@@ -1177,7 +1177,12 @@
              its primary action. -->
         <div class="an-list-head">
           <div class="an-list-head-text">
-            <h2 class="viz-h">Dashboards<span class="ws-badge an-count" id="an-count" hidden></span></h2>
+            <div class="viz-title-row">
+              <h2 class="viz-h">Dashboards</h2>
+              <!-- Same chip and same wording as the Visuals count; hidden at zero. -->
+              <span class="viz-count an-count" id="an-count" hidden></span>
+            </div>
+            <p class="viz-sub">Sheets of charts, metrics and text over your datasets.</p>
           </div>
           <div class="an-list-head-actions">
             <button class="btn" type="button" id="an-draft-btn">✨ Draft with the Assistant</button>
@@ -1208,6 +1213,7 @@
             <button class="btn btn-primary btn-lg" type="button" id="an-empty-new">Create dashboard</button>
             <button class="btn btn-lg" type="button" id="an-empty-draft">✨ Draft with the Assistant</button>
           </div>
+          <p class="viz-empty-hint" id="an-empty-hint" hidden></p>
         </div>
       </div>
       <!-- The authoring workbench. #dash-editor is re-parented into this host

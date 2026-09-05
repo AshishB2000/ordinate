@@ -7285,6 +7285,34 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   height: 100%;
   min-height: 0;
 }
+/* A chart inside a dashboard card must FIT the card.
+   `.cv-canvas-wrap` — the box Chart.js measures — sizes itself against the
+   VIEWPORT (`height: clamp(300px, 44vh, 480px)`), which is right on the capture
+   surface, where the whole panel scrolls and a tall chart just extends it. In a
+   dashboard cell, whose height the user set by dragging, that floor is 300px of
+   chart in a 189px body: `overflow: auto` turned every visual card into a
+   scrollbar over a chart cropped to its top third.
+   Two other surfaces already patch this one at a time — `.an-draft-viz` and the
+   dock's `.dk-proposal-chart`, each with a comment naming the same clamp. The
+   grid is the third, and the one place charts are ALWAYS in a fixed box.
+   The wrappers between the body and the canvas have no height of their own, so
+   each needs to pass the card's height down rather than size to content. */
+.dash-card .dash-viz-area,
+.dash-card .cv-chart-wrapper {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+/* `.cv-viz-area` also carries `margin-top: 2px`, which `.dash-viz-area` never
+   overrode — 2px of chart clipped off the bottom of every card, small enough to
+   read as a rendering artifact rather than a rule. */
+.dash-card .dash-viz-area { margin-top: 0; }
+.dash-card .cv-canvas-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+/* Nothing left to scroll to once the chart fits, and a card that scrolls its
+   own content hides half a chart behind a bar the reader has to find. */
+.dash-card .dash-card-body { overflow: hidden; }
 .dash-card--metric .dash-card-body {
   display: flex;
   flex-direction: column;
