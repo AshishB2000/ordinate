@@ -12,6 +12,51 @@
  */
 const AI_NOT_CONFIGURED = 'Connect a model in Settings → Execution to use the Assistant.';
 
+/**
+ * Every button that hands work to the Assistant, and the hint that explains a
+ * disabled one. Ids only — each is static markup in index.html, so this list is
+ * the whole registry and a new door joins it by being named here.
+ */
+const AI_DOORS = ['viz-empty-ai', 'viz-suggest-btn', 'an-draft-btn', 'an-empty-draft'];
+const AI_DOOR_HINTS = ['viz-empty-hint', 'an-empty-hint'];
+
+/**
+ * Disable the Assistant's doors when no model is configured, and say why.
+ *
+ * Each surface used to decide this for itself, and only one of them did: the
+ * Visuals empty state disabled its door and explained it, while the Dashboards
+ * header, the Dashboards empty state and the builder's "Suggest chart" all
+ * looked live with no model and answered a click with an alert. One gate over
+ * one registry, so a door cannot be added without being gated.
+ *
+ * Readiness is publicConfig.isReady (config.executionReady()) — the same source
+ * the create popup, the analysis wizard and the dock's pill ask, so there is no
+ * second definition of "ready" that could disagree with them. Called once at
+ * boot: it cannot change without a settings round trip, which reloads the hub.
+ */
+async function gateAssistantDoors(): Promise<void> {
+  let ready = false;
+  try {
+    const st: any = await window.hub.getKeyStatus();
+    ready = !!(st && st.isReady);
+  } catch (_) {
+    ready = false; // no answer is not a yes — a dead door beats a dead end
+  }
+  for (const id of AI_DOORS) {
+    const b = document.getElementById(id) as HTMLButtonElement | null;
+    if (!b) continue;
+    b.disabled = !ready;
+    // The tooltip carries the reason where there is no room for the hint line.
+    b.title = ready ? '' : AI_NOT_CONFIGURED;
+  }
+  for (const id of AI_DOOR_HINTS) {
+    const h = document.getElementById(id);
+    if (!h) continue;
+    h.textContent = AI_NOT_CONFIGURED; // one sentence, one source
+    h.hidden = ready;
+  }
+}
+
 // Execution-mode menu — the top-right chip popup: agent rows (cloud/local),
 // model selectors, and the open/close/refresh logic. Extracted from hub.js as
 // a pure structural move (no logic changes). The exec STATE (execMode/execByok/

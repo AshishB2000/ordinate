@@ -337,7 +337,7 @@ export function validatePlan(raw: unknown, ctx: PlanContext): ValidatedPlan {
   const dropped: PlanDrop[] = [];
   const o = looksLikeObject(raw) ? raw : {};
 
-  const name = str(o.name) || 'AI dashboard';
+  const name = str(o.name) || 'Assistant dashboard';
   const rationale = str(o.rationale);
 
   // ── 1. Calculated fields. A formula MUST compile before it is stored. ────

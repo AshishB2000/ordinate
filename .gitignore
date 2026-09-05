@@ -280,3 +280,4 @@ scripts/**/*.js
 /src/ai/suggestedAction.js
 /scripts/test-suggestedAction.js
 /scripts/smoke-dashboard-proposal.js
+/scripts/smoke-dashboards.js

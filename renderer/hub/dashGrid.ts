@@ -494,7 +494,10 @@ function dashCtrlBtn(label: string, aria: string, onClick: () => void): HTMLButt
 }
 
 function dashCardTitle(card: any): string {
-  if (card.type === 'visual') return 'Visual';
+  // A card's own inline snapshot (published) carries the name; an authoring
+  // card only has an id, so this is the placeholder renderVisualCard replaces
+  // once resolveCardVisual() answers — no second fetch, no cache.
+  if (card.type === 'visual') return (card.visual && card.visual.name) || 'Visual';
   if (card.type === 'metric') {
     const m = card.metric || {};
     return m.label || ((DASH_AGG_LABELS[m.aggregation as DashAgg] || m.aggregation) + ' of ' + (m.column || ''));
@@ -603,6 +606,11 @@ async function renderVisualCard(card: any, body: HTMLElement): Promise<void> {
   const resolved = await resolveCardVisual(card);
   if (!resolved) { dashCardMissing(body, 'This visual was deleted.', true); return; }
   const visual = resolved.visual;
+  // Name the card after the visual it draws. dashCardTitle() runs when the head
+  // is built, before this resolve, so it can only guess; this is where the name
+  // is actually known, and it costs nothing — the fetch already happened.
+  const titleEl = body.closest('.dash-card')?.querySelector('.dash-card-title');
+  if (titleEl && visual.name) titleEl.textContent = String(visual.name);
 
   // Merge dashboard-wide filters + every control's live selection (effectiveFilters,
   // dashboards.ts) with the visual's own filters, then pass the combined list through

@@ -62,6 +62,13 @@ const RETIRED: Array<[RegExp, string]> = [
   [/Suggest with AI\b/, '"Suggest with AI"'],
   [/Draft with AI\b/, '"Draft with AI"'],
   [/'AI: O(n|ff)'/, '"AI: On/Off" — the pill names the Assistant'],
+  // The catch-all, and the reason the others can stay narrow: no user-visible
+  // string says "AI" at all any more. Case-SENSITIVE, so the historical
+  // lowercase ids and classes (#side-ai-btn, .ai-interp, .ai-badge) — which
+  // deliberately keep their spelling, because renaming them moves persisted
+  // state — do not trip it. Comments are stripped before this runs, so the
+  // files can still narrate their own history.
+  [/\bAI\b/, 'bare "AI" in a user-visible string — the feature is the Assistant'],
 ];
 // window.hub.* IPC names and CSS/DOM ids keep their historical spelling on
 // purpose (renaming them moves persisted state), so only quoted UI strings and
@@ -70,7 +77,7 @@ const UI_FILES = [
   ...fs.readdirSync(path.join(REPO, 'renderer/hub'))
       .filter((f) => f.endsWith('.ts') && !f.endsWith('.d.ts'))
       .map((f) => 'renderer/hub/' + f),
-  'src/ai/analyze.ts',
+  'src/ai/analyze.ts', 'src/analysis/analysisPlan.ts',
 ];
 for (const [re, label] of RETIRED) {
   const hits: string[] = [];

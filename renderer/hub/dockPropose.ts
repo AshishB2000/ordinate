@@ -336,7 +336,7 @@ function dkRenderPlanCard(res: any, containerId = 'dk-messages'): void {
 
   const name = document.createElement('div');
   name.className = 'dk-plan-name';
-  name.textContent = res && res.name ? String(res.name) : 'AI dashboard';
+  name.textContent = res && res.name ? String(res.name) : 'Assistant dashboard';
   card.appendChild(name);
 
   if (res && typeof res.rationale === 'string' && res.rationale.trim()) {

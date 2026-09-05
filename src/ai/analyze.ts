@@ -158,10 +158,10 @@ export function errRateLimit(): TypedError {
   return { ok: false, errorType: 'rate_limit', message: 'Too many requests — wait a moment and try again.' };
 }
 export function errProvider(): TypedError {
-  return { ok: false, errorType: 'provider', message: 'The AI provider had an error. Try again.' };
+  return { ok: false, errorType: 'provider', message: 'The model provider had an error. Try again.' };
 }
 function errBadReply(): TypedError {
-  return { ok: false, errorType: 'bad_reply', message: "Couldn't read the AI's response. Try again." };
+  return { ok: false, errorType: 'bad_reply', message: "Couldn't read the model's response. Try again." };
 }
 // Distinct from errBadReply: the provider hit the max_tokens cap and cut the reply
 // off mid-JSON. Retrying the SAME capture won't help — the user must raise the cap.
