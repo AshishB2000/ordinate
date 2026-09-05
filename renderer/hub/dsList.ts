@@ -252,7 +252,7 @@ function makeSavedItem(d: any): HTMLElement {
   if (d && d.originKind) {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'ds-saved-refresh';
+    btn.className = 'btn btn-sm ds-saved-refresh';
     btn.setAttribute('aria-label', 'Refresh dataset');
     btn.textContent = '↻ Refresh';
     btn.addEventListener('click', (e) => {
@@ -271,8 +271,9 @@ function makeSavedItem(d: any): HTMLElement {
 
   const comb = document.createElement('button');
   comb.type = 'button';
-  comb.className = 'ds-saved-combine';
+  comb.className = 'btn btn-sm ds-saved-combine';
   comb.setAttribute('aria-label', `Combine ${d && d.name ? d.name : 'dataset'} with another dataset`);
+  comb.title = 'Combine this dataset with another';
   comb.textContent = 'Combine…';
   comb.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -282,8 +283,11 @@ function makeSavedItem(d: any): HTMLElement {
 
   const del = document.createElement('button');
   del.type = 'button';
-  del.className = 'ds-saved-del';
-  del.setAttribute('aria-label', 'Delete dataset');
+  del.className = 'btn btn-sm ds-saved-del';
+  del.setAttribute('aria-label', `Delete ${d && d.name ? d.name : 'dataset'}`);
+  // Icon-only, so the accessible name is the aria-label above; `title` is the
+  // hover tooltip, which an icon with no text needs to be identifiable at all.
+  del.title = `Delete ${d && d.name ? d.name : 'dataset'}…`;
   del.textContent = '🗑';
   del.addEventListener('click', (e) => {
     e.stopPropagation();

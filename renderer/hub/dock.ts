@@ -2,7 +2,7 @@
 // user across the app (docs/superpowers/plans/2026-08-09-ai-dock.md). Classic
 // global-scope renderer <script>: NO import/export. Loads after workspace.js
 // (reads `selectSection`'s `.hub-body[data-section]`), dashboards.js (reads
-// `dashReadOnly`) and explore.js (reads `xpAppendBubble`/`xpRenderTurns`/
+// `dashReadOnly`) and askCore.js (reads `xpAppendBubble`/`xpRenderTurns`/
 // `xpScrollToBottom`) — see the load-order comment in index.html.
 //
 // Task 1 shipped the SHELL: open/close from the sidebar button and ⌘L,
@@ -73,8 +73,9 @@ function dkAllowed(): boolean {
   // grid and document horizontal overflow are 0 everywhere. Focus mode hides
   // the 176px sidebar, which is most of what the dock takes back.
   if (document.body.classList.contains('cap-focus')) return false; // capture surface is deliberately bare
-  const body = document.querySelector('.hub-body') as HTMLElement | null;
-  if (body && body.dataset.section === 'explore') return false; // Explore IS the chat
+  // The `section === 'explore'` case that used to sit here is gone with the
+  // page it guarded (#117 merged the two AI surfaces into this dock), and a
+  // check against a section that cannot exist reads as a live rule.
   if (typeof dashReadOnly !== 'undefined' && dashReadOnly) return false; // published snapshot — nothing editable
   return true;
 }
@@ -89,33 +90,10 @@ function dkSetOpen(open: boolean): void {
   dkSync();
 }
 
-/**
- * Open the dock ONCE, ever, on the first run that can actually use it — the
- * dock is then discovered by having been used, which is the only thing that
- * reliably teaches a panel exists. Called from the top of `dkSync()`, the one
- * function every entry point already routes through.
- *
- * Three deliberate details:
- *  - It writes `dkOpen` directly rather than calling `dkSetOpen()`, which
- *    would re-enter `dkSync()`. The caller recomputes everything from
- *    `dkIsOpen()` immediately after, so a second pass is pure recursion.
- *  - `dkSeen` is written ONLY when it actually opens. A boot that lands
- *    somewhere suppressed (`dkAllowed()`) or before any project is open would
- *    otherwise burn the one chance on a dock the user never saw — this defers
- *    to the next sync instead, which is why the check lives in `dkSync()` and
- *    not in `initDock()`.
- *  - It does NOT set `dkUserOpened`. The user did not ask for this; pulling
- *    keyboard focus into the composer would be a louder surprise than the
- *    panel itself.
- */
-function dkFirstRun(): void {
-  try {
-    if (localStorage.getItem('dkSeen') === '1') return;
-    if (!dkAllowed() || !currentProjectId) return;
-    localStorage.setItem('dkSeen', '1');
-    localStorage.setItem('dkOpen', '1');
-  } catch (_) { /* private mode / quota — no first-run open, and nothing else breaks */ }
-}
+/* The dock does NOT open itself. A `dkFirstRun()` used to flip `dkOpen` on the
+   first usable sync, so the Assistant was on screen over Data, Visuals and
+   Dashboards before anyone asked — and with no model it opened onto its own
+   "connect a model" notice. `dkOpen` remembers the user's choice instead. */
 
 function dkToggle(): void {
   if (!dkAllowed()) return;
@@ -335,7 +313,6 @@ let dkUserOpened = false;
  * the active project changed under it.
  */
 function dkSync(): void {
-  dkFirstRun(); // may flip `dkOpen` before the read below — self-limiting, never recurses
   const panel = document.getElementById('dk-panel');
   // Two entry points now: #side-ai-btn (the top bar's Agent toggle —
   // workspace.ts wires it to dkToggle) and ⌘L.
@@ -528,19 +505,43 @@ async function dkOpenThread(id: string): Promise<void> {
   await dkLoadHistory();
 }
 
-// ── AI on/off — the one control that turns config.copilotEnabled back on ─────
-// Rehomed from the retired page. Always clickable, even while the composer is
-// disabled (that is the whole point — it is the way back on).
-function dkPaintAiToggle(enabled: boolean): void {
+// ── Assistant on/off — the one control that turns config.copilotEnabled back
+// on. Always clickable, even while the composer is disabled (that is the point).
+//
+// THREE states, not two. The pill used to read the on/off preference alone, so
+// with no model it said "AI: On" directly above the panel's own "Connect a
+// model…" notice. Readiness (config.executionReady(), reaching the renderer as
+// getKeyStatus().isReady) is the outer state: with no model there is nothing to
+// turn on or off, so the pill says so and becomes the way to fix it.
+// `dkAiNeedsModel` is what the click branches on — one meaning at a time.
+let dkAiNeedsModel = false;
+
+function dkPaintAiToggle(enabled: boolean, ready: boolean): void {
   const btn = document.getElementById('dk-ai-toggle') as HTMLButtonElement | null;
   if (!btn) return;
-  btn.textContent = enabled ? 'AI: On' : 'AI: Off';
+  dkAiNeedsModel = !ready;
+  if (!ready) {
+    btn.textContent = 'No model';
+    btn.removeAttribute('aria-pressed'); // not a toggle in this state — a link to the fix
+    btn.title = AI_NOT_CONFIGURED;
+    btn.classList.remove('dk-ai-toggle--off');
+    btn.classList.add('dk-ai-toggle--none');
+    return;
+  }
+  btn.classList.remove('dk-ai-toggle--none');
+  btn.textContent = enabled ? 'Assistant: On' : 'Assistant: Off';
   btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-  btn.title = enabled ? 'Turn AI off' : 'Turn AI on';
+  btn.title = enabled ? 'Turn the Assistant off' : 'Turn the Assistant on';
   btn.classList.toggle('dk-ai-toggle--off', !enabled);
 }
 
 async function dkToggleAi(): Promise<void> {
+  // With no model there is no preference worth flipping — send the user to the
+  // one screen that can change the answer.
+  if (dkAiNeedsModel) {
+    if (typeof showSettingsPanel === 'function') void showSettingsPanel('exec');
+    return;
+  }
   let status: any = {};
   try { status = (await window.hub.getKeyStatus()) || {}; } catch (_) { status = {}; }
   const next = status.copilotEnabled === false; // flip
@@ -614,13 +615,9 @@ async function dkSend(): Promise<void> {
     dkHideHint();
     // A proposal is a bonus, never a requirement of the answer — fire it after
     // the transcript has settled and never let it block the composer.
-    // What to propose comes from the model's own structured read of the
-    // question (src/ai/suggestedAction.ts), validated in main against a
-    // whitelist — not from a keyword guess here. The thread id scopes the
-    // accumulated build intent so a follow-up refines THIS conversation's plan.
-    if (typeof dkOfferProposal === 'function') {
-      void dkOfferProposal(ref, question, res.suggestedAction, dkThreadId || '');
-    }
+    // WHICH proposal comes from the model's validated suggestedAction (main's
+    // whitelist, src/ai/suggestedAction.ts), not a keyword guess here.
+    if (typeof dkOfferProposal === 'function') void dkOfferProposal(ref, question, res.suggestedAction, dkThreadId || '');
     return;
   }
 
@@ -632,7 +629,7 @@ async function dkSend(): Promise<void> {
   input.value = question;
   if (res && res.notReady) {
     dkSetComposerEnabled(false);
-    dkShowHint('Connect a model in Execution settings to use Copilot.');
+    dkShowHint(AI_NOT_CONFIGURED);
   } else {
     dkSetComposerEnabled(true);
     dkShowHint((res && res.error) || 'Could not answer that. Try again.');
@@ -684,18 +681,18 @@ async function dkRefresh(): Promise<void> {
   } catch (_) { status = {}; }
   const enabled = status.copilotEnabled !== false;
   const ready = Boolean(status.isReady);
-  dkPaintAiToggle(enabled);
+  dkPaintAiToggle(enabled, ready);
 
   if (!enabled) {
     dkSetComposerEnabled(false);
-    if (input) input.placeholder = 'AI is off. Turn it back on with the AI toggle above.';
-    dkShowHint('AI is off. Everything else in Ordinate works exactly as it does now.');
+    if (input) input.placeholder = 'The Assistant is off. Turn it back on with the toggle above.';
+    dkShowHint('The Assistant is off. Everything else in Ordinate works exactly as it does now.');
     return;
   }
   if (!ready) {
     dkSetComposerEnabled(false);
     if (input) input.placeholder = 'Connect a model to ask a question…';
-    dkShowHint('Connect a model in Execution settings to use Copilot.');
+    dkShowHint(AI_NOT_CONFIGURED);
     return;
   }
   dkSetComposerEnabled(true);

@@ -144,7 +144,7 @@ async function openNewVisualModal(opts: VizNewOpts = {}): Promise<VizNewChoice |
       regenBtn.disabled = false;
 
       if (res && res.notReady) {
-        statusEl.textContent = 'Connect a model in Execution settings to suggest a chart.';
+        statusEl.textContent = AI_NOT_CONFIGURED;
         return;
       }
       const options = res && res.ok && Array.isArray(res.options) ? res.options : [];

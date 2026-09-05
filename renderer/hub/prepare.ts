@@ -603,7 +603,7 @@ async function handleSuggestSteps(): Promise<void> {
     list.textContent = 'No steps suggested — the data already looks ready.';
   } else if (res && res.notReady) {
     list.className = 'ds-suggest-list ds-suggest-hint';
-    list.textContent = 'Connect a model in Execution settings to get step suggestions.';
+    list.textContent = AI_NOT_CONFIGURED;
   } else {
     list.className = 'ds-suggest-list ds-suggest-hint';
     list.textContent = (res && res.error) || 'Could not get step suggestions.';
@@ -623,7 +623,7 @@ async function handleSuggestCalcField(): Promise<void> {
     if (!out) return;
     out.hidden = false;
     out.innerHTML = '';
-    const head = mkAiPanel('AI suggestion — the app compiles and computes the formula');
+    const head = mkAiPanel('Assistant suggestion — the app compiles and computes the formula');
     out.appendChild(head);
     const hint = document.createElement('div');
     hint.className = 'ai-interp-hint';
@@ -643,7 +643,7 @@ async function handleSuggestCalcField(): Promise<void> {
   if (btn) btn.disabled = false;
 
   if (res && res.notReady) {
-    showHint('Connect a model in Execution settings to suggest a calculated field.');
+    showHint(AI_NOT_CONFIGURED);
     return;
   }
   if (!res || res.ok === false) {
@@ -681,7 +681,7 @@ function prefillCalcFieldEditor(name: unknown, expression: unknown, warning?: un
   // suggestion to review/edit before saving.
   const panel = document.createElement('div');
   panel.className = 'ai-interp';
-  panel.appendChild(mkAiPanel('AI suggestion — review and edit; the app compiles and computes the formula'));
+  panel.appendChild(mkAiPanel('Assistant suggestion — review and edit; the app compiles and computes the formula'));
   if (warning) {
     const warn = document.createElement('div');
     warn.className = 'ai-interp-hint';

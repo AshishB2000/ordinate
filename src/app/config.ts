@@ -632,6 +632,14 @@ export function publicByok() {
 // Runnable local CLIs (have a working adapter) — keep in sync with analyze.js.
 const RUNNABLE_LOCAL: string[] = ['claude', 'antigravity', 'codex', 'grok', 'opencode', 'cursor'];
 
+// What every surface says when executionReady() is false. One sentence, one
+// name for the feature: it used to be six near-copies that named it three ways
+// ("…to use Copilot.", "…to draft a dashboard.") and pointed at "Execution
+// settings", a screen labelled Settings → Execution. The renderer keeps its own
+// copy in execMenu.ts (two worlds, no shared module); test-ai-naming.ts asserts
+// the two stay identical.
+export const AI_NOT_CONFIGURED = 'Connect a model in Settings → Execution to use the Assistant.';
+
 // THE single readiness concept used everywhere (banner, empty state, status pill,
 // capture gate): ready when the active execution path can actually run.
 //   Local  → a runnable local CLI is selected active AND detected installed.

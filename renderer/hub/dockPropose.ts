@@ -510,7 +510,7 @@ function dkRenderChartCard(datasetId: string, question: string, option: any, dat
   area.className = 'dk-proposal-chart cv-viz-area';
   card.appendChild(area);
   // entry: null opts the tile out of the ⋯ Customize menu — same as the
-  // "✨ Suggest with AI" preview in vizNew.ts. Every number came from
+  // "✨ Suggest with the Assistant" preview in vizNew.ts. Every number came from
   // computeVisualData above; nothing here is drawn from what the model said.
   renderVizInArea(area, data, type, null, '');
 

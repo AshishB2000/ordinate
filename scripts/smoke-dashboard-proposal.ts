@@ -147,11 +147,13 @@ async function main(): Promise<void> {
     (await win.locator('#dk-messages .dk-plan-grid canvas').count()) > 0);
 
   // The numbers came from previewPlan reading Parquet — the stub supplied none.
+  // Read what Chart.js ACTUALLY drew. `chartInstances` is a top-level const in a
+  // classic script, so it never lands on `window`; Chart.getChart(canvas) is the
+  // supported way in, and it reads the rendered chart rather than a registry.
   const drawn = await win.evaluate(() => {
-    const areas = [...document.querySelectorAll('#dk-messages .dk-plan-grid .cv-viz-area')];
-    for (const a of areas) {
-      const inst = (window as any).chartInstances.get(a);
-      const c = Array.isArray(inst) ? inst[0] : inst;
+    const canvases = [...document.querySelectorAll('#dk-messages .dk-plan-grid canvas')];
+    for (const cv of canvases) {
+      const c = (window as any).Chart?.getChart?.(cv);
       if (c && c.data && c.data.datasets && c.data.datasets[0]) {
         return { labels: c.data.labels, values: c.data.datasets[0].data };
       }

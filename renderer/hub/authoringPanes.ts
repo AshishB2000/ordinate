@@ -229,7 +229,7 @@ async function anRenderAiSlot(): Promise<void> {
   note.id = 'an-ai-note';
   if (!anAiReady) {
     note.textContent =
-      'AI suggestions need a model in Settings → Execution. The chart types below are recommended by the app itself and work without one.';
+      AI_NOT_CONFIGURED + ' The chart types below are recommended by the app itself and work without one.';
   } else {
     note.hidden = true;
   }

@@ -306,7 +306,7 @@ async function handleExplainDataset(): Promise<void> {
     out.textContent = String(res.text || '');
   } else if (res && res.notReady) {
     out.className = 'ds-explain-out ds-explain-hint';
-    out.textContent = 'Connect a model in Execution settings to explain datasets.';
+    out.textContent = AI_NOT_CONFIGURED;
   } else {
     out.className = 'ds-explain-out ds-explain-hint';
     out.textContent = (res && res.error) || 'Could not explain the dataset.';
