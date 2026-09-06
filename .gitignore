@@ -281,3 +281,7 @@ scripts/**/*.js
 /scripts/test-suggestedAction.js
 /scripts/smoke-dashboard-proposal.js
 /scripts/smoke-dashboards.js
+
+# Assistant EDITS an existing dashboard — the delta validator. Emitted siblings.
+/src/analysis/dashboardDelta.js
+/scripts/test-dashboardDelta.js
