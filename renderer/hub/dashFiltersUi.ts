@@ -117,6 +117,55 @@ function renderTextCard(card: any, body: HTMLElement): void {
     p.textContent = '(empty text card)';
     body.appendChild(p);
   }
+  // The bundled sample's note card carries a real Delete, because the note says
+  // the sample can be deleted and nothing else in the app can delete a project:
+  // projects:delete has existed as an IPC channel and a typed preload binding
+  // all along, with no caller. `action` is a closed enum that only
+  // src/app/sampleProject.ts ever writes — a plan cannot produce one, so no
+  // model-authored dashboard can grow a delete button.
+  if (card.action === 'delete-sample') body.appendChild(dashSampleDeleteBtn());
+}
+
+function dashSampleDeleteBtn(): HTMLElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn btn-sm dash-sample-delete';
+  btn.textContent = 'Delete sample project';
+  btn.addEventListener('click', () => { void handleDeleteSampleProject(); });
+  return btn;
+}
+
+// Deleting the project is a recursive rm of userData/projects/<id>/ in main, so
+// its datasets, visuals, analyses AND their Parquet tables go together — there
+// is nothing left to orphan. The starred pin is pruned here rather than left
+// pointing at a record that no longer exists.
+async function handleDeleteSampleProject(): Promise<void> {
+  const pid = (dashCurrent && dashCurrent.projectId) || currentProjectId;
+  if (!pid) return;
+  const name = (dashCurrent && dashCurrent.name) || 'this dashboard';
+  if (!window.confirm(
+    'Delete the sample project?\n\nThis removes ' + name + ', the sample dataset and its charts. '
+    + 'Your own projects are not affected. This cannot be undone.')) return;
+  const analysisId = dashCurrent && dashCurrent.id ? String(dashCurrent.id) : '';
+  try {
+    const res = await window.hub.deleteProject(pid);
+    if (!res || res.ok === false) { showToast('Could not delete the sample project.'); return; }
+  } catch (_) { showToast('Could not delete the sample project.'); return; }
+  try {
+    const starred = await window.hub.getStarred();
+    if (Array.isArray(starred) && analysisId) {
+      await window.hub.setStarred(starred.filter((s: string) => s !== 'analysis:' + analysisId));
+    }
+  } catch (_) { /* a stale pin is invisible — Starred filters Recent */ }
+  closeDashboardEditor();
+  // The adopted project is gone, so pick another before anything repaints.
+  try {
+    const list = await window.hub.listProjects();
+    if (Array.isArray(list) && list.length) await adoptProject(String(list[0].id));
+  } catch (_) { /* Home resolves one itself if this fails */ }
+  selectSection('home');
+  if (typeof refreshHome === 'function') void refreshHome();
+  showToast('Sample project deleted.');
 }
 
 // A card whose source (visual / dataset) is gone. `broken` marks it with a clear badge

@@ -15,6 +15,7 @@ const { spawnSync }: typeof import('child_process') = require('child_process');
 // In chain order — smoke-app first, same as before, so its logs stay on top.
 const SMOKES = [
   'smoke-app',
+  'smoke-sample',
   'smoke-composer',
   'smoke-dock',
   'smoke-ask-actions',

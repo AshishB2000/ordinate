@@ -66,6 +66,11 @@ interface Config {
   // from execution-readiness). Default true; when false the renderer hides the
   // chat entirely and never calls the model.
   copilotEnabled: boolean;
+
+  /** Whether the bundled sample project has EVER been seeded (sampleProject.ts).
+   *  Records the event, not the sample's presence — the user may delete it, and
+   *  re-creating it next launch would make that impossible. Main-only. */
+  sampleSeeded: boolean;
   // Home "Starred" pins — a flat list of "type:id" keys (e.g. "analysis:<uuid>").
   // ONE array for all four record types, so a record never carries a starred flag
   // and there are no per-type migrations.
@@ -159,6 +164,8 @@ const DEFAULTS: Omit<Config, 'providers' | 'byok'> = {
   // AI Copilot panel is ON by default — it stays fully optional (execution-gated),
   // but the user can also switch it OFF entirely from the panel's toggle.
   copilotEnabled: true,
+  // Absent means not-yet-seeded, so an existing config.json seeds once on upgrade.
+  sampleSeeded: false,
   // Home "Starred" pins, as "type:id" keys. One flat array, one setter — no
   // per-record flag, no migration.
   starred: [],
@@ -213,6 +220,7 @@ function sanitize(input: any): Partial<Config> {
     };
   }
   if (typeof input.copilotEnabled === 'boolean') out.copilotEnabled = input.copilotEnabled;
+  if (typeof input.sampleSeeded === 'boolean') out.sampleSeeded = input.sampleSeeded;
   // Whitelisted so it survives disk load ({...DEFAULTS, ...sanitize(onDisk)}).
   if (Array.isArray(input.starred)) out.starred = cleanStarred(input.starred);
   return out;

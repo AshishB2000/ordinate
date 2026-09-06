@@ -10,6 +10,15 @@ All notable changes to Ordinate are documented here. Format based on
 ## [Unreleased]
 
 ### Added
+- **The app is no longer empty on first launch.** A bundled sample project — 5,000 rows of generated
+  retail orders across two years, five regions and twenty-five US states — arrives with a dashboard
+  already built: revenue, profit, units and order-count KPIs, revenue by month, revenue by category,
+  and a profit-by-state map. It is pinned to Home, so Starred and Recent have something in them, and
+  the ask bar suggests questions written for it. The data is generated, not real; there is a planted
+  bad month for anomaly detection to find. A **Delete sample project** button on its notes card
+  removes it completely, and it is never re-created afterwards. Your own work goes into a separate
+  empty project that is selected by default, so the sample never collects it.
+
 - **Dashboard starter layouts that actually build something.** "KPIs + chart" and "Two-up" used to
   drop in a note reading *"Add metric cards here"* and then ask which already-saved visual belonged
   in the slot — on a new project that meant one text card. They now build real tiles from the
