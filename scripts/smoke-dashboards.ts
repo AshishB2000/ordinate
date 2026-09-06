@@ -56,9 +56,17 @@ async function main(): Promise<void> {
     const proj = await projects.createProject('Sales review');
     const regions = ['North', 'South', 'East', 'West', 'Central'];
     const rows: any[][] = [];
-    for (let i = 0; i < 300; i++) rows.push([regions[i % 5], (i % 97) - 10]);
+    // `units` and `order_date` exist for the STARTER assertions below: two
+    // numeric columns and a date are what make a "KPIs + chart" layout more than
+    // one KPI and one chart. The visuals below still encode region/amount, so
+    // the older assertions are unaffected.
+    for (let i = 0; i < 300; i++) {
+      rows.push([regions[i % 5], (i % 97) - 10, (i % 40) + 3,
+        new Date(2024, i % 12, 1 + (i % 27)).toISOString().slice(0, 10)]);
+    }
     const ds = await datasets.saveDataset(proj.id, { name: 'Sales', sourceKind: 'csv',
-      columns: [{ name: 'region', type: 'text' }, { name: 'amount', type: 'number' }], rows });
+      columns: [{ name: 'region', type: 'text' }, { name: 'amount', type: 'number' },
+        { name: 'units', type: 'number' }, { name: 'order_date', type: 'date' }], rows });
     const enc = { category: 'region', values: [{ column: 'amount', aggregation: 'sum' }] };
     const v1 = await visuals.saveVisual(proj.id, { name: 'Revenue by region', datasetId: ds.id, chartType: 'bar', encoding: enc, filters: [] });
     const v2 = await visuals.saveVisual(proj.id, { name: 'Revenue trend', datasetId: ds.id, chartType: 'line', encoding: enc, filters: [] });
@@ -69,7 +77,9 @@ async function main(): Promise<void> {
         { type: 'visual', visualId: v2.id, layout: { x: 6, y: 0, w: 6, h: 4 } },
       ],
     }] });
-    return { projectId: proj.id, bareProjectId: bare.id, analysisId: an.id };
+    // A second, EMPTY dashboard: the starter buttons only show on an empty page.
+    const blank = await analysis.saveAnalysis(proj.id, { name: 'Starter target', sheets: [{ name: 'Overview', cards: [] }] });
+    return { projectId: proj.id, bareProjectId: bare.id, analysisId: an.id, blankId: blank.id, datasetId: ds.id };
   });
   ok('seeded a bare project and one with visuals + a dashboard',
     Boolean(seeded.projectId && seeded.bareProjectId && seeded.analysisId));
@@ -118,8 +128,10 @@ async function main(): Promise<void> {
     sub: (document.querySelector('#ws-analyses .viz-sub') as HTMLElement | null)?.textContent?.trim() || null,
     subVisible: !!(document.querySelector('#ws-analyses .viz-sub') as HTMLElement | null)?.offsetParent,
   }));
+  // Two now: the seed adds an empty one for the starter assertions below, which
+  // means this also exercises the PLURAL the singular form used to hide.
   ok('the Dashboards count names what it counts, like the Visuals one',
-    head.count === '1 dashboard' && head.countHidden === false, JSON.stringify(head));
+    head.count === '2 dashboards' && head.countHidden === false, JSON.stringify(head));
   ok('…and the page has a subtitle, like Data and Visuals',
     !!head.sub && head.subVisible, JSON.stringify(head));
 
@@ -148,6 +160,116 @@ async function main(): Promise<void> {
     cards.some((c) => /Revenue by region/.test(c.title)) && cards.some((c) => /Revenue trend/.test(c.title))
       && !cards.some((c) => /^Visual/.test(c.title)),
     JSON.stringify(cards.map((c) => c.title)));
+
+  // ── 5. A starter layout builds REAL tiles ────────────────────────────────
+  // "KPIs + chart" used to insert one text card reading "Add metric cards here"
+  // and then ask which SAVED VISUAL went in the slot — so on a project with no
+  // visuals it produced that one card and nothing else. Asserted by KIND and by
+  // DRAWN CONTENT, not by count: four empty boxes would satisfy a count.
+  await win.evaluate(async (id: string) => { await (window as any).openAnalysis(id); }, seeded.blankId);
+  await win.waitForTimeout(2000);
+  await win.evaluate(() => {
+    const b = document.getElementById('dash-starter-kpis') as HTMLElement | null;
+    if (b) b.click();
+  });
+  await win.waitForTimeout(6000);
+  const built = await win.evaluate(() => [...document.querySelectorAll('#dash-grid .dash-card')].map((c) => ({
+    kind: (c.className.match(/dash-card--(\w+)/) || [])[1],
+    title: ((c.querySelector('.dash-card-title') || {}) as any).textContent || '',
+    metric: ((c.querySelector('.dash-metric-value') || {}) as any).textContent || '',
+    canvas: !!c.querySelector('canvas'),
+    x: getComputedStyle(c as HTMLElement).gridColumnStart,
+  })));
+  ok('a starter layout builds at least three tiles', built.length >= 3, JSON.stringify(built));
+  ok('…a KPI row of metric tiles, each showing a computed figure',
+    built.filter((b) => b.kind === 'metric').length >= 2
+      && built.filter((b) => b.kind === 'metric').every((b) => /\d/.test(b.metric)),
+    JSON.stringify(built.filter((b) => b.kind === 'metric').map((b) => b.metric)));
+  ok('…and chart tiles that actually drew, not empty placeholders',
+    built.filter((b) => b.kind === 'visual').length >= 1
+      && built.filter((b) => b.kind === 'visual').every((b) => b.canvas),
+    JSON.stringify(built.filter((b) => b.kind === 'visual').map((b) => b.title)));
+  ok('…no "add a card here" placeholder text tile survives',
+    !built.some((b) => b.kind === 'text'), JSON.stringify(built.map((b) => b.kind)));
+  // The KPI strip shares one row: two tiles starting in different columns is
+  // what proves dashFindSlot ran instead of the old x:0 stack.
+  ok('…and the KPI tiles share a row rather than stacking in column 0',
+    new Set(built.filter((b) => b.kind === 'metric').map((b) => b.x)).size >= 2,
+    JSON.stringify(built.filter((b) => b.kind === 'metric').map((b) => b.x)));
+
+  // ── 6. A tile's controls are not on top of its plot ──────────────────────
+  // .cv-graph-controls is absolutely positioned at the chart's top-right, which
+  // is where Chart.js draws its top-right data labels — it sat on the last bar's
+  // own number. Geometry, because "the element exists" was always true.
+  const overlap = await win.evaluate(() => {
+    const cluster = document.querySelector('#dash-grid .cv-graph-controls') as HTMLElement | null;
+    const canvas = document.querySelector('#dash-grid canvas') as HTMLElement | null;
+    if (!cluster || !canvas) return { found: false, area: -1, inSlot: false };
+    const a = cluster.getBoundingClientRect();
+    const b = canvas.getBoundingClientRect();
+    const w = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+    const h = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+    return { found: true, area: Math.round(w * h), inSlot: !!cluster.closest('.cv-controls-slot') };
+  });
+  ok('a tile still has its chart controls', overlap.found && overlap.inSlot, JSON.stringify(overlap));
+  ok('…and they do not intersect the canvas at all', overlap.area === 0, `${overlap.area}px2 of overlap`);
+
+  // ── 7. The resize handles can be seen ────────────────────────────────────
+  // They always worked; they drew nothing, so the affordance only appeared once
+  // the pointer was already on a 7px strip. Read AFTER the fade, or the computed
+  // value is still the transition's start.
+  const handle = await win.evaluate(() => {
+    const card = document.querySelector('#dash-grid .dash-card') as HTMLElement | null;
+    if (!card) return { rest: '-1', shown: '-1' };
+    const e = card.querySelector('.an-resize--e') as HTMLElement | null;
+    if (!e) return { rest: '-1', shown: '-1' };
+    const rest = getComputedStyle(e).opacity;
+    card.classList.add('is-selected');
+    return new Promise<{ rest: string; shown: string }>((res) => {
+      setTimeout(() => res({ rest, shown: getComputedStyle(e).opacity }), 400);
+    });
+  });
+  ok('a resize handle is invisible at rest', handle.rest === '0', JSON.stringify(handle));
+  ok('…and visible once the card is engaged', Number(handle.shown) > 0.2, JSON.stringify(handle));
+
+  // ── 8. Present mode fills the window ─────────────────────────────────────
+  // The old rule hid `.sidebar`, which is not the rail — so both rails and the
+  // page tabs stayed up through a presentation, and the fixed row pitch left a
+  // band of empty background below the last row.
+  const present = await win.evaluate(async () => {
+    (window as any).enterDashPresent();
+    await new Promise((r) => setTimeout(r, 2500));
+    const vis = (q: string) => { const el = document.querySelector(q) as HTMLElement | null; return !!(el && el.offsetParent); };
+    const ed = document.getElementById('dash-editor') as HTMLElement;
+    const grid = document.getElementById('dash-grid') as HTMLElement;
+    const pad = parseFloat(getComputedStyle(ed).paddingBottom) || 0;
+    const contentBottom = ed.getBoundingClientRect().top + ed.clientHeight - pad;
+    return {
+      rail: vis('.app-sidebar') || vis('.an-rail'),
+      tabs: vis('.dash-pages'),
+      head: vis('.dash-editor-head'),
+      controls: vis('#dash-grid .cv-graph-controls'),
+      band: Math.round(contentBottom - grid.getBoundingClientRect().bottom),
+      scrolls: ed.scrollHeight > ed.clientHeight + 1,
+    };
+  });
+  ok('present mode hides the rail', !present.rail, JSON.stringify(present));
+  ok('…and the page tabs and the editor head', !present.tabs && !present.head, JSON.stringify(present));
+  ok('…and the per-tile chart controls', !present.controls, JSON.stringify(present));
+  ok('…and the tiles fill the window, leaving no band below the last row',
+    present.band <= 4 && present.band >= -1 && !present.scrolls, JSON.stringify(present));
+
+  const exited = await win.evaluate(async () => {
+    (window as any).exitDashPresent();
+    await new Promise((r) => setTimeout(r, 1500));
+    const grid = document.getElementById('dash-grid') as HTMLElement;
+    return {
+      rail: !!(document.querySelector('.an-rail') as HTMLElement | null)?.offsetParent,
+      row: getComputedStyle(grid).getPropertyValue('--dash-row').trim(),
+    };
+  });
+  ok('leaving present mode puts the chrome and the row pitch back',
+    exited.rail && exited.row === '48px', JSON.stringify(exited));
 
   ok('no renderer console errors on either page', errors.length === 0, errors.slice(0, 3).join(' | '));
 

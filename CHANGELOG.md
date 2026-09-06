@@ -10,6 +10,28 @@ All notable changes to Ordinate are documented here. Format based on
 ## [Unreleased]
 
 ### Added
+- **Dashboard starter layouts that actually build something.** "KPIs + chart" and "Two-up" used to
+  drop in a note reading *"Add metric cards here"* and then ask which already-saved visual belonged
+  in the slot — on a new project that meant one text card. They now build real tiles from the
+  dataset you pick: a KPI row totalling its numeric columns (revenue/sales/amount and friends
+  first), a chart over the first column narrow enough to read as an axis, and, when there is a date
+  column, the same measure by month. Both the empty-state buttons and the create-a-dashboard wizard
+  use them, and the tiles are made by the same code path the Assistant's dashboards go through.
+
+### Changed
+- **New tiles fill the row.** Adding a visual, metric, control or note now drops it in the first
+  free space on the grid instead of always starting a new row in column 0 — four KPIs sit in one
+  row, and notes run the full width.
+- **Drag and resize are visible.** Dashboard tiles could always be dragged to move and dragged by
+  their right/bottom edge to resize; the handles simply drew nothing. They now appear on hover, and
+  the tile header shows a grip. Narrow windows put one tile per row.
+- **Present mode fills the window.** It hides both rails and the page tabs (it hid neither before —
+  the rule named an element that is not the rail), and scales the tiles so the sheet fills the
+  screen instead of leaving a band of empty background below the last row.
+- **Chart controls left the plot.** The "Values" and "⋯" buttons moved out of the top-right of the
+  chart — where they covered its own data labels — into the tile header and the visual builder's
+  toolbar. Maps keep their existing overlay.
+
 - **Change a dashboard by asking.** With a dashboard open, tell the Assistant what you want —
   "add a line chart of amount by month", "make the region chart a bar", "add a filter for channel",
   "rename page 1 to Overview" — and it proposes the change as a plain diff: what it would add,
