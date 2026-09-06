@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import * as config from '../app/config';
+import * as execConfig from '../app/execConfig';
 import * as localCli from '../cli/localCli';
 import { testLocalCli } from '../ai/analyze';
 import * as liveModels from '../ai/models';
@@ -25,13 +26,13 @@ export function register({ notifyKeyChanged }: { notifyKeyChanged: () => void })
         if (timer.unref) timer.unref();
       });
       const results = await Promise.race([localCli.detectAll(), timeout]);
-      config.saveLocalCliDetection(results);
+      execConfig.saveLocalCliDetection(results);
     } catch (err: any) {
       console.error('[cli:detect] error', err && err.message);
     } finally {
       if (timer) clearTimeout(timer);
     }
-    return config.publicLocalCli();
+    return execConfig.publicLocalCli();
   });
 
   // Re-check a single CLI by id; merge into stored results.
@@ -44,17 +45,17 @@ export function register({ notifyKeyChanged }: { notifyKeyChanged: () => void })
         const results = (det && Array.isArray(det.results)) ? det.results.slice() : [];
         const idx = results.findIndex((r: any) => r && r.id === id);
         if (idx >= 0) results[idx] = one; else results.push(one);
-        config.saveLocalCliDetection(results);
+        execConfig.saveLocalCliDetection(results);
       }
     } catch (err: any) {
       console.error('[cli:detectOne] error', err && err.message);
     }
-    return config.publicLocalCli();
+    return execConfig.publicLocalCli();
   });
 
   // Persist the selected Local CLI (selection only — does not run anything).
   ipcMain.handle('cli:setActive', (_e, { id }: any) => {
-    const result = config.setLocalCliActive(id);
+    const result = execConfig.setLocalCliActive(id);
     if (result.ok) notifyKeyChanged();
     return result;
   });
@@ -95,7 +96,7 @@ export function register({ notifyKeyChanged }: { notifyKeyChanged: () => void })
 
   // Persist the chosen model for a Local CLI (selection only — runs nothing).
   ipcMain.handle('cli:saveModel', (_e, { id, model }: any = {}) => {
-    return config.setLocalCliModel(id, model);
+    return execConfig.setLocalCliModel(id, model);
   });
 
   // Shared live model list for a BYOK provider — used by BOTH the header dropdown
@@ -105,7 +106,7 @@ export function register({ notifyKeyChanged }: { notifyKeyChanged: () => void })
   const MODEL_CACHE_TTL_MS = 60 * 60 * 1000; // 1h: serve cache, refresh in background
   ipcMain.handle('models:list', async (_e, { target, force }: any = {}) => {
     if (typeof target !== 'string') return { models: [], source: 'none' };
-    const cached = config.getModelCache(target);
+    const cached = execConfig.getModelCache(target);
     const fresh = cached && (Date.now() - new Date(cached.at).getTime() < MODEL_CACHE_TTL_MS);
     if (cached && fresh && !force) {
       return { models: cached.models, at: cached.at, source: 'cache' };
@@ -115,7 +116,7 @@ export function register({ notifyKeyChanged }: { notifyKeyChanged: () => void })
     catch (err: any) { console.error('[models:list]', err && err.message); result = { ok: false, errorType: 'unknown', models: [] }; }
 
     if (result.ok && result.models.length) {
-      config.setModelCache(target, result.models);
+      execConfig.setModelCache(target, result.models);
       return { models: result.models, at: new Date().toISOString(), source: 'live' };
     }
     // Distinct reasons so the UI can explain WHY it fell back:

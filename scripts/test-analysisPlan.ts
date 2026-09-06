@@ -72,6 +72,7 @@ const projects: typeof import('../src/app/projects') = require('../src/app/proje
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const analysisStore: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const config: typeof import('../src/app/config') = require('../src/app/config');
+const execConfig: typeof import('../src/app/execConfig') = require('../src/app/execConfig');
 const configSecrets: typeof import('../src/app/configSecrets') = require('../src/app/configSecrets');
 const connections: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
 const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
@@ -185,7 +186,7 @@ function checkChartVocabulary(): void {
 
 // ── §2 AI is optional ───────────────────────────────────────────────────────
 async function checkNotReady(): Promise<void> {
-  ok('no model is configured in this fixture', config.executionReady() === false);
+  ok('no model is configured in this fixture', execConfig.executionReady() === false);
 
   const draft = await analysesIpc.draftAnalysisPlan(projectId);
   ok('analysis:draft returns notReady with no model', draft.ok === false && draft.notReady === true,

@@ -7,7 +7,7 @@
 
 import { net } from 'electron';
 import { spawn, ChildProcess } from 'child_process';
-import * as config from '../app/config';
+import * as execConfig from '../app/execConfig';
 
 const TIMEOUT_MS = 12000;
 export const BYOK: string[] = ['anthropic', 'openai', 'gemini', 'gateway'];
@@ -70,7 +70,7 @@ function parseByok(provider: string, json: any): ModelRow[] {
 }
 
 async function fetchByokModels(provider: string): Promise<ListResult> {
-  const e = config.getByokProvider(provider); // { apiKey, baseUrl, model } — main only
+  const e = execConfig.getByokProvider(provider); // { apiKey, baseUrl, model } — main only
   const baseUrl = (e.baseUrl || '').replace(/\/+$/, '');
   if (!e.apiKey) return fail('no_key');
   if (provider === 'gateway' && !baseUrl) return fail('no_key');
@@ -114,7 +114,7 @@ function fetchCliModels(cliId: string): Promise<ListResult> {
   // Only Antigravity exposes a non-interactive list. Claude Code (and others)
   // have no such command — honest "Default (CLI config)".
   if (cliId !== 'antigravity') return Promise.resolve(ok([]));
-  const rec = config.getLocalCliResult('antigravity');
+  const rec = execConfig.getLocalCliResult('antigravity');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return Promise.resolve(fail('not_installed'));
 

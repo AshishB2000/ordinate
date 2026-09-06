@@ -38,6 +38,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 // ponytail: compiled siblings of the .ts sources under test.
 const analyze: typeof import('../src/ai/analyze') = require('../src/ai/analyze');
 const config: any = require('../src/app/config');
+const execConfig: any = require('../src/app/execConfig');
 const localCliRun: any = require('../src/cli/localCliRun');
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 
@@ -49,7 +50,7 @@ const visuals: typeof import('../src/analysis/visuals') = require('../src/analys
 let cannedReply = '';
 let lastCall: { system: string; messages: Array<{ role: string; text: string }> } | null = null;
 
-config.executionReady = () => true;
+execConfig.executionReady = () => true;
 config.get = () => ({ executionMode: 'local', localCli: { activeId: 'claude' } });
 localCliRun.runLocalCli = async (
   _cliId: string,
@@ -149,7 +150,7 @@ async function main(): Promise<void> {
      `${visuals.SUGGESTABLE_CHART_TYPES.length} types`);
 
   // ── 8. No model configured ───────────────────────────────────────────────
-  config.executionReady = () => false;
+  execConfig.executionReady = () => false;
   res = await analyze.suggestCharts(SUMMARY, '', 3);
   ok('with no model it is a soft not_ready, not an error dialog',
      res.ok === false && res.errorType === 'not_ready');

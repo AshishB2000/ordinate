@@ -7,7 +7,7 @@
 // the diff card → Apply through the editor's own mutation functions → Undo.
 //
 // TWO stubs, both in the main process, both minimal:
-//   config.executionReady → true. The handler refuses without a model, and a
+//   execConfig.executionReady → true. The handler refuses without a model, and a
 //     smoke run has none. Stubbing the PREDICATE (not the model) keeps this
 //     deterministic on CI, where no CLI is installed.
 //   analyze.dispatch → a canned ops JSON. Everything after it is shipped code:
@@ -103,9 +103,9 @@ async function main(): Promise<void> {
   // ── The two stubs ────────────────────────────────────────────────────────
   await app.evaluate(async (_electronModule) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
-    const config = req('./src/app/config.js');
+    const execConfig = req('./src/app/execConfig.js');
     const analyze = req('./src/ai/analyze.js');
-    config.executionReady = () => true;
+    execConfig.executionReady = () => true;
     (analyze as any)._realDispatch = analyze.dispatch;
     analyze.dispatch = async () => ({
       rawText: JSON.stringify({

@@ -3,7 +3,7 @@
 //
 // The main process and the renderer cannot share a module (one is CommonJS
 // under Electron's main, the other a classic global-scope <script>), so the
-// sentence is declared twice: config.AI_NOT_CONFIGURED and execMenu.ts's
+// sentence is declared twice: execConfig.AI_NOT_CONFIGURED and execMenu.ts's
 // `const AI_NOT_CONFIGURED`. Two declarations of one string is exactly the
 // shape that drifts, so this asserts they are byte-identical — and that the
 // old spellings the sweep replaced ("Copilot", "Execution settings", "AI
@@ -14,13 +14,13 @@ import { ok, failureCount } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
-const config = require('../src/app/config.js');
+const execConfig = require('../src/app/execConfig.js');
 
 const REPO = path.resolve(__dirname, '..');
 const read = (p: string): string => fs.readFileSync(path.join(REPO, p), 'utf8');
 
 // ── The one sentence, declared in two worlds ────────────────────────────────
-const MAIN = config.AI_NOT_CONFIGURED;
+const MAIN = execConfig.AI_NOT_CONFIGURED;
 ok('the main process exports the not-configured sentence',
   MAIN === 'Connect a model in Settings → Execution to use the Assistant.', String(MAIN));
 
