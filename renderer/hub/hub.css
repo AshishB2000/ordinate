@@ -7722,6 +7722,12 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 }
 .dash-present-exit:hover { border-color: var(--accent); color: var(--accent); }
 
+/* TWO rails, and the old rule named NEITHER. `.sidebar` is a different element
+   entirely, so presenting hid something invisible: the section nav
+   (.app-sidebar) and the authoring rail (.an-rail — Data / Visuals / Filters /
+   Properties) both stayed on screen through every presentation. */
+.dash-presenting .app-sidebar,
+.dash-presenting .an-rail,
 .dash-presenting .sidebar,
 .dash-presenting .titlebar,
 .dash-presenting .hub-topbar,
@@ -7730,7 +7736,15 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 .dash-presenting .dash-starters,
 .dash-presenting .dash-page-ctrl,
 .dash-presenting .dash-page-add,
-.dash-presenting .dash-card-ctrls { display: none !important; }
+.dash-presenting .dash-card-ctrls,
+/* The page tabs were the one piece of chrome left on screen while presenting:
+   .dash-page-ctrl and .dash-page-add were hidden but the strip and its tabs were
+   not, so a presentation opened with a row of editor buttons above it. */
+.dash-presenting .dash-pages,
+/* Presenting is for showing, not for fiddling. Whatever you want toggled, toggle
+   it before you present. */
+.dash-presenting .cv-graph-controls,
+.dash-presenting .cv-controls-slot { display: none !important; }
 .dash-presenting .dash-card-head { cursor: default; }
 .dash-presenting .dash-editor { padding: 24px 32px 32px; background: var(--bg); }
 .dash-presenting .dash-pages { border-bottom: none; }
