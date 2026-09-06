@@ -132,7 +132,10 @@ function isValidId(id: unknown): id is string {
 }
 
 const CARD_TYPES: ReadonlySet<string> = new Set(['visual', 'text', 'metric', 'control']);
-const METRIC_AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
+/** Exported so analysisPlan's metric validation clamps against THIS set rather
+ *  than a fourth copy of it — dashboardDelta.ts already restates one, and it
+ *  says so apologetically. One whitelist, one place to widen it. */
+export const METRIC_AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
 const CONTROL_KINDS: ReadonlySet<string> = new Set(['dropdown', 'multi', 'date_range']);
 const METRIC_FORMATS: ReadonlySet<string> = new Set([
   'auto',

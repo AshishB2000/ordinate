@@ -17,7 +17,8 @@ import type { VizEncoding } from './visuals';
 import type { VizDataResult } from './vizData';
 import { sampleRowsResident } from '../engine/statsResident';
 import type {
-  AnalysisPlan, PlanContext, PlanDataset, PlanDrop, PlannedVisual,
+  AnalysisPlan, PlanContext, PlanDataset, PlanDrop,
+  PlannedMetric, PlannedText, PlannedVisual,
 } from './analysisPlan';
 import { loadPlanContext, validatePlan } from './analysisPlan';
 // INVERTED IMPORT, deliberately. `vizDataFor` lives beside `residentVizData` in
@@ -77,7 +78,14 @@ export interface PlanPreview {
   ok: true;
   name: string;
   rationale: string;
-  sheets: { name: string; visuals: VisualPreview[] }[];
+  /**
+   * `visuals` carries a computed `data` per card because a chart is the thing a
+   * reader cannot check by eye. `metrics` and `texts` pass through VERBATIM: a
+   * KPI's figure is computed at render time by the same `dashboard:metric` call
+   * the built tile makes, and previewing it here would be this module rendering
+   * a number a second way — exactly what its header forbids.
+   */
+  sheets: { name: string; metrics: PlannedMetric[]; visuals: VisualPreview[]; texts: PlannedText[] }[];
   calculatedFields: CalcFieldPreview[];
   dropped: PlanDrop[];
   /** The VALIDATED plan — exactly what to hand back to `buildPlan` on approval.
@@ -151,7 +159,11 @@ async function previewValidated(
     for (let vi = 0; vi < sheet.visuals.length; vi += 1) {
       out.push(await previewVisual(projectId, byId, sheet.visuals[vi], si, vi));
     }
-    sheets.push({ name: sheet.name, visuals: out });
+    // Metrics and texts are carried through unchanged. Preview and build must
+    // agree on the WHOLE sheet: a plan whose KPI row was built but never shown
+    // breaks the guarantee at the top of this file just as surely as a wrong
+    // figure would.
+    sheets.push({ name: sheet.name, metrics: sheet.metrics, visuals: out, texts: sheet.texts });
   }
 
   return { ok: true, name: plan.name, rationale: plan.rationale, sheets, calculatedFields, dropped, plan };

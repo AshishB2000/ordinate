@@ -49,6 +49,7 @@ import { compile } from '../formula/formula';
 import type { ColumnSummary } from '../data/datasetStats';
 import * as datasets from '../data/datasets';
 import * as visuals from './visuals';
+import * as dashboards from './dashboards';
 import type { VizEncoding } from './visuals';
 import { computeColumnSummariesResident } from '../engine/statsResident';
 
@@ -73,7 +74,7 @@ export const CHART_TYPE_IDS: ReadonlySet<string> = new Set([
 
 /** Aggregations that need a `number` column. `count` is the only one that does
  *  not — it counts non-empty cells of any type (metricValue.computeMetric). */
-const NUMERIC_AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'min', 'max', 'none']);
+export const NUMERIC_AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'min', 'max', 'none']);
 
 
 // ── Shapes ─────────────────────────────────────────────────────────────────
@@ -98,9 +99,31 @@ export interface PlannedVisual {
   needsCalcField?: string;
 }
 
+/**
+ * A KPI tile. The plan names a column and an aggregation; the FIGURE is computed
+ * at render time by `dashboard:metric`, the same path a hand-added metric card
+ * takes. Nothing here is ever a value — a plan cannot carry a number.
+ */
+export interface PlannedMetric {
+  datasetId: string;
+  column: string;
+  aggregation: dashboards.MetricAggregation;
+  label?: string;
+}
+
+/** A notes tile — the only free text a plan may put on a sheet. */
+export interface PlannedText {
+  heading?: string;
+  text?: string;
+}
+
 export interface PlanSheet {
   name: string;
+  /** KPI strip. Packed FIRST, on its own row above the charts. */
+  metrics: PlannedMetric[];
   visuals: PlannedVisual[];
+  /** Notes. Packed LAST, below the charts. */
+  texts: PlannedText[];
 }
 
 export interface AnalysisPlan {
@@ -110,7 +133,9 @@ export interface AnalysisPlan {
   sheets: PlanSheet[];
 }
 
-export type PlanDropKind = 'dataset' | 'chartType' | 'formula' | 'encoding' | 'filter' | 'visual' | 'sheet';
+export type PlanDropKind =
+  | 'dataset' | 'chartType' | 'formula' | 'encoding' | 'filter' | 'visual' | 'sheet'
+  | 'metric' | 'text';
 
 export interface PlanDrop {
   kind: PlanDropKind;
@@ -391,13 +416,110 @@ export function validatePlan(raw: unknown, ctx: PlanContext): ValidatedPlan {
       const v = validateVisual(rawVisual, ctx, proposedCols, where, at, dropped);
       if (v) kept.push(v);
     });
-    sheets.push({ name: sheetName, visuals: kept });
+    const rawMetrics = Array.isArray(rawSheet.metrics) ? rawSheet.metrics : [];
+    const keptMetrics: PlannedMetric[] = [];
+    rawMetrics.forEach((rawMetric, mi) => {
+      const m = validateMetric(rawMetric, ctx, proposedCols, `sheets[${si}].metrics[${mi}]`,
+        `Sheet "${sheetName}" metric ${mi + 1}`, dropped);
+      if (m) keptMetrics.push(m);
+    });
+    const rawTexts = Array.isArray(rawSheet.texts) ? rawSheet.texts : [];
+    const keptTexts: PlannedText[] = [];
+    rawTexts.forEach((rawText, ti) => {
+      const t = validateText(rawText, `sheets[${si}].texts[${ti}]`,
+        `Sheet "${sheetName}" note ${ti + 1}`, dropped);
+      if (t) keptTexts.push(t);
+    });
+    sheets.push({ name: sheetName, metrics: keptMetrics, visuals: kept, texts: keptTexts });
   });
   // An Analysis always has at least one sheet (analysis.sanitizeSheets enforces
   // it); make that true here so preview and build agree on the sheet count too.
-  if (sheets.length === 0) sheets.push({ name: 'Sheet 1', visuals: [] });
+  if (sheets.length === 0) sheets.push({ name: 'Sheet 1', metrics: [], visuals: [], texts: [] });
 
   return { plan: { name, rationale, calculatedFields, sheets }, dropped };
+}
+
+/** Longest a plan's own text may be. A note is a caption, not a document, and
+ *  this string is rendered onto a tile whose height the app chose. */
+const TEXT_HEADING_MAX = 200;
+const TEXT_BODY_MAX = 2000;
+
+/**
+ * A KPI tile, validated exactly as hard as a chart measure.
+ *
+ * dashboards.sanitizeCard checks the SHAPE of a metric card — a UUID datasetId,
+ * a known aggregation, a known format — but never that the column exists or that
+ * it is a number. Without the check below, `sum` of a text column builds a tile
+ * that renders "—" forever: computeMetric returns null for it, so it is a broken
+ * tile rather than a wrong figure, but it is a tile that should never have been
+ * built. Judged on the DECLARED type, like everywhere else in this file; a
+ * column this plan is about to compute has no declared type yet, so it passes.
+ */
+function validateMetric(
+  raw: unknown,
+  ctx: PlanContext,
+  proposedCols: Map<string, Set<string>>,
+  where: string,
+  at: string,
+  dropped: PlanDrop[],
+): PlannedMetric | null {
+  if (!looksLikeObject(raw)) {
+    dropped.push({ kind: 'metric', where, message: `${at} dropped: not an object.` });
+    return null;
+  }
+  const ds = resolveDataset(ctx, raw);
+  if (!ds) {
+    dropped.push({
+      kind: 'dataset',
+      where,
+      message: `${at} dropped: unknown dataset ${JSON.stringify(str(raw.dataset) || str(raw.datasetId))}.`,
+    });
+    return null;
+  }
+  const aggregation = str(raw.aggregation);
+  if (!dashboards.METRIC_AGGS.has(aggregation)) {
+    dropped.push({ kind: 'encoding', where, message: `${at} dropped: ${JSON.stringify(aggregation)} is not a metric aggregation.` });
+    return null;
+  }
+  const column = str(raw.column);
+  const real = new Map(ds.columns.map((c) => [c.name, c.type]));
+  const proposed = proposedCols.get(ds.id) || new Set<string>();
+  if (!real.has(column) && !proposed.has(column)) {
+    dropped.push({ kind: 'encoding', where, message: `${at} dropped: "${column}" is not a column of "${ds.name}".` });
+    return null;
+  }
+  if (NUMERIC_AGGS.has(aggregation) && real.has(column) && real.get(column) !== 'number') {
+    dropped.push({
+      kind: 'encoding',
+      where,
+      message: `${at} dropped: ${aggregation} needs a number column, but "${column}" is ${real.get(column)} in "${ds.name}".`,
+    });
+    return null;
+  }
+  const out: PlannedMetric = { datasetId: ds.id, column, aggregation: aggregation as dashboards.MetricAggregation };
+  const label = str(raw.label).slice(0, TEXT_HEADING_MAX);
+  if (label) out.label = label;
+  return out;
+}
+
+/** A notes tile. Both fields are optional but not both absent — dashboards
+ *  .sanitizeCard drops a text card with neither, so catching it here is what
+ *  turns a silently missing tile into a reported one. */
+function validateText(raw: unknown, where: string, at: string, dropped: PlanDrop[]): PlannedText | null {
+  if (!looksLikeObject(raw)) {
+    dropped.push({ kind: 'text', where, message: `${at} dropped: not an object.` });
+    return null;
+  }
+  const heading = str(raw.heading).slice(0, TEXT_HEADING_MAX);
+  const text = str(raw.text).slice(0, TEXT_BODY_MAX);
+  if (!heading && !text) {
+    dropped.push({ kind: 'text', where, message: `${at} dropped: no heading and no body.` });
+    return null;
+  }
+  const out: PlannedText = {};
+  if (heading) out.heading = heading;
+  if (text) out.text = text;
+  return out;
 }
 
 function validateVisual(
