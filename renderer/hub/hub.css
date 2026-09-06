@@ -9070,6 +9070,58 @@ body.an-grabbing { user-select: none; cursor: grabbing; }
   border-bottom-right-radius: 4px;
 }
 
+/* The edge handles were INVISIBLE — .an-resize--e and --s set a cursor and
+   nothing else, so drag-to-resize existed and worked but only announced itself
+   once the pointer was already on a 7px strip nobody had a reason to aim at.
+   Now they draw a bar on hover, following the house hover-reveal idiom
+   (.viz-card-star): opacity, never display, so the strip stays hit-testable and
+   the reveal cannot move anything. The bar sits INSIDE the border because
+   .dash-card is overflow:hidden and clips the outer half. */
+.an-workbench.is-active #dash-grid .dash-card .an-resize--e,
+.an-workbench.is-active #dash-grid .dash-card .an-resize--s {
+  background: var(--accent);
+  border-radius: var(--r-full);
+  opacity: 0;
+  transition: opacity 140ms var(--ease);
+}
+.an-workbench.is-active #dash-grid .dash-card:hover .an-resize--e,
+.an-workbench.is-active #dash-grid .dash-card:hover .an-resize--s,
+.an-workbench.is-active #dash-grid .dash-card:focus-within .an-resize--e,
+.an-workbench.is-active #dash-grid .dash-card:focus-within .an-resize--s,
+.an-workbench.is-active #dash-grid .dash-card.is-selected .an-resize--e,
+.an-workbench.is-active #dash-grid .dash-card.is-selected .an-resize--s { opacity: 0.45; }
+.an-workbench.is-active #dash-grid .an-resize--e:hover,
+.an-workbench.is-active #dash-grid .an-resize--s:hover { opacity: 1; }
+
+/* And the head says it is a handle before you press it. Dots rather than a
+   label: the head already carries the tile's name and has no room for a word. */
+.an-workbench.is-active #dash-grid .dash-card-head::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 3px;
+  height: 12px;
+  border-radius: var(--r-full);
+  background: radial-gradient(circle, var(--border-3) 1px, transparent 1.2px) 0 0 / 3px 4px repeat-y;
+  opacity: 0;
+  transition: opacity 140ms var(--ease);
+}
+.an-workbench.is-active #dash-grid .dash-card:hover .dash-card-head::before,
+.an-workbench.is-active #dash-grid .dash-card.is-selected .dash-card-head::before { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .an-workbench.is-active #dash-grid .dash-card .an-resize--e,
+  .an-workbench.is-active #dash-grid .dash-card .an-resize--s,
+  .an-workbench.is-active #dash-grid .dash-card-head::before { transition: none; }
+}
+
+/* Narrow window: one tile per row. A card's span is written inline by
+   applyDashCardStyle (it is stored geometry, not a look), so overriding it needs
+   !important — the one place in this sheet where that is not a smell. The stored
+   x/w are untouched; widen the window and the layout comes back exactly. */
+@media (max-width: 900px) {
+  #dash-grid .dash-card { grid-column: 1 / -1 !important; }
+}
+
 .an-ghost {
   border: 2px dashed var(--accent);
   border-radius: var(--r-md);

@@ -36,7 +36,7 @@ async function handleAddVisual(): Promise<void> {
   if (!pick) return;
 
   if (pick.kind === 'existing') {
-    pushCard({ id: dashUuid(), type: 'visual', visualId: pick.visualId, layout: { x: 0, y: nextFreeRow(), w: 6, h: 6 } });
+    pushCard({ id: dashUuid(), type: 'visual', visualId: pick.visualId, layout: { ...dashFindSlot(dashCards(), 6, 6), w: 6, h: 6 } });
     return;
   }
 
@@ -73,7 +73,7 @@ async function handleAddVisual(): Promise<void> {
     showToast('Could not create the visual.');
     return;
   }
-  const card = { id: dashUuid(), type: 'visual', visualId: String(visual.id), layout: { x: 0, y: nextFreeRow(), w: 6, h: 6 } };
+  const card = { id: dashUuid(), type: 'visual', visualId: String(visual.id), layout: { ...dashFindSlot(dashCards(), 6, 6), w: 6, h: 6 } };
   pushCard(card);
   // Select it so Properties binds (and, for a blank one, opens on the wells the
   // user fills next). Analysis mode only — a dashboard has no workbench.
@@ -221,7 +221,7 @@ async function handleAddMetric(): Promise<void> {
   if (!Array.isArray(datasets)) datasets = [];
   const metric = await openMetricDialog(datasets);
   if (!metric) return;
-  pushCard({ id: dashUuid(), type: 'metric', metric, layout: { x: 0, y: nextFreeRow(), w: 3, h: 2 } });
+  pushCard({ id: dashUuid(), type: 'metric', metric, layout: { ...dashFindSlot(dashCards(), 3, 2), w: 3, h: 2 } });
 }
 
 /**
@@ -452,7 +452,8 @@ async function handleAddText(): Promise<void> {
   const text = await promptModal('Text card — body (optional)', '', 'Add');
   if (text === null) return;
   if (!heading.trim() && !text.trim()) return; // a card with no content is dropped anyway
-  const card: any = { id: dashUuid(), type: 'text', layout: { x: 0, y: nextFreeRow(), w: 6, h: 2 } };
+  // Notes run the full width — a caption under a row of charts, not a tile beside them.
+  const card: any = { id: dashUuid(), type: 'text', layout: { ...dashFindSlot(dashCards(), 12, 2), w: 12, h: 2 } };
   if (heading.trim()) card.heading = heading.trim();
   if (text.trim()) card.text = text.trim();
   pushCard(card);

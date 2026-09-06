@@ -423,7 +423,7 @@ async function handleAddVisualToAnalysis(id: string): Promise<void> {
   // Same layout maths the grid editor uses for its own + Visual — nextFreeRow
   // takes the card list so this and the editor cannot disagree about where the
   // next card lands.
-  last.cards.push({ id: dashUuid(), type: 'visual', visualId: id, layout: { x: 0, y: nextFreeRow(last.cards), w: 6, h: 6 } });
+  last.cards.push({ id: dashUuid(), type: 'visual', visualId: id, layout: { ...dashFindSlot(last.cards, 6, 6), w: 6, h: 6 } });
 
   let saved: any = null;
   try {

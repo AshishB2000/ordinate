@@ -660,7 +660,7 @@ function dkRenderChartCard(datasetId: string, question: string, option: any, dat
           showToast('Could not add to the dashboard.');
           return;
         }
-        pushCard({ id: dashUuid(), type: 'visual', visualId: String(res.id), layout: { x: 0, y: nextFreeRow(), w: 6, h: 6 } });
+        pushCard({ id: dashUuid(), type: 'visual', visualId: String(res.id), layout: { ...dashFindSlot(dashCards(), 6, 6), w: 6, h: 6 } });
         finish('Added to the dashboard.');
       })();
     });
