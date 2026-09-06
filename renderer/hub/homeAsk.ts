@@ -96,6 +96,22 @@ async function haPaintGreeting(proj: { id: string; name: string }): Promise<void
 // ── Starter suggestions ───────────────────────────────────────────────────────
 // Up to three prompts from REAL dataset names (strings only, no model call, no
 // figures). A click FILLS the ask bar and focuses it — never auto-sends.
+const HA_SAMPLE_DATASET = 'Retail orders';
+const HA_SAMPLE_PROMPTS = [
+  'Which region had the worst month?',
+  'Revenue by category this year',
+];
+
+/** The bundled sample, and nothing else the user has brought in yet. */
+function haSampleOnly(names: string[]): boolean {
+  return names.length === 1 && names[0] === HA_SAMPLE_DATASET;
+}
+
+function haPaintSampleChips(host: HTMLElement): void {
+  HA_SAMPLE_PROMPTS.forEach((p) => host.appendChild(haMakeSuggestChip(p)));
+  host.hidden = false;
+}
+
 function haMakeSuggestChip(prompt: string): HTMLElement {
   const chip = document.createElement('button');
   chip.type = 'button';
@@ -119,7 +135,28 @@ async function haRenderSuggests(pid: string): Promise<void> {
   let list: any[] = [];
   try { const res = await window.hub.listDatasets(pid); list = Array.isArray(res) ? res : []; } catch (_) { list = []; }
   const names = list.map((d) => String(d && d.name ? d.name : '').trim()).filter(Boolean);
-  if (!names.length) return;
+
+  // The bundled sample gets questions written FOR it. "What stands out in Retail
+  // orders?" is a fair generic prompt, but the sample exists to show what the app
+  // can do, and it has a planted bad month for the first of these to find.
+  // HA_SAMPLE_DATASET mirrors SAMPLE_DATASET_NAME in src/app/sampleProject.ts;
+  // scripts/test-sampleProject.ts asserts the two spellings stay identical.
+  if (haSampleOnly(names)) return haPaintSampleChips(host);
+
+  if (!names.length) {
+    // FIRST LAUNCH. The working project is the empty one seeded alongside the
+    // sample (so the user's own imports never land inside it), which means this
+    // project has no datasets and the bar would suggest nothing at all — a dead
+    // ask bar on the one screen this whole feature exists to populate. The
+    // sample lives in the OTHER project, and recentItems already flattens
+    // datasets across every project, so one call finds it.
+    let recent: any[] = [];
+    try { const r = await window.hub.recentItems(); recent = Array.isArray(r) ? r : []; } catch (_) { recent = []; }
+    const dsNames = recent.filter((r) => r && r.type === 'dataset').map((r) => String(r.name || '').trim());
+    if (haSampleOnly(dsNames)) haPaintSampleChips(host);
+    return;
+  }
+
   const prompts: string[] = ['What stands out in ' + names[0] + '?'];
   if (names.length > 1) prompts.push('How do ' + names[0] + ' and ' + names[1] + ' compare?');
   prompts.push('Summarise ' + names[0] + ' in plain terms');

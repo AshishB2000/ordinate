@@ -77,6 +77,7 @@ function persistableResult(result: any): any {
 }
 import * as history from './app/history';
 import * as projects from './app/projects';
+import * as sampleProject from './app/sampleProject';
 import * as datasets from './data/datasets';
 import * as copilot from './ai/copilot';
 import { resolveUserPath } from './cli/userPath';
@@ -739,6 +740,16 @@ void app.whenReady().then(async () => {
   } catch (err: any) {
     console.error('[history] Failed to load summaries on startup:', err.message);
     historySummaries = [];
+  }
+
+  // First launch only: a bundled sample project, so the app is never empty.
+  // Its OWN try/catch — the block above logs under a [history] label and
+  // swallows, so a seed failure there would be both invisible and would skip
+  // whatever init came after it.
+  try {
+    await sampleProject.seedSampleProject();
+  } catch (err: any) {
+    console.error('[sample] Failed to seed the sample project:', err && err.message);
   }
 
   // Always open the hub on launch.

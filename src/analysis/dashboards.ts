@@ -38,6 +38,7 @@ import { sanitizeSteps } from '../data/transforms';
 import type { FilterStep } from '../data/transforms';
 
 export type CardType = 'visual' | 'text' | 'metric' | 'control';
+export type CardAction = 'delete-sample';
 export type MetricAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';
 export type ControlKind = 'dropdown' | 'multi' | 'date_range';
 
@@ -113,6 +114,15 @@ export interface Card {
 
   heading?: string; // type 'text'
   text?: string; // type 'text'
+  /**
+   * An app-owned button on a text card. A closed one-value enum, and the ONLY
+   * value is the bundled sample's "delete this project".
+   *
+   * Deliberately absent from PlannedText, so no plan — and therefore no
+   * model-authored dashboard — can grow a delete button on someone's sheet. The
+   * only writer is src/app/sampleProject.ts, patching its own note card.
+   */
+  action?: CardAction; // type 'text'
   metric?: CardMetric; // type 'metric'
   control?: CardControl; // type 'control'
 }
@@ -257,6 +267,7 @@ export function sanitizeCard(raw: unknown): Card | null {
   if (type === 'text') {
     if (typeof o.heading === 'string') card.heading = o.heading;
     if (typeof o.text === 'string') card.text = o.text;
+    if (o.action === 'delete-sample') card.action = 'delete-sample';
     // A text card with neither heading nor body carries no content → drop it.
     if (card.heading === undefined && card.text === undefined) return null;
     return card;
