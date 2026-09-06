@@ -222,8 +222,8 @@ function runChild(bin: string, args: string[], cwd: string, stdin?: string, time
 // ── JSON-envelope extraction (single step before the SHARED parseReply) ──────
 // A CLI's print output may wrap our JSON envelope in markdown fences or banners
 // (e.g. an `[image.png](file://…)` link). Pull the envelope out so the EXISTING
-// parser sees clean JSON. Returns the envelope string, or the trimmed text when
-// no JSON object is found (so connectivity-test "OK" replies pass through too).
+// parser sees clean JSON, or the trimmed text when no JSON is found (so "OK" test
+// replies pass). `prose` turns the hunt off — CORRECTNESS; see suggestedAction.ts.
 function tryParse(s: string): boolean { try { JSON.parse(s); return true; } catch (_) { return false; } }
 
 function balancedObjectFrom(text: string, start: number): string | null {
@@ -241,8 +241,8 @@ function balancedObjectFrom(text: string, start: number): string | null {
   return null;
 }
 
-function extractEnvelope(text: string): string {
-  const t = cleanCliOutput(text);
+export function extractEnvelope(text: string, prose?: boolean): string {
+  const t = cleanCliOutput(text); if (prose) return t; // prose reply: its text IS the answer
   // 1. fenced ```json … ``` block.
   const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fence) { const c = fence[1].trim(); if (tryParse(c)) return c; }
@@ -330,7 +330,7 @@ async function runClaude(systemPrompt: string, messages: CliMessage[]): Promise<
 const AGY_NAME = 'Antigravity (Google)';
 const AGY_HINT = 'needs sign-in — run `agy` once, then test again.';
 
-async function runAntigravity(systemPrompt: string, messages: CliMessage[]): Promise<CliRunResult> {
+async function runAntigravity(systemPrompt: string, messages: CliMessage[], opts?: { prose?: boolean }): Promise<CliRunResult> {
   const rec = execConfig.getLocalCliResult('antigravity');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { error: errProvider(AGY_NAME, 'Antigravity (Google) not detected — rescan in Execution mode.') };
@@ -375,7 +375,7 @@ async function runAntigravity(systemPrompt: string, messages: CliMessage[]): Pro
       if (out.stderr) debugRaw('antigravity stderr', out.stderr);
       return { error: errBadReply(AGY_NAME) };
     }
-    return { rawText: extractEnvelope(text) };
+    return { rawText: extractEnvelope(text, opts && opts.prose) };
   } catch (err: any) {
     console.error('[localCliRun] antigravity error:', err && err.message);
     return { error: errProvider(AGY_NAME) };
@@ -399,7 +399,7 @@ async function runAntigravity(systemPrompt: string, messages: CliMessage[]): Pro
 const CODEX_NAME = 'Codex CLI';
 const CODEX_HINT = 'needs sign-in — run `codex` once, then test again.';
 
-async function runCodex(systemPrompt: string, messages: CliMessage[]): Promise<CliRunResult> {
+async function runCodex(systemPrompt: string, messages: CliMessage[], opts?: { prose?: boolean }): Promise<CliRunResult> {
   const rec = execConfig.getLocalCliResult('codex');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { error: errProvider(CODEX_NAME, 'Codex CLI not detected — rescan in Execution mode.') };
@@ -459,7 +459,7 @@ async function runCodex(systemPrompt: string, messages: CliMessage[]): Promise<C
       if (out.stderr) debugRaw('codex stderr', out.stderr);
       return { error: errBadReply(CODEX_NAME) };
     }
-    return { rawText: extractEnvelope(text) };
+    return { rawText: extractEnvelope(text, opts && opts.prose) };
   } catch (err: any) {
     console.error('[localCliRun] codex error:', err && err.message);
     return { error: errProvider(CODEX_NAME) };
@@ -488,7 +488,7 @@ async function runCodex(systemPrompt: string, messages: CliMessage[]): Promise<C
 const GROK_NAME = 'Grok CLI';
 const GROK_HINT = 'needs an xAI API key — set GROK_API_KEY, then test again.';
 
-async function runGrok(systemPrompt: string, messages: CliMessage[]): Promise<CliRunResult> {
+async function runGrok(systemPrompt: string, messages: CliMessage[], opts?: { prose?: boolean }): Promise<CliRunResult> {
   const rec = execConfig.getLocalCliResult('grok');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { error: errProvider(GROK_NAME, 'Grok CLI not detected — rescan in Execution mode.') };
@@ -537,7 +537,7 @@ async function runGrok(systemPrompt: string, messages: CliMessage[]): Promise<Cl
       if (out.stderr) debugRaw('grok stderr', out.stderr);
       return { error: errBadReply(GROK_NAME) };
     }
-    return { rawText: extractEnvelope(text) };
+    return { rawText: extractEnvelope(text, opts && opts.prose) };
   } catch (err: any) {
     console.error('[localCliRun] grok error:', err && err.message);
     return { error: errProvider(GROK_NAME) };
@@ -570,7 +570,7 @@ function opencodeImageMiss(s: string | null | undefined): boolean {
   return /does ?n[o']?t support image|not support image input|no image (was )?(provided|attached|found|given)|cannot (see|view|read|process) (the |any )?image|unable to [^.]{0,30}image/i.test(s || '');
 }
 
-async function runOpenCode(systemPrompt: string, messages: CliMessage[]): Promise<CliRunResult> {
+async function runOpenCode(systemPrompt: string, messages: CliMessage[], opts?: { prose?: boolean }): Promise<CliRunResult> {
   const rec = execConfig.getLocalCliResult('opencode');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { error: errProvider(OPENCODE_NAME, 'OpenCode not detected — rescan in Execution mode.') };
@@ -622,7 +622,7 @@ async function runOpenCode(systemPrompt: string, messages: CliMessage[]): Promis
       return { error: errBadReply(OPENCODE_NAME) };
     }
 
-    const envelope = extractEnvelope(text);
+    const envelope = extractEnvelope(text, opts && opts.prose);
     // Image runs: if the model said it couldn't see an image, OR it returned but
     // produced no usable JSON analysis, the screenshot likely never reached the
     // model (a non-vision provider). Surface a CLEAR message, not a broken result.
@@ -658,7 +658,7 @@ async function runOpenCode(systemPrompt: string, messages: CliMessage[]): Promis
 const CURSOR_NAME = 'Cursor Agent';
 const CURSOR_HINT = 'needs an API key — set CURSOR_API_KEY or run `cursor-agent login`, then test again.';
 
-async function runCursor(systemPrompt: string, messages: CliMessage[]): Promise<CliRunResult> {
+async function runCursor(systemPrompt: string, messages: CliMessage[], opts?: { prose?: boolean }): Promise<CliRunResult> {
   const rec = execConfig.getLocalCliResult('cursor');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { error: errProvider(CURSOR_NAME, 'Cursor Agent not detected — rescan in Execution mode.') };
@@ -712,7 +712,7 @@ async function runCursor(systemPrompt: string, messages: CliMessage[]): Promise<
       return { error: classifyStderr(CURSOR_NAME, CURSOR_HINT, out.stderr || (typeof envelope.result === 'string' ? envelope.result : '')) };
     }
 
-    const body = extractEnvelope(typeof envelope.result === 'string' ? envelope.result : '');
+    const body = extractEnvelope(typeof envelope.result === 'string' ? envelope.result : '', opts && opts.prose);
     // An image run that came back with no usable JSON analysis almost always means
     // the screenshot wasn't read — say so rather than passing a broken result on.
     if (withImage && !tryParse(body)) {
@@ -808,15 +808,15 @@ export async function listCursorModels(): Promise<ModelListResult> {
   return models.length ? { ok: true, models } : { ok: false, models: [], reason: 'empty' };
 }
 
-// runLocalCli(cliId, systemPrompt, messages, opts) -> { rawText } | { error }
+// runLocalCli(cliId, systemPrompt, messages, { prose }) -> { rawText } | { error }
 // Mirrors callProvider() so src/analyze.js can branch on execution mode and feed
-// the result through the SAME parseReply() afterward.
-export async function runLocalCli(cliId: string, systemPrompt: string, messages: CliMessage[], _opts?: unknown): Promise<CliRunResult> {
-  if (cliId === 'claude') return runClaude(systemPrompt, messages);
-  if (cliId === 'antigravity') return runAntigravity(systemPrompt, messages);
-  if (cliId === 'codex') return runCodex(systemPrompt, messages);
-  if (cliId === 'grok') return runGrok(systemPrompt, messages);
-  if (cliId === 'opencode') return runOpenCode(systemPrompt, messages);
-  if (cliId === 'cursor') return runCursor(systemPrompt, messages);
+// the result through the SAME parseReply() afterward. `prose` — see extractEnvelope.
+export async function runLocalCli(cliId: string, systemPrompt: string, messages: CliMessage[], opts?: { prose?: boolean }): Promise<CliRunResult> {
+  if (cliId === 'claude') return runClaude(systemPrompt, messages); // never extracts — hands back .result verbatim
+  if (cliId === 'antigravity') return runAntigravity(systemPrompt, messages, opts);
+  if (cliId === 'codex') return runCodex(systemPrompt, messages, opts);
+  if (cliId === 'grok') return runGrok(systemPrompt, messages, opts);
+  if (cliId === 'opencode') return runOpenCode(systemPrompt, messages, opts);
+  if (cliId === 'cursor') return runCursor(systemPrompt, messages, opts);
   return { error: errProvider('That local CLI', 'isn’t supported yet.') };
 }

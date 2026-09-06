@@ -244,26 +244,26 @@ function dkHandleKeydown(e: KeyboardEvent): void {
  * disagreeing. The dock has no competing chip, so it renders exactly what it
  * resolved — but only if what it resolves can never outlive its section.
  */
-function dkContextRef(): { kind: string; id: string; label: string } {
+function dkContextRef(): { kind: string; id: string; label: string; name: string } {
   if (currentSection === 'datasets') {
     if (typeof expId === 'string' && expId) {
       const name = typeof expName === 'string' && expName ? expName : 'open dataset';
-      return { kind: 'dataset', id: expId, label: 'dataset · ' + name };
+      return { kind: 'dataset', id: expId, label: 'dataset · ' + name, name };
     }
-    return { kind: '', id: '', label: 'whole project' };
+    return { kind: '', id: '', label: 'whole project', name: '' };
   }
   if (currentSection === 'visuals') {
     if (typeof vizEditingId === 'string' && vizEditingId) {
-      return { kind: 'visual', id: vizEditingId, label: 'visual · open visual' };
+      return { kind: 'visual', id: vizEditingId, label: 'visual · open visual', name: '' };
     }
-    return { kind: '', id: '', label: 'whole project' };
+    return { kind: '', id: '', label: 'whole project', name: '' };
   }
   // An OPEN dashboard is the context; the Dashboards LIST is not. In scope now
   // because an edit delta can only name a tile the model was actually shown.
   if (currentSection === 'analyses' && dashCurrent && dashCurrent.id) {
-    return { kind: 'analysis', id: String(dashCurrent.id), label: 'dashboard · ' + (dashCurrent.name || 'open dashboard') };
+    return { kind: 'analysis', id: String(dashCurrent.id), label: 'dashboard · ' + (dashCurrent.name || 'open dashboard'), name: String(dashCurrent.name || '') };
   }
-  return { kind: '', id: '', label: 'whole project' };
+  return { kind: '', id: '', label: 'whole project', name: '' };
 }
 
 /**
@@ -281,14 +281,13 @@ function dkRenderContext(): void {
   label.className = 'dk-context-label';
   label.textContent = 'Based on ' + ref.label;
   el.appendChild(label);
-  // Same "stats app-computed" chip Explore's provenance rows use — .xp-prov-chip,
-  // not a new chip style. (Not .ai-chip: that class's CSS did not survive
-  // 498d647's retirement of the copilot panel; .xp-prov-chip is its
-  // surviving equivalent.)
+  // The same "stats app-computed" pill the transcript's provenance line uses —
+  // .xp-prov-chip, not a new chip style (.ai-chip died with the copilot panel).
   const chip = document.createElement('span');
   chip.className = 'xp-prov-chip';
   chip.textContent = 'stats app-computed';
   el.appendChild(chip);
+  if (typeof dkPaintHero === 'function') dkPaintHero(ref.name); // the empty state greets the SAME context
 }
 
 // ── Visibility + resize nudge ───────────────────────────────────────────────

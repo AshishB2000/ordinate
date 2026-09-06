@@ -39,24 +39,23 @@ function xpAppendBubble(role: string, text: string, provenance?: any, containerI
   bubble.textContent = text;
   row.appendChild(bubble);
 
+  // Provenance is a FOOTNOTE — one small muted line, not a row of pills.
+  // The pills had the composer chips' radius, fill and size, so they read as
+  // buttons sitting under every answer and were not. Same facts, same order,
+  // joined with the separator the header's "Based on …" row already uses.
   if (role === 'assistant' && provenance && typeof provenance === 'object') {
-    const prov = document.createElement('div');
-    prov.className = 'xp-provenance';
-    const chips: string[] = [];
-    if (provenance.kind && provenance.name) chips.push(provenance.kind + ': ' + provenance.name);
-    else if (provenance.kind) chips.push(String(provenance.kind));
-    if (provenance.datasetName) chips.push('dataset: ' + provenance.datasetName);
+    const parts: string[] = [];
+    if (provenance.kind && provenance.name) parts.push(provenance.kind + ': ' + provenance.name);
+    else if (provenance.kind) parts.push(String(provenance.kind));
+    if (provenance.datasetName) parts.push('dataset: ' + provenance.datasetName);
     if (Array.isArray(provenance.columns) && provenance.columns.length) {
       const cols = provenance.columns.slice(0, 6).join(', ');
-      chips.push('columns: ' + cols + (provenance.columns.length > 6 ? '…' : ''));
+      parts.push('columns: ' + cols + (provenance.columns.length > 6 ? '…' : ''));
     }
-    chips.push(provenance.note ? String(provenance.note) : 'stats app-computed');
-    chips.forEach((c) => {
-      const chip = document.createElement('span');
-      chip.className = 'xp-prov-chip';
-      chip.textContent = c;
-      prov.appendChild(chip);
-    });
+    parts.push(provenance.note ? String(provenance.note) : 'stats app-computed');
+    const prov = document.createElement('div');
+    prov.className = 'xp-provenance';
+    prov.textContent = parts.join(' · '); // textContent, like the bubble — never innerHTML
     row.appendChild(prov);
   }
   list.appendChild(row);

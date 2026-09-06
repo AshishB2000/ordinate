@@ -168,6 +168,59 @@ for (const tail of ['', ' not json at all', ' {', ' {"kind":', ' {"kind":"dashbo
     r.text === 'Prose.' && r.action.kind === 'none', JSON.stringify(r));
 }
 
+// ── splitAction: the SHAPE, with or without the marker ──────────────────────
+// The four cases behind the leaked-action-line bug. The first two are what the
+// user actually saw: a local CLI's JSON-envelope hunter had already eaten the
+// prose (src/cli/localCliRun.ts extractEnvelope, fixed with `prose: true`), so
+// the whole reply WAS the action line — and with only a marker search, an
+// unmarked one is prose. Never an empty bubble, and never a brace.
+
+const bare = sa.splitAction('{"kind":"none","intent":""}');
+ok('split: an unmarked action line is stripped, not shown',
+  bare.text.indexOf('{') < 0, JSON.stringify(bare.text));
+ok('split: …and an action-ONLY answer becomes the app-written line, never empty',
+  bare.text === sa.EMPTY_ANSWER, JSON.stringify(bare.text));
+
+const onlyMarked = sa.splitAction(ACTION_MARKER + ' {"kind":"none","intent":""}');
+ok('split: a MARKED action-only answer gets the same line, not an empty bubble',
+  onlyMarked.text === sa.EMPTY_ANSWER, JSON.stringify(onlyMarked.text));
+
+const unmarked = sa.splitAction('Revenue rose in Q3.\n{"kind":"dashboard","intent":"sales overview"}');
+ok('split: prose survives an unmarked action line', unmarked.text === 'Revenue rose in Q3.', JSON.stringify(unmarked.text));
+ok('split: …and the action is still read off it',
+  unmarked.action.kind === 'dashboard' && unmarked.action.intent === 'sales overview',
+  JSON.stringify(unmarked.action));
+
+// Trailing whitespace on the line, and a trailing newline after it — a model
+// that pads, and the `\n` almost every CLI appends to its last line.
+const padded = sa.splitAction('Revenue rose in Q3.\n  {"kind":"chart","intent":"revenue by region"}   \n\n');
+ok('split: an action line padded with whitespace is still stripped',
+  padded.text === 'Revenue rose in Q3.' && padded.action.kind === 'chart', JSON.stringify(padded));
+const paddedMarked = sa.splitAction('Q3 is up.\n' + ACTION_MARKER + '  {"kind":"chart","intent":"x"}  \n');
+ok('split: …marked or not', paddedMarked.text === 'Q3 is up.' && paddedMarked.action.kind === 'chart',
+  JSON.stringify(paddedMarked));
+
+// The other half of the contract: JSON-shaped prose that is NOT an action line
+// must survive intact. Stripping too much is the same class of bug as stripping
+// too little — the user loses their answer either way.
+const keepers: [string, string][] = [
+  ['an off-whitelist kind', 'Your config reads {"kind":"banana","intent":"x"} — that kind is not one we support.'],
+  ['a lone off-whitelist object', '{"kind":"banana","intent":"x"}'],
+  ['an object with no intent field', '{"kind":"chart"}'],
+  ['a non-action JSON object', 'The row is {"id":7,"name":"North"} in the source file.'],
+  ['the format quoted mid-sentence', 'I would emit {"kind":"none","intent":""} normally, but not here.'],
+];
+for (const [label, text] of keepers) {
+  const r = sa.splitAction(text);
+  ok('split: keeps ' + label + ' — JSON-looking prose is prose', r.text === text, JSON.stringify(r.text));
+}
+
+// A whitelisted kind on its OWN line inside a longer answer is an action line
+// wherever it sits, not only at the very end.
+const midway = sa.splitAction('First line.\n{"kind":"step","intent":"drop empties"}\nSecond line.');
+ok('split: an action line anywhere in the tail is removed',
+  midway.text === 'First line.\nSecond line.' && midway.action.kind === 'step', JSON.stringify(midway));
+
 // ── makeActionFilter: the marker never reaches the stream ───────────────────
 
 /** Feed `full` through the filter in fixed-size chunks; return what was emitted. */
@@ -218,6 +271,36 @@ ok('filter: a reply with no action line still streams in full', plainBad === '',
 // Text arriving AFTER the marker is never forwarded, whatever it is.
 const after = stream('Prose.' + ACTION_MARKER + ' {"kind":"dashboard","intent":"x"}\nand more prose', 3);
 ok('filter: nothing after the marker is ever emitted', after === 'Prose.', JSON.stringify(after));
+
+// An UNMARKED action line must not stream either — same guarantee, no sentinel
+// to hunt. Every chunk size, so a bare "{" arriving alone is covered: that is
+// the chunk that would otherwise paint a brace into the bubble with no later
+// chunk able to take it back.
+const UNMARKED = PROSE + '{"kind":"dashboard","intent":"sales overview"}';
+let braced = '';
+let lost = '';
+for (let size = 1; size <= 40; size++) {
+  const got = stream(UNMARKED, size);
+  if (got.indexOf('{') >= 0) braced += size + ' ';
+  if (got !== PROSE) lost += size + '(' + JSON.stringify(got) + ') ';
+}
+ok('filter: no chunk size leaks a brace from an UNMARKED action line', braced === '', braced);
+ok('filter: …and the prose before it still arrives whole', lost === '', lost.slice(0, 200));
+
+// A brace in ORDINARY prose is delayed, never dropped: the filter holds it while
+// it could still be an opener and lets go as soon as it cannot.
+const braceProse = 'The row is {"id":7,"name":"North"} in the source.';
+let braceBad = '';
+for (let size = 1; size <= 20; size++) if (stream(braceProse, size) !== braceProse) braceBad += size + ' ';
+ok('filter: a JSON object inside prose still streams in full', braceBad === '', braceBad);
+
+// The worst case for the hold: a line that opens EXACTLY like an action line and
+// then turns out not to be one. flush() is the backstop that releases it.
+const decoy = '{"kind":"banana","intent":"nope"}';
+let decoyBad = '';
+for (let size = 1; size <= 20; size++) if (stream(decoy, size) !== decoy) decoyBad += size + ' ';
+ok('filter: an action-SHAPED line with an off-whitelist kind is released, not eaten',
+  decoyBad === '', decoyBad);
 
 // ── The prompt and the parser must agree ────────────────────────────────────
 // A prompt that drifts from its whitelist is a bug with no symptom: the model
