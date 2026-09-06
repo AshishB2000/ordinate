@@ -169,7 +169,14 @@ const CASES: Case[] = [
     what: 'aggregate — 1,000 groups × sum',
     js: (c, r) =>
       vizData.buildVizData(c, r, { category: 'sku', values: [{ column: 'sales', aggregation: 'sum' }] }).data,
-    resident: (s) => rq.aggregateResident(s, 'sku', [{ column: 'sales', aggregation: 'sum' }]),
+    // 'sku' has 1,000 distinct values, past CATEGORY_CAP, so `buildVizData`
+    // caps it at the top 50 plus 'Other'. The resident side has to be given the
+    // SAME key or the two answers are not comparable and the timing below them
+    // means nothing — the pairing `ipc/visuals.residentVizData` actually ships.
+    resident: (s) => {
+      const m = [{ column: 'sales', aggregation: 'sum' as const }];
+      return rq.aggregateResident(s, 'sku', m, undefined, rq.resolveCatKey(s, 'sku', m)?.key);
+    },
     sig: chartSig,
   },
   {

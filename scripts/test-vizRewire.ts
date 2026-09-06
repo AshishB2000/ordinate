@@ -58,6 +58,7 @@ const parquetStore: typeof import('../src/engine/parquetStore') = require('../sr
 const vizData: typeof import('../src/analysis/vizData') = require('../src/analysis/vizData');
 const visualsMod: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
+const categoryKey: typeof import('../src/analysis/categoryKey') = require('../src/analysis/categoryKey');
 
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
 type Cell = import('../src/data/transforms').Cell;
@@ -396,7 +397,22 @@ async function main(): Promise<void> {
     const a = await visualData(null, { projectId, datasetId: big.id, encoding: enc });
     const b = await visualData(null, { projectId, datasetId: big.id, encoding: enc });
     ok('60k label order is stable across repeated runs', shapeOf(a.data) === shapeOf(b.data));
-    ok('60k: 120 groups, first-seen order', a.data.labels.length === 120 && a.data.labels[0] === 'g0' && a.data.labels[1] === 'g1');
+    // 120 distinct groups is past CATEGORY_CAP, so the axis is the top 50 by
+    // the first measure plus one 'Other' (analysis/categoryKey). The property
+    // this block has always been about — FIRST-SEEN order, not sort order — is
+    // asserted on what survives the cap: `gN` first appears at row N, so the
+    // kept group numbers must come back strictly increasing.
+    ok('60k: capped to the top 50 plus one Other',
+      a.data.labels.length === categoryKey.CATEGORY_CAP + 1 &&
+      a.data.labels.filter((l: string | number) => l === categoryKey.OTHER_LABEL).length === 1,
+      JSON.stringify(a.data.labels));
+    const kept = (a.data.labels as (string | number)[])
+      .map((l) => /^g(\d+)$/.exec(String(l)))
+      .filter((m): m is RegExpExecArray => m !== null)
+      .map((m) => Number(m[1]));
+    ok('60k: first-seen order among the kept groups',
+      kept.length === categoryKey.CATEGORY_CAP && kept.every((n, i) => i === 0 || n > kept[i - 1]),
+      JSON.stringify(kept));
   }
 
   // ── The one divergence that could NOT be reproduced ────────────────────────

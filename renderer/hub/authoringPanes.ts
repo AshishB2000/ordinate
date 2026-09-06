@@ -299,6 +299,9 @@ async function anRenderSwitcher(): Promise<void> {
   if (seq !== anSwitcherSeq) return;
   if (!res || res.ok === false || !anVisual) return;
   const data = res.data || { labels: [], series: [] };
+  // Same reply, same panel treatment as the Visuals builder — the grain main
+  // settled on, and its note when the dimension's tail was capped.
+  anForm.applyCategoryInfo(res.category);
 
   let shape = res.recommendedShape;
   if (data.geo) {

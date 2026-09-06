@@ -5,7 +5,7 @@ import * as visuals from '../analysis/visuals';
 import * as datasets from '../data/datasets';
 import { buildVizData, recommendChartType } from '../analysis/vizData';
 import type { VizDataResult } from '../analysis/vizData';
-import { aggregateResident } from '../engine/residentQuery';
+import { aggregateResident, resolveCatKey } from '../engine/residentQuery';
 import type { ResidentMeasure } from '../engine/residentQuery';
 import * as trace from '../engine/residentTrace';
 import { sanitizeEncoding, sanitizeChartType } from '../analysis/visuals';
@@ -14,6 +14,7 @@ import type { Cell, FilterStep } from '../data/transforms';
 import type { ParsedColumn } from '../data/parse';
 import { coerceValue } from '../data/parse';
 import { FILTER_OPS, LIST_OPS } from '../data/filterOps';
+import { CATEGORY_CAP, OTHER_LABEL } from '../analysis/categoryKey';
 // The drill-down panel pages rows through the SAME two-path decision the Explore
 // grid uses — see `pageFor`'s note on why there is only one of them.
 import { pageFor } from './datasets';
@@ -160,7 +161,24 @@ export async function residentVizData(
       aggregation: v.aggregation === 'none' ? 'sum' : v.aggregation,
     }));
 
-    const chart = aggregateResident(src, encoding.category, measures, filters);
+    // The category key (10 bins / a date grain / the top-50 cap) is resolved by
+    // pre-queries over the same relation before the aggregate runs.
+    //
+    // A `null` on a DATE column is a DECISION, not a fault: SQL implements only
+    // the two canonical date shapes and hands anything else to the JS
+    // `Date.parse` path deliberately. residentTrace's taxonomy calls that
+    // 'skipped' — counted, silent. On a number or text column nothing about the
+    // input can produce a null, so one there IS the regression signal and warns.
+    // (No column NAME in the detail: it is a header out of the user's own file.)
+    const catType = src.columns.find((c) => c && c.name === encoding.category)?.type;
+    const plan = resolveCatKey(src, encoding.category, measures, filters, encoding.grain);
+    if (!plan) {
+      trace.record('vizCategoryKey', catType === 'date' ? 'skipped' : 'failed', `category type ${catType}`);
+      return null;
+    }
+    trace.record('vizCategoryKey', 'resident');
+
+    const chart = aggregateResident(src, encoding.category, measures, filters, plan.key);
     if (!chart) {
       trace.record('vizAggregate', 'failed', `${measures.length} measure(s), filters=${filters.length}`);
       return null; // bridge down / query failed → JS path
@@ -172,7 +190,11 @@ export async function residentVizData(
       // Pure, cheap, and needs only columns — call the real thing rather than
       // reimplementing the classification.
       recommendedShape: recommendChartType(src.columns, encoding).shape,
+      // Still EMPTY, and it has to be: the whole fast path is gated on
+      // `buildVizData` having produced no warning. The cap's inline note travels
+      // on `category.note`, which is not a warning.
       warnings: [],
+      category: plan.info,
     };
   } catch (_) {
     return null;
@@ -286,6 +308,34 @@ export function resolveDrill(
   }
   if (!hasSplit && series !== undefined) {
     return { available: false, reason: 'This chart has no split column, so the clicked series cannot be resolved.' };
+  }
+
+  // A GROUPED chart's category axis is now bucketed (analysis/categoryKey): a
+  // number column becomes ten ranges, a date column a grain, a text column its
+  // top 50 plus 'Other'. A bucket LABEL is not a cell value, so `= '2023-01'`
+  // on a date column stored as '2023-01-05' would return no rows under a
+  // non-empty bar — the exact contradiction this whole panel exists to rule
+  // out. Number and date are refused outright; a text bucket is still an exact
+  // key EXCEPT 'Other', which is a set of keys and ambiguous besides (a real
+  // category may literally be called Other).
+  const catCol = cols.find((c) => c && c.name === encoding.category);
+  if (catCol && catCol.type === 'number') {
+    return {
+      available: false,
+      reason: `"${encoding.category}" is a number, so this axis is grouped into ranges rather than single values — a bar covers a span, not one value, so its rows cannot be identified by an exact match.`,
+    };
+  }
+  if (catCol && catCol.type === 'date') {
+    return {
+      available: false,
+      reason: `"${encoding.category}" is a date, so this axis is rolled up to a period rather than single days — a bar covers a range of dates, so its rows cannot be identified by an exact match.`,
+    };
+  }
+  if (category === OTHER_LABEL) {
+    return {
+      available: false,
+      reason: `"${OTHER_LABEL}" is every category outside the top ${CATEGORY_CAP}, not one of them, so the exact rows behind it cannot be listed.`,
+    };
   }
 
   const steps: FilterStep[] = [];
@@ -426,7 +476,14 @@ async function writeDrillCsv(
 /** The reply shape of `visual:data`. `tooLarge` is only ever set by a caller
  *  that supplied `maxHydrateRows` (see below); `visual:data` itself never does. */
 export type VizDataReply =
-  | { ok: true; data: VizDataResult['data']; recommendedShape: string; warnings: string[] }
+  | {
+      ok: true;
+      data: VizDataResult['data'];
+      recommendedShape: string;
+      warnings: string[];
+      /** How the category axis was bucketed — see analysis/categoryKey. */
+      category?: VizDataResult['category'];
+    }
   | { ok: false; error: string; tooLarge?: true };
 
 /**
@@ -459,7 +516,15 @@ export async function vizDataFor(
   // Fast path: an aggregated chart over a resident (v3) dataset, answered
   // without hydrating a single row. Returns null unless provably identical.
   const fast = await residentVizData(projectId, datasetId, encoding, filters);
-  if (fast) return { ok: true, data: fast.data, recommendedShape: fast.recommendedShape, warnings: fast.warnings };
+  if (fast) {
+    return {
+      ok: true,
+      data: fast.data,
+      recommendedShape: fast.recommendedShape,
+      warnings: fast.warnings,
+      category: fast.category,
+    };
+  }
 
   if (typeof opts.maxHydrateRows === 'number') {
     // Metadata read — one small JSON, no rows, no migration.
@@ -473,7 +538,13 @@ export async function vizDataFor(
   const ds = await datasets.getDataset(projectId, datasetId);
   if (!ds) return { ok: false, error: 'Dataset not found' };
   const result = buildVizData(ds.columns, ds.rows, encoding, filters);
-  return { ok: true, data: result.data, recommendedShape: result.recommendedShape, warnings: result.warnings };
+  return {
+    ok: true,
+    data: result.data,
+    recommendedShape: result.recommendedShape,
+    warnings: result.warnings,
+    category: result.category,
+  };
 }
 
 export function register() {
