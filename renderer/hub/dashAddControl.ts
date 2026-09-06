@@ -21,7 +21,7 @@ async function handleAddControl(): Promise<void> {
   // A filter widget is short and wide — proportionate to, but shorter than, a
   // metric card's 3×2 (h:2 would waste half the card on empty space below a
   // one-line dropdown/date-range control).
-  pushCard({ id: dashUuid(), type: 'control', control, layout: { x: 0, y: nextFreeRow(), w: 3, h: 1 } });
+  pushCard({ id: dashUuid(), type: 'control', control, layout: { ...dashFindSlot(dashCards(), 3, 1), w: 3, h: 1 } });
 }
 
 // The three control kinds, named once — read here (dialog tiles) and from

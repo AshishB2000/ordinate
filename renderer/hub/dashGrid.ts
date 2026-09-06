@@ -408,6 +408,51 @@ async function handleDashRefreshData(): Promise<void> {
 // page's cards; visuals.ts passes an arbitrary sheet's card list so adding a
 // card from the gallery lands where the editor would have put it — one rule for
 // where the next card goes, not two.
+/**
+ * Where a new `w`x`h` card goes: the first cell it fits without overlapping
+ * anything, scanning left-to-right then down.
+ *
+ * Every add path used to hardcode `x: 0, y: nextFreeRow()`, which put every card
+ * in column 0 on a brand new row — add a 3-wide KPI beside a 9-column gap and it
+ * still started a row of its own, leaving columns 3-11 empty until someone
+ * dragged something into them. A dashboard built by clicking "+ Metric" four
+ * times was a vertical ribbon down the left edge.
+ *
+ * Deliberately NOT shared with the packer in src/analysis/planBuild.ts: that one
+ * lays out a whole batch from an empty grid and can carry a cursor, this one
+ * answers "given these cards, where does ONE more go". Same idea, different
+ * question — merging them would mean a stateful packer pretending to be pure.
+ */
+/** The open page's cards, or [] — the usual argument to dashFindSlot. */
+function dashCards(): any[] {
+  const page = dashCurrentPage();
+  return page && Array.isArray(page.cards) ? page.cards : [];
+}
+
+function dashFindSlot(cards: any[], w: number, h: number): { x: number; y: number } {
+  const width = clampInt(w, 1, DASH_GRID_COLS, 1);
+  const height = Math.max(1, clampInt(h, 1, 100000, 1));
+  const placed = (Array.isArray(cards) ? cards : [])
+    .map((c: any) => c && c.layout)
+    .filter(Boolean)
+    .map((l: any) => ({
+      x: clampInt(l.x, 0, DASH_GRID_COLS - 1, 0),
+      y: Math.max(0, clampInt(l.y, 0, 100000, 0)),
+      w: clampInt(l.w, 1, DASH_GRID_COLS, 1),
+      h: Math.max(1, clampInt(l.h, 1, 100000, 1)),
+    }));
+  const hits = (x: number, y: number): boolean => placed.some((p) =>
+    x < p.x + p.w && p.x < x + width && y < p.y + p.h && p.y < y + height);
+  // Bounded by the grid's own height: one row past the bottom is always free.
+  const limit = placed.reduce((m, p) => Math.max(m, p.y + p.h), 0);
+  for (let y = 0; y <= limit; y += 1) {
+    for (let x = 0; x + width <= DASH_GRID_COLS; x += 1) {
+      if (!hits(x, y)) return { x, y };
+    }
+  }
+  return { x: 0, y: limit };
+}
+
 function nextFreeRow(cardList?: any[]): number {
   let cards: any[];
   if (Array.isArray(cardList)) {
@@ -479,6 +524,12 @@ function makeDashCardEl(card: any): HTMLElement {
   rm.classList.add('dash-card-rm');
   ctrls.appendChild(rm);
   head.appendChild(ctrls);
+  // A THIRD sibling, deliberately not inside .dash-card-ctrls: that cluster is
+  // hidden for a reader of a published dashboard and in present mode, and the
+  // chart's own controls are not layout editing.
+  const slot = document.createElement('div');
+  slot.className = 'cv-controls-slot';
+  head.appendChild(slot);
   el.appendChild(head);
 
   const body = document.createElement('div');

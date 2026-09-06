@@ -44,24 +44,14 @@
 // still get the preview + build. `analysis:draft` returns `not_ready`.
 
 import type { ParsedColumn } from '../data/parse';
-import type { Cell, FilterStep, TransformStep } from '../data/transforms';
-import type { FValue } from '../formula/formula';
+import type { FilterStep } from '../data/transforms';
 import { compile } from '../formula/formula';
 import type { ColumnSummary } from '../data/datasetStats';
 import * as datasets from '../data/datasets';
 import * as visuals from './visuals';
-import type { VizEncoding } from './visuals';
-import type { VizDataResult } from './vizData';
-import * as analysis from './analysis';
 import * as dashboards from './dashboards';
-import { computeColumnSummariesResident, sampleRowsResident } from '../engine/statsResident';
-// INVERTED IMPORT, deliberately. `vizDataFor` lives beside `residentVizData` in
-// src/ipc/visuals.ts because that is where the resident-vs-JS decision for a
-// chart already lives, and `register()` is inert until called (the same reason
-// scripts/test-analysis.ts imports src/ipc/analyses.ts directly). Reaching for
-// it here — rather than reimplementing the decision — is what makes guarantee 2
-// above structural instead of aspirational.
-import { vizDataFor } from '../ipc/visuals';
+import type { VizEncoding } from './visuals';
+import { computeColumnSummariesResident } from '../engine/statsResident';
 
 // ── The CLOSED chart-type vocabulary ───────────────────────────────────────
 //
@@ -84,19 +74,8 @@ export const CHART_TYPE_IDS: ReadonlySet<string> = new Set([
 
 /** Aggregations that need a `number` column. `count` is the only one that does
  *  not — it counts non-empty cells of any type (metricValue.computeMetric). */
-const NUMERIC_AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'min', 'max', 'none']);
+export const NUMERIC_AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'min', 'max', 'none']);
 
-/**
- * The JS-fallback ceiling for a PREVIEW chart, in rows. See `vizDataFor`: the
- * preview draws every card at once, so it cannot afford the per-chart hydrate
- * budget `visual:data` can. Resident (Parquet) datasets ignore this entirely —
- * they never hydrate at any size.
- */
-export const PREVIEW_MAX_HYDRATE_ROWS = 50_000;
-
-/** Rows evaluated to show a calculated field's sample output. Read off Parquet
- *  with a LIMIT; never a hydrate. */
-export const CALC_SAMPLE_ROWS = 8;
 
 // ── Shapes ─────────────────────────────────────────────────────────────────
 
@@ -120,9 +99,31 @@ export interface PlannedVisual {
   needsCalcField?: string;
 }
 
+/**
+ * A KPI tile. The plan names a column and an aggregation; the FIGURE is computed
+ * at render time by `dashboard:metric`, the same path a hand-added metric card
+ * takes. Nothing here is ever a value — a plan cannot carry a number.
+ */
+export interface PlannedMetric {
+  datasetId: string;
+  column: string;
+  aggregation: dashboards.MetricAggregation;
+  label?: string;
+}
+
+/** A notes tile — the only free text a plan may put on a sheet. */
+export interface PlannedText {
+  heading?: string;
+  text?: string;
+}
+
 export interface PlanSheet {
   name: string;
+  /** KPI strip. Packed FIRST, on its own row above the charts. */
+  metrics: PlannedMetric[];
   visuals: PlannedVisual[];
+  /** Notes. Packed LAST, below the charts. */
+  texts: PlannedText[];
 }
 
 export interface AnalysisPlan {
@@ -132,7 +133,9 @@ export interface AnalysisPlan {
   sheets: PlanSheet[];
 }
 
-export type PlanDropKind = 'dataset' | 'chartType' | 'formula' | 'encoding' | 'filter' | 'visual' | 'sheet';
+export type PlanDropKind =
+  | 'dataset' | 'chartType' | 'formula' | 'encoding' | 'filter' | 'visual' | 'sheet'
+  | 'metric' | 'text';
 
 export interface PlanDrop {
   kind: PlanDropKind;
@@ -413,13 +416,110 @@ export function validatePlan(raw: unknown, ctx: PlanContext): ValidatedPlan {
       const v = validateVisual(rawVisual, ctx, proposedCols, where, at, dropped);
       if (v) kept.push(v);
     });
-    sheets.push({ name: sheetName, visuals: kept });
+    const rawMetrics = Array.isArray(rawSheet.metrics) ? rawSheet.metrics : [];
+    const keptMetrics: PlannedMetric[] = [];
+    rawMetrics.forEach((rawMetric, mi) => {
+      const m = validateMetric(rawMetric, ctx, proposedCols, `sheets[${si}].metrics[${mi}]`,
+        `Sheet "${sheetName}" metric ${mi + 1}`, dropped);
+      if (m) keptMetrics.push(m);
+    });
+    const rawTexts = Array.isArray(rawSheet.texts) ? rawSheet.texts : [];
+    const keptTexts: PlannedText[] = [];
+    rawTexts.forEach((rawText, ti) => {
+      const t = validateText(rawText, `sheets[${si}].texts[${ti}]`,
+        `Sheet "${sheetName}" note ${ti + 1}`, dropped);
+      if (t) keptTexts.push(t);
+    });
+    sheets.push({ name: sheetName, metrics: keptMetrics, visuals: kept, texts: keptTexts });
   });
   // An Analysis always has at least one sheet (analysis.sanitizeSheets enforces
   // it); make that true here so preview and build agree on the sheet count too.
-  if (sheets.length === 0) sheets.push({ name: 'Sheet 1', visuals: [] });
+  if (sheets.length === 0) sheets.push({ name: 'Sheet 1', metrics: [], visuals: [], texts: [] });
 
   return { plan: { name, rationale, calculatedFields, sheets }, dropped };
+}
+
+/** Longest a plan's own text may be. A note is a caption, not a document, and
+ *  this string is rendered onto a tile whose height the app chose. */
+const TEXT_HEADING_MAX = 200;
+const TEXT_BODY_MAX = 2000;
+
+/**
+ * A KPI tile, validated exactly as hard as a chart measure.
+ *
+ * dashboards.sanitizeCard checks the SHAPE of a metric card — a UUID datasetId,
+ * a known aggregation, a known format — but never that the column exists or that
+ * it is a number. Without the check below, `sum` of a text column builds a tile
+ * that renders "—" forever: computeMetric returns null for it, so it is a broken
+ * tile rather than a wrong figure, but it is a tile that should never have been
+ * built. Judged on the DECLARED type, like everywhere else in this file; a
+ * column this plan is about to compute has no declared type yet, so it passes.
+ */
+function validateMetric(
+  raw: unknown,
+  ctx: PlanContext,
+  proposedCols: Map<string, Set<string>>,
+  where: string,
+  at: string,
+  dropped: PlanDrop[],
+): PlannedMetric | null {
+  if (!looksLikeObject(raw)) {
+    dropped.push({ kind: 'metric', where, message: `${at} dropped: not an object.` });
+    return null;
+  }
+  const ds = resolveDataset(ctx, raw);
+  if (!ds) {
+    dropped.push({
+      kind: 'dataset',
+      where,
+      message: `${at} dropped: unknown dataset ${JSON.stringify(str(raw.dataset) || str(raw.datasetId))}.`,
+    });
+    return null;
+  }
+  const aggregation = str(raw.aggregation);
+  if (!dashboards.METRIC_AGGS.has(aggregation)) {
+    dropped.push({ kind: 'encoding', where, message: `${at} dropped: ${JSON.stringify(aggregation)} is not a metric aggregation.` });
+    return null;
+  }
+  const column = str(raw.column);
+  const real = new Map(ds.columns.map((c) => [c.name, c.type]));
+  const proposed = proposedCols.get(ds.id) || new Set<string>();
+  if (!real.has(column) && !proposed.has(column)) {
+    dropped.push({ kind: 'encoding', where, message: `${at} dropped: "${column}" is not a column of "${ds.name}".` });
+    return null;
+  }
+  if (NUMERIC_AGGS.has(aggregation) && real.has(column) && real.get(column) !== 'number') {
+    dropped.push({
+      kind: 'encoding',
+      where,
+      message: `${at} dropped: ${aggregation} needs a number column, but "${column}" is ${real.get(column)} in "${ds.name}".`,
+    });
+    return null;
+  }
+  const out: PlannedMetric = { datasetId: ds.id, column, aggregation: aggregation as dashboards.MetricAggregation };
+  const label = str(raw.label).slice(0, TEXT_HEADING_MAX);
+  if (label) out.label = label;
+  return out;
+}
+
+/** A notes tile. Both fields are optional but not both absent — dashboards
+ *  .sanitizeCard drops a text card with neither, so catching it here is what
+ *  turns a silently missing tile into a reported one. */
+function validateText(raw: unknown, where: string, at: string, dropped: PlanDrop[]): PlannedText | null {
+  if (!looksLikeObject(raw)) {
+    dropped.push({ kind: 'text', where, message: `${at} dropped: not an object.` });
+    return null;
+  }
+  const heading = str(raw.heading).slice(0, TEXT_HEADING_MAX);
+  const text = str(raw.text).slice(0, TEXT_BODY_MAX);
+  if (!heading && !text) {
+    dropped.push({ kind: 'text', where, message: `${at} dropped: no heading and no body.` });
+    return null;
+  }
+  const out: PlannedText = {};
+  if (heading) out.heading = heading;
+  if (text) out.text = text;
+  return out;
 }
 
 function validateVisual(
@@ -588,297 +688,4 @@ function validateVisual(
   };
   if (needsCalcField) out.needsCalcField = needsCalcField;
   return out;
-}
-
-// ── Preview ────────────────────────────────────────────────────────────────
-
-export interface CalcFieldPreview {
-  datasetId: string;
-  datasetName: string;
-  name: string;
-  expression: string;
-  /** Columns the compiled expression reads. */
-  refs: string[];
-  /** Columns it reads that the dataset does not have (still valid — they yield null). */
-  unknownRefs: string[];
-  /** Up to CALC_SAMPLE_ROWS real rows with the app-evaluated result. Empty when
-   *  the table is not resident — a sample is a nicety, never worth a hydrate. */
-  sample: { inputs: Record<string, Cell>; value: FValue }[];
-}
-
-export interface VisualPreview {
-  sheet: number;
-  index: number;
-  kind: 'new' | 'existing';
-  visualId?: string;
-  datasetId: string;
-  datasetName: string;
-  name: string;
-  chartType: string;
-  encoding: VizEncoding;
-  filters: FilterStep[];
-  /** Computed by the SAME function that renders the built Visual, or null. */
-  data: VizDataResult['data'] | null;
-  recommendedShape: string | null;
-  warnings: string[];
-  /** Why `data` is null, when it is. Never a figure. */
-  note?: string;
-}
-
-export interface PlanPreview {
-  ok: true;
-  name: string;
-  rationale: string;
-  sheets: { name: string; visuals: VisualPreview[] }[];
-  calculatedFields: CalcFieldPreview[];
-  dropped: PlanDrop[];
-  /** The VALIDATED plan — exactly what to hand back to `buildPlan` on approval.
-   *  Returned alongside the preview rather than instead of it, because the plan
-   *  is the contract and the preview is only what the user looked at. */
-  plan: AnalysisPlan;
-}
-
-/**
- * Validate a raw envelope and render a preview of exactly what survived.
- *
- * Costs at most: one small JSON per dataset, one stats query per resident
- * dataset, one aggregate per card, one `LIMIT 8` per calculated field. It does
- * NOT hydrate a table above PREVIEW_MAX_HYDRATE_ROWS and never hydrates one for
- * a sample. Works with no model configured — this is app code.
- *
- * `ctx` is optional purely so `analysis:draft` can reuse the context it already
- * loaded to build the FACTS block; omitting it loads a fresh one.
- */
-export async function previewPlan(projectId: string, raw: unknown, ctx?: PlanContext): Promise<PlanPreview> {
-  const context = ctx || (await loadPlanContext(projectId));
-  const { plan, dropped } = validatePlan(raw, context);
-  return previewValidated(projectId, context, plan, dropped);
-}
-
-async function previewValidated(
-  projectId: string,
-  ctx: PlanContext,
-  plan: AnalysisPlan,
-  dropped: PlanDrop[],
-): Promise<PlanPreview> {
-  const byId = new Map(ctx.datasets.map((d) => [d.id, d]));
-
-  // Calculated fields: compiled (again — the compile is the validation) and
-  // evaluated over real rows by the app's own evaluator.
-  const calculatedFields: CalcFieldPreview[] = [];
-  for (const cf of plan.calculatedFields) {
-    const ds = byId.get(cf.datasetId);
-    if (!ds) continue;
-    const compiled = compile(cf.expression);
-    if (!compiled.ok) continue; // unreachable: validatePlan already dropped it
-    const names = new Set(ds.columns.map((c) => c.name));
-    const unknownRefs = compiled.fn.refs.filter((r) => !names.has(r));
-    const sample: CalcFieldPreview['sample'] = [];
-    const src = await datasets.residentSource(projectId, cf.datasetId);
-    const rows = src ? sampleRowsResident(src, CALC_SAMPLE_ROWS) : null;
-    if (rows && src) {
-      for (const row of rows) {
-        const rowMap: Record<string, FValue> = {};
-        src.columns.forEach((col, c) => { rowMap[col.name] = (row[c] ?? null) as FValue; });
-        const inputs: Record<string, Cell> = {};
-        for (const ref of compiled.fn.refs) inputs[ref] = (rowMap[ref] ?? null) as Cell;
-        sample.push({ inputs, value: compiled.fn.evaluate(rowMap) });
-      }
-    }
-    calculatedFields.push({
-      datasetId: cf.datasetId,
-      datasetName: ds.name,
-      name: cf.name,
-      expression: cf.expression,
-      refs: compiled.fn.refs,
-      unknownRefs,
-      sample,
-    });
-  }
-
-  const sheets: PlanPreview['sheets'] = [];
-  for (let si = 0; si < plan.sheets.length; si += 1) {
-    const sheet = plan.sheets[si];
-    const out: VisualPreview[] = [];
-    for (let vi = 0; vi < sheet.visuals.length; vi += 1) {
-      out.push(await previewVisual(projectId, byId, sheet.visuals[vi], si, vi));
-    }
-    sheets.push({ name: sheet.name, visuals: out });
-  }
-
-  return { ok: true, name: plan.name, rationale: plan.rationale, sheets, calculatedFields, dropped, plan };
-}
-
-async function previewVisual(
-  projectId: string,
-  byId: Map<string, PlanDataset>,
-  pv: PlannedVisual,
-  sheet: number,
-  index: number,
-): Promise<VisualPreview> {
-  const ds = byId.get(pv.datasetId);
-  const base: VisualPreview = {
-    sheet,
-    index,
-    kind: pv.kind,
-    visualId: pv.visualId,
-    datasetId: pv.datasetId,
-    datasetName: ds ? ds.name : '',
-    name: pv.name,
-    chartType: pv.chartType,
-    encoding: pv.encoding,
-    filters: pv.filters,
-    data: null,
-    recommendedShape: null,
-    warnings: [],
-  };
-
-  // An existing saved Visual previews through its OWN stored definition, which
-  // is what the analysis will show — never through a re-derived one.
-  let encoding = pv.encoding;
-  let filters = pv.filters;
-  if (pv.kind === 'existing' && pv.visualId) {
-    const v = await visuals.getVisual(projectId, pv.visualId);
-    if (!v) {
-      base.note = 'The saved visual was deleted.';
-      return base;
-    }
-    encoding = v.encoding;
-    filters = v.filters;
-    base.encoding = encoding;
-    base.filters = filters;
-    base.chartType = v.chartType;
-  }
-
-  // A column that does not exist yet cannot be charted, and an approximation
-  // would be a figure the built analysis could contradict. Show nothing.
-  if (pv.needsCalcField) {
-    base.note = `Chart appears once the calculated field "${pv.needsCalcField}" is created.`;
-    return base;
-  }
-
-  const res = await vizDataFor(projectId, pv.datasetId, encoding, filters, {
-    maxHydrateRows: PREVIEW_MAX_HYDRATE_ROWS,
-  });
-  if (!res.ok) {
-    base.note = res.tooLarge
-      ? 'Too large to preview without the DuckDB bridge — the chart renders normally once built.'
-      : res.error;
-    return base;
-  }
-  base.data = res.data;
-  base.recommendedShape = res.recommendedShape;
-  base.warnings = res.warnings;
-  return base;
-}
-
-// ── Build ──────────────────────────────────────────────────────────────────
-
-export interface BuildResult {
-  ok: true;
-  analysis: analysis.Analysis;
-  /** Ids of the Visuals the build created or reused, in plan order. */
-  visualIds: string[];
-  /** Calculated fields actually appended as TransformSteps. */
-  calculatedFields: { datasetId: string; name: string }[];
-  dropped: PlanDrop[];
-  /** Pipeline warnings from applying the calculated-field steps. */
-  warnings: string[];
-}
-
-/** Flow packer, moved verbatim from the old draft handler: visual cards 6×6,
- *  left→right, wrapping at GRID_COLS. The app assigns geometry; the model never
- *  gets to. */
-function packer() {
-  let cx = 0;
-  let cy = 0;
-  let rowH = 0;
-  return (w: number, h: number) => {
-    if (cx + w > dashboards.GRID_COLS) { cx = 0; cy += rowH; rowH = 0; }
-    const layout = { x: cx, y: cy, w, h };
-    cx += w;
-    if (h > rowH) rowH = h;
-    return layout;
-  };
-}
-
-/**
- * Turn an approved plan into real records, through the EXISTING APIs only.
- *
- * Re-validates first, with the same `validatePlan` the preview used: the plan
- * comes back over IPC and is untrusted again, and re-deciding it with the same
- * function on the same context is what makes "what you previewed is what you
- * get" a property rather than a promise.
- *
- * Order mirrors validation: calculated fields become ordinary
- * `calculated_field` TransformSteps FIRST (so a visual encoding against one has
- * its column by the time the Visual is saved), then Visuals, then the Analysis.
- * Nothing here is special-cased: an AI calculated field is removable and
- * reorderable in Prepare exactly like a hand-written one.
- */
-export async function buildPlan(
-  projectId: string,
-  raw: unknown,
-): Promise<BuildResult | { ok: false; error: string }> {
-  const ctx = await loadPlanContext(projectId);
-  const { plan, dropped } = validatePlan(raw, ctx);
-
-  // 1. Calculated fields → TransformSteps, appended to the dataset's existing
-  //    pipeline. updateSteps sanitizes, recomputes from the immutable source and
-  //    persists — the same call `dataset:addStep` makes.
-  const warnings: string[] = [];
-  const appliedCalc: { datasetId: string; name: string }[] = [];
-  const byDataset = new Map<string, PlannedCalcField[]>();
-  for (const cf of plan.calculatedFields) {
-    const list = byDataset.get(cf.datasetId) || [];
-    list.push(cf);
-    byDataset.set(cf.datasetId, list);
-  }
-  for (const [datasetId, fields] of byDataset) {
-    // Metadata read for the EXISTING steps — updateSteps loads the table itself,
-    // so there is no reason for this to be a second hydrate.
-    const meta = await datasets.getDatasetMeta(projectId, datasetId);
-    if (!meta) continue;
-    const steps: TransformStep[] = Array.isArray(meta.steps) ? meta.steps.slice() : [];
-    for (const f of fields) steps.push({ type: 'calculated_field', name: f.name, expression: f.expression });
-    const res = await datasets.updateSteps(projectId, datasetId, steps);
-    if (!res) continue;
-    for (const w of res.output.warnings) warnings.push(w);
-    for (const f of fields) appliedCalc.push({ datasetId, name: f.name });
-  }
-
-  // 2. Visuals. A referenced saved visual is reused by id — the plan says "put
-  //    this chart here", not "make another copy of it".
-  const visualIds: string[] = [];
-  const place = packer();
-  const sheets: { name: string; cards: unknown[] }[] = [];
-  for (const sheet of plan.sheets) {
-    const cards: unknown[] = [];
-    for (const pv of sheet.visuals) {
-      let id = pv.visualId;
-      if (pv.kind === 'new') {
-        const saved = await visuals.saveVisual(projectId, {
-          name: pv.name,
-          datasetId: pv.datasetId,
-          chartType: pv.chartType,
-          encoding: pv.encoding,
-          filters: pv.filters,
-        });
-        if (!saved) continue;
-        id = saved.id;
-      }
-      if (!id) continue;
-      visualIds.push(id);
-      cards.push({ type: 'visual', layout: place(6, 6), visualId: id });
-    }
-    // sanitizeCards is the same whitelist a hand-built sheet goes through — a
-    // sheet IS a dashboards.Page.
-    sheets.push({ name: sheet.name, cards: dashboards.sanitizeCards(cards) });
-  }
-
-  // 3. The Analysis.
-  const saved = await analysis.saveAnalysis(projectId, { name: plan.name, sheets });
-  if (!saved) return { ok: false, error: 'Could not create the dashboard' };
-
-  return { ok: true, analysis: saved, visualIds, calculatedFields: appliedCalc, dropped, warnings };
 }

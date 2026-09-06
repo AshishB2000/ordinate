@@ -450,6 +450,8 @@ contextBridge.exposeInMainWorld('hub', {
   // | { ok:false, error }.
   buildAnalysisPlan: (projectId: string, plan: any) =>
     ipcRenderer.invoke('analysis:buildPlan', { projectId, plan }),
+  starterCards: (projectId: string, kind: string, datasetId?: string) =>
+    ipcRenderer.invoke('analysis:starterCards', { projectId, kind, datasetId }),
 
   // ── Analyses (the AUTHORING container — sheets of cards + analysis-wide
   // filters; a dashboard is a published snapshot OF one). ────────────────────

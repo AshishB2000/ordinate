@@ -83,7 +83,6 @@ const ALLOWED: Record<string, number> = {
   // mtime/bytes check there, same file, same reasoning as above.
   'scripts/smoke-app.ts': 3737,
   'scripts/test-connectorsHttp.ts': 881,
-  'src/analysis/analysisPlan.ts': 884,
   'src/ai/analyze.ts': 982,
   'src/engine/anomaliesResident.ts': 870,
   'src/connectors/http.ts': 1036,

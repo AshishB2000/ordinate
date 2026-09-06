@@ -2,6 +2,9 @@ import { ipcMain } from 'electron';
 import * as analysis from '../analysis/analysis';
 import { draftDashboard, dispatch, parseFirstObject, type NeutralMsg } from '../ai/analyze';
 import * as plan from '../analysis/analysisPlan';
+import * as planPreview from '../analysis/planPreview';
+import * as planBuild from '../analysis/planBuild';
+import { buildStarterPlan } from '../analysis/starterPlan';
 import * as delta from '../analysis/dashboardDelta';
 import * as config from '../app/config';
 
@@ -112,9 +115,37 @@ export function register() {
 
   ipcMain.handle('analysis:previewPlan', async (_e, { projectId, plan: raw }: any = {}) => {
     try {
-      return await plan.previewPlan(projectId, raw);
+      return await planPreview.previewPlan(projectId, raw);
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to preview the plan' };
+    }
+  });
+
+  // The two STARTER LAYOUTS. NOT an AI call — it works with no model configured,
+  // because the plan is written by starterPlan.ts from the dataset's own columns
+  // and the app's own per-column summaries, then run through the same validate →
+  // records path the Assistant's plan uses.
+  //
+  // It returns CARDS and never touches the Analysis record: the open editor owns
+  // that, and its debounced persistAnalysis is the one write. Same rule
+  // dockEdit.ts follows for edit deltas.
+  ipcMain.handle('analysis:starterCards', async (_e, { projectId, kind, datasetId }: any = {}) => {
+    try {
+      if (kind !== 'kpis' && kind !== 'twoup') return { ok: false, error: 'Unknown starter layout.' };
+      const ctx = await plan.loadPlanContext(projectId, typeof datasetId === 'string' ? datasetId : undefined);
+      const ds = ctx.datasets[0];
+      if (!ds) return { ok: false, error: 'Import a dataset first — a starter layout builds from one.' };
+      const records = await planBuild.buildPlanRecords(projectId, buildStarterPlan(kind, ds));
+      const sheet = records.sheets[0];
+      return {
+        ok: true,
+        cards: sheet ? sheet.cards : [],
+        visualIds: records.visualIds,
+        dropped: records.dropped,
+        warnings: records.warnings,
+      };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Failed to build the starter layout' };
     }
   });
 
@@ -122,7 +153,7 @@ export function register() {
   // creates the records through the existing stores. Also model-free.
   ipcMain.handle('analysis:buildPlan', async (_e, { projectId, plan: raw }: any = {}) => {
     try {
-      return await plan.buildPlan(projectId, raw);
+      return await planBuild.buildPlan(projectId, raw);
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to build the analysis' };
     }
@@ -165,7 +196,7 @@ export async function draftAnalysisPlan(
 
     // Reuses the context the FACTS block was built from — the model saw exactly
     // the records this validates against.
-    return await plan.previewPlan(projectId, res.structure, ctx);
+    return await planPreview.previewPlan(projectId, res.structure, ctx);
   } catch (err: any) {
     return { ok: false, error: err?.message || 'Failed to draft an analysis' };
   }
@@ -254,7 +285,7 @@ async function previewNewTiles(
     }],
   };
   try {
-    const res = await plan.previewPlan(projectId, synthetic, ctx);
+    const res = await planPreview.previewPlan(projectId, synthetic, ctx);
     return res.sheets[0] ? res.sheets[0].visuals : [];
   } catch (_) {
     return []; // a preview is a nicety; the diff still stands

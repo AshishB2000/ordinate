@@ -290,6 +290,7 @@ declare global {
       editDashboard(projectId: string, analysisId: string, intent: string): Promise<any>;
       previewAnalysisPlan(projectId: string, plan: any): Promise<any>;
       buildAnalysisPlan(projectId: string, plan: any): Promise<any>;
+      starterCards(projectId: string, kind: string, datasetId?: string): Promise<any>;
       // ── Analyses (the AUTHORING container — sheets of cards + filters) ──
       listAnalyses(projectId: string): Promise<any[]>;
       getAnalysis(projectId: string, id: string): Promise<any>;

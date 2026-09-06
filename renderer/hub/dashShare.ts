@@ -13,6 +13,53 @@
 // ── Presentation mode (renderer-only; no window, no IPC) ──────────────────────
 let dashPresenting = false;
 let dashPresentKeyHandler: ((e: KeyboardEvent) => void) | null = null;
+let dashPresentResizeHandler: (() => void) | null = null;
+
+/** Below this a tile is a stripe, not a chart. A page too tall to fit keeps its
+ *  natural pitch and scrolls, which is honest — squeezing 40 rows into a window
+ *  makes an unreadable dashboard, not a presentable one. */
+const PRESENT_MIN_ROW_PX = 28;
+
+/**
+ * Scale the grid so the page's rows fill the window exactly.
+ *
+ * `grid-auto-rows` is an absolute pixel pitch, so hiding ~150px of chrome used to
+ * free vertical space that nothing consumed — the tiles stayed their authored
+ * height and left a band of empty background below the last row. Present mode is
+ * the one place the pitch should follow the viewport instead of the record.
+ *
+ * It moves --dash-row rather than resizing anything, so the tiles, the charts
+ * inside them and the drag maths in dashboards.ts all follow from the one number
+ * they already read. Set on #dash-editor and cleared on exit; the stored layout
+ * is never touched.
+ */
+function fitDashPresentRows(): void {
+  const ed = dashEl('dash-editor');
+  const grid = dashEl('dash-grid');
+  if (!ed || !grid) return;
+  // Always measure at the natural pitch — otherwise each call compounds the last.
+  ed.style.removeProperty('--dash-row');
+  if (!dashPresenting) return;
+  const page = dashCurrentPage();
+  const cards = (page && Array.isArray(page.cards)) ? page.cards : [];
+  let rows = 0;
+  for (const c of cards) {
+    const l = (c && c.layout) || {};
+    rows = Math.max(rows, (Number(l.y) || 0) + Math.max(1, Number(l.h) || 1));
+  }
+  if (rows <= 0) return;
+  // Measured against the EDITOR, not the window. #dash-editor is its own scroll
+  // box inside a flex column, so sizing to window.innerHeight overshoots by
+  // whatever sits above it and puts the last row under a scrollbar — which is
+  // the same empty-space bug, upside down.
+  const gap = dashGapPx();
+  const edRect = ed.getBoundingClientRect();
+  const above = grid.getBoundingClientRect().top - edRect.top; // padding + the page tabs, when shown
+  const padBottom = parseFloat(getComputedStyle(ed).paddingBottom) || 0;
+  const avail = ed.clientHeight - above - padBottom - 1; // 1px: never round INTO a scrollbar
+  const row = (avail - (rows - 1) * gap) / rows;
+  if (row >= PRESENT_MIN_ROW_PX) ed.style.setProperty('--dash-row', row + 'px');
+}
 
 function enterDashPresent(): void {
   if (dashPresenting || !dashCurrent) return;
@@ -22,7 +69,12 @@ function enterDashPresent(): void {
   dashShow('dash-present-exit', true);
   dashPresentKeyHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); exitDashPresent(); } };
   document.addEventListener('keydown', dashPresentKeyHandler, true);
+  // Pitch first, then render: charts size to their cell at construction, so
+  // fitting afterwards would draw every one of them twice.
+  fitDashPresentRows();
   renderDashGrid(); // rebuild so charts refit the fuller viewport (destroy→rebuild, no leak)
+  dashPresentResizeHandler = () => { fitDashPresentRows(); renderDashGrid(); };
+  window.addEventListener('resize', dashPresentResizeHandler);
 }
 
 function exitDashPresent(): void {
@@ -32,6 +84,8 @@ function exitDashPresent(): void {
   if (typeof dkSync === 'function') dkSync(); // dock.ts — re-evaluate now that presenting is off
   dashShow('dash-present-exit', false);
   if (dashPresentKeyHandler) { document.removeEventListener('keydown', dashPresentKeyHandler, true); dashPresentKeyHandler = null; }
+  if (dashPresentResizeHandler) { window.removeEventListener('resize', dashPresentResizeHandler); dashPresentResizeHandler = null; }
+  fitDashPresentRows(); // dashPresenting is false now, so this only CLEARS the pitch
   renderDashGrid();
 }
 

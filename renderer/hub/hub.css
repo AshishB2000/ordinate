@@ -5498,10 +5498,47 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   border: 1px solid color-mix(in srgb, var(--warn) 22%, transparent);
   color: var(--warn);
 }
+/* Chart-type chips on the left, the chart's own controls pushed to the right. */
+.viz-stage-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+.viz-stage-head .cv-controls-slot { margin-left: auto; }
 .viz-switcher-mount {
   display: flex;
   flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* A header row that has offered the cluster a home. Empty until a chart mounts
+   one, so it must not reserve space or push a layout around when there is none. */
+.cv-controls-slot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex: 0 0 auto;
+}
+/* In the slot the cluster is ordinary flow, not an overlay over the canvas. */
+.cv-controls-slot .cv-graph-controls {
+  position: static;
+  top: auto;
+  right: auto;
+  z-index: auto;
+}
+/* On a tile the head is small, so the pills shrink to match its 22px buttons. */
+.dash-card-head .cv-controls-slot .cv-values-btn,
+.dash-card-head .cv-controls-slot .cv-periods-btn {
+  padding: 2px 8px;
+  font-size: 10.5px;
+  box-shadow: none;
+}
+.dash-card-head .cv-controls-slot .cv-chart-menu-btn {
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
 }
 /* .cv-viz-area (shared with dashboards/analyses/export) already makes this a
    flex column; here in the builder stage it also takes all height the chips
@@ -7722,6 +7759,12 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 }
 .dash-present-exit:hover { border-color: var(--accent); color: var(--accent); }
 
+/* TWO rails, and the old rule named NEITHER. `.sidebar` is a different element
+   entirely, so presenting hid something invisible: the section nav
+   (.app-sidebar) and the authoring rail (.an-rail — Data / Visuals / Filters /
+   Properties) both stayed on screen through every presentation. */
+.dash-presenting .app-sidebar,
+.dash-presenting .an-rail,
 .dash-presenting .sidebar,
 .dash-presenting .titlebar,
 .dash-presenting .hub-topbar,
@@ -7730,7 +7773,15 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 .dash-presenting .dash-starters,
 .dash-presenting .dash-page-ctrl,
 .dash-presenting .dash-page-add,
-.dash-presenting .dash-card-ctrls { display: none !important; }
+.dash-presenting .dash-card-ctrls,
+/* The page tabs were the one piece of chrome left on screen while presenting:
+   .dash-page-ctrl and .dash-page-add were hidden but the strip and its tabs were
+   not, so a presentation opened with a row of editor buttons above it. */
+.dash-presenting .dash-pages,
+/* Presenting is for showing, not for fiddling. Whatever you want toggled, toggle
+   it before you present. */
+.dash-presenting .cv-graph-controls,
+.dash-presenting .cv-controls-slot { display: none !important; }
 .dash-presenting .dash-card-head { cursor: default; }
 .dash-presenting .dash-editor { padding: 24px 32px 32px; background: var(--bg); }
 .dash-presenting .dash-pages { border-bottom: none; }
@@ -9068,6 +9119,58 @@ body.an-grabbing { user-select: none; cursor: grabbing; }
   border-right: 2px solid var(--accent);
   border-bottom: 2px solid var(--accent);
   border-bottom-right-radius: 4px;
+}
+
+/* The edge handles were INVISIBLE — .an-resize--e and --s set a cursor and
+   nothing else, so drag-to-resize existed and worked but only announced itself
+   once the pointer was already on a 7px strip nobody had a reason to aim at.
+   Now they draw a bar on hover, following the house hover-reveal idiom
+   (.viz-card-star): opacity, never display, so the strip stays hit-testable and
+   the reveal cannot move anything. The bar sits INSIDE the border because
+   .dash-card is overflow:hidden and clips the outer half. */
+.an-workbench.is-active #dash-grid .dash-card .an-resize--e,
+.an-workbench.is-active #dash-grid .dash-card .an-resize--s {
+  background: var(--accent);
+  border-radius: var(--r-full);
+  opacity: 0;
+  transition: opacity 140ms var(--ease);
+}
+.an-workbench.is-active #dash-grid .dash-card:hover .an-resize--e,
+.an-workbench.is-active #dash-grid .dash-card:hover .an-resize--s,
+.an-workbench.is-active #dash-grid .dash-card:focus-within .an-resize--e,
+.an-workbench.is-active #dash-grid .dash-card:focus-within .an-resize--s,
+.an-workbench.is-active #dash-grid .dash-card.is-selected .an-resize--e,
+.an-workbench.is-active #dash-grid .dash-card.is-selected .an-resize--s { opacity: 0.45; }
+.an-workbench.is-active #dash-grid .an-resize--e:hover,
+.an-workbench.is-active #dash-grid .an-resize--s:hover { opacity: 1; }
+
+/* And the head says it is a handle before you press it. Dots rather than a
+   label: the head already carries the tile's name and has no room for a word. */
+.an-workbench.is-active #dash-grid .dash-card-head::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 3px;
+  height: 12px;
+  border-radius: var(--r-full);
+  background: radial-gradient(circle, var(--border-3) 1px, transparent 1.2px) 0 0 / 3px 4px repeat-y;
+  opacity: 0;
+  transition: opacity 140ms var(--ease);
+}
+.an-workbench.is-active #dash-grid .dash-card:hover .dash-card-head::before,
+.an-workbench.is-active #dash-grid .dash-card.is-selected .dash-card-head::before { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .an-workbench.is-active #dash-grid .dash-card .an-resize--e,
+  .an-workbench.is-active #dash-grid .dash-card .an-resize--s,
+  .an-workbench.is-active #dash-grid .dash-card-head::before { transition: none; }
+}
+
+/* Narrow window: one tile per row. A card's span is written inline by
+   applyDashCardStyle (it is stored geometry, not a look), so overriding it needs
+   !important — the one place in this sheet where that is not a smell. The stored
+   x/w are untouched; widen the window and the layout comes back exactly. */
+@media (max-width: 900px) {
+  #dash-grid .dash-card { grid-column: 1 / -1 !important; }
 }
 
 .an-ghost {

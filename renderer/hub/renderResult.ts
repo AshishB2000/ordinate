@@ -81,11 +81,27 @@ function renderChartJsInArea(container, data, type, entry, turnIdx) {
     chartInstances.set(container, chart);
     if (entry && overrideKey) {
       // Controls (Values menu, period filter, ⋯) need an entry to persist overrides.
-      addChartControls(chartWrapper, container, canvas, data, type, entry, turnIdx, overrideKey);
+      addChartControls(controlsSlotFor(container) || chartWrapper, container, canvas, data, type, entry, turnIdx, overrideKey);
     }
   } else {
     container.innerHTML = '<div class="cv-chart-fallback">Couldn\'t draw a chart from this data.</div>';
   }
+}
+
+// Surfaces that give the Values / ⋯ cluster a home OUTSIDE the plot.
+//
+// The cluster is position:absolute at the top-right of .cv-chart-wrapper, which
+// is directly over where Chart.js draws its top-right data labels — on a
+// dashboard tile it sat on the last bar's own number. Where a surface offers a
+// header row it says so with an empty .cv-controls-slot, and the cluster is
+// appended there in normal flow instead. Surfaces with no header (the Ask
+// thread, the export preview) are unchanged and keep the overlay.
+const CONTROLS_HOSTS = '.dash-card, .viz-builder-stage';
+
+function controlsSlotFor(container) {
+  if (!container || typeof container.closest !== 'function') return null;
+  const host = container.closest(CONTROLS_HOSTS);
+  return host ? host.querySelector('.cv-controls-slot') : null;
 }
 
 // Render a grouped share/magnitude chart as small multiples: one mini chart per
@@ -140,7 +156,7 @@ function renderSmallMultiples(container, data, type, entry, turnIdx) {
   }
   chartInstances.set(container, charts);
   // One shared control cluster for the whole grid (no single canvas → null).
-  addChartControls(chartWrapper, container, null, data, type, entry, turnIdx, overrideKey);
+  addChartControls(controlsSlotFor(container) || chartWrapper, container, null, data, type, entry, turnIdx, overrideKey);
 }
 
 // Build a DOM turn element showing analysis + optional viz switcher for a result.

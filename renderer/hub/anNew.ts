@@ -392,10 +392,10 @@ async function anCreateWizard(): Promise<void> {
   // Non-AI path: create it, open it, then scaffold.
   //
   // The starter is applied AFTER opening rather than packed into createAnalysis,
-  // because `applyStarter` already does exactly this against the open editor —
-  // including asking which saved visual belongs in each slot. Re-implementing it
-  // over a sheets array would be a second scaffolder that has to be kept in step
-  // with the one the "+ Page" button uses.
+  // because `applyStarter` already does exactly this against the open editor.
+  // Re-implementing it over a sheets array would be a second scaffolder that has
+  // to be kept in step with the one the empty-state buttons use. The wizard's
+  // chosen dataset is passed through, so it never re-asks for one.
   async function createFromStarter(kind: StartKind): Promise<void> {
     let res: any;
     try {
@@ -408,7 +408,7 @@ async function anCreateWizard(): Promise<void> {
     close();
     await refreshAnalysisList();
       openAnalysisFrom(res);
-    if (kind === 'kpis' || kind === 'twoup') await applyStarter(kind);
+    if (kind === 'kpis' || kind === 'twoup') await applyStarter(kind, selectedId || undefined);
   }
 
   skip.addEventListener('click', () => { createFromStarter('blank'); });

@@ -2676,9 +2676,10 @@ async function main(): Promise<void> {
   await win.evaluate(() =>
     ([...document.querySelectorAll('.an-wiz-foot .btn-primary')][0] as HTMLElement).click());
   await win.waitForTimeout(1800);
-  // applyStarter asks which saved visual belongs in the wide slot.
-  ok('the starter asks which visual fills its slot', await pickFirstOption());
-  await win.waitForTimeout(2500);
+  await win.waitForTimeout(4500); // the build is IPC + saveVisual, not instant
+  // "Pick a visual for this slot" was the old picker. It must never come back:
+  ok('the starter does not stop to ask for a saved visual', !(await win.evaluate(() =>
+     [...document.querySelectorAll('.ws-modal h3')].some((h) => /Pick a visual/i.test(h.textContent || '')))));
 
   const scaffold = await win.evaluate(() => ({
     cards: document.querySelectorAll('#dash-grid .dash-card').length,
@@ -2687,9 +2688,8 @@ async function main(): Promise<void> {
     name: (document.getElementById('dash-name')?.textContent || '').trim(),
   }));
   ok('KPIs + chart scaffolds a real layout, not an empty sheet',
-     scaffold.cards === 2 && scaffold.kinds.includes('dash-card--text') &&
-       scaffold.kinds.includes('dash-card--visual'),
-     JSON.stringify(scaffold));
+     scaffold.cards >= 2 && scaffold.kinds.includes('dash-card--metric')
+       && scaffold.kinds.includes('dash-card--visual'), JSON.stringify(scaffold));
   ok('…into the analysis the wizard just named', scaffold.name === 'Starter analysis', scaffold.name);
 
   const starterShot = path.join(shotDir, 'starter-scaffold.png');
