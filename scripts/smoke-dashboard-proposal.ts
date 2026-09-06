@@ -222,6 +222,26 @@ async function main(): Promise<void> {
     (await win.locator('#dk-messages .dk-proposal').count()) === 0);
   ok('the dock stays open beside the new dashboard', await win.locator('#dk-panel').isVisible());
 
+  // The tile that could not be previewed (its calculated field did not exist
+  // yet) must actually COMPUTE once built. It did not: `amount * 2` produced
+  // doubles whose decimal expansion exceeds detectColumnType's 15-digit guard,
+  // so the new column typed as text, nothing aggregates text on purpose, and the
+  // built card drew an empty chart with no error anywhere. Asserted through the
+  // same channel the dashboard grid uses.
+  const calcData = await win.evaluate((args: any) => (window as any).hub.computeVisualData(
+    args.projectId, args.datasetId,
+    { category: 'region', values: [{ column: 'amount_x2', aggregation: 'sum' }] }, [],
+  ), { projectId: seeded.projectId, datasetId: seeded.datasetId });
+  const calcVals = calcData && calcData.data && calcData.data.series && calcData.data.series[0]
+    ? calcData.data.series[0].values : null;
+  ok('a card built on a calculated field computes real values, not an empty chart',
+    Boolean(calcVals) && calcVals.length > 0 && calcVals.every((v: any) => typeof v === 'number'),
+    JSON.stringify(calcVals));
+  // North is 10+20=30, doubled 60; South 20, doubled 40.
+  ok('…and they are the CORRECT doubled sums',
+    JSON.stringify([...(calcVals || [])].sort((a: number, b: number) => a - b)) === '[40,60]',
+    JSON.stringify(calcVals));
+
   // ── With no model, the same path stays silent rather than erroring ────────
   await app.evaluate(async (_electronModule) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);

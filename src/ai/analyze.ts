@@ -871,9 +871,8 @@ const DRAFT_DASHBOARD_SYSTEM_PROMPT =
   'Rules: a measure using sum/avg/min/max MUST name a number column — "count" works on any column. A ' +
   'calculated-field formula may use + - * / %, comparisons (= != > < >= <=), and/or/not, parentheses, ' +
   'numeric/string literals, and functions such as round, abs, floor, ceil, min, max, lower, upper, trim, len, ' +
-  'concat, if, coalesce; reference columns bare, or in [brackets] if they contain spaces. ALWAYS wrap a ' +
-  'division in round(..., 4) — the app stores a value with more than 15 significant digits as TEXT, so an ' +
-  'unrounded ratio produces a column you cannot then average. Do NOT specify positions or sizes — the app ' +
+  'concat, if, coalesce; reference columns bare, or in [brackets] if they contain spaces. Prefer wrapping a ' +
+  'division in round(..., 4) so its values read cleanly as chart labels. Do NOT specify positions or sizes — the app ' +
   'arranges the grid. Return ONLY the JSON object.';
 export async function draftDashboard(
   inventoryText: string,

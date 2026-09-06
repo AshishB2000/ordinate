@@ -622,10 +622,17 @@ async function checkPendingCalcField(): Promise<void> {
   await analysisStore.deleteAnalysis(projectId, built.analysis.id);
 }
 
-// ── §11 A rounded ratio is a number column; an unrounded one is not ────────
-// Pinned because it is surprising, it is what the draft prompt instructs around,
-// and if parse.isFiniteNumber's >15-digit rule ever changed this suite should
-// say so rather than a user discovering it through a chart that will not draw.
+// ── §11 A ratio is a number column, rounded or not ─────────────────────────
+// This section used to pin the OPPOSITE: an unrounded ratio typed as `text`,
+// because retypeColumn re-inferred computed doubles through
+// parse.isFiniteNumber, whose >15-significant-digit guard rejected
+// 54.142857142857146. Nothing aggregates a text column, so a dashboard built on
+// such a field drew an empty chart with no error — which is exactly how it was
+// found. The guard still governs imported TEXT; it no longer re-judges a number
+// the app itself computed (src/data/transforms.ts retypeColumn).
+//
+// The old comment said this suite should say so if the rule ever changed. It
+// did, so it does.
 async function checkRoundedRatioTyping(): Promise<void> {
   const build = async (name: string, formula: string): Promise<string | undefined> => {
     const res = await plan.buildPlan(projectId, {
@@ -636,13 +643,24 @@ async function checkRoundedRatioTyping(): Promise<void> {
     return meta?.columns.find((c) => c.name === name)?.type;
   };
 
-  ok('an UNROUNDED ratio types as text (>15 significant digits)',
-     (await build('RawRatio', '(revenue - cost) / revenue')) === 'text');
+  ok('an UNROUNDED ratio types as NUMBER, so it can be averaged',
+     (await build('RawRatio', '(revenue - cost) / revenue')) === 'number');
   await datasets.updateSteps(projectId, salesId, []);
-  ok('a ROUNDED ratio types as number', (await build('Ratio', 'round((revenue - cost) / revenue, 4)')) === 'number');
+  ok('a ROUNDED ratio still types as number', (await build('Ratio', 'round((revenue - cost) / revenue, 4)')) === 'number');
   await datasets.updateSteps(projectId, salesId, []);
-  ok('the draft prompt tells the model to round every division',
-     fs.readFileSync(path.join(__dirname, '..', 'src', 'ai', 'analyze.ts'), 'utf8').includes('ALWAYS wrap a '));
+  // An identifier-shaped STRING result is still text: the strict-number rule
+  // governs text, which is the half of it that was always right.
+  ok('a leading-zero string result is still text',
+     (await build('Tag', "concat('0', region)")) === 'text');
+  await datasets.updateSteps(projectId, salesId, []);
+  // The prompt still suggests rounding a division, but now for READABILITY —
+  // 62.56278286930461 is a fine number and a terrible bar label. It is no longer
+  // load-bearing: a model that ignores it produces a column that still averages,
+  // which is the whole point of the fix above.
+  const prompt = fs.readFileSync(path.join(__dirname, '..', 'src', 'ai', 'analyze.ts'), 'utf8');
+  ok('the draft prompt still suggests rounding a division', prompt.includes('round(..., 4)'));
+  ok('…but no longer claims the app cannot store an unrounded one',
+     !prompt.includes('more than 15 significant digits as TEXT'));
 }
 
 // ── §9 Garbage in ──────────────────────────────────────────────────────────

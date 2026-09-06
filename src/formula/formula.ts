@@ -14,9 +14,11 @@
 // to `null`, never throw and never fabricate a number.
 //
 // The strict-number rule (parse.isFiniteNumber) is intentionally NOT applied to
-// numeric LITERALS inside an expression (a formula may legitimately write 1.50);
-// it is applied by transforms.ts to the OUTPUT column via detectColumnType, so an
-// identifier-shaped result (e.g. "007") still lands as text.
+// numeric LITERALS inside an expression (a formula may legitimately write 1.50).
+// transforms.ts applies it to the OUTPUT column only when the results are NOT
+// already numbers, so an identifier-shaped result (e.g. "007") still lands as
+// text — while a computed double keeps its type instead of being re-inferred from
+// its own decimal expansion, which the >15-digit guard would reject.
 
 import { tokenize } from './formulaTokens';
 import { Parser } from './formulaParse';

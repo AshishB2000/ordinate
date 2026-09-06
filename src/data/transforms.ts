@@ -141,6 +141,26 @@ export function cellToString(cell: Cell): string {
 // (freshly-built, caller-owned) columns/rows arrays. Used after calculated_field
 // and fill_empty, and for combine outputs.
 export function retypeColumn(columns: ParsedColumn[], rows: Cell[][], c: number): void {
+  // A cell that is ALREADY a JS number needs no inference — the app computed it,
+  // so its type is known rather than guessed.
+  //
+  // detectColumnType classifies untrusted TEXT, and its >15-significant-digit
+  // guard (which stops a 20-digit id becoming a lossy double) also rejects a
+  // genuine quotient: `revenue / units` is 54.142857142857146, seventeen digits.
+  // Round-tripping computed doubles through that guard typed a column of real
+  // numbers as `text`, and nothing aggregates a text column — sum/avg over text
+  // is refused ON PURPOSE so a wrong figure can never appear — so a chart built
+  // on it drew nothing, with no error anywhere to say why. The guard's premise,
+  // "cannot round-trip through a JS double without loss", is false by
+  // construction here: the string came FROM a double.
+  //
+  // Text cells still go through detectColumnType, which is what keeps an
+  // identifier-shaped result such as concat('0', sku) → "0007" text.
+  const present = rows.map((r) => r[c]).filter((v) => v !== null && v !== '');
+  if (present.length > 0 && present.every((v) => typeof v === 'number' && Number.isFinite(v))) {
+    columns[c] = { ...columns[c], type: 'number' };
+    return; // already numbers — nothing to coerce
+  }
   const strCells = rows.map((r) => cellToString(r[c]));
   const type = detectColumnType(strCells);
   columns[c] = { ...columns[c], type };
@@ -249,7 +269,8 @@ function stepCalculatedField(t: TableData, s: CalculatedFieldStep): StepResult {
     return compiled.fn.evaluate(rowMap);
   });
 
-  // Append the new column, then type it via the strict-number path.
+  // Append the new column, then type it. retypeColumn keeps a computed double a
+  // number and still sends text results through the strict-number path.
   columns.push({ name, type: 'text' });
   const newIdx = columns.length - 1;
   for (let i = 0; i < rows.length; i += 1) {
