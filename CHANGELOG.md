@@ -10,6 +10,20 @@ All notable changes to Ordinate are documented here. Format based on
 ## [Unreleased]
 
 ### Added
+- **Change a dashboard by asking.** With a dashboard open, tell the Assistant what you want —
+  "add a line chart of amount by month", "make the region chart a bar", "add a filter for channel",
+  "rename page 1 to Overview" — and it proposes the change as a plain diff: what it would add,
+  change and remove, with a real preview of any new tile and a list of anything it refused. Nothing
+  moves until you press Apply, and one Undo puts the whole thing back, including the charts it
+  retyped and any it created. It names tiles by their titles, and refuses rather than guessing when
+  a name could mean two of them.
+- **Ask the Assistant to build you a dashboard.** Say "build me a sales dashboard for Adidas US
+  Sales" in the Assistant or the Home ask bar and you get a proposal you can look at — its name, why
+  it was proposed, each chart drawn with your real numbers, and a plain list of anything the app
+  refused to accept — with **Build dashboard** and **Adjust…** underneath. Follow-ups refine the same
+  proposal rather than starting over. Every figure in it is computed by Ordinate; the Assistant only
+  proposes the structure, and anything it gets wrong is shown to you rather than quietly dropped. An
+  empty Dashboards page now suggests build requests over the datasets you actually have.
 - **Explore — ask a question about your data.** A page of its own, above Home and on the Home
   screen: pick a dataset, ask in plain language, and get an answer built from figures the app
   computed — with chips saying which dataset and columns they came from. Where the question suits

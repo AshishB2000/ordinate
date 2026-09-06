@@ -8,6 +8,7 @@ import { computeMetrics, deriveChartData } from '../formula/calc';
 import { writeHeadline, verifyHeadlineNumbers } from './headline';
 import { SUGGESTABLE_CHART_TYPES } from '../analysis/visuals';
 import { streamProvider } from './analyzeStream';
+import { CHAT_SYSTEM_PROMPT, makeActionFilter, splitAction, type SuggestedAction } from './suggestedAction';
 
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -550,7 +551,7 @@ function resolveByok():
 // routable — keep this list in sync with src/localCliRun.js.
 const RUNNABLE_LOCAL_CLIS = ['claude', 'antigravity', 'codex', 'grok', 'opencode', 'cursor'];
 
-async function dispatch(systemPrompt: string, messages: NeutralMsg[], onDelta?: (delta: string) => void): Promise<CallResult> {
+export async function dispatch(systemPrompt: string, messages: NeutralMsg[], onDelta?: (delta: string) => void): Promise<CallResult> {
   const cfg = config.get();
   if ((cfg.executionMode || 'byok') === 'local') {
     const activeId = cfg.localCli && cfg.localCli.activeId;
@@ -642,20 +643,13 @@ export async function explainText(userPrompt: string): Promise<{ ok: true; text:
 // single user turn so provider role-alternation stays valid). Plain prose out — it
 // does NOT go through parseReply(). No model configured → a soft not_ready error so
 // the renderer shows a gentle hint, never an error dialog.
-const CHAT_SYSTEM_PROMPT =
-  'You are the Ordinate Assistant, a data analysis assistant for the user\'s current workspace. ' +
-  'You are given FACTS about the active project/dataset/visual/dashboard — columns, types, ' +
-  'already-computed statistics, sample rows, and computed chart/metric values. ' +
-  'Answer in plain, concise prose (no markdown, no code fences, no bullet lists unless asked). ' +
-  'GROUND every claim in the facts provided. NEVER invent, round, or recompute any number — use ' +
-  'ONLY the exact figures given to you; if a number you need is not in the facts, say you don\'t ' +
-  'have it rather than estimating. When the data is ambiguous or insufficient to answer, say so ' +
-  'plainly. Prefer insight over restating the numbers.';
+// The PROMPT lives in ./suggestedAction.ts with the contract for the one structured
+// field the answer carries — a prompt that drifts from its parser is an unseeable bug.
 export async function askCopilot(
   historyTurns: { role: 'user' | 'assistant'; text: string }[],
   contextFacts: string,
   question: string, onDelta?: (delta: string) => void,
-): Promise<{ ok: true; text: string } | TypedError> {
+): Promise<{ ok: true; text: string; suggestedAction: SuggestedAction } | TypedError> {
   if (!config.executionReady()) {
     return { ok: false, errorType: 'not_ready', message: config.AI_NOT_CONFIGURED };
   }
@@ -666,10 +660,15 @@ export async function askCopilot(
     ...prior,
     { role: 'user', text: (contextFacts || '') + '\n\n---\n\nQuestion: ' + question },
   ];
-  const { rawText, error } = await dispatch(CHAT_SYSTEM_PROMPT, messages, onDelta);
+  // The action line is withheld from the stream and stripped from the stored text
+  // (./suggestedAction) — the user only ever sees prose.
+  const filter = makeActionFilter(onDelta);
+  const { rawText, error } = await dispatch(CHAT_SYSTEM_PROMPT, messages, filter.onDelta);
+  // Release the tail held back in case it was the start of a marker.
+  filter.flush();
   if (error) return error;
-  const text = (rawText || '').trim();
-  return text ? { ok: true, text } : errBadReply();
+  const { text, action } = splitAction(rawText);
+  return text ? { ok: true, text, suggestedAction: action } : errBadReply();
 }
 
 // Week 6 — OPTIONAL AI-suggested data-preparation steps. Same execution path as
@@ -872,9 +871,8 @@ const DRAFT_DASHBOARD_SYSTEM_PROMPT =
   'Rules: a measure using sum/avg/min/max MUST name a number column — "count" works on any column. A ' +
   'calculated-field formula may use + - * / %, comparisons (= != > < >= <=), and/or/not, parentheses, ' +
   'numeric/string literals, and functions such as round, abs, floor, ceil, min, max, lower, upper, trim, len, ' +
-  'concat, if, coalesce; reference columns bare, or in [brackets] if they contain spaces. ALWAYS wrap a ' +
-  'division in round(..., 4) — the app stores a value with more than 15 significant digits as TEXT, so an ' +
-  'unrounded ratio produces a column you cannot then average. Do NOT specify positions or sizes — the app ' +
+  'concat, if, coalesce; reference columns bare, or in [brackets] if they contain spaces. Prefer wrapping a ' +
+  'division in round(..., 4) so its values read cleanly as chart labels. Do NOT specify positions or sizes — the app ' +
   'arranges the grid. Return ONLY the JSON object.';
 export async function draftDashboard(
   inventoryText: string,
@@ -893,7 +891,7 @@ export async function draftDashboard(
 // Tolerant single-object parse shared by the Week 12 structure wrappers: strip
 // accidental code fences, then slice the first {…last } if the whole text is not
 // clean JSON. Returns the parsed object or null (an array / non-object → null).
-function parseFirstObject(rawText: string | undefined): Record<string, unknown> | null {
+export function parseFirstObject(rawText: string | undefined): Record<string, unknown> | null {
   let text = (rawText || '').trim();
   text = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
   let parsed: unknown;

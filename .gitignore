@@ -275,4 +275,17 @@ scripts/**/*.js
 
 # Connect-shortcut smoke. Emitted sibling.
 /scripts/smoke-connect.js
+
+# Assistant builds dashboards from a conversation — emitted siblings.
+/src/ai/suggestedAction.js
+/scripts/test-suggestedAction.js
+/scripts/smoke-dashboard-proposal.js
 /scripts/smoke-dashboards.js
+
+# Assistant EDITS an existing dashboard — the delta validator. Emitted siblings.
+/src/analysis/dashboardDelta.js
+/scripts/test-dashboardDelta.js
+
+# Conversational editing of an open dashboard — emitted siblings.
+/renderer/hub/dockEdit.js
+/scripts/smoke-dashboard-edit.js

@@ -65,6 +65,41 @@ function fixture(): TableData {
   ok('calc: sku column untouched (still "007")', colValues(res, 'sku')[0] === '007');
 }
 
+// ── calculated_field: a high-precision quotient is a NUMBER, not text ─────────
+// The regression that made an AI-built dashboard render an empty tile with no
+// error anywhere. `revenue / units` is 54.142857142857146 — seventeen significant
+// digits — and detectColumnType rejects >15 as unable to round-trip through a
+// double, a guard meant for 20-digit ids in imported text. The column typed as
+// `text`, `avg` over text is refused on purpose, and the chart drew nothing.
+{
+  const cols = [
+    { name: 'revenue', type: 'number' as const },
+    { name: 'units', type: 'number' as const },
+  ];
+  const rows = [[1137, 21], [1274, 22], [1411, 23]];
+  const res = applyPipeline({ columns: cols, rows }, [
+    { type: 'calculated_field', name: 'rpu', expression: 'revenue / units' },
+  ]);
+  ok('calc: a high-precision quotient types as NUMBER, not text',
+    colType(res.columns, 'rpu') === 'number', colType(res.columns, 'rpu'));
+  // The point of the type: an aggregate over it is possible at all.
+  const vals = colValues(res, 'rpu');
+  ok('calc: …and its values are numbers the app can aggregate',
+    vals.every((v) => typeof v === 'number'), JSON.stringify(vals));
+  ok('calc: …with full precision kept, not rounded to fit a guard',
+    vals[0] === 1137 / 21, String(vals[0]));
+}
+
+// ── calculated_field: the strict-number rule still governs STRING results ─────
+// The fix above must not become "computed columns are always numeric": a result
+// that is identifier-shaped text is exactly what detectColumnType is for.
+{
+  const res = applyPipeline(fixture(), [
+    { type: 'calculated_field', name: 'z', expression: "concat('00', sku)" },
+  ]);
+  ok('calc: an identifier-shaped string result is still text', colType(res.columns, 'z') === 'text');
+}
+
 // ── calculated_field: blank/dup name + compile error → warn + skip ───────────
 {
   const blank = applyPipeline(fixture(), [{ type: 'calculated_field', name: '  ', expression: '1' }]);

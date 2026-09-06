@@ -27,9 +27,9 @@
 // It also exercises the actual notReady path once, for real, with no model
 // configured — proving dkOfferProposal stays silent rather than erroring.
 //
-// This does NOT cover: the heuristic that decides which of the three types to
-// offer (dkDecideProposalType — plain regex, no IPC, not worth an Electron
-// boot), or "Add to dashboard" (requires a dashboard page already open; "Save
+// This does NOT cover: which proposal kind a turn offers (no longer a heuristic
+// here but a validated field on the model's reply — see test-suggestedAction.ts),
+// or "Add to dashboard" (requires a dashboard page already open; "Save
 // as visual" is the assertion the plan calls "the regression guard for the
 // plan's most dangerous failure mode" and is covered in full).
 //
@@ -411,7 +411,7 @@ async function main(): Promise<void> {
     return (window as any).dkOfferProposal(
       { kind: 'dataset', id: args.datasetId },
       'why are there blank rows',
-      '412 rows have a blank region',
+      { kind: 'step', intent: 'clean the blank regions' }, '',
     );
   }, seeded).catch(() => {});
   await win.waitForTimeout(500);
@@ -456,7 +456,7 @@ async function main(): Promise<void> {
     return Promise.resolve((window as any).dkOfferProposal(
       { kind: 'dataset', id: args.datasetId },
       'why are there blank rows',
-      '412 rows have a blank region',
+      { kind: 'step', intent: 'clean the blank regions' }, '',
     )).then(() => ({
       cards: document.querySelectorAll('#dk-messages .dk-proposal').length,
       summary: (document.querySelector('#dk-messages .dk-proposal .ai-interp-body') || {}).textContent || '',

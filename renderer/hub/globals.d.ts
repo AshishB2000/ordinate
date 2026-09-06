@@ -287,6 +287,7 @@ declare global {
       // without writing anything; build materialises it. Typed loosely because
       // the plan envelope is owned by main (same convention as the rest of this
       // bridge) — ponytail.
+      editDashboard(projectId: string, analysisId: string, intent: string): Promise<any>;
       previewAnalysisPlan(projectId: string, plan: any): Promise<any>;
       buildAnalysisPlan(projectId: string, plan: any): Promise<any>;
       // ── Analyses (the AUTHORING container — sheets of cards + filters) ──

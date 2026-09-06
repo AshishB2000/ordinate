@@ -30,26 +30,42 @@
 // correct for its own confirmed-batch flow, catastrophic here).
 
 // ── Which type, if any, this turn offers ────────────────────────────────────
-// ponytail: a keyword heuristic standing in for real intent detection — good
-// enough to keep the dock to ONE proposal per turn without a second model call
-// deciding what to ask the first model. Upgrade path: have copilot:ask itself
-// return a `suggestedAction` alongside the answer once a miss rate is actually
-// measured; guessing at that today would be speculative.
-const DK_STEP_HINT_RE = /\b\d[\d,]*\s+rows?\b|\bblank\b|missing (value|data)|\bduplicate|empty (cell|value|row)|null value|inconsisten/i;
-const DK_CALC_HINT_RE = /\bcalculat|\bformula|\bratio\b|\bmargin\b|per (unit|item|customer|order)|percentage|% of|difference between|\bdivide|\bmultiply|\bderive/i;
-const DK_CHART_HINT_RE = /\bchart|\bgraph|\bplot\b|\btrend\b|over time|by (region|month|category|product|day|year|week)|\bbreakdown|\bdistribution|\bcompare|visuali[sz]e|top \d+/i;
+// The three keyword regexes that used to guess this are GONE. copilot:ask now
+// returns a validated `suggestedAction` ({ kind, intent }) alongside the answer
+// — the upgrade the ponytail comment here named, taken because the heuristic
+// could not tell "show me revenue by region" from "build me a dashboard of
+// revenue by region", and had no notion of a dashboard at all.
+//
+// The whitelist lives in main (src/ai/suggestedAction.ts) and is total: an
+// absent, malformed or unknown action arrives as 'none'. This reads that field
+// and nothing else — there is deliberately NO regex fallback, so a turn the
+// model did not mark is a turn with no proposal.
 
-function dkDecideProposalType(question: string, answerText: string): 'step' | 'calc' | 'chart' | null {
-  const q = String(question || '');
-  const a = String(answerText || '');
-  // The step signal comes from the ANSWER (the app's own computed facts, e.g.
-  // "412 rows have a blank region" — the brief's own example) — it is the most
-  // concrete of the three. The other two come from the QUESTION, since nothing
-  // in a text answer implies "draw this" or "add a formula".
-  if (DK_STEP_HINT_RE.test(a)) return 'step';
-  if (DK_CALC_HINT_RE.test(q)) return 'calc';
-  if (DK_CHART_HINT_RE.test(q)) return 'chart';
-  return null;
+// The intent accumulated across a conversation's dashboard turns. A follow-up
+// ("add a KPI for total revenue") refines the SAME plan by re-drafting with
+// everything asked so far, rather than starting over from the last sentence.
+// Renderer-side only: a proposal is never persisted, and this dies with it.
+let dkPlanIntent = '';
+let dkPlanThreadId = '';
+
+// Drop the accumulated intent. Called when the conversation changes underneath
+// it (a different thread or project) and when a plan is built or dismissed —
+// anything else would refine a plan the user has already finished with.
+function dkResetPlanIntent(): void {
+  dkPlanIntent = '';
+  dkPlanThreadId = '';
+}
+
+// Fold this turn's intent into the running one, resetting first if the thread
+// moved. Returns everything to draft from.
+function dkAccumulateIntent(intent: string, threadId: string): string {
+  if (threadId !== dkPlanThreadId) {
+    dkPlanIntent = '';
+    dkPlanThreadId = threadId;
+  }
+  const next = String(intent || '').trim();
+  if (next) dkPlanIntent = dkPlanIntent ? dkPlanIntent + '\n' + next : next;
+  return dkPlanIntent;
 }
 
 // Tear down any chart/map a proposal card drew BEFORE detaching it. A chart
@@ -97,14 +113,51 @@ function dkClearProposal(containerId = 'dk-messages'): void {
 // can't be drawn. The text answer already stands; a proposal is a bonus, never
 // an error. `containerId` picks the mount — the dock by default, 'xp-messages'
 // for Ask.
-async function dkOfferProposal(ref: { kind: string; id: string }, question: string, answerText: string, containerId = 'dk-messages'): Promise<void> {
-  if (!currentProjectId || !ref || ref.kind !== 'dataset' || !ref.id) return;
-  const kind = dkDecideProposalType(question, answerText);
-  if (!kind) return;
+async function dkOfferProposal(
+  ref: { kind: string; id: string },
+  question: string,
+  action: any,
+  threadId: string,
+  containerId = 'dk-messages',
+): Promise<void> {
+  if (!currentProjectId) return;
+  const kind = action && typeof action.kind === 'string' ? action.kind : 'none';
+  if (kind === 'none') return;
+  const intent = action && typeof action.intent === 'string' ? action.intent : '';
+
+  // A DASHBOARD proposal works at any scope: analysis:draft takes the whole
+  // project when no dataset is named, which is what "✨ Get started with AI"
+  // already does, and dkContextRef reports whole-project for every section
+  // except an open dataset or visual. Gating it on an open dataset would make
+  // "build me a sales dashboard" silently do nothing on the Dashboards page —
+  // the exact place someone would ask it.
+  if (kind === 'dashboard') {
+    try {
+      const datasetId = ref && ref.kind === 'dataset' ? ref.id : '';
+      await dkOfferDashboardProposal(datasetId, dkAccumulateIntent(intent || question, threadId), containerId);
+    } catch (_) { /* a proposal is a bonus, never an error */ }
+    return;
+  }
+
+  // An EDIT changes the dashboard that is already open, which is exactly what
+  // dkContextRef now reports as an 'analysis' context. Anywhere else there is
+  // nothing to edit — and drafting a new one is what 'dashboard' is for — so
+  // this returns rather than falling through to the dataset gate below.
+  if (kind === 'edit') {
+    if (ref && ref.kind === 'analysis' && ref.id && typeof dkOfferEditProposal === 'function') {
+      try {
+        await dkOfferEditProposal(ref.id, dkAccumulateIntent(intent || question, threadId), containerId);
+      } catch (_) { /* a proposal is a bonus, never an error */ }
+    }
+    return;
+  }
+
+  // The other three read a dataset's columns, so they still need one open.
+  if (!ref || ref.kind !== 'dataset' || !ref.id) return;
   try {
     if (kind === 'step') await dkOfferStepProposal(ref.id, containerId);
     else if (kind === 'calc') await dkOfferCalcFieldProposal(ref.id, containerId);
-    else await dkOfferChartProposal(ref.id, question, containerId);
+    else if (kind === 'chart') await dkOfferChartProposal(ref.id, intent || question, containerId);
   } catch (_) { /* a proposal is a bonus, never an error */ }
 }
 
@@ -256,6 +309,125 @@ function dkRenderCalcFieldCard(datasetId: string, res: any, containerId = 'dk-me
 }
 
 // ── 3. A chart — computed by main, drawn with the same path visual cards use ─
+// ── Dashboard proposal — the plan pipeline, mounted in the conversation ─────
+//
+// This is the whole point of the branch: "build me a sales dashboard for Adidas
+// US Sales" produces a REVIEWABLE PLAN in the chat, not a paragraph about one.
+//
+// It adds no AI path and no charting code. `analysis:draft` is the same channel
+// the Dashboards wizard uses; main runs validatePlan → previewPlan, so every
+// tile below carries the exact {labels, series} the app computed with the same
+// function that will draw the built Visual. The model contributed the structure
+// and the captions, and nothing else.
+//
+// Silent on everything that does not pan out — no model, nothing draftable, a
+// plan with no sheets. The answer already stands; a proposal is a bonus.
+async function dkOfferDashboardProposal(datasetId: string, intent: string, containerId = 'dk-messages'): Promise<void> {
+  let res: any;
+  try {
+    // No datasetId → the whole project. loadPlanContext then shows the model
+    // every dataset and lets the plan name the one it wants, which beats
+    // guessing "most recent" and silently drafting against the wrong table.
+    res = await window.hub.draftDashboard(currentProjectId, {
+      datasetId: datasetId || undefined,
+      intent: intent || undefined,
+    });
+  } catch (_) {
+    return;
+  }
+  if (!res || res.ok === false || res.notReady) return;
+  const sheets: any[] = Array.isArray(res.sheets) ? res.sheets : [];
+  // Nothing survived validation — say nothing rather than offer an empty plan.
+  if (!sheets.length && !(Array.isArray(res.dropped) && res.dropped.length)) return;
+  dkRenderPlanCard(res, containerId);
+}
+
+// The proposal card. Title, one line of rationale, the previewed tiles, and
+// everything the app REFUSED — then two ways forward and a way out.
+function dkRenderPlanCard(res: any, containerId = 'dk-messages'): void {
+  const { card, actions } = dkProposalCard('Suggested dashboard');
+
+  const name = document.createElement('div');
+  name.className = 'dk-plan-name';
+  name.textContent = res && res.name ? String(res.name) : 'Assistant dashboard';
+  card.appendChild(name);
+
+  if (res && typeof res.rationale === 'string' && res.rationale.trim()) {
+    const why = document.createElement('div');
+    why.className = 'ai-interp-body';
+    why.textContent = String(res.rationale);
+    card.appendChild(why);
+  }
+
+  // The tiles. anDraftVisualEl (anDraft.ts) is the SAME renderer the review
+  // modal uses — it draws `v.data` through renderVizInArea when the app computed
+  // one and shows `v.note` verbatim when it could not, drawing nothing. A
+  // placeholder number is never substituted, and that rule does not soften
+  // because the tile is small. `.dk-plan-grid` only shrinks it, in CSS.
+  const sheets: any[] = Array.isArray(res && res.sheets) ? res.sheets : [];
+  const grid = document.createElement('div');
+  grid.className = 'dk-plan-grid';
+  sheets.forEach((sheet: any) => {
+    const visuals: any[] = Array.isArray(sheet && sheet.visuals) ? sheet.visuals : [];
+    visuals.forEach((v: any) => {
+      if (typeof anDraftVisualEl === 'function') grid.appendChild(anDraftVisualEl(v, true));
+    });
+  });
+  if (grid.childNodes.length) card.appendChild(grid);
+
+  // Always visible, never behind a toggle — same renderer as the modal, so the
+  // two surfaces cannot drift into one of them quietly hiding it.
+  if (typeof anDraftAppendDropped === 'function') anDraftAppendDropped(card, res && res.dropped);
+
+  const build = dkMkBtn('Build dashboard', true, () => {
+    void (async () => {
+      if (!currentProjectId) return;
+      build.disabled = true;
+      try {
+        // The dock is section-wide, so a build fired from Sources or Home would
+        // otherwise create the dashboard and leave the user staring at whatever
+        // they were on — anBuildDraft opens the editor, but only the Dashboards
+        // section renders it. Same order dkTurnIntoAnalysis uses.
+        if (typeof selectSection === 'function') selectSection('analyses');
+        // anBuildDraft is the review modal's own build half. The card the user
+        // just read IS the review, so it is called directly and the modal is
+        // skipped — but the plan-vs-sheets decision stays in one place.
+        await anBuildDraft(res);
+      } catch (_) {
+        build.disabled = false;
+        showToast('Could not build that dashboard.');
+        return;
+      }
+      // Built and navigated to. The plan is finished with, so a later question
+      // starts a fresh one rather than refining this.
+      dkResetPlanIntent();
+      dkRemoveProposalCard(card);
+    })();
+  });
+  actions.appendChild(build);
+
+  // "Adjust…" hands the accumulated intent back to the composer so the user can
+  // edit the words that produced this, rather than having to remember them.
+  const adjust = dkMkBtn('Adjust…', false, () => {
+    const input = document.getElementById('dk-input') as HTMLTextAreaElement | null;
+    if (input) {
+      input.value = dkPlanIntent || (res && res.name ? String(res.name) : '');
+      input.focus();
+      try { input.setSelectionRange(input.value.length, input.value.length); } catch (_) { /* not focusable yet */ }
+    }
+  });
+  actions.appendChild(adjust);
+
+  const dismiss = dkMkBtn('Dismiss', false, () => {
+    dkResetPlanIntent();
+    dkRemoveProposalCard(card);
+  });
+  actions.appendChild(dismiss);
+
+  card.appendChild(actions);
+  dkAppendProposal(card, containerId);
+}
+
 async function dkOfferChartProposal(datasetId: string, question: string, containerId = 'dk-messages'): Promise<void> {
   let res: any;
   try {

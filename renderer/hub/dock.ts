@@ -258,9 +258,11 @@ function dkContextRef(): { kind: string; id: string; label: string } {
     }
     return { kind: '', id: '', label: 'whole project' };
   }
-  // 'analyses' (now the Dashboards surface) and anything else — deliberately
-  // whole project. Wiring the open dashboard in as dock context would be a
-  // behaviour change, out of scope for this delete-and-relabel.
+  // An OPEN dashboard is the context; the Dashboards LIST is not. In scope now
+  // because an edit delta can only name a tile the model was actually shown.
+  if (currentSection === 'analyses' && dashCurrent && dashCurrent.id) {
+    return { kind: 'analysis', id: String(dashCurrent.id), label: 'dashboard · ' + (dashCurrent.name || 'open dashboard') };
+  }
   return { kind: '', id: '', label: 'whole project' };
 }
 
@@ -615,7 +617,9 @@ async function dkSend(): Promise<void> {
     dkHideHint();
     // A proposal is a bonus, never a requirement of the answer — fire it after
     // the transcript has settled and never let it block the composer.
-    if (typeof dkOfferProposal === 'function') void dkOfferProposal(ref, question, String(res.answer || ''));
+    // WHICH proposal comes from the model's validated suggestedAction (main's
+    // whitelist, src/ai/suggestedAction.ts), not a keyword guess here.
+    if (typeof dkOfferProposal === 'function') void dkOfferProposal(ref, question, res.suggestedAction, dkThreadId || '');
     return;
   }
 

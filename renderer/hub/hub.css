@@ -10898,3 +10898,103 @@ body.cap-focus .cap-back {
 .home-empty--starred .home-empty-art { grid-row: 1 / 3; width: 34px; height: 34px; font-size: 16px; margin: 0; align-self: center; }
 .home-empty--starred .home-empty-title { font-size: 13px; }
 .home-empty--starred .home-empty-line { font-size: 12px; }
+
+/* ── Dashboard proposal card (dockPropose.ts) ────────────────────────────────
+   The plan pipeline's own preview, mounted in a dock 300px wide instead of a
+   modal. Everything here is SIZE: the tiles are the review modal's
+   anDraftVisualEl unchanged, so the numbers, the null-data note and the dropped
+   list are all the ones that surface already renders. */
+.dk-plan-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+  margin-top: 2px;
+}
+.dk-plan-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  /* Several tiles in a narrow dock: cap the run and scroll rather than pushing
+     the Build button below the fold, where a proposal reads as unfinished. */
+  max-height: 420px;
+  overflow-y: auto;
+}
+/* A dock tile is a glance, not a workbench. Shorter than the modal's 200px, but
+   not so short the plot loses its axes — 150px is what reads at 300px wide. */
+.dk-plan-grid .an-draft-viz { height: 150px; min-height: 150px; }
+/* flex-shrink defaults to 1, so three tiles in a 420px-capped flex column were
+   squashed BELOW their own height — and Chart.js measured the squashed box, so
+   every plot drew as a ~15px sliver. The tiles keep their height; the grid
+   scrolls instead. */
+.dk-plan-grid > .an-draft-visual { flex: 0 0 auto; }
+/* renderVizInArea nests the canvas one level deeper than the .an-draft-viz rule
+   above assumes: .cv-viz-area > .cv-chart-wrapper > .cv-canvas-wrap. The wrapper
+   is an auto-height flex column, so at this tile's smaller size `height:100%` on
+   the canvas wrap resolved against nothing and collapsed the plot to ~16px in an
+   otherwise correct 150px box. Scoped to the dock: the review modal's own tiles
+   lay out correctly as they are, and telling the wrapper to fill there pushed
+   its chart 2px past the box (caught by smoke-app). */
+.dk-plan-grid .an-draft-viz .cv-chart-wrapper { height: 100%; min-height: 0; }
+/* .cv-viz-area carries margin-top:2px for the surfaces it was written for, which
+   inside a fixed-height tile pushes the plot exactly 2px past the bottom. The
+   box clips it, but "clipped" is not "fits". */
+.dk-plan-grid .an-draft-viz .cv-viz-area { margin-top: 0; }
+.dk-plan-grid .an-draft-visual { padding: 8px; }
+.dk-plan-grid .an-draft-visual-title { font-size: 12px; }
+/* The dropped list is inside the card, so it inherits the card's own padding. */
+.dk-proposal .an-draft-section { margin-top: 10px; }
+
+/* Build-intent chips on an empty Dashboards page. Same language as the wizard's
+   .an-wiz-chip examples, but these ASK rather than fill a textarea. */
+.ws-empty-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+.ws-empty-chips[hidden] { display: none; }
+.ws-empty-chip {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.ws-empty-chip:hover { border-color: var(--accent); color: var(--accent); }
+.ws-empty-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ── Assistant edit delta: the diff, in words ─────────────────────────────────
+   One line per op, with the sign carrying the meaning (+ added, ~ changed,
+   − removed) so the card reads as a diff rather than as prose about a diff. The
+   sign is a separate span, not part of the text, so it stays aligned when a
+   title wraps — and it is never the ONLY signal: each line also says what the
+   op does in words, because a colour-blind or screen-reader user gets nothing
+   from a glyph alone. */
+.dk-delta-list { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 2px; }
+.dk-delta-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+}
+.dk-delta-sign {
+  flex: 0 0 auto;
+  width: 12px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+.dk-delta-add .dk-delta-sign { color: var(--ok); }
+.dk-delta-mod .dk-delta-sign { color: var(--warn); }
+.dk-delta-del .dk-delta-sign { color: var(--error); }
+.dk-delta-text { min-width: 0; }
+/* The applied state: the card stays put, states what happened, and offers the
+   one way back. */
+.dk-delta-done { font-size: 12.5px; color: var(--muted); margin-top: 6px; }

@@ -133,9 +133,15 @@ export async function buildFacts(
     const a = await analysis.getAnalysis(projectId, id);
     if (a) {
       emit({ kind: 'read', label: 'Read ' + a.name });
+      // Tile NAMES (analysis.listAnalysisTiles) — the same read model the edit
+      // validator resolves against, so the model can only name a tile the app
+      // can then find. A real read (one Visual record per distinct chart), so it
+      // is a real step; names and aggregations only, never a value.
+      const tiles = await analysis.listAnalysisTiles(projectId, a);
+      emit({ kind: 'read', label: 'Read ' + plural(tiles.length, 'tile'), count: tiles.length });
       const cards = await computeMetricCards(projectId, a.sheets);
       emit({ kind: 'compute', label: 'Computed ' + plural(cards.length, 'metric'), count: cards.length });
-      return copilot.analysisFacts(a, cards);
+      return copilot.analysisFacts(a, cards, tiles);
     }
   }
 
@@ -266,7 +272,16 @@ export function register() {
           text: res.text,
           provenance: facts.provenance,
         }, target);
-        return { ok: true, answer: res.text, provenance: facts.provenance, turns: turns || [], threadId: target || null };
+        // `suggestedAction` is the model's STRUCTURED read of what the question
+        // wanted (src/ai/suggestedAction.ts) — a whitelisted kind plus an intent
+        // string, never a plan and never a figure. It is NOT persisted on the
+        // turn: a proposal belongs to the turn that produced it and is rebuilt
+        // from disk truth as prose only, which is the existing rule.
+        return {
+          ok: true, answer: res.text, provenance: facts.provenance,
+          turns: turns || [], threadId: target || null,
+          suggestedAction: res.suggestedAction || { kind: 'none', intent: '' },
+        };
       }
       if (res.errorType === 'not_ready') return { ok: false, notReady: true };
       return { ok: false, error: res.message || 'Could not answer the question' };
