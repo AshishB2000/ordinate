@@ -21,7 +21,7 @@ const { ACTION_MARKER, MAX_INTENT, CHAT_SYSTEM_PROMPT } = sa;
 
 // ── validateAction: the whitelist ───────────────────────────────────────────
 
-for (const kind of ['dashboard', 'chart', 'step', 'calc']) {
+for (const kind of ['dashboard', 'edit', 'chart', 'step', 'calc']) {
   const got = sa.validateAction({ kind, intent: 'x' });
   ok('validate: "' + kind + '" survives the whitelist', got.kind === kind, JSON.stringify(got));
 }
@@ -134,7 +134,7 @@ ok('filter: nothing after the marker is ever emitted', after === 'Prose.', JSON.
 
 ok('prompt: names the exact marker the parser looks for',
   CHAT_SYSTEM_PROMPT.indexOf(ACTION_MARKER) >= 0);
-for (const kind of ['dashboard', 'chart', 'step', 'calc', 'none']) {
+for (const kind of ['dashboard', 'edit', 'chart', 'step', 'calc', 'none']) {
   ok('prompt: offers "' + kind + '", which the parser accepts',
     CHAT_SYSTEM_PROMPT.indexOf(kind) >= 0 && sa.validateAction({ kind, intent: '' }).kind === kind);
 }

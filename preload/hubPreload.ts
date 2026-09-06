@@ -435,6 +435,12 @@ contextBridge.exposeInMainWorld('hub', {
     }),
   // Re-validate + re-preview a plan the USER edited. NOT an AI call — this works
   // with no model configured. Same reply shape as draftDashboard, minus notReady.
+  // Ask the model for an EDIT DELTA against an OPEN dashboard — ops, not a new
+  // plan. Validated and previewed in main; the renderer applies nothing until
+  // the user clicks. Returns { ok, name, ops, dropped, previews } |
+  // { ok:false, notReady:true } | { ok:false, error }.
+  editDashboard: (projectId: string, analysisId: string, intent: string) =>
+    ipcRenderer.invoke('analysis:editDelta', { projectId, analysisId, intent }),
   previewAnalysisPlan: (projectId: string, plan: any) =>
     ipcRenderer.invoke('analysis:previewPlan', { projectId, plan }),
   // APPROVAL. Re-validates with the same validator the preview ran, then creates

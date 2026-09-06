@@ -139,6 +139,19 @@ async function dkOfferProposal(
     return;
   }
 
+  // An EDIT changes the dashboard that is already open, which is exactly what
+  // dkContextRef now reports as an 'analysis' context. Anywhere else there is
+  // nothing to edit — and drafting a new one is what 'dashboard' is for — so
+  // this returns rather than falling through to the dataset gate below.
+  if (kind === 'edit') {
+    if (ref && ref.kind === 'analysis' && ref.id && typeof dkOfferEditProposal === 'function') {
+      try {
+        await dkOfferEditProposal(ref.id, dkAccumulateIntent(intent || question, threadId), containerId);
+      } catch (_) { /* a proposal is a bonus, never an error */ }
+    }
+    return;
+  }
+
   // The other three read a dataset's columns, so they still need one open.
   if (!ref || ref.kind !== 'dataset' || !ref.id) return;
   try {

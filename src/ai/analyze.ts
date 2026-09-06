@@ -551,7 +551,7 @@ function resolveByok():
 // routable — keep this list in sync with src/localCliRun.js.
 const RUNNABLE_LOCAL_CLIS = ['claude', 'antigravity', 'codex', 'grok', 'opencode', 'cursor'];
 
-async function dispatch(systemPrompt: string, messages: NeutralMsg[], onDelta?: (delta: string) => void): Promise<CallResult> {
+export async function dispatch(systemPrompt: string, messages: NeutralMsg[], onDelta?: (delta: string) => void): Promise<CallResult> {
   const cfg = config.get();
   if ((cfg.executionMode || 'byok') === 'local') {
     const activeId = cfg.localCli && cfg.localCli.activeId;
@@ -891,7 +891,7 @@ export async function draftDashboard(
 // Tolerant single-object parse shared by the Week 12 structure wrappers: strip
 // accidental code fences, then slice the first {…last } if the whole text is not
 // clean JSON. Returns the parsed object or null (an array / non-object → null).
-function parseFirstObject(rawText: string | undefined): Record<string, unknown> | null {
+export function parseFirstObject(rawText: string | undefined): Record<string, unknown> | null {
   let text = (rawText || '').trim();
   text = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
   let parsed: unknown;

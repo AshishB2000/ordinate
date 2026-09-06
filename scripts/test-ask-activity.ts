@@ -125,7 +125,10 @@ async function main(): Promise<void> {
     vcap[0].label === 'Read Pop by city' && vcap[1].label === 'Read Cities' && vcap[2].label === 'Built chart data');
   ok('no visual step carries a data value', carriesDataValue(vcap, CELL_VALUES) === null);
 
-  // ── 4. Analysis ask: read → compute, and the metric TOTAL never leaks ─────
+  // ── 4. Analysis ask: read → read → compute, metric TOTAL never leaks ──────
+  // Two reads: the analysis record, then its TILES — one Visual record per
+  // distinct chart, which is what lets the Assistant name a tile when asked to
+  // change one. Real work, so it is a real step; it carries a count and no value.
   const cards = [
     { type: 'metric', layout: { x: 0, y: 0, w: 3, h: 2 },
       metric: { datasetId: ds.id, column: 'pop', aggregation: 'sum', label: 'Total pop' } },
@@ -135,9 +138,13 @@ async function main(): Promise<void> {
   const an = await analysis.saveAnalysis(proj.id, { name: 'City board', sheets: [{ name: 'P1', cards }] });
   const dcap: Step[] = [];
   const dFacts = await ipcCopilot.buildFacts(proj.id, { kind: 'analysis', id: an!.id }, (s) => dcap.push(s));
-  ok('analysis emits exactly read → compute', JSON.stringify(kinds(dcap)) === JSON.stringify(['read', 'compute']), JSON.stringify(kinds(dcap)));
-  ok('…naming the analysis, then counting the metrics computed (a count, not a total)',
-    dcap[0].label === 'Read City board' && dcap[1].label === 'Computed 2 metrics' && dcap[1].count === 2);
+  ok('analysis emits exactly read → read → compute',
+    JSON.stringify(kinds(dcap)) === JSON.stringify(['read', 'read', 'compute']), JSON.stringify(kinds(dcap)));
+  ok('…naming the analysis, then its tiles, then counting the metrics computed (a count, not a total)',
+    dcap[0].label === 'Read City board'
+    && dcap[1].label === 'Read 2 tiles' && dcap[1].count === 2
+    && dcap[2].label === 'Computed 2 metrics' && dcap[2].count === 2,
+    JSON.stringify(dcap.map((s) => s.label)));
   // The app-computed sum (600) IS in the facts the model narrates — and must NOT
   // be in any chip. This is the guardrail the whole feature turns on.
   ok('the facts DO carry the app-computed total…', dFacts.text.includes('Total pop: 600'));

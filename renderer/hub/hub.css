@@ -10967,3 +10967,34 @@ body.cap-focus .cap-back {
 }
 .ws-empty-chip:hover { border-color: var(--accent); color: var(--accent); }
 .ws-empty-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ── Assistant edit delta: the diff, in words ─────────────────────────────────
+   One line per op, with the sign carrying the meaning (+ added, ~ changed,
+   − removed) so the card reads as a diff rather than as prose about a diff. The
+   sign is a separate span, not part of the text, so it stays aligned when a
+   title wraps — and it is never the ONLY signal: each line also says what the
+   op does in words, because a colour-blind or screen-reader user gets nothing
+   from a glyph alone. */
+.dk-delta-list { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 2px; }
+.dk-delta-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+}
+.dk-delta-sign {
+  flex: 0 0 auto;
+  width: 12px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+.dk-delta-add .dk-delta-sign { color: var(--ok); }
+.dk-delta-mod .dk-delta-sign { color: var(--warn); }
+.dk-delta-del .dk-delta-sign { color: var(--error); }
+.dk-delta-text { min-width: 0; }
+/* The applied state: the card stays put, states what happened, and offers the
+   one way back. */
+.dk-delta-done { font-size: 12.5px; color: var(--muted); margin-top: 6px; }

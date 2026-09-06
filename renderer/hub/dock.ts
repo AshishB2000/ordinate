@@ -258,9 +258,11 @@ function dkContextRef(): { kind: string; id: string; label: string } {
     }
     return { kind: '', id: '', label: 'whole project' };
   }
-  // 'analyses' (now the Dashboards surface) and anything else — deliberately
-  // whole project. Wiring the open dashboard in as dock context would be a
-  // behaviour change, out of scope for this delete-and-relabel.
+  // An OPEN dashboard is the context; the Dashboards LIST is not. In scope now
+  // because an edit delta can only name a tile the model was actually shown.
+  if (currentSection === 'analyses' && dashCurrent && dashCurrent.id) {
+    return { kind: 'analysis', id: String(dashCurrent.id), label: 'dashboard · ' + (dashCurrent.name || 'open dashboard') };
+  }
   return { kind: '', id: '', label: 'whole project' };
 }
 

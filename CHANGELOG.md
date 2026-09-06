@@ -10,6 +10,13 @@ All notable changes to Ordinate are documented here. Format based on
 ## [Unreleased]
 
 ### Added
+- **Change a dashboard by asking.** With a dashboard open, tell the Assistant what you want —
+  "add a line chart of amount by month", "make the region chart a bar", "add a filter for channel",
+  "rename page 1 to Overview" — and it proposes the change as a plain diff: what it would add,
+  change and remove, with a real preview of any new tile and a list of anything it refused. Nothing
+  moves until you press Apply, and one Undo puts the whole thing back, including the charts it
+  retyped and any it created. It names tiles by their titles, and refuses rather than guessing when
+  a name could mean two of them.
 - **Ask the Assistant to build you a dashboard.** Say "build me a sales dashboard for Adidas US
   Sales" in the Assistant or the Home ask bar and you get a proposal you can look at — its name, why
   it was proposed, each chart drawn with your real numbers, and a plain list of anything the app

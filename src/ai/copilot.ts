@@ -29,7 +29,7 @@ import type { Dataset } from '../data/datasets';
 import type { ColumnSummary, QualityIssue } from '../data/datasetStats';
 import type { Visual } from '../analysis/visuals';
 import type { Page } from '../analysis/dashboards';
-import type { Analysis } from '../analysis/analysis';
+import type { Analysis, AnalysisTile } from '../analysis/analysis';
 import type { VizDataResult } from '../analysis/vizData';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -562,6 +562,7 @@ function countCards(pages: Page[] | undefined): number {
 export function analysisFacts(
   a: Analysis,
   computed: { label: string; value: number | null }[],
+  tiles: AnalysisTile[] = [],
 ): CopilotFacts {
   const sheets = Array.isArray(a.sheets) ? a.sheets : [];
   const lines: string[] = [GUARD_LINE, ''];
@@ -581,6 +582,18 @@ export function analysisFacts(
       cards.forEach((c) => counts.set(c.type, (counts.get(c.type) || 0) + 1));
       const breakdown = Array.from(counts.entries()).map(([t, n]) => `${n} ${t}`).join(', ');
       lines.push(`- Sheet ${i + 1} "${s.name}": ${cards.length} card(s)${breakdown ? ` (${breakdown})` : ''}.`);
+      // Each tile BY NAME, which is the whole point: a model that can only see
+      // "2 visual" can describe this dashboard but cannot ask to change one of
+      // them. Titles are what an edit delta names, and what the app resolves
+      // back to a card id — so what is listed here bounds what can be edited.
+      // Column and aggregation NAMES only; no values, no figures.
+      tiles.filter((t) => t.pageIndex === i).forEach((t) => {
+        const bits: string[] = [];
+        if (t.chartType) bits.push(t.chartType);
+        if (t.category) bits.push(`by ${t.category}`);
+        if (t.measures && t.measures.length) bits.push(t.measures.join(', '));
+        lines.push(`  - "${t.title}" (${t.type}${bits.length ? ': ' + bits.join(' · ') : ''})`);
+      });
     });
   }
   lines.push(...cardBodyLines(sheets, computed));

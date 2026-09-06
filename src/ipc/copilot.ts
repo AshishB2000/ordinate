@@ -133,9 +133,15 @@ export async function buildFacts(
     const a = await analysis.getAnalysis(projectId, id);
     if (a) {
       emit({ kind: 'read', label: 'Read ' + a.name });
+      // Tile NAMES (analysis.listAnalysisTiles) — the same read model the edit
+      // validator resolves against, so the model can only name a tile the app
+      // can then find. A real read (one Visual record per distinct chart), so it
+      // is a real step; names and aggregations only, never a value.
+      const tiles = await analysis.listAnalysisTiles(projectId, a);
+      emit({ kind: 'read', label: 'Read ' + plural(tiles.length, 'tile'), count: tiles.length });
       const cards = await computeMetricCards(projectId, a.sheets);
       emit({ kind: 'compute', label: 'Computed ' + plural(cards.length, 'metric'), count: cards.length });
-      return copilot.analysisFacts(a, cards);
+      return copilot.analysisFacts(a, cards, tiles);
     }
   }
 

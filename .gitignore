@@ -285,3 +285,7 @@ scripts/**/*.js
 # Assistant EDITS an existing dashboard — the delta validator. Emitted siblings.
 /src/analysis/dashboardDelta.js
 /scripts/test-dashboardDelta.js
+
+# Conversational editing of an open dashboard — emitted siblings.
+/renderer/hub/dockEdit.js
+/scripts/smoke-dashboard-edit.js

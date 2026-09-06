@@ -38,8 +38,8 @@ export const ACTION_MARKER = '@@ACTION';
 export const MAX_INTENT = 400;
 
 /** The whitelist. Anything not on it becomes 'none'. */
-export type SuggestedActionKind = 'dashboard' | 'chart' | 'step' | 'calc' | 'none';
-const KINDS: ReadonlySet<string> = new Set(['dashboard', 'chart', 'step', 'calc', 'none']);
+export type SuggestedActionKind = 'dashboard' | 'edit' | 'chart' | 'step' | 'calc' | 'none';
+const KINDS: ReadonlySet<string> = new Set(['dashboard', 'edit', 'chart', 'step', 'calc', 'none']);
 
 export interface SuggestedAction {
   kind: SuggestedActionKind;
@@ -57,8 +57,10 @@ export const NO_ACTION: SuggestedAction = { kind: 'none', intent: '' };
 const ACTION_PROMPT =
   '\n\nAFTER your answer, output ONE final line, exactly:\n' +
   ACTION_MARKER + ' {"kind":"<kind>","intent":"<intent>"}\n' +
-  'where <kind> is one of: dashboard, chart, step, calc, none. Use "dashboard" when the user is ' +
-  'asking to BUILD or CREATE a dashboard, report or overview; "chart" when they want a single ' +
+  'where <kind> is one of: dashboard, edit, chart, step, calc, none. Use "dashboard" when the user is ' +
+  'asking to BUILD or CREATE a new dashboard, report or overview; "edit" when the FACTS show a '
+  + 'dashboard is already open and they are asking to CHANGE it — add, remove, move, retype or rename '
+  + 'something on it; "chart" when they want a single ' +
   'chart or visualisation; "step" when they want the data cleaned or filtered; "calc" when they ' +
   'want a new calculated column or formula; and "none" for an ordinary question. <intent> is a ' +
   'short restatement of what they want built, in their own terms, or "" when kind is none. ' +
