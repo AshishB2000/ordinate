@@ -120,6 +120,10 @@ async function assembleExportBundle(forCapture: boolean): Promise<any> {
     name: (dashCurrent && dashCurrent.name) || 'Dashboard',
     pages,
     controlsSummary: controlParts.join(' · '),
+    // A shared snapshot has to LOOK like what the author saw, so the style
+    // travels with the bundle. Main re-clamps it (dashboardExport.sanitizeBundle)
+    // — this is a closed enum on both sides, never free-form CSS.
+    style: dashCurrentStyle(),
   };
 }
 
@@ -190,6 +194,7 @@ function buildDashCaptureHtml(bundle: any): string {
   const esc = (s: any) => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const cols = DASH_GRID_COLS;
+  const style = dashSanitizeStyle(bundle && bundle.style);
   let body = `<h1 class="d-title">${esc(bundle.name)}</h1>`;
   if (bundle.controlsSummary) body += `<div class="d-controls-summary">${esc(bundle.controlsSummary)}</div>`;
   const multi = Array.isArray(bundle.pages) && bundle.pages.length > 1;

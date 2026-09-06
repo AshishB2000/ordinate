@@ -23,6 +23,7 @@ const SMOKES = [
   'smoke-dashboard-proposal',
   'smoke-dashboards',
   'smoke-dashboard-edit',
+  'smoke-dashboard-styles',
 ];
 
 const results: { name: string; code: number }[] = [];

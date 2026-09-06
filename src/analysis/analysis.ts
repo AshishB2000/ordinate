@@ -29,15 +29,15 @@ import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
 import * as projects from '../app/projects';
-import { sanitizePages, sanitizeDashboardFilters } from './dashboards';
+import { sanitizePages, sanitizeDashboardFilters, sanitizeStyle } from './dashboards';
 import type { CardType } from './dashboards';
 import * as visuals from './visuals';
 import type { FilterStep } from '../data/transforms';
 
 // Re-exported so callers can type an analysis sheet without importing two
 // modules — and so it stays visible that a sheet IS a dashboard Page.
-export type { Page, Card, CardLayout, CardMetric, CardType, CardControl, ControlValue, ControlKind } from './dashboards';
-import type { Page } from './dashboards';
+export type { Page, Card, CardLayout, CardMetric, CardType, CardControl, ControlValue, ControlKind, DashboardStyle } from './dashboards';
+import type { Page, DashboardStyle } from './dashboards';
 
 export interface Analysis {
   /** Generated UUID — never derived from the name; it is a filesystem path. */
@@ -58,6 +58,20 @@ export interface Analysis {
    * filters by dashboardFilters.mergeDashboardFilters.
    */
   filters: FilterStep[];
+
+  /**
+   * How the sheet LOOKS: theme + density + accent, three closed enums clamped
+   * by dashboards.sanitizeStyle. Presentation only — it never moves a card.
+   *
+   * NOT a schema bump, deliberately. `normalize()` runs sanitizeStyle over the
+   * stored value, and sanitizeStyle turns a missing field into
+   * DEFAULT_DASHBOARD_STYLE — so every v1 record written before this field
+   * existed reads back as the `clean` style, which is exactly what those
+   * dashboards already looked like. Same reasoning as `Visual.favorite`
+   * (visuals.ts:84-91): bumping the version would buy a migration pass for
+   * three strings whose absence already means the right thing.
+   */
+  style: DashboardStyle;
 
   createdAt: string;
   /** Bumped by any sheet/filter/name edit. */
@@ -122,6 +136,8 @@ function normalize(data: any, projectId: string): Analysis {
     name: typeof data.name === 'string' && data.name.trim() ? data.name : 'Untitled dashboard',
     sheets: sanitizePages(data.sheets),
     filters: sanitizeDashboardFilters(data.filters),
+    // Absent on every record written before styles existed → the default.
+    style: sanitizeStyle(data.style),
     createdAt,
     updatedAt: data.updatedAt || createdAt,
     schemaVersion: 1,
@@ -198,6 +214,7 @@ export async function saveAnalysis(
     name: string;
     sheets?: unknown;
     filters?: unknown;
+    style?: unknown;
   },
 ): Promise<Analysis | null> {
   if (!isValidId(projectId)) return null;
@@ -212,6 +229,7 @@ export async function saveAnalysis(
     name: typeof input.name === 'string' && input.name.trim() ? input.name.trim() : 'Untitled dashboard',
     sheets: sanitizePages(input.sheets),
     filters: sanitizeDashboardFilters(input.filters),
+    style: sanitizeStyle(input.style),
     createdAt: now,
     updatedAt: now,
     schemaVersion: 1,
@@ -233,6 +251,7 @@ export async function updateAnalysis(
     name?: string;
     sheets?: unknown;
     filters?: unknown;
+    style?: unknown;
   },
 ): Promise<Analysis | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
@@ -244,6 +263,12 @@ export async function updateAnalysis(
     name: typeof patch.name === 'string' && patch.name.trim() ? patch.name.trim() : existing.name,
     sheets: patch.sheets !== undefined ? sanitizePages(patch.sheets) : existing.sheets,
     filters: patch.filters !== undefined ? sanitizeDashboardFilters(patch.filters) : existing.filters,
+    // Same replace-or-keep rule as the arrays above: an OMITTED style keeps the
+    // stored one, a SUPPLIED one replaces it wholesale (never axis-merged, for
+    // the same reason `sheets` is never merged). So a caller changing one axis
+    // must send the whole triple — sanitizeStyle defaults the axes it is not
+    // given, and a half-patch would quietly reset the other two.
+    style: patch.style !== undefined ? sanitizeStyle(patch.style) : existing.style,
     updatedAt: new Date().toISOString(),
   };
   await fs.promises.mkdir(analysesDir(projectId), { recursive: true });

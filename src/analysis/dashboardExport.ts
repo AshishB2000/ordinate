@@ -31,6 +31,16 @@
 // (buildVizData / computeMetric); this module only lays them out (strict-number rule
 // untouched — it never computes a figure).
 
+// The ONE non-pure-ish import: the shared style clamp. dashboards.ts is imported
+// for `sanitizeStyle` rather than copying its three enums here, for the same
+// reason dashboards.ts itself takes a value import of visuals.ts — duplicating a
+// whitelist is how whitelists drift. It stays node-testable: dashboards.ts pulls
+// no fs/DOM work at load (its `electron` import is never touched at module
+// scope), so scripts/test-dashboardExport.ts still runs under bare `node` with
+// no Electron stub.
+import { sanitizeStyle } from './dashboards';
+import type { DashboardStyle } from './dashboards';
+
 // The fixed grid column count (kept in sync with .dash-grid in hub.css / dashboards.ts).
 const GRID_COLS = 12;
 
@@ -88,6 +98,19 @@ export interface ExportBundle {
   // that survives into the file: a header subtitle, plain string, never a
   // structured value per control.
   controlsSummary?: string;
+  /**
+   * The dashboard's {theme,density,accent} triple, so a shared file looks like
+   * the dashboard it was exported from rather than always light-and-blue.
+   *
+   * This does NOT widen the secret-exclusion whitelist above. It is a CLOSED
+   * ENUM clamp — sanitizeStyle can only ever return one of 3×2×3 fixed literals
+   * it already knew — which is strictly TIGHTER than the `asString` fields
+   * around it, since those pass arbitrary caller text through (safely, via
+   * textContent) while this one cannot pass any caller text at all. That
+   * matters because these three values are interpolated into a class attribute
+   * and into the emitted <style> block, where an echoed string would not be.
+   */
+  style: DashboardStyle;
 }
 
 // Core Chart.js types that render live from inlined data. Anything else (treemap /
@@ -217,7 +240,15 @@ export function sanitizeBundle(raw: unknown): ExportBundle {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const pages = Array.isArray(o.pages) ? o.pages.map(sanitizePage) : [];
   if (pages.length === 0) pages.push({ name: 'Page', cards: [] });
-  return { name: asString(o.name) || 'Dashboard', pages, controlsSummary: asString(o.controlsSummary) };
+  return {
+    name: asString(o.name) || 'Dashboard',
+    pages,
+    controlsSummary: asString(o.controlsSummary),
+    // A closed-enum clamp, NOT a widening of the whitelist above — see the
+    // note on ExportBundle.style. Missing/garbage → the default light style,
+    // which is what every export looked like before this field existed.
+    style: sanitizeStyle(o.style),
+  };
 }
 
 // Serialize a JS value for safe embedding inside a <script> tag: escape `<`/`>` (so a
@@ -232,47 +263,162 @@ function embedJson(obj: unknown): string {
     .replace(/\u2029/g, '\\u2029');
 }
 
-// Light-theme tokens mirror renderer/theme.css (kept literal — a standalone file can't
-// read the app's CSS vars), same discipline as reportExport.buildReportHtml.
-function styleBlock(): string {
+// ── Style → literal tokens ────────────────────────────────────────────────────
+//
+// The tokens are TRANSCRIBED from the `.dash-theme--*` / `.dash-density--*` /
+// `.dash-accent--*` blocks in renderer/hub/hub.css, not read from them: a
+// standalone file has no access to the app's stylesheet, which is the same
+// reason this module hardcoded the light theme before styles existed (and the
+// same discipline as reportExport.buildReportHtml). The selector NAMES are kept
+// identical to hub.css's on purpose, so the two can be diffed by eye when a
+// colour moves.
+//
+// Only the CHOSEN triple is emitted, one block per axis. Shipping all three
+// themes would be dead CSS in a file with no theme switcher — and it would put
+// the light surface into a dark export, which is exactly the "looks like the
+// original" bug this feature exists to fix.
+//
+// Source order below is theme → density → accent, the order hub.css mandates:
+// accent owns --accent*/--chart* and has to win over the theme block's own copy
+// of them at equal specificity.
+
+// The token set each theme owns. Restricted to what THIS file's rules consume —
+// the app's full 34-token set includes chrome (titlebar, ok/warn) an export has
+// no surface for. --font-numeric is `inherit` except on Executive, where the
+// serif KPI is half of what makes that theme recognizable.
+const THEME_TOKENS: Record<DashboardStyle['theme'], string> = {
+  clean: `--bg: #f7f7f8; --surface: #ffffff; --surface-2: #f3f4f6;
+    --text: #18181b; --text-strong: #0f1117; --muted: #6b7280;
+    --text-dim: #8a909c; --text-faint: #aeb4bf;
+    --border: #e5e7eb; --border-2: #d6dae1;
+    --font-numeric: inherit; --card-radius: 10px; --card-shadow: none;
+    --kpi-size: 30px; --kpi-label-size: 13px; color-scheme: light;`,
+  executive: `--bg: #f6f4f1; --surface: #fffefc; --surface-2: #f2f0ec;
+    --text: #23211e; --text-strong: #14120f; --muted: #6d6862;
+    --text-dim: #8b857d; --text-faint: #b0aaa2;
+    --border: #e4e0d9; --border-2: #d5d0c7;
+    --font-numeric: ui-serif, Georgia, 'Times New Roman', serif;
+    --card-radius: 14px; --card-shadow: 0 10px 28px -12px rgba(60, 50, 35, 0.2);
+    --kpi-size: 34px; --kpi-label-size: 12.5px; color-scheme: light;`,
+  dark: `--bg: #18181b; --surface: #232327; --surface-2: #2a2a30;
+    --text: #ececee; --text-strong: #ffffff; --muted: #9ca3af;
+    --text-dim: #6b7280; --text-faint: #52525b;
+    --border: #2e2e33; --border-2: #3a3a42;
+    --font-numeric: inherit; --card-radius: 10px; --card-shadow: none;
+    --kpi-size: 30px; --kpi-label-size: 13px; color-scheme: dark;`,
+};
+
+// Density. --gap mirrors hub.css exactly (12/8); --row deliberately does NOT
+// (hub is 48/36). An export has no chrome and its .chart-wrap floor is 120px, so
+// a 2-row chart card on a 48px grid would overflow its own cell — the export has
+// always used a taller row. What matters is that the two scale by the SAME ratio
+// as the app, so a compact dashboard reads as compact here too.
+//
+// comfortable carries the sizes compact overrides, EXCEPT the two KPI sizes:
+// those belong to the theme (Executive's KPI is larger), and compact still wins
+// over both by source order — the same interaction hub.css relies on.
+const DENSITY_TOKENS: Record<DashboardStyle['density'], string> = {
+  comfortable: `--gap: 12px; --row: 80px; --card-pad: 12px;
+    --card-title-size: 12px; --text-h-size: 16px; --text-p-size: 13px;`,
+  compact: `--gap: 8px; --row: 60px; --card-pad: 8px;
+    --card-title-size: 10px; --text-h-size: 12.5px; --text-p-size: 12px;
+    --kpi-size: 20px; --kpi-label-size: 11px;`,
+};
+
+// Accent ramps, keyed `<accent>` for the light themes and `<accent>-dark` for
+// the dark one. The dark ramps are NOT a shade of the light ones: hub.css
+// carries a separate `.dash-theme--dark.dash-accent--*` set because the light
+// hues go muddy on #232327 (slate worst of all — #475569 is nearly invisible
+// there, so its whole ramp moves to the light half of the scale).
+interface AccentRamp {
+  accent: string;
+  accent2: string;
+  soft: string;
+  line: string;
+  chart: string[]; // --chart-1..5, and [0] is --chart-accent
+}
+const ACCENT_RAMPS: Record<string, AccentRamp> = {
+  blue: { accent: '#2563eb', accent2: '#1d4fd0', soft: 'rgba(37, 99, 235, 0.08)', line: 'rgba(37, 99, 235, 0.22)',
+    chart: ['#2563eb', '#0e7490', '#14b8a6', '#6366f1', '#64748b'] },
+  teal: { accent: '#0d9488', accent2: '#0f766e', soft: 'rgba(13, 148, 136, 0.09)', line: 'rgba(13, 148, 136, 0.24)',
+    chart: ['#0d9488', '#0e7490', '#2563eb', '#4f46e5', '#64748b'] },
+  slate: { accent: '#475569', accent2: '#334155', soft: 'rgba(71, 85, 105, 0.08)', line: 'rgba(71, 85, 105, 0.22)',
+    chart: ['#475569', '#64748b', '#0f766e', '#7e8ba3', '#a1a8b5'] },
+  'blue-dark': { accent: '#3b82f6', accent2: '#2f6fe0', soft: 'rgba(59, 130, 246, 0.16)', line: 'rgba(59, 130, 246, 0.32)',
+    chart: ['#3b82f6', '#22d3ee', '#2dd4bf', '#818cf8', '#94a3b8'] },
+  'teal-dark': { accent: '#2dd4bf', accent2: '#14b8a6', soft: 'rgba(45, 212, 191, 0.16)', line: 'rgba(45, 212, 191, 0.32)',
+    chart: ['#2dd4bf', '#22d3ee', '#60a5fa', '#818cf8', '#94a3b8'] },
+  'slate-dark': { accent: '#94a3b8', accent2: '#b6c2d1', soft: 'rgba(148, 163, 184, 0.16)', line: 'rgba(148, 163, 184, 0.32)',
+    chart: ['#94a3b8', '#cbd5e1', '#5eead4', '#a5b4fc', '#78859a'] },
+};
+
+// `style` is already clamped by sanitizeStyle, so both halves of the key are one
+// of a fixed set of literals and the lookup can never miss.
+function accentRamp(style: DashboardStyle): AccentRamp {
+  return ACCENT_RAMPS[style.theme === 'dark' ? style.accent + '-dark' : style.accent];
+}
+
+// The three class names the exported document carries, in hub.css's own spelling.
+function styleClasses(style: DashboardStyle): string {
+  return `dash-theme--${style.theme} dash-density--${style.density} dash-accent--${style.accent}`;
+}
+
+// Theme + density + accent tokens, then the layout rules that consume them. The
+// rules are token-only — that is what lets one style change repaint the whole
+// document without a second copy of every rule per theme.
+function styleBlock(style: DashboardStyle): string {
+  const ramp = accentRamp(style);
+  const chartVars = ramp.chart.map((c, i) => `--chart-${i + 1}: ${c};`).join(' ');
   return `
+    .dash-theme--${style.theme} { ${THEME_TOKENS[style.theme]} }
+    .dash-density--${style.density} { ${DENSITY_TOKENS[style.density]} }
+    .dash-accent--${style.accent} { --accent: ${ramp.accent}; --accent-2: ${ramp.accent2};
+      --accent-soft: ${ramp.soft}; --accent-line: ${ramp.line};
+      --chart-accent: ${ramp.chart[0]}; ${chartVars} }
+
     * { box-sizing: border-box; }
-    html, body { margin: 0; background: #f4f4f5; color: #18181b;
+    html, body { margin: 0; background: var(--bg); color: var(--text);
       font-family: -apple-system, system-ui, 'Hanken Grotesk', 'Segoe UI', sans-serif; }
     .dash-root { max-width: 1200px; margin: 0 auto; padding: 24px 20px 40px; }
-    .dash-title { font-size: 22px; font-weight: 700; margin: 0 0 4px; color: #0f1117; }
-    .dash-controls-summary { font-size: 13px; font-weight: 500; color: #6b7280; margin: 0 0 16px; }
+    .dash-title { font-size: 22px; font-weight: 700; margin: 0 0 4px; color: var(--text-strong); }
+    .dash-controls-summary { font-size: 13px; font-weight: 500; color: var(--muted); margin: 0 0 16px; }
     .dash-page { margin-bottom: 28px; }
-    .dash-page-title { font-size: 15px; font-weight: 600; color: #6b7280; margin: 0 0 10px; }
+    .dash-page-title { font-size: 15px; font-weight: 600; color: var(--muted); margin: 0 0 10px; }
     .dash-grid { display: grid; grid-template-columns: repeat(${GRID_COLS}, 1fr);
-      grid-auto-rows: 80px; gap: 12px; }
-    .dash-card { background: #ffffff; border: 1px solid #e4e4e7; border-radius: 10px;
-      padding: 12px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
-    .dash-card-title { font-size: 12px; font-weight: 600; color: #6b7280; margin: 0 0 8px;
+      grid-auto-rows: var(--row); gap: var(--gap); }
+    .dash-card { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--card-radius); box-shadow: var(--card-shadow);
+      padding: var(--card-pad); overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+    .dash-card-title { font-size: var(--card-title-size); font-weight: 600; color: var(--muted); margin: 0 0 8px;
       text-transform: uppercase; letter-spacing: .03em; }
     .chart-wrap { position: relative; flex: 1 1 auto; min-height: 120px; }
     .chart-wrap canvas { max-width: 100%; }
     .dash-img { max-width: 100%; max-height: 100%; object-fit: contain; margin: auto; }
-    .dash-metric-value { font-size: 30px; font-weight: 700; color: #0f1117; margin-top: auto; }
-    .dash-metric-label { font-size: 13px; color: #6b7280; }
-    .dash-text-heading { font-size: 16px; font-weight: 600; color: #0f1117; margin: 0 0 6px; }
-    .dash-text-body { font-size: 13px; color: #3f3f46; white-space: pre-wrap; }
-    .dash-card--broken { border-style: dashed; border-color: #d4d4d8; background: #fafafa;
-      align-items: center; justify-content: center; text-align: center; color: #9ca3af; }
+    .dash-metric-value { font-size: var(--kpi-size); font-weight: 700; color: var(--text-strong);
+      font-family: var(--font-numeric); margin-top: auto; }
+    .dash-metric-label { font-size: var(--kpi-label-size); color: var(--muted); }
+    .dash-text-heading { font-size: var(--text-h-size); font-weight: 600; color: var(--text-strong); margin: 0 0 6px; }
+    .dash-text-body { font-size: var(--text-p-size); color: var(--text); white-space: pre-wrap; }
+    .dash-card--broken { border-style: dashed; border-color: var(--border-2); background: var(--surface-2);
+      box-shadow: none; align-items: center; justify-content: center; text-align: center; color: var(--text-dim); }
     .dash-broken-badge { font-size: 11px; font-weight: 600; text-transform: uppercase;
-      letter-spacing: .04em; color: #a1a1aa; }
-    .dash-broken-reason { font-size: 12px; color: #b4b4bb; margin-top: 4px; }
+      letter-spacing: .04em; color: var(--text-faint); }
+    .dash-broken-reason { font-size: 12px; color: var(--text-faint); margin-top: 4px; }
   `;
 }
 
 // The vanilla render script embedded in the file. It reads `window.__DASHBOARD__`, lays
 // each card on a CSS grid, and draws chart cards with the inlined Chart.js. All text is
 // set via textContent (never innerHTML) so a label/heading can't inject markup.
-function renderScript(): string {
+function renderScript(style: DashboardStyle): string {
+  const palette = accentRamp(style).chart.map((c) => `'${c}'`).join(',');
   return `
 (function () {
   var D = window.__DASHBOARD__;
-  var PALETTE = ['#2563eb','#16a34a','#ea580c','#9333ea','#0891b2','#dc2626','#ca8a04','#4f46e5'];
+  // The SAME ramp the stylesheet above uses. It was a fixed eight-colour list,
+  // which meant an exported dark or Executive dashboard drew its chrome in the
+  // chosen style and its bars in the default blue-green-orange.
+  var PALETTE = [${palette}];
   var root = document.getElementById('dash-root');
   document.title = D.name || 'Dashboard';
   var h1 = document.createElement('h1'); h1.className = 'dash-title'; h1.textContent = D.name || 'Dashboard';
@@ -378,13 +524,13 @@ export function buildSelfContainedHtml(bundle: unknown, chartLibJs: string): str
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${titleText || 'Dashboard'}</title>
-<style>${styleBlock()}</style>
+<style>${styleBlock(clean.style)}</style>
 </head>
 <body>
-<div id="dash-root" class="dash-root"></div>
+<div id="dash-root" class="dash-root ${styleClasses(clean.style)}"></div>
 <script>${lib}</script>
 <script>window.__DASHBOARD__ = ${embedJson(clean)};</script>
-<script>${renderScript()}</script>
+<script>${renderScript(clean.style)}</script>
 </body>
 </html>`;
 }

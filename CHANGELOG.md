@@ -17,6 +17,17 @@ All notable changes to Ordinate are documented here. Format based on
   moves until you press Apply, and one Undo puts the whole thing back, including the charts it
   retyped and any it created. It names tiles by their titles, and refuses rather than guessing when
   a name could mean two of them.
+- **Dashboard styles — pick how a dashboard looks.** Four app-owned presets: **Clean** (the look
+  that shipped), **Executive** (muted paper palette, serif KPI figures, cards that lift off the
+  page), **Dense** (tighter grid and smaller type) and **Dark** (dark surface, same accent). Choose
+  one from **Style…** in a dashboard's ⋯ menu — four live thumbnails of *your* grid, previewed
+  instantly and undoable until you Apply — or before you build, from the strip on the Assistant's
+  dashboard proposal. The Assistant understands "make it dark", "make it denser" and "executive
+  style", and hands you the same one-click confirm. A style travels with the dashboard: it is saved
+  on the record and carried into shared HTML, PDF and PNG exports, so a snapshot looks like what its
+  author saw. Charts re-skin with the sheet. Nothing moves: every preset keeps the same twelve
+  columns, so a restyle never repositions a card. The Assistant only ever names one of the four
+  presets — it never writes CSS or picks a colour.
 - **Ask the Assistant to build you a dashboard.** Say "build me a sales dashboard for Adidas US
   Sales" in the Assistant or the Home ask bar and you get a proposal you can look at — its name, why
   it was proposed, each chart drawn with your real numbers, and a plain list of anything the app

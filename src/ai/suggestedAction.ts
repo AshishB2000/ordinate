@@ -16,6 +16,10 @@
 // code that re-decides everything for itself; this field only says which door
 // to knock on.
 //
+// The one kind that carries a third field is 'style', and it carries a PRESET
+// NAME, not a style: the app owns the four triples in dashboards.ts, so the
+// model picks a door here too — it never names a colour and never writes CSS.
+//
 // ── Why a sentinel, and not JSON ────────────────────────────────────────────
 // The chat answer STREAMS (askCopilot's onDelta → copilot:ask:chunk → the live
 // bubble). A JSON envelope would mean either buffering the whole answer before
@@ -28,6 +32,8 @@
 // the turn is simply an answer with no proposal. That is the common case for a
 // weaker local CLI, and it must degrade quietly.
 
+import type { DashboardStylePreset } from '../analysis/dashboards';
+
 /** The marker opening the action line. Chosen to be something no prose answer
  *  would produce on its own, and to survive a model that strips markdown. */
 export const ACTION_MARKER = '@@ACTION';
@@ -38,12 +44,38 @@ export const ACTION_MARKER = '@@ACTION';
 export const MAX_INTENT = 400;
 
 /** The whitelist. Anything not on it becomes 'none'. */
-export type SuggestedActionKind = 'dashboard' | 'edit' | 'chart' | 'step' | 'calc' | 'none';
-const KINDS: ReadonlySet<string> = new Set(['dashboard', 'edit', 'chart', 'step', 'calc', 'none']);
+export type SuggestedActionKind = 'dashboard' | 'edit' | 'chart' | 'step' | 'calc' | 'style' | 'none';
+const KINDS: ReadonlySet<string> = new Set(['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'none']);
+
+// The four preset NAMES, spelled out here and imported only as a TYPE.
+//
+// `import type` is erased at compile time, so this file keeps the purity its
+// header claims. A runtime import would not: dashboards.ts pulls in visuals.ts,
+// which pulls in `electron`, `fs`, projects and datasets — every plain-node test
+// that requires dashboards.ts has to stub `electron` through `Module._load`
+// first, and forcing that on a string-in/value-out parser (and on the test that
+// drives it) to reach four string literals is a bad trade.
+//
+// The Record below is the drift guard that makes the duplication safe in BOTH
+// directions: a preset renamed or removed in dashboards.ts leaves a key here
+// that is no longer in the union, and a preset ADDED there leaves this Record
+// non-exhaustive. Either way tsc fails on this file until the list is updated,
+// which is stronger than a runtime equality test and costs nothing.
+const STYLE_PRESET_TABLE: Record<DashboardStylePreset, true> = {
+  clean: true,
+  executive: true,
+  dense: true,
+  dark: true,
+};
+const STYLE_PRESETS: ReadonlySet<string> = new Set(Object.keys(STYLE_PRESET_TABLE));
 
 export interface SuggestedAction {
   kind: SuggestedActionKind;
   intent: string;
+  /** Which named style to apply. Present ONLY when `kind === 'style'`; the app
+   *  expands it through DASHBOARD_STYLE_PRESETS, so the model never names a
+   *  colour and never writes CSS. */
+  preset?: DashboardStylePreset;
 }
 
 /** What an absent or unusable action means. Never null — callers switch on
@@ -57,13 +89,20 @@ export const NO_ACTION: SuggestedAction = { kind: 'none', intent: '' };
 const ACTION_PROMPT =
   '\n\nAFTER your answer, output ONE final line, exactly:\n' +
   ACTION_MARKER + ' {"kind":"<kind>","intent":"<intent>"}\n' +
-  'where <kind> is one of: dashboard, edit, chart, step, calc, none. Use "dashboard" when the user is ' +
-  'asking to BUILD or CREATE a new dashboard, report or overview; "edit" when the FACTS show a '
-  + 'dashboard is already open and they are asking to CHANGE it — add, remove, move, retype or rename '
-  + 'something on it; "chart" when they want a single ' +
-  'chart or visualisation; "step" when they want the data cleaned or filtered; "calc" when they ' +
-  'want a new calculated column or formula; and "none" for an ordinary question. <intent> is a ' +
+  'where <kind> is one of: dashboard, edit, chart, step, calc, style, none. Use "dashboard" when the ' +
+  'user is asking to BUILD or CREATE a NEW dashboard, report or overview; "edit" when the FACTS ' +
+  'show a dashboard is already open and they are asking to CHANGE it — add, remove, move, retype ' +
+  'or rename something on it; "chart" when they want a ' +
+  'single chart or visualisation; "step" when they want the data cleaned or filtered; "calc" when ' +
+  'they want a new calculated column or formula; "style" when they want the dashboard they ' +
+  'already have to LOOK different (darker, denser, more executive or more formal) rather than ' +
+  'to contain anything new; and "none" for an ordinary question. <intent> is a ' +
   'short restatement of what they want built, in their own terms, or "" when kind is none. ' +
+  'For "style" ONLY, the line carries one extra field:\n' +
+  ACTION_MARKER + ' {"kind":"style","intent":"<intent>","preset":"<preset>"}\n' +
+  'where <preset> is EXACTLY one of: clean, executive, dense, dark. Lowercase, one word, ' +
+  'nothing else. Pick the closest of the four; never name a colour, never write CSS, and never ' +
+  'invent a preset. If none of the four fits what they asked for, use kind "none" instead. ' +
   'This line is machine-read and never shown; write nothing after it.';
 
 /** The chat system prompt. Lives here so the answer contract and the action
@@ -93,11 +132,30 @@ export function validateAction(raw: unknown): SuggestedAction {
     ? (o.kind as SuggestedActionKind)
     : 'none';
   if (kind === 'none') return NO_ACTION;
+
+  // A 'style' action is worth exactly as much as its preset. The app owns the
+  // styling; the model's whole job on this kind is to pick one of OUR four
+  // names, so a preset that is missing, miscased, misspelled or invented means
+  // it did not actually pick one. Defaulting would be the worse failure: the
+  // user says "make it dark", the model writes "darker", and a one-click
+  // confirm silently restyles their dashboard to `clean`. So an unusable preset
+  // collapses the whole action to NO_ACTION — the prose answer stands with no
+  // proposal behind it, which is the same rule this file's header already
+  // states for a malformed action, applied one level down.
+  if (kind === 'style' && !(typeof o.preset === 'string' && STYLE_PRESETS.has(o.preset))) {
+    return NO_ACTION;
+  }
+
   const intentRaw = typeof o.intent === 'string' ? o.intent : '';
   // Collapse whitespace before clamping: a model that pads with newlines would
   // otherwise spend the budget on them, and this string goes back into a prompt.
   const intent = intentRaw.replace(/\s+/g, ' ').trim().slice(0, MAX_INTENT);
-  return { kind, intent };
+  // The returned literal IS the whitelist — every key not named here is dropped.
+  // `preset` is named only on the style branch, so a model cannot smuggle a
+  // restyle in on a 'dashboard' proposal by tacking the field on.
+  return kind === 'style'
+    ? { kind, intent, preset: o.preset as DashboardStylePreset }
+    : { kind, intent };
 }
 
 /**

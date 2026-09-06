@@ -455,11 +455,17 @@ contextBridge.exposeInMainWorld('hub', {
   // filters; a dashboard is a published snapshot OF one). ────────────────────
   listAnalyses: (projectId: string) => ipcRenderer.invoke('analysis:list', { projectId }),
   getAnalysis: (projectId: string, id: string) => ipcRenderer.invoke('analysis:get', { projectId, id }),
-  createAnalysis: (payload: { projectId: string; name: string; sheets?: any; filters?: any }) =>
+  // `style` is the {theme,density,accent} triple; MAIN clamps it to the three
+  // closed enums (dashboards.sanitizeStyle), so this side stays untyped `any`
+  // like every other structured payload here — the renderer never gets a vote
+  // on what a valid style is.
+  createAnalysis: (payload: { projectId: string; name: string; sheets?: any; filters?: any; style?: any }) =>
     ipcRenderer.invoke('analysis:create', payload),
   renameAnalysis: (projectId: string, id: string, name: string) =>
     ipcRenderer.invoke('analysis:rename', { projectId, id, name }),
-  updateAnalysis: (projectId: string, id: string, patch: { name?: string; sheets?: any; filters?: any }) =>
+  // A supplied `style` REPLACES the stored one wholesale — send the whole
+  // triple, not one axis.
+  updateAnalysis: (projectId: string, id: string, patch: { name?: string; sheets?: any; filters?: any; style?: any }) =>
     ipcRenderer.invoke('analysis:update', { projectId, id, ...patch }),
   deleteAnalysis: (projectId: string, id: string) => ipcRenderer.invoke('analysis:delete', { projectId, id }),
   // PUBLISH — take a SNAPSHOT of the analysis as a dashboard. Each referenced
