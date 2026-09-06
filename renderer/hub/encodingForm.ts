@@ -70,7 +70,23 @@ interface EncodingFormApi {
   getFilters(): any[];
   /** The columns currently loaded (callers need these for warnings/naming). */
   getColumns(): EncCol[];
+  /**
+   * Reflect what MAIN actually did to the category dimension — the date grain it
+   * picked when the encoding named none, and the inline note when it capped a
+   * long tail. The form never derives either: both need the rows, and the app
+   * does the math in main. Setting the select's `.value` here fires no `change`,
+   * so this cannot loop back into a recompute.
+   */
+  applyCategoryInfo(info: EncCategoryInfo | null | undefined): void;
   show(on: boolean): void;
+}
+
+/** The `category` block of a `visual:data` reply (src/analysis/vizData.ts). */
+interface EncCategoryInfo {
+  kind?: string;
+  grain?: string;
+  binned?: boolean;
+  note?: string;
 }
 
 type EncAgg = 'sum' | 'avg' | 'count' | 'min' | 'max' | 'none';
@@ -104,6 +120,8 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
 
   const q = <T extends HTMLElement>(cls: string): T => root.querySelector('.' + cls) as T;
   const catSel = q<HTMLSelectElement>('js-enc-cat');
+  const grainSel = q<HTMLSelectElement>('js-enc-grain');
+  const catNote = q<HTMLElement>('js-enc-cat-note');
   const serSel = q<HTMLSelectElement>('js-enc-series');
   const geoSel = q<HTMLSelectElement>('js-enc-geo');
   const valuesList = q<HTMLElement>('js-enc-values');
@@ -214,6 +232,74 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     // A saved encoding can name a column the dataset no longer has; fall back to
     // the first real option rather than leaving the select on a phantom value.
     if (sel.value !== value && items.length) sel.value = items[0].value;
+  }
+
+  /**
+   * The Category options: text and date columns as plain options, numeric ones
+   * under a "Bin numeric…" group.
+   *
+   * The group is a WARNING, not a filter. A measure column is still choosable as
+   * a dimension — that is legitimate — but picking one used to draw one bar per
+   * distinct value, so a price column with 5,000 values drew 5,000 bars. Main
+   * bins a numeric category into ten equal-width ranges, and the group label is
+   * what says so before the click rather than after it.
+   */
+  function fillCategory(value: string): void {
+    if (!catSel) return;
+    catSel.innerHTML = '';
+    const opt = (c: EncCol): HTMLOptionElement => {
+      const o = document.createElement('option');
+      o.value = c.name;
+      o.textContent = c.name;
+      return o;
+    };
+    const dims = columns.filter((c) => c.type !== 'number');
+    const nums = columns.filter((c) => c.type === 'number');
+    dims.forEach((c) => catSel.appendChild(opt(c)));
+    if (nums.length) {
+      const grp = document.createElement('optgroup');
+      grp.label = 'Bin numeric…';
+      nums.forEach((c) => grp.appendChild(opt(c)));
+      catSel.appendChild(grp);
+    }
+    // No preset, or a saved encoding naming a column the dataset no longer has:
+    // fall back to the first real option rather than leaving the select blank on
+    // a phantom value. `catSel.value = ''` does NOT report a mismatch (it is
+    // stored verbatim with selectedIndex -1), so the empty case is checked first.
+    const first = dims[0] || nums[0];
+    catSel.value = value;
+    if ((!value || catSel.value !== value) && first) catSel.value = first.name;
+  }
+
+  /** The grain control belongs to a date category and nothing else. */
+  function catType(): string {
+    const name = catSel ? catSel.value : '';
+    const col = columns.find((c) => c.name === name);
+    return col ? col.type : '';
+  }
+
+  function syncGrain(): void {
+    if (!grainSel) return;
+    grainSel.hidden = catType() !== 'date';
+  }
+
+  /**
+   * The dimension moved. Main re-decides both of the things it owns: the grain
+   * (the old one belonged to a different column) and the note (which described a
+   * tail this column does not have). `applyCategoryInfo` refills them when the
+   * recompute this triggers comes back — clearing first is what keeps a stale
+   * "top 50" note off a column that has twelve values.
+   */
+  function categoryChanged(): void {
+    if (grainSel) grainSel.value = '';
+    setCatNote('');
+    syncGrain();
+  }
+
+  function setCatNote(text: string): void {
+    if (!catNote) return;
+    catNote.textContent = text;
+    catNote.hidden = !text;
   }
 
   // ── Measures ──────────────────────────────────────────────────────────────
@@ -377,8 +463,13 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     filters.push({ type: 'filter', column: columns[0] ? columns[0].name : '', op: '' });
     renderFilters();
   });
+  // BEFORE the shared handler below, which is the one that calls onChange: the
+  // recompute that fires from there must read the CLEARED grain, or a dimension
+  // switch would ask main to bucket the new column by the old column's grain.
+  if (catSel) catSel.addEventListener('change', () => categoryChanged());
   [catSel, serSel, geoSel].forEach((s) =>
     s && s.addEventListener('change', () => { syncSingles(); opts.onChange(); }));
+  if (grainSel) grainSel.addEventListener('change', () => opts.onChange());
   // Leaving the select without choosing puts the pill back.
   [catSel, serSel].forEach((s) => s && s.addEventListener('blur', () => syncSingles()));
 
@@ -388,14 +479,13 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     setColumns(cols: EncCol[], preset?: any, presetFilters?: any[]): void {
       columns = Array.isArray(cols) ? cols : [];
 
-      // Category: every column, text/date before numbers — a dimension is far
-      // more often one of those.
-      const catItems = columns
-        .slice()
-        .sort((a, b) => (a.type === 'number' ? 1 : 0) - (b.type === 'number' ? 1 : 0))
-        .map((c) => ({ value: c.name, label: c.name }));
-      const presetCat = preset && typeof preset.category === 'string' ? preset.category : '';
-      fill(catSel, catItems, presetCat || (catItems[0] ? catItems[0].value : ''));
+      // Category: text/date columns first, numbers under "Bin numeric…" — a
+      // dimension is far more often one of the former, and choosing one of the
+      // latter now means ten ranges rather than one bar per distinct value.
+      fillCategory(preset && typeof preset.category === 'string' ? preset.category : '');
+      if (grainSel) grainSel.value = preset && typeof preset.grain === 'string' ? preset.grain : '';
+      setCatNote('');
+      syncGrain();
 
       const textCols = columns.filter((c) => c.type !== 'number');
       fill(
@@ -437,6 +527,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
         if (!catSel) return false;
         catSel.value = column;
         if (catSel.value !== column) return false; // not an option (shouldn't happen)
+        categoryChanged(); // assigning `.value` fires no `change` — do it by hand
       } else if (well === 'series') {
         if (!serSel) return false;
         serSel.value = column;
@@ -473,6 +564,12 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       };
       const series = serSel ? serSel.value : '';
       if (series) enc.series = series;
+      // The grain travels WITH the encoding, so a tile, a published snapshot and
+      // an Assistant plan all bucket the same dates the same way. Only for a date
+      // category — main ignores it elsewhere, and carrying it would let a stale
+      // grain reappear when the dimension goes back to being a date.
+      const grain = grainSel && !grainSel.hidden ? grainSel.value : '';
+      if (grain) enc.grain = grain;
       const geoLevel = geoSel ? geoSel.value : '';
       if (geoLevel) enc.geo = { level: geoLevel };
       return enc;
@@ -501,6 +598,18 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
 
     getColumns(): EncCol[] {
       return columns.slice();
+    },
+
+    applyCategoryInfo(info: EncCategoryInfo | null | undefined): void {
+      syncGrain();
+      if (grainSel && !grainSel.hidden && info && typeof info.grain === 'string') {
+        // Only fills a BLANK select: main echoes the grain it used, which on the
+        // second and later computes is the one already showing. Overwriting
+        // unconditionally would be harmless today and a lie the moment main ever
+        // clamps a grain the user chose.
+        if (!grainSel.value) grainSel.value = info.grain;
+      }
+      setCatNote(info && typeof info.note === 'string' ? info.note : '');
     },
 
     show(on: boolean): void {

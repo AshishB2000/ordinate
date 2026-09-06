@@ -18,6 +18,8 @@ import * as projects from '../app/projects';
 import * as datasets from '../data/datasets';
 import { sanitizeSteps } from '../data/transforms';
 import type { FilterStep } from '../data/transforms';
+import { isDateGrain } from './categoryKey';
+import type { DateGrain } from './categoryKey';
 
 export type VizAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max' | 'none';
 
@@ -35,6 +37,17 @@ export interface VizEncoding {
   values: VizMeasure[]; // one or more measures → one or more series
   series?: string; // OPTIONAL split/pivot column (category × series → grid of series)
   geo?: VizGeo; // present only for map chart types
+  /**
+   * OPTIONAL roll-up for a DATE category (day/week/month/quarter/year). Absent
+   * means "pick the finest grain that keeps the axis readable", which is what
+   * every chart saved before this key existed gets — so no migration.
+   *
+   * The other two category rewrites (10 bins for a number column, the top-50
+   * cap for a text one) are deliberately NOT stored: they are derived from the
+   * column's declared type and the filtered data, so an old saved visual over a
+   * high-cardinality column is fixed by reading it, not by re-saving it.
+   */
+  grain?: DateGrain;
 }
 
 // Whitelisted chart-styling overrides — the SAME object shape the capture-flow ⋯
@@ -161,6 +174,11 @@ export function sanitizeEncoding(raw: unknown): VizEncoding {
 
   const enc: VizEncoding = { category, values };
   if (typeof o.series === 'string' && o.series) enc.series = o.series;
+  // Whitelisted against DATE_GRAINS, like every other enum here: a model- or
+  // plan-supplied grain survives, anything else is DROPPED rather than clamped
+  // to a default, because an absent grain already means "choose one from the
+  // data" and silently substituting 'day' would be a different chart.
+  if (isDateGrain(o.grain)) enc.grain = o.grain;
   if (o.geo && typeof o.geo === 'object') {
     const level = (o.geo as Record<string, unknown>).level;
     if (typeof level === 'string' && GEO_LEVELS.has(level)) enc.geo = { level: level as VizGeo['level'] };

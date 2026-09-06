@@ -1026,10 +1026,8 @@
             <div class="ds-steps-list" id="ds-steps-list"></div>
 
             <div class="ds-prepare-controls">
-              <div class="ds-step-add-wrap">
-                <button class="btn" type="button" id="ds-step-add">+ Add step</button>
-                <div class="ds-step-type-menu" id="ds-step-type-menu" hidden></div>
-              </div>
+              <button class="btn" type="button" id="ds-step-add"
+                      aria-haspopup="menu" aria-expanded="false">+ Add step</button>
               <button class="btn" type="button" id="ds-suggest-btn">Suggest steps with the Assistant</button>
               <button class="btn" type="button" id="ds-calc-suggest-btn">✨ Suggest calculated field</button>
             </div>
@@ -2188,9 +2186,22 @@
        first mounted form for every instance. -->
   <template id="viz-encoding-tpl">
     <div class="viz-encoding" hidden>
+      <!-- The grain select and the note carry NO id: nothing labels them (the
+           select is aria-labelled, the note is prose), and an id here would have
+           to be suffix-rewritten per mount like the ones that do. hub.css orders
+           both last in this row, so the wells variant can keep APPENDING its
+           category pill to it. -->
       <div class="viz-build-row" data-well="category">
         <label class="viz-field-label" for="viz-category-select">Category</label>
         <select class="viz-select js-enc-cat" id="viz-category-select" aria-label="Category (dimension)"></select>
+        <select class="viz-select viz-grain js-enc-grain" aria-label="Date grain" hidden>
+          <option value="day">Day</option>
+          <option value="week">Week</option>
+          <option value="month">Month</option>
+          <option value="quarter">Quarter</option>
+          <option value="year">Year</option>
+        </select>
+        <p class="viz-enc-note js-enc-cat-note" hidden></p>
       </div>
 
       <div class="viz-build-row" data-well="values">

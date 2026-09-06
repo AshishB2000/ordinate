@@ -40,6 +40,17 @@
 //   4. Every aggregate is wrapped in `CAST(… AS DOUBLE)`. `sum(INTEGER)` is
 //      HUGEINT in DuckDB, which the bridge hands to JS as a decimal STRING.
 //
+// ── The category key ─────────────────────────────────────────────────────────
+// A Category on a high-cardinality column draws thousands of unreadable marks,
+// so `vizData` bins a number column into ten buckets, rolls a date column up to
+// a grain and caps a text column at its top 50. `resolveCatKey` reproduces
+// those decisions with pre-queries over the SAME relation and the SAME WHERE as
+// the aggregate that follows, and `residentCategory` spells the resulting key
+// in SQL. SQL returns a bucket ID; `analysis/categoryKey` writes every label,
+// on both paths. A date column carrying anything but the two canonical shapes
+// is declined outright — SQL has no `Date.parse`, and a half-implemented
+// grammar would bucket the leftovers differently from the reference.
+//
 // ── The ordinal ──────────────────────────────────────────────────────────────
 // `transforms.stepGroupAggregate` emits groups in FIRST-SEEN row order. A bare
 // `GROUP BY` does not: measured on this repo's own 60k fixture, DuckDB returns
@@ -85,9 +96,20 @@ import type { Cell, FilterStep } from '../data/transforms';
 import type { FilterOp } from '../data/filterOps';
 import { FILTER_OPS, COMPARE_OPS, LIST_OPS } from '../data/filterOps';
 import type { MetricAggregation } from '../analysis/metricValue';
+import {
+  CATEGORY_CAP, DATE_GRAINS, OTHER_LABEL, OTHER_NOTE,
+  binPlan, chooseGrain, isDateGrain,
+} from '../analysis/categoryKey';
+import type { CategoryInfo, DateGrain } from '../analysis/categoryKey';
 import { sqlEmpty } from './sqlGen';
 import { relationSql } from './parquetStore';
+// The group key — expressions and labels — lives in its own file since this one
+// hit the 800-line cap. One-way: nothing there imports back.
+import { bomSafe, catKeyExpr, catLabel, dateBucketSql, phys, sqlCanonicalDate, sqlNum } from './residentCategory';
+import type { ResidentCatKey } from './residentCategory';
 import * as duck from './duckdb';
+
+export type { ResidentCatKey } from './residentCategory';
 
 // ── Public shapes ────────────────────────────────────────────────────────────
 
@@ -200,6 +222,7 @@ export function aggregateResident(
   category: string,
   measures: ResidentMeasure[],
   filters?: FilterStep[],
+  catKey: ResidentCatKey = { kind: 'raw' },
 ): ResidentChartData | null {
   try {
     const cols = schemaOf(src);
@@ -210,11 +233,11 @@ export function aggregateResident(
     const list = Array.isArray(measures) ? measures : [];
     if (list.length === 0) return null;
 
-    const out = runAggregate(src, cols, gi, list, filters, ordinalMode);
+    const out = runAggregate(src, cols, gi, list, filters, catKey);
     if (out === null) return null;
 
     const catType = cols[gi].type;
-    const labels = out.map((r) => labelOf(r.g0 ?? null, catType));
+    const labels = out.map((r) => catLabel(r.g0 ?? null, catType, catKey));
     const series = list.map((m, i) => ({
       name: measureLabel(m),
       // vizData.numOrNull: ONLY a finite number survives; anything else is null,
@@ -227,6 +250,149 @@ export function aggregateResident(
   }
 }
 
+/**
+ * The pre-queries that turn a category column into a `ResidentCatKey`, plus the
+ * `CategoryInfo` the renderer shows — the resident twin of the first half of
+ * `vizData.rewriteCategory`.
+ *
+ * Every probe below runs against the SAME relation with the SAME WHERE as the
+ * aggregate that follows, through `filterPredicates`/`relationSql`, so the bins,
+ * the grain and the top-50 cut describe exactly what will be plotted.
+ *
+ * `null` means "no resident answer" — notably a date column carrying anything
+ * but the two canonical shapes, which SQL does not implement and the JS
+ * `Date.parse` fallback does.
+ */
+export function resolveCatKey(
+  src: ResidentSource,
+  category: string,
+  measures: ResidentMeasure[],
+  filters?: FilterStep[],
+  grain?: DateGrain,
+): { key: ResidentCatKey; info: CategoryInfo } | null {
+  try {
+    const cols = schemaOf(src);
+    if (!cols) return null;
+    if (typeof category !== 'string' || category === '') return null;
+    const gi = colIndex(cols, category);
+    if (gi < 0) return null;
+    const list = Array.isArray(measures) ? measures : [];
+    if (list.length === 0) return null;
+
+    const type = cols[gi].type;
+    if (type === 'number') return binKey(src, cols, gi, filters);
+    if (type === 'date') return dateKey(src, cols, gi, filters, grain);
+    return textKey(src, cols, gi, list[0], filters);
+  } catch {
+    return null;
+  }
+}
+
+/** min/max of the FILTERED numeric cells → the ten bin edges. */
+function binKey(
+  src: ResidentSource,
+  cols: ParsedColumn[],
+  gi: number,
+  filters: FilterStep[] | undefined,
+): { key: ResidentCatKey; info: CategoryInfo } | null {
+  const params: duck.DuckValue[] = [];
+  const where = whereClause(cols, filters, params);
+  const n = sqlNum(phys(gi));
+  const sql =
+    `SELECT CAST(min(${n}) AS DOUBLE) AS lo, CAST(max(${n}) AS DOUBLE) AS hi ` +
+    `FROM ${plainFrom(src.parquetPath)}${where};`;
+  const out = duck.query(sql, params);
+  if (out.length === 0) return null;
+  // binPlan is shared with the JS path, so the degenerate cases (one distinct
+  // value, no numeric cells at all) collapse to one bucket identically.
+  const plan = binPlan(finiteOrNull(out[0].lo), finiteOrNull(out[0].hi));
+  return { key: { kind: 'bin', ...plan }, info: { kind: 'number', binned: true } };
+}
+
+/**
+ * The canonical-shape probe, and — when the encoding did not name a grain — the
+ * five distinct-bucket counts that pick the default. One query either way.
+ */
+function dateKey(
+  src: ResidentSource,
+  cols: ParsedColumn[],
+  gi: number,
+  filters: FilterStep[] | undefined,
+  grain: DateGrain | undefined,
+): { key: ResidentCatKey; info: CategoryInfo } | null {
+  const p = phys(gi);
+  const d = sqlCanonicalDate(p);
+  const named = isDateGrain(grain) ? grain : null;
+
+  // Empty is null OR '' OR whitespace, spelled out by sqlEmpty rather than
+  // trim(). CASE WHEN rather than FILTER (WHERE …), as everywhere in this file.
+  const select = [`CAST(sum(CASE WHEN NOT ${sqlEmpty(p)} AND ${d} IS NULL THEN 1 ELSE 0 END) AS DOUBLE) AS bad`];
+  if (!named) {
+    for (const g of DATE_GRAINS) select.push(`CAST(count(DISTINCT ${dateBucketSql(d, g)}) AS DOUBLE) AS g_${g}`);
+  }
+
+  const params: duck.DuckValue[] = [];
+  const where = whereClause(cols, filters, params);
+  const out = duck.query(`SELECT ${select.join(', ')} FROM ${plainFrom(src.parquetPath)}${where};`, params);
+  if (out.length === 0) return null;
+  // sum() over zero qualifying rows is NULL, and zero rows means zero unparsable
+  // cells — so `?? 0` is the right reading, not a defensive coalesce.
+  if ((finiteOrNull(out[0].bad) ?? 0) !== 0) return null;
+
+  let g: DateGrain;
+  if (named) {
+    g = named;
+  } else {
+    const counts = {} as Record<DateGrain, number>;
+    // count(DISTINCT …) skips NULLs, exactly as the JS side counts only parsed
+    // buckets. An unreadable count is Infinity so chooseGrain coarsens past it.
+    for (const x of DATE_GRAINS) counts[x] = finiteOrNull(out[0][`g_${x}`]) ?? Infinity;
+    g = chooseGrain(counts);
+  }
+  return { key: { kind: 'date', grain: g }, info: { kind: 'date', grain: g } };
+}
+
+/**
+ * The top-(CATEGORY_CAP + 1) probe. Asking for one more group than we keep is
+ * what answers BOTH questions in one query: fewer rows come back and the column
+ * is under the cap, so no rewrite happens at all.
+ */
+function textKey(
+  src: ResidentSource,
+  cols: ParsedColumn[],
+  gi: number,
+  first: ResidentMeasure,
+  filters: FilterStep[] | undefined,
+): { key: ResidentCatKey; info: CategoryInfo } | null {
+  const p = phys(gi);
+  const params: duck.DuckValue[] = [];
+  const where = whereClause(cols, filters, params);
+  const agg = aggExpr(cols, colIndex(cols, first.column), first.aggregation);
+
+  // DESC NULLS LAST then the ordinal: the JS twin sorts the first-seen group
+  // list by value descending with nulls last and breaks ties on position.
+  const out = runOrdered(
+    src.parquetPath,
+    (from, ord) =>
+      `SELECT ${bomSafe(p)} AS g0, ${agg} AS m0 FROM ${from}${where} ` +
+      `GROUP BY ${p} ORDER BY m0 DESC NULLS LAST, min(${ord}) LIMIT ${CATEGORY_CAP + 1};`,
+    params,
+  );
+  if (out.length <= CATEGORY_CAP) return { key: { kind: 'raw' }, info: { kind: 'text' } };
+
+  const keep: string[] = [];
+  let keepNull = false;
+  for (const r of out.slice(0, CATEGORY_CAP)) {
+    const v = r.g0;
+    if (v == null) keepNull = true;
+    else keep.push(typeof v === 'string' ? v : String(v));
+  }
+  return {
+    key: { kind: 'other', keep, keepNull, label: OTHER_LABEL },
+    info: { kind: 'text', note: OTHER_NOTE },
+  };
+}
+
 // ── Ordinal mode ─────────────────────────────────────────────────────────────
 //
 // `file_row_number=true` is the ordinal (see the header). If a DuckDB build
@@ -237,38 +403,70 @@ export function aggregateResident(
 type OrdinalMode = 'file_row_number' | 'row_number';
 let ordinalMode: OrdinalMode = 'file_row_number';
 
+/**
+ * Run a statement that needs the ordinal, downgrading the mode ONCE and
+ * permanently if the build rejects `file_row_number`. `sqlFor` is called again
+ * on the retry with the fallback FROM/ordinal; `params` is unchanged by the
+ * ordinal, so the same array is reused.
+ */
+function runOrdered(
+  parquetPath: string,
+  sqlFor: (from: string, ord: string) => string,
+  params: duck.DuckValue[],
+): duck.DuckRow[] {
+  const first = orderedFrom(parquetPath, ordinalMode);
+  try {
+    return duck.query(sqlFor(first.from, first.ord), params);
+  } catch (err) {
+    if (ordinalMode === 'file_row_number' && /file_row_number/i.test(String((err as Error)?.message ?? ''))) {
+      ordinalMode = 'row_number';
+      const next = orderedFrom(parquetPath, 'row_number');
+      return duck.query(sqlFor(next.from, next.ord), params);
+    }
+    throw err;
+  }
+}
+
 function runAggregate(
   src: ResidentSource,
   cols: ParsedColumn[],
   gi: number,
   measures: ResidentMeasure[],
   filters: FilterStep[] | undefined,
-  mode: OrdinalMode,
+  catKey: ResidentCatKey,
 ): duck.DuckRow[] | null {
+  // Params are positional, so they are pushed in STATEMENT-TEXT order: the key
+  // expression's, then the WHERE's.
   const params: duck.DuckValue[] = [];
+  const key = catKeyExpr(cols, gi, catKey, params);
   const where = whereClause(cols, filters, params);
-  const { from, ord } = orderedFrom(src.parquetPath, mode);
 
-  const key = groupKeyExpr(cols, gi);
-  const select = [`${key.label} AS g0`];
-  measures.forEach((m, i) => {
-    const ci = colIndex(cols, m.column);
-    select.push(`${aggExpr(cols, ci, m.aggregation)} AS m${i}`);
-  });
+  const aggs = measures.map((m, i) => `${aggExpr(cols, colIndex(cols, m.column), m.aggregation)} AS m${i}`);
 
-  const sql =
-    `SELECT ${select.join(', ')} FROM ${from}${where} ` +
-    `GROUP BY ${key.group} ORDER BY min(${ord});`;
-
-  try {
-    return duck.query(sql, params);
-  } catch (err) {
-    if (mode === 'file_row_number' && /file_row_number/i.test(String((err as Error)?.message ?? ''))) {
-      ordinalMode = 'row_number';
-      return runAggregate(src, cols, gi, measures, filters, 'row_number');
-    }
-    throw err;
+  if (catKey.kind === 'raw') {
+    // Unchanged: the label projection and the group key differ here (bomSafe vs
+    // the raw column) and neither carries a parameter.
+    return runOrdered(
+      src.parquetPath,
+      (from, ord) =>
+        `SELECT ${key.label} AS g0, ${aggs.join(', ')} FROM ${from}${where} ` +
+        `GROUP BY ${key.group} ORDER BY min(${ord});`,
+      params,
+    );
   }
+  // A BUCKETED key is one expression serving as both the label and the group,
+  // and it carries bound parameters. Computing it once in a subquery and
+  // grouping by NAME keeps each parameter bound exactly once — repeating the
+  // expression in GROUP BY would mean binding the same values twice, in an
+  // order that has to stay in step with the statement text.
+  return runOrdered(
+    src.parquetPath,
+    (from, ord) =>
+      `SELECT __k AS g0, ${aggs.join(', ')} FROM ` +
+      `(SELECT ${key.label} AS __k, ${ord} AS __o, * FROM ${from}${where}) ` +
+      `GROUP BY __k ORDER BY min(__o);`,
+    params,
+  );
 }
 
 // ── FROM targets ─────────────────────────────────────────────────────────────
@@ -292,56 +490,9 @@ function orderedFrom(parquetPath: string, mode: OrdinalMode): { from: string; or
   return { from: `(SELECT row_number() OVER () AS __ord, * FROM ${base})`, ord: '__ord' };
 }
 
-// ── Physical column expressions ──────────────────────────────────────────────
-//
-// Physical names are positional `c0..cN`, the same contract `sqlGen.ts` and
-// `parquetStore.ts` use. User-facing names never reach SQL, so identifier
-// quoting, duplicate names and column-name injection are all structurally out of
-// reach.
-
-function phys(i: number): string {
-  return `c${i}`;
-}
-
-/** A finite JS number, or NULL. Mirrors `sqlGen`'s private `sqlNum`. */
-function sqlNum(p: string): string {
-  return `CASE WHEN isfinite(TRY_CAST(${p} AS DOUBLE)) THEN TRY_CAST(${p} AS DOUBLE) END`;
-}
-
 /** `transforms.cellToString` for a stored cell: NULL becomes ''. */
 function sqlStr(p: string): string {
   return `coalesce(CAST(${p} AS VARCHAR), '')`;
-}
-
-// The transport in src/duckdb.ts loses exactly ONE leading U+FEFF from every
-// returned string (documented there; below the JS layer, unfixable there).
-// Doubling a leading BOM at projection time is an exact inverse, and a value
-// that does not start with one is untouched — the same fix `parquetStore.readTable`
-// applies. Group LABELS are user data, so they get it; aggregates are DOUBLEs
-// and cannot be affected.
-const BOM = 'chr(65279)';
-function bomSafe(p: string): string {
-  const v = `CAST(${p} AS VARCHAR)`;
-  return `CASE WHEN starts_with(${v}, ${BOM}) THEN ${BOM} || ${v} ELSE ${v} END`;
-}
-
-/**
- * The GROUP BY key and its label projection.
- *
- * `transforms.stepGroupAggregate` keys on the ROUND-TRIPPED cell, so a `number`
- * column groups on the JS number (`'1'` and `'1.0'` are one group; a
- * non-numeric or non-finite value is `null`) while a text/date column groups on
- * the string verbatim (`null` and `''` stay two distinct groups). Grouping on
- * the raw VARCHAR would split `1` from `1.0`; grouping on a cast would fuse
- * `'007'` with `'7'`. Hence: cast ONLY when the DECLARED type is number.
- */
-function groupKeyExpr(cols: ParsedColumn[], gi: number): { group: string; label: string } {
-  const p = phys(gi);
-  if (cols[gi].type === 'number') {
-    const n = sqlNum(p);
-    return { group: n, label: n };
-  }
-  return { group: p, label: bomSafe(p) };
 }
 
 /**
@@ -522,24 +673,6 @@ function sqlInPredicate(
 }
 
 // ── Result decoding ──────────────────────────────────────────────────────────
-
-/**
- * The inverse of `String(cell)`, identical to `parquetStore.toCell` /
- * `pipelineDuck.toCell`. NOT a re-parse: `''` stays `''` for a text column.
- */
-function toCell(raw: duck.DuckValue, type: ColumnType): Cell {
-  if (raw == null) return null;
-  if (type !== 'number') return typeof raw === 'string' ? raw : String(raw);
-  const n = typeof raw === 'number' ? raw : Number(raw);
-  return Number.isFinite(n) ? n : null;
-}
-
-/** `vizData.labelVal` over a round-tripped group key. */
-function labelOf(raw: duck.DuckValue, type: ColumnType): string | number {
-  const cell = toCell(raw, type);
-  if (typeof cell === 'number') return cell;
-  return cell == null ? '' : String(cell);
-}
 
 /** `vizData.numOrNull`: only a finite number survives. */
 function finiteOrNull(raw: duck.DuckValue): number | null {

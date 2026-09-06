@@ -13,6 +13,7 @@ let expSteps: any[] = [];
 let dsStepEditIndex = -1; // -1 = adding a new step; >=0 = editing that index
 let dsStepEditType = '';
 let dsSuggestedSteps: any[] = []; // AI-proposed steps awaiting user confirmation
+let dsTypeMenuClose: (() => void) | null = null; // openMiniMenu's closer, while the Add-step menu is up
 
 const STEP_TYPES: Array<{ type: string; label: string }> = [
   { type: 'calculated_field', label: 'Calculated field' },
@@ -227,7 +228,6 @@ async function removeStep(i: number): Promise<void> {
 function openStepEditor(type: string, index: number): void {
   dsStepEditType = type;
   dsStepEditIndex = index;
-  hideTypeMenu();
   const editor = pEl('ds-step-editor');
   if (!editor) return;
   editor.innerHTML = '';
@@ -543,26 +543,6 @@ async function saveStepFromForm(getStep: () => any): Promise<void> {
   if (applyStepResult(res)) closeStepEditor();
 }
 
-// ── Step-type chooser menu ────────────────────────────────────────────────────
-function renderTypeMenu(): void {
-  const menu = pEl('ds-step-type-menu');
-  if (!menu) return;
-  menu.innerHTML = '';
-  STEP_TYPES.forEach((t) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'ds-step-type-item';
-    b.textContent = t.label;
-    b.addEventListener('click', () => openStepEditor(t.type, -1));
-    menu.appendChild(b);
-  });
-}
-
-function hideTypeMenu(): void {
-  const m = pEl('ds-step-type-menu');
-  if (m) m.hidden = true;
-}
-
 // ── AI suggest steps (structure only; never auto-applies) ─────────────────────
 async function handleSuggestSteps(): Promise<void> {
   if (!currentProjectId || !expId) return;
@@ -712,7 +692,7 @@ function resetPreparePanel(): void {
   dsSuggestedSteps = [];
   const panel = pEl('ds-prepare-panel');
   if (panel) panel.hidden = true;
-  hideTypeMenu();
+  if (dsTypeMenuClose) dsTypeMenuClose();
   closeStepEditor();
   const out = pEl('ds-suggest-out');
   if (out) out.hidden = true;
@@ -747,19 +727,33 @@ function initPrepare(): void {
   const prepBtn = pEl('ds-prepare-btn');
   if (prepBtn) prepBtn.addEventListener('click', () => togglePreparePanel());
 
+  // The step-type chooser is openMiniMenu (chartControls.ts) — the hub's own
+  // popover, which positions in the body, flips up when it would run off the
+  // bottom, and closes on outside-click/Esc. As an absolutely-positioned child
+  // of the rail it was instead clipped by the rail's own overflow, which is how
+  // an eight-item list read as three.
   const addBtn = pEl('ds-step-add');
-  const typeMenu = pEl('ds-step-type-menu');
-  if (addBtn && typeMenu) {
-    addBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const show = typeMenu.hidden;
-      if (show) renderTypeMenu();
-      typeMenu.hidden = !show;
-    });
-    document.addEventListener('click', (e) => {
-      if (typeMenu.hidden) return;
-      const t = e.target as Node;
-      if (t !== addBtn && !typeMenu.contains(t)) typeMenu.hidden = true;
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      // A second click dismisses: openMiniMenu's outside-click handler spares
+      // its own anchor, so without this the button would only ever reopen.
+      if (dsTypeMenuClose) { dsTypeMenuClose(); return; }
+      dsTypeMenuClose = openMiniMenu(addBtn, (menu: HTMLElement, close: () => void) => {
+        STEP_TYPES.forEach((t) => {
+          const row = document.createElement('button');
+          row.type = 'button';
+          row.className = 'chart-menu-item';
+          row.textContent = t.label;
+          row.addEventListener('click', () => { close(); openStepEditor(t.type, -1); });
+          menu.appendChild(row);
+        });
+      }, () => {
+        addBtn.setAttribute('aria-expanded', 'false');
+        dsTypeMenuClose = null;
+      });
+      // After the open, not before: openMiniMenu closes any other mini menu
+      // first, and that close runs our onClose.
+      addBtn.setAttribute('aria-expanded', 'true');
     });
   }
 

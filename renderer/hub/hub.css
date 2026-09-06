@@ -4970,13 +4970,28 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 }
 .ds-explorer.tab-prepare .ds-tab-body {
   flex-direction: row;
-  align-items: flex-start;
+  align-items: stretch;
+  min-height: 0;
 }
+/* The rail is as tall as the row it shares with the grid — `stretch`, not a
+   `100vh` arithmetic guess. The old cap made a short box with a scrollbar of
+   its own inside a page that already scrolls, and (because it was an overflow
+   container) it also CLIPPED the absolutely-positioned Add-step dropdown to a
+   few rows. Nothing here scrolls until the rail's own content is taller than
+   the row. */
 .ds-explorer.tab-prepare #ds-tabp-prepare {
   flex: 0 0 340px;
   min-width: 0;
-  max-height: calc(100vh - 260px);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
+}
+/* Fills the stretched rail so the panel's border reaches the bottom of the row
+   instead of stopping under the last step. */
+.ds-explorer.tab-prepare .ds-prepare-panel {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .ds-explorer.tab-prepare .ds-grid-pane {
   flex: 1 1 auto;
@@ -5419,6 +5434,18 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   padding: 8px;
   border-radius: var(--r-md);
   max-width: none;
+}
+/* The grain select and the "top 50" note hang off the Category row, ordered
+   last by `order` rather than by DOM position: the wells variant APPENDS its
+   pill to this same row, and would otherwise land underneath them. They stay
+   direct children (no wrapper) so that hiding both leaves no flex gap behind. */
+.viz-grain, .viz-enc-note { order: 1; }
+.viz-encoding:not(.is-wells) .viz-grain { width: 100%; }
+.viz-enc-note {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-dim, var(--muted));
 }
 .viz-values-list {
   display: flex;
@@ -8815,37 +8842,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-}
-.ds-step-add-wrap {
-  position: relative;
-}
-.ds-step-type-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 30;
-  min-width: 180px;
-  padding: 6px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.ds-step-type-item {
-  text-align: left;
-  background: none;
-  border: none;
-  padding: 6px 8px;
-  font-size: 13px;
-  color: var(--text-strong);
-  border-radius: 5px;
-  cursor: pointer;
-}
-.ds-step-type-item:hover {
-  background: var(--hover, rgba(127, 127, 127, 0.12));
 }
 .ds-step-editor {
   display: flex;

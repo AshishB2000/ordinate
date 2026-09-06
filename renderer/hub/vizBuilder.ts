@@ -149,11 +149,15 @@ async function recomputeVisual(): Promise<void> {
   }
   if (!res || res.ok === false) {
     setVizWarnings([(res && res.error) || 'Could not compute the visual.']);
+    vizForm!.applyCategoryInfo(null);
     clearVizArea();
     return;
   }
   const data = res.data || { labels: [], series: [] };
   setVizWarnings(Array.isArray(res.warnings) ? res.warnings : []);
+  // What main did to the dimension: the date grain it settled on, and the note
+  // when it capped a long tail. Only main knows — both need the rows.
+  vizForm!.applyCategoryInfo(res.category);
 
   const area = vizEl('viz-area');
   const mount = vizEl('viz-switcher-mount');

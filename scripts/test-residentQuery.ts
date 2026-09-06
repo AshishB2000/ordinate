@@ -97,7 +97,17 @@ function diffAggregate(
     values: measures.map((m) => ({ column: m.column, aggregation: m.aggregation })),
   };
   const want = vizData.buildVizData(f.columns, f.rows, encoding, filters).data;
-  const got = rq.aggregateResident(f.src, category, measures, filters);
+  // The category key (10 bins for a number column, a grain for a date one, the
+  // top-50 cap for a text one) is resolved by the SAME pre-queries `ipc/visuals`
+  // runs, so the pairing compared here is the pairing the app ships. Resolving
+  // it separately is what lets `aggregateResident` still be called bare below,
+  // where the raw group key is the thing under test.
+  const plan = rq.resolveCatKey(f.src, category, measures, filters);
+  if (!plan) {
+    ok(`${label}: resolveCatKey produced a key`, false);
+    return;
+  }
+  const got = rq.aggregateResident(f.src, category, measures, filters, plan.key);
   if (!got) {
     ok(`${label}: aggregateResident returned a result`, false);
     return;
@@ -528,10 +538,24 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
   }
   const f = fixture(cols, rows);
 
-  const want = vizData.buildVizData(f.columns, f.rows, {
-    category: 'cat',
-    values: [{ column: 'v', aggregation: 'sum' }],
-  }).data;
+  // The reference here is `transforms.stepGroupAggregate` DIRECTLY, not
+  // buildVizData: this block is about the ORDINAL over 997 groups, and
+  // buildVizData would cap a text category that wide at its top 50 (see
+  // analysis/categoryKey) — which is the right chart and the wrong reference
+  // for an ordering test. stepGroupAggregate is what the ordinal has to
+  // reproduce, and it is untouched by the cap.
+  const transformsRef: typeof import('../src/data/transforms') = require('../src/data/transforms');
+  const grouped = transformsRef.applyPipeline({ columns: f.columns, rows: f.rows }, [
+    {
+      type: 'group_aggregate',
+      groupBy: ['cat'],
+      aggregations: [{ column: 'v', fn: 'sum', as: 'm0' }],
+    },
+  ]);
+  const want = {
+    labels: grouped.rows.map((r) => (r[0] == null ? '' : (r[0] as string | number))),
+    series: [{ name: 'sum of v', values: grouped.rows.map((r) => (typeof r[1] === 'number' ? r[1] : null)) }],
+  };
   ok(`60k: reference produced ${G} groups`, want.labels.length === G);
 
   let allSame = true;
