@@ -17,6 +17,20 @@ import * as dashboards from './dashboards';
 import type { PlanDrop, PlannedCalcField } from './analysisPlan';
 import { loadPlanContext, validatePlan } from './analysisPlan';
 
+/**
+ * A plan turned into REAL records, minus the Analysis: the calculated fields and
+ * Visuals are already saved, and the cards are handed back for the caller to
+ * place. This is the ONE place a dashboard card is built.
+ */
+export interface PlanRecords {
+  name: string;
+  sheets: { name: string; cards: unknown[] }[];
+  visualIds: string[];
+  calculatedFields: { datasetId: string; name: string }[];
+  dropped: PlanDrop[];
+  warnings: string[];
+}
+
 export interface BuildResult {
   ok: true;
   analysis: analysis.Analysis;
@@ -29,19 +43,38 @@ export interface BuildResult {
   warnings: string[];
 }
 
-/** Flow packer, moved verbatim from the old draft handler: visual cards 6×6,
- *  left→right, wrapping at GRID_COLS. The app assigns geometry; the model never
- *  gets to. */
+// GEOMETRY IS THE APP'S, ENTIRELY — and it stays that way by adding no geometry
+// vocabulary at all. A plan cannot name an x, a y, a width or a height, so there
+// is nothing for a model to get wrong or to abuse. Size comes from the card KIND,
+// and a chart's width is DERIVED from how many charts share the sheet, which the
+// app counts for itself.
+//
+// Known ceiling: two stacked full-width charts is not expressible. Add a
+// `width: 'half' | 'full'` enum to PlannedVisual if a layout ever needs it —
+// that is still app-owned vocabulary, unlike raw coordinates.
+const KPI_W = 3;
+const KPI_H = 2;
+const CHART_H = 6;
+const TEXT_H = 2;
+
+/** Flow packer: left→right, wrapping at GRID_COLS. */
 function packer() {
   let cx = 0;
   let cy = 0;
   let rowH = 0;
-  return (w: number, h: number) => {
-    if (cx + w > dashboards.GRID_COLS) { cx = 0; cy += rowH; rowH = 0; }
-    const layout = { x: cx, y: cy, w, h };
-    cx += w;
-    if (h > rowH) rowH = h;
-    return layout;
+  return {
+    place(w: number, h: number) {
+      if (cx + w > dashboards.GRID_COLS) { cx = 0; cy += rowH; rowH = 0; }
+      const layout = { x: cx, y: cy, w, h };
+      cx += w;
+      if (h > rowH) rowH = h;
+      return layout;
+    },
+    /** Break to a fresh row. A KPI strip and the charts beneath it are separate
+     *  BANDS, not one flow: without this, two 3-wide KPIs leave exactly enough
+     *  room for a 6-wide chart beside them and the strip stops reading as a
+     *  strip. */
+    newRow() { if (cx > 0) { cx = 0; cy += rowH; rowH = 0; } },
   };
 }
 
@@ -59,10 +92,7 @@ function packer() {
  * Nothing here is special-cased: an AI calculated field is removable and
  * reorderable in Prepare exactly like a hand-written one.
  */
-export async function buildPlan(
-  projectId: string,
-  raw: unknown,
-): Promise<BuildResult | { ok: false; error: string }> {
+export async function buildPlanRecords(projectId: string, raw: unknown): Promise<PlanRecords> {
   const ctx = await loadPlanContext(projectId);
   const { plan, dropped } = validatePlan(raw, ctx);
 
@@ -99,8 +129,17 @@ export async function buildPlan(
     // loop, so sheet 2's first card inherited sheet 1's cursor and started N
     // rows down its own empty grid — every sheet after the first opened with a
     // band of blank rows above it. Each sheet is its own Page with its own grid.
-    const place = packer();
+    const pk = packer();
     const cards: unknown[] = [];
+
+    for (const m of sheet.metrics) {
+      cards.push({ type: 'metric', layout: pk.place(KPI_W, KPI_H), metric: m });
+    }
+    pk.newRow();
+
+    // One chart fills the sheet; two or more share the row. Counted here rather
+    // than declared in the plan — see the note on the packer above.
+    const chartW = sheet.visuals.length > 1 ? dashboards.GRID_COLS / 2 : dashboards.GRID_COLS;
     for (const pv of sheet.visuals) {
       let id = pv.visualId;
       if (pv.kind === 'new') {
@@ -116,16 +155,43 @@ export async function buildPlan(
       }
       if (!id) continue;
       visualIds.push(id);
-      cards.push({ type: 'visual', layout: place(6, 6), visualId: id });
+      cards.push({ type: 'visual', layout: pk.place(chartW, CHART_H), visualId: id });
+    }
+    pk.newRow();
+
+    for (const t of sheet.texts) {
+      cards.push({ type: 'text', layout: pk.place(dashboards.GRID_COLS, TEXT_H), ...t });
     }
     // sanitizeCards is the same whitelist a hand-built sheet goes through — a
     // sheet IS a dashboards.Page.
     sheets.push({ name: sheet.name, cards: dashboards.sanitizeCards(cards) });
   }
 
-  // 3. The Analysis.
-  const saved = await analysis.saveAnalysis(projectId, { name: plan.name, sheets });
-  if (!saved) return { ok: false, error: 'Could not create the dashboard' };
+  return { name: plan.name, sheets, visualIds, calculatedFields: appliedCalc, dropped, warnings };
+}
 
-  return { ok: true, analysis: saved, visualIds, calculatedFields: appliedCalc, dropped, warnings };
+/**
+ * The Assistant's entry point: records, then a NEW Analysis to hold them.
+ *
+ * The starter layouts deliberately do NOT come through here. They run against an
+ * Analysis that is already open, and `dashCurrent` is the live record the editor
+ * owns — main writing it behind the editor's back would be clobbered by the next
+ * debounced save. They call `buildPlanRecords` and let the renderer place the
+ * cards, which is the same rule dockEdit.ts already follows for edit deltas.
+ */
+export async function buildPlan(
+  projectId: string,
+  raw: unknown,
+): Promise<BuildResult | { ok: false; error: string }> {
+  const r = await buildPlanRecords(projectId, raw);
+  const saved = await analysis.saveAnalysis(projectId, { name: r.name, sheets: r.sheets });
+  if (!saved) return { ok: false, error: 'Could not create the dashboard' };
+  return {
+    ok: true,
+    analysis: saved,
+    visualIds: r.visualIds,
+    calculatedFields: r.calculatedFields,
+    dropped: r.dropped,
+    warnings: r.warnings,
+  };
 }
