@@ -551,7 +551,7 @@ function resolveByok():
 // routable — keep this list in sync with src/localCliRun.js.
 const RUNNABLE_LOCAL_CLIS = ['claude', 'antigravity', 'codex', 'grok', 'opencode', 'cursor'];
 
-export async function dispatch(systemPrompt: string, messages: NeutralMsg[], onDelta?: (delta: string) => void): Promise<CallResult> {
+export async function dispatch(systemPrompt: string, messages: NeutralMsg[], onDelta?: (delta: string) => void, opts?: { prose?: boolean }): Promise<CallResult> {
   const cfg = config.get();
   if ((cfg.executionMode || 'byok') === 'local') {
     const activeId = cfg.localCli && cfg.localCli.activeId;
@@ -562,7 +562,7 @@ export async function dispatch(systemPrompt: string, messages: NeutralMsg[], onD
           : errProvider2('No local CLI selected — pick a runnable local CLI in Execution mode.'),
       };
     }
-    return runLocalCli(activeId as string, systemPrompt, messages, {}); // onDelta unused → local CLI is reveal-on-complete (buffered)
+    return runLocalCli(activeId as string, systemPrompt, messages, opts); // onDelta unused → local CLI is reveal-on-complete (buffered)
   }
   const creds = resolveByok();
   if (creds.error) return { error: creds.error };
@@ -627,7 +627,7 @@ export async function explainText(userPrompt: string): Promise<{ ok: true; text:
     return { ok: false, errorType: 'not_ready', message: config.AI_NOT_CONFIGURED };
   }
   const messages: NeutralMsg[] = [{ role: 'user', text: userPrompt }];
-  const { rawText, error } = await dispatch(EXPLAIN_SYSTEM_PROMPT, messages);
+  const { rawText, error } = await dispatch(EXPLAIN_SYSTEM_PROMPT, messages, undefined, { prose: true });
   if (error) return error;
   const text = (rawText || '').trim();
   if (!text) return errBadReply();
@@ -663,7 +663,7 @@ export async function askCopilot(
   // The action line is withheld from the stream and stripped from the stored text
   // (./suggestedAction) — the user only ever sees prose.
   const filter = makeActionFilter(onDelta);
-  const { rawText, error } = await dispatch(CHAT_SYSTEM_PROMPT, messages, filter.onDelta);
+  const { rawText, error } = await dispatch(CHAT_SYSTEM_PROMPT, messages, filter.onDelta, { prose: true });
   // Release the tail held back in case it was the start of a marker.
   filter.flush();
   if (error) return error;
