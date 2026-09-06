@@ -19,6 +19,7 @@ import * as path from 'path';
 import { app } from 'electron';
 
 import * as config from './config';
+import * as execConfig from './execConfig';
 import * as projects from './projects';
 import * as datasets from '../data/datasets';
 import { parseFile, sourceKindForPath } from '../data/fileImport';
@@ -169,7 +170,7 @@ export async function seedSampleProject(): Promise<{ seeded: boolean; projectId?
     await markNoteCardDeletable(project.id, analysisId);
     // Home's Starred is a filter over Recent keyed on "type:id", so pinning the
     // real record is all it takes for the section to have something in it.
-    const starred = config.publicConfig().starred || [];
+    const starred = execConfig.publicConfig().starred || [];
     config.setStarred([...starred, 'analysis:' + analysisId]);
     if (built.dropped.length) {
       console.error('[sample] plan dropped', built.dropped.length, 'element(s):',

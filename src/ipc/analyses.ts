@@ -6,7 +6,7 @@ import * as planPreview from '../analysis/planPreview';
 import * as planBuild from '../analysis/planBuild';
 import { buildStarterPlan } from '../analysis/starterPlan';
 import * as delta from '../analysis/dashboardDelta';
-import * as config from '../app/config';
+import * as execConfig from '../app/execConfig';
 
 // Analyses IPC — list/get/create/rename/update/delete an Analysis (the AUTHORING
 // container), plus the AI layout draft channel `analysis:draft` (MOVED from the
@@ -300,7 +300,7 @@ export async function draftDashboardEdit(
   try {
     const a = await analysis.getAnalysis(projectId, analysisId);
     if (!a) return { ok: false, error: 'That dashboard could not be read.' };
-    if (!config.executionReady()) return { ok: false, notReady: true };
+    if (!execConfig.executionReady()) return { ok: false, notReady: true };
 
     const planCtx = await plan.loadPlanContext(projectId);
     const tiles = await analysis.listAnalysisTiles(projectId, a);

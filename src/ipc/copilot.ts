@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import * as config from '../app/config';
+import * as execConfig from '../app/execConfig';
 import * as copilot from '../ai/copilot';
 import * as projects from '../app/projects';
 import * as datasets from '../data/datasets';
@@ -277,7 +278,7 @@ export function register() {
       // ONLY when an askId is present AND a model is configured — so with no model
       // the ask short-circuits to not_ready and the chips stay invisible. Scoped
       // by askId so a stale ask's chips are dropped and Ask/dock never cross.
-      const emit: ActivityEmit = aid && config.executionReady()
+      const emit: ActivityEmit = aid && execConfig.executionReady()
         ? (step) => { try { event.sender.send('copilot:ask:activity', { askId: aid, step }); } catch (_) { /* window gone */ } }
         : NO_ACTIVITY;
       // STREAMING deltas: only BYOK models actually stream (analyzeStream.ts);

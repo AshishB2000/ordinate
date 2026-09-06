@@ -7,7 +7,7 @@
 //
 // SECURITY (see SECURITY REVIEW in the commit/PR):
 //  - The binary executed is ONLY the path captured by Milestone 2 detection
-//    (config.getLocalCliResult(id).resolvedPath). Never a bare command name,
+//    (execConfig.getLocalCliResult(id).resolvedPath). Never a bare command name,
 //    never a string built from user/AI/config content.
 //  - spawn() with an ARGS ARRAY, never shell:true. Prompt text is passed as a
 //    single argv element (Claude: stdin; Antigravity: the -p value) — never
@@ -30,7 +30,7 @@ import * as fsp from 'fs/promises';
 import { spawn } from 'child_process';
 import type { ChildProcess } from 'child_process';
 import { app, nativeImage } from 'electron';
-import * as config from '../app/config';
+import * as execConfig from '../app/execConfig';
 import { wrapCommand } from './disclaim';
 
 const TIMEOUT_MS = 90000;      // CLI cold-starts are slower than HTTP.
@@ -260,7 +260,7 @@ const CLAUDE_NAME = 'Claude Code';
 const CLAUDE_HINT = 'needs sign-in — run `claude` once, then test again.';
 
 async function runClaude(systemPrompt: string, messages: CliMessage[]): Promise<CliRunResult> {
-  const rec = config.getLocalCliResult('claude');
+  const rec = execConfig.getLocalCliResult('claude');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { error: errProvider(CLAUDE_NAME, 'Claude Code not detected — rescan in Execution mode.') };
 
@@ -280,7 +280,7 @@ async function runClaude(systemPrompt: string, messages: CliMessage[]): Promise<
     // Curated, user-selected model (see CLAUDE_MODELS); empty → omit --model and
     // use the CLI's own configured model. A bad value surfaces as a normal
     // provider/bad_reply error from the spawn below — not swallowed.
-    const model = config.getLocalCliModel('claude');
+    const model = execConfig.getLocalCliModel('claude');
     const args = [
       '-p',
       '--output-format', 'json',
@@ -331,7 +331,7 @@ const AGY_NAME = 'Antigravity (Google)';
 const AGY_HINT = 'needs sign-in — run `agy` once, then test again.';
 
 async function runAntigravity(systemPrompt: string, messages: CliMessage[], opts?: { prose?: boolean }): Promise<CliRunResult> {
-  const rec = config.getLocalCliResult('antigravity');
+  const rec = execConfig.getLocalCliResult('antigravity');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { error: errProvider(AGY_NAME, 'Antigravity (Google) not detected — rescan in Execution mode.') };
 
@@ -348,7 +348,7 @@ async function runAntigravity(systemPrompt: string, messages: CliMessage[], opts
     }
 
     const prompt = `${systemPrompt}\n\n${buildPrompt(messages, imageAbs)}`;
-    const model = config.getLocalCliModel('antigravity');
+    const model = execConfig.getLocalCliModel('antigravity');
 
     // Args: only fixed literal flags + the detection-resolved path + the user's
     // model from agy's own list. Prompt CONTENT is a single argv element.
@@ -400,7 +400,7 @@ const CODEX_NAME = 'Codex CLI';
 const CODEX_HINT = 'needs sign-in — run `codex` once, then test again.';
 
 async function runCodex(systemPrompt: string, messages: CliMessage[], opts?: { prose?: boolean }): Promise<CliRunResult> {
-  const rec = config.getLocalCliResult('codex');
+  const rec = execConfig.getLocalCliResult('codex');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { error: errProvider(CODEX_NAME, 'Codex CLI not detected — rescan in Execution mode.') };
 
@@ -420,7 +420,7 @@ async function runCodex(systemPrompt: string, messages: CliMessage[], opts?: { p
     // imageRef=null: codex attaches the image itself via -i, so the prompt needn't
     // point at a file. systemPrompt prepended (no system-prompt flag).
     const prompt = `${systemPrompt}\n\n${buildPrompt(messages, null)}`;
-    const model = config.getLocalCliModel('codex');
+    const model = execConfig.getLocalCliModel('codex');
 
     // Fixed literal flags only; the user's model (if any) is from codex's own set.
     // read-only sandbox: analysis writes nothing. skip-git-repo-check: the temp
@@ -489,7 +489,7 @@ const GROK_NAME = 'Grok CLI';
 const GROK_HINT = 'needs an xAI API key — set GROK_API_KEY, then test again.';
 
 async function runGrok(systemPrompt: string, messages: CliMessage[], opts?: { prose?: boolean }): Promise<CliRunResult> {
-  const rec = config.getLocalCliResult('grok');
+  const rec = execConfig.getLocalCliResult('grok');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { error: errProvider(GROK_NAME, 'Grok CLI not detected — rescan in Execution mode.') };
 
@@ -509,7 +509,7 @@ async function runGrok(systemPrompt: string, messages: CliMessage[], opts?: { pr
     // the image is attached and embed its absolute path so grok auto-attaches it.
     let prompt = `${systemPrompt}\n\n${buildPrompt(messages, null)}`;
     if (imageAbs) prompt += `\n\nThe screenshot to analyze is attached (located at ${imageAbs}).`;
-    const model = config.getLocalCliModel('grok');
+    const model = execConfig.getLocalCliModel('grok');
 
     // Fixed literal flags only; the user's model (if any) is from grok's own set.
     const args = [
@@ -571,7 +571,7 @@ function opencodeImageMiss(s: string | null | undefined): boolean {
 }
 
 async function runOpenCode(systemPrompt: string, messages: CliMessage[], opts?: { prose?: boolean }): Promise<CliRunResult> {
-  const rec = config.getLocalCliResult('opencode');
+  const rec = execConfig.getLocalCliResult('opencode');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { error: errProvider(OPENCODE_NAME, 'OpenCode not detected — rescan in Execution mode.') };
 
@@ -590,7 +590,7 @@ async function runOpenCode(systemPrompt: string, messages: CliMessage[], opts?: 
     // imageRef=null: the image is delivered via -f, not a path in the prompt.
     // systemPrompt prepended (opencode has no system-prompt flag).
     const prompt = `${systemPrompt}\n\n${buildPrompt(messages, null)}`;
-    const model = config.getLocalCliModel('opencode'); // 'provider/model' or ''
+    const model = execConfig.getLocalCliModel('opencode'); // 'provider/model' or ''
 
     // Message FIRST (positional), then -f LAST so the array flag can't swallow it.
     const args = ['run', prompt, '--pure', '--dir', dir];
@@ -659,7 +659,7 @@ const CURSOR_NAME = 'Cursor Agent';
 const CURSOR_HINT = 'needs an API key — set CURSOR_API_KEY or run `cursor-agent login`, then test again.';
 
 async function runCursor(systemPrompt: string, messages: CliMessage[], opts?: { prose?: boolean }): Promise<CliRunResult> {
-  const rec = config.getLocalCliResult('cursor');
+  const rec = execConfig.getLocalCliResult('cursor');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { error: errProvider(CURSOR_NAME, 'Cursor Agent not detected — rescan in Execution mode.') };
 
@@ -679,7 +679,7 @@ async function runCursor(systemPrompt: string, messages: CliMessage[], opts?: { 
     // path points to). systemPrompt prepended (no system-prompt flag).
     let prompt = `${systemPrompt}\n\n${buildPrompt(messages, null)}`;
     if (imageAbs) prompt += `\n\nThe screenshot to analyze is the image at ${imageAbs}`;
-    const model = config.getLocalCliModel('cursor');
+    const model = execConfig.getLocalCliModel('cursor');
 
     // Fixed literal flags only; the user's model (if any) is from cursor's own set.
     const args = [
@@ -744,7 +744,7 @@ interface ModelListResult { ok: boolean; models: string[]; reason?: 'not_install
 // detection-resolved agy path with the fixed `models` arg. Returns { ok, models,
 // reason? } — never fabricates a list; callers fall back to "Default" on !ok.
 export async function listAntigravityModels(): Promise<ModelListResult> {
-  const rec = config.getLocalCliResult('antigravity');
+  const rec = execConfig.getLocalCliResult('antigravity');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { ok: false, models: [], reason: 'not_installed' };
   const out = await runChild(bin, ['models'], app.getPath('userData'), '', AGY_MODELS_TIMEOUT_MS);
@@ -760,7 +760,7 @@ export async function listAntigravityModels(): Promise<ModelListResult> {
 // description/aliases lines. It needs NO auth, so Grok's picker populates even when
 // unconnected. Parse the id from each "<id> — …" line (em-dash only on id lines).
 export async function listGrokModels(): Promise<ModelListResult> {
-  const rec = config.getLocalCliResult('grok');
+  const rec = execConfig.getLocalCliResult('grok');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { ok: false, models: [], reason: 'not_installed' };
   const out = await runChild(bin, ['models'], app.getPath('userData'), '', AGY_MODELS_TIMEOUT_MS, process.env);
@@ -775,7 +775,7 @@ export async function listGrokModels(): Promise<ModelListResult> {
 // `opencode models` prints one "provider/model" per line (no auth needed; reflects
 // the user's configured providers + the free tier). Keep bare-token lines only.
 export async function listOpenCodeModels(): Promise<ModelListResult> {
-  const rec = config.getLocalCliResult('opencode');
+  const rec = execConfig.getLocalCliResult('opencode');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { ok: false, models: [], reason: 'not_installed' };
   const out = await runChild(bin, ['models'], app.getPath('userData'), '', AGY_MODELS_TIMEOUT_MS);
@@ -794,7 +794,7 @@ export async function listOpenCodeModels(): Promise<ModelListResult> {
 // the leading id token from each "<id> - …" line; the header has no " - " so it's
 // skipped.
 export async function listCursorModels(): Promise<ModelListResult> {
-  const rec = config.getLocalCliResult('cursor');
+  const rec = execConfig.getLocalCliResult('cursor');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { ok: false, models: [], reason: 'not_installed' };
   const out = await runChild(bin, ['--list-models'], app.getPath('userData'), '', AGY_MODELS_TIMEOUT_MS, process.env);

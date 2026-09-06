@@ -1,5 +1,6 @@
 import { ipcMain, app, dialog, BrowserWindow, MessageBoxOptions } from 'electron';
 import * as config from '../app/config';
+import * as execConfig from '../app/execConfig';
 import { testProvider } from '../ai/analyze';
 import * as history from '../app/history';
 
@@ -25,7 +26,7 @@ export function register({ getHubWindow, notifyKeyChanged, entryData, entryThrea
   // ponytail: untrusted renderer payloads — any, validated field-by-field below.
   ipcMain.handle('local:save', (_e, { endpoint }: any) => {
     if (typeof endpoint !== 'string' || !endpoint.trim()) return { ok: false };
-    config.setOllamaEndpoint(endpoint.trim());
+    execConfig.setOllamaEndpoint(endpoint.trim());
     notifyKeyChanged();
     return { ok: true };
   });
@@ -138,7 +139,7 @@ export function register({ getHubWindow, notifyKeyChanged, entryData, entryThrea
     const timer = setTimeout(() => ctrl.abort(), 12000);
 
     try {
-      const key = await config.getApiKey(prov);
+      const key = await execConfig.getApiKey(prov);
       const ollamaEndpoint = (config.get().providers?.ollama?.endpoint || 'http://localhost:11434').replace(/\/$/, '');
       let res: any, models: any[] = [];
 
@@ -226,14 +227,14 @@ export function register({ getHubWindow, notifyKeyChanged, entryData, entryThrea
   // Save the chosen model for a specific provider.
   ipcMain.handle('model:save', (_e, { model, provider }: any) => {
     if (typeof model === 'string' && model.trim()) {
-      config.setModel(model.trim(), provider);
+      execConfig.setModel(model.trim(), provider);
     }
     return { ok: true };
   });
 
   // Remove the stored key for a specific provider and notify the hub.
   ipcMain.handle('key:clear', (_e, { provider }: any = {}) => {
-    config.clearProviderKey(provider);
+    execConfig.clearProviderKey(provider);
     notifyKeyChanged();
     return { ok: true };
   });
@@ -241,14 +242,14 @@ export function register({ getHubWindow, notifyKeyChanged, entryData, entryThrea
   // Save the API key for a specific provider.
   ipcMain.handle('key:save', async (_e, { provider, key }: any) => {
     if (typeof provider !== 'string' || typeof key !== 'string') return { ok: false };
-    const result = await config.setApiKey(key, provider);
+    const result = await execConfig.setApiKey(key, provider);
     if (result.ok) notifyKeyChanged();
     return result;
   });
 
   // Switch the active provider (which one is used for captures).
   ipcMain.handle('provider:activate', (_e, { provider }: any) => {
-    const result = config.setActiveProvider(provider);
+    const result = execConfig.setActiveProvider(provider);
     if (result.ok) notifyKeyChanged();
     return result;
   });
@@ -257,14 +258,14 @@ export function register({ getHubWindow, notifyKeyChanged, entryData, entryThrea
 
   // Set execution mode ('local' | 'byok').
   ipcMain.handle('exec:setMode', (_e, { mode }: any) => {
-    const result = config.setExecutionMode(mode);
+    const result = execConfig.setExecutionMode(mode);
     if (result.ok) notifyKeyChanged();
     return result;
   });
 
   // Persist the memory-model choice (setting-only — no memory step consumes it yet).
   ipcMain.handle('memory:setModel', (_e, { fields }: any) => {
-    const result = config.setMemoryModel(fields);
+    const result = execConfig.setMemoryModel(fields);
     if (result.ok) notifyKeyChanged();
     return result;
   });
@@ -272,7 +273,7 @@ export function register({ getHubWindow, notifyKeyChanged, entryData, entryThrea
   // Save editable fields for a byok provider (apiKey/baseUrl/maxTokens/model).
   ipcMain.handle('byok:saveProvider', (_e, { provider, fields }: any) => {
     if (typeof provider !== 'string' || !fields || typeof fields !== 'object') return { ok: false };
-    const result = config.setByokProvider(provider, fields);
+    const result = execConfig.setByokProvider(provider, fields);
     if (result.ok) notifyKeyChanged();
     return result;
   });
@@ -282,9 +283,9 @@ export function register({ getHubWindow, notifyKeyChanged, entryData, entryThrea
   // otherwise executionMode stays 'local' and the readiness gate ignores BYOK
   // (New capture would keep doing nothing despite a connected provider).
   ipcMain.handle('byok:activate', (_e, { provider }: any) => {
-    const result = config.setByokActiveProvider(provider);
+    const result = execConfig.setByokActiveProvider(provider);
     if (result.ok) {
-      config.setExecutionMode('byok');
+      execConfig.setExecutionMode('byok');
       notifyKeyChanged();
     }
     return result;
@@ -298,16 +299,16 @@ export function register({ getHubWindow, notifyKeyChanged, entryData, entryThrea
     try {
       const r = await testProvider(provider);
       if (typeof provider === 'string') {
-        config.setByokVerified(provider, Boolean(r && r.ok));
+        execConfig.setByokVerified(provider, Boolean(r && r.ok));
         // A passing test means "AI connected". If local execution isn't usable,
         // adopt BYOK as the active mode so capture actually works without the
         // user also having to flip the Local/BYOK toggle by hand.
-        if (r && r.ok) config.adoptByokModeIfLocalUnready(provider);
+        if (r && r.ok) execConfig.adoptByokModeIfLocalUnready(provider);
       }
       notifyKeyChanged();
       return r;
     } catch (err: any) {
-      if (typeof provider === 'string') config.setByokVerified(provider, false);
+      if (typeof provider === 'string') execConfig.setByokVerified(provider, false);
       notifyKeyChanged();
       console.error('[byok:test] error', err && err.message);
       return { ok: false, errorType: 'unknown', message: 'Test failed. Try again.' };
@@ -332,7 +333,7 @@ export function register({ getHubWindow, notifyKeyChanged, entryData, entryThrea
 
   // Home "Starred" pins — read the current list, or replace it wholesale. A flat
   // array of "type:id" keys; no secrets, so both directions are renderer-safe.
-  ipcMain.handle('starred:get', () => config.publicConfig().starred);
+  ipcMain.handle('starred:get', () => execConfig.publicConfig().starred);
   ipcMain.handle('starred:set', (_e, { ids }: any = {}) => config.setStarred(ids));
 
   // Delete-my-data — destructive, irreversible, LOCAL ONLY. Runs ONLY on an
@@ -397,7 +398,7 @@ export function register({ getHubWindow, notifyKeyChanged, entryData, entryThrea
   // the broad status payload. BYOK keys are stored plaintext on disk by design.
   ipcMain.handle('byok:revealKey', (_e, { provider }: any = {}) => {
     if (typeof provider !== 'string') return '';
-    const e = config.getByokProvider(provider);
+    const e = execConfig.getByokProvider(provider);
     return (e && e.apiKey) || '';
   });
 }

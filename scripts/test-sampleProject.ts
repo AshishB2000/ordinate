@@ -46,7 +46,7 @@ const projects: typeof import('../src/app/projects') = require('../src/app/proje
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const analysisStore: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
-const config: typeof import('../src/app/config') = require('../src/app/config');
+const execConfig: typeof import('../src/app/execConfig') = require('../src/app/execConfig');
 const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
 const ipcDashboards: typeof import('../src/ipc/dashboards') = require('../src/ipc/dashboards');
 
@@ -153,8 +153,8 @@ async function main(): Promise<void> {
 
   // ── Starred, so Home is not empty ────────────────────────────────────────
   ok('the dashboard is pinned to Home',
-    config.publicConfig().starred.includes('analysis:' + anList[0].id),
-    JSON.stringify(config.publicConfig().starred));
+    execConfig.publicConfig().starred.includes('analysis:' + anList[0].id),
+    JSON.stringify(execConfig.publicConfig().starred));
 
   // ── The renderer's copy of the dataset name ──────────────────────────────
   // homeAsk.ts swaps in sample-specific ask chips by matching this name, and the

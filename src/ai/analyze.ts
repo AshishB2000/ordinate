@@ -3,12 +3,19 @@
 
 import { net } from 'electron';
 import * as config from '../app/config';
+import * as execConfig from '../app/execConfig';
 import { runLocalCli } from '../cli/localCliRun';
 import { computeMetrics, deriveChartData } from '../formula/calc';
 import { writeHeadline, verifyHeadlineNumbers } from './headline';
 import { SUGGESTABLE_CHART_TYPES } from '../analysis/visuals';
 import { streamProvider } from './analyzeStream';
 import { CHAT_SYSTEM_PROMPT, makeActionFilter, splitAction, type SuggestedAction } from './suggestedAction';
+
+/** The one "no model is configured" reply. Six entry points returned this exact
+ *  object; a seventh would have copied it too. */
+function notReady() {
+  return { ok: false as const, errorType: 'not_ready' as const, message: execConfig.AI_NOT_CONFIGURED };
+}
 
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -521,9 +528,9 @@ function resolveByok():
   | { error?: undefined; provider: string; apiKey?: string | null; baseUrl?: string; model: string; maxTokens?: number | string } {
   // Only ever run a provider that is actually Connected (verified). A stale or
   // keyless active provider resolves to null → ask the user to connect one.
-  const provider = config.effectiveByokActive();
+  const provider = execConfig.effectiveByokActive();
   if (!provider) return { error: errNoKey() };
-  const entry = config.getByokProvider(provider); // includes apiKey — main only
+  const entry = execConfig.getByokProvider(provider); // includes apiKey — main only
   if (provider !== 'gateway' && !entry.apiKey) return { error: errNoKey() };
   if (provider === 'gateway' && !entry.baseUrl) {
     return { error: Object.assign(errProvider(), { detail: 'Gateway · set a base URL in Settings' }) };
@@ -575,7 +582,7 @@ function errProvider2(message: string): TypedError { return { ok: false, errorTy
 // Returns a typed result: { ok:true, message } or a typed error object.
 export async function testProvider(provider: string): Promise<TypedError | { ok: true; message: string }> {
   if (!ADAPTERS[provider]) return errUnknown();
-  const entry = config.getByokProvider(provider);
+  const entry = execConfig.getByokProvider(provider);
   if (provider !== 'gateway' && !entry.apiKey) return errNoKey();
   if (provider === 'gateway' && !entry.baseUrl) {
     return Object.assign(errProvider(), { message: 'Set a base URL for the gateway.' });
@@ -623,9 +630,7 @@ const EXPLAIN_SYSTEM_PROMPT =
   'Do NOT use markdown, code fences, or bullet lists. NEVER invent, round, or ' +
   'recompute any number — use only the exact figures given to you as facts.';
 export async function explainText(userPrompt: string): Promise<{ ok: true; text: string } | TypedError> {
-  if (!config.executionReady()) {
-    return { ok: false, errorType: 'not_ready', message: config.AI_NOT_CONFIGURED };
-  }
+  if (!execConfig.executionReady()) return notReady();
   const messages: NeutralMsg[] = [{ role: 'user', text: userPrompt }];
   const { rawText, error } = await dispatch(EXPLAIN_SYSTEM_PROMPT, messages, undefined, { prose: true });
   if (error) return error;
@@ -650,9 +655,7 @@ export async function askCopilot(
   contextFacts: string,
   question: string, onDelta?: (delta: string) => void,
 ): Promise<{ ok: true; text: string; suggestedAction: SuggestedAction } | TypedError> {
-  if (!config.executionReady()) {
-    return { ok: false, errorType: 'not_ready', message: config.AI_NOT_CONFIGURED };
-  }
+  if (!execConfig.executionReady()) return notReady();
   const prior: NeutralMsg[] = (Array.isArray(historyTurns) ? historyTurns : [])
     .filter((t) => t && (t.role === 'user' || t.role === 'assistant') && typeof t.text === 'string')
     .map((t) => ({ role: t.role, text: t.text }));
@@ -693,9 +696,7 @@ const SUGGEST_STEPS_SYSTEM_PROMPT =
   '  { "type": "rename_column", "from": "<col>", "to": "<new name>" }\n' +
   'Return ONLY the JSON array (use [] if no preparation is warranted).';
 export async function suggestSteps(summaryText: string): Promise<{ ok: true; steps: unknown[] } | TypedError> {
-  if (!config.executionReady()) {
-    return { ok: false, errorType: 'not_ready', message: config.AI_NOT_CONFIGURED };
-  }
+  if (!execConfig.executionReady()) return notReady();
   const messages: NeutralMsg[] = [{ role: 'user', text: summaryText }];
   const { rawText, error } = await dispatch(SUGGEST_STEPS_SYSTEM_PROMPT, messages);
   if (error) return error;
@@ -753,9 +754,7 @@ export async function suggestCharts(
   intent: string,
   count: number,
 ): Promise<{ ok: true; options: Array<Record<string, unknown>> } | TypedError> {
-  if (!config.executionReady()) {
-    return { ok: false, errorType: 'not_ready', message: config.AI_NOT_CONFIGURED };
-  }
+  if (!execConfig.executionReady()) return notReady();
   const n = Number.isFinite(count) && count > 0 ? Math.min(Math.floor(count), 6) : 3;
   let userText = summaryText + '\n\nPropose up to ' + n + ' charts.';
   // The user's own words are UNTRUSTED text: they go in the USER message,
@@ -820,9 +819,7 @@ const SUGGEST_CALC_FIELD_SYSTEM_PROMPT =
 export async function suggestCalcField(
   summaryText: string,
 ): Promise<{ ok: true; name: unknown; expression: unknown } | TypedError> {
-  if (!config.executionReady()) {
-    return { ok: false, errorType: 'not_ready', message: config.AI_NOT_CONFIGURED };
-  }
+  if (!execConfig.executionReady()) return notReady();
   const messages: NeutralMsg[] = [{ role: 'user', text: summaryText }];
   const { rawText, error } = await dispatch(SUGGEST_CALC_FIELD_SYSTEM_PROMPT, messages);
   if (error) return error;
@@ -877,9 +874,7 @@ const DRAFT_DASHBOARD_SYSTEM_PROMPT =
 export async function draftDashboard(
   inventoryText: string,
 ): Promise<{ ok: true; structure: unknown } | TypedError> {
-  if (!config.executionReady()) {
-    return { ok: false, errorType: 'not_ready', message: config.AI_NOT_CONFIGURED };
-  }
+  if (!execConfig.executionReady()) return notReady();
   const messages: NeutralMsg[] = [{ role: 'user', text: inventoryText }];
   const { rawText, error } = await dispatch(DRAFT_DASHBOARD_SYSTEM_PROMPT, messages);
   if (error) return error;

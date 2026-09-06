@@ -58,6 +58,7 @@ app.on('second-instance', () => {
 
 import { captureFrozenFrame, cropToRect, getActiveDisplay } from './app/capture';
 import * as config from './app/config';
+import * as execConfig from './app/execConfig';
 import * as localCli from './cli/localCli';
 import * as localCliRun from './cli/localCliRun';
 import { analyze, analyzeFollowup } from './ai/analyze';
@@ -335,7 +336,7 @@ function openPermission(): void {
 }
 
 // Detect Local CLIs ONCE at startup using the recovered PATH, so the capture
-// readiness gate (config.executionReady) is correct from the very FIRST hotkey
+// readiness gate (execConfig.executionReady) is correct from the very FIRST hotkey
 // press — without the user having to open Settings first. This is the missing
 // link that made New capture "do nothing" from a Finder launch: detection only
 // ran on settings-open, so the gate read a stale/empty cache and silently routed
@@ -344,7 +345,7 @@ function openPermission(): void {
 async function refreshLocalCliDetectionAtStartup(): Promise<void> {
   try {
     const results = await localCli.detectAll();
-    config.saveLocalCliDetection(results);
+    execConfig.saveLocalCliDetection(results);
     const installed = results.filter((r: any) => r && r.status === 'installed').map((r: any) => r.id);
     console.log('[localCli] startup detection complete — installed:', installed.join(', ') || 'none');
     notifyKeyChanged(); // refresh the hub's readiness badge if it's already open
@@ -431,7 +432,7 @@ ipcMain.on('hub:open', openHub);
 // Take-screenshot / new-capture: gate on execution readiness (Local CLI OR BYOK),
 // not just an API key. When not ready, open the Execution mode settings.
 ipcMain.on('hub:capture', () => {
-  const ready = config.executionReady();
+  const ready = execConfig.executionReady();
   console.log('[capture] hub:capture (New capture button) | executionReady =', ready);
   if (!ready) {
     openExecutionSettings();
@@ -443,7 +444,7 @@ ipcMain.on('hub:capture', () => {
 // ── IPC: key management ───────────────────────────────────────────────────
 
 // Returns { isReady, hasApiKey, provider, theme, ... } — no raw key.
-ipcMain.handle('key:status', () => config.publicConfig());
+ipcMain.handle('key:status', () => execConfig.publicConfig());
 
 // NOTE: these IPC registrations stay as positional require(...).register(...)
 // calls (not hoisted imports) so module load order matches the original main.js.
@@ -478,7 +479,7 @@ ipcMain.handle('hotkey:save', (_e, { accelerator }) => {
   globalShortcut.unregister(oldHotkey);
 
   const handler = () => {
-    if (!config.executionReady()) { openExecutionSettings(); return; }
+    if (!execConfig.executionReady()) { openExecutionSettings(); return; }
     void startCapture();
   };
 
@@ -708,7 +709,7 @@ void app.whenReady().then(async () => {
 
   // Gate the global hotkey on execution readiness (Local CLI OR BYOK).
   const registerReturn = globalShortcut.register(config.get().hotkey, () => {
-    const ready = config.executionReady();
+    const ready = execConfig.executionReady();
     console.log('[capture] hotkey fired | executionReady =', ready);
     if (!ready) {
       openExecutionSettings();
