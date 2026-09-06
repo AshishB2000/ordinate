@@ -65,6 +65,8 @@ Module._load = function (request: string, ...rest: any[]): any {
 
 // ponytail: compiled siblings of the real modules.
 const plan: typeof import('../src/analysis/analysisPlan') = require('../src/analysis/analysisPlan');
+const planPreview: typeof import('../src/analysis/planPreview') = require('../src/analysis/planPreview');
+const planBuild: typeof import('../src/analysis/planBuild') = require('../src/analysis/planBuild');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
@@ -191,7 +193,7 @@ async function checkNotReady(): Promise<void> {
   ok('analysis:draft leaks no error text that pretends it worked', !('sheets' in draft));
 
   // The other two channels are NOT AI and must work regardless.
-  const previewed = await plan.previewPlan(projectId, {
+  const previewed = await planPreview.previewPlan(projectId, {
     name: 'Hand-written',
     sheets: [{ name: 'S', visuals: [{ dataset: 'Sales', name: 'R', chartType: 'bar',
       encoding: { category: 'region', values: [{ column: 'revenue', aggregation: 'sum' }] } }] }],
@@ -200,7 +202,7 @@ async function checkNotReady(): Promise<void> {
   ok('previewPlan drew the chart from real data',
      Array.isArray(previewed.sheets[0].visuals[0].data?.labels) && previewed.sheets[0].visuals[0].data!.labels.length === 4);
 
-  const built = await plan.buildPlan(projectId, previewed.plan);
+  const built = await planBuild.buildPlan(projectId, previewed.plan);
   ok('buildPlan works with no model configured', built.ok === true);
   if (built.ok) {
     ok('buildPlan created the analysis', typeof built.analysis.id === 'string' && built.analysis.sheets.length === 1);
@@ -237,7 +239,7 @@ async function checkThreeDrops(): Promise<void> {
     }],
   };
 
-  const preview = await plan.previewPlan(projectId, envelope);
+  const preview = await planPreview.previewPlan(projectId, envelope);
   ok('acceptance: exactly three drops', preview.dropped.length === 3,
      preview.dropped.map((d) => d.kind).join(','));
 
@@ -281,7 +283,7 @@ async function checkThreeDrops(): Promise<void> {
   }
 
   // BUILD it and prove the drops did not come back.
-  const built = await plan.buildPlan(projectId, envelope);
+  const built = await planBuild.buildPlan(projectId, envelope);
   ok('build: succeeded', built.ok === true);
   if (!built.ok) return;
   ok('build: reported the same three drops', built.dropped.length === 3);
@@ -386,7 +388,7 @@ async function checkScopeAndIntent(): Promise<void> {
   // The point of the whole design: intent does NOT widen the vocabulary. A plan
   // that asks for an off-list chart type is still dropped, exactly as if the
   // model had invented it unprompted.
-  const injected = await plan.previewPlan(projectId, {
+  const injected = await planPreview.previewPlan(projectId, {
     name: 'Injected',
     sheets: [{ name: 'S', visuals: [
       { dataset: 'Sales', name: 'Bad', chartType: 'spiral',
@@ -397,7 +399,7 @@ async function checkScopeAndIntent(): Promise<void> {
      injected.dropped.some((d: any) => d.kind === 'chartType'),
      JSON.stringify(injected.dropped.map((d: any) => d.kind)));
   // And a dataset outside the scope cannot be planned against.
-  const outside = await plan.previewPlan(projectId, {
+  const outside = await planPreview.previewPlan(projectId, {
     name: 'Outside',
     sheets: [{ name: 'S', visuals: [
       { dataset: 'Huge', name: 'Nope', chartType: 'bar',
@@ -415,7 +417,7 @@ async function checkNoHydration(): Promise<void> {
   ok('the fixture dataset is resident (Parquet-backed)', meta?.resident === true);
 
   resetSpy();
-  const preview = await plan.previewPlan(projectId, {
+  const preview = await planPreview.previewPlan(projectId, {
     name: 'No hydrate',
     sheets: [{
       name: 'S',
@@ -447,7 +449,7 @@ async function checkNoHydration(): Promise<void> {
   fs.writeFileSync(file, JSON.stringify(rec, null, 2), 'utf8');
 
   resetSpy();
-  const tooBig = await plan.previewPlan(projectId, {
+  const tooBig = await planPreview.previewPlan(projectId, {
     name: 'Too big',
     // 'none' (raw, unaggregated) has no resident equivalent, so this is the one
     // shape that WOULD reach the JS fallback — which is exactly what is capped.
@@ -521,11 +523,11 @@ async function checkPreviewMatchesBuild(): Promise<void> {
     }],
   };
 
-  const preview = await plan.previewPlan(projectId, envelope);
+  const preview = await planPreview.previewPlan(projectId, envelope);
   ok('match: three cards previewed', preview.sheets[0].visuals.length === 3);
   ok('match: every previewed card carries data', preview.sheets[0].visuals.every((v) => v.data !== null));
 
-  const built = await plan.buildPlan(projectId, preview.plan);
+  const built = await planBuild.buildPlan(projectId, preview.plan);
   ok('match: build succeeded', built.ok === true);
   if (!built.ok) return;
   ok('match: the reference reused the saved visual rather than copying it',
@@ -592,20 +594,20 @@ async function checkPendingCalcField(): Promise<void> {
       encoding: { category: 'region', values: [{ column: 'Margin', aggregation: 'avg' }] } }] }],
   };
 
-  const preview = await plan.previewPlan(projectId, envelope);
+  const preview = await planPreview.previewPlan(projectId, envelope);
   ok('pending: the card was KEPT, not dropped', preview.sheets[0].visuals.length === 1 && preview.dropped.length === 0);
   const card = preview.sheets[0].visuals[0];
   ok('pending: no data is shown for it', card.data === null);
   ok('pending: it says why, naming the field', (card.note || '').includes('Margin'), card.note);
   ok('pending: the note contains no figure', !/\d/.test((card.note || '').replace(/[^0-9]/g, '') || 'x'));
 
-  const built = await plan.buildPlan(projectId, preview.plan);
+  const built = await planBuild.buildPlan(projectId, preview.plan);
   ok('pending: build succeeded', built.ok === true);
   if (!built.ok) return;
   ok('pending: the calculated field was applied', built.calculatedFields.length === 1);
 
   // Now the column exists, so a re-preview of the SAME plan draws the chart.
-  const again = await plan.previewPlan(projectId, envelope);
+  const again = await planPreview.previewPlan(projectId, envelope);
   const card2 = again.sheets[0].visuals[0];
   ok('pending: the field is no longer proposable a second time (column exists)',
      again.dropped.length === 1 && again.dropped[0].kind === 'formula');
@@ -635,7 +637,7 @@ async function checkPendingCalcField(): Promise<void> {
 // did, so it does.
 async function checkRoundedRatioTyping(): Promise<void> {
   const build = async (name: string, formula: string): Promise<string | undefined> => {
-    const res = await plan.buildPlan(projectId, {
+    const res = await planBuild.buildPlan(projectId, {
       name: 'T', calculatedFields: [{ dataset: 'Sales', name, formula }], sheets: [],
     });
     const meta = await datasets.getDatasetMeta(projectId, salesId);
