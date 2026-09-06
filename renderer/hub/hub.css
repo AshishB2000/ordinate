@@ -10068,335 +10068,12 @@ body.cap-focus .cap-back {
 .gs-sub { color: var(--muted); font-size: 10px; white-space: nowrap; }
 .gs-none { padding: 8px; color: var(--muted); font-size: 12px; }
 
-/* ── ASK — the conversational front door ──────────────────────────────────────
-   (The xp- prefix and the 'explore' section id predate the rename to Ask.)
-   A place, not a panel. The stage is FULL-BLEED and edge-aligned with the rest
-   of the app: the background is atmosphere the section sits in, not a card
-   floating in whitespace. Only the composer is width-capped, so the greeting
-   and input read as one centred column while the colour runs to the edges.
-
-   The wash is layered radial-gradients in --accent-soft / --accent-line over
-   --surface, with a fine DOT LATTICE beneath it — a repeating radial-gradient,
-   not an image, so there is nothing for the CSP to police and the two theme
-   variants are two colour stops rather than two assets. The dot layer comes
-   LAST in the list (background layers paint first-on-top), i.e. under the
-   washes; its colour is restated in the dark override below, which already
-   restates the whole stack to swap the base. Both accent tokens flip with
-   [data-theme]. Gradients cost no network request, so this stays inside
-   `default-src 'none'`. */
-.xp-panel { overflow: hidden; }
-.xp-stage {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px 28px;
-  background:
-    radial-gradient(80% 62% at 18% 8%, var(--accent-soft), transparent 68%),
-    radial-gradient(66% 56% at 84% 22%, var(--accent-soft), transparent 72%),
-    radial-gradient(120% 84% at 50% 108%, var(--accent-line), transparent 76%),
-    radial-gradient(circle at 1px 1px, rgba(15, 23, 42, 0.05) 1px, transparent 1.5px),
-    var(--surface);
-  background-size: auto, auto, auto, 22px 22px;
-  background-repeat: no-repeat, no-repeat, no-repeat, repeat;
-}
-.xp-stage-inner {
-  width: 100%;
-  max-width: 720px;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 20px;
-}
-/* The brand mark — the splash's own logo.png, decorative, centred over the
-   greeting. Small on purpose: it identifies the app, it does not advertise it. */
-.xp-mark {
-  align-self: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--r-md);
-  box-shadow: var(--shadow-md);
-}
-.xp-greet {
-  margin: 0;
-  text-align: center;
-  font-size: 27px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--text-strong);
-}
-/* The sub-line under the greeting — the Home hero's product promise, one voice
-   across surfaces. Negative top margin tucks it to the greeting so the pair
-   reads as one block inside the column's 20px gap rhythm. */
-.xp-sub {
-  margin: -10px 0 0;
-  text-align: center;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-/* The composer is the one capped element — the single floating card on the
-   stage. It sits ON the wash, so it keeps a solid --surface fill and a real
-   shadow to lift it off the gradient. 640px, tighter than the 720px column, so
-   the card reads as an object on the field rather than another column edge;
-   --r-lg (13px) is the existing token nearest the card shape this wants. */
-.xp-composer {
-  position: relative; /* the context picker hangs off this */
-  width: 100%;
-  max-width: 640px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 12px 10px;
-  background: var(--surface);
-  border: 1px solid var(--border-2);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-md);
-}
-.xp-composer:focus-within { border-color: var(--accent); }
-.xp-input {
-  border: none;
-  background: none;
-  resize: none;
-  font: inherit;
-  font-size: 14.5px;
-  line-height: 1.5;
-  color: var(--text);
-  padding: 4px 4px 0;
-  max-height: 180px;
-  overflow-y: auto;
-}
-.xp-input:focus-visible { outline: none; }
-.xp-input::placeholder { color: var(--text-dim); }
-.xp-input:disabled { background: none; color: var(--text-dim); cursor: not-allowed; }
-
-.xp-composer-row { display: flex; align-items: center; gap: 8px; }
-.xp-composer-spacer { flex: 1 1 auto; }
-
-/* The context picker, anchored above the composer it belongs to. Its rows reuse
-   the .gs-* hit classes above — one hit-row look across the app, not two. */
-.xp-picker {
-  position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 40;
-  display: flex; flex-direction: column; gap: 4px;
-  padding: 6px; max-height: 300px;
-  border: 1px solid var(--border); border-radius: var(--r-lg);
-  background: var(--surface); box-shadow: var(--shadow-md);
-}
-.xp-picker-q {
-  flex: none;
-  padding: 6px 9px;
-  border: 1px solid var(--border); border-radius: var(--r-md);
-  background: var(--surface-2); color: var(--text);
-  font: inherit; font-size: 12.5px;
-}
-.xp-picker-q::placeholder { color: var(--text-dim); }
-.xp-picker-q:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.xp-picker-rows { display: flex; flex-direction: column; gap: 1px; overflow-y: auto; }
-.xp-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.xp-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 240px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 5px 11px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-full);
-  background: var(--surface-2);
-  color: var(--muted);
-  font: inherit;
-  font-size: 12.5px;
-  cursor: pointer;
-}
-.xp-chip:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-.xp-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.xp-chip:disabled { cursor: not-allowed; opacity: 0.65; }
-/* The model chip's agent mark and caret (explore.ts paints them). The mark
-   reuses agentIconHTML's .exec-agent-* classes, sized down to chip scale. */
-.xp-model-mark { display: inline-flex; align-items: center; flex: none; }
-.xp-model-mark .exec-agent-mono { width: 14px; height: 14px; font-size: 9px; }
-.xp-chip-caret { display: inline-flex; align-items: center; flex: none; opacity: 0.7; }
-
-/* Starter suggestions — quiet pills under the composer, matching its 640px cap
-   so the group hangs from the card's own edges. Empty-state only: .xp-asked
-   hides them below, and explore.ts hides the strip when there is no data. */
-.xp-suggests {
-  width: 100%;
-  max-width: 640px;
-  margin: -8px auto 0;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-}
-.xp-suggest {
-  padding: 5px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-full);
-  background: var(--surface);
-  color: var(--muted);
-  font: inherit;
-  font-size: 12.5px;
-  cursor: pointer;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.xp-suggest:hover { border-color: var(--accent); color: var(--accent); background: var(--surface); }
-.xp-suggest:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.xp-send {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: var(--r-full);
-  background: var(--accent);
-  color: var(--accent-ink);
-  cursor: pointer;
-}
-.xp-send:hover:not(:disabled) { background: var(--accent-2); }
-.xp-send:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.xp-send:disabled { background: var(--surface-3); color: var(--text-faint); cursor: not-allowed; }
-
-/* Jump back in — a strip under the stage, not a card. Two columns, matching the
-   stage's 28px gutters so the whole section shares one edge. */
-.xp-jump {
-  flex: none;
-  padding: 16px 28px 22px;
-  border-top: 1px solid var(--border);
-  background: var(--bg);
-}
-.xp-jump-h {
-  margin: 0 0 10px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-strong);
-}
-/* Empty state is ONE muted line — an empty bordered container reads as broken. */
-.xp-jump-bare .xp-jump-h { margin-bottom: 6px; }
-.xp-jump-rows {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px 32px;
-  max-height: 168px;
-  overflow-y: auto;
-}
-.xp-jump-empty { margin: 0; font-size: 12.5px; color: var(--text-dim); }
-.xp-jump-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 7px 9px;
-  border: none;
-  border-radius: var(--r-sm);
-  background: none;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.xp-jump-row:hover { background: var(--surface-2); }
-.xp-jump-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.xp-jump-row .gs-glyph { flex: none; }
-.xp-jump-name {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  color: var(--text);
-}
-.xp-jump-kind {
-  flex: none;
-  padding: 1px 7px;
-  border-radius: var(--r-full);
-  background: var(--surface-3);
-  color: var(--muted);
-  font-size: 11px;
-}
-.xp-jump-time { flex: none; font-size: 11.5px; color: var(--text-dim); }
-
-/* --accent-soft/--accent-line are already lifted for dark, but the BASE must be
-   --bg rather than --surface or the stage glows brighter than the app it sits in. */
-[data-theme="dark"] .xp-stage {
-  background:
-    radial-gradient(80% 62% at 18% 8%, var(--accent-soft), transparent 68%),
-    radial-gradient(66% 56% at 84% 22%, var(--accent-soft), transparent 72%),
-    radial-gradient(120% 84% at 50% 108%, var(--accent-line), transparent 76%),
-    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.05) 1px, transparent 1.5px),
-    var(--bg);
-  /* Restated, not inherited: the `background` shorthand above implicitly
-     resets size/repeat to initial, and this rule out-specifies the base one —
-     without these two lines the dark lattice silently becomes one
-     element-sized gradient (i.e. no dots at all). */
-  background-size: auto, auto, auto, 22px 22px;
-  background-repeat: no-repeat, no-repeat, no-repeat, repeat;
-}
-
-/* ── Ask: hero → transcript ───────────────────────────────────────────────────
-   One markup tree, two states. .xp-asked on the panel collapses the greeting,
-   opens the transcript and docks the composer at the bottom of the stage; the
-   composer element itself never moves in the DOM. The greeting collapses rather
-   than display:none-ing so the change reads as a fade, not a jump. */
-.xp-greet {
-  transition: opacity 0.18s var(--ease), height 0.18s var(--ease);
-}
-.xp-messages { display: none; }
-.xp-hint {
-  padding: 8px 12px;
-  border-radius: var(--r-md);
-  background: var(--warn-soft);
-  color: var(--text);
-  font-size: 12.5px;
-}
-
-.xp-panel.xp-asked .xp-stage { align-items: stretch; padding-top: 18px; }
-.xp-panel.xp-asked .xp-stage-inner { height: 100%; min-height: 0; }
-.xp-panel.xp-asked .xp-greet {
-  opacity: 0;
-  height: 0;
-  margin: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-/* The hero-only furniture goes with the greeting: the mark and sub-line are
-   introductions, and the starter chips must never float over a transcript
-   (explore.ts also hides the chips when the project has no data). */
-.xp-panel.xp-asked .xp-mark,
-.xp-panel.xp-asked .xp-sub,
-.xp-panel.xp-asked .xp-suggests { display: none; }
-.xp-panel.xp-asked .xp-messages {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  flex-direction: column;
-  gap: 14px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-/* A short conversation sits ON the composer, not at the top of a void. Done with
-   margin-top:auto on the first bubble rather than justify-content:flex-end,
-   which clips the top of an overflowing flex container in Chromium. */
-.xp-panel.xp-asked .xp-messages > .xp-msg:first-child { margin-top: auto; }
-/* The strip STAYS during a transcript — it is the only route to another
-   conversation or a new one, and hiding it stranded the user in whichever
-   thread they happened to open. It shrinks instead: the transcript stays the
-   dominant thing on screen without becoming the only reachable one. */
-.xp-panel.xp-asked .xp-jump { padding-top: 10px; padding-bottom: 12px; }
-.xp-panel.xp-asked .xp-jump-rows { max-height: 74px; }
-
-/* The model chip states "nothing connected" the way the sidebar button does —
-   muted rather than alarming, because no model is a normal, supported state. */
-.xp-chip-warn { color: var(--text-dim); border-style: dashed; }
+/* The retired Assistant page's own CSS (.xp-stage / .xp-mark / .xp-greet /
+   .xp-sub / .xp-composer / .xp-picker / .xp-jump*, and the .xp-asked state
+   machine) lived here. The page went in #117; its LOOK is now the dock's empty
+   state — see .dk-hero* and .dk-composer below. What is left of the `xp` prefix
+   is only what askCore.ts still renders: .xp-msg / .xp-bubble / .xp-provenance /
+   .xp-prov-chip / .xp-activity*. */
 
 /* ── AI dock — docked, toggleable panel on the right edge (dock.ts) ─────────
    A sibling of `.ws-panel`/`.sidebar`/`.main` inside `.hub-body` (which is
@@ -10610,13 +10287,117 @@ body.cap-focus .cap-back {
   font-size: 12px;
 }
 
+/* A flex COLUMN, not a block. `.xp-msg-user { align-self: flex-end }` has been
+   in the stylesheet since the retired Copilot panel and did nothing here — a
+   block parent ignores align-self — so every turn sat left against the edge with
+   no gap. This is the rule that makes the user's bubble right-aligned and gives
+   the transcript its rhythm; `margin: auto 0` on .dk-hero below then centres the
+   empty state in the same box. */
 .dk-messages {
   flex: 1 1 auto;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   overflow-y: auto;
   padding: 14px;
 }
 
+/* ── The empty / new-conversation state (dockHero.ts) ──────────────────────
+   The retired Assistant page's hero, resized for a ~340px panel: the same
+   logo mark, greeting and sub line over the same accent wash (40bff73^'s
+   .xp-stage). The wash rides the HERO rather than the panel, so it needs no
+   state of its own — the hero is hidden the moment a turn exists and the
+   gradient goes with it. Gradients cost no network request, so this stays
+   inside `default-src 'none'`; --accent-soft/--accent-line both flip with
+   [data-theme], which is why there is no dark override for this block. */
+.dk-hero {
+  flex: none;
+  /* `auto` top and bottom centres it while the transcript is empty (the flex
+     column above); the negative sides cancel .dk-messages' 14px padding so the
+     wash runs edge to edge. FULL-BLEED is the point — a rounded box would be a
+     second card competing with the composer, and its corners cut the bottom
+     gradient off mid-fade instead of letting it dissolve into the panel. */
+  margin: auto -14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 26px 18px 30px;
+  /* Every layer is centred and sized so its alpha reaches ZERO before the band's
+     top and bottom edges: the wash has to dissolve into the panel, and a stop
+     that is still coloured where the element ends draws a hard horizontal line
+     across the dock instead (which is exactly what the first pass did in dark).
+     Horizontally they may overrun — the panel border catches that side. */
+  background:
+    radial-gradient(90% 38% at 28% 34%, var(--accent-soft), transparent 72%),
+    radial-gradient(80% 34% at 78% 44%, var(--accent-soft), transparent 74%),
+    radial-gradient(120% 34% at 50% 74%, var(--accent-line), transparent 70%);
+}
+.dk-hero[hidden] { display: none; }
+.dk-hero[hidden] + .xp-msg { margin-top: auto; }
+.dk-hero-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+}
+.dk-hero-greet {
+  margin: 0;
+  text-align: center;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--text-strong);
+  overflow-wrap: anywhere; /* a long dataset name must wrap, not widen the panel */
+}
+/* Tucked to the greeting so the pair reads as one block inside the 10px gap. */
+.dk-hero-sub {
+  margin: -4px 0 0;
+  text-align: center;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+/* Starter chips — quiet pills, one per row's worth of width, ellipsised rather
+   than wrapped so three prompts stay three predictable lines in a narrow panel
+   (the full text is on the button's title). */
+.dk-suggests {
+  width: 100%;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.dk-suggests[hidden] { display: none; }
+.dk-suggest {
+  max-width: 100%;
+  padding: 6px 12px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: center;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dk-suggest:hover { border-color: var(--accent); color: var(--accent); }
+.dk-suggest:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* The composer is the panel's one raised object — the .xp-composer treatment
+   from the retired page, unchanged in intent: a solid --surface fill so it lifts
+   off both the hero's wash and the transcript behind it, --r-lg (13px), and a
+   real shadow. The focus ring is a box-shadow rather than an `outline` because
+   the send button lives INSIDE the card: an outline on :focus-within would draw
+   a second, tighter rectangle around the button as well. --accent-soft carries
+   the ring in both themes (it is lifted for dark in theme.css), which is why
+   this block needs no dark override. */
 .dk-composer {
   flex: none;
   display: flex;
@@ -10624,11 +10405,15 @@ body.cap-focus .cap-back {
   gap: 8px;
   margin: 0 12px 12px;
   padding: 8px 8px 8px 12px;
-  background: var(--surface-2);
+  background: var(--surface);
   border: 1px solid var(--border-2);
   border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
 }
-.dk-composer:focus-within { border-color: var(--accent); }
+.dk-composer:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-md);
+}
 .dk-input {
   flex: 1 1 auto;
   min-width: 0;
@@ -10663,11 +10448,20 @@ body.cap-focus .cap-back {
 .dk-send:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .dk-send:disabled { background: var(--surface-3); color: var(--text-faint); cursor: not-allowed; }
 
-/* Dock proposals (Task 3, dockPropose.ts). The card box itself reuses
-   .ai-interp (badge/border/background) — these only add spacing in the
-   transcript and size the chart-proposal tile for the narrow panel. */
+/* Dock proposals (Task 3, dockPropose.ts). The card box reuses .ai-interp for
+   its badge and structure — unchanged, that is not this PR's business — but
+   .ai-interp's hard-coded `border-radius: 8px` and flat fill were the one thing
+   in the panel not speaking the dock's language, next to a --r-lg composer and a
+   --r-lg hero. Retokenised here rather than in .ai-interp, which has other
+   callers on other surfaces. */
 .dk-proposal {
   margin: 10px 0 4px;
+}
+.dk-proposal.ai-interp {
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
 }
 .dk-proposal-actions {
   display: flex;
@@ -10677,22 +10471,6 @@ body.cap-focus .cap-back {
 .dk-proposal-chart {
   min-height: 200px;
 }
-/* The one proposal engine (dockPropose.ts) mounts this SAME chart tile in two
-   places: the ~340px dock panel and — since the Ask actions work — the full-width
-   Ask transcript (#xp-messages). The canvas the tile holds sits in a shared
-   `.cv-canvas-wrap`, whose height is `clamp(300px, 44vh, 480px)` (≈396px at 900px
-   tall) — a big viewport-scaled box tuned for a full analysis panel. In the dock
-   that reads fine, but in the Ask column it makes the proposal card balloon past
-   half the viewport, earn its own inner scrollbar and shove the answer bubble it
-   belongs to off-screen. Give ONLY the Ask mount's canvas box a compact fixed
-   height so the card stays small and the answer above it stays visible; the dock
-   keeps the shared sizing (this rule is scoped to #xp-messages). It sets height on
-   `.cv-canvas-wrap` — the box Chart.js actually measures — not on the outer tile,
-   whose height a bare cap would not propagate down to the canvas. */
-#xp-messages .dk-proposal-chart .cv-canvas-wrap {
-  height: 240px;
-}
-
 .dk-scrim { display: none; }
 
 @media (max-width: 1100px) {
@@ -10722,32 +10500,11 @@ body.cap-focus .cap-back {
   }
 }
 
-/* Explore: the chart under an answer. Sits inside the assistant bubble's row,
-   so it scrolls with the turn that produced it. */
-.xp-chart {
-  margin-top: 10px;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--surface);
-}
-.xp-chart-area { height: 260px; min-height: 260px; }
-.xp-chart-actions { display: flex; gap: 8px; margin-top: 8px; }
 
-/* Conversations strip: the heading gains a "New conversation" action once the
-   project has any history to leave behind. */
-.xp-jump-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-.xp-jump-head .xp-jump-h { margin: 0; }
-
-
-/* Explore transcript bubbles. Inherited from the retired Copilot panel and
-   renamed with it — same DOM, same textContent-only rendering, one owner. */
+/* Transcript bubbles. Inherited from the retired Copilot panel and renamed with
+   it — same DOM, same textContent-only rendering, one owner. The dock is the
+   only mount left, so these are unprefixed by container: one surface, one rule.
+   The `xp` prefix stays because askCore.ts still owns them. */
 .xp-msg {
   display: flex;
   flex-direction: column;
@@ -10774,10 +10531,20 @@ body.cap-focus .cap-back {
   background: var(--accent);
   color: var(--accent-ink);
 }
+/* The ANSWER is not a message from someone else — it is the panel's content, so
+   it reads as text on the panel rather than as a second chat bubble facing the
+   user's. Only the user's turn keeps a bubble: with one side filled and one side
+   plain, who said what is still unambiguous, and a long answer stops looking
+   like a quotation of itself. Slightly wider than a bubble would be, for the
+   same reason: nothing is boxing it in. */
+.xp-msg-assistant {
+  max-width: 100%;
+}
 .xp-msg-assistant .xp-bubble {
-  background: var(--surface-2);
-  color: var(--text-strong);
-  border: 1px solid var(--border);
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text);
 }
 /* A subtle blinking caret while an answer is streaming in token-by-token. CSS
    only (hub CSP forbids inline style=): the class is added on the first delta and
@@ -10793,10 +10560,17 @@ body.cap-focus .cap-back {
   animation: xp-caret-blink 1s steps(2, start) infinite;
 }
 @keyframes xp-caret-blink { 50% { opacity: 0; } }
+/* ONE small muted line under the answer, not a row of pills.
+   The pills read as buttons — same radius, same fill, same size as the chips
+   directly above them in the composer — so every answer arrived under two things
+   that looked clickable and were not. They are provenance: a footnote. Kept as
+   text, joined by askCore.ts, at the smallest size the type scale has.
+   `.xp-prov-chip` survives for the header's "Based on …" row, where a single
+   pill against a label IS the right shape. */
 .xp-provenance {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-dim);
 }
 .xp-prov-chip {
   padding: 2px 8px;
@@ -10861,10 +10635,6 @@ body.cap-focus .cap-back {
 }
 .xp-activity-collapsed .xp-activity-chips { margin-top: 4px; }
 
-.xp-jump-actions { display: flex; align-items: center; gap: 8px; }
-/* The AI off state is stated plainly, not alarmingly — running without AI is a
-   supported way to use Ordinate, not a fault. */
-.xp-toggle-off { color: var(--muted); }
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -10964,7 +10734,7 @@ body.cap-focus .cap-back {
 .home-ask-send:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .home-ask-send svg { display: block; }
 
-/* Starter chips — reuse the retired page's pill look (.xp-suggest), inline. */
+/* Starter chips — the same pill as the dock's .dk-suggest, wrapped not stacked. */
 .home-ask-suggests { display: flex; flex-wrap: wrap; gap: 6px; }
 .home-ask-chip {
   padding: 5px 12px;

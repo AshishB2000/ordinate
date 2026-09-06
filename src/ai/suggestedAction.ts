@@ -31,12 +31,34 @@
 // A missing, malformed or unknown action is NOT an error: it means 'none', and
 // the turn is simply an answer with no proposal. That is the common case for a
 // weaker local CLI, and it must degrade quietly.
+//
+// ── Why the sentinel is not enough ──────────────────────────────────────────
+// The marker is a REQUEST, not a guarantee, and two things routinely break it:
+//
+//  1. The model drops it. It was told to write one final line; a weaker CLI
+//     writes the JSON and forgets the prefix. With only a marker search, that
+//     line is prose — and when it is the ONLY thing left, the user's answer was
+//     literally `{"kind":"none","intent":""}`. That is the bug this file's
+//     stripping now covers: the JSON SHAPE is matched whether the marker is
+//     there or not, on its own line, anywhere in the tail.
+//  2. Something upstream eats the prose around it. A local CLI adapter used to
+//     run every reply — prose ones included — through its JSON-envelope hunter
+//     (src/cli/localCliRun.ts extractEnvelope), which found the action line's
+//     `{…}` first and returned THAT as the whole reply. Fixed at the source with
+//     `prose: true`; this file is the second line of defence, not the first.
+//
+// Both end the same way: nothing usable left. An empty bubble is not an answer
+// and neither is a brace, so `splitAction` substitutes EMPTY_ANSWER — one
+// app-written sentence, chosen here so every caller gets it without asking.
 
 import type { DashboardStylePreset } from '../analysis/dashboards';
 
 /** The marker opening the action line. Chosen to be something no prose answer
  *  would produce on its own, and to survive a model that strips markdown. */
 export const ACTION_MARKER = '@@ACTION';
+/** ACTION_MARKER escaped for a RegExp source. Spelled out rather than derived,
+ *  so a marker that gains a metacharacter fails tsc here and not silently. */
+const ACTION_MARKER_SRC = '@@ACTION';
 
 /** Longest intent we carry forward. The intent is model text used to re-prompt
  *  (analysis:draft) and shown in the composer on "Adjust…", so it is bounded
@@ -45,7 +67,46 @@ export const MAX_INTENT = 400;
 
 /** The whitelist. Anything not on it becomes 'none'. */
 export type SuggestedActionKind = 'dashboard' | 'edit' | 'chart' | 'step' | 'calc' | 'style' | 'none';
-const KINDS: ReadonlySet<string> = new Set(['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'none']);
+const KIND_LIST = ['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'none'] as const;
+const KINDS: ReadonlySet<string> = new Set(KIND_LIST);
+
+/**
+ * An action line, WITH OR WITHOUT the marker: an object opening with a
+ * whitelisted `"kind"`, alone on its line.
+ *
+ * Built from KIND_LIST, so it cannot drift from the whitelist `validateAction`
+ * enforces one function below. Three deliberate tightenings, because this is the
+ * pattern that decides what is thrown away:
+ *
+ *  - THE KIND MUST BE ON THE WHITELIST. `{"kind":"banana"}` is not an action
+ *    line, it is prose that happens to be JSON, and prose is kept.
+ *  - `"intent"` must be there too. One field is a fragment; the contract is two.
+ *  - IT MUST OWN ITS LINE (`^`…`$` under /m, whitespace allowed either side).
+ *    An answer that quotes the format mid-sentence — "I would emit
+ *    {"kind":"none","intent":""} normally" — is an answer ABOUT the format, and
+ *    deleting half that sentence would be a worse bug than the one this fixes.
+ *
+ * The trailing `\n?` takes the line's own newline with it. Without it, removing
+ * a line from the MIDDLE of an answer leaves the blank line behind — a visible
+ * hole where the wiring used to be, which is most of what we set out to hide.
+ *
+ * A fresh RegExp per call: /g carries `lastIndex` between uses, and a shared one
+ * would skip every other match in exactly the multi-line case this exists for.
+ */
+const ACTION_LINE_SRC =
+  '^[ \\t]*(?:' + ACTION_MARKER_SRC + '[ \\t]*)?' +
+  '\\{[ \\t]*"kind"[ \\t]*:[ \\t]*"(?:' + KIND_LIST.join('|') + ')"[^\\n]*"intent"[^\\n]*\\}[ \\t]*$\\n?';
+function actionLineRe(): RegExp { return new RegExp(ACTION_LINE_SRC, 'gm'); }
+
+/**
+ * What the user is shown when stripping leaves nothing.
+ *
+ * The model DID answer — it just answered entirely in machine text. The two
+ * alternatives are both worse: an empty bubble reads as a crash, and the JSON is
+ * the bug. This is app-written, so it is safe to show under any model, and it
+ * says the one thing a blank turn should say — what to type next.
+ */
+export const EMPTY_ANSWER = 'Ask me about your data — e.g. \'revenue by region\'.';
 
 // The four preset NAMES, spelled out here and imported only as a TYPE.
 //
@@ -159,36 +220,62 @@ export function validateAction(raw: unknown): SuggestedAction {
 }
 
 /**
+ * Parse one action line's JSON, marker or no marker. Returns NO_ACTION for
+ * anything unparseable — a broken line costs the proposal, never the answer.
+ */
+function parseActionLine(line: string): SuggestedAction {
+  const open = line.indexOf('{');
+  const close = line.lastIndexOf('}');
+  if (open < 0 || close <= open) return NO_ACTION;
+  try {
+    return validateAction(JSON.parse(line.slice(open, close + 1)));
+  } catch (_) {
+    return NO_ACTION;
+  }
+}
+
+/**
  * Split a raw reply into the prose the user sees and the action behind it.
  *
- * Tolerant on purpose — the model is being asked for a machine-readable line at
- * the end of a prose answer, and will sometimes fence it, prefix it, or emit it
- * twice. The LAST marker wins (a model that mentions the format mid-answer, or
- * self-corrects, ends with the real one), and the JSON is located by its own
- * braces rather than by assuming the line is clean.
+ * TWO passes, in this order, because they cover two different failures:
+ *
+ *  1. THE MARKER, if the model wrote one. The LAST one wins (a model that
+ *     mentions the format mid-answer, or self-corrects, ends with the real one),
+ *     the JSON is located by its own braces rather than by assuming the line is
+ *     clean, and a fence the model opened around it is not left dangling.
+ *  2. THE SHAPE, marker or not. Whatever survives pass 1 is swept for
+ *     action-shaped lines (ACTION_LINE_SRC above) and they are REMOVED. This is
+ *     what stops a model that forgot the prefix from printing its wiring into
+ *     the user's bubble; if pass 1 found nothing, the last such line is also
+ *     where the action comes from.
+ *
+ * Then the empty check: a reply that had content but is all machine text after
+ * stripping becomes EMPTY_ANSWER, never a blank bubble. A reply that was empty
+ * to begin with stays empty — that is a provider failure, and askCopilot turns
+ * it into a real error rather than a cheerful prompt.
  */
 export function splitAction(raw: string | null | undefined): { text: string; action: SuggestedAction } {
   const full = String(raw || '');
+  let action = NO_ACTION;
+  let text = full;
+
   const at = full.lastIndexOf(ACTION_MARKER);
-  if (at < 0) return { text: full.trim(), action: NO_ACTION };
-
-  // Prose is everything before the marker, minus any code fence the model may
-  // have opened around the line it was about to write.
-  const text = full.slice(0, at).replace(/```(?:json)?\s*$/, '').trim();
-
-  const tail = full.slice(at + ACTION_MARKER.length);
-  const open = tail.indexOf('{');
-  if (open < 0) return { text, action: NO_ACTION };
-  const close = tail.lastIndexOf('}');
-  if (close <= open) return { text, action: NO_ACTION };
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(tail.slice(open, close + 1));
-  } catch (_) {
-    return { text, action: NO_ACTION }; // unparseable → no proposal, answer stands
+  if (at >= 0) {
+    text = full.slice(0, at).replace(/```(?:json)?\s*$/, '');
+    action = parseActionLine(full.slice(at + ACTION_MARKER.length));
   }
-  return { text, action: validateAction(parsed) };
+
+  // Pass 2. `matchAll` before `replace` so the LAST surviving line can supply the
+  // action when pass 1 did not — replace alone would not hand us the match.
+  const leftovers = Array.from(text.matchAll(actionLineRe()));
+  if (leftovers.length) {
+    if (action.kind === 'none') action = parseActionLine(leftovers[leftovers.length - 1][0]);
+    text = text.replace(actionLineRe(), '').replace(/```(?:json)?\s*$/, '');
+  }
+
+  text = text.trim();
+  if (!text && full.trim()) text = EMPTY_ANSWER;
+  return { text, action };
 }
 
 /**
@@ -201,14 +288,36 @@ export function splitAction(raw: string | null | undefined): { text: string; act
  * the longest possible partial marker — and releases them only once more text
  * arrives to prove they were not the start of one.
  *
+ * THE SAME PROBLEM WITHOUT A MARKER. A model that forgot the prefix streams a
+ * bare `{` and then, one chunk at a time, its own wiring — and a fixed 7-char
+ * hold cannot cover a line of unknown length. So an unemitted `{` that STARTS
+ * ITS LINE is also held, for as long as what follows is still a live prefix of
+ * `{"kind":"` (see couldOpenAction). It resolves one of three ways: the line
+ * completes and is dropped like a marked one; it turns out to be ordinary prose
+ * and is released the moment it stops matching; or the stream simply ends and
+ * `flush()` releases it — a `{` is never lost, only ever delayed.
+ *
  * Returns `{ onDelta, flush }`. `flush()` releases that withheld tail once the
- * stream is over and no marker ever arrived — without it, an answer with no
+ * stream is over and no action line ever arrived — without it, an answer with no
  * action line would permanently lose its last few characters from the live
  * bubble (a real bug, caught by test-suggestedAction.ts). After a marker, flush
  * is a no-op: everything from there on is the action, not prose.
  *
  * `onDelta` is `undefined` for a non-streaming caller, which stays untouched.
  */
+const ACTION_OPEN = '{"kind":"';
+
+/** Could `line` — an unfinished line that opened with `{` — still become an
+ *  action line? True while it is a live prefix of `{"kind":"`, or has matched
+ *  that opener and not closed yet. Whitespace is ignored so a model that
+ *  pretty-prints `{ "kind" : …` is held too. False the instant it is plainly
+ *  something else, which is what keeps a `{` in ordinary prose flowing. */
+function couldOpenAction(line: string): boolean {
+  const t = line.replace(/\s+/g, '');
+  if (ACTION_OPEN.startsWith(t)) return true;         // still typing the opener
+  return t.startsWith(ACTION_OPEN) && !t.endsWith('}'); // opener matched, still open
+}
+
 export function makeActionFilter(
   onDelta: ((delta: string) => void) | undefined,
 ): { onDelta: ((delta: string) => void) | undefined; flush: () => void } {
@@ -216,22 +325,45 @@ export function makeActionFilter(
   const hold = ACTION_MARKER.length - 1;
   let seen = '';    // everything received so far
   let emitted = 0;  // how much of `seen` has been forwarded
-  let done = false; // the marker has arrived; nothing more is prose
+  let done = false; // an action line has arrived; nothing more is prose
+
+  /** Index of the first unemitted `{` that opens its own line, or -1. */
+  const lineOpenBrace = (): number => {
+    for (let i = Math.max(emitted, 0); i < seen.length; i++) {
+      if (seen[i] !== '{') continue;
+      const before = seen.slice(seen.lastIndexOf('\n', i - 1) + 1, i);
+      if (!before.trim()) return i;
+    }
+    return -1;
+  };
+
+  const stopAt = (at: number): void => {
+    done = true;
+    if (at > emitted) onDelta(seen.slice(emitted, at));
+    emitted = at;
+  };
 
   const push = (delta: string): void => {
     if (done) return;
     seen += String(delta || '');
 
     const at = seen.indexOf(ACTION_MARKER);
-    if (at >= 0) {
-      done = true;
-      if (at > emitted) onDelta(seen.slice(emitted, at));
-      emitted = at;
-      return;
+    if (at >= 0) return stopAt(at);
+
+    // No marker — forward everything except the tail that could still become one.
+    let safe = Math.max(emitted, seen.length - hold);
+
+    // …and except an unmarked action line already under way.
+    const brace = lineOpenBrace();
+    if (brace >= 0 && brace < safe) {
+      // Judge THAT LINE, not the rest of the stream: a finished line is decided
+      // (action → stop, prose → release), an unfinished one is still in play.
+      const nl = seen.indexOf('\n', brace);
+      const line = (nl < 0 ? seen.slice(brace) : seen.slice(brace, nl)).trimEnd();
+      if (actionLineRe().test(line)) return stopAt(brace); // complete — ends the prose, as a marker does
+      if (nl < 0 && couldOpenAction(line)) safe = brace;
     }
-    // No marker yet — forward everything except the tail that could still
-    // become one.
-    const safe = Math.max(emitted, seen.length - hold);
+
     if (safe > emitted) {
       onDelta(seen.slice(emitted, safe));
       emitted = safe;
