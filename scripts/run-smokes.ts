@@ -20,7 +20,9 @@ const SMOKES = [
   'smoke-ask-actions',
   'smoke-viz-thumbs',
   'smoke-connect',
+  'smoke-dashboard-proposal',
   'smoke-dashboards',
+  'smoke-dashboard-styles',
 ];
 
 const results: { name: string; code: number }[] = [];

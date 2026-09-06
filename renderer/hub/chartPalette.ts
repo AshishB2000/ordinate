@@ -6,11 +6,11 @@
 // renderer — they are testable and readable without a canvas, a dataset or a
 // chart type anywhere in scope.
 //
-// getCSSVar is the one impure member: it reads a CSS custom property off
-// :root, which is how every chart picks up the active theme (--chart-1..5,
-// --muted, --border, --surface, --text-strong, --font-ui) instead of hardcoding
-// colors. It lives here because the palette IS what it is read for, and
-// mapRender.js resolves it at call time too.
+// getCSSVar is the one impure member: it reads a CSS custom property off an
+// element's computed style, which is how every chart picks up the active theme
+// (--chart-1..5, --muted, --border, --surface, --text-strong, --font-ui) instead
+// of hardcoding colors. It lives here because the palette IS what it is read
+// for, and mapRender.js resolves it at call time too.
 //
 // Loads before chartRender.js / chartTable.js, both of which read CHART_PALETTE
 // and these helpers. Classic global-scope script — NO import/export.
@@ -19,8 +19,16 @@
 // swatch order in the data table.
 const CHART_PALETTE = ['#2563eb', '#0e7490', '#14b8a6', '#6366f1', '#64748b'];
 
-function getCSSVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+// `el` exists because a dashboard style preset (`.dash-theme--dark` and friends)
+// REMAPS these very tokens on a CONTAINER element, not on :root. Resolving from
+// the root would paint light-theme charts inside dark-styled dashboard chrome —
+// and it makes the four side-by-side preset thumbnails (the same grid rendered
+// under four presets, live, on screen at once) outright impossible, since every
+// chart would read one shared set of colours. Callers pass the element they draw
+// into. OMITTING `el` IS BYTE-IDENTICAL TO THE OLD ROOT READ, so every existing
+// call site elsewhere in the app is unaffected.
+function getCSSVar(name: string, el?: Element | null): string {
+  return getComputedStyle(el || document.documentElement).getPropertyValue(name).trim();
 }
 
 // ── Color helpers (for deriving a full palette from one chosen swatch) ──────

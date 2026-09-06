@@ -615,7 +615,9 @@ async function dkSend(): Promise<void> {
     dkHideHint();
     // A proposal is a bonus, never a requirement of the answer — fire it after
     // the transcript has settled and never let it block the composer.
-    if (typeof dkOfferProposal === 'function') void dkOfferProposal(ref, question, String(res.answer || ''));
+    // WHICH proposal comes from the model's validated suggestedAction (main's
+    // whitelist, src/ai/suggestedAction.ts), not a keyword guess here.
+    if (typeof dkOfferProposal === 'function') void dkOfferProposal(ref, question, res.suggestedAction, dkThreadId || '');
     return;
   }
 

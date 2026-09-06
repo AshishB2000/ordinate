@@ -4,7 +4,12 @@
 // single Dashboard surface). What remains, and what the rest of the app imports
 // from here, is the shared structural vocabulary: the Card/Page/CardLayout/
 // CardMetric/CardVisual/CardControl types and GRID_COLS, plus the sanitizers that
-// clamp untrusted renderer/disk input onto them. An Analysis sheet IS a `Page`;
+// clamp untrusted renderer/disk input onto them — plus, at the bottom, the
+// DashboardStyle vocabulary (three orthogonal presentation axes + the four
+// named presets) and its own clamp, which lives here for the same reason: it is
+// shared by the record (analysis.ts), the IPC edge and the offline export, and a
+// second copy of an enum whitelist is how enum whitelists drift apart.
+// An Analysis sheet IS a `Page`;
 // `src/analysis/analysis.ts` re-exports these types and calls sanitizePages /
 // sanitizeDashboardFilters, and `src/ipc/dashboards.ts` uses sanitizeDashboardFilters
 // for the metric-card filter path.
@@ -327,6 +332,83 @@ export function sanitizePages(raw: unknown): Page[] {
   const pages = arr.map((p) => sanitizePage(p));
   if (pages.length === 0) return [{ id: randomUUID(), name: 'Page 1', cards: [] }];
   return pages;
+}
+
+// ── Dashboard style ─────────────────────────────────────────────────────────
+//
+// PRESENTATION ONLY, on three ORTHOGONAL axes: theme owns the surface/text/
+// border tokens, density owns the grid gap + row height, accent owns
+// --accent*/--chart*. They compile to three CSS classes applied together on one
+// element (`dash-theme--x dash-density--y dash-accent--z`), so adding a theme
+// never means restating every accent.
+//
+// A style must NEVER move a card. The grid stays GRID_COLS wide in every
+// preset, because a card's x/w are layout COORDINATES: a "restyle" that also
+// re-flowed the sheet would silently re-author work the user placed by hand.
+
+export interface DashboardStyle {
+  theme: 'clean' | 'executive' | 'dark';
+  density: 'comfortable' | 'compact';
+  accent: 'blue' | 'teal' | 'slate';
+}
+
+export const DEFAULT_DASHBOARD_STYLE: DashboardStyle = {
+  theme: 'clean',
+  density: 'comfortable',
+  accent: 'blue',
+};
+
+/**
+ * The named triples the picker offers. A preset is a SHORTCUT over the three
+ * axes, never a fourth axis — nothing is persisted as "the executive preset",
+ * only as the triple it expands to, so a user who nudges one axis afterwards
+ * does not end up with a record that lies about which preset it is.
+ */
+export type DashboardStylePreset = 'clean' | 'executive' | 'dense' | 'dark';
+
+export const DASHBOARD_STYLE_PRESETS: Record<DashboardStylePreset, DashboardStyle> = {
+  clean: { theme: 'clean', density: 'comfortable', accent: 'blue' },
+  executive: { theme: 'executive', density: 'comfortable', accent: 'slate' },
+  dense: { theme: 'clean', density: 'compact', accent: 'blue' },
+  dark: { theme: 'dark', density: 'comfortable', accent: 'blue' },
+};
+
+const STYLE_THEMES: ReadonlySet<string> = new Set(['clean', 'executive', 'dark']);
+const STYLE_DENSITIES: ReadonlySet<string> = new Set(['comfortable', 'compact']);
+const STYLE_ACCENTS: ReadonlySet<string> = new Set(['blue', 'teal', 'slate']);
+
+/**
+ * Clamp an untrusted style onto the three closed enums. Differs from
+ * visuals.sanitizeOverrides in one way that matters: there an unrecognized enum
+ * is DROPPED (absence means "use the buildChart default"), but every axis here
+ * is REQUIRED — a style with no theme has no meaning — so a junk value falls
+ * back to that axis's default instead.
+ *
+ * Nothing from `raw` is ever echoed. Each field is one of the three literals
+ * that was already a member of the allowed set, which is what makes the result
+ * safe to interpolate into a class name and into exported CSS. Never throws:
+ * a non-object (null, a number, an array, a string) is simply the default.
+ *
+ * Returns a FRESH object every call. Handing out DEFAULT_DASHBOARD_STYLE itself
+ * would let one caller's `style.theme = 'dark'` restyle every record that had
+ * ever defaulted — the same aliasing bug a shared `[]` literal causes.
+ */
+export function sanitizeStyle(raw: unknown): DashboardStyle {
+  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return {
+    theme:
+      typeof o.theme === 'string' && STYLE_THEMES.has(o.theme)
+        ? (o.theme as DashboardStyle['theme'])
+        : DEFAULT_DASHBOARD_STYLE.theme,
+    density:
+      typeof o.density === 'string' && STYLE_DENSITIES.has(o.density)
+        ? (o.density as DashboardStyle['density'])
+        : DEFAULT_DASHBOARD_STYLE.density,
+    accent:
+      typeof o.accent === 'string' && STYLE_ACCENTS.has(o.accent)
+        ? (o.accent as DashboardStyle['accent'])
+        : DEFAULT_DASHBOARD_STYLE.accent,
+  };
 }
 
 // Whitelist untrusted dashboard-wide filters: delegate to the shared

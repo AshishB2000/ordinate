@@ -8,6 +8,7 @@ import { computeMetrics, deriveChartData } from '../formula/calc';
 import { writeHeadline, verifyHeadlineNumbers } from './headline';
 import { SUGGESTABLE_CHART_TYPES } from '../analysis/visuals';
 import { streamProvider } from './analyzeStream';
+import { CHAT_SYSTEM_PROMPT, makeActionFilter, splitAction, type SuggestedAction } from './suggestedAction';
 
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -642,20 +643,13 @@ export async function explainText(userPrompt: string): Promise<{ ok: true; text:
 // single user turn so provider role-alternation stays valid). Plain prose out — it
 // does NOT go through parseReply(). No model configured → a soft not_ready error so
 // the renderer shows a gentle hint, never an error dialog.
-const CHAT_SYSTEM_PROMPT =
-  'You are the Ordinate Assistant, a data analysis assistant for the user\'s current workspace. ' +
-  'You are given FACTS about the active project/dataset/visual/dashboard — columns, types, ' +
-  'already-computed statistics, sample rows, and computed chart/metric values. ' +
-  'Answer in plain, concise prose (no markdown, no code fences, no bullet lists unless asked). ' +
-  'GROUND every claim in the facts provided. NEVER invent, round, or recompute any number — use ' +
-  'ONLY the exact figures given to you; if a number you need is not in the facts, say you don\'t ' +
-  'have it rather than estimating. When the data is ambiguous or insufficient to answer, say so ' +
-  'plainly. Prefer insight over restating the numbers.';
+// The PROMPT lives in ./suggestedAction.ts with the contract for the one structured
+// field the answer carries — a prompt that drifts from its parser is an unseeable bug.
 export async function askCopilot(
   historyTurns: { role: 'user' | 'assistant'; text: string }[],
   contextFacts: string,
   question: string, onDelta?: (delta: string) => void,
-): Promise<{ ok: true; text: string } | TypedError> {
+): Promise<{ ok: true; text: string; suggestedAction: SuggestedAction } | TypedError> {
   if (!config.executionReady()) {
     return { ok: false, errorType: 'not_ready', message: config.AI_NOT_CONFIGURED };
   }
@@ -666,10 +660,15 @@ export async function askCopilot(
     ...prior,
     { role: 'user', text: (contextFacts || '') + '\n\n---\n\nQuestion: ' + question },
   ];
-  const { rawText, error } = await dispatch(CHAT_SYSTEM_PROMPT, messages, onDelta);
+  // The action line is withheld from the stream and stripped from the stored text
+  // (./suggestedAction) — the user only ever sees prose.
+  const filter = makeActionFilter(onDelta);
+  const { rawText, error } = await dispatch(CHAT_SYSTEM_PROMPT, messages, filter.onDelta);
+  // Release the tail held back in case it was the start of a marker.
+  filter.flush();
   if (error) return error;
-  const text = (rawText || '').trim();
-  return text ? { ok: true, text } : errBadReply();
+  const { text, action } = splitAction(rawText);
+  return text ? { ok: true, text, suggestedAction: action } : errBadReply();
 }
 
 // Week 6 — OPTIONAL AI-suggested data-preparation steps. Same execution path as

@@ -35,22 +35,23 @@ function _mlgl(): any {
   return (window as any).maplibregl;
 }
 
-function getChoroplethColor(t: number): string {
-  const stops = document.documentElement.dataset.theme === 'dark'
-    ? CHOROPLETH_STOPS_DARK : CHOROPLETH_STOPS_LIGHT;
+// Is the surface `el` sits on a dark one? The root's `data-theme` is no longer the
+// right question: a style preset remaps the theme tokens on a CONTAINER class, so a
+// dark dashboard can live inside a light app, and four preset thumbnails can be on
+// screen at once. ponytail: 6-digit hex only (every token here is); else reads light.
+function isDarkSurface(el?: Element | null): boolean {
+  const m = /^#([0-9a-f]{6})$/i.exec(getCSSVar('--surface', el)), n = m ? parseInt(m[1], 16) : 0xffffff;
+  return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) < 128;
+}
+
+function getChoroplethColor(t: number, el?: Element | null): string {
+  const stops = isDarkSurface(el) ? CHOROPLETH_STOPS_DARK : CHOROPLETH_STOPS_LIGHT;
   const scaled = Math.max(0, Math.min(1, t)) * (stops.length - 1);
-  const lo = Math.floor(scaled);
-  const hi = Math.min(stops.length - 1, lo + 1);
-  const frac = scaled - lo;
+  const lo = Math.floor(scaled), hi = Math.min(stops.length - 1, lo + 1), frac = scaled - lo;
   if (frac === 0) return stops[lo];
-  // Interpolate hex colors
-  const parse = (hex: string) => [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
-  const [r1,g1,b1] = parse(stops[lo]);
-  const [r2,g2,b2] = parse(stops[hi]);
-  const r = Math.round(r1 + frac*(r2-r1));
-  const g = Math.round(g1 + frac*(g2-g1));
-  const b = Math.round(b1 + frac*(b2-b1));
-  return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+  const parse = (hex: string) => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));   // hex → [r,g,b]
+  const to = parse(stops[hi]);
+  return '#' + parse(stops[lo]).map((v, i) => Math.round(v + frac * (to[i] - v)).toString(16).padStart(2, '0')).join('');
 }
 
 // normalizeName + matchGeoItem are provided as globals by geoMatch.js, loaded
@@ -442,7 +443,7 @@ function _renderBubbleMap(map: any, wrap: HTMLElement, geo: any, periodInfo: any
   if (periodInfo) { minVal = periodInfo.minVal; maxVal = periodInfo.maxVal; }   // fixed global scale
   else { const vs = placeable.map((i: any) => i.value); minVal = Math.min(...vs); maxVal = Math.max(...vs); }
   const MAX_RADIUS = 30, MIN_RADIUS = 5;
-  const accent = getCSSVar('--accent') || '#3b82f6';
+  const accent = getCSSVar('--accent', wrap) || '#3b82f6';
 
   const SRC = 'cv-bubbles', LAYER = 'cv-bubbles-circles';
 
@@ -547,9 +548,9 @@ function _renderChoroplethMap(map: any, wrap: HTMLElement, geo: any, geoData: an
     maxVal = vs.length ? Math.max(...vs) : 1;
   }
 
-  const noData = getCSSVar('--surface-3') || '#e5e7eb';
-  const noDataBorder = getCSSVar('--border-2') || '#d1d5db';
-  const borderColor = getCSSVar('--border') || '#e5e7eb';
+  const noData = getCSSVar('--surface-3', wrap) || '#e5e7eb';
+  const noDataBorder = getCSSVar('--border-2', wrap) || '#d1d5db';
+  const borderColor = getCSSVar('--border', wrap) || '#e5e7eb';
 
   const SRC = 'cv-choropleth', FILL = 'cv-choropleth-fill', LINE = 'cv-choropleth-line';
 
@@ -579,7 +580,7 @@ function _renderChoroplethMap(map: any, wrap: HTMLElement, geo: any, geoData: an
       let color = noData;
       if (hasValue) {
         const t = maxVal > minVal ? (item.value - minVal) / (maxVal - minVal) : 0.5;
-        color = getChoroplethColor(t);
+        color = getChoroplethColor(t, wrap);
       }
       if (item) {
         matchedNames.add(normalizeName(item.name));
@@ -784,8 +785,7 @@ function _addBubbleLegend(wrap: HTMLElement, minVal: number, maxVal: number, col
 }
 
 function _addChoroplethLegend(wrap: HTMLElement, minVal: number, maxVal: number): void {
-  const stops = document.documentElement.dataset.theme === 'dark'
-    ? CHOROPLETH_STOPS_DARK : CHOROPLETH_STOPS_LIGHT;
+  const stops = isDarkSurface(wrap) ? CHOROPLETH_STOPS_DARK : CHOROPLETH_STOPS_LIGHT;
   const leg = document.createElement('div');
   leg.className = 'cv-map-legend';
 

@@ -26,12 +26,28 @@
     BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
     monospace;
+  /* The face for a KPI figure. Defaults to the UI stack (i.e. no change from
+     what shipped); .dash-theme--executive remaps it to a SYSTEM serif. It is a
+     token rather than a font-family on .dash-metric-value because a theme block
+     may only redefine tokens — a preset that had to restyle each rule would
+     fight .an-workbench/#dash-grid specificity for every one of them. */
+  --font-numeric: var(--font-ui);
   --r-sm: 6px;
   --r-md: 9px;
   --r-lg: 13px;
   --r-xl: 18px;
   --r-full: 999px;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Dashboard grid geometry. These are tokens and not literals in hub.css
+     because renderer/hub/dashboards.ts READS THEM BACK with getComputedStyle to
+     do its drag/resize hit-testing: the gap and row height were duplicated as
+     DASH_GAP_PX / DASH_ROW_PX in the TypeScript, so a density preset that
+     changed only the painted grid would leave every drop target computed
+     against the old geometry — cards landing a row off from where they were
+     released. One definition, read by both. */
+  --dash-gap: 12px;
+  --dash-row: 48px;
 
   /* ── Light (default) ── */
   --bg: #f7f7f8;

@@ -18,10 +18,20 @@
 // The fixed column count — MUST stay in sync with `.dash-grid` in hub.css and
 // GRID_COLS in src/dashboards.ts.
 const DASH_GRID_COLS = 12;
-// One grid row's height in px (mirrors `.dash-grid { grid-auto-rows }`) + the
-// gap, used only to map a drop pointer to whole grid units for native drag.
-const DASH_ROW_PX = 48;
-const DASH_GAP_PX = 12;
+// One grid row's height in px + the gap, used only to map a drop pointer to
+// whole grid units for native drag. These are READ BACK from the live grid
+// rather than frozen as constants: a density preset (dashStyle.ts) remaps
+// --dash-gap / --dash-row, and a constant here would leave drag-and-resize hit
+// testing measuring a grid that is no longer on screen. The fallbacks are the
+// comfortable values, for the window between a call and the grid existing.
+function dashGridPx(prop: string, fallback: number): number {
+  const grid = dashEl('dash-grid');
+  if (!grid) return fallback;
+  const v = parseFloat(getComputedStyle(grid).getPropertyValue(prop));
+  return Number.isFinite(v) && v > 0 ? v : fallback;
+}
+function dashRowPx(): number { return dashGridPx('--dash-row', 48); }
+function dashGapPx(): number { return dashGridPx('--dash-gap', 12); }
 
 type DashAgg = 'sum' | 'avg' | 'count' | 'min' | 'max';
 const DASH_AGGS: DashAgg[] = ['sum', 'avg', 'count', 'min', 'max'];
@@ -214,6 +224,9 @@ async function persistAnalysis(): Promise<void> {
       name: dashCurrent.name,
       sheets: dashCurrent.pages,
       filters: Array.isArray(dashCurrent.filters) ? dashCurrent.filters : [],
+      // Saved WITH the record, not as a view preference: a dashboard's look is
+      // part of what gets shared, so it must survive a reopen on another machine.
+      style: dashCurrentStyle(),
     });
     if (res && res.ok && res.analysis) {
       // Adopt main's sanitized copy, keeping the pages/sheets alias intact.
@@ -296,6 +309,11 @@ function initDashboards(): void {
   if (catC) catC.addEventListener('click', () => handleDashCategory());
   const perC = dashEl('dash-period-select');
   if (perC) perC.addEventListener('click', () => handleDashPeriod());
+  // Not `dash-edit-only`, and never gated on dashReadOnly: restyling is a view
+  // decision a reader of a published dashboard is allowed to make, same
+  // argument as #dash-reset-controls above.
+  const styleBtn = dashEl('dash-style-btn');
+  if (styleBtn) styleBtn.addEventListener('click', () => handleDashStyle());
   const pres = dashEl('dash-present-btn');
   if (pres) pres.addEventListener('click', () => enterDashPresent());
   const presX = dashEl('dash-present-exit');

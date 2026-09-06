@@ -292,12 +292,12 @@ declare global {
       // ── Analyses (the AUTHORING container — sheets of cards + filters) ──
       listAnalyses(projectId: string): Promise<any[]>;
       getAnalysis(projectId: string, id: string): Promise<any>;
-      createAnalysis(payload: { projectId: string; name: string; sheets?: any; filters?: any }): Promise<any>;
+      createAnalysis(payload: { projectId: string; name: string; sheets?: any; filters?: any; style?: any }): Promise<any>;
       renameAnalysis(projectId: string, id: string, name: string): Promise<any>;
       updateAnalysis(
         projectId: string,
         id: string,
-        patch: { name?: string; sheets?: any; filters?: any },
+        patch: { name?: string; sheets?: any; filters?: any; style?: any },
       ): Promise<any>;
       deleteAnalysis(projectId: string, id: string): Promise<{ ok: boolean }>;
       computeMetric(

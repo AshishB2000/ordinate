@@ -10,6 +10,24 @@ All notable changes to Ordinate are documented here. Format based on
 ## [Unreleased]
 
 ### Added
+- **Dashboard styles — pick how a dashboard looks.** Four app-owned presets: **Clean** (the look
+  that shipped), **Executive** (muted paper palette, serif KPI figures, cards that lift off the
+  page), **Dense** (tighter grid and smaller type) and **Dark** (dark surface, same accent). Choose
+  one from **Style…** in a dashboard's ⋯ menu — four live thumbnails of *your* grid, previewed
+  instantly and undoable until you Apply — or before you build, from the strip on the Assistant's
+  dashboard proposal. The Assistant understands "make it dark", "make it denser" and "executive
+  style", and hands you the same one-click confirm. A style travels with the dashboard: it is saved
+  on the record and carried into shared HTML, PDF and PNG exports, so a snapshot looks like what its
+  author saw. Charts re-skin with the sheet. Nothing moves: every preset keeps the same twelve
+  columns, so a restyle never repositions a card. The Assistant only ever names one of the four
+  presets — it never writes CSS or picks a colour.
+- **Ask the Assistant to build you a dashboard.** Say "build me a sales dashboard for Adidas US
+  Sales" in the Assistant or the Home ask bar and you get a proposal you can look at — its name, why
+  it was proposed, each chart drawn with your real numbers, and a plain list of anything the app
+  refused to accept — with **Build dashboard** and **Adjust…** underneath. Follow-ups refine the same
+  proposal rather than starting over. Every figure in it is computed by Ordinate; the Assistant only
+  proposes the structure, and anything it gets wrong is shown to you rather than quietly dropped. An
+  empty Dashboards page now suggests build requests over the datasets you actually have.
 - **Explore — ask a question about your data.** A page of its own, above Home and on the Home
   screen: pick a dataset, ask in plain language, and get an answer built from figures the app
   computed — with chips saying which dataset and columns they came from. Where the question suits

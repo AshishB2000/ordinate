@@ -266,7 +266,16 @@ export function register() {
           text: res.text,
           provenance: facts.provenance,
         }, target);
-        return { ok: true, answer: res.text, provenance: facts.provenance, turns: turns || [], threadId: target || null };
+        // `suggestedAction` is the model's STRUCTURED read of what the question
+        // wanted (src/ai/suggestedAction.ts) — a whitelisted kind plus an intent
+        // string, never a plan and never a figure. It is NOT persisted on the
+        // turn: a proposal belongs to the turn that produced it and is rebuilt
+        // from disk truth as prose only, which is the existing rule.
+        return {
+          ok: true, answer: res.text, provenance: facts.provenance,
+          turns: turns || [], threadId: target || null,
+          suggestedAction: res.suggestedAction || { kind: 'none', intent: '' },
+        };
       }
       if (res.errorType === 'not_ready') return { ok: false, notReady: true };
       return { ok: false, error: res.message || 'Could not answer the question' };

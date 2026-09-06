@@ -7217,9 +7217,16 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 
 .dash-grid {
   display: grid;
+  /* TWELVE COLUMNS, in every preset, deliberately NOT a style axis. A card's
+     x and w are layout COORDINATES stored on the record, not a look — re-column
+     the grid and every saved dashboard silently rearranges itself, which is a
+     restyle moving a card. Gap and row height are safe to vary because they
+     only change the pitch, never which cell a card occupies. */
   grid-template-columns: repeat(12, 1fr);
-  gap: 12px;
-  grid-auto-rows: 48px;
+  /* Tokens, not literals: dashboards.ts reads these back with getComputedStyle
+     for drag/resize hit-testing (see --dash-gap in theme.css). */
+  gap: var(--dash-gap);
+  grid-auto-rows: var(--dash-row);
 }
 .dash-card {
   display: flex;
@@ -7272,7 +7279,10 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   cursor: pointer;
 }
 .dash-card-btn:hover { border-color: var(--accent); color: var(--accent); }
-.dash-card-rm:hover { border-color: #dc2626; color: #dc2626; }
+/* var(--error), not #dc2626: the literal is theme-blind, so on .dash-theme--dark
+   it paints a light-theme red on a dark card. Same class of bug as a var() that
+   resolves to nothing — invisible in review, obvious on screen. */
+.dash-card-rm:hover { border-color: var(--error); color: var(--error); }
 .dash-card-body {
   flex: 1;
   min-width: 0;
@@ -7322,6 +7332,13 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   gap: 4px;
 }
 .dash-metric-value {
+  /* --font-numeric defaults to --font-ui, so this is the same face that shipped;
+     .dash-theme--executive is the only thing that moves it (to a system serif).
+     tabular-nums regardless of face: a KPI that re-renders on a filter change
+     with proportional digits jitters its own width, and two metric cards side by
+     side stop lining up at the decimal point. */
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
   font-size: 26px;
   font-weight: 700;
   color: var(--text-strong);
@@ -7684,7 +7701,7 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   border-radius: 50%;
   cursor: pointer;
 }
-.dash-filter-chip-x:hover { color: #dc2626; background: var(--bg); }
+.dash-filter-chip-x:hover { color: var(--error); background: var(--bg); }
 .dash-filter-none { font-size: 12px; color: var(--muted); }
 .dash-toolbar-quick { display: flex; align-items: center; gap: 6px; }
 .dash-toolbar-actions { display: flex; align-items: center; gap: 6px; }
@@ -7719,8 +7736,8 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 .dash-presenting .dash-pages { border-bottom: none; }
 
 /* ── Broken / outdated card link (source visual or dataset is gone) ── */
-.dash-card--broken { border-color: #dc2626; border-style: dashed; }
-.dash-card--broken .dash-card-head { background: color-mix(in srgb, #dc2626 8%, var(--bg)); }
+.dash-card--broken { border-color: var(--error); border-style: dashed; }
+.dash-card--broken .dash-card-head { background: color-mix(in srgb, var(--error) 8%, var(--bg)); }
 .dash-card-broken-badge {
   flex: 0 0 auto;
   padding: 1px 7px;
@@ -7728,8 +7745,8 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: .04em;
-  color: #dc2626;
-  background: color-mix(in srgb, #dc2626 12%, transparent);
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 12%, transparent);
   border-radius: 999px;
   white-space: nowrap;
 }
@@ -7743,6 +7760,340 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   margin: 0 0 10px;
 }
 .dash-share-note--safe { color: var(--muted); }
+
+/* ╔══════════════════════════════════════════════════════════════════════════╗
+   ║  DASHBOARD STYLES — three orthogonal axes                                ║
+   ║    .dash-theme--clean | --executive | --dark                             ║
+   ║    .dash-density--comfortable | --compact                                ║
+   ║    .dash-accent--blue | --teal | --slate                                 ║
+   ╚══════════════════════════════════════════════════════════════════════════╝
+
+   All three classes go on ONE element, together. They are PLAIN CLASS SELECTORS
+   — never `html.dash-theme--dark` — because the same element may be <html>, may
+   be #dash-editor, and may be a 120px preview tile in the style picker. Qualify
+   them with `html` and the picker's four thumbnails all paint the root's colours.
+
+   Presets REDEFINE THE EXISTING GLOBAL TOKENS (--surface, --text, --chart-1 …)
+   rather than introducing a --dash-* colour namespace: every `.dash-*` rule
+   above already consumes the globals, so a token swap restyles the whole sheet
+   and a new namespace would mean rewriting all of them and missing some.
+
+   SOURCE ORDER IS LOAD-BEARING: every theme block, then every density block,
+   then every accent block. All three axes are single-class selectors (0,1,0), so
+   the cascade is decided by position alone, and the accent axis owns
+   the --accent and --chart tokens — it MUST come last, or picking Teal on Dark
+   silently keeps the theme's blue. The `.dash-theme--dark.dash-accent--*`
+   combined blocks are (0,2,0) and win over both, which is how a dark sheet gets
+   the brighter chart ramp instead of the light one.
+
+   Specificity walls checked, and why nothing here has to fight them:
+     :6403  `.an-workbench.is-active #dash-grid .dash-card { background:
+            var(--surface); }` — CONSUMES a token, so it follows every preset for
+            free. This is the reason presets move tokens and not properties.
+     :6793  `#dash-grid .dash-card.is-selected` — token-only too (--accent,
+            --accent-line), and its box-shadow deliberately outranks the
+            Executive card shadow below, so a selected card keeps its ring.
+     :8699+ the drag/resize rules — cursors, positions and var(--accent). Nothing
+            a preset sets.
+     :7716  the present-mode `display: none !important` block. Nothing here
+            declares `display`, so presentation stays chrome-free under any
+            preset. Do not add one.
+
+   ── THEME ──────────────────────────────────────────────────────────────────
+   Each theme block declares the SAME token set — the 34 that [data-theme="dark"]
+   redefines in theme.css, plus --font-numeric. Not for tidiness: a theme block
+   that omits, say, --surface-3 inherits the LIGHT value, and the dark preset
+   shows white boxes on a dark sheet. scripts/test-dashboardStyleCss.ts asserts
+   the three sets are identical for exactly that reason. */
+
+/* Clean — the look that shipped. Written out in full rather than left empty
+   because it is the PARITY BASELINE: applying it to a preview tile on a dark
+   root must produce the light sheet, and an empty block would inherit the dark
+   one. It is also what the test compares the other two against. */
+.dash-theme--clean {
+  --bg: #f7f7f8;
+  --surface: #ffffff;
+  --surface-2: #f3f4f6;
+  --surface-3: #eaecf0;
+  --inset: #f2f4f7;
+
+  --text: #18181b;
+  --text-strong: #0f1117;
+  --muted: #6b7280;
+  --text-dim: #8a909c;
+  --text-faint: #aeb4bf;
+
+  --border: #e5e7eb;
+  --border-2: #d6dae1;
+  --border-3: #bfc5cf;
+
+  --accent: #2563eb;
+  --accent-2: #1d4fd0;
+  --accent-soft: rgba(37, 99, 235, 0.08);
+  --accent-line: rgba(37, 99, 235, 0.22);
+  --accent-ink: #ffffff;
+
+  --chart-1: #2563eb;
+  --chart-2: #0e7490;
+  --chart-3: #14b8a6;
+  --chart-4: #6366f1;
+  --chart-5: #64748b;
+  --chart-accent: #2563eb;
+
+  --error: #e11d48;
+  --error-soft: rgba(225, 29, 72, 0.09);
+  --ok: #059669;
+  --ok-soft: rgba(5, 150, 105, 0.1);
+  --warn: #c77d11;
+  --warn-soft: rgba(199, 125, 17, 0.12);
+
+  --titlebar: #fafbfc;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 10px 28px -12px rgba(15, 23, 42, 0.18);
+  --shadow-lg: 0 30px 70px -24px rgba(15, 23, 42, 0.28);
+  --font-numeric: var(--font-ui);
+  color-scheme: light;
+}
+
+/* Executive — the same layout read as a printed report: warm paper neutrals
+   instead of the cool greys, a muted slate accent, and a card that lifts off the
+   page. Quieter, not duller: the greys carry a little warmth so the KPI figures
+   are the only saturated thing on the sheet. */
+.dash-theme--executive {
+  --bg: #f6f4f1;
+  --surface: #fffefc;
+  --surface-2: #f2f0ec;
+  --surface-3: #e8e5df;
+  --inset: #f1efeb;
+
+  --text: #23211e;
+  --text-strong: #14120f;
+  --muted: #6d6862;
+  --text-dim: #8b857d;
+  --text-faint: #b0aaa2;
+
+  --border: #e4e0d9;
+  --border-2: #d5d0c7;
+  --border-3: #bfb9ae;
+
+  --accent: #475569;
+  --accent-2: #334155;
+  --accent-soft: rgba(71, 85, 105, 0.08);
+  --accent-line: rgba(71, 85, 105, 0.22);
+  --accent-ink: #ffffff;
+
+  --chart-1: #475569;
+  --chart-2: #64748b;
+  --chart-3: #0f766e;
+  --chart-4: #7e8ba3;
+  --chart-5: #a1a8b5;
+  --chart-accent: #475569;
+
+  --error: #b3123c;
+  --error-soft: rgba(179, 18, 60, 0.09);
+  --ok: #0f7a53;
+  --ok-soft: rgba(15, 122, 83, 0.1);
+  --warn: #a8710f;
+  --warn-soft: rgba(168, 113, 15, 0.12);
+
+  --titlebar: #faf9f7;
+  --shadow-sm: 0 1px 2px rgba(60, 50, 35, 0.07);
+  --shadow-md: 0 10px 28px -12px rgba(60, 50, 35, 0.2);
+  --shadow-lg: 0 30px 70px -24px rgba(60, 50, 35, 0.3);
+  /* The one system serif stack available: no web font may be added (local-first,
+     no remote fetch), and the repo has no serif stack anywhere else. ui-serif is
+     the platform's own, the rest is the fallback chain for platforms without it. */
+  --font-numeric: ui-serif, Georgia, "Times New Roman", serif;
+  color-scheme: light;
+}
+
+/* The two things Executive cannot express as a token, because .dash-card and
+   .dash-metric-value hardcode them. Both are (0,2,0) and the rules they override
+   are (0,1,0), so they win; #dash-grid .dash-card.is-selected (:6793) is (0,2,0)
+   AND later, so a selected card still shows its accent ring instead of this. */
+.dash-theme--executive .dash-card {
+  border-radius: 14px;
+  box-shadow: var(--shadow-md);
+}
+/* Larger KPI presence — the number is the point of an executive sheet. */
+.dash-theme--executive .dash-metric-value { font-size: 34px; }
+.dash-theme--executive .dash-metric-label { font-size: 12.5px; }
+
+/* Dark — must redefine EVERY token [data-theme="dark"] does (theme.css:73-116).
+   A missing one falls back to the light value: --surface-3 alone left un-set is
+   a white card head on a near-black sheet. Values are kept in step with the app
+   dark theme on purpose, so a dashboard on a dark app does not read as a second,
+   slightly-off dark. `color-scheme: dark` is inherited, which is what makes the
+   native <select> and <input type="date"> in .dash-ctrl-select / .dash-ctrl-date
+   render their dark widget instead of a white one on a dark card. */
+.dash-theme--dark {
+  --bg: #18181b;
+  --surface: #232327;
+  --surface-2: #2a2a30;
+  --surface-3: #313139;
+  --inset: #1d1d21;
+
+  --text: #ececee;
+  --text-strong: #ffffff;
+  --muted: #9ca3af;
+  --text-dim: #6b7280;
+  --text-faint: #52525b;
+
+  --border: #2e2e33;
+  --border-2: #3a3a42;
+  --border-3: #4a4a55;
+
+  --accent: #3b82f6;
+  --accent-2: #2f6fe0;
+  --accent-soft: rgba(59, 130, 246, 0.16);
+  --accent-line: rgba(59, 130, 246, 0.32);
+  --accent-ink: #ffffff;
+
+  --chart-1: #3b82f6;
+  --chart-2: #22d3ee;
+  --chart-3: #2dd4bf;
+  --chart-4: #818cf8;
+  --chart-5: #94a3b8;
+  --chart-accent: #3b82f6;
+
+  --error: #f87171;
+  --error-soft: rgba(248, 113, 113, 0.13);
+  --ok: #34d399;
+  --ok-soft: rgba(52, 211, 153, 0.13);
+  --warn: #f5b53d;
+  --warn-soft: rgba(245, 181, 61, 0.14);
+
+  --titlebar: #1d1d21;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px -8px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 28px 64px -20px rgba(0, 0, 0, 0.65);
+  --font-numeric: var(--font-ui);
+  color-scheme: dark;
+}
+
+/* ── DENSITY ────────────────────────────────────────────────────────────────
+   Only --dash-gap and --dash-row are tokens, and only because dashboards.ts
+   reads them back for hit-testing — a painted grid that disagrees with the drop
+   maths drops cards a row off from where they were released.
+
+   The type and padding below are PLAIN OVERRIDE RULES, not tokens. There are 32
+   literal font-sizes in the dashboard section and no --fs-* scale exists;
+   tokenising all of them is a separate refactor, and doing it halfway (some
+   sizes tokenised, some not) is worse than either end. These seven are the ones
+   that decide whether a compact card reads as tight or as broken. */
+.dash-density--comfortable {
+  --dash-gap: 12px;
+  --dash-row: 48px;
+}
+
+.dash-density--compact {
+  --dash-gap: 8px;
+  --dash-row: 36px;
+}
+/* (0,2,0) against the (0,1,0) originals — these win on position AND weight.
+   They also sit after the theme blocks, so compact still shrinks the KPI on the
+   Executive theme, whose .dash-metric-value rule is equal-specificity and
+   earlier. That is the point of the mandated axis order. */
+.dash-density--compact .dash-card-head { padding: 4px 7px; }
+.dash-density--compact .dash-card-body { padding: 6px; }
+.dash-density--compact .dash-card-title { font-size: 10px; }
+.dash-density--compact .dash-metric-value { font-size: 20px; }
+.dash-density--compact .dash-metric-label { font-size: 11px; }
+.dash-density--compact .dash-card-h { font-size: 12.5px; }
+.dash-density--compact .dash-card-p { font-size: 12px; }
+
+/* ── ACCENT ─────────────────────────────────────────────────────────────────
+   LAST, so it beats the theme block's own accent/chart values at equal
+   specificity. Each block declares the same ten tokens; a block that skipped
+   one would leave that series painting the theme's hue, and a five-series chart
+   with one colour from another palette looks like a rendering bug, not a style.
+   --accent-ink is deliberately NOT on this axis: it is the ink ON the accent,
+   and every accent here is dark enough for white. */
+.dash-accent--blue {
+  --accent: #2563eb;
+  --accent-2: #1d4fd0;
+  --accent-soft: rgba(37, 99, 235, 0.08);
+  --accent-line: rgba(37, 99, 235, 0.22);
+  --chart-accent: #2563eb;
+  --chart-1: #2563eb;
+  --chart-2: #0e7490;
+  --chart-3: #14b8a6;
+  --chart-4: #6366f1;
+  --chart-5: #64748b;
+}
+
+.dash-accent--teal {
+  --accent: #0d9488;
+  --accent-2: #0f766e;
+  --accent-soft: rgba(13, 148, 136, 0.09);
+  --accent-line: rgba(13, 148, 136, 0.24);
+  --chart-accent: #0d9488;
+  --chart-1: #0d9488;
+  --chart-2: #0e7490;
+  --chart-3: #2563eb;
+  --chart-4: #4f46e5;
+  --chart-5: #64748b;
+}
+
+/* Slate — the muted one, and what the Executive preset pairs with. */
+.dash-accent--slate {
+  --accent: #475569;
+  --accent-2: #334155;
+  --accent-soft: rgba(71, 85, 105, 0.08);
+  --accent-line: rgba(71, 85, 105, 0.22);
+  --chart-accent: #475569;
+  --chart-1: #475569;
+  --chart-2: #64748b;
+  --chart-3: #0f766e;
+  --chart-4: #7e8ba3;
+  --chart-5: #a1a8b5;
+}
+
+/* Dark + accent. These are (0,2,0), so they beat both the theme block and the
+   light accent block above regardless of which order the classes appear in the
+   class attribute. They exist because the light ramps go MUDDY on #232327: the
+   same hues have to be lifted in lightness and saturation, matching the level
+   theme.css's [data-theme="dark"] already establishes for the app chrome. */
+.dash-theme--dark.dash-accent--blue {
+  --accent: #3b82f6;
+  --accent-2: #2f6fe0;
+  --accent-soft: rgba(59, 130, 246, 0.16);
+  --accent-line: rgba(59, 130, 246, 0.32);
+  --chart-accent: #3b82f6;
+  --chart-1: #3b82f6;
+  --chart-2: #22d3ee;
+  --chart-3: #2dd4bf;
+  --chart-4: #818cf8;
+  --chart-5: #94a3b8;
+}
+
+.dash-theme--dark.dash-accent--teal {
+  --accent: #2dd4bf;
+  --accent-2: #14b8a6;
+  --accent-soft: rgba(45, 212, 191, 0.16);
+  --accent-line: rgba(45, 212, 191, 0.32);
+  --chart-accent: #2dd4bf;
+  --chart-1: #2dd4bf;
+  --chart-2: #22d3ee;
+  --chart-3: #60a5fa;
+  --chart-4: #818cf8;
+  --chart-5: #94a3b8;
+}
+
+/* Slate on dark is the corner case: #475569 is invisible against #232327, so the
+   whole ramp moves to the light half of the slate scale. */
+.dash-theme--dark.dash-accent--slate {
+  --accent: #94a3b8;
+  --accent-2: #b6c2d1;
+  --accent-soft: rgba(148, 163, 184, 0.16);
+  --accent-line: rgba(148, 163, 184, 0.32);
+  --chart-accent: #94a3b8;
+  --chart-1: #94a3b8;
+  --chart-2: #cbd5e1;
+  --chart-3: #5eead4;
+  --chart-4: #a5b4fc;
+  --chart-5: #78859a;
+}
 
 /* ── Connect data (connected sources: Postgres + URL/API JSON) ── */
 /* Overlays the capture area inside .main-body so the capture surface underneath
@@ -10898,3 +11249,206 @@ body.cap-focus .cap-back {
 .home-empty--starred .home-empty-art { grid-row: 1 / 3; width: 34px; height: 34px; font-size: 16px; margin: 0; align-self: center; }
 .home-empty--starred .home-empty-title { font-size: 13px; }
 .home-empty--starred .home-empty-line { font-size: 12px; }
+
+/* ── Dashboard proposal card (dockPropose.ts) ────────────────────────────────
+   The plan pipeline's own preview, mounted in a dock 300px wide instead of a
+   modal. Everything here is SIZE: the tiles are the review modal's
+   anDraftVisualEl unchanged, so the numbers, the null-data note and the dropped
+   list are all the ones that surface already renders. */
+.dk-plan-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+  margin-top: 2px;
+}
+.dk-plan-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  /* Several tiles in a narrow dock: cap the run and scroll rather than pushing
+     the Build button below the fold, where a proposal reads as unfinished. */
+  max-height: 420px;
+  overflow-y: auto;
+}
+/* A dock tile is a glance, not a workbench. Shorter than the modal's 200px, but
+   not so short the plot loses its axes — 150px is what reads at 300px wide. */
+.dk-plan-grid .an-draft-viz { height: 150px; min-height: 150px; }
+/* flex-shrink defaults to 1, so three tiles in a 420px-capped flex column were
+   squashed BELOW their own height — and Chart.js measured the squashed box, so
+   every plot drew as a ~15px sliver. The tiles keep their height; the grid
+   scrolls instead. */
+.dk-plan-grid > .an-draft-visual { flex: 0 0 auto; }
+/* renderVizInArea nests the canvas one level deeper than the .an-draft-viz rule
+   above assumes: .cv-viz-area > .cv-chart-wrapper > .cv-canvas-wrap. The wrapper
+   is an auto-height flex column, so at this tile's smaller size `height:100%` on
+   the canvas wrap resolved against nothing and collapsed the plot to ~16px in an
+   otherwise correct 150px box. Scoped to the dock: the review modal's own tiles
+   lay out correctly as they are, and telling the wrapper to fill there pushed
+   its chart 2px past the box (caught by smoke-app). */
+.dk-plan-grid .an-draft-viz .cv-chart-wrapper { height: 100%; min-height: 0; }
+/* .cv-viz-area carries margin-top:2px for the surfaces it was written for, which
+   inside a fixed-height tile pushes the plot exactly 2px past the bottom. The
+   box clips it, but "clipped" is not "fits". */
+.dk-plan-grid .an-draft-viz .cv-viz-area { margin-top: 0; }
+.dk-plan-grid .an-draft-visual { padding: 8px; }
+.dk-plan-grid .an-draft-visual-title { font-size: 12px; }
+/* The dropped list is inside the card, so it inherits the card's own padding. */
+.dk-proposal .an-draft-section { margin-top: 10px; }
+
+/* Build-intent chips on an empty Dashboards page. Same language as the wizard's
+   .an-wiz-chip examples, but these ASK rather than fill a textarea. */
+.ws-empty-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+.ws-empty-chips[hidden] { display: none; }
+.ws-empty-chip {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.ws-empty-chip:hover { border-color: var(--accent); color: var(--accent); }
+.ws-empty-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ╔══════════════════════════════════════════════════════════════════════════╗
+   ║  DASHBOARD STYLE PICKER — the four-up chooser (dashStyle.ts)             ║
+   ╚══════════════════════════════════════════════════════════════════════════╝
+
+   Four tiles, each carrying the three axis classes of the preset it offers, so
+   every thumbnail paints itself out of its OWN tokens. That is the whole trick:
+   the preview is not a picture of the style, it is the style, applied to a
+   120px scale model of the real grid.
+
+   It renders in two places with very different widths — the Style modal and the
+   340px Assistant dock — so the strip wraps to two-up rather than assuming four
+   fit. */
+.dash-style-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 4px;
+}
+.dash-style-tile {
+  flex: 1 1 96px;
+  min-width: 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  font: inherit;
+  cursor: pointer;
+}
+.dash-style-tile:hover { border-color: var(--border-3); }
+.dash-style-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* The selected ring is the same 2px --accent-line idiom a selected card uses
+   (#dash-grid .dash-card.is-selected), so "chosen" reads the same everywhere. */
+.dash-style-tile[aria-checked="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-line);
+}
+.dash-style-tile-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  text-align: center;
+}
+.dash-style-tile[aria-checked="true"] .dash-style-tile-name { color: var(--text-strong); }
+
+/* The miniature world. It MUST paint its own background: left transparent it
+   would inherit the surrounding sheet and all four tiles would look identical
+   — which is precisely the bug this whole preview exists to rule out. */
+.dash-style-preview {
+  display: block;
+  overflow: hidden;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  aspect-ratio: 4 / 3;
+}
+.dash-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-auto-rows: 5px;
+  gap: 2px;
+  height: 100%;
+}
+/* Density has to be VISIBLE at this size or the Dense tile is lying about what
+   it does — the rows and gap scale by the same ratio as the real grid. */
+.dash-density--compact .dash-mini-grid { grid-auto-rows: 4px; gap: 1px; }
+
+.dash-mini-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  overflow: hidden;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface-2);
+}
+/* Executive's cards carry a shadow and a rounder corner in the real grid, so
+   its thumbnail does too — otherwise the one preset defined by its card
+   treatment previews identically to Clean. */
+.dash-theme--executive .dash-mini-card {
+  border-radius: 5px;
+  background: var(--surface);
+  box-shadow: 0 2px 6px -3px rgba(60, 50, 35, 0.35);
+}
+.dash-mini-metric {
+  font-family: var(--font-numeric);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-strong);
+}
+.dash-mini-line {
+  width: 70%;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--border-2);
+}
+.dash-mini-pill {
+  width: 60%;
+  height: 5px;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  border: 1px solid var(--border-2);
+}
+/* Bars are how the accent axis shows up at all — height and background are set
+   from JS (element.style, which the CSP allows; only inline style= in the HTML
+   is banned), reading var(--chart-N) against THIS tile's accent class. */
+.dash-mini-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+}
+.dash-mini-bar {
+  flex: 1 1 0;
+  min-width: 0;
+  border-radius: 1px 1px 0 0;
+  background: var(--chart-1);
+}
+
+.ws-modal.dash-style-modal { width: min(470px, calc(100vw - 48px)); }
+.dash-style-sub {
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}

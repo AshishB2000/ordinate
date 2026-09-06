@@ -79,13 +79,15 @@ function initAuthoring(): void {
     });
   }
 
-  // ⋯ overflow: Present / Export… / Share. openMiniMenu (chartControls.ts) is
-  // the hub's existing popover — positioned, outside-click and Esc already done.
+  // ⋯ overflow: Style… / Present / Export… / Share. openMiniMenu
+  // (chartControls.ts) is the hub's existing popover — positioned, outside-click
+  // and Esc already done.
   const more = anEl('an-more-btn');
   if (more) {
     more.addEventListener('click', () => {
       openMiniMenu(more, (menu: HTMLElement, close: () => void) => {
         ([
+          ['Style…', 'dash-style-btn'],
           ['Present', 'dash-present-btn'],
           ['Export…', 'dash-export-btn'],
           ['Share', 'dash-share-btn'],
