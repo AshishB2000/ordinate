@@ -11,6 +11,8 @@ import { computeColumnSummary, findQualityIssues } from '../data/datasetStats';
 import { buildVizData } from '../analysis/vizData';
 import { computeMetric } from '../analysis/metricValue';
 import { askCopilot } from '../ai/analyze';
+import { auditNumbers } from '../ai/numberAudit';
+import type { LedgerEntry, NumberAudit } from '../ai/numberAudit';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
 // (request/response). Every handler is wrapped so a throw becomes { ok:false, error }
@@ -51,6 +53,41 @@ const NO_ACTIVITY: ActivityEmit = () => { /* default — non-ask callers and the
 // "1 columns"). App-authored strings only — nothing here is model output.
 function plural(n: number, one: string, many = one + 's'): string {
   return n + ' ' + (n === 1 ? one : many);
+}
+
+// ── The number-fidelity guard ────────────────────────────────────────────────
+//
+// The app does the math; the model narrates figures the app already computed.
+// `ai/numberAudit` checks that claim against the LEDGER buildFacts recorded, and
+// this is where the answer meets the check.
+//
+// It does not block and it does not retry. A retry loop spends a second model
+// call to hide the evidence, and blocking turns one bad figure into no answer at
+// all — while the user, who is the person actually able to judge, is told
+// nothing either way. So the finding is APPENDED TO THE ANSWER TEXT, before the
+// turn is persisted: it then survives a reload, appears in the composer, the
+// dock and the stored transcript with no renderer change, and cannot be styled
+// away. The user sees it, which is the entire point.
+const GUARD_NOTE = 'Contains a figure the app did not compute: ';
+
+// Once per process, residentTrace-style: the failure this catches is systematic
+// (a prompt that invites derived figures), so the thousandth line says nothing
+// the first did not, and a flooded log is a log nobody reads.
+let guardWarned = false;
+
+function guardAnswer(text: string, ledger: LedgerEntry[]): { text: string; audit: NumberAudit } {
+  const audit = auditNumbers(text, ledger);
+  if (audit.ok) return { text, audit };
+  const tokens = audit.violations.map((v) => v.token).join(', ');
+  if (!guardWarned) {
+    guardWarned = true;
+    // Tokens only, never the answer or the facts: this runs over user data.
+    console.warn(
+      `[numbers] the assistant stated ${plural(audit.violations.length, 'figure')} not in the app's ledger ` +
+        `(${tokens}). The answer is shown with a note appended. Further occurrences this session are not logged.`,
+    );
+  }
+  return { text: text + '\n\n' + GUARD_NOTE + tokens, audit };
 }
 
 // One app-computed number per metric card (metricValue.computeMetric) over a
@@ -267,10 +304,15 @@ export function register() {
         let target = tid || (await copilot.latestThreadId(projectId)) || undefined;
         if (!target) target = (await copilot.createThread(projectId))?.id;
 
+        // The guard runs BEFORE persistence, so the stored turn carries the note
+        // and a reloaded conversation shows it too. `answer` below is the guarded
+        // text for the same reason — one string, seen everywhere.
+        const guarded = guardAnswer(res.text, facts.ledger);
+
         await copilot.appendTurn(projectId, { role: 'user', text: q }, target);
         const turns = await copilot.appendTurn(projectId, {
           role: 'assistant',
-          text: res.text,
+          text: guarded.text,
           provenance: facts.provenance,
         }, target);
         // `suggestedAction` is the model's STRUCTURED read of what the question
@@ -279,9 +321,14 @@ export function register() {
         // turn: a proposal belongs to the turn that produced it and is rebuilt
         // from disk truth as prose only, which is the existing rule.
         return {
-          ok: true, answer: res.text, provenance: facts.provenance,
+          ok: true, answer: guarded.text, provenance: facts.provenance,
           turns: turns || [], threadId: target || null,
           suggestedAction: res.suggestedAction || { kind: 'none', intent: '' },
+          // App-side records, for tests and the fidelity gate. The renderer shows
+          // neither: the ledger is internal, and the audit's finding is already
+          // in `answer`. Nothing new reaches a user in this PR.
+          ledger: facts.ledger,
+          numberAudit: guarded.audit,
         };
       }
       if (res.errorType === 'not_ready') return { ok: false, notReady: true };
