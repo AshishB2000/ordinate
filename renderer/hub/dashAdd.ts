@@ -458,46 +458,64 @@ async function handleAddText(): Promise<void> {
   pushCard(card);
 }
 
-// ── Starter layouts (scaffolding only — the user still picks each card's source) ─
-async function applyStarter(kind: string): Promise<void> {
+// ── Starter layouts ─────────────────────────────────────────────────────────
+// A starter builds REAL tiles from a dataset's own columns. It used to insert a
+// text card reading "Add metric cards here" and then ask which SAVED VISUAL went
+// in each slot — so on a fresh project, where no visual exists yet, the whole
+// layout was one text card telling you to do it yourself.
+//
+// The cards come from main (analysis:starterCards → starterPlan → the same
+// buildPlanRecords the Assistant's plan runs through), and they are placed HERE:
+// dashCurrent is the live record this editor owns, and markDashDirty is the one
+// debounced write. Main writing it directly would be clobbered by the next save.
+async function applyStarter(kind: string, datasetId?: string): Promise<void> {
   const page = dashCurrentPage();
-  if (!page) return;
+  if (!page || !currentProjectId) return;
   if (!Array.isArray(page.cards)) page.cards = [];
   if (page.cards.length && !window.confirm('Add starter cards to this page?')) return;
 
-  if (kind === 'kpis') {
-    // Add a note prompting the user to fill in metrics, plus a wide visual slot.
-    page.cards.push({ id: dashUuid(), type: 'text', heading: 'KPIs', text: 'Add metric cards here (+ Metric), then a chart below.', layout: { x: 0, y: 0, w: 12, h: 2 } });
-    // The visual card needs a real visualId — offer the picker for the wide slot.
-    await addStarterVisual({ x: 0, y: 2, w: 12, h: 6 });
-  } else if (kind === 'twoup') {
-    await addStarterVisual({ x: 0, y: 0, w: 6, h: 6 });
-    await addStarterVisual({ x: 6, y: 0, w: 6, h: 6 });
-    page.cards.push({ id: dashUuid(), type: 'text', heading: 'Notes', text: 'Add your notes here.', layout: { x: 0, y: 6, w: 12, h: 2 } });
+  const dsId = datasetId || await pickStarterDataset();
+  if (!dsId) return;
+
+  let res: any;
+  try {
+    res = await window.hub.starterCards(currentProjectId, kind, dsId);
+  } catch (_) { res = null; }
+  if (!res || res.ok === false || !Array.isArray(res.cards) || !res.cards.length) {
+    window.alert((res && res.error) || 'Could not build a starter layout from that dataset.');
+    return;
+  }
+
+  // Main packed from y = 0 against an empty grid. Read the offset ONCE: it
+  // recomputes as cards land, so reading it per card would stagger them.
+  const y0 = nextFreeRow();
+  for (const card of res.cards) {
+    if (card && card.layout) card.layout.y = (card.layout.y || 0) + y0;
+    page.cards.push(card);
   }
   markDashDirty();
   renderDashPages();
   renderDashGrid();
+  // Anything the validator refused is said out loud rather than silently missing
+  // — the same rule the Assistant's proposal card follows.
+  if (Array.isArray(res.dropped) && res.dropped.length) {
+    showToast(res.dropped.length === 1 ? 'One tile could not be built.' : `${res.dropped.length} tiles could not be built.`);
+  }
 }
 
-// Offer the visual picker for a starter slot; skips the slot if cancelled or if
-// the project has no visuals yet (the user can add one later with + Visual).
-async function addStarterVisual(layout: any): Promise<void> {
-  const page = dashCurrentPage();
-  if (!page || !currentProjectId) return;
-  let visuals: any[] = [];
-  try {
-    visuals = await window.hub.listVisuals(currentProjectId);
-  } catch (_) {
-    visuals = [];
+/** Which dataset the layout is built from. Silent when there is only one. */
+async function pickStarterDataset(): Promise<string | null> {
+  let list: any[] = [];
+  try { list = await window.hub.listDatasets(currentProjectId); } catch (_) { list = []; }
+  if (!Array.isArray(list) || !list.length) {
+    window.alert('Import a dataset first — a starter layout builds from one.');
+    return null;
   }
-  if (!Array.isArray(visuals) || !visuals.length) return;
-  const visualId = await dashChooseModal(
-    'Pick a visual for this slot',
-    visuals.map((v) => ({ value: String(v.id), label: v && v.name ? String(v.name) : 'Untitled visual' })),
-    'Add',
+  if (list.length === 1) return String(list[0].id);
+  return await dashChooseModal(
+    'Build the starter layout from',
+    list.map((d) => ({ value: String(d.id), label: d && d.name ? String(d.name) : 'Untitled dataset' })),
+    'Build',
   );
-  if (visualId === null) return;
-  page.cards.push({ id: dashUuid(), type: 'visual', visualId, layout });
 }
 
