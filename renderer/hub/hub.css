@@ -5498,10 +5498,47 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   border: 1px solid color-mix(in srgb, var(--warn) 22%, transparent);
   color: var(--warn);
 }
+/* Chart-type chips on the left, the chart's own controls pushed to the right. */
+.viz-stage-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+.viz-stage-head .cv-controls-slot { margin-left: auto; }
 .viz-switcher-mount {
   display: flex;
   flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* A header row that has offered the cluster a home. Empty until a chart mounts
+   one, so it must not reserve space or push a layout around when there is none. */
+.cv-controls-slot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex: 0 0 auto;
+}
+/* In the slot the cluster is ordinary flow, not an overlay over the canvas. */
+.cv-controls-slot .cv-graph-controls {
+  position: static;
+  top: auto;
+  right: auto;
+  z-index: auto;
+}
+/* On a tile the head is small, so the pills shrink to match its 22px buttons. */
+.dash-card-head .cv-controls-slot .cv-values-btn,
+.dash-card-head .cv-controls-slot .cv-periods-btn {
+  padding: 2px 8px;
+  font-size: 10.5px;
+  box-shadow: none;
+}
+.dash-card-head .cv-controls-slot .cv-chart-menu-btn {
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
 }
 /* .cv-viz-area (shared with dashboards/analyses/export) already makes this a
    flex column; here in the builder stage it also takes all height the chips

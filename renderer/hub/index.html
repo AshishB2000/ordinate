@@ -1157,7 +1157,13 @@
 
             <!-- Stage: chart-type chips, then the chart filling everything left. -->
             <div class="viz-builder-stage">
-              <div class="viz-switcher-mount" id="viz-switcher-mount"></div>
+              <div class="viz-stage-head">
+                <div class="viz-switcher-mount" id="viz-switcher-mount"></div>
+                <!-- The chart's Values / ⋯ cluster mounts here (renderResult.ts),
+                     out of the plot. Beside the chip row rather than inside it:
+                     recomputeVisual clears that mount with innerHTML. -->
+                <div class="cv-controls-slot"></div>
+              </div>
               <div class="cv-viz-area viz-area" id="viz-area"></div>
             </div>
           </div>

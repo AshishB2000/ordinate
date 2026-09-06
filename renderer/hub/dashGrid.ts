@@ -524,6 +524,12 @@ function makeDashCardEl(card: any): HTMLElement {
   rm.classList.add('dash-card-rm');
   ctrls.appendChild(rm);
   head.appendChild(ctrls);
+  // A THIRD sibling, deliberately not inside .dash-card-ctrls: that cluster is
+  // hidden for a reader of a published dashboard and in present mode, and the
+  // chart's own controls are not layout editing.
+  const slot = document.createElement('div');
+  slot.className = 'cv-controls-slot';
+  head.appendChild(slot);
   el.appendChild(head);
 
   const body = document.createElement('div');
