@@ -263,6 +263,7 @@ scripts/**/*.js
 # Dock proposals (Task 3) — split out of dock.ts, see file-size.md. Emitted
 # siblings.
 /renderer/hub/dockPropose.js
+/renderer/hub/dockHero.js
 /scripts/test-dockReversibility.js
 
 # Ask activity chips (feat/ask-activity). Emitted sibling.
@@ -270,6 +271,7 @@ scripts/**/*.js
 
 # Dock smoke (Task 4). Emitted sibling.
 /scripts/smoke-dock.js
+/scripts/smoke-dockHero.js
 
 # Ask actions smoke (feat/ask-actions). Emitted sibling.
 /scripts/smoke-ask-actions.js

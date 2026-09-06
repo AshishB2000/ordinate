@@ -75,6 +75,7 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
   initWorkspaceRouter(); // workspace.ts — wires the persistent sidebar nav
   initAskCore();          // askCore.ts — the ONE streaming subscription, shared by every AI mount
   initDock();             // dock.ts — the AI dock shell (⌘L + width var + close/scrim)
+  initDockHero();         // dockHero.ts — the dock's empty state (observes #dk-messages)
   initHomeAsk();         // homeAsk.ts — Home greeting + ask bar (before selectSection paints it)
   initHomeData();        // homeData.ts — Home "Your data" + saved-visuals strip
   selectSection('home'); // workspace.ts — Home is the default section (paints via refreshHome)

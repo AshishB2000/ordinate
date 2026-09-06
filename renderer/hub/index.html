@@ -1505,7 +1505,30 @@
       <div class="dk-thread-list" id="dk-thread-list" role="menu" hidden></div>
       <div class="dk-context" id="dk-context">Based on your workspace</div>
       <div class="dk-hint" id="dk-hint" hidden></div>
-      <div class="dk-messages" id="dk-messages"></div>
+      <div class="dk-messages" id="dk-messages">
+        <!-- The EMPTY / new-conversation state, salvaged from the retired
+             Assistant page's hero (40bff73^: .xp-stage/.xp-mark/.xp-greet/
+             .xp-sub) and resized for a ~340px panel. It lives INSIDE the
+             transcript, above the first message, because xpRenderTurns
+             (askCore.js) only ever removes `.xp-msg` rows — so a rebuild from
+             disk truth leaves this node alone and bubbles simply append after
+             it. dockHero.js hides it while any `.xp-msg` exists, watching the
+             list with a MutationObserver rather than trusting six call sites. -->
+        <div class="dk-hero" id="dk-hero">
+          <!-- The splash's own logo asset — file: is in img-src. Decorative. -->
+          <img class="dk-hero-mark" src="logo.png" width="36" height="36" alt="" aria-hidden="true">
+          <!-- dockHero.js rewrites both lines for the dock's current context
+               ("Ask about Adidas US Sales"); this is the whole-project text it
+               falls back to, and what shows before the first paint. -->
+          <h2 class="dk-hero-greet" id="dk-hero-greet">Ask about your data</h2>
+          <p class="dk-hero-sub" id="dk-hero-sub">Open a dataset or a dashboard and I follow you there.</p>
+          <!-- Starter chips. The prompt STRINGS come from haSuggestPrompts()
+               (homeAsk.js) — the same generator behind Home's chips, so there
+               is one voice and one set of sample-project special cases. A
+               click fills the composer; it never auto-sends. -->
+          <div class="dk-suggests" id="dk-suggests" hidden></div>
+        </div>
+      </div>
       <div class="dk-composer">
         <textarea class="dk-input" id="dk-input" rows="1"
           placeholder="Ask about what you're looking at…"
@@ -2463,6 +2486,11 @@
      dxSelectTab (dataSection.js) and xpScrollToBottom (askCore.js), so it loads
      after dock.js AND after all of those. -->
 <script src="dockPropose.js"></script>
+<!-- The dock's empty state (mark, greeting, sub line, starter chips). Split out
+     of dock.ts for file-size.md. Calls haSuggestPrompts (homeAsk.js) and is
+     called BY dkRenderContext (dock.js); both are resolved at call time, so
+     only "after the panel exists" matters — initDockHero() in hub.js. -->
+<script src="dockHero.js"></script>
 <script src="dockEdit.js"></script>
 <!-- Ask activity chips (feat/ask-activity) — the live "app showing its work"
      region for an in-flight ask, mounted into 'dk-messages' (dock.js). Reads

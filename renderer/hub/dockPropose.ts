@@ -592,6 +592,15 @@ function dkRenderChartCard(datasetId: string, question: string, option: any, dat
   const area = document.createElement('div');
   area.className = 'dk-proposal-chart cv-viz-area';
   card.appendChild(area);
+  // MOUNT BEFORE DRAWING. chartRender.buildChart reads its theme colours with
+  // getCSSVar(name, canvas) — getComputedStyle on a DETACHED element returns ''
+  // for every custom property, so a chart drawn before its card is in the
+  // document silently falls back to Chart.js's built-in #666 for every tick,
+  // grid line and label. In light that is close enough to --muted to pass; in
+  // dark it is grey-on-grey and the axis is unreadable. The card is appended
+  // again at the end of this function (with its actions) — appendChild moves a
+  // node, so that is a no-op re-parent, not a second card.
+  dkAppendProposal(card, containerId);
   // entry: null opts the tile out of the ⋯ Customize menu — same as the
   // "✨ Suggest with the Assistant" preview in vizNew.ts. Every number came from
   // computeVisualData above; nothing here is drawn from what the model said.
