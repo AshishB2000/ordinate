@@ -139,6 +139,16 @@ async function dkOfferProposal(
     return;
   }
 
+  // A STYLE action restyles the dashboard that is already open, so like
+  // 'dashboard' it has nothing to do with an open dataset and must be handled
+  // above the gate below. The model only ever names one of four app-owned
+  // presets (src/ai/suggestedAction.ts clamps it); it never writes CSS.
+  if (kind === 'style') {
+    try { dkOfferStyleProposal(action && action.preset, containerId); }
+    catch (_) { /* a proposal is a bonus, never an error */ }
+    return;
+  }
+
   // The other three read a dataset's columns, so they still need one open.
   if (!ref || ref.kind !== 'dataset' || !ref.id) return;
   try {
@@ -174,6 +184,35 @@ function dkMkBtn(label: string, primary: boolean, cb: () => void): HTMLButtonEle
   b.textContent = label;
   b.addEventListener('click', cb);
   return b;
+}
+
+// ── 0. Style — re-skins the OPEN dashboard, one click, nothing computed ─────
+// No IPC and no model output beyond the preset name: every value this can
+// produce is already in DASH_STYLE_PRESETS (dashStyle.ts). Silent when no
+// dashboard is open, because there would be nothing to restyle.
+function dkOfferStyleProposal(preset: any, containerId = 'dk-messages'): void {
+  if (!dashCurrent) return;
+  const { card, actions } = dkProposalCard('Restyle this dashboard');
+  let picked = preset && DASH_STYLE_PRESETS[preset] ? String(preset) : (dashPresetOf(dashCurrentStyle()) || 'clean');
+
+  const why = document.createElement('div');
+  why.className = 'ai-interp-body';
+  why.textContent = 'A style changes how ' + String(dashCurrent.name || 'this dashboard') +
+    ' looks. It never moves a card or changes a number.';
+  card.appendChild(why);
+
+  // Preselected to what the Assistant picked, but the four are all here: the
+  // user confirms a look they can SEE, not a word the model chose.
+  card.appendChild(buildDashStyleStrip(dashMiniCardsFromCurrent(), DASH_STYLE_PRESETS[picked], (name) => {
+    picked = name;
+  }));
+
+  actions.appendChild(dkMkBtn('Apply style', true, () => {
+    applyDashStylePreset(picked);
+    dkRemoveProposalCard(card);
+  }));
+  actions.appendChild(dkMkBtn('Dismiss', false, () => dkRemoveProposalCard(card)));
+  dkAppendProposal(card, containerId);
 }
 
 // ── 1. Prepare step — appends ONE step, never replaces the pipeline ─────────
@@ -329,6 +368,21 @@ async function dkOfferDashboardProposal(datasetId: string, intent: string, conta
   dkRenderPlanCard(res, containerId);
 }
 
+// A plan has no layout yet — buildPlan arranges the grid app-side, and the
+// draft prompt explicitly forbids the model from proposing positions. So the
+// preview uses the SAME shape buildPlan will produce: a row of full-width-ish
+// tiles, two per row, which is what the thumbnails need in order to be a
+// picture of this proposal rather than a stock one.
+function dkPlanMiniCards(res: any): any[] {
+  const out: any[] = [];
+  const sheets: any[] = Array.isArray(res && res.sheets) ? res.sheets : [];
+  const visuals: any[] = sheets.length && Array.isArray(sheets[0].visuals) ? sheets[0].visuals : [];
+  visuals.slice(0, 6).forEach((_v: any, i: number) => {
+    out.push({ type: 'visual', x: (i % 2) * 6, y: Math.floor(i / 2) * 4, w: 6, h: 4 });
+  });
+  return out;
+}
+
 // The proposal card. Title, one line of rationale, the previewed tiles, and
 // everything the app REFUSED — then two ways forward and a way out.
 function dkRenderPlanCard(res: any, containerId = 'dk-messages'): void {
@@ -362,6 +416,13 @@ function dkRenderPlanCard(res: any, containerId = 'dk-messages'): void {
   });
   if (grid.childNodes.length) card.appendChild(grid);
 
+  // Pick the look before it is built. The thumbnails preview THIS proposal's
+  // own arrangement, so the choice is made against the real grid rather than a
+  // stock picture — each card's x/y/w/h comes straight off the validated plan.
+  let planStyle = 'clean';
+  card.appendChild(buildDashStyleStrip(
+    dkPlanMiniCards(res), DASH_STYLE_PRESETS[planStyle], (name) => { planStyle = name; }));
+
   // Always visible, never behind a toggle — same renderer as the modal, so the
   // two surfaces cannot drift into one of them quietly hiding it.
   if (typeof anDraftAppendDropped === 'function') anDraftAppendDropped(card, res && res.dropped);
@@ -380,6 +441,10 @@ function dkRenderPlanCard(res: any, containerId = 'dk-messages'): void {
         // just read IS the review, so it is called directly and the modal is
         // skipped — but the plan-vs-sheets decision stays in one place.
         await anBuildDraft(res);
+        // anBuildDraft leaves the new dashboard OPEN, so the style is applied
+        // to it the same way the Style button does — one path, and it persists
+        // through the normal save rather than needing a field on buildPlan.
+        setDashStyle(DASH_STYLE_PRESETS[planStyle], true);
       } catch (_) {
         build.disabled = false;
         showToast('Could not build that dashboard.');

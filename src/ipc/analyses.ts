@@ -50,9 +50,13 @@ export function register() {
   );
 
   // `sheets` is optional so `analysis:draft` can hand its packed sheets straight in.
-  ipcMain.handle('analysis:create', async (_e, { projectId, name, sheets, filters }: any = {}) => {
+  // NOTE the destructure: these handlers forward NAMED fields, not the whole
+  // payload, so a field that is not listed here is silently dropped on the way
+  // to disk however correctly the record and the sanitizer handle it. `style`
+  // is listed for exactly that reason.
+  ipcMain.handle('analysis:create', async (_e, { projectId, name, sheets, filters, style }: any = {}) => {
     try {
-      const saved = await analysis.saveAnalysis(projectId, { name, sheets, filters });
+      const saved = await analysis.saveAnalysis(projectId, { name, sheets, filters, style });
       if (!saved) return { ok: false, error: 'Invalid project, or it no longer exists' };
       return saved;
     } catch (err: any) {
@@ -71,9 +75,9 @@ export function register() {
 
   // Mirrors dashboard:update exactly — a supplied array REPLACES the stored one
   // wholesale; it is never patch-merged.
-  ipcMain.handle('analysis:update', async (_e, { projectId, id, name, sheets, filters }: any = {}) => {
+  ipcMain.handle('analysis:update', async (_e, { projectId, id, name, sheets, filters, style }: any = {}) => {
     try {
-      const updated = await analysis.updateAnalysis(projectId, id, { name, sheets, filters });
+      const updated = await analysis.updateAnalysis(projectId, id, { name, sheets, filters, style });
       return updated ? { ok: true, analysis: updated } : { ok: false, error: 'Could not update the analysis' };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to update the analysis' };

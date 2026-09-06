@@ -142,11 +142,11 @@ let anGesture: any = null;
 
 /** Column pitch: 12 tracks with 11 gaps between them, so pitch = (w + gap) / 12. */
 function anColPitch(grid: HTMLElement): number {
-  return (grid.getBoundingClientRect().width + DASH_GAP_PX) / DASH_GRID_COLS;
+  return (grid.getBoundingClientRect().width + dashGapPx()) / DASH_GRID_COLS;
 }
 
 function anRowPitch(): number {
-  return DASH_ROW_PX + DASH_GAP_PX;
+  return dashRowPx() + dashGapPx();
 }
 
 function anShowGhost(grid: HTMLElement, x: number, y: number, w: number, h: number): void {

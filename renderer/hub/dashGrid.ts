@@ -71,6 +71,7 @@ function openEditorWith(rec: any, title: string): void {
   }
   dashShow('dash-editor', true);
   applyDashEditorMode();
+  syncDashStyle(); // before the first renderDashGrid, so charts build in-palette
   const nameEl = dashEl('dash-name');
   if (nameEl) nameEl.textContent = title;
   renderDashFilterBar();
@@ -106,6 +107,9 @@ function closeDashboardEditor(): void {
   if (grid) grid.innerHTML = '';
   const pages = dashEl('dash-pages');
   if (pages) pages.innerHTML = '';
+  // Drop the style classes too: the editor is ONE re-parented element, so a
+  // dark dashboard closed without this would tint the next one opened.
+  applyDashStyleTo(dashEl('dash-editor'), DASH_STYLE_DEFAULT);
   dashShow('dash-editor', false);
   // dashCurrent is null now, so this drops the workbench columns and clears the
   // selection — closing an analysis must not leave panels bound to a dead card.
@@ -553,7 +557,7 @@ function onDashGridDrop(e: DragEvent, grid: HTMLElement): void {
   if (!card) return;
   const rect = grid.getBoundingClientRect();
   const colW = rect.width / DASH_GRID_COLS;
-  const rowH = DASH_ROW_PX + DASH_GAP_PX;
+  const rowH = dashRowPx() + dashGapPx();
   const nx = clampInt(Math.floor((e.clientX - rect.left) / colW), 0, DASH_GRID_COLS - (card.layout.w || 1), card.layout.x);
   const ny = Math.max(0, Math.floor((e.clientY - rect.top) / rowH));
   card.layout.x = nx;

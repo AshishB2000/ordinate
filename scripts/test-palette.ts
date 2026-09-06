@@ -2,6 +2,9 @@
 // node-runnable (browser globals), so these mirror the pure helpers — keep in sync.
 
 export {}; // module scope — sibling test scripts share top-level names
+import * as fs from 'fs';
+import * as path from 'path';
+
 import { ok, failureCount } from './selfcheck';
 
 function hexToHsl(hex: string): { h: number; s: number; l: number } | null {
@@ -100,6 +103,60 @@ ok('n>base → all valid #rrggbb', ten.every(isHex));
 ok('n>base → all distinct', new Set(ten).size === 10);
 ok('endpoints anchor on the base palette', ten[0] === BASE[0] && ten[9] === BASE[BASE.length - 1]);
 ok('single category → one color', JSON.stringify(interpolatePalette(BASE, 1)) === JSON.stringify(['#2563eb']));
+
+// ── getCSSVar element scoping ───────────────────────────────────────────────
+// The failure this section exists to catch: dashboard style presets remap the
+// theme tokens on a CONTAINER class, so a chart MUST resolve its colours from its
+// own element, not from :root — otherwise a dark-styled dashboard paints
+// light-theme charts, and four live preset thumbnails side by side are impossible.
+//
+// getCSSVar itself needs a real DOM, so only its DOM-free contract is asserted
+// here (the default argument, which every unconverted caller in the app relies on
+// staying byte-identical) plus a source check that the renderers actually pass an
+// element. The scoping ITSELF — that a chart under .dash-theme--dark paints dark
+// colours — needs a smoke assertion in scripts/smoke-app.ts, which is the only
+// check that runs the real app.
+
+// Mirror of renderer/hub/chartPalette.ts:getCSSVar with getComputedStyle injected,
+// so the `el || document.documentElement` default can be exercised without a DOM.
+const ROOT = { id: 'root' }, PANEL = { id: 'panel' };
+let readFrom = '';
+const gcs = (el: any) => ({ getPropertyValue: (_n: string) => { readFrom = el.id; return '  #123456  '; } });
+function getCSSVar(name: string, el?: any): string {
+  return gcs(el || ROOT).getPropertyValue(name).trim();
+}
+
+const scoped = getCSSVar('--chart-1', PANEL);
+ok('an element resolves against that element', readFrom === 'panel');
+ok('omitting el resolves against the root', getCSSVar('--chart-1') === scoped && readFrom === 'root');
+ok('null el resolves against the root', getCSSVar('--chart-1', null) === scoped && readFrom === 'root');
+ok('the value is still trimmed', scoped === '#123456');
+
+// Every getCSSVar call in the renderers must carry a second argument. A new unscoped
+// call is the exact regression that silently reintroduces root-wide colour.
+const REPO = path.resolve(__dirname, '..');
+for (const rel of ['renderer/hub/chartRender.ts', 'renderer/hub/mapRender.ts', 'renderer/hub/chartTable.ts']) {
+  const calls = fs.readFileSync(path.join(REPO, rel), 'utf8').match(/getCSSVar\([^)]*\)/g) || [];
+  const unscoped = calls.filter(c => !c.includes(','));
+  // chartTable deliberately keeps ONE root read as the middle of its fallback chain
+  // (its <table> is still detached when it colours the swatches).
+  const allowed = rel.endsWith('chartTable.ts') ? 1 : 0;
+  ok(rel + ': every getCSSVar is element-scoped', unscoped.length === allowed, unscoped.join(' '));
+  ok(rel + ': has getCSSVar calls at all', calls.length > 0);
+}
+
+// isDarkSurface (mapRender.ts) replaced `document.documentElement.dataset.theme`,
+// which asked the root a question only the container can answer now.
+const isDarkSurface = (surface: string) => {
+  const m = /^#([0-9a-f]{6})$/i.exec(surface), n = m ? parseInt(m[1], 16) : 0xffffff;
+  return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) < 128;
+};
+ok('light --surface reads light', !isDarkSurface('#ffffff'));
+ok('dark --surface reads dark', isDarkSurface('#232327'));      // theme.css dark
+ok('missing/detached --surface reads light', !isDarkSurface(''));
+ok('non-hex --surface reads light, not a throw', !isDarkSurface('rgb(35, 35, 39)'));
+ok('no dataset.theme branch left in mapRender',
+  !/documentElement\.dataset\.theme/.test(fs.readFileSync(path.join(REPO, 'renderer/hub/mapRender.ts'), 'utf8')));
 
 if (failureCount()) { console.error('\n' + failureCount() + ' assertion(s) failed'); process.exit(1); }
 console.log('\nAll palette checks passed.');

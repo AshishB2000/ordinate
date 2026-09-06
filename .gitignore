@@ -5,7 +5,7 @@
 .DS_Store
 
 # Node / Electron
-node_modules/
+node_modules
 
 # Build output
 dist/
@@ -196,6 +196,7 @@ scripts/**/*.js
 /renderer/hub/hubResultMenus.js
 
 # dashboards.ts split by job (.claude/rules/file-size.md) — emitted siblings.
+/renderer/hub/dashStyle.js
 /renderer/hub/dashGrid.js
 /renderer/hub/dashAdd.js
 /renderer/hub/dashAddControl.js
@@ -281,3 +282,4 @@ scripts/**/*.js
 /scripts/test-suggestedAction.js
 /scripts/smoke-dashboard-proposal.js
 /scripts/smoke-dashboards.js
+/scripts/smoke-dashboard-styles.js

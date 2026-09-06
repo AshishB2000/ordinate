@@ -135,13 +135,13 @@ function buildChart(
   // Line smoothing: curved (default) vs straight segments.
   const lineTension = overrides.smooth === false ? 0 : 0.35;
 
-  // ── Theme tokens ────────────────────────────────────────────────────────
+  // ── Theme tokens, resolved off THIS canvas, never :root (see chartPalette) ──
   const palette = [
-    getCSSVar('--chart-1') || CHART_PALETTE[0],
-    getCSSVar('--chart-2') || CHART_PALETTE[1],
-    getCSSVar('--chart-3') || CHART_PALETTE[2],
-    getCSSVar('--chart-4') || CHART_PALETTE[3],
-    getCSSVar('--chart-5') || CHART_PALETTE[4],
+    getCSSVar('--chart-1', canvas) || CHART_PALETTE[0],
+    getCSSVar('--chart-2', canvas) || CHART_PALETTE[1],
+    getCSSVar('--chart-3', canvas) || CHART_PALETTE[2],
+    getCSSVar('--chart-4', canvas) || CHART_PALETTE[3],
+    getCSSVar('--chart-5', canvas) || CHART_PALETTE[4],
   ];
   // Color override seeds a harmonious palette: every series (and pie/donut slice,
   // which uses palette[i % len]) recolors to a distinct hue derived from the pick,
@@ -150,11 +150,11 @@ function buildChart(
     const seeded = paletteFromSeed(overrides.color, palette.length);
     for (let i = 0; i < palette.length; i++) palette[i] = seeded[i];
   }
-  const textColor  = getCSSVar('--muted');
-  const gridColor  = getCSSVar('--border');
-  const surfColor  = getCSSVar('--surface');
-  const titleColor = getCSSVar('--text-strong');
-  const fontFamily = getCSSVar('--font-ui') || 'system-ui, sans-serif';
+  const textColor  = getCSSVar('--muted', canvas);
+  const gridColor  = getCSSVar('--border', canvas);
+  const surfColor  = getCSSVar('--surface', canvas);
+  const titleColor = getCSSVar('--text-strong', canvas);
+  const fontFamily = getCSSVar('--font-ui', canvas) || 'system-ui, sans-serif';
 
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const animDuration = reduceMotion ? 0 : 480;
@@ -316,7 +316,7 @@ function buildChart(
     useSeries.forEach((s: ChartSeriesShape) => s.values.forEach((v: any) => { if (typeof v === 'number') { if (v < vmin) vmin = v; if (v > vmax) vmax = v; } }));
     if (!isFinite(vmin)) { vmin = 0; vmax = 1; }
     const span = (vmax - vmin) || 1;
-    const accent = getCSSVar('--accent') || palette[0];
+    const accent = getCSSVar('--accent', canvas) || palette[0];
     const alphaHex = (f: number) => Math.round(Math.max(0, Math.min(1, f)) * 255).toString(16).padStart(2, '0');
     const heat = (v: any) => (typeof v === 'number') ? accent + alphaHex(0.15 + 0.85 * ((v - vmin) / span)) : gridColor;
     const cells: any[] = [];
@@ -448,8 +448,8 @@ function buildChart(
       }
       return { x: String(lab), o, h, l, c };
     });
-    const up = getCSSVar('--ok') || '#16a34a';
-    const down = getCSSVar('--error') || '#dc2626';
+    const up = getCSSVar('--ok', canvas) || '#16a34a';
+    const down = getCSSVar('--error', canvas) || '#dc2626';
     datasets = [{
       label: 'OHLC',
       data: pts,
