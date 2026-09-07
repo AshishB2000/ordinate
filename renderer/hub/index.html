@@ -2376,12 +2376,19 @@
 <script src="geoMatch.js"></script>
 <!-- Chart scripts, in DEPENDENCY ORDER. chartTraits has no dependencies of its
      own; chartPalette defines CHART_PALETTE + getCSSVar; chartTable reads
-     CHART_PALETTE; chartRender reads all three at call time. Reordering these
-     four is what a "chart draws blank, ReferenceError in the console" bug looks
-     like — and what npm run smoke fails on. -->
+     CHART_PALETTE; chartTypeSpec resolves a chart id and depends on nothing;
+     chartValueLabels/chartDatasets/chartScales are the three per-family modules
+     buildChart calls, and chartDatasets reads chartPalette's interpolatePalette;
+     chartRender reads all of them at call time. Reordering these is what a
+     "chart draws blank, ReferenceError in the console" bug looks like — and what
+     npm run smoke fails on. -->
 <script src="chartTraits.js"></script>
 <script src="chartPalette.js"></script>
 <script src="chartTable.js"></script>
+<script src="chartTypeSpec.js"></script>
+<script src="chartValueLabels.js"></script>
+<script src="chartDatasets.js"></script>
+<script src="chartScales.js"></script>
 <script src="chartRender.js"></script>
 <script src="plotRender.js"></script>
 <script src="reportExport.js"></script>
