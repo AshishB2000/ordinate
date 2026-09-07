@@ -14,6 +14,78 @@
 // Loads after chartTypeSpec.js, before chartRender.js. Classic global-scope
 // script — NO import/export.
 
+/**
+ * Does a round-chart slice have room to hold its label?
+ *
+ * The old rule was `frac >= 0.06` — a share of the TOTAL, which says nothing
+ * about pixels. At a dashboard card's ~150px tile a 6% slice is a few pixels
+ * wide, so "Technology" in 10px type was drawn straight across the ring and out
+ * the other side. The same rule mislabels a full-size chart too, just less
+ * often: a long category in a thin slice has always overflowed.
+ *
+ * SO TEST THE TEXT AGAINST THE SLICE, AND DO IT IN THE RIGHT DIRECTION. The
+ * first attempt at this compared the text width to the slice's chord at the
+ * label radius. That is rotation-independent, and the label is not: it is drawn
+ * HORIZONTALLY, so a slice sitting at 4 o'clock offers far less left-to-right
+ * room than its chord suggests. It fixed the pie and left the donut exactly as
+ * broken, which is what sent this back for a second pass.
+ *
+ * What actually settles it is the label's own box. The text is a rectangle
+ * centred on the slice's mid-radius, mid-angle point; it fits when all FOUR of
+ * its corners are still inside the annular sector — radius within
+ * [inner, outer], angle within [start, end]. That is exact, cheap, and
+ * orientation-aware by construction.
+ *
+ * Pure and unit-testable on purpose: everything here is a number, so
+ * scripts/test-roundLabels.ts can drive real thumbnail and full-size geometry
+ * without a canvas. `textWidth` is measured by the caller, which is the only
+ * part that needs a 2-D context.
+ */
+function roundLabelFits(
+  geom: { innerRadius: number; outerRadius: number; startAngle: number; endAngle: number },
+  textWidth: number, textHeight: number,
+): boolean {
+  const inner = Math.max(0, Number(geom.innerRadius) || 0);
+  const outer = Math.max(0, Number(geom.outerRadius) || 0);
+  const start = Number(geom.startAngle) || 0;
+  const end = Number(geom.endAngle) || 0;
+  const w = Number(textWidth) || 0;
+  const h = Number(textHeight) || 0;
+  if (!(outer > inner) || !(w > 0) || !(h > 0)) return false;
+
+  const span = Math.abs(end - start);
+  const TAU = Math.PI * 2;
+  // A slice covering the whole circle has no edges to cross, so only the radii
+  // can rule the label out. Checked first because the angle test below would
+  // otherwise depend on floating-point luck at exactly 2π.
+  const whole = span >= TAU - 1e-9;
+
+  const rMid = (inner + outer) / 2;
+  const mid = (start + end) / 2;
+  const cx = rMid * Math.cos(mid);
+  const cy = rMid * Math.sin(mid);
+  // 4px of breathing room each side, or the text kisses the slice edges and
+  // reads as overflowing even when it technically fits.
+  const hw = w / 2 + 4;
+  const hh = h / 2 + 2;
+
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      const x = cx + sx * hw;
+      const y = cy + sy * hh;
+      const r = Math.sqrt(x * x + y * y);
+      if (r < inner || r > outer) return false;
+      if (whole) continue;
+      // Sweep from `start` to this corner, normalised into [0, 2π), must land
+      // inside the slice's own span.
+      let d = (Math.atan2(y, x) - start) % TAU;
+      if (d < 0) d += TAU;
+      if (d > span) return false;
+    }
+  }
+  return true;
+}
+
 // Which data points the Values menu labels, given a mode and the 2-D value grid
 // (`values[seriesIdx][catIdx]`; hidden series passed as all-null so they can't win).
 // Returns a Set of "seriesIdx:catIdx" keys.
@@ -198,8 +270,15 @@ function buildChartPlugins(c: ChartCtx): any[] {
   if (isRound) {
     // Pie/donut have no axes, so label each big-enough slice with its category name
     // directly (always on — readable without hovering or colour-matching the legend);
-    // small slices fall back to the legend. When Values is on, the slice's value is
-    // added below the name. White text + shadow keeps it legible on any slice colour.
+    // slices that cannot hold their label fall back to the legend. When Values is
+    // on, the slice's value is added below the name. White text + shadow keeps it
+    // legible on any slice colour.
+    //
+    // "Big enough" is TWO tests, and the second is the one that matters at small
+    // sizes: a share of the total (a product judgement about which slices deserve
+    // a name at all), and then whether the measured text actually fits the slice's
+    // geometry (roundLabelFits above). Without the second, a dashboard card's
+    // ~150px donut drew its category names straight across the ring.
     inlinePlugins.push({
       id: 'roundLabels',
       afterDatasetsDraw(chart: ChartJsCtx) {
@@ -223,17 +302,26 @@ function buildChartPlugins(c: ChartCtx): any[] {
           if (showName) lines.push(clip(name));
           if (showVal) lines.push(overrides.numberFormat ? fmt(val)
             : (Math.abs(val) >= 10000 ? _fmtVal(val) : String(val)));
-          const pos = el.tooltipPosition();
           const lh = 12;
-          const y0 = pos.y - ((lines.length - 1) * lh) / 2;
+          // Measure with each line's OWN font — the name is 600 weight and the
+          // value 500, and the widest line is what has to fit.
+          const fontFor = (k: number) => `${(k === 0 && showName) ? 600 : 500} 10px ${fontFamily}`;
           ctx.save();
+          let textWidth = 0;
+          lines.forEach((ln: string, k: number) => {
+            ctx.font = fontFor(k);
+            textWidth = Math.max(textWidth, ctx.measureText(ln).width);
+          });
+          if (!roundLabelFits(el, textWidth, lines.length * lh)) { ctx.restore(); return; }
+          const pos = el.tooltipPosition();
+          const y0 = pos.y - ((lines.length - 1) * lh) / 2;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.shadowColor = 'rgba(0,0,0,0.5)';
           ctx.shadowBlur = 3;
           ctx.fillStyle = '#ffffff';
           lines.forEach((ln: string, k: number) => {
-            ctx.font = `${(k === 0 && showName) ? 600 : 500} 10px ${fontFamily}`;
+            ctx.font = fontFor(k);
             ctx.fillText(ln, pos.x, y0 + k * lh);
           });
           ctx.restore();
