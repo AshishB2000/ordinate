@@ -7412,12 +7412,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   font-size: 12px;
   color: var(--muted);
 }
-.dash-card-h {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-strong);
-  margin-bottom: 4px;
-}
 .dash-card-p {
   font-size: 13px;
   color: var(--text);
@@ -8077,7 +8071,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 .dash-density--compact .dash-card-title { font-size: 10px; }
 .dash-density--compact .dash-metric-value { font-size: 20px; }
 .dash-density--compact .dash-metric-label { font-size: 11px; }
-.dash-density--compact .dash-card-h { font-size: 12.5px; }
 .dash-density--compact .dash-card-p { font-size: 12px; }
 
 /* ── ACCENT ─────────────────────────────────────────────────────────────────

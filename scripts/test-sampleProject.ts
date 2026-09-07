@@ -71,13 +71,18 @@ async function main(): Promise<void> {
   ok('seeding reports that it seeded', first.seeded === true && !!first.projectId, JSON.stringify(first));
 
   const all = await projects.listProjects();
-  ok('it creates the sample project and an empty one to work in', all.length === 2,
+  // ONE project, and the sample is IN it. Two projects — the sample in its own,
+  // an empty "My project" created last so resolveProjectId adopted that instead
+  // — is the bug this replaced: Home's Recent and Starred are global across
+  // projects while every other surface is scoped to the adopted one, and there
+  // is no project front door in the UI, so a new user saw "My project · 0
+  // datasets · 0 dashboards" above a Starred row for a dashboard that existed.
+  ok('seeding creates exactly ONE project', all.length === 1,
     JSON.stringify(all.map((p: any) => p.name)));
-  // Newest first (projects.listProjects sorts by updatedAt), so [0] is the one
-  // resolveProjectId adopts. If the sample were newest, the user's first real
-  // import would land inside it.
-  ok('…and the EMPTY one is newest, so the sample is never the working project',
+  ok('…the user\'s own first project, not a sample-only one',
     all[0].name === sample.FIRST_PROJECT_NAME, JSON.stringify(all.map((p: any) => p.name)));
+  ok('…and it is the project the seed reports, so the sample is IN it',
+    String(first.projectId) === String(all[0].id), JSON.stringify({ seeded: first.projectId, only: all[0].id }));
 
   const pid = String(first.projectId);
   const ds = await datasets.listDatasets(pid);
@@ -171,17 +176,28 @@ async function main(): Promise<void> {
   // otherwise deleting it would be undone on the next launch.
   const second = await sample.seedSampleProject();
   ok('a second launch does not seed again', second.seeded === false, JSON.stringify(second));
-  ok('…and creates no extra project', (await projects.listProjects()).length === 2);
+  ok('…and creates no extra project', (await projects.listProjects()).length === 1);
 
   // ── Deleting leaves nothing behind ───────────────────────────────────────
   const parquetBefore = walk(path.join(tmpUserData, 'projects')).filter((f) => f.endsWith('.parquet'));
   ok('the sample stored real Parquet tables', parquetBefore.length >= 1, String(parquetBefore.length));
 
-  ok('deleting the sample project succeeds', await projects.deleteProject(pid));
-  ok('…its directory is gone', !fs.existsSync(path.join(tmpUserData, 'projects', pid)));
-  const leftovers = walk(path.join(tmpUserData, 'projects'))
-    .filter((f) => f.endsWith('.parquet') || f.includes(pid));
-  ok('…leaving no orphan Parquet anywhere under userData', leftovers.length === 0,
+  // Removing the sample is now a record-level delete, not a project delete —
+  // the project is the USER'S (see src/app/sampleProject.ts). This mirrors what
+  // dashFiltersUi.ts's Remove button does, in the same order: dashboard, then
+  // every visual on the sample dataset, then the dataset.
+  ok('removing the sample dashboard succeeds', await analysisStore.deleteAnalysis(pid, anList[0].id));
+  for (const v of vis) ok('…and its visual "' + v.name + '"', await visuals.deleteVisual(pid, v.id));
+  ok('…and the sample dataset', await datasets.deleteDataset(pid, ds[0].id));
+
+  ok('the project itself survives — it is the user\'s, not the sample\'s',
+    (await projects.listProjects()).length === 1 && fs.existsSync(path.join(tmpUserData, 'projects', pid)));
+  ok('…now genuinely empty',
+    (await datasets.listDatasets(pid)).length === 0
+    && (await visuals.listVisuals(pid)).length === 0
+    && (await analysisStore.listAnalyses(pid)).length === 0);
+  const leftovers = walk(path.join(tmpUserData, 'projects')).filter((f) => f.endsWith('.parquet'));
+  ok('…and the sample\'s Parquet tables are reclaimed, not orphaned', leftovers.length === 0,
     JSON.stringify(leftovers));
 
   const third = await sample.seedSampleProject();

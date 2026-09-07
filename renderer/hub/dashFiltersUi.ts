@@ -97,14 +97,13 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
   valEl.textContent = fmtWith(r.value, m.format || 'auto');
 }
 
+// The heading is NOT drawn here. dashCardTitle (dashGrid.ts) already puts it in
+// the card head, and that file's own comment states the rule this card was the
+// only one breaking: "every other card type's 'what is this' text lives there,
+// not duplicated in the body". The duplicate was invisible for as long as the
+// body overflowed its two-row card and scrolled the first copy out of sight.
 function renderTextCard(card: any, body: HTMLElement): void {
   body.innerHTML = '';
-  if (card.heading) {
-    const h = document.createElement('div');
-    h.className = 'dash-card-h';
-    h.textContent = String(card.heading);
-    body.appendChild(h);
-  }
   if (card.text) {
     const p = document.createElement('p');
     p.className = 'dash-card-p';
@@ -117,12 +116,10 @@ function renderTextCard(card: any, body: HTMLElement): void {
     p.textContent = '(empty text card)';
     body.appendChild(p);
   }
-  // The bundled sample's note card carries a real Delete, because the note says
-  // the sample can be deleted and nothing else in the app can delete a project:
-  // projects:delete has existed as an IPC channel and a typed preload binding
-  // all along, with no caller. `action` is a closed enum that only
+  // The bundled sample's note card carries a real Remove, because the note
+  // promises the sample can be taken out. `action` is a closed enum that only
   // src/app/sampleProject.ts ever writes — a plan cannot produce one, so no
-  // model-authored dashboard can grow a delete button.
+  // model-authored dashboard can grow this button.
   if (card.action === 'delete-sample') body.appendChild(dashSampleDeleteBtn());
 }
 
@@ -130,42 +127,87 @@ function dashSampleDeleteBtn(): HTMLElement {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'btn btn-sm dash-sample-delete';
-  btn.textContent = 'Delete sample project';
+  btn.textContent = 'Remove the sample data';
   btn.addEventListener('click', () => { void handleDeleteSampleProject(); });
   return btn;
 }
 
-// Deleting the project is a recursive rm of userData/projects/<id>/ in main, so
-// its datasets, visuals, analyses AND their Parquet tables go together — there
-// is nothing left to orphan. The starred pin is pruned here rather than left
-// pointing at a record that no longer exists.
+/** The dataset(s) the OPEN dashboard is built on, read off its own cards.
+ *  Metric cards carry `metric.datasetId` outright; a visual card carries only a
+ *  visualId, so the saved visual supplies it. Both are read, because a sheet of
+ *  nothing but charts would otherwise yield nothing to remove. */
+async function dashSampleDatasetIds(pid: string, cards: any[]): Promise<string[]> {
+  const ids = new Set<string>();
+  cards.forEach((c) => { if (c && c.type === 'metric' && c.metric && c.metric.datasetId) ids.add(String(c.metric.datasetId)); });
+  const visualIds = cards.filter((c) => c && c.type === 'visual' && c.visualId).map((c) => String(c.visualId));
+  if (visualIds.length) {
+    let all: any[] = [];
+    try { const res = await window.hub.listVisuals(pid); all = Array.isArray(res) ? res : []; } catch (_) { all = []; }
+    all.filter((v) => visualIds.includes(String(v.id)) && v.datasetId).forEach((v) => ids.add(String(v.datasetId)));
+  }
+  return [...ids];
+}
+
+/**
+ * Remove the sample: its dashboard, the visuals drawn on its dataset, and the
+ * dataset itself. THE PROJECT STAYS.
+ *
+ * It used to delete the whole project, which was right when the sample had a
+ * project of its own — one recursive rm in main took the records and their
+ * Parquet with it. The sample now lives in the user's FIRST project (see
+ * src/app/sampleProject.ts's header), so deleting the project would delete
+ * everything they had put beside it, and on a fresh install would leave them
+ * with no project at all.
+ *
+ * Every visual on the sample dataset goes, not just the three that were seeded:
+ * the dataset is leaving, so a visual still pointing at it is a broken card, and
+ * the honest thing is to say so in the confirm and take them.
+ */
 async function handleDeleteSampleProject(): Promise<void> {
   const pid = (dashCurrent && dashCurrent.projectId) || currentProjectId;
-  if (!pid) return;
+  const analysisId = dashCurrent && dashCurrent.id ? String(dashCurrent.id) : '';
+  if (!pid || !analysisId) return;
+  const cards = typeof dashCards === 'function' ? dashCards() : [];
+  const datasetIds = await dashSampleDatasetIds(String(pid), cards);
+
+  let visualIds: string[] = [];
+  try {
+    const all = await window.hub.listVisuals(String(pid));
+    visualIds = (Array.isArray(all) ? all : [])
+      .filter((v: any) => v && datasetIds.includes(String(v.datasetId)))
+      .map((v: any) => String(v.id));
+  } catch (_) { visualIds = []; }
+
   const name = (dashCurrent && dashCurrent.name) || 'this dashboard';
   if (!window.confirm(
-    'Delete the sample project?\n\nThis removes ' + name + ', the sample dataset and its charts. '
-    + 'Your own projects are not affected. This cannot be undone.')) return;
-  const analysisId = dashCurrent && dashCurrent.id ? String(dashCurrent.id) : '';
+    'Remove the sample data?\n\nThis deletes ' + name + ', its ' + visualIds.length
+    + ' chart(s) and the sample dataset. The project and anything else in it stay. '
+    + 'This cannot be undone.')) return;
+
+  // Dashboard first: it is the only one of the three the user is looking at, so
+  // a failure part-way leaves the least confusing state (a dashboard whose cards
+  // report a missing source is worse than a dataset with nothing drawn on it).
   try {
-    const res = await window.hub.deleteProject(pid);
-    if (!res || res.ok === false) { showToast('Could not delete the sample project.'); return; }
-  } catch (_) { showToast('Could not delete the sample project.'); return; }
+    const res = await window.hub.deleteAnalysis(String(pid), analysisId);
+    if (!res || res.ok === false) { showToast('Could not remove the sample data.'); return; }
+  } catch (_) { showToast('Could not remove the sample data.'); return; }
+  for (const vid of visualIds) {
+    try { await window.hub.deleteVisual(String(pid), vid); } catch (_) { /* next */ }
+  }
+  for (const did of datasetIds) {
+    try { await window.hub.deleteDataset(String(pid), did); } catch (_) { /* next */ }
+  }
+
   try {
     const starred = await window.hub.getStarred();
-    if (Array.isArray(starred) && analysisId) {
+    if (Array.isArray(starred)) {
       await window.hub.setStarred(starred.filter((s: string) => s !== 'analysis:' + analysisId));
     }
   } catch (_) { /* a stale pin is invisible — Starred filters Recent */ }
   closeDashboardEditor();
-  // The adopted project is gone, so pick another before anything repaints.
-  try {
-    const list = await window.hub.listProjects();
-    if (Array.isArray(list) && list.length) await adoptProject(String(list[0].id));
-  } catch (_) { /* Home resolves one itself if this fails */ }
   selectSection('home');
   if (typeof refreshHome === 'function') void refreshHome();
-  showToast('Sample project deleted.');
+  showToast('Sample data removed.');
 }
 
 // A card whose source (visual / dataset) is gone. `broken` marks it with a clear badge
