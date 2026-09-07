@@ -271,6 +271,13 @@ function capture(type: string, variant: string): { text: string; ok: boolean } {
 // table is a regression until proven otherwise. What the legend RENDERS is
 // asserted in scripts/test-chartLegend.ts — a hash cannot tell a legend of three
 // category names from a legend of one `null`.
+// REGENERATED again, deliberately, for the gauge round-label fix
+// (fix/gauge-labels): exactly 3 moved — gauge/default, gauge/custom,
+// gauge/filtered — and pie/donut did NOT, which is the whole point. A gauge is a
+// Chart.js doughnut, so it was picking up `roundLabels` and drawing the metric
+// name a second time on the arc, over the caption gaugeCenter already prints.
+// `roundLabels` is added per-family, so excluding gauge from it can only move
+// gauge's three configs; any fourth would have been a regression.
 const GOLDEN: Record<string, string> = {
   "area/custom": '90ba1827b59bbc7f',
   "area/default": '6db93a96ded80287',
@@ -305,9 +312,9 @@ const GOLDEN: Record<string, string> = {
   "funnel/custom": '85636d7870e87cf8',
   "funnel/default": '79fd54ebc0ecd510',
   "funnel/filtered": 'a63e174df450904d',
-  "gauge/custom": '99df2ebe44b7e686',
-  "gauge/default": '43253496e561dddd',
-  "gauge/filtered": '687260dd9862bb48',
+  "gauge/custom": '3ee58d657b34e497',
+  "gauge/default": 'f0cb1605e5cf7b0f',
+  "gauge/filtered": '428f0f337ad3db37',
   "heatmap/custom": '9122e9b0ff696dcb',
   "heatmap/default": 'd6b972e27fcd03ff',
   "heatmap/filtered": 'be203644e6495e9a',
@@ -402,6 +409,29 @@ ok('the golden table has no stale entries',
 ok('captured configs are distinct per chart id',
    new Set(Object.values(fresh)).size >= CHART_IDS.length,
    new Set(Object.values(fresh)).size + ' distinct of ' + Object.keys(fresh).length);
+
+// ── Which inline plugins a family carries ──────────────────────────────────
+// A hash says a config CHANGED, never what it now contains — so name the one
+// thing this file's last regeneration was about. A gauge is drawn as a Chart.js
+// doughnut, so it used to pick up `roundLabels` and write the metric name onto
+// the arc, on top of the caption `gaugeCenter` already prints under the big
+// number: the same words twice on one small chart. Asserted in both directions,
+// because "no roundLabels" is also what a gauge that stopped building any
+// plugins at all would look like.
+function pluginIds(type: string): string[] {
+  recorded.length = 0;
+  api.buildChart({ __canvas: type } as unknown as HTMLCanvasElement,
+                 JSON.parse(JSON.stringify(DATA)), type, {});
+  return ((recorded[0] && recorded[0].config.plugins) || []).map((p: any) => p.id);
+}
+const gaugeIds = pluginIds('gauge');
+ok('a gauge carries no roundLabels plugin', !gaugeIds.includes('roundLabels'), gaugeIds.join(', '));
+ok('a gauge still prints its own centre caption', gaugeIds.includes('gaugeCenter'), gaugeIds.join(', '));
+for (const t of ['pie', 'donut']) {
+  const ids = pluginIds(t);
+  ok(t + ' still labels its slices', ids.includes('roundLabels'), ids.join(', '));
+  ok(t + ' has no gauge centre plugin', !ids.includes('gaugeCenter'), ids.join(', '));
+}
 
 if (process.env.ORDINATE_CHARTSPEC_EMIT) {
   // Regeneration aid for the ONE case this is legitimate: a deliberate,
