@@ -225,6 +225,11 @@ function dkOfferStyleProposal(preset: any, containerId = 'dk-messages'): void {
     dkRemoveProposalCard(card);
   }));
   actions.appendChild(dkMkBtn('Dismiss', false, () => dkRemoveProposalCard(card)));
+  // Every other proposal kind appends its action row; this one built the row,
+  // filled it, and dropped it on the floor — so "make it dark" rendered four
+  // preset thumbnails and NO way to apply any of them. A card the user cannot
+  // act on is worse than no card.
+  card.appendChild(actions);
   dkAppendProposal(card, containerId);
 }
 
