@@ -222,7 +222,9 @@ scripts/**/*.js
 /renderer/hub/vizNew.js
 /renderer/hub/vizBuilder.js
 # vizThumbs.ts is NEW (gallery thumbnails), not part of that split — same emit rule.
+# mapThumb.ts is its map arm (static canvas mini-map, no MapLibre).
 /renderer/hub/vizThumbs.js
+/renderer/hub/mapThumb.js
 
 # analyses.ts split by job (.claude/rules/file-size.md) — emitted siblings.
 /renderer/hub/anList.js
