@@ -11355,3 +11355,31 @@ body.cap-focus .cap-back {
   font-size: 12.5px;
   color: var(--muted);
 }
+
+/* The proposal card's KPI strip. The plan has always carried metrics and
+   buildPlan has always built them; the card drew only the charts, so a user
+   approved a dashboard without seeing its KPI row. Chips rather than tiles:
+   this runs BEFORE the build, so there is no figure to show yet — only the
+   label and how it will be computed. */
+.dk-plan-kpis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 2px;
+}
+.dk-plan-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+.dk-plan-kpi-name { font-size: 11.5px; font-weight: 600; color: var(--text-strong); }
+.dk-plan-kpi-how { font-size: 10.5px; color: var(--muted); }
+.dk-plan-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}

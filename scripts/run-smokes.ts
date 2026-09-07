@@ -19,6 +19,7 @@ const SMOKES = [
   'smoke-composer',
   'smoke-dock',
   'smoke-dockHero',
+  'smoke-assistant',
   'smoke-ask-actions',
   'smoke-viz-thumbs',
   'smoke-connect',

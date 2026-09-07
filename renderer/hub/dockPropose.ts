@@ -225,6 +225,11 @@ function dkOfferStyleProposal(preset: any, containerId = 'dk-messages'): void {
     dkRemoveProposalCard(card);
   }));
   actions.appendChild(dkMkBtn('Dismiss', false, () => dkRemoveProposalCard(card)));
+  // Every other proposal kind appends its action row; this one built the row,
+  // filled it, and dropped it on the floor — so "make it dark" rendered four
+  // preset thumbnails and NO way to apply any of them. A card the user cannot
+  // act on is worse than no card.
+  card.appendChild(actions);
   dkAppendProposal(card, containerId);
 }
 
@@ -419,6 +424,34 @@ function dkRenderPlanCard(res: any, containerId = 'dk-messages'): void {
   // placeholder number is never substituted, and that rule does not soften
   // because the tile is small. `.dk-plan-grid` only shrinks it, in CSS.
   const sheets: any[] = Array.isArray(res && res.sheets) ? res.sheets : [];
+
+  // The KPI row, and the notes. A plan has carried metrics and texts since they
+  // were added to PlanSheet, and buildPlan has always BUILT them — but this card
+  // only ever drew `visuals`, so the user approved a dashboard without being
+  // shown its KPI strip and then found tiles they had never seen proposed.
+  // A preview that hides part of what it is about to build is not a preview.
+  const kpis: any[] = sheets.length && Array.isArray(sheets[0].metrics) ? sheets[0].metrics : [];
+  if (kpis.length) {
+    const row = document.createElement('div');
+    row.className = 'dk-plan-kpis';
+    kpis.forEach((m: any) => {
+      const chip = document.createElement('span');
+      chip.className = 'dk-plan-kpi';
+      // The label, then how it is computed — never a figure. The number is the
+      // app's to compute at render time, and this card runs before the build.
+      const name = document.createElement('span');
+      name.className = 'dk-plan-kpi-name';
+      name.textContent = String(m && (m.label || m.column) || 'KPI');
+      const how = document.createElement('span');
+      how.className = 'dk-plan-kpi-how';
+      how.textContent = String((m && m.aggregation) || 'sum') + ' of ' + String((m && m.column) || '');
+      chip.appendChild(name);
+      chip.appendChild(how);
+      row.appendChild(chip);
+    });
+    card.appendChild(row);
+  }
+
   const grid = document.createElement('div');
   grid.className = 'dk-plan-grid';
   sheets.forEach((sheet: any) => {
@@ -428,6 +461,14 @@ function dkRenderPlanCard(res: any, containerId = 'dk-messages'): void {
     });
   });
   if (grid.childNodes.length) card.appendChild(grid);
+
+  const notes: any[] = sheets.length && Array.isArray(sheets[0].texts) ? sheets[0].texts : [];
+  notes.forEach((t: any) => {
+    const note = document.createElement('div');
+    note.className = 'dk-plan-note';
+    note.textContent = [t && t.heading, t && t.text].filter(Boolean).join(' — ');
+    if (note.textContent) card.appendChild(note);
+  });
 
   // Pick the look before it is built. The thumbnails preview THIS proposal's
   // own arrangement, so the choice is made against the real grid rather than a
