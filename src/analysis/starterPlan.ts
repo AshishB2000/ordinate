@@ -24,7 +24,55 @@ export type StarterKind = 'kpis' | 'twoup';
 
 /** Names that read as a measure someone actually wants totalled. Preference
  *  only — every numeric column is still eligible, these just go first. */
-const KPI_NAME_RE = /revenue|sales|amount|total|count|units/i;
+/**
+ * Column names, split into WORDS.
+ *
+ * The preference used to be one substring regex, which matched `count` inside
+ * "dis(count)" and so ranked a discount RATE as a headline measure. Words, not
+ * substrings: `discount` is one word and matches nothing here.
+ */
+function words(name: string): string[] {
+  return String(name)
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2') // camelCase → two words
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((w) => w.toLowerCase());
+}
+
+/** Money and other additive measures — the headline of almost any dashboard. */
+const MEASURE_WORDS = new Set(['revenue', 'sales', 'amount', 'total', 'profit', 'cost', 'spend', 'gmv']);
+/** Things you count. Additive too, but a weaker headline than money. */
+const COUNT_WORDS = new Set(['units', 'unit', 'qty', 'quantity', 'count', 'orders', 'visits', 'clicks', 'sessions']);
+/**
+ * Quantities a SUM is meaningless for.
+ *
+ * "Total unit price: 1.2M" and "total discount: 315.7" are not facts about a
+ * business, they are artefacts of adding up a column that was never additive.
+ * These take `avg`, and they never outrank a real measure.
+ */
+const AVERAGED_WORDS = new Set([
+  'price', 'rate', 'discount', 'margin', 'ratio', 'pct', 'percent', 'percentage',
+  'score', 'age', 'days', 'duration', 'latency', 'avg', 'average', 'mean', 'median',
+]);
+/** Numbers that are identifiers or coordinates, not measures at all. */
+const NOT_A_MEASURE_WORDS = new Set([
+  'id', 'code', 'zip', 'postcode', 'year', 'month', 'day', 'week', 'quarter',
+  'lat', 'lon', 'lng', 'latitude', 'longitude',
+]);
+
+/** `avg` when a sum would be meaningless, `sum` otherwise. */
+function aggregationFor(name: string): 'sum' | 'avg' {
+  return words(name).some((w) => AVERAGED_WORDS.has(w)) ? 'avg' : 'sum';
+}
+
+/** 0 = money, 1 = counts, 2 = anything else numeric. Lower sorts first. */
+function measureRank(name: string): number {
+  const ws = words(name);
+  if (ws.some((w) => AVERAGED_WORDS.has(w))) return 2; // a rate is never a headline
+  if (ws.some((w) => MEASURE_WORDS.has(w))) return 0;
+  if (ws.some((w) => COUNT_WORDS.has(w))) return 1;
+  return 2;
+}
 
 /** A KPI strip is a strip. Beyond four it is a table, and a 12-column grid at
  *  3 wide gives exactly four. */
@@ -51,11 +99,20 @@ function summaryOf(ds: PlanDataset, name: string): ColumnSummary | undefined {
 /** Numeric columns, preferred names first, declared order within each group.
  *  A partition rather than a sort with a comparator — it says what it means. */
 function kpiColumns(ds: PlanDataset): ParsedColumn[] {
-  const nums = ds.columns.filter((c) => c.type === 'number');
-  return [
-    ...nums.filter((c) => KPI_NAME_RE.test(c.name)),
-    ...nums.filter((c) => !KPI_NAME_RE.test(c.name)),
-  ].slice(0, MAX_KPIS);
+  const nums = ds.columns
+    .filter((c) => c.type === 'number')
+    // An id, a zip or a year is a number the way a phone number is: never a
+    // measure, and summing one is the kind of figure that makes a dashboard
+    // look unserious on the very first screen.
+    .filter((c) => !words(c.name).some((w) => NOT_A_MEASURE_WORDS.has(w)));
+  // Stable: rank first, declared order within a rank. `units` no longer beats
+  // `revenue` just for appearing earlier in the file, which also decides the
+  // measure both starter charts plot.
+  return nums
+    .map((c, i) => ({ c, i, rank: measureRank(c.name) }))
+    .sort((a, b) => a.rank - b.rank || a.i - b.i)
+    .slice(0, MAX_KPIS)
+    .map((x) => x.c);
 }
 
 /**
@@ -102,7 +159,11 @@ function monthField(ds: PlanDataset, dateCol: string): PlannedCalcField | null {
 }
 
 function chart(ds: PlanDataset, category: string, measure: string, label: string): PlannedVisual {
-  const encoding: VizEncoding = { category, values: [{ column: measure, aggregation: 'sum' }] };
+  // Same rule as the KPI strip: a chart of summed unit prices is as wrong as a
+  // KPI of them, and on a dataset whose only measure is a rate that is exactly
+  // what the starter would have drawn.
+  const agg = aggregationFor(measure);
+  const encoding: VizEncoding = { category, values: [{ column: measure, aggregation: agg }] };
   return {
     kind: 'new',
     datasetId: ds.id,
@@ -138,7 +199,7 @@ export function buildStarterPlan(kind: StarterKind, ds: PlanDataset, opts: { nam
 
   if (kind === 'kpis') {
     for (const c of kpis) {
-      metrics.push({ datasetId: ds.id, column: c.name, aggregation: 'sum', label: c.name });
+      metrics.push({ datasetId: ds.id, column: c.name, aggregation: aggregationFor(c.name), label: c.name });
     }
     if (measure && axes.length) {
       visuals.push(chart(ds, axes[0], measure, `${measure} by ${axes[0]}`));

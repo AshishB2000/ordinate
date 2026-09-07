@@ -83,12 +83,14 @@ export function sampleCsvPath(): string {
  * (`datetrunc('month', order_date)`), which is the only way to chart by month:
  * VizEncoding has no date granularity and vizData groups on the raw cell.
  *
- * The metrics and visuals are then replaced with the sample's own. `kpiColumns`
- * ranks by name (`revenue`, `units`) and then by declared order, which on this
- * dataset means it would offer `sum(unit_price)` and `sum(discount)` — figures
- * that mean nothing, on the one dashboard every new user sees first. Summing a
- * price or a rate is never right; teaching the template that is a real fix, but
- * it is a change to everyone's starter layouts and belongs in its own PR.
+ * The metrics and visuals are then replaced with the sample's own. The template
+ * no longer picks badly — it used to offer `sum(unit_price)` and `sum(discount)`
+ * here, and starterPlan now ranks money over counts and averages anything a sum
+ * would be meaningless for, so it lands on revenue/profit/units by itself. What
+ * is left is presentation: the labels are written for a reader ("Units sold",
+ * not "units"), and the fourth tile is `count(order_date)` as "Orders" rather
+ * than the template's `avg(unit_price)`, which is a fine figure but a dull one
+ * for a first impression.
  */
 function sampleDashboardPlan(ds: { id: string; name: string; columns: { name: string; type: string }[]; summaries?: unknown }): AnalysisPlan {
   const plan = buildStarterPlan('kpis', ds as never, { name: SAMPLE_DASHBOARD_NAME });
