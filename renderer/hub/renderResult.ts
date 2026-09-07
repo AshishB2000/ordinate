@@ -336,6 +336,38 @@ function eligibleChartTypes(dataShape, seriesCount, labelCount) {
   });
 }
 
+/**
+ * Can `type` physically draw THIS data? The one rule, module-level so it has one
+ * home rather than one per caller.
+ *
+ * It used to live only inside buildVizPicker, where the chip row needs it. But
+ * vizBuilder.ts needs the same answer for a different and more consequential
+ * question — whether a REOPENED visual keeps the chart type its author chose —
+ * and had its own `canShow()`, a hand-written list returning true for exactly
+ * `table`, `map_bubble` and `map_choropleth`. Every other saved type survived
+ * reopening only by also being in `recommended`.
+ *
+ * That silently downgraded saved work. `gauge` is recommended for the
+ * `single_metric` shape alone, so a gauge saved over a categorical encoding came
+ * back as a column — and saving again wrote `column` to disk, losing the type.
+ * A gauge sets neither CHART_SERIES_MIN nor CHART_LABELS_MIN, so by the real
+ * rule one series and one label were always enough for it to draw.
+ *
+ * Deliberately NOT consulting CHART_SERIES_MAX. That cap exists so the chip row
+ * cannot offer both "Column" and "Clustered column" for the same 2-series data
+ * and mislabel one of them; it is about which types to SUGGEST, not which can
+ * draw. A saved single-series column that later gained a measure still renders,
+ * and honouring the author's choice beats renaming it for them.
+ */
+function chartCanRender(type, data, hasGeo) {
+  if (type === 'table') return true;
+  if (type === 'map_bubble' || type === 'map_choropleth') return !!hasGeo;
+  const d = data || {};
+  if (countNumericSeries(d) < (CHART_SERIES_MIN[type] || 1)) return false;
+  if (((d.labels || []).length) < (CHART_LABELS_MIN[type] || 1)) return false;
+  return true;
+}
+
 // Count series that actually carry at least one number.
 function countNumericSeries(data) {
   if (!data || !Array.isArray(data.series)) return 0;
@@ -369,14 +401,12 @@ function buildVizPicker(opts) {
   let selectedType = opts.initial;
   let morePanel = null;
 
-  // Can `type` physically render with THIS data? Same data-reality minimums the chip
-  // eligibility uses, but shape-agnostic so "+ More" can offer any type.
+  // Can `type` physically render with THIS data? Shape-agnostic, so "+ More" can
+  // offer any type. Delegates to the module-level rule — vizBuilder.ts asks the
+  // same question when deciding whether a reopened visual keeps its saved type,
+  // and two answers to one question is how a saved gauge came back as a column.
   function canRenderType(type) {
-    if (type === 'table') return true;
-    if (isMapType(type)) return hasGeo;
-    if (numSeries < (CHART_SERIES_MIN[type] || 1)) return false;
-    if (numLabels < (CHART_LABELS_MIN[type] || 1)) return false;
-    return true;
+    return chartCanRender(type, data, hasGeo);
   }
   // Plain-language "what it needs" for the can't-render message.
   function needsText(type) {

@@ -228,12 +228,22 @@ async function recomputeVisual(): Promise<void> {
   requestAnimationFrame(() => picker.select(initial));
 }
 
-// A saved map type is valid to restore even if it's not in `recommended` (which
-// lists charts first); a map is showable whenever the data carries geo.
+// A saved type is valid to restore whenever it can actually DRAW, not only when
+// it is recommended — `recommended` ranks types for a new visual, and a user who
+// picked one deliberately has already made that choice.
+// Whether a SAVED chart type is still restorable — asked of every visual the
+// builder reopens. This was a hand-written list (table + the two map types) and
+// therefore a second, wronger answer to a question renderResult.ts already
+// answers for the chip row: every other saved type survived reopening only by
+// also being in `recommended`, so a gauge saved over a categorical encoding came
+// back as a column and the next save wrote that column to disk.
+//
+// One rule now, in renderResult.ts, used by both. `recommended` stays what it
+// always was — advice for a NEW visual, not a filter on someone's saved one.
 function canShow(type: string, data: any): boolean {
-  if (type === 'map_bubble' || type === 'map_choropleth') return !!data.geo;
-  if (type === 'table') return true;
-  return false;
+  return typeof chartCanRender === 'function'
+    ? chartCanRender(type, data, !!(data && data.geo))
+    : false;
 }
 
 // ── Open a saved visual into the builder ─────────────────────────────────────
