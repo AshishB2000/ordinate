@@ -7,16 +7,16 @@
 // which keeps the module-local state every function here reads.
 
 // ── The chart-glyph motif ────────────────────────────────────────────────────
-// The Analyses hero draws five CSS bars. Visuals is about 28 chart TYPES, so
-// its motif is a cluster of real chart glyphs instead — still no image asset,
-// still nothing to ship: VIZ_ICONS (renderResult.ts) is already in the bundle.
+// Dashboards draws CSS bars (.ws-bars). Visuals is about 28 chart TYPES, so its
+// motif is a cluster of real chart glyphs instead — still no image asset, still
+// nothing to ship: VIZ_ICONS (renderResult.ts) is already in the bundle.
 //
 // Those SVG strings are the ONE innerHTML allowed in this file: a trusted
 // hand-written constant, never user or model input. Everything else is
 // textContent.
 const VIZ_ART_TYPES = ['column', 'line', 'donut', 'treemap'];
 // Which glyph reads as the bright one, mirroring how --4 is the tall bar in the
-// Analyses motif.
+// Dashboards motif.
 const VIZ_ART_FOCUS = 1;
 
 // The five chart tokens from renderer/theme.css. Deliberately the SAME palette
@@ -38,17 +38,7 @@ function vizAccentFor(chartType: string): string {
   return 'var(' + VIZ_ACCENTS[h % VIZ_ACCENTS.length] + ')';
 }
 
-// Mirrors the Analyses hero's dismissal: same localStorage scheme, its own key.
-const VIZ_HERO_KEY = 'vizHeroDismissed';
-function vizHeroDismissed(): boolean {
-  try {
-    return localStorage.getItem(VIZ_HERO_KEY) === '1';
-  } catch (_) {
-    return false; // private mode — show it rather than crash
-  }
-}
-
-// Fill every .viz-glyph-art host (hero + empty state) with the glyph cluster.
+// Fill every .viz-glyph-art host with the glyph cluster.
 // Idempotent: re-running replaces the children rather than appending.
 function paintVizGlyphArt(): void {
   document.querySelectorAll('.viz-glyph-art').forEach((host) => {
@@ -188,10 +178,10 @@ async function refreshVisualList(): Promise<void> {
     count.hidden = items.length === 0;
     count.textContent = items.length + (items.length === 1 ? ' visual' : ' visuals');
   }
-  // First-run hero: only alongside real content, and only until dismissed —
-  // the same rule and the same storage key scheme the Analyses hero uses.
-  const hero = vizEl('viz-hero');
-  if (hero) hero.hidden = items.length === 0 || vizHeroDismissed();
+  // No first-run banner over the grid. "What a visual is for" is the EMPTY
+  // state's whole job, and it already says it; a second copy of that pitch on
+  // top of the user's own saved visuals is teaching someone who has finished
+  // learning. Data and Dashboards teach the same way — empty state only.
   paintVizGlyphArt();
   // The dataset band belongs to the empty state only — once there are visuals,
   // the grid IS the content and a second card grid under it would compete.

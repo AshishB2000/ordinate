@@ -23,6 +23,7 @@ const SMOKES = [
   'smoke-assistant',
   'smoke-ask-actions',
   'smoke-viz-thumbs',
+  'smoke-section-hero',
   'smoke-connect',
   'smoke-dashboard-proposal',
   'smoke-dashboards',

@@ -169,7 +169,7 @@ async function main(): Promise<void> {
       canvases: full ? full.querySelectorAll('canvas').length : 0,
       menus: cards.filter((c) => c.querySelector('.an-row-menu')).length,
       meta: (full?.querySelector('.viz-card-meta')?.textContent || '').trim(),
-      blankBars: !!blank?.querySelector('.an-card-bars .ws-hero-bar'),
+      blankBars: !!blank?.querySelector('.an-card-bars .ws-bar'),
       blankCanvas: !!blank?.querySelector('canvas'),
     };
   });

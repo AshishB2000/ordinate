@@ -261,16 +261,16 @@ function anPreviewTile(v: any): HTMLElement {
 
 // A first sheet with no visual cards at all (metrics and text only) gets the
 // section's OWN bar motif rather than borrowing a chart glyph for a chart it
-// does not have. Reuses .ws-hero-art/.ws-hero-bar — no image asset, and the
+// does not have. Reuses .ws-bars/.ws-bar — no image asset, and the
 // fixed-height art element is what makes the bars' percentage heights resolve.
 function anPreviewBars(): HTMLElement {
   const tile = document.createElement('span');
   tile.className = 'viz-card-tile an-card-tile an-card-tile--none';
   const art = document.createElement('span');
-  art.className = 'ws-hero-art an-card-bars';
+  art.className = 'ws-bars an-card-bars';
   ['2', '4', '3'].forEach((h) => {
     const bar = document.createElement('span');
-    bar.className = 'ws-hero-bar ws-hero-bar--' + h;
+    bar.className = 'ws-bar ws-bar--' + h;
     art.appendChild(bar);
   });
   tile.appendChild(art);
