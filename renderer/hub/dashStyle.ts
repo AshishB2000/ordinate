@@ -12,26 +12,35 @@
 // A duplicated constant, deliberately: the renderer is classic global scope and
 // cannot import from main. scripts/test-dashboardStyleParity.ts asserts the two
 // copies are identical, the same way AI_NOT_CONFIGURED is pinned.
-const DASH_THEMES = ['clean', 'executive', 'dark'];
+// 'auto' declares NO tokens — see hub.css — so a sheet set to it inherits the
+// app's [data-theme]. That is the default, and it is why a dark app now has dark
+// dashboards: 'clean' pins the light tokens on the sheet container, which was the
+// default and so applied to every dashboard nobody had deliberately restyled.
+const DASH_THEMES = ['auto', 'clean', 'executive', 'dark'];
 const DASH_DENSITIES = ['comfortable', 'compact'];
 const DASH_ACCENTS = ['blue', 'teal', 'slate'];
-const DASH_STYLE_DEFAULT = { theme: 'clean', density: 'comfortable', accent: 'blue' };
+const DASH_STYLE_DEFAULT = { theme: 'auto', density: 'comfortable', accent: 'blue' };
 
-const DASH_STYLE_PRESET_ORDER = ['clean', 'executive', 'dense', 'dark'];
+// The picker offers these four. `dense` is still a valid preset the Assistant
+// can name; it is simply not a tile, because "compact" is a density and the
+// other three tiles are about light and dark.
+const DASH_STYLE_PRESET_ORDER = ['auto', 'clean', 'executive', 'dark'];
 const DASH_STYLE_PRESETS: Record<string, any> = {
-  clean: { theme: 'clean', density: 'comfortable', accent: 'blue' },
-  executive: { theme: 'executive', density: 'comfortable', accent: 'slate' },
-  dense: { theme: 'clean', density: 'compact', accent: 'blue' },
-  dark: { theme: 'dark', density: 'comfortable', accent: 'blue' },
+  auto: { theme: 'auto', density: 'comfortable', accent: 'blue' },
+  clean: { theme: 'clean', density: 'comfortable', accent: 'blue', chosen: true },
+  executive: { theme: 'executive', density: 'comfortable', accent: 'slate', chosen: true },
+  dense: { theme: 'auto', density: 'compact', accent: 'blue' },
+  dark: { theme: 'dark', density: 'comfortable', accent: 'blue', chosen: true },
 };
 const DASH_STYLE_LABELS: Record<string, string> = {
-  clean: 'Clean', executive: 'Executive', dense: 'Dense', dark: 'Dark',
+  auto: 'Auto', clean: 'Light', executive: 'Executive', dense: 'Dense', dark: 'Dark',
 };
 const DASH_STYLE_NOTES: Record<string, string> = {
-  clean: 'The default — light, roomy, blue.',
+  auto: 'Follows the app — light or dark with your Appearance setting.',
+  clean: 'Always light, whatever the app is set to.',
   executive: 'Muted palette, serif figures, more presence.',
   dense: 'Tighter grid and smaller type — more on screen.',
-  dark: 'Dark surface, same accent.',
+  dark: 'Always dark, whatever the app is set to.',
 };
 
 // Renderer-side clamp. Main sanitizes too (src/analysis/dashboards.ts) and its
@@ -39,10 +48,16 @@ const DASH_STYLE_NOTES: Record<string, string> = {
 // junk still PAINTS, instead of composing a class name out of the junk.
 function dashSanitizeStyle(raw: any): any {
   const o = raw && typeof raw === 'object' ? raw : {};
+  // Same migration main applies (src/analysis/dashboards.ts): a stored 'clean'
+  // without `chosen` was written by the old default, not picked, so it reads as
+  // 'auto' and follows the app.
+  const chosen = o.chosen === true;
+  const rawTheme = DASH_THEMES.indexOf(o.theme) >= 0 ? o.theme : DASH_STYLE_DEFAULT.theme;
   return {
-    theme: DASH_THEMES.indexOf(o.theme) >= 0 ? o.theme : DASH_STYLE_DEFAULT.theme,
+    theme: rawTheme === 'clean' && !chosen ? 'auto' : rawTheme,
     density: DASH_DENSITIES.indexOf(o.density) >= 0 ? o.density : DASH_STYLE_DEFAULT.density,
     accent: DASH_ACCENTS.indexOf(o.accent) >= 0 ? o.accent : DASH_STYLE_DEFAULT.accent,
+    ...(chosen ? { chosen: true } : {}),
   };
 }
 
@@ -207,7 +222,9 @@ function buildDashStyleStrip(cards: DashMiniCard[], current: any, onPick: (p: st
  */
 function setDashStyle(style: any, persist: boolean): void {
   if (!dashCurrent) return;
-  dashCurrent.style = dashSanitizeStyle(style);
+  // Anything that reaches here came from the picker or the Assistant, so it is a
+  // CHOICE — flagged so the 'clean' migration never quietly undoes it.
+  dashCurrent.style = dashSanitizeStyle({ ...style, chosen: true });
   syncDashStyle();
   renderDashGrid();
   if (persist) { markDashDirty(); scheduleDashSave(); }

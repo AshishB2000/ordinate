@@ -182,6 +182,9 @@ function buildChartPlugins(c: ChartCtx): any[] {
           const pos = el.tooltipPosition();
           ctx.save();
           ctx.font = `600 11px ${fontFamily}`;
+          // ON the filled stage, not floating over the plot — white is right in
+          // both themes. The floating labels above use titleColor, which is the
+          // token. Do not "theme" this one.
           ctx.fillStyle = '#ffffff';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
@@ -324,6 +327,9 @@ function buildChartPlugins(c: ChartCtx): any[] {
           ctx.textBaseline = 'middle';
           ctx.shadowColor = 'rgba(0,0,0,0.5)';
           ctx.shadowBlur = 3;
+          // Inside the slice — roundLabelFits() above refuses to draw otherwise —
+          // so this sits on a filled arc in the accent palette, never on the
+          // plot background. White plus the shadow is correct in both themes.
           ctx.fillStyle = '#ffffff';
           lines.forEach((ln: string, k: number) => {
             ctx.font = fontFor(k);

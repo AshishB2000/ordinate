@@ -249,6 +249,12 @@ function destroyDashCharts(): void {
   });
 }
 
+// A theme flip changes every token a chart baked in, so the open sheet is
+// rebuilt exactly as a style change rebuilds it. Registered once at load.
+document.addEventListener('themechange', () => {
+  if (dashCurrent) renderDashGrid();
+});
+
 function renderDashGrid(): void {
   const grid = dashEl('dash-grid');
   if (!grid) return;

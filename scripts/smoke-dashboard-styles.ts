@@ -30,7 +30,9 @@ const REPO = path.resolve(__dirname, '..');
 const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-smoke-style-'));
 const SHOTS = process.env.ORDINATE_SHOT_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-style-shots-'));
 
-const PRESETS = ['clean', 'executive', 'dense', 'dark'];
+// The picker's four. `dense` is still a preset the Assistant can name, but it
+// is a density rather than a look, so it is not a tile.
+const PRESETS = ['auto', 'clean', 'executive', 'dark'];
 
 async function main(): Promise<void> {
   const app = await _electron.launch({
@@ -102,7 +104,7 @@ async function main(): Promise<void> {
   // theme.css values and only LOOKS right until a preset is applied and cleared).
   const initial = await measure(win);
   ok('a dashboard opens carrying all three axis classes',
-    initial.classes.theme === 'clean' && initial.classes.density === 'comfortable'
+    initial.classes.theme === 'auto' && initial.classes.density === 'comfortable'
       && initial.classes.accent === 'blue', JSON.stringify(initial.classes));
 
   // ── The Style button is reachable, and not gated on edit rights ──────────
@@ -152,8 +154,13 @@ async function main(): Promise<void> {
   // catches it — the four-thumbnail case is why getCSSVar takes an element.
   ok('…and the four previews resolve DIFFERENT surfaces, not one inherited sheet',
     new Set(strip.map((s) => s.cardBg)).size >= 2, JSON.stringify(strip.map((s) => s.cardBg)));
+  // BY NAME. This read strip[1] until the picker gained Auto and reordered, at
+  // which point it compared two tiles that are blue by design and failed for a
+  // reason that had nothing to do with the accent.
+  const execBar = (strip.find((s: any) => /executive/i.test(String(s.name))) || {}).barBg || '';
+  const blueBar = (strip.find((s: any) => /auto|light|clean/i.test(String(s.name))) || {}).barBg || '';
   ok('…with the Executive tile drawing its bars in the muted accent, not blue',
-    strip[1].barBg !== strip[0].barBg, `${strip[0].barBg} vs ${strip[1].barBg}`);
+    Boolean(execBar) && Boolean(blueBar) && execBar !== blueBar, `${blueBar} vs ${execBar}`);
   await win.screenshot({ path: path.join(SHOTS, 'style-chooser.png') });
   await win.evaluate(() => {
     const c = [...document.querySelectorAll('.dash-style-modal .btn')].find((b) => b.textContent === 'Cancel');
@@ -162,12 +169,15 @@ async function main(): Promise<void> {
   await win.waitForTimeout(400);
   const afterCancel = await measure(win);
   ok('cancelling the chooser leaves the dashboard exactly as it was',
-    afterCancel.classes.theme === 'clean' && afterCancel.editorBg === initial.editorBg,
+    afterCancel.classes.theme === 'auto' && afterCancel.editorBg === initial.editorBg,
     JSON.stringify(afterCancel.classes));
 
   // ── Each preset, applied for real ────────────────────────────────────────
   const seen: Record<string, any> = {};
-  for (const preset of PRESETS) {
+  // The picker's four PLUS dense: it is no longer a tile (a density is not a
+  // look) but it is still a preset the Assistant can name, and the geometry
+  // assertions below are the only coverage its compact grid has.
+  for (const preset of PRESETS.concat(['dense'])) {
     await win.evaluate((p: string) => (window as any).applyDashStylePreset(p), preset);
     await win.waitForTimeout(1400);
     const m = await measure(win);
@@ -204,14 +214,14 @@ async function main(): Promise<void> {
 
   // Density: the painted grid AND the maths that hit-tests it.
   ok('Dense tightens the painted grid',
-    seen.dense.gap < seen.clean.gap && seen.dense.row < seen.clean.row,
-    `gap ${seen.clean.gap}→${seen.dense.gap}, row ${seen.clean.row}→${seen.dense.row}`);
+    seen.dense.gap < seen.auto.gap && seen.dense.row < seen.auto.row,
+    `gap ${seen.auto.gap}→${seen.dense.gap}, row ${seen.auto.row}→${seen.dense.row}`);
   ok('…and the drag/resize maths follow it, instead of measuring a grid that is gone',
-    seen.dense.jsRow === seen.dense.row + seen.dense.gap && seen.clean.jsRow === seen.clean.row + seen.clean.gap,
+    seen.dense.jsRow === seen.dense.row + seen.dense.gap && seen.auto.jsRow === seen.auto.row + seen.auto.gap,
     `dense js=${seen.dense.jsRow} css=${seen.dense.row}+${seen.dense.gap}`);
   ok('…while every preset keeps 12 columns, so no card ever moves',
-    PRESETS.every((p) => seen[p].cols === 12 && seen[p].cards[0].col === seen.clean.cards[0].col),
-    JSON.stringify(PRESETS.map((p) => seen[p].cols)));
+    PRESETS.concat(['dense']).every((p) => seen[p].cols === 12 && seen[p].cards[0].col === seen.auto.cards[0].col),
+    JSON.stringify(PRESETS.concat(['dense']).map((p) => seen[p].cols)));
 
   // ── It survives a reopen ─────────────────────────────────────────────────
   await win.evaluate((p: string) => (window as any).applyDashStylePreset(p), 'dark');

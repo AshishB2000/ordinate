@@ -287,6 +287,17 @@ function embedJson(obj: unknown): string {
 // no surface for. --font-numeric is `inherit` except on Executive, where the
 // serif KPI is half of what makes that theme recognizable.
 const THEME_TOKENS: Record<DashboardStyle['theme'], string> = {
+  // An exported file is a standalone document with no app around it to inherit
+  // from, so 'auto' — which declares nothing in the app precisely so the sheet
+  // follows the app — has to resolve to something concrete here. Light: an
+  // export is for sharing and printing, and that is the neutral choice for a
+  // document whose reader's preference we cannot know.
+  auto: `--bg: #f7f7f8; --surface: #ffffff; --surface-2: #f3f4f6;
+    --text: #18181b; --text-strong: #0f1117; --muted: #6b7280;
+    --text-dim: #8a909c; --text-faint: #aeb4bf;
+    --border: #e5e7eb; --border-2: #d6dae1;
+    --font-numeric: inherit; --card-radius: 10px; --card-shadow: none;
+    --kpi-size: 30px; --kpi-label-size: 13px; color-scheme: light;`,
   clean: `--bg: #f7f7f8; --surface: #ffffff; --surface-2: #f3f4f6;
     --text: #18181b; --text-strong: #0f1117; --muted: #6b7280;
     --text-dim: #8a909c; --text-faint: #aeb4bf;
