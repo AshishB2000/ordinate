@@ -270,7 +270,12 @@ function buildChartPlugins(c: ChartCtx): any[] {
     });
   }
 
-  if (isRound) {
+  // A gauge is DRAWN as a doughnut, so isRound is true for it — correctly, for
+  // datasets, cutout and rotation. Not for this plugin: a gauge's two "slices"
+  // are a value and its remainder, not categories, and its label IS the metric
+  // name the gaugeCenter plugin above already prints under the big number. So
+  // roundLabels drew the same words twice on one small chart.
+  if (isRound && !isGauge) {
     // Pie/donut have no axes, so label each big-enough slice with its category name
     // directly (always on — readable without hovering or colour-matching the legend);
     // slices that cannot hold their label fall back to the legend. When Values is

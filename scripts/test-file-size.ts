@@ -50,27 +50,16 @@ const CAP = 800;
  */
 const ALLOWED: Record<string, number> = {
   'renderer/hub/mapRender.ts': 834,
-  // Deliberately last: it is the only check that runs the real app, so breaking
-  // it blinds every other split. Own PR, after these are merged and green.
-  //
-  // Grew from 3544 in the dash-controls plan's final task: the plan's own gate
-  // list requires a PERMANENT smoke assertion for the "view state never writes"
-  // safety guarantee (mtime/bytes around a control interaction) plus a real-app
-  // walk of all three control kinds — both belong in the one file that drives
-  // the real app, not a new one (there is exactly one of these on purpose). A
-  // future split still owns its own PR; this is a one-time, reviewed bump, not
-  // organic drift.
-  //
-  // Grew again, 4098 -> 4165, in the whole-branch review fix pass: the same
-  // safety-guarantee assertion had only ever been exercised on the PUBLISHED
-  // (read-only) side, where persistDashboard's own early-return makes it
-  // trivially true. The path a real regression would break is the AUTHORING
-  // side — editing an open analysis, where markDashDirty/anScheduleWrite DO
-  // reach disk — and that side had no coverage at all. Added the analogous
-  // mtime/bytes check there, same file, same reasoning as above.
-  'scripts/smoke-app.ts': 3725,
+  // WAS 3,725 lines — by a wide margin the largest entry on this list, and the
+  // file every other smoke file existed to avoid growing (smoke-sample,
+  // smoke-dock, smoke-dockHero, smoke-composer and smoke-section-hero each open
+  // with a comment saying they are separate files BECAUSE this one could not
+  // take another line). Split by surface into eight siblings, all of which land
+  // under the cap and therefore get NO entry here. The ratchet tightened by
+  // 3,387 lines; the assertion count went UP, 323 -> 341.
+  'scripts/smoke-app.ts': 338,
   'scripts/test-connectorsHttp.ts': 881,
-  'src/ai/analyze.ts': 955,
+  'src/ai/analyze.ts': 911,
   'src/engine/anomaliesResident.ts': 870,
   'src/connectors/http.ts': 1036,
   'src/connectors/local.ts': 804,

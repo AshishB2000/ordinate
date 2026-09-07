@@ -116,6 +116,18 @@ scripts/**/*.js
 /scripts/test-statsResident.js
 /scripts/smoke-app.js
 
+# The eight surfaces split out of smoke-app.ts under the 800-line cap, plus the
+# launch/fixture module they share. Emitted siblings.
+/scripts/smokeFixture.js
+/scripts/smoke-shell.js
+/scripts/smoke-analysis-create.js
+/scripts/smoke-analysis-workbench.js
+/scripts/smoke-analysis-props.js
+/scripts/smoke-dashboard-controls.js
+/scripts/smoke-draft-review.js
+/scripts/smoke-viz-builder.js
+/scripts/smoke-render-stacks.js
+
 # Server-side paged read for the Explore grid — emitted siblings.
 /scripts/test-datasetPage.js
 
@@ -304,3 +316,7 @@ scripts/**/*.js
 # Conversational editing of an open dashboard — emitted siblings.
 /renderer/hub/dockEdit.js
 /scripts/smoke-dashboard-edit.js
+
+# Prompts without a parser of their own, split out of analyze.ts. Emitted siblings.
+/src/ai/prompts.js
+/scripts/test-prompts.js

@@ -105,10 +105,10 @@ function fillSelect(sel: HTMLSelectElement | null, items: Array<{ value: string;
 
 // ── Boot wiring (once) ───────────────────────────────────────────────────────
 function initVisuals(): void {
-  // Three "+ New visual" buttons — header, hero, empty state. Whichever is on
-  // screen runs the same handler, exactly as the Analyses section does with its
-  // three Create buttons.
-  ['viz-new-btn', 'viz-empty-new-btn', 'viz-hero-new'].forEach((btnId) => {
+  // Two "+ New visual" buttons — header and empty state. Whichever is on screen
+  // runs the same handler, exactly as the Dashboards section does with its
+  // Create buttons.
+  ['viz-new-btn', 'viz-empty-new-btn'].forEach((btnId) => {
     const b = vizEl(btnId);
     if (b) b.addEventListener('click', () => handleNewVisual());
   });
@@ -122,15 +122,6 @@ function initVisuals(): void {
   if (seeAll) seeAll.addEventListener('click', () => {
     if (typeof selectSection === 'function') selectSection('datasets');
   });
-
-  const heroDismiss = vizEl('viz-hero-dismiss');
-  if (heroDismiss) {
-    heroDismiss.addEventListener('click', () => {
-      try { localStorage.setItem(VIZ_HERO_KEY, '1'); } catch (_) { /* private mode */ }
-      const hero = vizEl('viz-hero');
-      if (hero) hero.hidden = true;
-    });
-  }
 
   // "← Back": leave the builder and repaint the gallery, so a delete
   // or a rename made while the builder was open shows immediately.

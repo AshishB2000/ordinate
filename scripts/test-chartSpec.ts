@@ -265,97 +265,120 @@ function capture(type: string, variant: string): { text: string; ok: boolean } {
 // pie, donut and gauge — gauge because a gauge IS a Chart.js doughnut and shares
 // the `roundLabels` plugin — moved because that plugin now measures its text and
 // skips a slice that cannot hold it. 9 of 84 hashes changed and the other 75 did
-// not, which is the shape a change confined to one plugin should have. Every
-// other movement in this table is a regression until proven otherwise.
+// not, which is the shape a change confined to one plugin should have.
+// REGENERATED again, deliberately, for the round-family legend fix
+// (fix/round-legend): ALL 84 moved, and that is the honest shape this time —
+// `legend.labels.generateLabels` is not per-family like `roundLabels`, it sits in
+// the ONE options block every chart id shares, so editing a line inside it
+// necessarily re-serialises all 84. Verified confined before regenerating: with
+// ORDINATE_CHARTSPEC_DUMP set on both sides, the only differing line across all
+// 84 dumps is that callback's first statement. Every other movement in this
+// table is a regression until proven otherwise. What the legend RENDERS is
+// asserted in scripts/test-chartLegend.ts — a hash cannot tell a legend of three
+// category names from a legend of one `null`.
+// REGENERATED again, deliberately, for the gauge round-label fix
+// (fix/gauge-labels): exactly 3 moved — gauge/default, gauge/custom,
+// gauge/filtered — and pie/donut did NOT, which is the whole point. A gauge is a
+// Chart.js doughnut, so it was picking up `roundLabels` and drawing the metric
+// name a second time on the arc, over the caption gaugeCenter already prints.
+// `roundLabels` is added per-family, so excluding gauge from it can only move
+// gauge's three configs; any fourth would have been a regression.
 const GOLDEN: Record<string, string> = {
   // Regenerated ONCE when the serialiser stopped hashing whole-line comments
-  // (see ser() above). Verified comment-only: emitting these with and without
-  // an explanatory comment added to a plugin body gives byte-identical hashes
-  // for all 84 cases, so nothing about what buildChart draws moved.
-  "area/custom": '4c595c8db5df6c9c',
-  "area/default": 'c05671fe7c7fde8b',
-  "area/filtered": '2f976fb054dde02e',
-  "bar/custom": '4f636988f7512349',
-  "bar/default": 'fc96b68ab581a0ff',
-  "bar/filtered": '464cdad014cea3df',
-  "boxplot/custom": 'aa90233021ddb042',
-  "boxplot/default": '3ba37605fcc22ee7',
-  "boxplot/filtered": '547ab6603f659251',
-  "bubble/custom": 'e90257425a8a3962',
-  "bubble/default": 'fe55a7462da30bff',
-  "bubble/filtered": '140b407a8bdc8fc4',
-  "candlestick/custom": '879ad28137848364',
-  "candlestick/default": '25ba91304bfec71e',
-  "candlestick/filtered": '1161b4d195869789',
-  "clustered_bar/custom": '4f636988f7512349',
-  "clustered_bar/default": 'fc96b68ab581a0ff',
-  "clustered_bar/filtered": '464cdad014cea3df',
-  "clustered_column/custom": '41e8abe586bb95c0',
-  "clustered_column/default": 'a9058222389e0346',
-  "clustered_column/filtered": '7a0c05de3cb165e7',
-  "column/custom": '41e8abe586bb95c0',
-  "column/default": 'a9058222389e0346',
-  "column/filtered": '7a0c05de3cb165e7',
-  "combo/custom": 'bf9759005a7ff09b',
-  "combo/default": 'b600605b8b4c3b01',
-  "combo/filtered": 'f32c358401c0b403',
-  "donut/custom": '223a984ec3409a4f',
-  "donut/default": '33ab5d897ef2f585',
-  "donut/filtered": '1b78478a64c2bcbe',
-  "funnel/custom": '19c8c43c8e36555a',
-  "funnel/default": '0af304e33e8db106',
-  "funnel/filtered": 'd30fa10ba1cfd742',
-  "gauge/custom": 'cb51c64f494bee8f',
-  "gauge/default": '47806d9751eb1100',
-  "gauge/filtered": '0bcbe874c829ef78',
-  "heatmap/custom": 'df69fa499bb92862',
-  "heatmap/default": '85fd32800c95c302',
-  "heatmap/filtered": '8b00d2e2aed785ad',
-  "histogram/custom": 'ad692b1a8b241b89',
-  "histogram/default": '78d4c8863ecf276e',
-  "histogram/filtered": '2c580828fdc3e041',
-  "line/custom": '143122a6030b30fe',
-  "line/default": '9f4d249b8b7374c3',
-  "line/filtered": '8e02aa33b2c5942b',
-  "line_markers/custom": '5be470d3d7bda4ab',
-  "line_markers/default": '740292bbb393d0a8',
-  "line_markers/filtered": 'd16767a3d37602d2',
-  "map_bubble/custom": '41e8abe586bb95c0',
-  "map_bubble/default": 'a9058222389e0346',
-  "map_bubble/filtered": '7a0c05de3cb165e7',
-  "map_choropleth/custom": '41e8abe586bb95c0',
-  "map_choropleth/default": 'a9058222389e0346',
-  "map_choropleth/filtered": '7a0c05de3cb165e7',
-  "pct_stacked_bar/custom": 'f492113633810901',
-  "pct_stacked_bar/default": '2606796f64bc77dc',
-  "pct_stacked_bar/filtered": '531ca8eef94d94db',
-  "pct_stacked_column/custom": '5e2a135a9aafac92',
-  "pct_stacked_column/default": '395df4f3e7850d55',
-  "pct_stacked_column/filtered": 'a2266a27312a2079',
-  "pie/custom": '500873866c680d3e',
-  "pie/default": '63026528b9f5e476',
-  "pie/filtered": 'e530a5fde790920e',
-  "sankey/custom": '07f081c9c90c1701',
-  "sankey/default": '92cabfbd621176a1',
-  "sankey/filtered": 'b221ddef527b99ed',
-  "scatter/custom": 'ac762f15952ac7e8',
-  "scatter/default": '741472441916e950',
-  "scatter/filtered": '4d3d9c597c469dd0',
-  "stacked_area/custom": '994e6b633054b0a6',
-  "stacked_area/default": '9b82c521321727eb',
-  "stacked_area/filtered": 'f0934bbdfb019a53',
-  "stacked_bar/custom": '02d82608f06a3f90',
-  "stacked_bar/default": '573c69106f50e128',
-  "stacked_bar/filtered": '10ae16f5c583e0f7',
-  "stacked_column/custom": '5bed3698139d255c',
-  "stacked_column/default": 'b02c4fe450fa5e6a',
-  "stacked_column/filtered": '2c63eefbeec51c88',
-  "table/custom": '41e8abe586bb95c0',
-  "table/default": 'a9058222389e0346',
-  "table/filtered": '7a0c05de3cb165e7',
-  "treemap/custom": '42a6b0f1c702a201',
-  "treemap/default": 'd23046de9560f84d',
-  "treemap/filtered": '9f77470ce3aed06a',
+  // (see ser() above), and REGENERATED AGAIN on the merge with develop, which had
+  // meanwhile regenerated the same table for the round-legend and gauge fixes.
+  // 79 of 84 moved — every case whose serialised functions contain a comment —
+  // and the 5 that did not are the ones with no comment to strip.
+  //
+  // Verified attributable to the serialiser alone, not to the merge: this branch's
+  // only change under renderer/hub is two explanatory comment blocks in
+  // chartValueLabels.ts, and dumping all 84 serialisations with and without them
+  // (ORDINATE_CHARTSPEC_DUMP on both sides) gives 84 byte-identical files. So
+  // nothing about what buildChart draws moved.
+  "area/custom": '5d4962f12b137b08',
+  "area/default": 'cf9dcab7bc21c881',
+  "area/filtered": 'c4cfd9811df4b316',
+  "bar/custom": '8695c93a56ec930e',
+  "bar/default": 'd44d47972ab7ee70',
+  "bar/filtered": 'a777c9fc4625f614',
+  "boxplot/custom": 'f28cfccbae124eb9',
+  "boxplot/default": 'fa5f95629263f4df',
+  "boxplot/filtered": 'b169c7ac3c58dc00',
+  "bubble/custom": '6214a39422dffb42',
+  "bubble/default": '513bc21beb3a332a',
+  "bubble/filtered": 'bcd1372d56e3f8d4',
+  "candlestick/custom": '615d31c8118d3f04',
+  "candlestick/default": 'ac5d0986bdb30f99',
+  "candlestick/filtered": '5cc77bfb08ce431b',
+  "clustered_bar/custom": '8695c93a56ec930e',
+  "clustered_bar/default": 'd44d47972ab7ee70',
+  "clustered_bar/filtered": 'a777c9fc4625f614',
+  "clustered_column/custom": '7e7529eef57ac853',
+  "clustered_column/default": '0de46840c7314dec',
+  "clustered_column/filtered": '2a5f5a057b1a37d0',
+  "column/custom": '7e7529eef57ac853',
+  "column/default": '0de46840c7314dec',
+  "column/filtered": '2a5f5a057b1a37d0',
+  "combo/custom": '3dce0df74a7b5e60',
+  "combo/default": '3953ab12c0ba2b95',
+  "combo/filtered": '2e298c8ca34e5640',
+  "donut/custom": '2a151a3c98422223',
+  "donut/default": 'fb119d2f58f02c4c',
+  "donut/filtered": '656d544cd3dda400',
+  "funnel/custom": 'a834f41f67417e7c',
+  "funnel/default": '8dc573bb4ec3135d',
+  "funnel/filtered": 'a63e174df450904d',
+  "gauge/custom": '272874450fc4e820',
+  "gauge/default": '82a06baedf35fee0',
+  "gauge/filtered": '5bb65e740b74bdf1',
+  "heatmap/custom": 'cd3027bc7bd3e5e4',
+  "heatmap/default": 'c3f723568b6aa1dd',
+  "heatmap/filtered": 'a60101e6cc6ec618',
+  "histogram/custom": '2420a35aef2193f7',
+  "histogram/default": '600ad6b764464b83',
+  "histogram/filtered": '4ea05ac5576c6639',
+  "line/custom": '119adc1bfbce2b8b',
+  "line/default": '2b97c8377f560fc8',
+  "line/filtered": 'a74aba75e43202ef',
+  "line_markers/custom": '09402d81e37d820c',
+  "line_markers/default": 'ff0f19435a57de24',
+  "line_markers/filtered": '2bba77a1b83e4b9a',
+  "map_bubble/custom": '7e7529eef57ac853',
+  "map_bubble/default": '0de46840c7314dec',
+  "map_bubble/filtered": '2a5f5a057b1a37d0',
+  "map_choropleth/custom": '7e7529eef57ac853',
+  "map_choropleth/default": '0de46840c7314dec',
+  "map_choropleth/filtered": '2a5f5a057b1a37d0',
+  "pct_stacked_bar/custom": '8a647b24cb0fdaed',
+  "pct_stacked_bar/default": '7789420be7e39595',
+  "pct_stacked_bar/filtered": '01cc65a703f8cf7a',
+  "pct_stacked_column/custom": 'c4c866edccf4596e',
+  "pct_stacked_column/default": '09774544c95f0127',
+  "pct_stacked_column/filtered": '75b22854f2a0a4e6',
+  "pie/custom": 'b0b34c96ef5b4905',
+  "pie/default": '6dcbd9c62dd4903e',
+  "pie/filtered": '088d7a0a7455e764',
+  "sankey/custom": '48eadd37dc79c0c0',
+  "sankey/default": '6db6c0e34b05e192',
+  "sankey/filtered": '6bf246ad16fd94ba',
+  "scatter/custom": '78bbeb778b69ef83',
+  "scatter/default": '029634d58c3f4196',
+  "scatter/filtered": 'cdd4e57cf5a923f4',
+  "stacked_area/custom": 'ae9d01f2d0af8839',
+  "stacked_area/default": '2ae8ccee8c8ac7d1',
+  "stacked_area/filtered": '28e072230cf614bd',
+  "stacked_bar/custom": '46ccc2aff69b939a',
+  "stacked_bar/default": '1161f02b4708414e',
+  "stacked_bar/filtered": '6b34b76f980cc9e6',
+  "stacked_column/custom": '16588f1e76c928b8',
+  "stacked_column/default": '3483e00abf1fe499',
+  "stacked_column/filtered": '55115f9103e60f7f',
+  "table/custom": '7e7529eef57ac853',
+  "table/default": '0de46840c7314dec',
+  "table/filtered": '2a5f5a057b1a37d0',
+  "treemap/custom": 'dd923b5b900019ca',
+  "treemap/default": '6ca42388e2a2b681',
+  "treemap/filtered": 'd8a949baca22c73f',
 };
 
 // ── Run ────────────────────────────────────────────────────────────────────
@@ -402,6 +425,29 @@ ok('the golden table has no stale entries',
 ok('captured configs are distinct per chart id',
    new Set(Object.values(fresh)).size >= CHART_IDS.length,
    new Set(Object.values(fresh)).size + ' distinct of ' + Object.keys(fresh).length);
+
+// ── Which inline plugins a family carries ──────────────────────────────────
+// A hash says a config CHANGED, never what it now contains — so name the one
+// thing this file's last regeneration was about. A gauge is drawn as a Chart.js
+// doughnut, so it used to pick up `roundLabels` and write the metric name onto
+// the arc, on top of the caption `gaugeCenter` already prints under the big
+// number: the same words twice on one small chart. Asserted in both directions,
+// because "no roundLabels" is also what a gauge that stopped building any
+// plugins at all would look like.
+function pluginIds(type: string): string[] {
+  recorded.length = 0;
+  api.buildChart({ __canvas: type } as unknown as HTMLCanvasElement,
+                 JSON.parse(JSON.stringify(DATA)), type, {});
+  return ((recorded[0] && recorded[0].config.plugins) || []).map((p: any) => p.id);
+}
+const gaugeIds = pluginIds('gauge');
+ok('a gauge carries no roundLabels plugin', !gaugeIds.includes('roundLabels'), gaugeIds.join(', '));
+ok('a gauge still prints its own centre caption', gaugeIds.includes('gaugeCenter'), gaugeIds.join(', '));
+for (const t of ['pie', 'donut']) {
+  const ids = pluginIds(t);
+  ok(t + ' still labels its slices', ids.includes('roundLabels'), ids.join(', '));
+  ok(t + ' has no gauge centre plugin', !ids.includes('gaugeCenter'), ids.join(', '));
+}
 
 if (process.env.ORDINATE_CHARTSPEC_EMIT) {
   // Regeneration aid for the ONE case this is legitimate: a deliberate,

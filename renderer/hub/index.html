@@ -1072,21 +1072,6 @@
             <button class="btn btn-primary" type="button" id="viz-new-btn">+ New visual</button>
           </div>
 
-          <!-- First-run hero. Same .ws-hero the Analyses section uses; its art
-               is a glyph cluster injected by visuals.ts (VIZ_ICONS), because
-               those SVGs are a renderer constant, not markup. -->
-          <div class="ws-hero" id="viz-hero" hidden>
-            <div class="ws-hero-copy">
-              <h3 class="ws-hero-h">One chart, saved once, used everywhere.</h3>
-              <p class="ws-hero-p">Pick a dataset, describe what you want to see or build it yourself, then reuse it across dashboards. Every number is computed by the app.</p>
-              <div class="ws-hero-actions">
-                <button class="btn btn-primary" type="button" id="viz-hero-new">+ New visual</button>
-                <button class="btn btn-ghost" type="button" id="viz-hero-dismiss">Dismiss</button>
-              </div>
-            </div>
-            <div class="ws-hero-art viz-glyph-art" id="viz-hero-art" aria-hidden="true"></div>
-          </div>
-
           <div class="viz-grid" id="viz-grid"></div>
 
           <!-- The whole empty STATE, not just the card: the card plus the
@@ -1097,7 +1082,7 @@
             <div class="ws-empty" id="viz-empty">
               <div class="ws-empty-art viz-glyph-art" id="viz-empty-art" aria-hidden="true"></div>
               <h3 class="ws-empty-h">No visuals yet</h3>
-              <p class="ws-empty-p">A visual is one saved chart — build it once, then drop it into any dashboard, or export it on its own.</p>
+              <p class="ws-empty-p">A visual is one saved chart — build it once, then drop it into any dashboard, or export it on its own. Every number is computed by the app.</p>
               <div class="ws-empty-actions">
                 <button class="btn btn-primary btn-lg" type="button" id="viz-empty-new-btn">+ New visual</button>
                 <button class="btn btn-lg" type="button" id="viz-empty-ai">✨ Start with the Assistant</button>
@@ -1172,9 +1157,8 @@
       <div class="dash-panel" id="an-list-view">
         <!-- The section header, matching Data and Visuals: what this is (with
              how many), then what you can do, right-aligned. The two actions
-             lived inside the table card before, which put them below the hero
-             and above the column labels — a place nothing else in the app puts
-             its primary action. -->
+             lived inside the table card before, which put them above the column
+             labels — a place nothing else in the app puts its primary action. -->
         <div class="an-list-head">
           <div class="an-list-head-text">
             <div class="viz-title-row">
@@ -1201,9 +1185,9 @@
              anything is created. -->
         <div class="ws-empty" id="an-list-empty" hidden>
           <div class="ws-empty-art" aria-hidden="true">
-            <span class="ws-hero-bar ws-hero-bar--2"></span>
-            <span class="ws-hero-bar ws-hero-bar--4"></span>
-            <span class="ws-hero-bar ws-hero-bar--3"></span>
+            <span class="ws-bar ws-bar--2"></span>
+            <span class="ws-bar ws-bar--4"></span>
+            <span class="ws-bar ws-bar--3"></span>
           </div>
           <h3 class="ws-empty-h">No dashboards yet</h3>
           <p class="ws-empty-p">A dashboard is where you build: sheets of charts, metrics and text over your datasets. Start from a blank sheet, or describe what you want and let the Assistant draft the sheets, charts and calculated fields — you review all of it before anything is created.</p>

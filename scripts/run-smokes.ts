@@ -13,8 +13,19 @@ const path: typeof import('path') = require('path');
 const { spawnSync }: typeof import('child_process') = require('child_process');
 
 // In chain order — smoke-app first, same as before, so its logs stay on top.
+// The eight files after it are the surfaces SPLIT OUT of smoke-app.ts, listed in
+// the order those sections ran inside it, so the logs still read top to bottom
+// the way they always did.
 const SMOKES = [
   'smoke-app',
+  'smoke-shell',
+  'smoke-analysis-create',
+  'smoke-analysis-workbench',
+  'smoke-analysis-props',
+  'smoke-dashboard-controls',
+  'smoke-draft-review',
+  'smoke-viz-builder',
+  'smoke-render-stacks',
   'smoke-topbar',
   'smoke-sample',
   'smoke-composer',
@@ -23,6 +34,7 @@ const SMOKES = [
   'smoke-assistant',
   'smoke-ask-actions',
   'smoke-viz-thumbs',
+  'smoke-section-hero',
   'smoke-connect',
   'smoke-dashboard-proposal',
   'smoke-dashboards',

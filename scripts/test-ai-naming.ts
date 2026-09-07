@@ -37,6 +37,7 @@ const SURFACES = [
   'renderer/hub/dock.ts', 'renderer/hub/prepare.ts', 'renderer/hub/dsExplorer.ts',
   'renderer/hub/dashAdd.ts', 'renderer/hub/vizNew.ts', 'renderer/hub/anDraft.ts',
   'renderer/hub/anNew.ts', 'renderer/hub/authoringPanes.ts', 'src/ai/analyze.ts',
+  'src/ai/prompts.ts',
 ];
 for (const f of SURFACES) {
   const src = read(f);
@@ -77,7 +78,7 @@ const UI_FILES = [
   ...fs.readdirSync(path.join(REPO, 'renderer/hub'))
       .filter((f) => f.endsWith('.ts') && !f.endsWith('.d.ts'))
       .map((f) => 'renderer/hub/' + f),
-  'src/ai/analyze.ts', 'src/analysis/analysisPlan.ts',
+  'src/ai/analyze.ts', 'src/ai/prompts.ts', 'src/analysis/analysisPlan.ts',
 ];
 for (const [re, label] of RETIRED) {
   const hits: string[] = [];
