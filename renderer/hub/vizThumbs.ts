@@ -34,6 +34,14 @@ const vizThumbVisual = new WeakMap<HTMLElement, any>();
 // Every live thumbnail chart, so reset can destroy them all.
 const vizThumbCharts = new Set<any>();
 
+// How many thumbnail charts this module currently holds. Read-only, and the
+// only reason it exists is that a smoke test cannot otherwise tell "reset
+// destroyed them" from "reset forgot them": Chart.js's own registry proves
+// nothing was leaked, this proves the tracking set was actually emptied.
+function vizThumbLiveCount(): number {
+  return vizThumbCharts.size;
+}
+
 // Can this chart type be thumbnailed at all? (Exclusions in the header.)
 function vizThumbEligible(chartType: string): boolean {
   return Boolean(chartType) && !VIZ_THUMB_SKIP.has(chartType);

@@ -1189,14 +1189,12 @@
             <button class="btn btn-primary" type="button" id="an-new-btn">Create dashboard</button>
           </div>
         </div>
-        <div class="an-table ws-table" id="an-table" hidden>
-          <div class="an-table-cols ws-table-cols">
-            <span>Name</span>
-            <span>Sheets</span>
-            <span>Last updated</span>
-            <span class="an-col-action">Action</span>
-          </div>
-          <div class="dash-list" id="an-list"></div>
+        <!-- The populated state: a card grid, not a table. A dashboard is mostly
+             pictures, so each card previews its first sheet's first one or two
+             visuals as LIVE thumbnails (anList.ts → vizThumbs.ts). The wrapper
+             keeps the id every caller and test already uses to show/hide it. -->
+        <div id="an-table" hidden>
+          <div class="an-grid" id="an-list"></div>
         </div>
         <!-- Empty state. Two doors, both offered: start from nothing, or describe
              what you want and let a model propose the structure — reviewed before

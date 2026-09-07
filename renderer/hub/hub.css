@@ -5751,6 +5751,10 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .viz-card:hover .viz-card-menu,
 .viz-card:focus-within .viz-card-star,
 .viz-card:focus-within .viz-card-menu,
+/* The Dashboards cards wear the same ⋯ chip (anList.ts), so they share the
+   reveal rather than declaring a second one that could drift. */
+.an-card:hover .viz-card-menu,
+.an-card:focus-within .viz-card-menu,
 .viz-card-star:focus-visible,
 .viz-card-menu:focus-visible { opacity: 1; }
 /* A favourite is state, not chrome — it stays visible with nothing hovered. */
@@ -6283,8 +6287,7 @@ body.an-focus .dash-head-spacer--2 { display: none; }
 
    `.ws-*` is the section-agnostic name; the `.an-*` selectors ride along so the
    Analyses markup did not have to be rewritten to share them. */
-.ws-table,
-.an-table {
+.ws-table {
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -6293,28 +6296,7 @@ body.an-focus .dash-head-spacer--2 { display: none; }
   padding: 14px 16px 16px;
   gap: 10px;
 }
-.an-table-head {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-/* One template per section, declared once and inherited by the rows, so a
-   column label can never drift out of line with the cell under it. The fixed
-   tracks are sized to their actual content — a bare sheet count, the widest
-   status pill ("Unpublished changes"), a short relative date — so the grid's
-   minimum width stays well under this column even with the AI dock open. NAME
-   is the only elastic track and truncates with an ellipsis; the old 82/190/150
-   tracks were oversized and pushed "Last updated" off the right edge into a
-   horizontal scrollbar. */
-.an-table-cols,
-#ws-analyses .dash-list-item {
-  display: grid;
-  grid-template-columns: minmax(150px, 1fr) 60px 116px 56px;
-  align-items: center;
-  gap: 10px;
-}
-.ws-table-cols,
-.an-table-cols {
+.ws-table-cols {
   padding: 0 10px 8px;
   border-bottom: 1px solid var(--border);
   font-size: 11px;
@@ -6338,67 +6320,52 @@ body.an-focus .dash-head-spacer--2 { display: none; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ws-col-action,
-.an-col-action { text-align: right; }
-#ws-analyses .dash-list { gap: 0; }
-#ws-analyses .dash-list-item {
+.ws-col-action { text-align: right; }
+
+/* ── The Dashboards card grid ────────────────────────────────────────────────
+   A dashboard is the one record in the app that is mostly PICTURES, and its
+   list used to be the plainest surface in the product: a four-column text
+   table, while Visuals next door was a grid of live charts. It is now the same
+   card, showing the first sheet's first one or two visuals as live thumbnails
+   drawn by the SAME engine (vizThumbs.ts, via anList.ts) — one thumbnail
+   engine, not two.
+
+   The card body, name and meta reuse .viz-card-* verbatim, so the two grids
+   cannot drift apart. Only the preview strip below is this section's own. */
+.an-grid {
+  display: grid;
+  /* Wider than .viz-grid's 210px: a card here can hold two thumbnails side by
+     side, and a 105px chart is a smudge. */
+  grid-template-columns: repeat(auto-fill, minmax(264px, 1fr));
+  gap: 14px;
+}
+.an-card { position: relative; } /* anchors the ⋯ overlay onto the preview */
+/* The preview strip: one tile, or two sharing a hairline. It owns the aspect
+   ratio rather than the tiles — two 16/10 tiles side by side would make a
+   dashboard card twice as tall as a gallery one for no extra information. */
+.an-card-prev {
+  display: grid;
+  grid-template-columns: 1fr;
+  aspect-ratio: 16 / 9;
+  margin-bottom: 9px;
   border-bottom: 1px solid var(--border);
-  padding: 2px 10px;
 }
-#ws-analyses .dash-list-item:last-child { border-bottom: 0; }
-#ws-analyses .dash-list-item:hover { background: var(--surface-2); }
-/* The name cell is the click target. Stripped back to a link-like control: the
-   card border and padding belong to the row now, not to the button. */
-#ws-analyses .dash-list-open {
-  flex: none;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  padding: 11px 0;
-  background: none;
-  border: 0;
-  border-radius: 0;
+.an-card-prev--2 { grid-template-columns: 1fr 1fr; }
+/* A tile inside the strip fills its cell instead of setting its own height. */
+.an-card-tile {
+  aspect-ratio: auto;
+  height: 100%;
   min-width: 0;
+  margin-bottom: 0;
+  border-bottom: 0;
 }
-#ws-analyses .dash-list-open:hover .dash-list-name { color: var(--accent); }
-#ws-analyses .dash-list-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-#ws-analyses .an-cell {
-  font-size: 12px;
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-#ws-analyses .an-cell-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 4px;
-}
-/* The ⋯ trigger. Square, quiet until hovered — it is a control, not data, and
-   the row already has a click target on the name. */
-#ws-analyses .an-row-menu {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 15px;
-  line-height: 1;
-  background: none;
-  border-color: transparent;
-  border-radius: var(--r-sm);
-  color: var(--text-dim);
-}
-#ws-analyses .an-row-menu:hover {
-  background: var(--surface-3);
-  border-color: var(--border-2);
-  color: var(--text);
-}
+.an-card-tile + .an-card-tile { border-left: 1px solid var(--border); }
+/* No visual cards on the first sheet (metrics/text only): the section's own bar
+   motif, not a chart glyph for a chart that is not there. .ws-hero-art carries a
+   definite height, which is what lets the bars' percentage heights resolve. */
+.an-card-bars { height: 52px; }
+.an-card-bars .ws-hero-bar { width: 13px; background: var(--accent-line); }
+.an-card-bars .ws-hero-bar--4 { background: var(--accent); }
 
 .ws-empty {
   display: flex;
