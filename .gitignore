@@ -304,3 +304,7 @@ scripts/**/*.js
 # Conversational editing of an open dashboard — emitted siblings.
 /renderer/hub/dockEdit.js
 /scripts/smoke-dashboard-edit.js
+
+# Prompts without a parser of their own, split out of analyze.ts. Emitted siblings.
+/src/ai/prompts.js
+/scripts/test-prompts.js
