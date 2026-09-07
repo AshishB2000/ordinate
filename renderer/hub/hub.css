@@ -23,54 +23,59 @@ body {
   overflow: hidden;
 }
 
-/* ── titlebar ─────────────────────────────────────────────────────── */
-/* The native title bar is hidden (see hubWindow.js) so the app name shows only
-   here. This strip is the window's drag region; interactive children opt out
-   below. Left/right padding (set per-OS via html[data-os]) keeps our content
-   clear of the OS window controls — traffic lights (macOS, left) and the
-   min/max/close overlay (Windows, right). */
-.titlebar {
+/* ── top bar ──────────────────────────────────────────────────────────
+   ONE row: the app's window-wide chrome AND the frameless window's drag region.
+
+   There were two. Above this sat `.titlebar`, an EMPTY 40px strip whose only
+   job was to hold vertical space for the OS window controls — a bare band
+   across the top of every screen. The stated reason for keeping them apart was
+   that a drag region carries per-OS padding reserving the macOS traffic lights
+   and the Windows overlay, so an input inside it would have to opt back out of
+   drag AND centre against two asymmetric paddings. Both are handled below, in
+   about six lines; that was never worth a row of empty chrome. The native title
+   bar is hidden (hubWindow.ts), and TITLEBAR_HEIGHT there — the Windows overlay
+   height — is this row's 40px. THE TWO MUST MATCH.
+
+   40px, not the old top bar's 48: the macOS traffic lights sat correctly in the
+   40px strip under `hiddenInset`, so keeping that height keeps their placement
+   known-good and needs no `trafficLightPosition` guess. The 32px search and the
+   32px toggle have 4px either side.
+
+   Three columns with the two sides on EQUAL flex, so the search centres on the
+   WINDOW rather than on the space left over beside the Agent toggle: the sides
+   grow and shrink together, and the middle holds still as the window resizes. */
+.hub-topbar {
   flex: 0 0 40px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px 0 14px;
+  gap: 12px;
+  padding: 0 12px;
   background: var(--titlebar);
   border-bottom: 1px solid var(--border);
   user-select: none;
   -webkit-app-region: drag;
 }
+/* Everything you can click, type in or drop down opts back OUT of the drag
+   region — otherwise the whole row swallows the pointer and the search cannot
+   be focused. The wrap covers the input and the results box in one. */
+.hub-topbar .hub-search-wrap,
+.hub-topbar button { -webkit-app-region: no-drag; }
 
-/* macOS traffic lights sit at the top-left with hiddenInset — clear them. */
-html[data-os="mac"] .titlebar { padding-left: 78px; }
-/* Windows min/max/close overlay sits at the top-right — clear it. */
-html[data-os="win"] .titlebar { padding-right: 146px; }
-
-/* Buttons stay clickable inside the drag region. */
-.titlebar button { -webkit-app-region: no-drag; }
-
-/* ── top bar ──────────────────────────────────────────────────────────
-   A sibling of .titlebar, never a child: that strip is a drag region with
-   per-OS padding reserving the macOS traffic lights and the Windows control
-   overlay, so an input inside it would have to opt back out of drag AND centre
-   against two asymmetric paddings that differ per OS.
-
-   Three columns with the two sides on EQUAL flex, so the search centres on the
-   WINDOW rather than on the space left over beside the Agent toggle: the sides grow and
-   shrink together, and the middle holds still as the window resizes. */
-.hub-topbar {
-  flex: 0 0 48px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 12px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
 /* Equal flex on BOTH sides is what does the centring; `min-width: 0` lets them
    shrink below their content instead of shoving the search off-centre. */
 .hub-topbar-side { flex: 1 1 0; min-width: 0; display: flex; align-items: center; }
 .hub-topbar-right { justify-content: flex-end; }
+/* The OS window controls now share this row, so the SIDES reserve their space
+   rather than the row padding doing it. That is the whole trick that let the
+   two rows become one, and it is why the equal-flex centring survives: a
+   min-width on a `flex: 1 1 0` item is not binding while the window is wide, so
+   both sides stay equal and the search stays centred on the WINDOW. It binds
+   only once the window is narrow enough that the search would otherwise ride
+   over the traffic lights — and there, clearing them is worth more than a
+   perfectly centred box. (78px and 146px are the OS reservations; 12px of it is
+   already the row's own padding.) */
+html[data-os="mac"] .hub-topbar-side:first-child { min-width: 66px; }
+html[data-os="win"] .hub-topbar-right { min-width: 134px; }
 /* The anchor for the results dropdown — the input and the dropdown under it are
    the same box, so the width cap lives here rather than on either one.
 
@@ -7787,7 +7792,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 .dash-presenting .app-sidebar,
 .dash-presenting .an-rail,
 .dash-presenting .sidebar,
-.dash-presenting .titlebar,
 .dash-presenting .hub-topbar,
 .dash-presenting .dash-editor-head,
 .dash-presenting .dash-toolbar,
@@ -9268,17 +9272,16 @@ body.an-focus .ws-nav,
 body.an-focus .app-sidebar { display: none; }
 body.an-focus .hub-body { padding: 0; }
 body.an-focus #ws-analyses { padding: 0; }
-/* The titlebar is the frameless window's drag region and holds the macOS traffic
-   lights, so it stays — but authoring is not the place for the wordmark and two
-   settings gears. Emptying it leaves a bare 40px drag strip.
-   ponytail: content hidden, not the strip. Removing the strip means giving the
-   window a new drag region and re-placing the traffic lights. */
-/* #exec-mode-btn was dropped from this list with the button itself. The top bar
+/* The ponytail note that used to sit here — "content hidden, not the strip;
+   removing the strip means giving the window a new drag region and re-placing
+   the traffic lights" — is paid off: the strip is gone and the top bar IS the
+   drag region. Its two selectors named `.titlebar` children that went with it.
+
+   #exec-mode-btn was dropped from this list with the button itself. The top bar
    deliberately stays VISIBLE here: focus mode hides the sidebar, and that is
-   exactly the case the removed #dk-edge tab existed to cover — the Agent
-   toggle in the bar is the mouse way into the dock inside an open analysis. */
-body.an-focus .titlebar .glyph,
-body.an-focus .titlebar .tb-title,
+   exactly the case the removed #dk-edge tab existed to cover — the Agent toggle
+   in the bar is the mouse way into the dock inside an open analysis, and now it
+   is also the only place left to drag the window from. */
 body.an-focus #settings-gear { display: none; }
 
 /* One row up top: ‹ Back · name · spacer · ⋯ · Publish · Save. Rename folds into
@@ -9298,10 +9301,11 @@ body.an-focus .an-more-btn { display: inline-flex; }
    row and the workbench takes the rest. Height lives on the PANEL now, not on
    the workbench — the strip is outside it. */
 body.an-focus #ws-analyses {
-  /* the chrome above is .titlebar (40px) + .hub-topbar (48px) — the bar stays
-     in focus mode (see the comment above), so sizing against 40px left the
-     workbench's bottom 48px clipped under .win's overflow:hidden */
-  height: calc(100vh - 88px);
+  /* the chrome above is the 40px .hub-topbar, and nothing else — it stays in
+     focus mode (see the comment above). This was 88px while an empty 40px
+     .titlebar sat on top of it; get this wrong in either direction and the
+     workbench's bottom is clipped under .win's overflow:hidden. */
+  height: calc(100vh - 40px);
   min-height: 0;
 }
 body.an-focus .an-workbench.is-active {
@@ -9329,7 +9333,7 @@ body.an-focus .an-workbench.is-active > .dash-editor > .dash-ai-out {
   margin-left: 16px;
   margin-right: 16px;
 }
-body.an-focus .an-side { max-height: calc(100vh - 88px); } /* titlebar + top bar, as above */
+body.an-focus .an-side { max-height: calc(100vh - 40px); } /* the top bar, as above */
 
 /* The editor head is one row in focus mode. At 665px it was wrapping Save onto
    a second line, which pushed the sheet down and looked broken. */
@@ -10480,11 +10484,11 @@ body.cap-focus .cap-back {
 @media (max-width: 1100px) {
   .dk-panel {
     position: fixed;
-    /* Below the whole chrome stack: .titlebar (40px) + .hub-topbar (48px). An
-       overlaid dock must not cover the drag strip, and now must not cover the
-       top bar either — burying global search and the Agent toggle under the
-       panel it opens is how a toggle becomes a one-way door. */
-    top: 88px;
+    /* Below the chrome: the 40px top bar (was 88px, when an empty .titlebar sat
+       above it). An overlaid dock must not cover it — burying global search and
+       the Agent toggle under the panel it opens is how a toggle becomes a
+       one-way door, and the bar is the window's drag region besides. */
+    top: 40px;
     right: 0;
     bottom: 0;
     /* `flex-basis` has no effect once the item is out of flow (position:
@@ -10497,7 +10501,7 @@ body.cap-focus .cap-back {
   body.dk-open .dk-scrim {
     display: block;
     position: fixed;
-    top: 88px; /* matches .dk-panel above — chrome stays reachable behind the scrim */
+    top: 40px; /* matches .dk-panel above — chrome stays reachable behind the scrim */
     left: 0; right: 0; bottom: 0;
     background: rgba(15, 23, 42, 0.45);
     z-index: 9940;

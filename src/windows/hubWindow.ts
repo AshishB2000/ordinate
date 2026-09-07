@@ -12,7 +12,23 @@ const isWin = process.platform === 'win32';
 // These WCO colors mirror --titlebar / --text-strong in renderer/theme.css so the
 // controls strip blends with our header in both themes. Windows-only; updated live
 // on theme change via setHubTitleBarOverlay().
-const TITLEBAR_HEIGHT = 40;
+//
+// 40px BECAUSE .hub-topbar IS 40px (renderer/hub/hub.css), and that row now
+// carries the OS window controls itself — there used to be an empty 40px
+// `.titlebar` above it holding them, and this constant was that strip's height.
+// The two numbers are one number: a WCO shorter than the row leaves the Windows
+// buttons floating in its top half, a taller one overlaps the search.
+//
+// The merged row kept 40px rather than the old top bar's 48 for one reason: the
+// macOS traffic lights sat correctly in a 40px strip under `hiddenInset`, so
+// keeping the height keeps their placement KNOWN-GOOD. Any other height needs a
+// `trafficLightPosition` to re-centre them, and that offset cannot be checked
+// from a Playwright screenshot — it captures web contents, not the OS frame.
+// A 32px search and a 32px toggle sit inside 40px with 4px either side.
+// Exported ONLY so scripts/smoke-topbar.ts can assert it against the rendered
+// height of .hub-topbar. A comment saying two numbers must match is a wish; this
+// makes it a check.
+export const TITLEBAR_HEIGHT = 40;
 const WCO = {
   light: { color: '#fafbfc', symbolColor: '#0f1117' },
   dark:  { color: '#1d1d21', symbolColor: '#ffffff' },

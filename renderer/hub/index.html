@@ -45,29 +45,25 @@
 
 <div class="win">
 
-  <!-- ── titlebar ─────────────────────────────────────────────────────
-       An EMPTY drag strip. It exists only to give the macOS traffic lights /
-       Windows window controls their vertical space (per-OS padding in hub.css).
-       The app's chrome — brand, nav, connect, AI, settings — moved into the
-       persistent sidebar below. No interactive children, so the whole strip
-       drags the window. -->
-  <div class="titlebar"></div>
-
   <!-- ── top bar ───────────────────────────────────────────────────────
-       Window-wide chrome: global search centred on the WINDOW, the Agent
-       panel toggle at the right end. Both lived in the sidebar, the SECTION nav —
-       a column for choosing where you are, not for tools that act on wherever
-       you already are.
+       ONE row. Window-wide chrome — global search centred on the WINDOW, the
+       Agent panel toggle at the right end — AND the frameless window's drag
+       region, holding the macOS traffic lights / Windows control overlay.
 
-       It is a sibling of .titlebar, never a child. That strip is
-       `-webkit-app-region: drag` with per-OS padding reserving the macOS
-       traffic lights (78px left) and the Windows control overlay (146px
-       right); putting an input in there means opting every child back out of
-       drag AND centring against two asymmetric paddings that change per OS.
-       A separate row keeps the drag strip empty and the centring honest.
+       There used to be two: an EMPTY 40px `.titlebar` above this one, whose
+       only job was to give the OS window controls their vertical space. It was
+       a bare strip across the top of every screen. The reason given for keeping
+       them apart was that a drag region needs per-OS padding reserving the
+       traffic lights (left) and the Windows overlay (right), so an input inside
+       it has to opt back out of drag and centre against two asymmetric paddings
+       — but that is a handful of CSS lines, not a row of empty chrome, and it
+       is what hub.css does now. The 40px went back to the content.
 
        Hidden in body.cap-focus (hub.css) — that surface is deliberately bare,
-       dkAllowed() returns false there, and the sidebar is hidden too. -->
+       dkAllowed() returns false there, and the sidebar is hidden too. NOTE that
+       hiding this row also removes the window's drag region on that surface,
+       which is the same trade the capture surface already makes for the
+       sidebar. -->
   <div class="hub-topbar">
     <!-- Left spacer: equal-flex with the right cluster so the search centres on
          the WINDOW rather than on the space left over beside the toggle. -->
