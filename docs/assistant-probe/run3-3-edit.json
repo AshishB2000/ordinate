@@ -1,0 +1,27 @@
+{
+  "run": 3,
+  "step": "3-edit",
+  "ask": "add a KPI for average discount",
+  "raw": "I will add an average discount KPI to the Revenue Overview sheet on your Revenue and Units Analysis dashboard, alongside your existing Total Units metric of 19386. The average discount figure is not currently in the facts.\n@@ACTION {\"kind\":\"edit\",\"intent\":\"add a KPI for average discount\"}\n---\n{\"ops\":[{\"op\":\"addMetric\",\"page\":1,\"dataset\":\"Retail orders\",\"column\":\"discount\",\"aggregation\":\"avg\",\"label\":\"Average Discount\"}]}",
+  "parsed": [
+    {
+      "fn": "askCopilot",
+      "result": {
+        "ok": true,
+        "text": "I will add an average discount KPI to the Revenue Overview sheet on your Revenue and Units Analysis dashboard, alongside your existing Total Units metric of 19386. The average discount figure is not currently in the facts.",
+        "suggestedAction": {
+          "kind": "edit",
+          "intent": "add a KPI for average discount"
+        }
+      }
+    },
+    {
+      "fn": "dispatch",
+      "result": {
+        "rawText": "{\"ops\":[{\"op\":\"addMetric\",\"page\":1,\"dataset\":\"Retail orders\",\"column\":\"discount\",\"aggregation\":\"avg\",\"label\":\"Average Discount\"}]}"
+      }
+    }
+  ],
+  "uiOk": true,
+  "notes": []
+}
