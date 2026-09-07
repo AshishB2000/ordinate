@@ -108,6 +108,29 @@ function checkHappyPath(): void {
     encoding: enc('region', 'revenue') });
   ok('a numeric page index past the end is clamped to the last page', clamped.ops[0].pageIndex === 1);
 
+  // ── addMetric ─────────────────────────────────────────────────────────────
+  // The vocabulary could add a chart, a control, a page and a title but not a
+  // KPI, so "add a KPI for average discount" came back as "not one of
+  // Ordinate's edit operations" — while buildPlan could create that very tile.
+  const kpi = one({ op: 'addMetric', dataset: 'Sales', column: 'revenue', aggregation: 'sum', label: 'Total revenue' });
+  ok('addMetric survives', kpi.ops.length === 1 && kpi.dropped.length === 0, JSON.stringify(kpi.dropped));
+  ok('addMetric normalises to the dataset id and defaults to page 0',
+     kpi.ops[0].datasetId === SALES && kpi.ops[0].pageIndex === 0 && kpi.ops[0].label === 'Total revenue');
+  const kpiNoLabel = one({ op: 'addMetric', dataset: 'Sales', column: 'revenue', aggregation: 'avg' });
+  ok('addMetric names itself when the label is missing', kpiNoLabel.ops[0].label === 'avg of revenue');
+  // The same rule a planned metric gets: sanitizeCard checks a metric card's
+  // SHAPE but never that the column is numeric, so `avg` of text would build a
+  // tile that renders "—" forever.
+  const kpiText = one({ op: 'addMetric', dataset: 'Sales', column: 'region', aggregation: 'avg' });
+  ok('addMetric refuses a numeric aggregation over a text column',
+     kpiText.ops.length === 0 && /number column/.test(kpiText.dropped[0].message), JSON.stringify(kpiText.dropped));
+  const kpiCount = one({ op: 'addMetric', dataset: 'Sales', column: 'region', aggregation: 'count' });
+  ok('…but count over text is legitimate and survives', kpiCount.ops.length === 1, JSON.stringify(kpiCount.dropped));
+  const kpiBadAgg = one({ op: 'addMetric', dataset: 'Sales', column: 'revenue', aggregation: 'median' });
+  ok('addMetric refuses an aggregation off the whitelist', kpiBadAgg.ops.length === 0);
+  const kpiBadCol = one({ op: 'addMetric', dataset: 'Sales', column: 'nope', aggregation: 'sum' });
+  ok('addMetric refuses a column the dataset does not have', kpiBadCol.ops.length === 0);
+
   const rep = one({ op: 'replaceTileEncoding', tile: 'Revenue by region', chartType: 'line',
     encoding: enc('region', 'cost', 'avg') });
   ok('replaceTileEncoding survives and resolves to the cardId',

@@ -104,6 +104,11 @@ function dkDeltaLine(op: any): { sign: string; cls: string; text: string } | nul
         sign: '+', cls: 'dk-delta-add',
         text: `${op.name} (${op.chartType}) → ${dkPageLabel(op.pageIndex)}`,
       };
+    case 'addMetric':
+      return {
+        sign: '+', cls: 'dk-delta-add',
+        text: `${op.label} — ${op.aggregation} of ${op.column} → ${dkPageLabel(op.pageIndex)}`,
+      };
     case 'addControl':
       return {
         sign: '+', cls: 'dk-delta-add',
@@ -316,6 +321,15 @@ async function dkApplyDelta(ops: any[]): Promise<DkDeltaSnapshot | null> {
           layout: { x: 0, y: 0, w: 6, h: 6 },
         });
       }
+    } else if (op.op === 'addMetric') {
+      // No Visual record to make: a metric card carries its own definition, and
+      // the FIGURE is computed at render time by dashboard:metric — the same
+      // path a hand-added KPI takes.
+      dkPushCardOn(op.pageIndex, {
+        id: dashUuid(), type: 'metric',
+        metric: { datasetId: op.datasetId, column: op.column, aggregation: op.aggregation, label: op.label },
+        layout: { x: 0, y: 0, w: 3, h: 2 },
+      });
     } else if (op.op === 'addControl') {
       dkPushCardOn(op.pageIndex, {
         id: dashUuid(), type: 'control',

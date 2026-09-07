@@ -32,7 +32,8 @@ import type { ParsedColumn } from '../data/parse';
 import type { FilterStep } from '../data/transforms';
 import * as visuals from './visuals';
 import type { VizEncoding } from './visuals';
-import type { ControlKind } from './dashboards';
+import type { ControlKind, MetricAggregation } from './dashboards';
+import { METRIC_AGGS } from './dashboards';
 import { CHART_TYPE_IDS } from './analysisPlan';
 import type { PlanDataset } from './analysisPlan';
 
@@ -46,7 +47,7 @@ const CONTROL_KINDS: ReadonlySet<string> = new Set(['dropdown', 'multi', 'date_r
 // ── Shapes ─────────────────────────────────────────────────────────────────
 
 export type DeltaOpKind =
-  | 'addTile' | 'replaceTileEncoding' | 'removeTile' | 'moveTile'
+  | 'addTile' | 'addMetric' | 'replaceTileEncoding' | 'removeTile' | 'moveTile'
   | 'addControl' | 'renamePage' | 'addPage' | 'setTitle';
 
 /** One existing tile, flattened for resolution. Titles come from the Visual
@@ -86,6 +87,14 @@ export type ValidatedDeltaOp =
       chartType: string;
       encoding: VizEncoding;
       filters: FilterStep[];
+    }
+  | {
+      op: 'addMetric';
+      pageIndex: number;
+      datasetId: string;
+      column: string;
+      aggregation: MetricAggregation;
+      label: string;
     }
   | ReplaceTileEncodingOp
   | { op: 'removeTile'; cardId: string }
@@ -297,7 +306,7 @@ function keepFilters(
 // ── The validator ──────────────────────────────────────────────────────────
 
 const OP_KINDS: ReadonlySet<string> = new Set([
-  'addTile', 'replaceTileEncoding', 'removeTile', 'moveTile',
+  'addTile', 'addMetric', 'replaceTileEncoding', 'removeTile', 'moveTile',
   'addControl', 'renamePage', 'addPage', 'setTitle',
 ]);
 
@@ -350,6 +359,7 @@ function validateOp(
   const at = `Edit ${JSON.stringify(kind)}`;
 
   if (kind === 'addTile') return opAddTile(raw, ctx, where, at, dropped);
+  if (kind === 'addMetric') return opAddMetric(raw, ctx, where, at, dropped);
   if (kind === 'replaceTileEncoding') return opReplaceEncoding(raw, ctx, where, at, dropped);
   if (kind === 'removeTile' || kind === 'moveTile') return opTileRef(kind, raw, ctx, where, at, dropped);
   if (kind === 'addControl') return opAddControl(raw, ctx, where, at, dropped);
@@ -377,6 +387,62 @@ function validateOp(
     return null;
   }
   return { op: 'renamePage', pageIndex, name };
+}
+
+/**
+ * A KPI tile.
+ *
+ * The delta vocabulary could add a chart, a control, a page and a title but had
+ * NO way to add a KPI — so "add a KPI for average discount" was refused as "not
+ * one of Ordinate's edit operations", while the very same tile could be created
+ * by the plan builder. A dashboard the Assistant can build but cannot then
+ * extend is the asymmetry this closes.
+ *
+ * Validated exactly as hard as a planned metric (analysisPlan.validateMetric):
+ * sanitizeCard checks a metric card's SHAPE but never that the column exists or
+ * is numeric, so without the declared-type check below `avg` of a text column
+ * builds a tile that renders "—" forever.
+ */
+function opAddMetric(
+  raw: Record<string, unknown>, ctx: DeltaContext, where: string, at: string, dropped: DeltaDrop[],
+): ValidatedDeltaOp | null {
+  const ds = resolveDataset(ctx, raw);
+  if (!ds) {
+    dropped.push({ kind: 'dataset', where, message: `${at} dropped: unknown dataset ${JSON.stringify(datasetRef(raw))}.` });
+    return null;
+  }
+  const aggregation = str(raw.aggregation);
+  if (!METRIC_AGGS.has(aggregation)) {
+    dropped.push({ kind: 'encoding', where, message: `${at} dropped: ${JSON.stringify(aggregation)} is not a metric aggregation.` });
+    return null;
+  }
+  const column = str(raw.column);
+  const col = ds.columns.find((c) => c.name === column);
+  if (!col) {
+    dropped.push({ kind: 'encoding', where, message: `${at} dropped: "${column}" is not a column of "${ds.name}".` });
+    return null;
+  }
+  if (NUMERIC_AGGS.has(aggregation) && col.type !== 'number') {
+    dropped.push({
+      kind: 'encoding',
+      where,
+      message: `${at} dropped: ${aggregation} needs a number column, but "${column}" is ${col.type} in "${ds.name}".`,
+    });
+    return null;
+  }
+  const pageIndex = resolvePageIndex(ctx, raw);
+  if (pageIndex === null) {
+    dropped.push({ kind: 'page', where, message: `${at} dropped: no page called ${JSON.stringify(str(raw.pageName) || str(raw.page))}.` });
+    return null;
+  }
+  return {
+    op: 'addMetric',
+    pageIndex: pageIndex ?? 0,
+    datasetId: ds.id,
+    column,
+    aggregation: aggregation as MetricAggregation,
+    label: str(raw.label) || str(raw.name) || `${aggregation} of ${column}`,
+  };
 }
 
 function opAddTile(

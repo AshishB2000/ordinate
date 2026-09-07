@@ -224,6 +224,8 @@ const EDIT_DELTA_SYSTEM_PROMPT =
   'the columns of each dataset. Reply with ONLY a JSON object: {"ops":[…]} — no markdown, no ' +
   'prose, no code fences.\n' +
   'Each op is one of:\n' +
+  '  {"op":"addMetric","page":<1-based page number>,"dataset":"<name>","column":"<column>",' +
+  '   "aggregation":"sum|avg|count|min|max","label":"<title>"}\n' +
   '  {"op":"addTile","page":<1-based page number>,"dataset":"<name>","name":"<title>",' +
   '"chartType":"<type>","encoding":{"category":"<col>","values":[{"column":"<col>","aggregation":"sum|avg|count|min|max"}]}}\n' +
   '  {"op":"replaceTileEncoding","tile":"<existing tile title>","chartType":"<type>","encoding":{…}}\n' +
