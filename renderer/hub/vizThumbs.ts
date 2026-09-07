@@ -10,8 +10,10 @@
 // exactly like dashboard cards do: getVisual → the same visual:data channel the
 // dash grid uses (computeVisualData, resident fast path in main) → buildChart.
 //
-// Deliberate exclusions: MAP types keep the card glyph (MapLibre needs WebGL2
-// and the visible window — never render map thumbs) and TABLE visuals keep the
+// MAP types do NOT go through Chart.js: MapLibre needs WebGL2 and the visible
+// window, so a map card draws a static mini choropleth (or bubble map) on a
+// plain 2D canvas instead — mapThumb.js, same boundaries and same colour scale
+// as the real map, no tiles and no interaction. TABLE visuals keep the card
 // glyph (a shrunken table is unreadable). ANY fetch or render failure falls
 // back to the glyph silently — a broken card is worse than a plain one.
 //
@@ -22,7 +24,8 @@
 // discards the DOM nodes and a WeakMap alone would leave the charts' RAF/resize
 // hooks alive until GC. No leaks across repeated section switches.
 
-const VIZ_THUMB_SKIP = new Set(['table', 'map_bubble', 'map_choropleth']);
+const VIZ_THUMB_SKIP = new Set(['table']);
+const VIZ_THUMB_MAPS = new Set(['map_bubble', 'map_choropleth']);
 const VIZ_THUMB_CONCURRENCY = 3;
 
 let vizThumbObserver: IntersectionObserver | null = null;
@@ -108,11 +111,23 @@ async function vizThumbRender(tile: HTMLElement): Promise<void> {
   // no animation (paint the final frame), no legend, no gridlines, no value
   // labels, no title. Chart.js picks up devicePixelRatio itself, so the canvas
   // is crisp on retina without an explicit override.
+  const chartType = String(visual.chartType || v.chartType || 'column');
+
+  // Maps take the canvas straight, with no Chart.js and no MapLibre: polygons
+  // projected and filled by mapThumb.js. Nothing else in this function applies
+  // to them — there are no scales, legend or animation to trim.
+  if (VIZ_THUMB_MAPS.has(chartType)) {
+    const drew = await drawMapThumb(canvas, res.data, chartType);
+    if (!drew || !tile.isConnected) { host.remove(); return; }
+    tile.classList.add('viz-card-tile--thumb');
+    return;
+  }
+
   const stored = visual.overrides && typeof visual.overrides === 'object' ? visual.overrides : {};
   const overrides = Object.assign({}, stored, {
     noAnimate: true, showLegend: false, showGridlines: false, valueMode: 'off', title: '',
   });
-  const chart = buildChart(canvas, res.data, String(visual.chartType || v.chartType || 'column'), overrides);
+  const chart = buildChart(canvas, res.data, chartType, overrides);
   if (!chart) { host.remove(); return; } // undrawable data — the glyph stays
 
   vizThumbTrim(chart);

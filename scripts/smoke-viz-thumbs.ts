@@ -4,8 +4,9 @@
 // Asserts, against seeded bar + line + map visuals:
 //   • chartable cards grow a real thumbnail canvas (nonzero bitmap) once the
 //     tile is in view;
-//   • the MAP card keeps its glyph — MapLibre needs WebGL2 and the visible
-//     window, so thumbs never render maps;
+//   • the MAP card draws a static mini choropleth (mapThumb.ts) — MapLibre is
+//     never involved, so the check reads the CANVAS PIXELS: a blank canvas
+//     passes every structural check while proving nothing;
 //   • the card meta line carries the VIZ_LABELS type label;
 //   • re-entering the section repeatedly does NOT leak Chart instances —
 //     vizThumbsReset() destroys the previous paint's charts (Chart.instances
@@ -58,16 +59,21 @@ async function main(): Promise<void> {
     const visuals = req('./src/analysis/visuals.js');
     await projects.init();
     const proj = await projects.createProject('Thumbs smoke');
+    // Full state names, like sampleProject.ts's "Profit by state" — geoMatch
+    // joins on names, so "CA" would match nothing and the map would be blank.
     const ds = await datasets.saveDataset(proj.id, {
       name: 'Regional revenue',
       sourceKind: 'csv',
       columns: [{ name: 'region', type: 'text' }, { name: 'revenue', type: 'number' }],
-      rows: [['North', 120], ['South', 240], ['East', 180], ['West', 90]],
+      rows: [['California', 120], ['Texas', 240], ['New York', 180], ['Florida', 90]],
     });
     const encoding = { category: 'region', values: [{ column: 'revenue', aggregation: 'sum' }] };
     const bar = await visuals.saveVisual(proj.id, { name: 'Bar thumb', datasetId: ds.id, chartType: 'bar', encoding });
     const line = await visuals.saveVisual(proj.id, { name: 'Line thumb', datasetId: ds.id, chartType: 'line', encoding });
-    const map = await visuals.saveVisual(proj.id, { name: 'Map thumb', datasetId: ds.id, chartType: 'map_choropleth', encoding });
+    const map = await visuals.saveVisual(proj.id, {
+      name: 'Map thumb', datasetId: ds.id, chartType: 'map_choropleth',
+      encoding: Object.assign({}, encoding, { geo: { level: 'us_state' } }),
+    });
     return { projectId: proj.id, ok: Boolean(bar && line && map) };
   });
   ok('seeded a dataset and bar/line/map visuals', seeded.ok === true);
@@ -76,13 +82,14 @@ async function main(): Promise<void> {
   await win.waitForTimeout(1000);
   await win.evaluate(() => { (window as any).selectSection('visuals'); });
 
-  // Thumbs are lazy (IntersectionObserver + concurrency cap): wait for both
-  // chartable cards to carry a canvas, not just the first.
+  // Thumbs are lazy (IntersectionObserver + concurrency cap): wait for ALL
+  // three cards to carry a canvas, not just the first. The map's is last —
+  // it also has to pull the us-states boundaries in.
   const settled = await win.waitForFunction(
-    () => document.querySelectorAll('#viz-grid .viz-card-tile--thumb canvas').length >= 2,
+    () => document.querySelectorAll('#viz-grid .viz-card-tile--thumb canvas').length >= 3,
     { timeout: 20_000 },
   ).then(() => true).catch(() => false);
-  ok('both chartable cards grew a live thumbnail canvas', settled);
+  ok('all three cards grew a live thumbnail canvas', settled);
 
   const state = await win.evaluate(() => {
     const cards = [...document.querySelectorAll('#viz-grid .viz-card')] as HTMLElement[];
@@ -90,12 +97,29 @@ async function main(): Promise<void> {
     const bar = byName(/Bar thumb/); const line = byName(/Line thumb/); const map = byName(/Map thumb/);
     const canvasOf = (c?: HTMLElement) => c?.querySelector('.viz-card-tile canvas') as HTMLCanvasElement | null;
     const glyphOf = (c?: HTMLElement) => c?.querySelector('.viz-card-glyph') as HTMLElement | null;
+    // READ THE PIXELS. A canvas of the right size that was never drawn into
+    // passes every structural check and proves nothing, so count the opaque
+    // pixels and the distinct colours actually on it.
+    const pixels = (c: HTMLCanvasElement | null) => {
+      if (!c || !c.width || !c.height) return { painted: 0, colors: 0 };
+      const ctx = c.getContext('2d');
+      if (!ctx) return { painted: 0, colors: 0 };
+      const d = ctx.getImageData(0, 0, c.width, c.height).data;
+      let painted = 0;
+      const colors = new Set<number>();
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] < 8) continue;
+        painted += 1;
+        colors.add((d[i] << 16) | (d[i + 1] << 8) | d[i + 2]);
+      }
+      return { painted, colors: colors.size };
+    };
     return {
       cards: cards.length,
       barDrawn: Boolean(canvasOf(bar) && canvasOf(bar)!.width > 0 && canvasOf(bar)!.height > 0),
       lineDrawn: Boolean(canvasOf(line) && canvasOf(line)!.width > 0 && canvasOf(line)!.height > 0),
-      mapHasCanvas: Boolean(map && map.querySelector('canvas')),
       mapGlyphShown: Boolean(glyphOf(map) && glyphOf(map)!.offsetParent !== null),
+      mapPixels: pixels(canvasOf(map)),
       barMeta: (bar?.querySelector('.viz-card-meta')?.textContent || ''),
       chartCount: Object.keys(((window as any).Chart && (window as any).Chart.instances) || {}).length,
     };
@@ -103,8 +127,12 @@ async function main(): Promise<void> {
   ok('the gallery lists all three cards', state.cards === 3, `${state.cards} cards`);
   ok('the bar card renders a real chart (nonzero bitmap)', state.barDrawn);
   ok('the line card renders a real chart (nonzero bitmap)', state.lineDrawn);
-  ok('the MAP card has NO canvas — maps never thumbnail (WebGL2 + visible window)', state.mapHasCanvas === false);
-  ok('…and its glyph is still shown as the presentation', state.mapGlyphShown === true);
+  ok('the MAP card draws real pixels, not a blank canvas',
+    state.mapPixels.painted > 500, JSON.stringify(state.mapPixels));
+  ok('…and more than one colour, so matched states are actually filled',
+    state.mapPixels.colors > 1, JSON.stringify(state.mapPixels));
+  ok('…so the glyph is hidden, like every other rendered thumbnail',
+    state.mapGlyphShown === false);
   ok('the card meta carries the VIZ_LABELS type label', /^Bar · /.test(state.barMeta), state.barMeta);
 
   // ── No leaks across repeated section switches ────────────────────────────
@@ -115,7 +143,7 @@ async function main(): Promise<void> {
     await win.waitForTimeout(400);
     await win.evaluate(() => { (window as any).selectSection('visuals'); });
     await win.waitForFunction(
-      () => document.querySelectorAll('#viz-grid .viz-card-tile--thumb canvas').length >= 2,
+      () => document.querySelectorAll('#viz-grid .viz-card-tile--thumb canvas').length >= 3,
       { timeout: 20_000 },
     ).catch(() => {});
   }
@@ -125,7 +153,9 @@ async function main(): Promise<void> {
   }));
   ok('three section round-trips leak no Chart instances',
     after.chartCount <= state.chartCount, `before=${state.chartCount} after=${after.chartCount}`);
-  ok('…and the grid holds exactly the two live thumbnail canvases', after.canvases === 2, `${after.canvases} canvases`);
+  // Three canvases, two Chart instances: the map's canvas is drawn directly and
+  // registers nothing, so it can't leak — but it must not accumulate either.
+  ok('…and the grid holds exactly the three live thumbnail canvases', after.canvases === 3, `${after.canvases} canvases`);
 
   ok('no renderer errors (incl. CSP violations)', errors.length === 0, errors.slice(0, 3).join(' | '));
 
