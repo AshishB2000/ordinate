@@ -1,7 +1,7 @@
 // Ask activity chips — the app SHOWING ITS WORK while an answer is prepared.
 // Classic global-scope renderer <script>: NO import/export. Loads after
-// explore.js (reuses xpScrollToBottom) and dock.js; both xpSend() and dkSend()
-// pass an askId to copilotAsk and drive the region through the helpers below.
+// askCore.js (reuses xpScrollToBottom) and dock.js; dkSend() passes an askId to
+// copilotAsk and drives the region through the helpers below.
 //
 // WHAT THESE CHIPS ARE. This app has NO agent loop and NO model tool-calls: an
 // ask computes app-side facts (buildFacts) and makes ONE narration call. So the
@@ -15,8 +15,9 @@
 // a reload) clears it. copilot turns on disk keep only text + provenance, so a
 // past turn shows its provenance chips — not a replayed activity stream.
 //
-// ONE renderer, two mounts — 'xp-messages' (Ask) and 'dk-messages' (the dock) —
-// the same discipline as xpAppendBubble(containerId). textContent ONLY here; the
+// ONE renderer, ONE mount — 'dk-messages' (the dock); the Ask page's own list
+// went with the page in #117. `containerId` is a required argument here, the
+// same discipline as xpAppendBubble(containerId). textContent ONLY here; the
 // labels are app strings, but that rule is absolute for anything rendered.
 
 /** Live state for the one in-flight ask per container. Keyed by askId. */
@@ -29,7 +30,7 @@ interface XpActState {
 }
 const xpActs: Map<string, XpActState> = new Map();
 
-// The ask id is generated ONCE per ask by xpNewAskId() (explore.ts) and shared
+// The ask id is generated ONCE per ask by xpNewAskId() (askCore.ts) and shared
 // with the streaming channel — one spine, one id, so a chip stream and a token
 // stream for the same ask carry the same scope and a stale ask's late events
 // (either kind) are dropped together.
@@ -139,7 +140,7 @@ function xpActivityCollapse(askId: string): void {
 }
 
 /** Wire the single main→renderer activity subscription, once. Routing by askId
- *  means one listener feeds both mounts. */
+ *  means one listener feeds the dock regardless of which ask is in flight. */
 function initAskActivity(): void {
   if (window.hub && typeof window.hub.onAskActivity === 'function') {
     window.hub.onAskActivity((o) => {
