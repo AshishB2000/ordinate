@@ -256,6 +256,12 @@ function capture(type: string, variant: string): { text: string; ok: boolean } {
 // sha256(serialisation).slice(0,16) per `<chart id>/<override set>`, taken from
 // develop at 488b63e, before the split. THESE ARE NOT TO BE REGENERATED to make
 // a red run green: a mismatch means buildChart now produces a different chart.
+// REGENERATED once, deliberately, for the round-label fit gate (fix/donut-labels):
+// pie, donut and gauge — gauge because a gauge IS a Chart.js doughnut and shares
+// the `roundLabels` plugin — moved because that plugin now measures its text and
+// skips a slice that cannot hold it. 9 of 84 hashes changed and the other 75 did
+// not, which is the shape a change confined to one plugin should have. Every
+// other movement in this table is a regression until proven otherwise.
 const GOLDEN: Record<string, string> = {
   "area/custom": 'e090fd0e1ccd9bb3',
   "area/default": '5e9597f7e7d4871e',
@@ -284,15 +290,15 @@ const GOLDEN: Record<string, string> = {
   "combo/custom": '2ea079eb99555140',
   "combo/default": 'eb0d73f16a74c7b5',
   "combo/filtered": '4e847935347c6386',
-  "donut/custom": 'b256369efcd2b73c',
-  "donut/default": 'e37404a3c2a71808',
-  "donut/filtered": 'ea292197bae2d65b',
+  "donut/custom": '28ed8e10d986f3d0',
+  "donut/default": '6b0befe48c71a204',
+  "donut/filtered": '20a6e45289f8e8ea',
   "funnel/custom": '84dbb2b9e7a48514',
   "funnel/default": '6cd973c6a69fc7ed',
   "funnel/filtered": 'd30fa10ba1cfd742',
-  "gauge/custom": '5c58695b24ad96f8',
-  "gauge/default": '7a175db00be8e374',
-  "gauge/filtered": 'c5d322767e3bb3da',
+  "gauge/custom": '807a26bee8b29996',
+  "gauge/default": 'e33f8faf2286d89e',
+  "gauge/filtered": '77482194ef48abc4',
   "heatmap/custom": '4e5f8ba8bad5a069',
   "heatmap/default": '596d9f5cbc5f0ef9',
   "heatmap/filtered": '2ddc87fbc64888d5',
@@ -317,9 +323,9 @@ const GOLDEN: Record<string, string> = {
   "pct_stacked_column/custom": 'e2c13936a14a8f2a',
   "pct_stacked_column/default": '9c71168fa6209a50',
   "pct_stacked_column/filtered": 'da85470248be4452',
-  "pie/custom": '23dddb714f0b8b3a',
-  "pie/default": 'd2430cafbf796f5b',
-  "pie/filtered": '3f37ddd239fc17ea',
+  "pie/custom": '4b0340143b6a0d7b',
+  "pie/default": '5b80d42c05e300bc',
+  "pie/filtered": '7f6d0f6d47e75cab',
   "sankey/custom": '413e3f9a29fe2c4d',
   "sankey/default": '09cbf3afa664126b',
   "sankey/filtered": 'b221ddef527b99ed',
