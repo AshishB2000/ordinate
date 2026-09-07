@@ -67,6 +67,56 @@ const FULL_DISTINCT = { region: 5, order_id: 400 };
     p.sheets[0].metrics.length === 4, String(p.sheets[0].metrics.length));
 }
 
+// ── A sum has to MEAN something ─────────────────────────────────────────────
+// The first version ranked by one substring regex and summed whatever it found.
+// On the app's own bundled sample that produced "total discount: 315.7" and
+// "total unit price: 1.2M" — figures that are not facts about a business — and
+// it plotted units rather than revenue, because `units` appears earlier in the
+// file. This is the first dashboard most people ever see.
+{
+  const retail = ds([
+    { name: 'order_date', type: 'date' }, { name: 'region', type: 'text' },
+    { name: 'units', type: 'number' }, { name: 'unit_price', type: 'number' },
+    { name: 'discount', type: 'number' }, { name: 'revenue', type: 'number' },
+    { name: 'profit', type: 'number' }, { name: 'ship_days', type: 'number' },
+  ], { region: 5 });
+  const p = starter.buildStarterPlan('kpis', retail);
+  const got = p.sheets[0].metrics.map((m) => `${m.aggregation}(${m.column})`);
+
+  ok('money outranks counts, whatever the column order',
+    got[0] === 'sum(revenue)' && got[1] === 'sum(profit)' && got[2] === 'sum(units)', JSON.stringify(got));
+  ok('a PRICE is averaged, never summed',
+    !got.includes('sum(unit_price)') && got.some((g) => g === 'avg(unit_price)'), JSON.stringify(got));
+  ok('a RATE is never a headline KPI at all',
+    !got.some((g) => /\(discount\)/.test(g)), JSON.stringify(got));
+  // "dis(count)" matched the old substring regex, which is how a discount rate
+  // came to rank alongside revenue.
+  ok('…because the preference matches WORDS, not substrings',
+    starter.buildStarterPlan('kpis', ds([{ name: 'discount', type: 'number' },
+      { name: 'revenue', type: 'number' }], {})).sheets[0].metrics[0].column === 'revenue');
+  ok('and the charts plot the headline measure, not whatever came first',
+    p.sheets[0].visuals.every((v) => v.encoding.values[0].column === 'revenue'),
+    JSON.stringify(p.sheets[0].visuals.map((v) => v.encoding.values[0].column)));
+}
+{
+  // A dataset whose ONLY measure is a rate still gets a chart — averaged, not
+  // summed. Before, this drew a bar chart of added-up percentages.
+  const rates = ds([{ name: 'region', type: 'text' }, { name: 'conversion_rate', type: 'number' }], { region: 4 });
+  const p = starter.buildStarterPlan('kpis', rates);
+  ok('a rate-only dataset averages in the KPI and in the chart',
+    p.sheets[0].metrics[0].aggregation === 'avg'
+      && p.sheets[0].visuals[0].encoding.values[0].aggregation === 'avg',
+    JSON.stringify(p.sheets[0].metrics.concat(p.sheets[0].visuals as any)));
+}
+{
+  // An id or a year is a number the way a phone number is.
+  const ids = ds([{ name: 'order_id', type: 'number' }, { name: 'year', type: 'number' },
+    { name: 'zip_code', type: 'number' }, { name: 'revenue', type: 'number' }], {});
+  const cols = starter.buildStarterPlan('kpis', ids).sheets[0].metrics.map((m) => m.column);
+  ok('identifiers, years and zips are not measures',
+    cols.length === 1 && cols[0] === 'revenue', JSON.stringify(cols));
+}
+
 // ── Category column: narrow enough to read as an axis ───────────────────────
 {
   const p = starter.buildStarterPlan('kpis', ds(FULL, FULL_DISTINCT));
