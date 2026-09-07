@@ -25,7 +25,7 @@
 // So the sample is seeded INTO the first project. The user's first import lands
 // beside it, which is fine and always was — the note card says the sample is
 // sample data and offers to remove it, and removing it now takes the sample's
-// three records out and LEAVES the project (see markNoteCardDeletable, and
+// three records out and LEAVES the project (see patchSampleSheet, and
 // dashFiltersUi.ts's handler). Installs that already seeded keep their two
 // projects: `sampleSeeded` records that seeding happened, and re-homing records
 // under someone's feet is worse than an extra project in a list they cannot see.
@@ -49,6 +49,8 @@ import * as projects from './projects';
 import * as datasets from '../data/datasets';
 import { parseFile, sourceKindForPath } from '../data/fileImport';
 import * as analysis from '../analysis/analysis';
+import * as dashboards from '../analysis/dashboards';
+import * as visuals from '../analysis/visuals';
 import * as planBuild from '../analysis/planBuild';
 import { loadPlanContext } from '../analysis/analysisPlan';
 import type { AnalysisPlan, PlannedMetric, PlannedVisual } from '../analysis/analysisPlan';
@@ -133,7 +135,21 @@ function sampleDashboardPlan(ds: { id: string; name: string; columns: { name: st
 }
 
 /**
- * Mark the note card so the renderer draws a Remove button on it.
+ * The two things the sheet needs that a PLAN cannot say: a Remove button on the
+ * note card, and a full-width row for the map.
+ *
+ * Both are patched onto the built analysis rather than declared, because a plan
+ * has no vocabulary for either — deliberately. Geometry is the app's (planBuild
+ * derives a chart's width from how many charts share the sheet, so three charts
+ * are three half-widths and the third sits alone in half a row), and `action` is
+ * not part of PlannedText so no model-authored dashboard can grow a delete
+ * button. The seeder is the only writer of both.
+ *
+ * The map goes full width because a choropleth at half width is a postage stamp
+ * — state shapes stop being readable — and it is alone on its row already, so
+ * widening it moves nothing beneath it.
+ *
+ * On the note card:
  *
  * That button takes out the sample's three records — the dashboard, its visuals
  * and the dataset — and leaves the project standing, because the project is now
@@ -145,12 +161,21 @@ function sampleDashboardPlan(ds: { id: string; name: string; columns: { name: st
  * (and therefore any model-authored dashboard) can never grow a delete button.
  * The only way to get one is this patch, from this file.
  */
-async function markNoteCardDeletable(projectId: string, analysisId: string): Promise<void> {
+async function patchSampleSheet(projectId: string, analysisId: string): Promise<void> {
   const rec = await analysis.getAnalysis(projectId, analysisId);
   if (!rec) return;
+  const mapIds = new Set((await visuals.listVisuals(projectId))
+    .filter((v) => v.chartType.startsWith('map_'))
+    .map((v) => v.id));
   const sheets = rec.sheets.map((page) => ({
     ...page,
-    cards: page.cards.map((c) => (c.type === 'text' ? { ...c, action: 'delete-sample' } : c)),
+    cards: page.cards.map((c) => {
+      if (c.type === 'text') return { ...c, action: 'delete-sample' };
+      if (c.type === 'visual' && c.visualId && mapIds.has(c.visualId)) {
+        return { ...c, layout: { ...c.layout, x: 0, w: dashboards.GRID_COLS } };
+      }
+      return c;
+    }),
   }));
   await analysis.updateAnalysis(projectId, analysisId, { sheets });
 }
@@ -204,7 +229,7 @@ export async function seedSampleProject(): Promise<{ seeded: boolean; projectId?
   let analysisId: string | undefined;
   if (built.ok) {
     analysisId = built.analysis.id;
-    await markNoteCardDeletable(project.id, analysisId);
+    await patchSampleSheet(project.id, analysisId);
     // Home's Starred is a filter over Recent keyed on "type:id", so pinning the
     // real record is all it takes for the section to have something in it.
     const starred = execConfig.publicConfig().starred || [];

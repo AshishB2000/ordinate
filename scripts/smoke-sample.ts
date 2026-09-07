@@ -186,33 +186,70 @@ async function main(): Promise<void> {
     Boolean(map.found && map.canvas && (map.w || 0) > 100 && (map.h || 0) > 50 && !map.fallback),
     JSON.stringify(map));
 
+  // …and it gets the whole row. planBuild derives a chart's width from how many
+  // charts share the sheet, so three charts are three half-widths and the map
+  // landed alone in half a row, state shapes too small to read. Measured off the
+  // laid-out tiles rather than the stored layout: the point is what the user sees.
+  const widths = await win.evaluate(() => {
+    const cards = [...document.querySelectorAll('#dash-grid .dash-card--visual')];
+    const of = (re: RegExp) => {
+      const c = cards.find((e) => re.test(((e.querySelector('.dash-card-title') || {}) as any).textContent || ''));
+      return c ? Math.round(c.getBoundingClientRect().width) : 0;
+    };
+    return { map: of(/Profit by state/), month: of(/Revenue by month/), cat: of(/Revenue by category/) };
+  });
+  ok('…across the full row, not half of one',
+    widths.map > widths.month * 1.7 && widths.map > widths.cat * 1.7, JSON.stringify(widths));
+
+  // A month-grain axis printed '2023-01-01' twelve times over, the day part noise
+  // on every one. Read off the live Chart.js instance, which is what the axis, the
+  // tooltip and the value labels all draw from.
+  const monthLabels = await win.evaluate(() => {
+    const card = [...document.querySelectorAll('#dash-grid .dash-card')]
+      .find((c) => /Revenue by month/.test(((c.querySelector('.dash-card-title') || {}) as any).textContent || ''));
+    const cv = card && card.querySelector('canvas');
+    const chart = cv && (window as any).Chart && (window as any).Chart.getChart(cv);
+    return chart ? chart.data.labels.slice(0, 3) : null;
+  });
+  ok('the month axis reads as months, not ISO dates',
+    Array.isArray(monthLabels) && monthLabels.length === 3
+      && monthLabels.every((l: string) => /^[A-Z][a-z]{2} \d{4}$/.test(l)),
+    JSON.stringify(monthLabels));
+
   // ── Screenshots for the PR, both themes ─────────────────────────────────
   // Through setThemePreference, not by poking data-theme: main owns the
   // preference and pushes the resolved value back, so a hand-set attribute is
   // overwritten on the next push and both screenshots come out identical.
-  // A dashboard carries its OWN style (theme/density/accent on #dash-editor), so
-  // flipping the app theme deliberately does not repaint its tiles — the sample
-  // ships with the default Clean style like any new dashboard. The dark shot
-  // therefore switches BOTH, which is also the honest picture of what a user on
-  // a dark machine sees once they pick the Dark dashboard style.
+  // The app theme is the ONLY thing switched. A dashboard's style theme now
+  // defaults to 'auto', which declares no tokens of its own and lets the sheet
+  // inherit the app's — so the sample follows the app, and these two shots are
+  // what a user on a light and a dark machine actually sees.
+  //
+  // This block used to force the Dark and Clean presets alongside the switch,
+  // because the default was 'clean' and the sheet stayed white inside a dark
+  // app. Forcing them now would be worse than redundant: applyDashStylePreset
+  // records a deliberate choice, so the reset afterwards would PIN the sample to
+  // Light rather than return it to the shipped default.
   for (const theme of ['light', 'dark']) {
     await win.evaluate(async (t: string) => { await (window as any).hub.setThemePreference(t); }, theme);
-    await win.waitForTimeout(1500);
-    const applied = await win.evaluate(() => document.documentElement.dataset.theme);
-    ok(`the app switches to the ${theme} theme`, applied === theme, String(applied));
-    await win.evaluate((t: string) => {
-      if (typeof (window as any).applyDashStylePreset === 'function') {
-        (window as any).applyDashStylePreset(t === 'dark' ? 'dark' : 'clean');
-      }
-    }, theme);
     await win.waitForTimeout(3000); // charts rebuild and re-read their tokens
+    const applied = await win.evaluate(() => {
+      const ed = document.getElementById('dash-editor') as HTMLElement;
+      return {
+        root: document.documentElement.dataset.theme,
+        sheetBg: getComputedStyle(ed).getPropertyValue('--bg').trim(),
+      };
+    });
+    ok(`the app switches to the ${theme} theme`, applied.root === theme, JSON.stringify(applied));
+    // Rough luminance: the sheet must follow, not sit white inside a dark app.
+    const rgb = (/(\d+)\D+(\d+)\D+(\d+)/.exec(applied.sheetBg) || []).slice(1).map(Number);
+    const hex = /^#([0-9a-f]{6})$/i.exec(applied.sheetBg);
+    const px = hex ? [0, 2, 4].map((i) => parseInt(hex[1].slice(i, i + 2), 16)) : rgb;
+    const lum = px.length === 3 ? (0.2126 * px[0] + 0.7152 * px[1] + 0.0722 * px[2]) / 255 : 1;
+    ok(`…and the sample sheet follows it into ${theme}`,
+      theme === 'dark' ? lum < 0.3 : lum > 0.8, `${applied.sheetBg} → lum ${lum.toFixed(2)}`);
     await win.screenshot({ path: path.join(shotDir, `sample-dashboard-${theme}.png`) });
   }
-  // Back to the shipped default before the delete assertions below.
-  await win.evaluate(() => {
-    if (typeof (window as any).applyDashStylePreset === 'function') (window as any).applyDashStylePreset('clean');
-  });
-  await win.waitForTimeout(1500);
   await win.evaluate(async () => { await (window as any).hub.setThemePreference('light'); });
   await win.waitForTimeout(1500);
   console.log('screenshots: ' + shotDir);

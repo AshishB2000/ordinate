@@ -109,6 +109,24 @@ function chartSeries(data: ChartDataShape | null | undefined): ChartSeriesShape[
     : [];
 }
 
+// A month-truncated date axis reads as a date axis unless it is formatted.
+// `datetrunc('month', order_date)` — the only way to chart by month, since
+// VizEncoding has no granularity — yields '2023-01-01', and a year of those
+// prints twelve full ISO dates whose day part is noise on every one of them.
+//
+// All-or-nothing on purpose: one label that is not a first-of-month means the
+// axis is really daily and the days carry information, so nothing is rewritten.
+// UTC throughout — `new Date('2023-01-01')` is UTC midnight, and formatting it
+// in a negative-offset zone would label January as Dec 2022.
+const FIRST_OF_MONTH_RE = /^(\d{4})-(\d{2})-01(?:[T ]00:00(?::00(?:\.000)?)?Z?)?$/;
+
+function asMonthLabels(labels: any[]): any[] {
+  const parsed = labels.map((l) => (typeof l === 'string' ? FIRST_OF_MONTH_RE.exec(l.trim()) : null));
+  if (parsed.some((m) => !m)) return labels;
+  return parsed.map((m: any) => new Date(Date.UTC(+m[1], +m[2] - 1, 1))
+    .toLocaleDateString(undefined, { month: 'short', year: 'numeric', timeZone: 'UTC' }));
+}
+
 // Build a Chart.js instance for the given data + type id. Returns instance or null.
 // overrides: optional per-chart customization { title, color, valueMode, hiddenSeries,
 //            showLegend, showGridlines, xAxisLabel, yAxisLabel }
@@ -125,7 +143,7 @@ function buildChart(
   overrides?: any,
 ): any {
   overrides = overrides || {};
-  let labels = Array.isArray(data.labels) ? data.labels : [];
+  let labels = asMonthLabels(Array.isArray(data.labels) ? data.labels : []);
   let series = chartSeries(data);
   if (!labels.length || !series.length || !canvas) return null;
 
