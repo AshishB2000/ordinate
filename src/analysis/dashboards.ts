@@ -361,13 +361,22 @@ export function sanitizePages(raw: unknown): Page[] {
 // re-flowed the sheet would silently re-author work the user placed by hand.
 
 export interface DashboardStyle {
-  theme: 'clean' | 'executive' | 'dark';
+  /**
+   * 'auto' declares NO tokens, so the sheet inherits the app's [data-theme] —
+   * which is what a dashboard nobody has restyled should do. The other three are
+   * deliberate overrides: a dashboard can be pinned light or dark for presenting
+   * regardless of how the app is set.
+   */
+  theme: 'auto' | 'clean' | 'executive' | 'dark';
   density: 'comfortable' | 'compact';
   accent: 'blue' | 'teal' | 'slate';
+  /** The user (or the Assistant on their behalf) picked this, so it is an
+   *  override to keep rather than a default to migrate. Absent means defaulted. */
+  chosen?: true;
 }
 
 export const DEFAULT_DASHBOARD_STYLE: DashboardStyle = {
-  theme: 'clean',
+  theme: 'auto',
   density: 'comfortable',
   accent: 'blue',
 };
@@ -378,16 +387,19 @@ export const DEFAULT_DASHBOARD_STYLE: DashboardStyle = {
  * only as the triple it expands to, so a user who nudges one axis afterwards
  * does not end up with a record that lies about which preset it is.
  */
-export type DashboardStylePreset = 'clean' | 'executive' | 'dense' | 'dark';
+export type DashboardStylePreset = 'auto' | 'clean' | 'executive' | 'dense' | 'dark';
 
 export const DASHBOARD_STYLE_PRESETS: Record<DashboardStylePreset, DashboardStyle> = {
-  clean: { theme: 'clean', density: 'comfortable', accent: 'blue' },
-  executive: { theme: 'executive', density: 'comfortable', accent: 'slate' },
-  dense: { theme: 'clean', density: 'compact', accent: 'blue' },
-  dark: { theme: 'dark', density: 'comfortable', accent: 'blue' },
+  // `auto` is the one that declares nothing and follows the app. `clean` is the
+  // same look pinned, for a dashboard that must stay light whatever the app is.
+  auto: { theme: 'auto', density: 'comfortable', accent: 'blue' },
+  clean: { theme: 'clean', density: 'comfortable', accent: 'blue', chosen: true },
+  executive: { theme: 'executive', density: 'comfortable', accent: 'slate', chosen: true },
+  dense: { theme: 'auto', density: 'compact', accent: 'blue' },
+  dark: { theme: 'dark', density: 'comfortable', accent: 'blue', chosen: true },
 };
 
-const STYLE_THEMES: ReadonlySet<string> = new Set(['clean', 'executive', 'dark']);
+const STYLE_THEMES: ReadonlySet<string> = new Set(['auto', 'clean', 'executive', 'dark']);
 const STYLE_DENSITIES: ReadonlySet<string> = new Set(['comfortable', 'compact']);
 const STYLE_ACCENTS: ReadonlySet<string> = new Set(['blue', 'teal', 'slate']);
 
@@ -409,11 +421,18 @@ const STYLE_ACCENTS: ReadonlySet<string> = new Set(['blue', 'teal', 'slate']);
  */
 export function sanitizeStyle(raw: unknown): DashboardStyle {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  // MIGRATION, no version bump. 'clean' used to be the default, so almost every
+  // stored 'clean' was written by that default rather than chosen — and it pins
+  // the light tokens on the sheet, which is why a dark app showed white
+  // dashboards. A 'clean' the user actually picked carries `chosen`, and keeps
+  // its override; one without it is read as 'auto' and follows the app.
+  const chosen = o.chosen === true;
+  const rawTheme = typeof o.theme === 'string' && STYLE_THEMES.has(o.theme)
+    ? (o.theme as DashboardStyle['theme'])
+    : DEFAULT_DASHBOARD_STYLE.theme;
+  const theme = rawTheme === 'clean' && !chosen ? 'auto' : rawTheme;
   return {
-    theme:
-      typeof o.theme === 'string' && STYLE_THEMES.has(o.theme)
-        ? (o.theme as DashboardStyle['theme'])
-        : DEFAULT_DASHBOARD_STYLE.theme,
+    theme,
     density:
       typeof o.density === 'string' && STYLE_DENSITIES.has(o.density)
         ? (o.density as DashboardStyle['density'])
@@ -422,6 +441,8 @@ export function sanitizeStyle(raw: unknown): DashboardStyle {
       typeof o.accent === 'string' && STYLE_ACCENTS.has(o.accent)
         ? (o.accent as DashboardStyle['accent'])
         : DEFAULT_DASHBOARD_STYLE.accent,
+    // Last, so a preset literal and its sanitized copy serialise identically.
+    ...(chosen ? { chosen: true as const } : {}),
   };
 }
 

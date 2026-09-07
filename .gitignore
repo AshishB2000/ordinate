@@ -126,6 +126,7 @@ scripts/**/*.js
 /scripts/smoke-dashboard-controls.js
 /scripts/smoke-draft-review.js
 /scripts/smoke-viz-builder.js
+/scripts/smoke-saved-chart-type.js
 /scripts/smoke-render-stacks.js
 
 # Server-side paged read for the Explore grid — emitted siblings.

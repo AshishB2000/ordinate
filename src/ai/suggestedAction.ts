@@ -123,6 +123,7 @@ export const EMPTY_ANSWER = 'Ask me about your data — e.g. \'revenue by region
 // non-exhaustive. Either way tsc fails on this file until the list is updated,
 // which is stronger than a runtime equality test and costs nothing.
 const STYLE_PRESET_TABLE: Record<DashboardStylePreset, true> = {
+  auto: true,
   clean: true,
   executive: true,
   dense: true,

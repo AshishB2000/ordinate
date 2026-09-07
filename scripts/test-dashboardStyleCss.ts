@@ -41,6 +41,8 @@ const SECTION_END = '── Connect data';
 
 // The contract's class names, verbatim. Renaming one here without renaming it in
 // dashboards.ts is the failure this list exists to make loud.
+// The three that PIN a look. `auto` is deliberately not here: it declares no
+// tokens at all, which is asserted separately below.
 const THEMES = ['clean', 'dark', 'executive'];
 const DENSITIES = ['comfortable', 'compact'];
 const ACCENTS = ['blue', 'slate', 'teal'];
@@ -125,9 +127,22 @@ const theme = decomment(themeRaw);
 
 // ── the class names are the contract ─────────────────────────────────────────
 
-ok('theme classes are exactly clean/executive/dark',
-   axisNames(hub, 'dash-theme').join(',') === THEMES.join(','),
+ok('theme classes are exactly auto/clean/executive/dark',
+   axisNames(hub, 'dash-theme').join(',') === ['auto'].concat(THEMES).join(','),
    axisNames(hub, 'dash-theme').join(','));
+
+// ── auto declares NOTHING, and that is the feature ─────────────────────────
+// Every other theme block redefines the token set on the sheet container, which
+// is what pins a dashboard to a look. `auto` must declare none of them, so the
+// tokens resolve from the app's [data-theme] and the sheet follows Appearance.
+// Give it one token and dark mode silently half-breaks again.
+{
+  const props = propsOf(hub, '.dash-theme--auto');
+  ok('.dash-theme--auto exists', props !== null);
+  ok('…and declares no custom properties at all',
+     props !== null && Array.from(props).filter((p) => p.startsWith('--')).length === 0,
+     JSON.stringify(props ? Array.from(props) : null));
+}
 ok('density classes are exactly comfortable/compact',
    axisNames(hub, 'dash-density').join(',') === DENSITIES.join(','),
    axisNames(hub, 'dash-density').join(','));

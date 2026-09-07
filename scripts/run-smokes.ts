@@ -25,6 +25,7 @@ const SMOKES = [
   'smoke-dashboard-controls',
   'smoke-draft-review',
   'smoke-viz-builder',
+  'smoke-saved-chart-type',
   'smoke-render-stacks',
   'smoke-topbar',
   'smoke-sample',
@@ -40,6 +41,7 @@ const SMOKES = [
   'smoke-dashboards',
   'smoke-dashboard-edit',
   'smoke-dashboard-styles',
+  'smoke-theme',
 ];
 
 const results: { name: string; code: number }[] = [];

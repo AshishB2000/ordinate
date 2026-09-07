@@ -11315,3 +11315,14 @@ body.cap-focus .cap-back {
   font-size: 12px;
   color: var(--muted);
 }
+
+/* `auto` — deliberately EMPTY, and that is the whole point.
+   Every other theme block redefines the 34 light/dark tokens on the sheet
+   container, which is exactly what a dashboard pinned to a look needs. A
+   dashboard nobody has restyled must do the opposite: declare nothing, so the
+   tokens resolve from the app's [data-theme] on :root and the sheet follows the
+   Appearance setting. `clean` used to be the default and pinned the LIGHT
+   values, which is why a dark app rendered white dashboards with near-white
+   inherited text on them.
+   Do not "fix" this by giving it tokens. */
+.dash-theme--auto { /* intentionally declares nothing — see above */ }

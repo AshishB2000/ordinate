@@ -55,8 +55,8 @@ ok('dashStyle.ts declares the renderer copy', Object.keys(REND).length > 0);
 ok('…and both name the same four presets',
   JSON.stringify(Object.keys(MAIN).sort()) === JSON.stringify(Object.keys(REND).sort()),
   `main=${Object.keys(MAIN).sort()} renderer=${Object.keys(REND).sort()}`);
-ok('…which are exactly clean/executive/dense/dark',
-  JSON.stringify(Object.keys(MAIN).sort()) === JSON.stringify(['clean', 'dark', 'dense', 'executive']),
+ok('…which are exactly auto/clean/executive/dense/dark',
+  JSON.stringify(Object.keys(MAIN).sort()) === JSON.stringify(['auto', 'clean', 'dark', 'dense', 'executive']),
   String(Object.keys(MAIN).sort()));
 
 for (const name of Object.keys(MAIN)) {
@@ -73,8 +73,8 @@ const RDEF = parsePresetTable('X = {d: ' + (/const DASH_STYLE_DEFAULT = (\{[^}]*
 ok('the default style matches in both copies',
   Boolean(RDEF.d) && MDEF.theme === RDEF.d.theme && MDEF.density === RDEF.d.density && MDEF.accent === RDEF.d.accent,
   `main=${JSON.stringify(MDEF)} renderer=${JSON.stringify(RDEF.d)}`);
-ok('…and the default is itself a preset (Clean)',
-  MDEF.theme === MAIN.clean.theme && MDEF.density === MAIN.clean.density && MDEF.accent === MAIN.clean.accent);
+ok('…and the default is itself a preset (Auto)',
+  MDEF.theme === MAIN.auto.theme && MDEF.density === MAIN.auto.density && MDEF.accent === MAIN.auto.accent);
 
 // ── The axis lists ──────────────────────────────────────────────────────────
 // The renderer clamps against these three arrays before composing a class name;
@@ -99,7 +99,9 @@ for (const axis of Object.keys(AXES)) {
   }
   // …and a value the renderer would paint but main would reject is just as bad.
   for (const v of AXES[axis]) {
-    const probe: Record<string, string> = { theme: 'clean', density: 'comfortable', accent: 'blue' };
+    // `chosen` on the probe, or the 'clean' migration reads a defaulted 'clean'
+    // as 'auto' and this looks like the sanitizer clamping a legal value away.
+    const probe: Record<string, unknown> = { theme: 'auto', density: 'comfortable', accent: 'blue', chosen: true };
     probe[axis] = v;
     const clamped = dashboards.sanitizeStyle(probe as any) as unknown as Record<string, string>;
     ok(`…and main accepts "${v}" on ${axis} rather than clamping it away`,
