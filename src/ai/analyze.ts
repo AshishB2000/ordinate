@@ -7,10 +7,15 @@ import * as execConfig from '../app/execConfig';
 import { runLocalCli } from '../cli/localCliRun';
 import { computeMetrics, deriveChartData } from '../formula/calc';
 import { writeHeadline, verifyHeadlineNumbers } from './headline';
-import { SUGGESTABLE_CHART_TYPES } from '../analysis/visuals';
 import { DRAFT_DASHBOARD_SYSTEM_PROMPT } from '../analysis/analysisPlan';
 import { streamProvider } from './analyzeStream';
 import { CHAT_SYSTEM_PROMPT, makeActionFilter, splitAction, type SuggestedAction } from './suggestedAction';
+// Prompts with no dedicated parser of their own live in ./prompts.ts; the capture
+// envelope below stays here, next to parseReply(), which reads its answer.
+import {
+  EXPLAIN_SYSTEM_PROMPT, SUGGEST_STEPS_SYSTEM_PROMPT, SUGGEST_CHARTS_SYSTEM_PROMPT,
+  SUGGEST_CALC_FIELD_SYSTEM_PROMPT,
+} from './prompts';
 
 /** The one "no model is configured" reply. Six entry points returned this exact
  *  object; a seventh would have copied it too. */
@@ -623,13 +628,6 @@ export async function testLocalCli(cliId: string): Promise<TypedError | { ok: tr
 // narrates and must never invent or recompute a figure. If no model is configured
 // this returns a soft not_ready error so the renderer can show a gentle hint
 // rather than an error dialog.
-const EXPLAIN_SYSTEM_PROMPT =
-  'You are a data explainer for Ordinate. You are given a compact summary of a ' +
-  'dataset — its columns, their types, already-computed statistics, and a few sample ' +
-  'rows. Reply in plain, concise prose (2-5 sentences): describe what the dataset ' +
-  'appears to contain, notable patterns, and any data-quality caveats mentioned. ' +
-  'Do NOT use markdown, code fences, or bullet lists. NEVER invent, round, or ' +
-  'recompute any number — use only the exact figures given to you as facts.';
 export async function explainText(userPrompt: string): Promise<{ ok: true; text: string } | TypedError> {
   if (!execConfig.executionReady()) return notReady();
   const messages: NeutralMsg[] = [{ role: 'user', text: userPrompt }];
@@ -682,20 +680,6 @@ export async function askCopilot(
 // preserving the number-accuracy contract). The caller sanitizes the array and the
 // renderer requires user confirmation before any step is applied. Returns the raw
 // parsed array on success; a soft not_ready error when no model is configured.
-const SUGGEST_STEPS_SYSTEM_PROMPT =
-  'You propose data-preparation steps for a tabular dataset as ONLY a JSON array — ' +
-  'no markdown, no code fences, no prose. NEVER compute or output any data value or ' +
-  'computed number; the app performs all math itself. Use ONLY these step types and ' +
-  'shapes, and reference ONLY the exact column names given to you:\n' +
-  '  { "type": "calculated_field", "name": "<new column>", "expression": "<formula over column names>" }\n' +
-  '  { "type": "filter", "column": "<col>", "op": "=|!=|>|<|>=|<=|contains|is_empty|not_empty", "value": <optional> }\n' +
-  '  { "type": "group_aggregate", "groupBy": ["<col>"], "aggregations": [{ "column": "<col>", "fn": "sum|avg|count|min|max", "as": "<new column>" }] }\n' +
-  '  { "type": "dedupe", "columns": ["<col>"] }\n' +
-  '  { "type": "fill_empty", "column": "<col>", "value": <string|number> }\n' +
-  '  { "type": "trim", "column": "<col optional>" }\n' +
-  '  { "type": "drop_column", "column": "<col>" }\n' +
-  '  { "type": "rename_column", "from": "<col>", "to": "<new name>" }\n' +
-  'Return ONLY the JSON array (use [] if no preparation is warranted).';
 export async function suggestSteps(summaryText: string): Promise<{ ok: true; steps: unknown[] } | TypedError> {
   if (!execConfig.executionReady()) return notReady();
   const messages: NeutralMsg[] = [{ role: 'user', text: summaryText }];
@@ -732,24 +716,6 @@ export async function suggestSteps(summaryText: string): Promise<{ ok: true; ste
 // This REPLACED the single-suggestion `suggestChart`: the builder's ✨ Suggest
 // chart button and the create popup's Ask AI are both this one path, so there is
 // no second prompt that could drift out of step with the sanitizer.
-//
-// `why` is a caption about STRUCTURE ("Revenue summed by region"), which is why
-// the no-numbers rule is restated for it specifically — a caption is the one
-// field where a model is most tempted to volunteer a figure.
-const SUGGEST_CHARTS_SYSTEM_PROMPT =
-  'You propose charts for a tabular dataset as ONLY a JSON ARRAY of objects — no ' +
-  'markdown, no code fences, no prose. NEVER output any data value, computed ' +
-  'number, figure, percentage or count; the app performs all math itself. ' +
-  'Reference ONLY the exact column names given to you — never invent a column. ' +
-  'Use this exact shape for each element:\n' +
-  '  { "category": "<dimension column>", "values": [{ "column": "<col>", "aggregation": "sum|avg|count|min|max" }], ' +
-  '"series": "<optional split column>", "chartType": "<one of the listed chart types>", ' +
-  '"why": "<short caption naming ONLY columns and the aggregation, e.g. \\"Revenue summed by region\\">" }\n' +
-  '"why" must be under 100 characters and must NOT contain a number. ' +
-  'The chart type must be one of: ' + SUGGESTABLE_CHART_TYPES.join(', ') + '.\n' +
-  'Propose DIFFERENT views of the data, not the same chart restyled. ' +
-  'Return ONLY the JSON array.';
-
 export async function suggestCharts(
   summaryText: string,
   intent: string,
@@ -803,20 +769,11 @@ function parseFirstArray(rawText: string | null | undefined): Array<Record<strin
 // Week 12 — OPTIONAL AI-suggested calculated field. Twin of suggestChart: same
 // execution path (BYOK or local CLI), STRUCTURE ONLY (a single JSON object), and
 // NEVER a computed data value or number — the app compiles + evaluates the formula
-// over every row itself (src/formula.ts), preserving number-accuracy. The grammar
-// below mirrors formula.ts FUNCTIONS exactly so a valid proposal compiles. The IPC
+// over every row itself (src/formula/), preserving number-accuracy. The prompt
+// (./prompts.ts) advertises a narrow subset of formulaEval.FUNCTIONS, pinned by
+// test-prompts.ts, so a valid proposal compiles. The IPC
 // caller sanitizes/validates and the renderer requires the user to Save the step
 // before anything is applied. Soft not_ready when no model is configured.
-const SUGGEST_CALC_FIELD_SYSTEM_PROMPT =
-  'You propose ONE calculated field for a tabular dataset as ONLY a single JSON object — no markdown, no code ' +
-  'fences, no prose. NEVER output a computed data value or number; the app evaluates the formula itself over ' +
-  'every row. Reference ONLY the exact column names given to you (bare, or in [brackets] if they contain ' +
-  'spaces). Use this exact shape:\n' +
-  '  { "name": "<new column name>", "expression": "<formula over the columns>" }\n' +
-  'The expression may use + - * / %, comparisons (= != > < >= <=), and/or/not, parentheses, numeric/string ' +
-  'literals, and these functions ONLY: round, abs, floor, ceil, min, max, lower, upper, trim, len, concat, ' +
-  'if, coalesce. Example: { "name": "Margin", "expression": "([revenue] - [cost]) / [revenue]" }. ' +
-  'Return ONLY the JSON object.';
 export async function suggestCalcField(
   summaryText: string,
 ): Promise<{ ok: true; name: unknown; expression: unknown } | TypedError> {
