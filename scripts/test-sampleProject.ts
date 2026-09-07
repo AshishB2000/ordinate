@@ -49,6 +49,7 @@ const analysisStore: typeof import('../src/analysis/analysis') = require('../src
 const execConfig: typeof import('../src/app/execConfig') = require('../src/app/execConfig');
 const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
 const ipcDashboards: typeof import('../src/ipc/dashboards') = require('../src/ipc/dashboards');
+const dashboards: typeof import('../src/analysis/dashboards') = require('../src/analysis/dashboards');
 
 /** Every file under a directory, recursively. */
 function walk(dir: string, out: string[] = []): string[] {
@@ -155,6 +156,19 @@ async function main(): Promise<void> {
     (drawn.find((d) => d.type === 'line') || { labels: 0 }).labels >= 24, JSON.stringify(drawn));
   ok('…and the choropleth resolves real states',
     (drawn.find((d) => d.type === 'map_choropleth') || { labels: 0 }).labels >= 20, JSON.stringify(drawn));
+
+  // planBuild derives a chart's width from how many charts share the sheet, so
+  // three charts are three half-widths and the map lands alone in half a row —
+  // at which point the state shapes are too small to read. patchSampleSheet
+  // widens it afterwards; `drawn` is built in visualCards order, so the index
+  // carries over.
+  const mapCard = visualCards[drawn.findIndex((d) => d.type === 'map_choropleth')];
+  ok('…and the map gets the full row, not half of one',
+    Boolean(mapCard) && mapCard.layout.x === 0 && mapCard.layout.w === dashboards.GRID_COLS,
+    JSON.stringify(mapCard && mapCard.layout));
+  ok('…while the two charts beside it stay half-width',
+    visualCards.filter((c) => c !== mapCard).every((c) => c.layout.w === dashboards.GRID_COLS / 2),
+    JSON.stringify(visualCards.map((c) => c.layout)));
 
   // ── Starred, so Home is not empty ────────────────────────────────────────
   ok('the dashboard is pinned to Home',
