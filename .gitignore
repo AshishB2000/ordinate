@@ -229,6 +229,13 @@ scripts/**/*.js
 /renderer/hub/anNew.js
 /renderer/hub/anDraft.js
 
+# chartRender.ts split by job (.claude/rules/file-size.md) — emitted siblings.
+/renderer/hub/chartTypeSpec.js
+/renderer/hub/chartValueLabels.js
+/renderer/hub/chartDatasets.js
+/renderer/hub/chartScales.js
+/scripts/test-chartSpec.js
+
 # connections.ts split by job (.claude/rules/file-size.md) — emitted siblings.
 /renderer/hub/connNew.js
 /renderer/hub/connRun.js
