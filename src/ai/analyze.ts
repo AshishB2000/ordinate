@@ -8,6 +8,7 @@ import { runLocalCli } from '../cli/localCliRun';
 import { computeMetrics, deriveChartData } from '../formula/calc';
 import { writeHeadline, verifyHeadlineNumbers } from './headline';
 import { SUGGESTABLE_CHART_TYPES } from '../analysis/visuals';
+import { DRAFT_DASHBOARD_SYSTEM_PROMPT } from '../analysis/analysisPlan';
 import { streamProvider } from './analyzeStream';
 import { CHAT_SYSTEM_PROMPT, makeActionFilter, splitAction, type SuggestedAction } from './suggestedAction';
 
@@ -847,30 +848,6 @@ export async function suggestCalcField(
 //
 // `inventoryText` is the app-computed FACTS block (analysisPlan.buildFactsText):
 // dataset/column names, declared types and per-column stats — and no rows.
-const DRAFT_DASHBOARD_SYSTEM_PROMPT =
-  'You propose an ANALYSIS PLAN for a project as ONLY a single JSON object — no markdown, no code fences, no ' +
-  'prose. NEVER output a computed value, figure, percentage or count; the app computes every number itself and ' +
-  'will REJECT anything it cannot verify. Reference ONLY the exact dataset names, column names, saved-visual ' +
-  'names and chart types given to you. Use this shape:\n' +
-  '  { "name": "<analysis name>",\n' +
-  '    "rationale": "<1-3 sentences, NO numbers, on why these views>",\n' +
-  '    "calculatedFields": [ { "dataset":"<dataset name>", "name":"<new column name>", "formula":"<expression>" } ],\n' +
-  '    "sheets": [ { "name":"<sheet name>", "visuals": [ <visual>, ... ] } ] }\n' +
-  'Aim for 1-3 sheets and 2-5 visuals per sheet. "calculatedFields" may be an empty array.\n' +
-  'Each visual is EITHER a new chart:\n' +
-  '  { "dataset":"<dataset name>", "name":"<short title>", "chartType":"<one of the listed chart types>",\n' +
-  '    "encoding": { "category":"<dimension column>", "values":[ {"column":"<column>",' +
-  '"aggregation":"sum|avg|count|min|max"} ], "series":"<optional split column>" },\n' +
-  '    "filters": [ {"type":"filter","column":"<column>","op":"=|!=|>|<|>=|<=|contains|is_empty|not_empty",' +
-  '"value":<string or number>} ] }\n' +
-  'OR a reference to an existing saved visual, to place it as-is:\n' +
-  '  { "visual":"<saved visual name>" }\n' +
-  'Rules: a measure using sum/avg/min/max MUST name a number column — "count" works on any column. A ' +
-  'calculated-field formula may use + - * / %, comparisons (= != > < >= <=), and/or/not, parentheses, ' +
-  'numeric/string literals, and functions such as round, abs, floor, ceil, min, max, lower, upper, trim, len, ' +
-  'concat, if, coalesce; reference columns bare, or in [brackets] if they contain spaces. Prefer wrapping a ' +
-  'division in round(..., 4) so its values read cleanly as chart labels. Do NOT specify positions or sizes — the app ' +
-  'arranges the grid. Return ONLY the JSON object.';
 export async function draftDashboard(
   inventoryText: string,
 ): Promise<{ ok: true; structure: unknown } | TypedError> {
