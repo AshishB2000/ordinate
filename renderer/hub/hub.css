@@ -5791,11 +5791,6 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   height: 28px;
 }
 .viz-glyph--focus { color: var(--accent); }
-/* On the gradient hero the same cluster is white-on-colour, mirroring how --4
-   is the bright bar in the Analyses motif. */
-.ws-hero .viz-glyph { color: rgba(255, 255, 255, 0.42); }
-.ws-hero .viz-glyph--focus { color: rgba(255, 255, 255, 0.82); }
-.ws-hero .viz-glyph svg { width: 34px; height: 34px; }
 
 /* ── Section header ── */
 .viz-title-row {
@@ -6212,71 +6207,27 @@ body.an-focus .dash-head-spacer--2 { display: none; }
    the way .ws-badge does in a flex header. */
 .an-count { margin-left: 8px; vertical-align: middle; }
 
-.ws-hero {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 22px 26px;
-  border-radius: var(--r-lg);
-  background: linear-gradient(103deg, var(--accent) 0%, #4f46e5 52%, #7c3aed 100%);
-  color: #fff;
-  overflow: hidden;
-}
-.ws-hero-copy { max-width: 640px; }
-.ws-hero-h {
-  margin: 0 0 6px;
-  font-size: 16px;
-  font-weight: 600;
-  color: #fff;
-}
-.ws-hero-p {
-  margin: 0 0 14px;
-  font-size: 12.5px;
-  line-height: 1.55;
-  color: rgba(255, 255, 255, 0.86);
-}
-.ws-hero-actions { display: flex; gap: 8px; }
-/* The banner sits on a saturated gradient, so the two buttons need their own
-   treatment — the shared .btn-primary blue would vanish into it. */
-.ws-hero-actions .btn-primary {
-  background: #fff;
-  border-color: #fff;
-  color: var(--accent-2);
-}
-.ws-hero-actions .btn-primary:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.9);
-  border-color: rgba(255, 255, 255, 0.9);
-  color: var(--accent-2);
-}
-.ws-hero-actions .btn-ghost {
-  background: transparent;
-  border-color: rgba(255, 255, 255, 0.5);
-  color: #fff;
-}
-.ws-hero-actions .btn-ghost:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
-}
 /* A chart motif, in CSS. An illustration would mean shipping an image asset for
-   decoration; five spans cost nothing and theme themselves. */
-.ws-hero-art {
+   decoration; three or five spans cost nothing and theme themselves. Named for
+   the empty states and dashboard cards that draw it — the first-run hero this
+   was written for is gone. */
+.ws-bars {
   display: flex;
   align-items: flex-end;
   gap: 7px;
   height: 78px;
   flex: none;
 }
-.ws-hero-bar {
+.ws-bar {
   width: 16px;
   border-radius: 3px 3px 0 0;
-  background: rgba(255, 255, 255, 0.42);
+  background: var(--accent-line);
 }
-.ws-hero-bar--1 { height: 34%; }
-.ws-hero-bar--2 { height: 62%; }
-.ws-hero-bar--3 { height: 45%; }
-.ws-hero-bar--4 { height: 100%; background: rgba(255, 255, 255, 0.82); }
-.ws-hero-bar--5 { height: 72%; }
+.ws-bar--1 { height: 34%; }
+.ws-bar--2 { height: 62%; }
+.ws-bar--3 { height: 45%; }
+.ws-bar--4 { height: 100%; background: var(--accent); }
+.ws-bar--5 { height: 72%; }
 
 /* ── The shared list-table ───────────────────────────────────────────────────
    A card, an uppercase column header, hairline rows. Analyses defined this
@@ -6361,11 +6312,10 @@ body.an-focus .dash-head-spacer--2 { display: none; }
 }
 .an-card-tile + .an-card-tile { border-left: 1px solid var(--border); }
 /* No visual cards on the first sheet (metrics/text only): the section's own bar
-   motif, not a chart glyph for a chart that is not there. .ws-hero-art carries a
+   motif, not a chart glyph for a chart that is not there. .ws-bars carries a
    definite height, which is what lets the bars' percentage heights resolve. */
 .an-card-bars { height: 52px; }
-.an-card-bars .ws-hero-bar { width: 13px; background: var(--accent-line); }
-.an-card-bars .ws-hero-bar--4 { background: var(--accent); }
+.an-card-bars .ws-bar { width: 13px; }
 
 .ws-empty {
   display: flex;
@@ -6385,7 +6335,7 @@ body.an-focus .dash-head-spacer--2 { display: none; }
   height: 44px;
   margin-bottom: 14px;
 }
-.ws-empty-art .ws-hero-bar { background: var(--accent-line); width: 14px; }
+.ws-empty-art .ws-bar { background: var(--accent-line); width: 14px; }
 .ws-empty-h {
   margin: 0;
   font-size: 16px;
