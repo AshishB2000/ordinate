@@ -296,6 +296,46 @@ export function buildFactsText(ctx: PlanContext, intent?: string): string {
   return lines.join('\n');
 }
 
+// ── The prompt that describes this vocabulary ──────────────────────────────
+//
+// It lives HERE, beside validatePlan, for the reason suggestedAction.ts gives
+// for CHAT_SYSTEM_PROMPT: a prompt that drifts from its parser is an unseeable
+// bug. It drifted — `metrics` and `texts` were added to PlanSheet and built by
+// buildPlan, but the schema below still described sheets as visuals only, so a
+// real model asked for "a units KPI" replied that "a KPI card is not an
+// available chart type" and substituted a gauge chart. The app could build the
+// tile the whole time; nothing had told the model it existed.
+
+export const DRAFT_DASHBOARD_SYSTEM_PROMPT =
+  'You propose an ANALYSIS PLAN for a project as ONLY a single JSON object — no markdown, no code fences, no ' +
+  'prose. NEVER output a computed value, figure, percentage or count; the app computes every number itself and ' +
+  'will REJECT anything it cannot verify. Reference ONLY the exact dataset names, column names, saved-visual ' +
+  'names and chart types given to you. Use this shape:\n' +
+  '  { "name": "<analysis name>",\n' +
+  '    "rationale": "<1-3 sentences, NO numbers, on why these views>",\n' +
+  '    "calculatedFields": [ { "dataset":"<dataset name>", "name":"<new column name>", "formula":"<expression>" } ],\n' +
+  '    "sheets": [ { "name":"<sheet name>", "metrics": [ <kpi>, ... ], "visuals": [ <visual>, ... ],\n' +
+  '                 "texts": [ {"heading":"<short>","text":"<1-2 sentences, NO numbers>"} ] } ] }\n' +
+  'Aim for 1-3 sheets and 2-5 visuals per sheet. Any of calculatedFields, metrics and texts may be [].\n' +
+  'A KPI is a single headline figure, shown as its own tile — this is what "a KPI for X" means, NOT a gauge\n' +
+  'or a one-bar chart. The app computes the figure; you only say which column and how to aggregate it:\n' +
+  '  { "dataset":"<dataset name>", "column":"<column>", "aggregation":"sum|avg|count|min|max",\n' +
+  '    "label":"<short title>" }\n' +
+  'Each visual is EITHER a new chart:\n' +
+  '  { "dataset":"<dataset name>", "name":"<short title>", "chartType":"<one of the listed chart types>",\n' +
+  '    "encoding": { "category":"<dimension column>", "values":[ {"column":"<column>",' +
+  '"aggregation":"sum|avg|count|min|max"} ], "series":"<optional split column>" },\n' +
+  '    "filters": [ {"type":"filter","column":"<column>","op":"=|!=|>|<|>=|<=|contains|is_empty|not_empty",' +
+  '"value":<string or number>} ] }\n' +
+  'OR a reference to an existing saved visual, to place it as-is:\n' +
+  '  { "visual":"<saved visual name>" }\n' +
+  'Rules: a measure using sum/avg/min/max MUST name a number column — "count" works on any column. A ' +
+  'calculated-field formula may use + - * / %, comparisons (= != > < >= <=), and/or/not, parentheses, ' +
+  'numeric/string literals, and functions such as round, abs, floor, ceil, min, max, lower, upper, trim, len, ' +
+  'concat, if, coalesce; reference columns bare, or in [brackets] if they contain spaces. Prefer wrapping a ' +
+  'division in round(..., 4) so its values read cleanly as chart labels. Do NOT specify positions or sizes — the app ' +
+  'arranges the grid. Return ONLY the JSON object.';
+
 // ── Validation ─────────────────────────────────────────────────────────────
 
 function str(v: unknown): string {

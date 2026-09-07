@@ -1,0 +1,21 @@
+{
+  "run": 2,
+  "step": "1-chat",
+  "ask": "hi",
+  "raw": "Hello! You are working in My project, which contains the Retail orders dataset, visuals for Profit by state, Revenue by category, and Revenue by month, and the Retail overview dashboard. Because no specific dataset, visual, or dashboard is currently open, numeric details are not available. Please open one if you would like detailed figures or analysis.\n@@ACTION {\"kind\":\"none\",\"intent\":\"\"}",
+  "parsed": [
+    {
+      "fn": "askCopilot",
+      "result": {
+        "ok": true,
+        "text": "Hello! You are working in My project, which contains the Retail orders dataset, visuals for Profit by state, Revenue by category, and Revenue by month, and the Retail overview dashboard. Because no specific dataset, visual, or dashboard is currently open, numeric details are not available. Please open one if you would like detailed figures or analysis.",
+        "suggestedAction": {
+          "kind": "none",
+          "intent": ""
+        }
+      }
+    }
+  ],
+  "uiOk": true,
+  "notes": []
+}

@@ -1,0 +1,27 @@
+{
+  "run": 1,
+  "step": "3-edit",
+  "ask": "add a KPI for average discount",
+  "raw": "I will add an average discount KPI card to your Revenue and Units Analysis dashboard. The figure for average discount is not available in the current facts, so it will be displayed once the card is added.\n@@ACTION {\"kind\":\"edit\",\"intent\":\"add a KPI for average discount\"}\n---\n{\"ops\":[{\"op\":\"addMetric\",\"page\":1,\"dataset\":\"Retail orders\",\"column\":\"discount\",\"aggregation\":\"avg\",\"label\":\"Average Discount\"}]}",
+  "parsed": [
+    {
+      "fn": "askCopilot",
+      "result": {
+        "ok": true,
+        "text": "I will add an average discount KPI card to your Revenue and Units Analysis dashboard. The figure for average discount is not available in the current facts, so it will be displayed once the card is added.",
+        "suggestedAction": {
+          "kind": "edit",
+          "intent": "add a KPI for average discount"
+        }
+      }
+    },
+    {
+      "fn": "dispatch",
+      "result": {
+        "rawText": "{\"ops\":[{\"op\":\"addMetric\",\"page\":1,\"dataset\":\"Retail orders\",\"column\":\"discount\",\"aggregation\":\"avg\",\"label\":\"Average Discount\"}]}"
+      }
+    }
+  ],
+  "uiOk": true,
+  "notes": []
+}

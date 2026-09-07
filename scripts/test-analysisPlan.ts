@@ -660,7 +660,9 @@ async function checkRoundedRatioTyping(): Promise<void> {
   // 62.56278286930461 is a fine number and a terrible bar label. It is no longer
   // load-bearing: a model that ignores it produces a column that still averages,
   // which is the whole point of the fix above.
-  const prompt = fs.readFileSync(path.join(__dirname, '..', 'src', 'ai', 'analyze.ts'), 'utf8');
+  // The draft prompt moved next to validatePlan, its parser — it had drifted
+  // from the vocabulary it describes, which is exactly what that move guards.
+  const prompt = fs.readFileSync(path.join(__dirname, '..', 'src', 'analysis', 'analysisPlan.ts'), 'utf8');
   ok('the draft prompt still suggests rounding a division', prompt.includes('round(..., 4)'));
   ok('…but no longer claims the app cannot store an unrounded one',
      !prompt.includes('more than 15 significant digits as TEXT'));
