@@ -703,7 +703,7 @@ async function main(): Promise<void> {
   // The bar the workbench now sits under is 48px the old sizing did not know
   // about: body.an-focus #ws-analyses was calc(100vh - 40px) — the titlebar
   // alone — which left the workbench's bottom 48px clipped under .win's
-  // overflow:hidden. This is the guard for that (100vh - 88px now).
+  // overflow:hidden. This is the guard for that (100vh - 40px now, one merged bar).
   ok('…and the workbench bottom lands inside the window, not clipped under it',
     await win.evaluate(() => {
       const r = document.getElementById('ws-analyses')!.getBoundingClientRect();
