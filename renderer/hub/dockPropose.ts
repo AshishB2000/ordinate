@@ -1,9 +1,8 @@
 // Dock proposals — the reason the dock exists (Task 3,
 // docs/superpowers/plans/2026-08-09-ai-dock.md). Classic global-scope
 // renderer <script>: NO import/export. Loads AFTER dock.js (calls
-// dkClearProposal/dkOfferProposal from dkSend), explore.js (xpScrollToBottom —
-// the ask surface is the SECOND caller now; see below), prepare.js
-// (stepSummaryText, applyStepResult, prefillCalcFieldEditor), renderResult.js
+// dkClearProposal/dkOfferProposal from dkSend), askCore.js (xpScrollToBottom),
+// prepare.js (stepSummaryText, applyStepResult, prefillCalcFieldEditor), renderResult.js
 // (renderVizInArea, eligibleChartTypes, countNumericSeries), dashGrid.js
 // (dashCurrentPage, dashUuid, nextFreeRow, openAnalysis), dashAdd.js
 // (pushCard), dsExplorer.js (openSavedDataset) and dataSection.js
@@ -14,15 +13,12 @@
 // cheap heuristic on the question/answer text — never a gallery, never more
 // than one extra model call per turn.
 //
-// ONE engine, TWO mounts. The dock (#dk-messages) was the first caller; Ask
-// (explore.ts, #xp-messages) is the second. The mount is a `containerId`
-// threaded from dkOfferProposal down to dkAppendProposal / dkClearProposal,
-// defaulting to 'dk-messages' so every dock call site is byte-for-byte
-// unchanged. This is the same pattern explore.ts's own xpAppendBubble uses to
-// serve both surfaces from one renderer — NOT a second copy for Ask. Retiring
-// exploreChart.ts's parallel chart path (it drew a chart under every Ask
-// answer, outside the one-proposal-per-turn rule) is what makes that honest:
-// Ask now offers the SAME grounded step/calc/chart proposal the dock does.
+// ONE engine, ONE mount. The dock (#dk-messages) was the first caller; the Ask
+// page (explore.ts, #xp-messages) was the second until #117 retired it. The
+// mount is still a `containerId` threaded from dkOfferProposal down to
+// dkAppendProposal / dkClearProposal, defaulting to 'dk-messages' — unlike
+// askCore's old 'xp-messages' default, that names the container that actually
+// exists, so an omitted argument lands on the dock rather than nowhere.
 //
 // ⚠️ The one rule that matters most: a prepare-step proposal calls
 // `addDatasetStep` (APPENDS one step) and NEVER `setDatasetSteps` (which
@@ -101,18 +97,16 @@ function dkRemoveProposalCard(card: HTMLElement): void {
 // Remove any proposal left over from a previous turn, in ONE mount. Called
 // before a new question is asked and whenever the transcript is rebuilt from
 // disk truth — a proposal is never persisted (dismiss, or a new turn, leaves no
-// trace). `containerId` defaults to the dock so every dock caller is unchanged;
-// Ask passes 'xp-messages'.
+// trace). `containerId` defaults to the dock, the only mount there is.
 function dkClearProposal(containerId = 'dk-messages'): void {
   document.querySelectorAll('#' + containerId + ' .dk-proposal').forEach((el) => dkRemoveProposalCard(el as HTMLElement));
 }
 
-// Entry point — called by dkSend() (dock.ts) and xpSend() (explore.ts) after a
-// successful answer. Silent on anything that doesn't pan out: no dataset in
-// scope, no heuristic match, notReady, a failed suggestion, or an encoding that
-// can't be drawn. The text answer already stands; a proposal is a bonus, never
-// an error. `containerId` picks the mount — the dock by default, 'xp-messages'
-// for Ask.
+// Entry point — called by dkSend() (dock.ts) after a successful answer. Silent
+// on anything that doesn't pan out: no dataset in scope, no heuristic match,
+// notReady, a failed suggestion, or an encoding that can't be drawn. The text
+// answer already stands; a proposal is a bonus, never an error. `containerId`
+// picks the mount — the dock by default.
 async function dkOfferProposal(
   ref: { kind: string; id: string },
   question: string,

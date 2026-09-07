@@ -27,10 +27,10 @@
 // ── Rework (develop merged in: 498d647 retired the standalone Copilot panel,
 // renderer/hub/copilot.ts) ──────────────────────────────────────────────────
 // The panel's rendering (appendCopilotBubble/renderCopilotTurns/
-// scrollCopilotToBottom) moved to explore.ts as xpAppendBubble/xpRenderTurns/
-// xpScrollToBottom, each taking a `containerId` (defaulting to Explore's own)
-// — the dock calls them with 'dk-messages'. One rendering implementation,
-// two containers, same as before; only the file it lives in changed.
+// scrollCopilotToBottom) moved to askCore.ts as xpAppendBubble/xpRenderTurns/
+// xpScrollToBottom, each taking a REQUIRED `containerId` — the dock calls them
+// with 'dk-messages'. One rendering implementation; only the file it lives in
+// changed.
 //
 // The panel's buildCopilotContextRef() — a global priority chain (dataset →
 // visual → dashboard → project) off whatever entity happened to be open
@@ -387,11 +387,10 @@ function dkNudgeCanvasResize(): void {
 }
 
 // ── Conversation ─────────────────────────────────────────────────────────
-// Reuses explore.ts's xpAppendBubble/xpRenderTurns/xpScrollToBottom with
+// Reuses askCore.ts's xpAppendBubble/xpRenderTurns/xpScrollToBottom with
 // 'dk-messages' as the container — same rebuild-from-disk-on-success, same
-// notReady hint, same restore-text-on-failure contract xpSend/xpLoadHistory
-// use. One rendering implementation, two containers; the dock has no inline
-// empty-state node, same as Explore.
+// notReady hint, same restore-text-on-failure contract the retired Ask page
+// used. One rendering implementation; the dock has no inline empty-state node.
 
 let dkBusy = false; // guards against a re-entrant send while one is in flight
 // The thread the dock is showing. '' → the project's most-recent thread (main
@@ -576,8 +575,8 @@ async function dkSend(): Promise<void> {
   const ref = dkContextRef();
 
   // A per-ask id so main streams this answer's tokens back to THIS bubble. The
-  // streaming machinery lives in explore.ts (one rendering + one registry for
-  // both surfaces); the shared askId keeps the dock's stream out of Explore's.
+  // streaming machinery lives in askCore.ts (one rendering + one registry); the
+  // askId keeps a stale ask's late chunks out of the current bubble.
   const askId = xpNewAskId();
 
   // Optimistic UI: the question + a pending marker appear immediately.
