@@ -186,6 +186,36 @@ async function main(): Promise<void> {
     Boolean(map.found && map.canvas && (map.w || 0) > 100 && (map.h || 0) > 50 && !map.fallback),
     JSON.stringify(map));
 
+  // …and it gets the whole row. planBuild derives a chart's width from how many
+  // charts share the sheet, so three charts are three half-widths and the map
+  // landed alone in half a row, state shapes too small to read. Measured off the
+  // laid-out tiles rather than the stored layout: the point is what the user sees.
+  const widths = await win.evaluate(() => {
+    const cards = [...document.querySelectorAll('#dash-grid .dash-card--visual')];
+    const of = (re: RegExp) => {
+      const c = cards.find((e) => re.test(((e.querySelector('.dash-card-title') || {}) as any).textContent || ''));
+      return c ? Math.round(c.getBoundingClientRect().width) : 0;
+    };
+    return { map: of(/Profit by state/), month: of(/Revenue by month/), cat: of(/Revenue by category/) };
+  });
+  ok('…across the full row, not half of one',
+    widths.map > widths.month * 1.7 && widths.map > widths.cat * 1.7, JSON.stringify(widths));
+
+  // A month-grain axis printed '2023-01-01' twelve times over, the day part noise
+  // on every one. Read off the live Chart.js instance, which is what the axis, the
+  // tooltip and the value labels all draw from.
+  const monthLabels = await win.evaluate(() => {
+    const card = [...document.querySelectorAll('#dash-grid .dash-card')]
+      .find((c) => /Revenue by month/.test(((c.querySelector('.dash-card-title') || {}) as any).textContent || ''));
+    const cv = card && card.querySelector('canvas');
+    const chart = cv && (window as any).Chart && (window as any).Chart.getChart(cv);
+    return chart ? chart.data.labels.slice(0, 3) : null;
+  });
+  ok('the month axis reads as months, not ISO dates',
+    Array.isArray(monthLabels) && monthLabels.length === 3
+      && monthLabels.every((l: string) => /^[A-Z][a-z]{2} \d{4}$/.test(l)),
+    JSON.stringify(monthLabels));
+
   // ── Screenshots for the PR, both themes ─────────────────────────────────
   // Through setThemePreference, not by poking data-theme: main owns the
   // preference and pushes the resolved value back, so a hand-set attribute is
