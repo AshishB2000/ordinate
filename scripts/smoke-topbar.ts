@@ -168,6 +168,50 @@ async function main(): Promise<void> {
     focus.barVisible === true, JSON.stringify(focus));
   ok('…and the workbench bottom lands inside the window, not clipped under it',
     focus.bottom <= focus.innerHeight + 1, JSON.stringify(focus));
+
+  // ── …and the analysis flyout takes its height from the ROW, not from a sum ─
+  // It carried `max-height: calc(100vh - 78px)` — an unattributable constant
+  // sitting beside a documented one — plus a focus-mode override that #133 had
+  // to keep re-deriving every time the chrome moved. Both are gone: the flyout
+  // is a `stretch`ed flex item of a row that is already bounded, so it fills the
+  // row exactly and scrolls inside it. That is what is asserted, in the same
+  // synthetic focus state as the check above (a REAL open analysis, with the
+  // editor head moved into the strip, is smoke-dock.ts's job — it measures the
+  // same element's width there). No expected pixel count is written down: both
+  // sides are read off the render.
+  //
+  // A number here would rot. `maxHeight: 'none'` is the guard that a future
+  // chrome change cannot answer by patching an arithmetic constant again.
+  const side = await win.evaluate(() => {
+    const panel = document.getElementById('ws-analyses') as HTMLElement;
+    const host = document.getElementById('an-editor-host') as HTMLElement;
+    const el = document.getElementById('an-side-left') as HTMLElement;
+    const prevPanel = panel.hidden;
+    const prevSide = el.hidden;
+    const prevActive = host.classList.contains('is-active');
+    panel.hidden = false;
+    el.hidden = false;
+    host.classList.add('is-active');
+    const r = el.getBoundingClientRect();
+    const row = host.getBoundingClientRect();
+    const out = {
+      maxH: getComputedStyle(el).maxHeight,
+      top: Math.round(r.top), bottom: Math.round(r.bottom),
+      rowTop: Math.round(row.top), rowBottom: Math.round(row.bottom),
+      innerHeight: window.innerHeight,
+    };
+    panel.hidden = prevPanel;
+    el.hidden = prevSide;
+    if (!prevActive) host.classList.remove('is-active');
+    return out;
+  });
+  ok('the analysis flyout has no 100vh arithmetic cap left on it',
+    side.maxH === 'none', JSON.stringify(side));
+  ok('…it fills the workbench row exactly, top and bottom',
+    side.top === side.rowTop && side.bottom === side.rowBottom, JSON.stringify(side));
+  ok('…and the row it fills already ends inside the window',
+    side.rowBottom <= side.innerHeight + 1, JSON.stringify(side));
+
   await win.evaluate(() => { document.body.classList.remove('an-focus'); });
 
   ok('no renderer errors (incl. CSP violations)', errors.length === 0, errors.slice(0, 5).join(' | '));

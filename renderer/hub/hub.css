@@ -6475,12 +6475,21 @@ body.an-focus .dash-head-spacer--2 { display: none; }
 .an-workbench:not(.is-active) > .an-side,
 .an-workbench:not(.is-active) > .an-rail { display: none; }
 
+/* NO max-height. The flyout is `stretch`ed to the workbench row by the rule
+   above, and the row is already bounded — `body.an-focus #ws-analyses` is
+   `calc(100vh - 40px)` and the editor head takes its share off the top — so the
+   box is ALWAYS shorter than any `100vh - n` cap could make it, and
+   `overflow-y` scrolls it inside that. Measured in a 700px window: bar 40 +
+   head 47, flyout 87 → 700, exactly the row. Same reasoning as the Prepare rail
+   further up this file.
+   This carried `max-height: calc(100vh - 78px)` from Aug 2026 until it was
+   traced: 78 was never a chrome sum, and once focus mode arrived the rule could
+   not apply at all. See the commit for the archaeology. */
 .an-side {
   display: flex;
   flex-direction: column;
   flex: 0 0 252px;
   background: var(--surface);
-  max-height: calc(100vh - 78px);
   overflow-y: auto;
 }
 .an-pane-head {
@@ -9333,7 +9342,9 @@ body.an-focus .an-workbench.is-active > .dash-editor > .dash-ai-out {
   margin-left: 16px;
   margin-right: 16px;
 }
-body.an-focus .an-side { max-height: calc(100vh - 40px); } /* the top bar, as above */
+/* The flyout gets NO height of its own here either — the `.an-side` rule says
+   why. This was `calc(100vh - 88px)`, corrected to 40px with the rest of the
+   chrome sums, and only then measured: it never bound in either form. */
 
 /* The editor head is one row in focus mode. At 665px it was wrapping Save onto
    a second line, which pushed the sheet down and looked broken. */
