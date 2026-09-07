@@ -134,6 +134,14 @@ function clearVizArea(): void {
 
 // Ask main for the renderer-ready data, then (re)build the shared chart-type
 // picker + draw the current type. Mirrors renderTurnResult's picker wiring.
+// Same reason as the dashboard: the chart on screen baked in the old tokens.
+// Guarded on the builder actually being open — recomputeVisual() early-returns
+// without a dataset, but re-entering it from a background section is pointless.
+document.addEventListener('themechange', () => {
+  const area = document.getElementById('viz-area');
+  if (area && area.offsetParent && vizDatasetId) void recomputeVisual();
+});
+
 async function recomputeVisual(): Promise<void> {
   if (!currentProjectId || !vizDatasetId) return;
   const encoding = vizForm!.getEncoding();

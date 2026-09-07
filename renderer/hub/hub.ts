@@ -15,6 +15,12 @@ let currentThemePref = 'system';
 
 function applyEffectiveTheme(effective) {
   document.documentElement.dataset.theme = effective === 'dark' ? 'dark' : 'light';
+  // CSS re-resolves its own tokens; a <canvas> does not. Chart.js reads every
+  // colour ONCE, at construction, so a chart drawn before this line keeps the
+  // old theme's gridlines and value-label ink until something redraws it — the
+  // builder's chart drawing black labels on a dark plot was exactly that.
+  // One event from the one place the theme changes; each surface redraws itself.
+  document.dispatchEvent(new CustomEvent('themechange', { detail: { effective } }));
 }
 
 // Reflect the active preference on both theme controls (gear menu + settings panel).
