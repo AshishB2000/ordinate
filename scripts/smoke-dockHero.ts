@@ -3,14 +3,16 @@
 //
 // TWO THINGS, both of which pass every unit test while being broken on screen:
 //
-//  1. THE EMPTY STATE (dockHero.ts). The greeting, the sub line and the starter
-//     chips are painted by dkPaintHero, which is called from dkRenderContext in
-//     ANOTHER file, using prompt strings from haSuggestPrompts in a THIRD. Every
-//     one of those hops is a bare global resolved at call time, so a rename
-//     anywhere along the chain breaks the hero silently — no build error, no
-//     lint error, no unit-test failure, just a blank panel. This file is that
-//     coverage, plus the visibility rule (hero while empty, gone once a turn
-//     exists) which is driven by a MutationObserver rather than a call.
+//  1. THE STAGE AND THE CHIPS. The stage — the dotted lattice and accent washes
+//     on .dk-messages — is pure CSS, and its dark rule restates the whole
+//     `background` shorthand, which implicitly resets background-size: lose the
+//     restated 22px and the lattice silently becomes one element-sized gradient
+//     with no dots and no error. Both themes are read back here for that reason.
+//     The chips are painted by dkPaintHero, called from dkRenderContext in
+//     ANOTHER file, using prompt strings from haSuggestPrompts in a THIRD, each
+//     hop a bare global resolved at call time — so a rename anywhere along the
+//     chain breaks them silently. Plus the visibility rule (chips while empty,
+//     gone once a turn exists), driven by a MutationObserver rather than a call.
 //
 //  2. THE LEAKED ACTION LINE. `{"kind":"none","intent":""}` rendered as the
 //     answer to "hi". test-cliEnvelope.ts and test-suggestedAction.ts pin the
@@ -80,32 +82,55 @@ async function main(): Promise<void> {
   await win.evaluate(() => { (window as any).dkSetOpen(true); (window as any).dkSync(); });
   await win.waitForSelector('#dk-panel', { state: 'visible', timeout: 8000 });
 
-  // ── 1. The empty state is actually on screen ────────────────────────────
-  await win.waitForSelector('#dk-hero:not([hidden])', { timeout: 8000 });
-  const hero = await win.evaluate(() => {
-    const h = document.getElementById('dk-hero')!;
-    const mark = h.querySelector('.dk-hero-mark') as HTMLImageElement | null;
-    return {
-      visible: !h.hidden && h.getBoundingClientRect().height > 0,
-      mark: Boolean(mark && mark.getBoundingClientRect().width > 0),
-      greet: (document.getElementById('dk-hero-greet')!.textContent || '').trim(),
-      sub: (document.getElementById('dk-hero-sub')!.textContent || '').trim(),
-    };
-  });
-  ok('the dock opens onto the hero, not a blank rectangle', hero.visible && hero.mark, JSON.stringify(hero));
-  ok('…with a greeting', hero.greet.length > 0, hero.greet);
-  ok('…and exactly one sub line under it', hero.sub.length > 0 && hero.sub.indexOf('\n') < 0, hero.sub);
+  // ── 1. THE STAGE is painted, in both themes ─────────────────────────────
+  // The dotted lattice and the accent washes are the design (40bff73^'s
+  // .xp-stage, retuned for the panel). They are also the thing a stylesheet edit
+  // silently loses: the dark rule restates the whole `background` shorthand,
+  // which implicitly resets background-size to `auto` — drop the restated
+  // `background-size` and the 22px lattice becomes ONE element-sized gradient,
+  // i.e. no dots, with no error anywhere. So both themes are read back.
+  ok('#dk-hero is gone — the stage is CSS on the body, not a card in the markup',
+    (await win.locator('#dk-hero').count()) === 0);
 
-  // Chips are an async round-trip through haSuggestPrompts → listDatasets.
+  const stageIn = async (theme: string): Promise<any> => {
+    await win.evaluate((t: string) => { document.documentElement.dataset.theme = t; }, theme);
+    await win.waitForTimeout(400);
+    return win.evaluate(() => {
+      const cs = getComputedStyle(document.getElementById('dk-messages')!);
+      return { image: cs.backgroundImage, size: cs.backgroundSize, repeat: cs.backgroundRepeat };
+    });
+  };
+  for (const theme of ['light', 'dark']) {
+    const bg = await stageIn(theme);
+    ok(`the ${theme} stage paints the accent washes`,
+      (bg.image.match(/radial-gradient/g) || []).length >= 3, bg.image.slice(0, 120));
+    ok(`…and the 22px dot lattice under them`,
+      /\b22px 22px\b/.test(bg.size) && /repeat/.test(bg.repeat),
+      JSON.stringify({ size: bg.size, repeat: bg.repeat }));
+  }
+  await win.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
+  await win.waitForTimeout(400);
+
+  // ── The starter chips are the only thing an empty conversation shows ─────
+  // Async: haSuggestPrompts → listDatasets.
   await win.waitForFunction(
     () => !(document.getElementById('dk-suggests') as HTMLElement).hidden, { timeout: 15_000 },
   ).catch(() => {});
   const chips: string[] = await win.evaluate(() =>
     [...document.querySelectorAll('#dk-suggests .dk-suggest')].map((c) => (c.textContent || '').trim()));
-  ok('…and 2–3 starter chips built from the project’s real data',
+  ok('an empty conversation shows 2–3 starter chips built from the project’s real data',
     chips.length >= 2 && chips.length <= 3, JSON.stringify(chips));
   ok('…naming the dataset that is actually there, not a placeholder',
     chips.some((c) => c.indexOf(seeded.datasetName) >= 0), JSON.stringify(chips));
+  // Pinned just above the composer, not floating mid-panel.
+  const strip = await win.evaluate(() => {
+    const s = document.getElementById('dk-suggests')!.getBoundingClientRect();
+    const c = document.querySelector('.dk-composer')!.getBoundingClientRect();
+    const m = document.getElementById('dk-messages')!.getBoundingClientRect();
+    return { gap: Math.round(c.top - s.bottom), belowBody: Math.round(s.top - m.bottom) };
+  });
+  ok('…sitting directly above the composer, outside the scrolling stage',
+    strip.gap >= 0 && strip.gap < 24 && strip.belowBody >= 0, JSON.stringify(strip));
   // A chip FILLS the composer. It must never auto-send — a suggestion is a draft.
   await win.click('#dk-suggests .dk-suggest', { timeout: 8000 });
   ok('clicking a chip fills the composer and sends nothing',
@@ -116,9 +141,7 @@ async function main(): Promise<void> {
   // property, not by Playwright's fill (which refuses a disabled control).
   await win.evaluate(() => { (document.getElementById('dk-input') as HTMLTextAreaElement).value = ''; });
 
-  // ── The greeting follows the CONTEXT ────────────────────────────────────
-  // Open the dataset: the header says "Based on dataset · Adidas US Sales" and
-  // the hero must say the same thing in its own voice, not stay generic.
+  // ── The chips follow the CONTEXT ────────────────────────────────────────
   // The user path: the Data section, then the dataset. openSavedDataset sets
   // expId/expName but does NOT switch section, and dkContextRef only claims a
   // dataset context while the Data section is the one on screen.
@@ -128,17 +151,17 @@ async function main(): Promise<void> {
   await win.waitForTimeout(1500);
   await win.evaluate(() => { (window as any).dkSetOpen(true); (window as any).dkSync(); });
   await win.waitForFunction(
-    (name: string) => (document.getElementById('dk-hero-greet')!.textContent || '').indexOf(name) >= 0,
+    (name: string) => [...document.querySelectorAll('#dk-suggests .dk-suggest')]
+      .some((c) => (c.textContent || '').indexOf(name) >= 0),
     seeded.datasetName, { timeout: 15_000 },
   ).catch(() => {});
   const scoped = await win.evaluate(() => ({
-    greet: (document.getElementById('dk-hero-greet')!.textContent || '').trim(),
+    chips: [...document.querySelectorAll('#dk-suggests .dk-suggest')].map((c) => (c.textContent || '').trim()),
     header: (document.getElementById('dk-context')!.textContent || '').trim(),
-    section: (document.querySelector('.hub-body') as HTMLElement).dataset.section,
     ref: (window as any).dkContextRef(),
   }));
-  ok('with a dataset open the greeting names it ("Ask about <dataset>")',
-    scoped.greet === 'Ask about ' + seeded.datasetName, JSON.stringify(scoped));
+  ok('with a dataset open the chips lead with it, like the header does',
+    scoped.chips.length > 0 && scoped.chips[0].indexOf(seeded.datasetName) >= 0, JSON.stringify(scoped));
 
   // ── 2. An action-only reply never shows a brace ─────────────────────────
   // No model is configured in a smoke run, so drive the renderer with the exact
@@ -161,15 +184,15 @@ async function main(): Promise<void> {
       .map((p) => p.textContent || '');
     return { bubbles, prov, provNodes: prov.length };
   }, empty);
-  // The hero is hidden by a MutationObserver, whose callback runs at the end of
+  // The strip is hidden by a MutationObserver, whose callback runs at the end of
   // the microtask checkpoint — before the next paint, so there is no flash, but
   // after the evaluate above returns. Read it in its own round-trip.
-  const heroHidden = await win.evaluate(() => (document.getElementById('dk-hero') as HTMLElement).hidden);
+  const chipsHidden = await win.evaluate(() => (document.getElementById('dk-suggests') as HTMLElement).hidden);
   ok('an action-only answer renders the app-written line, and NO "{" anywhere',
     painted.bubbles.join(' ').indexOf('{') < 0 && painted.bubbles.some((b: string) => b === empty),
     JSON.stringify(painted.bubbles));
-  ok('…the hero gets out of the way once there is a turn (the observer fired)',
-    heroHidden === true, String(heroHidden));
+  ok('…and the starter chips disappear once there is a turn (the observer fired)',
+    chipsHidden === true, String(chipsHidden));
   ok('…and provenance is ONE muted line, not a row of pills',
     painted.provNodes === 1 && painted.prov[0].indexOf(' · ') > 0
       && (await win.locator('#dk-messages .xp-prov-chip').count()) === 0,
@@ -195,11 +218,11 @@ async function main(): Promise<void> {
   ok('…and the answer is plain text on the panel surface, not a second bubble',
     clear(sides.asst.bg), JSON.stringify(sides.asst));
 
-  // A new conversation brings the hero back — the empty state is a STATE, not a
-  // first-run screen.
+  // A new conversation brings them back — the empty state is a STATE, not a
+  // first-run screen. The stage never went anywhere; only the chips toggle.
   await win.evaluate(() => (window as any).dkNew());
-  await win.waitForSelector('#dk-hero:not([hidden])', { timeout: 8000 });
-  ok('"New conversation" restores the empty state', await win.locator('#dk-hero').isVisible());
+  await win.waitForSelector('#dk-suggests:not([hidden])', { timeout: 8000 });
+  ok('"New conversation" restores the starter chips', await win.locator('#dk-suggests').isVisible());
 
   ok('no renderer errors (incl. CSP violations)', errors.length === 0, errors.slice(0, 5).join(' | '));
 
