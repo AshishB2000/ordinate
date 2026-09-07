@@ -272,6 +272,7 @@ scripts/**/*.js
 # Dock smoke (Task 4). Emitted sibling.
 /scripts/smoke-dock.js
 /scripts/smoke-dockHero.js
+/scripts/smoke-topbar.js
 /scripts/smoke-assistant.js
 
 # Ask actions smoke (feat/ask-actions). Emitted sibling.
