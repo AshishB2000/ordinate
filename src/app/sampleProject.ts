@@ -1,9 +1,34 @@
-// The bundled SAMPLE PROJECT, seeded once on first launch.
+// The bundled SAMPLE DATA, seeded once on first launch — into the user's OWN
+// first project, not a project of its own.
 //
 // Without it the app opens completely empty — no project, no data, no dashboard,
 // every surface showing its empty state — and the only way to find out what
 // Ordinate does is to go and find a CSV first. The sample also gives the map, the
 // anomaly detector and the starter templates something real to run against.
+//
+// ── ONE project, and why it changed ─────────────────────────────────────────
+// This used to create TWO: "Sample: Retail orders" holding everything, then an
+// empty "My project" LAST so that resolveProjectId — which adopts the most
+// recently updated one — would adopt the empty one and keep the user's first
+// real import out of the sample.
+//
+// That reasoning only holds if the user can SEE both projects, and there is no
+// project front door in the UI: homePage.ts's openRecentItem adopts a project
+// implicitly when you click a row, and nothing else lists them. So a new user
+// landed in the empty project while Home's Recent and Starred — the only two
+// global-across-projects surfaces in the app — showed the sample. Home said
+// "My project · 0 datasets · 0 dashboards" over a Starred row for a dashboard
+// that was really there, Data said "No datasets yet", Dashboards said "No
+// dashboards yet". Three of four surfaces empty, which is the exact first
+// impression the sample exists to prevent.
+//
+// So the sample is seeded INTO the first project. The user's first import lands
+// beside it, which is fine and always was — the note card says the sample is
+// sample data and offers to remove it, and removing it now takes the sample's
+// three records out and LEAVES the project (see markNoteCardDeletable, and
+// dashFiltersUi.ts's handler). Installs that already seeded keep their two
+// projects: `sampleSeeded` records that seeding happened, and re-homing records
+// under someone's feet is worse than an extra project in a list they cannot see.
 //
 // Everything here goes through the ORDINARY paths: the CSV is parsed by
 // fileImport.parseFile (the same call `dataset:pickAndParse` makes), stored by
@@ -29,17 +54,19 @@ import { loadPlanContext } from '../analysis/analysisPlan';
 import type { AnalysisPlan, PlannedMetric, PlannedVisual } from '../analysis/analysisPlan';
 import { buildStarterPlan } from '../analysis/starterPlan';
 
-export const SAMPLE_PROJECT_NAME = 'Sample: Retail orders';
 export const SAMPLE_DATASET_NAME = 'Retail orders';
 export const SAMPLE_DASHBOARD_NAME = 'Retail overview';
-/** Created after the sample so it is NEWEST, and therefore the one the renderer
- *  adopts — see the note in seedSampleProject. */
+/** The one project a fresh install gets. The sample is seeded INTO it, so every
+ *  surface — Home's counts, Data, Dashboards — agrees on first launch. */
 export const FIRST_PROJECT_NAME = 'My project';
 
 const SAMPLE_NOTE_HEADING = 'This is sample data';
+// Kept SHORT deliberately. The note is one card on a laid-out sheet and its body
+// does not grow to fit: the starter plan sizes a text card, and prose past about
+// two lines scrolls inside it, hiding the Remove button the note is promising.
 const SAMPLE_NOTE_TEXT =
-  'A generated retail orders dataset, bundled so the app has something to show on first launch. '
-  + 'Nothing here is real. Delete it whenever you like — your own projects are untouched.';
+  'A generated retail orders dataset, bundled so the app has something to show on '
+  + 'first launch. Nothing here is real — remove it whenever you like; your project stays.';
 
 /** The bundled CSV. `app.getAppPath()` is the repo root in dev and app.asar when
  *  packaged, and Electron patches fs to read inside asar, so one path works for
@@ -104,7 +131,12 @@ function sampleDashboardPlan(ds: { id: string; name: string; columns: { name: st
 }
 
 /**
- * Mark the note card so the renderer draws a Delete button on it.
+ * Mark the note card so the renderer draws a Remove button on it.
+ *
+ * That button takes out the sample's three records — the dashboard, its visuals
+ * and the dataset — and leaves the project standing, because the project is now
+ * the user's own (see this file's header). It used to delete the project whole,
+ * which with one project would delete everything they had.
  *
  * `action` is a closed one-value enum on Card, whitelisted by
  * dashboards.sanitizeCard — but deliberately NOT part of PlannedText, so a plan
@@ -139,7 +171,10 @@ export async function seedSampleProject(): Promise<{ seeded: boolean; projectId?
   }
   config.save({ sampleSeeded: true });
 
-  const project = await projects.createProject(SAMPLE_PROJECT_NAME);
+  // The user's own first project, and the only one. Created here rather than by
+  // resolveProjectId so the sample has somewhere to land; resolveProjectId finds
+  // it and adopts it exactly as it would any other.
+  const project = await projects.createProject(FIRST_PROJECT_NAME);
 
   const kind = sourceKindForPath(csv) || 'csv';
   const parsed = await parseFile(csv, kind as never);
@@ -179,11 +214,6 @@ export async function seedSampleProject(): Promise<{ seeded: boolean; projectId?
   } else {
     console.error('[sample] could not build the sample dashboard:', built.error);
   }
-
-  // LAST, so it is the newest project and therefore the one resolveProjectId
-  // adopts. Otherwise the sample would be the working project and the user's
-  // first real import would land inside it.
-  await projects.createProject(FIRST_PROJECT_NAME);
 
   return { seeded: true, projectId: project.id, analysisId };
 }

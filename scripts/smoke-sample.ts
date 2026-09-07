@@ -1,4 +1,15 @@
-// The bundled sample project, on a genuinely FIRST launch.
+// The bundled sample, on a genuinely FIRST launch.
+//
+// THE ASSERTIONS THAT MATTER ARE THE RENDERED ONES. Everything used to be
+// checked on disk, and on disk everything was fine: the sample project existed,
+// the dataset had 5000 rows, the dashboard had its tiles. What the user actually
+// saw was Home reading "My project · 0 datasets · 0 dashboards" over a Starred
+// row for that dashboard, Data saying "No datasets yet" and Dashboards saying
+// "No dashboards yet" — because the sample was seeded into its OWN project and
+// an empty "My project" was created last to be the adopted one, while Home's
+// Recent and Starred are the app's only global-across-projects surfaces. Three
+// of four surfaces empty. So this file reads the counts and the lists off the
+// rendered page, which is the only place that bug was visible.
 //
 // This is its own smoke file rather than assertions bolted onto smoke-app.ts for
 // two reasons, both hard. smoke-app.ts is at its allowlisted line count so it
@@ -51,26 +62,26 @@ async function main(): Promise<void> {
     const analysis = req('./src/analysis/analysis.js');
     const visuals = req('./src/analysis/visuals.js');
     const list = await projects.listProjects();
-    const sample = list.find((p: any) => p.name === 'Sample: Retail orders');
-    if (!sample) return { projects: list.map((p: any) => p.name) };
+    if (!list.length) return { projects: [] };
+    const only = list[0];
     return {
       projects: list.map((p: any) => p.name),
-      newest: list[0].name,
-      datasets: (await datasets.listDatasets(sample.id)).map((d: any) => ({ name: d.name, rows: d.rowCount })),
-      visuals: (await visuals.listVisuals(sample.id)).map((v: any) => v.name),
-      analyses: (await analysis.listAnalyses(sample.id)).map((a: any) => ({ id: a.id, name: a.name })),
+      datasets: (await datasets.listDatasets(only.id)).map((d: any) => ({ name: d.name, rows: d.rowCount })),
+      visuals: (await visuals.listVisuals(only.id)).map((v: any) => v.name),
+      analyses: (await analysis.listAnalyses(only.id)).map((a: any) => ({ id: a.id, name: a.name })),
     };
   });
-  ok('a first launch seeds the sample project',
-    Array.isArray(seeded.projects) && seeded.projects.includes('Sample: Retail orders'),
-    JSON.stringify(seeded.projects));
-  ok('…and an empty project that is newest, so the sample never receives real work',
-    seeded.newest === 'My project', String(seeded.newest));
-  ok('…with the full dataset imported',
-    seeded.datasets && seeded.datasets.length === 1 && seeded.datasets[0].rows === 5000,
+  ok('a first launch creates exactly ONE project',
+    Array.isArray(seeded.projects) && seeded.projects.length === 1, JSON.stringify(seeded.projects));
+  ok('…named "My project" — the user\'s own, not a sample-only one',
+    seeded.projects[0] === 'My project', JSON.stringify(seeded.projects));
+  ok('…holding the sample dataset, every row of the committed CSV',
+    seeded.datasets && seeded.datasets.length === 1
+    && seeded.datasets[0].name === 'Retail orders' && seeded.datasets[0].rows === 5000,
     JSON.stringify(seeded.datasets));
-  ok('…three visuals and one dashboard',
-    seeded.visuals && seeded.visuals.length === 3 && seeded.analyses.length === 1,
+  ok('…and the sample dashboard with its three charts',
+    seeded.visuals && seeded.visuals.length === 3
+    && seeded.analyses.length === 1 && seeded.analyses[0].name === 'Retail overview',
     JSON.stringify({ visuals: seeded.visuals, analyses: seeded.analyses }));
 
   // ── Home is not empty ────────────────────────────────────────────────────
@@ -83,12 +94,48 @@ async function main(): Promise<void> {
     return {
       starred: rows.map((r) => ((r.querySelector('.home-row-name') || {}) as any).textContent || ''),
       chips,
+      sub: ((document.getElementById('home-greet-sub') || {}) as any).textContent || '',
     };
   });
   ok('the sample dashboard is pinned to Home, so Starred is not an empty state',
     home.starred.some((n: string) => /Retail overview/.test(n)), JSON.stringify(home.starred));
   ok('…and the ask bar suggests questions written for the sample',
     home.chips.includes('Which region had the worst month?'), JSON.stringify(home.chips));
+  // THE BUG, in one assertion. Home's subtitle counts the ADOPTED project's
+  // records; Starred above counts across all of them. They read "0 datasets ·
+  // 0 dashboards" and "Retail overview" at the same time, on the same screen.
+  ok('…and the header counts AGREE with what Starred is showing',
+    /\b1 dataset\b/.test(home.sub) && /\b1 dashboard\b/.test(home.sub), home.sub);
+  ok('…naming the one project', /My project/.test(home.sub), home.sub);
+  await win.screenshot({ path: path.join(shotDir, 'sample-home.png') });
+
+  // ── Data lists the sample, instead of "No datasets yet" ──────────────────
+  await win.evaluate(() => { (window as any).selectSection('datasets'); });
+  await win.waitForTimeout(2500);
+  const dataPage = await win.evaluate(() => ({
+    rows: [...document.querySelectorAll('#ds-saved-list .ds-saved-item .ds-saved-name')]
+      .map((r) => (r.textContent || '').trim()).filter(Boolean),
+    emptyShown: !(document.getElementById('ds-saved-empty') as HTMLElement).hidden,
+  }));
+  ok('the Data page lists "Retail orders"',
+    dataPage.rows.some((t: string) => /Retail orders/.test(t)), JSON.stringify(dataPage.rows.slice(0, 4)));
+  ok('…and is not showing its "No datasets yet" empty state', dataPage.emptyShown === false);
+  await win.screenshot({ path: path.join(shotDir, 'sample-data.png') });
+
+  // ── Dashboards lists the sample, instead of "No dashboards yet" ──────────
+  await win.evaluate(() => { (window as any).selectSection('analyses'); });
+  await win.waitForTimeout(2500);
+  const dashPage = await win.evaluate(() => ({
+    rows: [...document.querySelectorAll('#an-list > *')].map((r) => (r.textContent || '').trim()).filter(Boolean),
+    emptyShown: !(document.getElementById('an-list-empty') as HTMLElement).hidden,
+  }));
+  ok('the Dashboards page lists "Retail overview"',
+    dashPage.rows.some((t: string) => /Retail overview/.test(t)), JSON.stringify(dashPage.rows.slice(0, 4)));
+  ok('…and is not showing its "No dashboards yet" empty state', dashPage.emptyShown === false);
+  await win.screenshot({ path: path.join(shotDir, 'sample-dashboards.png') });
+
+  await win.evaluate(() => { (window as any).selectSection('home'); });
+  await win.waitForTimeout(2000);
 
   // ── Opening it from Home renders real tiles ──────────────────────────────
   // Clicked, not called: the row IS the path a first-time user takes.
@@ -170,22 +217,31 @@ async function main(): Promise<void> {
   await win.waitForTimeout(1500);
   console.log('screenshots: ' + shotDir);
 
-  // ── The note card's Delete actually deletes ─────────────────────────────
-  // The note promises the sample can be removed, and until this change nothing
-  // in the app could delete a project at all — projects:delete had a handler, a
-  // preload binding and a type, and no caller. Done LAST, because it destroys
-  // the fixture everything above needed.
+  // The note card carries the behaviour change, so it gets its own shot.
+  await win.evaluate(() => {
+    const btn = document.querySelector('#dash-grid .dash-sample-delete');
+    if (btn) btn.scrollIntoView({ block: 'center' });
+  });
+  await win.waitForTimeout(1200);
+  await win.screenshot({ path: path.join(shotDir, 'sample-note-card.png') });
+
+  // ── The note card's Remove takes the SAMPLE, and leaves the PROJECT ──────
+  // The note promises the sample can be taken out. It used to do that by
+  // deleting the whole project, which was right when the sample had one to
+  // itself; now the project is the user's only one, so removing the sample must
+  // remove three records and leave the project standing. Done LAST, because it
+  // destroys the fixture everything above needed.
   const deleted = await win.evaluate(async () => {
     const btn = document.querySelector('#dash-grid .dash-sample-delete') as HTMLElement | null;
     if (!btn) return { found: false };
     const origConfirm = window.confirm;
     (window as any).confirm = () => true; // the dialog is the user's, not the test's
     btn.click();
-    await new Promise((r) => setTimeout(r, 4000));
+    await new Promise((r) => setTimeout(r, 5000));
     (window as any).confirm = origConfirm;
     return { found: true, section: (document.querySelector('.hub-body') as HTMLElement | null)?.dataset.section || '' };
   });
-  ok('the note card offers a working Delete', deleted.found === true, JSON.stringify(deleted));
+  ok('the note card offers a working Remove', deleted.found === true, JSON.stringify(deleted));
   ok('…which returns to Home', deleted.section === 'home', JSON.stringify(deleted));
 
   const after: any = await app.evaluate(async () => {
@@ -194,6 +250,9 @@ async function main(): Promise<void> {
     const nodePath = req('path');
     const { app: electronApp } = req('electron');
     const projects = req('./src/app/projects.js');
+    const datasets = req('./src/data/datasets.js');
+    const analysis = req('./src/analysis/analysis.js');
+    const visuals = req('./src/analysis/visuals.js');
     const base = nodePath.join(electronApp.getPath('userData'), 'projects');
     const walk = (dir: string, out: string[] = []): string[] => {
       if (!nodeFs.existsSync(dir)) return out;
@@ -203,13 +262,20 @@ async function main(): Promise<void> {
       }
       return out;
     };
+    const list = await projects.listProjects();
+    const only = list[0];
     return {
-      names: (await projects.listProjects()).map((p: any) => p.name),
+      names: list.map((p: any) => p.name),
+      datasets: only ? (await datasets.listDatasets(only.id)).length : -1,
+      visuals: only ? (await visuals.listVisuals(only.id)).length : -1,
+      analyses: only ? (await analysis.listAnalyses(only.id)).length : -1,
       parquet: walk(base).filter((f) => f.endsWith('.parquet')),
     };
   });
-  ok('…removing the sample project from disk',
-    !after.names.includes('Sample: Retail orders'), JSON.stringify(after.names));
+  ok('the project SURVIVES — it is the user\'s, and it is their only one',
+    after.names.length === 1 && after.names[0] === 'My project', JSON.stringify(after.names));
+  ok('…with the sample\'s dashboard, charts and dataset all gone',
+    after.datasets === 0 && after.visuals === 0 && after.analyses === 0, JSON.stringify(after));
   ok('…and leaving no orphan Parquet behind', after.parquet.length === 0, JSON.stringify(after.parquet));
 
   ok('no renderer console errors on a first launch', errors.length === 0, errors.slice(0, 3).join(' | '));
