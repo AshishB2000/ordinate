@@ -81,6 +81,14 @@ const LAZY_BUNDLES: Record<string, string[]> = {
     '../../assets/geo/world-countries.js',
     '../../assets/geo/us-states.js',
   ],
+  // The boundary payloads WITHOUT MapLibre, for the static canvas mini-maps on
+  // gallery cards (mapThumb.ts): a picture of polygons has no use for a 714K
+  // WebGL renderer. Same two srcs as `map`, so loadScriptOnce's per-src cache
+  // means whichever bundle is asked for first pays, and the other is free.
+  geo: [
+    '../../assets/geo/world-countries.js',
+    '../../assets/geo/us-states.js',
+  ],
 };
 
 // NOT here, deliberately:

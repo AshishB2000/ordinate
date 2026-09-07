@@ -70,6 +70,10 @@ async function main(): Promise<void> {
     const enc = { category: 'region', values: [{ column: 'amount', aggregation: 'sum' }] };
     const v1 = await visuals.saveVisual(proj.id, { name: 'Revenue by region', datasetId: ds.id, chartType: 'bar', encoding: enc, filters: [] });
     const v2 = await visuals.saveVisual(proj.id, { name: 'Revenue trend', datasetId: ds.id, chartType: 'line', encoding: enc, filters: [] });
+    // The bundled sample ("Retail overview" in "My project") is seeded at boot,
+    // so the list assertions below get a REAL dashboard with real charts and no
+    // setup of their own.
+    const sample = (await projects.listProjects()).find((p: any) => /My project/.test(p.name));
     const an = await analysis.saveAnalysis(proj.id, { name: 'Quarterly review', sheets: [{
       name: 'Overview',
       cards: [
@@ -79,7 +83,8 @@ async function main(): Promise<void> {
     }] });
     // A second, EMPTY dashboard: the starter buttons only show on an empty page.
     const blank = await analysis.saveAnalysis(proj.id, { name: 'Starter target', sheets: [{ name: 'Overview', cards: [] }] });
-    return { projectId: proj.id, bareProjectId: bare.id, analysisId: an.id, blankId: blank.id, datasetId: ds.id };
+    return { projectId: proj.id, bareProjectId: bare.id, analysisId: an.id, blankId: blank.id,
+      datasetId: ds.id, sampleProjectId: sample ? sample.id : '' };
   });
   ok('seeded a bare project and one with visuals + a dashboard',
     Boolean(seeded.projectId && seeded.bareProjectId && seeded.analysisId));
@@ -134,6 +139,104 @@ async function main(): Promise<void> {
     head.count === '2 dashboards' && head.countHidden === false, JSON.stringify(head));
   ok('…and the page has a subtitle, like Data and Visuals',
     !!head.sub && head.subVisible, JSON.stringify(head));
+
+  // ── 4b. The list is a CARD GRID with live previews, not a text table ─────
+  // A dashboard is the one record in the app that is mostly pictures, and its
+  // list was the plainest surface in the product. Asserted by geometry and by
+  // drawn content: a collapsed card and an empty card both pass every
+  // structural check that "the element exists" can make.
+  await win.waitForFunction(
+    () => document.querySelectorAll('#an-list .an-card').length === 2, { timeout: 20_000 },
+  ).catch(() => {});
+  const drew = await win.waitForFunction(
+    () => document.querySelectorAll('#an-list .viz-card-tile--thumb canvas').length >= 2,
+    { timeout: 25_000 },
+  ).then(() => true).catch(() => false);
+  const grid = await win.evaluate(() => {
+    const cards = [...document.querySelectorAll('#an-list .an-card')] as HTMLElement[];
+    const byName = (re: RegExp) => cards.find((c) => re.test(c.textContent || ''));
+    const area = (c?: HTMLElement) => {
+      const r = c?.getBoundingClientRect();
+      return r ? Math.round(r.width) * Math.round(r.height) : 0;
+    };
+    const full = byName(/Quarterly review/);
+    const blank = byName(/Starter target/);
+    return {
+      cards: cards.length,
+      boxes: cards.map((c) => area(c)),
+      laidOut: cards.length > 0 && cards.every((c) => area(c) > 20_000),
+      tiles: full ? full.querySelectorAll('.an-card-prev .viz-card-tile').length : 0,
+      canvases: full ? full.querySelectorAll('canvas').length : 0,
+      menus: cards.filter((c) => c.querySelector('.an-row-menu')).length,
+      meta: (full?.querySelector('.viz-card-meta')?.textContent || '').trim(),
+      blankBars: !!blank?.querySelector('.an-card-bars .ws-hero-bar'),
+      blankCanvas: !!blank?.querySelector('canvas'),
+    };
+  });
+  ok('the list renders one card per dashboard', grid.cards === 2, JSON.stringify(grid.boxes));
+  ok('…each laid out, not collapsed to nothing', grid.laidOut, JSON.stringify(grid.boxes));
+  ok('…the two-visual sheet previews both of them as live charts',
+    drew && grid.tiles === 2 && grid.canvases === 2,
+    `tiles=${grid.tiles} canvases=${grid.canvases}`);
+  ok('…a sheet with no visual cards keeps the bar glyph instead',
+    grid.blankBars && !grid.blankCanvas, JSON.stringify(grid));
+  ok('…the card still names the sheet count and when it changed',
+    /^1 sheet · /.test(grid.meta), grid.meta);
+  ok('…and every card keeps its ⋯ menu', grid.menus === 2, String(grid.menus));
+
+  // ── 4c. The bundled sample, and no leaked charts across repaints ─────────
+  // "Retail overview" is seeded into "My project" on a fresh user-data-dir, so
+  // this is a real dashboard with real charts. Its first sheet leads with a line
+  // and a column chart; the map comes third and is never thumbnailed.
+  if (seeded.sampleProjectId) {
+    await win.evaluate(async (id: string) => {
+      await (window as any).adoptProject(id);
+      (window as any).selectSection('analyses');
+    }, seeded.sampleProjectId);
+    const sampleDrew = await win.waitForFunction(
+      () => {
+        const c = [...document.querySelectorAll('#an-list .an-card')]
+          .find((x) => /Retail overview/.test(x.textContent || ''));
+        return !!c && c.querySelectorAll('canvas').length >= 1;
+      }, { timeout: 30_000 },
+    ).then(() => true).catch(() => false);
+    ok('the bundled sample\'s "Retail overview" card draws a real chart', sampleDrew);
+
+    // Three round-trips through the section. Each re-entry repaints the grid,
+    // and vizThumbsReset() must destroy the previous paint's charts first — a
+    // Chart that outlives its discarded canvas keeps its RAF and resize hooks.
+    // Chart.js's own registry proves nothing leaked; vizThumbs' registry proves
+    // the tracking set was emptied rather than merely forgotten.
+    const before = await win.evaluate(() => ({
+      thumbs: (window as any).vizThumbLiveCount(),
+      charts: Object.keys(((window as any).Chart && (window as any).Chart.instances) || {}).length,
+    }));
+    for (let i = 0; i < 3; i += 1) {
+      await win.evaluate(() => { (window as any).selectSection('datasets'); });
+      await win.waitForTimeout(400);
+      await win.evaluate(() => { (window as any).selectSection('analyses'); });
+      await win.waitForFunction(
+        () => document.querySelectorAll('#an-list .viz-card-tile--thumb canvas').length >= 1,
+        { timeout: 25_000 },
+      ).catch(() => {});
+    }
+    const after = await win.evaluate(() => ({
+      thumbs: (window as any).vizThumbLiveCount(),
+      charts: Object.keys(((window as any).Chart && (window as any).Chart.instances) || {}).length,
+    }));
+    ok('three section round-trips leak no thumbnail charts',
+      after.thumbs <= before.thumbs && after.charts <= before.charts,
+      `before=${JSON.stringify(before)} after=${JSON.stringify(after)}`);
+    const emptied = await win.evaluate(() => {
+      (window as any).vizThumbsReset();
+      return (window as any).vizThumbLiveCount();
+    });
+    ok('…and a repaint empties the registry outright', emptied === 0, String(emptied));
+  }
+
+  await win.evaluate(async (id: string) => { await (window as any).adoptProject(id); },
+    seeded.projectId);
+  await win.waitForTimeout(600);
 
   // ── 2 + 3. The dashboard editor's cards ──────────────────────────────────
   await win.evaluate(async (id: string) => { await (window as any).openAnalysis(id); }, seeded.analysisId);

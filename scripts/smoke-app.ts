@@ -2437,41 +2437,29 @@ async function main(): Promise<void> {
   ok('back to Dashboards', await clickExact('Dashboards'));
   await win.waitForTimeout(1200);
   const anRow = await win.evaluate(() => {
-    const row = [...document.querySelectorAll('#an-list .dash-list-item')].find((r) =>
+    const row = [...document.querySelectorAll('#an-list .an-card')].find((r) =>
       /Smoke analysis/.test(r.textContent || ''),
     );
     const vis = (id: string) => (document.getElementById(id) as HTMLElement | null)?.offsetParent != null;
-    const cols = [...document.querySelectorAll('.an-table-cols span')];
-    // The header labels and the row cells are two separate grids that share one
-    // `grid-template-columns`. Nothing but a laid-out page can prove they line
-    // up — so compare the actual left edges rather than trusting the CSS.
-    const colLefts = cols.map((c) => Math.round(c.getBoundingClientRect().left));
-    const cellLefts = row
-      ? [...row.children].map((c) => Math.round(c.getBoundingClientRect().left))
-      : [];
+    const r = row ? row.getBoundingClientRect() : null;
     return {
       found: !!row,
       text: row ? (row.textContent || '').trim().slice(0, 100) : '',
-      headers: cols.map((c) => (c.textContent || '').trim()),
-      colLefts,
-      cellLefts,
-      aligned: colLefts.length === cellLefts.length &&
-               colLefts.every((x, i) => Math.abs(x - cellLefts[i]) <= 1),
+      // A collapsed card passes every structural check, so measure it.
+      box: r ? `${Math.round(r.width)}x${Math.round(r.height)}` : '0x0',
+      laidOut: !!r && r.width > 100 && r.height > 100,
+      preview: !!row?.querySelector('.an-card-prev .viz-card-tile'),
       tableVisible: vis('an-table'),
       emptyVisible: vis('an-list-empty'),
     };
   });
   ok('the dashboard is listed with its sheet count', !!anRow?.found,
      anRow ? anRow.text : 'not found');
-  ok('a populated page shows the table and hides the empty state',
+  ok('a populated page shows the grid and hides the empty state',
      !!anRow && anRow.tableVisible && !anRow.emptyVisible, JSON.stringify({
        table: anRow?.tableVisible, empty: anRow?.emptyVisible }));
-  ok('the table declares its columns',
-     JSON.stringify(anRow?.headers) ===
-       JSON.stringify(['Name', 'Sheets', 'Last updated', 'Action']),
-     JSON.stringify(anRow?.headers));
-  ok('and every row cell lines up under its column label', !!anRow && anRow.aligned,
-     `cols=${JSON.stringify(anRow?.colLefts)} cells=${JSON.stringify(anRow?.cellLefts)}`);
+  ok('the card is laid out, not collapsed', !!anRow?.laidOut, anRow?.box);
+  ok('and it carries a preview of the sheet, not just text', !!anRow?.preview);
 
   // The ⋯ row menu. Rename and Delete used to be two bare glyphs in the row; now
   // they live behind this. A popup is appended to <body> and positioned with
@@ -2493,7 +2481,7 @@ async function main(): Promise<void> {
                 pr.bottom <= window.innerHeight && pr.right <= window.innerWidth,
       // Right-aligned to the trigger, directly under it.
       anchored: Math.abs(pr.right - br.right) <= 2 && pr.top >= br.bottom - 1,
-      inlineGlyphs: document.querySelectorAll('#an-list .dash-list-btn').length,
+      inlineGlyphs: document.querySelectorAll('#an-list button:not(.an-card-body)').length,
     };
   });
   ok('the ⋯ row menu opens', rowMenu.opened);
@@ -2529,9 +2517,9 @@ async function main(): Promise<void> {
   // open sheet to act on — and prove the second sheet and all three control
   // cards persisted through the edit and reload.
   ok('open the dashboard from the list', await win.evaluate(() => {
-    const row = [...document.querySelectorAll('#an-list .dash-list-item')]
+    const row = [...document.querySelectorAll('#an-list .an-card')]
       .find((r) => /Smoke analysis/.test(r.textContent || '')) as HTMLElement | undefined;
-    const openBtn = row?.querySelector('.dash-list-open') as HTMLElement | undefined;
+    const openBtn = row?.querySelector('.an-card-body') as HTMLElement | undefined;
     if (!openBtn) return false;
     openBtn.click();
     return true;

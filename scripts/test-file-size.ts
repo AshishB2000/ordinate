@@ -49,19 +49,6 @@ const CAP = 800;
  * number) is the point; adding one is the failure this file exists to prevent.
  */
 const ALLOWED: Record<string, number> = {
-  // Not splittable by moving lines: buildChart() is ONE 870-line function and
-  // every per-chart-family block reads its locals (palette, fmt, isRound,
-  // makeValueAxis, …). Breaking it up means inventing a parameter object, which
-  // is a design change with real behaviour risk, not a move. Own PR.
-  //
-  // 1097 -> 999, and that is the floor for moves. Everything around buildChart
-  // that could leave HAS left: chartTraits.ts (facts about chart ids),
-  // chartPalette.ts (CHART_PALETTE, getCSSVar, the hex/HSL derivation helpers)
-  // and chartTable.ts (buildDataTable renders a <table>, not a chart) — each
-  // under 100 lines. What remains is that one function plus the ~90 lines of
-  // shapes, WeakMaps and value-label helpers it reads, so the next reduction is
-  // the parameter-object redesign named above, not another extraction.
-  'renderer/hub/chartRender.ts': 999,
   'renderer/hub/mapRender.ts': 834,
   // Deliberately last: it is the only check that runs the real app, so breaking
   // it blinds every other split. Own PR, after these are merged and green.
@@ -81,7 +68,7 @@ const ALLOWED: Record<string, number> = {
   // side — editing an open analysis, where markDashDirty/anScheduleWrite DO
   // reach disk — and that side had no coverage at all. Added the analogous
   // mtime/bytes check there, same file, same reasoning as above.
-  'scripts/smoke-app.ts': 3737,
+  'scripts/smoke-app.ts': 3725,
   'scripts/test-connectorsHttp.ts': 881,
   'src/ai/analyze.ts': 955,
   'src/engine/anomaliesResident.ts': 870,

@@ -1,16 +1,20 @@
-// askCore — the shared AI transcript + streaming primitives, used by BOTH the
-// dock (dock.ts, #dk-messages) and any other AI mount. Classic global-scope
-// renderer <script> — NO import/export; keeps the historical `xp` prefix so
-// every existing caller (dock.ts, dockPropose.ts, askActivity.ts) resolves these
-// by name across the shared global scope, unchanged.
+// askCore — the shared AI transcript + streaming primitives, mounted at the
+// dock (dock.ts, #dk-messages). Classic global-scope renderer <script> — NO
+// import/export; keeps the historical `xp` prefix so every existing caller
+// (dock.ts, dockPropose.ts, dockEdit.ts, askActivity.ts) resolves these by name
+// across the shared global scope, unchanged.
 //
 // Extracted verbatim from the retired Assistant page (explore.ts) when the page
-// and the dock merged into one docked assistant: these functions were always
-// shared ("ONE engine, TWO mounts", keyed on containerId) — they just used to
-// live inside the page file. DOM only, textContent NEVER innerHTML: nothing the
-// model returns can inject markup.
+// and the dock merged into one docked assistant. That page was the second mount
+// ("ONE engine, TWO mounts", keyed on containerId); #117 retired it, so this is
+// one engine and ONE mount. `containerId` stays an explicit REQUIRED parameter
+// rather than a hardcoded id — one mount today is not a promise of one mount
+// forever — but it must never be defaulted again; see the note below.
+// DOM only, textContent NEVER innerHTML: nothing the model returns can inject
+// markup.
 //
-// Loads BEFORE dock.js / dockPropose.js / askActivity.js, which all call into it.
+// Loads BEFORE dock.js / dockPropose.js / dockEdit.js / askActivity.js, which
+// all call into it.
 
 function xpEl<T extends HTMLElement = HTMLElement>(id: string): T | null {
   return document.getElementById(id) as T | null;
@@ -18,18 +22,20 @@ function xpEl<T extends HTMLElement = HTMLElement>(id: string): T | null {
 
 // ── Message rendering ─────────────────────────────────────────────────────────
 //
-// Moved here verbatim from the retired copilot panel (renderer/hub/copilot.ts),
-// which Explore replaced. DOM only, textContent NEVER innerHTML — nothing the
+// Moved here verbatim from the retired copilot panel (renderer/hub/copilot.ts).
+// DOM only, textContent NEVER innerHTML — nothing the
 // model returns can inject markup. That rule is the reason these are copied
 // rather than rewritten.
 //
-// `containerId` defaults to Explore's own list, so every existing call site
-// above is unchanged — exactly the pattern the retired copilot.ts used
-// (`containerId = 'ai-messages'`) for the panel/Explore split. The dock
-// (dock.ts) is the second caller now, passing 'dk-messages'; there is still
-// only ONE rendering implementation.
+// `containerId` is REQUIRED — no default. It used to default to 'xp-messages',
+// the retired Assistant page's own list, an id that has not existed anywhere in
+// index.html since #117. Every function here opens `const list =
+// xpEl(containerId); if (!list) return;`, so an omitted argument was a silent
+// no-op: no bubble, no error, nothing in the console. The guard stays — it still
+// covers a panel that is not in the DOM yet — but the default that aimed it at
+// an element that cannot exist is gone, and tsc now names any caller that forgets.
 
-function xpAppendBubble(role: string, text: string, provenance?: any, containerId = 'xp-messages'): void {
+function xpAppendBubble(role: string, text: string, provenance: any, containerId: string): void {
   const list = xpEl(containerId);
   if (!list) return;
   const row = document.createElement('div');
@@ -62,7 +68,7 @@ function xpAppendBubble(role: string, text: string, provenance?: any, containerI
 }
 
 // Rebuild the whole transcript from an authoritative turns array (disk truth).
-function xpRenderTurns(turns: any[], containerId = 'xp-messages'): void {
+function xpRenderTurns(turns: any[], containerId: string): void {
   const list = xpEl(containerId);
   if (!list) return;
   list.querySelectorAll('.xp-msg').forEach((n) => n.remove());
@@ -72,7 +78,7 @@ function xpRenderTurns(turns: any[], containerId = 'xp-messages'): void {
   xpScrollToBottom(containerId);
 }
 
-function xpScrollToBottom(containerId = 'xp-messages'): void {
+function xpScrollToBottom(containerId: string): void {
   const list = xpEl(containerId);
   if (list) list.scrollTop = list.scrollHeight;
 }
@@ -87,9 +93,10 @@ function xpScrollToBottom(containerId = 'xp-messages'): void {
 // streamed token can carry markup, exactly the reason xpAppendBubble is
 // textContent-only (see its header).
 //
-// ONE registry serves both surfaces. A UUID askId means only the matching
-// in-flight ask paints, so a late chunk from a stale ask (the user asked again)
-// or the other surface's stream can never write into this bubble. The stream is
+// ONE registry, keyed by askId. A UUID askId means only the matching in-flight
+// ask paints, so a late chunk from a stale ask (the user asked again) can never
+// write into this bubble — which is what makes the registry, rather than a
+// single current-bubble variable, the right shape. The stream is
 // only ever a live PREVIEW: on the handle's resolution the caller reconciles by
 // rebuilding the transcript from disk truth (authoritative text + provenance
 // chips), which is why xpEndStream is called before that rebuild — a chunk that
@@ -99,7 +106,7 @@ const xpStreamTargets: Record<string, XpStreamTarget> = {};
 
 // Adopt the LAST assistant bubble in a container as askId's streaming target —
 // that is the optimistic "Thinking…" bubble the caller just appended.
-function xpBeginStream(askId: string, containerId = 'xp-messages'): void {
+function xpBeginStream(askId: string, containerId: string): void {
   if (!askId) return;
   const list = xpEl(containerId);
   if (!list) return;
@@ -132,9 +139,9 @@ function xpOnStreamChunk(askId: string, delta: string): void {
   xpScrollToBottom(t.container);
 }
 
-// The ONE streaming subscription for the whole hub. The registry it feeds
-// (xpStreamTargets) is shared, so every surface's asks stream through here — the
-// askId picks the right bubble regardless of which surface sent the question.
+// The ONE streaming subscription for the whole hub. Every ask streams through
+// here and the askId picks the right bubble, so this stays one subscription no
+// matter how many asks are in flight or where they were sent from.
 function initAskCore(): void {
   if (window.hub && typeof window.hub.onCopilotChunk === 'function') {
     window.hub.onCopilotChunk((d) => {
