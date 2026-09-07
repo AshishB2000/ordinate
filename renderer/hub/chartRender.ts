@@ -306,10 +306,20 @@ function buildChart(
               // cleaner than squares for a many-slice list.
               usePointStyle: isRound,
               pointStyle: 'circle',
-              // Line/area swatches default to a hollow box (transparent fill). Paint each
-              // with its line color so every legend entry reads as a solid colored box.
+              // Start from the generator THIS CHART TYPE would have used, then recolour.
+              // Chart.js puts a per-SLICE generator on Chart.overrides.doughnut (pie
+              // inherits it as a static), and only the dataset-based one on
+              // Chart.defaults — so reaching for the default collapsed a 3-category
+              // donut to a single entry whose text was the dataset's absent label. That
+              // matters beyond looks: chartValueLabels drops a slice's label when it
+              // cannot fit, on the promise the legend still names it.
+              // Recolour: line/area swatches default to a hollow box (transparent fill).
+              // Paint each with its line color so every entry reads as a solid box.
               generateLabels(chart: ChartJsCtx) {
-                const items = window.Chart.defaults.plugins.legend.labels.generateLabels(chart);
+                const gen = window.Chart.overrides?.[chart.config.type]?.plugins?.legend
+                  ?.labels?.generateLabels
+                  || window.Chart.defaults.plugins.legend.labels.generateLabels;
+                const items = gen(chart);
                 items.forEach((it: ChartJsCtx) => {
                   const ds = chart.data.datasets[it.datasetIndex];
                   if (chart.config.type === 'line' || (ds && ds.type === 'line')) {

@@ -1,0 +1,69 @@
+{
+  "report": [
+    {
+      "theme": "light",
+      "kind": "donut",
+      "legend": {
+        "type": "doughnut",
+        "display": true,
+        "dataLabels": [
+          "Office Supplies",
+          "Furniture",
+          "Technology"
+        ],
+        "texts": [
+          null
+        ]
+      }
+    },
+    {
+      "theme": "light",
+      "kind": "pie",
+      "legend": {
+        "type": "pie",
+        "display": true,
+        "dataLabels": [
+          "Office Supplies",
+          "Furniture",
+          "Technology"
+        ],
+        "texts": [
+          null
+        ]
+      }
+    },
+    {
+      "theme": "dark",
+      "kind": "donut",
+      "legend": {
+        "type": "doughnut",
+        "display": true,
+        "dataLabels": [
+          "Office Supplies",
+          "Furniture",
+          "Technology"
+        ],
+        "texts": [
+          null
+        ]
+      }
+    },
+    {
+      "theme": "dark",
+      "kind": "pie",
+      "legend": {
+        "type": "pie",
+        "display": true,
+        "dataLabels": [
+          "Office Supplies",
+          "Furniture",
+          "Technology"
+        ],
+        "texts": [
+          null
+        ]
+      }
+    }
+  ],
+  "errors": []
+}
