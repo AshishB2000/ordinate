@@ -287,7 +287,7 @@ function dkRenderContext(): void {
   chip.className = 'xp-prov-chip';
   chip.textContent = 'stats app-computed';
   el.appendChild(chip);
-  if (typeof dkPaintHero === 'function') dkPaintHero(ref.name); // the empty state greets the SAME context
+  if (typeof dkPaintHero === 'function') dkPaintHero(ref.name); // starter chips follow the SAME context
 }
 
 // ── Visibility + resize nudge ───────────────────────────────────────────────

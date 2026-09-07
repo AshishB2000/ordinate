@@ -10064,7 +10064,7 @@ body.cap-focus .cap-back {
 /* The retired Assistant page's own CSS (.xp-stage / .xp-mark / .xp-greet /
    .xp-sub / .xp-composer / .xp-picker / .xp-jump*, and the .xp-asked state
    machine) lived here. The page went in #117; its LOOK is now the dock's empty
-   state — see .dk-hero* and .dk-composer below. What is left of the `xp` prefix
+   state — see the .dk-messages stage and .dk-composer below. What is left of the `xp` prefix
    is only what askCore.ts still renders: .xp-msg / .xp-bubble / .xp-provenance /
    .xp-prov-chip / .xp-activity*. */
 
@@ -10270,9 +10270,12 @@ body.cap-focus .cap-back {
   font-weight: 500;
 }
 
+/* Inside the stage now, not above it — so the wash starts at the top of the body
+   and the notice reads as sitting ON it. Its old `margin: 10px 14px 0` was the
+   gutter of a sibling of .dk-messages; as a child it inherits the body's 14px
+   padding instead. */
 .dk-hint {
   flex: none;
-  margin: 10px 14px 0;
   padding: 8px 12px;
   border-radius: var(--r-md);
   background: var(--warn-soft);
@@ -10280,12 +10283,35 @@ body.cap-focus .cap-back {
   font-size: 12px;
 }
 
-/* A flex COLUMN, not a block. `.xp-msg-user { align-self: flex-end }` has been
-   in the stylesheet since the retired Copilot panel and did nothing here — a
-   block parent ignores align-self — so every turn sat left against the edge with
-   no gap. This is the rule that makes the user's bubble right-aligned and gives
-   the transcript its rhythm; `margin: auto 0` on .dk-hero below then centres the
-   empty state in the same box. */
+/* ── THE STAGE ─────────────────────────────────────────────────────────────
+   The dock's scrolling body IS the retired Assistant page's stage
+   (40bff73^'s .xp-stage), not a card sitting on one. Three accent washes over a
+   fine DOT LATTICE — a repeating radial-gradient, not an image, so there is
+   nothing for the CSP to police and the two theme variants are two colour stops
+   rather than two assets. The dot layer comes LAST in the list (background
+   layers paint first-on-top), i.e. UNDER the washes; its colour is restated in
+   the dark override below, which already restates the whole stack to swap the
+   base. Both accent tokens flip with [data-theme]. Gradients cost no network
+   request, so this stays inside `default-src 'none'`.
+
+   RETUNED FOR THE PANEL. The page's stage was wide and short and grounded
+   itself with a fourth wash rising off the BOTTOM edge (`at 50% 108%`). A dock
+   is ~340px wide and window-tall, so the same figures would smear one gradient
+   down the whole column and put colour behind the composer. All three sit at
+   the TOP instead — two soft blooms in the corners and the stronger
+   --accent-line centred just ABOVE the top edge, so only its faded tail shows —
+   and every one reaches alpha zero by ~a quarter of the way down, well clear of
+   the composer. Vertical radii are percentages of the body, so the proportions
+   hold whatever the window height.
+
+   The background does NOT scroll with the transcript. `background-attachment`
+   defaults to `scroll`, which on a scroll container means "fixed with regard to
+   the element, not its contents" — so the lattice stays put and the bubbles
+   travel over it, which is the whole effect. `local` would drag it along.
+
+   A flex COLUMN, not a block: `.xp-msg-user { align-self: flex-end }` has been
+   in the stylesheet since the retired Copilot panel and does nothing in a block
+   parent, so without this every turn sat left against the edge with no gap. */
 .dk-messages {
   flex: 1 1 auto;
   min-height: 0;
@@ -10294,73 +10320,58 @@ body.cap-focus .cap-back {
   gap: 14px;
   overflow-y: auto;
   padding: 14px;
-}
-
-/* ── The empty / new-conversation state (dockHero.ts) ──────────────────────
-   The retired Assistant page's hero, resized for a ~340px panel: the same
-   logo mark, greeting and sub line over the same accent wash (40bff73^'s
-   .xp-stage). The wash rides the HERO rather than the panel, so it needs no
-   state of its own — the hero is hidden the moment a turn exists and the
-   gradient goes with it. Gradients cost no network request, so this stays
-   inside `default-src 'none'`; --accent-soft/--accent-line both flip with
-   [data-theme], which is why there is no dark override for this block. */
-.dk-hero {
-  flex: none;
-  /* `auto` top and bottom centres it while the transcript is empty (the flex
-     column above); the negative sides cancel .dk-messages' 14px padding so the
-     wash runs edge to edge. FULL-BLEED is the point — a rounded box would be a
-     second card competing with the composer, and its corners cut the bottom
-     gradient off mid-fade instead of letting it dissolve into the panel. */
-  margin: auto -14px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 26px 18px 30px;
-  /* Every layer is centred and sized so its alpha reaches ZERO before the band's
-     top and bottom edges: the wash has to dissolve into the panel, and a stop
-     that is still coloured where the element ends draws a hard horizontal line
-     across the dock instead (which is exactly what the first pass did in dark).
-     Horizontally they may overrun — the panel border catches that side. */
   background:
-    radial-gradient(90% 38% at 28% 34%, var(--accent-soft), transparent 72%),
-    radial-gradient(80% 34% at 78% 44%, var(--accent-soft), transparent 74%),
-    radial-gradient(120% 34% at 50% 74%, var(--accent-line), transparent 70%);
+    radial-gradient(80% 22% at 14% 3%, var(--accent-soft), transparent 68%),
+    radial-gradient(66% 19% at 88% 10%, var(--accent-soft), transparent 72%),
+    radial-gradient(140% 30% at 50% -9%, var(--accent-line), transparent 76%),
+    radial-gradient(circle at 1px 1px, rgba(15, 23, 42, 0.05) 1px, transparent 1.5px),
+    var(--surface);
+  background-size: auto, auto, auto, 22px 22px;
+  background-repeat: no-repeat, no-repeat, no-repeat, repeat;
 }
-.dk-hero[hidden] { display: none; }
-.dk-hero[hidden] + .xp-msg { margin-top: auto; }
-.dk-hero-mark {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--r-md);
-  box-shadow: var(--shadow-md);
+/* --accent-soft/--accent-line are already lifted for dark. The BASE stays
+   --surface, where the page's rule used --bg: that rule was "do not glow
+   brighter than the app you sit in", and what this stage sits in is the PANEL,
+   which is --surface. --bg is DARKER than the dock's own chrome, so it drew the
+   body as a recessed rectangle between a lighter header and a lighter composer
+   strip — a seam light does not have. Same rule, applied to the right surface. */
+[data-theme="dark"] .dk-messages {
+  background:
+    radial-gradient(80% 22% at 14% 3%, var(--accent-soft), transparent 68%),
+    radial-gradient(66% 19% at 88% 10%, var(--accent-soft), transparent 72%),
+    radial-gradient(140% 30% at 50% -9%, var(--accent-line), transparent 76%),
+    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.05) 1px, transparent 1.5px),
+    var(--surface);
+  /* Restated, not inherited: the `background` shorthand above implicitly resets
+     size/repeat to initial, and this rule out-specifies the base one — without
+     these two lines the dark lattice silently becomes one element-sized
+     gradient (i.e. no dots at all). */
+  background-size: auto, auto, auto, 22px 22px;
+  background-repeat: no-repeat, no-repeat, no-repeat, repeat;
 }
-.dk-hero-greet {
-  margin: 0;
-  text-align: center;
-  font-size: 19px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.25;
-  color: var(--text-strong);
-  overflow-wrap: anywhere; /* a long dataset name must wrap, not widen the panel */
-}
-/* Tucked to the greeting so the pair reads as one block inside the 10px gap. */
-.dk-hero-sub {
-  margin: -4px 0 0;
-  text-align: center;
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: var(--muted);
-}
-/* Starter chips — quiet pills, one per row's worth of width, ellipsised rather
-   than wrapped so three prompts stay three predictable lines in a narrow panel
-   (the full text is on the button's title). */
+/* A transcript hangs from the composer, not from the header: the first turn takes
+   the slack, so a short conversation sits just above where you type and the
+   washed top of the stage stays open — which is what the retired page's
+   `.xp-asked .xp-messages > .xp-msg:first-child` did too.
+   Keyed off .dk-hint, NOT `:first-of-type`: the hint is the stage's first child
+   and it is also a <div>, so `.xp-msg:first-of-type` can never match — the first
+   div of that parent is always the hint. (It stays a sibling while `hidden`, so
+   this holds whether the notice is showing or not.) */
+.dk-hint + .xp-msg { margin-top: auto; }
+
+/* Starter chips — the only thing an empty conversation shows, pinned just above
+   the composer rather than floating mid-panel. Quiet pills, one per row and
+   ellipsised rather than wrapped, so three prompts stay three predictable lines
+   at 340px (the full text is on the button's title). Aligned to the composer's
+   own 12px gutters so the strip and the card share an edge. */
 .dk-suggests {
-  width: 100%;
-  margin-top: 4px;
+  flex: none;
+  margin: 0 12px 10px;
   display: flex;
   flex-direction: column;
+  /* CENTRE, not stretch. Stretched to the composer's width these read as three
+     more input boxes stacked above the real one — same width, same radius, same
+     border. Sized to their own text they are unmistakably chips. */
   align-items: center;
   gap: 6px;
 }
