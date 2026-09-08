@@ -295,6 +295,10 @@ const GOLDEN: Record<string, string> = {
   // chartValueLabels.ts, and dumping all 84 serialisations with and without them
   // (ORDINATE_CHARTSPEC_DUMP on both sides) gives 84 byte-identical files. So
   // nothing about what buildChart draws moved.
+  // fix/gauge-sort moved ONE case, gauge/custom: `canSort` stopped being true
+  // for a gauge (it is a doughnut, so `isRound` caught it). Only `custom` sets
+  // overrides.sort, so it is the only override set whose config the sort branch
+  // touched at all — 1 of 84 is the shape a change gated on one override has.
   "area/custom": '5d4962f12b137b08',
   "area/default": 'cf9dcab7bc21c881',
   "area/filtered": 'c4cfd9811df4b316',
@@ -328,7 +332,7 @@ const GOLDEN: Record<string, string> = {
   "funnel/custom": 'a834f41f67417e7c',
   "funnel/default": '8dc573bb4ec3135d',
   "funnel/filtered": 'a63e174df450904d',
-  "gauge/custom": '272874450fc4e820',
+  "gauge/custom": 'ea4848d7536ccf28',
   "gauge/default": '82a06baedf35fee0',
   "gauge/filtered": '5bb65e740b74bdf1',
   "heatmap/custom": 'cd3027bc7bd3e5e4',
