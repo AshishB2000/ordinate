@@ -192,7 +192,19 @@ function buildChart(
   // ── Sort by value (bar/column families + pie/donut) ───────────────────────
   // Reorders categories by their total across series; line/area/funnel/histogram
   // keep their natural order (sorting would scramble a time axis / fixed sequence).
-  const canSort = (chartType === 'bar' && !isFunnel && !isHistogram) || isRound;
+  //
+  // NOT A GAUGE, even though `isRound` is true for one — a gauge is drawn as a
+  // Chart.js doughnut, so it inherits every round-family branch unless a branch
+  // says otherwise (the same reason #145 had to exclude it from `roundLabels`).
+  //
+  // Sorting a gauge does not reorder anything the eye can see: chartDatasets
+  // builds its two slices itself from `series[0].values.find(isNumber)` — the
+  // FIRST numeric value — so reordering the categories underneath changes WHICH
+  // NUMBER THE GAUGE SHOWS. Measured on 3 categories of 120/340/80: unsorted 120,
+  // `asc` 80, `desc` 340, with the scale moving under it each time. A display
+  // control that silently swaps the figure is the one thing this app must never
+  // do, so a gauge keeps whichever value its encoding selected.
+  const canSort = (chartType === 'bar' && !isFunnel && !isHistogram) || (isRound && !isGauge);
   if (canSort && (overrides.sort === 'asc' || overrides.sort === 'desc')) {
     const totals = labels.map((_: any, i: number) =>
       series.reduce((sum: number, s: ChartSeriesShape) => sum + (typeof s.values[i] === 'number' ? s.values[i] : 0), 0));
