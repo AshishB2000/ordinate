@@ -1375,7 +1375,7 @@
 
         <!-- Toolbar: dashboard-wide filters + quick controls + present/export/share -->
         <div class="dash-toolbar" id="dash-toolbar">
-          <div class="dash-filter-bar">
+          <div class="dash-toolbar-filters">
             <span class="dash-toolbar-label">Filters</span>
             <div class="dash-filter-chips" id="dash-filter-chips"></div>
             <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-filter">+ Filter</button>
@@ -1405,6 +1405,18 @@
         <button class="dash-present-exit" type="button" id="dash-present-exit" hidden aria-label="Exit presentation (Esc)">✕ Exit</button>
 
         <div class="dash-pages" id="dash-pages"></div>
+
+        <!-- The FILTER BAR: every control card on the open page, as a chip.
+             Deliberately OUTSIDE .dash-toolbar, which .dash-presenting hides —
+             filtering is the point of presenting, so this strip survives it
+             (only the chips' ⋯ menus go, per hub.css). Controls used to be 3x1
+             grid tiles; the record still stores them as `type: 'control'`
+             cards, and only this renderer routes them here. -->
+        <div class="dash-filter-bar" id="dash-control-bar" hidden>
+          <div class="dash-fb-chips" id="dash-fb-chips"></div>
+          <span class="dash-fb-spacer"></span>
+          <button class="btn btn-sm dash-fb-clear" type="button" id="dash-fb-clear" hidden>Clear all</button>
+        </div>
 
         <div class="dash-grid" id="dash-grid"></div>
 
@@ -2437,6 +2449,7 @@
 <script src="dashAddControl.js"></script>
 <script src="dashFiltersUi.js"></script>
 <script src="dashControls.js"></script>
+<script src="dashControlBar.js"></script>
 <script src="dashAi.js"></script>
 <script src="dashShare.js"></script>
 <script src="authoring.js"></script>

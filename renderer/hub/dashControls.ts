@@ -1,23 +1,25 @@
-// The 'control' card type: a real, interactive filter widget on the dashboard
-// grid itself — a dropdown, a multi-select, or a date range — whose live
-// selection feeds `effectiveFilters()` (dashboards.ts) and therefore every
-// other card's compute. Split out of dashGrid.ts because a checkbox-list
-// popover is real UI code, not a one-branch dispatch.
+// THE THREE CONTROL WIDGETS — a native dropdown, a checkbox-list popover and a
+// date pair — plus the value helpers around them. A control's live selection
+// feeds `effectiveFilters()` (dashboards.ts) and therefore every other card's
+// compute. Split out of dashGrid.ts because a checkbox-list popover is real UI
+// code, not a one-branch dispatch.
+//
+// WHERE a widget sits is dashControlBar.ts's job, not this file's. Controls
+// used to be grid tiles and each widget rendered into a card body; they are
+// chips in the filter bar above the grid now, and `makeControlChip` there calls
+// the same three functions below with the same (card, wrap) contract. Nothing
+// here knows which it is.
 //
 // Classic global-scope renderer <script>: no import/export. Loads AFTER
 // dashFiltersUi.js (shares dashEl/dashShow/dashCardMissing/renderDashGrid/
 // controlState/dashCurrent, and the `.fd-*` checkbox-list classes this file's
-// multi popover reuses) and before dashAi.js.
+// multi popover reuses) and before dashControlBar.js.
 //
 // INTERACTION HERE IS NEVER GATED BY dashReadOnly. A published dashboard's
 // controls stay fully usable — filtering is a read, not a mutation of the
-// snapshot. Only card STRUCTURE (drag/resize/remove, in the shared
-// `.dash-card-ctrls` header cluster built by makeDashCardEl) is gated, and
-// that already happens for every card type via the `dash-editor--readonly
-// .dash-card-ctrls { display: none }` rule in hub.css — nothing new needed
-// here. For the same reason, a control's OWN "Clear" affordance lives in the
-// card BODY (which this file fully owns and which that CSS rule never
-// touches), never in `.dash-card-ctrls`.
+// snapshot. Only card STRUCTURE (Edit / Set as default / Remove, in the chip's
+// ⋯ menu) is gated, by the `.dash-editor--readonly .dash-fb-chip-menu` rule in
+// hub.css — the same rule `.dash-card-ctrls` already follows.
 //
 // Changing a control's value NEVER calls markDashDirty(): `controlState` is a
 // plain in-memory Map (dashboards.ts), reset every time a sheet opens or
@@ -45,21 +47,14 @@ function controlCurrentValue(card: any): any {
 }
 
 // Whether the card's live selection matches its published default (or the
-// kind's empty value, when it has none). Drives the per-card Clear affordance
-// and whether the header's Reset button shows at all. `controlState` never
+// kind's empty value, when it has none) — what "Reset controls" asks, as
+// against the filter bar's "is anything selected at all". `controlState` never
 // held anything but plain JSON-shaped objects (ControlValue), so a stringify
 // compare is enough — no deep-equal library earns its keep for three fields.
 function controlIsAtDefault(card: any): boolean {
   const cur = controlState.get(card.id);
   if (cur === undefined) return true;
   return JSON.stringify(cur) === JSON.stringify(controlDefaultValue(card.control));
-}
-
-function clearOneControl(card: any): void {
-  const def = card.control && card.control.default;
-  if (def) controlState.set(card.id, def);
-  else controlState.delete(card.id);
-  renderDashGrid();
 }
 
 // Every control card on the OPEN record, across all pages — a control is
@@ -94,42 +89,16 @@ function resetAllControls(): void {
 // Called at the end of every renderDashGrid() (dashGrid.ts): whether ANY
 // control differs from its default can change on any card's interaction, so
 // this stays a derived read rather than tracked state of its own.
+//
+// The `some(default)` half is not a subtlety — it is what stops two buttons
+// saying the same thing. The filter bar's "Clear all" clears every control to
+// All; this one returns them to what the AUTHOR published. When no control HAS
+// a published default the two are the same click, and showing both is clutter
+// that makes the reader guess which is which. So this appears only once a
+// default exists to go back to.
 function updateResetControlsBtn(): void {
-  dashShow('dash-reset-controls', anyControlNonDefault());
-}
-
-// ── Card body dispatch ───────────────────────────────────────────────────────
-function renderControlCard(card: any, body: HTMLElement): void {
-  const control = card.control;
-  if (!control || !control.datasetId || !control.column) {
-    dashCardMissing(body, 'This control has no source column.');
-    return;
-  }
-  const wrap = document.createElement('div');
-  wrap.className = 'dash-ctrl-widget';
-  // Authoring mode wires an arrow-key nudge/resize handler on the card
-  // element (authoringSelect.ts) that preventDefault()s unconditionally.
-  // Stop it here so arrow keys inside the select/date inputs move the
-  // cursor/value instead of the whole card.
-  wrap.addEventListener('keydown', (e) => e.stopPropagation());
-  body.appendChild(wrap);
-
-  if (control.kind === 'multi') renderMultiControl(card, wrap);
-  else if (control.kind === 'date_range') renderDateRangeControl(card, wrap);
-  else renderDropdownControl(card, wrap);
-
-  // A subtle per-card Clear affordance — only when there is something TO
-  // clear, and living in the body (never `.dash-card-ctrls`) so it survives
-  // read-only mode, per the file banner above.
-  if (!controlIsAtDefault(card)) {
-    const clr = document.createElement('button');
-    clr.type = 'button';
-    clr.className = 'dash-ctrl-clear';
-    clr.textContent = 'Clear';
-    clr.setAttribute('aria-label', 'Clear ' + (control.label || 'filter'));
-    clr.addEventListener('click', () => clearOneControl(card));
-    body.appendChild(clr);
-  }
+  const cards = allControlCards();
+  dashShow('dash-reset-controls', anyControlNonDefault() && cards.some((c) => c.control && c.control.default));
 }
 
 // ── Dropdown ─────────────────────────────────────────────────────────────────

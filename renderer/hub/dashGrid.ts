@@ -270,10 +270,16 @@ function renderDashGrid(): void {
   grid.innerHTML = '';
   const page = dashCurrentPage();
   const cards = (page && Array.isArray(page.cards)) ? page.cards : [];
-  dashShow('dash-starters', cards.length === 0);
+  // A control card draws no cell: it is a chip in the filter bar above the grid
+  // (dashControlBar.ts). It is still a card on the page, so the record, the
+  // export and effectiveFilters() are untouched — this is the one place that
+  // decides a control is not a tile.
+  const tiles = cards.filter((c: any) => !c || c.type !== 'control');
+  dashShow('dash-starters', tiles.length === 0);
+  renderDashControlBar();
   // Append every card element first (so each body has layout size), then kick
   // off the async body render into each — charts size to their grid cell.
-  cards.forEach((card: any) => {
+  tiles.forEach((card: any) => {
     const el = makeDashCardEl(card);
     grid.appendChild(el);
     const body = el.querySelector('.dash-card-body') as HTMLElement | null;
@@ -366,7 +372,11 @@ async function refreshDashFreshness(): Promise<void> {
     return;
   }
   label.hidden = false;
-  label.textContent = 'Data as of ' + formatSidebarTime(new Date(oldest).toISOString());
+  // "· filtered" whenever a control is narrowing the figures below. Without it
+  // the header states a data time over numbers that are a subset, with nothing
+  // on screen saying so once the chips scroll out of view.
+  label.textContent = 'Data as of ' + formatSidebarTime(new Date(oldest).toISOString())
+    + (anyControlActive() ? ' · filtered' : '');
   // Say WHY it is the oldest, so a header that disagrees with a single dataset's
   // own line is explicable rather than a bug report.
   label.title = ids.length > 1
@@ -439,6 +449,10 @@ function dashFindSlot(cards: any[], w: number, h: number): { x: number; y: numbe
   const width = clampInt(w, 1, DASH_GRID_COLS, 1);
   const height = Math.max(1, clampInt(h, 1, 100000, 1));
   const placed = (Array.isArray(cards) ? cards : [])
+    // A control card is a filter-bar chip, not a tile (dashControlBar.ts), and
+    // its zeroed layout would otherwise reserve the top-left cell against every
+    // card added after it.
+    .filter((c: any) => !c || c.type !== 'control')
     .map((c: any) => c && c.layout)
     .filter(Boolean)
     .map((l: any) => ({
@@ -628,10 +642,6 @@ function renderDashCardBody(card: any, body: HTMLElement): void {
   body.innerHTML = '';
   if (card.type === 'visual') { renderVisualCard(card, body); return; }
   if (card.type === 'metric') { renderMetricCard(card, body); return; }
-  // A control card renders as a real, interactive filter widget — NEVER gated
-  // by dashReadOnly (renderControlCard, dashControls.ts): filtering is a read,
-  // allowed on a published snapshot exactly as drilling already is.
-  if (card.type === 'control') { renderControlCard(card, body); return; }
   renderTextCard(card, body);
 }
 
