@@ -305,6 +305,13 @@ function initDashboards(): void {
   // dash-edit-only class and is never gated on dashReadOnly (dashControls.ts).
   const resetCtrls = dashEl('dash-reset-controls');
   if (resetCtrls) resetCtrls.addEventListener('click', () => resetAllControls());
+  // The filter bar's own Clear all: every control on the page back to "All".
+  // A DIFFERENT question from Reset controls above, which returns them to what
+  // the author published — see updateResetControlsBtn (dashControls.ts) for why
+  // only one of the two is ever on screen. Not gated on dashReadOnly either:
+  // clearing a filter is a read.
+  const clrCtrls = dashEl('dash-fb-clear');
+  if (clrCtrls) clrCtrls.addEventListener('click', () => clearAllControlsToAll());
   const catC = dashEl('dash-category-select');
   if (catC) catC.addEventListener('click', () => handleDashCategory());
   const perC = dashEl('dash-period-select');

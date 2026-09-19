@@ -334,7 +334,9 @@ async function dkApplyDelta(ops: any[]): Promise<DkDeltaSnapshot | null> {
       dkPushCardOn(op.pageIndex, {
         id: dashUuid(), type: 'control',
         control: { kind: op.kind, label: op.label, datasetId: op.datasetId, column: op.column },
-        layout: { x: 0, y: 0, w: 3, h: 1 },
+        // Zeroed and ignored on read: a control is a filter-bar chip, not a
+        // tile (dashControlBar.ts). Same layout the + Control button writes.
+        layout: { x: 0, y: 0, w: 0, h: 0 },
       });
     } else if (op.op === 'removeTile') {
       const c = dkFindCard(op.cardId);

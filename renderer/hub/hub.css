@@ -7119,6 +7119,7 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 .dash-editor--readonly .dash-page-ctrl,
 .dash-editor--readonly .dash-page-add,
 .dash-editor--readonly .dash-filter-chip-x,
+.dash-editor--readonly .dash-fb-chip-menu,
 .dash-editor--readonly .dash-starters { display: none; }
 .dash-editor--readonly .dash-card-head { cursor: default; }
 
@@ -7652,7 +7653,7 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   text-transform: uppercase;
   letter-spacing: .03em;
 }
-.dash-filter-bar {
+.dash-toolbar-filters {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -7692,6 +7693,84 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 }
 .dash-filter-chip-x:hover { color: var(--error); background: var(--bg); }
 .dash-filter-none { font-size: 12px; color: var(--muted); }
+
+/* ── THE FILTER BAR: control cards, as chips, between the tabs and the grid ──
+   A control used to be a 3x1 grid TILE placed by dashFindSlot, which put it
+   after the last card — under the notes at the bottom of the sheet — and its
+   <select> was clipped by the card body's own `overflow`. The record is
+   unchanged (`type: 'control'` cards, layout ignored); only the renderer
+   routes them here. */
+.dash-filter-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.dash-fb-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;   /* a second line rather than a horizontal scrollbar */
+  min-width: 0;
+}
+.dash-fb-spacer { flex: 1 1 auto; }
+.dash-fb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 6px 4px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+/* A chip with something selected reads as ON at a glance — the bar is the only
+   place that says a dashboard's figures are narrowed. */
+.dash-fb-chip--on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
+}
+.dash-fb-chip-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.dash-fb-chip--on .dash-fb-chip-label { color: var(--accent); }
+/* The widget is the one dashControls.ts already builds — `.dash-ctrl-widget`
+   is a block in a card body and an inline row here, nothing else changes. */
+.dash-fb-chip .dash-ctrl-widget {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.dash-fb-chip .dash-ctrl-select,
+.dash-fb-chip .dash-ctrl-chip { max-width: 220px; }
+/* The truncation hint ("Showing 500 of 2000") is real information, so it is
+   shrunk rather than hidden — and it is empty until a list is actually capped. */
+.dash-fb-chip .dash-ctrl-note { margin: 0; font-size: 11px; white-space: nowrap; }
+.dash-fb-chip .dash-ctrl-note:empty { display: none; }
+.dash-fb-chip-x,
+.dash-fb-chip-menu {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  line-height: 1;
+  font-size: 13px;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.dash-fb-chip-x:hover { color: var(--error); background: var(--bg); }
+.dash-fb-chip-menu:hover { color: var(--text-strong); background: var(--bg); }
+.dash-fb-clear { flex: 0 0 auto; }
 .dash-toolbar-quick { display: flex; align-items: center; gap: 6px; }
 .dash-toolbar-actions { display: flex; align-items: center; gap: 6px; }
 
@@ -7732,7 +7811,11 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 /* Presenting is for showing, not for fiddling. Whatever you want toggled, toggle
    it before you present. */
 .dash-presenting .cv-graph-controls,
-.dash-presenting .cv-controls-slot { display: none !important; }
+.dash-presenting .cv-controls-slot,
+/* The bar itself is NOT in this list: a reader presenting a dashboard must
+   still be able to filter it. Only the authoring affordances go. */
+.dash-presenting .dash-fb-chip-menu,
+.dash-presenting .dash-sample-delete { display: none !important; }
 .dash-presenting .dash-card-head { cursor: default; }
 .dash-presenting .dash-editor { padding: 24px 32px 32px; background: var(--bg); }
 .dash-presenting .dash-pages { border-bottom: none; }

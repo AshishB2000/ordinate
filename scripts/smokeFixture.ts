@@ -263,9 +263,10 @@ export async function seedProject(
 }
 
 export interface SeedCard {
-  type: 'visual' | 'control';
+  type: 'visual' | 'control' | 'metric';
   visualId?: string;
   control?: { kind: string; label: string; datasetId: string; column: string };
+  metric?: { datasetId: string; column: string; aggregation: string; label?: string };
   layout: { x: number; y: number; w: number; h: number };
 }
 

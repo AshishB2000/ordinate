@@ -1,5 +1,6 @@
-// The add-control flow: `+ Control`'s single dialog (kind tiles, dataset,
-// column, label, live preview-as-default) and the card it pushes.
+// The add-control flow: the single dialog (kind tiles, dataset, column, label,
+// live preview-as-default) behind both `+ Control` and a chip's Edit…, and the
+// card `+ Control` pushes.
 //
 // Split out of dashAdd.ts — see .claude/rules/file-size.md (dashAdd.ts hit the
 // 800-line cap). Classic global-scope renderer <script>: no import/export.
@@ -18,10 +19,14 @@ async function handleAddControl(): Promise<void> {
   if (!Array.isArray(datasets)) datasets = [];
   const control = await openControlDialog(datasets);
   if (!control) return;
-  // A filter widget is short and wide — proportionate to, but shorter than, a
-  // metric card's 3×2 (h:2 would waste half the card on empty space below a
-  // one-line dropdown/date-range control).
-  pushCard({ id: dashUuid(), type: 'control', control, layout: { ...dashFindSlot(dashCards(), 3, 1), w: 3, h: 1 } });
+  // ZEROED, and ignored on read. A control is a chip in the filter bar
+  // (dashControlBar.ts), not a tile, so there is no cell for it to occupy —
+  // and this used to be `dashFindSlot(dashCards(), 3, 1)`, which on a full
+  // sheet meant "the row below the last card", i.e. the filter appeared under
+  // the notes at the very bottom. The field stays on the record because every
+  // card carries one; `dashFindSlot` now skips control cards so a zeroed
+  // layout cannot block the top-left cell either.
+  pushCard({ id: dashUuid(), type: 'control', control, layout: { x: 0, y: 0, w: 0, h: 0 } });
 }
 
 // The three control kinds, named once — read here (dialog tiles) and from
@@ -47,19 +52,25 @@ const CONTROL_KIND_LABELS: Record<string, string> = Object.fromEntries(
  * filter, so nothing done here can leak into a live filter. Whatever is left
  * selected when "Add" is pressed becomes `default`; an untouched preview
  * means no default, same as today's unset control.
+ *
+ * `existing` turns it into the EDIT dialog behind a chip's ⋯ → Edit…: the same
+ * fields, prefilled, answering with the same shape. One dialog, so an edit can
+ * never offer a different vocabulary from an add.
  */
 function openControlDialog(
   datasets: any[],
+  existing?: any,
 ): Promise<{ kind: string; datasetId: string; column: string; label: string; default?: any } | null> {
   return new Promise((resolve) => {
     let done = false;
+    const editing = !!(existing && existing.kind);
     const overlay = document.createElement('div');
     overlay.className = 'ws-modal-overlay';
     const box = document.createElement('div');
     box.className = 'ws-modal dash-control-modal';
     const h = document.createElement('div');
     h.className = 'ws-modal-title';
-    h.textContent = 'Add a control';
+    h.textContent = editing ? 'Edit control' : 'Add a control';
 
     const field = (labelText: string, control: HTMLElement): HTMLElement => {
       const row = document.createElement('label');
@@ -75,7 +86,7 @@ function openControlDialog(
     // ── Kind: three tiles, same segmented-row shape as the metric dialog's
     // aggregation row (role=radiogroup, aria-checked, .is-on) — all three
     // visible at once rather than a select, per the brief.
-    let kind = 'dropdown';
+    let kind = editing && existing.kind ? String(existing.kind) : 'dropdown';
     const kindRow = document.createElement('div');
     kindRow.className = 'dc-kind';
     kindRow.setAttribute('role', 'radiogroup');
@@ -120,6 +131,7 @@ function openControlDialog(
       opt.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
       dsSel.appendChild(opt);
     });
+    if (editing && existing.datasetId) dsSel.value = String(existing.datasetId);
 
     const colSel = document.createElement('select');
     colSel.className = 'ws-modal-input';
@@ -129,6 +141,12 @@ function openControlDialog(
     labelInput.className = 'ws-modal-input';
     labelInput.placeholder = 'Label';
     let labelTouched = false;
+    if (editing && existing.label) {
+      labelInput.value = String(existing.label);
+      // An author's own wording is not "untouched" — re-picking a column here
+      // must not silently overwrite it with "Filter by <column>".
+      labelTouched = existing.label !== 'Filter by ' + (existing.column || '');
+    }
     labelInput.addEventListener('input', () => { labelTouched = true; });
     const autoLabel = (): string => 'Filter by ' + (colSel.value || '');
     const onChange = (): void => {
@@ -140,7 +158,43 @@ function openControlDialog(
     // since a dropdown/multi filter is as likely to want a text column as a
     // number one, so no ordering is more "right" than the source's own.
     let colsCache: any[] = [];
+    // App-computed per-column stats for the picked dataset, by column name —
+    // `distinct` is what picks the default column below. From dataset:stats,
+    // which answers straight off the stored .parquet (no rows hydrated).
+    let statsCache = new Map<string, any>();
+
+    /**
+     * The column the dialog opens on.
+     *
+     * A filter over 5,000 order ids is not a filter, and one over a column with
+     * a single value is not either — so a dropdown/multi opens on the TEXT
+     * column with the FEWEST distinct values in [2, 50], which is what a
+     * categorical column looks like. Ties go to the earlier column, so a
+     * dataset with several equally-small categories opens on the one its author
+     * put first. Date range opens on the first date column.
+     *
+     * Falls back to the first option when stats are unavailable (a non-resident
+     * dataset) or nothing qualifies — the old behaviour, never worse than it.
+     */
+    const bestColumn = (): string => {
+      const cols = colsCache.filter((c) => c && c.name);
+      if (kind === 'date_range') {
+        const d = cols.find((c) => c.type === 'date');
+        return String((d || cols[0] || {}).name || '');
+      }
+      let best: { name: string; distinct: number } | null = null;
+      cols.forEach((c) => {
+        if (c.type !== 'text') return;
+        const n = statsCache.get(String(c.name));
+        const distinct = n && typeof n.distinct === 'number' ? n.distinct : null;
+        if (distinct === null || distinct < 2 || distinct > 50) return;
+        if (!best || distinct < best.distinct) best = { name: String(c.name), distinct };
+      });
+      return best ? (best as { name: string }).name : String((cols[0] || {}).name || '');
+    };
+
     const renderColumns = (): void => {
+      const keep = colSel.value;
       colSel.innerHTML = '';
       const mapped = colsCache.map((c, i) => ({ c, i }));
       const ordered = kind === 'date_range'
@@ -152,17 +206,36 @@ function openControlDialog(
         opt.textContent = String(c.name) + (c.type ? ' (' + c.type + ')' : '');
         colSel.appendChild(opt);
       });
+      // Switching kind re-orders the list; a column already chosen survives it.
+      const want = keep || (editing && existing.column ? String(existing.column) : '') || bestColumn();
+      if ([...colSel.options].some((o) => o.value === want)) colSel.value = want;
       ok.disabled = colSel.options.length === 0;
     };
     const loadColumns = async (): Promise<void> => {
-      let meta: any = null;
-      try {
-        meta = currentProjectId ? await window.hub.getDatasetMeta(currentProjectId, dsSel.value) : null;
-      } catch (_) {
-        meta = null;
-      }
-      if (done) return;
+      const dsId = dsSel.value;
+      // In PARALLEL: the stats read is the one that decides the default column,
+      // and serialising it behind the metadata read would double the wait
+      // before the dialog is usable.
+      const [meta, stats] = await Promise.all([
+        (async () => {
+          try {
+            return currentProjectId ? await window.hub.getDatasetMeta(currentProjectId, dsId) : null;
+          } catch (_) { return null; }
+        })(),
+        (async () => {
+          try {
+            return currentProjectId ? await window.hub.datasetStats(currentProjectId, dsId) : null;
+          } catch (_) { return null; }
+        })(),
+      ]);
+      if (done || dsSel.value !== dsId) return; // a newer dataset pick won
       colsCache = meta && Array.isArray(meta.columns) ? meta.columns : [];
+      statsCache = new Map<string, any>(
+        stats && stats.ok && Array.isArray(stats.summaries)
+          ? stats.summaries.map((su: any) => [String(su.name), su])
+          : [],
+      );
+      colSel.value = ''; // renderColumns picks: the edited column, else bestColumn()
       renderColumns();
       onChange();
       buildPreview();
@@ -187,16 +260,30 @@ function openControlDialog(
       if (done || seq !== previewSeq) return;
       apply(res && Array.isArray(res.values) ? res.values : []);
     }
+    // The control's PUBLISHED default, when this dialog is editing one and the
+    // preview still points at the column it was set against. Re-pointing the
+    // control at a different column drops it rather than carrying a value that
+    // may not exist in the new column.
+    const seedDefault = (): any => (
+      editing && existing.default && kind === existing.kind
+        && dsSel.value === String(existing.datasetId) && colSel.value === String(existing.column)
+        ? existing.default : null
+    );
+
     function buildPreview(): void {
       previewWrap.innerHTML = '';
       previewValue = {};
       if (!dsSel.value || !colSel.value) return;
+      const seed = seedDefault();
+      if (seed) previewValue = seed;
       if (kind === 'multi') {
         const list = document.createElement('div');
         list.className = 'fd-list dc-preview-list';
         list.textContent = 'Loading…';
         previewWrap.appendChild(list);
-        const selected = new Set<string>();
+        const selected = new Set<string>(
+          seed && Array.isArray(seed.values) ? seed.values.map((v: any) => String(v)) : [],
+        );
         void loadPreviewOptions((values) => {
           list.innerHTML = '';
           if (!values.length) {
@@ -211,6 +298,7 @@ function openControlDialog(
             const cb = document.createElement('input');
             cb.type = 'checkbox';
             cb.value = v;
+            cb.checked = selected.has(v);
             cb.addEventListener('change', () => {
               if (cb.checked) selected.add(v); else selected.delete(v);
               previewValue = { values: [...selected] };
@@ -235,6 +323,7 @@ function openControlDialog(
         const to = document.createElement('input');
         to.type = 'date';
         to.className = 'dash-ctrl-date';
+        if (seed) { from.value = seed.from || ''; to.value = seed.to || ''; }
         const commit = (): void => {
           const next: any = {};
           if (from.value) next.from = from.value;
@@ -254,15 +343,25 @@ function openControlDialog(
         all.value = '';
         all.textContent = 'All';
         sel.appendChild(all);
+        if (seed && seed.value) {
+          const o0 = document.createElement('option');
+          o0.value = String(seed.value);
+          o0.textContent = String(seed.value);
+          sel.appendChild(o0);
+          sel.value = String(seed.value);
+        }
         sel.addEventListener('change', () => { previewValue = sel.value ? { value: sel.value } : {}; });
         previewWrap.appendChild(sel);
         void loadPreviewOptions((values) => {
+          const keep = sel.value;
           values.forEach((v) => {
+            if (v === keep) return; // already there as the placeholder
             const o = document.createElement('option');
             o.value = v;
             o.textContent = v;
             sel.appendChild(o);
           });
+          sel.value = keep;
         });
       }
     }
@@ -280,7 +379,7 @@ function openControlDialog(
     const ok = document.createElement('button');
     ok.type = 'button';
     ok.className = 'btn btn-primary';
-    ok.textContent = 'Add';
+    ok.textContent = editing ? 'Save' : 'Add';
     ok.disabled = datasets.length === 0;
 
     let a11y: { onTabKey: (e: KeyboardEvent) => void; release: () => void } | null = null;
@@ -334,7 +433,7 @@ function openControlDialog(
     box.appendChild(actions);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
-    a11y = makeModalAccessible(box, 'Add a control', datasets.length ? dsSel : cancel);
+    a11y = makeModalAccessible(box, editing ? 'Edit control' : 'Add a control', datasets.length ? dsSel : cancel);
     paintKind();
     if (datasets.length) void loadColumns();
   });
