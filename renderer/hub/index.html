@@ -1415,6 +1415,23 @@
                  action, not two. Shown by CSS in focus mode only. -->
             <button class="btn btn-sm an-more-btn" type="button" id="an-more-btn"
               aria-haspopup="true" aria-label="More actions" title="More actions">⋯</button>
+            <!-- ↶ / ↷ as CHARACTERS were a pair of hairline hooks at 14px — present
+                 in the DOM, unreadable on screen. Stroke SVG, same build as the
+                 Rescan icon, so they carry at button size and in both themes. -->
+            <button class="btn btn-sm dash-edit-only dash-hist-btn" type="button" id="dash-undo-btn"
+              aria-label="Undo" title="Nothing to undo" disabled>
+              <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>
+              </svg>
+            </button>
+            <button class="btn btn-sm dash-edit-only dash-hist-btn" type="button" id="dash-redo-btn"
+              aria-label="Redo" title="Nothing to redo" disabled>
+              <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>
+              </svg>
+            </button>
             <button class="btn btn-primary btn-sm dash-edit-only" type="button" id="dash-save-btn">Save</button>
           </div>
         </div>
@@ -2487,6 +2504,9 @@
 <script src="vizNew.js"></script>
 <script src="vizBuilder.js"></script>
 <script src="dashboards.js"></script>
+<!-- Undo/redo for the editor. After dashboards.js (whose state it snapshots),
+     before dashGrid.js (whose markDashDirty files every commit). -->
+<script src="dashHistory.js"></script>
 <script src="dashStyle.js"></script>
 <!-- dashboards.ts was 2340 lines; these six are it, split by job. dashboards.js
      stays FIRST of the group — it keeps the module-local state the rest read —

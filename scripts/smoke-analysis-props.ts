@@ -481,19 +481,34 @@ async function main(): Promise<void> {
   ok('…and Properties binds to the card', bound.propsRows >= 2 && !!bound.title,
      `${bound.propsRows} rows, title="${bound.title}"`);
 
-  // Layout is DIRECT MANIPULATION: the nine-button cluster is off the card
-  // header and was NOT replaced by steppers in Properties. Aiming at a target
-  // four clicks away is arithmetic, not editing.
-  const ctrls = await win.evaluate(() => ({
-    onCards: [...document.querySelectorAll('#dash-grid .dash-card-ctrls')]
-      .filter((c) => (c as HTMLElement).offsetParent !== null).length,
-    steppers: document.querySelectorAll('#an-props .an-prop-btn').length,
-    handles: [...document.querySelectorAll('#dash-grid .dash-card.is-selected .an-resize')]
-      .map((h) => [...h.classList].find((c) => c.startsWith('an-resize--'))),
-    remove: !!document.querySelector('#an-props .an-prop-del'),
-  }));
-  ok('…the per-card button cluster is gone, and no steppers replaced it',
-     ctrls.onCards === 0 && ctrls.steppers === 0 && ctrls.remove, JSON.stringify(ctrls));
+  // Layout is DIRECT MANIPULATION. The nine-button stepper cluster
+  // (◀▶▲▼ W−W+H−H+ 🗑) is gone from the card header and was NOT replaced by
+  // steppers in Properties either — aiming at a target four clicks away is
+  // arithmetic, not editing.
+  //
+  // What the header carries now is ONE ⋯ menu. That is the assertion, not
+  // "nothing": a discoverable, keyboard-reachable route to the same functions
+  // is the point, and it is one target rather than nine. So the cluster is
+  // counted by its CONTENTS — exactly one button, and it is the menu.
+  const ctrls = await win.evaluate(() => {
+    const visible = [...document.querySelectorAll('#dash-grid .dash-card-ctrls')]
+      .filter((c) => (c as HTMLElement).offsetParent !== null);
+    return {
+      clusters: visible.length,
+      buttonsPerCluster: visible.map((c) => c.querySelectorAll('button').length),
+      menusPerCluster: visible.map((c) => c.querySelectorAll('.dash-card-menu-btn').length),
+      steppers: document.querySelectorAll('#an-props .an-prop-btn').length,
+      handles: [...document.querySelectorAll('#dash-grid .dash-card.is-selected .an-resize')]
+        .map((h) => [...h.classList].find((c) => c.startsWith('an-resize--'))),
+      remove: !!document.querySelector('#an-props .an-prop-del'),
+    };
+  });
+  ok('…the card header carries ONE ⋯, not a stepper cluster',
+     ctrls.clusters > 0 && ctrls.buttonsPerCluster.every((n) => n === 1)
+       && ctrls.menusPerCluster.every((n) => n === 1),
+     JSON.stringify(ctrls));
+  ok('…and nothing put steppers in Properties instead, where Remove still lives',
+     ctrls.steppers === 0 && ctrls.remove, JSON.stringify(ctrls));
   ok('…the card carries right, bottom and corner resize handles instead',
      JSON.stringify(ctrls.handles) ===
        JSON.stringify(['an-resize--e', 'an-resize--s', 'an-resize--se']),

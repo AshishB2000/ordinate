@@ -47,7 +47,7 @@ function wireCrossFilter(area: HTMLElement, visual: any): boolean {
 function applyCrossFilter(column: string, value: unknown): void {
   if (!dashCurrent || dashReadOnly) return; // a published snapshot is not editable
   dashCurrent.filters = toggleCrossFilterSteps(dashCurrent.filters, column, value);
-  markDashDirty();
+  markDashDirty('Cross-filter');
   renderDashFilterBar();
   renderDashGrid();
 }
@@ -336,7 +336,7 @@ function renderDashFilterBar(): void {
 
 // Any filter change re-renders every card with the merged filters, then debounce-saves.
 function afterDashFilterChange(): void {
-  markDashDirty();
+  markDashDirty('Change filters');
   renderDashFilterBar();
   renderDashGrid();
 }

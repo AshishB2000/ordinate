@@ -277,6 +277,15 @@ function initDashboards(): void {
   const save = dashEl('dash-save-btn');
   if (save) save.addEventListener('click', () => handleSaveDashboard());
 
+  // Undo / redo (dashHistory.ts). The keydown is on the document rather than
+  // the editor, because focus is usually on a card, the page strip or nothing
+  // at all — dashHistKeydown does the "is the editor even open" check itself.
+  const undoB = dashEl('dash-undo-btn');
+  if (undoB) undoB.addEventListener('click', () => dashUndo());
+  const redoB = dashEl('dash-redo-btn');
+  if (redoB) redoB.addEventListener('click', () => dashRedo());
+  document.addEventListener('keydown', dashHistKeydown);
+
   // The empty-sheet block's three add buttons delegate to the head strip's, so
   // each action keeps exactly one handler.
   ([

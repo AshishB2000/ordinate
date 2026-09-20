@@ -221,7 +221,9 @@ function anEndGesture(): void {
   if (!changed) return;
   l.x = g.next.x; l.y = g.next.y; l.w = g.next.w; l.h = g.next.h;
   reapplyCardStyle(g.card);
-  markDashDirty();
+  // ONE commit for the whole gesture: anMoveGesture only moves a ghost, so the
+  // record is not touched until the pointer comes up, right here.
+  markDashDirty(g.mode === 'move' ? 'Move card' : 'Resize card');
 }
 
 /**

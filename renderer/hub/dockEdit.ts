@@ -348,7 +348,7 @@ async function dkApplyDelta(ops: any[]): Promise<DkDeltaSnapshot | null> {
     }
   }
 
-  markDashDirty();
+  markDashDirty('Assistant change');
   renderDashPages();
   renderDashGrid();
   return snap;
@@ -449,7 +449,7 @@ async function dkUndoDelta(snap: DkDeltaSnapshot): Promise<void> {
   // persistAnalysis does after main sanitizes.
   if (dashPageIdx >= dashCurrent.pages.length) dashPageIdx = snap.pageIdx < dashCurrent.pages.length ? snap.pageIdx : 0;
 
-  markDashDirty();
+  markDashDirty('Undo Assistant change');
   renderDashPages();
   renderDashGrid();
 }

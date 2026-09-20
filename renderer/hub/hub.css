@@ -6508,7 +6508,16 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .dash-head-spacer { flex: 1 1 0; }
 body.an-focus .dash-head-zone { display: contents; }
 body.an-focus .dash-head-zone--add { background: none; padding: 0; }
-body.an-focus .dash-head-spacer--2 { display: none; }
+body.an-focus /* Undo / redo sit with Save because they are the same kind of control: what
+   happens to the edit. Icon-only and square, narrower than a labelled button —
+   the words are in the tooltip, which has to name the actual change anyway. */
+.dash-hist-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  padding: 0;
+}
+.dash-head-spacer--2 { display: none; }
 
 /* ── Analyses page: hero, table, empty state ────────────────────────────────
    Everything here is scoped under #ws-analyses on purpose. `.dash-list-item`,
@@ -7598,10 +7607,16 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   cursor: pointer;
 }
 .dash-card-btn:hover { border-color: var(--accent); color: var(--accent); }
+/* The one ⋯ that replaced the nine-glyph cluster. Square, and a size up: it is
+   now the only thing in the strip, so it stops being a row of tiny targets and
+   becomes one ordinary one. */
+.dash-card-menu-btn { min-width: 24px; height: 24px; font-size: 14px; }
 /* var(--error), not #dc2626: the literal is theme-blind, so on .dash-theme--dark
    it paints a light-theme red on a dark card. Same class of bug as a var() that
    resolves to nothing — invisible in review, obvious on screen. */
 .dash-card-rm:hover { border-color: var(--error); color: var(--error); }
+/* Remove is the destructive row of the card menu, and reads as one. */
+.chart-menu-item.dash-card-menu-rm { color: var(--error); }
 .dash-card-body {
   flex: 1;
   min-width: 0;
@@ -9517,9 +9532,13 @@ body.an-grabbing { user-select: none; cursor: grabbing; }
   clip-path: inset(50%);
 }
 
-/* The per-card control cluster is not needed in the workbench: the card is
-   dragged and resized directly, and Remove lives in Properties. */
-.an-workbench.is-active .dash-card-ctrls { display: none; }
+/* The per-card cluster used to be hidden outright in the workbench — nine
+   permanently-present glyph buttons over a card that is dragged and resized
+   directly, with Remove already in Properties, read as a control panel.
+   It is ONE ⋯ now, which is the same argument answered: quiet at rest (the
+   opacity rule above), one ordinary target on hover, and the only place the
+   move/resize/remove functions are still reachable by pointer without
+   selecting the card first. So it stays. */
 
 /* Search fields — the reference puts one above the field list, and a wide
    dataset is unusable without it. */
