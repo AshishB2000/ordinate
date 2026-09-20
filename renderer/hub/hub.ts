@@ -75,8 +75,8 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
 // ── Workspace shell boot ─────────────────────────────────────────────────────
 // Wire the project gallery (HOME) + workspace section router, and land on HOME
 // first (gallery before any workspace). Defined in projects.ts / workspace.ts,
-// which load before hub.js. The existing capture→result surface is the Sources
-// section and is otherwise untouched.
+// which load before hub.js. Captures are project records: their list is a tab
+// on the Data page and their page is a section, both wired here like any other.
 (function initWorkspaceShell() {
   initWorkspaceRouter(); // workspace.ts — wires the persistent sidebar nav
   initAskCore();          // askCore.ts — the ONE streaming subscription, shared by every AI mount
@@ -87,6 +87,7 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
   selectSection('home'); // workspace.ts — Home is the default section (paints via refreshHome)
   initHome();            // projects.ts
   initDatasets();        // datasets.ts
+  initCaptureList();     // captureList.ts — the Captures tab beside Datasets
   initComposer();        // composer.ts — the full-page create surface
   initPrepare();         // prepare.ts
   initConnections();     // connections.ts

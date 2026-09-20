@@ -245,13 +245,12 @@ function runSourceAction(kind: string): void {
     if (typeof openImportDialog === 'function') openImportDialog('paste');
     return;
   }
-  // "Screenshot" is a destination, not an action: openWorkspace() has already
-  // landed on Sources (the capture surface), and this turns that surface into a
-  // full-screen workspace — no nav, captures column kept. Entering focus mode is
-  // the ONLY thing this branch does; the capture pipeline is untouched, and the
-  // global ⌘⌥S hotkey is registered in main and unaffected.
+  // "Screenshot" is an ACTION, like the other four: it takes a screenshot. It
+  // used to be a destination — it opened a capture shell and waited — which is
+  // why it was the one source in this list that produced nothing when clicked.
+  // Same call the ⌘⌥S hotkey makes; main gates on readiness either way.
   if (kind === 'capture') {
-    if (typeof setCaptureFocus === 'function') setCaptureFocus(true); // workspace.ts
+    if (typeof doCapture === 'function') doCapture(); // hubCapture.ts
     return;
   }
 

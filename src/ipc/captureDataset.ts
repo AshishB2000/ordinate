@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import * as datasets from '../data/datasets';
 import * as captureDataset from '../data/captureDataset';
+import * as history from '../app/history';
 import type { ParsedColumn } from '../data/parse';
 
 // Capture → dataset IPC — turns a capture's `extractedTable` into a saved,
@@ -127,6 +128,14 @@ export function register(deps: CaptureDeps = {}) {
         capture,
       });
       if (!saved) return { ok: false, error: 'Invalid project, or the project no longer exists' };
+      // Link the capture back to the dataset it produced, so the Captures grid
+      // can badge it "Dataset" and the capture page can enable "New visual".
+      // Best-effort: the dataset is already on disk, and a missing badge must
+      // never fail a save that worked.
+      if (capture.entryId) {
+        await history.setDatasetId(capture.entryId, saved.id)
+          .catch((e: any) => console.error('[history] setDatasetId failed:', e.message));
+      }
       return { ok: true, dataset: saved, warnings };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to save the capture as a dataset' };

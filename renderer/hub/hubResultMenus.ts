@@ -2,12 +2,15 @@
 
 // The two popover menus that open ON a capture result: the per-chart ⋯ menu
 // (chart type, colour, number format) and the image action menu (copy / save),
-// which the thumbnail and the lightbox both raise on right-click.
+// which the capture page's image frame and the lightbox both raise on
+// right-click.
 //
 // Split verbatim out of hub.ts — see .claude/rules/file-size.md. Classic
 // global-scope <script>: no import/export. Loads after hubCapture.js — the
-// wiring below reads cvThumbWrap, imgLightbox, lightboxImg and lightboxClose at
-// load time, and those are declared there.
+// wiring below reads imgLightbox, lightboxImg, lightboxClose and closeLightbox
+// at load time, and those are declared there. The capture page's own frame is
+// looked up here rather than shared, so the page owns its clicks and this file
+// owns its right-click.
 
 // ── Chart context menu (⋯ button) ────────────────────────────────────────
 // Single shared popover, repositioned on each open.
@@ -232,9 +235,16 @@ function closeImgActionMenu() {
   }
 }
 
+// The capture page's image frame and the image inside it. Looked up here rather
+// than borrowed from hubCapture.ts: this file owns the RIGHT-CLICK menu over a
+// screenshot, hubCapture.ts owns the page, and one shared mutable reference
+// between them is how the two fall out of step.
+const capPageFrame = document.getElementById('cap-frame');
+const capPageImg = document.getElementById('cap-view-img') as HTMLImageElement | null;
+
 function getImgSrc() {
   if (lightboxImg && imgLightbox && !imgLightbox.hidden && lightboxImg.src) return lightboxImg.src;
-  return capViewImg ? capViewImg.src : '';
+  return capPageImg ? capPageImg.src : '';
 }
 
 if (imgActCopy) {
@@ -257,13 +267,10 @@ if (imgActDownload) {
   });
 }
 
-if (cvThumbWrap) {
-  // Left-click → full view; right-click → options menu
-  cvThumbWrap.addEventListener('click', openLightbox);
-  cvThumbWrap.addEventListener('contextmenu', e => { e.preventDefault(); openImgActionMenu(cvThumbWrap); });
-  cvThumbWrap.addEventListener('keydown', e => {
-    if (e.key === 'Enter' || e.key === ' ') openLightbox();
-  });
+if (capPageFrame) {
+  // Right-click → options menu. Left-click and Enter/Space open the lightbox and
+  // are wired by the page itself (hubCapture.ts), which owns that frame.
+  capPageFrame.addEventListener('contextmenu', e => { e.preventDefault(); openImgActionMenu(capPageFrame); });
 }
 if (lightboxImg) {
   // Right-click on expanded image → options menu

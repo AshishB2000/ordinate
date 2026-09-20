@@ -67,9 +67,18 @@ export async function saveThread(thread: any): Promise<void> {
   await fs.promises.rename(tmp, file);
 }
 
-// Return all thread summaries for the sidebar, newest-first.
-// Skips corrupt/missing files gracefully.
-export async function loadAllSummaries(): Promise<Array<{ id: string; title: string; updatedAt: string; cropPath: string | null }>> {
+export interface ThreadSummary {
+  id: string;
+  projectId: string | null;
+  title: string;
+  updatedAt: string;
+  cropPath: string | null;
+  datasetId: string | null;
+  copilotThreadId: string | null;
+}
+
+// Read every thread.json, skipping corrupt/missing files gracefully.
+async function readAllThreads(): Promise<any[]> {
   const dir = getHistoryDir();
   let dirents;
   try {
@@ -78,7 +87,7 @@ export async function loadAllSummaries(): Promise<Array<{ id: string; title: str
     return [];
   }
 
-  const summaries = [];
+  const threads: any[] = [];
   for (const dirent of dirents) {
     if (!dirent.isDirectory()) continue;
     const id = dirent.name;
@@ -86,12 +95,7 @@ export async function loadAllSummaries(): Promise<Array<{ id: string; title: str
       const raw = await fs.promises.readFile(threadFilePath(id), 'utf8');
       const data = JSON.parse(raw);
       if (!data.id) continue;
-      summaries.push({
-        id: data.id,
-        title: data.title || 'Analysis',
-        updatedAt: data.updatedAt || data.createdAt,
-        cropPath: data.cropPath || null,
-      });
+      threads.push(data);
     } catch (err: any) { // ponytail: fs errors carry .code, JSON errors don't
       // ENOENT = orphaned capture (crop.png saved, thread.json never written, e.g.
       // analysis didn't finish). Not corruption — skip quietly. Only log real damage.
@@ -100,9 +104,69 @@ export async function loadAllSummaries(): Promise<Array<{ id: string; title: str
       }
     }
   }
+  return threads;
+}
 
+/**
+ * Adopt every pre-project capture into `projectId`.
+ *
+ * A capture is a project record now, but every entry written before this change
+ * has no `projectId` and would be invisible under any project. One pass at
+ * startup gives them the newest project (the one the user is most likely still
+ * working in) and rewrites them through the same atomic saveThread.
+ *
+ * IDEMPOTENT: an entry that already carries a projectId is left alone, so the
+ * second run finds nothing and writes nothing. Returns how many were adopted so
+ * the caller can log a real number rather than "ran migration".
+ */
+export async function migrateProjectIds(projectId: string): Promise<number> {
+  if (!projectId) return 0;
+  let adopted = 0;
+  for (const thread of await readAllThreads()) {
+    if (thread.projectId) continue;
+    thread.projectId = projectId;
+    try {
+      await saveThread(thread);
+      adopted += 1;
+    } catch (err: any) {
+      console.error('[history] Could not adopt thread', thread.id, err.message);
+    }
+  }
+  if (adopted > 0) console.log('[history] Adopted', adopted, 'pre-project capture(s) into project', projectId);
+  return adopted;
+}
+
+// Return thread summaries newest-first. With a `projectId`, only that project's
+// captures — a capture belongs to one project, so an unscoped list would put
+// another project's screenshots in this one's Captures tab. Omit it (main's own
+// crop-path cache) for every entry on disk.
+export async function loadAllSummaries(projectId?: string): Promise<ThreadSummary[]> {
+  const summaries: ThreadSummary[] = [];
+  for (const data of await readAllThreads()) {
+    if (projectId && data.projectId !== projectId) continue;
+    summaries.push({
+      id: data.id,
+      projectId: data.projectId || null,
+      title: data.title || 'Analysis',
+      updatedAt: data.updatedAt || data.createdAt,
+      cropPath: data.cropPath || null,
+      datasetId: data.datasetId || null,
+      copilotThreadId: data.copilotThreadId || null,
+    });
+  }
   summaries.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   return summaries;
+}
+
+// Record which dataset a capture was saved into, so the Captures grid can badge
+// it and the capture page can enable "New visual". A merge onto whatever is on
+// disk — the thread may have been written by a different code path since.
+export async function setDatasetId(id: string | number, datasetId: string): Promise<boolean> {
+  const thread = await loadThread(id);
+  if (!thread) return false;
+  thread.datasetId = datasetId;
+  await saveThread(thread);
+  return true;
 }
 
 // Load a single thread's full data. Returns null if missing or corrupt.

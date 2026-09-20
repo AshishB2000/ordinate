@@ -58,15 +58,16 @@ const SHARE_LINKS = {
   whatsapp: `https://wa.me/?text=${_enc(SHARE_TEXT + ' ' + SHARE_URL)}`,
 };
 
-// TWO settings buttons, never two ids. #settings-gear lives in the app sidebar;
-// #settings-gear-cap lives in the capture surface's own footer, which is the
-// only place visible when body.cap-focus hides that sidebar. Everything below
-// anchors, focuses and dismisses off whichever is CURRENTLY visible — anchoring
-// off a hidden element yields a zeroed rect and drops the menu at 0,0.
-const settingsGear    = document.getElementById('settings-gear');
-const settingsGearCap = document.getElementById('settings-gear-cap');
+// ONE settings button, in the app sidebar. There were two: the capture surface
+// hid that sidebar and carried a #settings-gear-cap of its own, so everything
+// below anchors, focuses and dismisses off whichever is CURRENTLY visible —
+// anchoring off a hidden element yields a zeroed rect and drops the menu at
+// 0,0. The capture surface is a page in the workspace now and the sidebar
+// never hides, so the second gear went with it. The list SHAPE stays: it is
+// what makes adding a second opener a one-line change rather than a rewrite.
+const settingsGear = document.getElementById('settings-gear');
 function settingsGears(): HTMLElement[] {
-  return [settingsGear, settingsGearCap].filter(Boolean) as HTMLElement[];
+  return [settingsGear].filter(Boolean) as HTMLElement[];
 }
 function settingsGearVisible(): HTMLElement | null {
   const all = settingsGears();

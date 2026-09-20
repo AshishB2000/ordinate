@@ -6,8 +6,9 @@
 // ONE attribute: hub.css shows exactly one section body per
 // .hub-body[data-section]. There is no home/workspace view toggle any more —
 // opening an item sets the active project implicitly; the user never has to
-// pick a project to reach their work. The capture→result surface (the Sources
-// section) is unchanged.
+// pick a project to reach their work. A capture is a section like any other
+// ('capture'), with the same nav and top bar around it — the old 'sources'
+// section WAS the capture shell and went with it.
 
 // ── Session state (renderer-only; launch always starts on HOME) ──────────────
 let currentProjectId: string | null = null;
@@ -34,7 +35,8 @@ function showHome(): void {
 
 // Enter a project's workspace context. Validates via main first; if the project
 // is gone (deleted/corrupt), fall back to HOME rather than a dangling context.
-// Lands on Sources (the capture surface); callers that open a specific item
+// Lands on Data — the project's data is what a workspace opens onto, and it is
+// where both datasets and captures live; callers that open a specific item
 // select their own section afterwards.
 async function openWorkspace(id: string): Promise<void> {
   if (!(await adoptProject(id))) {
@@ -42,7 +44,7 @@ async function openWorkspace(id: string): Promise<void> {
     showHome();
     return;
   }
-  selectSection('sources');
+  selectSection('datasets');
 }
 
 /**
@@ -82,11 +84,6 @@ async function adoptProject(id: string): Promise<boolean> {
 // attribute (CSS shows exactly one body) and toggles nav + placeholder state.
 function selectSection(section: string): void {
   if (section !== currentSection) previousSection = currentSection;
-  // Leaving the Capture workspace by ANY route drops focus mode — the nav has to
-  // come back even when the user left via a global search hit or a capture
-  // landing rather than the Back button. Tying it to the section change instead
-  // of to the Back handler is what makes that hold for routes added later.
-  if (section !== 'sources') setCaptureFocus(false);
   currentSection = section;
   const body = wsBodyEl();
   if (body) body.dataset.section = section;
@@ -113,10 +110,14 @@ function selectSection(section: string): void {
     if (typeof renderRecent === 'function') renderRecent();
     if (typeof refreshHome === 'function') void refreshHome();
   }
-  // Refresh the datasets list when its section becomes active (datasets.ts).
-  if (section === 'datasets' && typeof refreshDatasetList === 'function') refreshDatasetList();
-  // Refresh the saved-connections list when Sources becomes active (connections.ts).
-  if (section === 'sources' && typeof refreshConnectionList === 'function') refreshConnectionList();
+  // Refresh the datasets list when its section becomes active (datasets.ts),
+  // and the Captures grid with it — they are two tabs of one page, and a
+  // project switch with the Captures tab showing would otherwise leave the
+  // previous project's screenshots on screen (captureList.ts).
+  if (section === 'datasets') {
+    if (typeof refreshDatasetList === 'function') refreshDatasetList();
+    if (typeof refreshCaptureList === 'function') void refreshCaptureList();
+  }
   // Refresh the saved-visuals list when the Visuals section becomes active (visuals.ts).
   if (section === 'visuals' && typeof refreshVisualList === 'function') refreshVisualList();
   // Refresh the dashboards list when the Dashboards section becomes active
@@ -170,41 +171,14 @@ function initWorkspaceRouter(): void {
   // wherever the dock is suppressed — the predicate is NOT duplicated here.
   const ai = document.getElementById('side-ai-btn');
   if (ai && typeof dkToggle === 'function') ai.addEventListener('click', () => dkToggle());
-  // The only way out of the Capture workspace while the nav is hidden. Reuses
-  // leaveSection() — the same helper Connect's Close uses — rather than adding a
-  // second notion of "where was I".
-  const capBack = document.getElementById('cap-back');
-  if (capBack) capBack.addEventListener('click', () => leaveSection('sources'));
-}
-
-/**
- * Enter/leave the full-screen Capture workspace.
- *
- * Same mechanism the analysis authoring surface already uses (`body.an-focus`,
- * authoring.ts) rather than a second one: a body class, everything else in
- * hub.css. The capture surface itself is untouched — this only decides which
- * chrome renders around it.
- *
- * The default strapline is REPLACED, not hidden, because hub.ts writes real
- * status into the same element ("Analyzing…", "Ready") as a capture progresses.
- * Blanking it lets `:empty` collapse the line now and lets that status appear
- * normally later; a `display:none` rule would have silently eaten it.
- */
-function setCaptureFocus(on: boolean): void {
-  document.body.classList.toggle('cap-focus', on);
-  if (typeof dkSync === 'function') dkSync(); // dock.ts — cap-focus suppresses the dock
-  if (!on) return;
-  const h = document.getElementById('main-title-h');
-  const sub = document.getElementById('main-title-sub');
-  if (h) h.textContent = 'Capture';
-  if (sub) sub.textContent = '';
 }
 
 // Quick-capture guarantee: a capture fired from HOME (or before any project
-// exists) transparently lands the user in a workspace with the Sources surface
-// showing the fresh analysis. Uses only list/create/open — no new IPC, and the
-// main capture pipeline is untouched. A default project is auto-created once
-// then reused (most-recent first), never spammed.
+// exists) transparently lands the user in a workspace. Uses only list/create/
+// open — no new IPC, and the main capture pipeline is untouched. A default
+// project is auto-created once then reused (most-recent first), never spammed.
+// The SECTION is chosen by the caller (hubCapture.ts opens the capture page);
+// this only guarantees there is a project to open it in.
 async function ensureWorkspaceForCapture(): Promise<void> {
   // Project setup is best-effort and must NEVER throw or drop to HOME: a
   // failure in the project layer must not suppress the captured result. So we
@@ -228,9 +202,6 @@ async function ensureWorkspaceForCapture(): Promise<void> {
       }
     }
   } catch (_) { /* never let project setup abort the capture render */ }
-  // Do NOT call openWorkspace()/showHome() here — openWorkspace falls back to
-  // HOME on failure, which hides the result surface. Force Sources visible.
-  selectSection('sources');
 }
 
 /**

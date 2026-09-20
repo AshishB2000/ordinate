@@ -99,11 +99,6 @@ html[data-os="win"] .hub-topbar-right { min-width: 134px; }
   flex-direction: column;
   justify-content: center;
 }
-/* The capture surface is deliberately bare: it hides the sidebar too (below),
-   and dkAllowed() returns false there, so the Agent toggle would be a disabled
-   control marooned in an otherwise empty bar. */
-body.cap-focus .hub-topbar { display: none; }
-
 /* the thin divider before the Agent toggle */
 .hub-topbar-div { width: 0; height: 20px; border-left: 1px solid var(--border); flex: 0 0 auto; margin-right: var(--sp-8); }
 
@@ -794,147 +789,12 @@ textarea:focus-visible {
 }
 
 /* inline kbd inside step text */
-.step-t kbd {
-  font-family: var(--font-mono);
-  font-size: var(--t-11);
-  padding: 1px var(--sp-4);
-  border-radius: 4px;
-  background: var(--surface-3);
-  border: 1px solid var(--border-2);
-  border-bottom-width: 2px;
-  color: var(--muted);
-}
 
 /* ── hub body ─────────────────────────────────────────────────────── */
 .hub-body {
   flex: 1;
   display: flex;
   min-height: 0;
-}
-
-/* ── sidebar ──────────────────────────────────────────────────────── */
-.sidebar {
-  width: 220px;
-  flex: 0 0 220px;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  padding: var(--sp-12);
-  gap: 0;
-}
-
-.side-top {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-8);
-  margin-bottom: var(--sp-8);
-}
-
-/* search row */
-.side-search {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-8);
-  height: 32px;
-  padding: 0 var(--sp-8);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  font-size: var(--t-13);
-  color: var(--text-faint);
-  user-select: none;
-}
-
-.side-search .ic { flex: 0 0 auto; color: var(--text-faint); }
-
-.side-search-input {
-  flex: 1 1 auto;
-  min-width: 0;
-  border: none;
-  background: none;
-  outline: none;
-  font-family: var(--font-ui);
-  font-size: var(--t-13);
-  color: var(--text);
-}
-.side-search-input::placeholder { color: var(--text-faint); }
-.side-search:focus-within { border-color: var(--accent); }
-
-/* empty history */
-.side-empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  gap: var(--sp-4);
-  padding: var(--sp-16) var(--sp-12);
-  color: var(--muted);
-}
-
-.side-empty-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--r-md);
-  background: var(--surface-2);
-  display: grid;
-  place-items: center;
-  color: var(--text-faint);
-  margin-bottom: var(--sp-4);
-}
-
-.side-empty-title {
-  font-size: var(--t-13);
-  font-weight: 600;
-  color: var(--muted);
-}
-
-.side-empty-sub {
-  font-size: var(--t-12);
-  color: var(--text-faint);
-  line-height: 1.5;
-}
-
-/* sidebar footer */
-.side-bottom {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--sp-8) 2px 2px;
-  border-top: 1px solid var(--border);
-  margin-top: auto;
-}
-
-.side-gear {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-4);
-  height: 30px;
-  padding: 0 var(--sp-8);
-  background: none;
-  border: none;
-  font-family: var(--font-ui);
-  font-size: var(--t-13);
-  font-weight: 500;
-  color: var(--muted);
-  cursor: pointer;
-  border-radius: var(--r-sm);
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
-}
-
-.side-gear .ic { display: block; }
-
-.side-gear:hover {
-  background: var(--surface-2);
-  color: var(--text);
-}
-
-.side-gear:focus-visible {
-  outline: var(--focus-ring-w) solid var(--focus-ring);
-  outline-offset: 1px;
 }
 
 /* key status chip */
@@ -976,244 +836,9 @@ textarea:focus-visible {
   background: var(--warn);
 }
 
-/* ── main column ──────────────────────────────────────────────────── */
-.main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--bg);
-}
-
-/* main header. Wraps: the title flex-grows to fill the space beside the
-   actions, and the header wraps to a second row when it is too narrow to seat
-   both — so the actions drop below the title instead of clipping past the
-   panel edge (which they did when the AI dock squeezed this column). */
-.main-top {
-  flex: 0 0 auto;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-8) var(--sp-8);
-  padding: var(--sp-12) var(--sp-24);
-  border-bottom: 1px solid var(--border);
-  background: var(--titlebar);
-}
-
-/* Claims the space between "‹ Back" and the actions, but holds a 160px floor so
-   a tight header wraps the actions below rather than crushing the title to one
-   word per line. The floor + the ellipsis on each line is what truncates the
-   text instead of collapsing it. */
-.main-title {
-  flex: 1 1 160px;
-  min-width: 160px;
-}
-
-.main-title h2 {
-  font-size: var(--t-15);
-  letter-spacing: var(--tr-tight);
-  font-weight: 700;
-  color: var(--text-strong);
-  margin: 0;
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.main-title p {
-  font-size: var(--t-12);
-  color: var(--muted);
-  margin: 2px 0 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* The action cluster travels as one unit: natural width on the right, and when
-   the header can't seat it beside the title it wraps as a whole to row two (and
-   its own buttons wrap within it before any of them clips). */
-.main-top-actions {
-  flex: 0 0 auto;
-  /* Capped at the row width so that on a very narrow column the cluster wraps
-     its own buttons instead of sizing to their max-content and spilling past
-     the panel edge — without the cap a flex item takes its content width and
-     `.main` (overflow:hidden) would clip the last button. */
-  max-width: 100%;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--sp-8) var(--sp-8);
-}
-
-.hotkey-hint { display: flex; align-items: center; gap: 3px; }
-
-/* ── main body: wraps empty state + capture view overlay ────────────── */
-.main-body {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
-/* ── empty state / conv area ──────────────────────────────────────── */
-.conv {
-  height: 100%;
-  overflow-y: auto;
-  padding: 0;
-}
-
-.state-pad {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--sp-24) var(--sp-24);
-}
-
-/* The onboarding is framed as a card now, the same surface/border/radius
-   generation Home and Dashboards use — it reads as one panel that fits any
-   width rather than free copy that grew a scrollbar when the column narrowed.
-   Fixed max-width caps the line length independent of the column, so its
-   height is stable whether the AI dock is open or closed. */
-.state-narrow {
-  width: 100%;
-  max-width: 440px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: var(--sp-32) var(--sp-32) var(--sp-24);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-sm);
-}
-
-/* camera icon */
-.empty-mark {
-  width: 56px;
-  height: 56px;
-  border-radius: var(--r-xl);
-  background: var(--accent-soft);
-  color: var(--accent);
-  display: grid;
-  place-items: center;
-  margin-bottom: var(--sp-16);
-}
-
-.empty-h {
-  font-size: var(--t-20);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--text-strong);
-  margin: 0 0 var(--sp-8);
-  line-height: 1.25;
-}
-
-.empty-sub {
-  font-size: var(--t-13);
-  color: var(--muted);
-  line-height: 1.55;
-  margin: 0 0 var(--sp-16);
-}
-
-/* numbered steps */
-.steps {
-  width: 100%;
-  text-align: left;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-8);
-  margin-bottom: var(--sp-16);
-}
-
-.step {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--sp-12);
-}
-
-/* Numbered chips share the accent tint the camera mark uses, so the step list
-   reads as part of the same family rather than three grey bullets. */
-.step-n {
-  flex: 0 0 22px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--accent-soft);
-  border: 1px solid transparent;
-  display: grid;
-  place-items: center;
-  font-size: var(--t-11);
-  font-weight: 700;
-  color: var(--accent);
-  margin-top: 1px;
-  font-family: var(--font-mono);
-}
-
-.step-t {
-  font-size: var(--t-15);
-  letter-spacing: var(--tr-tight);
-  color: var(--text);
-  line-height: 1.5;
-  padding-top: 2px;
-}
-
-.step-t strong {
-  font-weight: 700;
-  color: var(--text-strong);
-}
-
-.step-t .mut { color: var(--muted); }
-
-/* ── api key banner ───────────────────────────────────────────────── */
-/* visibility controlled by hub.js via style.display — not the hidden attr */
-.api-banner {
-  width: 100%;
-  align-items: center;
-  gap: var(--sp-8);
-  padding: var(--sp-12) var(--sp-12);
-  margin-top: var(--sp-16);
-  border-radius: var(--r-md);
-  background: var(--warn-soft);
-  border: 1px solid color-mix(in srgb, var(--warn) 22%, transparent);
-  font-size: var(--t-13);
-  color: var(--warn);
-}
-
-.api-banner .ic { display: block; flex: 0 0 auto; }
-
-.api-banner-text {
-  flex: 1;
-  font-weight: 500;
-  color: var(--text);
-}
-
-.api-banner-link {
-  flex: 0 0 auto;
-  background: none;
-  border: none;
-  padding: 0;
-  font-family: var(--font-ui);
-  font-size: var(--t-13);
-  font-weight: 600;
-  color: var(--accent);
-  cursor: pointer;
-}
-
-.api-banner-link:hover { text-decoration: underline; }
-
-.api-banner-link:focus-visible {
-  outline: var(--focus-ring-w) solid var(--focus-ring);
-  outline-offset: 2px;
-  border-radius: 3px;
-}
-
 /* ── hotkey registration failure banner ───────────────────────────────── */
-/* Sits between .main-top and .conv; visibility controlled by hub.js */
+/* Sits directly under the top bar, above every section; visibility is
+   controlled by hubHotkey.ts via the `is-hidden` class. */
 .hotkey-fail-banner {
   flex: 0 0 auto;
   display: flex;
@@ -2237,8 +1862,145 @@ textarea:focus-visible {
   max-width: 340px;
 }
 
+/* ── The capture page ────────────────────────────────────────────────────
+   A `.ws-panel` laid out like the dataset page: the same `.ds-explorer-head`
+   above, then two columns — the screenshot left, what the app read and
+   computed right. The image FRAME is the only capture-specific piece of design
+   in the app; everything else on this page is `.ds-*`, `.viz-*`, `.ws-*` and
+   `.btn`, so a restyle of those restyles this too. */
+.cap-cols {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  /* The screenshot is reference material; the figures are the work. A fixed-
+     fraction split would starve a wide table on a narrow window, so the image
+     column takes what it needs up to 420px and the right column takes the
+     rest. */
+  grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  padding: 16px 0 0;
+}
+
+/* Below the two-column threshold the image goes above the figures rather than
+   next to them — a 200px-wide screenshot is not reference material. */
+@media (max-width: 1000px) {
+  .cap-cols { grid-template-columns: minmax(0, 1fr); }
+}
+
+.cap-frame {
+  display: block;
+  /* `fit-content` up to the column: a wide screenshot fills the column, and a
+     narrow crop gets a frame its own size rather than a 420px box with a
+     postage stamp floating in it. */
+  width: fit-content;
+  max-width: 100%;
+  padding: 8px;
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  cursor: zoom-in;
+  transition: border-color 140ms var(--ease);
+}
+.cap-frame:hover { border-color: var(--border-2); }
+.cap-frame:focus-visible {
+  outline: 2.5px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.cap-img {
+  display: block;
+  /* `max-width`, not `width` — a narrow crop (a KPI tile, a single column) is
+     upscaled into a blurry poster by `width: 100%`, and a screenshot blown up
+     past its own pixels is harder to check a figure against, not easier. */
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  border-radius: var(--r-md);
+}
+
+/* A section heading inside the right column, matching the weight of the
+   dataset page's own section labels. */
+.cap-sec-h {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.cap-sec-p {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.cap-extracted .ds-table-scroll { max-height: 340px; }
+
+.cap-side {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* The "Set up the Assistant" line (execMenu.ts fills it through the same
+   AI_DOOR_HINTS registry every other Assistant door uses). */
+.cap-hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.cap-error { text-align: left; }
+
+/* ── The Captures tab (captureList.ts) ───────────────────────────────────
+   `.viz-card` with a screenshot in the tile instead of a chart glyph. */
+.cap-card-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* `cover` crops; a screenshot cropped is a screenshot lying about its
+     contents, so it is letterboxed into the 16:10 tile instead. */
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.cap-card-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  pointer-events: none;
+}
+
+/* Hover-revealed, like `.viz-card-star`/`.viz-card-menu`, and forced back for
+   keyboard users — otherwise Tab moves focus onto something invisible. */
+.cap-card-acts {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 140ms var(--ease);
+}
+.cap-card:hover .cap-card-acts,
+.cap-card:focus-within .cap-card-acts { opacity: 1; }
+
+/* The empty-state art slot is a row of bars for the chart surfaces; here it
+   holds one icon, so it centres rather than bottom-aligning a single child. */
+.cap-empty-art {
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-line);
+}
+
+/* The camera mark a capture-sourced dataset row carries in the Source column. */
+.ds-cam-glyph {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+}
+
 /* ── hub capture view (shown when a hub-triggered capture lands) ─────── */
-.cap-view-hidden { display: none !important; }
 
 /* Initial-paint hiding for elements JS later toggles via element.style.display.
    MUST be a class, not style="display:none" in the HTML: the hub CSP is
@@ -2248,51 +2010,7 @@ textarea:focus-visible {
    value set that way still wins over this class, so showing works unchanged.) */
 .is-hidden { display: none; }
 
-.cap-view {
-  position: absolute;
-  inset: 0;
-  background: var(--bg);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  z-index: 1;
-}
-
 /* ── Screenshot thumbnail ────────────────────────────────────────────── */
-.cv-thumb-section {
-  margin-bottom: var(--sp-16);
-}
-
-.cv-section-label {
-  font-size: var(--t-11);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  margin-bottom: var(--sp-8);
-}
-
-.cv-thumb-wrap {
-  display: inline-block;
-  border-radius: var(--r-md);
-  overflow: hidden;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  max-width: 220px;
-}
-
-.cv-img {
-  display: block;
-  max-width: 220px;
-  max-height: 140px;
-  object-fit: contain;
-}
-
-.cv-thumb-meta {
-  margin-top: var(--sp-4);
-  font-size: var(--t-11);
-  color: var(--text-faint);
-}
 
 .cv-data-pre {
   font-size: var(--t-11);
@@ -2311,57 +2029,6 @@ textarea:focus-visible {
   padding: var(--sp-16) var(--sp-16) var(--sp-16);
   display: flex;
   flex-direction: column;
-}
-
-/* State-based visibility — no inline styles needed in HTML */
-#capture-view[data-cv-state="loading"] .cv-result-panel,
-#capture-view[data-cv-state="loading"] .cv-error-panel { display: none; }
-#capture-view[data-cv-state="result"]  .cv-loading-panel,
-#capture-view[data-cv-state="result"]  .cv-error-panel  { display: none; }
-#capture-view[data-cv-state="error"]   .cv-loading-panel,
-#capture-view[data-cv-state="error"]   .cv-result-panel { display: none; }
-
-/* Loading panel */
-.cv-loading-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-12);
-}
-
-.cv-loading-head {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-8);
-}
-
-.cv-spin-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: var(--accent-soft);
-  display: grid;
-  place-items: center;
-  flex: 0 0 34px;
-}
-
-/* `.cv-spinner` and its `cv-spin` keyframes are GONE — the loading panel now
-   puts a static mark in this circle and lets the step list below it narrate
-   progress, which it was already doing. See "LOADING SKELETONS" at the end of
-   this file for the one remaining spinner in the app. */
-
-
-.cv-loading-title {
-  font-size: var(--t-13);
-  font-weight: 600;
-  color: var(--text-strong);
-  line-height: 1.3;
-}
-
-.cv-loading-sub {
-  font-size: var(--t-12);
-  color: var(--muted);
-  margin-top: 2px;
-  line-height: 1.4;
 }
 
 /* Step list */
@@ -2408,12 +2075,6 @@ textarea:focus-visible {
 .cv-step[data-status="pending"] .cv-step-label { color: var(--text-faint); }
 
 /* Result panel */
-.cv-result-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-8);
-  flex: 1;
-}
 
 .cv-analysis-text {
   font-size: var(--t-13);
@@ -2583,189 +2244,12 @@ textarea:focus-visible {
 /* Verify note */
 
 /* ── Follow-up input ─────────────────────────────────────────────────── */
-.cv-followup {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0;
-  padding: var(--sp-12) var(--sp-16) var(--sp-12);
-  border-top: 1px solid var(--border);
-  background: var(--bg);
-}
-
-.cv-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-4);
-  margin-bottom: var(--sp-8);
-}
-
-.cv-chips:empty { margin-bottom: 0; }
-
-.cv-chip {
-  display: inline-flex;
-  align-items: center;
-  height: 24px;
-  padding: 0 var(--sp-8);
-  font-size: var(--t-12);
-  font-weight: 600;
-  font-family: var(--font-ui);
-  color: var(--muted);
-  background: var(--surface-2);
-  border: 1px solid var(--border-2);
-  border-radius: 100px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.cv-chip:hover { background: var(--surface-3); color: var(--text); }
-
-.cv-input-row {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-8);
-  height: 40px;
-  padding: 0 var(--sp-8) 0 var(--sp-12);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  box-shadow: 0 1px 2px rgba(0,0,0,.04);
-}
-
-.cv-input-row:focus-within { border-color: var(--accent); }
-
-.cv-input-icon {
-  flex: 0 0 auto;
-  color: var(--text-faint);
-}
-
-.cv-followup-inp {
-  flex: 1;
-  height: 100%;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--text);
-  font-size: var(--t-13);
-  font-family: var(--font-ui);
-  outline: none;
-}
-
-.cv-followup-inp::placeholder { color: var(--text-faint); }
-.cv-followup-inp:disabled { cursor: default; }
-
-.cv-followup-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  border: none;
-  background: var(--accent);
-  color: var(--accent-ink);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  flex: 0 0 auto;
-}
-
-.cv-followup-btn { transition: background var(--dur-fast) var(--ease-out); }
-.cv-followup-btn:hover:not(:disabled) { background: var(--accent-2); }
-.cv-followup-btn:disabled { opacity: 0.45; cursor: default; }
 
 /* ── Footer ──────────────────────────────────────────────────────────── */
-.cv-foot {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  padding: var(--sp-8) var(--sp-16);
-  border-top: 1px solid var(--border);
-}
 
 /* ── Sidebar capture history ─────────────────────────────────────────── */
-.cap-history {
-  flex: 1 1 0;
-  overflow-y: auto;
-  min-height: 0;
-  padding: var(--sp-4) 0;
-  display: none;
-  flex-direction: column;
-  gap: 1px;
-}
 
-.cap-hist-item {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--sp-8);
-  padding: var(--sp-8) var(--sp-4);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-out);
-}
-
-.cap-hist-item:hover { background: var(--surface-2); }
-.cap-hist-item-active { background: var(--surface-2); }
-
-.cap-hist-del {
-  display: none;
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  margin-top: 1px;
-  border: none;
-  background: transparent;
-  border-radius: 4px;
-  cursor: pointer;
-  color: var(--muted);
-  align-items: center;
-  justify-content: center;
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
-}
-
-.cap-hist-del:hover {
-  background: var(--error-bg, rgba(239,68,68,0.1));
-  color: var(--error, #ef4444);
-}
-
-.cap-hist-item:hover .cap-hist-del,
-.cap-hist-item-active .cap-hist-del {
-  display: flex;
-}
-
-.cap-hist-thumb {
-  width: 40px;
-  height: 30px;
-  border-radius: 3px;
-  object-fit: cover;
-  flex-shrink: 0;
-  background: var(--surface-3);
-  border: 1px solid var(--border);
-}
-
-.cap-hist-info { flex: 1; min-width: 0; }
-
-.cap-hist-summary {
-  font-size: var(--t-12);
-  font-weight: 500;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.3;
-}
-
-.cap-hist-time {
-  font-size: var(--t-11);
-  color: var(--text-faint);
-  margin-top: 2px;
-}
-
-/* ── Thumbnail click cursor ──────────────────────────────────────────── */
-.cv-thumb-wrap { cursor: pointer; } /* left-click = options, right-click = full view */
-/* It is a click target, so it has to answer the pointer. The border already
-   frames it, so brightening the border is the whole change — a lift or a
-   filter on an image the user is reading would fight the image. */
-.cv-thumb-wrap { transition: border-color var(--dur-fast) var(--ease-out); }
-.cv-thumb-wrap:hover { border-color: var(--border-3); }
+/* ── Thumbnail click cursor ──────────────────────────────────────────── */ /* left-click = options, right-click = full view */
 
 /* ── Image action menu ───────────────────────────────────────────────── */
 .img-action-menu {
@@ -2778,7 +2262,6 @@ textarea:focus-visible {
   min-width: 180px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.1);
 }
-
 
 .img-act-btn {
   display: flex;
@@ -2817,7 +2300,6 @@ textarea:focus-visible {
   align-items: center;
   justify-content: center;
 }
-
 
 .lightbox-backdrop {
   position: absolute;
@@ -2908,13 +2390,6 @@ textarea:focus-visible {
 
 /* ── Thread ───────────────────────────────────────────────────────────── */
 
-.cv-thread {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-16);
-  padding: var(--sp-4) 0 var(--sp-8);
-}
-
 .cv-turn {
   display: flex;
   flex-direction: column;
@@ -2966,38 +2441,6 @@ textarea:focus-visible {
 .cv-details-summary:hover { color: var(--text); }
 .cv-details[open] .cv-details-summary { margin-bottom: 2px; }
 .cv-details .cv-metrics { margin-top: var(--sp-4); }
-
-.cv-turn-question {
-  font-size: var(--t-13);
-  font-weight: 600;
-  color: var(--text-strong);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md, 6px);
-  padding: var(--sp-4) var(--sp-8);
-  align-self: flex-start;
-  max-width: 90%;
-}
-
-.cv-turn-loading {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-8);
-  font-size: var(--t-13);
-  color: var(--muted);
-  padding: 2px 0;
-}
-
-/* `.cv-turn-spinner` is GONE: a follow-up answer is TEXT arriving, so the wait
-   is a shimmering line of it (.sk-line) beside the word — a skeleton of the
-   shape of the answer, not a ring. `@keyframes spin` moved to the end of this
-   file, where the one spinner that survives lives. */
-
-.cv-turn-error {
-  font-size: var(--t-13);
-  color: var(--error, #ef4444);
-  padding: 2px 0;
-}
 
 /* ── Visualization switcher ───────────────────────────────────────────── */
 
@@ -3682,7 +3125,6 @@ textarea:focus-visible {
   padding: var(--sp-4) 0;
 }
 
-
 /* Action items */
 .chart-menu-section { padding: 2px 0; }
 
@@ -3741,7 +3183,6 @@ textarea:focus-visible {
   padding: var(--sp-4) var(--sp-12) var(--sp-8);
   border-top: 1px solid var(--border);
 }
-
 
 .cm-field { margin-bottom: var(--sp-8); }
 
@@ -5230,9 +4671,6 @@ button.as-ai-status:hover { background: var(--surface-2); color: var(--text); }
   letter-spacing: 0.03em;
 }
 
-/* ── section toggle: Sources = existing sidebar+main; others = placeholders ── */
-.hub-body:not([data-section="sources"]) .sidebar,
-.hub-body:not([data-section="sources"]) .main { display: none; }
 .ws-panel {
   flex: 1;
   min-width: 0;
@@ -5988,7 +5426,6 @@ button.as-ai-status:hover { background: var(--surface-2); color: var(--text); }
   flex-direction: column;
   gap: var(--sp-12);
 }
-
 
 /* ── The import dialog ───────────────────────────────────────────────────────
    Wider than the stock .ws-modal (which is min(360px, …)) because it holds a
@@ -9332,13 +8769,13 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 }
 .dash-present-exit:hover { border-color: var(--accent); color: var(--accent); }
 
-/* TWO rails, and the old rule named NEITHER. `.sidebar` is a different element
-   entirely, so presenting hid something invisible: the section nav
-   (.app-sidebar) and the authoring rail (.an-rail — Data / Visuals / Filters /
-   Properties) both stayed on screen through every presentation. */
+/* TWO rails, and the old rule named NEITHER. `.sidebar` was a different
+   element entirely — the capture shell's column, deleted with that shell — so
+   presenting hid something invisible: the section nav (.app-sidebar) and the
+   authoring rail (.an-rail — Data / Visuals / Filters / Properties) both
+   stayed on screen through every presentation. */
 .dash-presenting .app-sidebar,
 .dash-presenting .an-rail,
-.dash-presenting .sidebar,
 .dash-presenting .hub-topbar,
 .dash-presenting .dash-editor-head,
 .dash-presenting .dash-toolbar,
@@ -9734,13 +9171,12 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 }
 
 /* ── Connect data (connected sources: Postgres + URL/API JSON) ── */
-/* Overlays the capture area inside .main-body so the capture surface underneath
-   stays intact — closing the panel reveals it unchanged. */
 /* A section body, not an overlay. It used to be `position: absolute; inset: 0`
-   inside .main, which is exactly why the Welcome header and the captures column
-   stayed visible around it — an absolute child cannot escape a parent the
-   [data-section] rule is about to hide. As a .ws-panel sibling it fills the
-   stage on its own and the router hides .main/.sidebar for free. */
+   inside the capture shell's `.main`, which is exactly why that shell's Welcome
+   header and captures column stayed visible around it — an absolute child
+   cannot escape a parent the [data-section] rule is about to hide. As a
+   .ws-panel sibling it fills the stage on its own. (That shell is gone now
+   too; this is simply how every section has worked since.) */
 .conn-panel {
   flex: 1;
   min-width: 0;
@@ -10186,125 +9622,6 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   margin-top: var(--sp-16);
 }
 
-/* ── Capture → dataset review modal (Week 13) ────────────────────────────── */
-/* Reuses the .ws-modal shell but widened for the editable grid, and made a
-   flex column so the grid scrolls while the header/name/actions stay put. */
-.cd-modal {
-  width: min(880px, calc(100vw - 48px));
-  max-height: 85vh;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-12);
-}
-.cd-caution {
-  font-size: var(--t-12);
-  color: var(--text-strong);
-  background: var(--accent-soft);
-  border: 1px solid var(--accent);
-  border-radius: 6px;
-  padding: var(--sp-4) var(--sp-8);
-}
-.cd-warnings {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-}
-.cd-grid-scroll {
-  overflow: auto;
-  flex: 1;
-  min-height: 80px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-.cd-grid {
-  border-collapse: collapse;
-  font-size: var(--t-12);
-  width: max-content;
-  min-width: 100%;
-}
-.cd-col {
-  vertical-align: top;
-}
-.cd-col-name {
-  display: block;
-  width: 120px;
-  box-sizing: border-box;
-  font-size: var(--t-12);
-  font-weight: 600;
-  color: inherit;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: var(--sp-4) var(--sp-4);
-  margin-bottom: var(--sp-4);
-  outline: none;
-}
-.cd-col-name:focus {
-  border-color: var(--accent);
-}
-.cd-col-type {
-  display: block;
-  width: 120px;
-  box-sizing: border-box;
-  margin-bottom: var(--sp-4);
-}
-.cd-col-keep {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-  font-size: var(--t-11);
-  font-weight: 400;
-  color: var(--muted);
-  cursor: pointer;
-  transition: color var(--dur-fast) var(--ease-out);
-}
-.cd-col-keep:hover { color: var(--text); }
-.cd-cell {
-  width: 120px;
-  box-sizing: border-box;
-  font-size: var(--t-12);
-  color: inherit;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  padding: var(--sp-4) var(--sp-4);
-  outline: none;
-}
-.cd-cell:hover {
-  border-color: var(--border);
-}
-.cd-cell:focus {
-  border-color: var(--accent);
-  background: var(--bg);
-}
-.cd-name-row {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-8);
-  font-size: var(--t-13);
-  color: var(--text-strong);
-}
-.cd-name-row input {
-  flex: 1;
-}
-.cd-target-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-12);
-}
-.cd-target {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-  font-size: var(--t-12);
-  color: var(--muted);
-  cursor: pointer;
-  transition: color var(--dur-fast) var(--ease-out);
-}
-/* A <label> wrapping a radio is a click target the size of its text — the
-   whole label has to light up, not just the 13px control at its left. */
-.cd-target:hover { color: var(--text); }
-
 /* ── Capture-sourced dataset badge / thumbnail / provenance strip (Week 13) ── */
 .ds-cap-badge {
   align-self: flex-start;
@@ -10736,7 +10053,6 @@ body.an-grabbing { user-select: none; cursor: grabbing; }
 }
 .an-workbench.is-active #dash-grid .dash-card:hover .dash-card-head::before,
 .an-workbench.is-active #dash-grid .dash-card.is-selected .dash-card-head::before { opacity: 1; }
-
 
 /* Narrow window: one tile per row. A card's span is written inline by
    applyDashCardStyle (it is stored geometry, not a look), so overriding it needs
@@ -11260,61 +10576,6 @@ body.an-focus .an-workbench.is-active #dash-pages {
 }
 .dash-filter-chip-txt:hover { text-decoration: underline; }
 
-/* ── Focus mode: the Capture workspace owns the window ───────────────────────
-   Same mechanism as `body.an-focus` above (an open analysis), deliberately
-   rather than a second pattern: one body class, everything else here.
-
-   "Screenshot" in the CONNECT rail is a destination, not a panel — the captures
-   column and the capture surface get the whole window, and "‹ Back" is the way
-   out. The global ⌘⌥S hotkey is registered in main and is completely unaffected
-   by any of this; only the visual chip goes. */
-body.cap-focus .app-sidebar { display: none; }
-body.cap-focus .hub-body { padding: 0; }
-
-/* The header keeps "New capture" and loses everything that belongs to the
-   surrounding app rather than to capturing: the shortcut chip (this workspace is
-   already the place you capture from) and "Connect data" (which navigates to a
-   different section, so offering it from inside a focused workspace would throw
-   the user straight back out). */
-body.cap-focus .hotkey-hint,
-body.cap-focus #conn-connect-btn { display: none; }
-
-/* The AI selector in the capture top bar, and the capture footer that now holds
-   Settings, follow the same rule .cap-back does: rendered ONLY in focus mode.
-   That is what guarantees execMenu.ts / hubMenus.ts never see both of a pair
-   visible at once — outside focus mode the app sidebar owns both controls.
-   It matters beyond tidiness: the `sources` section renders this same legacy
-   surface WITHOUT cap-focus (a capture fired from the hotkey lands there), and
-   there the app sidebar is present too. Without these rules both buttons of
-   each pair would be on screen together. */
-.exec-btn-cap { display: none; }
-body.cap-focus .exec-btn-cap {
-  display: inline-flex;
-  flex: 0 0 auto;
-  margin-left: var(--sp-8);
-}
-/* The footer holds one button now, so it no longer needs space-between; and
-   outside focus mode it would be an empty bordered strip under the captures
-   column, because its only control is focus-mode-only. */
-.side-bottom { display: none; }
-body.cap-focus .side-bottom { display: flex; justify-content: flex-start; }
-
-/* Back is rendered ONLY in focus mode — outside it the nav is present and this
-   button would be a second, redundant way home. */
-.cap-back { display: none; }
-body.cap-focus .cap-back {
-  display: inline-flex;
-  align-items: center;
-  margin-right: var(--sp-8);
-  flex: 0 0 auto;
-}
-
-/* setCaptureFocus() blanks the strapline rather than hiding it, because hub.ts
-   writes live status ("Analyzing…", "Ready") into this same element as a capture
-   runs. Collapsing it only while it is genuinely empty keeps that status working
-   — a display:none on the element would have eaten it silently. */
-.main-title p:empty { display: none; }
-
 /* ── The drill-down panel (drill.ts, #drill-tpl) ─────────────────────────────
    A slide-over from the right, above every other surface: it is opened from a
    dashboard card, the Visuals builder and the authoring panel alike, so it has
@@ -11587,6 +10848,28 @@ body.cap-focus .cap-back {
 .dc-pager { display: flex; align-items: center; gap: var(--sp-8); justify-content: flex-end; }
 .dc-page-label { color: var(--muted); font-size: var(--t-12); font-variant-numeric: tabular-nums; }
 
+/* An EDITABLE preview cell. Only a screenshot capture gets these (composer.ts,
+   dcCellEdit) — every other source's cells are ground truth. It reads as a
+   grid cell until you touch it, not as a form field in a table: a bordered
+   input per cell would turn a 20-column preview into a wall of boxes. */
+.dc-cell {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: var(--t-12);
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  padding: 2px 5px;
+  outline: none;
+}
+.dc-cell:hover { border-color: var(--border); }
+.dc-cell:focus {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
 /* The two popovers. Positioned from JS (element.style is fine under the CSP;
    only an inline style= ATTRIBUTE in the HTML is not). */
 .dc-pop {
@@ -11676,10 +10959,9 @@ body.cap-focus .cap-back {
    .xp-prov-chip / .xp-activity*. */
 
 /* ── AI dock — docked, toggleable panel on the right edge (dock.ts) ─────────
-   A sibling of `.ws-panel`/`.sidebar`/`.main` inside `.hub-body` (which is
-   `display: flex`), so an open dock PUSHES those over rather than covering
-   them — same flex row the Sources section's `.sidebar`+`.main` pair already
-   shares. `--dk-width` is set from localStorage by dock.ts; the fallback
+   A sibling of the `.ws-panel`s inside `.hub-body` (which is `display: flex`),
+   so an open dock PUSHES the section over rather than covering it.
+   `--dk-width` is set from localStorage by dock.ts; the fallback
    below covers the instant before that runs. Below ~1100px there isn't room
    to push without crushing the canvas, so it switches to a fixed overlay with
    a scrim instead (same breakpoint the plan specifies). Task 1 ships the
@@ -12147,7 +11429,6 @@ body.cap-focus .cap-back {
   }
 }
 
-
 /* Transcript bubbles. Inherited from the retired Copilot panel and renamed with
    it — same DOM, same textContent-only rendering, one owner. The dock is the
    only mount left, so these are unprefixed by container: one surface, one rule.
@@ -12288,8 +11569,6 @@ body.cap-focus .cap-back {
   white-space: nowrap;
 }
 .xp-activity-collapsed .xp-activity-chips { margin-top: var(--sp-4); }
-
-
 
 /* ═══════════════════════════════════════════════════════════════════════════
    HOME — the workspace front page (rebuilt to the mockup).
@@ -13205,7 +12484,7 @@ body.cap-focus .cap-back {
 /* ── Formula editor (renderer/hub/formulaEditor.ts) ───────────────────────── */
 /* `.ws-modal` is defined EARLIER in this file but sets width on a single class,
    so the pair `.ws-modal.fx-modal` is what wins — the same trick .fd-modal,
-   .an-wiz and .cd-modal use. 860px is the design width; the min() is what lets
+   .an-wiz and .fd-modal use. 860px is the design width; the min() is what lets
    it live inside the 1000px window without a horizontal scrollbar. */
 .ws-modal.fx-modal {
   width: min(860px, calc(100vw - 48px));

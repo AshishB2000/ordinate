@@ -5,7 +5,6 @@ import {
   ipcMain,
   systemPreferences,
   nativeTheme,
-  Notification,
   BrowserWindow,
   NativeImage,
   Display,
@@ -65,23 +64,17 @@ import { analyze, analyzeFollowup } from './ai/analyze';
 
 console.log('[boot] Ordinate', app.getVersion(), '| packaged =', app.isPackaged);
 
-// The result we persist per turn: the FULL analysis result minus the raw provider
-// thread (_messages is stored separately in thread.messages and never goes to the
-// renderer). Persisting everything — metrics, headlineProse, extractedTable, geo,
-// … — is what lets a reloaded capture render identically to the fresh one (the old
-// title/analysis/data/visualizations/followups allowlist dropped the rest).
-// ponytail: analysis results are big model-shaped JSON envelopes — typing them
-// fully isn't worth it here.
-function persistableResult(result: any): any {
-  const { _messages, ...rest } = result;
-  return rest;
-}
 import * as history from './app/history';
 import * as projects from './app/projects';
 import * as sampleProject from './app/sampleProject';
 import * as datasets from './data/datasets';
 import * as copilot from './ai/copilot';
+import { captureProjectId, persistableResult, seedCaptureConversation, setActiveProject } from './app/captureRecord';
 import { resolveUserPath } from './cli/userPath';
+import { bootstrapNotification, maybeNotify, maybeNotifyDone } from './app/notify';
+
+/** Whether the hub is on screen and focused — the one thing notify.ts needs to know. */
+const hubFocused = (): boolean => !!(hubWindow && !hubWindow.isDestroyed() && hubWindow.isFocused());
 
 // Packaged macOS/Linux GUI launches inherit a stripped PATH (no Homebrew, nvm,
 // ~/.local/bin…), which would make Local CLI detection (claude, agy) find nothing.
@@ -116,7 +109,8 @@ const entryThreads = new Map<number, any[]>();
 // Per-entry persistent data: { id, title, createdAt, updatedAt, cropPath, result, turns }
 // ponytail: thread envelopes hold the untyped analysis result — any.
 const entryData = new Map<number, any>();
-// History summaries loaded at startup (sent to hub on open).
+// History summaries loaded at startup — main's own cache, used to resolve a
+// capture's crop path. The hub reads its Captures tab from disk (history:list).
 // ponytail: summary rows come straight from disk JSON.
 let historySummaries: any[] = [];
 
@@ -262,7 +256,6 @@ function openHub(): void {
   hubWindow.on('closed', () => { hubWindow = null; });
   hubWindow.webContents.once('did-finish-load', () => {
     if (!hubWindow || hubWindow.isDestroyed()) return;
-    hubWindow.webContents.send('hub:history', historySummaries);
     notifyHotkeyState();
   });
 }
@@ -274,49 +267,6 @@ function notifyKeyChanged(): void {
   }
 }
 
-// Best-effort OS notification when an analysis turn finishes AND the window is
-// not focused. Gated on the user's setting; failures are swallowed so they can
-// never block or error the analysis. (The completion SOUND is played in the
-// renderer — see hub.js.)
-function maybeNotify(body: string): void {
-  try {
-    const prefs = config.get().notifications || {};
-    if (!prefs.desktop) return;
-    if (hubWindow && !hubWindow.isDestroyed() && hubWindow.isFocused()) return;
-    if (!Notification.isSupported || !Notification.isSupported()) return;
-    new Notification({ title: 'Ordinate', body, silent: false }).show();
-  } catch (_) { /* a notification must never block the thing it reports on */ }
-}
-
-function maybeNotifyDone(title?: string): void {
-  maybeNotify(title ? `Analysis ready — ${title}` : 'Analysis ready.');
-}
-
-// Register with the OS the moment the user ENABLES the Desktop toggle — a benign,
-// focus-independent show — so the app appears in System Settings → Notifications,
-// instead of lazily on the first unfocused completion (which the OS may silently
-// drop). Electron exposes no allow/deny status here, so `supported:false` only
-// means the platform has no notifications at all; the renderer nudges toward
-// System Settings either way.
-//
-// KNOWN macOS LIMITATION (signing-dependent, not a code bug): Apple's
-// UNUserNotification API requires the app to be code-signed to emit; an UNSIGNED
-// build emits a 'failed' event and shows nothing. So this bootstrap is correct
-// but macOS notifications stay non-functional until the app is signed. Windows
-// has no such requirement — the AppUserModelID set above is enough.
-function bootstrapNotification(): { ok: boolean; supported: boolean } {
-  try {
-    if (!Notification.isSupported || !Notification.isSupported()) return { ok: false, supported: false };
-    new Notification({
-      title: 'Ordinate',
-      body: 'Desktop notifications are on. You’ll be alerted when an analysis finishes and this window isn’t focused.',
-      silent: true,
-    }).show();
-    return { ok: true, supported: true };
-  } catch (_) {
-    return { ok: false, supported: false };
-  }
-}
 ipcMain.handle('notifications:bootstrap', () => bootstrapNotification());
 
 // Show the permission panel inside the hub (single-window experience).
@@ -364,46 +314,83 @@ ipcMain.on('capture:commit', (_e, rect) => {
   const cropped = cropToRect(frozenFrame, rect, captureDisplay);
   endCapture();
   if (!cropped) return;
+  ingestCapture(cropped.toDataURL());
+});
 
-  const dataUrl = cropped.toDataURL();
+/**
+ * Everything that happens to a captured IMAGE: store it, analyze it, write the
+ * record, and tell the hub.
+ *
+ * Exported and taking a plain data URL so the ONE thing a test cannot do —
+ * grab pixels off a real screen — is the only thing it has to replace.
+ * scripts/smoke-capture.ts swaps the `hub:capture` listener for one that calls
+ * this with a fixture PNG; every line below it is then the shipped path.
+ */
+export function ingestCapture(dataUrl: string): void {
   const entryId = Date.now();
   const createdAt = new Date().toISOString();
   entryDataUrls.set(entryId, dataUrl);
+  // Resolved once, here, and carried onto the thread: which project this capture
+  // belongs to. Async, so it is awaited where the thread is written.
+  const projectIdPromise = captureProjectId();
 
-  // Save crop image to disk immediately so it's available even if analysis fails.
-  history.saveCrop(entryId, dataUrl).then((cropPath: string) => {
-    const stub = entryData.get(entryId) || {};
-    stub.cropPath = cropPath;
-    entryData.set(entryId, stub);
-  }).catch((err: any) => console.error('[history] saveCrop failed:', err.message));
+  // Save crop image to disk immediately so it's available even if analysis
+  // fails. AWAITED where the thread is written, not merely fired: the record
+  // stores the crop PATH, and analysis finishing first would write a thread
+  // with `cropPath: null` — a capture with no image in the Captures grid and
+  // no "view original" on the dataset it produces. A real model call takes
+  // seconds and hid this; a fast one does not.
+  const cropPromise = history.saveCrop(entryId, dataUrl)
+    .then((cropPath: string) => {
+      const stub = entryData.get(entryId) || {};
+      stub.cropPath = cropPath;
+      entryData.set(entryId, stub);
+      return cropPath;
+    })
+    .catch((err: any) => {
+      console.error('[history] saveCrop failed:', err.message);
+      return null;
+    });
 
   function sendToHub() {
     if (!hubWindow || hubWindow.isDestroyed()) return;
     hubWindow.focus();
     hubWindow.webContents.send('hub:new-entry', { entryId, dataUrl });
-    analyze(dataUrl).then((result: any) => {
+    analyze(dataUrl).then(async (result: any) => {
       if (!hubWindow || hubWindow.isDestroyed()) return;
       if (result.ok && result._messages) {
         entryThreads.set(entryId, result._messages);
-        const data = entryData.get(entryId) || {};
+        const cropPath = await cropPromise;
+        const projectId = await projectIdPromise;
+        // The narration is the first assistant turn of a dock conversation, not a
+        // thread of its own: a capture's follow-ups are ordinary dock asks, and a
+        // second conversation surface for one source of data is the thing this
+        // change exists to delete. Seeded in MAIN because main is what holds the
+        // analysis text — the renderer never re-posts it.
+        const copilotThreadId = await seedCaptureConversation(projectId, result);
         const thread = {
           id: entryId,
+          projectId,
           title: result.title || 'Analysis',
           createdAt,
           updatedAt: new Date().toISOString(),
-          cropPath: data.cropPath || null,
+          cropPath,
+          copilotThreadId,
+          datasetId: null,
           messages: result._messages,
           result: persistableResult(result),
           turns: [],
         };
         entryData.set(entryId, thread);
         history.saveThread(thread).catch((e: any) => console.error('[history] saveThread failed:', e.message));
-        // Update sidebar summaries cache so re-opened hub sees this entry
-        historySummaries = [{ id: entryId, title: thread.title, updatedAt: thread.updatedAt, cropPath: thread.cropPath }, ...historySummaries.filter(s => s.id !== entryId)];
+        // main's own crop-path cache; the hub reads Captures from disk.
+        historySummaries = [{ id: entryId, projectId, title: thread.title, updatedAt: thread.updatedAt, cropPath: thread.cropPath }, ...historySummaries.filter(s => s.id !== entryId)];
         delete result._messages;
+        result.copilotThreadId = copilotThreadId;
       }
+      if (!hubWindow || hubWindow.isDestroyed()) return;
       hubWindow.webContents.send('hub:entry-result', { entryId, ...result });
-      if (result.ok) maybeNotifyDone(result.title);
+      if (result.ok) maybeNotifyDone(result.title, hubFocused);
     }).catch(() => {
       if (!hubWindow || hubWindow.isDestroyed()) return;
       hubWindow.webContents.send('hub:entry-result', {
@@ -419,7 +406,7 @@ ipcMain.on('capture:commit', (_e, rect) => {
   } else {
     sendToHub();
   }
-});
+}
 
 ipcMain.on('capture:cancel', () => {
   endCapture();
@@ -525,7 +512,7 @@ ipcMain.on('hub:retry', (_e, { entryId }) => {
       delete result._messages;
     }
     hubWindow.webContents.send('hub:entry-result', { entryId, ...result });
-    if (result.ok) maybeNotifyDone(result.title); // parity with initial capture + follow-up
+    if (result.ok) maybeNotifyDone(result.title, hubFocused); // parity with initial capture + follow-up
   }).catch(() => {
     if (!hubWindow || hubWindow.isDestroyed()) return;
     hubWindow.webContents.send('hub:entry-result', {
@@ -558,7 +545,7 @@ ipcMain.on('hub:followup', (_e, { entryId, text }) => {
       delete result._messages;
     }
     hubWindow.webContents.send('hub:followup-result', { entryId, ...result });
-    if (result.ok) maybeNotifyDone(result.title);
+    if (result.ok) maybeNotifyDone(result.title, hubFocused);
   }).catch(() => {
     if (!hubWindow || hubWindow.isDestroyed()) return;
     hubWindow.webContents.send('hub:followup-result', {
@@ -578,7 +565,7 @@ require("./ipc/fileSave").register();
 
 require("./ipc/capture").register();
 
-require("./ipc/projects").register();
+require("./ipc/projects").register({ onActive: setActiveProject });
 
 require("./ipc/recent").register();
 
@@ -619,16 +606,16 @@ require("./ipc/insights").register();
     // At most ONE notification per dataset per tick, and only for these two.
     // A success inside the interval is silent by design.
     if (!o.ok) {
-      maybeNotify(`Couldn't refresh "${o.name}" — ${o.error || 'refresh failed.'}`);
+      maybeNotify(`Couldn't refresh "${o.name}" — ${o.error || 'refresh failed.'}`, hubFocused);
       return;
     }
     const before = o.rowsBefore;
     if (before > 0 && Math.abs(o.rowsAfter - before) / before > BIG_CHANGE) {
-      maybeNotify(`"${o.name}" changed: ${before.toLocaleString()} → ${o.rowsAfter.toLocaleString()} rows.`);
+      maybeNotify(`"${o.name}" changed: ${before.toLocaleString()} → ${o.rowsAfter.toLocaleString()} rows.`, hubFocused);
       return; // one notification per dataset per tick
     }
     if (o.newAnomalies > 0) {
-      maybeNotify(require("./analysis/anomalyWatch").watchMessage(o.name, o.newAnomalies));
+      maybeNotify(require("./analysis/anomalyWatch").watchMessage(o.name, o.newAnomalies), hubFocused);
     }
   });
 
@@ -748,6 +735,11 @@ void app.whenReady().then(async () => {
     await projects.init();
     await datasets.init();
     await copilot.init();
+    // Captures are project records now. Every entry written before that has no
+    // projectId and would be invisible under any project, so adopt them into the
+    // newest one — ONE pass, idempotent, logged with a real count.
+    const newest = (await projects.listProjects())[0];
+    if (newest) await history.migrateProjectIds(newest.id);
     historySummaries = await history.loadAllSummaries();
   } catch (err: any) {
     console.error('[history] Failed to load summaries on startup:', err.message);

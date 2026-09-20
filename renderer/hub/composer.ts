@@ -45,6 +45,19 @@ let dcRawCols: any[] = [];
 const dcMap = new Map<string, { name: string; type: string; dropped: boolean }>();
 let dcPage = 0;
 let dcTotal = 0;
+/**
+ * Whether the preview's CELLS are editable, not just its column headers.
+ *
+ * On for a screenshot capture and nothing else. Every other source is a file or
+ * a query whose cells are ground truth — editing them here would silently
+ * diverge the dataset from the thing it claims to be, and the Prepare pipeline
+ * is where a saved dataset gets changed. A capture's cells are a MODEL'S
+ * READING of an image and can simply be wrong, so the correction belongs before
+ * the save. See `dcEditCell`: an edit is only possible while the canvas is a
+ * bare base (no joins), because with a fold in between a preview cell no longer
+ * maps to one source cell.
+ */
+let dcCellEdit = false;
 let dcPageRows = 100;
 let dcPreviewSeq = 0;
 let dcTimer: number | null = null;
@@ -101,6 +114,7 @@ function openComposer(base: DcTable | null, opts: { name?: string; origin?: any;
   dcPage = 0;
   dcOrigin = opts.origin;
   dcSourceKind = opts.sourceKind || '';
+  dcCellEdit = dcSourceKind === 'capture' && !!(base && base.ref.inline);
   const name = dcEl('dc-name') as HTMLInputElement | null;
   if (name) name.value = opts.name || (base ? base.label : '');
 
@@ -519,175 +533,10 @@ function paintPager(): void {
   if (next) next.disabled = dcPage >= pages - 1;
 }
 
-// ── The header IS the field mapper ───────────────────────────────────────────
+// The PREVIEW GRID and its column menu — paintGrid, mapFor, visibleCols,
+// openColPop and the capture-only cell editing — live in composerGrid.ts. This
+// file owns the canvas and the save; that one owns what the preview looks like.
 
-/** The mapping for a column, defaulted from what main returned. */
-function mapFor(col: any): { name: string; type: string; dropped: boolean } {
-  const key = String(col.name);
-  let m = dcMap.get(key);
-  if (!m) {
-    m = { name: key, type: String(col.type || 'text'), dropped: false };
-    dcMap.set(key, m);
-  }
-  return m;
-}
-
-function visibleCols(): any[] {
-  return dcRawCols.filter((c) => !mapFor(c).dropped);
-}
-
-function paintGrid(rows: any[][]): void {
-  const host = dcEl('dc-grid');
-  if (!host) return;
-  host.innerHTML = '';
-  if (!dcRawCols.length) {
-    const empty = document.createElement('div');
-    empty.className = 'dc-grid-empty';
-    empty.textContent = 'Nothing to preview yet.';
-    host.appendChild(empty);
-    return;
-  }
-
-  const table = document.createElement('table');
-  table.className = 'dc-table';
-  const thead = document.createElement('thead');
-  const hr = document.createElement('tr');
-
-  dcRawCols.forEach((col) => {
-    const m = mapFor(col);
-    const th = document.createElement('th');
-    if (m.dropped) {
-      // A dropped column collapses to a stub, never to nothing: an invisible
-      // drop is how a column gets lost without anyone noticing.
-      th.className = 'dc-th dc-th-dropped';
-      const restore = document.createElement('button');
-      restore.className = 'dc-restore';
-      restore.type = 'button';
-      restore.textContent = '↩';
-      restore.title = `Restore ${col.name}`;
-      restore.setAttribute('aria-label', `Restore ${col.name}`);
-      restore.addEventListener('click', () => {
-        m.dropped = false;
-        paintGridFromCache();
-      });
-      th.appendChild(restore);
-      hr.appendChild(th);
-      return;
-    }
-    th.className = 'dc-th';
-    const btn = document.createElement('button');
-    btn.className = 'dc-th-btn';
-    btn.type = 'button';
-    const nm = document.createElement('span');
-    nm.className = 'dc-th-name';
-    nm.textContent = m.name;
-    btn.appendChild(nm);
-    if (m.name !== String(col.name)) {
-      const dot = document.createElement('span');
-      dot.className = 'dc-th-dot';
-      dot.title = `Renamed from ${col.name}`;
-      dot.setAttribute('aria-label', `Renamed from ${col.name}`);
-      btn.appendChild(dot);
-    }
-    const ty = document.createElement('span');
-    ty.className = 'dc-th-type';
-    ty.textContent = m.type;
-    btn.appendChild(ty);
-    const caret = document.createElement('span');
-    caret.className = 'dc-th-caret';
-    setIcon(caret, 'chevron-down');
-    btn.appendChild(caret);
-    btn.addEventListener('click', (e) => { e.stopPropagation(); openColPop(String(col.name), th); });
-    th.appendChild(btn);
-    hr.appendChild(th);
-  });
-
-  thead.appendChild(hr);
-  table.appendChild(thead);
-
-  const tbody = document.createElement('tbody');
-  for (const row of rows) {
-    const tr = document.createElement('tr');
-    dcRawCols.forEach((col, c) => {
-      const td = document.createElement('td');
-      if (mapFor(col).dropped) td.className = 'dc-td-dropped';
-      else td.textContent = row[c] == null ? '' : String(row[c]);
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  }
-  table.appendChild(tbody);
-  host.appendChild(table);
-  dcLastRows = rows;
-}
-
-let dcLastRows: any[][] = [];
-/** Repaint from the rows already on screen — a mapping edit changes no data. */
-function paintGridFromCache(): void {
-  paintGrid(dcLastRows);
-  paintCount();
-}
-
-function openColPop(colName: string, anchor: HTMLElement): void {
-  const pop = dcEl('dc-col-pop');
-  const col = dcRawCols.find((c) => String(c.name) === colName);
-  if (!pop || !col) return;
-  dcOpenCol = colName;
-  const m = mapFor(col);
-
-  const name = dcEl('dc-col-name') as HTMLInputElement | null;
-  const type = dcEl('dc-col-type') as HTMLSelectElement | null;
-  if (name) {
-    name.value = m.name;
-    name.oninput = () => { m.name = name.value; };
-    name.onchange = () => { m.name = name.value.trim() || colName; paintGridFromCache(); };
-  }
-  if (type) {
-    type.value = m.type;
-    type.onchange = () => { m.type = type.value; paintGridFromCache(); };
-  }
-  const drop = dcEl('dc-col-drop');
-  if (drop) {
-    drop.onclick = () => {
-      m.dropped = true;
-      closeColPop();
-      paintGridFromCache();
-    };
-  }
-
-  pop.hidden = false;
-  const b = anchor.getBoundingClientRect();
-  let left = b.left;
-  if (left + pop.offsetWidth > window.innerWidth - 12) left = window.innerWidth - 12 - pop.offsetWidth;
-  if (left < 12) left = 12;
-  pop.style.left = left + 'px';
-  pop.style.top = (b.bottom + 6) + 'px';
-  if (name) name.focus();
-  document.addEventListener('click', dcColDismiss, true);
-  document.addEventListener('keydown', dcPopEsc, true);
-}
-
-function dcColDismiss(e: MouseEvent): void {
-  const pop = dcEl('dc-col-pop');
-  const t = e.target as Node;
-  if (!pop || pop.contains(t)) return;
-  closeColPop();
-}
-
-function closeColPop(): void {
-  const pop = dcEl('dc-col-pop');
-  if (pop) pop.hidden = true;
-  dcOpenCol = '';
-  document.removeEventListener('click', dcColDismiss, true);
-  document.removeEventListener('keydown', dcPopEsc, true);
-}
-
-/**
- * The mapping, as REAL prepare steps — so the saved dataset opens in the
- * explorer with its pipeline visible and every mapping reversible, exactly like
- * a step added later. Renames go first: a drop names the column, and after a
- * rename that name is the new one.
- */
 function mappingSteps(): any[] {
   const steps: any[] = [];
   for (const col of dcRawCols) {

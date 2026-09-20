@@ -13,6 +13,8 @@ import { computeMetric } from '../analysis/metricValue';
 import { askCopilot } from '../ai/analyze';
 import { auditNumbers } from '../ai/numberAudit';
 import { listInsights } from './insights';
+import * as history from '../app/history';
+import * as captureDataset from '../data/captureDataset';
 import type { LedgerEntry, NumberAudit } from '../ai/numberAudit';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
@@ -167,6 +169,25 @@ export async function buildFacts(
       );
       emit({ kind: 'compute', label: 'Built chart data' });
       return copilot.visualFacts(v, ds ? ds.name : '(missing dataset)', viz);
+    }
+  }
+
+  // A CAPTURE is a project record like any other, so a question asked from the
+  // capture page is an ordinary dock ask scoped to it. The extraction is the
+  // model's; every statistic below is the app's, computed here with the same
+  // computeColumnSummary the dataset branch uses.
+  if (kind === 'capture' && id) {
+    const thread = await history.loadThread(id);
+    const extracted = thread && thread.result ? thread.result.extractedTable : null;
+    if (thread && extracted) {
+      emit({ kind: 'read', label: 'Read ' + (thread.title || 'capture') });
+      const draft = captureDataset.buildDraft(extracted);
+      emit({ kind: 'read', label: 'Read the extracted table', detail: plural(draft.rows.length, 'row') });
+      const summaries = draft.columns.map((col, c) =>
+        computeColumnSummary(col, draft.rows.map((row) => (row ? row[c] ?? null : null))),
+      );
+      emit({ kind: 'compute', label: 'Summarised ' + plural(draft.columns.length, 'column'), count: draft.columns.length });
+      return copilot.captureFacts(thread.title || 'Capture', draft.columns, summaries, draft.rows);
     }
   }
 

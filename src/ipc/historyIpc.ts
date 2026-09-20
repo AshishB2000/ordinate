@@ -14,6 +14,15 @@ export function register({ entryData, entryThreads, entryDataUrls, removeSummary
   entryDataUrls: Map<string, string>;
   removeSummary: (id: string) => void;
 }) {
+  // List one PROJECT's captures for the Data section's Captures tab. Captures are
+  // project records, so this is scoped — never the whole disk. Read straight from
+  // disk rather than from main's summaries cache: the cache exists to resolve a
+  // crop path for a capture taken in THIS session, not to be a project index.
+  ipcMain.handle('history:list', async (_e, { projectId }: any = {}) => {
+    if (typeof projectId !== 'string' || !projectId) return [];
+    return history.loadAllSummaries(projectId);
+  });
+
   // Load a full thread from disk; also restores entryThreads and entryDataUrls so
   // follow-ups and retry work after the thread is opened from history.
   // ponytail: untrusted renderer payloads — any.

@@ -72,13 +72,16 @@ function dkAllowed(): boolean {
   // editor head stays one row (47px) in all eight combinations, and head,
   // grid and document horizontal overflow are 0 everywhere. Focus mode hides
   // the 176px sidebar, which is most of what the dock takes back.
-  if (document.body.classList.contains('cap-focus')) return false; // capture surface is deliberately bare
   // The `section === 'explore'` case that used to sit here is gone with the
   // page it guarded (#117 merged the two AI surfaces into this dock), and a
   // check against a section that cannot exist reads as a live rule.
   if (typeof dashReadOnly !== 'undefined' && dashReadOnly) return false; // published snapshot — nothing editable
   return true;
 }
+
+// The width machinery — dkApplyWidth / dkClampWidth / dkCurrentWidth /
+// dkPersistWidth and the drag + keyboard handlers — lives in dockResize.ts,
+// which loads first. It calls dkNudgeCanvasResize() below once per gesture.
 
 // ── View state (localStorage — renderer view state, never config.json) ────
 function dkIsOpen(): boolean {
@@ -99,129 +102,6 @@ function dkToggle(): void {
   if (!dkAllowed()) return;
   if (!dkIsOpen()) dkUserOpened = true; // a deliberate open — this one may take focus
   dkSetOpen(!dkIsOpen());
-}
-
-// [300, 40% of window] — the ONE clamp both the read path (dkApplyWidth) and
-// the write path (dkPersistWidth, drag/keyboard resize) share, so there is
-// exactly one place the bound is computed.
-//
-// `Math.max(window.innerWidth * 0.4, DK_MIN_WIDTH)` is the Task 1 review fix:
-// below a 750px window, 40% is under 300px, so a plain `Math.min(n, 40%)`
-// forced the width BELOW the documented minimum. Wrapping the max in
-// `Math.max(…, DK_MIN_WIDTH)` means the minimum always wins on a narrow
-// window instead of silently losing to a smaller "maximum" — simpler than
-// special-casing the <1100px overlay breakpoint, and correct even though the
-// dock is in overlay mode there too (the overlay still honours --dk-width;
-// see hub.css's media query).
-const DK_MIN_WIDTH = 300;
-function dkClampWidth(n: number): number {
-  const max = Math.max(window.innerWidth * 0.4, DK_MIN_WIDTH);
-  return Math.min(Math.max(n, DK_MIN_WIDTH), max);
-}
-
-// Applied at boot AND after every persisted change (dkPersistWidth calls this
-// rather than setting --dk-width itself) — the ONE place a stored value
-// becomes an applied one.
-function dkApplyWidth(): void {
-  let w = 340;
-  try {
-    const raw = localStorage.getItem('dkWidth');
-    const n = raw ? parseInt(raw, 10) : NaN;
-    if (Number.isFinite(n) && n >= DK_MIN_WIDTH) w = dkClampWidth(n);
-  } catch (_) { /* default stands */ }
-  document.documentElement.style.setProperty('--dk-width', w + 'px');
-  dkSyncHandleAria(w);
-}
-
-function dkCurrentWidth(): number {
-  const raw = getComputedStyle(document.documentElement).getPropertyValue('--dk-width');
-  const n = parseInt(raw, 10);
-  return Number.isFinite(n) ? n : 340;
-}
-
-// The ONLY function that writes `dkWidth` to localStorage — drag and keyboard
-// resize both funnel here, then hand off to dkApplyWidth() (above) rather
-// than a second copy of its clamp-and-set-the-CSS-var logic.
-function dkPersistWidth(n: number): void {
-  const w = dkClampWidth(n);
-  try { localStorage.setItem('dkWidth', String(w)); } catch (_) { /* private mode / quota — just won't survive reload */ }
-  dkApplyWidth();
-}
-
-function dkSyncHandleAria(w: number): void {
-  const handle = document.getElementById('dk-handle');
-  if (!handle) return;
-  handle.setAttribute('aria-valuenow', String(Math.round(w)));
-  handle.setAttribute('aria-valuemax', String(Math.round(Math.max(window.innerWidth * 0.4, DK_MIN_WIDTH))));
-}
-
-// ── Resize handle (drag + keyboard) ─────────────────────────────────────────
-// Live feedback (mousemove / each arrow press) only ever touches the CSS
-// custom property directly — cheap, and NOT a second writer of `dkWidth`.
-// Persisting to localStorage and re-running the canvas resize nudge happens
-// once, at the end of the gesture: mouseup for a drag, a short settle timer
-// for the keyboard (arrow-key repeat fires far faster than one resize per
-// keystroke should cost).
-let dkDragStartX = 0;
-let dkDragStartWidth = 0;
-
-function dkHandleMouseMove(e: MouseEvent): void {
-  // Widening the panel drags the cursor AWAY from the handle (it's on the
-  // panel's left edge), so releasing outside the OS window is plausible —
-  // and when that happens, `mouseup` never reaches `document`. Without this
-  // guard the listener would stay attached and keep resizing on any later
-  // mouse movement with no button held, until an unrelated click happened to
-  // fire `mouseup` and clean up. `e.buttons` reflects the CURRENT button
-  // state on every move, so a release outside the window is caught on the
-  // very next move inside it — treat it exactly like a real mouseup.
-  if (e.buttons !== 1) { dkHandleMouseUp(); return; }
-  // The dock sits on the right edge; the handle is its LEFT edge, so dragging
-  // the mouse left (negative movement) is what WIDENS the panel.
-  const dx = dkDragStartX - e.clientX;
-  const w = dkClampWidth(dkDragStartWidth + dx);
-  document.documentElement.style.setProperty('--dk-width', w + 'px');
-  dkSyncHandleAria(w);
-}
-
-function dkHandleMouseUp(): void {
-  document.removeEventListener('mousemove', dkHandleMouseMove);
-  document.removeEventListener('mouseup', dkHandleMouseUp);
-  const handle = document.getElementById('dk-handle');
-  if (handle) handle.classList.remove('dk-dragging');
-  dkPersistWidth(dkCurrentWidth());
-  dkNudgeCanvasResize(); // once, on drag END — never per mousemove
-}
-
-function dkHandleMouseDown(e: MouseEvent): void {
-  e.preventDefault(); // a text-selection drag would otherwise start under the cursor
-  dkDragStartX = e.clientX;
-  dkDragStartWidth = dkCurrentWidth();
-  const handle = document.getElementById('dk-handle');
-  if (handle) handle.classList.add('dk-dragging');
-  document.addEventListener('mousemove', dkHandleMouseMove);
-  document.addEventListener('mouseup', dkHandleMouseUp);
-}
-
-let dkKeyResizeSettle: ReturnType<typeof setTimeout> | null = null;
-const DK_KEY_STEP = 16;
-
-function dkHandleKeydown(e: KeyboardEvent): void {
-  let delta = 0;
-  if (e.key === 'ArrowLeft') delta = DK_KEY_STEP; // grows the panel — see dkHandleMouseMove
-  else if (e.key === 'ArrowRight') delta = -DK_KEY_STEP;
-  else return;
-  e.preventDefault();
-  const w = dkClampWidth(dkCurrentWidth() + delta);
-  document.documentElement.style.setProperty('--dk-width', w + 'px');
-  dkSyncHandleAria(w);
-  // Settle once key-repeat stops, not once per keystroke — the keyboard
-  // equivalent of "on drag end, not every frame".
-  if (dkKeyResizeSettle) clearTimeout(dkKeyResizeSettle);
-  dkKeyResizeSettle = setTimeout(() => {
-    dkKeyResizeSettle = null;
-    dkPersistWidth(dkCurrentWidth());
-    dkNudgeCanvasResize();
-  }, 300);
 }
 
 // ── Context ──────────────────────────────────────────────────────────────
@@ -257,6 +137,14 @@ function dkContextRef(): { kind: string; id: string; label: string; name: string
       return { kind: 'visual', id: vizEditingId, label: 'visual · open visual', name: '' };
     }
     return { kind: '', id: '', label: 'whole project', name: '' };
+  }
+  // An open CAPTURE is the context. This is what makes a follow-up about a
+  // screenshot an ordinary dock ask: main's buildFacts resolves the capture,
+  // computes its statistics and hands them over like any other entity's.
+  if (currentSection === 'capture' && currentEntryId) {
+    const entry = typeof getEntry === 'function' ? getEntry(currentEntryId) : null;
+    const name = (entry && entry.title) || 'this capture';
+    return { kind: 'capture', id: String(currentEntryId), label: 'capture · ' + name, name };
   }
   // An OPEN dashboard is the context; the Dashboards LIST is not. In scope now
   // because an edit delta can only name a tile the model was actually shown.

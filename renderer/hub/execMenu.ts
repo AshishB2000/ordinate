@@ -50,7 +50,7 @@ function aiSetupNotice(el: HTMLElement | null, extra?: string): void {
  * the whole registry and a new door joins it by being named here.
  */
 const AI_DOORS = ['viz-empty-ai', 'viz-suggest-btn', 'an-draft-btn', 'an-empty-draft'];
-const AI_DOOR_HINTS = ['viz-empty-hint', 'an-empty-hint'];
+const AI_DOOR_HINTS = ['viz-empty-hint', 'an-empty-hint', 'cap-hint'];
 
 /**
  * Disable the Assistant's doors when no model is configured, and say why.

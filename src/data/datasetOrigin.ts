@@ -20,11 +20,18 @@ import { normalizeCombineMode } from './combine';
  * refreshable — a record without one is a snapshot, exactly as every dataset was
  * before this existed.
  *
- * `paste` and `capture` deliberately have no origin: pasted text has no
- * re-fetchable source, and a capture already has its own recapture flow.
+ * `paste` deliberately has no origin: pasted text has no re-fetchable source.
+ *
+ * `capture` is the ONE member that is not re-fetchable — a screenshot cannot be
+ * taken again from a record, and recapture is a separate, user-driven flow. It
+ * is here because it is still WHERE the rows came from, and the capture page
+ * and the Captures grid both need to get from a dataset back to its screenshot.
+ * `datasets.listDatasets` deliberately withholds it from `originKind`, which is
+ * the summary field the refresh affordances read — see the note there.
  */
 export type DatasetOrigin =
   | { kind: 'file'; path: string; sheetName?: string }
+  | { kind: 'capture'; captureId: string }
   | { kind: 'url'; url: string }
   | { kind: 'connection'; connId: string }
   | {
@@ -95,6 +102,12 @@ export function sanitizeOrigin(raw: unknown): DatasetOrigin | undefined {
     case 'connection': {
       const connId = str(o.connId);
       return isValidId(connId) ? { kind: 'connection', connId } : undefined;
+    }
+    case 'capture': {
+      // History ids are main-generated (Date.now()-ish) and reach a path in
+      // history.ts, so the shape guard is history's own: no `.`, `/` or `\`.
+      const captureId = str(o.captureId);
+      return /^[0-9a-zA-Z_-]+$/.test(captureId) ? { kind: 'capture', captureId } : undefined;
     }
     case 'combined': {
       const leftId = str(o.leftId);

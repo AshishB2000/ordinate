@@ -114,8 +114,12 @@ contextBridge.exposeInMainWorld('hub', {
   followup: (entryId: string, text: string) => ipcRenderer.send('hub:followup', { entryId, text }),
   // Register a callback fired when a follow-up result arrives.
   onFollowupResult: (cb: (data: any) => void) => ipcRenderer.on('hub:followup-result', (_e, data) => cb(data)),
-  // Register a callback fired with persisted history summaries on hub open.
-  onHistory: (cb: (data: any) => void) => ipcRenderer.on('hub:history', (_e, data) => cb(data)),
+  // One project's captures, for the Data section's Captures tab. Captures are
+  // project records, so this is scoped — there is no unscoped list.
+  listCaptures: (projectId: string) => ipcRenderer.invoke('history:list', { projectId }),
+  // Fired after a confirmed "delete capture history" so the Captures tab
+  // repaints instead of showing rows whose files are gone.
+  onCapturesCleared: (cb: () => void) => ipcRenderer.on('hub:captures-cleared', () => cb()),
   // Load a full thread from disk (returns thread data without messages array).
   loadThread: (entryId: string) => ipcRenderer.invoke('history:load', { entryId }),
   // Delete a thread's files from disk.

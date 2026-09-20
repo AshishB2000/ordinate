@@ -376,7 +376,10 @@ export function register({ getHubWindow, notifyKeyChanged, entryData, entryThrea
       try { await fsp.rm(tmpDir, { recursive: true, force: true }); removed.push(tmpDir + ' (temp capture images)'); } catch (_) {}
       entryData.clear(); entryThreads.clear(); entryDataUrls.clear();
       clearHistorySummaries();
-      if (hubWindow && !hubWindow.isDestroyed()) hubWindow.webContents.send('hub:history', []);
+      // The hub had a captures sidebar that main pushed a fresh list into; the
+      // Captures tab reads from disk on every paint instead, so one nudge is
+      // enough and there is no list to send.
+      if (hubWindow && !hubWindow.isDestroyed()) hubWindow.webContents.send('hub:captures-cleared');
     }
 
     if (scope === 'history' || scope === 'everything') await wipeHistory();

@@ -71,6 +71,18 @@ prompts unrounded); a leading U+FEFF is lost on every string the bridge returns 
   `initOracleClient`**, `local.ts` 3, `url.ts` 1). **Three rules: read-only, secrets never leave
   main, EVERY query bounded server-side** — the old central `LIMIT` wrapper is gone because it broke
   five of six dialects.
+- **Captures are PROJECT RECORDS, not a second app.** A capture had its own shell — its own
+  sidebar, search, settings gear, conversation thread and follow-up box, in a section the workspace
+  nav could not reach. All of it is deleted. A capture entry carries a `projectId` (`history.ts`;
+  pre-project entries were adopted into the newest project by a one-pass, idempotent migration), its
+  LIST is a tab under Data, its PAGE is a `.ws-panel` using the dataset page's own header, and its
+  narration is the first assistant turn of an ordinary **dock** conversation, seeded in main. It
+  becomes a dataset through the ORDINARY path — `captureDataset:draft` → the composer → `composeSave`
+  with `sourceKind: 'capture'` and `origin: { kind:'capture', captureId }` — so a capture is a
+  SOURCE, not a second kind of import. The composer's preview cells are editable for this one source
+  kind, because they are a model's reading of an image; every other source's cells are ground truth.
+  `origin.capture` is the one origin that is deliberately NOT re-fetchable, and `listDatasets`
+  withholds it from `originKind` so no "↻ Refresh" is offered for a screenshot.
 - **Prepare** — `transforms.ts` folds ordered steps over an immutable copy, so removing a step
   recomputes from source. Unknown step is skipped with a warning, never throws. `formula.ts` is a
   hand-written tokenizer + parser + tree-walker — **no `eval`, no `new Function`, ever.**
@@ -146,7 +158,7 @@ renderer-safe views and strip every raw key and secret. `executionReady()` gates
 bridge, worker/sidecar, resident fast paths), `src/data/` (parse, datasets, transforms),
 `src/formula/` (tokenizer/parser/evaluator), `src/analysis/` (analyses, dashboards, visuals,
 anomalies), `src/ai/` (analyze, copilot, models), `src/cli/` (local CLI detection + run),
-`src/app/` (config, projects, history, icons, capture), `src/connectors/` (the 35-source registry
+`src/app/` (config, projects, history, icons, capture, notifications), `src/connectors/` (the 35-source registry
 plus the connection store). `src/ipc/` → one file per area. `src/windows/` → BrowserWindow
 factories. `renderer/{hub,overlay}/` → windows.
 `renderer/theme.css` → shared CSS vars. `preload/` → one contextBridge per window.
