@@ -6,7 +6,7 @@
   "author": "Screenchart",
   "homepage": "https://screenshot.app",
   "scripts": {
-    "build:ts": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json",
+    "build:ts": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && node scripts/check-emit.js --heal",
     "build:svelte": "npm run typecheck:svelte && node scripts/build-svelte.js",
     "typecheck:svelte": "tsc -p tsconfig.svelte.json",
     "build": "npm run build:ts && npm run build:svelte",
@@ -87,7 +87,8 @@
       "!**/*.map",
       "!**/*.ts",
       "!**/*.svelte",
-      "!tsconfig*.json"
+      "!tsconfig*.json",
+      "!.tsbuildinfo/**"
     ],
     "asar": true,
     "afterPack": "./scripts/afterPack.js",

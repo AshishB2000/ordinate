@@ -11,6 +11,16 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "noEmitOnError": true,
+    // Each config names its own tsBuildInfoFile under `.tsbuildinfo/` at the
+    // repo root — per-CHECKOUT, deliberately NOT under node_modules. A
+    // worktree that symlinks node_modules to the main checkout would share
+    // one buildinfo, and the paths recorded inside it are relative to the
+    // buildinfo's own directory, so each checkout reads the other's
+    // signatures as its own and `build:ts` exits 0 having emitted nothing.
+    // That is phase-5 blocker B1 (docs/phase-5/04-csp-and-testing.md), and
+    // it shipped stale renderer code twice. `tsc --incremental` never stats
+    // its output files, so scripts/check-emit.ts is what actually catches a
+    // no-op emit; this only removes the known cause.
     "incremental": true
   }
 }

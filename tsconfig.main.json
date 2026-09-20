@@ -9,7 +9,8 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "types": ["node"],
-    "tsBuildInfoFile": "node_modules/.cache/tsc/main.tsbuildinfo"
+    // Per-checkout cache — see tsconfig.base.json for why it is not in node_modules.
+    "tsBuildInfoFile": ".tsbuildinfo/main.tsbuildinfo"
   },
   "include": ["src/**/*.ts", "preload/**/*.ts", "scripts/**/*.ts"]
 }
