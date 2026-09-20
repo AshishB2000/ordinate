@@ -19,7 +19,7 @@ const AN_WIZ_EXAMPLES = [
   'Give me an overview sheet, then a sheet per region.',
 ];
 
-async function anCreateWizard(): Promise<void> {
+async function anCreateWizard(datasetId?: string): Promise<void> {
   if (!currentProjectId) { window.alert('Open a project first.'); return; }
 
   let sets: any[] = [];
@@ -462,11 +462,15 @@ async function anCreateWizard(): Promise<void> {
   document.body.appendChild(overlay);
 
   search.addEventListener('input', renderRows);
-  // Preselect when there is only one dataset — the step is then a confirmation,
-  // not a decision, and Next is live immediately.
-  if (sets.length === 1) {
-    selectedId = String(sets[0].id);
-    nameIn.value = String(sets[0].name || '').trim() + ' dashboard';
+  // Preselect the dataset the caller opened this ON — the Data page's "New
+  // dashboard" button knows which one you were looking at, so step 1 is a
+  // confirmation rather than a decision and Next is live immediately. Falls
+  // back to the only dataset there is, which was the original rule.
+  const preset = sets.find((d) => String(d.id) === String(datasetId || ''))
+    || (sets.length === 1 ? sets[0] : null);
+  if (preset) {
+    selectedId = String(preset.id);
+    nameIn.value = String(preset.name || '').trim() + ' dashboard';
   }
   renderRows();
   sync();

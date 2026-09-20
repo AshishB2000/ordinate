@@ -24,6 +24,8 @@ import {
   distinctValuesPageJs,
   MAX_DISTINCT,
 } from '../engine/datasetPage';
+import { medianOf } from '../data/columnProfile';
+import { medianResident } from '../engine/medianResident';
 // The visual-filter whitelist, reused verbatim: `dataset:page` now takes the
 // same `FilterStep[]` a visual carries, and two sanitisers for one shape is how
 // they drift apart.
@@ -441,6 +443,54 @@ export function register() {
       return distinctValuesPageJs(ds.columns, ds.rows, col, req);
     } catch {
       return { values: [], total: 0 };
+    }
+  });
+
+  // ── One column's median, for the column-profile panel ─────────────────────
+  //
+  // The ONE figure that panel needs and nothing else in the app computes; see
+  // the header of src/data/columnProfile.ts for what serves the rest of it and
+  // why a median is not folded into `dataset:stats` (it would pay for a
+  // quantile over every numeric column on every dataset open, to serve a panel
+  // opened by a click).
+  //
+  // Two-path shape, same as `dataset:distinct`. `{ ok: true, median: null }` is
+  // a REAL answer — a column with no finite numeric cells, and the only thing a
+  // non-number column ever gets. Never throws.
+  ipcMain.handle('dataset:median', async (_e, { projectId, datasetId, column }: any = {}) => {
+    try {
+      const col = typeof column === 'string' ? column : '';
+      if (!col) return { ok: true, median: null };
+
+      const src = await datasets.residentSource(projectId, datasetId);
+      if (src) {
+        // A column DECLARED anything but `number` has no median, and that is
+        // settled by the record's schema alone — no query and, crucially, no
+        // hydrate. Without this, clicking a text header would fall through to
+        // the JS reference and pull the whole table into main just to reach the
+        // same `null`, which is the exact cost this panel is built to avoid.
+        // It is also not a resident FAILURE, so it is not traced as one.
+        const declared = src.columns.find((c) => c && c.name === col);
+        if (declared && declared.type !== 'number') return { ok: true, median: null };
+
+        // `{ value: null }` is "no finite cells" and ends the call; only a bare
+        // `null` is "fall back". Conflating them would hydrate a million rows
+        // for the JS reference to reach the same answer.
+        const fast = medianResident(src, col);
+        if (fast) {
+          trace.record('datasetMedian', 'resident');
+          return { ok: true, median: fast.value };
+        }
+        trace.record('datasetMedian', 'failed', col);
+      } else {
+        trace.record('datasetMedian', 'skipped');
+      }
+
+      const ds = await datasets.getDataset(projectId, datasetId);
+      if (!ds) return { ok: true, median: null };
+      return { ok: true, median: medianOf(ds.columns, ds.rows, col) };
+    } catch {
+      return { ok: true, median: null };
     }
   });
 

@@ -150,6 +150,7 @@ declare global {
       ): Promise<{ values: string[]; total: number }>;
       deleteDataset(projectId: string, id: string): Promise<{ ok: boolean }>;
       datasetStats(projectId: string, datasetId: string): Promise<any>;
+      datasetMedian(projectId: string, datasetId: string, column: string): Promise<any>;
       setDatasetAutoRefresh(projectId: string, datasetId: string, autoRefresh: string | null): Promise<any>;
       setDatasetWatch(projectId: string, datasetId: string, watch: boolean): Promise<any>;
       updateDataset(projectId: string, datasetId: string, columns: any[]): Promise<any>;

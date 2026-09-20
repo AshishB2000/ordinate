@@ -238,6 +238,12 @@ contextBridge.exposeInMainWorld('hub', {
   // { ok, dataset } | { ok:false, error }.
   // `autoRefresh`: 'hourly' | 'daily' | 'weekly' to set, null/'off' to clear,
   // omitted to leave alone. Same channel as the column patch — one record.
+  // One column's median, for the column-profile panel — the one figure it needs
+  // that `dataset:stats` and `visual:data` cannot answer between them.
+  // Returns { ok:true, median: number | null }; null means "no finite cells".
+  datasetMedian: (projectId: string, datasetId: string, column: string) =>
+    ipcRenderer.invoke('dataset:median', { projectId, datasetId, column }),
+
   setDatasetAutoRefresh: (projectId: string, datasetId: string, autoRefresh: string | null) =>
     ipcRenderer.invoke('dataset:update', { projectId, datasetId, autoRefresh }),
   setDatasetWatch: (projectId: string, datasetId: string, watch: boolean) =>

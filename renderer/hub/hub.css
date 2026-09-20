@@ -4579,7 +4579,9 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 .ds-saved-cols,
 .ds-saved-item {
   display: grid;
-  grid-template-columns: minmax(200px, 1fr) 90px 116px minmax(150px, 200px) 132px;
+  /* The action cell gained "New visual" (ghost until hover, but always in the
+     layout so nothing shifts under the pointer) — 132px could not hold it. */
+  grid-template-columns: minmax(200px, 1fr) 90px 116px minmax(150px, 200px) 232px;
   align-items: center;
   gap: 12px;
 }
@@ -4589,6 +4591,9 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
 }
 .ds-saved-item:last-child { border-bottom: 0; }
 .ds-saved-item:hover { background: var(--surface-2); }
+/* The WHOLE row opens the dataset (dsList.ts), so the whole row says so. The
+   name button keeps its own focus ring as the keyboard-reachable control. */
+.ds-saved-item { cursor: pointer; }
 /* The name cell IS the click target — a link-like control, because the row now
    carries the border and the padding. */
 .ds-saved-open {
@@ -4634,6 +4639,24 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
    — Combine… had none at all and rendered as a raw UA button, 21px tall with
    square corners, beside a 36px `.btn` in the same panel. What is left here is
    only what makes each one itself. */
+/* "New visual" is the row's primary next step, but five visible buttons per row
+   is noise down a list. Reveal on hover or on focus reaching anywhere inside the
+   row — OPACITY, not display, so the cell's width never changes under the
+   pointer and the other buttons never jump. `pointer-events: none` while it is
+   invisible keeps it from swallowing a click aimed at the row. */
+.ds-saved-viz {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+.ds-saved-item:hover .ds-saved-viz,
+.ds-saved-item:focus-within .ds-saved-viz {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* Keyboard users never hover, so a tab into it must reveal it in its own right. */
+.ds-saved-viz:focus-visible { opacity: 1; pointer-events: auto; }
+
 .ds-saved-del {
   width: 30px;      /* square: the trash is icon-only, .btn-sm's 11px side padding is for text */
   padding: 0;
@@ -4737,12 +4760,22 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   gap: 12px;
   flex-wrap: wrap;
 }
+/* The ident is a COLUMN now: the name and its source badge on one line, and
+   under them the freshness line that used to sit out on the right. A timestamp
+   is a property of the title, not an action, and the right edge is worth more
+   as the place the page leads somewhere. */
 .ds-explorer-ident {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.ds-explorer-titlerow {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
-  flex: 1 1 auto;
 }
 .ds-explorer-ident .ds-explorer-title {
   overflow: hidden;
@@ -4753,6 +4786,15 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+/* What the dataset page is FOR: the three flows it can start. */
+.ds-explorer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex: 0 0 auto;
 }
 .ds-back { flex: 0 0 auto; }
@@ -5008,6 +5050,19 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   gap: 6px;
   min-width: 0;
 }
+/* The grid and the column profile share a row. The profile is `hidden` until a
+   column name is clicked, so the table has the full width until then — no
+   reserved gutter, no reflow cost for a panel nobody opened. */
+.ds-grid-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+.ds-grid-row .ds-table-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 /* Quality is a list of findings; the grid is not part of that answer. */
 .ds-explorer.tab-quality .ds-grid-pane { display: none; }
 /* "No issues" is a real answer — shown only when the issue list is empty,
@@ -5018,6 +5073,14 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   margin: 0;
 }
 #ds-tabp-quality:has(#ds-quality:not([hidden])) .ds-quality-none { display: none; }
+/* Findings, then the verdict line, then the per-column table under both.
+   No `[hidden]` guard needed: the global `[hidden] { display: none !important }`
+   at the top of this file already settles that for every element. */
+#ds-tabp-quality {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
 
 /* ── The import dialog ───────────────────────────────────────────────────────
@@ -5237,6 +5300,25 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   align-items: center;
   gap: 6px;
 }
+/* The column NAME and the SORT arrow are two controls. They were one button, so
+   there was no way to ask "what is in this column?" without also reordering the
+   grid you were reading. The name opens the profile panel; the arrow sorts. */
+.ds-th-name {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text-strong);
+  cursor: pointer;
+  text-align: left;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-th-name:hover { color: var(--accent); }
 .ds-th-sort {
   display: inline-flex;
   align-items: center;
@@ -5257,6 +5339,13 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   font-size: 10px;
   color: var(--muted);
 }
+/* An unsorted column keeps a dimmed arrow rather than an empty span: the
+   control has to be findable before you have already used it. */
+.ds-th-arrow.is-idle { opacity: 0.3; }
+.ds-th-sort:hover .ds-th-arrow.is-idle { opacity: 0.7; }
+/* Which column the open profile is describing. */
+.ds-th.is-profiled { background: var(--surface-2); }
+.ds-th.is-profiled .ds-th-name { color: var(--accent); }
 .ds-th-edit {
   background: none;
   border: none;
@@ -5282,6 +5371,240 @@ button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
   font-size: 10px;
   font-weight: 400;
   color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ── The column profile (dsProfile.ts) ───────────────────────────────────────
+   A panel beside the grid, not over it: you are comparing what it says against
+   the rows it describes, so covering them would be the wrong shape. It matches
+   .ds-table-scroll's height cap so the two sit as one block. */
+.ds-profile {
+  flex: 0 0 300px;
+  max-width: 300px;
+  /* TALLER than .ds-table-scroll's 380px, deliberately. Matching the grid looked
+     tidier and made the panel useless: six fact rows plus the pinned actions
+     leave ~50px for a ten-bar histogram, which is a scrollbar where a
+     distribution should be. 520px holds the worst case — a number column's six
+     facts and all ten bins — without scrolling at all, and the row is
+     `align-items: flex-start`, so the panel simply hangs below the grid rather
+     than stretching it. */
+  max-height: 520px;
+  overflow: hidden;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+/* The scrolling part. The head above it and the actions below it stay put — a
+   ten-bar histogram is taller than the panel, and when the whole thing scrolled
+   together the three actions were below the fold on every numeric column. */
+.dsp-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dsp-head-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.dsp-ident {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.dsp-name {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+.dsp-kind {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.dsp-x {
+  flex: 0 0 auto;
+  background: none;
+  border: 0;
+  padding: 0 2px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.dsp-x:hover { color: var(--text-strong); }
+
+/* Label/value pairs as a two-column grid, so the numbers line up down the
+   right edge and can be compared without reading the labels twice. */
+.dsp-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  margin: 0;
+  font-size: 12px;
+}
+.dsp-facts dt { color: var(--muted); }
+.dsp-facts dd {
+  margin: 0;
+  text-align: right;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.dsp-head {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.dsp-note {
+  margin: 0 0 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.dsp-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+/* label · bar · count. The bar column is the only elastic one, so every row's
+   count ends at the same x and the bars all start at the same one. */
+.dsp-bar-row {
+  display: grid;
+  grid-template-columns: 84px 1fr auto;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.dsp-bar-label {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dsp-bar-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--border);
+  overflow: hidden;
+}
+.dsp-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent);
+}
+.dsp-bar-n {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+/* The three scoped actions, stacked: at 300px they would wrap mid-label. Pinned
+   under the scrolling body, with a rule to separate them from it. */
+.dsp-actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── The Quality tab's completeness table (dsProfile.ts) ─────────────────────
+   The findings above it are an exception report; this is the baseline the tab
+   shows when there are no exceptions, so it renders either way. */
+.ds-quality-table {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.ds-quality-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.ds-quality-grid th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.ds-quality-grid td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: middle;
+}
+.ds-quality-grid tr:last-child td { border-bottom: 0; }
+.dsq-name {
+  font-weight: 500;
+  color: var(--text-strong);
+}
+.dsq-type {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+/* A partly-empty column should be findable by scanning the column of bars, not
+   by reading forty percentages. Warm below half full — the same threshold main
+   flags `empty_heavy` at, so the bar and the badge above never disagree. */
+.dsq-fill {
+  display: inline-block;
+  width: 64px;
+  height: 6px;
+  vertical-align: middle;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+.dsq-fill-bar {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+}
+.dsq-fill.is-low .dsq-fill-bar { background: #d97706; }
+.dsq-fill-pct {
+  margin-left: 8px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+/* A dash that MEANS something — "not counted here", not "no value". The title
+   says where the number is. */
+.dsq-muted {
+  color: var(--text-dim);
+  cursor: help;
+}
+.dsq-sample {
+  color: var(--muted);
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

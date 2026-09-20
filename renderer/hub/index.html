@@ -962,16 +962,28 @@
 
         <!-- ── Saved-dataset explorer (sort / filter / show-hide / rename / retype / stats / quality / AI explain) ── -->
         <div class="ds-explorer" id="ds-explorer" hidden>
+          <!-- The header is where the dataset page stopped being a dead end. The
+               right side used to hold only "Imported 09:08 PM"; it now holds the
+               three things you came here to do, and the timestamp moved under
+               the title where a timestamp belongs. Every button opens an
+               EXISTING flow with this dataset already chosen (dsExplorer.ts). -->
           <div class="ds-explorer-head">
             <button class="btn btn-sm ds-back" type="button" id="ds-explorer-close">← Back to datasets</button>
             <div class="ds-explorer-ident">
-              <h3 class="ds-explorer-title" id="ds-explorer-title"></h3>
-              <span class="ds-source-badge" id="ds-explorer-source" hidden></span>
+              <div class="ds-explorer-titlerow">
+                <h3 class="ds-explorer-title" id="ds-explorer-title"></h3>
+                <span class="ds-source-badge" id="ds-explorer-source" hidden></span>
+              </div>
+              <div class="ds-explorer-meta">
+                <span class="ds-fresh" id="ds-explorer-fresh"></span>
+                <span class="ds-auto-host" id="ds-explorer-auto" hidden></span>
+                <button class="btn btn-sm" type="button" id="ds-explorer-refresh" hidden>↻ Refresh</button>
+              </div>
             </div>
-            <div class="ds-explorer-meta">
-              <span class="ds-fresh" id="ds-explorer-fresh"></span>
-              <span class="ds-auto-host" id="ds-explorer-auto" hidden></span>
-              <button class="btn btn-sm" type="button" id="ds-explorer-refresh" hidden>↻ Refresh</button>
+            <div class="ds-explorer-actions">
+              <button class="btn btn-primary btn-sm" type="button" id="ds-act-visual">New visual</button>
+              <button class="btn btn-sm" type="button" id="ds-act-dashboard">New dashboard</button>
+              <button class="btn btn-sm" type="button" id="ds-act-ask">Ask</button>
             </div>
           </div>
 
@@ -995,24 +1007,30 @@
 
           <div class="ds-tab-body">
           <div class="ds-tabp" id="ds-tabp-data" role="tabpanel" aria-labelledby="ds-tab-data">
+          <!-- "Prepare data" opened the tab one click to the left of it, and
+               "Explain this dataset" is what the header's Ask button does with
+               the whole conversation around it. Both are gone; what is left is
+               the three controls that act on the GRID. -->
           <div class="ds-explorer-toolbar">
             <input class="ds-search" id="ds-search" type="search" placeholder="Search rows…" />
             <div class="ds-cols-wrap">
-              <button class="btn" type="button" id="ds-cols-btn">Columns</button>
+              <button class="btn" type="button" id="ds-cols-btn">Show/hide columns</button>
               <div class="ds-cols-menu" id="ds-cols-menu" hidden></div>
             </div>
-            <button class="btn" type="button" id="ds-explain-btn">Explain this dataset</button>
-            <button class="btn" type="button" id="ds-prepare-btn">Prepare data</button>
           </div>
-
-          <div class="ds-explain-out" id="ds-explain-out" hidden></div>
           </div><!-- /#ds-tabp-data -->
 
           <div class="ds-tabp" id="ds-tabp-quality" role="tabpanel" aria-labelledby="ds-tab-quality" hidden>
             <div class="ds-quality" id="ds-quality" hidden></div>
-            <!-- Shown only when the quality panel has nothing in it: an empty
-                 tab reads as broken, and "no issues found" is a real answer. -->
-            <p class="ds-quality-none">No quality issues found in this dataset.</p>
+            <!-- Shown only when the findings list is empty: "no issues" is a
+                 real answer, and it reads as one above a table rather than
+                 alone on a blank page. -->
+            <p class="ds-quality-none">✓ No issues found in this dataset.</p>
+            <!-- The BASELINE: every column, how full it is, what is in it. The
+                 findings above are the exception report; this is what the tab
+                 shows when there are no exceptions. Built by dsProfile.ts from
+                 the summaries the explorer already fetched — no extra query. -->
+            <div class="ds-quality-table" id="ds-quality-table" hidden></div>
           </div>
 
           <div class="ds-tabp" id="ds-tabp-prepare" role="tabpanel" aria-labelledby="ds-tab-prepare" hidden>
@@ -1048,7 +1066,35 @@
                edited, which is the whole point of a reversible pipeline. -->
           <div class="ds-grid-pane">
             <p class="ds-preview-note" id="ds-explorer-note" hidden></p>
-            <div class="ds-table-scroll" id="ds-explorer-scroll"></div>
+            <div class="ds-grid-row">
+              <div class="ds-table-scroll" id="ds-explorer-scroll"></div>
+              <!-- The column profile, opened by clicking a column NAME in the
+                   header (dsProfile.ts). Static markup rather than a template:
+                   there is exactly one, it is a panel and not a dialog, and its
+                   three actions wire once at boot. -->
+              <aside class="ds-profile" id="ds-profile" hidden aria-label="Column profile">
+                <div class="dsp-head-row">
+                  <div class="dsp-ident">
+                    <h4 class="dsp-name js-dsp-name"></h4>
+                    <span class="dsp-kind js-dsp-kind"></span>
+                  </div>
+                  <button class="dsp-x js-dsp-x" type="button" aria-label="Close the column profile">✕</button>
+                </div>
+                <!-- The body scrolls; the actions below it do not. A ten-bar
+                     histogram is taller than the panel, and with everything in
+                     one scroll the three actions — the reason the panel exists
+                     — sat below the fold. -->
+                <div class="dsp-body">
+                  <dl class="dsp-facts js-dsp-facts"></dl>
+                  <div class="dsp-chart js-dsp-chart"></div>
+                </div>
+                <div class="dsp-actions">
+                  <button class="btn btn-sm js-dsp-chart-btn" type="button">Chart this column</button>
+                  <button class="btn btn-sm js-dsp-filter-btn" type="button">Filter rows on this</button>
+                  <button class="btn btn-sm js-dsp-rename-btn" type="button">Rename</button>
+                </div>
+              </aside>
+            </div>
           </div>
           </div><!-- /.ds-tab-body -->
         </div>
@@ -2406,12 +2452,13 @@
 <script src="projects.js"></script>
 <script src="workspace.js"></script>
 <script src="datasets.js"></script>
-<!-- datasets.ts was 1271 lines; these five are it, split by job. datasets.js
+<!-- datasets.ts was 1271 lines; these six are it, split by job. datasets.js
      stays first — it keeps the module-local state the rest read. -->
 <script src="dsImport.js"></script>
 <script src="dsList.js"></script>
 <script src="dsExplorer.js"></script>
 <script src="dsGrid.js"></script>
+<script src="dsProfile.js"></script>
 <script src="composer.js"></script>
 <script src="dataSection.js"></script>
 <script src="captureDataset.js"></script>
