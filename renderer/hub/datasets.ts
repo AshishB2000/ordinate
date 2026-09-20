@@ -75,13 +75,24 @@ function initDatasets(): void {
     });
   }
 
-  const explainBtn = dsEl('ds-explain-btn');
-  if (explainBtn) explainBtn.addEventListener('click', () => handleExplainDataset());
+  // The three header actions — the doors out of the dataset page. Each opens an
+  // existing flow with this dataset already chosen; see dsExplorer.ts.
+  const actVisual = dsEl('ds-act-visual');
+  if (actVisual) actVisual.addEventListener('click', () => void dsNewVisualFromDataset());
+  const actDash = dsEl('ds-act-dashboard');
+  if (actDash) actDash.addEventListener('click', () => void dsNewDashboardFromDataset());
+  const actAsk = dsEl('ds-act-ask');
+  if (actAsk) actAsk.addEventListener('click', () => dsAskAboutDataset());
+
+  // The column-profile panel's own controls (dsProfile.ts). Wired once, here,
+  // rather than per open — the panel is static markup, not a cloned template.
+  dsWireProfileActions();
 
   const closeBtn = dsEl('ds-explorer-close');
   if (closeBtn) {
     closeBtn.addEventListener('click', () => {
       expId = ''; // also makes any in-flight page reply drop itself
+      dsCloseProfile(); // nothing to profile once the dataset is closed
       if (typeof dkSync === 'function') dkSync(); // dock.ts — context line falls back off this dataset
       if (expSearchTimer) {
         window.clearTimeout(expSearchTimer);

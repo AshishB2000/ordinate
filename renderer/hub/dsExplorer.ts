@@ -38,6 +38,10 @@ let expName = '';
 let expColumns: ExpCol[] = [];
 let expRows: ExpCell[][] = []; // FALLBACK ONLY — never rendered directly (see above)
 let expSummaries: any[] = []; // per-column ColumnSummary from dataset:stats
+// The STORED row count, from the record's metadata — not `expTotal`, which is
+// the count AFTER the current search and therefore moves as you type. Every
+// "filled 94% of n" figure divides by this one.
+let expRowCount = 0;
 let expHidden: Set<number> = new Set();
 let expSearch = '';
 let expSortCol = -1;
@@ -106,6 +110,7 @@ async function openSavedDataset(id: string): Promise<void> {
   expRows = [];
   expSteps = Array.isArray(ds.steps) ? ds.steps : []; // prepare.ts pipeline state
   expSummaries = [];
+  expRowCount = typeof ds.rowCount === 'number' ? ds.rowCount : 0;
   expHidden = new Set();
   expSearch = '';
   expSortCol = -1;
@@ -120,13 +125,11 @@ async function openSavedDataset(id: string): Promise<void> {
 
   const searchInput = dsEl('ds-search') as HTMLInputElement | null;
   if (searchInput) searchInput.value = '';
-  const explainOut = dsEl('ds-explain-out');
-  if (explainOut) {
-    explainOut.hidden = true;
-    explainOut.textContent = '';
-  }
   const colsMenu = dsEl('ds-cols-menu');
   if (colsMenu) colsMenu.hidden = true;
+  // A panel left open from the previous dataset would describe a column this
+  // one may not even have.
+  dsCloseProfile();
   const quality = dsEl('ds-quality');
   if (quality) {
     quality.innerHTML = '';
@@ -267,6 +270,16 @@ async function loadExplorerStats(): Promise<void> {
   paintExplorerTable(); // headers now carry summary chips — same rows, no refetch
 }
 
+/**
+ * The Quality tab: the findings, and — always — the per-column completeness
+ * table under them.
+ *
+ * The badges are an EXCEPTION report, so on a clean dataset there are none and
+ * the tab used to be a single sentence on an otherwise blank page, which reads
+ * as broken rather than as good news. `dsRenderQualityTable` (dsProfile.ts)
+ * gives the tab its baseline content from the summaries already in hand, and
+ * `.ds-quality-none` above it says, in as many words, that nothing is wrong.
+ */
 function renderQuality(issues: any[]): void {
   const box = dsEl('ds-quality');
   if (!box) return;
@@ -278,39 +291,53 @@ function renderQuality(issues: any[]): void {
     box.appendChild(badge);
   });
   box.hidden = issues.length === 0;
+  dsRenderQualityTable();
 }
 
 
-// OPTIONAL: narrate the dataset via the configured model. Numbers are computed in
-// main and passed as facts; gate on readiness — show a gentle hint, never an error.
-async function handleExplainDataset(): Promise<void> {
-  if (!currentProjectId || !expId) return;
-  const out = dsEl('ds-explain-out');
-  const btn = dsEl('ds-explain-btn') as HTMLButtonElement | null;
-  if (out) {
-    out.hidden = false;
-    out.className = 'ds-explain-out ds-explain-hint';
-    out.textContent = 'Thinking…';
+// ── The three things you can do with the dataset you are looking at ─────────
+//
+// The Data page used to end here: you imported a table, opened it, and nothing
+// on the page led anywhere. These are the doors out, and every one of them is
+// an EXISTING flow reached with this dataset already chosen — not a second way
+// to do the same thing, which is how two flows drift into disagreeing.
+
+/** "New visual" — the builder, on this dataset. Same entry as the gallery's. */
+async function dsNewVisualFromDataset(): Promise<void> {
+  if (!expId) return;
+  // Switch first: `handleNewVisual` ends in `openVisualBuilder`, which shows the
+  // builder inside #ws-visuals — a section that is not on screen from here.
+  // Cancelling therefore lands on the Visuals gallery rather than back on the
+  // grid, which is a coherent place to be after asking for a new visual.
+  if (typeof selectSection === 'function') selectSection('visuals');
+  await handleNewVisual({ datasetId: expId });
+}
+
+/** "New dashboard" — the create wizard, with step 1 already answered. */
+async function dsNewDashboardFromDataset(): Promise<void> {
+  if (!expId) return;
+  if (typeof selectSection === 'function') selectSection('analyses');
+  await anCreateWizard(expId);
+}
+
+/**
+ * "Ask" — the Assistant dock, on this dataset.
+ *
+ * Nothing is passed: `dkContextRef()` already resolves the open dataset as the
+ * dock's context (it reads `expId`), and the dock's whole contract is that
+ * context is INFERRED, never overridden. So this only has to open the panel and
+ * put the cursor in it. Opening via `dkToggle` rather than `dkSetOpen` is
+ * deliberate — the toggle marks it a deliberate user open, which is what
+ * licenses `dkSync` to move focus into the composer.
+ */
+function dsAskAboutDataset(): void {
+  if (typeof dkToggle !== 'function' || typeof dkIsOpen !== 'function') return;
+  if (!dkIsOpen()) {
+    dkToggle();
+    return;
   }
-  if (btn) btn.disabled = true;
-  let res: any;
-  try {
-    res = await window.hub.explainDataset(currentProjectId, expId);
-  } catch (_) {
-    res = { ok: false, error: 'Failed to explain the dataset.' };
-  }
-  if (btn) btn.disabled = false;
-  if (!out) return;
-  if (res && res.ok) {
-    out.className = 'ds-explain-out';
-    out.textContent = String(res.text || '');
-  } else if (res && res.notReady) {
-    out.className = 'ds-explain-out ds-explain-hint';
-    out.textContent = AI_NOT_CONFIGURED;
-  } else {
-    out.className = 'ds-explain-out ds-explain-hint';
-    out.textContent = (res && res.error) || 'Could not explain the dataset.';
-  }
+  const input = document.getElementById('dk-input') as HTMLTextAreaElement | null;
+  if (input && !input.disabled) input.focus();
 }
 
 async function handleDeleteDataset(id: string): Promise<void> {

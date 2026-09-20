@@ -60,19 +60,29 @@ function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max - 1) + '…' : s;
 }
 
+/**
+ * ONE hint under a header, not a summary.
+ *
+ * This used to print the whole `ColumnSummary` — `725 distinct · top 2024-12-06
+ * ×24 · n=5000` — under EVERY column, which is three facts nobody asked for
+ * wrapped across a header row, repeated across forty columns. The profile panel
+ * (dsProfile.ts) is where those facts belong, and it opens on a click of the
+ * name; what stays here is the single number that tells you whether opening it
+ * is worth it.
+ *
+ * A number column has no `distinct` in its summary (it carries min/max/mean
+ * instead), so it shows its range — the equivalent one-glance answer, and one
+ * the panel does not have to be opened to learn.
+ */
 function summaryChipText(sum: any): string {
   if (!sum) return '';
   if (sum.type === 'number') {
-    const parts: string[] = [];
-    if (typeof sum.min === 'number' && typeof sum.max === 'number') parts.push(fmtNum(sum.min) + '–' + fmtNum(sum.max));
-    if (typeof sum.mean === 'number') parts.push('avg ' + fmtNum(sum.mean));
-    parts.push('n=' + (sum.count ?? 0));
-    return parts.join(' · ');
+    if (typeof sum.min === 'number' && typeof sum.max === 'number') {
+      return fmtNum(sum.min) + '–' + fmtNum(sum.max);
+    }
+    return '';
   }
-  const parts: string[] = [(sum.distinct ?? 0) + ' distinct'];
-  if (sum.mostCommon) parts.push('top "' + truncate(String(sum.mostCommon.value), 16) + '" ×' + sum.mostCommon.count);
-  parts.push('n=' + (sum.nonEmpty ?? 0));
-  return parts.join(' · ');
+  return typeof sum.distinct === 'number' ? sum.distinct.toLocaleString() + ' distinct' : '';
 }
 
 function toggleSort(c: number): void {
@@ -100,23 +110,38 @@ function expSortColumnName(): string {
 
 function makeExplorerTh(col: ExpCol, c: number): HTMLElement {
   const th = document.createElement('th');
-  th.className = 'ds-th';
+  th.className = 'ds-th' + (dsProfileCol === c ? ' is-profiled' : '');
   const inner = document.createElement('div');
   inner.className = 'ds-th-inner';
 
   const row = document.createElement('div');
   row.className = 'ds-th-row';
 
+  // TWO controls where there was one. The NAME opens the column profile and the
+  // ARROW sorts — they were a single button, so there was no way to ask "what
+  // is in this column?" without also reordering the grid you were reading.
+  const nameBtn = document.createElement('button');
+  nameBtn.type = 'button';
+  nameBtn.className = 'ds-th-name';
+  nameBtn.textContent = col.name;
+  nameBtn.title = 'Profile this column';
+  nameBtn.setAttribute('aria-expanded', String(dsProfileCol === c));
+  nameBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    void dsOpenProfile(c);
+  });
+  row.appendChild(nameBtn);
+
   const sortBtn = document.createElement('button');
   sortBtn.type = 'button';
   sortBtn.className = 'ds-th-sort';
-  const nameSpan = document.createElement('span');
-  nameSpan.className = 'ds-th-name';
-  nameSpan.textContent = col.name;
-  sortBtn.appendChild(nameSpan);
+  sortBtn.setAttribute('aria-label', 'Sort by ' + (col.name || 'this column'));
   const arrow = document.createElement('span');
   arrow.className = 'ds-th-arrow';
-  arrow.textContent = expSortCol === c ? (expSortDir === 1 ? '▲' : '▼') : '';
+  // An unsorted column keeps a dimmed ▲, so the control is discoverable at all
+  // — an empty span was invisible until you happened to click the right pixels.
+  arrow.textContent = expSortCol === c ? (expSortDir === 1 ? '▲' : '▼') : '▲';
+  if (expSortCol !== c) arrow.classList.add('is-idle');
   sortBtn.appendChild(arrow);
   sortBtn.addEventListener('click', () => toggleSort(c));
   row.appendChild(sortBtn);
@@ -232,6 +257,9 @@ function stepExplorerPage(delta: number): void {
 function paintExplorerTable(): void {
   const scroll = dsEl('ds-explorer-scroll');
   if (!scroll) return;
+  // A dropped column would leave the panel pointing at an index that no longer
+  // exists (or, worse, at a different column that slid into it).
+  if (dsProfileCol >= expColumns.length) dsCloseProfile();
   scroll.innerHTML = '';
   const table = document.createElement('table');
   table.className = 'ds-table';

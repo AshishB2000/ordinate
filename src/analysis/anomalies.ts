@@ -82,7 +82,14 @@ function round(n: number): number {
 }
 
 // Linear-interpolated quantile (numpy "linear" / type-7). sorted must be ascending.
-function quantile(sorted: number[], p: number): number {
+//
+// EXPORTED so `data/columnProfile.ts` computes a column's median with this exact
+// evaluation order rather than a second one of its own. That matters because the
+// resident twin uses DuckDB's `quantile_cont`, which this repo has already
+// verified against THIS function on 800 random samples (see the header of
+// `engine/anomaliesResident.ts`) — a second JS spelling would be a third
+// implementation nothing has compared.
+export function quantile(sorted: number[], p: number): number {
   const n = sorted.length;
   if (n === 0) return NaN;
   if (n === 1) return sorted[0];

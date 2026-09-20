@@ -230,6 +230,14 @@ function makeSavedItem(d: any): HTMLElement {
   if (!(d && d.originKind)) fresh.title = DS_NOT_REFRESHABLE_HINT;
   open.addEventListener('click', () => openSavedDataset(String(d.id)));
 
+  // THE WHOLE ROW opens it, not just the name. Everything from the row count to
+  // the timestamp looked clickable and was not, so half the row was a dead
+  // target. Every control inside the action cell already calls
+  // `stopPropagation`, which is what keeps Refresh/Combine/delete from opening
+  // the dataset on their way past — and the name button above stays the
+  // keyboard-reachable control, so this adds a target without removing one.
+  row.addEventListener('click', () => openSavedDataset(String(d.id)));
+
   // Inline status for this row's own refresh — spinner, then either nothing
   // (the row repaints) or the error text. textContent only, never innerHTML,
   // and never a window.alert.
@@ -268,6 +276,23 @@ function makeSavedItem(d: any): HTMLElement {
   if (auto) actions.appendChild(auto);
   const watch = dsWatchToggle(d);
   if (watch) actions.appendChild(watch);
+
+  // "New visual", the row-level twin of the explorer header's primary action:
+  // the most common next step after importing a table, without opening it
+  // first. Ghost until the row is hovered or focus lands inside it (hub.css) —
+  // present where it is wanted, not five buttons of noise down the list.
+  const viz = document.createElement('button');
+  viz.type = 'button';
+  viz.className = 'btn btn-sm ds-saved-viz';
+  viz.setAttribute('aria-label', `New visual from ${d && d.name ? d.name : 'this dataset'}`);
+  viz.title = 'Build a chart from this dataset';
+  viz.textContent = 'New visual';
+  viz.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (typeof selectSection === 'function') selectSection('visuals');
+    void handleNewVisual({ datasetId: String(d.id) });
+  });
+  actions.appendChild(viz);
 
   const comb = document.createElement('button');
   comb.type = 'button';
