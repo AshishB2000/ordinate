@@ -293,6 +293,11 @@ function makeEmptyState(opts: {
 // ALWAYS render: a section that vanishes when empty is what left a void under
 // the old first-run cards.
 function paintHome(): void {
+  // "What stands out" — its own fetch (insights:list), so Home's recent/starred
+  // paint is never held up by a dataset scan. The section stays hidden until it
+  // has something to say.
+  if (typeof insRenderHome === 'function') void insRenderHome();
+
   const starredSec = document.getElementById('home-starred');
   const starredRows = document.getElementById('home-starred-rows');
   const recentSec = document.getElementById('home-recent');

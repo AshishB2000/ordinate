@@ -10,8 +10,8 @@
 //      test-copilot-analysis-facts.ts also depends on), and passing an emitter
 //      does not change the computed facts.
 //   2. Each kind emits its exact ordered step set, mapping 1:1 to the functions
-//      that ran (dataset: read → compute → quality; visual: read → read →
-//      compute; analysis: read → compute; unknown → project inventory).
+//      that ran (dataset: read → compute → quality → compute; visual: read →
+//      read → compute; analysis: read → compute; unknown → project inventory).
 //   3. NO emitted step contains a data VALUE — not a cell, not a metric total.
 //      Counts of columns/rows/issues/metrics are facts and are allowed; a value
 //      like the app-computed sum (600) is not, and must never leak into a chip.
@@ -89,9 +89,11 @@ async function main(): Promise<void> {
     withEmitFacts.text === noEmitFacts.text
       && JSON.stringify(withEmitFacts.provenance) === JSON.stringify(noEmitFacts.provenance));
 
-  // ── 2. Dataset ask: read → compute → quality, exact labels + counts ───────
-  ok('dataset emits exactly read → compute → quality',
-    JSON.stringify(kinds(cap)) === JSON.stringify(['read', 'compute', 'quality']),
+  // ── 2. Dataset ask: read → compute → quality → compute, labels + counts ──
+  // The fourth step is the insights read (feat/insights): buildFacts now also
+  // hands the dock what the app FOUND, so a truthful stream has to say so.
+  ok('dataset emits exactly read → compute → quality → compute',
+    JSON.stringify(kinds(cap)) === JSON.stringify(['read', 'compute', 'quality', 'compute']),
     JSON.stringify(kinds(cap)));
   ok('the read step names the dataset and counts rows (a count, not a value)',
     cap[0].kind === 'read' && cap[0].label === 'Read Cities' && cap[0].detail === '3 rows');
@@ -104,6 +106,10 @@ async function main(): Promise<void> {
     cap[2].kind === 'quality' && cap[2].label === 'Checked data quality'
       && cap[2].count === expectedIssues && cap[2].detail === expectedIssues + (expectedIssues === 1 ? ' issue found' : ' issues found'),
     JSON.stringify(cap[2]));
+  ok('the insights step counts findings, and names no figure',
+    cap[3].kind === 'compute' && /^Read \d+ insights?$/.test(cap[3].label)
+      && typeof cap[3].count === 'number',
+    JSON.stringify(cap[3]));
   ok('no dataset step carries a data value', carriesDataValue(cap, CELL_VALUES) === null,
     String(carriesDataValue(cap, CELL_VALUES)));
   ok('buildFacts never emits a model step (that is the ipc handler, not the facts)',

@@ -323,3 +323,11 @@ scripts/**/*.js
 # Prompts without a parser of their own, split out of analyze.ts. Emitted siblings.
 /src/ai/prompts.js
 /scripts/test-prompts.js
+
+# Insights — what the app found in the data. Emitted siblings.
+/src/analysis/insights.js
+/src/analysis/insightsAgg.js
+/src/ipc/insights.js
+/renderer/hub/insights.js
+/scripts/test-insights.js
+/scripts/smoke-insights.js

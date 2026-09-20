@@ -16,7 +16,21 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   schemaVersion: 1;
+  /**
+   * Insight ids the user has dismissed (feat/insights). OPTIONAL, so every
+   * record written before this existed stays valid untouched.
+   *
+   * Ids here, not on the dataset record: dismissing is a VIEW preference over
+   * the whole project, and a dataset record is rewritten on every refresh.
+   * `insights.Insight.id` names WHAT a finding is about (kind, column, period),
+   * so a dismissal survives a recompute and a new period brings the card back.
+   * Capped, because this list is unbounded otherwise.
+   */
+  dismissedInsights?: string[];
 }
+
+/** Enough for every card on every dataset in a project, several times over. */
+const MAX_DISMISSED = 500;
 
 let projectsDir: string | null = null;
 
@@ -105,7 +119,44 @@ function normalize(data: any): Project {
     createdAt,
     updatedAt: data.updatedAt || createdAt,
     schemaVersion: 1,
+    dismissedInsights: sanitizeDismissed(data.dismissedInsights),
   };
+}
+
+// Off-disk input: keep only plain non-empty strings, deduped and capped. A
+// hand-edited array of objects must not reach the renderer as one.
+function sanitizeDismissed(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const v of raw) {
+    if (typeof v !== 'string' || v === '' || seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+    if (out.length >= MAX_DISMISSED) break;
+  }
+  return out;
+}
+
+/**
+ * Add or remove one dismissed insight id. Returns the stored list, or null if
+ * the project is missing. Deliberately does NOT bump `updatedAt`: hiding a card
+ * is not a change to the project's content and must not reorder Recent.
+ */
+export async function setInsightDismissed(
+  id: string,
+  insightId: string,
+  dismissed: boolean,
+): Promise<string[] | null> {
+  if (!isValidId(id) || typeof insightId !== 'string' || !insightId) return null;
+  const existing = await getProject(id);
+  if (!existing) return null;
+  const current = existing.dismissedInsights || [];
+  const next = dismissed
+    ? (current.includes(insightId) ? current : [...current, insightId].slice(-MAX_DISMISSED))
+    : current.filter((x) => x !== insightId);
+  await writeJsonAtomic(projectFilePath(id), { ...existing, dismissedInsights: next });
+  return next;
 }
 
 // Load a single project. Returns null if missing or corrupt.

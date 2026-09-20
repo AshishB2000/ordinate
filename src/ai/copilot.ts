@@ -502,7 +502,17 @@ function sealLedger(ledger: LedgerEntry[], text: string, source: string): number
 // distinct/mostCommon) + quality issues + up to N sample rows. This is the
 // generalized twin of ipc/datasets.buildDatasetSummaryText (same shape) with the
 // guard line prepended.
-export function datasetFacts(ds: Dataset, summaries: ColumnSummary[], issues: QualityIssue[]): CopilotFacts {
+export function datasetFacts(
+  ds: Dataset,
+  summaries: ColumnSummary[],
+  issues: QualityIssue[],
+  // What the app FOUND (src/analysis/insights.ts), so "why did West drop?" has
+  // the app's own figures to narrate instead of the model deriving one. Each
+  // arrives as a finished, app-authored sentence; `sealLedger` below harvests
+  // its numbers exactly as it already does for the quality notes, so the
+  // fidelity guard covers these figures like any other.
+  insights: { detail: string }[] = [],
+): CopilotFacts {
   const lines: string[] = [GUARD_LINE, ''];
   const ledger: LedgerEntry[] = [];
   const SRC = 'datasetStats';
@@ -543,6 +553,11 @@ export function datasetFacts(ds: Dataset, summaries: ColumnSummary[], issues: Qu
       lines.push(`- ${i.detail}`);
       fromAppText(ledger, `quality: ${i.kind}`, i.detail, 'datasetStats.quality');
     });
+  }
+  if (insights.length > 0) {
+    lines.push('');
+    lines.push('What the app found (every figure below is app-computed):');
+    insights.forEach((i) => lines.push(`- ${i.detail}`));
   }
   const sample = ds.rows.slice(0, SAMPLE_ROWS);
   if (sample.length > 0) {

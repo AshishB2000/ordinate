@@ -578,14 +578,23 @@ function dkAnalysisSheets(visualId: string): any[] {
 // then NAVIGATE there so the user SEES it. Reversible: it is a new record they
 // can delete, which is the whole safety story. Grounded entirely in existing
 // IPC (saveVisual + analysis:create) — no new channel. Returns true on success.
-async function dkTurnIntoAnalysis(datasetId: string, name: string, chartType: string, encoding: any): Promise<boolean> {
+async function dkTurnIntoAnalysis(
+  datasetId: string,
+  name: string,
+  chartType: string,
+  encoding: any,
+  // The rows the chart is ABOUT. Empty for a proposed chart (the proposal IS
+  // the whole encoding); an insight card passes its own, because "West fell
+  // 31%" wrapped around a tile showing every region is not that finding.
+  filters: any[] = [],
+): Promise<boolean> {
   if (!currentProjectId) return false;
   // 1. saveVisual — exactly what "Save as visual" / "Add to dashboard" do.
   let vis: any;
   try {
     vis = await window.hub.saveVisual({
       projectId: currentProjectId, datasetId, name, chartType,
-      encoding, overrides: {}, filters: [],
+      encoding, overrides: {}, filters,
     });
   } catch (_) {
     vis = null;

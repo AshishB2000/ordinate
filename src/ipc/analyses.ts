@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import * as analysis from '../analysis/analysis';
+import { listInsights } from './insights';
 import { draftDashboard, dispatch, parseFirstObject, type NeutralMsg } from '../ai/analyze';
 import * as plan from '../analysis/analysisPlan';
 import * as planPreview from '../analysis/planPreview';
@@ -196,12 +197,73 @@ export async function draftAnalysisPlan(
 
     // Reuses the context the FACTS block was built from — the model saw exactly
     // the records this validates against.
-    return await planPreview.previewPlan(projectId, res.structure, ctx);
+    return await planPreview.previewPlan(
+      projectId,
+      await withInsightCharts(projectId, res.structure, ctx, opts.intent),
+      ctx,
+    );
   } catch (err: any) {
     return { ok: false, error: err?.message || 'Failed to draft an analysis' };
   }
 }
 
+
+// ── Insight charts in a drafted plan ─────────────────────────────────────────
+//
+// When the ask is explicitly about CHANGE, the app already knows the answer:
+// `analysis/insights.ts` found it, measured it, and picked the chart. Adding
+// those charts to the envelope BEFORE validation means the model is not asked
+// to guess which period moved — and the plan still goes through the one
+// validator, so an insight chart is dropped for exactly the same reasons a
+// model's would be.
+//
+// Gated on the intent WORDS, not on a flag, so every caller of `analysis:draft`
+// behaves the same way: the Dashboards wizard and the dock's proposal both say
+// "what changed" in the user's own sentence.
+const INSIGHT_INTENT_RE = /what changed|what's changed|trend|anomal/i;
+/** Enough to make the point; a plan is a starting layout, not a report. */
+const MAX_INSIGHT_CHARTS = 3;
+
+async function withInsightCharts(
+  projectId: string,
+  structure: unknown,
+  ctx: plan.PlanContext,
+  intent?: string,
+): Promise<unknown> {
+  try {
+    if (!intent || !INSIGHT_INTENT_RE.test(intent)) return structure;
+    const found: any[] = [];
+    for (const ds of ctx.datasets) {
+      for (const i of await listInsights(projectId, ds.id)) {
+        if (i.chart) found.push(i);
+        if (found.length >= MAX_INSIGHT_CHARTS) break;
+      }
+      if (found.length >= MAX_INSIGHT_CHARTS) break;
+    }
+    if (found.length === 0) return structure;
+
+    const o: any = structure && typeof structure === 'object' ? { ...(structure as any) } : {};
+    const sheets = Array.isArray(o.sheets) && o.sheets.length ? o.sheets.slice() : [{ name: 'Sheet 1', visuals: [] }];
+    const first = { ...(sheets[0] || {}) };
+    first.visuals = [
+      ...(Array.isArray(first.visuals) ? first.visuals : []),
+      ...found.map((i) => ({
+        datasetId: i.datasetId,
+        // The app's own title. Never model text, and never a figure the model
+        // supplied — this string came out of `insights.ts`.
+        name: String(i.title).slice(0, 80),
+        chartType: i.chart.type,
+        encoding: i.chart.encoding,
+        filters: i.chart.filters || [],
+      })),
+    ];
+    sheets[0] = first;
+    o.sheets = sheets;
+    return o;
+  } catch (_) {
+    return structure; // an insight scan must never cost the user their draft
+  }
+}
 
 // ── The EDIT DELTA: one model call, then the app decides everything ──────────
 //

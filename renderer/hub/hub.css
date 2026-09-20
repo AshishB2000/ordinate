@@ -11816,3 +11816,122 @@ body.cap-focus .cap-back {
    inherited text on them.
    Do not "fix" this by giving it tokens. */
 .dash-theme--auto { /* intentionally declares nothing — see above */ }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   INSIGHTS — what the app found in the data.
+   One card vocabulary on three surfaces: a horizontal row on Home, a grid on
+   the dataset's Insights tab, a single column in the dashboard editor's rail.
+   Every card IS a .dash-card, so the surface, border and radius come from the
+   dashboard tokens and match in every theme. Severity is a dot, never a banner.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* `.home-sec` sets `min-height: 0` so Recent can take the remaining height in
+   the two-column body. This section sits ABOVE that body, directly in the
+   `.home-scroll` flex column, where the same rule lets it be crushed to zero by
+   `.home-cols` — the cards render, 2px tall. `flex: 0 0 auto` opts out; the
+   `.home-scroll` gap already provides the spacing. */
+.home-insights { flex: 0 0 auto; }
+
+.ins-row {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  /* The row scrolls rather than wrapping: "what stands out" is a ranked list,
+     and a second line reads as a second, lesser rank. */
+  scrollbar-width: thin;
+}
+.ins-row .ins-card { flex: 0 0 260px; }
+
+.ins-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  margin: 0 0 20px;
+}
+
+.ins-card { min-height: 0; }
+.ins-head { cursor: default; gap: 8px; }
+.ins-title {
+  white-space: normal;
+  line-height: 1.35;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.ins-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-full);
+  background: var(--muted);
+}
+.ins-dot--warn { background: var(--error); }
+.ins-x {
+  flex: 0 0 auto;
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.12s var(--ease);
+}
+.ins-card:hover .ins-x,
+.ins-x:focus-visible { opacity: 1; }
+
+.ins-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+}
+
+.ins-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ins-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  font-size: 11px;
+}
+.ins-chip-k { color: var(--muted); }
+.ins-chip-v { font-family: var(--font-numeric); font-weight: 600; color: var(--text-strong); }
+
+.ins-spark {
+  height: 56px;
+  display: flex;
+  align-items: center;
+}
+.ins-spark-canvas { width: 160px; height: 56px; }
+
+.ins-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.ins-group-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ins-group-n {
+  padding: 1px 7px;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.ins-tab-body { padding: 16px; overflow-y: auto; }
+
+/* The rail is narrow — one card per row, and the sparkline sets the width. */
+#an-insights-body { display: flex; flex-direction: column; gap: 10px; }
+#an-insights-body .ins-card { flex: 0 0 auto; }

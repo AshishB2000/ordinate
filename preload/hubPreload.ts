@@ -155,6 +155,13 @@ contextBridge.exposeInMainWorld('hub', {
   listProjects: () => ipcRenderer.invoke('projects:list'),
   // Cross-project recent list (datasets/analyses/dashboards, newest first).
   recentItems: (limit?: number) => ipcRenderer.invoke('recent:list', { limit }),
+
+  // Insights — what the app FOUND in the data. Omit datasetId for the whole
+  // project (Home); pass one for a dataset's Insights tab.
+  listInsights: (projectId: string, datasetId?: string) =>
+    ipcRenderer.invoke('insights:list', { projectId, datasetId }),
+  dismissInsight: (projectId: string, id: string, dismissed = true) =>
+    ipcRenderer.invoke('insights:dismiss', { projectId, id, dismissed }),
   // OS account username (capitalised) for Ask's greeting; '' when unavailable.
   userName: () => ipcRenderer.invoke('app:userName'),
   // Home "Starred" pins — a flat "type:id" list. get reads; set replaces.
