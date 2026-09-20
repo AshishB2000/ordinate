@@ -43,6 +43,9 @@ const SMOKES = [
   'smoke-dashboard-edit',
   'smoke-dashboard-styles',
   'smoke-theme',
+  // Last, and after smoke-theme deliberately: both drive the real Appearance
+  // control, and this one is about what survives it into a FILE.
+  'smoke-export',
 ];
 
 const results: { name: string; code: number }[] = [];
