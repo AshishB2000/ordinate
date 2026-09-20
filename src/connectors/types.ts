@@ -65,6 +65,26 @@ export interface ConnectorTables {
   tables: ConnectorTable[];
 }
 
+/** One column as the SOURCE's own catalog describes it. Richer than
+ *  ConnectorColumn because a catalog knows things a result-set header does not:
+ *  whether the column accepts NULL, and (per table) roughly how many rows there
+ *  are. `type` is still the source's verbatim type name — mapping it to
+ *  Ordinate's ColumnType stays the caller's job, so `007` stays text. */
+export interface ConnectorColumnDetail {
+  name: string;
+  type: string;
+  /** Omitted when the catalog does not say. `false` means NOT NULL. */
+  nullable?: boolean;
+}
+
+export interface ConnectorSchema {
+  ok: true;
+  columns: ConnectorColumnDetail[];
+  /** The optimiser's row ESTIMATE, not a count. Never shown as a fact — the
+   *  schema tree renders it as "~12k". Omitted when the catalog has none. */
+  rowEstimate?: number;
+}
+
 export interface ConnectorError {
   ok: false;
   /** User-facing. MUST NOT contain a password, token, or connection string. */
@@ -101,6 +121,21 @@ export interface ConnectorDef {
   fields: ConnectorField[];
   listTables(ctx: ConnectorContext): Promise<ConnectorTables | ConnectorError>;
   run(ctx: ConnectorContext, sql: string): Promise<ConnectorRows | ConnectorError>;
+  /**
+   * One table's columns out of the SOURCE'S OWN CATALOG, plus a row estimate.
+   *
+   * OPTIONAL, and its absence is the signal the workbench reads: a connector
+   * that cannot describe a table is not browsable, so the schema tree and the
+   * sample grid are hidden for it rather than shown empty. That is why HTTP
+   * engines and the URL source deliberately do not implement it — a Trino or
+   * Elasticsearch endpoint answers `listTables` but has no uniform catalog to
+   * ask, and a tree that lists tables you cannot open is worse than no tree.
+   *
+   * The table name is the SAME string `listTables` returned (schema-qualified
+   * where that source qualifies), and every implementation must BIND it as a
+   * value or whitelist it — it arrives from a renderer.
+   */
+  describeTable?(ctx: ConnectorContext, table: string): Promise<ConnectorSchema | ConnectorError>;
 }
 
 /** Redact anything that looks like a credential before it reaches a renderer.

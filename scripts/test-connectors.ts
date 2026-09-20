@@ -125,7 +125,11 @@ async function main(): Promise<void> {
   const catalog = registry.connectorCatalog();
   ok('connectorCatalog() covers every connector', catalog.length === all.length);
 
-  const CATALOG_KEYS = new Set(['id', 'label', 'family', 'category', 'blurb', 'fields']);
+  // `browsable` is the seventh: a BOOLEAN derived from whether the connector
+  // implements describeTable, so the workbench knows whether to show a schema
+  // tree. It is a capability flag, never a value — the same discipline as a
+  // field's `secret` flag, which travels while the secret never does.
+  const CATALOG_KEYS = new Set(['id', 'label', 'family', 'category', 'blurb', 'fields', 'browsable']);
   const FIELD_KEYS = new Set(['key', 'label', 'type', 'required', 'placeholder', 'default', 'options', 'secret', 'help']);
   let extraKeys: string[] = [];
   let functionsFound: string[] = [];
@@ -147,7 +151,22 @@ async function main(): Promise<void> {
   }
   scanForFunctions(catalog, 'catalog');
 
-  ok('connectorCatalog() exposes ONLY the six documented keys', extraKeys.length === 0, extraKeys.join(', '));
+  ok('connectorCatalog() exposes ONLY the seven documented keys', extraKeys.length === 0, extraKeys.join(', '));
+  // The flag has to be a BOOLEAN on every entry: `undefined` on a browsable
+  // source would read as "not browsable" in the renderer's `!== false` test and
+  // silently hide a schema tree that works.
+  const badBrowsable = catalog.filter((e: any) => typeof e.browsable !== 'boolean').map((e: any) => e.id);
+  ok('every catalog entry reports `browsable` as a boolean', badBrowsable.length === 0, badBrowsable.join(', '));
+  // The five SQL families implement describeTable; HTTP engines and URL do not,
+  // and that ASYMMETRY is the whole point of the flag — if it ever reads all-true
+  // or all-false, something has stopped being derived from the registry.
+  const browsableIds = catalog.filter((e: any) => e.browsable).map((e: any) => e.id);
+  ok('the SQL families are browsable',
+    ['postgres', 'mysql', 'sqlserver', 'oracle', 'duckdb-file'].every((id) => browsableIds.includes(id)),
+    browsableIds.join(', '));
+  ok('…and the HTTP engines and the URL source are not',
+    ['clickhouse', 'trino', 'elasticsearch', 'url'].every((id) => !browsableIds.includes(id)),
+    browsableIds.join(', '));
   ok('connectorCatalog() carries NO functions (listTables/run never cross the bridge)',
     functionsFound.length === 0, functionsFound.join(', '));
   ok('connectorCatalog() ships no default value on a secret field',

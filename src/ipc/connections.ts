@@ -144,6 +144,7 @@ async function runSaved(
   projectId: string,
   connId: string,
   tableOrQuery?: { table?: string; query?: string },
+  bounds?: { rowLimit?: number },
 ): Promise<{ ok: true; result: import('../data/parse').ParseResult } | { ok: false; error: string }> {
   const conn = await connections.getConnection(projectId, connId);
   if (!conn) return { ok: false, error: 'Connection not found' };
@@ -152,8 +153,28 @@ async function runSaved(
   const which = tableOrQuery && (tableOrQuery.table || tableOrQuery.query)
     ? { table: str(tableOrQuery.table), query: str(tableOrQuery.query) }
     : { table: conn.table, query: conn.query };
-  const res = await connectionRun.runConnection(conn.connectorId, conn.values, secrets, which);
+  const res = await connectionRun.runConnection(conn.connectorId, conn.values, secrets, which, bounds);
   return res.ok ? { ok: true, result: res.result } : res;
+}
+
+/**
+ * WHAT a dataset's refresh should re-run.
+ *
+ * The dataset's own origin wins, because one connection now feeds many
+ * datasets: `origin.sql` is the statement that actually produced these rows, so
+ * it is what re-produces them — even after the saved query it came from was
+ * renamed, edited or deleted. `origin.table` is the same promise for a table
+ * import. Only a dataset saved BEFORE the workbench (origin = connId alone)
+ * falls through to the connection's own single saved selection, which is
+ * exactly what it has always refreshed to.
+ */
+function selectionForDataset(origin: unknown): { table?: string; query?: string } | undefined {
+  if (!origin || typeof origin !== 'object') return undefined;
+  const o = origin as Record<string, unknown>;
+  if (o.kind !== 'connection') return undefined;
+  if (typeof o.sql === 'string' && o.sql.trim()) return { query: o.sql };
+  if (typeof o.table === 'string' && o.table.trim()) return { table: o.table };
+  return undefined;
 }
 
 /**
@@ -174,7 +195,11 @@ export async function refreshConnectionInto(
   outWarnings?: string[],
 ): Promise<{ ok: true; dataset: import('../data/datasets').Dataset } | { ok: false; error: string }> {
   try {
-    const res = await runSaved(projectId, connId);
+    // Read the dataset's own origin FIRST — metadata only, no table hydrate —
+    // so the refresh re-runs what built THIS dataset rather than whatever the
+    // connection last happened to have selected.
+    const meta = await datasets.getDatasetMeta(projectId, datasetId);
+    const res = await runSaved(projectId, connId, selectionForDataset(meta?.origin));
     if (!res.ok) {
       await connections.updateConnection(projectId, connId, { lastStatus: 'error', lastError: res.error });
       return { ok: false, error: res.error };
@@ -290,9 +315,15 @@ export function register(): void {
 
   // Run a connection and return a ParseResult PREVIEW (no save). The renderer may
   // pass a table/query to override the saved one.
-  ipcMain.handle('connection:run', async (_e, { projectId, connId, tableOrQuery }: any = {}) => {
+  ipcMain.handle('connection:run', async (_e, { projectId, connId, tableOrQuery, limit }: any = {}) => {
     try {
-      const res = await runSaved(projectId, connId, tableOrQuery && typeof tableOrQuery === 'object' ? tableOrQuery : undefined);
+      const want = Number(limit);
+      const res = await runSaved(
+        projectId,
+        connId,
+        tableOrQuery && typeof tableOrQuery === 'object' ? tableOrQuery : undefined,
+        Number.isFinite(want) && want > 0 ? { rowLimit: want } : undefined,
+      );
       return res.ok ? { ok: true, preview: res.result } : { ok: false, error: res.error };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not run the connection' };
@@ -304,6 +335,87 @@ export function register(): void {
   ipcMain.handle('connection:refresh', async (_e, { projectId, connId, datasetId }: any = {}) => {
     const res = await refreshConnectionInto(projectId, connId, datasetId);
     return res.ok ? { ok: true, dataset: res.dataset } : res;
+  });
+
+  // One table's columns, out of the source's own catalog. `schema: null` means
+  // this connector has no catalog to browse (HTTP engines, the URL source) —
+  // the workbench hides its schema browser rather than showing an empty tree.
+  // That is a legitimate answer, NOT an error, and the two must stay distinct.
+  ipcMain.handle('connection:describe', async (_e, { projectId, connId, table }: any = {}) => {
+    try {
+      const conn = await connections.getConnection(projectId, connId);
+      if (!conn) return { ok: false, error: 'Connection not found' };
+      const def = getConnector(conn.connectorId);
+      const secrets = loadSecrets(connId, def);
+      const res = await connectionRun.describeTable(conn.connectorId, conn.values, secrets, str(table));
+      if (res === null) return { ok: true, schema: null };
+      if (!res.ok) return { ok: false, error: res.error };
+      const schema: { columns: unknown[]; rowEstimate?: number } = { columns: res.columns };
+      if (typeof res.rowEstimate === 'number') schema.rowEstimate = res.rowEstimate;
+      return { ok: true, schema };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Could not describe that table' };
+    }
+  });
+
+  // A bounded peek at one table. `limit` may only LOWER the bound — buildContext
+  // clamps it, so a renderer cannot ask for more than the app's own row cap.
+  ipcMain.handle('connection:sample', async (_e, { projectId, connId, table, limit }: any = {}) => {
+    try {
+      const conn = await connections.getConnection(projectId, connId);
+      if (!conn) return { ok: false, error: 'Connection not found' };
+      const def = getConnector(conn.connectorId);
+      const secrets = loadSecrets(connId, def);
+      const want = Number(limit);
+      const res = await connectionRun.sampleTable(
+        conn.connectorId, conn.values, secrets, str(table),
+        Number.isFinite(want) && want > 0 ? want : connectionRun.SAMPLE_ROWS,
+      );
+      return res.ok ? { ok: true, preview: res.result } : { ok: false, error: res.error };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Could not sample that table' };
+    }
+  });
+
+  // Validate a statement and report the columns it WOULD return, without
+  // fetching a result. The error, when there is one, is the dialect's own.
+  ipcMain.handle('connection:explain', async (_e, { projectId, connId, sql }: any = {}) => {
+    try {
+      const conn = await connections.getConnection(projectId, connId);
+      if (!conn) return { ok: false, error: 'Connection not found' };
+      const def = getConnector(conn.connectorId);
+      const secrets = loadSecrets(connId, def);
+      const res = await connectionRun.explainSql(conn.connectorId, conn.values, secrets, str(sql));
+      return res.ok ? { ok: true, columns: res.columns } : { ok: false, error: res.error };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Could not check that query' };
+    }
+  });
+
+  // Create, edit or rename a saved query on a connection. Returns the whole
+  // list so the renderer never has to merge one in by hand.
+  ipcMain.handle('connection:saveQuery', async (_e, { projectId, connId, id, name, sql }: any = {}) => {
+    try {
+      const queries = await connections.saveQuery(projectId, connId, {
+        id: str(id) || undefined,
+        name: str(name),
+        sql: typeof sql === 'string' ? sql : '',
+      });
+      return queries ? { ok: true, queries } : { ok: false, error: 'Could not save that query' };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Could not save that query' };
+    }
+  });
+
+  // Remove a saved query. A dataset built from it keeps refreshing — its origin
+  // carries the SQL, not just the id.
+  ipcMain.handle('connection:deleteQuery', async (_e, { projectId, connId, queryId }: any = {}) => {
+    try {
+      const queries = await connections.deleteQuery(projectId, connId, str(queryId));
+      return queries ? { ok: true, queries } : { ok: false, error: 'Connection not found' };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Could not delete that query' };
+    }
   });
 
   // Delete a connection (also drops its secret from config.json).

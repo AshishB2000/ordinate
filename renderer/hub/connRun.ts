@@ -1,368 +1,176 @@
-// A saved connection: listing them, the run area for one, and refresh / delete.
+// The SAVED CONNECTIONS LIST — one card per connection, and the row-level
+// delete. Classic global-scope renderer <script>: no import/export.
 //
-// Every source is read-only and EVERY query is bounded server-side by its own
-// driver — there is no central LIMIT wrapper, because one broke five of six
-// dialects.
+// WHAT THIS REPLACED. A four-button row (Run / Refresh / Delete, plus the name)
+// and, under it, an inline "run area": a table <select>, a one-line query box
+// and a preview. Every connection in a project shared that one area, so opening
+// a second connection silently replaced the first one's result, and there was
+// nowhere to keep a query you wanted again. All of that is now
+// connWorkbench.ts, opened by clicking a card — which is why this file is the
+// list and nothing else.
 //
-// Split verbatim out of connections.ts — see .claude/rules/file-size.md.
-// Classic global-scope renderer <script>: no import/export.
+// A card is a BUTTON: the whole surface opens the connection, so the name, the
+// host and the dataset count are all live targets instead of three pieces of
+// text beside one small link. Delete stops propagation on its way past, the
+// same rule dsList.ts's row actions follow.
 
-// ── Saved-connections list ───────────────────────────────────────────────────
+// ── The list ─────────────────────────────────────────────────────────────────
+
 async function refreshConnectionList(): Promise<void> {
   const list = connEl('conn-saved-list');
   const empty = connEl('conn-saved-empty');
   if (!list) return;
   list.innerHTML = '';
   if (!currentProjectId) {
+    connShow('conn-saved', false);
     if (empty) empty.hidden = false;
     return;
   }
+
   let items: any[] = [];
+  let datasets: any[] = [];
   try {
-    items = await window.hub.listConnections(currentProjectId);
+    // Both in one round trip: the card's "3 datasets" line is a count over the
+    // project's dataset summaries, and fetching it per card would be one IPC
+    // call per connection to answer one integer each.
+    [items, datasets] = await Promise.all([
+      window.hub.listConnections(currentProjectId),
+      listDatasetSummaries(),
+    ]);
   } catch (_) {
     items = [];
   }
   if (!Array.isArray(items)) items = [];
+
+  const counts = new Map<string, number>();
+  for (const d of datasets) {
+    const id = d && typeof d.originConnId === 'string' ? d.originConnId : '';
+    if (id) counts.set(id, (counts.get(id) || 0) + 1);
+  }
+
+  // The block sits ABOVE the picker, so an empty one would push 35 tiles down
+  // behind a heading with nothing under it. Hide the whole thing, not the list.
+  connShow('conn-saved', items.length > 0);
   if (empty) empty.hidden = items.length > 0;
-  items.forEach((c) => list.appendChild(makeConnItem(c)));
+  items.forEach((c) => list.appendChild(makeConnCard(c, counts.get(String(c && c.id)) || 0)));
 }
 
-function makeConnItem(c: any): HTMLElement {
-  const row = document.createElement('div');
-  row.className = 'conn-saved-item';
+/** The project's dataset summaries, or [] — never throws, because a card list
+ *  must render even when the dataset channel is unavailable. */
+async function listDatasetSummaries(): Promise<any[]> {
+  if (!currentProjectId) return [];
+  try {
+    const res = await window.hub.listDatasets(currentProjectId);
+    return Array.isArray(res) ? res : [];
+  } catch (_) {
+    return [];
+  }
+}
 
-  const mainCol = document.createElement('div');
-  mainCol.className = 'conn-saved-main';
+/** The host line under a connection's name: what identifies this connection
+ *  among several to the same kind of database. Falls back through the fields a
+ *  source actually has, because a DuckDB file has no host and the URL source
+ *  has nothing but one. */
+function connWhere(c: any): string {
+  const v = (c && c.values) || {};
+  const host = typeof v.host === 'string' ? v.host : '';
+  const database = typeof v.database === 'string' ? v.database : '';
+  if (host && database) return host + ' / ' + database;
+  if (host) return host;
+  if (database) return database;
+  if (typeof v.path === 'string' && v.path) return v.path;
+  if (typeof v.url === 'string' && v.url) return v.url;
+  if (typeof c?.url === 'string' && c.url) return c.url;
+  return '';
+}
 
-  const name = document.createElement('span');
-  name.className = 'conn-saved-name';
-  name.textContent = c && c.name ? String(c.name) : 'Untitled connection';
+function makeConnCard(c: any, datasetCount: number): HTMLElement {
+  const card = document.createElement('button');
+  card.type = 'button';
+  card.className = 'conn-card';
+  card.dataset.connId = String((c && c.id) || '');
 
-  const meta = document.createElement('span');
-  meta.className = 'conn-saved-meta';
-  const status = c && c.lastStatus ? String(c.lastStatus) : 'untested';
-  const statusBadge = document.createElement('span');
-  statusBadge.className = 'conn-status conn-status-' + (status === 'ok' ? 'ok' : status === 'error' ? 'error' : 'untested');
-  statusBadge.textContent = status;
   // The stored `kind` is a connector id; name it from the catalogue so a saved
   // Redshift connection does not read "Postgres". Unknown ids show verbatim.
   const kindId = c && typeof c.kind === 'string' ? c.kind : '';
-  const kindDef = connDefById(kindId);
-  const kind = kindDef ? kindDef.label : kindId === 'url' ? 'URL' : kindId || 'Connection';
-  const when = c && c.lastRefreshedAt ? 'refreshed ' + formatSidebarTime(c.lastRefreshedAt) : 'never refreshed';
-  const metaText = document.createElement('span');
-  metaText.textContent = kind + ' · ' + when;
-  meta.appendChild(statusBadge);
-  meta.appendChild(metaText);
+  const def = connDefById(kindId);
+  const label = def ? def.label : kindId === 'url' ? 'URL' : kindId || 'Connection';
 
-  mainCol.appendChild(name);
-  mainCol.appendChild(meta);
+  card.appendChild(connMakeLogoFor(kindId, label));
 
-  const runBtn = document.createElement('button');
-  runBtn.type = 'button';
-  runBtn.className = 'conn-run-btn';
-  runBtn.textContent = 'Run';
-  runBtn.addEventListener('click', () => openRunArea(c));
+  const body = document.createElement('span');
+  body.className = 'conn-card-body';
 
-  const refreshBtn = document.createElement('button');
-  refreshBtn.type = 'button';
-  refreshBtn.className = 'conn-refresh';
-  refreshBtn.textContent = 'Refresh';
-  refreshBtn.addEventListener('click', () => handleConnRefresh(c));
+  const top = document.createElement('span');
+  top.className = 'conn-card-top';
+  const name = document.createElement('span');
+  name.className = 'conn-card-name';
+  name.textContent = c && c.name ? String(c.name) : 'Untitled connection';
+  top.appendChild(name);
 
+  // The health dot is the LAST TEST's verdict, not a live probe — a card list
+  // must not open 12 sockets to render. The title says which it is.
+  const status = c && c.lastStatus ? String(c.lastStatus) : 'untested';
+  const dot = document.createElement('span');
+  dot.className = 'conn-dot conn-dot-' + (status === 'ok' ? 'ok' : status === 'error' ? 'error' : 'untested');
+  dot.setAttribute('role', 'img');
+  dot.title = status === 'ok'
+    ? 'Last test succeeded'
+    : status === 'error'
+      ? 'Last test failed: ' + String((c && c.lastError) || 'unknown error')
+      : 'Not tested yet';
+  dot.setAttribute('aria-label', dot.title);
+  top.appendChild(dot);
+  body.appendChild(top);
+
+  const where = connWhere(c);
+  const sub = document.createElement('span');
+  sub.className = 'conn-card-sub';
+  sub.textContent = where ? label + ' · ' + where : label;
+  sub.title = sub.textContent;
+  body.appendChild(sub);
+
+  const meta = document.createElement('span');
+  meta.className = 'conn-card-meta';
+  const used = c && c.lastRefreshedAt ? 'used ' + formatSidebarTime(c.lastRefreshedAt) : 'never used';
+  const nDatasets = datasetCount === 1 ? '1 dataset' : datasetCount + ' datasets';
+  const nQueries = Array.isArray(c && c.queries) ? c.queries.length : 0;
+  meta.textContent = nQueries
+    ? `${nDatasets} · ${nQueries === 1 ? '1 saved query' : nQueries + ' saved queries'} · ${used}`
+    : `${nDatasets} · ${used}`;
+  body.appendChild(meta);
+
+  card.appendChild(body);
+
+  const del = document.createElement('span');
+  del.className = 'conn-card-del';
   const delBtn = document.createElement('button');
   delBtn.type = 'button';
   delBtn.className = 'conn-del';
   iconOnly(delBtn, 'trash', 'Delete connection');
-  delBtn.addEventListener('click', () => handleConnDelete(c));
+  // The card is itself a <button>; without this the delete opens the workbench
+  // on its way past. Same rule as dsList.ts's row actions.
+  delBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    void handleConnDelete(c);
+  });
+  del.appendChild(delBtn);
+  card.appendChild(del);
 
-  row.appendChild(mainCol);
-  row.appendChild(runBtn);
-  row.appendChild(refreshBtn);
-  row.appendChild(delBtn);
-  return row;
+  card.addEventListener('click', () => { void openConnWorkbench(c); });
+  return card;
 }
 
-// ── Run area (per saved connection) ──────────────────────────────────────────
-async function openRunArea(c: any): Promise<void> {
-  if (!currentProjectId || !c || !c.id) return;
-  connSetError('');
-  connRunConnId = String(c.id);
-  connRunKind = typeof c.kind === 'string' ? c.kind : 'postgres';
-  connRunFamily = connFamilyOf(connRunKind);
-  connRunPreview = null;
-
-  const title = connEl('conn-run-title');
-  if (title) title.textContent = 'Run — ' + (c.name || 'connection');
-
-  // Reset preview + save bar.
-  const scroll = connEl('conn-run-table-scroll');
-  if (scroll) scroll.innerHTML = '';
-  connShow('conn-run-preview', false);
-  connShow('conn-save-bar', false);
-  connShow('conn-run-warnings', false);
-
-  // Table + query belong to anything SQL-shaped. The dividing line is NOT the
-  // family: every HTTP engine here (ClickHouse, Trino, Druid, …) implements
-  // listTables and is queried in SQL. The one source with neither is `url`,
-  // which fetches a single document. Gating on family cost seven connectors
-  // their table picker.
-  const isPg = connRunKind !== 'url';
-  connShow('conn-run-table-row', isPg);
-  connShow('conn-run-query-row', isPg);
-
-  // Prefill the query textarea with any saved query.
-  const qEl = connEl('conn-run-query') as HTMLTextAreaElement | null;
-  if (qEl) qEl.value = isPg && typeof c.query === 'string' ? c.query : '';
-
-  connShow('conn-run-area', true);
-
-  if (isPg) {
-    const sel = connEl('conn-table-select') as HTMLSelectElement | null;
-    if (sel) {
-      sel.innerHTML = '';
-      const loading = document.createElement('option');
-      loading.value = '';
-      loading.textContent = 'Loading tables…';
-      sel.appendChild(loading);
-    }
-    let tRes: any;
-    try {
-      tRes = await window.hub.listConnectionTables(currentProjectId, connRunConnId);
-    } catch (_) {
-      tRes = { ok: false, error: 'Could not list tables.' };
-    }
-    if (sel) {
-      sel.innerHTML = '';
-      if (tRes && tRes.ok && Array.isArray(tRes.tables)) {
-        const blank = document.createElement('option');
-        blank.value = '';
-        blank.textContent = c.table ? c.table : 'Choose a table…';
-        sel.appendChild(blank);
-        tRes.tables.forEach((t: any) => {
-          const qualified = (t && t.schema ? String(t.schema) + '.' : '') + (t && t.name ? String(t.name) : '');
-          const opt = document.createElement('option');
-          opt.value = qualified;
-          opt.textContent = qualified;
-          if (c.table && qualified === c.table) opt.selected = true;
-          sel.appendChild(opt);
-        });
-      } else {
-        const err = document.createElement('option');
-        err.value = '';
-        err.textContent = (tRes && tRes.error) || 'Could not list tables';
-        sel.appendChild(err);
-      }
-    }
-  }
-}
-
-function closeRunArea(): void {
-  connShow('conn-run-area', false);
-  connRunConnId = '';
-  connRunKind = '';
-  connRunFamily = '';
-  connRunPreview = null;
-}
-
-async function handleConnRun(): Promise<void> {
-  if (!currentProjectId || !connRunConnId) return;
-  connSetError('');
-  const btn = connEl('conn-run-btn') as HTMLButtonElement | null;
-  if (btn) btn.disabled = true;
-
-  let tableOrQuery: any = {};
-  if (connRunKind !== 'url') {
-    const query = connVal('conn-run-query');
-    if (query) tableOrQuery = { query };
-    else {
-      const table = connVal('conn-table-select');
-      if (table) tableOrQuery = { table };
-    }
-  }
-
-  let res: any;
-  try {
-    res = await window.hub.runConnection(currentProjectId, connRunConnId, tableOrQuery);
-  } catch (_) {
-    res = { ok: false, error: 'Could not run the connection.' };
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-
-  if (!res || res.ok === false) {
-    connSetError((res && res.error) || 'Could not run the connection.');
-    connShow('conn-run-preview', false);
-    connShow('conn-save-bar', false);
-    return;
-  }
-  connRunPreview = res.preview || null;
-  connRenderRunPreview(connRunPreview);
-}
-
-// Build the preview table into #conn-run-table-scroll (reuses the .ds-table CSS).
-function connRenderRunPreview(res: any): void {
-  const columns: any[] = res && Array.isArray(res.columns) ? res.columns : [];
-  const rows: any[] = res && Array.isArray(res.rows) ? res.rows : [];
-  const warnings: any[] = res && Array.isArray(res.warnings) ? res.warnings : [];
-  const rowCount: number = typeof (res && res.rowCount) === 'number' ? res.rowCount : rows.length;
-
-  // Warnings.
-  const warnBox = connEl('conn-run-warnings');
-  if (warnBox) {
-    warnBox.innerHTML = '';
-    warnings.forEach((w) => {
-      const line = document.createElement('div');
-      line.className = 'ds-warning';
-      line.textContent = String(w);
-      warnBox.appendChild(line);
-    });
-  }
-  connShow('conn-run-warnings', warnings.length > 0);
-
-  // Table.
-  const scroll = connEl('conn-run-table-scroll');
-  if (scroll) {
-    scroll.innerHTML = '';
-    const table = document.createElement('table');
-    table.className = 'ds-table';
-
-    const thead = document.createElement('thead');
-    const htr = document.createElement('tr');
-    columns.forEach((col) => {
-      const th = document.createElement('th');
-      th.className = 'ds-th';
-      const nameSpan = document.createElement('span');
-      nameSpan.className = 'ds-th-name';
-      nameSpan.textContent = col && col.name != null ? String(col.name) : '';
-      const type = col && col.type ? String(col.type) : 'text';
-      const badge = document.createElement('span');
-      badge.className = 'ds-type ds-type-' + type;
-      badge.textContent = type;
-      th.appendChild(nameSpan);
-      th.appendChild(badge);
-      htr.appendChild(th);
-    });
-    thead.appendChild(htr);
-    table.appendChild(thead);
-
-    const tbody = document.createElement('tbody');
-    rows.slice(0, CONN_PREVIEW_ROWS).forEach((row) => {
-      const tr = document.createElement('tr');
-      const cells: any[] = Array.isArray(row) ? row : [];
-      for (let i = 0; i < columns.length; i++) {
-        const td = document.createElement('td');
-        td.className = 'ds-td';
-        const v = cells[i];
-        td.textContent = v == null ? '' : String(v);
-        tr.appendChild(td);
-      }
-      tbody.appendChild(tr);
-    });
-    table.appendChild(tbody);
-    scroll.appendChild(table);
-  }
-
-  const note = connEl('conn-run-note');
-  if (note) {
-    if (rowCount > CONN_PREVIEW_ROWS) {
-      note.textContent = 'Showing first ' + CONN_PREVIEW_ROWS + ' of ' + rowCount + ' rows';
-      note.hidden = false;
-    } else {
-      note.textContent = '';
-      note.hidden = true;
-    }
-  }
-
-  connShow('conn-run-preview', columns.length > 0);
-
-  // Save bar — suggest a dataset name from the connection/table.
-  const nameInput = connEl('conn-ds-name') as HTMLInputElement | null;
-  if (nameInput && !nameInput.value) {
-    const table = connVal('conn-table-select');
-    nameInput.value = table || 'Connection data';
-  }
-  connShow('conn-save-bar', columns.length > 0);
-}
-
-// Save the current run result as a dataset, then link the connection to it (so
-// Refresh has a target). Reuses the existing dataset:save channel.
-async function handleConnSaveAsDataset(): Promise<void> {
-  if (!currentProjectId || !connRunConnId) return;
-  if (!connRunPreview || !Array.isArray(connRunPreview.columns) || connRunPreview.columns.length === 0) return;
-  const nameInput = connEl('conn-ds-name') as HTMLInputElement | null;
-  const name = (nameInput && nameInput.value.trim()) || 'Connection data';
-  // Dataset.sourceKind is a closed union, so 35 connector ids collapse onto the
-  // two it already has: an http source is 'url', everything else 'postgres'.
-  const sourceKind = connRunKind === 'url' ? 'url' : 'postgres';
-
-  let saved: any;
-  try {
-    saved = await window.hub.saveDataset({
-      projectId: currentProjectId,
-      name,
-      sourceKind,
-      columns: connRunPreview.columns,
-      rows: connRunPreview.rows,
-      // The connection ID, never the URL or the DSN: a refresh re-runs the SAVED
-      // connection, so the secret is resolved in main and never round-trips
-      // through here. This covers the URL/API source too — it is a connection
-      // like any other in the registry.
-      origin: { kind: 'connection', connId: connRunConnId },
-    });
-  } catch (_) {
-    connSetError('Failed to save the dataset.');
-    return;
-  }
-  if (saved && saved.ok === false) {
-    connSetError(saved.error || 'Failed to save the dataset.');
-    return;
-  }
-  // Link the connection to the new dataset so Refresh can re-run into it.
-  if (saved && saved.id) {
-    try {
-      await window.hub.refreshConnection(currentProjectId, connRunConnId, String(saved.id));
-    } catch (_) {
-      /* best-effort link; ignore */
-    }
-  }
-  closeRunArea();
-  await refreshConnectionList();
-  // The new dataset also appears in the Datasets section list.
-  if (typeof refreshDatasetList === 'function') await refreshDatasetList();
-}
-
-// ── Refresh / Delete ─────────────────────────────────────────────────────────
-async function handleConnRefresh(c: any): Promise<void> {
-  if (!currentProjectId || !c || !c.id) return;
-  connSetError('');
-  if (!c.linkedDatasetId) {
-    connSetError('Run this connection and save the result as a dataset first, then Refresh will keep it up to date.');
-    return;
-  }
-  let res: any;
-  try {
-    res = await window.hub.refreshConnection(currentProjectId, String(c.id), String(c.linkedDatasetId));
-  } catch (_) {
-    res = { ok: false, error: 'Could not refresh the connection.' };
-  }
-  if (!res || res.ok === false) {
-    connSetError((res && res.error) || 'Could not refresh the connection.');
-  }
-  await refreshConnectionList();
-  if (typeof refreshDatasetList === 'function') await refreshDatasetList();
-}
+// ── Delete ───────────────────────────────────────────────────────────────────
 
 async function handleConnDelete(c: any): Promise<void> {
   if (!currentProjectId || !c || !c.id) return;
-  if (!window.confirm('Delete this connection? Its saved dataset is not removed.')) return;
+  if (!window.confirm('Delete this connection? Datasets already imported from it are not removed.')) return;
   try {
     await window.hub.deleteConnection(currentProjectId, String(c.id));
   } catch (_) {
-    /* ignore */
+    /* the list repaint below is the report either way */
   }
-  if (connRunConnId === String(c.id)) closeRunArea();
+  if (cwConn && String(cwConn.id) === String(c.id)) closeConnWorkbench();
   await refreshConnectionList();
 }
-

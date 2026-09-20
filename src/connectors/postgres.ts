@@ -53,6 +53,7 @@ import type {
   ConnectorError,
   ConnectorField,
   ConnectorRows,
+  ConnectorSchema,
   ConnectorTable,
   ConnectorTables,
 } from './types';
@@ -583,6 +584,77 @@ async function run(v: PgVariant, ctx: ConnectorContext, sql: string): Promise<Co
   });
 }
 
+/**
+ * One table's columns, out of `information_schema.columns`.
+ *
+ * Everything the caller supplies is BOUND, never concatenated: the schema and
+ * the table arrive from a renderer, so they are `$1`/`$2` and a name like
+ * `x"; drop table y; --` is inert text on the wire. That is a stronger guard
+ * than `run`'s, which has to interpolate because it builds a FROM clause.
+ *
+ * An unqualified name matches in ANY non-catalog schema, which is what the tree
+ * sends for a source whose `listTables` reported no schema. Ordering by
+ * `table_schema` keeps that deterministic rather than whichever row came back
+ * first.
+ *
+ * The row estimate is `pg_class.reltuples` — the planner's number, updated by
+ * ANALYZE/autovacuum, `-1` on a table that has never been analysed. It is an
+ * ESTIMATE and the UI says so; `count(*)` on a warehouse table is not something
+ * to run because a tree node came into view. A failure to read it is not a
+ * failure to describe the table, so it is caught separately.
+ */
+const COLUMNS_SQL = `select column_name, data_type, is_nullable
+                       from information_schema.columns
+                      where table_name = $2
+                        and ($1::text is null or table_schema = $1::text)
+                        and table_schema not in ('pg_catalog', 'information_schema')
+                      order by table_schema, ordinal_position`;
+
+const ESTIMATE_SQL = `select c.reltuples
+                        from pg_class c
+                        join pg_namespace n on n.oid = c.relnamespace
+                       where c.relname = $2
+                         and ($1::text is null or n.nspname = $1::text)
+                       limit 1`;
+
+async function describeTable(
+  v: PgVariant,
+  ctx: ConnectorContext,
+  table: string,
+): Promise<ConnectorSchema | ConnectorError> {
+  const parts = String(table || '').trim().split('.');
+  if (parts.length < 1 || parts.length > 2 || parts.some((p) => !p)) {
+    return { ok: false, error: 'Invalid table name' };
+  }
+  const schema = parts.length === 2 ? parts[0] : null;
+  const name = parts[parts.length - 1];
+
+  return withClient<ConnectorSchema>(v, ctx, async (client) => {
+    const res = await queryArray(client, COLUMNS_SQL, [schema, name]);
+    const columns = (res.rows || []).map((row) => {
+      const col: { name: string; type: string; nullable?: boolean } = {
+        name: asString(row[0]),
+        type: asString(row[1]),
+      };
+      const isNullable = asString(row[2]).toUpperCase();
+      if (isNullable === 'YES' || isNullable === 'NO') col.nullable = isNullable === 'YES';
+      return col;
+    }).filter((c) => c.name);
+    if (columns.length === 0) return { ok: false, error: `No such table: ${name}` };
+
+    const out: ConnectorSchema = { ok: true, columns };
+    try {
+      const est = await queryArray(client, ESTIMATE_SQL, [schema, name]);
+      const n = Number((est.rows || [])[0]?.[0]);
+      // reltuples is -1 on a never-analysed table and a float otherwise.
+      if (Number.isFinite(n) && n >= 0) out.rowEstimate = Math.round(n);
+    } catch {
+      /* no estimate is a missing nicety, not a failed describe */
+    }
+    return out;
+  });
+}
+
 // ── The eleven ───────────────────────────────────────────────────────────────
 
 function define(v: PgVariant): ConnectorDef {
@@ -596,6 +668,7 @@ function define(v: PgVariant): ConnectorDef {
     fields: buildFields(v),
     listTables: (ctx: ConnectorContext) => listTables(v, ctx),
     run: (ctx: ConnectorContext, sql: string) => run(v, ctx, sql),
+    describeTable: (ctx: ConnectorContext, table: string) => describeTable(v, ctx, table),
   };
 }
 

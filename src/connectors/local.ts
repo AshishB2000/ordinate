@@ -211,18 +211,19 @@
 //   connectors HAS a secret field — the one that would have (`motherduck`'s
 //   token) was dropped — but the discipline stays so adding one is safe.
 
-import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as duck from '../engine/duckdb';
-import { hardenConnection, hardeningState } from '../ipc/mosaic';
+import { hardeningState } from '../ipc/mosaic';
+import { noteDir, prepareEngine } from './duckdbDirs';
 import type {
   ConnectorColumn,
   ConnectorContext,
   ConnectorDef,
   ConnectorError,
   ConnectorRows,
+  ConnectorSchema,
   ConnectorTables,
 } from './types';
 import { safeError } from './types';
@@ -234,9 +235,6 @@ const FAMILY = 'duckdb';
 
 /** Files (or tables) listed from one source. A folder browser, not a warehouse. */
 const MAX_TABLES = 1000;
-
-/** How many picked folders stay in the allow-list registry, newest first. */
-const MAX_REGISTERED_DIRS = 32;
 
 /** Used when a caller supplies a nonsense `rowLimit`. Matches connectionRun.ts. */
 const DEFAULT_ROW_LIMIT = 1_000_000;
@@ -279,116 +277,10 @@ function newAlias(): string {
   return 'ord_src_' + randomUUID().replace(/-/g, '');
 }
 
-// ── The allow-list registry ──────────────────────────────────────────────────
+// The allow-list registry (noteDir / prepareEngine / registeredDirs) lives in
+// ./duckdbDirs.ts — see that file's header for why the lock timing matters.
 
-function userDataDir(): string | null {
-  try {
-    const d = app.getPath('userData');
-    return typeof d === 'string' && d ? d : null;
-  } catch {
-    return null; // no Electron (a unit test, or a stripped harness) — skip hardening
-  }
-}
-
-/**
- * The folders DuckDB has previously been pointed at, newest first.
- *
- * Exported for ONE caller: `main.ts` at startup. `allowed_directories` can only
- * be set BEFORE `enable_external_access=false`, and the lock is irreversible for
- * the process lifetime — so a folder that is not inside the lock when it closes
- * cannot be read until the next launch. Pre-registering the known folders at
- * boot is what makes these connectors work on the second and every later
- * session regardless of whether the user opens a Mosaic chart first.
- *
- * Returns [] when nothing has ever been registered, which is the signal main.ts
- * uses to skip hardening entirely and keep the bridge lazy.
- */
-export function registeredDirs(base: string): string[] {
-  return readRegistry(base);
-}
-
-function registryFile(base: string): string {
-  return path.join(base, 'connectors', 'duckdb-dirs.json');
-}
-
-function readRegistry(base: string): string[] {
-  try {
-    const raw = fs.readFileSync(registryFile(base), 'utf8');
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((d): d is string => typeof d === 'string' && d !== '');
-  } catch {
-    return []; // missing or corrupt — a registry is a cache, never a fatal
-  }
-}
-
-/**
- * Record `dir` as a folder DuckDB may be allowed to read, newest first.
- *
- * Entries that no longer exist are dropped on every write, and the list is
- * capped: `allowed_directories` is a security control, and an unbounded list of
- * every folder ever touched would erode it. Best-effort — a failed write costs
- * an extra restart later, never correctness.
- *
- * Written atomically (temp sibling + rename), matching `datasets.writeJsonAtomic`.
- */
-function rememberDir(base: string, dir: string): void {
-  try {
-    const prev = readRegistry(base);
-    const next = [dir, ...prev.filter((d) => d !== dir)]
-      .filter((d) => {
-        try {
-          return fs.statSync(d).isDirectory();
-        } catch {
-          return false;
-        }
-      })
-      .slice(0, MAX_REGISTERED_DIRS);
-    // Unchanged: do not rewrite the file on every query.
-    if (next.length === prev.length && next.every((d, j) => d === prev[j])) return;
-    const file = registryFile(base);
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    const tmp = `${file}.${randomUUID()}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(next, null, 2), 'utf8');
-    fs.renameSync(tmp, file);
-  } catch {
-    /* best-effort */
-  }
-}
-
-/**
- * Record `dir` WITHOUT touching the engine.
- *
- * Used by the folder connectors' `listTables`, which reads the directory with
- * `fs` and needs no DuckDB at all. Keeping it engine-free matters: applying the
- * lock is irreversible, so it must happen at the LAST responsible moment — the
- * first actual query — not when a user is merely filling in a connection form.
- * Browsing a folder therefore never narrows what a later folder can reach.
- */
-function noteDir(dir: string): void {
-  const base = userDataDir();
-  if (base) rememberDir(base, dir);
-}
-
-/**
- * Remember `dir`, then make sure the engine is hardened WITH it (and with every
- * folder remembered from earlier sessions) rather than without it.
- *
- * Called immediately before engine access, never earlier. Idempotent and cheap
- * after the first call: `hardenConnection` memoises, so this is a
- * resolved-promise await plus one small file read.
- *
- * Never throws. If hardening fails or Electron is absent the engine simply stays
- * as it is, which is the un-hardened, fully working state.
- */
-async function prepareEngine(dir: string): Promise<void> {
-  const base = userDataDir();
-  if (!base) return;
-  rememberDir(base, dir);
-  const dirs = [base, ...readRegistry(base)];
-  const unique = dirs.filter((d, i) => dirs.indexOf(d) === i);
-  await hardenConnection(unique);
-}
+export { registeredDirs } from './duckdbDirs';
 
 /**
  * Turn an engine error into something a user can act on.
@@ -583,6 +475,46 @@ async function runStatement(
   return { ok: true, columns, rows, truncated };
 }
 
+/**
+ * `DESCRIBE` one referenceable name, plus an exact `count(*)`.
+ *
+ * `ref` is built by this module from a name the module itself listed — never
+ * from renderer text — so the caller must resolve the name against its own
+ * table list FIRST and pass the resolved reference. That is what keeps this
+ * safe without a whitelist: there is no path from a typed string to this SQL.
+ *
+ * The count is EXACT here, unlike every other driver's estimate. A local
+ * Parquet/DuckDB file answers `count(*)` off its own metadata in single-digit
+ * milliseconds — there is no server to bill and no scan to avoid — so an
+ * estimate would be a worse number for no saving.
+ */
+async function describeRef(preludeSql: string, ref: string): Promise<ConnectorSchema> {
+  const described = await duck.queryAsync(`${preludeSql}DESCRIBE SELECT * FROM ${ref}`);
+  const columns = described.map((r) => {
+    const col: { name: string; type: string; nullable?: boolean } = {
+      // The SOURCE's type name, verbatim. Never mapped, never coerced.
+      name: String(r.column_name ?? ''),
+      type: String(r.column_type ?? ''),
+    };
+    // DESCRIBE reports `null` as 'YES' / 'NO'; a reader expression (a CSV or a
+    // Parquet glob) has no NOT NULL constraint, so the key is simply absent
+    // rather than guessed.
+    const nullable = String(r.null ?? '').toUpperCase();
+    if (nullable === 'YES' || nullable === 'NO') col.nullable = nullable === 'YES';
+    return col;
+  }).filter((c) => c.name);
+
+  const out: ConnectorSchema = { ok: true, columns };
+  try {
+    const counted = await duck.queryAsync(`${preludeSql}SELECT count(*) AS n FROM ${ref}`);
+    const n = Number(counted[0]?.n ?? NaN);
+    if (Number.isFinite(n) && n >= 0) out.rowEstimate = n;
+  } catch {
+    /* an unreadable file still has a describable header */
+  }
+  return out;
+}
+
 // ── duckdb-file ──────────────────────────────────────────────────────────────
 
 interface DuckTable {
@@ -686,6 +618,31 @@ const duckdbFile: ConnectorDef = {
       return { ok: false, error: explainError(err, dir, ctx) };
     }
   },
+
+  // The name is resolved against THIS attach's own table list, so a name the
+  // renderer invented reaches no SQL at all — it simply is not found.
+  async describeTable(ctx: ConnectorContext, table: string): Promise<ConnectorSchema | ConnectorError> {
+    const file = fieldString(ctx, 'path');
+    const bad = checkPath(file, 'file');
+    if (bad) return { ok: false, error: bad };
+    const wanted = String(table ?? '').trim();
+    if (!wanted) return { ok: false, error: 'No table specified' };
+    const dir = path.dirname(file);
+    try {
+      await prepareEngine(dir);
+      return await withDeadline(
+        withAttached(file, async (_alias, list) => {
+          const hit = list.find((t) => t.name === wanted);
+          if (!hit) return { ok: false as const, error: `No such table: ${wanted}` };
+          return describeRef('', hit.ref);
+        }),
+        timeoutOf(ctx),
+        'Describe'
+      );
+    } catch (err) {
+      return { ok: false, error: explainError(err, dir, ctx) };
+    }
+  },
 };
 
 // ── Folder connectors (parquet, csv) ─────────────────────────────────────────
@@ -758,6 +715,25 @@ function folderConnector(spec: {
         const tables = tablesOf(ctx, dir);
         if (!tables.length) return { ok: false, error: `No ${spec.ext} files in ${dir}` };
         return await withDeadline(runStatement(prelude(tables), sql, ctx), timeoutOf(ctx), 'Query');
+      } catch (err) {
+        return { ok: false, error: explainError(err, dir, ctx) };
+      }
+    },
+
+    // Resolved against the folder's OWN listing, so the reader expression that
+    // reaches SQL is one this module built from a real dirent — never text a
+    // renderer typed.
+    async describeTable(ctx: ConnectorContext, table: string): Promise<ConnectorSchema | ConnectorError> {
+      const dir = fieldString(ctx, 'path');
+      const bad = checkPath(dir, 'directory');
+      if (bad) return { ok: false, error: bad };
+      const wanted = String(table ?? '').trim();
+      if (!wanted) return { ok: false, error: 'No table specified' };
+      try {
+        await prepareEngine(dir);
+        const hit = tablesOf(ctx, dir).find((t) => t.name === wanted);
+        if (!hit) return { ok: false, error: `No such table: ${wanted}` };
+        return await withDeadline(describeRef('', hit.ref), timeoutOf(ctx), 'Describe');
       } catch (err) {
         return { ok: false, error: explainError(err, dir, ctx) };
       }

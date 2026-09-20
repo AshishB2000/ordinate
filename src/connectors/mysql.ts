@@ -27,6 +27,7 @@ import {
   ConnectorError,
   ConnectorField,
   ConnectorRows,
+  ConnectorSchema,
   ConnectorTables,
   safeError,
 } from './types';
@@ -259,7 +260,7 @@ type RawRows = any[];
 // backstop timer only exists so a server that ignored the SET cannot wedge the
 // main process — it is not the timeout, because destroying a socket does not
 // reliably stop work already running on the server.
-async function withConnection<T extends ConnectorRows | ConnectorTables | ConnectorError>(
+async function withConnection<T extends { ok: true } | ConnectorError>(
   variant: MysqlVariant,
   ctx: ConnectorContext,
   body: (conn: Connection, plan: TimeoutPlan) => Promise<T>,
@@ -499,6 +500,74 @@ async function run(variant: MysqlVariant, ctx: ConnectorContext, sql: string): P
   });
 }
 
+/**
+ * One table's columns out of `information_schema.columns`, fully parameterised.
+ *
+ * The schema and table arrive from a renderer and are BOUND with `?` — never
+ * backtick-quoted into the text, which is what `run` has to do because it
+ * builds a FROM clause. `TABLE_SCHEMA` falls back to the connection's own
+ * database when the tree sends an unqualified name, then to any non-system
+ * schema, so a source listed via `SHOW TABLES` (PlanetScale) describes too.
+ *
+ * `information_schema.tables.TABLE_ROWS` is the estimate. On InnoDB it is a
+ * sampled figure that can be off by a wide margin — which is exactly why the
+ * contract calls it `rowEstimate` and the tree renders it as "~". It is read in
+ * its own try: no estimate is a missing nicety, not a failed describe.
+ */
+const DESCRIBE_COLUMNS_SQL =
+  `SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE FROM information_schema.columns
+     WHERE TABLE_NAME = ?
+       AND (? = '' OR TABLE_SCHEMA = ?)
+       AND TABLE_SCHEMA NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys')
+     ORDER BY TABLE_SCHEMA, ORDINAL_POSITION`;
+
+const DESCRIBE_ROWS_SQL =
+  `SELECT TABLE_ROWS FROM information_schema.tables
+     WHERE TABLE_NAME = ? AND (? = '' OR TABLE_SCHEMA = ?) LIMIT 1`;
+
+async function describeTable(
+  variant: MysqlVariant,
+  ctx: ConnectorContext,
+  table: string,
+): Promise<ConnectorSchema | ConnectorError> {
+  const parts = str(table).trim().split('.');
+  if (parts.length < 1 || parts.length > 2 || parts.some((p) => !p)) {
+    return { ok: false, error: 'Invalid table name' };
+  }
+  // An unqualified name is looked up in the connection's own database first —
+  // which is what the user means by `orders` when they connected to `shop`.
+  const schema = parts.length === 2 ? parts[0] : str(ctx.values.database).trim();
+  const name = parts[parts.length - 1];
+
+  return withConnection(variant, ctx, async (conn, plan) => {
+    const [rows] = await conn.query<RawRows>(
+      plan.prefix + DESCRIBE_COLUMNS_SQL, [name, schema, schema],
+    );
+    const columns = (rows || []).map((r: unknown[]) => {
+      const col: { name: string; type: string; nullable?: boolean } = {
+        name: str(r[0]),
+        type: str(r[1]),
+      };
+      const nullable = str(r[2]).toUpperCase();
+      if (nullable === 'YES' || nullable === 'NO') col.nullable = nullable === 'YES';
+      return col;
+    }).filter((c) => c.name);
+    if (columns.length === 0) return { ok: false as const, error: `No such table: ${name}` };
+
+    const out: ConnectorSchema = { ok: true as const, columns };
+    try {
+      const [est] = await conn.query<RawRows>(
+        plan.prefix + DESCRIBE_ROWS_SQL, [name, schema, schema],
+      );
+      const n = Number((est || [])[0]?.[0]);
+      if (Number.isFinite(n) && n >= 0) out.rowEstimate = Math.round(n);
+    } catch (_) {
+      /* a hosted plan may hide information_schema.tables — see listTables */
+    }
+    return out;
+  });
+}
+
 export const CONNECTORS: ConnectorDef[] = VARIANTS.map((v) => ({
   id: v.id,
   label: v.label,
@@ -509,4 +578,5 @@ export const CONNECTORS: ConnectorDef[] = VARIANTS.map((v) => ({
   fields: fieldsFor(v),
   listTables: (ctx: ConnectorContext) => listTables(v, ctx),
   run: (ctx: ConnectorContext, sql: string) => run(v, ctx, sql),
+  describeTable: (ctx: ConnectorContext, table: string) => describeTable(v, ctx, table),
 }));

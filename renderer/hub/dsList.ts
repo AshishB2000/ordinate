@@ -38,10 +38,40 @@ async function refreshDatasetList(): Promise<void> {
   if (!Array.isArray(items)) items = [];
   if (empty) empty.hidden = items.length > 0;
   dsMarkEmpty(items.length === 0);
+  await dsLoadConnKinds(items);
   items.forEach((d) => list.appendChild(makeSavedItem(d)));
   // "Refresh all" only appears when there is something it could refresh.
   const all = dsEl('ds-refresh-all-btn');
   if (all) all.hidden = !items.some((d) => d && d.originKind);
+}
+
+/**
+ * connId -> connectorId, so a row imported from a connection can carry THAT
+ * SOURCE's logo rather than a generic "Database" badge.
+ *
+ * Fetched once per list paint and cached, not per row: the summaries carry
+ * `originConnId` (which connection) and the connector id lives on the
+ * connection record, so without this the alternative is one IPC call per row to
+ * resolve one string each. Best-effort — a row whose connection has since been
+ * deleted simply falls back to the badge.
+ */
+const dsConnKinds = new Map<string, { kind: string; label: string }>();
+
+async function dsLoadConnKinds(items: any[]): Promise<void> {
+  if (!currentProjectId) return;
+  if (!items.some((d) => d && d.originConnId)) return;
+  let list: any[] = [];
+  try {
+    list = await window.hub.listConnections(currentProjectId);
+  } catch (_) {
+    return;
+  }
+  dsConnKinds.clear();
+  for (const c of Array.isArray(list) ? list : []) {
+    if (!c || !c.id) continue;
+    const kind = typeof c.kind === 'string' ? c.kind : '';
+    dsConnKinds.set(String(c.id), { kind, label: String(c.name || kind || 'Connection') });
+  }
 }
 
 // ── Freshness ────────────────────────────────────────────────────────────────
@@ -52,11 +82,14 @@ async function refreshDatasetList(): Promise<void> {
 function dsFreshnessText(d: any): string {
   const stamp = (d && d.lastRefreshedAt) || (d && d.updatedAt);
   const when = formatSidebarTime(stamp);
-  const base = d && d.originKind ? 'Data as of ' + when : 'Imported ' + when;
   // A schedule is part of how fresh this is, so it belongs on the same line
-  // rather than in a second badge somewhere else.
+  // rather than in a second badge somewhere else — and it is stated as a
+  // SENTENCE ("Refreshes daily · last 08:00") rather than the "auto daily"
+  // shorthand, which read as a status rather than as a promise about the
+  // future.
   const every = d && d.autoRefresh && d.autoRefresh.every;
-  return every ? `${base} · auto ${every}` : base;
+  if (every) return `Refreshes ${every} · last ${when}`;
+  return d && d.originKind ? 'Data as of ' + when : 'Imported ' + when;
 }
 
 /**
@@ -241,28 +274,60 @@ function makeSavedItem(d: any): HTMLElement {
     label.textContent = 'From screenshot · ' + formatSidebarTime((d && d.updatedAt) || null);
     source.appendChild(label);
   } else {
+    // A connection-sourced dataset shows WHICH source it came from. `csv` /
+    // `postgres` are the eight display labels 35 connectors collapse onto, so
+    // the badge alone reads "Postgres" for a Redshift import — the logo and the
+    // connection's own name are the part that identifies it.
+    const conn = d && d.originConnId ? dsConnKinds.get(String(d.originConnId)) : undefined;
+    if (conn && typeof connMakeLogoFor === 'function') {
+      const logo = connMakeLogoFor(conn.kind, conn.label);
+      logo.classList.add('ds-source-logo');
+      source.appendChild(logo);
+    }
     const badge = document.createElement('span');
     badge.className = 'ds-source-badge';
-    badge.textContent = DS_SOURCE_LABELS[kind] || kind || 'Unknown';
+    const def = conn && typeof connDefById === 'function' ? connDefById(conn.kind) : null;
+    badge.textContent = conn ? conn.label : DS_SOURCE_LABELS[kind] || kind || 'Unknown';
+    if (conn) badge.title = (def ? def.label + ' · ' : '') + conn.label;
     source.appendChild(badge);
   }
 
   // Freshness line. A dataset whose last refresh FAILED keeps a warning dot
   // until the next success, so a silently stale number has a visible cause.
   const fresh = document.createElement('span');
-  fresh.className = 'ds-fresh ws-cell';
+  fresh.className = 'ds-fresh';
+  // The dot and the sentence share one LINE element, so the cell below can be a
+  // column without the dot becoming its own row — and so the line is the same
+  // element whether or not there is a dot to put in it.
+  const freshLine = document.createElement('span');
+  freshLine.className = 'ds-fresh-line';
   if (d && d.lastRefreshStatus === 'error') {
     const dot = document.createElement('span');
     dot.className = 'ds-fresh-dot';
     dot.setAttribute('role', 'img');
     dot.setAttribute('aria-label', 'Last refresh failed');
     dot.textContent = '●';
-    fresh.appendChild(dot);
+    freshLine.appendChild(dot);
   }
   const freshText = document.createElement('span');
   freshText.textContent = dsFreshnessText(d);
-  fresh.appendChild(freshText);
+  freshLine.appendChild(freshText);
+  fresh.appendChild(freshLine);
+  // The schedule and the anomaly watch live HERE, not in the action cell.
+  // Semantically they are freshness — "Refreshes hourly · last 08:00" and the
+  // control that sets it are one statement — and structurally the action cell
+  // could not hold them: six controls in a 232px track overflowed LEFT across
+  // the Source column, which is exactly where a connection's logo now goes.
+  const auto = dsAutoRefreshPicker(d);
+  if (auto) fresh.appendChild(auto);
+  const watch = dsWatchToggle(d);
+  if (watch) fresh.appendChild(watch);
   if (!(d && d.originKind)) fresh.title = DS_NOT_REFRESHABLE_HINT;
+  // WHY it failed, on hover. A red dot whose cause is one dataset-open away is
+  // a warning that makes you go and look; the row already has the reason.
+  else if (d && d.lastRefreshStatus === 'error') {
+    fresh.title = String(d.lastRefreshError || 'The last refresh failed.');
+  }
   open.addEventListener('click', () => openSavedDataset(String(d.id)));
 
   // THE WHOLE ROW opens it, not just the name. Everything from the row count to
@@ -305,12 +370,6 @@ function makeSavedItem(d: any): HTMLElement {
     actions.appendChild(btn);
   }
 
-  // Combine… opens the composer with THIS dataset as the base. It is the same
-  // page the import flow lands on — one flow, not a second combine dialog.
-  const auto = dsAutoRefreshPicker(d);
-  if (auto) actions.appendChild(auto);
-  const watch = dsWatchToggle(d);
-  if (watch) actions.appendChild(watch);
 
   // "New visual", the row-level twin of the explorer header's primary action:
   // the most common next step after importing a table, without opening it

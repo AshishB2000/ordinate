@@ -16,7 +16,12 @@
 import { finalizeTable, ParseResult } from '../data/parse';
 import { getConnector } from './index';
 import { safeError } from './types';
-import type { ConnectorColumn, ConnectorContext, ConnectorDef } from './types';
+import type {
+  ConnectorColumn,
+  ConnectorColumnDetail,
+  ConnectorContext,
+  ConnectorDef,
+} from './types';
 
 // The bounds fed into every ConnectorContext. Unchanged from the pre-registry
 // runner: the same 1M row cap as the file path (parse.ts MAX_ROWS) and the same
@@ -24,6 +29,11 @@ import type { ConnectorColumn, ConnectorContext, ConnectorDef } from './types';
 // both — see contract rule 3 — which is why they are passed rather than assumed.
 export const ROW_LIMIT = 1_000_000;
 export const QUERY_TIMEOUT_MS = 30_000;
+
+/** Default peek size for the workbench's table sample and query preview. Big
+ *  enough to see the shape of the data, small enough that clicking around a
+ *  schema tree never costs a warehouse scan. */
+export const SAMPLE_ROWS = 500;
 
 export interface RunBounds {
   rowLimit?: number;
@@ -101,10 +111,17 @@ const DIALECTS: Readonly<Record<string, Dialect>> = {
 /** Compile a validated `schema.table` (or `db.schema.table`) into a bounded
  *  SELECT for this family. Returns null when the name fails the whitelist. */
 export function buildTableSql(family: string, table: string, rowLimit: number): string | null {
-  const parts = String(table || '').trim().split('.');
+  const name = String(table || '').trim();
+  const parts = name.split('.');
   if (parts.length === 0 || parts.length > 3 || parts.some((p) => !IDENT_RE.test(p))) return null;
   const dialect = DIALECTS[family] || ANSI;
-  const quoted = parts.map(dialect.quote).join('.');
+  // The duckdb family reports a COMPLETE identifier with any schema folded into
+  // the name (see local.ts's CONTRACT NOTE): its tables live in a catalog
+  // attached under a per-call random alias, so `"reporting"."t"` would bind
+  // against the app's own in-memory catalog and find nothing. Quote the whole
+  // name as one identifier instead. Splitting it was a silent wrong-catalog
+  // lookup that only a non-`main` schema could reach.
+  const quoted = family === 'duckdb' ? dialect.quote(name) : parts.map(dialect.quote).join('.');
   return dialect.limit(`select * from ${quoted}`, rowLimit);
 }
 
@@ -249,6 +266,113 @@ export async function testConnection(
   // Otherwise prove reachability by actually fetching (this is the URL/API path).
   const run = await runConnection(connectorId, values, secrets, selection || {}, bounds);
   return run.ok ? { ok: true, tables: [] } : run;
+}
+
+/**
+ * One table's columns, out of the SOURCE'S OWN CATALOG.
+ *
+ * Returns `null` — not an error — when this connector has no `describeTable`.
+ * That is the signal the workbench reads to hide the schema browser entirely:
+ * an HTTP engine or the URL source can still list and run, it just has no
+ * uniform catalog to ask, and a tree of tables you cannot open is worse than no
+ * tree. A real failure (bad credentials, no such table) is still `{ok:false}`.
+ */
+export async function describeTable(
+  connectorId: unknown,
+  values: Record<string, unknown>,
+  secrets: Record<string, string>,
+  table: string,
+  bounds?: RunBounds,
+): Promise<{ ok: true; columns: ConnectorColumnDetail[]; rowEstimate?: number } | RunErr | null> {
+  const def = resolve(connectorId);
+  if (!def) return { ok: false, error: unknownConnector(connectorId) };
+  if (typeof def.describeTable !== 'function') return null;
+  const ctx = buildContext(values, secrets, bounds);
+  try {
+    const res = await def.describeTable(ctx, String(table ?? ''));
+    if (!res.ok) return { ok: false, error: safeError(res.error, ctx.secrets) };
+    const columns = (res.columns || [])
+      .map((c) => {
+        const out: ConnectorColumnDetail = { name: String(c?.name ?? ''), type: String(c?.type ?? '') };
+        if (typeof c?.nullable === 'boolean') out.nullable = c.nullable;
+        return out;
+      })
+      .filter((c) => c.name);
+    const n = Number(res.rowEstimate);
+    return Number.isFinite(n) && n >= 0
+      ? { ok: true, columns, rowEstimate: Math.round(n) }
+      : { ok: true, columns };
+  } catch (err: unknown) {
+    return { ok: false, error: safeError(err, ctx.secrets) };
+  }
+}
+
+/**
+ * A bounded peek at one table.
+ *
+ * Deliberately NOT a sixth per-driver method. A sample is `select * from <t>
+ * limit n`, and compiling a table name into exactly that — with the right
+ * quoting, the right row-limit syntax, and the whitelist that makes an
+ * interpolated identifier safe — is what `buildTableSql` already does for five
+ * dialects, on the path every saved table import already takes. A per-driver
+ * copy would be five new ways to emit an unbounded query for no behaviour the
+ * dispatch does not already have.
+ *
+ * `limit` may only lower the bound: buildContext clamps to ROW_LIMIT, so no
+ * caller can widen it.
+ */
+export async function sampleTable(
+  connectorId: unknown,
+  values: Record<string, unknown>,
+  secrets: Record<string, string>,
+  table: string,
+  limit: number,
+  bounds?: RunBounds,
+): Promise<RunOk | RunErr> {
+  const rowLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : SAMPLE_ROWS;
+  return runConnection(connectorId, values, secrets, { table: String(table ?? '') }, {
+    ...bounds,
+    rowLimit: Math.min(rowLimit, bounds?.rowLimit ?? ROW_LIMIT),
+  });
+}
+
+/**
+ * Validate a statement and report the columns it would produce, WITHOUT
+ * fetching a result.
+ *
+ * Implemented as the `LIMIT 0`-style dry run rather than `EXPLAIN`, for two
+ * reasons that both point the same way: `EXPLAIN` output is a different shape
+ * on every one of these engines (and is not available at all on several), and —
+ * the reason that actually decides it — a plan does not carry the OUTPUT COLUMN
+ * NAMES, which is the whole thing the caller asked for. Running the user's own
+ * statement bounded to a single row costs one round trip, answers with the real
+ * columns and the real source types, and surfaces a syntax error as the
+ * dialect's own message. The row itself is discarded here and never leaves main.
+ */
+export async function explainSql(
+  connectorId: unknown,
+  values: Record<string, unknown>,
+  secrets: Record<string, string>,
+  sql: string,
+): Promise<{ ok: true; columns: ConnectorColumn[] } | RunErr> {
+  const def = resolve(connectorId);
+  if (!def) return { ok: false, error: unknownConnector(connectorId) };
+  const statement = typeof sql === 'string' ? sql.trim() : '';
+  if (!statement) return { ok: false, error: 'No query to check' };
+  const ctx = buildContext(values, secrets, { rowLimit: 1 });
+  try {
+    const res = await def.run(ctx, statement.replace(/;\s*$/, ''));
+    if (!res.ok) return { ok: false, error: safeError(res.error, ctx.secrets) };
+    return {
+      ok: true,
+      columns: (res.columns || []).map((c) => ({
+        name: String(c?.name ?? ''),
+        type: String(c?.type ?? ''),
+      })),
+    };
+  } catch (err: unknown) {
+    return { ok: false, error: safeError(err, ctx.secrets) };
+  }
 }
 
 // An unknown id reaches here off a stored record or an IPC payload. Echo it, but

@@ -207,13 +207,24 @@ declare global {
             secret: boolean;
             help?: string;
           }[];
+          /** True when this source has a catalog the workbench can browse. */
+          browsable?: boolean;
         }[]
       >;
       searchWorkspace(projectId: string, query: string): Promise<any>;
       listConnections(projectId: string): Promise<any[]>;
       testAndSaveConnection(projectId: string, kind: string, config: any, secret: any): Promise<any>;
       listConnectionTables(projectId: string, connId: string): Promise<any>;
-      runConnection(projectId: string, connId: string, tableOrQuery: any): Promise<any>;
+      runConnection(projectId: string, connId: string, tableOrQuery: any, limit?: number): Promise<any>;
+      describeConnectionTable(projectId: string, connId: string, table: string): Promise<any>;
+      sampleConnectionTable(projectId: string, connId: string, table: string, limit?: number): Promise<any>;
+      explainConnectionSql(projectId: string, connId: string, sql: string): Promise<any>;
+      saveConnectionQuery(
+        projectId: string,
+        connId: string,
+        q: { id?: string; name?: string; sql?: string },
+      ): Promise<any>;
+      deleteConnectionQuery(projectId: string, connId: string, queryId: string): Promise<any>;
       refreshConnection(projectId: string, connId: string, datasetId: string): Promise<any>;
       deleteConnection(projectId: string, connId: string): Promise<{ ok: boolean }>;
       // ── Visuals (saved charts/maps from a dataset + an encoding) ──
