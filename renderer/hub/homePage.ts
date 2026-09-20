@@ -206,7 +206,7 @@ function makeRecentRow(it: any): HTMLElement {
   body.appendChild(meta);
 
   const time = document.createElement('span');
-  time.className = 'home-row-time';
+  time.className = 'home-row-time tnum';
   time.textContent = formatSidebarTime(it.updatedAt || null); // hub.ts
 
   const on = starredSet.has(starKey(it));

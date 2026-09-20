@@ -313,7 +313,7 @@ function openMetricDialog(
     const preview = document.createElement('div');
     preview.className = 'dm-preview';
     const prevVal = document.createElement('div');
-    prevVal.className = 'dash-metric-value';
+    prevVal.className = 'dash-metric-value tnum';
     prevVal.textContent = '—';
     const prevLabel = document.createElement('div');
     prevLabel.className = 'dash-metric-label';

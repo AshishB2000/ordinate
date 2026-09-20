@@ -178,7 +178,7 @@ function renderDashPages(): void {
   (dashCurrent.pages || []).forEach((p: any, i: number) => {
     const tab = document.createElement('button');
     tab.type = 'button';
-    tab.className = 'dash-page-tab' + (i === dashPageIdx ? ' active' : '');
+    tab.className = 'dash-page-tab seg-opt' + (i === dashPageIdx ? ' active' : '');
     tab.textContent = p && p.name ? String(p.name) : 'Page ' + (i + 1);
     tab.addEventListener('click', () => { dashPageIdx = i; renderDashPages(); renderDashGrid(); });
     tab.addEventListener('dblclick', () => handleRenamePage(i));

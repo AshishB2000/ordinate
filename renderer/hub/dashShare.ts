@@ -192,7 +192,7 @@ function dashExportMeasure(): DashExportMeasure {
   const body = document.createElement('div');
   body.className = 'dash-card-body';
   const value = document.createElement('div');
-  value.className = 'dash-metric-value';
+  value.className = 'dash-metric-value tnum';
   value.textContent = 'x';
   const label = document.createElement('div');
   label.className = 'dash-metric-label';

@@ -78,7 +78,7 @@ function dkPaintPoweredBy(status: any): void {
 function dhMakeChip(prompt: string): HTMLElement {
   const chip = document.createElement('button');
   chip.type = 'button';
-  chip.className = 'dk-suggest';
+  chip.className = 'dk-suggest chip';
   chip.textContent = prompt;
   chip.title = prompt; // the panel is narrow; the chip ellipsises, the tooltip does not
   chip.addEventListener('click', () => {

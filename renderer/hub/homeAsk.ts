@@ -161,7 +161,7 @@ async function haSuggestPrompts(pid: string, preferred?: string): Promise<string
 function haMakeSuggestChip(prompt: string): HTMLElement {
   const chip = document.createElement('button');
   chip.type = 'button';
-  chip.className = 'home-ask-chip';
+  chip.className = 'home-ask-chip chip';
   chip.textContent = prompt;
   chip.addEventListener('click', () => {
     const input = document.getElementById('home-ask-input') as HTMLInputElement | null;

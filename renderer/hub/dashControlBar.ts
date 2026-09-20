@@ -88,7 +88,7 @@ function renderDashControlBar(): void {
 function makeControlChip(card: any): HTMLElement {
   const control = card.control;
   const chip = document.createElement('div');
-  chip.className = 'dash-fb-chip';
+  chip.className = 'dash-fb-chip chip';
   chip.dataset.cardId = card.id;
   const active = !controlIsAll(card);
   chip.classList.toggle('dash-fb-chip--on', active);
