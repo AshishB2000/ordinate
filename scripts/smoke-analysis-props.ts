@@ -457,7 +457,9 @@ async function main(): Promise<void> {
   ok('the ✨ Suggest a visual button is offered, above the chart types',
      ai.present && /Suggest a visual/.test(ai.label) && ai.aboveChips, JSON.stringify(ai));
   ok('…with no model it is DISABLED and says the one shared sentence',
-     ai.disabled && ai.noteVisible && /Execution to use the Assistant/.test(ai.noteText), ai.noteText);
+     ai.disabled && ai.noteVisible && /^The Assistant isn’t set up yet\./.test(ai.noteText), ai.noteText);
+  ok('…and the note ends in the one button that fixes it, not a route in prose',
+     /Set up the Assistant$/.test(ai.noteText), ai.noteText);
   ok('…while the app-computed chart types still work, and say they are the app\'s',
      ai.chips > 0 && /recommended by the app itself/i.test(ai.noteText) && !!ai.activeChip,
      `${ai.chips} chips, active="${ai.activeChip}"`);

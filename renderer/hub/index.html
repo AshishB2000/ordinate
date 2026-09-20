@@ -561,8 +561,8 @@
                 <circle cx="8" cy="14" r="3.5" stroke="currentColor" stroke-width="1.7"/>
                 <path d="M10.5 11.5L20 2M16 6l2.5 2.5M18 8l1.8 1.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
               </svg>
-              <span class="api-banner-text">Connect a Local CLI or add an API key (BYOK) to get started.</span>
-              <button id="open-settings-banner" class="api-banner-link" type="button">Open Settings</button>
+              <span class="api-banner-text">The Assistant isn’t set up yet.</span>
+              <button id="open-settings-banner" class="api-banner-link" type="button">Set up the Assistant</button>
             </div>
 
           </div>
@@ -1133,7 +1133,7 @@
                 <button class="btn btn-primary btn-lg" type="button" id="viz-empty-new-btn">+ New visual</button>
                 <button class="btn btn-lg" type="button" id="viz-empty-ai">✨ Start with the Assistant</button>
               </div>
-              <p class="viz-empty-hint" id="viz-empty-hint" hidden>Connect a model in Settings → Execution to use the Assistant.</p>
+              <p class="viz-empty-hint" id="viz-empty-hint" hidden></p>
             </div>
 
             <!-- Move 3: the project's datasets, so the empty page offers the
@@ -1551,6 +1551,7 @@
            removes `.xp-msg` rows, so a rebuild from disk truth leaves it be. -->
       <div class="dk-messages" id="dk-messages">
         <div class="dk-hint" id="dk-hint" hidden></div>
+        <div class="dk-powered" id="dk-powered" hidden></div>
       </div>
       <!-- Starter chips, pinned just above the composer — the only thing an
            empty conversation shows. The prompt STRINGS come from
@@ -1592,7 +1593,7 @@
       <div class="settings-modal-head">
         <div class="settings-modal-headtext">
           <div class="settings-modal-eyebrow">SETTINGS</div>
-          <h2 id="stp-title" class="settings-modal-title">Execution mode</h2>
+          <h2 id="stp-title" class="settings-modal-title">Assistant</h2>
         </div>
         <button id="stp-close" class="settings-modal-x" type="button" aria-label="Close settings">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -1604,7 +1605,7 @@
       <!-- body: category sidebar + content -->
       <div class="settings-modal-body">
         <nav class="settings-cats" role="tablist" aria-label="Settings categories">
-          <button class="settings-cat active" type="button" role="tab" data-cat="exec">Execution mode</button>
+          <button class="settings-cat active" type="button" role="tab" data-cat="exec">Assistant</button>
           <button class="settings-cat" type="button" role="tab" data-cat="hotkey">Hotkey</button>
           <button class="settings-cat" type="button" role="tab" data-cat="prompt">Instructions / Rules</button>
           <button class="settings-cat" type="button" role="tab" data-cat="appearance">Appearance</button>
@@ -1615,19 +1616,20 @@
 
         <div class="settings-content">
 
-          <!-- Execution mode -->
+          <!-- Assistant -->
           <section class="settings-pane" data-cat="exec">
 
             <!-- Local CLI / BYOK toggle -->
             <div class="stp-row">
               <div class="stp-rl">
-                <div class="stp-rt">Execution mode</div>
-                <div class="stp-rd">Run captures through a local CLI agent, or your own API key</div>
+                <div class="stp-rt">Assistant</div>
+                <div class="stp-rd">Choose what powers the Assistant. Your data never leaves this
+                  computer unless you connect a cloud key.</div>
               </div>
               <div class="stp-rr">
-                <div class="stp-seg" id="ex-mode-seg" role="group" aria-label="Execution mode">
-                  <button class="stp-seg-opt" data-mode="local" type="button">Local CLI</button>
-                  <button class="stp-seg-opt" data-mode="byok" type="button">Cloud</button>
+                <div class="stp-seg" id="ex-mode-seg" role="group" aria-label="What powers the Assistant">
+                  <button class="stp-seg-opt" data-mode="local" type="button">Use an app on this computer</button>
+                  <button class="stp-seg-opt" data-mode="byok" type="button">Use my own API key</button>
                 </div>
               </div>
             </div>
@@ -1638,8 +1640,7 @@
               <!-- heading + rescan -->
               <div class="stp-row">
                 <div class="stp-rl">
-                  <div class="stp-rt">Pick the CLI that runs your prompts</div>
-                  <div class="stp-rd" id="ex-local-sub">Detected on your PATH. Selecting one only stores the choice for now.</div>
+                  <div class="stp-rt">Apps on this computer</div>
                 </div>
                 <div class="stp-rr">
                   <button id="ex-rescan" class="btn btn-sm" type="button">
@@ -1655,18 +1656,18 @@
               <!-- scanning state -->
               <div id="ex-local-scanning" class="ex-local-scanning" hidden>
                 <span class="cap-spinner" role="status" aria-label="Scanning"></span>
-                Scanning your PATH…
+                Looking on your Mac…
               </div>
 
               <!-- Your CLIs (installed) -->
               <div id="ex-installed-group" class="ex-cli-group" hidden>
-                <div class="ex-cli-grouphead">Your CLIs (<span id="ex-installed-count">0</span>)</div>
+                <div class="ex-cli-grouphead">Ordinate found these on your Mac (<span id="ex-installed-count">0</span>)</div>
                 <div id="ex-installed-list" class="ex-cli-list"></div>
               </div>
 
               <!-- empty installed -->
               <div id="ex-installed-empty" class="ex-cli-empty" hidden>
-                No supported CLIs found on your PATH. Install one below to use Local CLI.
+                None found. Install Claude Code, Codex or Gemini CLI, or use an API key instead.
               </div>
 
               <!-- Available to install (collapsible) -->
@@ -1691,6 +1692,9 @@
                  after a successful Test (config.verified), which promotes it
                  from Available into Your connected providers. -->
             <div id="ex-byok-panel" class="ex-panel" hidden>
+
+              <p class="ex-byok-storage">Stored only on this computer, in plain text, in the app's
+                config file.</p>
 
               <!-- Your connected providers -->
               <div id="ex-byok-conn-group" class="ex-cli-group" hidden>
@@ -1949,7 +1953,7 @@
           </span>
           <div>
             <div class="about-trouble-title">"Key was rejected"</div>
-            <div class="about-trouble-detail">Re-paste your API key under Settings → Execution mode.</div>
+            <div class="about-trouble-detail">Re-paste your API key under Settings → Assistant.</div>
           </div>
         </div>
         <div class="about-trouble-row">
@@ -2076,12 +2080,12 @@
        second home in the new chrome is a separate decision, deliberately not
        taken here — a chrome relayout is the wrong place to delete a ~500-line
        subsystem. -->
-  <div id="exec-menu" class="settings-menu exec-menu" role="menu" aria-label="Execution mode" hidden>
+  <div id="exec-menu" class="settings-menu exec-menu" role="menu" aria-label="Assistant" hidden>
 
     <!-- a. Mode -->
     <div class="sm-section">
       <div class="sm-label">Mode</div>
-      <div class="sm-seg" id="exec-mode-seg" role="group" aria-label="Execution mode">
+      <div class="sm-seg" id="exec-mode-seg" role="group" aria-label="What powers the Assistant">
         <button class="menu-seg-opt" type="button" data-mode="local">Local CLI</button>
         <button class="menu-seg-opt" type="button" data-mode="byok">Cloud</button>
       </div>
@@ -2320,7 +2324,7 @@
               <textarea class="ws-modal-input vn-textarea js-vn-intent" rows="3"
                         placeholder="e.g. profile registrations year over year"
                         aria-label="Describe the visual you want"></textarea>
-              <p class="vn-note js-vn-note" hidden>Connect a model in Settings → Execution to use the Assistant.</p>
+              <p class="vn-note js-vn-note" hidden></p>
               <button class="btn btn-primary js-vn-ask" type="button">Ask the Assistant</button>
             </div>
             <div class="vn-choice">

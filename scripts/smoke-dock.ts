@@ -626,7 +626,7 @@ async function main(): Promise<void> {
   ]);
   ok('…and with no model the pill says so, and carries the one shared sentence',
     (await pill()) === JSON.stringify(
-      ['No model', null, 'Connect a model in Settings → Execution to use the Assistant.']),
+      ['Not set up', null, 'The Assistant isn’t set up yet.']),
     await pill());
   await win.evaluate(() => (window as any).dkPaintAiToggle(true, true));
   const pillOn = await pill();

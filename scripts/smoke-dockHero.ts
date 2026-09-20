@@ -141,6 +141,66 @@ async function main(): Promise<void> {
   // property, not by Playwright's fill (which refuses a disabled control).
   await win.evaluate(() => { (document.getElementById('dk-input') as HTMLTextAreaElement).value = ''; });
 
+  // THE BANNER, AND THE BUTTON IN IT. With no model the dock's notice used to
+  // be a sentence naming a screen ("Settings → Execution") — something to read,
+  // not something to do. It is now that sentence plus one real button, and this
+  // asserts the whole route: the button is there, clicking it opens Settings,
+  // and what opens is the ASSISTANT tab. Read off the RENDERED title and the
+  // selected category, so a renamed tab or a broken pane switch fails here
+  // rather than in a screenshot nobody compares.
+  const banner = await win.evaluate(() => {
+    const h = document.getElementById('dk-hint');
+    const b = h?.querySelector('.ai-setup-btn') as HTMLButtonElement | null;
+    return { shown: !!h && !h.hidden, text: (h?.textContent || '').trim(), btn: (b?.textContent || '').trim() };
+  });
+  ok('the dock banner says it in the one sentence and offers the one button',
+    banner.shown && /^The Assistant isn’t set up yet\./.test(banner.text)
+      && banner.btn === 'Set up the Assistant',
+    JSON.stringify(banner));
+  await win.evaluate(() => {
+    const b = document.querySelector('#dk-hint .ai-setup-btn') as HTMLButtonElement | null;
+    if (b) b.click();
+  });
+  await win.waitForTimeout(700);
+  const landed = await win.evaluate(() => ({
+    open: (document.getElementById('settings-panel') as HTMLElement | null)?.style.display === 'flex',
+    title: (document.getElementById('stp-title')?.textContent || '').trim(),
+    tab: (document.querySelector('.settings-cat.active') as HTMLElement | null)?.textContent?.trim() || null,
+    paneShown: !(document.querySelector('.settings-pane[data-cat="exec"]') as HTMLElement | null)?.hidden,
+  }));
+  ok('…and clicking it lands on the Assistant settings tab',
+    landed.open && landed.title === 'Assistant' && landed.tab === 'Assistant' && landed.paneShown,
+    JSON.stringify(landed));
+  await win.keyboard.press('Escape');
+  await win.waitForTimeout(400);
+
+  // POWERED BY <name>. The other half of the empty state: once something IS
+  // set up, the stage says what. A smoke run has no model, so drive the painter
+  // with the status shape main produces — the point being that the NAME comes
+  // out of execActiveConnected, the same rule the header pill uses, and that a
+  // turn on the stage takes the line away again.
+  const powered = await win.evaluate(() => {
+    (window as any).dkPaintPoweredBy({
+      executionMode: 'local',
+      localCli: { activeId: 'claude', clis: [{ id: 'claude', displayName: 'Claude Code', status: 'installed' }] },
+    });
+    const el = document.getElementById('dk-powered')!;
+    return { text: (el.textContent || '').trim(), shown: !el.hidden };
+  });
+  ok('with something set up, the empty stage names it — and nothing else',
+    powered.shown && powered.text === 'Powered by Claude Code', JSON.stringify(powered));
+  await win.evaluate(() => (window as any).xpRenderTurns([{ role: 'user', text: 'hi' }], 'dk-messages'));
+  // The MutationObserver is the mechanism (see dockHero's banner), so this must
+  // wait a tick rather than read back inside the same task.
+  await win.waitForTimeout(300);
+  const poweredGone = await win.evaluate(() => !!document.getElementById('dk-powered')!.hidden);
+  ok('…and a conversation takes the line away, like the chips', poweredGone);
+  await win.evaluate(() => {
+    (window as any).xpRenderTurns([], 'dk-messages');
+    (window as any).dkPaintPoweredBy(null);
+  });
+  await win.waitForTimeout(300);
+
   // ── The chips follow the CONTEXT ────────────────────────────────────────
   // The user path: the Data section, then the dataset. openSavedDataset sets
   // expId/expName but does NOT switch section, and dkContextRef only claims a

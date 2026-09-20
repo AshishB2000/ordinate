@@ -107,19 +107,29 @@ async function main(): Promise<void> {
   const doors = await win.evaluate(() =>
     ['viz-empty-ai', 'viz-suggest-btn', 'an-draft-btn', 'an-empty-draft'].map((id) => {
       const b = document.getElementById(id) as HTMLButtonElement | null;
-      return { id, present: !!b, disabled: !!b && b.disabled, titled: !!b && /Settings → Execution/.test(b.title) };
+      return { id, present: !!b, disabled: !!b && b.disabled, titled: !!b && /isn’t set up yet/.test(b.title) };
     }));
   ok('with no model, every Assistant door is disabled', doors.every((d) => d.present && d.disabled),
     JSON.stringify(doors));
   ok('…and each says why on hover, in the one shared sentence',
     doors.every((d) => d.titled), JSON.stringify(doors.filter((d) => !d.titled)));
+  // The notice is no longer a sentence that NAMES a screen — it is a sentence
+  // plus the button that goes there. Asserting the button, not just the prose,
+  // is the point: the prose alone was the thing a first-time reader could not act on.
   const dashHint = await win.evaluate(() => {
     const h = document.getElementById('an-empty-hint');
-    return { present: !!h, shown: !!h && !h.hidden, text: (h?.textContent || '').trim() };
+    const b = h?.querySelector('.ai-setup-btn') as HTMLButtonElement | null;
+    return {
+      present: !!h, shown: !!h && !h.hidden, text: (h?.textContent || '').trim(),
+      btn: (b?.textContent || '').trim(),
+    };
   });
   ok('…and the Dashboards empty state explains it in line, as Visuals does',
-    dashHint.shown && dashHint.text === 'Connect a model in Settings → Execution to use the Assistant.',
+    dashHint.shown && /^The Assistant isn’t set up yet\./.test(dashHint.text),
     JSON.stringify(dashHint));
+  ok('…and offers the one button that fixes it, not the name of a screen',
+    dashHint.btn === 'Set up the Assistant', JSON.stringify(dashHint));
+
 
   // ── 4. The Dashboards header matches its sibling sections ────────────────
   await win.evaluate(async (id: string) => {

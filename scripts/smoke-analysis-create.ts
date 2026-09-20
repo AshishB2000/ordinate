@@ -194,7 +194,7 @@ async function main(): Promise<void> {
       aiDisabled: !!cards.find((c) => c.dataset.kind === 'ai')?.disabled,
       othersEnabled: cards.filter((c) => c.dataset.kind !== 'ai').every((c) => !c.disabled),
       noteVisible: !!note && note.offsetParent !== null,
-      noteText: (note?.textContent || '').trim().slice(0, 80),
+      noteText: (note?.textContent || '').trim(),
       // Nothing left to ask on the three non-AI routes, so step 2 finishes.
       nextLabel: (next?.textContent || '').trim(),
       nextDisabled: !!next?.disabled,
@@ -216,7 +216,8 @@ async function main(): Promise<void> {
   ok('…Blank is preselected, so the step answers itself',
      JSON.stringify(wiz2.selected) === JSON.stringify(['Blank sheet']), JSON.stringify(wiz2.selected));
   ok('…with no model, ONLY the AI card is disabled, and it says why',
-     wiz2.aiDisabled && wiz2.othersEnabled && wiz2.noteVisible && /No model is configured/.test(wiz2.noteText),
+     wiz2.aiDisabled && wiz2.othersEnabled && wiz2.noteVisible
+       && /^The Assistant isn’t set up yet\./.test(wiz2.noteText),
      wiz2.noteText);
   ok('…and step 3 is dimmed rather than removed', wiz2.step3Skipped);
   ok('…a non-AI route finishes here, so the button says Create',

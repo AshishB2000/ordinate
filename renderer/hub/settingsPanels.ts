@@ -505,7 +505,13 @@ function lcInstalledRow(cli) {
   row.appendChild(main);
 
   const actions = lcMakeEl('span', 'ex-cli-actions');
-  actions.appendChild(lcMakeEl('span', 'ex-cli-selected-tag', 'Selected'));
+  // "Use" is the affordance the row always had but never showed — the whole row
+  // is the button, so this needs no handler of its own: the click bubbles to it.
+  // CSS swaps it for the green "Ready" tag on the row that is picked.
+  const use = lcMakeEl('button', 'btn btn-sm ex-cli-use', 'Use');
+  use.type = 'button';
+  actions.appendChild(use);
+  actions.appendChild(lcMakeEl('span', 'ex-cli-selected-tag', 'Ready'));
   // Per-CLI connectivity test — only CLIs with a working run adapter.
   if (RUNNABLE_LOCAL.includes(cli.id)) {
     const test = lcMakeEl('button', 'btn btn-sm ex-cli-test', 'Test');
@@ -576,7 +582,7 @@ function lcAvailRow(cli) {
   } else {
     const code = lcMakeEl('code', null, cli.binaryName);
     note.appendChild(code);
-    note.appendChild(document.createTextNode(' was not found on your PATH'));
+    note.appendChild(document.createTextNode(' was not found on this Mac'));
   }
   main.appendChild(note);
   row.appendChild(main);

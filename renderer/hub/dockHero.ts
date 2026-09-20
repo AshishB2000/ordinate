@@ -44,7 +44,33 @@ function dkSyncHeroVisible(): void {
   const host = document.getElementById('dk-suggests');
   const list = document.getElementById('dk-messages');
   if (!host || !list) return;
-  host.hidden = !dhHasPrompts || Boolean(list.querySelector('.xp-msg'));
+  const busy = Boolean(list.querySelector('.xp-msg'));
+  host.hidden = !dhHasPrompts || busy;
+  // "Powered by <name>" belongs to the same empty stage. dock.ts fills its text
+  // (and marks it ready); the rule for when it shows lives here, once.
+  const powered = document.getElementById('dk-powered');
+  if (powered) powered.hidden = busy || powered.dataset.ready !== '1';
+}
+
+/**
+ * One line on the empty stage naming what is answering — the local app's own
+ * display name, or the cloud provider's. Never a key, never a model id: the
+ * point is "something is set up", not what it costs.
+ *
+ * `status` is a getKeyStatus() snapshot (dock.ts has one in hand); null paints
+ * nothing. execActiveConnected is the SAME rule the header pill uses, so the
+ * two can never name different things. The element is a sibling of #dk-hint —
+ * xpRenderTurns only removes `.xp-msg`, so a rebuild from disk leaves it be —
+ * and `data-ready` is what dkSyncHeroVisible reads, keeping the when in one
+ * place with the chips' own rule.
+ */
+function dkPaintPoweredBy(status: any): void {
+  const el = document.getElementById('dk-powered');
+  if (!el) return;
+  const active = status ? execActiveConnected(status) : null;
+  el.textContent = active ? 'Powered by ' + active.label : '';
+  el.dataset.ready = active ? '1' : '';
+  dkSyncHeroVisible();
 }
 
 /** One starter chip. A click FILLS the composer and focuses it — never sends.

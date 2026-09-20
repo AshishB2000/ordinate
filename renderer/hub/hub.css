@@ -3803,6 +3803,15 @@ button.ex-cli-row.selected {
   padding: 1px 7px; background: var(--surface-2);
 }
 
+/* "Set up the Assistant" — the one button every not-ready notice ends with.
+   Inline-baseline because its hosts are paragraphs, not flex rows. */
+.ai-setup-btn { vertical-align: baseline; margin-left: 2px; }
+
+/* Where a pasted key actually lands. One line, above the provider cards. */
+.ex-byok-storage {
+  margin: 0 0 10px; font-size: 12px; color: var(--muted);
+}
+
 /* Retired CLI row — informational, dimmed, not selectable. */
 .ex-cli-row.ex-cli-retired { opacity: 0.66; }
 .ex-cli-row.ex-cli-retired:hover { background: none; }
@@ -3810,9 +3819,10 @@ button.ex-cli-row.selected {
 .ex-cli-actions { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; margin-top: 1px; }
 .ex-cli-selected-tag {
   display: none;
-  font-size: 11px; font-weight: 650; color: var(--accent);
+  font-size: 11px; font-weight: 650; color: var(--ok);
 }
 button.ex-cli-row.selected .ex-cli-selected-tag { display: inline; }
+button.ex-cli-row.selected .ex-cli-use { display: none; }
 
 .ex-cli-refresh {
   display: grid; place-items: center;
@@ -10691,11 +10701,20 @@ body.cap-focus .cap-back {
    the slack, so a short conversation sits just above where you type and the
    washed top of the stage stays open — which is what the retired page's
    `.xp-asked .xp-messages > .xp-msg:first-child` did too.
-   Keyed off .dk-hint, NOT `:first-of-type`: the hint is the stage's first child
-   and it is also a <div>, so `.xp-msg:first-of-type` can never match — the first
-   div of that parent is always the hint. (It stays a sibling while `hidden`, so
-   this holds whether the notice is showing or not.) */
-.dk-hint + .xp-msg { margin-top: auto; }
+   Keyed off #dk-powered, NOT `:first-of-type`: the stage's first children are
+   the hint and the "Powered by" line, both <div>s, so `.xp-msg:first-of-type`
+   can never match. They stay siblings while `hidden`, so this holds whether
+   either notice is showing or not — and #dk-powered is the LAST of the two, so
+   it is the one actually adjacent to the first turn. */
+.dk-powered + .xp-msg { margin-top: auto; }
+
+/* Named, not quantified: which local app or cloud provider is answering. Quiet
+   enough to read as a caption on the empty stage, gone the moment a turn lands
+   (dockHero's observer). */
+.dk-powered {
+  flex: none;
+  font-size: 11.5px; color: var(--muted); text-align: center;
+}
 
 /* Starter chips — the only thing an empty conversation shows, pinned just above
    the composer rather than floating mid-panel. Quiet pills, one per row and
