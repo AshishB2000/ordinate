@@ -169,7 +169,7 @@ function setControlDefaultFromCurrent(card: any): void {
   const cur = controlState.get(card.id);
   if (controlIsAll(card) || cur === undefined) delete card.control.default;
   else card.control.default = cur;
-  markDashDirty();
+  markDashDirty('Set control default');
   renderDashGrid();
 }
 
@@ -189,6 +189,6 @@ async function handleEditControl(card: any): Promise<void> {
   // the new one by a value that may not exist in it.
   controlState.delete(card.id);
   if (next.default) controlState.set(card.id, next.default);
-  markDashDirty();
+  markDashDirty('Edit control');
   renderDashGrid();
 }

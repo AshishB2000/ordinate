@@ -18,7 +18,7 @@ function pushCard(card: any): void {
   if (!page) return;
   if (!Array.isArray(page.cards)) page.cards = [];
   page.cards.push(card);
-  markDashDirty();
+  markDashDirty('Add ' + (card && card.type === 'control' ? 'control' : card && card.type ? card.type : 'card'));
   renderDashGrid();
 }
 
@@ -493,7 +493,7 @@ async function applyStarter(kind: string, datasetId?: string): Promise<void> {
     if (card && card.layout) card.layout.y = (card.layout.y || 0) + y0;
     page.cards.push(card);
   }
-  markDashDirty();
+  markDashDirty('Add cards');
   renderDashPages();
   renderDashGrid();
   // Anything the validator refused is said out loud rather than silently missing

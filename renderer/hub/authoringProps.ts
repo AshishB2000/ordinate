@@ -256,7 +256,7 @@ function anRenderControlProps(card: any, host: HTMLElement): void {
     const cur = controlState.get(card.id);
     if (cur === undefined) return;
     control.default = cur;
-    markDashDirty();
+    markDashDirty('Set control default');
     anRenderProps(card);
   });
   const clearDefBtn = document.createElement('button');
@@ -266,7 +266,7 @@ function anRenderControlProps(card: any, host: HTMLElement): void {
   clearDefBtn.disabled = control.default === undefined;
   clearDefBtn.addEventListener('click', () => {
     delete control.default;
-    markDashDirty();
+    markDashDirty('Clear control default');
     anRenderProps(card);
   });
   defActions.appendChild(useCurBtn);
@@ -285,7 +285,9 @@ function anRenderControlProps(card: any, host: HTMLElement): void {
   let labelTimer: number | null = null;
   labelIn.addEventListener('input', () => {
     control.label = labelIn.value;
-    markDashDirty();
+    // Per KEYSTROKE: coalescing, so typing a label is ONE undo, not one per
+    // character (dashHistory.ts's DASH_HIST_COALESCE_MS).
+    markDashDirty('Edit control label', true);
     if (labelTimer !== null) window.clearTimeout(labelTimer);
     labelTimer = window.setTimeout(() => {
       labelTimer = null;
@@ -327,7 +329,7 @@ function anRenderControlProps(card: any, host: HTMLElement): void {
     control.datasetId = dsSel.value;
     controlState.delete(card.id);
     delete control.default;
-    markDashDirty();
+    markDashDirty('Change control dataset');
     void loadControlColumns().then(() => {
       // Only adopt the new selection if the fetch actually produced one —
       // an empty colSel.value (failed fetch, columnless dataset, or the
@@ -343,7 +345,7 @@ function anRenderControlProps(card: any, host: HTMLElement): void {
     control.column = colSel.value;
     controlState.delete(card.id);
     delete control.default;
-    markDashDirty();
+    markDashDirty('Change control column');
     renderDashGrid();
     anPaintSelection();
     anRenderProps(card);

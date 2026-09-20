@@ -488,6 +488,9 @@ async function handleRenameAnalysis(id: string, currentName: string): Promise<vo
     dashCurrent.name = name.trim() || dashCurrent.name;
     const nameEl = dashEl('dash-name');
     if (nameEl) nameEl.textContent = dashCurrent.name;
+    // The title is part of the record persistAnalysis writes, so a rename is an
+    // undoable change like any other — it just reaches the record by its own IPC.
+    markDashDirty('Rename dashboard');
     await refreshAnalysisListKeepEditor();
     return;
   }

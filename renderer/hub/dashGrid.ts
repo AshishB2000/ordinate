@@ -74,6 +74,7 @@ function openEditorWith(rec: any, title: string): void {
   syncDashStyle(); // before the first renderDashGrid, so charts build in-palette
   const nameEl = dashEl('dash-name');
   if (nameEl) nameEl.textContent = title;
+  dashHistReset(); // this state is the floor — nothing before it is undoable
   renderDashFilterBar();
   renderDashPages();
   renderDashGrid();
@@ -102,6 +103,7 @@ function closeDashboardEditor(): void {
   dashPageIdx = 0;
   dashDirty = false;
   dashDragId = null;
+  dashHistClear(); // one dashboard's undo stack never reaches the next one
   destroyDashCharts(); // tear down card charts/maps before wiping the grid (no leak)
   const grid = dashEl('dash-grid');
   if (grid) grid.innerHTML = '';
@@ -150,12 +152,21 @@ function dashCurrentPage(): any {
   return dashCurrent.pages[dashPageIdx] || null;
 }
 
-function markDashDirty(): void {
+/**
+ * THE one write hook for this surface: every mutation of the open record ends
+ * here, which is why the undo history is filed here too rather than at twenty
+ * call sites (dashHistory.ts explains the shape). `label` is what the Undo
+ * button will offer to reverse; an unlabelled caller still gets an undo step,
+ * just a generic one. `coalesce` is for callers that fire per KEYSTROKE — they
+ * are one edit, not thirty.
+ */
+function markDashDirty(label?: string, coalesce?: boolean): void {
   // A published dashboard is read-only. Nothing in the UI should reach here (the
   // controls are hidden), but the 600 ms autosave is exactly the mechanism that
   // would quietly overwrite a snapshot, so it is stopped at the source too.
   if (dashReadOnly) return;
   dashDirty = true;
+  dashHistCommit(label || 'Change', coalesce);
   scheduleDashSave();
 }
 
@@ -205,7 +216,7 @@ function handleAddPage(): void {
   const n = (dashCurrent.pages || []).length + 1;
   dashCurrent.pages.push({ id: dashUuid(), name: 'Page ' + n, cards: [] });
   dashPageIdx = dashCurrent.pages.length - 1;
-  markDashDirty();
+  markDashDirty('Add page');
   renderDashPages();
   renderDashGrid();
 }
@@ -215,7 +226,7 @@ async function handleRenamePage(i: number): Promise<void> {
   const name = await promptModal('Rename page', dashCurrent.pages[i].name || 'Page ' + (i + 1), 'Save');
   if (name === null) return;
   dashCurrent.pages[i].name = name.trim() || dashCurrent.pages[i].name;
-  markDashDirty();
+  markDashDirty('Rename page');
   renderDashPages();
 }
 
@@ -224,7 +235,7 @@ function handleRemovePage(i: number): void {
   if (!window.confirm('Remove this page and its cards?')) return;
   dashCurrent.pages.splice(i, 1);
   if (dashPageIdx >= dashCurrent.pages.length) dashPageIdx = dashCurrent.pages.length - 1;
-  markDashDirty();
+  markDashDirty('Remove page');
   renderDashPages();
   renderDashGrid();
 }
@@ -529,20 +540,12 @@ function makeDashCardEl(card: any): HTMLElement {
 
   const ctrls = document.createElement('div');
   ctrls.className = 'dash-card-ctrls';
-  // Move.
-  ctrls.appendChild(dashCtrlBtn('◀', 'Move left', () => nudgeCard(card, -1, 0)));
-  ctrls.appendChild(dashCtrlBtn('▶', 'Move right', () => nudgeCard(card, 1, 0)));
-  ctrls.appendChild(dashCtrlBtn('▲', 'Move up', () => nudgeCard(card, 0, -1)));
-  ctrls.appendChild(dashCtrlBtn('▼', 'Move down', () => nudgeCard(card, 0, 1)));
-  // Resize.
-  ctrls.appendChild(dashCtrlBtn('W−', 'Narrower', () => resizeCard(card, -1, 0)));
-  ctrls.appendChild(dashCtrlBtn('W+', 'Wider', () => resizeCard(card, 1, 0)));
-  ctrls.appendChild(dashCtrlBtn('H−', 'Shorter', () => resizeCard(card, 0, -1)));
-  ctrls.appendChild(dashCtrlBtn('H+', 'Taller', () => resizeCard(card, 0, 1)));
-  // Remove.
-  const rm = dashCtrlBtn('🗑', 'Remove card', () => removeCard(card));
-  rm.classList.add('dash-card-rm');
-  ctrls.appendChild(rm);
+  // ONE ⋯, not nine glyphs. Drag and the resize handles (authoringSelect.ts)
+  // are the primary gestures now, so the cluster was nine permanently-visible
+  // buttons for the fallback path — and ' ◀▶▲▼ W−W+H−H+ ' read as a puzzle at
+  // 11px. The FUNCTIONS are untouched; only the chrome in front of them changed,
+  // so the keyboard path (arrows / shift+arrows) still calls the same two.
+  ctrls.appendChild(dashCardMenuBtn(card));
   head.appendChild(ctrls);
   // A THIRD sibling, deliberately not inside .dash-card-ctrls: that cluster is
   // hidden for a reader of a published dashboard and in present mode, and the
@@ -556,6 +559,41 @@ function makeDashCardEl(card: any): HTMLElement {
   body.className = 'dash-card-body';
   el.appendChild(body);
   return el;
+}
+
+// The card's ⋯ menu: move, resize, remove. openMiniMenu (chartControls.ts) is
+// the hub's existing popover — positioned, outside-click and Esc already done.
+function dashCardMenuBtn(card: any): HTMLButtonElement {
+  const btn = dashCtrlBtn('⋯', 'Card actions', () => {
+    openMiniMenu(btn, (menu: HTMLElement, close: () => void) => {
+      // The chart's own controls popover is a .chart-menu too — this one needs
+      // a hook of its own, or a selector for either finds both.
+      menu.classList.add('dash-card-menu');
+      ([
+        ['Move up', () => nudgeCard(card, 0, -1)],
+        ['Move down', () => nudgeCard(card, 0, 1)],
+        ['Move left', () => nudgeCard(card, -1, 0)],
+        ['Move right', () => nudgeCard(card, 1, 0)],
+        ['Wider', () => resizeCard(card, 1, 0)],
+        ['Narrower', () => resizeCard(card, -1, 0)],
+        ['Taller', () => resizeCard(card, 0, 1)],
+        ['Shorter', () => resizeCard(card, 0, -1)],
+        ['Remove', () => removeCard(card)],
+      ] as Array<[string, () => void]>).forEach(([label, run], i, all) => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'chart-menu-item' + (i === all.length - 1 ? ' dash-card-menu-rm' : '');
+        row.textContent = label;
+        // close() FIRST: Remove re-renders the grid, which destroys the anchor
+        // this menu is positioned against.
+        row.addEventListener('click', () => { close(); run(); });
+        menu.appendChild(row);
+      });
+    });
+  });
+  btn.classList.add('dash-card-menu-btn');
+  btn.setAttribute('aria-haspopup', 'true');
+  return btn;
 }
 
 function dashCtrlBtn(label: string, aria: string, onClick: () => void): HTMLButtonElement {
@@ -598,7 +636,7 @@ function nudgeCard(card: any, dx: number, dy: number): void {
   l.x = clampInt(l.x + dx, 0, DASH_GRID_COLS - (l.w || 1), l.x);
   l.y = Math.max(0, (l.y || 0) + dy);
   reapplyCardStyle(card);
-  markDashDirty();
+  markDashDirty('Move card');
 }
 
 function resizeCard(card: any, dw: number, dh: number): void {
@@ -606,7 +644,7 @@ function resizeCard(card: any, dw: number, dh: number): void {
   l.w = clampInt((l.w || 1) + dw, 1, DASH_GRID_COLS - (l.x || 0), l.w);
   l.h = clampInt((l.h || 1) + dh, 1, 100000, l.h);
   reapplyCardStyle(card);
-  markDashDirty();
+  markDashDirty('Resize card');
 }
 
 function removeCard(card: any): void {
@@ -614,7 +652,7 @@ function removeCard(card: any): void {
   if (!page) return;
   const i = page.cards.indexOf(card);
   if (i >= 0) page.cards.splice(i, 1);
-  markDashDirty();
+  markDashDirty('Remove card');
   renderDashGrid();
 }
 
@@ -634,7 +672,7 @@ function onDashGridDrop(e: DragEvent, grid: HTMLElement): void {
   card.layout.x = nx;
   card.layout.y = ny;
   reapplyCardStyle(card);
-  markDashDirty();
+  markDashDirty('Move card');
 }
 
 // ── Card body renderers ─────────────────────────────────────────────────────

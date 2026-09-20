@@ -227,7 +227,7 @@ function setDashStyle(style: any, persist: boolean): void {
   dashCurrent.style = dashSanitizeStyle({ ...style, chosen: true });
   syncDashStyle();
   renderDashGrid();
-  if (persist) { markDashDirty(); scheduleDashSave(); }
+  if (persist) { markDashDirty('Change style'); scheduleDashSave(); }
 }
 
 function applyDashStylePreset(preset: string): boolean {

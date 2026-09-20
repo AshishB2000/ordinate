@@ -274,6 +274,78 @@ async function main(): Promise<void> {
       && !cards.some((c) => /^Visual/.test(c.title)),
     JSON.stringify(cards.map((c) => c.title)));
 
+  // ── 4b. Undo: the ⋯ menu, ⌘Z, and what actually reaches disk ──────────
+  //
+  // A card removed and brought back has to be brought back IN THE RECORD, not
+  // just on screen — the autosave fires 600 ms after every mutation, so a
+  // renderer-only undo leaves the grid looking right and the file missing a
+  // card until the next reload proves it. Hence the disk read at the end: the
+  // assertion is what analysis.getAnalysis() returns, not what the DOM says.
+  //
+  // Driven through the NEW chrome too. Remove used to be a 🗑 in a nine-glyph
+  // cluster and is now a row in the card's ⋯ menu, so clicking the menu is how
+  // this proves the replacement kept the function it wrapped.
+  const before = await win.evaluate(() =>
+    [...document.querySelectorAll('#dash-grid .dash-card')].map((c) => (c as HTMLElement).dataset.cardId || ''));
+  ok('the open dashboard has two cards to work with', before.length === 2, JSON.stringify(before));
+
+  await win.evaluate(() => {
+    const btn = document.querySelector('#dash-grid .dash-card .dash-card-menu-btn') as HTMLElement | null;
+    if (btn) btn.click();
+  });
+  await win.waitForTimeout(400);
+  const menu = await win.evaluate(() =>
+    [...document.querySelectorAll('.dash-card-menu .chart-menu-item')].map((r) => (r.textContent || '').trim()));
+  ok('the card\u2019s ⋯ menu carries move, resize and remove',
+    JSON.stringify(menu) === JSON.stringify(['Move up', 'Move down', 'Move left', 'Move right',
+      'Wider', 'Narrower', 'Taller', 'Shorter', 'Remove']), JSON.stringify(menu));
+
+  await win.evaluate(() => {
+    const row = [...document.querySelectorAll('.dash-card-menu .chart-menu-item')]
+      .find((r) => (r.textContent || '').trim() === 'Remove') as HTMLElement | undefined;
+    if (row) row.click();
+  });
+  await win.waitForTimeout(900);
+  const removed = await win.evaluate(() => ({
+    cards: document.querySelectorAll('#dash-grid .dash-card').length,
+    undoDisabled: (document.getElementById('dash-undo-btn') as HTMLButtonElement).disabled,
+    undoTitle: (document.getElementById('dash-undo-btn') as HTMLButtonElement).title,
+    redoDisabled: (document.getElementById('dash-redo-btn') as HTMLButtonElement).disabled,
+  }));
+  ok('Remove takes the card off the grid', removed.cards === 1, JSON.stringify(removed));
+  ok('…and Undo lights up NAMING the change it will reverse',
+    !removed.undoDisabled && removed.undoTitle === 'Undo: Remove card', JSON.stringify(removed));
+  ok('…while Redo stays dark', removed.redoDisabled, JSON.stringify(removed));
+
+  // The real keystroke, not dashUndo() — the point is that the shortcut reaches
+  // the editor at all. Focus is on the grid, not in a text field.
+  await win.evaluate(() => (document.getElementById('dash-grid') as HTMLElement).focus());
+  await win.keyboard.press('Meta+z');
+  await win.waitForTimeout(900);
+  const undone = await win.evaluate(() => ({
+    ids: [...document.querySelectorAll('#dash-grid .dash-card')]
+      .map((c) => (c as HTMLElement).dataset.cardId || ''),
+    undoDisabled: (document.getElementById('dash-undo-btn') as HTMLButtonElement).disabled,
+    redoTitle: (document.getElementById('dash-redo-btn') as HTMLButtonElement).title,
+  }));
+  ok('⌘Z puts the card back, the same card, in the same order',
+    JSON.stringify(undone.ids) === JSON.stringify(before), JSON.stringify(undone.ids));
+  ok('…and the pair flips: nothing left to undo, the removal waiting to redo',
+    undone.undoDisabled && undone.redoTitle === 'Redo: Remove card', JSON.stringify(undone));
+
+  // Save, then read the file back. This is the half a DOM check cannot make.
+  await win.evaluate(() => (document.getElementById('dash-save-btn') as HTMLElement).click());
+  await win.waitForTimeout(1500);
+  const onDisk = await app.evaluate(async (_app: any, arg: any) => {
+    const req = (process as any).mainModule.require.bind((process as any).mainModule);
+    const analysis = req('./src/analysis/analysis.js');
+    const a = await analysis.getAnalysis(arg.projectId, arg.analysisId);
+    const cards = (a && a.sheets && a.sheets[0] && a.sheets[0].cards) || [];
+    return cards.map((c: any) => c.id);
+  }, { projectId: seeded.projectId, analysisId: seeded.analysisId });
+  ok('…and the record SAVED after the undo is the one from before the removal',
+    JSON.stringify(onDisk) === JSON.stringify(before), JSON.stringify({ onDisk, before }));
+
   // ── 5. A starter layout builds REAL tiles ────────────────────────────────
   // "KPIs + chart" used to insert one text card reading "Add metric cards here"
   // and then ask which SAVED VISUAL went in the slot — so on a project with no
