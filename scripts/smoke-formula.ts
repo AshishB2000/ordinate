@@ -313,6 +313,54 @@ async function main(): Promise<void> {
     onDisk.firstValues.every((v: number, i: number) => Object.is(v, ROWS[i][1] / ROWS[i][2])),
     JSON.stringify(onDisk.firstValues));
 
+  // ── The Assistant's suggested field opens the SAME editor ─────────────────
+  // The AI dock's calc-field proposal card hands off through
+  // `prefillCalcFieldEditor`, which now opens this editor rather than the old
+  // inline two-box form — so a MODEL's formula is previewed against real rows
+  // before it can be accepted, which is the whole reason for routing it here.
+  //
+  // This lived in smoke-dock.ts. It moved because that file sits at the
+  // 800-line cap and .claude/rules/file-size.md says a file there is split
+  // before more is added to it — and because the claim is about this editor,
+  // which makes this the file that should fail when it stops being true.
+  await win.evaluate(() => { (window as any).dkSetOpen(true); (window as any).dkSync(); });
+  await win.waitForSelector('#dk-panel', { state: 'visible', timeout: 8000 });
+  await win.evaluate((args: any) => {
+    document.querySelectorAll('#dk-messages .dk-proposal').forEach((n) => n.remove());
+    (window as any).dkRenderCalcFieldCard(args.datasetId, args.res);
+  }, { datasetId: seeded.datasetId, res: { name: 'Margin pct', expression: '[revenue] / 100', warning: null } });
+  await win.waitForSelector('#dk-messages .dk-proposal', { timeout: 8000 });
+  await win.locator('#dk-messages .dk-proposal').last().locator('button', { hasText: 'Apply' }).click();
+  await win.waitForSelector('.fx-modal .fx-input', { timeout: 10_000 });
+  await win.waitForTimeout(1200);
+  const proposed = await win.evaluate(() => ({
+    name: (document.querySelector('.fx-modal .fx-name') as HTMLInputElement)?.value,
+    expr: (document.querySelector('.fx-modal .fx-input') as HTMLTextAreaElement)?.value,
+    note: (document.querySelector('.fx-modal .fx-note') as HTMLElement)?.textContent || '',
+    cards: document.querySelectorAll('#dk-messages .dk-proposal').length,
+    previewRows: document.querySelectorAll('.fx-modal .fx-table tbody tr').length,
+  }));
+  ok('the dock’s calc-field proposal opens this editor prefilled',
+    proposed.name === 'Margin pct' && proposed.expr === '[revenue] / 100', JSON.stringify(proposed));
+  ok('…labelled as a suggestion to review', /Assistant suggestion/i.test(proposed.note), proposed.note);
+  ok('…and the proposal card hands off and removes itself', proposed.cards === 0, String(proposed.cards));
+  // The point of the change: the model's formula is COMPUTED before it is accepted.
+  ok('…with the model’s formula already evaluated on real rows', proposed.previewRows === 8,
+    String(proposed.previewRows));
+
+  await win.keyboard.press('Escape');
+  await win.waitForTimeout(400);
+  const afterCancel: any = await app.evaluate(async (_e, arg: any) => {
+    const req = (process as any).mainModule.require.bind((process as any).mainModule);
+    const datasets = req('./src/data/datasets.js');
+    const meta = await datasets.getDatasetMeta(arg.projectId, arg.datasetId);
+    return meta.steps.length;
+  }, { projectId: seeded.projectId, datasetId: seeded.datasetId });
+  ok('cancelling a suggestion applies nothing (still the one saved step)', afterCancel === 1,
+    String(afterCancel));
+  await win.evaluate(() => { (window as any).dkSetOpen(false); (window as any).dkSync(); });
+  await win.waitForTimeout(300);
+
   // ── The analysis rail opens the SAME editor ────────────────────────────────
   await seedAnalysis(app, seeded.projectId, {
     name: 'Formula smoke analysis',

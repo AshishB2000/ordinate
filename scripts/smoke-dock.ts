@@ -503,51 +503,12 @@ async function main(): Promise<void> {
   ok('…so the dropped column is gone from the derived table',
     afterStep.columns.indexOf('note') < 0, afterStep.columns.join(','));
 
-  // ── 2. Calc-field proposal: Apply opens the editor prefilled, doesn't apply ─
-  await win.evaluate((args: any) => {
-    document.querySelectorAll('#dk-messages .dk-proposal').forEach((n) => n.remove());
-    (window as any).dkRenderCalcFieldCard(args.datasetId, args.res);
-  }, { datasetId: seeded.datasetId, res: { name: 'Margin pct', expression: 'revenue / 100', warning: null } });
-  await win.waitForSelector('#dk-messages .dk-proposal', { timeout: 8000 });
-
-  // Apply hands off to the FORMULA EDITOR (renderer/hub/formulaEditor.ts), which
-  // is now the one calculated-field surface in the app — the same modal the
-  // Prepare panel and the analysis rail open. It used to be the inline
-  // `#ds-step-editor` two-box form; the assertions below are unchanged in
-  // intent (prefilled, applies nothing) and only follow the surface.
-  //
-  // The point of routing a MODEL's formula through it: the suggestion is now
-  // previewed against real rows before it can be accepted.
-  await win.locator('#dk-messages .dk-proposal').last().locator('button', { hasText: 'Apply' }).click();
-  await win.waitForSelector('.fx-modal .fx-input', { timeout: 10_000 });
-  const editorVals = await win.evaluate(() => [
-    (document.querySelector('.fx-modal .fx-name') as HTMLInputElement)?.value,
-    (document.querySelector('.fx-modal .fx-input') as HTMLTextAreaElement)?.value,
-    (document.querySelector('.fx-modal .fx-note') as HTMLElement)?.textContent || '',
-  ]);
-  ok('Apply opens the formula editor prefilled with the suggested name',
-    editorVals[0] === 'Margin pct', JSON.stringify(editorVals.slice(0, 2)));
-  ok('…and the suggested expression — nothing is applied without a click',
-    editorVals[1] === 'revenue / 100', JSON.stringify(editorVals.slice(0, 2)));
-  ok('…and it is labelled as a suggestion to review',
-    /Assistant suggestion/i.test(editorVals[2]), JSON.stringify(editorVals[2]));
-  ok('the dataset pipeline is UNCHANGED by opening the editor (still 3 steps)',
-    (await app.evaluate(async (_electronModule, args: any) => {
-      const req = (process as any).mainModule.require.bind((process as any).mainModule);
-      const datasets = req('./src/data/datasets.js');
-      const ds = await datasets.getDataset(args.pid, args.did);
-      return ds.steps.length;
-    }, { pid: seeded.projectId, did: seeded.datasetId })) === 3);
-  ok('the proposal card hands off to the editor and removes itself',
-    (await win.locator('#dk-messages .dk-proposal').count()) === 0);
-
-  // Dismiss it before moving on: the editor is a `.ws-modal-overlay`, which is
-  // position:fixed over the whole window, so leaving it up would swallow every
-  // click the chart-proposal section below makes.
-  await win.keyboard.press('Escape');
-  await win.waitForTimeout(400);
-  ok('cancelling the suggestion leaves the pipeline alone', (await win.evaluate(() =>
-    !document.querySelector('.fx-modal'))));
+  // ── 2. Calc-field proposal ────────────────────────────────────────────────
+  // Apply hands off to the FORMULA EDITOR, which is a formula-editor claim, so
+  // it is asserted in scripts/smoke-formula.ts (the file whose subject that
+  // editor is) rather than here. This file is one line under the 800-line cap
+  // and .claude/rules/file-size.md says a file at the cap is split before more
+  // is added to it — so the coverage moved instead of growing this.
 
   // ── 3. Chart proposal: real computeVisualData, real Save-as-visual ──────
   const chartData: any = await win.evaluate(async (args: any) => {
@@ -563,6 +524,11 @@ async function main(): Promise<void> {
 
   const question = 'Show revenue by region';
   await win.evaluate((args: any) => {
+    // Clear first, as the step and calc-field sections do: the count assertion
+    // below is "this card removed itself", and section 1's step card is still
+    // in the dock. This used to be done incidentally by the calc-field block
+    // that now lives in smoke-formula.ts.
+    document.querySelectorAll('#dk-messages .dk-proposal').forEach((n) => n.remove());
     (window as any).dkRenderChartCard(
       args.did, args.question,
       { encoding: { category: 'region', values: [{ column: 'revenue', aggregation: 'sum' }] }, why: 'Grouped by region' },
