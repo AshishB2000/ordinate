@@ -211,16 +211,31 @@ async function main(): Promise<void> {
   const dark = await win.evaluate(() => {
     const tok = document.querySelector('.fx-modal .fx-hl .fx-t-col') as HTMLElement;
     const modal = document.querySelector('.fx-modal') as HTMLElement;
+    // A probe painted with the SAME token the modal's rule uses, so the
+    // expectation is the palette rather than a copy of it. This assertion used
+    // to compare against the literal `rgb(35, 35, 39)` — which meant a test
+    // whose entire point is "the colour comes from a token, not a literal" was
+    // itself pinned to a literal, and it broke the moment the dark ramp was
+    // retuned. `element.style` from JS is CSSOM, so the hub's `style-src
+    // 'self'` CSP does not block it.
+    const probe = document.createElement('div');
+    probe.style.background = 'var(--surface)';
+    document.body.appendChild(probe);
+    const expected = getComputedStyle(probe).backgroundColor;
+    probe.remove();
     return {
       token: tok ? getComputedStyle(tok).color : '',
       background: getComputedStyle(modal).backgroundColor,
+      expected,
     };
   });
   // #3b82f6 is the dark palette's --accent; the light one is #2563eb. Reading
   // the COMPUTED colour is what proves the token followed the theme rather
   // than being painted from a literal.
   ok('column tokens take the dark theme’s accent', dark.token === 'rgb(59, 130, 246)', dark.token);
-  ok('the modal takes the dark theme’s surface', dark.background === 'rgb(35, 35, 39)', dark.background);
+  ok('the modal takes the dark theme’s surface',
+     dark.background === dark.expected && dark.background !== 'rgba(0, 0, 0, 0)',
+     `${dark.background} vs --surface ${dark.expected}`);
   await win.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
   await win.waitForTimeout(300);
 

@@ -216,7 +216,7 @@ function makeRecentRow(it: any): HTMLElement {
   star.setAttribute('tabindex', '0');
   star.setAttribute('aria-label', on ? 'Unstar' : 'Star');
   star.setAttribute('aria-pressed', on ? 'true' : 'false');
-  star.textContent = on ? '★' : '☆';
+  setIcon(star, on ? 'star-filled' : 'star');
   star.addEventListener('click', (e) => {
     e.stopPropagation();
     toggleStar(it);
@@ -249,7 +249,7 @@ function makeRecentRow(it: any): HTMLElement {
  * A DESIGNED empty state, not a muted sentence in a box.
  *
  * Empty is what every user sees on day one, so it is a first impression rather
- * than an error path: a glyph, a headline in the same tier as a section, one
+ * than an error path: an icon, a headline in the same tier as a section, one
  * line of guidance, and — where there is something useful to press — an action
  * that is the actual next step.
  *
@@ -258,7 +258,7 @@ function makeRecentRow(it: any): HTMLElement {
  */
 function makeEmptyState(opts: {
   variant: string;
-  glyph: string;
+  iconName: string;
   title: string;
   line: string;
   actionLabel?: string;
@@ -270,7 +270,7 @@ function makeEmptyState(opts: {
   const art = document.createElement('span');
   art.className = 'home-empty-art';
   art.setAttribute('aria-hidden', 'true');
-  art.textContent = opts.glyph;
+  art.appendChild(icon(opts.iconName, 24));
 
   const title = document.createElement('span');
   title.className = 'home-empty-title';
@@ -324,7 +324,7 @@ function paintHome(): void {
       starredRows.appendChild(
         makeEmptyState({
           variant: 'starred',
-          glyph: '☆',
+          iconName: 'star',
           title: 'Nothing pinned yet',
           line: 'Star a dataset or dashboard and it stays here, across every project.',
         }),
@@ -341,7 +341,7 @@ function paintHome(): void {
       recentRows.appendChild(
         makeEmptyState({
           variant: 'recent',
-          glyph: '◴',
+          iconName: 'list',   // no clock in the sprite; the section IS a list
           title: 'Your work will collect here',
           line: 'Every dataset and dashboard you open shows up in this list — newest first, across all projects.',
           actionLabel: 'Bring in some data',

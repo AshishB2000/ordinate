@@ -219,7 +219,7 @@ async function anRenderAiSlot(): Promise<void> {
   btn.type = 'button';
   btn.className = 'btn btn-sm an-ai-btn';
   btn.id = 'an-suggest-btn';
-  btn.textContent = '✨ Suggest a visual';
+  iconLabel(btn, 'sparkles', 'Suggest a visual');
   btn.disabled = !anAiReady;
   btn.addEventListener('click', () => anSuggestVisual(btn));
   slot.appendChild(btn);
@@ -244,9 +244,11 @@ function anSetAiNote(text: string): void {
 
 async function anSuggestVisual(btn: HTMLButtonElement): Promise<void> {
   if (!anVisual || !currentProjectId || !anForm) return;
-  const label = btn.textContent;
+  // The label is the <span> iconLabel built, not the button's own text.
+  const labelEl = btn.querySelector('span');
+  const label = labelEl ? labelEl.textContent : '';
   btn.disabled = true;
-  btn.textContent = 'Thinking…';
+  iconLabel(btn, 'sparkles', 'Thinking…');
   let res: any;
   try {
     res = await window.hub.suggestVisual(currentProjectId, String(anVisual.datasetId));
@@ -254,7 +256,7 @@ async function anSuggestVisual(btn: HTMLButtonElement): Promise<void> {
     res = { ok: false };
   }
   btn.disabled = false;
-  btn.textContent = label || '✨ Suggest a visual';
+  iconLabel(btn, 'sparkles', label || 'Suggest a visual');
 
   if (res && res.notReady) {
     anAiReady = false;
@@ -340,7 +342,7 @@ async function anRenderSwitcher(): Promise<void> {
   const chev = document.createElement('span');
   chev.className = 'an-typerow-chev';
   chev.setAttribute('aria-hidden', 'true');
-  chev.textContent = '›';
+  setIcon(chev, 'chevron-right');
   row.appendChild(ic);
   row.appendChild(nm);
   row.appendChild(chev);

@@ -126,12 +126,11 @@ function stepSummaryText(step: any): string {
   }
 }
 
-function mkStepBtn(label: string, aria: string, disabled: boolean, cb: () => void): HTMLButtonElement {
+function mkStepBtn(name: string, aria: string, disabled: boolean, cb: () => void): HTMLButtonElement {
   const b = document.createElement('button');
   b.type = 'button';
   b.className = 'ds-step-btn';
-  b.textContent = label;
-  b.setAttribute('aria-label', aria);
+  iconOnly(b, name, aria);
   b.disabled = disabled;
   if (!disabled) b.addEventListener('click', cb);
   return b;
@@ -164,10 +163,12 @@ function renderStepsList(): void {
 
     const actions = document.createElement('div');
     actions.className = 'ds-step-actions';
-    actions.appendChild(mkStepBtn('▲', 'Move step up', i === 0, () => moveStep(i, -1)));
-    actions.appendChild(mkStepBtn('▼', 'Move step down', i === expSteps.length - 1, () => moveStep(i, 1)));
-    actions.appendChild(mkStepBtn('✎', 'Edit step', false, () => openStepEditor(step.type, i)));
-    actions.appendChild(mkStepBtn('🗑', 'Remove step', false, () => removeStep(i)));
+    actions.appendChild(mkStepBtn('arrow-up', 'Move step up', i === 0, () => moveStep(i, -1)));
+    actions.appendChild(
+      mkStepBtn('arrow-down', 'Move step down', i === expSteps.length - 1, () => moveStep(i, 1)),
+    );
+    actions.appendChild(mkStepBtn('pencil', 'Edit step', false, () => openStepEditor(step.type, i)));
+    actions.appendChild(mkStepBtn('trash', 'Remove step', false, () => removeStep(i)));
     rowEl.appendChild(actions);
 
     list.appendChild(rowEl);
@@ -495,8 +496,7 @@ function makeAggRow(agg?: any): HTMLElement {
   const del = document.createElement('button');
   del.type = 'button';
   del.className = 'ds-step-btn';
-  del.textContent = '✕';
-  del.setAttribute('aria-label', 'Remove aggregation');
+  iconOnly(del, 'x', 'Remove aggregation');
   del.addEventListener('click', () => row.remove());
   row.appendChild(fnSel);
   row.appendChild(colSel);

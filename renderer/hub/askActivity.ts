@@ -121,7 +121,7 @@ function xpActivityCollapse(askId: string): void {
   const caret = document.createElement('span');
   caret.className = 'xp-activity-caret';
   caret.setAttribute('aria-hidden', 'true');
-  caret.textContent = '▸';
+  setIcon(caret, 'chevron-right');
   const text = document.createElement('span');
   text.className = 'xp-activity-summary-text';
   text.textContent = summaryText || 'Prepared the answer';
@@ -130,7 +130,7 @@ function xpActivityCollapse(askId: string): void {
     const show = st.list.hidden;
     st.list.hidden = !show;
     bar.setAttribute('aria-expanded', show ? 'true' : 'false');
-    caret.textContent = show ? '▾' : '▸';
+    setIcon(caret, show ? 'chevron-down' : 'chevron-right');
   });
   st.region.insertBefore(bar, st.list);
 

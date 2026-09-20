@@ -249,8 +249,16 @@ const VIZ_LABELS = {
 
 // Small monochrome glyph per chart type for the viz chips. currentColor so each icon
 // inherits the chip's state color (muted → accent on hover → white when active).
-const _vi = (inner) => '<svg width="13" height="13" viewBox="0 0 24 24" fill="none"'
-  + ' stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"'
+//
+// These 29 stay hand-drawn rather than moving into the icons.ts sprite: they
+// are a CHART TAXONOMY, one mark per renderable type, not UI actions, and they
+// are generated from this table alongside VIZ_LABELS. What they do take from
+// the sprite is its geometry — 16px at stroke 1.5 with `class="ic"`, so a
+// chart-type mark in a picker is the same weight and size as the plus beside
+// it. They were 13px at 1.8, which is why they read heavier and smaller than
+// every other icon on the same row.
+const _vi = (inner) => '<svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none"'
+  + ' stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"'
   + ' aria-hidden="true">' + inner + '</svg>';
 const VIZ_ICONS = {
   column: _vi('<rect x="4" y="11" width="4" height="9" fill="currentColor"/><rect x="10" y="7" width="4" height="13" fill="currentColor"/><rect x="16" y="13" width="4" height="7" fill="currentColor"/>'),

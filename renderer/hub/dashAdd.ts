@@ -122,17 +122,17 @@ function openVisualPicker(
     const actions = document.createElement('div');
     actions.className = 'vn-pick-actions';
     if (canCreate) {
-      const mk = (label: string, kind: 'new' | 'ai'): HTMLButtonElement => {
+      const mk = (name: string, label: string, kind: 'new' | 'ai'): HTMLButtonElement => {
         const b = document.createElement('button');
         b.type = 'button';
         b.className = 'btn';
-        b.textContent = label;
+        iconLabel(b, name, label);
         b.addEventListener('click', () => close({ kind }));
         actions.appendChild(b);
         return b;
       };
-      mk('+ New visual', 'new');
-      const ai = mk('✨ Suggest with the Assistant', 'ai');
+      mk('plus', 'New visual', 'new');
+      const ai = mk('sparkles', 'Suggest with the Assistant', 'ai');
       // The standard not_ready treatment: disabled, with the standard sentence.
       // Painted async — the dialog opens instantly and the button un-disables
       // if a model turns out to be configured.

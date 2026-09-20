@@ -116,10 +116,30 @@ ok('every var() resolves to a definition, a fallback, or a JS assignment',
          .join('; ')
      : `${uses.length} uses checked`);
 
-// The specific name that caused this: theme.css has --surface, not --surface-1.
-// Pinned by name so the regression is impossible to reintroduce quietly.
-ok('--surface-1 is still not a thing (use --surface)', !defined.has('--surface-1'));
+// The specific name that caused this: theme.css HAD --surface and no
+// --surface-1, so every `var(--surface-1)` silently resolved to nothing.
+//
+// This assertion used to read `--surface-1 is still not a thing`. It has been
+// INVERTED, deliberately: the design-foundations pass defines a real three-step
+// elevation ramp (--bg page → --surface-1 card → --surface-float menu/modal),
+// so --surface-1 is now a token with a job rather than a typo for --surface.
+// The guard still holds the same ground — the original bug was a name that
+// resolved to nothing, and asserting it is DEFINED catches exactly the same
+// failure as asserting it was absent did, from the other side. Both elevations
+// are pinned by name so neither can quietly disappear and leave transparent
+// panels behind again.
+ok('--surface-1 IS defined (the card elevation)', defined.has('--surface-1'));
+ok('--surface-float IS defined (menus, popovers, modals)', defined.has('--surface-float'));
 ok('--surface IS defined', defined.has('--surface'));
+
+// The ramp has to exist in BOTH themes. A surface defined only on :root leaves
+// dark mode rendering the light card colour — which is the same class of
+// silent, screenshot-surviving bug as the undefined name above.
+const themeSrc = decomment(fs.readFileSync(path.join(REPO, 'renderer/theme.css'), 'utf8'));
+const darkBlock = themeSrc.split('[data-theme="dark"]')[1] || '';
+for (const name of ['--surface-1', '--surface-float', '--border-hairline']) {
+  ok(`${name} is retuned for dark`, darkBlock.includes(name + ':'));
+}
 
 // A fallback-bearing use is fine, but knowing the count keeps it honest: if this
 // climbs, the palette is being worked around rather than extended.

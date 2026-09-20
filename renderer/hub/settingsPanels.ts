@@ -106,7 +106,11 @@ function byokCard(prov) {
   head.appendChild(main);
   const ha = lcMakeEl('span', 'ex-cli-actions');
   if (isActive) ha.appendChild(lcMakeEl('span', 'ex-byok-active-tag', 'Active'));
-  ha.appendChild(lcMakeEl('span', 'ex-collapse-caret ex-byok-caret', '▸'));
+  // Decorative disclosure caret — hub.css rotates it 90° when the card opens,
+  // which turns the right-chevron into a down-chevron just as the glyph did.
+  const caret = lcMakeEl('span', 'ex-collapse-caret ex-byok-caret');
+  setIcon(caret, 'chevron-right');
+  ha.appendChild(caret);
   head.appendChild(ha);
   card.appendChild(head);
 
@@ -329,6 +333,18 @@ async function byokSave(prov, fields) {
   }
 }
 
+/* A connection-test result line: a STATUS mark, never a control. `check` means
+   the test passed and `x` means it failed — neither is a button, and the `x` is
+   not a close. `text` can be a server/provider string, so it stays a text node
+   in its own span. An empty `name` (the "Testing…" state) draws no mark. */
+function exTestResult(el: HTMLElement, name: string, text: string): void {
+  el.textContent = '';
+  if (name) el.appendChild(icon(name));
+  const span = document.createElement('span');
+  span.textContent = text;
+  el.appendChild(span);
+}
+
 async function byokTest(prov, btn, res, keyInput, urlInput, mtInput, modelSel) {
   if (!window.hub || typeof window.hub.testByokProvider !== 'function') return;
   // Save pending edits first so the test uses current values. Skip the mask dots —
@@ -347,7 +363,7 @@ async function byokTest(prov, btn, res, keyInput, urlInput, mtInput, modelSel) {
   try {
     const r = await window.hub.testByokProvider(prov);
     if (r && r.ok) {
-      res.textContent = '✓ Connected';
+      exTestResult(res, 'check', 'Connected');
       res.className = 'ex-test-result ex-test-ok';
       exByokExpanded.add(prov);   // keep the card open as it promotes upward
       await byokRefresh();        // re-fetch verified state → moves into "connected"
@@ -357,12 +373,12 @@ async function byokTest(prov, btn, res, keyInput, urlInput, mtInput, modelSel) {
       // (e.g. "Gateway · 404 · model not found"); then a custom message; then the
       // generic label. Full text on hover since the result line clamps.
       const label = (r && r.detail) || (r && r.message) || (r && map[r.errorType]) || 'Failed';
-      res.textContent = '✕ ' + label;
+      exTestResult(res, 'x', label);
       res.title = label;
       res.className = 'ex-test-result ex-test-err';
     }
   } catch (_) {
-    res.textContent = '✕ Failed';
+    exTestResult(res, 'x', 'Failed');
     res.className = 'ex-test-result ex-test-err';
   } finally {
     btn.disabled = false;
@@ -519,8 +535,10 @@ function lcInstalledRow(cli) {
     // The result lives in `main` (full-width column), NOT in the narrow actions
     // row, so a long error wraps/clamps within the card instead of overflowing.
     const res = lcMakeEl('span', 'ex-cli-test-result');
+    // The status mark follows the result class: ok → check, err → x, neither
+    // while the test is still running.
     const setRes = (text, cls, full?) => {
-      res.textContent = text;
+      exTestResult(res, cls === 'ex-test-ok' ? 'check' : cls === 'ex-test-err' ? 'x' : '', text);
       res.className = 'ex-cli-test-result' + (cls ? ' ' + cls : '');
       if (full) res.title = full; else res.removeAttribute('title'); // full text on hover
     };
@@ -532,13 +550,13 @@ function lcInstalledRow(cli) {
       try {
         const r = await window.hub.testLocalCli(cli.id);
         if (r && r.ok) {
-          setRes('✓ Connected', 'ex-test-ok');
+          setRes('Connected', 'ex-test-ok');
         } else {
           const msg = (r && r.message) || 'Test failed.';
-          setRes('✕ ' + msg, 'ex-test-err', msg);
+          setRes(msg, 'ex-test-err', msg);
         }
       } catch (_) {
-        setRes('✕ Test failed.', 'ex-test-err');
+        setRes('Test failed.', 'ex-test-err');
       } finally {
         test.disabled = false;
       }

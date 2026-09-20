@@ -210,7 +210,9 @@ async function main(): Promise<void> {
   ok('step 2 offers four ways to start',
      wiz2.count === 4 &&
        JSON.stringify(wiz2.titles) ===
-         JSON.stringify(['Blank sheet', 'KPIs + chart', 'Two-up', '✨ Let the Assistant design it']),
+         // No longer '✨ Let the Assistant design it' — the sparkle is an icon
+         // now, so the card's TEXT is just the title.
+         JSON.stringify(['Blank sheet', 'KPIs + chart', 'Two-up', 'Let the Assistant design it']),
      JSON.stringify(wiz2.titles));
   ok('…step 1 is ticked off behind it', wiz2.doneTick === '✓', `"${wiz2.doneTick}"`);
   ok('…Blank is preselected, so the step answers itself',
@@ -366,7 +368,8 @@ async function main(): Promise<void> {
        const tiles = document.querySelectorAll('.vn-pick-modal .vn-pick-tile').length;
        const labels = [...document.querySelectorAll('.vn-pick-modal .vn-pick-actions .btn')]
          .map((b) => (b.textContent || '').trim());
-       return tiles > 0 && labels.indexOf('+ New visual') >= 0
+       // The "+" and the "✨" are icons now, not label text — match the words.
+       return tiles > 0 && labels.some((l) => /New visual/.test(l))
          && labels.some((l) => /Suggest with the Assistant/.test(l));
      }));
   ok('the picker adds the saved visual', await win.evaluate(() => {

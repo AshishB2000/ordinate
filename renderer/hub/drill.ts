@@ -363,7 +363,12 @@ function drillPaintTable(scroll: HTMLElement): void {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'drill-th-btn';
-    btn.textContent = col.name + (drillSortCol === col.name ? (drillSortDir === 'asc' ? ' ▲' : ' ▼') : '');
+    const nm = document.createElement('span');
+    nm.textContent = col.name;                     // data — textContent, never innerHTML
+    btn.appendChild(nm);
+    if (drillSortCol === col.name) {
+      btn.appendChild(icon(drillSortDir === 'asc' ? 'chevron-up' : 'chevron-down'));
+    }
     btn.setAttribute(
       'aria-label',
       'Sort by ' + col.name + (drillSortCol === col.name && drillSortDir === 'asc' ? ', descending' : ', ascending'),
@@ -466,11 +471,21 @@ function drillPaintPager(): void {
   label.textContent = `Rows ${first.toLocaleString()}–${last.toLocaleString()} of ${drillTotal.toLocaleString()}`;
   pager.appendChild(label);
 
-  const mk = (text: string, delta: number, disabled: boolean): void => {
+  // `side` says which end the chevron sits on: iconLabel() only ever leads.
+  const mk = (
+    name: string,
+    label: string,
+    side: 'left' | 'right',
+    delta: number,
+    disabled: boolean,
+  ): void => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn btn-sm drill-page-btn';
-    btn.textContent = text;
+    const span = document.createElement('span');
+    span.textContent = label;
+    if (side === 'left') btn.append(icon(name), span);
+    else btn.append(span, icon(name));
     btn.disabled = disabled;
     btn.addEventListener('click', () => {
       const next = drillOffset + delta * DRILL_PAGE_ROWS;
@@ -480,6 +495,6 @@ function drillPaintPager(): void {
     });
     pager.appendChild(btn);
   };
-  mk('‹ Prev', -1, drillOffset <= 0);
-  mk('Next ›', 1, drillOffset + DRILL_PAGE_ROWS >= drillTotal);
+  mk('chevron-left', 'Prev', 'left', -1, drillOffset <= 0);
+  mk('chevron-right', 'Next', 'right', 1, drillOffset + DRILL_PAGE_ROWS >= drillTotal);
 }

@@ -263,8 +263,7 @@ function dcChip(t: DcTable, onRemove: (() => void) | null): HTMLElement {
     const x = document.createElement('button');
     x.className = 'dc-chip-x';
     x.type = 'button';
-    x.textContent = '✕';
-    x.setAttribute('aria-label', `Remove ${t.label}`);
+    iconOnly(x, 'x', `Remove ${t.label}`);
     x.addEventListener('click', onRemove);
     chip.appendChild(x);
   }
@@ -596,7 +595,7 @@ function paintGrid(rows: any[][]): void {
     btn.appendChild(ty);
     const caret = document.createElement('span');
     caret.className = 'dc-th-caret';
-    caret.textContent = '▾';
+    setIcon(caret, 'chevron-down');
     btn.appendChild(caret);
     btn.addEventListener('click', (e) => { e.stopPropagation(); openColPop(String(col.name), th); });
     th.appendChild(btn);

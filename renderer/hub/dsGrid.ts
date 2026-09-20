@@ -138,9 +138,10 @@ function makeExplorerTh(col: ExpCol, c: number): HTMLElement {
   sortBtn.setAttribute('aria-label', 'Sort by ' + (col.name || 'this column'));
   const arrow = document.createElement('span');
   arrow.className = 'ds-th-arrow';
-  // An unsorted column keeps a dimmed ▲, so the control is discoverable at all
-  // — an empty span was invisible until you happened to click the right pixels.
-  arrow.textContent = expSortCol === c ? (expSortDir === 1 ? '▲' : '▼') : '▲';
+  // An unsorted column keeps a dimmed up-chevron, so the control is discoverable
+  // at all — an empty span was invisible until you happened to click the right
+  // pixels.
+  setIcon(arrow, expSortCol === c && expSortDir !== 1 ? 'chevron-down' : 'chevron-up');
   if (expSortCol !== c) arrow.classList.add('is-idle');
   sortBtn.appendChild(arrow);
   sortBtn.addEventListener('click', () => toggleSort(c));
@@ -149,8 +150,7 @@ function makeExplorerTh(col: ExpCol, c: number): HTMLElement {
   const edit = document.createElement('button');
   edit.type = 'button';
   edit.className = 'ds-th-edit';
-  edit.setAttribute('aria-label', 'Rename column');
-  edit.textContent = '✎';
+  iconOnly(edit, 'pencil', 'Rename column');
   edit.addEventListener('click', (e) => {
     e.stopPropagation();
     handleRenameColumn(c);
@@ -316,18 +316,28 @@ function paintExplorerPager(): void {
 
   if (expTotal <= DS_PAGE_ROWS) return; // one page — no controls to show
 
-  const mkPageBtn = (text: string, delta: number, disabled: boolean): void => {
+  // `side` says which end the chevron sits on: iconLabel() only ever leads.
+  const mkPageBtn = (
+    name: string,
+    label: string,
+    side: 'left' | 'right',
+    delta: number,
+    disabled: boolean,
+  ): void => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn btn-sm';
-    btn.textContent = text;
+    const span = document.createElement('span');
+    span.textContent = label;
+    if (side === 'left') btn.append(icon(name), span);
+    else btn.append(span, icon(name));
     btn.disabled = disabled;
     btn.style.marginLeft = '8px';
     btn.addEventListener('click', () => stepExplorerPage(delta));
     note.appendChild(btn);
   };
-  mkPageBtn('‹ Prev', -1, expOffset <= 0);
-  mkPageBtn('Next ›', 1, expOffset + DS_PAGE_ROWS >= expTotal);
+  mkPageBtn('chevron-left', 'Prev', 'left', -1, expOffset <= 0);
+  mkPageBtn('chevron-right', 'Next', 'right', 1, expOffset + DS_PAGE_ROWS >= expTotal);
 }
 
 // Column show/hide menu (checkbox per column).

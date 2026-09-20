@@ -679,8 +679,7 @@ function openExportDialog({ recommended, selectedExtra, current, vizData, entry,
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.className = 'export-x';
-  closeBtn.setAttribute('aria-label', 'Close');
-  closeBtn.textContent = '✕';
+  iconOnly(closeBtn, 'x', 'Close');
   closeBtn.addEventListener('click', closeExportDialog);
   head.appendChild(titles); head.appendChild(closeBtn);
   dialog.appendChild(head);
