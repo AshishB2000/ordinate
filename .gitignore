@@ -7,6 +7,9 @@
 # Node / Electron
 node_modules
 
+# TypeScript incremental cache — per-checkout, never shared (see tsconfig.*.json)
+.tsbuildinfo/
+
 # Build output
 dist/
 out/
@@ -323,6 +326,9 @@ scripts/**/*.js
 # Prompts without a parser of their own, split out of analyze.ts. Emitted siblings.
 /src/ai/prompts.js
 /scripts/test-prompts.js
+# Build-emit guard — emitted siblings.
+/scripts/check-emit.js
+/scripts/test-checkEmit.js
 
 # Insights — what the app found in the data. Emitted siblings.
 /src/analysis/insights.js

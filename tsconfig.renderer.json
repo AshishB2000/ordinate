@@ -15,7 +15,8 @@
     "strict": false,
     "noImplicitThis": true,
     "alwaysStrict": true,
-    "tsBuildInfoFile": "node_modules/.cache/tsc/renderer.tsbuildinfo"
+    // Per-checkout cache — see tsconfig.base.json for why it is not in node_modules.
+    "tsBuildInfoFile": ".tsbuildinfo/renderer.tsbuildinfo"
   },
   "include": ["renderer/**/*.ts"],
   // Phase 5: the Svelte island sources are MODULES, bundled by esbuild
