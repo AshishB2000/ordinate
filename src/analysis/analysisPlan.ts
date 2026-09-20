@@ -50,6 +50,7 @@ import type { ColumnSummary } from '../data/datasetStats';
 import * as datasets from '../data/datasets';
 import * as visuals from './visuals';
 import * as dashboards from './dashboards';
+import { validateControl, type PlannedControl } from './planControls';
 import type { VizEncoding } from './visuals';
 import { computeColumnSummariesResident } from '../engine/statsResident';
 
@@ -117,6 +118,8 @@ export interface PlannedText {
   text?: string;
 }
 
+export type { PlannedControl };
+
 export interface PlanSheet {
   name: string;
   /** KPI strip. Packed FIRST, on its own row above the charts. */
@@ -124,6 +127,13 @@ export interface PlanSheet {
   visuals: PlannedVisual[];
   /** Notes. Packed LAST, below the charts. */
   texts: PlannedText[];
+  /**
+   * Filter-bar chips. NOT tiles and NOT geometry — dashControlBar.ts puts them
+   * in the strip above the grid — so they are packed by neither the metric band
+   * nor the chart band. Optional so every plan written before this key existed
+   * (and every model envelope that never mentions one) reads back unchanged.
+   */
+  controls?: PlannedControl[];
 }
 
 export interface AnalysisPlan {
@@ -470,7 +480,16 @@ export function validatePlan(raw: unknown, ctx: PlanContext): ValidatedPlan {
         `Sheet "${sheetName}" note ${ti + 1}`, dropped);
       if (t) keptTexts.push(t);
     });
-    sheets.push({ name: sheetName, metrics: keptMetrics, visuals: kept, texts: keptTexts });
+    const rawControls = Array.isArray(rawSheet.controls) ? rawSheet.controls : [];
+    const keptControls: PlannedControl[] = [];
+    rawControls.forEach((rawControl, ci) => {
+      const c = validateControl(rawControl, ctx, proposedCols, `sheets[${si}].controls[${ci}]`,
+        `Sheet "${sheetName}" control ${ci + 1}`, dropped);
+      if (c) keptControls.push(c);
+    });
+    const sheet: PlanSheet = { name: sheetName, metrics: keptMetrics, visuals: kept, texts: keptTexts };
+    if (keptControls.length) sheet.controls = keptControls;
+    sheets.push(sheet);
   });
   // An Analysis always has at least one sheet (analysis.sanitizeSheets enforces
   // it); make that true here so preview and build agree on the sheet count too.

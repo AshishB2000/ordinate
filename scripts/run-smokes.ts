@@ -40,6 +40,7 @@ const SMOKES = [
   'smoke-section-hero',
   'smoke-connect',
   'smoke-dashboard-proposal',
+  'smoke-templates',
   'smoke-dashboards',
   'smoke-dashboard-edit',
   'smoke-insights',

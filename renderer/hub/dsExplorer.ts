@@ -314,11 +314,17 @@ async function dsNewVisualFromDataset(): Promise<void> {
   await handleNewVisual({ datasetId: expId });
 }
 
-/** "New dashboard" — the create wizard, with step 1 already answered. */
+/**
+ * "New dashboard" — the create wizard, with step 1 already answered.
+ *
+ * Opens ON step 2, the gallery: the dataset is the one you are looking at, so
+ * confirming it is a step that asks nothing, and the templates it offers are
+ * already judged against this dataset's own columns.
+ */
 async function dsNewDashboardFromDataset(): Promise<void> {
   if (!expId) return;
   if (typeof selectSection === 'function') selectSection('analyses');
-  await anCreateWizard(expId);
+  await anCreateWizard(expId, { step: 2 });
 }
 
 /**

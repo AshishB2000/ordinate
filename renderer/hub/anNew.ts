@@ -19,7 +19,10 @@ const AN_WIZ_EXAMPLES = [
   'Give me an overview sheet, then a sheet per region.',
 ];
 
-async function anCreateWizard(datasetId?: string): Promise<void> {
+// `opts.step` lets a caller that has ALREADY chosen the dataset open straight on
+// the gallery — the Data page's "New dashboard" button knows which dataset you
+// were looking at, so making you confirm it is a step that asks nothing.
+async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}): Promise<void> {
   if (!currentProjectId) { window.alert('Open a project first.'); return; }
 
   let sets: any[] = [];
@@ -95,7 +98,9 @@ async function anCreateWizard(datasetId?: string): Promise<void> {
       el.appendChild(o);
     }
     rail.appendChild(el);
-    return { el, dot };
+    // `label` and `opt` are returned because step 3 is TWO steps wearing one
+    // dot: "Describe it" on the AI route, "Map columns" on a template's.
+    return { el, dot, label: lab, opt: el.querySelector('.an-wiz-optional') as HTMLElement };
   });
 
   // ── Step 1: the dataset picker ────────────────────────────────────────────
@@ -206,6 +211,10 @@ async function anCreateWizard(datasetId?: string): Promise<void> {
       row.addEventListener('click', () => {
         selectedId = String(d.id);
         if (!nameTouched) nameIn.value = String(d.name || '').trim() + ' dashboard';
+        // The mapping is a fact about the DATASET, so a different dataset means
+        // a different catalogue — and a template card that was pickable on the
+        // old one may be dimmed on this one.
+        if (tplFor !== selectedId) { tplData = null; tplPicked = ''; if (startFrom === 'template') startFrom = 'blank'; }
         renderRows();
         sync();
       });
@@ -223,12 +232,53 @@ async function anCreateWizard(datasetId?: string): Promise<void> {
   // Pixel-Perfect / Layout / Optimize-for-width pickers are deliberately absent:
   // Ordinate has one layout, no paginated-report mode and no fixed-width canvas,
   // so those three controls would change nothing.
-  type StartKind = 'blank' | 'kpis' | 'twoup' | 'ai';
+  type StartKind = 'blank' | 'kpis' | 'twoup' | 'ai' | 'template';
   let startFrom: StartKind = 'blank';
+  // The chosen TEMPLATE, when startFrom === 'template'. Kept beside startFrom
+  // rather than inside it so going back to the gallery and forward again lands
+  // on the same card.
+  let tplPicked = '';
+  let tplData: any = null; // the last `template:list` reply, cached per dataset
+  let tplFor = ''; // which dataset id tplData describes
 
   const pane2 = document.createElement('div');
   pane2.className = 'an-wiz-pane';
   pane2.hidden = true;
+
+  // ── The TEMPLATE gallery ──
+  // Six subject dashboards, above the three layouts. A template is not a
+  // different kind of thing from a layout — both are entries in the same
+  // catalogue (src/analysis/templates.ts) and both end up in `buildPlan` — so
+  // the two rows differ only in what they promise, not in how they are built.
+  const tplHead = document.createElement('div');
+  tplHead.className = 'an-wiz-grouph';
+  const tplHeadT = document.createElement('span');
+  tplHeadT.textContent = 'Templates';
+  const tplHeadP = document.createElement('span');
+  tplHeadP.className = 'an-wiz-grouph-p';
+  tplHeadP.textContent = 'A complete dashboard, mapped to your columns.';
+  tplHead.appendChild(tplHeadT);
+  tplHead.appendChild(tplHeadP);
+  const tplGrid = document.createElement('div');
+  tplGrid.className = 'an-wiz-tpls';
+  const tplNote = document.createElement('p');
+  tplNote.className = 'an-wiz-none';
+  tplNote.textContent = 'Reading your columns…';
+  pane2.appendChild(tplHead);
+  pane2.appendChild(tplGrid);
+  pane2.appendChild(tplNote);
+
+  const layoutHead = document.createElement('div');
+  layoutHead.className = 'an-wiz-grouph';
+  const layoutHeadT = document.createElement('span');
+  layoutHeadT.textContent = 'Layouts';
+  const layoutHeadP = document.createElement('span');
+  layoutHeadP.className = 'an-wiz-grouph-p';
+  layoutHeadP.textContent = 'A scaffold to fill in yourself.';
+  layoutHead.appendChild(layoutHeadT);
+  layoutHead.appendChild(layoutHeadP);
+  pane2.appendChild(layoutHead);
+
   const startGrid = document.createElement('div');
   startGrid.className = 'an-wiz-starts';
   const START_OPTS: Array<{ id: StartKind; title: string; body: string; art: string[] }> = [
@@ -259,7 +309,7 @@ async function anCreateWizard(datasetId?: string): Promise<void> {
     c.appendChild(art);
     c.appendChild(t);
     c.appendChild(p);
-    c.addEventListener('click', () => { startFrom = o.id; sync(); });
+    c.addEventListener('click', () => { startFrom = o.id; tplPicked = ''; sync(); });
     startGrid.appendChild(c);
     return { el: c, id: o.id };
   });
@@ -271,10 +321,15 @@ async function anCreateWizard(datasetId?: string): Promise<void> {
   startNote.hidden = true;
   pane2.appendChild(startNote);
 
-  // ── Step 3: the AI step ───────────────────────────────────────────────────
-  // Reachable ONLY when step 2's AI card was chosen, which step 2 disables
-  // without a model. That is the single gate — this pane deliberately does not
-  // re-check readiness, because two guards for one condition is how they drift.
+  // ── Step 3: describe it, OR map the template's columns ────────────────────
+  // ONE step with two occupants, because it answers the same question for both
+  // routes — "what should this be built from?" — and a fourth rail dot for a
+  // step only one route ever walks would be a step counter, not a map.
+  //
+  // The AI half is reachable ONLY when step 2's AI card was chosen, which step 2
+  // disables without a model. That is the single gate — this pane deliberately
+  // does not re-check readiness, because two guards for one condition is how
+  // they drift.
   const pane3 = document.createElement('div');
   pane3.className = 'an-wiz-pane';
   pane3.hidden = true;
@@ -308,6 +363,12 @@ async function anCreateWizard(datasetId?: string): Promise<void> {
   aiCard.appendChild(ta);
   aiCard.appendChild(chips);
   pane3.appendChild(aiCard);
+
+  // The template route's occupant of step 3 (anNewTemplates.ts). Built once and
+  // re-`load`ed per template, so switching cards does not leak listeners.
+  const mapPane = anTplMapPane();
+  mapPane.el.hidden = true;
+  pane3.appendChild(mapPane.el);
 
   const body = document.createElement('div');
   body.className = 'an-wiz-body';
@@ -349,16 +410,24 @@ async function anCreateWizard(datasetId?: string): Promise<void> {
     pane1.hidden = step !== 1;
     pane2.hidden = step !== 2;
     pane3.hidden = step !== 3;
+    const onTemplate = startFrom === 'template';
     sub.textContent =
       step === 1 ? 'Choose the dataset to build from. You can add more sheets and datasets later.'
-      : step === 2 ? 'Pick a starting layout, or let a model design the whole dashboard for you.'
+      : step === 2 ? 'Start from a template built for your data, a plain layout, or let a model design it.'
+      : onTemplate ? 'Check which column plays which part. Every figure below is computed from your data.'
       : 'Describe the dashboard and the Assistant will draft it. You review everything before it is created.';
 
-    // Step 3 exists only on the AI route, so the rail dims it otherwise rather
-    // than pretending there is a third step everyone has to walk through.
+    // Step 3 belongs to the AI and TEMPLATE routes; the three plain layouts
+    // finish at step 2, so the rail dims it for them rather than pretending
+    // there is a third step everyone has to walk through.
+    const hasStep3 = startFrom === 'ai' || onTemplate;
+    railSteps[2].label.textContent = onTemplate ? 'Map columns' : 'Describe it';
+    // "Optional" is the AI step's promise (Skip still creates the dashboard);
+    // mapping is not optional, so the chip goes away on that route.
+    railSteps[2].opt.hidden = onTemplate;
     railSteps.forEach((s, i) => {
       const n = i + 1;
-      const skipped = n === 3 && startFrom !== 'ai';
+      const skipped = n === 3 && !hasStep3;
       s.el.className = 'an-wiz-step'
         + (n === step ? ' is-active' : '')
         + (n < step ? ' is-done' : '')
@@ -374,17 +443,61 @@ async function anCreateWizard(datasetId?: string): Promise<void> {
       if (c.id === 'ai') (c.el as HTMLButtonElement).disabled = !aiReady;
     });
     startNote.hidden = step !== 2 || aiReady;
+    // The two occupants of step 3, one at a time.
+    aiCard.hidden = onTemplate;
+    mapPane.el.hidden = !onTemplate;
 
     backBtn.hidden = step === 1;
-    skip.hidden = step !== 3;
-    // Step 2 finishes the wizard for the three non-AI routes — there is nothing
+    skip.hidden = step !== 3 || onTemplate;
+    // Step 2 finishes the wizard for the three plain layouts — there is nothing
     // left to ask, so it says Create rather than marching through a dead step.
     next.textContent =
       step === 1 ? 'Next'
-      : step === 2 ? (startFrom === 'ai' ? 'Next' : 'Create dashboard')
+      : step === 2 ? (hasStep3 ? 'Next' : 'Create dashboard')
+      : onTemplate ? 'Create dashboard'
       : 'Draft with the Assistant';
     next.disabled = step === 1 ? !selectedId : false;
-    if (step === 3) setTimeout(() => ta.focus(), 0);
+    if (step === 3 && !onTemplate) setTimeout(() => ta.focus(), 0);
+  }
+
+  // ── The template catalogue for the chosen dataset ─────────────────────────
+  //
+  // ONE call per dataset, cached: `template:list` maps every template's roles
+  // against that dataset's columns and app-computed summaries, which is what
+  // decides whether a card is offered or dimmed. Re-fetched when the dataset
+  // changes, because the mapping is a fact about the dataset, not the wizard.
+  async function loadTemplates(): Promise<void> {
+    const ds = selectedId || '';
+    if (!ds) return;
+    if (tplFor === ds && tplData) { paintTemplates(); return; }
+    tplNote.hidden = false;
+    tplNote.textContent = 'Reading your columns…';
+    tplGrid.innerHTML = '';
+    let res: any;
+    try {
+      res = await window.hub.listTemplates(currentProjectId, ds);
+    } catch (_) { res = null; }
+    if (selectedId !== ds) return; // the user moved on while this was in flight
+    if (!res || res.ok === false) {
+      tplData = null;
+      tplNote.textContent = (res && res.error) || 'Templates are unavailable for this dataset.';
+      return;
+    }
+    tplData = res;
+    tplFor = ds;
+    paintTemplates();
+  }
+
+  function paintTemplates(): void {
+    if (!tplData) return;
+    const subject = (tplData.templates || []).filter((t: any) => t.group === 'Templates');
+    tplNote.hidden = subject.length > 0;
+    anTplRenderGallery(tplGrid, subject, tplPicked, (id: string) => {
+      startFrom = 'template';
+      tplPicked = id;
+      paintTemplates();
+      sync();
+    });
   }
 
   const chosenName = (): string => nameIn.value.trim() || 'Untitled dashboard';
@@ -411,14 +524,49 @@ async function anCreateWizard(datasetId?: string): Promise<void> {
     if (kind === 'kpis' || kind === 'twoup') await applyStarter(kind, selectedId || undefined);
   }
 
+  // TEMPLATE path: the plan the mapping step already previewed, built through
+  // the SAME `analysis:buildPlan` the Assistant's approved plan goes through.
+  // No second builder, no second validator — the plan is re-validated in main
+  // on the way in, which is what makes "what you previewed is what you get" a
+  // property of the code rather than a promise of this function.
+  async function createFromTemplate(): Promise<void> {
+    const plan = mapPane.plan();
+    if (!plan) { window.alert('That mapping could not be built. Change a column and try again.'); return; }
+    const label = next.textContent;
+    next.disabled = true;
+    next.textContent = 'Creating…';
+    let res: any;
+    try {
+      res = await window.hub.buildAnalysisPlan(currentProjectId, plan);
+    } catch (_) { res = null; }
+    next.disabled = false;
+    next.textContent = label || 'Create dashboard';
+    if (!res || res.ok === false || !res.analysis) {
+      window.alert((res && res.error) || 'Failed to create the dashboard.');
+      return;
+    }
+    close();
+    await refreshAnalysisList();
+    openAnalysisFrom(res.analysis);
+  }
+
   skip.addEventListener('click', () => { createFromStarter('blank'); });
   next.addEventListener('click', async () => {
-    if (step === 1) { step = 2; sync(); return; }
+    if (step === 1) { step = 2; loadTemplates(); sync(); return; }
     if (step === 2) {
       if (startFrom === 'ai') { step = 3; sync(); return; }
+      if (startFrom === 'template') {
+        const tpl = (tplData?.templates || []).find((t: any) => t.id === tplPicked);
+        if (!tpl) return;
+        step = 3;
+        sync();
+        mapPane.load(currentProjectId, selectedId || '', tpl, tplData.columns || [], chosenName());
+        return;
+      }
       await createFromStarter(startFrom);
       return;
     }
+    if (startFrom === 'template') { await createFromTemplate(); return; }
     // AI path. The wizard stays open and busy while the model works — closing it
     // first would leave nothing on screen to explain the wait.
     const label = next.textContent;
@@ -473,8 +621,12 @@ async function anCreateWizard(datasetId?: string): Promise<void> {
     nameIn.value = String(preset.name || '').trim() + ' dashboard';
   }
   renderRows();
+  // Opening straight on the gallery is only honest once a dataset IS chosen —
+  // the cards are dimmed or offered BY that dataset's columns, so a step 2 with
+  // nothing selected would show six cards it cannot judge.
+  if (opts.step === 2 && selectedId) { step = 2; loadTemplates(); }
   sync();
-  (sets.length === 0 ? mkDataset : search).focus();
+  (sets.length === 0 ? mkDataset : step === 2 ? next : search).focus();
 }
 
 async function handleRenameAnalysis(id: string, currentName: string): Promise<void> {

@@ -132,6 +132,14 @@ export async function buildPlanRecords(projectId: string, raw: unknown): Promise
     const pk = packer();
     const cards: unknown[] = [];
 
+    // CONTROLS FIRST, and with a zeroed layout. A control card is a filter-bar
+    // chip (dashControlBar.ts), not a cell: the bar reads `layout` only to
+    // recover the order the author built them in, and reserving a grid cell for
+    // one would leave a hole nothing draws in. So they never touch the packer.
+    (sheet.controls || []).forEach((c, i) => {
+      cards.push({ type: 'control', layout: { x: i, y: 0, w: 0, h: 0 }, control: c });
+    });
+
     for (const m of sheet.metrics) {
       cards.push({ type: 'metric', layout: pk.place(KPI_W, KPI_H), metric: m });
     }

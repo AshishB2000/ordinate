@@ -31,7 +31,7 @@ export type StarterKind = 'kpis' | 'twoup';
  * "dis(count)" and so ranked a discount RATE as a headline measure. Words, not
  * substrings: `discount` is one word and matches nothing here.
  */
-function words(name: string): string[] {
+export function words(name: string): string[] {
   return String(name)
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2') // camelCase → two words
     .split(/[^A-Za-z0-9]+/)

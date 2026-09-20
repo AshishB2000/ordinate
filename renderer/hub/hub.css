@@ -7376,6 +7376,139 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 .an-wiz-name { display: flex; flex-direction: column; gap: 6px; }
 .an-wiz-name > span { font-size: 11.5px; font-weight: 600; color: var(--text); }
 
+/* Step 2 — the TEMPLATE gallery, above the layouts.
+   A template card's picture is a REAL chart (anNewTemplates.ts renders one per
+   chart type through buildChart and caches the data URL), so it cannot drift
+   from what the app draws. The layout cards below keep their CSS blocks: they
+   promise a shape, not a chart. */
+.an-wiz-grouph {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.an-wiz-grouph-p { font-size: 11px; font-weight: 400; color: var(--muted); }
+.an-wiz-tpls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.an-wiz-tpl {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.an-wiz-tpl:hover:not(:disabled) { border-color: var(--border-3); }
+.an-wiz-tpl.is-selected { border-color: var(--accent); background: var(--accent-soft); }
+.an-wiz-tpl.is-blocked { opacity: 0.45; cursor: not-allowed; }
+.an-wiz-tpl-art {
+  display: block;
+  height: 92px;
+  border-radius: var(--r-sm);
+  background: var(--inset);
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+.an-wiz-tpl-img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.an-wiz-tpl-t { font-size: 12.5px; font-weight: 600; color: var(--text-strong); }
+.an-wiz-tpl-needs {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.an-wiz-tpl.is-blocked .an-wiz-tpl-needs { color: var(--warn); }
+
+/* Step 3 (template route) — Map columns. One row per role: name, a select over
+   the dataset's columns, the dataset's own type glyph, and a confidence dot. */
+.an-tpl-rows { display: flex; flex-direction: column; gap: 8px; }
+.an-tpl-row {
+  display: grid;
+  grid-template-columns: 150px 1fr 56px 14px;
+  align-items: center;
+  gap: 10px;
+}
+.an-tpl-role {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.an-tpl-select { width: 100%; }
+.an-tpl-glyph { justify-self: start; }
+.an-tpl-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--border-3);
+}
+.an-tpl-dot.is-high { background: var(--ok); }
+.an-tpl-dot.is-medium { background: var(--warn); }
+.an-tpl-dot.is-low { background: var(--error); }
+.an-tpl-dot.is-chosen { background: var(--accent); }
+.an-tpl-dot.is-none { background: var(--border-3); }
+.an-tpl-summary {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.an-tpl-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--inset);
+}
+.an-tpl-preview-h {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.an-tpl-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.an-tpl-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  min-height: 52px;
+}
+.an-tpl-kpi-v {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.an-tpl-kpi-l {
+  font-size: 10.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Step 2 — starting layout. The thumbnails are CSS blocks rather than images:
    an illustration would mean shipping four assets for decoration, and these
    theme themselves. */
