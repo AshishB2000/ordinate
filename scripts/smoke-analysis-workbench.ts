@@ -159,6 +159,16 @@ async function main(): Promise<void> {
      fs.existsSync(restShot) && fs.statSync(restShot).size > 5000,
      `${Math.round(fs.statSync(restShot).size / 1024)} KB -> ${restShot}`);
 
+  // Every pane the rail offers, in rail order. ONE list, used twice: it is both
+  // what the rail must SHOW and what "exactly one panel at a time" is checked
+  // across. Adding a pane to `authoring.ts` and not here fails LOUDLY — which
+  // is what happened when feat/insights added `an-pane-insights` and this file
+  // was the only thing pinning the old four. So it stays an exhaustive list
+  // rather than becoming a prefix match: the failure is the feature.
+  const panes = [
+    'an-pane-data', 'an-pane-visuals', 'an-pane-filter', 'an-pane-props', 'an-pane-insights',
+  ];
+
   // ── The tool rail ─────────────────────────────────────────────────────────
   // Icon-only chrome is where dead controls hide: nothing labels them, so a
   // button wired to nothing looks identical to one that works. Assert every
@@ -177,14 +187,14 @@ async function main(): Promise<void> {
   ok('the tool rail is on screen, every icon named, titled and drawn',
      rail.visible && rail.allLabelled && rail.allSvg &&
        JSON.stringify(rail.panes) ===
-         JSON.stringify(['an-pane-data', 'an-pane-visuals', 'an-pane-filter', 'an-pane-props']),
+         JSON.stringify(panes),
      JSON.stringify(rail));
 
   // ONE flyout at a time, and clicking the lit icon closes it. That is the
   // whole point of the rail — two panels stacked is what it replaced.
   await openPane('an-pane-data');
-  const flyout = await win.evaluate(() => {
-    const shown = () => ['an-pane-data', 'an-pane-visuals', 'an-pane-filter', 'an-pane-props']
+  const flyout = await win.evaluate((ids: string[]) => {
+    const shown = () => ids
       .filter((id) => (document.getElementById(id) as HTMLElement | null)?.offsetParent != null);
     const afterData = shown();
     (document.querySelector('#an-rail .an-rail-btn[data-pane="an-pane-visuals"]') as HTMLElement).click();
@@ -193,7 +203,7 @@ async function main(): Promise<void> {
     const afterClose = shown();
     const sideShut = (document.getElementById('an-side-left') as HTMLElement | null)?.offsetParent == null;
     return { afterData, afterVisuals, afterClose, sideShut };
-  });
+  }, panes);
   ok('the rail opens exactly one panel, and the next one replaces it',
      JSON.stringify(flyout.afterData) === JSON.stringify(['an-pane-data']) &&
        JSON.stringify(flyout.afterVisuals) === JSON.stringify(['an-pane-visuals']),
