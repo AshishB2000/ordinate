@@ -15,6 +15,38 @@
 // script — NO import/export.
 
 /**
+ * The text a value label prints, when the chart carries no explicit
+ * "Number format" override.
+ *
+ * THE RULE, unchanged: at or above 10,000 abbreviate (`_fmtVal` → "12.2K"),
+ * below it show the real number. A label is the figure the reader takes away,
+ * and rounding 9,481 to "9.5K" on a chart small enough to read exactly is a
+ * loss; abbreviating 1,204,388 is a gain. The threshold is where those cross.
+ *
+ * WHAT WAS WRONG was the "show the real number" half: it was `String(v)`, which
+ * prints a float at full binary precision. A summed money column is almost never
+ * exact — filter the bundled sample to one category and the line chart's minimum
+ * printed `3908.359999999999` straight across the y-axis ticks. It stayed hidden
+ * for as long as it did because it only shows BELOW 10,000, and most unfiltered
+ * dashboards sum to more than that.
+ *
+ * `toLocaleString()` is the fix and also already the app's answer: it is exactly
+ * what `fmtWith(v, 'plain')` does, so "no override" now agrees with the override
+ * a reader would pick to mean the same thing. It groups thousands and rounds at
+ * three decimals.
+ *
+ * …except at the bottom of the range, where that rounding turns a real figure
+ * into "0". A margin of 0.0001234 is not zero, and a chart that says it is would
+ * be wrong in the one way this app must never be. Below 0.001 — precisely where
+ * the default rounding collapses — significant digits take over instead.
+ */
+function valueLabelText(v: number): string {
+  if (Math.abs(v) >= 10000) return _fmtVal(v);
+  if (v !== 0 && Math.abs(v) < 0.001) return v.toLocaleString(undefined, { maximumSignificantDigits: 3 });
+  return v.toLocaleString();
+}
+
+/**
  * Does a round-chart slice have room to hold its label?
  *
  * The old rule was `frac >= 0.06` — a share of the TOTAL, which says nothing
@@ -244,8 +276,7 @@ function buildChartPlugins(c: ChartCtx): any[] {
               displayVal = cum;
             }
             const pos = element.tooltipPosition();
-            const formatted = overrides.numberFormat ? fmt(displayVal)
-              : (Math.abs(displayVal) >= 10000 ? _fmtVal(displayVal) : String(displayVal));
+            const formatted = overrides.numberFormat ? fmt(displayVal) : valueLabelText(displayVal);
             const w = ctx.measureText(formatted).width;
             const tx = isHoriz ? pos.x + 8 : pos.x;
             const ty0 = isHoriz ? pos.y : pos.y - 4;
@@ -308,8 +339,7 @@ function buildChartPlugins(c: ChartCtx): any[] {
           if (!showName && !showVal) return;
           const lines: string[] = [];
           if (showName) lines.push(clip(name));
-          if (showVal) lines.push(overrides.numberFormat ? fmt(val)
-            : (Math.abs(val) >= 10000 ? _fmtVal(val) : String(val)));
+          if (showVal) lines.push(overrides.numberFormat ? fmt(val) : valueLabelText(val));
           const lh = 12;
           // Measure with each line's OWN font — the name is 600 weight and the
           // value 500, and the widest line is what has to fit.
@@ -356,8 +386,7 @@ function buildChartPlugins(c: ChartCtx): any[] {
           const v = numOf((chart.data.datasets[0].data[k] || {}).v);
           if (v == null) return;
           const pos = el.getCenterPoint ? el.getCenterPoint() : { x: el.x, y: el.y };
-          const formatted = overrides.numberFormat ? fmt(v)
-            : (Math.abs(v) >= 10000 ? _fmtVal(v) : String(v));
+          const formatted = overrides.numberFormat ? fmt(v) : valueLabelText(v);
           // Ink picked by cell darkness (the same accent-alpha ramp the cell is filled
           // with) — replaces the old halo stroke, which left a smudge behind the digits.
           const span = (opts._matrixVmax - opts._matrixVmin) || 1;
