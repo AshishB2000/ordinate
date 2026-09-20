@@ -577,6 +577,8 @@ require("./ipc/datasetCompose").register();
 // it reads the eight preview rows through.
 require("./ipc/formula").register();
 require("./ipc/search").register();
+// The application menu, built from the renderer's command registry (src/ipc/menu.ts).
+require("./ipc/menu").register();
 
 // What the app found in the data. Pure disk + the resident query layer; no deps.
 require("./ipc/insights").register();

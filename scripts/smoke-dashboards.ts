@@ -319,8 +319,16 @@ async function main(): Promise<void> {
 
   // The real keystroke, not dashUndo() — the point is that the shortcut reaches
   // the editor at all. Focus is on the grid, not in a text field.
+  //
+  // THE PLATFORM'S OWN MODIFIER, not a hard-coded Meta. This used to press
+  // Meta+z everywhere and pass on Linux CI anyway, because dashHistory.ts's own
+  // handler took `metaKey || ctrlKey` — so Super+Z worked on a machine where
+  // nobody would press it. The binding lives in the one keymap now
+  // (commands.ts), and `mod` there is ⌘ on macOS and Ctrl elsewhere, exactly
+  // one of them: on macOS ⌃K must not fire a ⌘K command. So this presses what a
+  // real user on this OS presses.
   await win.evaluate(() => (document.getElementById('dash-grid') as HTMLElement).focus());
-  await win.keyboard.press('Meta+z');
+  await win.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
   await win.waitForTimeout(900);
   const undone = await win.evaluate(() => ({
     ids: [...document.querySelectorAll('#dash-grid .dash-card')]
@@ -328,7 +336,7 @@ async function main(): Promise<void> {
     undoDisabled: (document.getElementById('dash-undo-btn') as HTMLButtonElement).disabled,
     redoTitle: (document.getElementById('dash-redo-btn') as HTMLButtonElement).title,
   }));
-  ok('⌘Z puts the card back, the same card, in the same order',
+  ok('⌘Z / Ctrl+Z puts the card back, the same card, in the same order',
     JSON.stringify(undone.ids) === JSON.stringify(before), JSON.stringify(undone.ids));
   ok('…and the pair flips: nothing left to undo, the removal waiting to redo',
     undone.undoDisabled && undone.redoTitle === 'Redo: Remove card', JSON.stringify(undone));

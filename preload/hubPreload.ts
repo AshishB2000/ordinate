@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webFrame } from 'electron';
 
 // ponytail: IPC payloads/results are big JSON envelopes owned by main + renderer;
 // full typing here isn't worth it — the bridge just forwards them.
@@ -90,6 +90,19 @@ contextBridge.exposeInMainWorld('hub', {
   onOpenSettings: (cb: (cat: string) => void) => ipcRenderer.on('hub:open-settings', (_e, cat) => cb(cat)),
   // Open a URL in the default external browser.
   openExternal: (url: string) => ipcRenderer.send('shell:open', url),
+  // ── Commands (renderer/hub/commands.ts) ──
+  // The registry, flattened, so main can build the application menu from the
+  // same list the palette, the sheet and the keymap read. Titles/ids/
+  // accelerators only — no functions cross the bridge; a menu click comes back
+  // as an id on 'menu:run' and the RENDERER decides what that means.
+  buildMenu: (commands: any[]) => ipcRenderer.invoke('menu:build', commands),
+  onMenuRun: (cb: (id: string) => void) => ipcRenderer.on('menu:run', (_e, id) => cb(id)),
+  // Page zoom. webFrame is the platform's own answer, kept per window by
+  // Electron, so nothing here has to store or re-apply a scale. `null` resets.
+  setZoom: (step: number | null) => {
+    const level = step === null ? 0 : webFrame.getZoomLevel() + step;
+    webFrame.setZoomLevel(Math.max(-3, Math.min(5, level)));
+  },
   // Open macOS System Settings to the Screen Recording pane.
   openSystemSettings: () => ipcRenderer.invoke('permission:open-settings'),
   // Register a callback fired when main wants the permission panel shown.

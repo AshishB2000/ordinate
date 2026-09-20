@@ -17,6 +17,7 @@ import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
 import * as analysis from '../analysis/analysis';
 import * as connections from '../connectors/connections';
+import * as projects from '../app/projects';
 
 /** Enough to be useful, few enough to read without scrolling. */
 const MAX_RESULTS = 20;
@@ -27,24 +28,72 @@ export interface SearchHit {
   name: string;
   /** A dim second line: rows, chart type, sheet count — whatever the list already knows. */
   sub: string;
+  /** The kind, in the words the UI says it in ("Dataset", "Dashboard"). */
+  type: string;
+  /** Which project the record is in. The palette searches every project. */
+  projectId: string;
+  projectName: string;
+  /** Same text as `sub` — what the row shows under the name. */
+  snippet: string;
 }
+
+/** The kind names the app uses on screen. `analysis` is a dashboard to a user. */
+const TYPE_LABEL: Record<SearchHit['kind'], string> = {
+  dataset: 'Dataset',
+  visual: 'Visual',
+  analysis: 'Dashboard',
+  connection: 'Connection',
+};
 
 function matches(name: unknown, q: string): boolean {
   return typeof name === 'string' && name.toLowerCase().indexOf(q) >= 0;
+}
+
+/** Every project the search covers: the one asked for, or all of them. */
+async function scope(projectId: string): Promise<{ id: string; name: string }[]> {
+  if (projectId) {
+    const p = await projects.getProject(projectId);
+    return [{ id: projectId, name: p ? p.name : '' }];
+  }
+  // The palette opens on Home too, where there is no active project — and a
+  // search box that answers nothing there is the box that made this feature
+  // necessary. Project lists are metadata-only (src/app/projects.ts), so this
+  // is the same cost per project the sidebar already pays to paint itself.
+  return (await projects.listProjects()).map((p) => ({ id: p.id, name: p.name }));
 }
 
 async function search(projectId: string, query: string): Promise<SearchHit[]> {
   const q = String(query || '').trim().toLowerCase();
   if (!q) return [];
   const hits: SearchHit[] = [];
+  let project = { id: '', name: '' };
 
   // Grouped in the order the sidebar lists the sections, so the results read in
   // the same order as the app they point into.
   const push = (kind: SearchHit['kind'], id: unknown, name: unknown, sub: string): void => {
     if (hits.length >= MAX_RESULTS) return;
-    hits.push({ kind, id: String(id), name: String(name), sub });
+    hits.push({
+      kind,
+      id: String(id),
+      name: String(name),
+      sub,
+      type: TYPE_LABEL[kind],
+      projectId: project.id,
+      projectName: project.name,
+      snippet: sub,
+    });
   };
 
+  for (project of await scope(projectId)) {
+    if (hits.length >= MAX_RESULTS) break;
+    await searchOne(project.id, q, push);
+  }
+  return hits;
+}
+
+type Push = (kind: SearchHit['kind'], id: unknown, name: unknown, sub: string) => void;
+
+async function searchOne(projectId: string, q: string, push: Push): Promise<void> {
   try {
     for (const d of await datasets.listDatasets(projectId)) {
       if (matches(d.name, q)) push('dataset', d.id, d.name, `${Number(d.rowCount || 0).toLocaleString()} rows`);
@@ -69,8 +118,6 @@ async function search(projectId: string, query: string): Promise<SearchHit[]> {
       if (matches(c.name, q)) push('connection', c.id, c.name, String((c as any).kind || 'connection'));
     }
   } catch (_) { /* ignore */ }
-
-  return hits;
 }
 
 export function register(): void {

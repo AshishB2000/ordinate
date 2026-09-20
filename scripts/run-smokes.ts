@@ -30,6 +30,7 @@ const SMOKES = [
   'smoke-saved-chart-type',
   'smoke-render-stacks',
   'smoke-topbar',
+  'smoke-palette',
   'smoke-sample',
   'smoke-composer',
   'smoke-formula',

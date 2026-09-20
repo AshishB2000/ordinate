@@ -247,55 +247,46 @@ async function main(): Promise<void> {
       return Boolean(a && panel && (a.id === 'dk-input' || a === panel));
     }));
 
-  // ── Global search: reachable from the top bar, and NOT clipped by it ─────
-  // New coverage for the relayout. In the sidebar the results box was an
-  // in-flow block that simply pushed the nav down; in a 48px bar that layout
-  // would be clipped by the bar's own height, so it became an absolutely
-  // positioned dropdown anchored under the input. Two ways that goes wrong and
-  // one of them is invisible to a DOM-only check:
-  //   1. it renders INSIDE the bar's box and gets cut off, and
-  //   2. it renders BEHIND the content stage or an open dock.
-  // Run with the dock still OPEN, because below ~1100px .dk-panel is a fixed
-  // overlay at z-index 9950 and the dropdown has to clear it.
-  await win.fill('#global-search', 'Regional');
-  await win.waitForSelector('#global-search-results:not([hidden])', { timeout: 8000 });
+  // ── The palette: reachable from the top bar, and painted over everything ─
+  // The top bar's own results dropdown is gone — focusing that box opens the
+  // command palette instead (palette.ts), which is a centred overlay rather
+  // than a box anchored under a 48px bar. The clipping failure it used to be
+  // checked for cannot happen to a fixed overlay; the one that CAN is z-order,
+  // so that is what is asserted, with the dock still OPEN because below ~1100px
+  // .dk-panel is a fixed overlay at z-index 9950 the palette has to clear.
+  await win.click('#global-search', { timeout: 8000 });
+  await win.waitForSelector('#cp-overlay:not([hidden])', { timeout: 8000 });
+  await win.fill('#cp-input', 'Regional');
+  await win.waitForTimeout(400);
   const searchBox: any = await win.evaluate(() => {
-    const bar = document.querySelector('.hub-topbar') as HTMLElement;
-    const box = document.getElementById('global-search-results') as HTMLElement;
+    const box = document.querySelector('.cp-box') as HTMLElement;
     const r = box.getBoundingClientRect();
-    const barR = bar.getBoundingClientRect();
-    // What is actually painted at the dropdown's own top-centre point? If the
-    // stage or the dock covers it, this resolves to something outside the box.
+    const barR = (document.querySelector('.hub-topbar') as HTMLElement).getBoundingClientRect();
+    // What is actually painted at the box's own top-centre point? If the stage
+    // or the dock covers it, this resolves to something outside the box.
     const hit = document.elementFromPoint(r.left + r.width / 2, r.top + 4);
     return {
       visible: r.height > 0 && r.width > 0,
       belowBar: r.top >= barR.bottom - 1,
-      overflowsBar: r.bottom > barR.bottom,
       onTop: Boolean(hit && box.contains(hit)),
       hitId: hit ? (hit.id || hit.className || hit.tagName) : '(nothing)',
     };
   });
-  ok('typing in the top bar opens the results dropdown', searchBox.visible);
-  ok('…anchored BELOW the bar, not laid out inside it', searchBox.belowBar);
-  ok('…extending past the 48px bar rather than being clipped to it', searchBox.overflowsBar);
+  ok('focusing the top bar search opens the palette', searchBox.visible);
+  ok('…clear of the bar rather than laid out inside it', searchBox.belowBar);
   ok('…and painted ON TOP of the content stage and the open dock, not behind them',
     searchBox.onTop, String(searchBox.hitId));
-  await win.fill('#global-search', '');
-  // state: 'hidden' — the default waits for VISIBLE, which a hidden box never is.
-  await win.waitForSelector('#global-search-results', { state: 'hidden', timeout: 8000 });
-  ok('…and clearing the query closes it again', await win.locator('#global-search-results').isHidden());
-  // Newly relevant after the relayout: search and the ⌘L target now sit in the
-  // same strip of chrome, inches apart. dock.ts's keydown handler bails on
-  // INPUT/TEXTAREA/contenteditable so the shortcut cannot hijack typing — which
-  // means ⌘L must do NOTHING while the caret is in the search box, even though
-  // the button it mirrors is right there. Asserted, then focus is released so
-  // the ⌘L checks below run from neutral ground.
-  await win.focus('#global-search');
+  // ⌘L must do NOTHING while the palette is up: it is the top-most layer and
+  // owns the keyboard (commands.ts), so a chord underneath it would act on a
+  // surface the user cannot see. Then Escape returns to neutral ground.
   await win.keyboard.press(process.platform === 'darwin' ? 'Meta+L' : 'Control+L');
   await win.waitForTimeout(250);
-  ok('⌘L is inert while the caret is in the search box (it must not hijack typing)',
+  ok('⌘L is inert while the palette is open (the top layer owns the keyboard)',
     await win.locator('#dk-panel').isVisible());
-  await win.evaluate(() => (document.getElementById('global-search') as HTMLInputElement).blur());
+  await win.keyboard.press('Escape');
+  await win.waitForSelector('#cp-overlay', { state: 'hidden', timeout: 8000 });
+  ok('…and Escape closes the palette without touching the dock',
+    await win.locator('#dk-panel').isVisible());
 
   // ── ⌘L closes it too (the second entry point) ───────────────────────────
   await win.keyboard.press(process.platform === 'darwin' ? 'Meta+L' : 'Control+L');

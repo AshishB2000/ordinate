@@ -610,18 +610,11 @@ function dkOnKeydown(e: KeyboardEvent): void {
     if (toggle) toggle.focus();
     return;
   }
-  if (e.key !== 'l' && e.key !== 'L') return;
-  if (!(e.metaKey || e.ctrlKey)) return;
-  const t = e.target as HTMLElement | null;
-  // The dock's own subtree is exempted BEFORE the text-field guard below.
-  // dkSync() focuses #dk-input (a <textarea>) the moment the dock becomes
-  // visible/usable, so without this, the text-field guard traps ⌘L the
-  // instant focus is inside the composer — the SECOND open, or any click into
-  // it, would silently stop the shortcut from closing the dock.
-  if (t && t.closest && t.closest('#dk-panel')) { e.preventDefault(); dkToggle(); return; }
-  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-  e.preventDefault();
-  dkToggle();
+  // ⌘L (and ⌘J) are declared on the `ai.open` command and bound by the one
+  // keymap in commands.ts. What was here — the dock-subtree exemption so the
+  // shortcut still closes the panel from inside its own composer — is the
+  // keymap's general rule now: a ⌘ chord fires in a text field unless the field
+  // itself owns that chord.
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────
