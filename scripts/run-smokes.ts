@@ -25,6 +25,7 @@ const SMOKES = [
   'smoke-dashboard-controls',
   'smoke-draft-review',
   'smoke-dataset',
+  'smoke-import',
   'smoke-viz-builder',
   'smoke-saved-chart-type',
   'smoke-render-stacks',

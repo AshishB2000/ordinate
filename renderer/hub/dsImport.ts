@@ -20,6 +20,7 @@ function clearPreview(): void {
   dsShow('ds-preview', false);
   dsShow('ds-save-bar', false);
   dsShow('ds-sheet-wrap', false);
+  dsShow('ds-sheet-bar', false);
   dsShow('ds-explorer', false); // close the saved-dataset explorer if open
   const nameInput = dsEl('ds-name-input') as HTMLInputElement | null;
   if (nameInput) nameInput.value = '';
@@ -52,6 +53,13 @@ function renderPreview(res: any, showSave: boolean): void {
   const sheetNames: string[] = (res && Array.isArray(res.sheetNames)) ? res.sheetNames : [];
   const sheetSel = dsEl('ds-sheet-select') as HTMLSelectElement | null;
   if (sheetSel) {
+    // Rebuilding the options resets the selection to the first one. On a sheet
+    // CHANGE this function is re-entered with the newly chosen sheet's rows, so
+    // without carrying the value over the picker would snap back to sheet 1
+    // while the preview below it showed sheet 2 — and `dsChosenSheet()` reads
+    // the picker, so the wrong name would reach `origin.sheetName`. An empty
+    // `prev` (the first parse) leaves index 0, which IS the sheet main parsed.
+    const prev = sheetSel.value;
     sheetSel.innerHTML = '';
     sheetNames.forEach((name) => {
       const opt = document.createElement('option');
@@ -59,8 +67,14 @@ function renderPreview(res: any, showSave: boolean): void {
       opt.textContent = name;
       sheetSel.appendChild(opt);
     });
+    if (prev && sheetNames.indexOf(prev) >= 0) sheetSel.value = prev;
   }
-  dsShow('ds-sheet-wrap', sheetNames.length > 1 && !!dsFilePath);
+  const showSheets = sheetNames.length > 1 && !!dsFilePath;
+  dsShow('ds-sheet-wrap', showSheets);
+  // The picker without a confirm is a dead end: the sheet already selected when
+  // the dialog opens never hands off, so the common case (the first sheet) had
+  // no way out but ✕.
+  dsShow('ds-sheet-bar', showSheets);
 
   // Preview table.
   const scroll = dsEl('ds-table-scroll');
@@ -107,15 +121,17 @@ function renderPreview(res: any, showSave: boolean): void {
     scroll.appendChild(table);
   }
 
+  // Size FIRST: with a sheet picker above it this line is how you tell the
+  // sheets apart before committing to one, so it is stated whether or not the
+  // preview is truncated.
   const note = dsEl('ds-preview-note');
   if (note) {
-    if (rowCount > DS_PREVIEW_ROWS) {
-      note.textContent = 'Showing first ' + DS_PREVIEW_ROWS + ' of ' + rowCount + ' rows';
-      note.hidden = false;
-    } else {
-      note.textContent = '';
-      note.hidden = true;
-    }
+    const size = rowCount.toLocaleString() + ' row' + (rowCount === 1 ? '' : 's')
+      + ' × ' + columns.length + ' column' + (columns.length === 1 ? '' : 's');
+    note.textContent = rowCount > DS_PREVIEW_ROWS
+      ? size + ' · showing the first ' + DS_PREVIEW_ROWS
+      : size;
+    note.hidden = false;
   }
   dsShow('ds-preview', columns.length > 0 || warnings.length === 0);
 
@@ -144,18 +160,34 @@ async function handleImportFile(): Promise<void> {
   toComposer(res.preview);
 }
 
-async function handleSheetChange(): Promise<void> {
-  if (!dsFilePath) return;
+// Re-read the picked workbook at the sheet the picker is showing. Returns the
+// ParseResult, or null on any failure — the dialog then simply stays as it was.
+async function reparseChosenSheet(): Promise<any> {
+  if (!dsFilePath) return null;
   const sel = dsEl('ds-sheet-select') as HTMLSelectElement | null;
-  if (!sel) return;
+  if (!sel) return null;
   let res: any;
   try {
     res = await window.hub.pickAndParseDataset(sel.value, dsFilePath);
   } catch (_) {
-    return;
+    return null;
   }
-  if (!res || !res.ok || res.canceled) return;
-  handOffToComposer(res.preview);
+  if (!res || !res.ok || res.canceled) return null;
+  return res.preview;
+}
+
+// Changing the sheet REPREVIEWS. It must not hand off: picking through a
+// dropdown and having the dialog vanish under you is the surprise that hid the
+// missing confirm for as long as it did.
+async function handleSheetChange(): Promise<void> {
+  const preview = await reparseChosenSheet();
+  if (preview) renderPreview(preview, false);
+}
+
+// "Use this sheet" is the confirm — the same hand-off, on the sheet showing.
+async function handleUseSheet(): Promise<void> {
+  const preview = await reparseChosenSheet();
+  if (preview) handOffToComposer(preview);
 }
 
 async function handleParsePaste(): Promise<void> {

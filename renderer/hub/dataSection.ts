@@ -101,10 +101,15 @@ function dxSetImportTitle(title: string): void {
  * hidden — it belongs to the other entry point.
  */
 function dxOpenImport(then?: () => void): void {
-  dxSetImportTitle('Choose a sheet');
+  // Name the workbook in the title: "Choose a sheet" alone does not say which
+  // file is being asked about, and a picked file is the one thing the user
+  // cannot re-read off the dialog.
+  const base = String(dsFilePath || '').split(/[\\/]/).pop() || '';
+  const title = base ? 'Choose a sheet · ' + base : 'Choose a sheet';
+  dxSetImportTitle(title);
   const paste = dxEl('ds-paste-wrap');
   if (paste) paste.hidden = true;
-  if (!dxOpenDialog('ds-import-modal', '.ds-import-modal', 'Choose a sheet', 'ds-sheet-select')) return;
+  if (!dxOpenDialog('ds-import-modal', '.ds-import-modal', title, 'ds-sheet-select')) return;
   if (then) then();
 }
 
@@ -118,7 +123,7 @@ function dxOpenImport(then?: () => void): void {
  */
 function openPasteDialog(): void {
   dxSetImportTitle('Paste data');
-  for (const id of ['ds-sheet-wrap', 'ds-warnings', 'ds-preview', 'ds-save-bar']) {
+  for (const id of ['ds-sheet-wrap', 'ds-sheet-bar', 'ds-warnings', 'ds-preview', 'ds-save-bar']) {
     const el = dxEl(id);
     if (el) el.hidden = true;
   }

@@ -35,8 +35,12 @@ function initDatasets(): void {
   const saveBtn = dsEl('ds-save-btn');
   if (saveBtn) saveBtn.addEventListener('click', () => handleSaveDataset());
 
+  // Picking a sheet RE-PREVIEWS; "Use this sheet" is what leaves the dialog.
   const sheetSel = dsEl('ds-sheet-select');
   if (sheetSel) sheetSel.addEventListener('change', () => handleSheetChange());
+
+  const sheetUse = dsEl('ds-sheet-use');
+  if (sheetUse) sheetUse.addEventListener('click', () => handleUseSheet());
 
   const refreshAll = dsEl('ds-refresh-all-btn');
   if (refreshAll) refreshAll.addEventListener('click', () => handleRefreshAll());

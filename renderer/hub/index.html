@@ -885,6 +885,14 @@
               </div>
             </div>
 
+            <!-- The sheet chooser's CONFIRM. Picking in the dropdown only
+                 re-previews; this is the one control that leaves the dialog, so
+                 the common case (the first sheet, already selected) has a way
+                 forward that is not ✕. -->
+            <div class="ds-save-bar ds-sheet-bar" id="ds-sheet-bar" hidden>
+              <button class="btn btn-primary" type="button" id="ds-sheet-use">Use this sheet</button>
+            </div>
+
             <div class="ds-save-bar" id="ds-save-bar" hidden>
               <input class="ds-name-input" id="ds-name-input" type="text" placeholder="Dataset name" />
               <button class="btn btn-primary" type="button" id="ds-save-btn">Save dataset</button>
