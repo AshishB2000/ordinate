@@ -97,6 +97,7 @@ async function openSavedDataset(id: string): Promise<void> {
   dsShow('ds-save-bar', false);
   dsShow('ds-warnings', false);
   dsShow('ds-sheet-wrap', false);
+  dsShow('ds-sheet-bar', false);
 
   expId = String(ds.id || id);
   expName = ds.name ? String(ds.name) : 'Untitled dataset';

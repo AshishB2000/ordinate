@@ -5142,6 +5142,8 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
   border-top: 1px solid var(--border);
 }
 .ds-import-modal .ds-preview { min-width: 0; }
+/* The confirm sits where a dialog's primary action sits. */
+.ds-sheet-bar { justify-content: flex-end; }
 
 /* ── Freshness: "Data as of …", the ↻ Refresh button, inline status ── */
 .ds-fresh {

@@ -154,11 +154,12 @@ async function renderComposerSources(): Promise<void> {
   const group = dcEl('dc-src-import-group');
   if (importList && group) {
     importList.innerHTML = '';
-    // The base, when it is the thing just imported rather than a saved dataset.
+    // The base, when just imported rather than saved — and the SHEET it came from.
     const inline = dcBase && dcBase.ref.inline ? dcBase : null;
     group.hidden = !inline;
     if (inline) {
-      const row = dcSourceRow(inline.label, `${inline.rows.toLocaleString()} rows · on the canvas`, () => {});
+      const sheet = dcOrigin && dcOrigin.sheetName ? ` · ${dcOrigin.sheetName}` : '';
+      const row = dcSourceRow(inline.label, `${inline.rows.toLocaleString()} rows${sheet} · on the canvas`, () => {});
       row.classList.add('dc-src-used');
       row.setAttribute('aria-disabled', 'true');
       importList.appendChild(row);
