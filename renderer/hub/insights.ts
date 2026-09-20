@@ -25,6 +25,19 @@ let insHomeList: any[] = [];
 let insTabList: any[] = [];
 let insRailList: any[] = [];
 
+/**
+ * Request generation, one per surface — a late reply for a scan you have since
+ * navigated away from is DROPPED rather than painted over the newer one.
+ *
+ * It matters more here than for most panels: a scan is up to 38 SQL statements
+ * and can outlast two or three of the user's clicks, and the dataset tab keys
+ * off `expId`, which a second dataset open moves under an in-flight fetch.
+ * Same instinct as `dsProfile`'s and the explorer's paging counters.
+ */
+let insHomeSeq = 0;
+let insTabSeq = 0;
+let insRailSeq = 0;
+
 /** Chart.js instances drawn into cards, so a repaint destroys them first. */
 const insCharts = new WeakMap<HTMLElement, any>();
 
@@ -310,10 +323,11 @@ async function insAddTile(ins: any): Promise<void> {
  * explaining that there is no panel is furniture.
  */
 async function insRenderHome(): Promise<void> {
-  const sec = insEl('home-insights');
-  const row = insEl('home-insights-row');
-  if (!sec || !row) return;
-  insHomeList = (await insFetch()).filter((i: any) => i.chart).slice(0, INS_HOME_MAX);
+  if (!insEl('home-insights') || !insEl('home-insights-row')) return;
+  const seq = (insHomeSeq += 1);
+  const list = (await insFetch()).filter((i: any) => i.chart).slice(0, INS_HOME_MAX);
+  if (seq !== insHomeSeq) return;
+  insHomeList = list;
   insPaintHome();
 }
 
@@ -351,9 +365,15 @@ const INS_KIND_LABELS: Record<string, string> = {
 };
 
 async function insRenderDatasetTab(): Promise<void> {
-  const host = insEl('ds-insights-body');
-  if (!host) return;
-  insTabList = typeof expId === 'string' && expId ? await insFetch(expId) : [];
+  if (!insEl('ds-insights-body')) return;
+  const id = typeof expId === 'string' ? expId : '';
+  const seq = (insTabSeq += 1);
+  const list = id ? await insFetch(id) : [];
+  // Two ways to be stale: a newer scan started, or the user opened a different
+  // dataset while this one was running. Either way these cards are about a
+  // table nobody is looking at.
+  if (seq !== insTabSeq || id !== (typeof expId === 'string' ? expId : '')) return;
+  insTabList = list;
   insPaintDatasetTab();
 }
 
@@ -420,11 +440,12 @@ async function insDashboardDatasets(): Promise<string[]> {
 }
 
 async function insRenderRail(): Promise<void> {
-  const host = insEl('an-insights-body');
-  if (!host) return;
+  if (!insEl('an-insights-body')) return;
+  const seq = (insRailSeq += 1);
   const ids = await insDashboardDatasets();
   const all: any[] = [];
   for (const id of ids) all.push(...await insFetch(id));
+  if (seq !== insRailSeq) return;
   insRailList = all.filter((i: any) => i.chart);
   insPaintRail();
 }

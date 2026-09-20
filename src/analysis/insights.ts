@@ -37,9 +37,12 @@ import type { Agg, Insight, InsightChart, InsightKind, InsightOptions } from './
 export type { Agg, Insight, InsightChart, InsightKind, InsightOptions } from './insightsAgg';
 export { jsAgg, residentAgg } from './insightsAgg';
 
-// Cost bounds. Each is a query count, not a taste: one dataset scan is
-// (TEXT_COLS × MEASURES) + MEASURES + (2 × MOVER_TRIPLES) aggregates, so these
-// four numbers ARE the ceiling — 33 statements at the values below.
+// Cost bounds. Each is a query count, not a taste. One dataset scan is
+// MEASURES_SCANNED (picking the measures, and the series `trend` then reuses
+// from cache) + TEXT_COLS × MEASURES (concentration, which also decides which
+// columns are dimensions) + 2 × MOVER_TRIPLES (a before and an after per
+// triple) aggregates — 38 statements at the values below, and no more however
+// wide the table is.
 const MEASURES = 3;
 const TEXT_COLS = 6;
 const MOVER_TRIPLES = 6;
@@ -416,9 +419,6 @@ export function detectInsights(
         : agg(category, measure, filters));
     ctx.agg = cachedAgg;
 
-    // Concentration — and, for free, which text columns are dimensions at all.
-    // `labels.length` IS the distinct count of the non-empty cells, so the 2..30
-    // gate below costs no extra query.
     // Concentration and movers ask different things of a text column, so they
     // have different gates: "3 of 40 states are 62% of revenue" is the FINDING,
     // while a 40-way mover breakdown is a table, not a card. One query serves
