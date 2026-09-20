@@ -4881,15 +4881,21 @@ button.as-ai-status:hover { background: var(--surface-2); color: var(--text); }
 .ds-saved-item {
   display: grid;
   /* MEASURED, not guessed. The action cell's four controls (Refresh, New
-     visual, Combine…, delete) come to 276px; the track was 232px at a wide
-     window and 116px below 1180px, so the cell overflowed LEFT and painted
-     across Source and Rows — which is where a connection's logo now goes.
-     280px holds it, and `1fr` on the name column absorbs the rest.
+     visual, Combine…, delete) come to 276px on macOS and 284px on CI's Linux;
+     the track was 232px at a wide window and 116px below 1180px, so the cell
+     overflowed LEFT and painted across Source and Rows — which is where a
+     connection's logo now goes.
+     312px holds it on both, and `1fr` on the name column absorbs the rest.
+
+     312px, not 284: this is a row of TEXT buttons, so its width is a font
+     metric and it moves between platforms. Sizing the track to the widest
+     measurement seen would make the next font stack a regression; the margin
+     IS the fix.
 
      ONE template at every width, down to ~830px of row: the narrow override
      below now drops a COLUMN rather than re-proportioning all five, because
      the same five tracks re-measured at two breakpoints is how this drifted. */
-  grid-template-columns: minmax(140px, 1fr) 78px minmax(104px, 140px) minmax(150px, 190px) 280px;
+  grid-template-columns: minmax(140px, 1fr) 78px minmax(104px, 140px) minmax(150px, 190px) 312px;
   align-items: center;
   gap: var(--sp-12);
 }
@@ -5115,7 +5121,7 @@ button.as-ai-status:hover { background: var(--surface-2); color: var(--text); }
 @media (max-width: 1080px) {
   .ds-saved-cols,
   .ds-saved-item {
-    grid-template-columns: minmax(140px, 1fr) minmax(104px, 140px) minmax(150px, 190px) 280px;
+    grid-template-columns: minmax(140px, 1fr) minmax(104px, 140px) minmax(150px, 190px) 312px;
   }
   .ds-saved-cols span:nth-child(2),
   .ds-saved-item .ds-saved-meta { display: none; }

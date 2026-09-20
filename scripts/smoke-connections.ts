@@ -392,13 +392,27 @@ async function main(): Promise<void> {
       const r = el.getBoundingClientRect();
       return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
     };
+    // The overflow NUMBER is for diagnosis; the assertion is about the OVERLAP,
+    // because that is the actual defect. A row of text buttons is a font
+    // metric — it measured 276px on macOS and 284px on CI's Linux — so
+    // demanding an exact fit would fail on the next font stack with nothing
+    // wrong, while an overlap means a cell really is painting over its
+    // neighbour and something really is invisible.
     const actions = row.querySelector('.ds-row-actions') as HTMLElement | null;
+    const sourceCell = row.querySelector('.ds-source-cell') as HTMLElement | null;
     let overflow = 0;
+    let overlap = 0;
     if (actions) {
       let content = 0;
       for (const el of [...actions.children] as HTMLElement[]) content += el.getBoundingClientRect().width;
       content += 4 * Math.max(0, actions.children.length - 1);
-      overflow = Math.round(content - actions.getBoundingClientRect().width);
+      const box = actions.getBoundingClientRect();
+      overflow = Math.round(content - box.width);
+      // Where the leftmost control actually STARTS — that is what a too-small
+      // track pushes back across its neighbours.
+      const first = actions.children[0] as HTMLElement | undefined;
+      const leftEdge = first ? first.getBoundingClientRect().left : box.left;
+      if (sourceCell) overlap = Math.round(sourceCell.getBoundingClientRect().right - leftEdge);
     }
     return {
       found: true,
@@ -408,6 +422,7 @@ async function main(): Promise<void> {
       scheduleSeen: seen('.ds-auto-select'),
       schedule: (row.querySelector('.ds-auto-select') as HTMLSelectElement | null)?.value || '',
       actionOverflow: overflow,
+      actionOverlapsSource: overlap,
     };
   });
   ok('the Data row SHOWS the connection\'s logo, its schedule and a Refresh action',
@@ -417,8 +432,9 @@ async function main(): Promise<void> {
   // The action cell is a fixed grid track. When its controls outgrow it they do
   // not wrap or clip — they overflow LEFT, across Source and Rows, which is how
   // the logo above ended up invisible while still being in the DOM.
-  ok('…and the action cell fits its track, so it is not painting over Source',
-     (dataRow.actionOverflow ?? 0) <= 0, `overflow=${dataRow.actionOverflow}px`);
+  ok('…and the action cell is not painting over Source',
+     (dataRow.actionOverlapsSource ?? 0) <= 0,
+     `overlap=${dataRow.actionOverlapsSource}px overflow=${dataRow.actionOverflow}px`);
 
   // ── The workbench at a 1000px window ─────────────────────────────────────
   // The rail collapses FIRST and the other two panes stay: the rail is ABOUT
