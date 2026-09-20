@@ -306,6 +306,15 @@ declare global {
         patch: { name?: string; sheets?: any; filters?: any; style?: any },
       ): Promise<any>;
       deleteAnalysis(projectId: string, id: string): Promise<{ ok: boolean }>;
+      // Dashboard TEMPLATES (the create wizard's gallery). Both model-free.
+      listTemplates(projectId: string, datasetId?: string): Promise<any>;
+      templatePlan(payload: {
+        projectId: string;
+        datasetId?: string;
+        templateId: string;
+        mapping: any;
+        name?: string;
+      }): Promise<any>;
       computeMetric(
         projectId: string,
         datasetId: string,

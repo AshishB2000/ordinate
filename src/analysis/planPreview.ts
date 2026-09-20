@@ -18,7 +18,7 @@ import type { VizDataResult } from './vizData';
 import { sampleRowsResident } from '../engine/statsResident';
 import type {
   AnalysisPlan, PlanContext, PlanDataset, PlanDrop,
-  PlannedMetric, PlannedText, PlannedVisual,
+  PlannedControl, PlannedMetric, PlannedText, PlannedVisual,
 } from './analysisPlan';
 import { loadPlanContext, validatePlan } from './analysisPlan';
 // INVERTED IMPORT, deliberately. `vizDataFor` lives beside `residentVizData` in
@@ -85,7 +85,16 @@ export interface PlanPreview {
    * the built tile makes, and previewing it here would be this module rendering
    * a number a second way — exactly what its header forbids.
    */
-  sheets: { name: string; metrics: PlannedMetric[]; visuals: VisualPreview[]; texts: PlannedText[] }[];
+  sheets: {
+    name: string;
+    metrics: PlannedMetric[];
+    visuals: VisualPreview[];
+    texts: PlannedText[];
+    /** Filter-bar chips, verbatim. A control computes nothing to preview — what
+     *  it filters is the reader's own live selection — but a preview that hid
+     *  the bar would still be showing less than the build produces. */
+    controls: PlannedControl[];
+  }[];
   calculatedFields: CalcFieldPreview[];
   dropped: PlanDrop[];
   /** The VALIDATED plan — exactly what to hand back to `buildPlan` on approval.
@@ -163,7 +172,13 @@ async function previewValidated(
     // agree on the WHOLE sheet: a plan whose KPI row was built but never shown
     // breaks the guarantee at the top of this file just as surely as a wrong
     // figure would.
-    sheets.push({ name: sheet.name, metrics: sheet.metrics, visuals: out, texts: sheet.texts });
+    sheets.push({
+      name: sheet.name,
+      metrics: sheet.metrics,
+      visuals: out,
+      texts: sheet.texts,
+      controls: sheet.controls || [],
+    });
   }
 
   return { ok: true, name: plan.name, rationale: plan.rationale, sheets, calculatedFields, dropped, plan };

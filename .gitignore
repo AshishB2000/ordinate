@@ -247,6 +247,7 @@ scripts/**/*.js
 # analyses.ts split by job (.claude/rules/file-size.md) — emitted siblings.
 /renderer/hub/anList.js
 /renderer/hub/anNew.js
+/renderer/hub/anNewTemplates.js
 /renderer/hub/anDraft.js
 
 # chartRender.ts split by job (.claude/rules/file-size.md) — emitted siblings.

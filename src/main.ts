@@ -643,6 +643,11 @@ require("./ipc/dashboards").register();
 // `analysis:draft`, which replaced the deleted `dashboard:draft`.
 require("./ipc/analyses").register();
 
+// Dashboard TEMPLATES — the gallery in the create wizard. Two channels, both
+// model-free; the plans they produce go through `analysis:previewPlan` /
+// `analysis:buildPlan` above like every other plan.
+require("./ipc/templates").register();
+
 require("./ipc/dashboardExport").register();
 
 require("./ipc/copilot").register();

@@ -466,6 +466,17 @@ contextBridge.exposeInMainWorld('hub', {
   starterCards: (projectId: string, kind: string, datasetId?: string) =>
     ipcRenderer.invoke('analysis:starterCards', { projectId, kind, datasetId }),
 
+  // ── Dashboard TEMPLATES (the create wizard's gallery) ──
+  // Every template with the column mapping it would use on `datasetId`, plus
+  // that dataset's column names/types for the mapping step's selects. Model-free.
+  // { ok:true, datasetId, datasetName, columns, templates } | { ok:false, error }.
+  listTemplates: (projectId: string, datasetId?: string) =>
+    ipcRenderer.invoke('template:list', { projectId, datasetId }),
+  // One template + a mapping → an ordinary AnalysisPlan, which the caller hands
+  // to previewAnalysisPlan / buildAnalysisPlan above. Nothing is saved here.
+  templatePlan: (payload: { projectId: string; datasetId?: string; templateId: string; mapping: any; name?: string }) =>
+    ipcRenderer.invoke('template:plan', payload),
+
   // ── Analyses (the AUTHORING container — sheets of cards + analysis-wide
   // filters; a dashboard is a published snapshot OF one). ────────────────────
   listAnalyses: (projectId: string) => ipcRenderer.invoke('analysis:list', { projectId }),
