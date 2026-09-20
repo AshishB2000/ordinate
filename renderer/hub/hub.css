@@ -12926,3 +12926,265 @@ body.an-focus .an-workbench.is-active #dash-pages {
   border-radius: var(--r-full);
   animation: spin 0.7s linear infinite;
 }
+
+/* ══ Command palette + shortcuts sheet ═════════════════════════════════════
+   One overlay, one box, 640px wide and no taller than 60vh, on the floating
+   surface with the hairline that defines a floating surface in dark (where the
+   shadow is invisible). The backdrop is 20% black in both themes: this box is
+   summoned over whatever you were doing and has to read as being in front of
+   it, but it is not a modal you have to dismiss to keep working.
+
+   Rows are 36px — the same row height as the sidebar and the menus — so the
+   palette does not introduce a fourth row rhythm. The selected row is a raised
+   surface with a 2px accent bar, the same "this one" vocabulary the sidebar's
+   active item uses, rather than a filled accent pill that would fight the
+   keycaps sitting on it. */
+.cp-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9800; /* above the settings backdrop (9700) — it can be opened over it */
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  /* Not centred on the vertical axis: a box that grows downward from a fixed
+     top does not jump under the cursor as results arrive. */
+  padding: 12vh var(--sp-24) var(--sp-24);
+  background: rgba(0, 0, 0, 0.2);
+}
+.cp-overlay[hidden] { display: none; }
+
+.cp-box {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 640px;
+  max-height: 60vh;
+  background: var(--surface-float);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: cp-in var(--dur-menu) var(--ease-out);
+}
+/* Opens in one move and stops. No bounce: an overshoot on a box you summon
+   dozens of times a day is a box that feels slow. --dur-menu (180ms) rather
+   than a raw 150ms — this is a popover, and the ramp is a token here so that
+   the reduced-motion block in this file can zero every one of them at once. */
+@keyframes cp-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.cp-input-wrap {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-12) var(--sp-16);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+/* The element-selector floor in this file gives every <input> a 32px height, a
+   border, a radius and a --surface-1 fill. The palette's input is not a field
+   you fill in — it is the box's own title row — so it opts out of all four.
+
+   BY ID, and that is not a style choice. That floor rule is
+   `input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color'])`,
+   and a `:not()` carries its argument's specificity — four attribute selectors,
+   so (0,4,1). A class cannot reach it: `.cp-input` lost, and the border it was
+   supposed to remove stayed on screen through three runs of the smoke, which
+   asserts behaviour and cannot see it. An id is (1,0,0). */
+#cp-input {
+  flex: 1;
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--t-15);
+  color: var(--text-strong);
+  outline: none;
+}
+#cp-input::placeholder { color: var(--text-dim); }
+/* No focus ring: the box only exists while it holds focus, and a ring around a
+   borderless input inside a floating panel reads as a second, boxed field.
+   By id for the same specificity reason as the block above. */
+#cp-input:focus-visible,
+#cp-input:focus { outline: none; }
+
+.cp-results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-4) 0 var(--sp-8);
+}
+
+.cp-group {
+  padding: var(--sp-8) var(--sp-16) var(--sp-4);
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.cp-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  height: 36px;
+  padding: 0 var(--sp-16);
+  /* The accent bar lives in the border so the row's text never shifts when the
+     selection moves — a 2px left border added on select would push every label
+     2px right, one row at a time, which reads as jitter. */
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  color: var(--text);
+}
+.cp-row .ic { flex: 0 0 auto; color: var(--muted); }
+/* The selected row is ONE STEP off the floating surface — and which token that
+   is differs per theme, which is why this is a local variable rather than a
+   token used directly.
+     light:  --surface-float is #ffffff and so is --surface-1, so a row painted
+             --surface-1 is a white row on a white box; --surface-2 (#f3f4f6)
+             is the step.
+     dark:   --surface-float IS --surface-2 (#26262c), so that one disappears
+             instead and the step is --surface-3.
+   Both halves were shipped and caught by the smoke's colour comparison, one
+   theme each — which is why that assertion exists rather than a screenshot. */
+.cp-box { --cp-sel: var(--surface-2); }
+[data-theme="dark"] .cp-box { --cp-sel: var(--surface-3); }
+.cp-row.is-sel {
+  background: var(--cp-sel);
+  border-left-color: var(--accent);
+}
+.cp-row.is-sel .ic { color: var(--text); }
+
+.cp-row-title {
+  flex: 0 1 auto;
+  font-size: var(--t-13);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cp-row-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--t-12);
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cp-row-key,
+.cp-row-more { flex: 0 0 auto; }
+.cp-row-key {
+  font-size: var(--t-11);
+  padding: 2px var(--sp-4);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-bottom-width: 1px;
+}
+.cp-row-more { color: var(--text-faint); font-size: var(--t-12); }
+.cp-row.is-sel .cp-row-more { color: var(--muted); }
+
+.cp-none { padding: var(--sp-24) var(--sp-16); }
+
+.cp-foot {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-12);
+  padding: var(--sp-8) var(--sp-16);
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  font-size: var(--t-11);
+  color: var(--text-dim);
+}
+.cp-foot .kbd { font-size: var(--t-11); padding: 1px var(--sp-4); border-bottom-width: 1px; }
+
+/* ── the shortcuts sheet (?) ──────────────────────────────────────────────
+   Same vocabulary, a taller box: it is a reference you read, not a box you
+   type one word into. Rendered from the registry (palette.ts), so it cannot
+   describe a binding the app does not have. */
+.cp-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-32);
+  background: rgba(0, 0, 0, 0.2);
+}
+.cp-sheet-overlay[hidden] { display: none; }
+
+.cp-sheet {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 640px;
+  max-height: 72vh;
+  background: var(--surface-float);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: cp-in var(--dur-menu) var(--ease-out);
+}
+.cp-sheet-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  padding: var(--sp-12) var(--sp-16);
+  border-bottom: 1px solid var(--border);
+}
+.cp-sheet-title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--t-15);
+  font-weight: 700;
+  color: var(--text-strong);
+}
+#cp-sheet-search {
+  flex: 0 0 180px;
+  height: var(--ctl-md);
+  padding: 0 var(--sp-8);
+  font: inherit;
+  font-size: var(--t-12);
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  outline: none;
+}
+#cp-sheet-search:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.cp-sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: var(--sp-12);
+}
+.cp-sheet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-12);
+  min-height: 32px;
+  padding: var(--sp-4) var(--sp-16);
+  font-size: var(--t-13);
+  color: var(--text);
+}
+.cp-sheet-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-sheet-none { padding: var(--sp-24) var(--sp-16); font-size: var(--t-13); color: var(--muted); }
+
+/* ── "Toggle the sidebar" (view.sidebar) ──────────────────────────────────
+   The rail is always present by design; this is the one thing that takes it
+   away, and it is a deliberate, reversible user action rather than a mode. */
+body.no-sidebar .app-sidebar { display: none; }

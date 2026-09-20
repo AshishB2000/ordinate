@@ -76,12 +76,12 @@
         <input id="global-search" class="hub-search-input" type="search" placeholder="Search"
           aria-label="Search datasets, dashboards and connectors"
           autocomplete="off" spellcheck="false" />
-        <!-- The shortcut that focuses this box (globalSearch.ts binds ⌘/Ctrl+K).
+        <!-- The shortcut that opens the palette off this box (commands.ts owns
+             the binding; palette.ts opens on focus too).
              aria-hidden: the input's aria-label is its accessible name, and a
              screen reader reading "Command K" after it is noise. -->
         <span class="menu-shortcut" aria-hidden="true">⌘K</span>
       </div>
-      <div id="global-search-results" class="hub-search-results" hidden></div>
     </div>
     <div class="hub-topbar-side hub-topbar-right">
       <!-- The execution-mode picker. It lived in the capture header, which was
@@ -1900,6 +1900,51 @@
        in it, so a per-toast region would announce nothing. -->
   <div id="hub-toast" class="hub-toast" role="status" aria-live="polite" hidden></div>
 
+  <!-- ── command palette + shortcuts sheet ───────────────────────────────
+       ONE overlay block for both, because they are two views of the same
+       list (the registry in commands.ts): the palette runs a command, the
+       sheet documents every one of them. Rows are built in palette.ts —
+       nothing here is a list of commands, which is what keeps the sheet from
+       going stale the first time a binding moves.
+
+       Opened by ⌘K, by focusing the top bar's search box, and by `?` for the
+       sheet. Hidden by default; palette.ts flips `hidden` (no inline style —
+       the hub CSP forbids it). -->
+  <div id="cp-overlay" class="cp-overlay" hidden>
+    <div class="cp-box" role="dialog" aria-modal="true" aria-label="Command palette">
+      <div class="cp-input-wrap">
+        <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-search"/></svg>
+        <input id="cp-input" class="cp-input" type="text" autocomplete="off" spellcheck="false"
+          role="combobox" aria-expanded="true" aria-controls="cp-results" aria-autocomplete="list"
+          placeholder="Search your data, or run a command"
+          aria-label="Search your data, or run a command" />
+      </div>
+      <div id="cp-results" class="cp-results" role="listbox" aria-label="Results"></div>
+      <div class="cp-foot" aria-hidden="true">
+        <span><span class="kbd">↑↓</span> move</span>
+        <span><span class="kbd">↵</span> run</span>
+        <span><span class="kbd">→</span> actions</span>
+        <span><span class="kbd">&gt;</span> commands</span>
+        <span><span class="kbd">/</span> your data</span>
+        <span><span class="kbd">@</span> columns</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="cp-sheet" class="cp-sheet-overlay" hidden>
+    <div class="cp-sheet" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+      <div class="cp-sheet-head">
+        <h2 class="cp-sheet-title">Keyboard shortcuts</h2>
+        <input id="cp-sheet-search" class="cp-sheet-search" type="search" autocomplete="off"
+          spellcheck="false" placeholder="Filter" aria-label="Filter shortcuts" />
+        <button id="cp-sheet-x" class="settings-modal-x" type="button" aria-label="Close">
+          <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-x"/></svg>
+        </button>
+      </div>
+      <div id="cp-sheet-body" class="cp-sheet-body"></div>
+    </div>
+  </div>
+
   <!-- ── image action menu (copy / save / download / view full size) ─── -->
   <div id="img-action-menu" class="img-action-menu" hidden>
     <button id="img-act-copy" class="img-act-btn" type="button">
@@ -2366,7 +2411,6 @@
 <script src="anNewTemplates.js"></script>
 <script src="anNew.js"></script>
 <script src="anDraft.js"></script>
-<script src="globalSearch.js"></script>
 <!-- Shared AI transcript + streaming primitives; loads before every AI mount.
      (The standalone Ask page — explore.js/explorePicker.js/exploreChart.js — was
      deleted; the dock is the only assistant surface now. askCore.js holds the
@@ -2418,6 +2462,14 @@
 <script src="hubCapture.js"></script>
 <script src="captureList.js"></script>
 <script src="hubResultMenus.js"></script>
+<!-- The command registry, its contents, and the palette that reads them.
+     commands.js is the machinery, commandDefs.js registers every command (so it
+     loads after the surfaces it calls into), palette.js paints. hub.js boots
+     them all in initWorkspaceShell(). -->
+<script src="commands.js"></script>
+<script src="commandDefs.js"></script>
+<script src="paletteRows.js"></script>
+<script src="palette.js"></script>
 <script src="hub.js"></script>
 
 <!-- Phase 5 — the Svelte islands bundle. An IIFE assigning ONE global

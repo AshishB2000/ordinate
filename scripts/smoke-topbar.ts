@@ -116,26 +116,31 @@ async function main(): Promise<void> {
 
   // Not the drag check (see above) — this covers the input being covered by
   // something, disabled, or simply not wired up.
+  //
+  // What a click into it DOES changed: the box's own results dropdown is gone
+  // and the command palette opens on focus instead (palette.ts), so the caret
+  // lands in #cp-input rather than staying here. That is the assertion now —
+  // an input eaten by the drag region opens nothing at all.
   await win.click('#global-search', { timeout: 8000 });
-  ok('…and the search still focuses on a click',
-    await win.evaluate(() => document.activeElement !== null && document.activeElement.id === 'global-search'),
+  await win.waitForSelector('#cp-overlay:not([hidden])', { timeout: 8000 });
+  ok('…and clicking the search still reaches the page — it opens the palette',
+    await win.evaluate(() => document.activeElement !== null && document.activeElement.id === 'cp-input'),
     await win.evaluate(() => (document.activeElement as HTMLElement).id || (document.activeElement as HTMLElement).tagName));
-  await win.fill('#global-search', 'Retail');
-  ok('…and it accepts typing', (await win.inputValue('#global-search')) === 'Retail');
+  await win.fill('#cp-input', 'Retail');
+  ok('…which accepts typing', (await win.inputValue('#cp-input')) === 'Retail');
 
-  // The results box hangs off the bar, not off the input, so a shorter bar must
-  // not leave it overlapping the chrome it drops out of.
-  await win.waitForSelector('#global-search-results:not([hidden])', { timeout: 8000 });
+  // The palette is centred on the WINDOW and floats over the bar rather than
+  // hanging off it — so what a shorter bar must not do is clip it.
   const drop = await win.evaluate(() => {
-    const d = document.getElementById('global-search-results')!.getBoundingClientRect();
+    const d = document.querySelector('.cp-box')!.getBoundingClientRect();
     const b = document.querySelector('.hub-topbar')!.getBoundingClientRect();
-    return { below: Math.round(d.top - b.bottom), h: Math.round(d.height) };
+    return { below: Math.round(d.top - b.bottom), h: Math.round(d.height), w: Math.round(d.width) };
   });
-  ok('…and its results drop BELOW the bar, not over it',
-    drop.below >= 0 && drop.below < 12 && drop.h > 0, JSON.stringify(drop));
-  await win.fill('#global-search', '');
+  ok('…and the palette opens BELOW the bar, at its own width, unclipped',
+    drop.below > 0 && drop.h > 0 && drop.w === 640, JSON.stringify(drop));
   await win.keyboard.press('Escape');
-  await win.waitForTimeout(500);
+  await win.waitForSelector('#cp-overlay', { state: 'hidden', timeout: 8000 });
+  await win.waitForTimeout(300);
 
   // ── The search is still centred on the WINDOW ───────────────────────────
   // Equal-flex sides do the centring, and the OS reservations are min-widths on

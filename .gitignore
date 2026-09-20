@@ -209,6 +209,16 @@ scripts/**/*.js
 # Data-section layout (list-first restructure) — emitted sibling.
 /renderer/hub/dataSection.js
 
+# Command palette: the registry, its contents, the overlay, and the native menu
+# built from the same list — emitted siblings.
+/renderer/hub/commands.js
+/renderer/hub/commandDefs.js
+/renderer/hub/paletteRows.js
+/renderer/hub/palette.js
+/src/ipc/menu.js
+/scripts/test-commands.js
+/scripts/smoke-palette.js
+
 # File-size ratchet (.claude/rules/file-size.md) — emitted sibling.
 /scripts/test-file-size.js
 
@@ -283,7 +293,6 @@ scripts/**/*.js
 /scripts/test-refreshScheduler.js
 /scripts/test-anomalyWatch.js
 /src/ipc/search.js
-/renderer/hub/globalSearch.js
 
 # Home surface — greeting + ask bar (homeAsk) and the "Your data" + saved-visuals
 # column (homeData), split from homePage.ts to the mockup. Emitted siblings.

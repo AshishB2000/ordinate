@@ -78,6 +78,10 @@ declare global {
       onKeyChanged(cb: () => void): void;
       onOpenSettings(cb: (cat?: string) => void): void;
       openExternal(url: string): void;
+      // ── Commands / menu / zoom (commands.ts) ──
+      buildMenu(commands: { id: string; title: string; group: string; accelerator: string }[]): Promise<any>;
+      onMenuRun(cb: (id: string) => void): void;
+      setZoom(step: number | null): void;
       openSystemSettings(): Promise<any>;
       onShowPermission(cb: () => void): void;
       loadGeo(level: string): Promise<any>;

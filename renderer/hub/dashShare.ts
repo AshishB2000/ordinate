@@ -530,6 +530,20 @@ async function handleDashExport(): Promise<void> {
     'Export',
   );
   if (choice === null) return;
+  await dashExportAs(choice as DashExportFormat);
+}
+
+type DashExportFormat = 'html' | 'pdf' | 'png';
+
+/**
+ * Export the open dashboard in one format, no chooser.
+ *
+ * Split out of handleDashExport so the three "Export as PDF/PNG/HTML" commands
+ * (commandDefs.ts) reach the same code the dialog does. A command that built its
+ * own bundle would be a second exporter to keep in step with the first.
+ */
+async function dashExportAs(choice: DashExportFormat): Promise<void> {
+  if (!dashCurrent) return;
   const safe = String(dashCurrent.name || 'dashboard').replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'dashboard';
   if (choice === 'html') {
     showToast('Building HTML…');

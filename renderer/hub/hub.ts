@@ -96,7 +96,15 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
   initAnalyses();        // analyses.ts
   initAuthoring();       // authoring.ts — the analysis workbench panels
   initAskActivity();     // askActivity.ts — live activity chips for an in-flight ask
-  initGlobalSearch();    // globalSearch.ts — the sidebar's search box
+  // The command registry, then the palette that reads it. Registration is LAST
+  // of the three so every surface's functions exist before a command can name
+  // one; initCommandKeys binds the one keydown handler, and initCommandMenu
+  // hands the same list to main for the native menu bar.
+  initCommands();        // commands.ts — the keymap
+  registerAppCommands(); // commandDefs.ts — the ~45 commands themselves
+  applyCommandTooltips();// commandDefs.ts — registry shortcuts onto existing buttons
+  initPalette();         // palette.ts — ⌘K, the top bar box, and the shortcuts sheet
+  initCommandMenu();     // commands.ts — build the application menu from the registry
   // execMenu.ts — one pass over every Assistant door, after the sections that
   // own them are wired. Readiness cannot change without a settings round trip,
   // which reloads the hub, so once is enough.

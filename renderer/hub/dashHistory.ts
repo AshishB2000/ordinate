@@ -204,27 +204,9 @@ function paintDashUndoBtns(): void {
   });
 }
 
-/**
- * ⌘Z / ⌃Z undo, ⇧⌘Z / ⌃Y redo — only while the editor is actually open, and
- * only when the keystroke is not already someone else's.
- *
- * A text field owns ⌘Z: the browser's own undo inside a <textarea> is what a
- * user means there, and taking it to revert a card instead is a data-loss bug
- * wearing a shortcut. Same for the dock — it is a conversation with its own
- * composer, not part of this editor.
- */
-function dashHistKeydown(e: KeyboardEvent): void {
-  if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
-  const k = e.key.toLowerCase();
-  if (k !== 'z' && k !== 'y') return;
-  if (!dashCurrent || dashReadOnly) return;
-  const ed = dashEl('dash-editor');
-  if (!ed || ed.hidden) return;
-  const t = e.target as HTMLElement | null;
-  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-  if (t && t.closest && t.closest('#dk-panel')) return;
-  e.preventDefault();
-  // ⌃Y is the Windows redo; ⇧⌘Z / ⇧⌃Z is everyone else's.
-  if (k === 'y' || e.shiftKey) dashRedo();
-  else dashUndo();
-}
+// ⌘Z / ⇧⌘Z (and ⌃Y on Windows) are declared on the `dash.undo` / `dash.redo`
+// commands in commandDefs.ts and bound by the single keymap in commands.ts.
+// The guards that used to live in this file's own keydown handler live there
+// too, generalised: the editor check is the commands' `when()`, and "a text
+// field owns ⌘Z" is CMD_NATIVE_EDIT_KEYS, so the next command to claim an
+// editing chord inherits the rule instead of rediscovering it.
