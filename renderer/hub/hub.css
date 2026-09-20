@@ -49,6 +49,9 @@ body {
    WINDOW rather than on the space left over beside the Agent toggle: the sides
    grow and shrink together, and the middle holds still as the window resizes. */
 .hub-topbar {
+  /* 40px is LOCKED: TITLEBAR_HEIGHT in src/windows/hubWindow.ts is the Windows
+     control-overlay height and must equal this row, and 40 is where the macOS
+     traffic lights are known-good under hiddenInset. Do not raise it to 48. */
   flex: 0 0 40px;
   display: flex;
   align-items: center;
@@ -112,8 +115,8 @@ body.cap-focus .hub-topbar { display: none; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: var(--ctl-md);
+  height: var(--ctl-md);
   flex: 0 0 auto;
   border: none;
   border-radius: var(--r-sm);
@@ -123,7 +126,7 @@ body.cap-focus .hub-topbar { display: none; }
 }
 .hub-ai-btn .ic { flex: 0 0 auto; }
 .hub-ai-btn:hover { background: var(--surface-2); color: var(--text); }
-.hub-ai-btn:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
+.hub-ai-btn:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 2px; }
 /* Suppressed, not gone (dock.ts's dkSync disables rather than hides it, so the
    bar does not reflow on every visit to Explore). Dimmed and inert so it reads
    as "not here, not now" rather than as a dead control — and :hover must not
@@ -131,6 +134,11 @@ body.cap-focus .hub-topbar { display: none; }
 .hub-ai-btn:disabled { opacity: 0.4; cursor: default; }
 .hub-ai-btn:disabled:hover { background: transparent; color: var(--muted); }
 .hub-ai-btn[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+
+/* The user / project menu is the only other thing allowed in the right
+   cluster. It is `#topbar-user`, and it is an `.icon-btn` — the base layer
+   already gives it the 32px box, the hover fill and the focus ring, so it
+   needs no rule of its own here. */
 
 .glyph { display: inline-flex; color: var(--text-strong); }
 
@@ -1157,8 +1165,11 @@ textarea:focus-visible {
   max-width: 880px;
   height: 100%;
   max-height: 580px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  /* A modal is the floating surface, and a floating surface is defined by the
+     hairline as much as by the shadow — in dark the shadow is invisible and the
+     --border grey was the only thing holding the edge. */
+  background: var(--surface-float);
+  border: 1px solid var(--border-hairline);
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
@@ -1189,19 +1200,23 @@ textarea:focus-visible {
 }
 .settings-modal-x {
   flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
+  width: var(--ctl-md);
+  height: var(--ctl-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-hairline);
   border-radius: var(--r-md);
-  background: var(--surface);
+  background: transparent;
   color: var(--muted);
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
 .settings-modal-x:hover { background: var(--surface-2); color: var(--text); }
+.settings-modal-x:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
 
 .settings-modal-body {
   flex: 1 1 auto;
@@ -1209,31 +1224,61 @@ textarea:focus-visible {
   min-height: 0;
 }
 
+/* The rail is the PAGE surface, not the card surface, which is the only thing
+   that lets an active row read as a raised row: --surface-1 and --surface are
+   the same colour in both themes, so a white-on-white active pill would have had
+   nothing but the accent bar to stand on. */
 .settings-cats {
   flex: 0 0 240px;
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: var(--sp-12) var(--sp-12);
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--border-hairline);
+  background: var(--bg);
   overflow-y: auto;
 }
+/* The sidebar row system: 32px, body type, and the active state is a SURFACE
+   with a 2px accent bar on the leading edge. It was an accent-soft lozenge with
+   accent text at 15/600 — a blue-on-blue pill that was the loudest object in the
+   modal, shouting over the panel it had just opened. */
 .settings-cat {
+  position: relative;
+  display: flex;
+  align-items: center;
   text-align: left;
-  padding: var(--sp-8) var(--sp-12);
+  height: var(--ctl-md);
+  padding: 0 var(--sp-12);
   border: none;
   background: none;
   color: var(--muted);
   font-family: var(--font-ui);
-  font-size: var(--t-15);
-  letter-spacing: var(--tr-tight);
-  line-height: var(--lh-snug);
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
   border-radius: var(--r-md);
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
 .settings-cat:hover { background: var(--surface-2); color: var(--text); }
-.settings-cat.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.settings-cat:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.settings-cat.active {
+  background: var(--surface-1);
+  color: var(--text-strong);
+  font-weight: 500;
+}
+.settings-cat.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: var(--sp-4);
+  bottom: var(--sp-4);
+  width: 2px;
+  border-radius: var(--r-full);
+  background: var(--accent);
+}
 
 .settings-content {
   flex: 1 1 auto;
@@ -1252,14 +1297,14 @@ textarea:focus-visible {
 
 .stp-group {
   padding: var(--sp-16) 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-hairline);
 }
 
 .stp-group-lbl {
   font-size: var(--t-11);
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--tr-label);
   color: var(--muted);
   margin-bottom: var(--sp-12);
 }
@@ -1272,7 +1317,7 @@ textarea:focus-visible {
   padding: var(--sp-8) 0;
 }
 
-.stp-row + .stp-row { border-top: 1px solid var(--border); }
+.stp-row + .stp-row { border-top: 1px solid var(--border-hairline); }
 
 .stp-rl { flex: 1; min-width: 0; }
 
@@ -1284,11 +1329,13 @@ textarea:focus-visible {
   color: var(--text-strong);
 }
 
+/* BODY, at the body size. A settings row's description is the prose of the
+   panel, not a caption on it — at 12 it read as a footnote under every title. */
 .stp-rd {
-  font-size: var(--t-12);
+  font-size: var(--t-13);
   color: var(--muted);
   margin-top: 2px;
-  line-height: 1.4;
+  line-height: var(--lh-body);
 }
 
 .stp-rr {
@@ -1435,6 +1482,11 @@ textarea:focus-visible {
 }
 
 .stp-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-line, rgba(99,102,241,0.18)); }
+/* The block above sets `outline: none`; a keyboard user needs the ring back. */
+.stp-select:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
 
 .stp-input {
   height: 34px;
@@ -1450,6 +1502,10 @@ textarea:focus-visible {
 }
 
 .stp-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-line, rgba(99,102,241,0.18)); }
+.stp-input:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
 .stp-input::placeholder { color: var(--text-faint); }
 
 .stp-prompt-row {
@@ -1475,6 +1531,10 @@ textarea:focus-visible {
 }
 
 .stp-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-line, rgba(99,102,241,0.18)); }
+.stp-textarea:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
 
 /* Configured providers chip row in settings panel */
 .stp-prov-chips {
@@ -1500,6 +1560,10 @@ textarea:focus-visible {
 }
 
 .stp-prov-chip:hover { background: var(--surface-2); color: var(--text); }
+.stp-prov-chip:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
 
 .stp-prov-chip.active {
   border-color: var(--accent);
@@ -1523,6 +1587,12 @@ textarea:focus-visible {
 }
 
 .stp-switch-on { background: var(--accent); }
+.stp-switch:hover { background: var(--border-3); }
+.stp-switch-on:hover { background: var(--accent-2); }
+.stp-switch:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
 
 .stp-switch-thumb {
   position: absolute;
@@ -4166,6 +4236,10 @@ select.model-picker::-ms-expand { display: none; }
   margin-left: var(--sp-4);
 }
 .ex-link:hover { text-decoration: underline; }
+.ex-link:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
 
 /* Test connection row */
 .ex-test-rr { display: flex; align-items: center; gap: var(--sp-8); }
@@ -4200,27 +4274,35 @@ button.ex-collapse .ex-collapse-caret { display: none; } /* group header reads a
 .ex-byok-head .ex-collapse-caret { display: inline-block; transition: transform .12s; font-size: var(--t-11); }
 .ex-byok-card.open .ex-byok-head .ex-collapse-caret { transform: rotate(90deg); }
 
-.ex-cli-list { display: flex; flex-direction: column; gap: var(--sp-4); }
+.ex-cli-list { display: flex; flex-direction: column; gap: var(--sp-8); }
 /* let the collapse toggle actually hide it */
 
+/* ONE card, for a detected CLI and for a BYOK provider alike (settingsPanels.ts
+   builds the provider card as `.ex-cli-row .ex-byok-card`): the card surface, a
+   hairline rather than a grey rule, the 13px corner, and the 16px gutter every
+   other card in the app uses. */
 .ex-cli-row {
   display: flex; align-items: flex-start; gap: var(--sp-12);
   width: 100%; text-align: left;
-  padding: var(--sp-12) var(--sp-12);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--surface);
+  padding: var(--sp-16);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
   cursor: pointer;
   font: inherit; color: var(--text);
 }
 .ex-cli-row:hover { background: var(--surface-2); }
+.ex-cli-row:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
 button.ex-cli-row.selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent) inset;
   background: var(--accent-soft);
 }
 .ex-cli-avail { cursor: default; }
-.ex-cli-avail:hover { background: var(--surface); }
+.ex-cli-avail:hover { background: var(--surface-1); }
 
 .ex-cli-icon { color: var(--muted); display: flex; flex: 0 0 auto; margin-top: 1px; }
 
@@ -4268,13 +4350,17 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
   background: var(--surface); color: var(--muted); cursor: pointer;
 }
 .ex-cli-refresh:hover { background: var(--surface-2); color: var(--text); }
+.ex-cli-refresh:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
 .ex-cli-refresh:disabled { opacity: .5; cursor: default; }
 
 .ex-cli-empty {
   font-size: var(--t-13); color: var(--muted);
-  padding: var(--sp-12) var(--sp-12);
-  border: 1px dashed var(--border); border-radius: var(--r-md);
-  background: var(--surface);
+  padding: var(--sp-16);
+  border: 1px dashed var(--border); border-radius: var(--r-lg);
+  background: var(--surface-1);
 }
 
 /* Full-width status/error line under the CLI info. Wraps and clamps so even the
@@ -4296,7 +4382,7 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
 
 /* ── BYOK provider cards (mirror the CLI cards: header + expandable body) ──── */
 .ex-byok-card { display: block; padding: 0; cursor: default; overflow: hidden; }
-.ex-byok-card:hover { background: var(--surface); }
+.ex-byok-card:hover { background: var(--surface-1); }
 .ex-byok-card.selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent) inset;
@@ -4308,11 +4394,15 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
 .ex-byok-head {
   display: flex; align-items: flex-start; gap: var(--sp-12);
   width: 100%; text-align: left;
-  padding: var(--sp-12) var(--sp-12);
+  padding: var(--sp-16);
   background: none; border: none; cursor: pointer;
   font: inherit; color: var(--text);
 }
 .ex-byok-head:hover { background: var(--surface-2); }
+.ex-byok-head:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: -2px;
+}
 .ex-byok-card.selected .ex-byok-head:hover { background: transparent; }
 .ex-byok-active-tag { font-size: var(--t-11); font-weight: 650; color: var(--accent); }
 .ex-byok-caret { color: var(--muted); }
@@ -4321,8 +4411,8 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
 /* editable body */
 .ex-byok-body {
   display: flex; flex-direction: column; gap: var(--sp-8);
-  padding: var(--sp-4) var(--sp-12) var(--sp-12);
-  border-top: 1px solid var(--border);
+  padding: var(--sp-8) var(--sp-16) var(--sp-16);
+  border-top: 1px solid var(--border-hairline);
 }
 .ex-byok-field { display: flex; flex-direction: column; gap: var(--sp-4); }
 .ex-byok-flabel { font-size: var(--t-12); font-weight: 600; color: var(--text); }
@@ -4537,15 +4627,57 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
 
 /* ── persistent sidebar ─────────────────────────────────────────────────── */
 .app-sidebar {
-  width: 210px;
-  flex: 0 0 210px;
+  width: 232px;
+  flex: 0 0 232px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: var(--sp-8) var(--sp-8) var(--sp-12);
-  background: var(--surface);
-  border-right: 1px solid var(--border);
+  gap: var(--sp-4);
+  padding: var(--sp-8);
+  /* The rail sits ON the page plane, not above it: --bg, the same ground the
+     stage uses, separated by the hairline alone. That is what lets an ACTIVE
+     row be --surface-1 (a card lifted off the rail) and a HOVER row be
+     --surface-2 (a darkening of it) and have both actually read — on a white
+     --surface rail the active card was invisible, which is why the old active
+     state had to be a filled accent pill. */
+  background: var(--bg);
+  border-right: 1px solid var(--border-hairline);
   overflow: hidden;
+}
+
+/* ── the project switcher, pinned at the TOP of the rail ──────────────────
+   Which project you are in is the first question the rail answers, so it is
+   the first row in it. One control: the name, an optional second line, and a
+   chevron that opens the switcher.
+   NOT YET IN THE MARKUP — this is the #as-proj-btn the rail needs as its
+   first child, ahead of .as-nav. */
+.as-project-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--ctl-gap);
+  width: 100%;
+  height: var(--ctl-lg);
+  padding: 0 var(--sp-8);
+  margin-bottom: var(--sp-4);
+  border: none;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-strong);
+  font-family: var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+.as-project-btn:hover { background: var(--surface-2); }
+.as-project-btn:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 2px; }
+.as-project-btn .ic { flex: 0 0 auto; color: var(--text-faint); margin-left: auto; }
+.as-project-btn:hover .ic { color: var(--muted); }
+.as-project-name {
+  font-size: var(--t-13);
+  font-weight: 600;
+  line-height: var(--lh-body);
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Global search — lives in the top bar (.hub-topbar), not in this column. It
@@ -4554,16 +4686,39 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
 .hub-search {
   display: flex;
   align-items: center;
-  gap: var(--sp-8);
-  height: 32px;
-  padding: 0 var(--sp-8);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
+  gap: var(--ctl-gap);
+  height: var(--ctl-md);
+  /* Tighter on the right: the ⌘K hint carries its own left padding. */
+  padding: 0 var(--sp-8) 0 var(--sp-12);
+  /* A card-coloured pill on the --titlebar band behind a hairline, not the
+     grey FILL it was — --surface-2 is the hover colour, so the field sat
+     permanently in its own hover state with nowhere to go. */
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-full);
   color: var(--text-faint);
 }
 .hub-search .ic { flex: 0 0 auto; }
-.hub-search:focus-within { border-color: var(--accent); }
+.hub-search:hover { border-color: var(--border-2); }
+.hub-search:focus-within {
+  border-color: var(--accent-line);
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+/* The ⌘K hint, right-aligned inside the pill and styled like .menu-shortcut
+   — same muted 12px tabular figures, so every shortcut in the app reads alike.
+   NOT YET IN THE MARKUP: this is the <kbd class="hub-search-kbd">⌘K</kbd> the
+   search pill needs as its last child. */
+.hub-search .menu-shortcut {
+  margin-left: auto;
+  padding-left: var(--sp-16);
+  flex: 0 0 auto;
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
 .hub-search-input {
   flex: 1 1 auto;
   min-width: 0;
@@ -4576,103 +4731,16 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
 }
 .hub-search-input::placeholder { color: var(--text-faint); }
 
-/* primary nav */
-.as-nav { display: flex; flex-direction: column; gap: 2px; }
+/* primary nav — 32px rows, 20px icon, left-aligned, --sp-8 inside the rail. */
+.as-nav { display: flex; flex-direction: column; gap: 1px; }
 .as-nav-item {
   display: flex;
   align-items: center;
-  gap: var(--sp-8);
+  justify-content: flex-start;
+  gap: var(--ctl-gap);
+  width: 100%;
+  height: var(--ctl-md);
   text-align: left;
-  padding: var(--sp-8) var(--sp-8);
-  border: none;
-  border-radius: var(--r-sm);
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: var(--t-13);
-  font-weight: 500;
-  cursor: pointer;
-}
-.as-nav-item .ic { flex: 0 0 auto; color: var(--text-faint); }
-.as-nav-item:hover { background: var(--surface-2); color: var(--text); }
-.as-nav-item:hover .ic { color: var(--muted); }
-.as-nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-.as-nav-item.active .ic { color: var(--accent); }
-.as-nav-item:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
-
-.as-divider { height: 1px; background: var(--border); margin: var(--sp-8) 2px; }
-
-/* Connect shortlist + a door to the full catalog */
-.as-connect { display: flex; flex-direction: column; gap: 1px; }
-.as-section-h {
-  font-size: var(--t-11);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  padding: 0 var(--sp-8) var(--sp-4);
-}
-.as-connect-item {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-8);
-  text-align: left;
-  padding: var(--sp-4) var(--sp-8);
-  border: none;
-  border-radius: var(--r-sm);
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: var(--t-13);
-  cursor: pointer;
-}
-.as-connect-item:hover { background: var(--surface-2); color: var(--text-strong); }
-.as-connect-item:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
-.as-source-logo {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  flex: 0 0 22px;
-  color: var(--muted);
-}
-.as-source-logo svg,
-.as-source-logo img {
-  display: block;
-  width: 18px;
-  height: 18px;
-  object-fit: contain;
-}
-.as-connect-more {
-  align-self: flex-start;
-  margin: 3px 0 0 var(--sp-24);
-  padding: 3px var(--sp-4);
-  border: none;
-  background: none;
-  color: var(--accent);
-  font: inherit;
-  font-size: var(--t-12);
-  cursor: pointer;
-}
-.as-connect-more:hover { text-decoration: underline; }
-.as-count::before { content: " "; }
-
-/* bottom tools — Settings, pinned to the base. The AI door moved to the top
-   bar (the Agent toggle) and #exec-mode-btn was removed, so this group has one
-   member and one job. */
-.as-bottom {
-  margin-top: auto;
-  padding-top: var(--sp-8);
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-}
-.as-tool {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-8);
-  height: 32px;
   padding: 0 var(--sp-8);
   border: none;
   border-radius: var(--r-sm);
@@ -4683,6 +4751,128 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
   font-weight: 500;
   cursor: pointer;
 }
+.as-nav-item .ic { flex: 0 0 auto; width: 20px; height: 20px; color: var(--text-faint); }
+.as-nav-item:hover { background: var(--surface-2); color: var(--text); }
+.as-nav-item:hover .ic { color: var(--muted); }
+/* ACTIVE is a card on the rail with a 2px accent bar on its left edge — not a
+   filled accent pill. The bar is an inset box-shadow rather than a border-left
+   so the label does not shift 2px when the row lights up, and rather than a
+   ::before so it survives on a button with no room for one. */
+.as-nav-item.active {
+  background: var(--surface-1);
+  box-shadow: inset 2px 0 0 0 var(--accent);
+  color: var(--text-strong);
+  font-weight: 600;
+}
+.as-nav-item.active .ic { color: var(--accent); }
+.as-nav-item.active:hover { background: var(--surface-2); }
+.as-nav-item:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 2px; }
+
+.as-divider { height: 1px; background: var(--border-hairline); margin: var(--sp-8) var(--sp-8); }
+
+/* Connect shortlist + a door to the full catalog */
+.as-connect { display: flex; flex-direction: column; gap: 1px; }
+/* CONNECT and friends — the .t-label treatment, spelled out because the
+   markup carries only this class. */
+.as-section-h {
+  font-size: var(--t-11);
+  line-height: var(--lh-body);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tr-label);
+  color: var(--muted);
+  padding: var(--sp-4) var(--sp-8);
+}
+.as-connect-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--ctl-gap);
+  width: 100%;
+  height: var(--ctl-sm);
+  text-align: left;
+  padding: 0 var(--sp-8);
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-13);
+  cursor: pointer;
+}
+.as-connect-item:hover { background: var(--surface-2); color: var(--text-strong); }
+.as-connect-item:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 2px; }
+.as-source-logo {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  color: var(--text-faint);
+}
+.as-connect-item:hover .as-source-logo { color: var(--muted); }
+.as-source-logo svg,
+.as-source-logo img {
+  display: block;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+.as-connect-more {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  /* The label is `More<span>35</span>`, and the space between them was the
+     collapsed whitespace of the source newline. Flex makes the text node and
+     the span separate items and drops that whitespace entirely — "More35".
+     The gap is what the space used to be. */
+  gap: var(--sp-4);
+  height: var(--ctl-sm);
+  margin: 0 0 0 var(--sp-24);
+  padding: 0 var(--sp-4);
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-12);
+  cursor: pointer;
+}
+.as-connect-more:hover { background: var(--surface-2); color: var(--text); }
+.as-connect-more:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 2px; }
+.as-count::before { content: " "; }
+
+/* bottom tools — Settings, pinned to the base. The AI door moved to the top
+   bar (the Agent toggle) and #exec-mode-btn was removed, so this group has one
+   member and one job. */
+/* Pinned to the base: Settings, and the Assistant's status line under it. */
+.as-bottom {
+  margin-top: auto;
+  padding-top: var(--sp-8);
+  border-top: 1px solid var(--border-hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.as-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--ctl-gap);
+  width: 100%;
+  height: var(--ctl-md);
+  padding: 0 var(--sp-8);
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-13);
+  font-weight: 500;
+  cursor: pointer;
+}
+.as-tool .ic { width: 20px; height: 20px; color: var(--text-faint); }
+.as-tool:hover .ic { color: var(--muted); }
 .as-tool .ic { flex: 0 0 auto; }
 /* Kept general: no `.as-tool` is disabled today (the dock's suppression now
    dims #side-ai-btn in the top bar instead — see .hub-ai-btn:disabled), and
@@ -4690,13 +4880,48 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
 .as-tool:disabled { opacity: 0.4; cursor: default; }
 .as-tool:disabled:hover { background: transparent; color: var(--muted); }
 .as-tool:hover { background: var(--surface-2); color: var(--text); }
-.as-tool:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
+.as-tool:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 2px; }
+
+/* The Assistant's status, pinned under Settings. A dot and a word — it says
+   whether a model is wired up, so it is a READOUT and only a button when it is
+   the "not ready" door into Settings.
+   NOT YET IN THE MARKUP — #as-ai-status, the last child of .as-bottom, with a
+   data-state of ready / not_ready / busy. */
+.as-ai-status {
+  display: flex;
+  align-items: center;
+  gap: var(--ctl-gap);
+  width: 100%;
+  height: var(--ctl-md);
+  padding: 0 var(--sp-8);
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-12);
+  text-align: left;
+}
+button.as-ai-status { cursor: pointer; }
+button.as-ai-status:hover { background: var(--surface-2); color: var(--text); }
+.as-ai-status:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 2px; }
+.as-ai-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-left: 6px;
+  border-radius: var(--r-full);
+  background: var(--text-faint);
+}
+.as-ai-status[data-state='ready'] .as-ai-dot { background: var(--ok); }
+.as-ai-status[data-state='busy'] .as-ai-dot { background: var(--warn); }
+.as-ai-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .as-icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: var(--ctl-md);
+  height: var(--ctl-md);
   flex: 0 0 auto;
   border: none;
   border-radius: var(--r-sm);
@@ -4705,7 +4930,7 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
   cursor: pointer;
 }
 .as-icon-btn:hover { background: var(--surface-2); color: var(--text); }
-.as-icon-btn:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
+.as-icon-btn:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 2px; }
 .as-icon-btn img { width: 16px; height: 16px; border-radius: 3px; }
 
 /* ── HOME section — recent / starred, over a first-run quick start ────────── */
@@ -4811,8 +5036,15 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
   cursor: pointer;
 }
 .ws-nav-item:hover { background: var(--surface-2); color: var(--text); }
-.ws-nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-.ws-nav-item:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
+/* Same card + 2px accent bar as .as-nav-item.active — one nav vocabulary. */
+.ws-nav-item.active {
+  background: var(--surface-1);
+  box-shadow: inset 2px 0 0 0 var(--accent);
+  color: var(--text-strong);
+  font-weight: 600;
+}
+.ws-nav-item.active:hover { background: var(--surface-2); }
+.ws-nav-item:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 2px; }
 .ws-badge {
   margin-left: auto;
   padding: 1px var(--sp-4);
@@ -4958,13 +5190,17 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
   width: max-content;
   min-width: 100%;
 }
+/* The grid's head: the card surface rather than the page one, so it reads as
+   part of the table and not as a strip of background showing through it, with
+   a hairline as the only edge. It is already sticky — an opaque fill is what
+   makes that legible when rows pass under it. */
 .ds-th {
   position: sticky;
   top: 0;
   text-align: left;
   padding: var(--sp-8) var(--sp-8);
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border-hairline);
   white-space: nowrap;
   color: var(--text-strong);
 }
@@ -4974,7 +5210,7 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
 }
 .ds-td {
   padding: var(--sp-4) var(--sp-8);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-hairline);
   white-space: nowrap;
   color: var(--text-strong);
   max-width: 260px;
@@ -5039,9 +5275,35 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
   align-items: center;
   gap: var(--sp-12);
 }
+/* The column labels are the table's HEAD: they stay put while the rows scroll
+   under them, which is the whole difference between a list of divs and a table
+   you can read a hundred rows of. Two classes, so it outranks `.ws-table-cols`
+   further down the file (an equal-specificity tie decided by source order is
+   not something to build on). The background has to be opaque — a translucent
+   header with rows sliding through it is worse than no header. */
+.ds-saved .ds-saved-cols {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-1);
+  border-bottom-color: var(--border-hairline);
+}
+/* Rows is a NUMBER column: right-aligned, so the digits line up down the list,
+   and its label goes with it — a left-aligned header over right-aligned figures
+   is the tell that a table was built out of flexbox. */
+.ds-saved .ds-saved-cols span:nth-child(2) { text-align: right; }
+.ds-saved-meta {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+/* One row height for every row, whatever is in it: the action cell's buttons
+   are 28px and the name cell is a single line, so nothing here sets the height
+   except this. */
 .ds-saved-item {
-  border-bottom: 1px solid var(--border);
-  padding: 2px var(--sp-8);
+  min-height: 40px;
+  border-bottom: 1px solid var(--border-hairline);
+  padding: 0 var(--sp-8);
 }
 .ds-saved-item:last-child { border-bottom: 0; }
 .ds-saved-item:hover { background: var(--surface-2); }
@@ -5049,20 +5311,31 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
    name button keeps its own focus ring as the keyboard-reachable control. */
 .ds-saved-item { cursor: pointer; }
 /* The name cell IS the click target — a link-like control, because the row now
-   carries the border and the padding. */
+   carries the border and the padding. Its own padding is gone: the row's
+   min-height sets the rhythm now, and a padded child inside a 40px grid row
+   just fights it. */
 .ds-saved-open {
   display: flex;
   align-items: center;
+  /* Fills the 40px row rather than being an 18px target inside it — the row's
+     own click handler covers the mouse, but this is what a keyboard lands on. */
+  align-self: stretch;
   gap: var(--sp-8);
   min-width: 0;
   text-align: left;
-  padding: var(--sp-12) 0;
+  padding: 0;
   background: none;
   border: 0;
   border-radius: 0;
   cursor: pointer;
 }
 .ds-saved-open:hover .ds-saved-name { color: var(--accent); }
+/* Inside a scrolling list an outward ring is clipped by the container, so this
+   one draws inward. */
+.ds-saved-open:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: -2px;
+}
 .ds-saved-name {
   font-size: var(--t-13);
   font-weight: 500;
@@ -5075,12 +5348,12 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
 .ds-source-badge {
   display: inline-block;
   padding: 2px var(--sp-8);
-  border: 1px solid var(--border-2, var(--border));
-  border-radius: 999px;
-  background: var(--bg);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-full);
+  background: var(--surface-1);
   font-size: var(--t-11);
   font-weight: 500;
-  color: var(--text);
+  color: var(--muted);
 }
 .ds-row-actions {
   display: flex;
@@ -5112,7 +5385,7 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
 .ds-saved-viz:focus-visible { opacity: 1; pointer-events: auto; }
 
 .ds-saved-del {
-  width: 30px;      /* square: the trash is icon-only, .btn-sm's 11px side padding is for text */
+  width: var(--ctl-sm);  /* square: the trash is icon-only, .btn-sm's side padding is for text */
   padding: 0;
   background: none;
   border-color: transparent;
@@ -5246,12 +5519,30 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
   font-size: var(--t-12);
   color: var(--muted);
 }
+/* The meta line is ONE size. `.ds-fresh` is 11px because it also rides in a
+   dense list row; under a 20px title it is the page's subtitle, so it matches
+   the rest of the line rather than being a third size on it. */
+.ds-explorer-meta .ds-fresh { font-size: var(--t-12); }
 /* What the dataset page is FOR: the three flows it can start. */
 .ds-explorer-actions {
   display: flex;
   align-items: center;
-  gap: var(--sp-4);
+  gap: var(--ctl-gap);
   flex: 0 0 auto;
+}
+/* Primary → secondary → ghost, left to right. "New visual" is the one thing
+   this page is most likely to be for, "New dashboard" is its peer, and "Ask"
+   is the quiet third — three equally solid buttons is three primaries, which
+   is none. The ghost treatment is `.btn-ghost`'s; it is applied by id because
+   the markup belongs to another pass. */
+#ds-act-ask {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+#ds-act-ask:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
 }
 .ds-back { flex: 0 0 auto; }
 
@@ -5438,27 +5729,38 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
    role=tab buttons, so the attribute IS the state. */
 .ds-tabs {
   display: flex;
-  gap: 2px;
+  gap: var(--sp-16);
   margin: var(--sp-4) 0 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-hairline);
 }
+/* The base `.tab` treatment (see DESIGN FOUNDATIONS), written out here because
+   the markup carries `.ds-tab` and not `.tab` — same geometry, same states, so
+   the two strips cannot drift apart. The underline is the ONLY marker: a tab
+   that also turns accent-coloured is saying the same thing twice and loses the
+   contrast a selected label wants. */
 .ds-tab {
-  padding: var(--sp-4) var(--sp-12) var(--sp-8);
+  height: var(--ctl-lg);
+  padding: 0;
   background: none;
   border: 0;
   /* The underline sits ON the strip's hairline — see .an-tab for why. */
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   font: inherit;
-  font-size: var(--t-12);
-  font-weight: 600;
+  font-size: var(--t-13);
+  font-weight: 400;
   color: var(--muted);
   cursor: pointer;
 }
 .ds-tab:hover { color: var(--text); }
+.ds-tab:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
 .ds-tab[aria-selected="true"] {
-  color: var(--accent);
+  color: var(--text-strong);
   border-bottom-color: var(--accent);
+  font-weight: 500;
 }
 
 /* The tab body. A column for Data and Quality; Prepare turns it into a
@@ -5660,10 +5962,12 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
   justify-content: space-between;
   gap: var(--sp-8);
 }
+/* The dataset's name is the PAGE TITLE while the explorer is open — this is
+   not a card heading inside another page, it is the whole surface. */
 .ds-explorer-title {
-  font-size: var(--t-15);
-  letter-spacing: var(--tr-tight);
-  line-height: var(--lh-snug);
+  font-size: var(--t-20);
+  letter-spacing: var(--tr-tighter);
+  line-height: var(--lh-tight);
   font-weight: 600;
   color: var(--text-strong);
   margin: 0;
@@ -5780,30 +6084,48 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
   white-space: nowrap;
 }
 .ds-th-name:hover { color: var(--accent); }
+/* A square target around the chevron, not a bare glyph: 16px of icon with no
+   box around it is a 16px click target, and the hover fill is what says the
+   header is sortable at all. */
 .ds-th-sort {
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-4);
+  justify-content: center;
+  width: var(--sp-24);
+  height: var(--sp-24);
   background: none;
   border: none;
+  border-radius: var(--r-sm);
   padding: 0;
   margin: 0;
   font: inherit;
-  font-weight: 600;
-  color: var(--text-strong);
+  color: var(--muted);
   cursor: pointer;
 }
 .ds-th-sort:hover {
-  color: var(--accent);
+  background: var(--surface-2);
+  color: var(--text);
 }
+.ds-th-sort:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+/* A real chevron (dsGrid.ts sets `chevron-up`/`chevron-down`), sized down from
+   the sprite's 16 so it sits beside a 13px label instead of over it. */
 .ds-th-arrow {
-  font-size: var(--t-11);
-  color: var(--muted);
+  display: inline-flex;
+  color: inherit;
 }
-/* An unsorted column keeps a dimmed arrow rather than an empty span: the
+.ds-th-arrow svg {
+  width: 14px;
+  height: 14px;
+}
+/* The SORTED column's chevron is the state, so it takes the accent; an
+   unsorted one keeps a dimmed arrow rather than an empty span, because the
    control has to be findable before you have already used it. */
-.ds-th-arrow.is-idle { opacity: 0.3; }
-.ds-th-sort:hover .ds-th-arrow.is-idle { opacity: 0.7; }
+.ds-th-arrow:not(.is-idle) { color: var(--accent); }
+.ds-th-arrow.is-idle { opacity: 0.4; }
+.ds-th-sort:hover .ds-th-arrow.is-idle { opacity: 1; }
 /* Which column the open profile is describing. */
 .ds-th.is-profiled { background: var(--surface-2); }
 .ds-th.is-profiled .ds-th-name { color: var(--accent); }
@@ -5818,15 +6140,30 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
 .ds-th-edit:hover {
   color: var(--accent);
 }
+/* The column TYPE, as a quiet control. It is a native <select> — it cannot
+   carry an SVG chevron like the sort button beside it, so it earns its place
+   the other way: small, muted, borderless until pointed at, so a header row
+   reads as [name] [sort] and not as [name] [sort] [a full-size form field].
+   The explicit height is doing real work — the base `select` rule sets 32px,
+   which is taller than the header label it sits on. */
 .ds-th-retype {
+  height: var(--sp-24);
   font-size: var(--t-11);
-  padding: 1px var(--sp-4);
-  color: var(--text-strong);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  padding: 0 var(--sp-4);
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: var(--tr-label);
+}
+.ds-th-retype:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.ds-th-retype:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
 }
 .ds-th-summary {
   font-size: var(--t-11);
@@ -6478,19 +6815,30 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
   align-items: stretch;
   gap: 2px;
   text-align: left;
-  padding: 0 0 var(--sp-12);
-  background: var(--surface);
-  border: 1px solid var(--border);
+  /* The tile is full-bleed to the card's edges; the 16 belongs to the text
+     block under it (and to the card's bottom edge). A padded thumbnail is a
+     picture INSIDE a card rather than the face of one. */
+  padding: 0 0 var(--sp-16);
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
   border-radius: var(--r-lg);
   cursor: pointer;
   overflow: hidden;
   transition: border-color 140ms var(--ease), box-shadow 140ms var(--ease),
     transform 140ms var(--ease);
 }
+/* Hover RAISES the card: the floating surface, and a 2px accent edge drawn as
+   1px of border plus a 1px ring. A literal `border-width: 2px` on hover moves
+   every pixel of the card's content by one as the pointer crosses it. */
 .viz-card-body:hover {
-  border-color: var(--border-2);
-  box-shadow: var(--shadow-md);
+  background: var(--surface-float);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow-md);
   transform: translateY(-1px);
+}
+.viz-card-body:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
 }
 /* A card that lifts is decoration; a card that changes colour is the state.
    Keep the second, drop the first, when motion is unwelcome. */
@@ -6506,9 +6854,9 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
   align-items: center;
   justify-content: center;
   aspect-ratio: 16 / 10;
-  margin-bottom: var(--sp-8);
+  margin-bottom: var(--sp-12);
   background: linear-gradient(160deg, var(--surface-2), var(--inset));
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-hairline);
   /* The per-type accent is set from JS onto this element (--viz-accent); the
      fallback keeps the tile sane if a type ever misses the map. */
   color: var(--viz-accent, var(--accent));
@@ -6534,21 +6882,26 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
   height: 100% !important;
 }
 .viz-card-tile--thumb .viz-card-glyph { display: none; }
+/* 500, not 600: the name is the card's label, not a heading. At 600 a grid of
+   twelve cards is twelve bold lines and nothing leads. */
 .viz-card-name {
   font-size: var(--t-13);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-strong);
-  padding: 0 var(--sp-12);
+  padding: 0 var(--sp-16);
   /* One line: a two-line name would make neighbouring cards different heights
      and the grid would stop reading as a grid. */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Type · time. --muted, not --text-dim: it is the one thing the card says
+   about itself besides its name, and dim put it below the threshold of being
+   worth reading at all. */
 .viz-card-meta {
   font-size: var(--t-12);
-  color: var(--text-dim);
-  padding: 0 var(--sp-12);
+  color: var(--muted);
+  padding: 0 var(--sp-16);
 }
 
 /* Hover-revealed controls. They must stay KEYBOARD reachable, so
@@ -6557,9 +6910,9 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
 .viz-card-star,
 .viz-card-menu {
   position: absolute;
-  top: 8px;
-  width: 26px;
-  height: 26px;
+  top: var(--sp-8);
+  width: var(--ctl-sm);
+  height: var(--ctl-sm);
   line-height: 1;
   font-size: var(--t-13);
   display: flex;
@@ -6578,8 +6931,8 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
   transition: opacity 140ms var(--ease), color 140ms var(--ease),
     border-color 140ms var(--ease);
 }
-.viz-card-star { left: 8px; }
-.viz-card-menu { right: 8px; }
+.viz-card-star { left: var(--sp-8); }
+.viz-card-menu { right: var(--sp-8); }
 .viz-card:hover .viz-card-star,
 .viz-card:hover .viz-card-menu,
 .viz-card:focus-within .viz-card-star,
@@ -7009,11 +7362,13 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
   gap: var(--sp-4);
   min-width: 0;
 }
+/* The add-actions are four ordinary SECONDARY buttons, not a segment group.
+   `.btn` is a card surface behind a hairline now, so a --surface-2 tray under
+   them painted the hover colour behind four buttons that were not hovered. */
 .dash-head-zone--add {
-  gap: 2px;
-  padding: 2px;
-  border-radius: var(--r-md);
-  background: var(--surface-2);
+  gap: var(--sp-4);
+  padding: 0;
+  background: none;
 }
 .dash-head-spacer { flex: 1 1 0; }
 body.an-focus .dash-head-zone { display: contents; }
@@ -7021,12 +7376,21 @@ body.an-focus .dash-head-zone--add { background: none; padding: 0; }
 body.an-focus /* Undo / redo sit with Save because they are the same kind of control: what
    happens to the edit. Icon-only and square, narrower than a labelled button —
    the words are in the tooltip, which has to name the actual change anyway. */
-.dash-hist-btn {
+/* Undo / redo are icon buttons, not labelled ones with the label removed: no
+   border, no fill, square at the small control height, and the meaning is in
+   the tooltip (which has to name the actual change anyway). The `.btn` in the
+   markup is out-specified here rather than edited out of the HTML. */
+.btn.dash-hist-btn {
   display: inline-grid;
   place-items: center;
-  width: 30px;
+  width: var(--ctl-sm);
+  height: var(--ctl-sm);
   padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
 }
+.btn.dash-hist-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
 .dash-head-spacer--2 { display: none; }
 
 /* ── Analyses page: hero, table, empty state ────────────────────────────────
@@ -7133,6 +7497,32 @@ body.an-focus /* Undo / redo sit with Save because they are the same kind of con
   gap: var(--sp-12);
 }
 .an-card { position: relative; } /* anchors the ⋯ overlay onto the preview */
+/* The card system, stated on the DASHBOARDS half of it. The element carries
+   `.viz-card-body .an-card-body`, so the shape comes from the gallery and these
+   are the surfaces: card fill, hairline edge, 13px corner, and a hover that
+   RAISES to the floating surface behind a 2px accent edge (border-colour plus a
+   1px inset ring — a real 2px border would reflow the grid by a pixel on every
+   hover). The name/meta gutter goes to 16 to match the card padding elsewhere;
+   the preview strip stays flush on purpose, it is the picture. */
+.an-card-body {
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+}
+.an-card-body:hover {
+  background: var(--surface-float);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.an-card-body:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.an-card-body .viz-card-name,
+.an-card-body .viz-card-meta {
+  padding-left: var(--sp-16);
+  padding-right: var(--sp-16);
+}
 /* The preview strip: one tile, or two sharing a hairline. It owns the aspect
    ratio rather than the tiles — two 16/10 tiles side by side would make a
    dashboard card twice as tall as a gallery one for no extra information. */
@@ -7637,8 +8027,16 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   opacity: 0;
   transition: opacity 120ms ease;
 }
+/* Same three steps as the generic rule further down (0 → 60% → 100%); this
+   block only exists to out-specify it, since `.dash-editor--analysis #dash-grid`
+   carries an id. A SELECTED card is state, not chrome, so it goes straight
+   to full. */
 .dash-editor--analysis #dash-grid .dash-card:hover .dash-card-ctrls,
-.dash-editor--analysis #dash-grid .dash-card:focus-within .dash-card-ctrls,
+.dash-editor--analysis #dash-grid .dash-card:focus-within .dash-card-ctrls {
+  opacity: 0.6;
+}
+.dash-editor--analysis #dash-grid .dash-card .dash-card-ctrls:hover,
+.dash-editor--analysis #dash-grid .dash-card .dash-card-ctrls:focus-within,
 .dash-editor--analysis #dash-grid .dash-card.is-selected .dash-card-ctrls {
   opacity: 1;
 }
@@ -8144,53 +8542,66 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   white-space: nowrap;
 }
 
+/* THE PAGE SWITCHER IS A SEGMENTED CONTROL — the `.seg` tray, with the rename /
+   remove / +Page affordances riding inside it at the right end. It was a row of
+   four separately-bordered buttons stretched across a full-width rule, which is
+   the look of a tab bar that never decided it was one. dashGrid.ts appends the
+   tabs and the controls as flat siblings of #dash-pages, so the tray IS the
+   strip: shrink-wrapped with align-self rather than spanning the sheet. */
 .dash-pages {
-  display: flex;
+  display: inline-flex;
+  align-self: flex-start;
   align-items: center;
-  gap: var(--sp-4);
+  gap: 2px;
   flex-wrap: wrap;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: var(--sp-8);
+  max-width: 100%;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
 }
 .dash-page-tab {
-  padding: var(--sp-4) var(--sp-12);
-  font-size: var(--t-13);
+  height: var(--sp-24);
+  padding: 0 var(--sp-12);
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
   color: var(--muted);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  background: transparent;
+  border: none;
+  border-radius: var(--r-sm);
   cursor: pointer;
 }
-.dash-page-tab:hover { border-color: var(--accent); }
+.dash-page-tab:hover { color: var(--text); }
 .dash-page-tab.active {
   color: var(--text-strong);
-  border-color: var(--accent);
-  background: var(--surface-2);
-  font-weight: 600;
+  background: var(--surface-1);
+  font-weight: 500;
 }
 .dash-page-ctrl {
-  width: 26px;
-  height: 26px;
+  width: var(--sp-24);
+  height: var(--sp-24);
   line-height: 1;
-  font-size: var(--t-13);
+  font-size: var(--t-12);
   color: var(--muted);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  background: transparent;
+  border: none;
+  border-radius: var(--r-sm);
   cursor: pointer;
 }
-.dash-page-ctrl:hover { border-color: var(--accent); color: var(--accent); }
+.dash-page-ctrl:hover { background: var(--surface-1); color: var(--text); }
 .dash-page-add {
-  margin-left: var(--sp-8);
-  padding: var(--sp-4) var(--sp-8);
-  font-size: var(--t-13);
+  margin-left: var(--sp-4);
+  height: var(--sp-24);
+  padding: 0 var(--sp-8);
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
   color: var(--muted);
-  background: var(--bg);
-  border: 1px dashed var(--border);
-  border-radius: 6px;
+  background: transparent;
+  border: none;
+  border-radius: var(--r-sm);
   cursor: pointer;
 }
-.dash-page-add:hover { border-color: var(--accent); color: var(--accent); }
+.dash-page-add:hover { background: var(--surface-1); color: var(--text); }
 
 .dash-grid {
   display: grid;
@@ -8215,34 +8626,52 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   border-radius: 12px; /* was 8px — the new design generation's softer corner */
   background: var(--surface-2);
 }
+/* One height for every card head in the grid, so the titles line up across a
+   row whatever is under them. Quiet fill (transparent → card surface) so the
+   CHART in the body is the loudest thing on the tile, not this strip. */
 .dash-card-head {
   display: flex;
   align-items: center;
   gap: var(--sp-4);
-  /* Roomier than the old 4px, and a quieter (transparent → card surface) head so
-     the CHART in the body is the loudest thing on the tile, not this strip. */
-  padding: var(--sp-8) var(--sp-8);
+  flex: 0 0 var(--ctl-lg);
+  height: var(--ctl-lg);
+  padding: 0 var(--sp-8);
   border-bottom: 1px solid var(--border);
   background: transparent;
   cursor: grab;
 }
 .dash-card-head:active { cursor: grabbing; }
+/* A card's title is a title, at the body size. At 11/600/muted it was set like
+   a section LABEL — the smallest, loudest type in the app, on the one strip
+   that should be the quietest. */
 .dash-card-title {
   flex: 1;
   min-width: 0;
-  font-size: var(--t-11);
-  font-weight: 600;
-  color: var(--muted);
+  font-size: var(--t-13);
+  font-weight: 500;
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* THE CONTROLS ARE CHROME, so they are not there until you point at the card:
+   0 at rest → 60% on card hover → 100% on the cluster itself. A grid where
+   every card shows its buttons at rest reads as a control panel, not as
+   content. `:focus-within` is what keeps them reachable from the keyboard —
+   without it, tabbing moves focus onto something invisible.
+   Equal-specificity `.dash-card .dash-card-ctrls:hover` (not the bare class)
+   so it outranks the card-hover rule above it rather than losing to it. */
 .dash-card-ctrls {
   display: flex;
   align-items: center;
   gap: 2px;
   flex-wrap: wrap;
+  opacity: 0;
 }
+.dash-card:hover .dash-card-ctrls,
+.dash-card:focus-within .dash-card-ctrls { opacity: 0.6; }
+.dash-card .dash-card-ctrls:hover,
+.dash-card .dash-card-ctrls:focus-within { opacity: 1; }
 .dash-card-btn {
   min-width: 22px;
   height: 22px;
@@ -8250,12 +8679,16 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   line-height: 1;
   font-size: var(--t-11);
   color: var(--muted);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
   cursor: pointer;
 }
-.dash-card-btn:hover { border-color: var(--accent); color: var(--accent); }
+.dash-card-btn:hover { background: var(--surface-3); color: var(--text); }
+.dash-card-btn:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
 /* The one ⋯ that replaced the nine-glyph cluster. Square, and a size up: it is
    now the only thing in the strip, so it stops being a row of tiny targets and
    becomes one ordinary one. */
@@ -8636,14 +9069,14 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   gap: var(--sp-8);
   flex-wrap: wrap;
   padding: var(--sp-8) 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-hairline);
 }
 .dash-toolbar-label {
-  font-size: var(--t-12);
+  font-size: var(--t-11);
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: .03em;
+  letter-spacing: var(--tr-label);
 }
 .dash-toolbar-filters {
   display: flex;
@@ -8657,16 +9090,20 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   gap: var(--sp-4);
   flex-wrap: wrap;
 }
+/* The base chip: pill, the small control height, a card fill behind a border —
+   not the --surface-2 hover grey, which made every chip look permanently
+   pointed at. */
 .dash-filter-chip {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-4);
-  padding: 3px var(--sp-4) 3px var(--sp-8);
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-4) 0 var(--sp-12);
   font-size: var(--t-12);
-  color: var(--text-strong);
-  background: var(--surface-2);
+  color: var(--text);
+  background: var(--surface-1);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--r-full);
 }
 .dash-filter-chip-txt { white-space: nowrap; }
 .dash-filter-chip-x {
@@ -8683,7 +9120,11 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   border-radius: 50%;
   cursor: pointer;
 }
-.dash-filter-chip-x:hover { color: var(--error); background: var(--bg); }
+.dash-filter-chip-x:hover { color: var(--error); background: var(--surface-2); }
+.dash-filter-chip-x:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
 .dash-filter-none { font-size: var(--t-12); color: var(--muted); }
 
 /* ── THE FILTER BAR: control cards, as chips, between the tabs and the grid ──
@@ -8697,7 +9138,7 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   align-items: flex-start;
   gap: var(--sp-8);
   padding: var(--sp-8) 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-hairline);
 }
 .dash-fb-chips {
   display: flex;
@@ -8707,21 +9148,25 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   min-width: 0;
 }
 .dash-fb-spacer { flex: 1 1 auto; }
+/* Same chip, carrying a live control. `min-height` rather than `height`: a
+   date-range or multi widget is taller than 28 and must be allowed to grow —
+   28 is the floor that makes a plain dropdown chip match the ones beside it. */
 .dash-fb-chip {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-4);
   max-width: 100%;
-  padding: var(--sp-4) var(--sp-4) var(--sp-4) var(--sp-8);
-  background: var(--surface-2);
+  min-height: var(--ctl-sm);
+  padding: var(--sp-4) var(--sp-4) var(--sp-4) var(--sp-12);
+  background: var(--surface-1);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--r-full);
 }
 /* A chip with something selected reads as ON at a glance — the bar is the only
    place that says a dashboard's figures are narrowed. */
 .dash-fb-chip--on {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
 }
 .dash-fb-chip-label {
   font-size: var(--t-12);
@@ -8760,8 +9205,13 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   border-radius: 50%;
   cursor: pointer;
 }
-.dash-fb-chip-x:hover { color: var(--error); background: var(--bg); }
-.dash-fb-chip-menu:hover { color: var(--text-strong); background: var(--bg); }
+.dash-fb-chip-x:hover { color: var(--error); background: var(--surface-2); }
+.dash-fb-chip-menu:hover { color: var(--text-strong); background: var(--surface-2); }
+.dash-fb-chip-x:focus-visible,
+.dash-fb-chip-menu:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
 .dash-fb-clear { flex: 0 0 auto; }
 .dash-toolbar-quick { display: flex; align-items: center; gap: var(--sp-4); }
 .dash-toolbar-actions { display: flex; align-items: center; gap: var(--sp-4); }
@@ -11159,13 +11609,18 @@ body.cap-focus .cap-back {
 }
 .dk-handle:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
 
+/* One stated height, not whatever the tallest thing inside happened to make it
+   — the panel's header now lines up with the 48px band the rest of the app's
+   chrome uses instead of being 51px because a 26px button had 12px of padding
+   above and below it. */
 .dk-head {
   flex: none;
   display: flex;
   align-items: center;
   gap: var(--sp-8);
-  padding: var(--sp-12) var(--sp-12);
-  border-bottom: 1px solid var(--border);
+  height: var(--sp-48);
+  padding: 0 var(--sp-12);
+  border-bottom: 1px solid var(--border-hairline);
 }
 /* The "Based on …" line is now its OWN row under the header (the header carries
    the thread title + switcher instead), so it must NOT grow into the column —
@@ -11197,10 +11652,10 @@ body.cap-focus .cap-back {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: var(--ctl-sm);
+  height: var(--ctl-sm);
   border: none;
-  border-radius: var(--r-md);
+  border-radius: var(--r-sm);
   background: none;
   color: var(--muted);
   cursor: pointer;
@@ -11213,23 +11668,30 @@ body.cap-focus .cap-back {
    The header's active-conversation title; clicking it opens the thread list
    popover (#dk-thread-list). It grows to fill the head so .dk-head-actions
    pins to the right. */
+/* A CHIP, sized to the thread's name: `flex: 1 1 auto` stretched it the whole
+   width of the head, which is a pill only in the sense that it had a radius.
+   `margin-right: auto` is what still pins .dk-head-actions to the right once it
+   stops growing. */
 .dk-thread-title {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+  margin-right: auto;
   min-width: 0;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: var(--sp-8);
-  padding: var(--sp-4) var(--sp-8);
-  border: none;
-  border-radius: var(--r-md);
-  background: none;
+  gap: var(--sp-4);
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface-1);
   color: var(--text);
   font: inherit;
-  font-size: var(--t-13);
-  font-weight: 600;
+  font-size: var(--t-12);
+  font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
 }
-.dk-thread-title:hover { background: var(--surface-2); }
+.dk-thread-title:hover { background: var(--surface-2); color: var(--text-strong); }
 .dk-thread-title:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
 .dk-thread-title .ic { flex: none; color: var(--muted); }
 .dk-thread-title-text {
@@ -11442,7 +11904,7 @@ body.cap-focus .cap-back {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.dk-suggest:hover { border-color: var(--accent); color: var(--accent); }
+.dk-suggest:hover { border-color: var(--accent); color: var(--accent); background: var(--surface-2); }
 .dk-suggest:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
 
 /* The composer is the panel's one raised object — the .xp-composer treatment
@@ -11460,8 +11922,10 @@ body.cap-focus .cap-back {
   gap: var(--sp-8);
   margin: 0 var(--sp-12) var(--sp-12);
   padding: var(--sp-8) var(--sp-8) var(--sp-8) var(--sp-12);
-  background: var(--surface);
-  border: 1px solid var(--border-2);
+  /* The panel's one FLOATING object, so it says so with the floating surface
+     and the hairline rather than with a heavier grey border. */
+  background: var(--surface-float);
+  border: 1px solid var(--border-hairline);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-md);
 }
@@ -11496,15 +11960,18 @@ body.cap-focus .cap-back {
 .dk-input:focus-visible { outline: none; }
 .dk-input::placeholder { color: var(--text-dim); }
 .dk-input:disabled { color: var(--text-dim); cursor: not-allowed; }
+/* .icon-btn + .icon-btn-primary, spelled out: the markup has neither class
+   (see the report), so the geometry is restated here at the shared 32px control
+   height and the shared --r-sm corner. */
 .dk-send {
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: var(--ctl-md);
+  height: var(--ctl-md);
   border: none;
-  border-radius: var(--r-full);
+  border-radius: var(--r-sm);
   background: var(--accent);
   color: var(--accent-ink);
   cursor: pointer;
@@ -11586,15 +12053,22 @@ body.cap-focus .cap-back {
 }
 .xp-bubble {
   padding: var(--sp-8) var(--sp-12);
-  border-radius: var(--r-md);
+  border-radius: var(--r-lg);
   font-size: var(--t-13);
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* The user's turn is a CARD on the stage — surface + hairline — not an accent
+   fill. The accent is the app's one loud colour and it is reserved for actions;
+   spending it on every line the reader typed made the transcript a column of
+   blue blocks, and on the washed stage a hairline card separates just as
+   clearly. The assistant's turn stays plain text (below), so which side is
+   which is still unambiguous. */
 .xp-msg-user .xp-bubble {
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  color: var(--text);
 }
 /* The ANSWER is not a message from someone else — it is the panel's content, so
    it reads as text on the panel rather than as a second chat bubble facing the
@@ -11741,7 +12215,7 @@ body.cap-focus .cap-back {
   font-size: var(--t-28);
   line-height: var(--lh-tight);
   font-weight: 600;
-  letter-spacing: -0.015em;
+  letter-spacing: var(--tr-tighter);
   color: var(--text-strong);
   margin: 0;
 }
@@ -11759,16 +12233,21 @@ body.cap-focus .cap-back {
 .home-ask-bar {
   display: flex;
   align-items: center;
-  gap: var(--sp-8);
-  padding: var(--sp-8) var(--sp-8) var(--sp-8) var(--sp-12);
-  background: var(--surface);
-  border: 1px solid var(--border-2);
+  gap: var(--ctl-gap);
+  /* THE HERO. 52px, full width of the page measure, and the one thing on Home
+     that left the page plane: --surface-float behind --shadow-md. */
+  min-height: 52px;
+  width: 100%;
+  padding: var(--sp-8) var(--sp-8) var(--sp-8) var(--sp-16);
+  background: var(--surface-float);
+  border: 1px solid var(--border-hairline);
   border-radius: var(--r-xl);
   /* The one element that lifts off both planes, so the eye lands here first. */
   box-shadow: var(--shadow-md);
   transition: border-color 0.14s var(--ease), box-shadow 0.14s var(--ease);
 }
-.home-ask-bar:focus-within { border-color: var(--accent); box-shadow: var(--shadow-lg); }
+.home-ask-bar:focus-within { border-color: var(--accent-line); box-shadow: var(--shadow-lg); }
+/* The leading mark. It is the only accent on the row until you type. */
 .home-ask-icon { flex: none; display: flex; color: var(--accent); }
 .home-ask-icon svg { display: block; }
 .home-ask-input {
@@ -11789,8 +12268,8 @@ body.cap-focus .cap-back {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: var(--ctl-lg);
+  height: var(--ctl-lg);
   border: none;
   border-radius: var(--r-lg);
   background: var(--accent);
@@ -11802,24 +12281,29 @@ body.cap-focus .cap-back {
 .home-ask-send:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 2px; }
 .home-ask-send svg { display: block; }
 
-/* Starter chips — the same pill as the dock's .dk-suggest, wrapped not stacked. */
-.home-ask-suggests { display: flex; flex-wrap: wrap; gap: var(--sp-4); }
+/* Starter chips — the base .chip GHOST treatment, spelled out because the
+   markup carries only this class. Never the accent state: these are prompts,
+   not a selection, and the accent's one job on Home is the ask bar. */
+.home-ask-suggests { display: flex; flex-wrap: wrap; gap: var(--sp-8); }
 .home-ask-chip {
-  padding: var(--sp-4) var(--sp-12);
-  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-12);
+  border: 1px solid var(--border-hairline);
   border-radius: var(--r-full);
-  background: var(--surface);
+  background: transparent;
   color: var(--muted);
   font: inherit;
-  font-size: var(--t-13);
+  font-size: var(--t-12);
   cursor: pointer;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.home-ask-chip:hover { border-color: var(--accent); color: var(--accent); }
-.home-ask-chip:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
+.home-ask-chip:hover { background: var(--surface-2); border-color: var(--border); color: var(--text); }
+.home-ask-chip:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 2px; }
 
 /* ── Two-column body ─────────────────────────────────────────────────────── */
 .home-cols {
@@ -11837,18 +12321,21 @@ body.cap-focus .cap-back {
 /* Filter pills — All / Datasets / Dashboards, over the Recent list. */
 .home-filter { display: flex; gap: var(--sp-4); }
 .home-pill {
-  padding: var(--sp-4) var(--sp-12);
-  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-12);
+  border: 1px solid var(--border-hairline);
   border-radius: var(--r-full);
-  background: var(--surface);
+  background: var(--surface-1);
   color: var(--muted);
   font: inherit;
-  font-size: var(--t-13);
+  font-size: var(--t-12);
   font-weight: 500;
   cursor: pointer;
 }
-.home-pill:hover { color: var(--text); border-color: var(--border-3); }
-.home-pill:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
+.home-pill:hover { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+.home-pill:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 2px; }
 .home-pill.is-active {
   background: var(--accent-soft);
   border-color: transparent;
@@ -11856,18 +12343,26 @@ body.cap-focus .cap-back {
   font-weight: 600;
 }
 
-/* Right-column cards ("Your data", "Saved visuals"). */
+/* Right-column cards ("Your data", "Saved visuals") — --surface-1 behind a
+   hairline and NO shadow: a card is not floating, only the ask bar is. */
 .home-card {
   display: flex;
   flex-direction: column;
   gap: var(--sp-12);
   padding: var(--sp-16);
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
   border-radius: var(--r-lg);
 }
 .home-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-8); }
-.home-card-h { font-size: var(--t-13); font-weight: 600; color: var(--text-strong); margin: 0; }
+.home-card-h {
+  font-size: var(--t-15);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tr-tight);
+  font-weight: 600;
+  color: var(--text-strong);
+  margin: 0;
+}
 
 /* "Your data": the dataset list (homeData fills #home-data-list). */
 .home-data-list { display: flex; flex-direction: column; gap: 2px; max-height: 210px; overflow-y: auto; }
@@ -11886,6 +12381,7 @@ body.cap-focus .cap-back {
   cursor: pointer;
 }
 .home-data-row:hover { background: var(--surface-2); }
+.home-data-row:hover .home-data-name { color: var(--text-strong); }
 .home-data-row:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: -2px; }
 .home-data-name {
   font-size: var(--t-13);
@@ -11940,10 +12436,11 @@ body.cap-focus .cap-back {
 .home-quick { display: flex; align-items: center; gap: var(--sp-12); flex-wrap: wrap; }
 .home-quick-label {
   font-size: var(--t-11);
-  font-weight: 700;
-  letter-spacing: 0.09em;
+  line-height: var(--lh-body);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
   text-transform: uppercase;
-  color: var(--text-dim);
+  color: var(--muted);
   flex: none;
 }
 .home-quick-row { display: flex; align-items: center; gap: var(--sp-8); flex-wrap: wrap; }
@@ -11985,10 +12482,11 @@ body.cap-focus .cap-back {
   align-items: baseline;
   gap: var(--sp-8);
   font-size: var(--t-11);
-  font-weight: 700;
-  letter-spacing: 0.09em;
+  line-height: var(--lh-body);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
   text-transform: uppercase;
-  color: var(--text-dim);
+  color: var(--muted);
   margin: 0;
 }
 .home-sec-count { font-size: var(--t-11); font-weight: 600; color: var(--text-faint); letter-spacing: 0.04em; }
@@ -12005,15 +12503,15 @@ body.cap-focus .cap-back {
   cursor: pointer;
 }
 .home-showall:hover { color: var(--text-strong); text-decoration: underline; }
+.home-showall:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 2px; }
 
 .home-rows {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-hairline);
   border-radius: var(--r-lg);
   overflow: hidden;
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
+  background: var(--surface-1);
 }
 /* An empty section is a single designed panel, so it must not also wear the
    row-list chrome — otherwise it reads as a panel inside a panel. */
@@ -12036,14 +12534,19 @@ body.cap-focus .cap-back {
 /* One row: type glyph · name over a meta line · time · star. Two lines, because
    a name and a timestamp left the two questions that actually matter — what
    kind of thing is this, and how big is it — unanswered. */
+/* ONE 40px line: type icon · name · meta · time (right, tabular) · star.
+   It was two stacked lines at ~54px; the meta now trails the name on the same
+   baseline, which is what lets eight rows read as a list rather than a stack
+   of cards and puts every timestamp on the same right edge. */
 .home-row {
   display: flex;
   align-items: center;
-  gap: var(--sp-12);
+  gap: var(--ctl-gap);
   width: 100%;
-  padding: var(--sp-8) var(--sp-12);
+  height: 40px;
+  padding: 0 var(--sp-12);
   border: none;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-hairline);
   background: transparent;
   font: inherit;
   text-align: left;
@@ -12059,19 +12562,28 @@ body.cap-focus .cap-back {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: var(--r-md);
-  background: var(--surface-2);
-  color: var(--muted);
+  width: var(--sp-24);
+  height: var(--sp-24);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-faint);
 }
 .home-row:hover .home-row-icon { background: var(--surface-3); color: var(--text); }
 
-.home-row-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.home-row-body {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: var(--ctl-gap);
+  min-width: 0;
+  flex: 1 1 auto;
+}
 .home-row-name {
-  font-size: var(--t-15);
-  letter-spacing: var(--tr-tight);
-  line-height: var(--lh-snug);
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: var(--t-13);
+  letter-spacing: 0;
+  line-height: var(--lh-body);
   /* 500. 550 was a one-off token nothing else in hub.css used; the comparable
      .viz-card-name is 600, so resolving to 500 keeps this lighter rather than
      raising it. */
@@ -12088,8 +12600,11 @@ body.cap-focus .cap-back {
   display: flex;
   align-items: baseline;
   gap: var(--sp-8);
+  flex: 0 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
   font-size: var(--t-12);
-  color: var(--muted);
+  color: var(--text-dim);
   min-width: 0;
 }
 .home-row-meta > * + *::before { content: '·'; margin-right: var(--sp-8); color: var(--text-faint); }
@@ -12097,15 +12612,27 @@ body.cap-focus .cap-back {
 .home-row-size { flex: none; font-variant-numeric: tabular-nums; }
 .home-row-proj { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* Right-aligned (`margin-left:auto`, because the meta may not fill the row)
+   and tabular, so every timestamp in the list shares one decimal edge. */
 .home-row-time {
   flex: none;
+  margin-left: auto;
+  padding-left: var(--sp-12);
+  text-align: right;
   font-size: var(--t-12);
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
+/* Revealed on hover — an unstarred row should not carry a grey star on every
+   line. `opacity`, not `visibility` or `display`: the star is a
+   role="button" with tabindex="0" (homePage.ts), and both of those take it OUT
+   of the tab order, so a keyboard user could never reach it. Opacity keeps it
+   focusable, keeps the column from collapsing, and :focus-visible below paints
+   it the moment it is tabbed to. An ALREADY starred row keeps its star at
+   rest: that is the state it is reporting. */
 .home-row-star {
   flex: none;
-  width: 24px;
+  width: var(--sp-24);
   text-align: center;
   font-size: var(--t-15);
   letter-spacing: var(--tr-tight);
@@ -12113,12 +12640,18 @@ body.cap-focus .cap-back {
   color: var(--text-faint);
   cursor: pointer;
   border-radius: var(--r-sm);
+  opacity: 0;
 }
+.home-row:hover .home-row-star,
+.home-row-star:hover,
+.home-row-star:focus,
+.home-row-star:focus-visible,
+.home-row-star.is-on { opacity: 1; }
 .home-row-star:hover { color: var(--warn); }
 /* Gold, not accent: "pinned" is a different signal from "the way forward", and
    giving it the accent is exactly how the accent stopped meaning anything. */
 .home-row-star.is-on { color: var(--warn); }
-.home-row-star:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
+.home-row-star:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 2px; }
 
 @media (max-width: 860px) { .home-row-proj { display: none; } }
 

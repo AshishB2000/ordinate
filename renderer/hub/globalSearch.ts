@@ -174,6 +174,20 @@ function initGlobalSearch(): void {
     }
   });
 
+  // ⌘K / Ctrl+K focuses the box from anywhere. The top bar RENDERS that hint
+  // beside the input, so the binding has to exist or the chrome is lying.
+  // Capture phase, because a focused textarea (the composer, the rules box)
+  // would otherwise swallow it.
+  document.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key !== 'k' && e.key !== 'K') return;
+    if (!e.metaKey && !e.ctrlKey) return;
+    if (e.altKey || e.shiftKey) return;
+    if (input.offsetParent === null) return; // hidden in body.cap-focus
+    e.preventDefault();
+    input.focus();
+    input.select();
+  }, true);
+
   // Clicking anywhere else closes it. Capture, so a click that also does
   // something else still dismisses first.
   document.addEventListener('click', (e) => {

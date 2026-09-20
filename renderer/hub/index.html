@@ -76,6 +76,10 @@
         <input id="global-search" class="hub-search-input" type="search" placeholder="Search"
           aria-label="Search datasets, dashboards and connectors"
           autocomplete="off" spellcheck="false" />
+        <!-- The shortcut that focuses this box (globalSearch.ts binds ⌘/Ctrl+K).
+             aria-hidden: the input's aria-label is its accessible name, and a
+             screen reader reading "Command K" after it is noise. -->
+        <span class="menu-shortcut" aria-hidden="true">⌘K</span>
       </div>
       <div id="global-search-results" class="hub-search-results" hidden></div>
     </div>
@@ -102,6 +106,16 @@
         aria-label="Assistant" aria-expanded="false" aria-controls="dk-panel">
         <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-columns"/></svg>
       </button>
+      <!-- The project / account door. Opens the SAME switcher as the sidebar's
+           project block (projects.ts openProjectSwitcher) — one list, two
+           triggers, because the sidebar is hidden in body.cap-focus and
+           body.an-focus while this bar is not. Icon-only, so aria-label IS the
+           accessible name. -->
+      <button id="topbar-user" class="icon-btn" type="button"
+        aria-haspopup="true" aria-expanded="false"
+        title="Project" aria-label="Project menu">
+        <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-user"/></svg>
+      </button>
     </div>
   </div>
 
@@ -120,6 +134,21 @@
          toggle moved to the top bar above: both are window-wide tools, and
          this column is for choosing a section. -->
     <aside id="app-sidebar" class="app-sidebar" aria-label="Navigation">
+
+      <!-- Which project am I in, and how do I leave it. Projects are demoted
+           (created implicitly by resolveProjectId), which is why there is no
+           gallery any more — but "demoted" is not "invisible": without this the
+           workspace never names the grouping its datasets and dashboards belong
+           to. #ws-project-name is the id adoptProject() has always written to
+           through a guarded lookup, kept for exactly this header; the button
+           opens the switcher in projects.ts. -->
+      <div class="as-project">
+        <button id="as-project-btn" class="as-project-btn" type="button"
+          aria-haspopup="true" aria-expanded="false" aria-label="Switch project">
+          <span class="as-project-name" id="ws-project-name">All projects</span>
+          <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+        </button>
+      </div>
 
       <!-- primary nav -->
       <nav class="as-nav" aria-label="Sections">
@@ -164,7 +193,7 @@
            catalog. This IS Sources. Count on More… is filled from the live
            connectors:catalog in a later phase. -->
       <div class="as-connect">
-        <div class="as-section-h">Connect</div>
+        <div class="as-section-h t-label">Connect</div>
         <!-- This shortcut IMPORTS a single file into a dataset — it is not the
              csv-folder CONNECTOR. It wore that connector's logo (data-logo-id=
              "csv-folder"), which is how an import action ended up carrying a
@@ -204,6 +233,15 @@
           <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-settings"/></svg>
           <span>Settings</span>
         </button>
+        <!-- The Assistant's readiness, pinned under Settings. It is a readout,
+             not a control: every AI surface in the app is gated on it, so "is
+             the Assistant set up?" should be answerable without opening a
+             panel. dkSync (dock.ts) owns data-state; the dot colour follows
+             it from CSS. -->
+        <div id="as-ai-status" class="as-ai-status" data-state="not_ready">
+          <span class="as-ai-dot" aria-hidden="true"></span>
+          <span class="as-ai-label">Assistant not set up</span>
+        </div>
       </div>
     </aside>
 
@@ -298,7 +336,7 @@
             <section class="home-sec home-sec--grow" id="home-recent">
               <div class="home-sec-head">
                 <h2 class="home-sec-h">Recent<span class="home-sec-count" id="home-recent-count"></span></h2>
-                <button class="home-showall" id="home-showall" type="button" hidden><span>Show all</span><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
+                <button class="btn btn-sm home-showall" id="home-showall" type="button" hidden><span>Show all</span><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
               </div>
               <div class="home-rows" id="home-recent-rows"></div>
             </section>
@@ -921,14 +959,14 @@
                the toolbar that nobody scrolled to. They are tabs now; the grid
                below belongs to the explorer, not to a tab, so Prepare can edit
                a step with its effect visible beside it. -->
-          <div class="ds-tabs" role="tablist" aria-label="Dataset views">
-            <button class="ds-tab" type="button" role="tab" id="ds-tab-data"
+          <div class="ds-tabs tabs" role="tablist" aria-label="Dataset views">
+            <button class="ds-tab tab" type="button" role="tab" id="ds-tab-data"
                     aria-selected="true" aria-controls="ds-tabp-data">Data</button>
-            <button class="ds-tab" type="button" role="tab" id="ds-tab-prepare"
+            <button class="ds-tab tab" type="button" role="tab" id="ds-tab-prepare"
                     aria-selected="false" aria-controls="ds-tabp-prepare" tabindex="-1">Prepare</button>
-            <button class="ds-tab" type="button" role="tab" id="ds-tab-quality"
+            <button class="ds-tab tab" type="button" role="tab" id="ds-tab-quality"
                     aria-selected="false" aria-controls="ds-tabp-quality" tabindex="-1">Quality</button>
-            <button class="ds-tab" type="button" role="tab" id="ds-tab-insights"
+            <button class="ds-tab tab" type="button" role="tab" id="ds-tab-insights"
                     aria-selected="false" aria-controls="ds-tabp-insights" tabindex="-1">Insights</button>
           </div>
 
@@ -1270,12 +1308,12 @@
             <div class="an-pane-body" id="an-props-body">
               <p class="an-pane-hint" id="an-props-hint">Select a visual card to edit it.</p>
               <div id="an-props-inner" hidden>
-                <div class="an-tabs" id="an-tabs" role="tablist" aria-label="Visual settings">
-                  <button class="an-tab is-on" type="button" role="tab" id="an-tab-build"
+                <div class="an-tabs tabs" id="an-tabs" role="tablist" aria-label="Visual settings">
+                  <button class="an-tab tab is-on" type="button" role="tab" id="an-tab-build"
                     data-tab="an-tabp-build" aria-selected="true" aria-controls="an-tabp-build">Build</button>
-                  <button class="an-tab" type="button" role="tab" id="an-tab-format"
+                  <button class="an-tab tab" type="button" role="tab" id="an-tab-format"
                     data-tab="an-tabp-format" aria-selected="false" aria-controls="an-tabp-format">Format</button>
-                  <button class="an-tab" type="button" role="tab" id="an-tab-interact"
+                  <button class="an-tab tab" type="button" role="tab" id="an-tab-interact"
                     data-tab="an-tabp-interact" aria-selected="false" aria-controls="an-tabp-interact">Interactions</button>
                 </div>
 
@@ -1404,7 +1442,10 @@
         <!-- Exit affordance shown only in presentation mode -->
         <button class="dash-present-exit" type="button" id="dash-present-exit" hidden aria-label="Exit presentation (Esc)"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-x"/></svg><span>Exit</span></button>
 
-        <div class="dash-pages" id="dash-pages"></div>
+        <!-- `seg` is the base segmented-control; the page tabs ARE one. The
+             bespoke class stays because dashGrid.ts renders the buttons into
+             it by id. -->
+        <div class="dash-pages seg" id="dash-pages"></div>
 
         <!-- The FILTER BAR: every control card on the open page, as a chip.
              Deliberately OUTSIDE .dash-toolbar, which .dash-presenting hides —
@@ -1536,7 +1577,7 @@
       <!-- header -->
       <div class="settings-modal-head">
         <div class="settings-modal-headtext">
-          <div class="settings-modal-eyebrow">SETTINGS</div>
+          <div class="settings-modal-eyebrow t-label">SETTINGS</div>
           <h2 id="stp-title" class="settings-modal-title">Assistant</h2>
         </div>
         <button id="stp-close" class="settings-modal-x" type="button" aria-label="Close settings">

@@ -343,6 +343,7 @@ function dkSync(): void {
   }
   if (dkLastVisible !== null && dkLastVisible !== visible) dkNudgeCanvasResize();
   dkLastVisible = visible;
+  wsSyncAiStatus(); // the rail's readiness readout; workspace.ts owns it
   // Opening focuses the composer — but a DISABLED textarea (no model
   // connected, or no project open yet — the state a fresh install starts in)
   // silently REFUSES focus, per the HTML spec; that would strand keyboard

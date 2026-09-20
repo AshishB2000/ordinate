@@ -70,7 +70,7 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
   const m = card.metric || {};
   body.innerHTML = '';
   const valEl = document.createElement('div');
-  valEl.className = 'dash-metric-value';
+  valEl.className = 'dash-metric-value tnum';
   valEl.textContent = '…';
   const labelEl = document.createElement('div');
   labelEl.className = 'dash-metric-label';
@@ -306,7 +306,7 @@ function renderDashFilterBar(): void {
   const list = dashFilters();
   list.forEach((step: any, i: number) => {
     const chip = document.createElement('span');
-    chip.className = 'dash-filter-chip';
+    chip.className = 'dash-filter-chip chip';
     // The chip's text is the edit affordance — a button, not a span, so it is
     // keyboard-reachable and announces itself.
     const txt = document.createElement('button');

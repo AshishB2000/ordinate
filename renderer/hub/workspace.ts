@@ -24,6 +24,11 @@ function wsBodyEl(): HTMLElement | null {
 // just a section switch that also drops the active project.
 function showHome(): void {
   currentProjectId = null;
+  // The sidebar's project block names the active project; dropping the project
+  // without clearing the label leaves the last one named under a Home that is
+  // cross-project. Same guarded lookup adoptProject() uses.
+  const nameEl = document.getElementById('ws-project-name');
+  if (nameEl) nameEl.textContent = 'All projects';
   selectSection('home');
 }
 
@@ -226,4 +231,34 @@ async function ensureWorkspaceForCapture(): Promise<void> {
   // Do NOT call openWorkspace()/showHome() here — openWorkspace falls back to
   // HOME on failure, which hides the result surface. Force Sources visible.
   selectSection('sources');
+}
+
+/**
+ * Paint `#as-ai-status`, the Assistant readiness readout pinned under Settings
+ * at the bottom of the rail.
+ *
+ * `getKeyStatus().isReady` is the SAME signal anNew.ts, dashAdd.ts and
+ * authoringPanes.ts already gate their AI actions on — reused deliberately
+ * rather than given a second definition, because two answers to "is the
+ * Assistant set up?" is exactly how a disabled button ends up sitting next to
+ * a green dot.
+ *
+ * It lives here rather than in dock.ts because it paints SIDEBAR chrome, and
+ * because dock.ts is at the 800-line cap. dkSync calls it: that runs on
+ * section switches and dock toggles, not in a loop, and getKeyStatus reads an
+ * in-memory config in main — so this needs no throttle, and a stale readout
+ * would cost more than the call does.
+ */
+function wsSyncAiStatus(): void {
+  const el = document.getElementById('as-ai-status');
+  if (!el) return;
+  const label = el.querySelector('.as-ai-label');
+  const paint = (state: string, text: string): void => {
+    el.setAttribute('data-state', state);
+    if (label) label.textContent = text;
+  };
+  window.hub.getKeyStatus().then((st: any) => {
+    if (st && st.isReady) paint('ready', 'Assistant ready');
+    else paint('not_ready', 'Assistant not set up');
+  }).catch(() => paint('not_ready', 'Assistant not set up'));
 }
