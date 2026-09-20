@@ -12,6 +12,7 @@ import { buildVizData } from '../analysis/vizData';
 import { computeMetric } from '../analysis/metricValue';
 import { askCopilot } from '../ai/analyze';
 import { auditNumbers } from '../ai/numberAudit';
+import { listInsights } from './insights';
 import type { LedgerEntry, NumberAudit } from '../ai/numberAudit';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
@@ -144,7 +145,11 @@ export async function buildFacts(
       emit({ kind: 'compute', label: 'Summarised ' + plural(ds.columns.length, 'column'), count: ds.columns.length });
       const issues = findQualityIssues(ds.columns, ds.rows);
       emit({ kind: 'quality', label: 'Checked data quality', detail: plural(issues.length, 'issue') + ' found', count: issues.length });
-      return copilot.datasetFacts(ds, summaries, issues);
+      // The same app-computed findings the Insights cards show — so the dock can
+      // narrate "West fell 31%" from the app's figure rather than deriving one.
+      const insights = await listInsights(projectId, id);
+      emit({ kind: 'compute', label: 'Read ' + plural(insights.length, 'insight'), count: insights.length });
+      return copilot.datasetFacts(ds, summaries, issues, insights);
     }
   }
 

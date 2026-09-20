@@ -588,6 +588,9 @@ require("./ipc/datasets").register();
 require("./ipc/datasetCompose").register();
 require("./ipc/search").register();
 
+// What the app found in the data. Pure disk + the resident query layer; no deps.
+require("./ipc/insights").register();
+
 // Unattended dataset refresh. Ordinate has no daemon: this ticks while the app
 // is RUNNING, and anything that came due while it was closed is simply overdue
 // on the first tick after launch. The settings copy says exactly that.

@@ -205,6 +205,7 @@ const DX_TABS: ReadonlyArray<{ tab: string; panel: string }> = [
   { tab: 'ds-tab-data', panel: 'ds-tabp-data' },
   { tab: 'ds-tab-prepare', panel: 'ds-tabp-prepare' },
   { tab: 'ds-tab-quality', panel: 'ds-tabp-quality' },
+  { tab: 'ds-tab-insights', panel: 'ds-tabp-insights' },
 ];
 
 /**
@@ -236,13 +237,18 @@ function dxSelectTab(tabId: string, focus?: boolean): void {
   // `tab-data` / `tab-prepare` / `tab-quality` on the explorer: the grid pane
   // sits below the Data tab and beside the Prepare rail, which is layout, not
   // visibility, so CSS decides it from here.
-  panel.classList.remove('tab-data', 'tab-prepare', 'tab-quality');
+  panel.classList.remove('tab-data', 'tab-prepare', 'tab-quality', 'tab-insights');
   panel.classList.add(tabId.replace('ds-tab-', 'tab-'));
 
   if (tabId === 'ds-tab-prepare') {
     const prep = dxEl('ds-prepare-panel');
     if (prep) prep.hidden = false;
   }
+
+  // Painted on SELECT, not on open: a dataset scan is ~30 SQL statements, and a
+  // user who never opens this tab should never pay for them. `insights:list`
+  // caches per dataset on `updatedAt`, so re-selecting is free.
+  if (tabId === 'ds-tab-insights' && typeof insRenderDatasetTab === 'function') void insRenderDatasetTab();
 }
 
 function initDataTabs(): void {

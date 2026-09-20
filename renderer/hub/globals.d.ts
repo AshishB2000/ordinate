@@ -108,6 +108,9 @@ declare global {
       // ── Projects (workspace shell) ──
       listProjects(): Promise<any[]>;
       recentItems(limit?: number): Promise<any[]>;
+      // Insights — what the app FOUND in the data (src/ipc/insights.ts).
+      listInsights(projectId: string, datasetId?: string): Promise<any>;
+      dismissInsight(projectId: string, id: string, dismissed?: boolean): Promise<any>;
       userName(): Promise<string>;
       getStarred(): Promise<string[]>;
       setStarred(ids: string[]): Promise<{ ok: boolean; starred: string[] }>;

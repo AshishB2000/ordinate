@@ -36,6 +36,9 @@ function anSetFlyout(pane: string | null): void {
   // Painted on open rather than once at startup: which tiles read as recommended
   // depends on the selected card's data, which changes under it.
   if (anFlyout === 'an-pane-visuals') anRenderGallery();
+  // Same reason, and the same cost argument as the dataset tab: a scan runs when
+  // the user asks to see it, never on every dashboard open.
+  if (anFlyout === 'an-pane-insights' && typeof insRenderRail === 'function') void insRenderRail();
 }
 
 

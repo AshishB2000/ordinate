@@ -42,6 +42,7 @@ const SMOKES = [
   'smoke-dashboard-proposal',
   'smoke-dashboards',
   'smoke-dashboard-edit',
+  'smoke-insights',
   'smoke-dashboard-styles',
   'smoke-theme',
   // Last, and after smoke-theme deliberately: both drive the real Appearance

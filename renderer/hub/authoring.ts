@@ -35,7 +35,7 @@ let anDataset: { name: string; kind: string } | null = null;
 let anSaveTimer: number | null = null;
 
 const AN_FLYOUT_KEY = 'anFlyout'; // id of the one open flyout pane, '' for none
-const AN_PANES = ['an-pane-data', 'an-pane-visuals', 'an-pane-filter', 'an-pane-props'];
+const AN_PANES = ['an-pane-data', 'an-pane-visuals', 'an-pane-filter', 'an-pane-props', 'an-pane-insights'];
 
 function anEl(id: string): HTMLElement | null {
   return document.getElementById(id);

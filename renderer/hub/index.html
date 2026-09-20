@@ -295,6 +295,18 @@
           <div class="home-ask-suggests" id="home-ask-suggests" hidden></div>
         </div>
 
+        <!-- ── WHAT STANDS OUT ──────────────────────────────────────────────
+             insights.ts fills #home-insights-row from `insights:list` and
+             UNHIDES the section. With nothing to say it stays hidden: there is
+             deliberately no empty state here, because Home already has a
+             greeting, an ask bar and two filled columns. -->
+        <section class="home-sec home-insights" id="home-insights" hidden>
+          <div class="home-sec-head">
+            <h2 class="home-sec-h">What stands out</h2>
+          </div>
+          <div class="ins-row" id="home-insights-row"></div>
+        </section>
+
         <!-- ── TWO-COLUMN BODY ──────────────────────────────────────────────
              LEFT = filter pills + Starred + Recent (homePage.ts keeps every id
              here); RIGHT = "Your data" + "Saved visuals" (homeData.ts fills the
@@ -1011,6 +1023,8 @@
                     aria-selected="false" aria-controls="ds-tabp-prepare" tabindex="-1">Prepare</button>
             <button class="ds-tab" type="button" role="tab" id="ds-tab-quality"
                     aria-selected="false" aria-controls="ds-tabp-quality" tabindex="-1">Quality</button>
+            <button class="ds-tab" type="button" role="tab" id="ds-tab-insights"
+                    aria-selected="false" aria-controls="ds-tabp-insights" tabindex="-1">Insights</button>
           </div>
 
           <div class="ds-tab-body">
@@ -1039,6 +1053,12 @@
                  shows when there are no exceptions. Built by dsProfile.ts from
                  the summaries the explorer already fetched — no extra query. -->
             <div class="ds-quality-table" id="ds-quality-table" hidden></div>
+          </div>
+
+          <!-- insights.ts (insRenderDatasetTab) fills this on tab select: every
+               finding for the open dataset, grouped by kind with counts. -->
+          <div class="ds-tabp" id="ds-tabp-insights" role="tabpanel" aria-labelledby="ds-tab-insights" hidden>
+            <div class="ins-tab-body" id="ds-insights-body"></div>
           </div>
 
           <div class="ds-tabp" id="ds-tabp-prepare" role="tabpanel" aria-labelledby="ds-tab-prepare" hidden>
@@ -1281,6 +1301,12 @@
           <button class="an-rail-btn" type="button" data-pane="an-pane-props" aria-label="Properties" title="Properties">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="9" cy="7" r="2" fill="currentColor"/><circle cx="15" cy="12" r="2" fill="currentColor"/><circle cx="8" cy="17" r="2" fill="currentColor"/></svg>
           </button>
+          <button class="an-rail-btn" type="button" data-pane="an-pane-insights" aria-label="Insights" title="Insights">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
+              <path d="M12 3a6 6 0 0 0-3.5 10.9V17h7v-3.1A6 6 0 0 0 12 3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+              <path d="M10 20h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+          </button>
         </nav>
 
         <aside class="an-side an-side--left" id="an-side-left" hidden>
@@ -1389,6 +1415,13 @@
                 </div>
               </div>
             </div>
+          </section>
+
+          <!-- Insights rail panel: what the app found in the datasets THIS
+               dashboard uses. "+ Add" goes through pushCard, so undo covers it. -->
+          <section class="an-pane" id="an-pane-insights" hidden>
+            <header class="an-pane-head"><span class="an-pane-title">Insights</span></header>
+            <div class="an-pane-body" id="an-insights-body"></div>
           </section>
         </aside>
       </div>
@@ -2562,6 +2595,12 @@
      dxSelectTab (dataSection.js) and xpScrollToBottom (askCore.js), so it loads
      after dock.js AND after all of those. -->
 <script src="dockPropose.js"></script>
+<!-- Insight cards, shared by Home, the dataset Insights tab and the dashboard
+     editor's Insights rail. Calls buildChart (chartRender.js), pushCard
+     (dashAdd.js), dashFindSlot (dashGrid.js), openSavedDataset (dsExplorer.js),
+     dsOpenProfile (dsProfile.js), dkSetOpen (dock.js) and dkTurnIntoAnalysis
+     (dockPropose.js) — all at call time, so it only has to load after them. -->
+<script src="insights.js"></script>
 <!-- The dock's starter chips, and the rule that hides them once a conversation
      has started. Split out of dock.ts for file-size.md. Calls haSuggestPrompts
      (homeAsk.js) and is called BY dkRenderContext (dock.js); both are resolved

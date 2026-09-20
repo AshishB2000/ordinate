@@ -77,6 +77,10 @@ async function renderRecent(): Promise<void> {
   recentItems = Array.isArray(list) ? list : [];
   starredSet = new Set(Array.isArray(starred) ? starred : []);
   paintHome();
+  // "What stands out" — a SEPARATE, unawaited fetch, so Home's recent/starred
+  // paint is never held up by a dataset scan. The section stays hidden until it
+  // has something to say.
+  if (typeof insRenderHome === 'function') void insRenderHome();
 }
 
 // ── Row rendering ────────────────────────────────────────────────────────────
@@ -293,6 +297,12 @@ function makeEmptyState(opts: {
 // ALWAYS render: a section that vanishes when empty is what left a void under
 // the old first-run cards.
 function paintHome(): void {
+  // Insights are NOT fetched here. paintHome is the re-filter path — a pill
+  // click, a star toggle, Show all — and it is documented as "no re-fetch";
+  // scanning every dataset again on each of those would make a filter pill the
+  // most expensive control on the page. insRenderHome() runs from
+  // renderRecent(), which is the boot / Home-is-shown path, and repaints from
+  // its own cached list.
   const starredSec = document.getElementById('home-starred');
   const starredRows = document.getElementById('home-starred-rows');
   const recentSec = document.getElementById('home-recent');

@@ -329,3 +329,11 @@ scripts/**/*.js
 # Build-emit guard — emitted siblings.
 /scripts/check-emit.js
 /scripts/test-checkEmit.js
+
+# Insights — what the app found in the data. Emitted siblings.
+/src/analysis/insights.js
+/src/analysis/insightsAgg.js
+/src/ipc/insights.js
+/renderer/hub/insights.js
+/scripts/test-insights.js
+/scripts/smoke-insights.js
