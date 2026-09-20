@@ -32,6 +32,7 @@ const SMOKES = [
   'smoke-topbar',
   'smoke-sample',
   'smoke-composer',
+  'smoke-formula',
   'smoke-dock',
   'smoke-dockHero',
   'smoke-assistant',

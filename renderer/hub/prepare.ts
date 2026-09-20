@@ -226,6 +226,15 @@ async function removeStep(i: number): Promise<void> {
 
 // ── Step editor (per-type form built in JS) ───────────────────────────────────
 function openStepEditor(type: string, index: number): void {
+  // A calculated field is NOT a form. Routing it here rather than at the two
+  // buttons that open a step editor is deliberate: the Add menu, the pipeline
+  // row's ✎, and both AI suggestion paths all funnel through this function, so
+  // one guard is what makes "there is only one formula editor" true instead of
+  // true-in-the-places-someone-remembered.
+  if (type === 'calculated_field') {
+    openCalcField(index);
+    return;
+  }
   dsStepEditType = type;
   dsStepEditIndex = index;
   const editor = pEl('ds-step-editor');
@@ -277,28 +286,6 @@ function closeStepEditor(): void {
 // input is invalid — the getter shows the alert itself).
 function buildStepForm(type: string, body: HTMLElement, existing: any): () => any {
   switch (type) {
-    case 'calculated_field': {
-      const nameIn = textInput(existing && existing.name ? String(existing.name) : '');
-      const exprIn = textInput(existing && existing.expression ? String(existing.expression) : '');
-      body.appendChild(fieldRow('New column name', nameIn));
-      body.appendChild(fieldRow('Expression', exprIn));
-      const hint = document.createElement('div');
-      hint.className = 'ds-step-hint';
-      hint.textContent =
-        'e.g. [price] * [qty]  ·  IF [score] > 90 THEN "A" ELSE "B" END  ·  ' +
-        'datediff("day", [start], [end])  ·  left(upper([code]), 3). ' +
-        'Supports number, string, date, logical and type-conversion functions (Tableau-style).';
-      body.appendChild(hint);
-      return () => {
-        const name = nameIn.value.trim();
-        const expression = exprIn.value.trim();
-        if (!name || !expression) {
-          window.alert('A column name and an expression are both required.');
-          return null;
-        }
-        return { type, name, expression };
-      };
-    }
     case 'filter': {
       // The column stays a select (that is how a filter is retargeted); the
       // CONDITION is one button opening the shared type-aware dialog, so this
@@ -637,38 +624,47 @@ async function handleSuggestCalcField(): Promise<void> {
 }
 
 /**
- * Open the step editor on a NEW calculated_field and prefill it from a
- * suggestion. Nothing is applied — the user reviews, edits and clicks Save,
- * which is what routes through addDatasetStep and lets formula.ts compile it.
+ * Open the formula editor on a NEW calculated field, prefilled from an AI
+ * suggestion. Nothing is applied — the user now sees the proposal's real
+ * result on real rows BEFORE accepting it, which is the point of routing a
+ * model's formula through the same editor a hand-written one goes through.
  *
  * Shared by BOTH AI entry points (this panel's ✨ Suggest, and the AI dock's
- * calc-field proposal card). The positional `.ds-step-input` [0]=name /
- * [1]=expression contract is owned by buildStepForm above; keeping ONE copy
- * means adding a field there can't silently prefill the wrong inputs in a
- * second place that nobody remembered to update.
+ * calc-field proposal card), which is why it keeps its name.
  */
 function prefillCalcFieldEditor(name: unknown, expression: unknown, warning?: unknown): void {
-  openStepEditor('calculated_field', -1);
-  const editor = pEl('ds-step-editor');
-  if (!editor) return;
-  const inputs = editor.querySelectorAll('.ds-step-input');
-  const nameIn = inputs[0] as HTMLInputElement | undefined;
-  const exprIn = inputs[1] as HTMLInputElement | undefined;
-  if (nameIn) nameIn.value = String(name || '');
-  if (exprIn) exprIn.value = String(expression || '');
+  openCalcField(-1, {
+    name: String(name || ''),
+    expression: String(expression || ''),
+    note: 'Assistant suggestion — review and edit; the app compiles and computes the formula.'
+      + (warning ? ' ' + String(warning) : ''),
+  });
+}
 
-  // Prepend an AI-interpretation label into the editor so the user knows this is a
-  // suggestion to review/edit before saving.
-  const panel = document.createElement('div');
-  panel.className = 'ai-interp';
-  panel.appendChild(mkAiPanel('Assistant suggestion — review and edit; the app compiles and computes the formula'));
-  if (warning) {
-    const warn = document.createElement('div');
-    warn.className = 'ai-interp-hint';
-    warn.textContent = String(warning);
-    panel.appendChild(warn);
-  }
-  editor.insertBefore(panel, editor.firstChild);
+/**
+ * The calculated-field surface, for a new step (`index` -1) or an existing one.
+ *
+ * `applyStepResult` returning false keeps the editor OPEN with the expression
+ * intact — main can still refuse a step the editor was happy with (a name that
+ * raced another tab, a dataset that moved), and losing a formula to a closed
+ * modal is the exact frustration this whole panel replaces.
+ */
+function openCalcField(index: number, prefill?: { name?: string; expression?: string; note?: string }): void {
+  if (!currentProjectId || !expId) return;
+  closeStepEditor();
+  const step = index >= 0 ? expSteps[index] : null;
+  openFormulaEditor({
+    projectId: currentProjectId,
+    datasetId: expId,
+    existing: prefill || (step ? { name: String(step.name || ''), expression: String(step.expression || '') } : undefined),
+    onSave: async (field) => {
+      const s = { type: 'calculated_field', name: field.name, expression: field.expression };
+      const res = index >= 0
+        ? await window.hub.updateDatasetStep(currentProjectId, expId, index, s)
+        : await window.hub.addDatasetStep(currentProjectId, expId, s);
+      return applyStepResult(res);
+    },
+  });
 }
 
 // Applying REPLACES the whole pipeline with the confirmed suggestions (setSteps).

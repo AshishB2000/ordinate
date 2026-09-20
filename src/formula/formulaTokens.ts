@@ -9,7 +9,16 @@
 
 // ── Errors ───────────────────────────────────────────────────────────────────
 
-export class FormulaError extends Error {}
+export class FormulaError extends Error {
+  // Where the problem is, in SOURCE OFFSETS — set by the tokenizer, which is the
+  // only thing here that knows them before there are tokens to index.
+  at?: { start: number; end: number };
+  // Where the problem is, as an index into the TOKEN stream — set by the parser,
+  // which counts tokens, not characters. `compile()` maps it back to offsets
+  // through the tokens it already has. An index of `tokens.length` means "at the
+  // end of the input", which is what an unclosed call or a trailing operator is.
+  tokenIndex?: number;
+}
 
 // ── Tokenizer ────────────────────────────────────────────────────────────────
 
@@ -17,6 +26,13 @@ export type TokKind = 'num' | 'str' | 'name' | 'col' | 'op' | 'punc';
 export interface Tok {
   kind: TokKind;
   value: string;
+  /** Offset of the token's first character in the source string. */
+  start: number;
+  /** Offset one past its last character — so `src.slice(start, end)` is the
+   *  token AS WRITTEN, including the quotes or brackets its `value` drops.
+   *  That is what the editor's highlight layer paints, so it must cover every
+   *  character: a gap would shift every colour after it. */
+  end: number;
 }
 
 const IDENT_START = /[A-Za-z_]/;
@@ -29,6 +45,12 @@ function isDigit(c: string): boolean {
 // char), bracketed column names [Col Name], bare identifiers, operators, parens,
 // commas. Any other character is a syntax error (so ";" in "1;process.exit"
 // aborts the whole compile).
+function fail(message: string, start: number, end: number): never {
+  const e = new FormulaError(message);
+  e.at = { start, end };
+  throw e;
+}
+
 export function tokenize(src: string): Tok[] {
   const toks: Tok[] = [];
   const n = src.length;
@@ -60,7 +82,7 @@ export function tokenize(src: string): Tok[] {
           j = k;
         }
       }
-      toks.push({ kind: 'num', value: src.slice(i, j) });
+      toks.push({ kind: 'num', value: src.slice(i, j), start: i, end: j });
       i = j;
       continue;
     }
@@ -79,8 +101,8 @@ export function tokenize(src: string): Tok[] {
         val += src[j];
         j += 1;
       }
-      if (j >= n) throw new FormulaError('Unterminated string literal');
-      toks.push({ kind: 'str', value: val });
+      if (j >= n) fail('Unterminated string literal', i, n);
+      toks.push({ kind: 'str', value: val, start: i, end: j + 1 });
       i = j + 1;
       continue;
     }
@@ -93,8 +115,8 @@ export function tokenize(src: string): Tok[] {
         val += src[j];
         j += 1;
       }
-      if (j >= n) throw new FormulaError('Unterminated [column] reference');
-      toks.push({ kind: 'col', value: val.trim() });
+      if (j >= n) fail('Unterminated [column] reference', i, n);
+      toks.push({ kind: 'col', value: val.trim(), start: i, end: j + 1 });
       i = j + 1;
       continue;
     }
@@ -103,7 +125,7 @@ export function tokenize(src: string): Tok[] {
     if (IDENT_START.test(c)) {
       let j = i + 1;
       while (j < n && IDENT_PART.test(src[j])) j += 1;
-      toks.push({ kind: 'name', value: src.slice(i, j) });
+      toks.push({ kind: 'name', value: src.slice(i, j), start: i, end: j });
       i = j;
       continue;
     }
@@ -111,26 +133,26 @@ export function tokenize(src: string): Tok[] {
     // multi-char operators
     const two = src.slice(i, i + 2);
     if (two === '==' || two === '!=' || two === '>=' || two === '<=') {
-      toks.push({ kind: 'op', value: two });
+      toks.push({ kind: 'op', value: two, start: i, end: i + 2 });
       i += 2;
       continue;
     }
 
     // single-char operators
     if (c === '=' || c === '>' || c === '<' || c === '+' || c === '-' || c === '*' || c === '/' || c === '%') {
-      toks.push({ kind: 'op', value: c });
+      toks.push({ kind: 'op', value: c, start: i, end: i + 1 });
       i += 1;
       continue;
     }
 
     // punctuation
     if (c === '(' || c === ')' || c === ',') {
-      toks.push({ kind: 'punc', value: c });
+      toks.push({ kind: 'punc', value: c, start: i, end: i + 1 });
       i += 1;
       continue;
     }
 
-    throw new FormulaError('Unexpected character: ' + c);
+    fail('Unexpected character: ' + c, i, i + 1);
   }
 
   return toks;

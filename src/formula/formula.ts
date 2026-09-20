@@ -20,7 +20,7 @@
 // text — while a computed double keeps its type instead of being re-inferred from
 // its own decimal expansion, which the >15-digit guard would reject.
 
-import { tokenize } from './formulaTokens';
+import { FormulaError, tokenize, type Tok } from './formulaTokens';
 import { Parser } from './formulaParse';
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -36,7 +36,40 @@ export interface Compiled {
   refs: string[];
 }
 
-export type CompileResult = { ok: true; fn: Compiled } | { ok: false; error: string };
+/** Where an error is, in SOURCE OFFSETS — `expression.slice(start, end)` is the
+ *  offending text. Present whenever the failure could be pinned to one; the
+ *  formula editor underlines it, and every other caller ignores it. */
+export interface SourceSpan {
+  start: number;
+  end: number;
+}
+
+export type CompileResult =
+  | { ok: true; fn: Compiled }
+  | { ok: false; error: string; at?: SourceSpan };
+
+// The parser counts TOKENS; an underline needs CHARACTERS. The tokens are right
+// here, so this is the whole mapping.
+//
+// A token index PAST the end is the "…but got end of input" case — an unclosed
+// call, a trailing operator. There is no token to underline, so the span runs
+// from the last token's end to the end of the source; when the expression ends
+// exactly there (nothing trailing to mark) it backs up over the final character,
+// because a zero-width underline draws nothing at all.
+function spanOf(tokens: Tok[], index: number, src: string): SourceSpan | undefined {
+  const t = tokens[index];
+  if (t) return { start: t.start, end: t.end };
+  const last = tokens[tokens.length - 1];
+  const start = last ? last.end : 0;
+  // Trailing whitespace is never where the mistake is. Without this, `[a] / `
+  // underlines the space after the operator and `[a] /` underlines the
+  // operator — the same mistake, marked in two places, decided by whether the
+  // user's finger was still on the space bar.
+  let end = src.length;
+  while (end > 0 && /\s/.test(src[end - 1])) end -= 1;
+  if (end <= 0) return undefined;
+  return start < end ? { start, end } : { start: Math.max(0, end - 1), end };
+}
 
 // Parse ONCE to a compiled function; evaluate per row (cheap). Any failure to
 // parse is returned as { ok:false, error }, never thrown.
@@ -44,8 +77,9 @@ export function compile(expression: string): CompileResult {
   if (typeof expression !== 'string' || expression.trim() === '') {
     return { ok: false, error: 'Empty expression' };
   }
+  let tokens: Tok[] = [];
   try {
-    const tokens = tokenize(expression);
+    tokens = tokenize(expression);
     const parser = new Parser(tokens);
     const fn = parser.parse();
     const refs = Array.from(parser.refs);
@@ -63,6 +97,10 @@ export function compile(expression: string): CompileResult {
     return { ok: true, fn: compiled };
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Parse error';
+    if (e instanceof FormulaError) {
+      const at = e.at ?? (e.tokenIndex === undefined ? undefined : spanOf(tokens, e.tokenIndex, expression));
+      if (at) return { ok: false, error: msg, at };
+    }
     return { ok: false, error: msg };
   }
 }

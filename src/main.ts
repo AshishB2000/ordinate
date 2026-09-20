@@ -586,6 +586,9 @@ require("./ipc/datasets").register();
 // The composer's two handlers. Registered AFTER datasets, which hands it the
 // commitSteps primitive during its own register().
 require("./ipc/datasetCompose").register();
+// The formula editor's check/catalog handlers. AFTER datasets, whose `pageFor`
+// it reads the eight preview rows through.
+require("./ipc/formula").register();
 require("./ipc/search").register();
 
 // What the app found in the data. Pure disk + the resident query layer; no deps.

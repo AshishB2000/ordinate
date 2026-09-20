@@ -11935,3 +11935,219 @@ body.cap-focus .cap-back {
 /* The rail is narrow — one card per row, and the sparkline sets the width. */
 #an-insights-body { display: flex; flex-direction: column; gap: 10px; }
 #an-insights-body .ins-card { flex: 0 0 auto; }
+/* ── Formula editor (renderer/hub/formulaEditor.ts) ───────────────────────── */
+/* `.ws-modal` is defined EARLIER in this file but sets width on a single class,
+   so the pair `.ws-modal.fx-modal` is what wins — the same trick .fd-modal,
+   .an-wiz and .cd-modal use. 860px is the design width; the min() is what lets
+   it live inside the 1000px window without a horizontal scrollbar. */
+.ws-modal.fx-modal {
+  width: min(860px, calc(100vw - 48px));
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.fx-note {
+  font-size: 12px;
+  color: var(--text-strong);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+}
+/* A FIXED height, not `flex: 1`. The function list is 82 entries long, and a
+   body that sized to its content made the modal 1,300px tall — taller than the
+   window it has to fit inside. Both columns scroll within this instead. */
+.fx-body {
+  display: flex;
+  gap: 14px;
+  height: min(460px, 58vh);
+}
+.fx-side {
+  width: 220px;
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.fx-search { font-size: 13px; padding: 6px 8px; }
+.fx-side-list {
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 4px;
+  flex: 1;
+  min-height: 0;
+}
+.fx-group {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 8px 6px 4px;
+}
+.fx-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: var(--r-sm, 4px);
+  padding: 4px 6px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fx-item:hover { background: var(--accent-soft); }
+.fx-item-col { color: var(--accent); }
+.fx-item-fn { font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); color: var(--text-strong); }
+.fx-side-empty { font-size: 12px; color: var(--muted); padding: 8px 6px; }
+
+.fx-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+.fx-name-row { display: flex; align-items: center; gap: 8px; }
+.fx-name { flex: 1; }
+.fx-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  white-space: nowrap;
+}
+
+/* The mirrored-<pre> highlight layer. THESE TWO SELECTORS SHARE ONE RULE ON
+   PURPOSE: the <pre> paints the colours and the <textarea> owns the caret and
+   the selection, so every property that affects where a character lands must be
+   identical in both. Split them into two rules that merely look alike and the
+   colours drift out from under the text on the first wrapped line. */
+.fx-edit-wrap { position: relative; }
+.fx-input,
+.fx-hl {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 84px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  tab-size: 2;
+}
+.fx-hl {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--bg);
+  color: var(--text);
+}
+.fx-input {
+  position: relative;
+  display: block;
+  resize: vertical;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+  outline: none;
+}
+.fx-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.fx-input::selection { background: var(--accent-soft); }
+
+.fx-t-col { color: var(--accent); }
+.fx-t-fn { color: var(--text-strong); font-weight: 600; }
+.fx-t-str { color: var(--muted); }
+.fx-t-num { color: var(--text); }
+.fx-t-err {
+  text-decoration: underline wavy var(--error);
+  text-underline-offset: 3px;
+  background: var(--error-soft);
+  border-radius: 2px;
+}
+
+.fx-pop {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  max-height: 200px;
+  overflow-y: auto;
+}
+.fx-pop-item {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.fx-pop-item.is-on { background: var(--accent-soft); }
+.fx-pop-label {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+.fx-pop-sub {
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fx-msg { display: flex; flex-direction: column; gap: 4px; }
+.fx-msg-err { font-size: 12px; color: var(--error); }
+
+.fx-preview { overflow: auto; flex: 1; min-height: 0; }
+.fx-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.fx-table th,
+.fx-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 5px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+/* NOT uppercased: these are the user's own column names, and `unit_price`
+   rendered as `UNIT_PRICE` is a different string from the one they typed. */
+.fx-table th {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+}
+/* A header over right-aligned numbers has to be right-aligned too, or the
+   label and the values it names sit at opposite ends of the column. */
+.fx-table th.fx-num { text-align: right; }
+/* The computed column is the one the user is here to look at. */
+.fx-table th.fx-res { color: var(--accent); }
+.fx-table td.fx-res { background: var(--accent-soft); color: var(--text-strong); font-weight: 600; }
+.fx-table td.fx-num { font-family: var(--font-numeric); font-variant-numeric: tabular-nums; text-align: right; }
+
+.fx-actions { align-items: center; margin-top: 0; }
+.fx-hint { margin-right: auto; font-size: 11px; color: var(--muted); }
+.fx-save-wrap { display: inline-flex; }
