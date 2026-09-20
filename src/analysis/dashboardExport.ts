@@ -74,6 +74,9 @@ export interface ExportCard {
   png?: string;
   // metric
   label?: string;
+  /** What the figure is ("Sum of revenue") under the name its author gave it
+   *  ("Revenue"). Empty when the two would be the same string. */
+  subLabel?: string;
   value?: string | number | null;
   format?: string;
   // text
@@ -210,7 +213,10 @@ function sanitizeCard(raw: unknown): ExportCard | null {
         : typeof o.value === 'string'
           ? o.value
           : null;
-    return { kind: 'metric', layout, label: asString(o.label), value, format: asString(o.format) };
+    return {
+      kind: 'metric', layout, label: asString(o.label), subLabel: asString(o.subLabel),
+      value, format: asString(o.format),
+    };
   }
   if (kind === 'text') {
     return { kind: 'text', layout, heading: asString(o.heading), text: asString(o.text) };
@@ -405,9 +411,14 @@ function styleBlock(style: DashboardStyle): string {
     .chart-wrap { position: relative; flex: 1 1 auto; min-height: 120px; }
     .chart-wrap canvas { max-width: 100%; }
     .dash-img { max-width: 100%; max-height: 100%; object-fit: contain; margin: auto; }
+    /* Centred in the tile, like .dash-card--metric .dash-card-body in hub.css.
+       The figure used to be pinned bottom-left by a lone \`margin-top: auto\`,
+       which read as a mistake in a tall card — and disagreed with the PNG. */
+    .dash-metric-box { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; text-align: center; gap: 4px; }
     .dash-metric-value { font-size: var(--kpi-size); font-weight: 700; color: var(--text-strong);
-      font-family: var(--font-numeric); margin-top: auto; }
-    .dash-metric-label { font-size: var(--kpi-label-size); color: var(--muted); }
+      font-family: var(--font-numeric); font-variant-numeric: tabular-nums; line-height: 1.1; }
+    .dash-metric-sub { font-size: var(--kpi-label-size); color: var(--muted); }
     .dash-text-heading { font-size: var(--text-h-size); font-weight: 600; color: var(--text-strong); margin: 0 0 6px; }
     .dash-text-body { font-size: var(--text-p-size); color: var(--text); white-space: pre-wrap; }
     .dash-card--broken { border-style: dashed; border-color: var(--border-2); background: var(--surface-2);
@@ -498,10 +509,18 @@ function renderScript(style: DashboardStyle): string {
   }
 
   function renderMetric(cell, card) {
-    if (card.label) { var l = document.createElement('div'); l.className = 'dash-metric-label'; l.textContent = card.label; cell.appendChild(l); }
+    // Label in the card's title line like every other card type, figure centred
+    // under it, and the aggregation it came from beneath that.
+    if (card.label) cell.appendChild(titleEl(card.label));
+    var box = document.createElement('div'); box.className = 'dash-metric-box';
     var v = document.createElement('div'); v.className = 'dash-metric-value';
     v.textContent = (card.value === null || card.value === undefined) ? '—' : String(card.value);
-    cell.appendChild(v);
+    box.appendChild(v);
+    if (card.subLabel) {
+      var s = document.createElement('div'); s.className = 'dash-metric-sub'; s.textContent = card.subLabel;
+      box.appendChild(s);
+    }
+    cell.appendChild(box);
   }
 
   function renderText(cell, card) {
@@ -529,8 +548,14 @@ export function buildSelfContainedHtml(bundle: unknown, chartLibJs: string): str
   const clean = sanitizeBundle(bundle);
   const lib = typeof chartLibJs === 'string' ? chartLibJs : '';
   const titleText = clean.name.replace(/[<>]/g, '');
+  // The style classes go on <html>, not on #dash-root. They declare the tokens,
+  // and `html, body { background: var(--bg) }` below is an ANCESTOR of that div
+  // — so on the div they left the page itself unstyled: `var(--bg)` resolved to
+  // nothing and the body fell back to white, which is invisible on a light
+  // export and a white frame around a DARK one. hub.css's own note says these
+  // are plain class selectors precisely so the element may be <html>.
   return `<!doctype html>
-<html lang="en">
+<html lang="en" class="${styleClasses(clean.style)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -538,7 +563,7 @@ export function buildSelfContainedHtml(bundle: unknown, chartLibJs: string): str
 <style>${styleBlock(clean.style)}</style>
 </head>
 <body>
-<div id="dash-root" class="dash-root ${styleClasses(clean.style)}"></div>
+<div id="dash-root" class="dash-root"></div>
 <script>${lib}</script>
 <script>window.__DASHBOARD__ = ${embedJson(clean)};</script>
 <script>${renderScript(clean.style)}</script>

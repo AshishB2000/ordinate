@@ -99,7 +99,167 @@ const DASH_EXPORT_LIVE_TYPES: Record<string, string> = {
 };
 function dashIsMapType(t: string): boolean { return t === 'map_bubble' || t === 'map_choropleth'; }
 
-// Plain-text "<label>: <value>" for one control card's CURRENT selection, for
+// ── ONE theme for the whole export ───────────────────────────────────────────
+//
+// An export is rendered under the DASHBOARD's style, never the app's Appearance.
+// Charts used to be captured off holders hanging under <body>, which inherit
+// [data-theme] — so a dark-mode app pasted dark chart rectangles onto the light
+// export sheet, and the choropleth came back in whichever theme the app happened
+// to be in. Everything below answers one question: which style is this export?
+//
+// 'auto' declares no tokens on purpose (on screen it follows the app), and an
+// exported file has no app around it — so here it resolves to LIGHT, the same
+// resolution src/analysis/dashboardExport.ts makes for THEME_TOKENS.auto. That
+// agreement is what keeps the PNG, the PDF and the HTML one document.
+function dashExportStyle(): any {
+  const s = dashCurrentStyle();
+  // `chosen` matters: dashSanitizeStyle migrates an unchosen 'clean' back to
+  // 'auto', so without it this resolution would immediately undo itself.
+  return { ...s, theme: s.theme === 'auto' ? 'clean' : s.theme, chosen: true };
+}
+
+function dashExportStyleClasses(): string[] { return dashStyleClassList(dashExportStyle()); }
+
+// The page box the one-pager is laid out in. 1160 is the logical width
+// handleDashExport hands main; 20px of side padding matches .d-root below.
+const DASH_EXPORT_PAGE_W = 1160;
+const DASH_EXPORT_PAD = 20;
+
+// Row pitch, matching src/analysis/dashboardExport.ts's DENSITY_TOKENS rather
+// than hub.css's 48/36. An export page carries no app chrome and is narrower
+// than a hub window, so the taller row is what keeps a chart card from coming
+// out as a letterbox — and the two export formats have to agree, or the HTML
+// and the PNG of one dashboard are two different documents.
+const DASH_EXPORT_ROW: Record<string, number> = { comfortable: 80, compact: 60 };
+
+// The theme tokens the one-pager's stylesheet consumes, READ OFF hub.css rather
+// than transcribed into it. Transcription is exactly how the old one-pager
+// drifted into a separate look; this way a colour that moves in hub.css moves
+// in the export with it.
+const DASH_EXPORT_TOKENS = [
+  '--bg', '--surface', '--surface-2', '--text', '--text-strong', '--muted',
+  '--text-dim', '--text-faint', '--border', '--border-2',
+  '--font-ui', '--font-numeric',
+];
+
+interface DashExportMeasure {
+  /** `--x: value;` declarations for the one-pager's :root. */
+  vars: string;
+  /** Grid gap in px, from --dash-gap. */
+  gap: number;
+  /** The row pitch the one-pager uses (see DASH_EXPORT_ROW). */
+  row: number;
+  /** A card's head strip and body padding in px, off a real .dash-card. */
+  head: number;
+  pad: number;
+}
+
+// Computed values only ever come from hub.css's own closed enum of preset
+// classes, so nothing author-written can reach here — but they ARE interpolated
+// into a <style> block, so the characters that could close one are dropped
+// rather than trusted.
+function dashExportCssSafe(v: string): string {
+  return String(v || '').replace(/[<>{};]/g, ' ').trim();
+}
+
+/**
+ * Measure the export's look off LIVE, themed hub.css elements.
+ *
+ * Two kinds of thing come back. The theme tokens are read from a container
+ * carrying the export's `dash-theme--* / dash-density--* / dash-accent--*`
+ * classes — the same element-scoped read charts use (chartPalette.getCSSVar).
+ * The rest are the handful of things `.dash-card` and `.dash-metric-value`
+ * hardcode as PROPERTIES rather than tokens (the Executive radius and shadow,
+ * the KPI type scale, the head and body padding), measured off a real card
+ * built from those classes.
+ *
+ * The probe is genuinely IN the document, off-screen: getComputedStyle returns
+ * '' for a custom property on a detached element.
+ */
+function dashExportMeasure(): DashExportMeasure {
+  const probe = document.createElement('div');
+  probe.className = 'export-capture-holder';
+  dashExportStyleClasses().forEach((c) => probe.classList.add(c));
+
+  const card = document.createElement('div');
+  card.className = 'dash-card dash-card--metric';
+  const head = document.createElement('div');
+  head.className = 'dash-card-head';
+  const title = document.createElement('div');
+  title.className = 'dash-card-title';
+  title.textContent = 'x';
+  head.appendChild(title);
+  const body = document.createElement('div');
+  body.className = 'dash-card-body';
+  const value = document.createElement('div');
+  value.className = 'dash-metric-value';
+  value.textContent = 'x';
+  const label = document.createElement('div');
+  label.className = 'dash-metric-label';
+  label.textContent = 'x';
+  body.appendChild(value);
+  body.appendChild(label);
+  card.appendChild(head);
+  card.appendChild(body);
+  probe.appendChild(card);
+  document.body.appendChild(probe);
+
+  try {
+    const cs = (el: Element) => getComputedStyle(el);
+    const root = cs(probe);
+    const px = (v: string, fallback: number) => {
+      const n = parseFloat(v);
+      return Number.isFinite(n) && n > 0 ? n : fallback;
+    };
+    const vars = DASH_EXPORT_TOKENS
+      .map((t) => t + ':' + (dashExportCssSafe(root.getPropertyValue(t)) || 'inherit') + ';')
+      .concat([
+        '--d-card-radius:' + (dashExportCssSafe(cs(card).borderRadius) || '12px') + ';',
+        '--d-card-shadow:' + (dashExportCssSafe(cs(card).boxShadow) || 'none') + ';',
+        '--d-head-pad:' + (dashExportCssSafe(cs(head).padding) || '7px 9px') + ';',
+        '--d-body-pad:' + (dashExportCssSafe(cs(body).padding) || '10px') + ';',
+        '--d-title-size:' + (dashExportCssSafe(cs(title).fontSize) || '11px') + ';',
+        '--d-kpi-size:' + (dashExportCssSafe(cs(value).fontSize) || '26px') + ';',
+        '--d-kpi-font:' + (dashExportCssSafe(cs(value).fontFamily) || 'inherit') + ';',
+        '--d-kpi-label-size:' + (dashExportCssSafe(cs(label).fontSize) || '12px') + ';',
+      ])
+      .join('');
+    return {
+      vars,
+      gap: px(root.getPropertyValue('--dash-gap'), 12),
+      row: DASH_EXPORT_ROW[dashExportStyle().density] || DASH_EXPORT_ROW.comfortable,
+      // getBoundingClientRect, not the padding sum: the head's height is its
+      // padding PLUS a line of 11px title PLUS a 1px border, and only the box
+      // knows all three.
+      head: head.getBoundingClientRect().height || 30,
+      pad: px(cs(body).paddingTop, 10),
+    };
+  } finally {
+    probe.remove();
+  }
+}
+
+/**
+ * The logical pixel box a card's chart occupies on the export sheet.
+ *
+ * Capturing at THIS size is half of what fixes "the chart is a third of its
+ * card": a fixed 1100x620 capture dropped into a card of any other shape is
+ * letterboxed, whichever way the mismatch runs. The image then goes in at
+ * `width: 100%`, so the card's height follows the picture rather than a grid
+ * row count that knows nothing about it.
+ */
+function dashExportChartBox(m: DashExportMeasure, layout: any, titled: boolean): { width: number; height: number } {
+  const content = DASH_EXPORT_PAGE_W - 2 * DASH_EXPORT_PAD;
+  const colW = (content - (DASH_GRID_COLS - 1) * m.gap) / DASH_GRID_COLS;
+  const w = Math.max(1, Math.min(DASH_GRID_COLS, Number(layout && layout.w) || 1));
+  const h = Math.max(1, Number(layout && layout.h) || 1);
+  return {
+    width: Math.round(w * colW + (w - 1) * m.gap - 2 * m.pad),
+    height: Math.round(h * m.row + (h - 1) * m.gap - (titled ? m.head : 0) - 2 * m.pad),
+  };
+}
+
+// Plain-text "<label> = <value>" for one control card's CURRENT selection, for
 // the export header summary only — an export never gets a live widget (the
 // plan is explicit: "Do NOT export live controls"). Resolution mirrors
 // controlCurrentValue (dashControls.ts, loaded before this file): whatever is
@@ -128,7 +288,7 @@ function formatControlSummaryPart(card: any): string {
     value = cur.value || '';
   }
   if (!value) return '';
-  return (control.label || 'Filter') + ': ' + value;
+  return (control.label || 'Filter') + ' = ' + value;
 }
 
 // Build the serializable export bundle. `forCapture` forces EVERY visual to a PNG image
@@ -138,6 +298,9 @@ function formatControlSummaryPart(card: any): string {
 async function assembleExportBundle(forCapture: boolean): Promise<any> {
   const pages: any[] = [];
   const controlParts: string[] = [];
+  // Measured ONCE per export, not per card: it lays out a probe card and reads
+  // computed style off it, and every card on every page wants the same answer.
+  const measure = dashExportMeasure();
   const srcPages = (dashCurrent && Array.isArray(dashCurrent.pages)) ? dashCurrent.pages : [];
   for (const page of srcPages) {
     const cards: any[] = [];
@@ -162,7 +325,7 @@ async function assembleExportBundle(forCapture: boolean): Promise<any> {
         continue;
       }
       if (card.type === 'visual') {
-        const built = await buildVisualExportCard(card, layout, forCapture);
+        const built = await buildVisualExportCard(card, layout, forCapture, measure);
         cards.push(built);
         continue;
       }
@@ -173,7 +336,10 @@ async function assembleExportBundle(forCapture: boolean): Promise<any> {
   return {
     name: (dashCurrent && dashCurrent.name) || 'Dashboard',
     pages,
-    controlsSummary: controlParts.join(' · '),
+    // One muted line under the title, prefixed so a reader knows the figures
+    // below are a SLICE — "Filtered: region = West · Quarter = Q3". Empty when
+    // nothing is filtering, which is the honest thing to print in that case.
+    controlsSummary: controlParts.length ? 'Filtered: ' + controlParts.join(' · ') : '',
     // A shared snapshot has to LOOK like what the author saw, so the style
     // travels with the bundle. Main re-clamps it (dashboardExport.sanitizeBundle)
     // — this is a closed enum on both sides, never free-form CSS.
@@ -183,7 +349,12 @@ async function assembleExportBundle(forCapture: boolean): Promise<any> {
 
 async function buildMetricExportCard(card: any, layout: any): Promise<any> {
   const m = card.metric || {};
-  const label = m.label || ((DASH_AGG_LABELS[m.aggregation as DashAgg] || m.aggregation) + ' of ' + (m.column || ''));
+  const derived = (DASH_AGG_LABELS[m.aggregation as DashAgg] || m.aggregation) + ' of ' + (m.column || '');
+  const label = m.label || derived;
+  // What the figure IS, under the name its author gave it — the third line a
+  // KPI tile has room for. When there is no author label the two strings are
+  // identical, so it is dropped rather than printed twice.
+  const subLabel = m.label ? derived : '';
   if (!currentProjectId || !m.datasetId || !m.column || !m.aggregation) {
     return { kind: 'broken', layout, reason: 'Metric not configured' };
   }
@@ -196,10 +367,12 @@ async function buildMetricExportCard(card: any, layout: any): Promise<any> {
   } catch (_) { r = { ok: false }; }
   if (!r || r.ok === false) return { kind: 'broken', layout, reason: 'Source removed' };
   const value = r.value == null ? null : fmtWith(r.value, m.format || 'auto');
-  return { kind: 'metric', layout, label, value, format: m.format || 'auto' };
+  return { kind: 'metric', layout, label, subLabel, value, format: m.format || 'auto' };
 }
 
-async function buildVisualExportCard(card: any, layout: any, forCapture: boolean): Promise<any> {
+async function buildVisualExportCard(
+  card: any, layout: any, forCapture: boolean, measure: DashExportMeasure,
+): Promise<any> {
   if (!currentProjectId || (!card.visualId && !card.visual)) return { kind: 'broken', layout, reason: 'No visual selected' };
   // Same two-shaped resolution as renderVisualCard: an inline publish-time
   // snapshot wins, so an export of a published dashboard carries the frozen
@@ -231,11 +404,20 @@ async function buildVisualExportCard(card: any, layout: any, forCapture: boolean
   }
   // Everything else (maps / plugin charts / table, and ALL visuals in a capture) → PNG,
   // captured through the EXISTING report-capture helpers (reuse, no new dependency).
+  //
+  // The frame is the whole fix: the EXPORT's theme classes (never the app's) and
+  // the box this image will actually fill on the sheet. Maps get the identical
+  // frame — capturePage still does the snapshotting, it just snapshots a holder
+  // that now carries the dashboard's own style.
+  const frame = Object.assign(
+    { themeClasses: dashExportStyleClasses() },
+    dashExportChartBox(measure, layout, !!title),
+  );
   let png: string | null = null;
   try {
     png = dashIsMapType(type)
-      ? await captureMapPNG(data, type)
-      : await captureChartPNG(type, data, visual.overrides || {});
+      ? await captureMapPNG(data, type, frame)
+      : await captureChartPNG(type, data, visual.overrides || {}, frame);
   } catch (_) { png = null; }
   if (!png) return { kind: 'broken', layout, reason: 'Chart could not be rendered' };
   return { kind: 'image', layout, png, title };
@@ -244,11 +426,19 @@ async function buildVisualExportCard(card: any, layout: any, forCapture: boolean
 // Static one-pager HTML for the PNG/PDF path. Rendered in an OFFSCREEN sandboxed window
 // (its own data: origin — the hub CSP does not apply), so inline styles are fine here.
 // Every card is an image / metric / text / broken tile (no live Chart.js needed).
+//
+// The stylesheet below used to be hand-written literals — a second, drifting
+// description of a card that hub.css already describes. It is now token-only:
+// every colour, radius, shadow, padding and type size comes in through
+// dashExportMeasure(), read off real `.dash-card` / `.dash-metric-value`
+// elements under the export's theme. The RULES here are the app's structure
+// (head strip, body, centred KPI, note paragraph) minus the chrome a sheet of
+// paper has no use for — the ⋯ menus, the drag handles, the Remove button.
 function buildDashCaptureHtml(bundle: any): string {
   const esc = (s: any) => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const cols = DASH_GRID_COLS;
-  const style = dashSanitizeStyle(bundle && bundle.style);
+  const m = dashExportMeasure();
   let body = `<h1 class="d-title">${esc(bundle.name)}</h1>`;
   if (bundle.controlsSummary) body += `<div class="d-controls-summary">${esc(bundle.controlsSummary)}</div>`;
   const multi = Array.isArray(bundle.pages) && bundle.pages.length > 1;
@@ -257,45 +447,74 @@ function buildDashCaptureHtml(bundle: any): string {
     body += '<div class="d-grid">';
     (page.cards || []).forEach((card: any) => {
       const L = card.layout || { x: 0, y: 0, w: 6, h: 4 };
-      const style = `grid-column:${(L.x || 0) + 1} / span ${L.w || 1};grid-row:${(L.y || 0) + 1} / span ${L.h || 1};`;
+      const cell = `grid-column:${(L.x || 0) + 1} / span ${L.w || 1};grid-row:${(L.y || 0) + 1} / span ${L.h || 1};`;
+      // Every card type wears the same head strip the app gives it — the "what
+      // is this" line lives THERE, never doubled into the body (the rule
+      // dashCardTitle states in dashGrid.ts).
+      let headText = '';
       let inner = '';
+      let kind = card.kind;
       if (card.kind === 'image') {
-        if (card.title) inner += `<div class="d-ct">${esc(card.title)}</div>`;
-        inner += `<img class="d-img" src="${esc(card.png)}" alt="${esc(card.title || 'chart')}">`;
+        headText = card.title || '';
+        inner = `<img class="d-img" src="${esc(card.png)}" alt="${esc(card.title || 'chart')}">`;
       } else if (card.kind === 'metric') {
-        if (card.label) inner += `<div class="d-ml">${esc(card.label)}</div>`;
-        inner += `<div class="d-mv">${card.value == null ? '—' : esc(card.value)}</div>`;
+        headText = card.label || '';
+        inner = `<div class="d-mv">${card.value == null ? '—' : esc(card.value)}</div>`;
+        if (card.subLabel) inner += `<div class="d-ms">${esc(card.subLabel)}</div>`;
       } else if (card.kind === 'text') {
-        if (card.heading) inner += `<div class="d-th">${esc(card.heading)}</div>`;
-        if (card.text) inner += `<div class="d-tb">${esc(card.text)}</div>`;
+        headText = card.heading || '';
+        if (card.text) inner = `<p class="d-tb">${esc(card.text)}</p>`;
       } else {
+        kind = 'broken';
         inner = `<div class="d-bk">Unavailable</div><div class="d-bkr">${esc(card.reason || 'Source removed')}</div>`;
       }
-      const cls = card.kind === 'broken' ? 'd-card d-card-broken' : 'd-card';
-      body += `<div class="${cls}" style="${style}">${inner}</div>`;
+      const head = headText ? `<div class="d-head">${esc(headText)}</div>` : '';
+      body += `<div class="d-card d-card--${esc(kind)}" style="${cell}">`
+        + `${head}<div class="d-body">${inner}</div></div>`;
     });
     body += '</div>';
   });
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><style>
-    *{box-sizing:border-box}html,body{margin:0;background:#f4f4f5;color:#18181b;
-      font-family:-apple-system,system-ui,'Segoe UI',sans-serif}
-    .d-root{max-width:1160px;margin:0 auto;padding:24px 20px 40px}
-    .d-title{font-size:22px;font-weight:700;margin:0 0 4px}
-    .d-controls-summary{font-size:13px;font-weight:500;color:#6b7280;margin:0 0 16px}
-    .d-page{font-size:14px;font-weight:600;color:#6b7280;margin:18px 0 8px}
-    .d-grid{display:grid;grid-template-columns:repeat(${cols},1fr);grid-auto-rows:80px;gap:12px;margin-bottom:24px}
-    .d-card{background:#fff;border:1px solid #e4e4e7;border-radius:10px;padding:12px;overflow:hidden;
-      display:flex;flex-direction:column;min-height:0}
-    .d-ct{font-size:12px;font-weight:600;color:#6b7280;margin-bottom:8px;text-transform:uppercase;letter-spacing:.03em}
-    .d-img{max-width:100%;max-height:100%;object-fit:contain;margin:auto}
-    .d-ml{font-size:13px;color:#6b7280}
-    .d-mv{font-size:30px;font-weight:700;margin-top:auto}
-    .d-th{font-size:16px;font-weight:600;margin-bottom:6px}
-    .d-tb{font-size:13px;color:#3f3f46;white-space:pre-wrap}
-    .d-card-broken{border-style:dashed;border-color:#d4d4d8;background:#fafafa;align-items:center;
-      justify-content:center;text-align:center;color:#9ca3af}
-    .d-bk{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:#a1a1aa}
-    .d-bkr{font-size:12px;color:#b4b4bb;margin-top:4px}
+    :root{${m.vars}}
+    *{box-sizing:border-box}
+    html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui)}
+    .d-root{max-width:${DASH_EXPORT_PAGE_W}px;margin:0 auto;padding:24px ${DASH_EXPORT_PAD}px 40px}
+    .d-title{font-size:22px;font-weight:700;color:var(--text-strong);margin:0 0 4px}
+    .d-controls-summary{font-size:13px;font-weight:500;color:var(--muted);margin:0 0 16px}
+    .d-page{font-size:14px;font-weight:600;color:var(--muted);margin:18px 0 8px}
+    /* minmax, not a fixed pitch: an image card's height follows its PICTURE, so
+       a row band grows when the capture is taller than the cells it was given
+       and never letterboxes one into cells it is shorter than. */
+    .d-grid{display:grid;grid-template-columns:repeat(${cols},1fr);
+      grid-auto-rows:minmax(${m.row}px,auto);gap:${m.gap}px;margin-bottom:24px}
+    /* Deliberately NO break-inside:avoid here. The PDF paginates this one page
+       across several sheets, and a chart card is over half a landscape sheet
+       tall — so avoiding the break does not keep a card whole, it pushes the
+       whole grid row to the next page and leaves two thirds of this one empty
+       (measured: 4 pages becomes 5, with page 1 holding only the KPI row).
+       A card that continues over the fold reads better than that. */
+    .d-card{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;
+      border:1px solid var(--border);border-radius:var(--d-card-radius);
+      box-shadow:var(--d-card-shadow);background:var(--surface-2)}
+    .d-head{padding:var(--d-head-pad);border-bottom:1px solid var(--border);
+      font-size:var(--d-title-size);font-weight:600;color:var(--muted);
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .d-body{flex:1 1 auto;min-width:0;min-height:0;overflow:hidden;padding:var(--d-body-pad)}
+    /* The image fills the body's WIDTH and keeps its own aspect — the capture
+       was already taken at this box, so it lands at its natural size. */
+    .d-img{display:block;width:100%;height:auto}
+    .d-card--metric .d-body{display:flex;flex-direction:column;align-items:center;
+      justify-content:center;text-align:center;gap:4px}
+    .d-mv{font-family:var(--d-kpi-font);font-variant-numeric:tabular-nums;
+      font-size:var(--d-kpi-size);font-weight:700;color:var(--text-strong);line-height:1.1}
+    .d-ms{font-size:var(--d-kpi-label-size);color:var(--muted)}
+    .d-tb{font-size:13px;color:var(--text);margin:0;white-space:pre-wrap}
+    .d-card--broken{border-style:dashed;border-color:var(--border-2);background:var(--surface);
+      box-shadow:none}
+    .d-card--broken .d-body{display:flex;flex-direction:column;align-items:center;
+      justify-content:center;text-align:center}
+    .d-bk{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text-faint)}
+    .d-bkr{font-size:12px;color:var(--text-faint);margin-top:4px}
   </style></head><body><div class="d-root">${body}</div></body></html>`;
 }
 

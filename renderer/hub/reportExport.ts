@@ -3,16 +3,43 @@
 // Classic script sharing global scope with hub.js: buildChart, window.hub.save*,
 // and the pdfMake / PptxGenJS / docx globals all resolve at call time.
 
+// How a caller wants a capture FRAMED.
+//
+// `themeClasses` is the load-bearing field. A chart reads its colours off the
+// element it is drawn into (chartPalette.getCSSVar takes an `el`), and the
+// holders below hang off <body> — so a capture inherited the APP theme, which is
+// how a dark-mode app pasted dark chart rectangles onto a light export sheet.
+// The DASHBOARD's own `dash-theme--* / dash-density--* / dash-accent--*` classes
+// on the holder re-point every one of those reads at the style the export is
+// rendered under. Omitting the field is the report path, which genuinely wants
+// the app theme and the fixed holder box. `width`/`height` are LOGICAL pixels:
+// capturing at the destination box is what stops a chart being letterboxed.
+interface CaptureFrame { themeClasses?: string[]; width?: number; height?: number }
+
+/** Put a frame's theme classes on a capture holder. No frame → the app theme. */
+function applyCaptureFrame(holder: HTMLElement, frame?: CaptureFrame): void {
+  if (!frame || !Array.isArray(frame.themeClasses)) return;
+  frame.themeClasses.forEach((c) => { if (c) holder.classList.add(c); });
+}
+
 // ── Report export (stage 1: chart→PNG + dialog; file generation is next stage) ──
 // Render `type` to a crisp PNG data URL OFF-SCREEN (2x, no animation), composited
 // onto a solid background so it embeds cleanly in a report. Reuses buildChart, so
 // the exported chart matches the on-screen one. Resolves null if the type can't draw.
 // Maps are NOT handled here — see captureMapPNG below, which snapshots the live
 // MapLibre render through the main process instead of rasterizing a Chart.js canvas.
-function captureChartPNG(type: string, data: any, overrides?: any): Promise<string | null> {
+function captureChartPNG(
+  type: string, data: any, overrides?: any, frame?: CaptureFrame,
+): Promise<string | null> {
   return new Promise<string | null>((resolve) => {
     const holder = document.createElement('div');
     holder.className = 'export-capture-holder';
+    applyCaptureFrame(holder, frame);
+    // The CSS box (1100x620) is the default; a framed capture overrides it so the
+    // PNG carries the aspect ratio of the card it is going into. devicePixelRatio: 2
+    // below then makes it 2x that box in real pixels, whatever the display is.
+    if (frame && frame.width) holder.style.width = Math.max(200, Math.round(frame.width)) + 'px';
+    if (frame && frame.height) holder.style.height = Math.max(120, Math.round(frame.height)) + 'px';
     const canvas = document.createElement('canvas');
     holder.appendChild(canvas);
     document.body.appendChild(holder);
@@ -32,9 +59,10 @@ function captureChartPNG(type: string, data: any, overrides?: any): Promise<stri
           const out = document.createElement('canvas');
           out.width = src.width; out.height = src.height;
           const ctx = out.getContext('2d')!;
-          // Solid background = the theme surface, so dark-theme charts stay readable
-          // (white-page reports can force light theme in the next stage).
-          ctx.fillStyle = getCSSVar('--surface') || '#ffffff';
+          // Solid background = the theme surface, read off the HOLDER so a framed
+          // capture gets the EXPORT's surface rather than the app's. The root read
+          // this replaces is what backed a light-sheet chart with a dark rectangle.
+          ctx.fillStyle = getCSSVar('--surface', holder) || '#ffffff';
           ctx.fillRect(0, 0, out.width, out.height);
           ctx.drawImage(src, 0, 0);
           finish(out.toDataURL('image/png'));
@@ -73,15 +101,21 @@ function captureChartPNG(type: string, data: any, overrides?: any): Promise<stri
 //
 // Returns null if the map can't be captured cleanly (never idles, comes back blank, IPC
 // failure) so the caller falls back rather than embedding a half-drawn map.
-async function captureMapPNG(vizData: any, type: string): Promise<string | null> {
+async function captureMapPNG(vizData: any, type: string, frame?: CaptureFrame): Promise<string | null> {
   if (!window.hub || typeof window.hub.captureRegion !== 'function') return null;
   if (typeof renderMapInArea !== 'function') return null;
 
   const holder = document.createElement('div');
   holder.className = 'export-map-capture';
+  // Same theme rule as captureChartPNG: mapRender resolves --accent / --surface-3 /
+  // --border off elements INSIDE this holder, so these classes are what decide
+  // whether the choropleth comes back light or dark.
+  applyCaptureFrame(holder, frame);
   // Generous capture size (clamped to the window) → crisp at the display's pixel ratio.
-  const W = Math.min(960, Math.max(480, window.innerWidth - 40));
-  const H = Math.min(600, Math.max(320, window.innerHeight - 40));
+  // A frame asks for the destination card's proportions instead; the window clamp
+  // stays either way, because capturePage can only read pixels that are on screen.
+  const W = Math.min(960, Math.max(480, Math.min((frame && frame.width) || 960, window.innerWidth - 40)));
+  const H = Math.min(600, Math.max(320, Math.min((frame && frame.height) || 600, window.innerHeight - 40)));
   holder.style.width = W + 'px';
   holder.style.height = H + 'px';
   document.body.appendChild(holder);
@@ -112,7 +146,7 @@ async function captureMapPNG(vizData: any, type: string): Promise<string | null>
     // A uniform image means the WebGL layer did not make it into the composite — the
     // one failure mode that would otherwise ship a blank rectangle into a report.
     if (png && !(await isUniformImage(png))) return png;
-    return await captureMapCanvasPNG(map);
+    return await captureMapCanvasPNG(map, holder);
   } catch (e) {
     console.error('[export] map capture failed', e);
     return null;
@@ -128,7 +162,7 @@ async function captureMapPNG(vizData: any, type: string): Promise<string | null>
 // preserveDrawingBuffer: true (set in mapRender.ts, see the contract above) — without
 // it the read comes back transparent, which the uniform check below rejects, and the
 // caller degrades to "couldn't capture the map" rather than embedding a blank box.
-async function captureMapCanvasPNG(map: any): Promise<string | null> {
+async function captureMapCanvasPNG(map: any, holder?: HTMLElement): Promise<string | null> {
   try {
     const canvas = typeof map.getCanvas === 'function' ? map.getCanvas() : null;
     if (!canvas || typeof canvas.toDataURL !== 'function') return null;
@@ -140,7 +174,7 @@ async function captureMapCanvasPNG(map: any): Promise<string | null> {
     out.width = canvas.width; out.height = canvas.height;
     const ctx = out.getContext('2d');
     if (!ctx) return null;
-    ctx.fillStyle = getCSSVar('--surface') || '#ffffff';
+    ctx.fillStyle = getCSSVar('--surface', holder) || '#ffffff';
     ctx.fillRect(0, 0, out.width, out.height);
     ctx.drawImage(canvas, 0, 0);
     const url = out.toDataURL('image/png');
