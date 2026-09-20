@@ -1,4 +1,7 @@
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, app } from 'electron';
+import { randomUUID } from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // Offscreen HTML → PNG / PDF capture — MAIN PROCESS. The single source for the
 // "render a self-contained HTML string in a hidden, content-sized BrowserWindow and
@@ -25,6 +28,36 @@ import { BrowserWindow } from 'electron';
 //     load event says nothing about a map having finished rendering).
 // If a live map is ever wanted in an exported page, it needs its own idle barrier and a
 // verified GPU path in a hidden window — do not assume this routine covers it.
+
+/**
+ * Load `html` into the offscreen window from a TEMP FILE, not a data: URL.
+ *
+ * A `data:text/html,` + encodeURIComponent() navigation has a size ceiling, and
+ * a dashboard one-pager is mostly base64 PNG — the sample dashboard alone came
+ * to 2.4 MB of HTML, which `loadURL` refused, and every caller reports that as
+ * "Could not render the dashboard". Nothing here needs a data: origin: both the
+ * report and the dashboard one-pager are fully self-contained (inline CSS,
+ * `data:` images, no relative URL and no network), which is exactly what makes
+ * a file:// origin equivalent — and the window is still sandboxed with no node
+ * integration, and Chromium blocks file→file reads from a page by default.
+ *
+ * The temp file is removed in `finally`, whether or not the capture worked.
+ */
+async function loadHtml(win: BrowserWindow, html: string): Promise<string> {
+  const file = path.join(app.getPath('temp'), 'ordinate-capture-' + randomUUID() + '.html');
+  await fs.promises.writeFile(file, html, 'utf8');
+  try {
+    await win.loadFile(file);
+  } catch (e) {
+    await fs.promises.rm(file, { force: true }).catch(() => {});
+    throw e;
+  }
+  return file;
+}
+
+function discard(file: string | undefined): void {
+  if (file) fs.promises.rm(file, { force: true }).catch(() => { /* temp file */ });
+}
 
 function offscreenWindow(width: number): BrowserWindow {
   const w = Math.max(320, Math.min(1600, Math.round(width) || 640));
@@ -83,9 +116,10 @@ export async function captureHtmlToPng(html: string, width?: number): Promise<st
   if (typeof html !== 'string' || !html) return null;
   const w = Math.max(320, Math.min(1600, Math.round(width as number) || 640));
   let win: BrowserWindow | undefined;
+  let file: string | undefined;
   try {
     win = offscreenWindow(w);
-    await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+    file = await loadHtml(win, html);
     await settleAndSize(win, w);
     const img = await win.webContents.capturePage();
     return img && !img.isEmpty() ? img.toDataURL() : null;
@@ -94,6 +128,7 @@ export async function captureHtmlToPng(html: string, width?: number): Promise<st
     return null;
   } finally {
     if (win && !win.isDestroyed()) win.destroy();
+    discard(file);
   }
 }
 
@@ -104,9 +139,10 @@ export async function captureHtmlToPdf(html: string, width?: number): Promise<Bu
   if (typeof html !== 'string' || !html) return null;
   const w = Math.max(320, Math.min(1600, Math.round(width as number) || 900));
   let win: BrowserWindow | undefined;
+  let file: string | undefined;
   try {
     win = offscreenWindow(w);
-    await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+    file = await loadHtml(win, html);
     await settleAndSize(win, w);
     const data = await win.webContents.printToPDF({
       printBackground: true,
@@ -119,5 +155,6 @@ export async function captureHtmlToPdf(html: string, width?: number): Promise<Bu
     return null;
   } finally {
     if (win && !win.isDestroyed()) win.destroy();
+    discard(file);
   }
 }
