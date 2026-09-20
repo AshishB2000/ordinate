@@ -121,7 +121,9 @@ async function main(): Promise<void> {
      `"${gallery.financeReason}" blocked=${gallery.financeBlocked}`);
   ok('…the three layouts and the Assistant are unchanged beside them',
      JSON.stringify(gallery.layouts) ===
-       JSON.stringify(['Blank sheet', 'KPIs + chart', 'Two-up', '✨ Let the Assistant design it']),
+       // No longer '✨ Let the Assistant design it' — the sparkle is an icon
+       // now, so the card's TEXT is just the title.
+       JSON.stringify(['Blank sheet', 'KPIs + chart', 'Two-up', 'Let the Assistant design it']),
      JSON.stringify(gallery.layouts));
 
   const galleryShot = path.join(shotDir, 'templates-gallery.png');

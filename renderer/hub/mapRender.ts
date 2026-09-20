@@ -717,7 +717,7 @@ function _addMapValuesMenu(parent: HTMLElement, getMode: () => string, onPick: (
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'cv-values-btn';
-  btn.textContent = 'Values ▾';
+  btn.append('Values', icon('chevron-down'));   // caret TRAILS the label, so not iconLabel()
   btn.setAttribute('aria-label', 'Value labels');
   const sync = () => btn.classList.toggle('active', getMode() !== 'off');
   btn.addEventListener('click', (e) => {
@@ -733,8 +733,7 @@ function _addMapMenuButton(parent: HTMLElement, data: any): void {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'cv-chart-menu-btn';
-  btn.setAttribute('aria-label', 'Map options');
-  btn.textContent = '⋯';
+  iconOnly(btn, 'more-horizontal', 'Map options');
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
     openMiniMenu(btn, (el, close) => {

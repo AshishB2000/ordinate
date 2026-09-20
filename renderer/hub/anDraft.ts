@@ -31,15 +31,19 @@
 async function handleDraftAnalysis(): Promise<void> {
   if (!currentProjectId) { window.alert('Open a project first.'); return; }
   const btn = dashEl('an-draft-btn') as HTMLButtonElement | null;
-  const label = btn ? btn.textContent : '';
-  if (btn) { btn.disabled = true; btn.textContent = 'Thinking…'; }
+  // The label lives in the <span> iconLabel builds. Read THAT, not the
+  // button's textContent: before the first click the button is still the one
+  // index.html shipped, and restoring its raw text would undo the icon.
+  const labelEl = btn ? btn.querySelector('span') : null;
+  const label = labelEl ? labelEl.textContent : '';
+  if (btn) { btn.disabled = true; iconLabel(btn, 'sparkles', 'Thinking…'); }
   let res: any;
   try {
     res = await window.hub.draftDashboard(currentProjectId);
   } catch (_) {
     res = { ok: false, error: 'Could not draft a dashboard.' };
   }
-  if (btn) { btn.disabled = false; btn.textContent = label || '✨ Draft with the Assistant'; }
+  if (btn) { btn.disabled = false; iconLabel(btn, 'sparkles', label || 'Draft with the Assistant'); }
 
   if (res && res.notReady) {
     window.alert(AI_NOT_CONFIGURED);

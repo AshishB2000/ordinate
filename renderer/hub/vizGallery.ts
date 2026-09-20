@@ -242,8 +242,8 @@ function makeVisualCard(v: any): HTMLElement {
   const star = document.createElement('button');
   star.type = 'button';
   star.className = 'viz-card-star';
-  star.textContent = '★';
   const fav = v && v.favorite === true;
+  setIcon(star, fav ? 'star-filled' : 'star');
   star.setAttribute('aria-pressed', fav ? 'true' : 'false');
   star.setAttribute('aria-label', fav ? 'Unfavourite' : 'Favourite');
   star.addEventListener('click', (e) => {
@@ -254,10 +254,9 @@ function makeVisualCard(v: any): HTMLElement {
   const menuBtn = document.createElement('button');
   menuBtn.type = 'button';
   menuBtn.className = 'viz-card-menu';
-  menuBtn.textContent = '⋯';
+  iconOnly(menuBtn, 'more-horizontal', 'More actions');
   menuBtn.setAttribute('aria-haspopup', 'menu');
   menuBtn.setAttribute('aria-expanded', 'false');
-  menuBtn.setAttribute('aria-label', 'More actions');
   menuBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     openVisualCardMenu(menuBtn, v);
@@ -433,6 +432,7 @@ async function handleAddVisualToAnalysis(id: string): Promise<void> {
 // refresh, which reads what is actually on disk.
 async function handleToggleFavorite(id: string, next: boolean, star: HTMLButtonElement): Promise<void> {
   if (!currentProjectId) return;
+  setIcon(star, next ? 'star-filled' : 'star');   // filled/outline, as on Home
   star.setAttribute('aria-pressed', next ? 'true' : 'false');
   star.setAttribute('aria-label', next ? 'Unfavourite' : 'Favourite');
   try {

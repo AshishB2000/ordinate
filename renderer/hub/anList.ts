@@ -218,9 +218,8 @@ function makeAnListItem(a: any, previews: any[]): HTMLElement {
   const menuBtn = document.createElement('button');
   menuBtn.type = 'button';
   menuBtn.className = 'viz-card-menu an-row-menu';
-  menuBtn.setAttribute('aria-label', 'Dashboard options');
   menuBtn.setAttribute('aria-haspopup', 'menu');
-  menuBtn.textContent = '⋯';
+  iconOnly(menuBtn, 'more-horizontal', 'Dashboard options');
   menuBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     openRowMenu(menuBtn, [

@@ -439,6 +439,14 @@ function openPeriodsMenu(anchorBtn, names, hidden, onCommit) {
   });
 }
 
+// [label][chevron-down] — iconLabel() puts the icon first, and a caret goes last.
+function cvLabelCaret(el: HTMLElement, label: string): void {
+  el.textContent = '';
+  const span = document.createElement('span');
+  span.textContent = label;
+  el.append(span, icon('chevron-down'));
+}
+
 // Build the top-right control cluster for a chart and append it to chartWrapper.
 function addChartControls(chartWrapper, container, canvas, data, type, entry, turnIdx, overrideKey) {
   const cluster = document.createElement('div');
@@ -452,7 +460,7 @@ function addChartControls(chartWrapper, container, canvas, data, type, entry, tu
     const valuesBtn = document.createElement('button');
     valuesBtn.type = 'button';
     valuesBtn.className = 'cv-values-btn' + (valueMode !== 'off' ? ' active' : '');
-    valuesBtn.textContent = 'Values ▾';
+    cvLabelCaret(valuesBtn, 'Values');
     valuesBtn.setAttribute('aria-label', 'Value labels');
     valuesBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -473,7 +481,7 @@ function addChartControls(chartWrapper, container, canvas, data, type, entry, tu
     const periodsBtn = document.createElement('button');
     periodsBtn.type = 'button';
     periodsBtn.className = 'cv-periods-btn' + (hidden.size ? ' active' : '');
-    periodsBtn.textContent = (data.dataShape === 'time_series' ? 'Periods' : 'Series') + ' ▾';
+    cvLabelCaret(periodsBtn, data.dataShape === 'time_series' ? 'Periods' : 'Series');
     periodsBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       openPeriodsMenu(periodsBtn, series.map(s => s.name), hidden, () => {
@@ -537,8 +545,7 @@ function addChartControls(chartWrapper, container, canvas, data, type, entry, tu
   const menuBtn = document.createElement('button');
   menuBtn.className = 'cv-chart-menu-btn';
   menuBtn.type = 'button';
-  menuBtn.setAttribute('aria-label', 'Chart options');
-  menuBtn.textContent = '⋯';
+  iconOnly(menuBtn, 'more-horizontal', 'Chart options');
   menuBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     openChartMenu(menuBtn, container, canvas, data, type, entry, turnIdx, overrideKey);

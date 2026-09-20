@@ -393,7 +393,7 @@ function anRenderProps(card: any): void {
     const chev = document.createElement('span');
     chev.className = 'an-sec-chev';
     chev.setAttribute('aria-hidden', 'true');
-    chev.textContent = '›';
+    setIcon(chev, 'chevron-right');
     const t = document.createElement('span');
     t.textContent = title;
     head.appendChild(chev);

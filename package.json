@@ -29,6 +29,7 @@
     "bench:prepare": "npm run build:ts && node scripts/bench-prepare.js",
     "bench:resident": "npm run build:ts && node scripts/bench-resident.js",
     "smoke": "npm run build && node scripts/run-smokes.js",
+    "shoot:design": "npm run build:ts && node scripts/shoot-design.js",
     "build:icons": "node scripts/build-icons.js",
     "build:appicon": "electron scripts/build-appicon.js"
   },

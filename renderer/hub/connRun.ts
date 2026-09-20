@@ -74,8 +74,7 @@ function makeConnItem(c: any): HTMLElement {
   const delBtn = document.createElement('button');
   delBtn.type = 'button';
   delBtn.className = 'conn-del';
-  delBtn.setAttribute('aria-label', 'Delete connection');
-  delBtn.textContent = '🗑';
+  iconOnly(delBtn, 'trash', 'Delete connection');
   delBtn.addEventListener('click', () => handleConnDelete(c));
 
   row.appendChild(mainCol);

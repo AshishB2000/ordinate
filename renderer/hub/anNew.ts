@@ -68,8 +68,7 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
   const x = document.createElement('button');
   x.type = 'button';
   x.className = 'an-wiz-x';
-  x.setAttribute('aria-label', 'Close');
-  x.textContent = '✕';
+  iconOnly(x, 'x', 'Close');
   x.addEventListener('click', close);
   head.appendChild(titles);
   head.appendChild(x);
@@ -285,7 +284,7 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
     { id: 'blank', title: 'Blank sheet', body: 'One empty sheet. Add cards as you go.', art: ['b-full'] },
     { id: 'kpis', title: 'KPIs + chart', body: 'A KPI strip across the top, with a wide chart beneath it.', art: ['b-strip', 'b-wide'] },
     { id: 'twoup', title: 'Two-up', body: 'Two charts side by side, with a notes card below.', art: ['b-half', 'b-half', 'b-strip'] },
-    { id: 'ai', title: '✨ Let the Assistant design it', body: 'Describe what you want and a model proposes the sheets. You review it first.', art: ['b-ai'] },
+    { id: 'ai', title: 'Let the Assistant design it', body: 'Describe what you want and a model proposes the sheets. You review it first.', art: ['b-ai'] },
   ];
   const startCards = START_OPTS.map((o) => {
     const c = document.createElement('button');
@@ -302,7 +301,11 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
     });
     const t = document.createElement('span');
     t.className = 'an-wiz-start-t';
-    t.textContent = o.title;
+    // The AI card is the only one that carries an icon — its title used to
+    // carry a ✨ glyph, and the sparkle is what marks the model route apart
+    // from the three the app builds itself.
+    if (o.id === 'ai') iconLabel(t, 'sparkles', o.title);
+    else t.textContent = o.title;
     const p = document.createElement('span');
     p.className = 'an-wiz-start-p';
     p.textContent = o.body;
@@ -338,7 +341,7 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
   aiCard.className = 'an-wiz-ai';
   const aiH = document.createElement('h3');
   aiH.className = 'an-wiz-ai-h';
-  aiH.textContent = '✨ Describe what you want to see';
+  iconLabel(aiH, 'sparkles', 'Describe what you want to see');
   const aiP = document.createElement('p');
   aiP.className = 'an-wiz-ai-p';
   aiP.textContent =
@@ -382,7 +385,7 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
   const backBtn = document.createElement('button');
   backBtn.type = 'button';
   backBtn.className = 'btn an-wiz-back';
-  backBtn.textContent = '‹ Back';
+  iconLabel(backBtn, 'chevron-left', 'Back');
   backBtn.addEventListener('click', () => { step = Math.max(1, step - 1); sync(); });
   const spacer = document.createElement('span');
   spacer.className = 'an-wiz-spacer';

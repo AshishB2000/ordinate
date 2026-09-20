@@ -121,8 +121,7 @@ function makeControlChip(card: any): HTMLElement {
     const x = document.createElement('button');
     x.type = 'button';
     x.className = 'dash-fb-chip-x';
-    x.textContent = '×';
-    x.setAttribute('aria-label', 'Clear ' + (control.label || 'filter'));
+    iconOnly(x, 'x', 'Clear ' + (control.label || 'filter'));
     x.addEventListener('click', () => clearControlToAll(card));
     chip.appendChild(x);
   }
@@ -133,9 +132,8 @@ function makeControlChip(card: any): HTMLElement {
   const menu = document.createElement('button');
   menu.type = 'button';
   menu.className = 'dash-fb-chip-menu';
-  menu.textContent = '⋯';
   menu.setAttribute('aria-haspopup', 'true');
-  menu.setAttribute('aria-label', 'Actions for ' + (control.label || 'filter'));
+  iconOnly(menu, 'more-horizontal', 'Actions for ' + (control.label || 'filter'));
   menu.addEventListener('click', (e) => {
     e.stopPropagation();
     openControlChipMenu(card, menu);

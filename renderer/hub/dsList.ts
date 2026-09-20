@@ -262,7 +262,7 @@ function makeSavedItem(d: any): HTMLElement {
     btn.type = 'button';
     btn.className = 'btn btn-sm ds-saved-refresh';
     btn.setAttribute('aria-label', 'Refresh dataset');
-    btn.textContent = '↻ Refresh';
+    iconLabel(btn, 'refresh', 'Refresh');
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       handleRefreshDataset(String(d.id), btn, status);
@@ -309,11 +309,11 @@ function makeSavedItem(d: any): HTMLElement {
   const del = document.createElement('button');
   del.type = 'button';
   del.className = 'btn btn-sm ds-saved-del';
-  del.setAttribute('aria-label', `Delete ${d && d.name ? d.name : 'dataset'}`);
-  // Icon-only, so the accessible name is the aria-label above; `title` is the
+  // Icon-only, so the accessible name is iconOnly's aria-label; `title` is the
   // hover tooltip, which an icon with no text needs to be identifiable at all.
+  // It is set first because iconOnly() only fills in a title that is missing.
   del.title = `Delete ${d && d.name ? d.name : 'dataset'}…`;
-  del.textContent = '🗑';
+  iconOnly(del, 'trash', `Delete ${d && d.name ? d.name : 'dataset'}`);
   del.addEventListener('click', (e) => {
     e.stopPropagation();
     handleDeleteDataset(String(d.id));

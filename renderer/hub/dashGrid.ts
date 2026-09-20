@@ -188,8 +188,7 @@ function renderDashPages(): void {
   const ren = document.createElement('button');
   ren.type = 'button';
   ren.className = 'dash-page-ctrl';
-  ren.setAttribute('aria-label', 'Rename page');
-  ren.textContent = '✎';
+  iconOnly(ren, 'pencil', 'Rename page');
   ren.addEventListener('click', () => handleRenamePage(dashPageIdx));
   strip.appendChild(ren);
 
@@ -197,8 +196,7 @@ function renderDashPages(): void {
     const del = document.createElement('button');
     del.type = 'button';
     del.className = 'dash-page-ctrl';
-    del.setAttribute('aria-label', 'Remove page');
-    del.textContent = '×';
+    iconOnly(del, 'x', 'Remove page');
     del.addEventListener('click', () => handleRemovePage(dashPageIdx));
     strip.appendChild(del);
   }
@@ -206,7 +204,7 @@ function renderDashPages(): void {
   const add = document.createElement('button');
   add.type = 'button';
   add.className = 'dash-page-add';
-  add.textContent = '＋ Page';
+  iconLabel(add, 'plus', 'Page');
   add.addEventListener('click', () => handleAddPage());
   strip.appendChild(add);
 }
@@ -402,7 +400,7 @@ async function handleDashRefreshData(): Promise<void> {
   const btn = dashEl('dash-refresh-data') as HTMLButtonElement | null;
   if (btn) {
     btn.disabled = true;
-    btn.textContent = 'Refreshing…';
+    iconLabel(btn, 'refresh', 'Refreshing…');
   }
   const ids = await dashSheetDatasetIds();
   let okCount = 0;
@@ -419,7 +417,7 @@ async function handleDashRefreshData(): Promise<void> {
   }
   if (btn) {
     btn.disabled = false;
-    btn.textContent = '↻ Refresh data';
+    iconLabel(btn, 'refresh', 'Refresh data');
   }
   const failed = ids.length - okCount;
   if (typeof showToast === 'function') {
@@ -564,7 +562,7 @@ function makeDashCardEl(card: any): HTMLElement {
 // The card's ⋯ menu: move, resize, remove. openMiniMenu (chartControls.ts) is
 // the hub's existing popover — positioned, outside-click and Esc already done.
 function dashCardMenuBtn(card: any): HTMLButtonElement {
-  const btn = dashCtrlBtn('⋯', 'Card actions', () => {
+  const btn = dashCtrlBtn('more-horizontal', 'Card actions', () => {
     openMiniMenu(btn, (menu: HTMLElement, close: () => void) => {
       // The chart's own controls popover is a .chart-menu too — this one needs
       // a hook of its own, or a selector for either finds both.
@@ -596,12 +594,11 @@ function dashCardMenuBtn(card: any): HTMLButtonElement {
   return btn;
 }
 
-function dashCtrlBtn(label: string, aria: string, onClick: () => void): HTMLButtonElement {
+function dashCtrlBtn(name: string, aria: string, onClick: () => void): HTMLButtonElement {
   const b = document.createElement('button');
   b.type = 'button';
   b.className = 'dash-card-btn';
-  b.textContent = label;
-  b.setAttribute('aria-label', aria);
+  iconOnly(b, name, aria);
   b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
   return b;
 }

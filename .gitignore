@@ -338,3 +338,10 @@ scripts/**/*.js
 /renderer/hub/insights.js
 /scripts/test-insights.js
 /scripts/smoke-insights.js
+
+# Design foundations — the icon sprite and its gate. Emitted siblings.
+/renderer/hub/icons.js
+/scripts/test-noGlyphIcons.js
+
+# Design screenshot harness — emitted sibling.
+/scripts/shoot-design.js
