@@ -39,6 +39,26 @@
   --r-full: 999px;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 
+  /* ── Motion: THREE durations by ROLE, and one curve ──────────────────
+     hub.css carried 57 transitions spread over eight durations
+     (0.1 / 0.12 / 0.14 / 0.15 / 0.18 / 0.2 / 0.3 / 0.8s) and two idioms
+     for the same fade. None of those numbers was a decision — nobody can
+     tell 100ms from 120ms, so the only thing the extra values bought was
+     two things on the same row easing at different speeds. Three, each
+     with a job, and 220ms is the ceiling for anything in the app:
+
+       --dur-fast   hover, colour, opacity — anything under the pointer
+       --dur-menu   menus, popovers, dropdowns (opacity + 4px translate)
+       --dur-panel  the dock and modals (opacity + scale 0.98 → 1)
+
+     One curve, decelerating: things arrive fast and settle. Note that a
+     `prefers-reduced-motion` block in hub.css zeroes every one of these
+     app-wide — the tokens are the vocabulary, not the guarantee. */
+  --dur-fast: 140ms;
+  --dur-menu: 180ms;
+  --dur-panel: 220ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+
   /* ── Type scale: SIX sizes, and there is no seventh ──────────────────
      hub.css carried 23 distinct font-sizes across 558 declarations, of
      which 137 were half-steps (12.5, 11.5, 10.5, 13.5, 14.5, 9.5). A half

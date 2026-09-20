@@ -348,7 +348,10 @@ function renderThread(entry) {
     if (turn.state === 'loading') {
       const loadEl = document.createElement('div');
       loadEl.className = 'cv-turn-loading';
-      loadEl.innerHTML = '<span class="cv-turn-spinner"></span><span>Thinking…</span>';
+      // A shimmering line of the answer that is coming, not a ring. The app has
+      // exactly one spinner left and it is the dock's send button (hub.css).
+      loadEl.textContent = 'Thinking…';
+      loadEl.appendChild(skelBlock('sk-line'));
       cvThread.appendChild(loadEl);
     } else if (turn.state === 'result' && turn.result) {
       cvThread.appendChild(renderTurnResult(turn.result, turn.activeVizType, entry, ti));
@@ -400,7 +403,7 @@ const cvStepEls = Array.from(document.querySelectorAll('#cv-steps .cv-step'));
 
 const CV_STEP_ICON = {
   done:    '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="var(--ok)"/><path d="M3.5 7.5L5.5 9.5L10.5 4.5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  active:  '<div class="cv-step-spinner"></div>',
+  active:  '<div class="cv-step-dot cv-step-dot--active"></div>',
   pending: '<div class="cv-step-dot"></div>',
 };
 

@@ -58,9 +58,15 @@ function gsPaint(): void {
   box.setAttribute('role', 'listbox');
 
   if (!gsHits.length) {
-    const none = document.createElement('div');
-    none.className = 'gs-none';
-    none.textContent = 'No matches.';
+    // The shared empty state (emptyState.ts), compact for a dropdown. It keeps
+    // .gs-none as well so the result box's own rules still find it.
+    const none = makeEmptyState({
+      variant: 'search',
+      iconName: 'search',
+      title: 'No matches',
+      line: 'Search looks at dataset, visual and dashboard names in this project.',
+    });
+    none.classList.add('gs-none');
     box.appendChild(none);
     box.hidden = false;
     if (input) input.removeAttribute('aria-activedescendant');

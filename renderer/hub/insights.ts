@@ -383,12 +383,15 @@ function insPaintDatasetTab(): void {
   insDestroySparks(host);
   host.innerHTML = '';
   if (!insTabList.length) {
-    const empty = document.createElement('p');
-    empty.className = 'ds-empty-note';
-    empty.textContent =
-      'Nothing stands out yet. Insights appear when a dataset has a date column and at ' +
-      'least two periods, or a category with an outsized share.';
-    host.appendChild(empty);
+    // The shared component (emptyState.ts), not a grey sentence — this tab is
+    // empty for most datasets, so it is a first impression, not an error path.
+    host.appendChild(makeEmptyState({
+      variant: 'insights',
+      iconName: 'zap',
+      title: 'Nothing stands out yet',
+      line: 'Insights appear when a dataset has a date column and at least two periods, ' +
+        'or a category with an outsized share.',
+    }));
     return;
   }
   const gone = (id: string): void => {
@@ -456,10 +459,13 @@ function insPaintRail(): void {
   insDestroySparks(host);
   host.innerHTML = '';
   if (!insRailList.length) {
-    const hint = document.createElement('p');
-    hint.className = 'an-pane-hint';
-    hint.textContent = 'Nothing stands out in the datasets this dashboard uses.';
-    host.appendChild(hint);
+    // Compact variant: this is a 300px rail, not a page.
+    host.appendChild(makeEmptyState({
+      variant: 'rail',
+      iconName: 'zap',
+      title: 'Nothing stands out',
+      line: 'None of the datasets this dashboard uses has a trend or share worth flagging yet.',
+    }));
     return;
   }
   const gone = (id: string): void => {

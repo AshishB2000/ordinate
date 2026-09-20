@@ -194,6 +194,15 @@ function makeExplorerTh(col: ExpCol, c: number): HTMLElement {
  */
 async function refreshExplorerPage(retried?: boolean): Promise<void> {
   if (!expId) return;
+  // A skeleton only on the FIRST paint of this grid. Sort, search and paging
+  // come back off the resident path in ~100 ms, so shimmering the table on
+  // every keystroke would be a flicker, not feedback — but the first fetch
+  // after opening a dataset is a blank panel otherwise. skelTable holds the
+  // shape (and sets aria-busy); paintExplorerTable clears both.
+  const scrollHost = dsEl('ds-explorer-scroll');
+  if (scrollHost && !scrollHost.querySelector('table')) {
+    skelTable(scrollHost, 12, expColumns.length - expHidden.size);
+  }
   const seq = ++expPageSeq;
   const wantId = expId;
   const req: DatasetPageReq = {
@@ -260,6 +269,7 @@ function paintExplorerTable(): void {
   // A dropped column would leave the panel pointing at an index that no longer
   // exists (or, worse, at a different column that slid into it).
   if (dsProfileCol >= expColumns.length) dsCloseProfile();
+  skelClear(scroll); // drops the loading skeleton AND the aria-busy with it
   scroll.innerHTML = '';
   const table = document.createElement('table');
   table.className = 'ds-table';
