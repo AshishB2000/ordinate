@@ -14,7 +14,8 @@
 //   npm run build:ts && node scripts/test-categoryKey.js
 
 import {
-  CATEGORY_CAP, DATE_GRAINS, GRAIN_MAX_POINTS, NUM_BINS, OTHER_LABEL, OTHER_NOTE,
+  CATEGORY_CAP, DATE_GRAINS, GRAIN_MAX_POINTS, MAX_BINS, NUM_BINS, OTHER_LABEL, OTHER_NOTE,
+  sanitizeBins,
   binIndex, binLabel, binPlan, chooseGrain, dateBucket, dateBucketLabel,
   isCanonicalDateCell, isDateGrain, parseDateCell,
 } from '../src/analysis/categoryKey';
@@ -73,6 +74,41 @@ import { ok, failureCount, finish } from './selfcheck';
   // THE LAST EDGE IS THE OBSERVED MAX, exactly. lo + 10*0.1 is
   // 0.9999999999999999 in IEEE-754, and printing that as the top of the axis
   // would be a figure the data never reaches.
+  // ── A caller-named bucket count ───────────────────────────────────────────
+  //
+  // `bins` is the numeric twin of `grain` (the column-profile panel asks for
+  // 20). The geometry has to follow the count, not just the count itself: a
+  // `bins` that changed `plan.bins` while leaving `width` on the default would
+  // put every edge in the wrong place and still look like a 20-bar histogram.
+  ok('MAX_BINS === 100', MAX_BINS === 100);
+  const twenty = binPlan(0, 12000, 20);
+  ok('binPlan(0, 12000, 20): twenty buckets', twenty.bins === 20);
+  ok('binPlan(0, 12000, 20): width follows the count (600, not 1200)', twenty.width === 600);
+  ok('binPlan(0, 12000, 20): lo/hi unchanged', twenty.lo === 0 && twenty.hi === 12000);
+  const two = binPlan(0, 10, 2);
+  ok('binPlan(0, 10, 2): the floor of the range', two.bins === 2 && two.width === 5);
+  const maxed = binPlan(0, 100, MAX_BINS);
+  ok('binPlan(0, 100, MAX_BINS): the ceiling of the range', maxed.bins === 100 && maxed.width === 1);
+
+  // Out of range is DROPPED, not clamped — so it is indistinguishable from
+  // naming nothing, which is what `sanitizeEncoding` promises for every enum.
+  for (const bad of [0, 1, -5, 101, 7.5, NaN, Infinity]) {
+    const p2 = binPlan(0, 12000, bad);
+    ok(`binPlan(0, 12000, ${String(bad)}) falls back to NUM_BINS`,
+      p2.bins === NUM_BINS && p2.width === 1200);
+  }
+  ok('binPlan with no count is still the default', binPlan(0, 12000).bins === NUM_BINS);
+  // The degenerate collapse wins over a named count: a flat column is ONE
+  // bucket whether or not the encoding asked for twenty.
+  ok('a flat column is one bucket even at bins=20', binPlan(5, 5, 20).bins === 1);
+
+  ok('sanitizeBins passes an integer in range', sanitizeBins(20) === 20);
+  ok('sanitizeBins takes the bounds themselves', sanitizeBins(2) === 2 && sanitizeBins(MAX_BINS) === MAX_BINS);
+  for (const bad of [1, 0, -1, MAX_BINS + 1, 7.5, NaN, Infinity, '20', null, undefined, {}]) {
+    ok(`sanitizeBins(${typeof bad === 'string' ? `"${bad}"` : String(bad)}) → undefined`,
+      sanitizeBins(bad as unknown) === undefined);
+  }
+
   const frac = binPlan(0, 1);
   ok('last bucket ends on hi, not lo + bins*width',
     binLabel(9, frac.lo, frac.width, frac.bins, frac.hi).endsWith('–1'),

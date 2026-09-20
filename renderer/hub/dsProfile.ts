@@ -25,12 +25,13 @@
 //                                          column buckets
 //   median                                 `datasetMedian` (src/ipc/datasets.ts)
 //
-// BINS ARE THE APP'S TEN, NOT A NUMBER THIS FILE PICKS. `analysis/categoryKey`'s
-// `NUM_BINS` is what every numeric chart in Ordinate bins by; asking for a
-// different count here would mean threading a `bins` option through
-// categoryKey, vizData, residentCategory, residentQuery and both differential
-// suites, to make this panel disagree with the histogram a user gets by
-// charting the same column. The panel labels what it shows.
+// TWENTY BINS, THROUGH THE ENCODING. `bins` is a real encoding key (the numeric
+// twin of `grain`), whitelisted by `visuals.sanitizeEncoding` and honoured by
+// `categoryKey.binPlan` — the ONE function both the JS and the resident path
+// call — so a profile histogram and a chart of the same column with the same
+// `bins` cannot land a bucket edge in a different place. A profile is read at a
+// glance in a narrow panel and wants more resolution than a chart axis, which
+// is why it names a count instead of taking `NUM_BINS`.
 //
 // Classic global-scope renderer <script>: no import/export.
 
@@ -38,8 +39,17 @@
 let dsProfileCol = -1;
 /** Request generation — a late reply for a column you have since left is dropped. */
 let dsProfileSeq = 0;
-/** Bars drawn for a distribution. The panel is ~300px wide; more is a smear. */
+/** Bars drawn for a TEXT distribution. The panel is ~300px wide; more is a smear. */
 const DS_PROFILE_TOP = 10;
+/**
+ * Buckets a NUMBER column's histogram asks for.
+ *
+ * More than the chart default (`categoryKey.NUM_BINS`, 10) because a profile is
+ * about the shape of the column: ten buckets hide a bimodal distribution that
+ * twenty show. Passed as an encoding key, so the app's own binning does the
+ * work rather than this file computing edges of its own.
+ */
+const DS_PROFILE_BINS = 20;
 
 function dsProfileEl(cls: string): HTMLElement | null {
   const host = dsEl('ds-profile');
@@ -138,11 +148,11 @@ async function dsProfileExtra(col: ExpCol): Promise<{ median?: number | null; di
 /**
  * The distribution, through `visual:data` — the same call a real chart makes.
  *
- * One encoding per column type: a number column bins (the app's ten), a date
- * column is grained to MONTH explicitly rather than letting the chart layer
- * choose a grain from the data, and a text column groups raw. The measure is
- * always `count` of the column itself, which is what makes every bar a row
- * count rather than a sum of something else.
+ * One encoding per column type, each naming its own bucketing rather than
+ * letting the chart layer choose from the data: a number column asks for
+ * `DS_PROFILE_BINS` buckets, a date column for a MONTH grain, and a text column
+ * groups raw. The measure is always `count` of the column itself, which is what
+ * makes every bar a row count rather than a sum of something else.
  */
 async function dsProfileDistribution(col: ExpCol): Promise<{ label: string; value: number }[] | null> {
   if (!currentProjectId || !expId) return null;
@@ -151,6 +161,7 @@ async function dsProfileDistribution(col: ExpCol): Promise<{ label: string; valu
     values: [{ column: col.name, aggregation: 'count' }],
   };
   if (col.type === 'date') encoding.grain = 'month';
+  if (col.type === 'number') encoding.bins = DS_PROFILE_BINS;
 
   let res: any;
   try {
@@ -213,7 +224,21 @@ function dsPctSuffix(part: number, total: number): string {
   return ' (' + Math.round((part / total) * 100) + '%)';
 }
 
-/** The distribution, as a labelled bar per bucket. */
+/**
+ * The distribution.
+ *
+ * TWO FORMS, because two different questions are being asked. A number column
+ * gets a real histogram — twenty thin vertical bars — because what you want
+ * from it is the SHAPE, and a shape is not readable as a list you scroll. A
+ * text or date column gets labelled horizontal rows, because there the labels
+ * ARE the answer ("which value is biggest", "which month") and a bar you cannot
+ * name tells you nothing.
+ *
+ * The horizontal form was used for all three first. At ten bins that was merely
+ * unremarkable; at twenty it needed a 740px panel hanging 380px below the grid
+ * to avoid scrolling, which is how it became clear the form was wrong rather
+ * than the height.
+ */
 function dsPaintProfileChart(col: ExpCol, dist: { label: string; value: number }[] | null): void {
   const host = dsProfileEl('.js-dsp-chart');
   if (!host) return;
@@ -235,9 +260,14 @@ function dsPaintProfileChart(col: ExpCol, dist: { label: string; value: number }
     return;
   }
 
+  if (col.type === 'number') {
+    dsPaintHistogram(host, dist);
+    return;
+  }
+
   // A text column is ordered by COUNT — "top values" has to mean the biggest,
-  // not the first-seen. A binned number and a grained date are ordered by the
-  // axis, because a histogram out of order is not a histogram.
+  // not the first-seen. A grained date is ordered by the axis, because months
+  // out of order are not a timeline.
   let rows = dist;
   if (col.type === 'text') {
     rows = dist.slice().sort((a, b) => b.value - a.value).slice(0, DS_PROFILE_TOP);
@@ -281,6 +311,70 @@ function dsPaintProfileChart(col: ExpCol, dist: { label: string; value: number }
     list.appendChild(row);
   });
   host.appendChild(list);
+}
+
+/**
+ * Twenty bars side by side, plus the two axis edges.
+ *
+ * Heights are a percentage of the tallest bucket, so the y axis is implicitly
+ * "0 to the modal count" — a histogram is read by comparing bars to each other,
+ * and a labelled y axis would cost a third of the panel's width to say what the
+ * tallest bar already says. The count and the bucket's real range live in each
+ * bar's `title`, which is where a specific number is wanted and nowhere else.
+ *
+ * An EMPTY bucket keeps its slot at zero height rather than being dropped: a
+ * gap in a distribution is a fact about the data, and a histogram that silently
+ * closed its gaps would draw a different shape from the one in the column.
+ */
+function dsPaintHistogram(host: HTMLElement, dist: { label: string; value: number }[]): void {
+  const max = dist.reduce((m, r) => (r.value > m ? r.value : m), 0);
+  const total = dist.reduce((sum, r) => sum + r.value, 0);
+
+  const chart = document.createElement('div');
+  chart.className = 'dsp-hist';
+  dist.forEach((r) => {
+    const bar = document.createElement('span');
+    bar.className = 'dsp-hist-bar';
+    // A non-zero count always draws at least a sliver: a bucket with one row in
+    // it must not be indistinguishable from one with none.
+    const pct = max > 0 && r.value > 0 ? Math.max(3, Math.round((r.value / max) * 100)) : 0;
+    bar.style.height = pct + '%'; // CSP: style= is banned in HTML, not here
+    if (r.value === 0) bar.classList.add('is-empty');
+    bar.title = (r.label || '—') + ' · ' + r.value.toLocaleString()
+      + (r.value === 1 ? ' row' : ' rows');
+    chart.appendChild(bar);
+  });
+  host.appendChild(chart);
+
+  // The two edges, under the bars. `binLabel` already formats each bucket as
+  // "lo–hi", so the axis is the first bucket's lower edge and the last one's
+  // upper edge — taken from the labels rather than recomputed, so the axis
+  // cannot disagree with the bars above it.
+  const axis = document.createElement('div');
+  axis.className = 'dsp-hist-axis';
+  const lo = document.createElement('span');
+  lo.textContent = dsEdgeOf(dist[0].label, 0);
+  const hi = document.createElement('span');
+  hi.textContent = dsEdgeOf(dist[dist.length - 1].label, 1);
+  axis.appendChild(lo);
+  axis.appendChild(hi);
+  host.appendChild(axis);
+
+  const note = document.createElement('p');
+  note.className = 'dsp-note dsp-hist-note';
+  note.textContent = dist.length + ' buckets · ' + total.toLocaleString() + ' rows';
+  host.appendChild(note);
+}
+
+/**
+ * One side of a `binLabel` string ("1.2K–2.4K" → "1.2K" or "2.4K").
+ *
+ * Split on the EN DASH `binLabel` joins with, not on a hyphen: a negative
+ * bucket is "-10–-5.2", and splitting that on '-' would produce nonsense.
+ */
+function dsEdgeOf(label: string, side: 0 | 1): string {
+  const parts = String(label).split('\u2013');
+  return parts.length === 2 ? parts[side] : String(label);
 }
 
 /**

@@ -330,7 +330,7 @@ function rewriteCategory(
       if (lo === null || c < lo) lo = c;
       if (hi === null || c > hi) hi = c;
     }
-    const plan = binPlan(lo, hi);
+    const plan = binPlan(lo, hi, encoding.bins);
     // KEY ON THE INDEX, LABEL AFTERWARDS. Two bins can compact to the same
     // text — over [2023, 2024] the width is 0.1 and bins 0 and 9 both print
     // "2K–2K" — and keying on that string would FUSE two real buckets while

@@ -5391,14 +5391,19 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
 .ds-profile {
   flex: 0 0 300px;
   max-width: 300px;
-  /* TALLER than .ds-table-scroll's 380px, deliberately. Matching the grid looked
-     tidier and made the panel useless: six fact rows plus the pinned actions
-     leave ~50px for a ten-bar histogram, which is a scrollbar where a
-     distribution should be. 520px holds the worst case — a number column's six
-     facts and all ten bins — without scrolling at all, and the row is
-     `align-items: flex-start`, so the panel simply hangs below the grid rather
-     than stretching it. */
-  max-height: 520px;
+  /* Slightly taller than .ds-table-scroll's 380px. Matching the grid exactly
+     looked tidier and made the panel useless: six fact rows plus the pinned
+     actions left ~50px for the distribution.
+     530px is what the worst case needs — a number column: six fact rows, the
+     120px histogram block, its axis and its note, plus the pinned actions. It
+     was 740px while the histogram was twenty labelled ROWS; twenty VERTICAL
+     bars in a fixed block (dsProfile.ts dsPaintHistogram) is what brought it
+     down. Measured through the smoke, not estimated. The row is
+     `align-items: flex-start`, so the panel hangs just below the grid rather
+     than stretching it.
+     The `min()` is the short-window guard — on a laptop in a small window the
+     viewport wins, the body scrolls, and the pinned actions stay reachable. */
+  max-height: min(530px, calc(100vh - 220px));
   overflow: hidden;
   box-sizing: border-box;
   display: flex;
@@ -5522,6 +5527,45 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+/* ── The numeric histogram ───────────────────────────────────────────────────
+   Twenty bars side by side. Fixed height, because a histogram is compared
+   against itself — the bars are percentages of the modal bucket, so the block
+   only has to be tall enough to tell them apart, and 120px does that for a
+   300px-wide panel. `align-items: flex-end` is what makes them grow upward from
+   a shared baseline. */
+.dsp-hist {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 120px;
+  padding: 0 1px;
+  border-bottom: 1px solid var(--border);
+}
+.dsp-hist-bar {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+}
+.dsp-hist-bar:hover { background: var(--text-strong); }
+/* An empty bucket keeps its slot — a gap in a distribution is a fact about the
+   data — but must not read as a bar. A hairline says "nothing here" where zero
+   height would say "no bucket here". */
+.dsp-hist-bar.is-empty {
+  height: 1px !important;
+  background: var(--border);
+}
+.dsp-hist-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.dsp-hist-note { margin: 6px 0 0; }
+
 /* The three scoped actions, stacked: at 300px they would wrap mid-label. Pinned
    under the scrolling body, with a rule to separate them from it. */
 .dsp-actions {
