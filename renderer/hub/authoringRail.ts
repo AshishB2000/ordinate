@@ -119,9 +119,6 @@ function initAuthoring(): void {
     });
   }
 
-  // + Calculated field belongs to the dataset, and the Prepare pipeline already
-  // owns authoring one (reversible, safe evaluator, AI suggestion). Sending the
-  // user there beats a second formula editor that has to stay in step with it.
   const search = anEl('an-field-search');
   if (search) search.addEventListener('input', () => anRenderFields());
   const browseSearch = anEl('an-browse-search');
@@ -149,12 +146,28 @@ function initAuthoring(): void {
         window.alert('Select a visual card first — a calculated field is added to its dataset.');
         return;
       }
-      // Calculated fields belong to the DATASET, and prepare.ts already owns
-      // authoring one (reversible pipeline, safe evaluator, AI suggestion). Send
-      // the user to it rather than grow a second formula editor here that has to
-      // be kept in step with the first.
-      openSavedDataset(String(anVisual.datasetId));
-      showToast('Add a calculated field in this dataset’s Prepare steps.');
+      // A calculated field belongs to the DATASET, so this still writes a
+      // pipeline step — but the user no longer has to leave the analysis to
+      // write one. It is the SAME editor prepare.ts opens, against the same
+      // IPC, so there is still exactly one formula surface in the app.
+      const datasetId = String(anVisual.datasetId);
+      openFormulaEditor({
+        projectId: currentProjectId || '',
+        datasetId,
+        onSave: async (field) => {
+          const res = await window.hub.addDatasetStep(currentProjectId, datasetId, {
+            type: 'calculated_field',
+            name: field.name,
+            expression: field.expression,
+          });
+          if (!res || res.ok === false) {
+            window.alert((res && res.error) || 'Failed to add the calculated field.');
+            return false;
+          }
+          showToast('Added “' + field.name + '” to this dataset.');
+          return true;
+        },
+      });
     });
   }
 }

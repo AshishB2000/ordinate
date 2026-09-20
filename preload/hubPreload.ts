@@ -314,6 +314,13 @@ contextBridge.exposeInMainWorld('hub', {
   // { ok:false, error }.
   suggestCalcField: (projectId: string, datasetId: string) =>
     ipcRenderer.invoke('dataset:suggestCalcField', { projectId, datasetId }),
+
+  // The formula editor. `check` runs on every (debounced) keystroke and NEVER
+  // writes — it compiles, names the unknown columns and evaluates eight rows.
+  // The catalog is fetched once and cached by the editor.
+  checkFormula: (projectId: string, datasetId: string, expression: string) =>
+    ipcRenderer.invoke('formula:check', { projectId, datasetId, expression }),
+  formulaFunctions: () => ipcRenderer.invoke('formula:functions'),
   // ── Connected data sources (every source is a connector in src/connectors) ──
   // Secrets (passwords / tokens / API keys) travel ONE-WAY to main inside
   // `secret` and are NEVER read back — no reveal bridge, mirroring BYOK keys.

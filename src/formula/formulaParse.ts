@@ -27,9 +27,19 @@ export class Parser {
   parse(): EvalFn {
     const fn = this.parseOr();
     if (this.pos < this.toks.length) {
-      throw new FormulaError('Unexpected token: ' + this.toks[this.pos].value);
+      this.fail('Unexpected token: ' + this.toks[this.pos].value);
     }
     return fn;
+  }
+
+  // EVERY parser error goes through here, so every one of them carries the
+  // token it is complaining about. The editor underlines that token; without a
+  // position a message like "Unexpected token: /" makes the user hunt for which
+  // "/" in a long expression is the wrong one.
+  private fail(message: string): never {
+    const e = new FormulaError(message);
+    e.tokenIndex = this.pos;
+    throw e;
   }
 
   private peek(): Tok | undefined {
@@ -54,7 +64,7 @@ export class Parser {
   private expectPunc(value: string): void {
     if (!this.isPunc(value)) {
       const got = this.peek();
-      throw new FormulaError(`Expected "${value}" but got ${got ? got.value : 'end of input'}`);
+      this.fail(`Expected "${value}" but got ${got ? got.value : 'end of input'}`);
     }
     this.pos += 1;
   }
@@ -62,7 +72,7 @@ export class Parser {
   private expectName(word: string): void {
     if (!this.isName(word)) {
       const got = this.peek();
-      throw new FormulaError(`Expected "${word.toUpperCase()}" but got ${got ? got.value : 'end of input'}`);
+      this.fail(`Expected "${word.toUpperCase()}" but got ${got ? got.value : 'end of input'}`);
     }
     this.pos += 1;
   }
@@ -171,7 +181,7 @@ export class Parser {
 
   private parsePrimary(): EvalFn {
     const t = this.peek();
-    if (!t) throw new FormulaError('Unexpected end of expression');
+    if (!t) this.fail('Unexpected end of expression');
 
     if (t.kind === 'num') {
       this.pos += 1;
@@ -230,7 +240,7 @@ export class Parser {
       return e;
     }
 
-    throw new FormulaError('Unexpected token: ' + t.value);
+    this.fail('Unexpected token: ' + t.value);
   }
 
   // IF <test> THEN <val> [ELSEIF <test> THEN <val>]* [ELSE <val>] END
@@ -269,7 +279,7 @@ export class Parser {
       this.expectName('then');
       whens.push({ val, then: this.parseOr() });
     }
-    if (whens.length === 0) throw new FormulaError('CASE requires at least one WHEN');
+    if (whens.length === 0) this.fail('CASE requires at least one WHEN');
     let elseFn: EvalFn | null = null;
     if (this.isName('else')) {
       this.pos += 1;
@@ -285,7 +295,7 @@ export class Parser {
 
   private parseCall(name: string): EvalFn {
     const fn = FUNCTIONS[name.toLowerCase()];
-    if (!fn) throw new FormulaError('Unknown function: ' + name);
+    if (!fn) this.fail('Unknown function: ' + name);
     this.pos += 1; // consume name
     this.expectPunc('('); // consume '('
     const args: EvalFn[] = [];
