@@ -63,7 +63,11 @@ function renderChartJsInArea(container, data, type, entry, turnIdx) {
   }
 
   const wrap = document.createElement('div');
-  wrap.className = 'cv-canvas-wrap';
+  // `is-fresh` is the one-shot fade-in: hub.css runs a 220ms opacity keyframe
+  // on it, and since this wrapper is built new for every draw the fade happens
+  // once per mount. Nothing removes the class — a keyframe does not replay on a
+  // live element, so it costs nothing to leave on.
+  wrap.className = 'cv-canvas-wrap is-fresh';
   const canvas = document.createElement('canvas');
   canvas.setAttribute('aria-label', 'Chart');
   wrap.appendChild(canvas);
@@ -140,7 +144,7 @@ function renderSmallMultiples(container, data, type, entry, turnIdx) {
     cap.textContent = s.name || ('Series ' + (i + 1));
     cell.appendChild(cap);
     const wrap = document.createElement('div');
-    wrap.className = 'cv-canvas-wrap';
+    wrap.className = 'cv-canvas-wrap is-fresh';
     const canvas = document.createElement('canvas');
     canvas.setAttribute('aria-label', cap.textContent + ' chart');
     wrap.appendChild(canvas);

@@ -103,18 +103,62 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
 })();
 
 // ── Toast ─────────────────────────────────────────────────────────────────
+// `#hub-toast` is the STACK, not a toast: a bottom-right column that up to
+// three `.toast` cards queue inside, oldest pushed out by a fourth. It was one
+// element whose textContent was replaced, so a second message erased the first
+// before it had been read.
+//
+// The CONTAINER carries role="status"/aria-live (index.html), not each toast:
+// a live region has to be in the document before the text lands inside it, so
+// a freshly created per-toast region announces nothing.
+//
+// `showToast(msg)` is unchanged for its ~120 call sites. The second argument is
+// the new part and is entirely optional:
+//   showToast('Saved', { kind: 'success' })
+//   showToast('Export failed', { kind: 'error', action: { label: 'Retry', onClick: fn } })
 const hubToast = document.getElementById('hub-toast');
-let _toastTimer = null;
+const TOAST_ICON = { success: 'check', error: 'alert', info: 'info' };
+// Keyed by the element so a toast dismissed early (by its action, or pushed
+// out of the stack) takes its pending 4s timer with it.
+const _toastTimers = new WeakMap();
 
-function showToast(msg) {
+function _dropToast(el) {
+  if (!el) return;
+  clearTimeout(_toastTimers.get(el));
+  _toastTimers.delete(el);
+  el.remove();
+  // Empty again → back to `hidden`, which is both what the smokes wait on and
+  // what keeps an empty container out of the accessibility tree.
+  if (hubToast && !hubToast.childElementCount) hubToast.hidden = true;
+}
+
+function showToast(msg, opts?) {
   if (!hubToast) return;
-  if (_toastTimer) { clearTimeout(_toastTimer); hubToast.classList.remove('hub-toast-fade'); }
-  hubToast.textContent = msg;
+  const o = opts || {};
+  const kind = TOAST_ICON[o.kind] ? o.kind : 'info';
+  const el = document.createElement('div');
+  el.className = 'toast toast-' + kind;
+  el.appendChild(icon(TOAST_ICON[kind], 16));
+  const text = document.createElement('span');
+  text.className = 'toast-text';
+  // Toast copy carries dataset names, file paths and model-written sentences.
+  text.textContent = msg == null ? '' : String(msg);
+  el.appendChild(text);
+  if (o.action && o.action.label) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toast-action';
+    btn.textContent = String(o.action.label);
+    btn.addEventListener('click', () => {
+      _dropToast(el);
+      if (typeof o.action.onClick === 'function') o.action.onClick();
+    });
+    el.appendChild(btn);
+  }
   hubToast.hidden = false;
-  _toastTimer = setTimeout(() => {
-    hubToast.classList.add('hub-toast-fade');
-    _toastTimer = setTimeout(() => { hubToast.hidden = true; hubToast.classList.remove('hub-toast-fade'); }, 320);
-  }, 2200);
+  hubToast.appendChild(el);
+  while (hubToast.childElementCount > 3) _dropToast(hubToast.firstElementChild);
+  _toastTimers.set(el, setTimeout(() => _dropToast(el), 4000));
 }
 
 function _fmtVal(v) {

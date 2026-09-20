@@ -345,3 +345,11 @@ scripts/**/*.js
 
 # Design screenshot harness — emitted sibling.
 /scripts/shoot-design.js
+
+# Tooltip behaviour behind the `.tip` class — emitted sibling.
+/renderer/hub/tooltip.js
+
+# Design motion + states — the shared empty state and loading skeletons.
+# Emitted siblings.
+/renderer/hub/emptyState.js
+/renderer/hub/skeleton.js

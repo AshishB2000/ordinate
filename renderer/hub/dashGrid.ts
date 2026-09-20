@@ -707,7 +707,18 @@ async function resolveCardVisual(card: any): Promise<{ visual: any; inline: bool
 // datasetId/encoding/chartType/overrides/filters, compute the renderer-ready
 // data in main, then hand it to renderVizInArea exactly like the Visuals
 // builder does.
+// A tile is two IPC round-trips away from anything to draw (resolve the visual,
+// then compute its data), so the card paints a skeleton of its own shape first
+// and every exit path — drawn, missing, broken — replaces it. The `finally` is
+// what takes aria-busy back off; the nodes themselves go when the body is
+// rewritten, but an un-cleared aria-busy would leave the card announced as
+// loading forever.
 async function renderVisualCard(card: any, body: HTMLElement): Promise<void> {
+  skelChart(body);
+  try { await renderVisualCardInto(card, body); } finally { skelClear(body); }
+}
+
+async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void> {
   if (!currentProjectId || (!card.visualId && !card.visual)) { dashCardMissing(body, 'No visual selected.'); return; }
   const resolved = await resolveCardVisual(card);
   if (!resolved) { dashCardMissing(body, 'This visual was deleted.', true); return; }

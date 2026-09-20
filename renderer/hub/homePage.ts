@@ -245,53 +245,10 @@ function makeRecentRow(it: any): HTMLElement {
   return row;
 }
 
-/**
- * A DESIGNED empty state, not a muted sentence in a box.
- *
- * Empty is what every user sees on day one, so it is a first impression rather
- * than an error path: an icon, a headline in the same tier as a section, one
- * line of guidance, and — where there is something useful to press — an action
- * that is the actual next step.
- *
- * `onAction` is wired as a real listener rather than markup, because the hub CSP
- * forbids inline handlers just as it forbids inline style.
- */
-function makeEmptyState(opts: {
-  variant: string;
-  iconName: string;
-  title: string;
-  line: string;
-  actionLabel?: string;
-  onAction?: () => void;
-}): HTMLElement {
-  const box = document.createElement('div');
-  box.className = 'home-empty home-empty--' + opts.variant;
-
-  const art = document.createElement('span');
-  art.className = 'home-empty-art';
-  art.setAttribute('aria-hidden', 'true');
-  art.appendChild(icon(opts.iconName, 24));
-
-  const title = document.createElement('span');
-  title.className = 'home-empty-title';
-  title.textContent = opts.title;
-
-  const line = document.createElement('span');
-  line.className = 'home-empty-line';
-  line.textContent = opts.line;
-
-  box.append(art, title, line);
-
-  if (opts.actionLabel && opts.onAction) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'home-empty-action';
-    btn.textContent = opts.actionLabel;
-    btn.addEventListener('click', opts.onAction);
-    box.appendChild(btn);
-  }
-  return box;
-}
+// The empty states below come from makeEmptyState (emptyState.ts) — the ONE
+// shared component, which this file used to own privately. Home's two are
+// density variants of it ('starred' is compact, 'recent' fills the column);
+// nothing about the parts is local any more.
 
 // Split the one recent list into Starred (pinned) and Recent (the rest). Both
 // ALWAYS render: a section that vanishes when empty is what left a void under
@@ -348,6 +305,8 @@ function paintHome(): void {
           // The same door the quick-start row opens, so the empty state ends in
           // the action it is describing rather than in advice.
           onAction: () => { if (typeof startFromSource === 'function') startFromSource('file'); },
+          ghostLabel: 'Browse sources',
+          onGhost: () => { if (typeof startFromSource === 'function') startFromSource('catalog'); },
         }),
       );
   }

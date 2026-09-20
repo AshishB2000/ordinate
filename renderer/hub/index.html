@@ -559,7 +559,10 @@
           <!-- Loading -->
           <div class="cv-loading-panel">
             <div class="cv-loading-head">
-              <span class="cv-spin-icon" aria-hidden="true"><span class="cv-spinner"></span></span>
+              <!-- A static mark, not a ring: the step list below already says
+                   which part of the work is running, and a spinner over it was
+                   the same message twice. -->
+              <span class="cv-spin-icon" aria-hidden="true"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="#i-sparkles"/></svg></span>
               <div>
                 <div class="cv-loading-title">Analyzing your capture…</div>
                 <div class="cv-loading-sub">Reading what's on screen. This usually takes a few seconds.</div>
@@ -775,12 +778,17 @@
             <span class="ws-col-action">Action</span>
           </div>
           <div class="ds-saved-list" id="ds-saved-list"></div>
+          <!-- The shared empty state (see .ws-empty in hub.css and
+               emptyState.ts): icon circle, title, line, one primary + one ghost.
+               Spelled in markup here rather than built, because the two buttons
+               are wired by id in dsList.ts. -->
           <div class="ws-empty ds-saved-empty" id="ds-saved-empty" hidden>
+            <span class="ws-empty-icon" aria-hidden="true"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="#i-database"/></svg></span>
             <h3 class="ws-empty-h">No datasets yet</h3>
             <p class="ws-empty-p">Import a CSV, JSON or Excel file — or paste data straight in — to save a structured dataset in this project.</p>
             <div class="ws-empty-actions">
               <button class="btn btn-primary" type="button" id="ds-empty-import">Import file</button>
-              <button class="btn" type="button" id="ds-empty-paste">Paste data</button>
+              <button class="btn btn-ghost" type="button" id="ds-empty-paste">Paste data</button>
             </div>
           </div>
         </div>
@@ -1102,7 +1110,7 @@
               <p class="ws-empty-p">A visual is one saved chart — build it once, then drop it into any dashboard, or export it on its own. Every number is computed by the app.</p>
               <div class="ws-empty-actions">
                 <button class="btn btn-primary btn-lg" type="button" id="viz-empty-new-btn"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-plus"/></svg><span>New visual</span></button>
-                <button class="btn btn-lg" type="button" id="viz-empty-ai"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-sparkles"/></svg><span>Start with the Assistant</span></button>
+                <button class="btn btn-ghost btn-lg" type="button" id="viz-empty-ai"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-sparkles"/></svg><span>Start with the Assistant</span></button>
               </div>
               <p class="viz-empty-hint" id="viz-empty-hint" hidden></p>
             </div>
@@ -1210,7 +1218,7 @@
           <p class="ws-empty-p">A dashboard is where you build: sheets of charts, metrics and text over your datasets. Start from a blank sheet, or describe what you want and let the Assistant draft the sheets, charts and calculated fields — you review all of it before anything is created.</p>
           <div class="ws-empty-actions">
             <button class="btn btn-primary btn-lg" type="button" id="an-empty-new">Create dashboard</button>
-            <button class="btn btn-lg" type="button" id="an-empty-draft"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-sparkles"/></svg><span>Draft with the Assistant</span></button>
+            <button class="btn btn-ghost btn-lg" type="button" id="an-empty-draft"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-sparkles"/></svg><span>Draft with the Assistant</span></button>
           </div>
           <!-- Build intents over the project's REAL datasets, filled by
                anRenderEmptyChips (anList.ts). Each opens the Assistant with that
@@ -1994,8 +2002,12 @@
   </div>
 
 </div>
-  <!-- ── toast notification ──────────────────────────────────────────── -->
-  <div id="hub-toast" class="hub-toast" hidden></div>
+  <!-- ── toast notifications ─────────────────────────────────────────────
+       The STACK, not one toast: showToast() appends up to three `.toast`
+       children here. The live region is this container and not the individual
+       toasts — a region has to already be in the document when the text lands
+       in it, so a per-toast region would announce nothing. -->
+  <div id="hub-toast" class="hub-toast" role="status" aria-live="polite" hidden></div>
 
   <!-- ── image action menu (copy / save / download / view full size) ─── -->
   <div id="img-action-menu" class="img-action-menu" hidden>
@@ -2342,7 +2354,19 @@
      sprite every other file's icon() calls resolve their <use href> against,
      and a panel that renders before the sprite exists draws empty boxes. -->
 <script src="icons.js"></script>
+<!-- The two shared STATE components, straight after the sprite: the one empty
+     state (makeEmptyState) and the one loading skeleton (skelTable/skelChart/
+     skelClear). Both only need icon()/the DOM, and every surface that calls
+     them — Home, Data, Visuals, Dashboards, Insights, the dock, search — loads
+     below, so this is the earliest correct slot in dependency order. -->
+<script src="emptyState.js"></script>
+<script src="skeleton.js"></script>
 <script src="lazyScript.js"></script>
+<!-- One delegated listener that turns every `title` in the app into the
+     designed `.tip`. Delegated on `document`, so it covers markup that does
+     not exist yet and its position in this list is free — it sits with the
+     other foundations because that is what it is. -->
+<script src="tooltip.js"></script>
 <script src="geoMatch.js"></script>
 <!-- Chart scripts, in DEPENDENCY ORDER. chartTraits has no dependencies of its
      own; chartPalette defines CHART_PALETTE + getCSSVar; chartTable reads

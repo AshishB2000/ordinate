@@ -404,7 +404,7 @@ function dkSetComposerEnabled(enabled: boolean): void {
   const input = document.getElementById('dk-input') as HTMLTextAreaElement | null;
   const send = document.getElementById('dk-send') as HTMLButtonElement | null;
   if (input) input.disabled = !enabled;
-  if (send) send.disabled = !enabled;
+  if (send) { send.disabled = !enabled; send.classList.toggle('is-busy', dkBusy); } // is-busy: the app's ONE spinner (hub.css)
 }
 
 function dkShowHint(text: string): void {
@@ -473,11 +473,11 @@ async function dkRenderThreadList(): Promise<void> {
     const res: any = await window.hub.copilotThreads(currentProjectId);
     if (res && res.ok && Array.isArray(res.threads)) threads = res.threads;
   } catch (_) { threads = []; }
-  if (!threads.length) {
-    const empty = document.createElement('div');
-    empty.className = 'dk-thread-empty';
-    empty.textContent = 'No past conversations yet.';
-    host.appendChild(empty);
+  if (!threads.length) { // the shared empty state (emptyState.ts), compact for a 300px dock
+    host.appendChild(makeEmptyState({
+      variant: 'dock', iconName: 'sparkles', title: 'No past conversations yet',
+      line: 'Ask something below and every thread in this project collects here.',
+    }));
     return;
   }
   threads.forEach((t) => host.appendChild(dkMakeThreadRow(t)));

@@ -70,6 +70,12 @@ function vizThumbObserve(tile: HTMLElement, v: any): void {
       for (const e of entries) {
         if (!e.isIntersecting) continue;
         vizThumbObserver!.unobserve(e.target);
+        // Skeleton from the moment a tile is QUEUED, not from when it is
+        // observed: an off-screen card would otherwise shimmer (and stay
+        // aria-busy) for as long as it is never scrolled to. The glyph
+        // underneath is the fallback for a render that FAILS, not a loading
+        // state. vizThumbPump clears it either way.
+        skelChart(e.target as HTMLElement);
         vizThumbQueue.push(e.target as HTMLElement);
       }
       vizThumbPump();
@@ -86,6 +92,7 @@ function vizThumbPump(): void {
     const tile = vizThumbQueue.shift() as HTMLElement;
     vizThumbActive += 1;
     vizThumbRender(tile).catch(() => { /* glyph stays */ }).then(() => {
+      skelClear(tile); // the chart is in, or the glyph is the answer — either way, done
       vizThumbActive -= 1;
       vizThumbPump();
     });
