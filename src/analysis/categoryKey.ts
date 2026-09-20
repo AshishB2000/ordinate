@@ -196,18 +196,48 @@ export interface BinPlan {
   bins: number;
 }
 
+/** The most buckets an encoding may ask for. See `sanitizeBins`. */
+export const MAX_BINS = 100;
+
+/**
+ * A caller-supplied bucket count, or `NUM_BINS`.
+ *
+ * DROPPED, never clamped — the same rule `visuals.sanitizeEncoding` applies to
+ * `grain` and every other enum it whitelists. An absent `bins` already means
+ * "use the default", so silently turning a bad 5,000 into 100 would draw a
+ * chart nobody asked for and call it the one they did.
+ *
+ * Two is the floor because one bucket is the DEGENERATE case below (a flat or
+ * empty column), not something an encoding gets to request. `MAX_BINS` is the
+ * ceiling because the bucket count is a GROUP BY cardinality on the resident
+ * path and an axis on the rendered one, and neither wants five thousand.
+ */
+export function sanitizeBins(raw: unknown): number | undefined {
+  if (typeof raw !== 'number' || !Number.isInteger(raw)) return undefined;
+  if (raw < 2 || raw > MAX_BINS) return undefined;
+  return raw;
+}
+
 /**
  * (min, max) of the filtered numeric cells → the bin geometry. Shared so the
  * degenerate cases collapse identically on both paths: a single distinct value,
  * an all-empty column (min/max NULL), or a range that underflows to zero width
- * all become ONE bucket rather than ten identical ones or a division by zero.
+ * all become ONE bucket rather than N identical ones or a division by zero.
+ *
+ * `bins` is the encoding's bucket count where it named one (the column-profile
+ * panel asks for 20), `NUM_BINS` otherwise. It is a PARAMETER rather than a
+ * module constant because both paths — `vizData.rewriteCategory` and
+ * `residentQuery.binKey` — call this one function, so a per-chart count cannot
+ * make the two disagree about where a bucket edge falls. Anything outside
+ * `sanitizeBins`'s range falls back to the default rather than being honoured.
  */
-export function binPlan(lo: number | null, hi: number | null): BinPlan {
+export function binPlan(lo: number | null, hi: number | null, bins?: number): BinPlan {
   const l = typeof lo === 'number' && Number.isFinite(lo) ? lo : 0;
   const h = typeof hi === 'number' && Number.isFinite(hi) ? hi : 0;
-  const width = (h - l) / NUM_BINS;
+  const n = sanitizeBins(bins) ?? NUM_BINS;
+  const width = (h - l) / n;
   if (!Number.isFinite(width) || width <= 0) return { lo: l, hi: h, width: 1, bins: 1 };
-  return { lo: l, hi: h, width, bins: NUM_BINS };
+  return { lo: l, hi: h, width, bins: n };
 }
 
 /**

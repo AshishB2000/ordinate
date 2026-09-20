@@ -40,6 +40,8 @@ const TOP_REGION = 'region0';
 const TOP_REGION_ROWS = 715;
 const NOTE_FILLED_PCT = Math.round(((ROWS - Math.ceil(ROWS / 3)) / ROWS) * 100);
 const COLUMNS = ['region', 'sku', 'amount', 'note'];
+/** dsProfile.ts DS_PROFILE_BINS — what a numeric profile asks `visual:data` for. */
+const PROFILE_BINS = 20;
 
 async function main(): Promise<void> {
   const smoke = await launchSmoke('dataset');
@@ -243,7 +245,12 @@ async function main(): Promise<void> {
       name: (panel?.querySelector('.js-dsp-name')?.textContent || '').trim(),
       kind: (panel?.querySelector('.js-dsp-kind')?.textContent || '').trim(),
       heading: (panel?.querySelector('.dsp-head')?.textContent || '').trim(),
-      bars: (panel?.querySelectorAll('.dsp-bar-row') || []).length,
+      // A numeric column draws `.dsp-hist-bar` (vertical), a text/date one
+      // `.dsp-bar-row` (labelled rows) — see dsProfile.dsPaintProfileChart.
+      bars: (panel?.querySelectorAll('.dsp-hist-bar') || []).length,
+      rowBars: (panel?.querySelectorAll('.dsp-bar-row') || []).length,
+      axis: [...(panel?.querySelectorAll('.dsp-hist-axis span') || [])]
+        .map((x) => (x.textContent || '').trim()),
       facts,
     };
   });
@@ -258,7 +265,36 @@ async function main(): Promise<void> {
   ok('amount has a computed median inside its own range',
      Number.isFinite(med) && med >= -10 && med <= 86, `Median="${numProfile.facts.Median}"`);
   ok('a number column charts a distribution', numProfile.heading === 'Distribution', numProfile.heading);
-  ok('the distribution has bars', numProfile.bars > 0, String(numProfile.bars));
+  // The COUNT, not merely "there are bars". `bins` reaches the JS path and the
+  // resident path through two different functions, and a count honoured by one
+  // and dropped by the other still returns a perfectly plausible chart — it is
+  // just the default one. `amount` spans -10..86, so twenty buckets are all
+  // non-empty and none is dropped for having no rows.
+  ok(`the distribution has exactly ${PROFILE_BINS} buckets`,
+     numProfile.bars === PROFILE_BINS, String(numProfile.bars));
+  ok('a number column draws a histogram, not labelled rows', numProfile.rowBars === 0,
+     String(numProfile.rowBars));
+  // The axis is taken from the first and last bucket LABELS, so it cannot
+  // disagree with the bars above it — and it must span the column's real range.
+  ok('the histogram axis runs from the column min to its max',
+     numProfile.axis.length === 2 && numProfile.axis[0] === '-10' && numProfile.axis[1] === '86',
+     JSON.stringify(numProfile.axis));
+  // And the panel is tall enough to show them without scrolling — a histogram
+  // you have to scroll is one whose shape you cannot read.
+  const fits = await win.evaluate(() => {
+    const body = document.querySelector('#ds-profile .dsp-body') as HTMLElement | null;
+    const actions = document.querySelector('#ds-profile .dsp-actions') as HTMLElement | null;
+    return {
+      scrolled: !!body && body.scrollHeight > body.clientHeight + 1,
+      need: body ? body.scrollHeight : 0,
+      have: body ? body.clientHeight : 0,
+      panel: (document.getElementById('ds-profile') as HTMLElement | null)?.offsetHeight ?? 0,
+      actionsVisible: !!actions && actions.getClientRects().length > 0,
+    };
+  });
+  ok('all twenty bars fit without scrolling', !fits.scrolled,
+     `body needs ${fits.need}px, has ${fits.have}px; panel ${fits.panel}px`);
+  ok('and the scoped actions are still on screen below them', fits.actionsVisible);
 
   await win.screenshot({ path: `${shotDir}/dataset-profile-number.png` });
 

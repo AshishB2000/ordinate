@@ -171,7 +171,7 @@ export async function residentVizData(
     // input can produce a null, so one there IS the regression signal and warns.
     // (No column NAME in the detail: it is a header out of the user's own file.)
     const catType = src.columns.find((c) => c && c.name === encoding.category)?.type;
-    const plan = resolveCatKey(src, encoding.category, measures, filters, encoding.grain);
+    const plan = resolveCatKey(src, encoding.category, measures, filters, encoding.grain, encoding.bins);
     if (!plan) {
       trace.record('vizCategoryKey', catType === 'date' ? 'skipped' : 'failed', `category type ${catType}`);
       return null;

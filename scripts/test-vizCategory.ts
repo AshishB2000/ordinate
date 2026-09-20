@@ -334,6 +334,60 @@ async function main(): Promise<void> {
     await diff('number → bins, filtered', nums, enc, { filters, expectResident: true });
   }
 
+  // ── 3b. An encoding that NAMES its bucket count ───────────────────────────
+  //
+  // `bins` is the numeric twin of `grain`, and the column-profile panel asks
+  // for 20 of them. The risk it introduces is specific: the count reaches the
+  // JS path through `vizData.rewriteCategory` and the resident path through
+  // `residentQuery.binKey`, so a count honoured by one and dropped by the other
+  // would put every bucket edge in a different place — and the shipped funnel
+  // would still return a perfectly plausible chart. Only a differential at a
+  // NON-DEFAULT count can see that, which is what these are.
+  {
+    const enc: VizEncoding = {
+      category: 'price',
+      values: [{ column: 'qty', aggregation: 'sum' }, { column: 'qty', aggregation: 'avg' }],
+    };
+    for (const bins of [2, 20, categoryKey.MAX_BINS]) {
+      await diff(`number → ${bins} bins`, nums, { ...enc, bins });
+      const { reply } = await viaFunnel(nums, { ...enc, bins });
+      // The count is ASSERTED, not just agreed on: both paths reading the same
+      // wrong default would satisfy the differential above and fail here.
+      ok(`number → ${bins} bins: exactly ${bins} buckets + the '' group`,
+        reply.data.labels.length === bins + 1,
+        `${reply.data.labels.length} labels`);
+    }
+    // Filtered, at a named count — the two rewrites compose.
+    await diff('number → 20 bins, filtered', nums, { ...enc, bins: 20 },
+      { filters: [{ type: 'filter', column: 'price', op: '<', value: 6000 }], expectResident: true });
+  }
+
+  // An out-of-range or malformed `bins` is DROPPED, never clamped — the rule
+  // `sanitizeEncoding` applies to every enum it whitelists. The chart falls back
+  // to NUM_BINS, so each of these must be indistinguishable from naming nothing.
+  {
+    const base: VizEncoding = { category: 'price', values: [{ column: 'qty', aggregation: 'sum' }] };
+    const def = await viaFunnel(nums, base);
+    // Labelled with String(), not JSON.stringify: the latter renders NaN,
+    // Infinity and null all as "null", which would give three assertions the
+    // same name and make one of them failing unreadable.
+    for (const bad of [0, 1, -5, 101, 7.5, NaN, Infinity, '20', null, {}]) {
+      const got = await viaFunnel(nums, { ...base, bins: bad });
+      ok(`bins=${typeof bad === 'string' ? `"${bad}"` : String(bad)} (${typeof bad}) is dropped → the default ${categoryKey.NUM_BINS}`,
+        sameLabels(def.reply.data.labels, got.reply.data.labels),
+        JSON.stringify({ want: def.reply.data.labels.length, got: got.reply.data.labels.length }));
+    }
+  }
+
+  // A NAMED count on a text or date column is ignored rather than honoured —
+  // `bins` is a numeric-axis key, and nothing else may quietly consume it.
+  {
+    const plain = await viaFunnel(dates, { category: 'd', values: [{ column: 'v', aggregation: 'sum' }], grain: 'month' });
+    const withBins = await viaFunnel(dates, { category: 'd', values: [{ column: 'v', aggregation: 'sum' }], grain: 'month', bins: 20 });
+    ok('bins on a DATE category changes nothing',
+      sameLabels(plain.reply.data.labels, withBins.reply.data.labels));
+  }
+
   // ── 4. Text category → top 50, and 'Other' is a REAL re-aggregation ───────
   //
   // `avg` is the measure that catches a naive implementation: folding the tail's

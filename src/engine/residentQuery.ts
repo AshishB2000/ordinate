@@ -269,6 +269,7 @@ export function resolveCatKey(
   measures: ResidentMeasure[],
   filters?: FilterStep[],
   grain?: DateGrain,
+  bins?: number,
 ): { key: ResidentCatKey; info: CategoryInfo } | null {
   try {
     const cols = schemaOf(src);
@@ -280,7 +281,7 @@ export function resolveCatKey(
     if (list.length === 0) return null;
 
     const type = cols[gi].type;
-    if (type === 'number') return binKey(src, cols, gi, filters);
+    if (type === 'number') return binKey(src, cols, gi, filters, bins);
     if (type === 'date') return dateKey(src, cols, gi, filters, grain);
     return textKey(src, cols, gi, list[0], filters);
   } catch {
@@ -288,12 +289,13 @@ export function resolveCatKey(
   }
 }
 
-/** min/max of the FILTERED numeric cells → the ten bin edges. */
+/** min/max of the FILTERED numeric cells → the bin edges. */
 function binKey(
   src: ResidentSource,
   cols: ParsedColumn[],
   gi: number,
   filters: FilterStep[] | undefined,
+  bins: number | undefined,
 ): { key: ResidentCatKey; info: CategoryInfo } | null {
   const params: duck.DuckValue[] = [];
   const where = whereClause(cols, filters, params);
@@ -305,7 +307,7 @@ function binKey(
   if (out.length === 0) return null;
   // binPlan is shared with the JS path, so the degenerate cases (one distinct
   // value, no numeric cells at all) collapse to one bucket identically.
-  const plan = binPlan(finiteOrNull(out[0].lo), finiteOrNull(out[0].hi));
+  const plan = binPlan(finiteOrNull(out[0].lo), finiteOrNull(out[0].hi), bins);
   return { key: { kind: 'bin', ...plan }, info: { kind: 'number', binned: true } };
 }
 
