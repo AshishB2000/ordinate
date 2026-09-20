@@ -1,17 +1,25 @@
 'use strict';
 
-// The capture surface, end to end: taking a capture, the sidebar history and its
-// search, selecting an entry, the image lightbox, the step animation while the
-// model works, the rendered result thread, the error card and the follow-up box.
+// The capture PAGE: taking a capture, and rendering one inside the workspace.
 //
-// The two popover menus that sit ON a rendered result are hubResultMenus.ts;
-// the shared number formatters they and everything else use (_fmtVal, fmtWith,
-// histogramBins) stay in hub.ts.
+// This used to be a shell of its own — a second sidebar with its own search and
+// settings gear, its own empty state, its own conversation thread and its own
+// follow-up box. All of that is gone. A capture is a project record now, so:
 //
-// Split verbatim out of hub.ts — see .claude/rules/file-size.md. Classic
-// global-scope <script>: no import/export.
+//   • the list lives under Data as a tab (captureList.ts),
+//   • the page is a `.ws-panel` laid out like the dataset page (index.html),
+//   • the narration is the first assistant turn of an ordinary dock
+//     conversation, seeded in MAIN — there is no thread widget here, and no
+//     follow-up box, because a follow-up about a capture is a dock ask.
+//
+// What is left is: fire a capture, hold the session's entries, paint the page,
+// and the shared image lightbox the dataset list reuses for "view original".
+// The page's two non-result states — the step list and the error card — are
+// captureStatus.ts.
+//
+// Classic global-scope <script>: no import/export.
 
-// ── Capture ───────────────────────────────────────────────────────────────
+// ── Taking one ────────────────────────────────────────────────────────────
 // The readiness gate (executionReady) lives in main.js — if not ready, main
 // opens the Execution mode settings instead of capturing. Renderer sends intent.
 function doCapture() {
@@ -20,637 +28,431 @@ function doCapture() {
   }
 }
 
-['take-shot-main', 'new-capture'].forEach(id => {
-  const el = document.getElementById(id);
-  if (el) el.addEventListener('click', doCapture);
-});
+// ── Session entries ───────────────────────────────────────────────────────
+// Each entry: { id, dataUrl, cropPath, state, result, error, title, datasetId,
+// copilotThreadId }. state: 'loading' | 'result' | 'error' | 'disk'.
+// ponytail: analysis results are model-shaped JSON envelopes — any.
+const entries: any[] = [];
+let currentEntryId: any = null;
 
-// ── In-memory capture history ──────────────────────────────────────────────
-// Each entry: { id, dataUrl, cropPath, state, result, error, title, turns, activeVizType, updatedAt }
-// state: 'loading' | 'result' | 'error' | 'disk' (loaded from history, full data not yet fetched)
-const entries = [];
-let currentEntryId = null;
-const captureHistoryEl = document.getElementById('capture-history');
-const sideEmptyEl      = document.querySelector('.side-empty') as HTMLElement;
-
-function getEntry(id) {
-  return entries.find(e => e.id === id);
+function getEntry(id: any): any {
+  return entries.find((e) => e.id === id);
 }
 
-function formatSidebarTime(dateOrString) {
+// The app's shared short-timestamp formatter — "2:14 PM" today, "Mar 4 · 2:14
+// PM" otherwise. Named for the capture sidebar it was written for; that sidebar
+// is gone and a dozen surfaces now call it, so the name is the only thing left
+// of it. Renaming it is a rename across ten files, not a fix.
+function formatSidebarTime(dateOrString: any): string {
   const d = typeof dateOrString === 'string' ? new Date(dateOrString) : (dateOrString || new Date());
   const now = new Date();
-  const sameDay = d.toDateString() === now.toDateString();
-  if (sameDay) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' · ' +
-    d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === now.toDateString()) return time;
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' · ' + time;
 }
 
-// Build a sidebar item. `entry` may have `dataUrl` (in-session) or `cropPath` (from disk).
-// Appends to the list when `prepend` is false, otherwise inserts at top.
-function renderSidebarItem(entry, prepend = true) {
-  if (!captureHistoryEl) return;
-  if (sideEmptyEl) sideEmptyEl.style.display = 'none';
-  captureHistoryEl.style.display = 'flex';
-
-  const item = document.createElement('div');
-  item.className = 'cap-hist-item';
-  item.dataset.entryId = String(entry.id);
-
-  const thumb = document.createElement('img');
-  thumb.className = 'cap-hist-thumb';
-  if (entry.dataUrl) {
-    thumb.src = entry.dataUrl;
-  } else if (entry.cropPath) {
-    thumb.src = 'file://' + entry.cropPath;
-  }
-  thumb.alt = '';
-  thumb.draggable = false;
-
-  const info = document.createElement('div');
-  info.className = 'cap-hist-info';
-
-  const summary = document.createElement('div');
-  summary.className = 'cap-hist-summary';
-  summary.id = 'hist-summary-' + entry.id;
-  summary.textContent = entry.state === 'loading' ? 'Analyzing…'
-    : (entry.title || (entry.state === 'error' ? 'Analysis failed' : 'Analysis'));
-
-  const time = document.createElement('div');
-  time.className = 'cap-hist-time';
-  time.textContent = formatSidebarTime(entry.updatedAt || null);
-
-  // Delete button (visible on hover via CSS)
-  const delBtn = document.createElement('button');
-  delBtn.className = 'cap-hist-del';
-  delBtn.type = 'button';
-  delBtn.setAttribute('aria-label', 'Delete');
-  delBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>';
-  delBtn.addEventListener('click', e => {
-    e.stopPropagation();
-    deleteEntry(entry.id);
-  });
-
-  info.appendChild(summary);
-  info.appendChild(time);
-  item.appendChild(thumb);
-  item.appendChild(info);
-  item.appendChild(delBtn);
-  item.addEventListener('click', () => selectEntry(entry.id));
-
-  if (prepend) {
-    captureHistoryEl.insertBefore(item, captureHistoryEl.firstChild);
-  } else {
-    captureHistoryEl.appendChild(item);
-  }
-  filterSidebar();
-}
-
-// ── Sidebar search ─────────────────────────────────────────────────────────
-const capSearchEl = document.getElementById('cap-search') as HTMLInputElement;
-
-// Show only capture items whose title/summary contains the query (case-insensitive).
-function filterSidebar() {
-  if (!captureHistoryEl) return;
-  const q = (capSearchEl ? capSearchEl.value : '').trim().toLowerCase();
-  captureHistoryEl.querySelectorAll('.cap-hist-item').forEach(item => {
-    const summary = item.querySelector('.cap-hist-summary');
-    const text = (summary ? summary.textContent : '').toLowerCase();
-    (item as HTMLElement).style.display = !q || text.includes(q) ? '' : 'none';
-  });
-}
-
-if (capSearchEl) capSearchEl.addEventListener('input', filterSidebar);
-
-function updateSidebarItem(entry) {
-  const summaryEl = document.getElementById('hist-summary-' + entry.id);
-  if (!summaryEl) return;
-  if (entry.state === 'loading') {
-    summaryEl.textContent = 'Analyzing…';
-  } else if (entry.state === 'error') {
-    summaryEl.textContent = 'Analysis failed';
-  } else if (entry.state === 'result' || entry.state === 'disk') {
-    summaryEl.textContent = entry.title || 'Analysis';
-  }
-  filterSidebar();
-}
-
-// Remove an entry from the sidebar and, if it's the current entry, show empty state.
-function removeSidebarItem(id) {
-  if (!captureHistoryEl) return;
-  const item = captureHistoryEl.querySelector('[data-entry-id="' + String(id) + '"]');
-  if (item) item.remove();
-  if (captureHistoryEl.children.length === 0) {
-    captureHistoryEl.style.display = 'none';
-    if (sideEmptyEl) sideEmptyEl.style.display = '';
-  }
-}
-
-// Wipe ALL entries from the in-memory list + sidebar and return to the empty
-// state. Used after a "Delete capture history / everything" action.
-function clearAllEntriesUI() {
-  entries.length = 0;
-  if (captureHistoryEl) { captureHistoryEl.innerHTML = ''; captureHistoryEl.style.display = 'none'; }
-  if (sideEmptyEl) sideEmptyEl.style.display = '';
-  showEmptyState();
-}
-
-// Delete a thread: confirm → IPC → remove from memory and sidebar.
-function deleteEntry(id) {
-  if (!window.confirm('Delete this capture and its analysis? This can\'t be undone.')) return;
-  const idx = entries.findIndex(e => e.id === id);
-  if (idx !== -1) entries.splice(idx, 1);
-  removeSidebarItem(id);
-  if (currentEntryId === id) showEmptyState();
-  if (window.hub && typeof window.hub.deleteThread === 'function') {
-    window.hub.deleteThread(id).catch(() => {});
-  }
-}
-
-function selectEntry(id) {
-  currentEntryId = id;
-  const entry = getEntry(id);
-  if (!entry) return;
-
-  // Sidebar highlight
-  if (captureHistoryEl) {
-    captureHistoryEl.querySelectorAll('.cap-hist-item').forEach(el => {
-      el.classList.toggle('cap-hist-item-active', (el as HTMLElement).dataset.entryId === String(id));
-    });
-  }
-
-  // Image thumbnail — entry may have a dataUrl (in-session) or a cropPath (from disk)
-  if (capViewImg) {
-    const imgSrc = entry.dataUrl || (entry.cropPath ? 'file://' + entry.cropPath : '');
-    capViewImg.src = imgSrc;
-    capViewImg.onload = () => {
-      if (cvThumbMeta) {
-        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        cvThumbMeta.textContent = `${capViewImg.naturalWidth} × ${capViewImg.naturalHeight} · ${time}`;
-      }
-    };
-  }
-
-  if (cvThread) cvThread.innerHTML = '';
-  if (cvChipsEl) cvChipsEl.innerHTML = '';
-  if (followupInp) followupInp.disabled = true;
-  if (followupBtn) followupBtn.disabled = true;
-  // Hidden by default; renderThread re-shows it only for a result entry that
-  // carries a non-empty extracted table (Week 13 "Save as dataset").
-  if (cvSaveDatasetBtn) cvSaveDatasetBtn.hidden = true;
-
-  if (captureView) captureView.classList.remove('cap-view-hidden');
-
-  if (entry.state === 'loading') {
-    if (captureView) captureView.dataset.cvState = 'loading';
-    if (mainTitleH) mainTitleH.textContent = 'Your capture';
-    if (mainTitleSub) mainTitleSub.textContent = 'Analyzing…';
-    cvStartSteps();
-  } else if (entry.state === 'result' && entry.result) {
-    cvStopSteps();
-    if (captureView) captureView.dataset.cvState = 'result';
-    if (mainTitleH) mainTitleH.textContent = entry.title || 'Analysis';
-    if (mainTitleSub) mainTitleSub.textContent = 'Ready';
-    renderThread(entry);
-  } else if (entry.state === 'error' && entry.error) {
-    cvStopSteps();
-    if (captureView) captureView.dataset.cvState = 'error';
-    if (mainTitleH) mainTitleH.textContent = 'Your capture';
-    if (mainTitleSub) mainTitleSub.textContent = 'Analysis failed';
-    _displayErrorContent(entry.error);
-  } else if (entry.state === 'disk') {
-    // Entry is in the sidebar but full data hasn't been loaded yet — fetch from disk.
-    cvStopSteps();
-    if (captureView) captureView.dataset.cvState = 'loading';
-    if (mainTitleH) mainTitleH.textContent = entry.title || 'Analysis';
-    if (mainTitleSub) mainTitleSub.textContent = 'Loading…';
-    const snapId = id;
-    if (window.hub && typeof window.hub.loadThread === 'function') {
-      window.hub.loadThread(id).then(thread => {
-        if (currentEntryId !== snapId || !thread) return;
-        entry.state = 'result';
-        entry.result = thread.result;
-        entry.turns = (thread.turns || []).map(t => ({ ...t, activeVizType: null }));
-        entry.title = thread.title || 'Analysis';
-        entry.activeVizType = null;
-        entry.chartOverrides = thread.chartOverrides || {};
-        updateSidebarItem(entry);
-        if (captureView) captureView.dataset.cvState = 'result';
-        if (mainTitleH) mainTitleH.textContent = entry.title;
-        if (mainTitleSub) mainTitleSub.textContent = 'Ready';
-        renderThread(entry);
-      }).catch(() => {
-        if (currentEntryId !== snapId) return;
-        if (captureView) captureView.dataset.cvState = 'error';
-        if (mainTitleSub) mainTitleSub.textContent = 'Could not load';
-      });
-    }
-  }
-}
-
-// ── Hub capture result ─────────────────────────────────────────────────────
-const captureView   = document.getElementById('capture-view');
-const capViewImg    = document.getElementById('cap-view-img') as HTMLImageElement;
-const cvThumbMeta   = document.getElementById('cv-thumb-meta');
-const cvThumbWrap   = document.getElementById('cv-thumb-wrap');
-const imgLightbox   = document.getElementById('img-lightbox');
-const lightboxImg   = document.getElementById('lightbox-img') as HTMLImageElement;
+// ── The image lightbox ────────────────────────────────────────────────────
+// Shared: the capture page opens it on its own frame, and dsList.ts /
+// dsExplorer.ts open it on a saved dataset's stored crop ("view original").
+const imgLightbox = document.getElementById('img-lightbox');
+const lightboxImg = document.getElementById('lightbox-img') as HTMLImageElement;
 const lightboxClose = document.getElementById('lightbox-close');
 
 // Focus management for the (static-markup) lightbox: move focus onto the close
 // button on open, trap Tab, and return focus to whatever opened it on close.
 let _lightboxA11y: { onTabKey: (e: KeyboardEvent) => void; release: () => void } | null = null;
 function _lightboxKey(e: KeyboardEvent): void { if (_lightboxA11y) _lightboxA11y.onTabKey(e); }
-function _openLightboxFocus(): void {
+function openLightboxSrc(src: string): void {
+  if (!src || !imgLightbox || !lightboxImg) return;
+  lightboxImg.src = src;
+  imgLightbox.hidden = false;
   if (_lightboxA11y) return; // already open
   _lightboxA11y = makeModalAccessible(imgLightbox as HTMLElement, 'Image preview', lightboxClose as HTMLElement | null);
   document.addEventListener('keydown', _lightboxKey, true);
 }
-function openLightbox() {
-  if (!capViewImg || !capViewImg.src || !imgLightbox) return;
-  lightboxImg.src = capViewImg.src;
-  imgLightbox.hidden = false;
-  _openLightboxFocus();
+function openLightbox(): void {
+  const img = capEl('cap-view-img') as HTMLImageElement | null;
+  if (img && img.src) openLightboxSrc(img.src);
 }
-// Open the existing image lightbox for an ARBITRARY src (e.g. a dataset's stored
-// capture crop) — captureDataset.js / datasets.js call this to "view original"
-// without touching the current capture thumbnail. Reuses the same lightbox DOM.
-function openLightboxSrc(src) {
-  if (!src || !imgLightbox || !lightboxImg) return;
-  lightboxImg.src = src;
-  imgLightbox.hidden = false;
-  _openLightboxFocus();
-}
-function closeLightbox() {
+function closeLightbox(): void {
   if (imgLightbox) imgLightbox.hidden = true;
   document.removeEventListener('keydown', _lightboxKey, true);
   if (_lightboxA11y) { _lightboxA11y.release(); _lightboxA11y = null; } // return focus to the opener
 }
 
+// The step list and the error card — the page's two non-result states — are
+// captureStatus.ts, which loads first. It also owns capEl(), the element lookup
+// both files use.
 
-const mainTitleH    = document.getElementById('main-title-h');
-const mainTitleSub  = document.getElementById('main-title-sub');
-const capViewNewBtn = document.getElementById('cap-view-new');
-const cvSaveDatasetBtn = document.getElementById('cv-save-dataset');
-const cvThread      = document.getElementById('cv-thread');
-const cvChipsEl     = document.getElementById('cv-chips');
-const cveBadge      = document.getElementById('cve-badge');
-const cveTitle      = document.getElementById('cve-title');
-const cveMsg        = document.getElementById('cve-msg');
-const cveSettingsBtn  = document.getElementById('cve-settings-btn');
-const cveRetryBtn     = document.getElementById('cve-retry-btn');
-const cveDetailPill   = document.getElementById('cve-detail-pill');
-const cveDetailText   = document.getElementById('cve-detail-text');
-const followupInp   = document.getElementById('cv-followup-input') as HTMLInputElement;
-const followupBtn   = document.getElementById('cv-followup-send') as HTMLButtonElement;
+// ── The page ──────────────────────────────────────────────────────────────
 
+/** Reset every region of the page, so no state leaks between two captures. */
+function capResetPage(): void {
+  cvStopSteps();
+  const result = capEl('cap-result');
+  if (result) result.innerHTML = '';
+  const err = capEl('cap-error');
+  if (err) err.hidden = true;
+  const hint = capEl('cap-hint');
+  if (hint) { hint.hidden = true; hint.textContent = ''; }
+}
 
-// Re-render all active charts on theme change.
+/**
+ * Paint the header: title, "Dataset" badge, the image's size + time, and which
+ * of the three actions are live.
+ *
+ * "New visual" needs a dataset, which is the honest gate — there is nothing to
+ * chart before one exists — and "Save as dataset" needs a result that carries a
+ * table, which is `captureHasExtractedTable` (captureDataset.ts). A capture that
+ * yielded only a chart with no table stays an entry, exactly as the model says.
+ */
+function capPaintHeader(entry: any): void {
+  const title = capEl('cap-title');
+  if (title) {
+    title.textContent = entry.state === 'loading'
+      ? 'Analyzing your capture…'
+      : (entry.title || (entry.state === 'error' ? 'Analysis failed' : 'Capture'));
+  }
+  const badge = capEl('cap-badge');
+  if (badge) badge.hidden = !entry.datasetId;
+
+  const img = capEl('cap-view-img') as HTMLImageElement | null;
+  const meta = capEl('cap-meta');
+  const stamp = formatSidebarTime(entry.updatedAt || null);
+  if (meta) {
+    meta.textContent = img && img.naturalWidth
+      ? `${img.naturalWidth} × ${img.naturalHeight} · ${stamp}`
+      : stamp;
+  }
+
+  const saveBtn = capEl('cap-act-dataset') as HTMLButtonElement | null;
+  const hasTable = typeof captureHasExtractedTable === 'function' && captureHasExtractedTable(entry);
+  if (saveBtn) saveBtn.disabled = !hasTable;
+  const vizBtn = capEl('cap-act-visual') as HTMLButtonElement | null;
+  if (vizBtn) vizBtn.disabled = !entry.datasetId;
+  const askBtn = capEl('cap-act-ask') as HTMLButtonElement | null;
+  if (askBtn) askBtn.disabled = entry.state !== 'result';
+}
+
+/**
+ * The table the model READ off the screenshot, as a table.
+ *
+ * This is the page's subject: it is what "Save as dataset" will save, so the
+ * user has to be able to check it against the image beside it. It is NOT the
+ * same thing as the charted figures below — those are the app's own analysis
+ * of it.
+ *
+ * The rows come from `captureDraft` (captureDataset.ts), the SAME projection
+ * the composer is handed on save — an extraction is object-keyed and ragged,
+ * and projecting it a second time here would be a second answer to "what did
+ * the model read". Quiet: opening a page is not the moment to be toasted about
+ * ragged rows. Built with the Explore grid's own `.ds-table`/`.ds-th`/`.ds-td`,
+ * and `textContent` only.
+ */
+async function capRenderExtracted(entry: any, host: HTMLElement): Promise<void> {
+  if (typeof captureDraft !== 'function') return;
+  const snapId = entry.id;
+  const draft = await captureDraft(entry, { quiet: true });
+  // A chart with no numbers under it is a real outcome; so is the user having
+  // moved on while main was drafting.
+  if (!draft || currentEntryId !== snapId) return;
+
+  const box = document.createElement('section');
+  box.className = 'cap-extracted';
+  const head = document.createElement('h4');
+  head.className = 'cap-sec-h';
+  head.textContent = 'What the app read';
+  box.appendChild(head);
+  const note = document.createElement('p');
+  note.className = 'cap-sec-p';
+  const r = draft.rows.length;
+  const c = draft.columns.length;
+  note.textContent = `${r} row${r === 1 ? '' : 's'} × ${c} column${c === 1 ? '' : 's'}`
+    + ' — check them against the screenshot before you save.';
+  box.appendChild(note);
+
+  const scroll = document.createElement('div');
+  scroll.className = 'ds-table-scroll';
+  const table = document.createElement('table');
+  table.className = 'ds-table';
+  const thead = document.createElement('thead');
+  const htr = document.createElement('tr');
+  draft.columns.forEach((col: any) => {
+    const th = document.createElement('th');
+    th.className = 'ds-th';
+    th.textContent = String((col && col.name) ?? '');
+    htr.appendChild(th);
+  });
+  thead.appendChild(htr);
+  table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  draft.rows.forEach((row: any[]) => {
+    const tr = document.createElement('tr');
+    draft.columns.forEach((_: any, i: number) => {
+      const td = document.createElement('td');
+      td.className = 'ds-td';
+      const v = Array.isArray(row) ? row[i] : undefined;
+      td.textContent = v == null ? '' : String(v);
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  scroll.appendChild(table);
+  box.appendChild(scroll);
+  host.insertBefore(box, host.firstChild);
+}
+
+/**
+ * Paint the right column for a finished capture: the extracted table, then the
+ * app-computed figures.
+ *
+ * `renderTurnResult` (renderResult.ts) is the ONE renderer for an analysis
+ * result and it already draws the second half — the chart chips, the computed
+ * metrics. The only thing removed from it is the narration paragraph: that
+ * prose is the dock conversation's first turn now, and printing it twice would
+ * be the duplicate surface this change exists to delete.
+ */
+function capRenderResult(entry: any): void {
+  const host = capEl('cap-result');
+  if (!host || !entry.result) return;
+  host.innerHTML = '';
+  const node = renderTurnResult(entry.result, entry.activeVizType, entry, 'main');
+  const prose = node.querySelector('.cv-analysis-text');
+  if (prose) prose.remove();
+  host.appendChild(node);
+  // Async (main does the projection) and prepended when it lands, so the
+  // figures paint immediately rather than waiting on a round trip.
+  void capRenderExtracted(entry, host);
+}
+
+/** Open a capture as a page in the workspace. */
+function openCapture(id: any): void {
+  currentEntryId = id;
+  const entry = getEntry(id);
+  if (!entry) return;
+  if (typeof selectSection === 'function') selectSection('capture');
+  capResetPage();
+
+  const img = capEl('cap-view-img') as HTMLImageElement | null;
+  if (img) {
+    img.src = entry.dataUrl || (entry.cropPath ? 'file://' + entry.cropPath : '');
+    img.onload = () => capPaintHeader(entry);
+  }
+  capPaintHeader(entry);
+
+  if (entry.state === 'loading') {
+    cvStartSteps();
+    return;
+  }
+  if (entry.state === 'result' && entry.result) {
+    capRenderResult(entry);
+    return;
+  }
+  if (entry.state === 'error' && entry.error) {
+    capShowError(entry.error);
+    return;
+  }
+  if (entry.state === 'disk') void capLoadFromDisk(entry);
+}
+
+/** A capture opened from the Captures tab: fetch its stored result. */
+async function capLoadFromDisk(entry: any): Promise<void> {
+  const snapId = entry.id;
+  let thread: any = null;
+  try {
+    thread = await window.hub.loadThread(entry.id);
+  } catch (_) { thread = null; }
+  if (currentEntryId !== snapId) return;
+  if (!thread) {
+    capShowError({ errorType: 'unknown', message: 'Could not load this capture.' });
+    return;
+  }
+  entry.state = 'result';
+  entry.result = thread.result;
+  entry.title = thread.title || 'Capture';
+  // The full record is the truth about both links — a Home "Recent" row
+  // carries neither, so taking them from the summary alone would leave "Ask"
+  // opening a blank conversation and "New visual" disabled on a capture that
+  // does have a dataset.
+  entry.datasetId = thread.datasetId || entry.datasetId || null;
+  entry.copilotThreadId = thread.copilotThreadId || entry.copilotThreadId || null;
+  entry.activeVizType = null;
+  entry.chartOverrides = thread.chartOverrides || {};
+  capPaintHeader(entry);
+  capRenderResult(entry);
+}
+
+/**
+ * Open (or adopt) a capture entry by id, whichever surface asked for it.
+ *
+ * captureList.ts hands over a summary row from disk; the capture may also
+ * already be in this session's list, in which case its live result is kept.
+ */
+function openCaptureFromSummary(summary: any): void {
+  const existing = getEntry(summary.id);
+  if (existing) {
+    // Disk knows about a dataset saved in a previous session; the live entry may not.
+    if (summary.datasetId) existing.datasetId = summary.datasetId;
+    if (summary.copilotThreadId) existing.copilotThreadId = summary.copilotThreadId;
+    openCapture(summary.id);
+    return;
+  }
+  entries.push({
+    id: summary.id,
+    dataUrl: null,
+    cropPath: summary.cropPath || null,
+    state: 'disk',
+    result: null,
+    error: null,
+    title: summary.title || 'Capture',
+    datasetId: summary.datasetId || null,
+    copilotThreadId: summary.copilotThreadId || null,
+    updatedAt: summary.updatedAt || null,
+    activeVizType: null,
+    chartOverrides: {},
+  });
+  openCapture(summary.id);
+}
+
+// Re-render the page's charts on theme change — the same repaint every other
+// chart surface does.
 new MutationObserver(() => {
   const entry = getEntry(currentEntryId);
-  if (entry && entry.state === 'result') renderThread(entry);
+  if (entry && entry.state === 'result') capRenderResult(entry);
 }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
-// Returns the result from the last successful turn in the thread.
-function getLastResult(entry) {
-  if (!entry) return null;
-  for (let i = (entry.turns || []).length - 1; i >= 0; i--) {
-    if (entry.turns[i].state === 'result' && entry.turns[i].result) return entry.turns[i].result;
-  }
-  return entry.result;
-}
+// ── Results arriving from main ────────────────────────────────────────────
 
-// Render the full conversation thread for an entry into #cv-thread.
-function renderThread(entry) {
-  if (!cvThread || !entry || !entry.result) return;
-  cvThread.innerHTML = '';
-
-  // Week 13 — enable "Save as dataset" only when this result carries a usable
-  // extracted table. captureHasExtractedTable is defined in captureDataset.js.
-  if (cvSaveDatasetBtn) {
-    const usable = typeof captureHasExtractedTable === 'function' && captureHasExtractedTable(entry);
-    cvSaveDatasetBtn.hidden = !usable;
-  }
-
-  const label = document.createElement('div');
-  label.className = 'cv-section-label';
-  label.textContent = 'Analysis';
-  cvThread.appendChild(label);
-
-  cvThread.appendChild(renderTurnResult(entry.result, entry.activeVizType, entry, 'main'));
-
-  (entry.turns || []).forEach((turn, ti) => {
-    const qEl = document.createElement('div');
-    qEl.className = 'cv-turn-question';
-    qEl.textContent = turn.text;
-    cvThread.appendChild(qEl);
-
-    if (turn.state === 'loading') {
-      const loadEl = document.createElement('div');
-      loadEl.className = 'cv-turn-loading';
-      // A shimmering line of the answer that is coming, not a ring. The app has
-      // exactly one spinner left and it is the dock's send button (hub.css).
-      loadEl.textContent = 'Thinking…';
-      loadEl.appendChild(skelBlock('sk-line'));
-      cvThread.appendChild(loadEl);
-    } else if (turn.state === 'result' && turn.result) {
-      cvThread.appendChild(renderTurnResult(turn.result, turn.activeVizType, entry, ti));
-    } else if (turn.state === 'error') {
-      const errEl = document.createElement('div');
-      errEl.className = 'cv-turn-error';
-      errEl.textContent = (turn.error && turn.error.message) || 'Something went wrong. Try again.';
-      cvThread.appendChild(errEl);
-    }
-  });
-
-  const lastResult = getLastResult(entry);
-  buildCvChips(lastResult ? lastResult.followups : []);
-
-  const hasPending = (entry.turns || []).some(t => t.state === 'loading');
-  if (followupInp) followupInp.disabled = hasPending;
-  if (followupBtn) followupBtn.disabled = hasPending;
-}
-
-function buildCvChips(followups) {
-  if (!cvChipsEl) return;
-  cvChipsEl.innerHTML = '';
-  (followups || []).forEach(q => {
-    const btn = document.createElement('button');
-    btn.className = 'cv-chip';
-    btn.type = 'button';
-    btn.textContent = q;
-    btn.addEventListener('click', () => {
-      if (followupInp) followupInp.value = q;
-      sendFollowup();
-    });
-    cvChipsEl.appendChild(btn);
-  });
-}
-
-// Error type → large icon (28px, scaled by CSS) + title + warn tint flag
-const CVE_CONFIG = {
-  network:    { title: 'No connection',          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>', warn: false },
-  auth:       { title: 'Your API key was rejected', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M21 2l-9.6 9.6"/><path d="M15.5 7.5l3 3L22 7l-3-3"/></svg>', warn: true  },
-  rate_limit: { title: 'Rate limit reached',     icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>', warn: true  },
-  provider:   { title: 'Provider error',         icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M22.61 16.95A5 5 0 0 0 18 10h-1.26a8 8 0 0 0-7.05-6M5 5a8 8 0 0 0 4 15h9a5 5 0 0 0 1.7-.3"/></svg>', warn: false },
-  bad_reply:  { title: 'Unreadable response',    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>', warn: false },
-  truncated:  { title: 'Response cut off',       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>', warn: true  },
-  unknown:    { title: 'Something went wrong',   icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>', warn: false },
-};
-
-// ── Step animation ────────────────────────────────────────────────────────────
-const cvStepEls = Array.from(document.querySelectorAll('#cv-steps .cv-step'));
-
-const CV_STEP_ICON = {
-  done:    '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="var(--ok)"/><path d="M3.5 7.5L5.5 9.5L10.5 4.5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  active:  '<div class="cv-step-dot cv-step-dot--active"></div>',
-  pending: '<div class="cv-step-dot"></div>',
-};
-
-let cvStepTimer  = null;
-let cvActiveStep = 0;
-
-function setCvStepStatus(el, status) {
-  el.dataset.status = status;
-  const icon = el.querySelector('.cv-step-icon');
-  if (icon) icon.innerHTML = CV_STEP_ICON[status] || '';
-}
-
-function cvStartSteps() {
-  clearInterval(cvStepTimer);
-  cvActiveStep = 0;
-  cvStepEls.forEach((el, i) => setCvStepStatus(el, i === 0 ? 'active' : 'pending'));
-  cvStepTimer = setInterval(() => {
-    if (cvActiveStep < cvStepEls.length - 1) {
-      setCvStepStatus(cvStepEls[cvActiveStep], 'done');
-      cvActiveStep++;
-      setCvStepStatus(cvStepEls[cvActiveStep], 'active');
-    }
-  }, 2500);
-}
-
-function cvStopSteps() {
-  clearInterval(cvStepTimer);
-  cvStepTimer = null;
-}
-
-function cvFinishSteps(callback: () => void) {
-  clearInterval(cvStepTimer);
-  cvStepTimer = null;
-  function completeNext() {
-    setCvStepStatus(cvStepEls[cvActiveStep], 'done');
-    if (cvActiveStep < cvStepEls.length - 1) {
-      cvActiveStep++;
-      setCvStepStatus(cvStepEls[cvActiveStep], 'active');
-      setTimeout(completeNext, 140);
-    } else {
-      setTimeout(callback, 200);
-    }
-  }
-  completeNext();
-}
-
-
-function _displayErrorContent(error) {
-  const cfg = CVE_CONFIG[error.errorType] || CVE_CONFIG.unknown;
-  if (cveBadge) {
-    cveBadge.innerHTML = cfg.icon;
-    cveBadge.classList.toggle('cve-warn', cfg.warn);
-  }
-  if (cveTitle) cveTitle.textContent = cfg.title;
-  if (cveMsg)   cveMsg.textContent   = error.message || 'Something went wrong. Try again.';
-  if (cveDetailPill) {
-    if (error.detail) {
-      if (cveDetailText) cveDetailText.textContent = error.detail;
-      cveDetailPill.classList.remove('cve-detail-pill-hidden');
-    } else {
-      cveDetailPill.classList.add('cve-detail-pill-hidden');
-    }
-  }
-  if (cveSettingsBtn) cveSettingsBtn.hidden = (error.errorType !== 'auth');
-}
-
-function showEmptyState() {
-  cvStopSteps();
-  currentEntryId = null;
-  if (captureView) captureView.classList.add('cap-view-hidden');
-  if (mainTitleH) mainTitleH.textContent = 'Welcome';
-  if (mainTitleSub) mainTitleSub.textContent = 'Capture any data';
-  if (captureHistoryEl) {
-    captureHistoryEl.querySelectorAll('.cap-hist-item').forEach(el => el.classList.remove('cap-hist-item-active'));
-  }
-}
-
-function showAnalyzeResult(entryId, result) {
-  if (!captureView) return;
+function showAnalyzeResult(entryId: any, result: any): void {
   const entry = getEntry(entryId);
   if (entry) {
     entry.state = result.ok ? 'result' : 'error';
+    entry.updatedAt = new Date().toISOString();
     if (result.ok) {
       entry.result = result;
       entry.title = result.title || null;
+      entry.copilotThreadId = result.copilotThreadId || null;
     } else {
       entry.error = result;
     }
-    updateSidebarItem(entry);
   }
-  if (entryId !== currentEntryId) return;
+  if (typeof refreshCaptureList === 'function') void refreshCaptureList();
+  if (entryId !== currentEntryId || !entry) return;
 
   if (result.ok) {
     const snapId = entryId;
     cvFinishSteps(() => {
       if (currentEntryId !== snapId) return;
-      captureView.dataset.cvState = 'result';
-      if (mainTitleH) mainTitleH.textContent = entry ? (entry.title || 'Analysis') : 'Analysis';
-      if (mainTitleSub) mainTitleSub.textContent = 'Ready';
-      renderThread(entry);
+      capPaintHeader(entry);
+      capRenderResult(entry);
     });
   } else {
     cvStopSteps();
-    captureView.dataset.cvState = 'error';
-    _displayErrorContent(result);
-    if (mainTitleSub) mainTitleSub.textContent = 'Analysis failed';
+    capPaintHeader(entry);
+    capShowError(result);
   }
 }
 
-if (cveSettingsBtn) cveSettingsBtn.addEventListener('click', () => showSettingsPanel('exec'));
-if (cveRetryBtn) cveRetryBtn.addEventListener('click', () => {
-  if (!currentEntryId) return;
-  const entry = getEntry(currentEntryId);
-  if (!entry) return;
-  entry.state = 'loading';
-  entry.result = null;
-  entry.error = null;
-  entry.title = null;
-  entry.turns = [];
-  entry.activeVizType = null;
-  updateSidebarItem(entry);
-  if (captureView) captureView.dataset.cvState = 'loading';
-  if (mainTitleH) mainTitleH.textContent = 'Your capture';
-  if (mainTitleSub) mainTitleSub.textContent = 'Analyzing…';
-  if (cvThread) cvThread.innerHTML = '';
-  if (cvChipsEl) cvChipsEl.innerHTML = '';
-  cvStartSteps();
-  if (window.hub && window.hub.retry) window.hub.retry(currentEntryId);
-});
-if (capViewNewBtn)  capViewNewBtn.addEventListener('click', showEmptyState);
-// Week 13 — open the review-and-correct grid for the current capture.
-// openCaptureDatasetModal is defined in captureDataset.js (shared global scope).
-if (cvSaveDatasetBtn) {
-  cvSaveDatasetBtn.addEventListener('click', () => {
-    const entry = getEntry(currentEntryId);
-    if (entry && typeof openCaptureDatasetModal === 'function') openCaptureDatasetModal(entry);
-  });
-}
-
 if (window.hub && typeof window.hub.onNewEntry === 'function') {
-  window.hub.onNewEntry(async ({ entryId, dataUrl }) => {
-    const entry = {
+  window.hub.onNewEntry(async ({ entryId, dataUrl }: any) => {
+    entries.unshift({
       id: entryId, dataUrl, state: 'loading',
       result: null, error: null,
-      title: null, turns: [], activeVizType: null,
-      chartOverrides: {},
-    };
-    entries.unshift(entry);
-    // Quick-capture with no open project transparently uses/creates a default
-    // project and shows the Sources surface (workspace.ts). Non-regressing: the
-    // result surface renders exactly as before. Guarded so a project-layer
-    // failure can never suppress the captured result (ensureWorkspaceForCapture
-    // is already defensive; this is belt-and-suspenders).
+      title: null, datasetId: null, copilotThreadId: null,
+      updatedAt: new Date().toISOString(),
+      activeVizType: null, chartOverrides: {},
+    });
+    // A capture fired with no project open transparently uses/creates one
+    // (workspace.ts). Guarded so a project-layer failure can never suppress the
+    // captured result.
     try { await ensureWorkspaceForCapture(); } catch (_) { /* render regardless */ }
-    renderSidebarItem(entry);
-    selectEntry(entryId);
+    openCapture(entryId);
   });
 }
 
 if (window.hub && typeof window.hub.onEntryResult === 'function') {
-  window.hub.onEntryResult(({ entryId, ...result }) => {
+  window.hub.onEntryResult(({ entryId, ...result }: any) => {
     showAnalyzeResult(entryId, result);
     if (result && result.ok && notifPrefs.sound) playCompletionSound();
-    // Week 13 — if a recapture (replace/append) is pending, auto-open the review
-    // modal pre-set to that target. maybeResumeRecapture is defined in
-    // captureDataset.js and no-ops when nothing is pending.
+    // A recapture (replace/append) reopens the review flow pre-set to its
+    // target; no-ops when nothing is pending (captureDataset.ts).
     if (typeof maybeResumeRecapture === 'function') maybeResumeRecapture(getEntry(entryId));
   });
 }
 
-// Populate sidebar with persisted threads from disk (sent by main on hub open).
-// Historical entries are added after any in-session entries (session entries are prepended).
-if (window.hub && typeof window.hub.onHistory === 'function') {
-  window.hub.onHistory(summaries => {
-    if (!Array.isArray(summaries)) return;
-    if (summaries.length === 0) { clearAllEntriesUI(); return; } // e.g. after "delete history"
-    summaries.forEach(summary => {
-      // Don't duplicate an entry that was already captured in this session
-      if (getEntry(summary.id)) return;
-      const entry = {
-        id: summary.id,
-        dataUrl: null,
-        cropPath: summary.cropPath || null,
-        state: 'disk',
-        result: null,
-        error: null,
-        title: summary.title || 'Analysis',
-        turns: [],
-        activeVizType: null,
-        updatedAt: summary.updatedAt || null,
-        chartOverrides: {},
-      };
-      entries.push(entry);
-      // Append (not prepend) — session entries sit above history entries
-      renderSidebarItem(entry, false);
-      updateSidebarItem(entry);
-    });
+// ── Wiring ────────────────────────────────────────────────────────────────
+
+const capFrame = capEl('cap-frame');
+if (capFrame) {
+  capFrame.addEventListener('click', openLightbox);
+  capFrame.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLightbox(); }
   });
 }
 
-function sendFollowup() {
-  if (!currentEntryId) return;
-  const text = (followupInp ? followupInp.value : '').trim();
-  if (!text) return;
-  const entry = getEntry(currentEntryId);
-  if (!entry || entry.state !== 'result') return;
-
-  const turn = { text, state: 'loading', result: null, error: null, activeVizType: null };
-  entry.turns.push(turn);
-  if (followupInp) followupInp.value = '';
-  renderThread(entry);
-
-  if (window.hub && typeof window.hub.followup === 'function') {
-    window.hub.followup(currentEntryId, text);
-  }
-}
-
-function showFollowupResult(entryId, result) {
-  const entry = getEntry(entryId);
-  if (!entry) return;
-
-  const turn = entry.turns.find(t => t.state === 'loading');
-  if (!turn) return;
-
-  if (result.ok) {
-    turn.state = 'result';
-    turn.result = result;
-    turn.activeVizType = null;
-  } else {
-    turn.state = 'error';
-    turn.error = result;
-  }
-
-  if (entryId === currentEntryId) renderThread(entry);
-}
-
-if (window.hub && typeof window.hub.onFollowupResult === 'function') {
-  window.hub.onFollowupResult(({ entryId, ...result }) => {
-    showFollowupResult(entryId, result);
-    if (result && result.ok && notifPrefs.sound) playCompletionSound();
+const capBack = capEl('cap-back');
+if (capBack) {
+  capBack.addEventListener('click', () => {
+    if (typeof showCaptureList === 'function') showCaptureList();
   });
 }
 
-if (followupBtn) followupBtn.addEventListener('click', sendFollowup);
-if (followupInp) {
-  followupInp.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendFollowup(); }
+const capSettingsBtn = capEl('cve-settings-btn');
+if (capSettingsBtn) capSettingsBtn.addEventListener('click', () => showSettingsPanel('exec'));
+
+const capRetryBtn = capEl('cve-retry-btn');
+if (capRetryBtn) {
+  capRetryBtn.addEventListener('click', () => {
+    const entry = getEntry(currentEntryId);
+    if (!entry) return;
+    entry.state = 'loading';
+    entry.result = null;
+    entry.error = null;
+    entry.title = null;
+    entry.activeVizType = null;
+    capResetPage();
+    capPaintHeader(entry);
+    cvStartSteps();
+    if (window.hub && window.hub.retry) window.hub.retry(currentEntryId);
   });
 }
 
+// The three header actions, in the order the dataset page puts them.
+const capActDataset = capEl('cap-act-dataset');
+if (capActDataset) {
+  capActDataset.addEventListener('click', () => {
+    const entry = getEntry(currentEntryId);
+    if (entry && typeof openCaptureComposer === 'function') void openCaptureComposer(entry);
+  });
+}
+
+const capActVisual = capEl('cap-act-visual');
+if (capActVisual) {
+  capActVisual.addEventListener('click', () => {
+    const entry = getEntry(currentEntryId);
+    // The dataset this capture produced is the visual's dataset — the same door
+    // the dataset page's "New visual" opens (dsNewVisualFromDataset), with the
+    // dataset already chosen. Switch section first: handleNewVisual ends in the
+    // builder, which lives inside #ws-visuals.
+    if (!entry || !entry.datasetId || typeof handleNewVisual !== 'function') return;
+    if (typeof selectSection === 'function') selectSection('visuals');
+    void handleNewVisual({ datasetId: String(entry.datasetId) });
+  });
+}
+
+const capActAsk = capEl('cap-act-ask');
+if (capActAsk) {
+  capActAsk.addEventListener('click', () => {
+    const entry = getEntry(currentEntryId);
+    if (!entry) return;
+    // The conversation main seeded with this capture's analysis, if there is
+    // one; otherwise just the dock, scoped to the capture by dkContextRef().
+    if (entry.copilotThreadId && typeof dkOpenThread === 'function') {
+      if (typeof dkSetOpen === 'function') dkSetOpen(true);
+      void dkOpenThread(String(entry.copilotThreadId));
+      return;
+    }
+    if (typeof dkSetOpen === 'function') dkSetOpen(true);
+  });
+}

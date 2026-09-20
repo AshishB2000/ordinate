@@ -120,7 +120,7 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
     // Leaves the wizard for the existing import flow rather than re-hosting it
     // in a modal. Deliberate: one import path, not two.
     close();
-    selectSection('sources');
+    selectSection('datasets');
   });
   bar.appendChild(search);
   bar.appendChild(mkDataset);

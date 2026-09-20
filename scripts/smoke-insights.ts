@@ -188,7 +188,10 @@ async function main(): Promise<void> {
   await win.waitForTimeout(3500);
   const tab = await win.evaluate(() => {
     const panel = document.getElementById('ds-tabp-insights') as HTMLElement;
-    const tabs = [...document.querySelectorAll('#ws-datasets .ds-tabs .ds-tab')].map((t) => (t.textContent || '').trim());
+    // Scoped to #ds-explorer, not the whole Data section: the section now has
+    // a Datasets/Captures tab strip of its own, in the same `.ds-tabs` classes
+    // deliberately, and an unscoped query returns both strips concatenated.
+    const tabs = [...document.querySelectorAll('#ds-explorer .ds-tabs .ds-tab')].map((t) => (t.textContent || '').trim());
     return {
       order: tabs,
       selected: (document.getElementById('ds-tab-insights') || {} as any).getAttribute?.('aria-selected'),

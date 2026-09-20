@@ -85,7 +85,10 @@ async function main(): Promise<void> {
   // ── The header: three actions, and the timestamp moved under the title ─────
   const head = await win.evaluate(() => {
     const explorer = document.getElementById('ds-explorer') as HTMLElement | null;
-    const ident = document.querySelector('.ds-explorer-ident') as HTMLElement | null;
+    // Scoped to #ds-explorer: the capture page reuses this header layout (and
+    // its classes) deliberately, so an unscoped query now matches whichever of
+    // the two is earlier in the document rather than the one under test.
+    const ident = document.querySelector('#ds-explorer .ds-explorer-ident') as HTMLElement | null;
     const vis = (t: string): boolean => {
       const el = document.getElementById(t) as HTMLElement | null;
       return !!el && !el.hidden && el.getClientRects().length > 0;

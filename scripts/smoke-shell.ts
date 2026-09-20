@@ -151,13 +151,13 @@ async function main(): Promise<void> {
     };
     return {
       connect: shown('#conn-panel'),
-      welcomeHeader: shown('.main-top'),
-      capturesColumn: shown('.sidebar'),
+      datasetList: shown('#ws-datasets'),
+      capturePage: shown('#ws-capture'),
       navActive: !!document.querySelector('.as-nav-item.active[data-section="datasets"]'),
     };
   });
-  ok('the Data page renders Connect ALONE — no Welcome header, no captures column',
-    dataPageAlone.connect && !dataPageAlone.welcomeHeader && !dataPageAlone.capturesColumn,
+  ok('the Data page renders Connect ALONE — no other section beside it',
+    dataPageAlone.connect && !dataPageAlone.datasetList && !dataPageAlone.capturePage,
     JSON.stringify(dataPageAlone));
   // Connect is an ACTION inside the Data area, so the "Data" nav item (which
   // points at datasets) stays lit here via its data-section-alt="connect".
@@ -354,65 +354,47 @@ async function main(): Promise<void> {
     homeShots.every((shot) => fs.existsSync(shot) && fs.statSync(shot).size > 5000),
     homeShots.join(' | '));
 
-  // ── Capture workspace: full-screen, no nav ─────────────────────────────────
-  await win.evaluate(() => {
-    const b = Array.from(document.querySelectorAll('.as-connect-item'))
-      .find((e) => (e as HTMLElement).dataset.source === 'capture') as HTMLElement | undefined;
-    if (b) b.click();
-  });
-  // The rail item resolves a project first (async), so focus mode arrives a beat
-  // after the click. Wait for the class, not the clock — an earlier version of
-  // this used a fixed sleep and was flaky about one run in three, and a flaky
-  // assertion is worse than no assertion: it teaches you to re-run rather than
-  // to read.
-  await win.waitForFunction(() => document.body.classList.contains('cap-focus'),
-    null, { timeout: 20000 }).catch(() => {});
-  const capturePage = await win.evaluate(() => {
-    const vis = (el: Element | null) => !!(el && (el as HTMLElement).offsetParent !== null);
-    return {
-      focus: document.body.classList.contains('cap-focus'),
-      navVisible: vis(document.getElementById('app-sidebar')),
-      capturesColumn: vis(document.querySelector('.sidebar')),
-      title: (document.getElementById('main-title-h') || { textContent: '' }).textContent,
-      subVisible: vis(document.getElementById('main-title-sub')),
-      hotkeyChip: vis(document.querySelector('.hotkey-hint')),
-      connectDataBtn: vis(document.getElementById('conn-connect-btn')),
-      newCapture: vis(document.getElementById('new-capture')),
-      back: vis(document.getElementById('cap-back')),
-    };
-  });
-  ok('capture: the left nav is gone entirely — same focus mode an analysis uses',
-    capturePage.focus && !capturePage.navVisible, JSON.stringify(capturePage));
-  ok('capture: the captures column stays — it is part of this workspace',
-    capturePage.capturesColumn);
-  ok('capture: titled "Capture", with the Welcome strapline collapsed',
-    capturePage.title === 'Capture' && !capturePage.subVisible);
-  ok('capture: the ⌘⌥S chip and "Connect data" are gone, "New capture" stays',
-    !capturePage.hotkeyChip && !capturePage.connectDataBtn && capturePage.newCapture);
-  ok('capture: a Back control exists — with no nav it is the only way out',
-    capturePage.back);
-  const capShot = path.join(shotDir, 'capture-page.png');
-  await win.screenshot({ path: capShot });
-  ok('capture page screenshot captured',
-    fs.existsSync(capShot) && fs.statSync(capShot).size > 5000, capShot);
-
-  // Back restores the nav and drops focus mode.
-  await win.evaluate(() => (document.getElementById('cap-back') as HTMLElement).click());
-  await win.waitForFunction(() => !document.body.classList.contains('cap-focus'),
-    null, { timeout: 15000 }).catch(() => {});
-  const afterBack = await win.evaluate(() => ({
-    focus: document.body.classList.contains('cap-focus'),
-    navVisible: !!(document.getElementById('app-sidebar') as HTMLElement).offsetParent,
+  // ── "Screenshot" is an ACTION, and the capture shell is gone ──────────────
+  // The rail item used to open a full-screen capture SHELL — its own sidebar,
+  // its own search, its own settings gear — that the workspace nav could not
+  // reach. It now simply takes a screenshot, and a capture lands on a page in
+  // this workspace like every other record. The capture WALK (stubbing the
+  // image and the model) is scripts/smoke-capture.ts; what this file asserts
+  // is that the second shell no longer exists to come back.
+  const noSecondShell = await win.evaluate(() => ({
+    capturesColumn: document.querySelectorAll('.cap-history').length,
+    captureSidebar: document.querySelectorAll('aside.sidebar').length,
+    captureSearch: document.querySelectorAll('#cap-search').length,
+    secondGear: document.querySelectorAll('#settings-gear-cap').length,
+    oldCaptureView: document.querySelectorAll('#capture-view').length,
+    focusModeRule: document.body.classList.contains('cap-focus'),
+    capturePage: document.querySelectorAll('#ws-capture[data-section="capture"]').length,
+    capturesTab: document.querySelectorAll('#ds-tab-captures').length,
   }));
-  ok('capture: Back leaves focus mode and restores the nav',
-    !afterBack.focus && afterBack.navVisible, JSON.stringify(afterBack));
+  ok('the capture shell is gone — no second sidebar, search, gear or capture view',
+    noSecondShell.capturesColumn === 0 && noSecondShell.captureSidebar === 0
+      && noSecondShell.captureSearch === 0 && noSecondShell.secondGear === 0
+      && noSecondShell.oldCaptureView === 0 && !noSecondShell.focusModeRule,
+    JSON.stringify(noSecondShell));
+  ok('…replaced by a capture SECTION and a Captures tab under Data',
+    noSecondShell.capturePage === 1 && noSecondShell.capturesTab === 1,
+    JSON.stringify(noSecondShell));
+
+  // The execution-mode picker lived in the capture header, which was its only
+  // opener. Deleting that header must not have deleted the picker.
+  const execDoor = await win.evaluate(() => {
+    const b = document.getElementById('exec-mode-btn-cap');
+    return { exists: !!b, visible: !!(b && (b as HTMLElement).offsetParent !== null) };
+  });
+  ok('the execution-mode picker survived the shell, in the top bar',
+    execDoor.exists && execDoor.visible, JSON.stringify(execDoor));
 
   // The chip is only a PICTURE of the hotkey; the shortcut is registered in
   // main. "Removed the chip" and "unregistered the shortcut" look identical on
   // screen, so assert the hotkey still resolves.
   const hotkeyAlive = await win.evaluate(() => (window as any).hub.getHotkeyLabel()
     .then((r: any) => !!(r && (typeof r === 'string' ? r : r.label))).catch(() => false));
-  ok('capture: dropping the ⌘⌥S chip did not unregister the hotkey', hotkeyAlive);
+  ok('dropping the ⌘⌥S chip did not unregister the hotkey', hotkeyAlive);
 
   await win.evaluate(() => { (window as any).selectSection('home'); });
   await win.waitForTimeout(400);

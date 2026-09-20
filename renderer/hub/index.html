@@ -84,6 +84,15 @@
       <div id="global-search-results" class="hub-search-results" hidden></div>
     </div>
     <div class="hub-topbar-side hub-topbar-right">
+      <!-- The execution-mode picker. It lived in the capture header, which was
+           the whole reason its id ends in "-cap" — and that header was the ONLY
+           opener left for #exec-menu, so deleting the capture shell would have
+           deleted the picker with it. It is a window-wide tool, like the two
+           controls beside it, so it belongs in this bar. Same id, same
+           #exec-menu, same execMenu.ts (which drives whichever exec buttons
+           exist via execBtns()/execBtnVisible()) — only the parent moved. -->
+      <button id="exec-mode-btn-cap" class="as-icon-btn exec-btn-cap exec-btn-empty" type="button"
+        aria-haspopup="true" aria-expanded="false" aria-label="No model connected" title="No model connected"></button>
       <span class="hub-topbar-div" aria-hidden="true"></span>
       <!-- The Agent toggle — the dock's ONE on-screen door (⌘L is the other
            way in). It was two doors that looked nothing alike: a labelled
@@ -117,6 +126,18 @@
         <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-user"/></svg>
       </button>
     </div>
+  </div>
+
+  <!-- Hotkey registration failure — shown when globalShortcut.register() returns
+       false. It sat inside the capture shell; it is a WINDOW-level condition
+       (the global shortcut is dead everywhere, not just on one page), so it now
+       sits under the top bar where every section sees it. Same ids, same
+       hubHotkey.ts. -->
+  <div id="hotkey-fail-banner" class="hotkey-fail-banner is-hidden">
+    <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-alert"/></svg>
+    <span id="hotkey-fail-msg" class="hotkey-fail-text">Couldn't register the shortcut — it may already be in use by another app.</span>
+    <button id="hotkey-fail-change" class="api-banner-link" type="button">Change shortcut</button>
+    <button id="hotkey-fail-dismiss" class="hotkey-fail-dismiss" type="button" aria-label="Dismiss"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-x"/></svg></button>
   </div>
 
   <!-- ── hub body ──────────────────────────────────────────────────────
@@ -401,200 +422,69 @@
       </div>
     </section>
 
-    <!-- ── sidebar ──────────────────────────────────────────────── -->
-    <aside class="sidebar">
-
-      <div class="side-top">
-        <!-- search -->
-        <div class="side-search">
-          <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-search"/></svg>
-          <input id="cap-search" class="side-search-input" type="text"
-            placeholder="Search captures" aria-label="Search captures" autocomplete="off" spellcheck="false" />
+    <!-- ── Capture — a PAGE in the workspace, laid out like the dataset page ──
+         There is no capture shell any more: no second sidebar, no second search,
+         no second settings gear, no "Welcome" header of its own. A capture is a
+         project record, so it gets a `.ws-panel` like Data, Visuals and
+         Dashboards, the same `.ds-explorer-head` the dataset page uses, and the
+         one nav + top bar stay on screen around it. hubCapture.ts owns it. -->
+    <section class="ws-panel" id="ws-capture" data-section="capture" hidden>
+      <div class="ds-explorer-head">
+        <button class="btn btn-sm ds-back" type="button" id="cap-back">← Back to captures</button>
+        <div class="ds-explorer-ident">
+          <div class="ds-explorer-titlerow">
+            <h3 class="ds-explorer-title" id="cap-title">Capture</h3>
+            <span class="ds-source-badge" id="cap-badge" hidden>Dataset</span>
+          </div>
+          <div class="ds-explorer-meta">
+            <span class="ds-fresh" id="cap-meta"></span>
+          </div>
+        </div>
+        <!-- The same three doors the dataset page offers, in the same order and
+             the same classes. "New visual" is disabled until a dataset exists —
+             there is nothing to chart before then. -->
+        <div class="ds-explorer-actions">
+          <button class="btn btn-primary btn-sm" type="button" id="cap-act-dataset">Save as dataset</button>
+          <button class="btn btn-sm" type="button" id="cap-act-visual" disabled>New visual</button>
+          <button class="btn btn-sm" type="button" id="cap-act-ask">Ask</button>
         </div>
       </div>
 
-      <!-- session capture history (JS populates; hidden until first entry) -->
-      <div id="capture-history" class="cap-history"></div>
-
-      <!-- empty history -->
-      <div class="side-empty" aria-label="No captures yet">
-        <div class="side-empty-icon" aria-hidden="true">
-          <svg class="ic" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
+      <div class="cap-cols">
+        <!-- LEFT: the screenshot. The frame is the one capture-specific piece of
+             design in this section; clicking it opens the shared lightbox. -->
+        <div class="cap-frame" id="cap-frame" role="button" tabindex="0" aria-label="View the full screenshot">
+          <img id="cap-view-img" class="cap-img" alt="Your capture"/>
         </div>
-        <div class="side-empty-title">No captures yet</div>
-        <div class="side-empty-sub">Your analyzed charts and tables will show up here.</div>
-      </div>
 
-      <!-- footer: Settings only. The AI status chip moved into the selector in
-           the top bar (which shows the same state as an icon), and Help folded
-           into the settings menu, which is the one menu this button opens.
-           #settings-gear-cap is a SECOND id, not a duplicate of #settings-gear
-           in the app sidebar; hub.css shows this footer only in body.cap-focus,
-           where that sidebar is hidden. -->
-      <div class="side-bottom">
-        <button id="settings-gear-cap" class="side-gear" type="button"
-          aria-haspopup="true" aria-expanded="false" aria-label="Settings menu">
-          <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-settings"/></svg>
-          Settings
-        </button>
-      </div>
+        <!-- RIGHT: what the app read and computed. While the model runs this is
+             the step list; with no model it is the setup banner; on failure the
+             error card. -->
+        <div class="cap-side">
+          <p class="cap-hint" id="cap-hint" hidden></p>
 
-    </aside>
-
-    <!-- ── main area ─────────────────────────────────────────────── -->
-    <section class="main">
-
-      <!-- main header -->
-      <div class="main-top">
-        <!-- Back out of the full-screen Capture workspace. Only rendered in
-             `body.cap-focus` (hub.css) — with the nav hidden there is otherwise
-             no way out, the same trap the analysis focus mode had to solve with
-             its own "‹ Back". -->
-        <button id="cap-back" class="btn btn-sm cap-back" type="button" aria-label="Leave the capture workspace"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-chevron-left"/></svg><span>Back</span></button>
-        <div class="main-title">
-          <h2 id="main-title-h">Welcome</h2>
-          <p id="main-title-sub">Capture any chart, table, or data to begin</p>
-        </div>
-        <!-- Actions are grouped so they wrap below the title as a unit on a
-             narrow header rather than clipping past the panel edge. The title
-             flex-grows to claim the space between; see `.main-top-actions`. -->
-        <div class="main-top-actions">
-          <div class="hotkey-hint" aria-label="Keyboard shortcut">
-            <span class="kbd" id="hotkey-hint">⌘ ⌥ S</span>
-          </div>
-          <button id="conn-connect-btn" class="btn" type="button">Connect data</button>
-          <!-- AI selector, capture page only. Since the top-bar relayout removed
-               the sidebar's #exec-mode-btn, this is the ONLY opener left for
-               #exec-menu; hub.css shows it only in body.cap-focus. execMenu.ts
-               drives whichever exec buttons exist (execBtns()/execBtnVisible()),
-               so it needed no change when the other one went away. Execution mode
-               stays fully configurable at Settings → Execution everywhere else. -->
-          <button id="exec-mode-btn-cap" class="as-icon-btn exec-btn-cap exec-btn-empty" type="button"
-            aria-haspopup="true" aria-expanded="false" aria-label="No model connected" title="No model connected"></button>
-          <button id="new-capture" class="btn btn-primary" type="button">
-            <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-camera"/></svg>
-            New capture
-          </button>
-        </div>
-      </div>
-
-      <!-- Hotkey registration failure — shown when globalShortcut.register() returns false -->
-      <div id="hotkey-fail-banner" class="hotkey-fail-banner is-hidden">
-        <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-alert"/></svg>
-        <span id="hotkey-fail-msg" class="hotkey-fail-text">Couldn't register the shortcut — it may already be in use by another app.</span>
-        <button id="hotkey-fail-change" class="api-banner-link" type="button">Change shortcut</button>
-        <button id="hotkey-fail-dismiss" class="hotkey-fail-dismiss" type="button" aria-label="Dismiss"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-x"/></svg></button>
-      </div>
-
-      <div class="main-body">
-
-      <!-- empty state body -->
-      <div class="conv">
-        <div class="state-pad">
-          <div class="state-narrow">
-
-            <!-- camera icon -->
-            <div class="empty-mark" aria-hidden="true">
-              <svg class="ic" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-camera"/></svg>
+          <div class="cv-steps" id="cv-steps" hidden>
+            <div class="cv-step" data-status="active">
+              <span class="cv-step-icon" aria-hidden="true"></span>
+              <span class="cv-step-label">Reading your capture…</span>
             </div>
-
-            <h1 class="empty-h">See what your data is really saying</h1>
-            <p class="empty-sub">
-              Screenshot any data and get instant analysis, with visualizations
-              that make it clearer.
-            </p>
-
-            <div class="steps">
-              <div class="step">
-                <div class="step-n">1</div>
-                <div class="step-t">
-                  Press <span id="step-hotkey-keys"><kbd>⌘</kbd> <kbd>⌥</kbd> <kbd>S</kbd></span>
-                  or click <strong>New capture</strong>.
-                </div>
-              </div>
-              <div class="step">
-                <div class="step-n">2</div>
-                <div class="step-t">Drag a box around any <strong>chart, table, or data</strong> on your screen.</div>
-              </div>
-              <div class="step">
-                <div class="step-n">3</div>
-                <div class="step-t">
-                  Get the figures in plain English, plus visualizations
-                  that make them clearer.
-                </div>
-              </div>
+            <div class="cv-step" data-status="pending">
+              <span class="cv-step-icon" aria-hidden="true"></span>
+              <span class="cv-step-label">Analyzing content…</span>
             </div>
-
-            <button id="take-shot-main" class="btn btn-primary btn-block btn-lg" type="button">
-              <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-camera"/></svg>
-              New capture
-            </button>
-
-            <!-- Readiness banner — shown only when NOT ready (no Local CLI and no BYOK provider) -->
-            <div id="api-banner" class="api-banner is-hidden">
-              <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="14" r="3.5"/><path d="M10.5 11.5L20 2M16 6l2.5 2.5M18 8l1.8 1.8"/></svg>
-              <span class="api-banner-text">The Assistant isn’t set up yet.</span>
-              <button id="open-settings-banner" class="api-banner-link" type="button">Set up the Assistant</button>
+            <div class="cv-step" data-status="pending">
+              <span class="cv-step-icon" aria-hidden="true"></span>
+              <span class="cv-step-label">Processing data…</span>
             </div>
-
-          </div>
-        </div>
-      </div>
-
-      <!-- capture view (shown after a hub-triggered capture, overlays the empty state) -->
-      <div id="capture-view" class="cap-view cap-view-hidden" data-cv-state="loading" aria-live="polite">
-
-        <!-- Analysis panel (full scroll area) -->
-        <div class="cv-analysis">
-
-          <!-- Screenshot thumbnail -->
-          <div class="cv-thumb-section">
-            <div class="cv-section-label">Your screenshot</div>
-            <div class="cv-thumb-wrap" id="cv-thumb-wrap" role="button" tabindex="0" aria-label="Image options">
-              <img id="cap-view-img" class="cv-img" alt="Your capture"/>
-            </div>
-            <div class="cv-thumb-meta" id="cv-thumb-meta"></div>
-          </div>
-
-          <!-- Loading -->
-          <div class="cv-loading-panel">
-            <div class="cv-loading-head">
-              <!-- A static mark, not a ring: the step list below already says
-                   which part of the work is running, and a spinner over it was
-                   the same message twice. -->
-              <span class="cv-spin-icon" aria-hidden="true"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="#i-sparkles"/></svg></span>
-              <div>
-                <div class="cv-loading-title">Analyzing your capture…</div>
-                <div class="cv-loading-sub">Reading what's on screen. This usually takes a few seconds.</div>
-              </div>
-            </div>
-            <div class="cv-steps" id="cv-steps">
-              <div class="cv-step" data-status="active">
-                <span class="cv-step-icon" aria-hidden="true"></span>
-                <span class="cv-step-label">Reading your capture…</span>
-              </div>
-              <div class="cv-step" data-status="pending">
-                <span class="cv-step-icon" aria-hidden="true"></span>
-                <span class="cv-step-label">Analyzing content…</span>
-              </div>
-              <div class="cv-step" data-status="pending">
-                <span class="cv-step-icon" aria-hidden="true"></span>
-                <span class="cv-step-label">Processing data…</span>
-              </div>
-              <div class="cv-step" data-status="pending">
-                <span class="cv-step-icon" aria-hidden="true"></span>
-                <span class="cv-step-label">Writing response…</span>
-              </div>
+            <div class="cv-step" data-status="pending">
+              <span class="cv-step-icon" aria-hidden="true"></span>
+              <span class="cv-step-label">Writing response…</span>
             </div>
           </div>
 
-          <!-- Result -->
-          <div class="cv-result-panel">
-            <div id="cv-thread" class="cv-thread"></div>
-          </div>
+          <div class="cap-result" id="cap-result"></div>
 
-          <!-- Error -->
-          <div class="cv-error-panel">
+          <div class="cv-error-panel cap-error" id="cap-error" hidden>
             <div id="cve-badge" class="cve-icon-wrap" aria-hidden="true"></div>
             <div id="cve-title" class="cve-error-title">Something went wrong</div>
             <p id="cve-msg" class="cve-error-msg"></p>
@@ -607,37 +497,8 @@
               <button id="cve-retry-btn" class="btn btn-soft btn-sm" type="button">Retry</button>
             </div>
           </div>
-
-        </div><!-- /.cv-analysis -->
-
-        <!-- Follow-up input -->
-        <div class="cv-followup">
-          <div id="cv-chips" class="cv-chips"></div>
-          <div class="cv-input-row">
-            <svg class="ic cv-input-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-            <input id="cv-followup-input" class="cv-followup-inp" type="text" placeholder="Ask a follow-up…" disabled/>
-            <button id="cv-followup-send" class="cv-followup-btn" type="button" disabled aria-label="Send">
-              <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-send"/></svg>
-            </button>
-          </div>
         </div>
-
-        <!-- Footer -->
-        <div class="cv-foot">
-          <button id="cap-view-new" class="btn btn-soft btn-sm" type="button">
-            <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-arrow-left"/></svg>
-            New capture
-          </button>
-          <button id="cv-save-dataset" class="btn btn-soft btn-sm" type="button" hidden>
-            <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-database"/></svg>
-            Save as dataset
-          </button>
-        </div>
-
       </div>
-
-      </div><!-- /.main-body -->
-
     </section>
 
     <!-- ── Connect data — a SECTION of its own, not an overlay over the capture surface.
@@ -745,8 +606,8 @@
         <div class="ds-list-view">
         <div class="ds-head">
           <div class="ds-head-text">
-            <h2 class="ds-h">Datasets</h2>
-            <p class="ds-sub">Import CSV, JSON, or Excel — or paste data — to save a structured dataset in this project.</p>
+            <h2 class="ds-h" id="ds-h">Data</h2>
+            <p class="ds-sub" id="ds-sub">Import CSV, JSON, or Excel — or paste data — to save a structured dataset in this project.</p>
           </div>
           <!-- Three ways to bring data in, three distinct actions: import a FILE
                (native picker, straight to the composer), PASTE text, or CONNECT a
@@ -765,11 +626,42 @@
           </div>
         </div>
 
+        <!-- Datasets and Captures are two views of the SAME thing — the data this
+             project holds — so they are two tabs of one page, not two sections.
+             The `.ds-tabs`/`.ds-tab` pair is the dataset page's own tab strip,
+             reused; captureList.ts drives the switch. -->
+        <div class="ds-tabs" role="tablist" aria-label="Data views">
+          <button class="ds-tab" type="button" role="tab" id="ds-tab-datasets"
+                  aria-selected="true" aria-controls="ds-saved">Datasets</button>
+          <button class="ds-tab" type="button" role="tab" id="ds-tab-captures"
+                  aria-selected="false" aria-controls="cap-grid-wrap" tabindex="-1">Captures</button>
+        </div>
+
+        <!-- The Captures tab: a card grid of screenshots. Same `.viz-grid` /
+             `.viz-card*` classes the Visuals gallery uses — the tile is already
+             16:10, which is the shape a screenshot wants. captureList.ts fills it. -->
+        <div id="cap-grid-wrap" role="tabpanel" aria-labelledby="ds-tab-captures" hidden>
+          <div class="viz-grid" id="cap-grid"></div>
+          <div class="ws-empty" id="cap-empty" hidden>
+            <!-- The camera, at the size the empty-state art slot gives it. The
+                 bar trio the other empty states draw is a picture of a CHART;
+                 this page is not about charts. -->
+            <div class="ws-empty-art cap-empty-art" aria-hidden="true">
+              <svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="#i-camera"/></svg>
+            </div>
+            <h3 class="ws-empty-h">No captures yet</h3>
+            <p class="ws-empty-p">Screenshot any chart or table on your screen and Ordinate reads the figures out of it. Save the ones that carry a table as a dataset.</p>
+            <div class="ws-empty-actions">
+              <button class="btn btn-primary" type="button" id="cap-empty-new">Take a screenshot</button>
+            </div>
+          </div>
+        </div>
+
         <!-- The saved datasets, as the same list-table Analyses uses. The column
              labels live here (one template, shared with the rows in hub.css, so
              a label cannot drift out of line with the cell under it); the rows
              themselves are built by datasets.ts's makeSavedItem. -->
-        <div class="ds-saved ws-table" id="ds-saved">
+        <div class="ds-saved ws-table" id="ds-saved" role="tabpanel" aria-labelledby="ds-tab-datasets">
           <div class="ws-table-cols ds-saved-cols">
             <span>Name</span>
             <span>Rows</span>
@@ -1491,7 +1383,6 @@
         </div>
       </div>
     </section>
-
 
     <!-- ── AI dock — docked, toggleable panel that follows across the app ──
          A sibling of the sidebar/section panels above, not another
@@ -2412,6 +2303,7 @@
 <script src="dsGrid.js"></script>
 <script src="dsProfile.js"></script>
 <script src="composer.js"></script>
+<script src="composerGrid.js"></script>
 <script src="dataSection.js"></script>
 <script src="captureDataset.js"></script>
 <script src="filterValues.js"></script>
@@ -2483,6 +2375,7 @@
 <!-- The AI dock — the one assistant surface. Reads `selectSection`/`wsBodyEl`
      (workspace.js), `dashReadOnly` (dashboards.js) and `xpAppendBubble`/
      `xpRenderTurns` (askCore.js) at call time, so it loads after all three. -->
+<script src="dockResize.js"></script>
 <script src="dock.js"></script>
 <!-- Dock proposals (Task 3) — the ONE proposal engine, mounted in the dock
      (#dk-messages). Reads stepSummaryText/applyStepResult/prefillCalcFieldEditor
@@ -2521,7 +2414,9 @@
 <script src="hubHotkey.js"></script>
 <script src="hubMenus.js"></script>
 <script src="hubNotify.js"></script>
+<script src="captureStatus.js"></script>
 <script src="hubCapture.js"></script>
+<script src="captureList.js"></script>
 <script src="hubResultMenus.js"></script>
 <script src="hub.js"></script>
 

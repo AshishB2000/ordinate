@@ -156,6 +156,30 @@ const DS_SOURCE_LABELS: Record<string, string> = {
   capture: 'Screenshot',
 };
 
+/** The camera mark a capture-sourced record carries, wherever it is listed. */
+function dsCameraGlyph(): SVGSVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'ds-cam-glyph');
+  svg.setAttribute('width', '13');
+  svg.setAttribute('height', '13');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('aria-hidden', 'true');
+  const body = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  body.setAttribute('d', 'M3 8.5A2 2 0 0 1 5 6.5h1.2l.8-1.4A1.5 1.5 0 0 1 8.3 4.3h7.4a1.5 1.5 0 0 1 1.3.8l.8 1.4H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z');
+  body.setAttribute('stroke', 'currentColor');
+  body.setAttribute('stroke-width', '1.7');
+  svg.appendChild(body);
+  const lens = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  lens.setAttribute('cx', '12');
+  lens.setAttribute('cy', '13');
+  lens.setAttribute('r', '3.4');
+  lens.setAttribute('stroke', 'currentColor');
+  lens.setAttribute('stroke-width', '1.7');
+  svg.appendChild(lens);
+  return svg;
+}
+
 const DS_NOT_REFRESHABLE_HINT =
   'This dataset was saved before its source was recorded, or has no re-fetchable source '
   + '(pasted text, or a screenshot capture). Re-importing the file will make it refreshable.';
@@ -207,10 +231,21 @@ function makeSavedItem(d: any): HTMLElement {
   const kind = d && d.sourceKind ? String(d.sourceKind) : '';
   const source = document.createElement('span');
   source.className = 'ws-cell ds-source-cell';
-  const badge = document.createElement('span');
-  badge.className = 'ds-source-badge';
-  badge.textContent = DS_SOURCE_LABELS[kind] || kind || 'Unknown';
-  source.appendChild(badge);
+  if (kind === 'capture') {
+    // A screenshot's source is WHEN it was taken — "Screenshot" alone said less
+    // than "CSV" does, because every capture-sourced dataset says it. The camera
+    // is the same glyph the Captures grid and Home's Recent rows use.
+    source.appendChild(dsCameraGlyph());
+    const label = document.createElement('span');
+    label.className = 'ds-source-badge';
+    label.textContent = 'From screenshot · ' + formatSidebarTime((d && d.updatedAt) || null);
+    source.appendChild(label);
+  } else {
+    const badge = document.createElement('span');
+    badge.className = 'ds-source-badge';
+    badge.textContent = DS_SOURCE_LABELS[kind] || kind || 'Unknown';
+    source.appendChild(badge);
+  }
 
   // Freshness line. A dataset whose last refresh FAILED keeps a warning dot
   // until the next success, so a silently stale number has a visible cause.

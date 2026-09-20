@@ -39,6 +39,7 @@ const SMOKES = [
   'smoke-ask-actions',
   'smoke-viz-thumbs',
   'smoke-section-hero',
+  'smoke-capture',
   'smoke-connect',
   'smoke-dashboard-proposal',
   'smoke-templates',

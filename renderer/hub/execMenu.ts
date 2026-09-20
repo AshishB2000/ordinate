@@ -17,6 +17,10 @@ const AI_NOT_CONFIGURED = 'The Assistant isn’t set up yet.';
 /** The one label on the one button that fixes it. */
 const AI_SETUP_LABEL = 'Set up the Assistant';
 
+/** The same state, said from the MODEL PICKER's point of view — see
+ *  updateExecBtnIcon for why that button must not be named "Assistant". */
+const MODEL_NOT_CONNECTED = 'No model connected';
+
 /** Open Settings on the Assistant tab — the single destination behind every
  *  "Set up the Assistant" button and the dock's header pill. */
 function openAssistantSettings(): void {
@@ -50,7 +54,7 @@ function aiSetupNotice(el: HTMLElement | null, extra?: string): void {
  * the whole registry and a new door joins it by being named here.
  */
 const AI_DOORS = ['viz-empty-ai', 'viz-suggest-btn', 'an-draft-btn', 'an-empty-draft'];
-const AI_DOOR_HINTS = ['viz-empty-hint', 'an-empty-hint'];
+const AI_DOOR_HINTS = ['viz-empty-hint', 'an-empty-hint', 'cap-hint'];
 
 /**
  * Disable the Assistant's doors when no model is configured, and say why.
@@ -163,13 +167,21 @@ function updateExecBtnIcon(): void {
     if (active) {
       btn.innerHTML = agentIconHTML(active.id, active.label, 18);
       btn.classList.remove('exec-btn-empty');
-      btn.setAttribute('aria-label', `Assistant: ${active.label}`);
+      // "Model", NOT "Assistant". This button picks WHICH MODEL RUNS; it does
+      // not open the Assistant, and the chrome already has exactly two doors
+      // that do (#side-ai-btn and the nav item), both named Assistant. Calling
+      // this one Assistant too put a third control with that accessible name
+      // in the chrome — which is the defect smoke-dock's door count exists to
+      // catch, and it caught it the moment this button moved out of the
+      // capture header into the top bar. The name it wears now is also simply
+      // the truer one.
+      btn.setAttribute('aria-label', `Model: ${active.label}`);
       btn.title = active.label;
     } else {
       btn.innerHTML = EXEC_BTN_NEUTRAL;
       btn.classList.add('exec-btn-empty');
-      btn.setAttribute('aria-label', AI_NOT_CONFIGURED);
-      btn.title = AI_NOT_CONFIGURED;
+      btn.setAttribute('aria-label', MODEL_NOT_CONNECTED);
+      btn.title = MODEL_NOT_CONNECTED;
     }
   }
 }

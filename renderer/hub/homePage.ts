@@ -89,6 +89,7 @@ const HOME_TYPE_LABEL: Record<string, string> = {
   dataset: 'Dataset',
   analysis: 'Dashboard',
   dashboard: 'Dashboard',
+  capture: 'Capture',
 };
 
 // One inline SVG path per record type. Inline, not an icon library: no new
@@ -99,6 +100,9 @@ const HOME_TYPE_PATH: Record<string, string> = {
   dataset: 'M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3Zm0 5c0 1.7 3.6 3 8 3s8-1.3 8-3M4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7',
   analysis: 'M4 19V5m0 14h16M8 16v-4m4 4V8m4 8v-6',
   dashboard: 'M4 4h7v7H4V4Zm9 0h7v4h-7V4ZM4 13h7v7H4v-7Zm9-3h7v10h-7V10Z',
+  // The camera: the same mark the Captures grid and a capture-sourced dataset
+  // row carry, so one glyph means "this came from a screenshot" everywhere.
+  capture: 'M3 8.5A2 2 0 0 1 5 6.5h1.2l.8-1.4A1.5 1.5 0 0 1 8.3 4.3h7.4a1.5 1.5 0 0 1 1.3.8l.8 1.4H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM15.4 13a3.4 3.4 0 1 1-6.8 0 3.4 3.4 0 0 1 6.8 0Z',
 };
 
 function homeTypeIcon(type: string): SVGSVGElement {
@@ -344,6 +348,12 @@ async function openRecentItem(it: any): Promise<void> {
   } else if (it.type === 'analysis') {
     selectSection('analyses');
     if (typeof openAnalysis === 'function') openAnalysis(String(it.id));
+  } else if (it.type === 'capture') {
+    // A Recent row carries `name`; a capture summary calls that `title`. The
+    // page fetches the crop and the stored result itself (hubCapture.ts).
+    if (typeof openCaptureFromSummary === 'function') {
+      openCaptureFromSummary({ id: it.id, title: it.name, updatedAt: it.updatedAt });
+    }
   }
 }
 

@@ -10,6 +10,7 @@
 import { ipcMain } from 'electron';
 import * as datasets from '../data/datasets';
 import * as combine from '../data/combine';
+import * as history from '../app/history';
 import type { Cell, TableData } from '../data/transforms';
 
 const MAX_ROWS = 1_000_000;
@@ -124,6 +125,22 @@ async function composePreview({ projectId, base, joins, page }: any = {}) {
 }
 
 /**
+ * Turn `origin: { kind:'capture', captureId }` into the stored screenshot link.
+ *
+ * The dataset record's `capture` field is what renders the thumbnail in the
+ * saved list and on the dataset page, and it holds a filesystem path — so the
+ * path comes from main's own history record, never from the payload. Returns
+ * null for every other origin, which is every other caller unchanged.
+ */
+async function resolveCaptureLink(
+  origin: any,
+): Promise<{ entryId: string | null; cropPath: string | null } | null> {
+  if (!origin || origin.kind !== 'capture' || !origin.captureId) return null;
+  const thread = await history.loadThread(origin.captureId).catch(() => null);
+  return { entryId: String(origin.captureId), cropPath: (thread && thread.cropPath) || null };
+}
+
+/**
  * Save a chain as a new dataset, at FULL fidelity (no sampling), with the
  * composer's field mapping as real prepare steps.
  *
@@ -143,6 +160,12 @@ export async function composeSave({ projectId, name, base, joins, steps, sourceK
 
     const finalName = (typeof name === 'string' && name.trim()) || r.baseRes.name || 'Dataset';
 
+    // A capture saved through the composer (the ordinary path — same surface as
+    // Paste and Import) carries `origin: { kind:'capture', captureId }`. The
+    // screenshot LINK is resolved here, from main's own history record, because
+    // a renderer-sent crop path is a renderer-sent filesystem path.
+    const captureLink = await resolveCaptureLink(origin);
+
     // No joins: an ordinary save. Same rows, same origin, same speed as before.
     if (!list.length) {
       const saved = await datasets.saveDataset(projectId, {
@@ -151,9 +174,14 @@ export async function composeSave({ projectId, name, base, joins, steps, sourceK
         columns: r.baseRes.table.columns,
         rows: r.baseRes.table.rows.slice(0, MAX_ROWS),
         origin,
+        capture: captureLink ?? undefined,
       });
       if (!saved) return { ok: false, error: 'Invalid project, or the project no longer exists' };
       const withSteps = await applyInitialSteps(projectId, saved.id, steps);
+      if (captureLink && captureLink.entryId) {
+        await history.setDatasetId(captureLink.entryId, saved.id)
+          .catch((e: any) => console.error('[history] setDatasetId failed:', e.message));
+      }
       return { ok: true, dataset: withSteps || saved, warnings: [] };
     }
 

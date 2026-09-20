@@ -14,8 +14,9 @@
 import * as projects from './projects';
 import * as datasets from '../data/datasets';
 import * as analysis from '../analysis/analysis';
+import * as history from './history';
 
-export type RecentType = 'dataset' | 'analysis';
+export type RecentType = 'dataset' | 'analysis' | 'capture';
 
 /**
  * What the record IS, in numbers — carried so a Home row can say more than a
@@ -52,6 +53,10 @@ export interface RecentGroup {
   projectName: string;
   datasets: { id: string; name: string; updatedAt: string; meta?: RecentMeta }[];
   analyses: { id: string; name: string; updatedAt: string; meta?: RecentMeta }[];
+  // A capture is a project record like the other two, so it belongs in the same
+  // time-ordered list. Optional so an older caller (and every existing test)
+  // builds a group without one.
+  captures?: { id: string; name: string; updatedAt: string }[];
 }
 
 /**
@@ -79,6 +84,16 @@ export function buildRecent(groups: RecentGroup[], limit: number): RecentItem[] 
         name: d.name,
         updatedAt: d.updatedAt,
         meta: d.meta,
+      });
+    }
+    for (const c of g.captures || []) {
+      items.push({
+        type: 'capture',
+        id: c.id,
+        projectId: g.projectId,
+        projectName: g.projectName,
+        name: c.name,
+        updatedAt: c.updatedAt,
       });
     }
     for (const a of g.analyses) {
@@ -130,9 +145,10 @@ export async function listRecent(limit = 50): Promise<RecentItem[]> {
 
   const groups: RecentGroup[] = await Promise.all(
     projectList.map(async (p): Promise<RecentGroup> => {
-      const [ds, an] = await Promise.all([
+      const [ds, an, caps] = await Promise.all([
         datasets.listDatasets(p.id).catch(() => []),
         analysis.listAnalyses(p.id).catch(() => []),
+        history.loadAllSummaries(p.id).catch(() => []),
       ]);
       return {
         projectId: p.id,
@@ -149,6 +165,9 @@ export async function listRecent(limit = 50): Promise<RecentItem[]> {
           updatedAt: a.updatedAt,
           meta: { sheetCount: a.sheetCount },
         })),
+        // No meta: a capture has no row/column/sheet count to carry, and an
+        // invented one would be a figure the app did not compute.
+        captures: caps.map((c) => ({ id: c.id, name: c.title, updatedAt: c.updatedAt })),
       };
     }),
   );

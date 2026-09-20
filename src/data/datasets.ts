@@ -362,7 +362,11 @@ export async function listDatasets(projectId: string): Promise<DatasetSummary[]>
         updatedAt: ds.updatedAt,
       };
       if (ds.capture) summary.capture = { cropPath: ds.capture.cropPath };
-      if (ds.origin) summary.originKind = ds.origin.kind;
+      // 'capture' is deliberately withheld: `originKind` is what the list and
+      // the explorer read to offer "↻ Refresh", and a screenshot has nothing to
+      // re-fetch. The origin itself stays on the full record (the capture page
+      // reads it) — this is only about the refresh affordance.
+      if (ds.origin && ds.origin.kind !== 'capture') summary.originKind = ds.origin.kind;
       if (ds.lastRefreshedAt) summary.lastRefreshedAt = ds.lastRefreshedAt;
       if (ds.lastRefreshStatus) summary.lastRefreshStatus = ds.lastRefreshStatus;
       if (ds.autoRefresh) summary.autoRefresh = ds.autoRefresh;

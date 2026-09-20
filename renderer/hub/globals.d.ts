@@ -90,7 +90,8 @@ declare global {
       retry(entryId: string): void;
       followup(entryId: string, text: string): void;
       onFollowupResult(cb: (data: any) => void): void;
-      onHistory(cb: (data: any) => void): void;
+      listCaptures(projectId: string): Promise<any[]>;
+      onCapturesCleared(cb: () => void): void;
       loadThread(entryId: string): Promise<any>;
       deleteThread(entryId: string): Promise<any>;
       copyText(text: string): void;

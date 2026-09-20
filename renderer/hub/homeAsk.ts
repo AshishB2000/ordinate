@@ -82,14 +82,21 @@ async function haPaintGreeting(proj: { id: string; name: string }): Promise<void
     greet.textContent = haGreetingText(haUserName, new Date().getHours());
   }
   if (!sub) return;
-  // "{project} · N datasets · M dashboards" — dataset:list and analysis:list
-  // carry summaries only; "analysis" records ARE the user-facing dashboards.
+  // "{project} · N datasets · M dashboards [· K captures]" — dataset:list,
+  // analysis:list and history:list carry summaries only; "analysis" records ARE
+  // the user-facing dashboards.
   if (!proj.id) { sub.textContent = 'No project yet — bring some data in to begin.'; return; }
   let dsN = 0;
   let dbN = 0;
+  let capN = 0;
   try { const d = await window.hub.listDatasets(proj.id); dsN = Array.isArray(d) ? d.length : 0; } catch (_) { /* 0 */ }
   try { const a = await window.hub.listAnalyses(proj.id); dbN = Array.isArray(a) ? a.length : 0; } catch (_) { /* 0 */ }
+  try { const c = await window.hub.listCaptures(proj.id); capN = Array.isArray(c) ? c.length : 0; } catch (_) { /* 0 */ }
   const parts = [proj.name || 'Workspace', haPlural(dsN, 'dataset'), haPlural(dbN, 'dashboard')];
+  // Only when there ARE any: datasets and dashboards are what every project is
+  // made of, so "0 datasets" is a state worth naming. Captures are optional —
+  // a project that has never taken one should not be told it has none.
+  if (capN > 0) parts.push(haPlural(capN, 'capture'));
   sub.textContent = parts.join('  ·  ');
 }
 

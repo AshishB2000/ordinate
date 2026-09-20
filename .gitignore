@@ -85,6 +85,14 @@ scripts/**/*.js
 /src/ipc/captureDataset.js
 /scripts/test-captureDataset.js
 /renderer/hub/captureDataset.js
+# Captures as project records (the Captures tab + the capture page) — emitted siblings.
+/renderer/hub/captureList.js
+/renderer/hub/captureStatus.js
+/scripts/smoke-capture.js
+# The dock's width machinery, split out under the 800-line cap.
+/renderer/hub/dockResize.js
+# The composer's preview grid, split out under the same cap.
+/renderer/hub/composerGrid.js
 # Hardening self-check — emitted sibling (also covered by scripts/**/*.js).
 /scripts/test-history.js
 # Phase 1 DuckDB synchronous bridge — emitted siblings.
