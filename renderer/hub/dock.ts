@@ -521,7 +521,7 @@ function dkPaintAiToggle(enabled: boolean, ready: boolean): void {
   if (!btn) return;
   dkAiNeedsModel = !ready;
   if (!ready) {
-    btn.textContent = 'No model';
+    btn.textContent = 'Not set up';
     btn.removeAttribute('aria-pressed'); // not a toggle in this state — a link to the fix
     btn.title = AI_NOT_CONFIGURED;
     btn.classList.remove('dk-ai-toggle--off');
@@ -539,7 +539,7 @@ async function dkToggleAi(): Promise<void> {
   // With no model there is no preference worth flipping — send the user to the
   // one screen that can change the answer.
   if (dkAiNeedsModel) {
-    if (typeof showSettingsPanel === 'function') void showSettingsPanel('exec');
+    openAssistantSettings();
     return;
   }
   let status: any = {};
@@ -629,7 +629,7 @@ async function dkSend(): Promise<void> {
   input.value = question;
   if (res && res.notReady) {
     dkSetComposerEnabled(false);
-    dkShowHint(AI_NOT_CONFIGURED);
+    aiSetupNotice(document.getElementById('dk-hint'));
   } else {
     dkSetComposerEnabled(true);
     dkShowHint((res && res.error) || 'Could not answer that. Try again.');
@@ -691,13 +691,15 @@ async function dkRefresh(): Promise<void> {
   }
   if (!ready) {
     dkSetComposerEnabled(false);
-    if (input) input.placeholder = 'Connect a model to ask a question…';
-    dkShowHint(AI_NOT_CONFIGURED);
+    if (input) input.placeholder = 'Set up the Assistant to ask a question…';
+    aiSetupNotice(document.getElementById('dk-hint'));
+    dkPaintPoweredBy(null);
     return;
   }
   dkSetComposerEnabled(true);
   if (input) input.placeholder = "Ask about what you're looking at…";
   dkHideHint();
+  dkPaintPoweredBy(status);
 }
 
 // ── Keyboard ─────────────────────────────────────────────────────────────

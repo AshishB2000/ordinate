@@ -228,8 +228,7 @@ async function anRenderAiSlot(): Promise<void> {
   note.className = 'an-ai-note';
   note.id = 'an-ai-note';
   if (!anAiReady) {
-    note.textContent =
-      AI_NOT_CONFIGURED + ' The chart types below are recommended by the app itself and work without one.';
+    aiSetupNotice(note, 'The chart types below are recommended by the app itself and work without one.');
   } else {
     note.hidden = true;
   }

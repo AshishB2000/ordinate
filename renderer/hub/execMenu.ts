@@ -1,16 +1,48 @@
 /**
- * The one "no model configured" sentence, for every surface in the hub that
- * has to say it — the dock, Prepare, Explain, the chart and dashboard
- * suggesters, the analysis wizard. It used to be six near-copies ("…to use
- * Copilot.", "…to suggest a chart.", "…to draft a dashboard."), which named
- * the feature three different ways and pointed at "Execution settings", a
- * screen that is labelled Settings → Execution.
+ * The one "not set up yet" sentence, for every surface in the hub that has to
+ * say it — the dock, Prepare, Explain, the chart and dashboard suggesters, the
+ * analysis wizard. It used to be six near-copies ("…to use Copilot.", "…to
+ * suggest a chart."), which named the feature three different ways.
+ *
+ * It no longer spells out a route. "Connect a model in Settings → Execution"
+ * asked a first-time reader to know what a model is and where Execution is;
+ * the route is now AI_SETUP_LABEL, a real button that goes there.
  *
  * Lives here because this file already owns the model-connection chrome, and
  * it loads (index.html) before every file that reads it. Classic global-scope
  * script: the `const` is the global lexical scope, read inside functions only.
  */
-const AI_NOT_CONFIGURED = 'Connect a model in Settings → Execution to use the Assistant.';
+const AI_NOT_CONFIGURED = 'The Assistant isn’t set up yet.';
+
+/** The one label on the one button that fixes it. */
+const AI_SETUP_LABEL = 'Set up the Assistant';
+
+/** Open Settings on the Assistant tab — the single destination behind every
+ *  "Set up the Assistant" button and the dock's header pill. */
+function openAssistantSettings(): void {
+  if (typeof closeExecMenu === 'function') closeExecMenu();
+  if (typeof showSettingsPanel === 'function') void showSettingsPanel('exec');
+}
+
+/** The "Set up the Assistant" button itself. Built, not markup, because the
+ *  five surfaces that need one are five different containers. */
+function aiSetupButton(): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'btn btn-sm ai-setup-btn';
+  b.textContent = AI_SETUP_LABEL;
+  b.addEventListener('click', openAssistantSettings);
+  return b;
+}
+
+/** Paint a notice element as "sentence + the button that fixes it", replacing
+ *  whatever was there. `extra` is a surface's own follow-on sentence. */
+function aiSetupNotice(el: HTMLElement | null, extra?: string): void {
+  if (!el) return;
+  el.textContent = AI_NOT_CONFIGURED + (extra ? ' ' + extra : '') + ' ';
+  el.appendChild(aiSetupButton());
+  el.hidden = false;
+}
 
 /**
  * Every button that hands work to the Assistant, and the hint that explains a
@@ -52,9 +84,13 @@ async function gateAssistantDoors(): Promise<void> {
   for (const id of AI_DOOR_HINTS) {
     const h = document.getElementById(id);
     if (!h) continue;
-    h.textContent = AI_NOT_CONFIGURED; // one sentence, one source
-    h.hidden = ready;
+    if (ready) { h.textContent = ''; h.hidden = true; continue; }
+    aiSetupNotice(h); // one sentence, one source, one button
   }
+  // Home's ask bar has no room for a notice, so its placeholder carries the
+  // same answer. Submitting it opens the dock, which shows the button.
+  const ask = document.getElementById('home-ask-input') as HTMLInputElement | null;
+  if (ask) ask.placeholder = ready ? 'Ask about your data…' : 'Set up the Assistant to ask a question…';
 }
 
 // Execution-mode menu — the top-right chip popup: agent rows (cloud/local),
@@ -84,16 +120,23 @@ function agentIconHTML(id: string, label: string, size: number): string {
 // (Active-requires-Connected, same rule as the status pill). Returns {id,label}
 // or null when nothing is connected — so we never imply "Claude is active" when
 // it isn't. No hardcoded default.
-function execActiveConnected(): { id: string; label: string } | null {
-  if (execMode === 'local') {
-    const id = execLocal.activeId;
+// Pass a getKeyStatus() snapshot to ask the same question of a caller that has
+// one in hand but has never opened the menu (the dock's "Powered by" line);
+// with no argument it reads the menu's own state, as it always has. One rule,
+// so the dock can never name something the pill disagrees with.
+function execActiveConnected(st?: any): { id: string; label: string } | null {
+  const mode  = st ? (st.executionMode || 'local') : execMode;
+  const byok  = st ? (st.byok || {}) : execByok;
+  const local = st ? (st.localCli || {}) : execLocal;
+  if (mode === 'local') {
+    const id = local.activeId;
     if (!id || !RUNNABLE_LOCAL.includes(id)) return null;
-    const cli = (execLocal.clis || []).find((c: any) => c.id === id);
+    const cli = (local.clis || []).find((c: any) => c.id === id);
     return (cli && cli.status === 'installed') ? { id, label: cli.displayName || id } : null;
   }
-  const id = execByok.activeProvider; // effective active (null if none connected)
+  const id = byok.activeProvider; // effective active (null if none connected)
   if (!id) return null;
-  const p = (execByok.providers || {})[id];
+  const p = (byok.providers || {})[id];
   return (p && p.connected) ? { id, label: BYOK_DISPLAY[id] || id } : null;
 }
 
@@ -120,13 +163,13 @@ function updateExecBtnIcon(): void {
     if (active) {
       btn.innerHTML = agentIconHTML(active.id, active.label, 18);
       btn.classList.remove('exec-btn-empty');
-      btn.setAttribute('aria-label', `Execution: ${active.label}`);
+      btn.setAttribute('aria-label', `Assistant: ${active.label}`);
       btn.title = active.label;
     } else {
       btn.innerHTML = EXEC_BTN_NEUTRAL;
       btn.classList.add('exec-btn-empty');
-      btn.setAttribute('aria-label', 'No model connected');
-      btn.title = 'No model connected';
+      btn.setAttribute('aria-label', AI_NOT_CONFIGURED);
+      btn.title = AI_NOT_CONFIGURED;
     }
   }
 }
@@ -206,7 +249,7 @@ function renderLocalAgents(): void {
   if (!shown.length) {
     const empty = document.createElement('div');
     empty.className = 'exec-agent-empty';
-    empty.textContent = 'No CLIs detected. Open Settings → Execution to scan.';
+    empty.textContent = 'Nothing found on this Mac. Open Settings → Assistant to look again.';
     execAgentList.appendChild(empty);
   }
   shown.forEach((cli: any) => {
@@ -451,15 +494,13 @@ async function selectLocalCli(id: string): Promise<void> {
 // A keyless provider can't be silently activated — send the user to Settings
 // (Execution mode) with that provider's key fields focused.
 function openSettingsForProvider(prov: string): void {
-  closeExecMenu();
-  showSettingsPanel('exec');
+  openAssistantSettings();
   // Open the settings BYOK pane with that provider's card expanded + focused.
   if (typeof byokExpandProvider === 'function') byokExpandProvider(prov);
 }
 
 function openLocalSettings(): void {
-  closeExecMenu();
-  showSettingsPanel('exec');
+  openAssistantSettings();
   if (typeof exShowMode === 'function') exShowMode('local');
   // Expand the "Available to install" group and bring it into view.
   const toggle = document.getElementById('ex-avail-toggle');

@@ -82,7 +82,7 @@ async function main(): Promise<void> {
   // ── Is a model configured at all? ────────────────────────────────────────
   const cfgPath = path.join(realUserData(), 'config.json');
   if (!fs.existsSync(cfgPath)) {
-    console.log('No Ordinate config found at ' + cfgPath + ' — configure a model in Settings → Execution first.');
+    console.log('No Ordinate config found at ' + cfgPath + ' — set the Assistant up in Settings → Assistant first.');
     return;
   }
   let real: any;
@@ -96,7 +96,7 @@ async function main(): Promise<void> {
   const cliReady = Boolean(cli.activeId)
     && detected.some((r: any) => r && r.id === cli.activeId && r.status === 'installed');
   if (!byokReady && !cliReady) {
-    console.log('No verified BYOK provider and no installed local CLI — configure one in Settings → Execution, then re-run.');
+    console.log('No verified BYOK provider and no installed local CLI — set one up in Settings → Assistant, then re-run.');
     return;
   }
   const modelLabel = real.executionMode === 'local' ? 'local CLI: ' + cli.activeId : 'BYOK: ' + byok.activeProvider;

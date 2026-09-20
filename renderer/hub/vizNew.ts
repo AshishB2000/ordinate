@@ -144,7 +144,7 @@ async function openNewVisualModal(opts: VizNewOpts = {}): Promise<VizNewChoice |
       regenBtn.disabled = false;
 
       if (res && res.notReady) {
-        statusEl.textContent = AI_NOT_CONFIGURED;
+        aiSetupNotice(statusEl);
         return;
       }
       const options = res && res.ok && Array.isArray(res.options) ? res.options : [];
@@ -258,7 +258,7 @@ async function openNewVisualModal(opts: VizNewOpts = {}): Promise<VizNewChoice |
     if (!aiReady) {
       askBtn.disabled = true;
       intentEl.disabled = true;
-      noteEl.hidden = false;
+      aiSetupNotice(noteEl);
       q('.js-vn-ai').classList.add('is-disabled');
     }
 

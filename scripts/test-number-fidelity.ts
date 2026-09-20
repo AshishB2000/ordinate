@@ -146,7 +146,7 @@ async function runLive(): Promise<void> {
   const ipcCopilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
 
   ok('LIVE: an execution path is configured', execConfig.executionReady(),
-    'set one up in Settings → Execution, or run without ORDINATE_LIVE_MODEL=1');
+    'set one up in Settings → Assistant, or run without ORDINATE_LIVE_MODEL=1');
   if (!execConfig.executionReady()) return;
   const mode = config.get().executionMode || 'local';
   console.log(`\nLIVE MODE — execution ${mode}` +

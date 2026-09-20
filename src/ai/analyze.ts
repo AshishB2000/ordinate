@@ -571,8 +571,8 @@ export async function dispatch(systemPrompt: string, messages: NeutralMsg[], onD
     if (!RUNNABLE_LOCAL_CLIS.includes(activeId as string)) {
       return {
         error: activeId
-          ? errProvider2('That local CLI isn’t supported yet — pick a runnable local CLI in Execution mode.')
-          : errProvider2('No local CLI selected — pick a runnable local CLI in Execution mode.'),
+          ? errProvider2('That app can’t run the Assistant yet — pick another in Settings → Assistant.')
+          : errProvider2('No app picked yet — choose one in Settings → Assistant.'),
       };
     }
     return runLocalCli(activeId as string, systemPrompt, messages, opts); // onDelta unused → local CLI is reveal-on-complete (buffered)

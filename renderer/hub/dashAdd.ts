@@ -140,13 +140,12 @@ function openVisualPicker(
       const note = document.createElement('p');
       note.className = 'vn-pick-note';
       note.hidden = true;
-      note.textContent = AI_NOT_CONFIGURED;
       actions.appendChild(note);
       window.hub.getKeyStatus().then((st: any) => {
         if (done) return;
         if (st && st.isReady) ai.disabled = false;
-        else note.hidden = false;
-      }).catch(() => { if (!done) note.hidden = false; });
+        else aiSetupNotice(note);
+      }).catch(() => { if (!done) aiSetupNotice(note); });
     }
 
     const grid = document.createElement('div');

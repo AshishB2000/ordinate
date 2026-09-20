@@ -267,7 +267,7 @@ async function anCreateWizard(datasetId?: string): Promise<void> {
   const startNote = document.createElement('p');
   startNote.className = 'an-wiz-note';
   startNote.textContent =
-    'No model is configured, so drafting is unavailable. Everything else works without one — pick any of the other three. ' + AI_NOT_CONFIGURED;
+    AI_NOT_CONFIGURED + ' Drafting is unavailable, but everything else works without one — pick any of the other three.';
   startNote.hidden = true;
   pane2.appendChild(startNote);
 

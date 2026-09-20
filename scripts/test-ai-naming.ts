@@ -22,7 +22,7 @@ const read = (p: string): string => fs.readFileSync(path.join(REPO, p), 'utf8');
 // ── The one sentence, declared in two worlds ────────────────────────────────
 const MAIN = execConfig.AI_NOT_CONFIGURED;
 ok('the main process exports the not-configured sentence',
-  MAIN === 'Connect a model in Settings → Execution to use the Assistant.', String(MAIN));
+  MAIN === 'The Assistant isn’t set up yet.', String(MAIN));
 
 const execMenu = read('renderer/hub/execMenu.ts');
 const m = /^const AI_NOT_CONFIGURED = '([^']*)';$/m.exec(execMenu);
@@ -41,9 +41,9 @@ const SURFACES = [
 ];
 for (const f of SURFACES) {
   const src = read(f);
-  ok(`${f} does not re-spell "Connect a model in…"`,
-    !/'Connect a model in[^']*'/.test(src),
-    (/'Connect a model in[^']*'/.exec(src) || [''])[0]);
+  ok(`${f} does not re-spell the not-set-up sentence`,
+    !/'(Connect a model|The Assistant isn’t set up)[^']*'/.test(src),
+    (/'(Connect a model|The Assistant isn’t set up)[^']*'/.exec(src) || [''])[0]);
 }
 
 // ── The retired names stay retired ──────────────────────────────────────────
@@ -56,7 +56,12 @@ const stripHtml = (s: string): string => s.replace(/<!--[\s\S]*?-->/g, '');
 
 const RETIRED: Array<[RegExp, string]> = [
   [/\bCopilot\b/, 'Copilot — the feature is the Assistant'],
-  [/Execution settings/, '"Execution settings" — the screen is Settings → Execution'],
+  [/Execution settings/, '"Execution settings" — the tab is Settings → Assistant'],
+  // The tab was renamed for people who do not know what an execution mode is.
+  // Prose that still routes them to the old name is the drift this pins.
+  [/Settings → Execution/, '"Settings → Execution" — the tab is Settings → Assistant'],
+  [/\bExecution mode\b/, '"Execution mode" — the settings tab is "Assistant"'],
+  [/Connect a model/, '"Connect a model" — the button is "Set up the Assistant"'],
   [/\bAI draft\b/, '"AI draft" — say "Draft with the Assistant"'],
   [/Start with AI\b/, '"Start with AI"'],
   [/Let AI design/, '"Let AI design it"'],

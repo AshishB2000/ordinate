@@ -179,7 +179,7 @@ const stpDialog  = stpPanel ? stpPanel.querySelector('.settings-modal') : null;
 const stpCats    = (stpPanel ? Array.from(stpPanel.querySelectorAll('.settings-cat')) : []) as HTMLElement[];
 const stpPanes   = (stpPanel ? Array.from(stpPanel.querySelectorAll('.settings-pane')) : []) as HTMLElement[];
 const CAT_TITLES = {
-  exec: 'Execution mode',
+  exec: 'Assistant',
   hotkey: 'Hotkey',
   prompt: 'Instructions / Rules',
   appearance: 'Appearance',
