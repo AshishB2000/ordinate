@@ -23,7 +23,8 @@
     "noEmit": true,
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,
-    "tsBuildInfoFile": "node_modules/.cache/tsc/svelte.tsbuildinfo"
+    // Per-checkout cache — see tsconfig.base.json for why it is not in node_modules.
+    "tsBuildInfoFile": ".tsbuildinfo/svelte.tsbuildinfo"
   },
   "include": ["renderer/hub/svelte/**/*.ts", "renderer/hub/svelte/**/*.d.ts"]
 }
