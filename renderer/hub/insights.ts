@@ -287,6 +287,17 @@ async function insAskWhy(ins: any): Promise<void> {
   try { input.setSelectionRange(input.value.length, input.value.length); } catch (_) { /* not focusable yet */ }
 }
 
+/**
+ * "Alert me if this happens again" — the insight, as a standing rule.
+ *
+ * An insight already names a dataset and a column, which IS a rule's metric, so
+ * this is a pre-filled dialog rather than a second way to author one. The dialog
+ * and the rule shape live in alerts.ts; this is only the door.
+ */
+async function insAlertMe(ins: any): Promise<void> {
+  await alertMeFromInsight(ins);
+}
+
 /** The dataset tab's "Explain": the column profile panel, on the column. */
 function insExplain(ins: any): void {
   const c = typeof expColumns !== 'undefined'
@@ -347,6 +358,9 @@ function insPaintHome(): void {
     row.appendChild(insCard(ins, [
       { label: 'Add to dashboard', primary: true, run: insAddToDashboard },
       { label: 'Ask why', run: insAskWhy },
+      // "Again" is a CHANGE, so the dialog opens on that tab with this
+      // insight's own direction already chosen (alerts.ts).
+      { label: 'Alert me if this happens again', run: insAlertMe },
     ], gone));
   });
 }
@@ -413,7 +427,9 @@ function insPaintDatasetTab(): void {
     const grid = document.createElement('div');
     grid.className = 'ins-grid';
     group.forEach((ins) => {
-      grid.appendChild(insCard(ins, ins.column ? [{ label: 'Explain', run: insExplain }] : [], gone));
+      grid.appendChild(insCard(ins, ins.column
+        ? [{ label: 'Explain', run: insExplain }, { label: 'Alert me if this happens again', run: insAlertMe }]
+        : [], gone));
     });
     host.appendChild(grid);
   }

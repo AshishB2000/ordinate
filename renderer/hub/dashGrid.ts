@@ -536,6 +536,9 @@ function makeDashCardEl(card: any): HTMLElement {
   title.textContent = dashCardTitle(card);
   head.appendChild(title);
 
+  // The bell a watched KPI wears, and the "something fired" mark (alerts.ts).
+  alAttachCardBell(el, head, card);
+
   const ctrls = document.createElement('div');
   ctrls.className = 'dash-card-ctrls';
   // ONE ⋯, not nine glyphs. Drag and the resize handles (authoringSelect.ts)
@@ -567,7 +570,9 @@ function dashCardMenuBtn(card: any): HTMLButtonElement {
       // The chart's own controls popover is a .chart-menu too — this one needs
       // a hook of its own, or a selector for either finds both.
       menu.classList.add('dash-card-menu');
-      ([
+      // "Alert me…" leads on a metric card (alerts.ts): it is the one item here
+      // about the card's NUMBER rather than about the tile's geometry.
+      (alCardMenuItems(card).concat([
         ['Move up', () => nudgeCard(card, 0, -1)],
         ['Move down', () => nudgeCard(card, 0, 1)],
         ['Move left', () => nudgeCard(card, -1, 0)],
@@ -577,7 +582,7 @@ function dashCardMenuBtn(card: any): HTMLButtonElement {
         ['Taller', () => resizeCard(card, 0, 1)],
         ['Shorter', () => resizeCard(card, 0, -1)],
         ['Remove', () => removeCard(card)],
-      ] as Array<[string, () => void]>).forEach(([label, run], i, all) => {
+      ] as Array<[string, () => void]>)).forEach(([label, run], i, all) => {
         const row = document.createElement('button');
         row.type = 'button';
         row.className = 'chart-menu-item' + (i === all.length - 1 ? ' dash-card-menu-rm' : '');
