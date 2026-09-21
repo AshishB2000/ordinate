@@ -3,17 +3,16 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as visuals from '../analysis/visuals';
 import * as datasets from '../data/datasets';
-import { buildVizData, recommendChartType } from '../analysis/vizData';
+import { buildVizData } from '../analysis/vizData';
 import type { VizDataResult } from '../analysis/vizData';
-import { aggregateResident, resolveCatKey } from '../engine/residentQuery';
-import type { ResidentMeasure } from '../engine/residentQuery';
 import * as trace from '../engine/residentTrace';
+// The two resident fast paths `vizDataFor` tries before hydrating a row.
+import { residentPivotData, residentVizData } from './visualsResident';
 import { sanitizeEncoding, sanitizeChartType } from '../analysis/visuals';
 import type { VizEncoding } from '../analysis/visuals';
 import type { Cell, FilterStep } from '../data/transforms';
 import type { ParsedColumn } from '../data/parse';
 import { coerceValue } from '../data/parse';
-import { FILTER_OPS, LIST_OPS } from '../data/filterOps';
 import { CATEGORY_CAP, OTHER_LABEL } from '../analysis/categoryKey';
 // The drill-down panel pages rows through the SAME two-path decision the Explore
 // grid uses — see `pageFor`'s note on why there is only one of them.
@@ -63,143 +62,11 @@ function buildColumnSummaryText(
   return lines.join('\n');
 }
 
-// ── Phase 2.5: the resident fast path for `visual:data` ─────────────────────
-//
-// `visual:data` runs on every chart render and every cross-filter change, and
-// until now it began by hydrating the WHOLE table into `Cell[][]` — measured at
-// 1,173 ms for 1M rows, against 6.6 ms for the equivalent aggregate computed in
-// place off the stored Parquet. So: when the answer is provably identical, ask
-// DuckDB; otherwise keep hydrating.
-//
-// ONLY branch (A) of `buildVizData` — no split, at least one real aggregation,
-// no geo — is rewired, because that is the only branch `aggregateResident`
-// reproduces. (B) pivot and (C) raw have no resident equivalent and fall back
-// verbatim. `buildVizData` stays the reference implementation: every rejection
-// below, and every throw, silently returns null and the JS path runs.
-//
-// The subtle precondition is WARNINGS. `aggregateResident` returns numbers, not
-// warnings, so the fast path may only be taken when `buildVizData` would have
-// produced NONE. In branch (A) exactly three things warn, and all three are
-// decidable from column METADATA alone, with no rows:
-//   1. `transforms.stepFilter`  — unknown filter column / unknown filter op
-//   2. `transforms.stepGroupAggregate` — unknown group (category) column
-//   3. `transforms.aggregate`   — unknown measure column
-// Check all three against the stored `ParsedColumn[]` and a warning is
-// impossible; fail any and we fall back so the user still sees the warning.
-// (The four guard-rail early returns each carry a warning too, so they are
-// likewise left to `buildVizData`.)
-
-// The op vocabulary comes from src/filterOps.ts so this gate cannot drift out of
-// step with the three implementations — that drift is silent by construction
-// (the fast path just stops firing and the JS path answers correctly, slowly).
-// `visuals.sanitizeFilters` already guarantees a valid op, so the check itself is
-// defence against a future divergence rather than a live case.
-//
-// `in`/`not in` add a FOURTH warning source to the three enumerated above: an
-// empty value list makes `transforms.stepFilter` skip the step with a warning.
-// Like the other three it is decidable from the step alone, with no rows.
 // How many charts `visual:suggest` asks for, and the cap on each caption. Three
 // fits the picker without scrolling and is three real model-side proposals, not
 // one restyled; 120 chars is a caption, past which it is prose.
 const SUGGEST_COUNT = 3;
 const WHY_MAX = 120;
-
-function filterCannotWarn(f: FilterStep, names: Set<string>): boolean {
-  if (!f || f.type !== 'filter' || !names.has(f.column) || !FILTER_OPS.has(f.op)) return false;
-  if (LIST_OPS.has(f.op) && (!Array.isArray(f.values) || f.values.length === 0)) return false;
-  return true;
-}
-
-/**
- * The aggregated (branch A) `visual:data` answer computed straight off Parquet,
- * or `null` meaning "not provably equivalent — use `buildVizData`".
- *
- * Takes ALREADY-SANITIZED encoding/filters: sanitisation is a security control
- * over untrusted renderer input and must run before anything else, including
- * this. Never throws.
- */
-export async function residentVizData(
-  projectId: string,
-  datasetId: string,
-  encoding: VizEncoding,
-  filters: FilterStep[],
-): Promise<VizDataResult | null> {
-  try {
-    if (!encoding) return null;
-    // Geo derives its region items from the finished series, and a split or an
-    // all-'none' encoding is branch (B)/(C). None are reproducible here.
-    if (encoding.geo) return null;
-    if (typeof encoding.series === 'string' && encoding.series.length > 0) return null;
-    if (typeof encoding.category !== 'string' || encoding.category === '') return null;
-    const values = Array.isArray(encoding.values) ? encoding.values : [];
-    if (values.length === 0) return null;
-    if (values.every((v) => v.aggregation === 'none')) return null;
-
-    // v2 record, missing .parquet, or no working bridge → the JS path.
-    const src = await datasets.residentSource(projectId, datasetId);
-    if (!src) {
-      trace.record('vizAggregate', 'skipped');
-      return null;
-    }
-
-    // The warning-freedom proof (see above). Column identity is exact and
-    // case-sensitive, matching `transforms.colIndex`.
-    const names = new Set<string>();
-    for (const c of src.columns) if (c && typeof c.name === 'string') names.add(c.name);
-    if (!names.has(encoding.category)) return null;
-    for (const v of values) if (!names.has(v.column)) return null;
-    for (const f of filters) {
-      if (!filterCannotWarn(f, names)) return null;
-    }
-
-    // In an aggregated build `buildVizData` coerces a 'none' measure to 'sum'
-    // AND relabels it ("sum of price", vizData.ts:133) so the legend never
-    // understates the value. Coercing here reproduces both at once, because
-    // `residentQuery.measureLabel` derives the name from the same aggregation.
-    const measures: ResidentMeasure[] = values.map((v) => ({
-      column: v.column,
-      aggregation: v.aggregation === 'none' ? 'sum' : v.aggregation,
-    }));
-
-    // The category key (10 bins / a date grain / the top-50 cap) is resolved by
-    // pre-queries over the same relation before the aggregate runs.
-    //
-    // A `null` on a DATE column is a DECISION, not a fault: SQL implements only
-    // the two canonical date shapes and hands anything else to the JS
-    // `Date.parse` path deliberately. residentTrace's taxonomy calls that
-    // 'skipped' — counted, silent. On a number or text column nothing about the
-    // input can produce a null, so one there IS the regression signal and warns.
-    // (No column NAME in the detail: it is a header out of the user's own file.)
-    const catType = src.columns.find((c) => c && c.name === encoding.category)?.type;
-    const plan = resolveCatKey(src, encoding.category, measures, filters, encoding.grain, encoding.bins);
-    if (!plan) {
-      trace.record('vizCategoryKey', catType === 'date' ? 'skipped' : 'failed', `category type ${catType}`);
-      return null;
-    }
-    trace.record('vizCategoryKey', 'resident');
-
-    const chart = aggregateResident(src, encoding.category, measures, filters, plan.key);
-    if (!chart) {
-      trace.record('vizAggregate', 'failed', `${measures.length} measure(s), filters=${filters.length}`);
-      return null; // bridge down / query failed → JS path
-    }
-    trace.record('vizAggregate', 'resident');
-
-    return {
-      data: { labels: chart.labels, series: chart.series },
-      // Pure, cheap, and needs only columns — call the real thing rather than
-      // reimplementing the classification.
-      recommendedShape: recommendChartType(src.columns, encoding).shape,
-      // Still EMPTY, and it has to be: the whole fast path is gated on
-      // `buildVizData` having produced no warning. The cap's inline note travels
-      // on `category.note`, which is not a warning.
-      warnings: [],
-      category: plan.info,
-    };
-  } catch (_) {
-    return null;
-  }
-}
 
 // ── Drill-down: the rows behind ONE mark ────────────────────────────────────
 //
@@ -513,9 +380,11 @@ export async function vizDataFor(
   filters: FilterStep[],
   opts: { maxHydrateRows?: number } = {},
 ): Promise<VizDataReply> {
-  // Fast path: an aggregated chart over a resident (v3) dataset, answered
-  // without hydrating a single row. Returns null unless provably identical.
-  const fast = await residentVizData(projectId, datasetId, encoding, filters);
+  // Fast path: an aggregated chart (or a pivot) over a resident (v3) dataset,
+  // answered without hydrating a single row. Null unless provably identical.
+  const fast = encoding && encoding.pivot
+    ? await residentPivotData(projectId, datasetId, encoding, filters)
+    : await residentVizData(projectId, datasetId, encoding, filters);
   if (fast) {
     return {
       ok: true,

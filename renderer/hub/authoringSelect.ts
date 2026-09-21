@@ -100,6 +100,15 @@ async function anSelectCard(cardId: string | null): Promise<void> {
   anRenderInteractions(card);
   anEnsureForm();
   anForm!.setColumns(anColumns, visual.encoding, Array.isArray(visual.filters) ? visual.filters : []);
+  // A PIVOT's shelves are authored in the Visuals builder, not here — this
+  // panel has one encoding form and a pivot needs three ordered shelves. So its
+  // chart fields are hidden rather than shown editing a mirror of themselves
+  // that changes nothing, and Filters stays, because a filter means the same
+  // thing to a pivot as to a chart. `anWriteVisual` carries the pivot block
+  // through untouched, so nothing here can downgrade a pivot to a bar chart.
+  const isPivot = anIsPivot();
+  anForm!.showFields(!isPivot);
+  setAnPropsNote(isPivot ? 'Rows, Columns and Values are edited in the Visuals builder.' : '');
   anShowEncoding(true, '');
   await anRenderAiSlot();
   await anRenderSwitcher();

@@ -27,6 +27,9 @@ const SMOKES = [
   'smoke-dataset',
   'smoke-import',
   'smoke-viz-builder',
+  // After smoke-viz-builder, which proves the builder itself works: this one
+  // adds the type whose whole output is DOM rather than a canvas.
+  'smoke-pivot',
   'smoke-saved-chart-type',
   'smoke-render-stacks',
   'smoke-topbar',

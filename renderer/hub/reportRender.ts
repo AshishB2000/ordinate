@@ -37,6 +37,13 @@ interface RenderedPage {
   tiles?: Array<{ title: string; png: string | null }>;
   /** A native table in every format — never an image of numbers. */
   kpis?: Array<{ label: string; value: string }>;
+  /**
+   * A PIVOT as a native table — header rows then body rows, already formatted.
+   * Set instead of `png` when the grid is small enough to typeset; a big one
+   * still goes as a picture, because a 300-row table across four pages of a
+   * slide deck is not a report.
+   */
+  grid?: { head: string[][]; body: string[][] } | null;
   /** One line per tile — the summary page. */
   bullets?: string[];
   /** Cover only: the filter line and the date. */
@@ -118,11 +125,21 @@ async function reportCardVisual(projectId: string, card: any): Promise<any> {
   }
 }
 
+/**
+ * How many BODY rows a pivot may have and still be printed as a real table.
+ * Past it the grid runs over more pages than it is worth and goes as an image
+ * — one page with a picture of the shape beats four pages of figures nobody
+ * asked to page through.
+ */
+const REPORT_GRID_MAX_ROWS = 40;
+
 interface ResolvedTile {
   cardId: string;
   title: string;
   png: string | null;
   caption: string;
+  /** A pivot small enough to print as a real table — see REPORT_GRID_MAX_ROWS. */
+  grid?: { head: string[][]; body: string[][] } | null;
 }
 
 /**
@@ -148,19 +165,38 @@ async function reportTile(
   if (!res || res.ok === false) return null;
   const data = res.data || { labels: [], series: [] };
 
+  // A PIVOT that fits is typeset, not photographed: the figures stay text, so
+  // they are selectable, searchable and readable by a screen reader in the
+  // finished document — the same rule the KPI table already follows. Over the
+  // cap it falls back to the picture, which is what every chart does anyway.
+  let grid: { head: string[][]; body: string[][] } | null = null;
+  if (type === 'pivot' && data.pivot) {
+    const rows = pivotToRows(data.pivot);
+    const headCount = data.pivot.colHeaders.length
+      ? Math.max(...data.pivot.colHeaders.map((h: string[]) => h.length))
+      : 1;
+    if (rows.length - headCount <= REPORT_GRID_MAX_ROWS) {
+      grid = { head: rows.slice(0, headCount), body: rows.slice(headCount) };
+    }
+  }
+
   const frame = Object.assign({ themeClasses: reportStyleClasses(ctx.analysis) }, box);
   let png: string | null = null;
-  try {
-    png = (type === 'map_bubble' || type === 'map_choropleth')
-      ? await captureMapPNG(data, type, frame)
-      : await captureChartPNG(type, data, visual.overrides || {}, frame);
-  } catch (_) { png = null; }
+  if (!grid) {
+    try {
+      png = (type === 'map_bubble' || type === 'map_choropleth')
+        ? await captureMapPNG(data, type, frame)
+        : await captureChartPNG(type, data, visual.overrides || {}, frame);
+    } catch (_) { png = null; }
+  }
 
   let caption = '';
   try {
-    caption = await window.hub.reportsCaption({ chartType: type, data, geo: data.geo || null });
+    caption = await window.hub.reportsCaption({
+      chartType: type, data, geo: data.geo || null, pivot: data.pivot || null,
+    });
   } catch (_) { caption = ''; }
-  return { cardId: card.id, title: visual.name || '', png, caption };
+  return { cardId: card.id, title: visual.name || '', png, caption, grid };
 }
 
 /** Every metric card on a sheet → its app-computed figure, formatted. */
@@ -320,7 +356,7 @@ async function buildReportPages(ctx: ReportContext): Promise<RenderedPage[]> {
         if (!t) return { kind: 'tile', layout: page.layout, title: 'Tile', body: 'This tile could not be drawn.' };
         return {
           kind: 'tile', layout: page.layout, title: t.title || 'Tile',
-          png: t.png, caption: page.caption || t.caption,
+          png: t.png, grid: t.grid || null, caption: page.caption || t.caption,
         };
       }
       case 'notes':
@@ -384,7 +420,8 @@ type ReportBlock =
   | { t: 'runs'; segments: Array<{ text: string; bold?: boolean }> }
   | { t: 'image'; png: string; alt: string }
   | { t: 'tiles'; tiles: Array<{ title: string; png: string | null }> }
-  | { t: 'kpis'; rows: Array<{ label: string; value: string }> };
+  | { t: 'kpis'; rows: Array<{ label: string; value: string }> }
+  | { t: 'grid'; head: string[][]; body: string[][] };
 
 function reportPageBlocks(rp: RenderedPage): ReportBlock[] {
   const out: ReportBlock[] = [];
@@ -401,6 +438,7 @@ function reportPageBlocks(rp: RenderedPage): ReportBlock[] {
   }
   if (rp.segments && rp.segments.length) out.push({ t: 'runs', segments: rp.segments });
   if (rp.kpis && rp.kpis.length) out.push({ t: 'kpis', rows: rp.kpis });
+  if (rp.grid) out.push({ t: 'grid', head: rp.grid.head, body: rp.grid.body });
   if (rp.png) out.push({ t: 'image', png: rp.png, alt: rp.title || '' });
   if (rp.tiles && rp.tiles.length) out.push({ t: 'tiles', tiles: rp.tiles });
   for (const line of (rp.bullets || [])) out.push({ t: 'bullet', text: line });
@@ -530,6 +568,39 @@ function renderPreviewPage(host: HTMLElement, rp: RenderedPage | null, report: a
         img.src = b.png;
         img.alt = b.alt;
         body.appendChild(img);
+        break;
+      }
+      case 'grid': {
+        // A REAL table in the preview too, so what the author sees on the page
+        // is what the PDF/PPTX/DOCX writers will typeset — not a picture here
+        // and text there.
+        const t = document.createElement('table');
+        t.className = 'rb-grid';
+        const thead = document.createElement('thead');
+        for (const hr of b.head) {
+          const tr = document.createElement('tr');
+          hr.forEach((cellText, i) => {
+            const th = document.createElement('th');
+            th.textContent = cellText;
+            if (i === 0) th.className = 'rb-grid-label';
+            tr.appendChild(th);
+          });
+          thead.appendChild(tr);
+        }
+        t.appendChild(thead);
+        const tb = document.createElement('tbody');
+        for (const br of b.body) {
+          const tr = document.createElement('tr');
+          br.forEach((cellText, i) => {
+            const td = document.createElement('td');
+            td.textContent = cellText;
+            if (i === 0) td.className = 'rb-grid-label';
+            tr.appendChild(td);
+          });
+          tb.appendChild(tr);
+        }
+        t.appendChild(tb);
+        body.appendChild(t);
         break;
       }
       case 'kpis': {

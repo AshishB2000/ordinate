@@ -19,6 +19,8 @@ import {
   binIndex, binLabel, binPlan, chooseGrain, dateBucket, dateBucketLabel, isDateGrain, parseDateCell,
 } from './categoryKey';
 import type { CategoryInfo, CivilDate, DateGrain } from './categoryKey';
+import { buildPivotGrid, pivotChartData } from './pivotData';
+import type { PivotGrid } from './pivotData';
 
 // === the buildChart input shape (chartRender.ts). A series is "plottable" when
 // values is a non-empty array; non-numeric cells MUST be null (the renderers test
@@ -33,6 +35,15 @@ export interface VizDataResult {
     // superset: also carries geo for map chart types (mapRender.ts)
     geo?: { level: string; items: { name: string; value: number }[] };
     dataShape?: 'time_series';
+    /**
+     * The PIVOT grid, present only for a pivot encoding. It rides ALONGSIDE
+     * `labels`/`series` rather than replacing them (those are the grid's leaf
+     * rows — see `pivotData.pivotChartData`), which is why a pivot needs no new
+     * IPC channel, no new dashboard card type and no change to captions, the
+     * filter bar, thumbnails or the share export: every one of them reads the
+     * payload it already read.
+     */
+    pivot?: PivotGrid;
   };
   recommendedShape: string; // feeds the renderer's eligibleChartTypes()
   warnings: string[];
@@ -152,6 +163,10 @@ function buildAggregated(
 
 // (B) Split/pivot: group by category × series, single measure, then long→wide
 // pivot. Missing (category, series) combos → null.
+//
+// "Pivot" here is the long→wide RESHAPE that turns a split into one series per
+// split value. It is not the `pivot` CHART TYPE — that is branch (D) above and
+// lives in ./pivotData.
 function buildPivot(
   table: TableData,
   encoding: VizEncoding,
@@ -388,6 +403,19 @@ export function buildVizData(
 ): VizDataResult {
   const cols = Array.isArray(columns) ? columns : [];
   let table: TableData = { columns: cols, rows: Array.isArray(rows) ? rows : [] };
+
+  // (D) PIVOT — the one encoding whose output is a grid. Dispatched before
+  // every check below because a pivot has no `category` and no `values` in the
+  // chart sense; `pivotData` owns its own guards and its own warnings.
+  if (encoding && encoding.pivot) {
+    const out = buildPivotGrid(cols, table.rows, encoding.pivot, filters);
+    const chart = pivotChartData(out.grid);
+    return {
+      data: { labels: chart.labels, series: chart.series, pivot: out.grid },
+      recommendedShape: 'categorical',
+      warnings: out.warnings,
+    };
+  }
 
   if (!encoding || typeof encoding.category !== 'string' || encoding.category === '') {
     return emptyResult(cols, encoding, 'No category (dimension) selected.');

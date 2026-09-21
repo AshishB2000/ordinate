@@ -148,6 +148,8 @@ contextBridge.exposeInMainWorld('hub', {
   savePptx: (base64: string, defaultName: string) => ipcRenderer.invoke('hub:savePptx', { base64, defaultName }),
   // Save a generated Word (.docx) report (base64 bytes) via the native save panel.
   saveDocx: (base64: string, defaultName: string) => ipcRenderer.invoke('hub:saveDocx', { base64, defaultName }),
+  // Save renderer-composed CSV text (a pivot grid's ⋯ → Export CSV) via the same panel.
+  saveCsv: (text: string, defaultName: string) => ipcRenderer.invoke('hub:saveCsv', { text, defaultName }),
   // Snapshot a page region (DIP rect {x,y,width,height}) to a PNG data URL — used to
   // export the live MapLibre map into reports. It composites the WebGL canvas AND the
   // DOM layer on top of it (value-label markers, legend) in one shot — a bare

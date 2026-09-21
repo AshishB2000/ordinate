@@ -2554,6 +2554,10 @@
 <script src="chartTraits.js"></script>
 <script src="chartPalette.js"></script>
 <script src="chartTable.js"></script>
+<!-- The pivot grid's renderer. A sibling of chartTable.js, not of chartRender.js:
+     it builds a <table> and never touches a canvas. Before renderResult.js,
+     which dispatches the `pivot` chart type to it. -->
+<script src="pivotRender.js"></script>
 <script src="chartTypeSpec.js"></script>
 <script src="chartValueLabels.js"></script>
 <script src="chartDatasets.js"></script>
@@ -2611,6 +2615,10 @@
 <script src="connDetails.js"></script>
 <script src="connEditor.js"></script>
 <script src="encodingForm.js"></script>
+<!-- The pivot shelves (Rows / Columns / Values), mounted beside the encoding
+     form by visuals.js and shown instead of its chart fields when the type is
+     `pivot`. After encodingForm.js, whose EncCol/EncAgg shapes it shares. -->
+<script src="pivotBuilder.js"></script>
 <script src="visuals.js"></script>
 <!-- visuals.ts was 1284 lines; these four are it, split by job. visuals.js
      stays first — it keeps the module-local state the rest read. -->
@@ -2633,6 +2641,10 @@
      stays FIRST of the group — it keeps the module-local state the rest read —
      and authoring.js / analyses.js stay after all of them, as before. -->
 <script src="dashGrid.js"></script>
+<!-- A card's chrome — the element, the header row, the ⋯ menu, the title —
+     split out of dashGrid.js at the 800-line cap. After it: the menu's rows
+     call dashGrid's nudge/resize/remove at CLICK time. -->
+<script src="dashCardChrome.js"></script>
 <script src="dashAdd.js"></script>
 <script src="dashAddControl.js"></script>
 <script src="dashFiltersUi.js"></script>

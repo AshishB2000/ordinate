@@ -126,4 +126,33 @@ export function register() {
       return { ok: false };
     }
   });
+
+  // Save a CSV the renderer composed — today, a pivot grid from its ⋯ menu.
+  //
+  // TEXT rather than base64, unlike the three above: the renderer already has
+  // the characters, and round-tripping them through base64 to un-base64 them
+  // here would only add a place for an encoding to go wrong. The UTF-8 BOM is
+  // deliberate — without it Excel on Windows reads a non-ASCII dimension value
+  // as mojibake, and a pivot's row labels are user data.
+  ipcMain.handle('hub:saveCsv', async (_e, { text, defaultName }: any = {}) => {
+    if (typeof text !== 'string') return { ok: false };
+    const { dialog } = require('electron');
+    const path = require('path');
+    const fs = require('fs');
+
+    const safe = (typeof defaultName === 'string' && /\.csv$/i.test(defaultName)) ? defaultName : 'ordinate-table.csv';
+    const { filePath: savePath, canceled } = await dialog.showSaveDialog({
+      title: 'Export CSV',
+      defaultPath: path.join(app.getPath('downloads'), safe),
+      filters: [{ name: 'CSV', extensions: ['csv'] }],
+    });
+    if (canceled || !savePath) return { ok: false, canceled: true };
+    try {
+      fs.writeFileSync(savePath, '\ufeff' + text, 'utf8');
+      return { ok: true, dest: savePath };
+    } catch (e) {
+      console.error('saveCsv failed', e);
+      return { ok: false };
+    }
+  });
 }

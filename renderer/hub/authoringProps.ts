@@ -50,14 +50,33 @@ function anScheduleWrite(): void {
   }, 500);
 }
 
+/** Is the selected card a pivot? Its shelves live in the Visuals builder. */
+function anIsPivot(): boolean {
+  return !!anVisual && anVisual.chartType === 'pivot' && !!(anVisual.encoding && anVisual.encoding.pivot);
+}
+
+/**
+ * The encoding to write for the selected card.
+ *
+ * For a pivot that is the form's encoding with the STORED `pivot` block carried
+ * through: this panel does not render the shelves, so it must not be able to
+ * drop them — an edit here would otherwise turn a saved pivot into a bar chart
+ * silently, on a field the author cannot even see.
+ */
+function anEncodingToWrite(): any {
+  const encoding = anForm!.getEncoding();
+  if (anIsPivot()) encoding.pivot = anVisual.encoding.pivot;
+  return encoding;
+}
+
 async function anWriteVisual(): Promise<void> {
   if (!anVisual || !anForm || !currentProjectId || dashMode !== 'analysis') return;
-  const encoding = anForm.getEncoding();
-  if (!encoding.category || !encoding.values || encoding.values.length === 0) {
+  const encoding = anEncodingToWrite();
+  if (!encoding.pivot && (!encoding.category || !encoding.values || encoding.values.length === 0)) {
     setAnPropsNote('Pick a category and at least one measure for this visual to draw.');
     return;
   }
-  setAnPropsNote('');
+  if (!anIsPivot()) setAnPropsNote('');
   try {
     await window.hub.updateVisual(currentProjectId, String(anVisual.id), {
       name: anVisual.name,
