@@ -67,10 +67,14 @@ function dashCardMenuBtn(card: any): HTMLButtonElement {
       // The chart's own controls popover is a .chart-menu too — this one needs
       // a hook of its own, or a selector for either finds both.
       menu.classList.add('dash-card-menu');
-      // Two per-card-type prepends above the layout ones, mutually exclusive by
-      // construction: "Alert me…" is about a metric card's NUMBER (alerts.ts),
-      // Copy as table / Export CSV about a pivot's FIGURES (pivotRender.ts).
-      (alCardMenuItems(card).concat(pivotMenuItems(btn.closest('.dash-card'), dashCardTitle(card))).concat([
+      // Three per-card-type prepends above the layout ones, each absent on the
+      // card types it does not apply to: "Alert me…" is about a metric card's
+      // NUMBER (alerts.ts), "Save as metric…" / "Edit metric…" about where that
+      // number is DEFINED (metricsPage.ts), Copy as table / Export CSV about a
+      // pivot's FIGURES (pivotRender.ts).
+      (alCardMenuItems(card)
+        .concat(mpCardMenuItems(card))
+        .concat(pivotMenuItems(btn.closest('.dash-card'), dashCardTitle(card))).concat([
         ['Move up', () => nudgeCard(card, 0, -1)],
         ['Move down', () => nudgeCard(card, 0, 1)],
         ['Move left', () => nudgeCard(card, -1, 0)],

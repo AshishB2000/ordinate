@@ -13,6 +13,9 @@ import { computeMetric } from '../analysis/metricValue';
 import { askCopilot } from '../ai/analyze';
 import { auditNumbers } from '../ai/numberAudit';
 import { listInsights } from './insights';
+import * as metrics from '../analysis/metrics';
+import { resolveMetric } from './metrics';
+import type { FactMetric } from '../ai/copilotFacts';
 import * as history from '../app/history';
 import * as captureDataset from '../data/captureDataset';
 import type { LedgerEntry, NumberAudit } from '../ai/numberAudit';
@@ -97,6 +100,35 @@ export function guardAnswer(text: string, ledger: LedgerEntry[]): { text: string
   return { text: text + '\n\n' + GUARD_NOTE + tokens, audit };
 }
 
+/**
+ * The project's DEFINED metrics, resolved.
+ *
+ * `datasetId` narrows to one dataset's metrics (the dataset branch); omitted,
+ * every metric in the project (the dashboard branch, whose cards may span
+ * several). Each figure comes back from the ordinary resolver, so it is the
+ * same number the card shows, formatted the same way — and both go into the
+ * facts ledger at the call site.
+ *
+ * Never throws: a project whose metrics cannot be read simply hands the model
+ * no metric vocabulary, which is exactly the state every project was in before
+ * this layer existed.
+ */
+async function factMetrics(projectId: string, datasetId?: string): Promise<FactMetric[]> {
+  try {
+    const list = await metrics.listMetrics(projectId);
+    const out: FactMetric[] = [];
+    for (const s of list) {
+      if (datasetId && s.datasetId !== datasetId) continue;
+      const r = await resolveMetric(projectId, s.id);
+      if (!r) continue;
+      out.push({ name: r.name, definitionText: r.definitionText, value: r.value, display: r.display });
+    }
+    return out;
+  } catch (_) {
+    return [];
+  }
+}
+
 // One app-computed number per metric card (metricValue.computeMetric) over a
 // dashboard's pages OR an analysis's sheets — the same Page[] shape either way.
 // Each referenced dataset is cached, so twelve cards over one dataset load it
@@ -155,7 +187,11 @@ export async function buildFacts(
       // narrate "West fell 31%" from the app's figure rather than deriving one.
       const insights = await listInsights(projectId, id);
       emit({ kind: 'compute', label: 'Read ' + plural(insights.length, 'insight'), count: insights.length });
-      return copilot.datasetFacts(ds, summaries, issues, insights);
+      const defined = await factMetrics(projectId, id);
+      if (defined.length) {
+        emit({ kind: 'compute', label: 'Resolved ' + plural(defined.length, 'metric'), count: defined.length });
+      }
+      return copilot.datasetFacts(ds, summaries, issues, insights, defined);
     }
   }
 
@@ -209,7 +245,11 @@ export async function buildFacts(
       emit({ kind: 'read', label: 'Read ' + plural(tiles.length, 'tile'), count: tiles.length });
       const cards = await computeMetricCards(projectId, a.sheets);
       emit({ kind: 'compute', label: 'Computed ' + plural(cards.length, 'metric'), count: cards.length });
-      return copilot.analysisFacts(a, cards, tiles);
+      const defined = await factMetrics(projectId);
+      if (defined.length) {
+        emit({ kind: 'compute', label: 'Resolved ' + plural(defined.length, 'metric'), count: defined.length });
+      }
+      return copilot.analysisFacts(a, cards, tiles, defined);
     }
   }
 

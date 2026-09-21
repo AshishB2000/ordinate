@@ -78,6 +78,31 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
   body.appendChild(valEl);
   body.appendChild(labelEl);
 
+  // A card that names a saved Metric shows THE METRIC: resolved by main (which
+  // is the only thing that can evaluate a formula definition) and formatted by
+  // the metric's own format, so the same metric reads identically here, in the
+  // Metrics table and in an alert. A metric that has since been deleted
+  // resolves to nothing and the card falls through to its own stored
+  // column/aggregation below — the same graceful degrade a dangling visualId
+  // already gets.
+  //
+  // BEFORE the column guard below, deliberately: a FORMULA metric has no column
+  // at all, so a card showing one would fail that guard and render "—" without
+  // ever asking main for the figure it is displaying.
+  if (currentProjectId && m.metricId) {
+    let mr: any;
+    try {
+      mr = await window.hub.metricValue(currentProjectId, m.metricId, effectiveFilters());
+    } catch (_) {
+      mr = null;
+    }
+    if (mr && mr.ok !== false) {
+      valEl.textContent = mr.display || '—';
+      if (!m.label && mr.name) labelEl.textContent = mr.name;
+      return;
+    }
+  }
+
   if (!currentProjectId || !m.datasetId || !m.column || !m.aggregation) { valEl.textContent = '—'; return; }
   let r: any;
   try {

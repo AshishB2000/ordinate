@@ -77,9 +77,33 @@ export function compile(expression: string): CompileResult {
   if (typeof expression !== 'string' || expression.trim() === '') {
     return { ok: false, error: 'Empty expression' };
   }
-  let tokens: Tok[] = [];
+  let tokens: Tok[];
   try {
     tokens = tokenize(expression);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Parse error';
+    const at = e instanceof FormulaError ? e.at : undefined;
+    return at ? { ok: false, error: msg, at } : { ok: false, error: msg };
+  }
+  return compileTokens(tokens, expression);
+}
+
+/**
+ * `compile`, starting from tokens the caller already has.
+ *
+ * Exists for ONE caller: src/analysis/metricFormula.ts, which rewrites
+ * `sum(revenue)` into a single synthetic reference token before parsing, so that
+ * a metric-level aggregation works without adding aggregate functions to the
+ * row-level `FUNCTIONS` table (where `sum` over one row's cell would be a
+ * different and wrong thing).
+ *
+ * `src` is the ORIGINAL expression, used only to turn a token index back into a
+ * source span. Because a rewritten token keeps the `start`/`end` of the text it
+ * replaced, an error inside a rewritten call still underlines what the user
+ * actually typed.
+ */
+export function compileTokens(tokens: Tok[], src: string): CompileResult {
+  try {
     const parser = new Parser(tokens);
     const fn = parser.parse();
     const refs = Array.from(parser.refs);
@@ -98,7 +122,7 @@ export function compile(expression: string): CompileResult {
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Parse error';
     if (e instanceof FormulaError) {
-      const at = e.at ?? (e.tokenIndex === undefined ? undefined : spanOf(tokens, e.tokenIndex, expression));
+      const at = e.at ?? (e.tokenIndex === undefined ? undefined : spanOf(tokens, e.tokenIndex, src));
       if (at) return { ok: false, error: msg, at };
     }
     return { ok: false, error: msg };

@@ -56,6 +56,28 @@ export interface RoleMatch {
   confidence: RoleConfidence;
   /** For a `geo` role that resolved: the choropleth level its values belong to. */
   geoLevel?: ResolvedGeoLevel;
+  /**
+   * The defined Metric this role matched BY NAME, if one did.
+   *
+   * Reported, not consumed: `mappingOf` still hands the factories a plain
+   * `{roleId: column}`, so every template builds exactly the chart it built
+   * before. This is here so the caller can say WHY a column was chosen, and so
+   * a future factory can link the tile to the metric without re-deriving the
+   * match.
+   */
+  metricId?: string;
+}
+
+/**
+ * A project's SIMPLE metrics, as the role mapper needs them.
+ *
+ * Formula metrics are deliberately absent: a template role resolves to a
+ * COLUMN, and `[Profit] / [Revenue]` is not one.
+ */
+export interface DefinedMeasure {
+  id: string;
+  name: string;
+  column: string;
 }
 
 export interface TemplateMapping {
@@ -212,10 +234,41 @@ function confidenceOf(s: Scored, kind: RoleKind): RoleConfidence {
  * is its date column whatever it is called, and the floor would otherwise drop
  * a template for a table with a column named `when`.
  */
+/**
+ * The defined metric whose NAME plays this role, if one does.
+ *
+ * Matched on whole words against the role's own hints and label — the same
+ * vocabulary the column scorer uses, so "Revenue" matches a `revenue` role and
+ * "Avg order value" does not match a `units` one. The metric's column must
+ * exist on THIS dataset and be numeric and unclaimed, because a role that
+ * resolved to a column the dataset lacks is worse than one that resolved to a
+ * merely-second-choice column.
+ *
+ * The first match in list order wins, and `listMetrics` sorts by name, so this
+ * answers the same way on every machine.
+ */
+function namedMeasure(
+  role: TemplateRole,
+  ds: PlanDataset,
+  defined: DefinedMeasure[],
+  taken: Set<string>,
+): DefinedMeasure | null {
+  if (!defined.length) return null;
+  const wanted = new Set<string>(role.hints.concat(words(role.label)));
+  for (const m of defined) {
+    if (!m.column || taken.has(m.column)) continue;
+    const col = ds.columns.find((c) => c.name === m.column);
+    if (!col || col.type !== 'number') continue;
+    if (words(m.name).some((w) => wanted.has(w))) return m;
+  }
+  return null;
+}
+
 export function mapRoles(
   roles: TemplateRole[],
   ds: PlanDataset,
   geoHits: GeoHits = {},
+  defined: DefinedMeasure[] = [],
 ): { matches: RoleMatch[]; missingRequired: string[] } {
   const matches: RoleMatch[] = [];
   const missingRequired: string[] = [];
@@ -224,6 +277,18 @@ export function mapRoles(
   const taken = new Set<string>();
 
   for (const role of roles) {
+    // A DEFINED METRIC wins a measure role outright. The scorer below reads
+    // column names, which is a guess at what the user calls their numbers; a
+    // metric named "Revenue" is that same user having already answered. So a
+    // template's Revenue role takes the Revenue metric's column, not whichever
+    // numeric column happened to score highest.
+    const named = role.kind === 'measure' ? namedMeasure(role, ds, defined, taken) : null;
+    if (named) {
+      taken.add(named.column);
+      matches.push({ role: role.id, column: named.column, confidence: 'high', metricId: named.id });
+      continue;
+    }
+
     const scored: Scored[] = [];
     ds.columns.forEach((c) => {
       if (taken.has(c.name)) return;

@@ -79,6 +79,18 @@ export interface CardMetric {
   aggregation: MetricAggregation;
   label?: string;
   format?: 'auto' | 'plain' | 'thousands' | 'compact' | 'percent' | 'currency';
+  /**
+   * The saved Metric this card shows, when it shows one.
+   *
+   * ADDITIVE, and deliberately never a replacement: `column`/`aggregation` stay
+   * REQUIRED and stay filled in, so a card whose metric was deleted keeps
+   * showing its number the way a card with a dangling `visualId` keeps showing
+   * a placeholder rather than corrupting the sheet. When present it wins — the
+   * handler resolves the metric (which may be a formula no column/aggregation
+   * pair could express) and formats with the metric's own format instead of
+   * guessing one from `format` above.
+   */
+  metricId?: string;
 }
 
 /**
@@ -309,9 +321,18 @@ export function sanitizeCard(raw: unknown): Card | null {
     typeof m.aggregation === 'string' && METRIC_AGGS.has(m.aggregation)
       ? (m.aggregation as MetricAggregation)
       : null;
-  if (!datasetId || !column || !aggregation) return null;
+  // UUID-shaped only: this id reaches a filesystem path in the metrics store,
+  // and the guard belongs at the edge that accepts it, not at the one that
+  // uses it.
+  const metricId = typeof m.metricId === 'string' && UUID_RE.test(m.metricId) ? m.metricId : '';
+  // A card that names a saved Metric may legitimately have NO column: a formula
+  // metric (`[Profit] / [Revenue]`) is not a column rolled up, and there is
+  // nothing honest to put there. Every other metric card still requires one —
+  // without a metricId, a card with no column is a card with no number.
+  if (!datasetId || !aggregation || (!column && !metricId)) return null;
   const metric: CardMetric = { datasetId, column, aggregation };
   if (typeof m.label === 'string') metric.label = m.label;
+  if (metricId) metric.metricId = metricId;
   if (typeof m.format === 'string' && METRIC_FORMATS.has(m.format)) {
     metric.format = m.format as CardMetric['format'];
   }
