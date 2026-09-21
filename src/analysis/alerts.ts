@@ -58,6 +58,17 @@ export interface AlertMetric {
    * column falls back to the column name, which is what it is called there.
    */
   label?: string;
+  /**
+   * The saved Metric this rule watches, when it was created from the metric
+   * picker rather than from a bare column.
+   *
+   * ADDITIVE: `column`/`aggregation` stay required and stay filled from the
+   * metric's definition, so `alertStore.metricFor` and the whole evaluator are
+   * untouched and a rule whose metric is deleted keeps firing on the same
+   * figure. What the id buys is the metric's NAME and FORMAT in the alert
+   * message, and a row in `metric:usage`.
+   */
+  metricId?: string;
 }
 
 export interface AlertRule {
@@ -224,6 +235,8 @@ export function sanitizeRule(raw: any): AlertRule | null {
   if (Array.isArray(m.filters) && m.filters.length) rule.metric.filters = m.filters;
   const label = str(m.label);
   if (label) rule.metric.label = label;
+  // UUID-shaped only — same guard, same reason as sanitizeCard's.
+  if (UUID_RE.test(String(m.metricId || ''))) rule.metric.metricId = String(m.metricId);
 
   if (compare === 'threshold') {
     const t = raw.threshold || {};

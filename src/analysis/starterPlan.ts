@@ -40,9 +40,9 @@ export function words(name: string): string[] {
 }
 
 /** Money and other additive measures — the headline of almost any dashboard. */
-const MEASURE_WORDS = new Set(['revenue', 'sales', 'amount', 'total', 'profit', 'cost', 'spend', 'gmv']);
+export const MEASURE_WORDS = new Set(['revenue', 'sales', 'amount', 'total', 'profit', 'cost', 'spend', 'gmv']);
 /** Things you count. Additive too, but a weaker headline than money. */
-const COUNT_WORDS = new Set(['units', 'unit', 'qty', 'quantity', 'count', 'orders', 'visits', 'clicks', 'sessions']);
+export const COUNT_WORDS = new Set(['units', 'unit', 'qty', 'quantity', 'count', 'orders', 'visits', 'clicks', 'sessions']);
 /**
  * Quantities a SUM is meaningless for.
  *
@@ -55,18 +55,22 @@ const AVERAGED_WORDS = new Set([
   'score', 'age', 'days', 'duration', 'latency', 'avg', 'average', 'mean', 'median',
 ]);
 /** Numbers that are identifiers or coordinates, not measures at all. */
-const NOT_A_MEASURE_WORDS = new Set([
+export const NOT_A_MEASURE_WORDS = new Set([
   'id', 'code', 'zip', 'postcode', 'year', 'month', 'day', 'week', 'quarter',
   'lat', 'lon', 'lng', 'latitude', 'longitude',
 ]);
 
 /** `avg` when a sum would be meaningless, `sum` otherwise. */
-function aggregationFor(name: string): 'sum' | 'avg' {
+// Exported for ./metricAuto, which proposes a Metric per numeric column and must
+// rank and aggregate them EXACTLY as the starter layout does — a second copy of
+// these word lists is how "Revenue" comes to be a sum on a dashboard and an
+// average in the Metrics table.
+export function aggregationFor(name: string): 'sum' | 'avg' {
   return words(name).some((w) => AVERAGED_WORDS.has(w)) ? 'avg' : 'sum';
 }
 
 /** 0 = money, 1 = counts, 2 = anything else numeric. Lower sorts first. */
-function measureRank(name: string): number {
+export function measureRank(name: string): number {
   const ws = words(name);
   if (ws.some((w) => AVERAGED_WORDS.has(w))) return 2; // a rate is never a headline
   if (ws.some((w) => MEASURE_WORDS.has(w))) return 0;

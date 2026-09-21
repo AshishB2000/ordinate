@@ -62,6 +62,8 @@ export interface PivotValue {
   format?: string;
   /** Per-value override of the grid-wide `showAs`. */
   showAs?: PivotShowAs;
+  /** The saved Metric this value IS. ADDITIVE — nothing here reads it. */
+  metricId?: string;
 }
 
 /** Renderer-side cell painting. Carried here so it is saved with the visual. */
@@ -169,6 +171,7 @@ function sanitizeDims(raw: unknown, cap: number): PivotDim[] {
   return out;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i; // a metricId reaches a path
 function sanitizeValues(raw: unknown): PivotValue[] {
   const list = Array.isArray(raw) ? raw : [];
   const out: PivotValue[] = [];
@@ -185,6 +188,7 @@ function sanitizeValues(raw: unknown): PivotValue[] {
     };
     if (typeof o.format === 'string' && o.format) val.format = o.format;
     if (typeof o.showAs === 'string' && SHOW_AS.has(o.showAs)) val.showAs = o.showAs as PivotShowAs;
+    if (typeof o.metricId === 'string' && UUID_RE.test(o.metricId)) val.metricId = o.metricId;
     out.push(val);
   }
   return out;

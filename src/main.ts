@@ -650,6 +650,8 @@ require("./ipc/visuals").register();
 
 require("./ipc/dashboards").register();
 
+// Metrics. After dashboards: every figure bottoms out in computeCardMetric.
+require("./ipc/metrics").register();
 // Alert rules and their inbox. After dashboards deliberately — see ipc/alerts.
 require("./ipc/alerts").register({ getHubWindow: () => hubWindow, focusHub });
 

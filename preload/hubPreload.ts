@@ -533,6 +533,36 @@ contextBridge.exposeInMainWorld('hub', {
   starterCards: (projectId: string, kind: string, datasetId?: string) =>
     ipcRenderer.invoke('analysis:starterCards', { projectId, kind, datasetId }),
 
+  // ── Metrics — the project's NAMED numbers ──
+  // A Metric is a definition, never a stored figure: `metricValue` resolves one
+  // on demand through the same `computeCardMetric` a KPI card uses, and returns
+  // BOTH the number and the finished `display` string. The renderer prints
+  // `display` rather than re-formatting — see src/analysis/metricFormat.ts.
+  listMetrics: (projectId: string) => ipcRenderer.invoke('metric:list', { projectId }),
+  // Listing never writes; this is the one call that may seed a project's first
+  // metrics from its columns, and only when it has none.
+  ensureDefaultMetrics: (projectId: string, datasetId?: string) =>
+    ipcRenderer.invoke('metric:ensureDefaults', { projectId, datasetId }),
+  getMetric: (projectId: string, id: string) => ipcRenderer.invoke('metric:get', { projectId, id }),
+  saveMetric: (projectId: string, input: any) => ipcRenderer.invoke('metric:save', { projectId, input }),
+  updateMetric: (projectId: string, id: string, patch: any) =>
+    ipcRenderer.invoke('metric:update', { projectId, id, patch }),
+  duplicateMetric: (projectId: string, id: string) => ipcRenderer.invoke('metric:duplicate', { projectId, id }),
+  deleteMetric: (projectId: string, id: string) => ipcRenderer.invoke('metric:delete', { projectId, id }),
+  // { ok, id, name, value, display, format, definitionText } | { ok:false, error }.
+  metricValue: (projectId: string, id: string, filters?: any) =>
+    ipcRenderer.invoke('metric:value', { projectId, id, filters }),
+  // The editor's live figure for a definition that is not saved yet — same
+  // resolver, same formatter, so the preview cannot disagree with the record.
+  previewMetric: (projectId: string, datasetId: string, definition: any, filters?: any, format?: any) =>
+    ipcRenderer.invoke('metric:preview', { projectId, datasetId, definition, filters, format }),
+  // The metric broken out by a column (the table's sparkline). `column` omitted
+  // → the dataset's first date column, or `{ series: null }` when it has none.
+  metricSeries: (projectId: string, id: string, column?: string, filters?: any) =>
+    ipcRenderer.invoke('metric:series', { projectId, id, column, filters }),
+  // Every card, visual, alert, report and metric that points at this one.
+  metricUsage: (projectId: string, id: string) => ipcRenderer.invoke('metric:usage', { projectId, id }),
+
   // ── Dashboard TEMPLATES (the create wizard's gallery) ──
   // Every template with the column mapping it would use on `datasetId`, plus
   // that dataset's column names/types for the mapping step's selects. Model-free.

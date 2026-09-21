@@ -51,6 +51,7 @@ import { parseFile, sourceKindForPath } from '../data/fileImport';
 import * as analysis from '../analysis/analysis';
 import * as dashboards from '../analysis/dashboards';
 import * as visuals from '../analysis/visuals';
+import * as metrics from '../analysis/metrics';
 import * as planBuild from '../analysis/planBuild';
 import { loadPlanContext } from '../analysis/analysisPlan';
 import type { AnalysisPlan, PlannedMetric, PlannedVisual } from '../analysis/analysisPlan';
@@ -132,6 +133,51 @@ function sampleDashboardPlan(ds: { id: string; name: string; columns: { name: st
   sheet.visuals = visuals;
   sheet.texts = [{ heading: SAMPLE_NOTE_HEADING, text: SAMPLE_NOTE_TEXT }];
   return plan;
+}
+
+/**
+ * The sample's six metrics.
+ *
+ * Written out rather than left to `metricAuto.proposeMetrics`, for the same
+ * reason `sampleDashboardPlan` writes out its four KPI cards: the proposer is
+ * correct and dull. It would name them "Units", "Unit price", "Discount",
+ * "Ship days" and "Rows" — every numeric column, in rank order — where the
+ * first screen wants the six figures a retail dataset is actually about, with
+ * the labels a reader uses. The proposer still runs on every OTHER project's
+ * first open; this is the curated set for the one dataset we ship.
+ *
+ * Two of them are formulas, so the sample demonstrates the thing a metric can
+ * do that a `{column, aggregation}` cannot — and, because a formula resolves
+ * its operands under whatever scope is in force, `Margin %` stays correct when
+ * the dashboard is filtered to one region.
+ */
+async function seedSampleMetrics(projectId: string, datasetId: string): Promise<void> {
+  const money = { kind: 'currency' as const, decimals: 0, compact: true };
+  const inputs = [
+    { name: 'Revenue', definition: { column: 'revenue', aggregation: 'sum' }, format: money, direction: 'up_good' as const },
+    { name: 'Profit', definition: { column: 'profit', aggregation: 'sum' }, format: money, direction: 'up_good' as const },
+    { name: 'Units', definition: { column: 'units', aggregation: 'sum' },
+      format: { kind: 'number' as const, decimals: 0, compact: true }, direction: 'up_good' as const },
+    // count, not a row count: `count` is the number of NON-EMPTY cells, and one
+    // order is one dated row.
+    { name: 'Orders', definition: { column: 'order_date', aggregation: 'count' },
+      format: { kind: 'number' as const, decimals: 0, compact: true }, direction: 'up_good' as const },
+    { name: 'Avg order value', definition: { formula: '[Revenue] / [Orders]' },
+      format: { kind: 'currency' as const, decimals: 2, compact: false }, direction: 'up_good' as const,
+      description: 'Revenue divided by the number of orders, both recomputed under the current filters.' },
+    { name: 'Margin %', definition: { formula: '[Profit] / [Revenue]' },
+      format: { kind: 'percent' as const, decimals: 1, compact: false }, direction: 'up_good' as const,
+      description: 'Profit as a share of revenue. A ratio of two scoped figures, never an average of per-row ratios.' },
+  ];
+  for (const input of inputs) {
+    // Order matters: `Avg order value` and `Margin %` reference metrics by
+    // name, and a name that does not resolve yet is simply null. Saving the
+    // simple ones first is what makes the formulas resolve on the very first
+    // read rather than on the second.
+    if (!(await metrics.saveMetric(projectId, { ...input, datasetId }))) {
+      console.error('[sample] could not save the metric', input.name);
+    }
+  }
 }
 
 /**
@@ -224,6 +270,8 @@ export async function seedSampleProject(): Promise<{ seeded: boolean; projectId?
   const ctx = await loadPlanContext(project.id, ds.id);
   const planDs = ctx.datasets[0];
   if (!planDs) return { seeded: true, projectId: project.id };
+
+  await seedSampleMetrics(project.id, ds.id);
 
   const built = await planBuild.buildPlan(project.id, sampleDashboardPlan(planDs));
   let analysisId: string | undefined;

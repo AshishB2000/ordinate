@@ -88,6 +88,37 @@ function sealLedger(ledger: LedgerEntry[], text: string, source: string): number
   return ledger.length - before;
 }
 
+/**
+ * One line per DEFINED METRIC — the project's own vocabulary for its numbers.
+ *
+ * The names are handed over because a name is what a reader uses back at the
+ * app: an answer reading "Revenue fell 8%" under a card headed Revenue is the
+ * app speaking the user's language, where "the sum of the revenue column fell
+ * 8%" is the app describing its own plumbing. An `intent` may name a metric
+ * too, and the APP resolves that name to a record — never the model.
+ *
+ * Every FIGURE here goes in the ledger, like every other figure in this file:
+ * a number that reaches the prompt without reaching the ledger becomes a false
+ * accusation under a perfectly correct answer (see ./numberAudit).
+ */
+export interface FactMetric {
+  name: string;
+  definitionText: string;
+  value: number | null;
+  /** The metric's OWN formatting, which is how it should be written back. */
+  display: string;
+}
+
+function metricLines(lines: string[], ledger: LedgerEntry[], metrics: FactMetric[]): void {
+  if (!metrics.length) return;
+  lines.push('');
+  lines.push('Defined metrics — use THESE names for these numbers, and write them the way the app does:');
+  metrics.forEach((m) => {
+    lines.push(`- "${m.name}" = ${m.definitionText}. Currently ${m.display}.`);
+    num(ledger, m.name, m.value, 'number', 'metrics');
+  });
+}
+
 // Dataset: columns + types + app-computed stats (min/max/mean/count |
 // distinct/mostCommon) + quality issues + up to N sample rows. This is the
 // generalized twin of ipc/datasets.buildDatasetSummaryText (same shape) with the
@@ -102,6 +133,10 @@ export function datasetFacts(
   // its numbers exactly as it already does for the quality notes, so the
   // fidelity guard covers these figures like any other.
   insights: { detail: string }[] = [],
+  // The project's DEFINED metrics on this dataset, already resolved by
+  // src/ipc/metrics.ts. Optional and defaulted, so every existing caller — and
+  // every existing test — produces a byte-identical block without them.
+  metrics: FactMetric[] = [],
 ): CopilotFacts {
   const lines: string[] = [GUARD_LINE, ''];
   const ledger: LedgerEntry[] = [];
@@ -133,6 +168,7 @@ export function datasetFacts(
       if (s.mostCommon) num(ledger, `${s.name} most common count`, s.mostCommon.count, 'count', SRC);
     }
   });
+  metricLines(lines, ledger, metrics);
   if (issues.length > 0) {
     lines.push('');
     lines.push('Data-quality notes:');
@@ -265,6 +301,7 @@ export function analysisFacts(
   a: Analysis,
   computed: { label: string; value: number | null }[],
   tiles: AnalysisTile[] = [],
+  metrics: FactMetric[] = [],
 ): CopilotFacts {
   const sheets = Array.isArray(a.sheets) ? a.sheets : [];
   const lines: string[] = [GUARD_LINE, ''];
@@ -304,6 +341,7 @@ export function analysisFacts(
     });
   }
   lines.push(...cardBodyLines(sheets, computed, ledger));
+  metricLines(lines, ledger, metrics);
   const text = lines.join('\n');
   sealLedger(ledger, text, 'dashboard');
   return {

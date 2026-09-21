@@ -1,7 +1,11 @@
 'use strict';
 
-// The Captures tab, under Data, beside Datasets. Classic global-scope renderer
-// <script>: no import/export.
+// The Data page's TAB STRIP — Datasets · Captures · Metrics — plus the Captures
+// tab itself. Classic global-scope renderer <script>: no import/export.
+//
+// The strip lives here because Captures was the second tab and built it; the
+// third (metricsPage.ts) joins the same table rather than growing a strip of
+// its own.
 //
 // Captures used to have a sidebar of their own in a shell of their own. They
 // are project records now, so they live where the project's other data lives:
@@ -14,7 +18,7 @@
 // the empty state is `.ws-empty`. Only `.cap-card-img` is new, and it is the
 // image frame.
 
-let clActive: 'datasets' | 'captures' = 'datasets';
+let clActive: 'datasets' | 'captures' | 'metrics' = 'datasets';
 
 function clEl(id: string): HTMLElement | null {
   return document.getElementById(id);
@@ -28,36 +32,54 @@ function clEl(id: string): HTMLElement | null {
  * makes a capture. So the tab switch swaps the sentence and hides that row
  * rather than leaving four buttons that do nothing for what is on screen.
  */
-function clSelectTab(tab: 'datasets' | 'captures'): void {
+const CL_TABS: Array<{ id: 'datasets' | 'captures' | 'metrics'; tab: string; panel: string; sub: string }> = [
+  {
+    id: 'datasets', tab: 'ds-tab-datasets', panel: 'ds-saved',
+    sub: 'Import CSV, JSON, or Excel — or paste data — to save a structured dataset in this project.',
+  },
+  {
+    id: 'captures', tab: 'ds-tab-captures', panel: 'cap-grid-wrap',
+    sub: 'Screenshots you analyzed in this project. Save the ones that carry a table as a dataset.',
+  },
+  {
+    id: 'metrics', tab: 'ds-tab-metrics', panel: 'mp-wrap',
+    sub: 'The numbers this project is about, defined once and shown the same way everywhere.',
+  },
+];
+
+function clSelectTab(tab: 'datasets' | 'captures' | 'metrics'): void {
   clActive = tab;
-  const isCaptures = tab === 'captures';
 
-  const dsTab = clEl('ds-tab-datasets');
-  const capTab = clEl('ds-tab-captures');
-  if (dsTab) {
-    dsTab.setAttribute('aria-selected', String(!isCaptures));
-    dsTab.tabIndex = isCaptures ? -1 : 0;
-  }
-  if (capTab) {
-    capTab.setAttribute('aria-selected', String(isCaptures));
-    capTab.tabIndex = isCaptures ? 0 : -1;
+  // A table, not a chain of booleans: this started as two tabs and an
+  // `isCaptures`, and a third would have meant a second boolean and six
+  // combinations of two that only three are legal.
+  for (const t of CL_TABS) {
+    const on = t.id === tab;
+    const btn = clEl(t.tab);
+    if (btn) {
+      btn.setAttribute('aria-selected', String(on));
+      btn.tabIndex = on ? 0 : -1;
+    }
+    const panel = clEl(t.panel);
+    if (panel) panel.hidden = !on;
   }
 
-  const saved = clEl('ds-saved');
-  if (saved) saved.hidden = isCaptures;
-  const grid = clEl('cap-grid-wrap');
-  if (grid) grid.hidden = !isCaptures;
+  // The Data header's copy and its actions belong to Datasets — "Import file",
+  // "Paste data", "Connect data" are all ways to make a dataset, and none of
+  // them makes a capture or a metric. So the tab switch swaps the sentence and
+  // hides that row rather than leaving four buttons that do nothing for what is
+  // on screen.
   const actions = document.querySelector('.ds-head-actions') as HTMLElement | null;
-  if (actions) actions.hidden = isCaptures;
+  if (actions) actions.hidden = tab !== 'datasets';
+  const metricActions = clEl('mp-actions-row');
+  if (metricActions) metricActions.hidden = tab !== 'metrics';
 
   const sub = clEl('ds-sub');
-  if (sub) {
-    sub.textContent = isCaptures
-      ? 'Screenshots you analyzed in this project. Save the ones that carry a table as a dataset.'
-      : 'Import CSV, JSON, or Excel — or paste data — to save a structured dataset in this project.';
-  }
+  const entry = CL_TABS.find((t) => t.id === tab);
+  if (sub && entry) sub.textContent = entry.sub;
 
-  if (isCaptures) void refreshCaptureList();
+  if (tab === 'captures') void refreshCaptureList();
+  if (tab === 'metrics') void refreshMetricsList();
 }
 
 /** Land on the Data page with the Captures tab showing — where "‹ Back" goes. */
@@ -175,6 +197,8 @@ function initCaptureList(): void {
   if (dsTab) dsTab.addEventListener('click', () => clSelectTab('datasets'));
   const capTab = clEl('ds-tab-captures');
   if (capTab) capTab.addEventListener('click', () => clSelectTab('captures'));
+  const metricTab = clEl('ds-tab-metrics');
+  if (metricTab) metricTab.addEventListener('click', () => clSelectTab('metrics'));
   const emptyNew = clEl('cap-empty-new');
   if (emptyNew) emptyNew.addEventListener('click', () => doCapture());
   // Settings → "Delete capture history" wipes the files under main; without

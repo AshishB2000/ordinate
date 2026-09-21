@@ -76,6 +76,13 @@ interface PivotChip {
   aggregation?: EncAgg;
   format?: string;
   showAs?: string;
+  /** The saved Metric this value IS, when it was filled from the metric picker.
+   *  ADDITIVE — `column`/`aggregation` stay filled and `pivotData` still does
+   *  all the folding, so a deleted metric costs the chip its name, not its
+   *  figures. */
+  metricId?: string;
+  /** The metric's name, for the chip. Re-read from the record, never persisted. */
+  metricName?: string;
 }
 
 function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBuilderApi {
@@ -150,8 +157,11 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
 
     const name = document.createElement('span');
     name.className = 'enc-pill-name';
+    // A value that IS a metric shows the metric's NAME — "Revenue", which is
+    // the whole point of having named it — rather than the column and
+    // aggregation behind it.
     name.textContent = shelf === 'values'
-      ? aggLabel(chip.aggregation) + ' of ' + chip.column
+      ? (chip.metricName || aggLabel(chip.aggregation) + ' of ' + chip.column)
       : chip.column;
     row.appendChild(name);
 
@@ -208,8 +218,22 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
     if (shelf === 'values') {
       // 'none' has no meaning in a pivot cell — every cell IS a group — so the
       // pivot's aggregation list is the five real ones.
+      // The metric picker, first: the same popover KPI add, the chart builder
+      // and an alert rule open (metricPicker.ts).
+      items.push({
+        label: chip.metricId ? 'Change metric…' : 'Use a metric…',
+        onClick: () => { void pickValueMetric(chip); },
+      });
       (['sum', 'avg', 'count', 'min', 'max'] as EncAgg[]).forEach((a) => {
-        items.push({ label: ENC_AGG_LABELS[a], onClick: () => { chip.aggregation = a; redraw(); } });
+        // Choosing a raw aggregation drops the metric link: the chip is no
+        // longer showing that metric, and keeping the id would tell
+        // `metric:usage` otherwise.
+        items.push({ label: ENC_AGG_LABELS[a], onClick: () => {
+          chip.aggregation = a;
+          delete chip.metricId;
+          delete chip.metricName;
+          redraw();
+        } });
       });
       PIVOT_SHOW_AS.forEach((s) => {
         items.push({
@@ -238,6 +262,39 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
       onClick: () => { shelves[shelf].splice(i, 1); if (shelf === 'values') conditional.delete(i); redraw(); },
     });
     return items;
+  }
+
+  /**
+   * Fill a value chip from the metric picker.
+   *
+   * A FORMULA metric is refused and says why: every pivot cell is a column
+   * rolled up within a group, and `[Profit] / [Revenue]` is not one. The KPI
+   * card, which shows a single number, takes formula metrics happily.
+   */
+  async function pickValueMetric(chip: PivotChip): Promise<void> {
+    const picked = await openMetricPicker(root, {});
+    if (!picked) return;
+    if (picked.kind === 'custom') {
+      delete chip.metricId;
+      delete chip.metricName;
+      redraw();
+      return;
+    }
+    const m = picked.metric;
+    const def = m && m.definition ? m.definition : {};
+    if (typeof def.formula === 'string') {
+      window.alert(`"${m.name}" is a formula metric. Every pivot cell is a column rolled up within a group — use it on a KPI card instead.`);
+      return;
+    }
+    if (!columns.some((c) => c.name === def.column)) {
+      window.alert(`"${m.name}" is defined on a different dataset's column.`);
+      return;
+    }
+    chip.column = def.column;
+    chip.aggregation = (ENC_AGGS.indexOf(def.aggregation) >= 0 ? def.aggregation : 'sum') as EncAgg;
+    chip.metricId = m.id;
+    chip.metricName = m.name;
+    redraw();
   }
 
   function addPicker(shelf: PivotShelf, btn: HTMLButtonElement): void {
@@ -462,6 +519,7 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
           aggregation: (ENC_AGGS.indexOf(v.aggregation) >= 0 ? v.aggregation : 'sum') as EncAgg,
           format: typeof v.format === 'string' ? v.format : undefined,
           showAs: typeof v.showAs === 'string' && v.showAs !== 'value' ? v.showAs : undefined,
+          metricId: typeof v.metricId === 'string' ? v.metricId : undefined,
         }));
 
       // A fresh pivot gets the first dimension and the first measure, so the
@@ -503,6 +561,7 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
           const v: any = { column: c.column, aggregation: c.aggregation || 'sum' };
           if (c.format) v.format = c.format;
           if (c.showAs) v.showAs = c.showAs;
+          if (c.metricId) v.metricId = c.metricId;
           return v;
         }),
         totals: { rows: totals.rows, columns: totals.columns, grand: totals.grand },

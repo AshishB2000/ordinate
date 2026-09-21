@@ -14370,6 +14370,247 @@ body.no-sidebar .app-sidebar { display: none; }
   background: transparent;
 }
 
+/* ── Metrics: the Data page's third tab ───────────────────────────────────
+   Everything structural here is borrowed: `.ws-table` / `.ws-table-cols` /
+   `.ws-row` are the saved-dataset list's, `.ws-empty` is the shared empty
+   state, and the trend line is `.al-spark` (the alert inbox's). What follows
+   is the grid template for this table's eight columns, a format chip, and the
+   editor's own fields — nothing else. Both themes come free: every colour is a
+   token, and the tokens flip. */
+
+.mp-actions-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin-bottom: var(--sp-12);
+}
+.mp-count-chip:empty { display: none; }
+
+/* The template, shared by the header labels and every row:
+   Name · Dataset · Definition · Format · Value · Trend · Used in · Action.
+   Name takes the slack; Definition is the other elastic one because it is the
+   cell that actually varies in length. Value is right-aligned with its header,
+   for the same reason the dataset list right-aligns Rows: a left-aligned label
+   over right-aligned figures is the tell that a table was built out of
+   flexbox.
+
+   The MINIMUMS matter more here than in a five-column table: eight tracks plus
+   seven gaps overflowed the section at a normal window width and put a
+   horizontal scrollbar under the whole page. They now sum to 728 + 56, which
+   fits — and the action track is 40px because the row's actions are one ⋯,
+   not three text buttons whose width is a font metric that moves per platform. */
+.mp-cols,
+.mp-row {
+  display: grid;
+  grid-template-columns:
+    minmax(120px, 1.1fr) minmax(80px, 0.6fr) minmax(140px, 1.3fr)
+    48px 96px 100px minmax(96px, 0.7fr) 40px;
+  align-items: center;
+  gap: var(--sp-8);
+  min-height: 40px;
+}
+/* Right-aligned figures, and its header with them. The trend header then needs
+   a gap of its own, or "VALUE" and "TREND" read as one word. */
+.mp-cols span:nth-child(5) { text-align: right; }
+.mp-cols span:nth-child(6) { padding-left: var(--sp-8); }
+.mp-spark { padding-left: var(--sp-8); }
+.mp-list {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The name is the row's affordance — it opens the editor — so it is a button
+   that reads as text, not a link-coloured one. */
+.mp-name {
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mp-name:hover { color: var(--accent); }
+.mp-name:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-sm); }
+
+.mp-def { font-variant-numeric: normal; }
+
+/* The format chip. A chip, not a word: it sits in a 56px track beside a name
+   and has to stay one glyph wide at any of the four kinds. */
+.mp-badge {
+  justify-self: start;
+  font-size: var(--t-11);
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border-radius: var(--r-full);
+  padding: 2px var(--sp-8);
+  white-space: nowrap;
+}
+
+.mp-value {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+.mp-spark { color: var(--accent); opacity: 0.85; display: flex; align-items: center; }
+.mp-more { padding: 2px var(--sp-8); line-height: 1; }
+.mp-used { font-size: var(--t-12); }
+/* "Not used yet" is a fact, not a warning — it recedes rather than shouting. */
+.mp-unused { color: var(--text-faint); }
+/* The ⋯ is ALWAYS there, dimmed. It was hover-only, which for a row whose only
+   edit and delete live behind it means a table with no visible way to act on
+   anything — a hover affordance is a shortcut to an action, never the only one. */
+.mp-actions { display: flex; gap: var(--sp-4); justify-content: flex-end; }
+.mp-row .mp-more { opacity: 0.55; }
+.mp-row:hover .mp-more,
+.mp-row:focus-within .mp-more { opacity: 1; }
+
+/* ── The metric picker popover ──
+   The host is `.chart-menu` (openMiniMenu's), so only the search box and the
+   row's three-cell layout are new. */
+.mpk-menu { min-width: 320px; padding: var(--sp-8); }
+.mpk-search {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: var(--sp-8);
+  padding: 6px var(--sp-8);
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.mpk-rows { display: flex; flex-direction: column; max-height: 320px; overflow-y: auto; }
+.mpk-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.mpk-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mpk-badge {
+  font-size: var(--t-11);
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border-radius: var(--r-full);
+  padding: 1px 6px;
+}
+.mpk-value {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+/* Separated from the metrics above it: "Custom…" leaves this list rather than
+   picking from it. */
+.mpk-custom { margin-top: var(--sp-4); border-top: 1px solid var(--border-hairline); }
+.mpk-empty { padding: var(--sp-12) var(--sp-8); font-size: var(--t-12); color: var(--text-dim); }
+
+/* ── The metric editor ──
+   640px: wide enough for "sum of revenue, where status ≠ refunded" to sit on
+   one line under the preview, which is the string this dialog exists to get
+   right. */
+.me-modal {
+  width: 640px;
+  max-width: calc(100vw - var(--sp-32));
+  /* The form is nine fields and a preview. On a short window it has to scroll
+     inside the dialog rather than off the bottom of the viewport, where Save
+     is unreachable. */
+  max-height: calc(100vh - var(--sp-48));
+  overflow-y: auto;
+}
+/* A native <select> renders its text on its own line box, and `.ws-modal-input`
+   is sized for an <input> — at --t-15 the descenders clipped. An explicit
+   height is the one thing that makes both agree. */
+.me-modal select.ws-modal-input { height: 38px; }
+.me-field { display: flex; flex-direction: column; gap: var(--sp-4); margin-bottom: var(--sp-12); }
+.me-field-label { font-size: var(--t-12); font-weight: 600; color: var(--muted); }
+.me-field-hint { font-size: var(--t-11); color: var(--text-dim); }
+
+.me-tabs { display: flex; gap: var(--sp-4); margin-bottom: var(--sp-12); }
+.me-tab {
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 6px var(--sp-8);
+  font: inherit;
+  font-size: var(--t-13);
+  color: var(--muted);
+  cursor: pointer;
+}
+.me-tab.is-on { color: var(--text); border-bottom-color: var(--accent); }
+.me-pane[hidden] { display: none; }
+.me-formula {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--t-12);
+  resize: vertical;
+}
+.me-refs { display: flex; flex-wrap: wrap; gap: var(--sp-4); margin: var(--sp-4) 0 var(--sp-12); }
+.me-ref-chip {
+  font-size: var(--t-11);
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  padding: 2px var(--sp-8);
+  cursor: pointer;
+}
+.me-ref-chip:hover { color: var(--text); border-color: var(--accent); }
+
+.me-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); }
+.me-filter-list { display: flex; flex-wrap: wrap; gap: var(--sp-4); }
+.me-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  font-size: var(--t-11);
+  color: var(--text);
+  background: var(--surface-2);
+  border-radius: var(--r-full);
+  padding: 2px var(--sp-8);
+}
+.me-filter-rm { background: none; border: 0; padding: 0; color: var(--text-dim); cursor: pointer; font: inherit; }
+.me-filter-rm:hover { color: var(--error); }
+
+.me-format { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-8); }
+.me-format-kind { flex: 0 0 120px; }
+.me-format-dec { flex: 0 0 72px; }
+.me-format-affix { flex: 0 0 96px; }
+.me-compact { display: inline-flex; align-items: center; gap: var(--sp-4); font-size: var(--t-12); color: var(--muted); }
+
+/* The preview is the point of the dialog, so it is a surface of its own rather
+   than another field. */
+.me-preview {
+  margin-top: var(--sp-8);
+  padding: var(--sp-12) var(--sp-16);
+  background: var(--surface-2);
+  border-radius: var(--r-md);
+  text-align: center;
+}
+.me-preview-def { color: var(--text-dim); font-size: var(--t-12); }
+.me-error { margin: var(--sp-8) 0 0; font-size: var(--t-12); color: var(--error); }
+
+/* A measure pill that IS a metric shows the metric's NAME where the column and
+   aggregation selects would be. Sized to sit in the same row height, with the
+   accent border that says "this one is defined elsewhere". */
+.viz-value-metric {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-sm);
+  padding: 4px var(--sp-8);
+}
 /* ── The pivot table (pivotRender.js) ─────────────────────────────────────
    A grid of figures, so it is typeset like one: 13px cells in tabular
    figures on a 32px row, an 11px uppercase muted header, and NO zebra. Zebra

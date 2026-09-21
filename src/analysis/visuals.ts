@@ -28,6 +28,17 @@ export type VizAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max' | 'none';
 export interface VizMeasure {
   column: string; // dataset column name
   aggregation: VizAggregation;
+  /**
+   * The saved Metric this measure IS, when the builder's measure chip was
+   * filled from the metric picker.
+   *
+   * ADDITIVE: `column`/`aggregation` stay required and stay filled, so every
+   * chart drawn before this key existed — and every chart whose metric is later
+   * deleted — plots exactly as it did. `vizData.buildVizData` never reads it;
+   * it is carried so the chip can show the metric's NAME and format, and so
+   * `metric:usage` can say which visuals a metric appears on.
+   */
+  metricId?: string;
 }
 
 export interface VizGeo {
@@ -194,7 +205,11 @@ export function sanitizeEncoding(raw: unknown): VizEncoding {
     if (!column) continue;
     const aggregation: VizAggregation =
       typeof vo.aggregation === 'string' && AGG_FNS.has(vo.aggregation) ? (vo.aggregation as VizAggregation) : 'sum';
-    values.push({ column, aggregation });
+    const measure: VizMeasure = { column, aggregation };
+    // UUID-shaped only — the same guard `sanitizeCard` puts on a card's
+    // metricId, for the same reason: this id reaches a path in the metrics store.
+    if (typeof vo.metricId === 'string' && UUID_RE.test(vo.metricId)) measure.metricId = vo.metricId;
+    values.push(measure);
   }
 
   const enc: VizEncoding = { category, values };

@@ -82,10 +82,9 @@ async function main(): Promise<void> {
     //   2. the metric changes (a skipped predicate would return the full sum),
     //   3. residentTrace says 'resident', not 'skipped' or 'failed'.
     const trace = req('./src/engine/residentTrace.js');
-    const residentViz = req('./src/ipc/visualsResident.js');
-    const inFilter = [
-      { type: 'filter', column: 'region', op: 'in', values: ['region0', 'region2', 'region4'] },
-    ];
+    // visualsResident: moved out of ipc/visuals.js at the cap, still the SHIPPED helper.
+    const ipcVisuals = req('./src/ipc/visualsResident.js');
+    const inFilter = [{ type: 'filter', column: 'region', op: 'in', values: ['region0', 'region2', 'region4'] }];
 
     out.inChart = src && residentQuery.aggregateResident(src, 'region', [
       { column: 'amount', aggregation: 'sum' },
@@ -103,7 +102,7 @@ async function main(): Promise<void> {
     // therefore the thing that has to still choose the resident path.
     trace.reset();
     t = Date.now();
-    const viaIpc = await residentViz.residentVizData(arg.projectId, arg.datasetId, {
+    const viaIpc = await ipcVisuals.residentVizData(arg.projectId, arg.datasetId, {
       category: 'region', values: [{ column: 'amount', aggregation: 'sum' }],
     }, inFilter);
     out.inIpcMs = Date.now() - t;
@@ -115,7 +114,7 @@ async function main(): Promise<void> {
     // path would emit a warning there and the fast path may only run when it
     // provably would not have.
     trace.reset();
-    out.emptyInViaIpc = await residentViz.residentVizData(arg.projectId, arg.datasetId, {
+    out.emptyInViaIpc = await ipcVisuals.residentVizData(arg.projectId, arg.datasetId, {
       category: 'region', values: [{ column: 'amount', aggregation: 'sum' }],
     }, [{ type: 'filter', column: 'region', op: 'in', values: [] }]);
 
