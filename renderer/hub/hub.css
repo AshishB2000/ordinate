@@ -14504,8 +14504,11 @@ body.no-sidebar .app-sidebar { display: none; }
   text-overflow: ellipsis;
 }
 
+/* Hover is surface-1, the same fill a subtotal row carries — so a hovered
+   ORDINARY row reads as lifted off the card, and a subtotal row, already
+   lifted, shows its state through weight rather than through a second fill. */
 .pivot-row:hover > th,
-.pivot-row:hover > td { background: var(--surface-2); }
+.pivot-row:hover > td { background: var(--surface-1); }
 
 /* A subtotal row is the same figures one level up, so it reads as a heavier
    version of a row rather than as a different kind of thing: surface-1 and

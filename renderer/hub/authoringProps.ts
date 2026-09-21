@@ -50,6 +50,9 @@ function anScheduleWrite(): void {
   }, 500);
 }
 
+/** Said wherever a pivot card is selected — one string, two callers. */
+const AN_PIVOT_NOTE = 'Rows, Columns and Values are edited in the Visuals builder.';
+
 /** Is the selected card a pivot? Its shelves live in the Visuals builder. */
 function anIsPivot(): boolean {
   return !!anVisual && anVisual.chartType === 'pivot' && !!(anVisual.encoding && anVisual.encoding.pivot);
@@ -76,7 +79,9 @@ async function anWriteVisual(): Promise<void> {
     setAnPropsNote('Pick a category and at least one measure for this visual to draw.');
     return;
   }
-  if (!anIsPivot()) setAnPropsNote('');
+  // The pivot hint is sticky: it explains a panel that stays this way, so a
+  // later formatting edit must not quietly take it away.
+  setAnPropsNote(anIsPivot() ? AN_PIVOT_NOTE : '');
   try {
     await window.hub.updateVisual(currentProjectId, String(anVisual.id), {
       name: anVisual.name,

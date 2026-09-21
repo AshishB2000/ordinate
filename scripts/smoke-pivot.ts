@@ -498,6 +498,11 @@ async function main(): Promise<void> {
   });
   ok('a formatting edit in the panel is possible at all', edited);
   await win.waitForTimeout(2500);
+  ok('…and the hint survives it — it explains a panel that stays this way',
+     await win.evaluate(() => {
+       const note = document.getElementById('an-props-note') as HTMLElement | null;
+       return !!note && !note.hidden && /Visuals builder/.test(note.textContent || '');
+     }));
   const saved: any = await app.evaluate(async (_e, projectId: string) => {
     const req = (process as any).mainModule.require.bind((process as any).mainModule);
     const visuals = req('./src/analysis/visuals.js');
