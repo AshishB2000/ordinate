@@ -108,7 +108,7 @@ async function anSelectCard(cardId: string | null): Promise<void> {
   // through untouched, so nothing here can downgrade a pivot to a bar chart.
   const isPivot = anIsPivot();
   anForm!.showFields(!isPivot);
-  setAnPropsNote(isPivot ? 'Rows, Columns and Values are edited in the Visuals builder.' : '');
+  setAnPropsNote(isPivot ? AN_PIVOT_NOTE : '');
   anShowEncoding(true, '');
   await anRenderAiSlot();
   await anRenderSwitcher();
