@@ -231,6 +231,52 @@ ok('compact covers the four bands', [
   compact(Infinity) === '',
 ].every(Boolean));
 
+// ── pivot ───────────────────────────────────────────────────────────────────
+//
+// A pivot's sentence is about the GRID: how big it is, and which CELL is
+// biggest. The peak is read off LEAF rows only — a subtotal is larger than its
+// own children by construction and would win every time, which would make the
+// sentence name a row the reader can collapse.
+const pivotGrid = (over: Record<string, unknown> = {}): never => ({
+  rowHeaders: [['Technology'], ['Technology', 'Phones'], ['Furniture'], ['Furniture', 'Chairs']],
+  colHeaders: [['West'], ['East']],
+  cells: [[1_100_000, 900_000], [1_100_000, 900_000], [400_000, 300_000], [400_000, 300_000]],
+  rowKinds: ['subtotal', 'leaf', 'subtotal', 'leaf'],
+  rowTotals: null, colTotals: null, grand: null,
+  valueNames: ['sum of revenue'], valueCount: 1,
+  showAs: ['value'], formats: [''], conditional: [], sort: null,
+  rowGroupCount: 24, colGroupCount: 3, truncated: false,
+  ...over,
+} as never);
+
+ok('pivot: size first, then the biggest LEAF cell by its full path',
+  tileCaption({ chartType: 'pivot', pivot: pivotGrid() })
+    === '24 rows × 3 columns; Technology · Phones · West is highest at 1.1M',
+  tileCaption({ chartType: 'pivot', pivot: pivotGrid() }));
+
+ok('pivot: one row and one column are singular',
+  tileCaption({
+    chartType: 'pivot',
+    pivot: pivotGrid({
+      rowHeaders: [['Only']], cells: [[42]], rowKinds: ['leaf'], colHeaders: [['West']],
+      rowGroupCount: 1, colGroupCount: 1,
+    }),
+  }) === '1 row × 1 column; Only · West is highest at 42');
+
+ok('pivot: a grid of nothing but nulls says so rather than naming a peak',
+  tileCaption({
+    chartType: 'pivot',
+    pivot: pivotGrid({ rowHeaders: [['A']], cells: [[null, null]], rowKinds: ['leaf'], rowGroupCount: 1 }),
+  }) === '1 row × 3 columns; no figures to compare');
+
+ok('pivot: an empty grid falls back to the shared nothing-to-say sentence',
+  tileCaption({ chartType: 'pivot', pivot: pivotGrid({ rowGroupCount: 0 }) }) === 'No data to summarize');
+
+ok('pivot: and a pivot with no grid at all does too',
+  tileCaption({ chartType: 'pivot' }) === 'No data to summarize');
+
+ok('captionFamily knows the pivot family', captionFamily('pivot') === 'pivot');
+
 /**
  * PARITY with the renderer's `_fmtVal`.
  *

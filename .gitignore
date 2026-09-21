@@ -65,6 +65,8 @@ scripts/**/*.js
 /scripts/test-vizData.js
 /scripts/test-visuals.js
 /scripts/test-viz-filter.js
+/renderer/hub/pivotRender.js
+/renderer/hub/pivotBuilder.js
 /renderer/hub/visuals.js
 # Week 9 dashboards — emitted siblings.
 /src/ipc/dashboards.js

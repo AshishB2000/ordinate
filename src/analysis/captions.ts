@@ -18,6 +18,7 @@
 // way. A page that needs a paragraph gets a Notes page.
 
 import type { ChartData } from './vizData';
+import type { PivotGrid } from './pivotData';
 
 // ── the app's compact number format ──────────────────────────────────────────
 //
@@ -42,7 +43,7 @@ export function compact(v: number | null | undefined): string {
 // plus `other` for the ones where the honest sentence is a count. Mapping by
 // FAMILY rather than per-id is what keeps this file from growing a branch every
 // time renderResult.ts gains a chart.
-export type CaptionFamily = 'bar' | 'line' | 'part' | 'map' | 'point' | 'other';
+export type CaptionFamily = 'bar' | 'line' | 'part' | 'map' | 'point' | 'pivot' | 'other';
 
 const FAMILY: Record<string, CaptionFamily> = {
   column: 'bar', bar: 'bar',
@@ -55,6 +56,7 @@ const FAMILY: Record<string, CaptionFamily> = {
   pie: 'part', donut: 'part',
   map_bubble: 'map', map_choropleth: 'map',
   scatter: 'point', bubble: 'point',
+  pivot: 'pivot',
 };
 
 export function captionFamily(chartType: string | null | undefined): CaptionFamily {
@@ -79,6 +81,8 @@ export interface CaptionInput {
   geo?: { items: Array<{ name: string; value: number }> } | null;
   /** A KPI row's figures — metric tiles only; presence selects the KPI frame. */
   kpis?: CaptionKpi[] | null;
+  /** A pivot's grid — pivots only. Its shape IS the sentence, so it is read directly. */
+  pivot?: PivotGrid | null;
 }
 
 const NOTHING = 'No data to summarize';
@@ -90,6 +94,10 @@ export function tileCaption(input: CaptionInput): string {
 
   const family = captionFamily(input.chartType);
   const measure = measureNoun(input.data);
+  // A pivot's sentence is about the GRID — how big it is and where its peak
+  // sits — which `{labels, series}` cannot say: a leaf row's label is a joined
+  // path and the shape of the thing is the point.
+  if (family === 'pivot') return pivotCaption(input.pivot);
   // A map's figures are its RESOLVED regions, which is a shorter list than the
   // chart labels whenever a name failed to match a feature — so the sentence is
   // written off `geo`, and only the measure noun comes from the series.
@@ -282,6 +290,37 @@ function genericCaption(pairs: Pair[], measure: string): string {
   if (pairs.length === 1) return `${sentenceCase(measure)} is ${compact(pairs[0].value)}`;
   const total = pairs.reduce((a, p) => a + p.value, 0);
   return `${sentenceCase(measure)} across ${pairs.length} categories, totalling ${compact(total)}`;
+}
+
+/**
+ * A pivot — "24 rows × 3 columns; Technology · West is highest at 1.1M".
+ *
+ * The size comes first because that is what a reader checks first, and the peak
+ * names its full CELL — the row path and the column path — since a pivot's
+ * biggest figure is identified by both. LEAF cells only: a subtotal is larger
+ * than its own children by construction and would win every time.
+ */
+function pivotCaption(grid: PivotGrid | null | undefined): string {
+  if (!grid || !Array.isArray(grid.cells) || grid.rowGroupCount === 0) return NOTHING;
+  const rows = grid.rowGroupCount;
+  const cols = grid.colGroupCount;
+  const size = `${rows} ${rows === 1 ? 'row' : 'rows'} × ${cols} ${cols === 1 ? 'column' : 'columns'}`;
+
+  let best: { path: string; v: number } | null = null;
+  for (let r = 0; r < grid.cells.length; r += 1) {
+    if (grid.rowKinds[r] !== 'leaf') continue;
+    for (let c = 0; c < grid.cells[r].length; c += 1) {
+      const v = grid.cells[r][c];
+      if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+      if (best && v <= best.v) continue;
+      const parts = (grid.rowHeaders[r] || []).concat(grid.colHeaders[c] || []).filter((p) => p !== '');
+      best = { path: parts.join(' · '), v };
+    }
+  }
+  if (!best) return `${size}; no figures to compare`;
+  // No measure noun: with more than one value field the cells are not all the
+  // same quantity, and the cell path already names which figure this is.
+  return `${size}; ${best.path} is highest at ${compact(best.v)}`;
 }
 
 /**

@@ -286,8 +286,10 @@ async function anRenderSwitcher(): Promise<void> {
   if (!mount || !anVisual || !anForm || !currentProjectId) return;
   const seq = ++anSwitcherSeq;
   mount.innerHTML = '';
-  const encoding = anForm.getEncoding();
-  if (!encoding.category || !encoding.values || !encoding.values.length) return;
+  // The same encoding the write path composes, so the preview and the record
+  // can never disagree about whether this card is a pivot.
+  const encoding = anEncodingToWrite();
+  if (!encoding.pivot && (!encoding.category || !encoding.values || !encoding.values.length)) return;
 
   let res: any;
   try {

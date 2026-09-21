@@ -96,7 +96,10 @@ const MOSAIC_CHART_TYPES: ReadonlySet<string> = new Set([
 const MOSAIC_FALLBACK_TYPES: ReadonlySet<string> = new Set([
   'pie', 'donut', 'gauge', 'treemap', 'sankey',
   'combo', 'funnel', 'candlestick', 'boxplot',
-  'table', 'map_bubble', 'map_choropleth',
+  // 'pivot' for the same reason as 'table': it is a <table>, and rendering one
+  // through vgplot would mean `vg.table()`, whose per-instance CSS violates the
+  // hub's style-src on every update.
+  'pivot', 'table', 'map_bubble', 'map_choropleth',
 ]);
 
 /** True when `type` has a vgplot mapping at all (the encoding still has to fit). */

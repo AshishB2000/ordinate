@@ -340,6 +340,7 @@ declare global {
         aggregation: string,
         filters?: any,
       ): Promise<any>;
+      saveCsv(text: string, defaultName: string): Promise<any>;
       exportDashboardHtml(bundle: any, defaultName?: string): Promise<any>;
       exportDashboardPng(html: string, width: number, defaultName?: string): Promise<any>;
       exportDashboardPdf(html: string, width: number, defaultName?: string): Promise<any>;

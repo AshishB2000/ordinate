@@ -567,7 +567,10 @@ function dashCardMenuBtn(card: any): HTMLButtonElement {
       // The chart's own controls popover is a .chart-menu too — this one needs
       // a hook of its own, or a selector for either finds both.
       menu.classList.add('dash-card-menu');
-      ([
+      // A pivot's data actions come FIRST, above the layout ones, and are
+      // absent entirely on every other card type rather than greyed out.
+      // pivotRender.ts owns them — they are about the grid, not the grid's tile.
+      pivotMenuItems(btn.closest('.dash-card'), dashCardTitle(card)).concat([
         ['Move up', () => nudgeCard(card, 0, -1)],
         ['Move down', () => nudgeCard(card, 0, 1)],
         ['Move left', () => nudgeCard(card, -1, 0)],
@@ -779,6 +782,8 @@ async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void>
   area.className = 'dash-viz-area cv-viz-area';
   body.innerHTML = '';
   body.appendChild(area);
+  // The tile's ⋯ menu copies/exports exactly what the tile is showing.
+  setPivotGridOnCard(body.closest('.dash-card'), type === 'pivot' ? data.pivot : null);
   // The trailing argument is dataset IDENTITY for the Mosaic engine — the same
   // project/dataset/encoding/filters that produced `data`, so the two engines
   // can never disagree about what this card shows. With the 'scMosaic' flag off

@@ -27,22 +27,61 @@ function renderVizInArea(container, data, type, entry, turnIdx, source?) {
   // below, silently but observably (plotRender.js records it on the container
   // and at console.debug). See renderer/hub/plotRender.ts.
   if (mosaicEnabled() && mosaicCanRender(type, source)) {
-    renderMosaicViz(container, type, source, () => renderChartJsInArea(container, data, type, entry, turnIdx))
-      .then(drawn => { if (!drawn) renderChartJsInArea(container, data, type, entry, turnIdx); });
+    renderMosaicViz(container, type, source, () => renderChartJsInArea(container, data, type, entry, turnIdx, source))
+      .then(drawn => { if (!drawn) renderChartJsInArea(container, data, type, entry, turnIdx, source); });
     return;
   }
-  renderChartJsInArea(container, data, type, entry, turnIdx);
+  renderChartJsInArea(container, data, type, entry, turnIdx, source);
+}
+
+/**
+ * Re-sort a pivot: ask main for the grid again with the new sort, then draw it.
+ *
+ * `source.encoding` is not mutated — the patched copy travels with the redraw
+ * so a second click sorts the grid that is actually on screen, while the SAVED
+ * visual keeps whatever its author chose in the builder's own Sort control.
+ * The builder hears about it through `onPivotSorted`, which it defines; on a
+ * dashboard tile nothing defines it and the sort is simply a look.
+ */
+async function resortPivot(container, source, sort, entry, turnIdx) {
+  const encoding = Object.assign({}, source.encoding, {
+    pivot: Object.assign({}, source.encoding && source.encoding.pivot, { sort }),
+  });
+  let res;
+  try {
+    res = await window.hub.computeVisualData(source.projectId, source.datasetId, encoding, source.filters || []);
+  } catch (_) { return; }
+  if (!res || res.ok === false || !res.data || !res.data.pivot) return;
+  renderVizInArea(container, res.data, 'pivot', entry, turnIdx, Object.assign({}, source, { encoding }));
+  if (typeof onPivotSorted === 'function') onPivotSorted(source, sort);
 }
 
 // The Chart.js/MapLibre/table ladder — everything renderVizInArea did before the
 // Mosaic seam, minus the teardown its caller already performed.
-function renderChartJsInArea(container, data, type, entry, turnIdx) {
+function renderChartJsInArea(container, data, type, entry, turnIdx, source?) {
   container.innerHTML = '';
 
   // Grouped share/magnitude charts (pie, donut, gauge, treemap, funnel, histogram)
   // can't stack series into one chart — render one mini per period instead.
   if (entry && chartIsSmallMultiple(type, chartSeries(data).length)) {
     renderSmallMultiples(container, data, type, entry, turnIdx);
+    return;
+  }
+
+  // A PIVOT is a <table> over `data.pivot`, which main computed. One dispatch,
+  // as early as the map one, because nothing below it applies: no canvas, no
+  // Chart.js instance, no Values/Customize cluster (its own header row IS the
+  // control surface). A pivot chart type WITHOUT a grid means the encoding is
+  // not a pivot — fall through and draw whatever the data actually is.
+  if (type === 'pivot' && data && data.pivot) {
+    renderPivotTable(container, data.pivot, {
+      interactive: true,
+      // Sorting reorders the hierarchy over figures only MAIN has, so a header
+      // click RECOMPUTES rather than rearranging the DOM. It needs the dataset
+      // identity to do that; without one (the export preview, a frozen
+      // snapshot) the headers stay plain labels rather than dead buttons.
+      onSort: source ? (next) => { void resortPivot(container, source, next, entry, turnIdx); } : undefined,
+    });
     return;
   }
 
@@ -248,6 +287,7 @@ const VIZ_LABELS = {
   combo: 'Line + column', bubble: 'Bubble', treemap: 'Treemap', heatmap: 'Heatmap',
   funnel: 'Funnel', histogram: 'Histogram',
   sankey: 'Sankey', candlestick: 'Candlestick', boxplot: 'Box plot',
+  pivot: 'Pivot table',
   table: 'Table', map_bubble: 'Bubble map', map_choropleth: 'Region map',
 };
 
@@ -291,6 +331,7 @@ const VIZ_ICONS = {
   candlestick: _vi('<line x1="8" y1="4" x2="8" y2="20"/><rect x="6" y="8" width="4" height="7" fill="currentColor"/><line x1="16" y1="6" x2="16" y2="21"/><rect x="14" y="10" width="4" height="6"/>'),
   boxplot: _vi('<line x1="7" y1="4" x2="7" y2="20"/><rect x="4" y="9" width="6" height="7"/><line x1="4" y1="12.5" x2="10" y2="12.5"/><line x1="16" y1="6" x2="16" y2="20"/><rect x="13" y="10" width="6" height="6"/><line x1="13" y1="13" x2="19" y2="13"/>'),
   table: _vi('<rect x="4" y="5" width="16" height="14" rx="1"/><line x1="4" y1="9.5" x2="20" y2="9.5"/><line x1="12" y1="5" x2="12" y2="19"/><line x1="4" y1="14.5" x2="20" y2="14.5"/>'),
+  pivot: _vi('<rect x="4" y="5" width="16" height="14" rx="1"/><rect x="4" y="5" width="16" height="4.5" fill="currentColor"/><rect x="4" y="9.5" width="5" height="9.5" fill="currentColor" opacity="0.35"/><line x1="9" y1="5" x2="9" y2="19"/><line x1="14.5" y1="5" x2="14.5" y2="19"/><line x1="4" y1="14.5" x2="20" y2="14.5"/>'),
   map_bubble: _vi('<circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r="1.6" fill="currentColor"/><circle cx="15" cy="14" r="2.2" fill="currentColor"/>'),
   map_choropleth: _vi('<path d="M9 4 4 6v14l5-2 6 2 5-2V4l-5 2-6-2z"/><path d="M9 4v14M15 6v14"/>'),
 };
@@ -304,17 +345,21 @@ const ALL_CHART_TYPE_IDS = [
   'pie', 'donut', 'scatter', 'gauge', 'combo', 'bubble',
   'treemap', 'heatmap', 'funnel', 'histogram',
   'sankey', 'candlestick', 'boxplot',
+  // A pivot draws from the SAME `visual:data` reply as every id above it, so it
+  // belongs in the one list every picker pools from — even though the thing it
+  // draws is a <table>, like 'table' and unlike the other twenty-five.
+  'pivot',
 ];
 
 // PART 1: CODE-DRIVEN eligibility. dataShape (still returned by the AI) + the real
 // data structure decide which chips appear — NOT the AI's visualizations list.
 // Each shape's list is best-first, so the first eligible entry is the default.
 const SHAPE_CHARTS = {
-  time_series:   ['line', 'line_markers', 'area', 'stacked_area', 'column', 'clustered_column', 'combo', 'heatmap', 'table'],
-  part_to_whole: ['pie', 'donut', 'treemap', 'pct_stacked_column', 'pct_stacked_bar', 'stacked_column', 'funnel', 'table'],
-  categorical:   ['column', 'bar', 'clustered_column', 'clustered_bar', 'heatmap', 'table'],
+  time_series:   ['line', 'line_markers', 'area', 'stacked_area', 'column', 'clustered_column', 'combo', 'heatmap', 'pivot', 'table'],
+  part_to_whole: ['pie', 'donut', 'treemap', 'pct_stacked_column', 'pct_stacked_bar', 'stacked_column', 'funnel', 'pivot', 'table'],
+  categorical:   ['column', 'bar', 'clustered_column', 'clustered_bar', 'heatmap', 'pivot', 'table'],
   single_metric: ['gauge', 'table'],
-  matrix:        ['heatmap', 'table'],
+  matrix:        ['heatmap', 'pivot', 'table'],
   unstructured:  ['table'],
 };
 
@@ -340,7 +385,9 @@ const CHART_LABELS_MIN = { pie: 2, donut: 2, treemap: 2, heatmap: 2, funnel: 3 }
 function eligibleChartTypes(dataShape, seriesCount, labelCount) {
   const base = SHAPE_CHARTS[dataShape] || SHAPE_CHARTS.unstructured;
   return base.filter(type => {
-    if (type === 'table') return true;
+    // A table and a pivot render ANY shape — there is no series or label
+    // minimum that stops a grid from being a legible grid.
+    if (type === 'table' || type === 'pivot') return true;
     if (seriesCount < (CHART_SERIES_MIN[type] || 1)) return false;
     if (seriesCount > (CHART_SERIES_MAX[type] || Infinity)) return false;
     if (labelCount < (CHART_LABELS_MIN[type] || 1)) return false;
@@ -372,7 +419,7 @@ function eligibleChartTypes(dataShape, seriesCount, labelCount) {
  * and honouring the author's choice beats renaming it for them.
  */
 function chartCanRender(type, data, hasGeo) {
-  if (type === 'table') return true;
+  if (type === 'table' || type === 'pivot') return true;
   if (type === 'map_bubble' || type === 'map_choropleth') return !!hasGeo;
   const d = data || {};
   if (countNumericSeries(d) < (CHART_SERIES_MIN[type] || 1)) return false;

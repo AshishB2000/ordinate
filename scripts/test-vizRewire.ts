@@ -58,6 +58,9 @@ const parquetStore: typeof import('../src/engine/parquetStore') = require('../sr
 const vizData: typeof import('../src/analysis/vizData') = require('../src/analysis/vizData');
 const visualsMod: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
+// The two fast paths moved to their own file at the 800-line cap
+// (.claude/rules/file-size.md); this suite still calls the SHIPPED one.
+const ipcVisualsResident: typeof import('../src/ipc/visualsResident') = require('../src/ipc/visualsResident');
 const categoryKey: typeof import('../src/analysis/categoryKey') = require('../src/analysis/categoryKey');
 
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
@@ -130,7 +133,7 @@ async function diff(
   ok(`${label}: warnings identical`, JSON.stringify(got.warnings) === JSON.stringify(ref.warnings));
 
   if (expectFast !== undefined) {
-    const fast = await ipcVisuals.residentVizData(projectId, f.id, enc, flt);
+    const fast = await ipcVisualsResident.residentVizData(projectId, f.id, enc, flt);
     ok(`${label}: path is ${expectFast ? 'RESIDENT' : 'fallback'}`, (fast !== null) === expectFast);
   }
 }

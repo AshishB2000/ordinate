@@ -411,7 +411,11 @@ let ordinalMode: OrdinalMode = 'file_row_number';
  * on the retry with the fallback FROM/ordinal; `params` is unchanged by the
  * ordinal, so the same array is reused.
  */
-function runOrdered(
+// EXPORTED for `engine/pivotResident`: a pivot runs the same kind of ordered
+// group-by over several grouping sets, and a second copy of the ordinal
+// downgrade / the aggregate SQL / the FROM target is exactly the silent
+// divergence this layer's differential tests exist to prevent.
+export function runOrdered(
   parquetPath: string,
   sqlFor: (from: string, ord: string) => string,
   params: duck.DuckValue[],
@@ -478,7 +482,11 @@ function runAggregate(
 // its output by re-opening the argument list rather than by re-implementing the
 // escaping — there is one escaper, and it is the tested one.
 
-function plainFrom(parquetPath: string): string {
+// EXPORTED for `engine/pivotResident`: a pivot runs the same kind of ordered
+// group-by over several grouping sets, and a second copy of the ordinal
+// downgrade / the aggregate SQL / the FROM target is exactly the silent
+// divergence this layer's differential tests exist to prevent.
+export function plainFrom(parquetPath: string): string {
   return relationSql(parquetPath);
 }
 
@@ -502,7 +510,11 @@ function sqlStr(p: string): string {
  * `ci < 0` (unknown measure column) yields NULL — transforms warns and returns
  * null there, and a null value is faithfully reproducible; the warning is not.
  */
-function aggExpr(cols: ParsedColumn[], ci: number, fn: MetricAggregation): string {
+// EXPORTED for `engine/pivotResident`: a pivot runs the same kind of ordered
+// group-by over several grouping sets, and a second copy of the ordinal
+// downgrade / the aggregate SQL / the FROM target is exactly the silent
+// divergence this layer's differential tests exist to prevent.
+export function aggExpr(cols: ParsedColumn[], ci: number, fn: MetricAggregation): string {
   if (ci < 0) return 'CAST(NULL AS DOUBLE)';
   const p = phys(ci);
   // Unknown fn degrades to count with no warning — transforms.aggregate:377.

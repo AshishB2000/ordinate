@@ -97,6 +97,12 @@ async function onDatasetChange(datasetId: string, preset?: any): Promise<void> {
   // order of the options. Restoring a saved visual is the same call with a
   // preset, so "new" and "reopened" cannot drift apart.
   vizForm!.setColumns(cols, preset, preset && Array.isArray(preset.filters) ? preset.filters : []);
+  // The pivot shelves take the SAME preset, so restoring a saved pivot and
+  // opening a new one are one code path here too. `pivotFromEncoding` fills
+  // them from the chart fields when the preset has no pivot of its own —
+  // which is what makes switching chart type carry the work over.
+  vizPivotForm!.setColumns(cols, (preset && preset.pivot) || pivotFromEncoding(preset || {}));
+  applyPivotMode(vizCurrentChartType === 'pivot');
 
   vizForm!.show(true);
   await recomputeVisual();
@@ -142,9 +148,34 @@ document.addEventListener('themechange', () => {
   if (area && area.offsetParent && vizDatasetId) void recomputeVisual();
 });
 
+/**
+ * Show the pivot shelves instead of Category / Measures / Split by / Map
+ * regions, or put them back. Filters stay put either way — see
+ * `EncodingFormApi.showFields`.
+ */
+function applyPivotMode(on: boolean): void {
+  if (!vizForm || !vizPivotForm) return;
+  vizForm.showFields(!on);
+  vizPivotForm.show(on);
+}
+
+/**
+ * The encoding for the type currently selected.
+ *
+ * A pivot carries BOTH: its own `pivot` block, and the mirrored chart fields
+ * (`category` / `series` / `values`) that every encoding-reading surface which
+ * knows nothing about pivots still expects — the drill panel, the AI prompt,
+ * the name suggester, and the switch back to a column chart.
+ */
+function vizEncodingForType(): any {
+  if (vizCurrentChartType !== 'pivot') return vizForm!.getEncoding();
+  const pivot = vizPivotForm!.getPivot();
+  return Object.assign(encodingFromPivot(pivot), { pivot });
+}
+
 async function recomputeVisual(): Promise<void> {
   if (!currentProjectId || !vizDatasetId) return;
-  const encoding = vizForm!.getEncoding();
+  const encoding = vizEncodingForType();
   const loadingArea = vizEl('viz-area');
   if (loadingArea) loadingArea.classList.add('is-loading');
   let res: any;
@@ -213,7 +244,18 @@ async function recomputeVisual(): Promise<void> {
     hasGeo: !!data.geo,
     initial,
     onSelect: (type: string, info: any) => {
+      const wasPivot = vizCurrentChartType === 'pivot';
       vizCurrentChartType = type;
+      // Entering or leaving pivot mode changes what the encoding IS, so the
+      // panel swaps and the visual is recomputed rather than redrawn from data
+      // built for the other shape.
+      if ((type === 'pivot') !== wasPivot) {
+        if (type === 'pivot') vizPivotForm!.setColumns(vizForm!.getColumns(), pivotFromEncoding(vizForm!.getEncoding()));
+        else vizForm!.setEncoding(encodingFromPivot(vizPivotForm!.getPivot()));
+        applyPivotMode(type === 'pivot');
+        void recomputeVisual();
+        return;
+      }
       if (!info.canRender) {
         area.innerHTML = '';
         const m = document.createElement('div');
@@ -296,8 +338,13 @@ async function handleSaveVisual(): Promise<void> {
     window.alert('Pick a dataset first.');
     return;
   }
-  const encoding = vizForm!.getEncoding();
-  if (!encoding.category || !Array.isArray(encoding.values) || encoding.values.length === 0) {
+  const encoding = vizEncodingForType();
+  if (encoding.pivot) {
+    if (!encoding.pivot.rows.length || !encoding.pivot.values.length) {
+      window.alert('Pick a row dimension and at least one value before saving.');
+      return;
+    }
+  } else if (!encoding.category || !Array.isArray(encoding.values) || encoding.values.length === 0) {
     window.alert('Pick a category and at least one measure before saving.');
     return;
   }
@@ -359,9 +406,31 @@ function applySuggestedEncoding(enc: any, chartType: string): void {
 
 function suggestVisualName(encoding: any, chartType: string): string {
   const typeLabel = VIZ_LABELS[chartType] || chartType || 'Chart';
+  if (encoding && encoding.pivot) {
+    const p = encoding.pivot;
+    const value = p.values && p.values[0] ? p.values[0].column : '';
+    const dim = p.rows && p.rows[0] ? p.rows[0].column : '';
+    if (value && dim) return `${value} by ${dim}`;
+  }
   const measure = encoding.values && encoding.values[0] ? encoding.values[0].column : '';
   const cat = encoding.category || '';
   if (measure && cat) return `${measure} by ${cat}`;
   return `${typeLabel}`;
 }
 
+
+
+/**
+ * A pivot header click landed (renderResult.resortPivot). The grid on screen is
+ * already sorted; this mirrors the choice into the builder's own Sort control
+ * so pressing Save keeps it.
+ *
+ * Defined here rather than called directly from renderResult because the
+ * dashboard and the export preview draw pivots too and have no builder to
+ * mirror into — `typeof onPivotSorted === 'function'` is the seam.
+ */
+function onPivotSorted(source: any, sort: { by: 'label' | number; dir: 'asc' | 'desc' }): void {
+  if (!vizPivotForm || vizCurrentChartType !== 'pivot') return;
+  if (!source || source.datasetId !== vizDatasetId) return;
+  vizPivotForm.setSort(sort);
+}
