@@ -32,6 +32,7 @@ import type {
   ConnectorDef,
   ConnectorError,
   ConnectorRows,
+  ConnectorSchema,
   ConnectorTables,
 } from './types';
 import { safeError } from './types';
@@ -408,6 +409,9 @@ async function execute(conn: OracleConnection, sql: string, binds: unknown[], ca
 
 const TABLE_LIST_CAP = 1000;
 
+/** A table wider than this is a modelling accident, not a tree to render. */
+const COLUMN_LIST_CAP = 2000;
+
 async function listTables(v: OracleVariant, ctx: ConnectorContext): Promise<ConnectorTables | ConnectorError> {
   // ALL_TABLES = every table this user can read, joined to ALL_USERS so the
   // Oracle-maintained schemas (SYS, SYSTEM, XDB, …) drop out without a
@@ -452,6 +456,84 @@ async function run(v: OracleVariant, ctx: ConnectorContext, sql: string): Promis
   }
 }
 
+/**
+ * One table's columns out of `ALL_TAB_COLUMNS`, every value a bind.
+ *
+ * ORACLE FOLDS UNQUOTED IDENTIFIERS TO UPPER CASE, so the catalog stores
+ * `ORDERS` for a table created as `orders`. The tree sends back exactly what
+ * `listTables` reported (already upper case for the ordinary case), but a user
+ * typing a name into the editor will type it in lower case — so both spellings
+ * are tried, verbatim first. Matching case-insensitively instead would find the
+ * wrong object on a schema that really does hold a quoted lower-case twin.
+ *
+ * `ALL_TABLES.NUM_ROWS` is the estimate: it is whatever the last
+ * DBMS_STATS/ANALYZE wrote, and NULL on a table that has never been gathered.
+ * Read in its own try — no estimate is a missing nicety, not a failed describe.
+ */
+async function describeTable(
+  v: OracleVariant,
+  ctx: ConnectorContext,
+  table: string,
+): Promise<ConnectorSchema | ConnectorError> {
+  const parts = str(table).trim().split('.');
+  if (parts.length < 1 || parts.length > 2 || parts.some((p) => !p)) {
+    return { ok: false, error: 'Invalid table name' };
+  }
+  const owner = parts.length === 2 ? parts[0] : '';
+  const name = parts[parts.length - 1];
+
+  const columnsSql =
+    'SELECT column_name, data_type, nullable ' +
+    '  FROM all_tab_columns ' +
+    ' WHERE table_name = :1 AND (:2 IS NULL OR owner = :2) ' +
+    ' ORDER BY owner, column_id ' +
+    ' FETCH FIRST :3 ROWS ONLY';
+  const estimateSql =
+    'SELECT num_rows FROM all_tables ' +
+    ' WHERE table_name = :1 AND (:2 IS NULL OR owner = :2) ' +
+    ' FETCH FIRST 1 ROWS ONLY';
+
+  try {
+    const out = await withConnection(v, ctx, async (conn) => {
+      // Verbatim, then the Oracle-folded upper case. Two cheap catalog reads
+      // beat guessing which convention this schema was created with.
+      let cols = await execute(conn, columnsSql, [name, owner || null, COLUMN_LIST_CAP], COLUMN_LIST_CAP);
+      let lookup: [string, string | null] = [name, owner || null];
+      if (cols.rows.length === 0) {
+        lookup = [name.toUpperCase(), owner ? owner.toUpperCase() : null];
+        cols = await execute(conn, columnsSql, [lookup[0], lookup[1], COLUMN_LIST_CAP], COLUMN_LIST_CAP);
+      }
+      let estimate: number | undefined;
+      try {
+        const est = await execute(conn, estimateSql, [lookup[0], lookup[1]], 1);
+        const n = Number(est.rows[0]?.[0]);
+        if (Number.isFinite(n) && n >= 0) estimate = Math.round(n);
+      } catch (_) {
+        /* stats never gathered, or ALL_TABLES not readable — skip the estimate */
+      }
+      return { cols, estimate };
+    });
+
+    const columns = out.cols.rows.map((r) => {
+      const col: { name: string; type: string; nullable?: boolean } = {
+        name: str(r[0]),
+        type: str(r[1]),
+      };
+      // ALL_TAB_COLUMNS.NULLABLE is 'Y' / 'N', not 'YES' / 'NO'.
+      const nullable = str(r[2]).toUpperCase();
+      if (nullable === 'Y' || nullable === 'N') col.nullable = nullable === 'Y';
+      return col;
+    }).filter((c) => c.name);
+    if (columns.length === 0) return { ok: false, error: `No such table: ${name}` };
+
+    const schemaOut: ConnectorSchema = { ok: true, columns };
+    if (out.estimate !== undefined) schemaOut.rowEstimate = out.estimate;
+    return schemaOut;
+  } catch (err) {
+    return { ok: false, error: safeError(err, ctx.secrets) };
+  }
+}
+
 function defFor(v: OracleVariant): ConnectorDef {
   return {
     id: v.id,
@@ -463,6 +545,7 @@ function defFor(v: OracleVariant): ConnectorDef {
     fields: fieldsFor(v),
     listTables: (ctx: ConnectorContext) => listTables(v, ctx),
     run: (ctx: ConnectorContext, q: string) => run(v, ctx, q),
+    describeTable: (ctx: ConnectorContext, t: string) => describeTable(v, ctx, t),
   };
 }
 

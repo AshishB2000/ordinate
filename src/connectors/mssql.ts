@@ -24,6 +24,7 @@ import type {
   ConnectorDef,
   ConnectorError,
   ConnectorRows,
+  ConnectorSchema,
   ConnectorTables,
 } from './types';
 import { safeError } from './types';
@@ -496,6 +497,10 @@ async function withConnection<T>(
 
 const TABLE_LIST_CAP = 1000;
 
+/** A table with more columns than this is a data-modelling accident, not a
+ *  schema tree to render. Same reasoning as TABLE_LIST_CAP above. */
+const COLUMN_LIST_CAP = 2000;
+
 async function listTables(v: MssqlVariant, ctx: ConnectorContext): Promise<ConnectorTables | ConnectorError> {
   try {
     // Parameterized, including the row cap: TOP accepts a variable when it is
@@ -541,6 +546,92 @@ async function run(v: MssqlVariant, ctx: ConnectorContext, sql: string): Promise
   }
 }
 
+/**
+ * One table's columns out of `INFORMATION_SCHEMA.COLUMNS`, fully parameterised.
+ *
+ * Every user-supplied part is a tedious PARAMETER, so nothing the renderer sent
+ * is ever concatenated into T-SQL — a stronger guard than `run`'s, which has to
+ * build a projection and therefore leans on `scanTopLevel`/`assertReadOnly`.
+ *
+ * The estimate comes from `sys.dm_db_partition_stats`, summed over the heap or
+ * clustered index (`index_id IN (0,1)`) — the standard way to read a row count
+ * without scanning. A principal with no VIEW DATABASE STATE permission cannot
+ * read it, which is ordinary on Azure SQL, so it is a separate try and its
+ * failure only costs the estimate.
+ */
+async function describeTable(
+  v: MssqlVariant,
+  ctx: ConnectorContext,
+  table: string,
+): Promise<ConnectorSchema | ConnectorError> {
+  const parts = String(table ?? '').trim().split('.');
+  if (parts.length < 1 || parts.length > 2 || parts.some((p) => !p)) {
+    return { ok: false, error: 'Invalid table name' };
+  }
+  const schema = parts.length === 2 ? parts[0] : '';
+  const name = parts[parts.length - 1];
+
+  const columnsSql =
+    'SELECT TOP (@maxCols) COLUMN_NAME, DATA_TYPE, IS_NULLABLE ' +
+    'FROM INFORMATION_SCHEMA.COLUMNS ' +
+    'WHERE TABLE_NAME = @tableName AND (@schemaName = @blank OR TABLE_SCHEMA = @schemaName) ' +
+    'ORDER BY TABLE_SCHEMA, ORDINAL_POSITION';
+
+  // QUOTENAME() is what makes this safe to hand to OBJECT_ID: it is SQL
+  // Server's own identifier quoter, applied server-side to a BOUND value, so a
+  // hostile name is bracketed rather than parsed.
+  const estimateSql =
+    'SELECT SUM(ps.row_count) FROM sys.dm_db_partition_stats ps ' +
+    'WHERE ps.index_id IN (0, 1) AND ps.object_id = OBJECT_ID(' +
+    "CASE WHEN @schemaName = @blank THEN QUOTENAME(@tableName) " +
+    'ELSE QUOTENAME(@schemaName) + N\'.\' + QUOTENAME(@tableName) END)';
+
+  const bind = (req: import('tedious').Request): void => {
+    const { TYPES } = loadTedious();
+    req.addParameter('maxCols', TYPES.Int, COLUMN_LIST_CAP);
+    req.addParameter('tableName', TYPES.NVarChar, name);
+    req.addParameter('schemaName', TYPES.NVarChar, schema);
+    req.addParameter('blank', TYPES.NVarChar, '');
+  };
+
+  try {
+    const out = await withConnection(v, ctx, async (conn) => {
+      const cols = await execSql(conn, columnsSql, COLUMN_LIST_CAP, bind);
+      let estimate: number | undefined;
+      try {
+        const est = await execSql(conn, estimateSql, 1, (req) => {
+          const { TYPES } = loadTedious();
+          req.addParameter('tableName', TYPES.NVarChar, name);
+          req.addParameter('schemaName', TYPES.NVarChar, schema);
+          req.addParameter('blank', TYPES.NVarChar, '');
+        });
+        const n = Number(est.rows[0]?.[0]);
+        if (Number.isFinite(n) && n >= 0) estimate = Math.round(n);
+      } catch (_) {
+        /* VIEW DATABASE STATE is commonly withheld — no estimate, still fine */
+      }
+      return { cols, estimate };
+    });
+
+    const columns = out.cols.rows.map((r) => {
+      const col: { name: string; type: string; nullable?: boolean } = {
+        name: str(r[0]),
+        type: str(r[1]),
+      };
+      const nullable = str(r[2]).toUpperCase();
+      if (nullable === 'YES' || nullable === 'NO') col.nullable = nullable === 'YES';
+      return col;
+    }).filter((c) => c.name);
+    if (columns.length === 0) return { ok: false, error: `No such table: ${name}` };
+
+    const schemaOut: ConnectorSchema = { ok: true, columns };
+    if (out.estimate !== undefined) schemaOut.rowEstimate = out.estimate;
+    return schemaOut;
+  } catch (err) {
+    return { ok: false, error: safeError(err, ctx.secrets) };
+  }
+}
+
 function defFor(v: MssqlVariant): ConnectorDef {
   return {
     id: v.id,
@@ -552,6 +643,7 @@ function defFor(v: MssqlVariant): ConnectorDef {
     fields: fieldsFor(v),
     listTables: (ctx: ConnectorContext) => listTables(v, ctx),
     run: (ctx: ConnectorContext, sql: string) => run(v, ctx, sql),
+    describeTable: (ctx: ConnectorContext, table: string) => describeTable(v, ctx, table),
   };
 }
 

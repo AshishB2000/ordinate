@@ -47,6 +47,17 @@ interface ConnDef {
   category: string;
   blurb?: string;
   fields: ConnFieldDef[];
+  /**
+   * True when main can describe this source's tables, i.e. when the workbench's
+   * schema browser has a catalog to read. REPORTED by the registry rather than
+   * inferred from `family` here: gating the run UI on family is what cost seven
+   * HTTP connectors their table picker once already.
+   *
+   * Optional, and absence means YES — an older main that does not send the flag
+   * gets the tree, discovers the source has no catalog on the first expand, and
+   * says so, which is a better failure than a feature silently missing.
+   */
+  browsable?: boolean;
 }
 
 // Fixed display order; anything with an unrecognised category is appended under
@@ -100,10 +111,35 @@ const CONN_FALLBACK_CATALOG: ConnDef[] = [
 ];
 
 // ── Module-local state ───────────────────────────────────────────────────────
-let connRunConnId = ''; // connId whose result is shown in the run area
-let connRunKind = ''; // connector id of the connection being run
-let connRunFamily = ''; // its family ('postgres' | 'http' | …) — drives the run UI
-let connRunPreview: any = null; // last run ParseResult, held for "save as dataset"
+//
+// THE WORKBENCH'S STATE LIVES HERE, not in connWorkbench.ts, for the same
+// reason the connector contract does: these are classic global-scope scripts
+// with a fixed load order, and a `let` declared in the file that happens to
+// read it first is a load-order dependency waiting to break. connections.js
+// loads first and owns the state; connWorkbench.js and connEditor.js act on it.
+
+/** The connection the workbench is open on (a PublicConnection), or null. */
+let cwConn: any = null;
+/** Its catalog entry — `browsable` decides whether the schema tree exists. */
+let cwDef: ConnDef | null = null;
+/** Tables as listTables reported them. The tree groups these by schema. */
+let cwTables: { schema?: string; name: string }[] = [];
+/** Column names per qualified table name, filled lazily as the tree expands.
+ *  Doubles as the autocomplete vocabulary — one fetch serves both. */
+const cwColumns = new Map<string, string[]>();
+/** The table whose sample is showing, '' when the results came from a query. */
+let cwTable = '';
+/** The last result, held for "Save as dataset". */
+let cwPreview: any = null;
+/** WHAT produced cwPreview, so the dataset's origin re-runs exactly that.
+ *  Exactly one of the two is set. */
+let cwPreviewTable = '';
+let cwPreviewSql = '';
+/** The saved query the editor is currently editing ('' = an ad-hoc statement).
+ *  Carried onto the dataset origin as a LABEL — never as what to re-run. */
+let cwQueryId = '';
+/** Datasets already imported from this connection (summaries), for the rail. */
+let cwDatasets: any[] = [];
 
 let connCatalog: ConnDef[] = []; // resolved once per panel open
 let connCatalogLoaded = false;
@@ -116,7 +152,9 @@ let connSearch = ''; // current picker filter
 // destructive. NEVER holds a secret — see connShowPicker.
 const connDraftValues: Record<string, Record<string, unknown>> = {};
 
-const CONN_PREVIEW_ROWS = 500; // display-only slice (full capped rows stay in connRunPreview)
+/** Rows the grid paints. Also the bound main is asked for on a preview Run —
+ *  the import row limit is a separate, explicit choice in the editor's bar. */
+const CONN_PREVIEW_ROWS = 500;
 
 type ConnLogo = { path?: string; color?: string; title?: string; src?: string };
 const CONN_LOGOS: Record<string, ConnLogo> =
@@ -213,6 +251,10 @@ async function refreshConnPanel(): Promise<void> {
   const preselect = connPendingPreselect;
   connPendingPreselect = '';
   connSetError('');
+  // Walking into Connect always lands on the browse flow. The workbench is
+  // reached by opening a connection, and leaving it must not be something the
+  // router can do behind connWorkbench.ts's back.
+  closeConnWorkbench();
   await loadConnCatalog();
   // An unknown id falls back to the picker rather than failing, because the
   // catalog is resolved from the live registry and a shortcut must never be able
@@ -257,12 +299,6 @@ function initConnections(): void {
   const testBtn = connEl('conn-test-btn');
   if (testBtn) testBtn.addEventListener('click', () => handleConnTestAndSave());
 
-  const runBtn = connEl('conn-run-btn');
-  if (runBtn) runBtn.addEventListener('click', () => handleConnRun());
-
-  const runClose = connEl('conn-run-close');
-  if (runClose) runClose.addEventListener('click', () => closeRunArea());
-
-  const saveBtn = connEl('conn-save-ds-btn');
-  if (saveBtn) saveBtn.addEventListener('click', () => handleConnSaveAsDataset());
+  initConnWorkbench();
+  initConnEditor();
 }

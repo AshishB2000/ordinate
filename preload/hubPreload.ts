@@ -364,8 +364,26 @@ contextBridge.exposeInMainWorld('hub', {
   listConnectionTables: (projectId: string, connId: string) =>
     ipcRenderer.invoke('connection:listTables', { projectId, connId }),
   // Run a saved connection and return a ParseResult preview (no save).
-  runConnection: (projectId: string, connId: string, tableOrQuery: any) =>
-    ipcRenderer.invoke('connection:run', { projectId, connId, tableOrQuery }),
+  // `limit` may only LOWER the app's row cap — main clamps it.
+  runConnection: (projectId: string, connId: string, tableOrQuery: any, limit?: number) =>
+    ipcRenderer.invoke('connection:run', { projectId, connId, tableOrQuery, limit }),
+  // One table's columns out of the source's own catalog, plus a row estimate.
+  // Resolves { ok: true, schema: null } for a source with no catalog to browse
+  // (HTTP engines, URL) — an answer, not a failure.
+  describeConnectionTable: (projectId: string, connId: string, table: string) =>
+    ipcRenderer.invoke('connection:describe', { projectId, connId, table }),
+  // A bounded peek at one table, as a ParseResult preview.
+  sampleConnectionTable: (projectId: string, connId: string, table: string, limit?: number) =>
+    ipcRenderer.invoke('connection:sample', { projectId, connId, table, limit }),
+  // Check a statement and report the columns it WOULD return, fetching no rows.
+  explainConnectionSql: (projectId: string, connId: string, sql: string) =>
+    ipcRenderer.invoke('connection:explain', { projectId, connId, sql }),
+  // Create / edit / rename a saved query on a connection; resolves the whole list.
+  saveConnectionQuery: (projectId: string, connId: string, q: { id?: string; name?: string; sql?: string }) =>
+    ipcRenderer.invoke('connection:saveQuery', { projectId, connId, ...q }),
+  // Remove a saved query; resolves the remaining list.
+  deleteConnectionQuery: (projectId: string, connId: string, queryId: string) =>
+    ipcRenderer.invoke('connection:deleteQuery', { projectId, connId, queryId }),
   // Re-run a connection and overwrite its linked dataset's data.
   refreshConnection: (projectId: string, connId: string, datasetId: string) =>
     ipcRenderer.invoke('connection:refresh', { projectId, connId, datasetId }),

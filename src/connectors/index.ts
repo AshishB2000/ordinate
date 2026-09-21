@@ -188,6 +188,11 @@ export interface CatalogEntry {
   category: string;
   blurb?: string;
   fields: CatalogField[];
+  /** True when this connector implements `describeTable`, i.e. when the
+   *  workbench's schema browser has a catalog to read. Reported rather than
+   *  inferred from `family`: gating the run UI on family is what cost seven
+   *  HTTP connectors their table picker once already. */
+  browsable: boolean;
 }
 
 // Rebuilt field-by-field, never spread. A ConnectorDef holds two live functions
@@ -228,6 +233,7 @@ export function connectorCatalog(): CatalogEntry[] {
       family: d.family,
       category: d.category,
       fields: (d.fields || []).map(catalogField),
+      browsable: typeof d.describeTable === 'function',
     };
     if (typeof d.blurb === 'string') entry.blurb = d.blurb;
     return entry;

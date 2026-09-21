@@ -508,6 +508,10 @@
          the parent moved. ── -->
     <section class="ws-panel conn-panel" id="conn-panel" data-section="connect" hidden
              aria-label="Connect a data source">
+      <!-- Everything EXCEPT the workbench. One wrapper so opening a connection
+           swaps the whole browse flow out rather than hiding five blocks and
+           leaving the sixth behind. -->
+      <div class="conn-browse" id="conn-browse">
       <div class="conn-head">
         <h3 class="conn-h">Connect data</h3>
         <button class="btn btn-sm" type="button" id="conn-close-btn">Close</button>
@@ -515,6 +519,15 @@
       <p class="conn-sub">Pick a data source, fill in its details, and pull it into this project as a dataset. Every source is read-only.</p>
 
       <div class="conn-error" id="conn-error" hidden></div>
+
+      <!-- Saved connections. ABOVE the picker: this is the list a returning user
+           came for, and the 35-source catalog is the thing they need once.
+           Hidden entirely while empty — see refreshConnectionList. -->
+      <div class="conn-saved" id="conn-saved" hidden>
+        <h4 class="conn-saved-h">Saved connections</h4>
+        <div class="conn-cards" id="conn-saved-list"></div>
+      </div>
+      <p class="conn-saved-empty" id="conn-saved-empty" hidden>No connections yet. Pick a source below to add one.</p>
 
       <!-- Step 1 — the connector picker. Tiles are BUILT BY connections.ts from
            the connectors:catalog contract; nothing here is per-connector. -->
@@ -555,39 +568,88 @@
         </div>
       </div>
 
-      <!-- Run area (shown when a saved connection's Run is clicked) -->
-      <div class="conn-run" id="conn-run-area" hidden>
-        <div class="conn-run-head">
-          <span class="conn-run-title" id="conn-run-title">Run</span>
-          <button class="btn btn-sm" type="button" id="conn-run-close" aria-label="Close"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-x"/></svg></button>
-        </div>
-        <div class="conn-field-row" id="conn-run-table-row" hidden>
-          <label class="conn-label" for="conn-table-select">Table</label>
-          <select class="conn-input" id="conn-table-select"></select>
-        </div>
-        <div class="conn-field-row conn-field-row-wide" id="conn-run-query-row" hidden>
-          <label class="conn-label" for="conn-run-query">Query</label>
-          <textarea class="conn-input conn-query" id="conn-run-query" placeholder="select … (optional; overrides the table)"></textarea>
-        </div>
-        <div class="conn-form-actions">
-          <button class="btn btn-primary" type="button" id="conn-run-btn">Run</button>
-        </div>
-        <div class="ds-warnings" id="conn-run-warnings" hidden></div>
-        <div class="conn-preview" id="conn-run-preview" hidden>
-          <p class="ds-preview-note" id="conn-run-note" hidden></p>
-          <div class="ds-table-scroll" id="conn-run-table-scroll"></div>
-        </div>
-        <div class="ds-save-bar" id="conn-save-bar" hidden>
-          <input class="ds-name-input" id="conn-ds-name" type="text" placeholder="Dataset name" />
-          <button class="btn btn-primary" type="button" id="conn-save-ds-btn">Save as dataset</button>
-        </div>
-      </div>
+      </div><!-- /#conn-browse -->
 
-      <!-- Saved connections -->
-      <div class="conn-saved">
-        <h4 class="conn-saved-h">Saved connections</h4>
-        <div class="conn-saved-list" id="conn-saved-list"></div>
-        <p class="conn-saved-empty" id="conn-saved-empty" hidden>No connections yet.</p>
+      <!-- ── The workbench ───────────────────────────────────────────────────
+           Opened by clicking a saved connection, or straight after Test & Save.
+           Three panes: the schema tree, the SQL editor over its results, and a
+           collapsible details rail. Built by connWorkbench.js / connEditor.js;
+           nothing here is per-connector. -->
+      <div class="cw" id="conn-wb" hidden>
+        <div class="cw-head">
+          <button class="btn btn-sm cw-back" type="button" id="conn-wb-back">Connections</button>
+          <span class="conn-logo cw-logo" id="conn-wb-logo" aria-hidden="true"></span>
+          <span class="cw-ident">
+            <span class="cw-title" id="conn-wb-title"></span>
+            <span class="cw-sub" id="conn-wb-sub"></span>
+          </span>
+          <button class="btn btn-sm cw-details-btn" type="button" id="conn-wb-details-btn" aria-expanded="true" aria-controls="conn-wb-details">Details</button>
+        </div>
+        <div class="conn-error" id="conn-wb-error" hidden></div>
+
+        <div class="cw-body">
+          <!-- Left: the schema tree. Schemas -> tables -> columns, lazy. -->
+          <div class="cw-pane cw-tree-pane">
+            <input class="conn-input cw-tree-search" id="conn-wb-tree-search" type="text" placeholder="Search tables&hellip;" autocomplete="off" spellcheck="false" aria-label="Search tables" />
+            <div class="cw-tree" id="conn-wb-tree" role="tree" aria-label="Schema"></div>
+            <p class="cw-msg" id="conn-wb-tree-msg" hidden></p>
+          </div>
+
+          <!-- Centre: the editor, and under it the results grid. -->
+          <div class="cw-pane cw-main">
+            <div class="cw-editor">
+              <div class="cw-edit-wrap">
+                <pre class="cw-hl" id="conn-wb-hl" aria-hidden="true"></pre>
+                <textarea class="cw-input" id="conn-wb-sql" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="select &hellip;" aria-label="SQL"></textarea>
+              </div>
+              <div class="cw-ac" id="conn-wb-ac" hidden role="listbox" aria-label="Completions"></div>
+              <div class="cw-bar">
+                <button class="btn btn-primary btn-sm" type="button" id="conn-wb-run">Run</button>
+                <button class="btn btn-sm" type="button" id="conn-wb-explain">Explain</button>
+                <button class="btn btn-sm" type="button" id="conn-wb-save-query">Save query</button>
+                <span class="cw-bar-gap"></span>
+                <span class="cw-limit-group">
+                <label class="cw-limit-label" for="conn-wb-limit">Import up to</label>
+                <select class="conn-input cw-limit" id="conn-wb-limit">
+                  <option value="10000">10,000 rows</option>
+                  <option value="100000" selected>100,000 rows</option>
+                  <option value="1000000">1,000,000 rows</option>
+                </select>
+                </span>
+              </div>
+              <p class="cw-hint" id="conn-wb-hint">&#8984;&#8617; runs &middot; &#8984;S saves the query &middot; Run previews 500 rows</p>
+              <div class="cw-msg-row" id="conn-wb-msg-row" hidden>
+                <p class="cw-msg" id="conn-wb-msg"></p>
+                <div class="cw-cols" id="conn-wb-cols"></div>
+              </div>
+              <div class="cw-chips" id="conn-wb-queries"></div>
+            </div>
+
+            <div class="cw-results">
+              <div class="cw-results-head">
+                <span class="cw-results-note" id="conn-wb-note"></span>
+                <input class="ds-name-input cw-save-name" id="conn-wb-ds-name" type="text" placeholder="Dataset name" aria-label="Dataset name" />
+                <button class="btn btn-primary btn-sm" type="button" id="conn-wb-save-ds" disabled>Save as dataset</button>
+              </div>
+              <div class="ds-table-scroll cw-grid" id="conn-wb-grid"></div>
+              <p class="cw-empty" id="conn-wb-results-empty">Pick a table on the left, or write a query and Run.</p>
+            </div>
+          </div>
+
+          <!-- Right: the connection itself, and what has been imported from it.
+               First pane to collapse at 1000px. -->
+          <div class="cw-pane cw-details" id="conn-wb-details">
+            <h4 class="cw-details-h">Connection</h4>
+            <dl class="cw-kv" id="conn-wb-kv"></dl>
+            <div class="cw-test-row">
+              <button class="btn btn-sm" type="button" id="conn-wb-test">Test</button>
+              <span class="conn-status conn-status-untested" id="conn-wb-status">untested</span>
+            </div>
+            <h4 class="cw-details-h">Datasets from this connection</h4>
+            <div class="cw-ds-list" id="conn-wb-ds-list"></div>
+            <p class="cw-empty" id="conn-wb-ds-empty" hidden>Nothing imported from this connection yet.</p>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -2364,6 +2426,13 @@
      module-local state the other two read. -->
 <script src="connNew.js"></script>
 <script src="connRun.js"></script>
+<!-- The workbench, split by pane (.claude/rules/file-size.md). connWorkbench.js
+     owns the shell, the schema tree and the results grid; connDetails.js is the
+     right rail; connEditor.js is the SQL editor in the centre. All three read
+     the `cw*` state in connections.js, which is why that loads first. -->
+<script src="connWorkbench.js"></script>
+<script src="connDetails.js"></script>
+<script src="connEditor.js"></script>
 <script src="encodingForm.js"></script>
 <script src="visuals.js"></script>
 <!-- visuals.ts was 1284 lines; these four are it, split by job. visuals.js

@@ -35,6 +35,26 @@ export type LegacyConnectionKind = 'postgres' | 'url';
 /** Non-secret form values, keyed by ConnectorField.key. JSON scalars only. */
 export type ConnectionValues = Record<string, string | number | boolean | null>;
 
+/**
+ * A query the user named and kept on this connection.
+ *
+ * The ID is what makes a rename non-destructive: a dataset imported from a
+ * saved query stores `origin.queryId`, so renaming the query moves a label and
+ * nothing else. It also stores the `sql` it was built from, so a dataset
+ * refreshes to EXACTLY what built it even if the saved query is later edited or
+ * deleted — see datasetOrigin's `connection` member.
+ */
+export interface SavedQuery {
+  id: string; // generated UUID
+  name: string;
+  sql: string;
+  updatedAt: string;
+}
+
+/** Enough named queries to be a library, few enough to stay a list. A
+ *  connection file is loaded on every Connect visit and shipped to a renderer. */
+const MAX_SAVED_QUERIES = 200;
+
 export interface Connection {
   id: string; // generated UUID
   projectId: string;
@@ -47,6 +67,8 @@ export interface Connection {
   // bounded by the connector's rowLimit/timeout):
   table?: string;
   query?: string;
+  /** Named queries kept on this connection. Newest-updated first. */
+  queries: SavedQuery[];
   // status / telemetry:
   lastRefreshedAt: string | null;
   lastStatus: 'ok' | 'error' | 'untested';
@@ -72,6 +94,7 @@ export interface PublicConnection {
   values: ConnectionValues;
   table?: string;
   query?: string;
+  queries: SavedQuery[];
   lastRefreshedAt: string | null;
   lastStatus: 'ok' | 'error' | 'untested';
   lastError?: string | null;
@@ -195,6 +218,41 @@ function sanitizeValues(
   return out;
 }
 
+/**
+ * Whitelist an untrusted `queries` array — from disk OR an IPC payload.
+ *
+ * Same discipline as sanitizeValues above: keep what is recognised, drop the
+ * rest, never repair. An entry without a UUID id is dropped rather than given
+ * one, because a generated id here would silently orphan the dataset origins
+ * that point at the real one. SQL is length-capped: this file is loaded on
+ * every Connect visit and a megabyte of pasted text in it is a slow panel.
+ */
+const MAX_QUERY_SQL = 20_000;
+
+function sanitizeQueries(raw: unknown): SavedQuery[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SavedQuery[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+    const q = entry as Record<string, unknown>;
+    const id = typeof q.id === 'string' ? q.id : '';
+    if (!isValidId(id) || seen.has(id)) continue;
+    const sql = typeof q.sql === 'string' ? q.sql.slice(0, MAX_QUERY_SQL) : '';
+    if (!sql.trim()) continue; // a saved query with no SQL is not a query
+    seen.add(id);
+    out.push({
+      id,
+      name: typeof q.name === 'string' && q.name.trim() ? q.name.trim().slice(0, 200) : 'Untitled query',
+      sql,
+      updatedAt: typeof q.updatedAt === 'string' ? q.updatedAt : new Date().toISOString(),
+    });
+    if (out.length >= MAX_SAVED_QUERIES) break;
+  }
+  out.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  return out;
+}
+
 function connectionsDir(projectId: string): string {
   return path.join(getProjectsBase(), projectId, 'connections');
 }
@@ -301,6 +359,9 @@ function normalize(data: Record<string, unknown>, projectId: string): Connection
     createdAt,
     updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : createdAt,
     schemaVersion: 2,
+    // A v1 record (and every v2 record written before the workbench) simply has
+    // none, which reads back as an empty library rather than a broken record.
+    queries: sanitizeQueries(data.queries),
   };
   if (typeof data.table === 'string') c.table = data.table;
   if (typeof data.query === 'string') c.query = data.query;
@@ -328,6 +389,9 @@ export function publicConnection(c: Connection): PublicConnection {
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
     schemaVersion: 2,
+    // Rebuilt, like everything else here: a saved query is user text and holds
+    // no secret, but it travels through the same whitelist as the rest.
+    queries: sanitizeQueries(c.queries),
     // derived display mirror — see PublicConnection
     kind: c.connectorId,
   };
@@ -440,6 +504,7 @@ export async function saveConnection(
     createdAt: now,
     updatedAt: now,
     schemaVersion: 2,
+    queries: [],
   };
   if (typeof input.table === 'string') c.table = input.table;
   if (typeof input.query === 'string') c.query = input.query;
@@ -485,6 +550,8 @@ export async function updateConnection(
   }
   if (typeof patch.table === 'string') next.table = patch.table;
   if (typeof patch.query === 'string') next.query = patch.query;
+  if (patch.queries !== undefined) next.queries = sanitizeQueries(patch.queries);
+  else next.queries = sanitizeQueries(next.queries);
   if (patch.lastRefreshedAt !== undefined) next.lastRefreshedAt = patch.lastRefreshedAt;
   if (patch.lastStatus !== undefined && STATUSES.has(patch.lastStatus)) next.lastStatus = patch.lastStatus;
   if (patch.lastError !== undefined) next.lastError = patch.lastError;
@@ -494,6 +561,62 @@ export async function updateConnection(
   await fs.promises.mkdir(connectionsDir(projectId), { recursive: true });
   await writeJsonAtomic(connectionFilePath(projectId, id), next);
   return next;
+}
+
+/**
+ * Create or update one saved query, and return the whole updated list.
+ *
+ * `id` absent → a new query with a generated UUID. `id` present but unknown →
+ * null, NOT a silent insert: the caller thought it was editing something, and
+ * inventing a second query under a different id is how a rename turns into a
+ * duplicate. Returns null for an invalid id or a missing connection.
+ */
+export async function saveQuery(
+  projectId: string,
+  connId: string,
+  input: { id?: string; name?: string; sql?: string },
+): Promise<SavedQuery[] | null> {
+  const existing = await getConnection(projectId, connId);
+  if (!existing) return null;
+  const sql = typeof input.sql === 'string' ? input.sql.slice(0, MAX_QUERY_SQL) : '';
+  const name = typeof input.name === 'string' ? input.name.trim().slice(0, 200) : '';
+  const now = new Date().toISOString();
+  const list = existing.queries.slice();
+
+  if (input.id) {
+    const at = list.findIndex((q) => q.id === input.id);
+    if (at < 0) return null;
+    // A rename sends no SQL and an edit sends no name; keep whichever the
+    // caller did not send, so neither operation quietly clears the other.
+    list[at] = {
+      id: list[at].id,
+      name: name || list[at].name,
+      sql: sql.trim() ? sql : list[at].sql,
+      updatedAt: now,
+    };
+  } else {
+    if (!sql.trim()) return null;
+    if (list.length >= MAX_SAVED_QUERIES) return null;
+    list.unshift({ id: randomUUID(), name: name || 'Untitled query', sql, updatedAt: now });
+  }
+
+  const saved = await updateConnection(projectId, connId, { queries: list });
+  return saved ? saved.queries : null;
+}
+
+/** Remove one saved query. Returns the remaining list, or null if the
+ *  connection is gone. A dataset built from it keeps refreshing: its origin
+ *  carries the SQL, not just the id. */
+export async function deleteQuery(
+  projectId: string,
+  connId: string,
+  queryId: string,
+): Promise<SavedQuery[] | null> {
+  const existing = await getConnection(projectId, connId);
+  if (!existing) return null;
+  const list = existing.queries.filter((q) => q.id !== queryId);
+  const saved = await updateConnection(projectId, connId, { queries: list });
+  return saved ? saved.queries : null;
 }
 
 // Delete a connection file. Returns true on success (force → missing is

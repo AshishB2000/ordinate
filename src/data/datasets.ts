@@ -115,11 +115,15 @@ export interface DatasetSummary {
   // Week 13 — just the crop path (not the full capture object) so the saved-list
   // can render a capture thumbnail + badge without a full dataset load.
   capture?: { cropPath: string | null };
-  // Freshness for the saved list, WITHOUT a full dataset load. Only the origin's
-  // `kind` is carried: the list needs "is this refreshable", not the path or URL.
+  // Freshness for the saved list, WITHOUT a full dataset load: enough of the
+  // origin to decide "is this refreshable" and to name the source, never the
+  // path, the URL or the SQL. `lastRefreshError` is the REASON a red dot shows,
+  // so a row can say it on hover — secret-free, like the record's.
   originKind?: DatasetOrigin['kind'];
+  originConnId?: string;
   lastRefreshedAt?: string;
   lastRefreshStatus?: 'ok' | 'error';
+  lastRefreshError?: string | null;
   // Carried on the SUMMARY so the scheduler can find due datasets from the
   // metadata alone. Reading a schedule must never hydrate a table.
   autoRefresh?: AutoRefresh;
@@ -318,9 +322,7 @@ function normalize(data: any, projectId: string): Dataset {
   const auto = sanitizeAutoRefresh(data.autoRefresh, Boolean(origin));
   if (auto) ds.autoRefresh = auto;
   if (typeof data.lastRefreshedAt === 'string' && data.lastRefreshedAt) ds.lastRefreshedAt = data.lastRefreshedAt;
-  if (data.lastRefreshStatus === 'ok' || data.lastRefreshStatus === 'error') {
-    ds.lastRefreshStatus = data.lastRefreshStatus;
-  }
+  if (data.lastRefreshStatus === 'ok' || data.lastRefreshStatus === 'error') ds.lastRefreshStatus = data.lastRefreshStatus;
   if (typeof data.lastRefreshError === 'string') ds.lastRefreshError = data.lastRefreshError;
   return ds;
 }
@@ -367,8 +369,10 @@ export async function listDatasets(projectId: string): Promise<DatasetSummary[]>
       // re-fetch. The origin itself stays on the full record (the capture page
       // reads it) — this is only about the refresh affordance.
       if (ds.origin && ds.origin.kind !== 'capture') summary.originKind = ds.origin.kind;
+      if (ds.origin && ds.origin.kind === 'connection') summary.originConnId = ds.origin.connId;
       if (ds.lastRefreshedAt) summary.lastRefreshedAt = ds.lastRefreshedAt;
       if (ds.lastRefreshStatus) summary.lastRefreshStatus = ds.lastRefreshStatus;
+      if (ds.lastRefreshStatus === 'error' && ds.lastRefreshError) summary.lastRefreshError = ds.lastRefreshError;
       if (ds.autoRefresh) summary.autoRefresh = ds.autoRefresh;
       out.push(summary);
     } catch (err: any) { // ponytail: fs errors carry .code, JSON errors don't

@@ -65,6 +65,8 @@ function connCoerceCatalog(raw: unknown): ConnDef[] {
       category: typeof d.category === 'string' && d.category ? d.category : 'Other',
       blurb: typeof d.blurb === 'string' ? d.blurb : undefined,
       fields,
+      // Absent → true. See ConnDef.browsable.
+      browsable: d.browsable !== false,
     });
   }
   return out;
@@ -98,14 +100,6 @@ async function loadConnCatalog(): Promise<void> {
 function connDefById(id: string): ConnDef | null {
   for (const d of connCatalog) if (d.id === id) return d;
   return null;
-}
-
-// Family drives the run UI (table picker + SQL box vs. neither). Falls back to
-// the legacy pair so a saved connection still works before the catalog loads.
-function connFamilyOf(id: string): string {
-  const d = connDefById(id);
-  if (d && d.family) return d.family;
-  return id === 'url' ? 'http' : 'postgres';
 }
 
 // ── Step 1: the picker ───────────────────────────────────────────────────────
@@ -489,11 +483,17 @@ async function handleConnTestAndSave(): Promise<void> {
     return;
   }
   // Success: clear the whole form (secrets included — they are write-only) and
-  // return to the picker so the next connection starts from a clean slate.
+  // reset the picker behind us, so leaving the workbench lands on a clean slate
+  // rather than on the form of the connection that was just saved.
   const nameInput = connEl('conn-name') as HTMLInputElement | null;
   if (nameInput) nameInput.value = '';
   delete connDraftValues[def.id];
   connShowPicker();
   await refreshConnectionList();
+
+  // Then open it. Saving a connection is never the goal — querying it is — and
+  // the old flow dropped the user back on the 35-source picker they had just
+  // finished with, one click from a panel they could not see.
+  if (res.connection && res.connection.id) await openConnWorkbench(res.connection);
 }
 

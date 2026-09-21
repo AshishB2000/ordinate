@@ -62,7 +62,7 @@ const ALLOWED: Record<string, number> = {
   'src/ai/analyze.ts': 911,
   'src/engine/anomaliesResident.ts': 870,
   'src/connectors/http.ts': 1036,
-  'src/connectors/local.ts': 804,
+  'src/connectors/local.ts': 780,
   'src/cli/localCliRun.ts': 822,
 };
 

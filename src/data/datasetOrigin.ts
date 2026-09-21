@@ -33,7 +33,21 @@ export type DatasetOrigin =
   | { kind: 'file'; path: string; sheetName?: string }
   | { kind: 'capture'; captureId: string }
   | { kind: 'url'; url: string }
-  | { kind: 'connection'; connId: string }
+  /**
+   * A connection import. `connId` alone was enough while a connection had ONE
+   * saved table/query: a refresh re-ran the connection's own selection. The
+   * workbench lets one connection produce many datasets, so WHAT this dataset
+   * was built from has to travel with the dataset rather than with the
+   * connection — otherwise importing a second table silently re-points the
+   * first dataset's refresh at it.
+   *
+   * `sql` is the statement that actually produced these rows and is what a
+   * refresh re-runs, so a dataset keeps refreshing correctly after its saved
+   * query is edited, renamed or deleted. `queryId` is a LABEL — it says which
+   * saved query this came from so the UI can name it — and `table` likewise.
+   * Neither is consulted to decide what to run.
+   */
+  | { kind: 'connection'; connId: string; table?: string; queryId?: string; sql?: string }
   | {
       kind: 'combined';
       leftId: string;
@@ -71,6 +85,10 @@ export type DatasetOrigin =
  * Same whitelist discipline as sanitizeCapture and visuals.sanitizeEncoding:
  * keep only what is recognised, drop the rest, never repair.
  */
+/** Same ceiling as connections.MAX_QUERY_SQL. A dataset record is read on
+ *  every list; an unbounded statement pasted into it is a slow Data page. */
+const MAX_ORIGIN_SQL = 20_000;
+
 export function sanitizeOrigin(raw: unknown): DatasetOrigin | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const o = raw as Record<string, unknown>;
@@ -101,7 +119,18 @@ export function sanitizeOrigin(raw: unknown): DatasetOrigin | undefined {
     }
     case 'connection': {
       const connId = str(o.connId);
-      return isValidId(connId) ? { kind: 'connection', connId } : undefined;
+      if (!isValidId(connId)) return undefined;
+      const out: DatasetOrigin = { kind: 'connection', connId };
+      // A bad table/queryId/sql degrades that FIELD, never the whole origin: the
+      // connId is what makes this refreshable and it is already valid. Dropping
+      // the origin here would turn a cosmetic problem into a dead Refresh.
+      const table = str(o.table);
+      if (table) out.table = table;
+      const queryId = str(o.queryId);
+      if (isValidId(queryId)) out.queryId = queryId;
+      const sql = typeof o.sql === 'string' ? o.sql.slice(0, MAX_ORIGIN_SQL) : '';
+      if (sql.trim()) out.sql = sql;
+      return out;
     }
     case 'capture': {
       // History ids are main-generated (Date.now()-ish) and reach a path in
