@@ -7,7 +7,7 @@
 // on the hub window, which main.ts owns, and a second module reaching for that
 // window is how two files end up disagreeing about which one is live.
 
-import { Notification } from 'electron';
+import { Notification, shell } from 'electron';
 import * as config from './config';
 
 // Best-effort OS notification when an analysis turn finishes AND the window is
@@ -51,5 +51,38 @@ export function bootstrapNotification(): { ok: boolean; supported: boolean } {
     return { ok: true, supported: true };
   } catch (_) {
     return { ok: false, supported: false };
+  }
+}
+
+/**
+ * A generated file landed — say so, and make the notification actionable.
+ *
+ * Unlike maybeNotify this is NOT gated on window focus. A scheduled report is
+ * written unattended: the file appearing in a folder is the only evidence it
+ * happened, and suppressing the message because the window happens to be in
+ * front would hide the one thing the user asked to be told about. It IS still
+ * gated on the Desktop toggle, which is the setting that means "tell me things".
+ *
+ * Clicking reveals the file in the OS file manager — `showItemInFolder`, which
+ * selects it rather than opening it: a .pptx is another application's business
+ * to launch, not ours.
+ *
+ * Returns whether a notification was actually shown, so the caller that wrote
+ * the file can report it. On an unsigned macOS build nothing is emitted (see
+ * bootstrapNotification above), and a silent false is more useful than a lie.
+ */
+export function notifyFile(body: string, filePath: string): boolean {
+  try {
+    const prefs = config.get().notifications || {};
+    if (!prefs.desktop) return false;
+    if (!Notification.isSupported || !Notification.isSupported()) return false;
+    const n = new Notification({ title: 'Ordinate', body, silent: false });
+    n.on('click', () => {
+      try { shell.showItemInFolder(filePath); } catch (_) { /* nothing to reveal */ }
+    });
+    n.show();
+    return true;
+  } catch (_) {
+    return false; // a notification must never block the thing it reports on
   }
 }

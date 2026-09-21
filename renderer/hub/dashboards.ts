@@ -336,6 +336,11 @@ function initDashboards(): void {
   if (presX) presX.addEventListener('click', () => exitDashPresent());
   const exp = dashEl('dash-export-btn');
   if (exp) exp.addEventListener('click', () => handleDashExport());
+  // An EXPORT is this dashboard as one sheet; a REPORT is a document made of it
+  // — a cover, a summary and a page per chart, with the app's own sentence under
+  // each. Two buttons because they are two artifacts, not two names for one.
+  const rep = dashEl('dash-report-btn');
+  if (rep) rep.addEventListener('click', () => void rbCreateForOpenDashboard());
   const shr = dashEl('dash-share-btn');
   if (shr) shr.addEventListener('click', () => handleDashShare());
 }

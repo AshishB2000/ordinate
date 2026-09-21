@@ -122,6 +122,22 @@ export function onRefreshed(fn: Reporter): void {
   report = fn;
 }
 
+/**
+ * Ride-along work for the END of a tick, after every due refresh has finished.
+ *
+ * ONE hook, and it deliberately takes no arguments and returns nothing: this is
+ * "the refresh pass is done", not a second scheduler. Scheduled reports use it
+ * because a report prints figures and must be generated after the data under it
+ * has moved — which only holds if there is one tick, in one order, not two
+ * timers racing. It fires on EVERY tick, including one that refreshed nothing,
+ * because a report's own cadence is independent of any dataset's.
+ */
+type AfterTick = () => void;
+let afterTickFn: AfterTick | null = null;
+export function afterTick(fn: AfterTick): void {
+  afterTickFn = fn;
+}
+
 let timer: ReturnType<typeof setInterval> | null = null;
 let running = false;
 /** The master switch, read from config on every tick by the callback main sets. */
@@ -171,6 +187,14 @@ export async function tickNow(now = Date.now()): Promise<AutoRefreshOutcome[]> {
     // next minute.
   } finally {
     running = false;
+    // In the `finally`, and AFTER `running` is cleared, so it fires on every
+    // path a tick can leave by — including the `!enabled()` return above. That
+    // is deliberate: the master switch turns off unattended DATASET REFRESH,
+    // and a report schedule is a different promise to the user. Its own failure
+    // is swallowed here for the same reason every other callback's is.
+    if (afterTickFn) {
+      try { afterTickFn(); } catch (_) { /* a ride-along must never stop the loop */ }
+    }
   }
   return outcomes;
 }

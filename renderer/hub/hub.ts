@@ -94,6 +94,7 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
   initVisuals();         // visuals.ts
   initDashboards();      // dashboards.ts
   initAnalyses();        // analyses.ts
+  initReportBuilder();   // reportBuilder.ts — the Reports tab beside Dashboards
   initAuthoring();       // authoring.ts — the analysis workbench panels
   initAskActivity();     // askActivity.ts — live activity chips for an in-flight ask
   // The command registry, then the palette that reads it. Registration is LAST

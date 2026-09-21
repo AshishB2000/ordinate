@@ -15,8 +15,9 @@ import * as projects from './projects';
 import * as datasets from '../data/datasets';
 import * as analysis from '../analysis/analysis';
 import * as history from './history';
+import * as reportSpec from '../analysis/reportSpec';
 
-export type RecentType = 'dataset' | 'analysis' | 'capture';
+export type RecentType = 'dataset' | 'analysis' | 'capture' | 'report';
 
 /**
  * What the record IS, in numbers — carried so a Home row can say more than a
@@ -57,6 +58,9 @@ export interface RecentGroup {
   // time-ordered list. Optional so an older caller (and every existing test)
   // builds a group without one.
   captures?: { id: string; name: string; updatedAt: string }[];
+  // GENERATED reports only — see listRecent. Optional so an older caller (and
+  // every existing test) builds a group without one.
+  reports?: { id: string; name: string; updatedAt: string }[];
 }
 
 /**
@@ -94,6 +98,16 @@ export function buildRecent(groups: RecentGroup[], limit: number): RecentItem[] 
         projectName: g.projectName,
         name: c.name,
         updatedAt: c.updatedAt,
+      });
+    }
+    for (const r of g.reports || []) {
+      items.push({
+        type: 'report',
+        id: r.id,
+        projectId: g.projectId,
+        projectName: g.projectName,
+        name: r.name,
+        updatedAt: r.updatedAt,
       });
     }
     for (const a of g.analyses) {
@@ -145,10 +159,11 @@ export async function listRecent(limit = 50): Promise<RecentItem[]> {
 
   const groups: RecentGroup[] = await Promise.all(
     projectList.map(async (p): Promise<RecentGroup> => {
-      const [ds, an, caps] = await Promise.all([
+      const [ds, an, caps, reps] = await Promise.all([
         datasets.listDatasets(p.id).catch(() => []),
         analysis.listAnalyses(p.id).catch(() => []),
         history.loadAllSummaries(p.id).catch(() => []),
+        reportSpec.listReports(p.id).catch(() => []),
       ]);
       return {
         projectId: p.id,
@@ -168,6 +183,15 @@ export async function listRecent(limit = 50): Promise<RecentItem[]> {
         // No meta: a capture has no row/column/sheet count to carry, and an
         // invented one would be a figure the app did not compute.
         captures: caps.map((c) => ({ id: c.id, name: c.title, updatedAt: c.updatedAt })),
+        // A report appears in Recent only once it has actually been GENERATED,
+        // and it is timed by that run rather than by the last settings edit: a
+        // Recent row promises something a reader can open, and an unrun report
+        // has no file behind it. No meta — a report has no row, column or sheet
+        // count to carry, and an invented one would be a figure the app did not
+        // compute.
+        reports: reps
+          .filter((r) => !!r.lastRunAt && !!r.lastFile)
+          .map((r) => ({ id: r.id, name: r.name, updatedAt: r.lastRunAt as string })),
       };
     }),
   );

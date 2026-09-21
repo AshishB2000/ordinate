@@ -13689,3 +13689,344 @@ body.an-focus .an-workbench.is-active #dash-pages {
    The rail is always present by design; this is the one thing that takes it
    away, and it is a deliberate, reversible user action rather than a mode. */
 body.no-sidebar .app-sidebar { display: none; }
+
+
+/* ══ REPORTS ══════════════════════════════════════════════════════════════
+   Two surfaces: the Reports tab's card grid, and the three-pane builder.
+
+   The builder's centre pane shows a PAGE, so it is drawn as a page: a white
+   sheet at the true paper aspect, with a shadow, floating on the workspace
+   background. The aspect comes from --rb-page-w / --rb-page-h, which
+   reportRender.ts sets from the report's own paper setting — so switching
+   Letter → A4 → 16:9 reshapes the preview rather than re-cropping it. */
+
+/* ── The Reports tab ──────────────────────────────────────────────────── */
+.rb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--sp-16);
+}
+.rb-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+/* The cover, drawn small: a real sheet of paper at the report's own aspect,
+   floating on a tinted band. Always light — a cover is a printed thing, and a
+   dark-theme preview of it would be a preview of something the file will never
+   look like. */
+.rb-card-band {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding: var(--sp-16) 0;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.rb-card-thumb {
+  --rb-thumb-aspect: 8.5 / 11;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  width: 108px;
+  aspect-ratio: var(--rb-thumb-aspect);
+  padding: var(--sp-8);
+  border: 1px solid var(--border-2);
+  border-radius: 2px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14), 0 6px 14px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+.rb-card-thumb-mark { width: 14px; height: 14px; }
+.rb-card-thumb-title {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #18181b;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+}
+.rb-card-badge {
+  position: absolute;
+  top: var(--sp-8);
+  right: var(--sp-8);
+  padding: 2px 6px;
+  border-radius: var(--r-full);
+  background: var(--accent);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.rb-card-body { padding: var(--sp-12); }
+.rb-card-name {
+  margin: 0 0 var(--sp-4);
+  font-size: var(--t-15);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.rb-card-line { margin: 0; font-size: var(--t-12); color: var(--muted); line-height: 1.6; }
+.rb-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: 0 var(--sp-12) var(--sp-12);
+  margin-top: auto;
+}
+/* The record actions, pushed to the trailing edge of the button row so the two
+   that produce a FILE keep the left-hand emphasis. */
+.rb-card-actions-2 { display: flex; gap: var(--sp-12); margin-left: auto; }
+.rb-link--danger { color: var(--error); }
+
+/* ── The builder ──────────────────────────────────────────────────────── */
+.rb-panel { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.rb-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  padding-bottom: var(--sp-12);
+  border-bottom: 1px solid var(--border);
+}
+.rb-head-title { display: flex; align-items: baseline; gap: var(--sp-8); flex: 1; min-width: 0; }
+.rb-head-h { margin: 0; font-size: var(--t-15); font-weight: 600; color: var(--text-strong); }
+.rb-dirty { font-size: var(--t-11); color: var(--text-faint); }
+.rb-head-actions { display: flex; gap: var(--sp-8); }
+
+.rb-body {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr) 260px;
+  gap: var(--sp-16);
+  flex: 1;
+  min-height: 0;
+  padding-top: var(--sp-16);
+}
+.rb-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  padding: var(--sp-12);
+}
+.rb-pane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-8);
+  margin-bottom: var(--sp-8);
+}
+.rb-pane-head:not(:first-child) { margin-top: var(--sp-16); }
+.rb-pane-h {
+  font-size: var(--t-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+.rb-pane-head-actions { display: flex; gap: var(--sp-4); }
+.rb-pane-hint { margin: 0 0 var(--sp-8); font-size: var(--t-11); color: var(--text-faint); }
+
+/* The page list */
+.rb-page-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.rb-page {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-4) var(--sp-8);
+  border-radius: var(--r-sm);
+  cursor: grab;
+}
+.rb-page:hover { background: var(--surface-2); }
+.rb-page.is-active { background: var(--surface-2); box-shadow: inset 2px 0 0 var(--accent); }
+.rb-page.is-off .rb-page-btn { opacity: 0.45; }
+.rb-page-inc { flex: none; }
+.rb-page-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.rb-page-kind { font-size: var(--t-13); color: var(--text); }
+.rb-page-sub {
+  max-width: 100%;
+  font-size: var(--t-11);
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rb-page-del {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text-faint);
+  font-size: var(--t-15);
+  line-height: 1;
+  cursor: pointer;
+}
+.rb-page-del:hover { background: var(--surface); color: var(--text); }
+
+/* The preview */
+.rb-preview { display: flex; flex-direction: column; min-height: 0; gap: var(--sp-12); }
+.rb-stage {
+  /* HUGS THE PAGE, rather than filling the column. The caption editor sits
+     directly under the sheet it edits — with `flex: 1` here the stage ate the
+     whole column and pushed the caption to the far bottom of the window, half
+     a screen from the picture it describes. It can still shrink and scroll
+     when the page is taller than the pane. */
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: auto;
+  padding: var(--sp-16);
+  border-radius: var(--r-md);
+  background: var(--bg);
+}
+.rb-stage.is-loading { opacity: 0.55; }
+
+/* THE SHEET. A page of paper, always light: a report is a printed artifact,
+   and previewing it in the app's dark theme would be previewing something the
+   file will never look like.
+
+   It is laid out at FULL page size — 816x1056 for Letter, 1280x720 for a
+   slide — and scaled to fit by reportRender.ts's fitPreviewSheet. Everything
+   inside is therefore specified in POINTS, exactly as the writers specify it,
+   and a caption is 11pt on the page rather than 11pt of app chrome. The
+   .rb-scaler wrapper reserves the SCALED height, because a transform does not
+   change layout. */
+.rb-scaler {
+  --rb-scale: 1;
+  flex: none;
+}
+.rb-scaler > .rb-sheet {
+  transform: scale(var(--rb-scale));
+  transform-origin: top left;
+}
+.rb-sheet {
+  --rb-page-w: 816;
+  --rb-page-h: 1056;
+  width: calc(var(--rb-page-w) * 1px);
+  height: calc(var(--rb-page-h) * 1px);
+  display: flex;
+  flex-direction: column;
+  padding: 6%;
+  background: #fff;
+  flex: none;
+  color: #18181b;
+  border-radius: 2px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12), 0 12px 32px rgba(0, 0, 0, 0.14);
+  overflow: hidden;
+}
+.rb-sheet-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-8);
+  padding-bottom: var(--sp-8);
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 9pt;
+  color: #6b7280;
+}
+.rb-sheet-body { flex: 1; min-height: 0; padding-top: var(--sp-16); overflow: hidden; }
+.rb-sheet--cover .rb-sheet-body { justify-content: center; display: flex; flex-direction: column; }
+.rb-cover-mark { width: 40px; height: 40px; margin-bottom: var(--sp-16); }
+.rb-sheet-title { margin: 0 0 var(--sp-8); font-size: 20pt; font-weight: 700; color: #0f1117; }
+.rb-sheet--cover .rb-sheet-title { font-size: 28pt; }
+.rb-sheet-sub { margin: 0 0 var(--sp-12); font-size: 13pt; color: #6b7280; }
+.rb-sheet-meta { margin: 0 0 var(--sp-4); font-size: 10pt; color: #6b7280; }
+.rb-sheet-para { margin: 0 0 var(--sp-12); font-size: 11pt; line-height: 1.5; }
+.rb-sheet-bullet { margin: 0 0 var(--sp-8); font-size: 11pt; line-height: 1.45; }
+/* 11pt on the page, as specified — the caption is set as part of the
+   document, not as app chrome around it. */
+.rb-sheet-caption { margin: var(--sp-8) 0 0; font-size: 11pt; font-style: italic; color: #6b7280; }
+.rb-sheet-img { display: block; max-width: 100%; max-height: 52%; margin: var(--sp-12) auto; object-fit: contain; }
+.rb-sheet-empty { margin: auto; font-size: var(--t-13); color: var(--muted); }
+.rb-kpis { display: flex; flex-wrap: wrap; gap: var(--sp-24); margin-bottom: var(--sp-16); }
+.rb-kpi-value { font-size: 18pt; font-weight: 700; color: #0f1117; }
+.rb-kpi-label { font-size: 9pt; color: #6b7280; }
+.rb-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-12); }
+.rb-tile { margin: 0; text-align: center; }
+.rb-tile img { max-width: 100%; max-height: 180px; object-fit: contain; }
+.rb-tile figcaption { font-size: 9pt; color: #6b7280; }
+.rb-tile-missing { font-size: 9pt; font-style: italic; color: #9ca3af; padding: var(--sp-24) 0; }
+
+/* The caption / notes editor under the preview */
+.rb-editrow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.rb-field-label { font-size: var(--t-11); font-weight: 600; color: var(--text-faint); }
+.rb-textarea,
+.rb-input {
+  width: 100%;
+  padding: var(--sp-4) var(--sp-8);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--t-13);
+}
+.rb-textarea { resize: vertical; }
+.rb-link {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: var(--t-12);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* Settings */
+.rb-field { display: flex; flex-direction: column; gap: var(--sp-4); margin-bottom: var(--sp-12); }
+.rb-field-group { display: flex; flex-direction: column; }
+.rb-check {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin-bottom: var(--sp-8);
+  font-size: var(--t-13);
+  color: var(--text);
+}
+.rb-note { margin: 0 0 var(--sp-8); font-size: var(--t-11); color: var(--text-faint); line-height: 1.5; }
+
+/* At 1000px the settings pane collapses to a strip under the preview: the
+   three-pane rhythm is worth keeping, but not at the cost of a page preview
+   too narrow to read. */
+@media (max-width: 1000px) {
+  .rb-body { grid-template-columns: 200px minmax(0, 1fr); }
+  .rb-settings {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0 var(--sp-16);
+    align-items: start;
+  }
+  .rb-settings .rb-pane-head { grid-column: 1 / -1; }
+}
