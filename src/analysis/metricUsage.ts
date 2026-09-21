@@ -5,9 +5,10 @@
 // (see metrics.deleteMetric's header for why that is the UI's call, not the
 // store's).
 //
-// Four kinds of reference, and one that deliberately is not:
+// Five kinds of reference, and one that deliberately is not:
 //   · a metric CARD on an analysis sheet   (Card.metric.metricId)
 //   · a MEASURE on a saved visual          (VizEncoding.values[].metricId)
+//   · a VALUE on a saved pivot             (VizEncoding.pivot.values[].metricId)
 //   · an ALERT rule                        (AlertRule.metric.metricId)
 //   · another METRIC's formula             ([Revenue] by name)
 //   · a REPORT, transitively — a report names an analysisId, so it uses the
@@ -105,7 +106,12 @@ export async function metricUsage(projectId: string, metricId: string): Promise<
     for (const summary of await visuals.listVisuals(projectId)) {
       const v = await visuals.getVisual(projectId, summary.id);
       if (!v) continue;
-      if (v.encoding.values.some((m) => m.metricId === metricId)) {
+      // A chart measure, or a PIVOT value — both are "this visual shows that
+      // metric", and a pivot's values live on their own shelf rather than in
+      // `encoding.values`.
+      const pivotValues = (v.encoding as { pivot?: { values?: { metricId?: string }[] } }).pivot?.values || [];
+      if (v.encoding.values.some((m) => m.metricId === metricId)
+        || pivotValues.some((m) => m && m.metricId === metricId)) {
         refs.push({ kind: 'visual', name: v.name, id: v.id });
       }
     }

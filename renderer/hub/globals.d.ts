@@ -373,6 +373,7 @@ declare global {
       ): Promise<any>;
       metricSeries(projectId: string, id: string, column?: string, filters?: any): Promise<any>;
       metricUsage(projectId: string, id: string): Promise<any>;
+      saveCsv(text: string, defaultName: string): Promise<any>;
       exportDashboardHtml(bundle: any, defaultName?: string): Promise<any>;
       exportDashboardPng(html: string, width: number, defaultName?: string): Promise<any>;
       exportDashboardPdf(html: string, width: number, defaultName?: string): Promise<any>;

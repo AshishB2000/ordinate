@@ -57,7 +57,7 @@ const ALLOWED: Record<string, number> = {
   // take another line). Split by surface into eight siblings, all of which land
   // under the cap and therefore get NO entry here. The ratchet tightened by
   // 3,387 lines; the assertion count went UP, 323 -> 341.
-  'scripts/smoke-app.ts': 338,
+  'scripts/smoke-app.ts': 337,
   'scripts/test-connectorsHttp.ts': 881,
   'src/ai/analyze.ts': 911,
   'src/engine/anomaliesResident.ts': 870,

@@ -580,9 +580,28 @@ async function resolutionChecks(): Promise<void> {
   ok('an alert rule kept its metricId through sanitizeRule',
     !!rule && (rule.metric as any).metricId === revenue.id);
 
+  // A pivot's values live on their own shelf, not in `encoding.values`, so the
+  // usage walk has to look at both or a pivot silently stops counting.
+  const pivot = await visuals.saveVisual(projectId, {
+    name: 'Revenue by region and category', datasetId: bigDs.id, chartType: 'pivot',
+    encoding: {
+      category: 'region',
+      values: [],
+      pivot: {
+        rows: [{ column: 'region' }],
+        columns: [],
+        values: [{ column: 'revenue', aggregation: 'sum', metricId: revenue.id }],
+      },
+    },
+  });
+  ok('a pivot value kept its metricId through the encoding sanitizer',
+    !!pivot && (pivot.encoding as any).pivot.values[0].metricId === revenue.id,
+    JSON.stringify(pivot && (pivot.encoding as any).pivot));
+
   const usage = await metricUsage.metricUsage(projectId, revenue.id);
   ok('usage finds the card', usage.refs.some((r) => r.kind === 'card' && r.id === dash!.id));
   ok('usage finds the visual', usage.refs.some((r) => r.kind === 'visual' && r.id === viz!.id));
+  ok('usage finds the pivot too', usage.refs.some((r) => r.kind === 'visual' && r.id === pivot!.id));
   ok('usage finds the alert', usage.refs.some((r) => r.kind === 'alert' && r.id === rule!.id));
   ok('a card ref carries the sheet it sits on',
     usage.refs.some((r) => r.kind === 'card' && r.sheetIndex === 0));
@@ -590,7 +609,7 @@ async function resolutionChecks(): Promise<void> {
   // their formulas — deleting Revenue would break them as surely as it breaks
   // the card, and the sentence has to say so.
   ok('the confirm sentence counts what would break',
-    usage.summary === '1 card, 1 visual, 1 alert and 2 metrics', usage.summary);
+    usage.summary === '1 card, 2 visuals, 1 alert and 2 metrics', usage.summary);
 
   // A formula operand is a usage too — deleting Revenue breaks Margin %.
   const marginUsage = await metricUsage.metricUsage(projectId, revenue.id);

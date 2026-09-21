@@ -64,6 +64,14 @@ interface EncodingFormApi {
    * The form stays DnD-agnostic: the caller owns the drag listeners.
    */
   dropField(well: string, column: string): boolean;
+  /**
+   * Hide the CHART fields — Category, Measures, Split by, Map regions — and
+   * leave Filters showing. That is exactly the split a pivot needs: its shelves
+   * replace the four, and a filter means the same thing to a pivot as to a
+   * column chart, so there is no second filter UI (which is the outcome this
+   * whole file exists to prevent).
+   */
+  showFields(on: boolean): void;
   /** The encoding in the shape computeVisualData / buildVizData consume. */
   getEncoding(): any;
   /** Visual-level filters as transforms `filter` steps. */
@@ -689,6 +697,13 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
         if (!grainSel.value) grainSel.value = info.grain;
       }
       setCatNote(info && typeof info.note === 'string' ? info.note : '');
+    },
+
+    showFields(on: boolean): void {
+      root.querySelectorAll('.viz-build-row').forEach((row) => {
+        if (row.classList.contains('js-enc-filters-row')) return;
+        (row as HTMLElement).hidden = !on;
+      });
     },
 
     show(on: boolean): void {

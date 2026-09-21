@@ -171,7 +171,7 @@ function checkChartVocabulary(): void {
   vm.createContext(sandbox);
   const got = vm.runInContext(code + '\n;({ALL_CHART_TYPE_IDS, VIZ_LABELS});', sandbox);
   const real: string[] = got.ALL_CHART_TYPE_IDS.concat(['table', 'map_bubble', 'map_choropleth']);
-  ok('the chart vocabulary under test is the real one', real.length === 28, `${real.length} types`);
+  ok('the chart vocabulary under test is the real one', real.length === 29, `${real.length} types`);
   ok('CHART_TYPE_IDS has exactly the renderer\'s types', plan.CHART_TYPE_IDS.size === real.length,
      `${plan.CHART_TYPE_IDS.size} vs ${real.length}`);
   const missing = real.filter((t) => !plan.CHART_TYPE_IDS.has(t));
@@ -252,7 +252,7 @@ async function checkThreeDrops(): Promise<void> {
   // Each is REPORTED — self-contained, names what and why, and is not a stack trace.
   const ct = byKind.get('chartType') || '';
   ok('chartType drop names the offending type and the card',
-     ct.includes('"sunburst"') && ct.includes('Sales by moon phase') && ct.includes('28 chart types'), ct);
+     ct.includes('"sunburst"') && ct.includes('Sales by moon phase') && ct.includes('29 chart types'), ct);
   const fm = byKind.get('formula') || '';
   ok('formula drop names the field and the parser\'s reason',
      fm.includes('"Broken"') && fm.includes('did not compile'), fm);

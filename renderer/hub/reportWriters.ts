@@ -89,6 +89,7 @@ function buildPagedPdfDoc(pages: any[], report: any) {
         }); break;
         case 'image': nodes.push({ image: b.png, fit: [CONTENT_W, IMG_H], alignment: 'center', margin: [0, 10, 0, 10] }); break;
         case 'kpis': nodes.push(pdfKpiTable(b.rows, CONTENT_W)); break;
+        case 'grid': nodes.push(pdfGrid(b.head, b.body, CONTENT_W)); break;
         case 'tiles': nodes.push(pdfTileGrid(b.tiles, CONTENT_W, Math.round(IMG_H / 2))); break;
       }
     }
@@ -135,6 +136,8 @@ function buildPagedPdfDoc(pages: any[], report: any) {
       kpiValue: { fontSize: 18, bold: true, color: REPORT_C.strong },
       kpiLabel: { fontSize: 9, color: REPORT_C.muted },
       tileCap: { fontSize: 9, color: REPORT_C.muted, alignment: 'center', margin: [0, 3, 0, 0] },
+      gridHead: { fontSize: 8, bold: true, color: REPORT_C.muted },
+      gridCell: { fontSize: 9, color: REPORT_C.strong },
     },
     defaultStyle: { font: 'Roboto', fontSize: 11, color: REPORT_C.ink },
     info: { title: name, creator: 'Ordinate' },
@@ -159,6 +162,33 @@ function pdfKpiTable(rows: any[], contentW: number) {
     table: { widths: new Array(cols).fill(contentW / cols), body: cells },
     layout: 'noBorders',
     margin: [0, 0, 0, 14],
+  };
+}
+
+/**
+ * A pivot as a real pdfmake table — the same rule `pdfKpiTable` follows, for
+ * the same reason: a grid of figures that is text stays selectable, searchable
+ * and copyable out of the finished PDF. Column widths are equal and the label
+ * column is left-aligned; the figures are right-aligned, as on screen.
+ */
+function pdfGrid(head: string[][], body: string[][], contentW: number) {
+  const rows = head.concat(body);
+  if (!rows.length) return { text: '' };
+  const cols = Math.max(...rows.map((r) => r.length));
+  const pad = (r: string[]): string[] => r.concat(new Array(Math.max(0, cols - r.length)).fill(''));
+  const cell = (text: string, i: number, isHead: boolean) => ({
+    text,
+    style: isHead ? 'gridHead' : 'gridCell',
+    alignment: i === 0 ? 'left' : 'right',
+  });
+  return {
+    table: {
+      headerRows: head.length,
+      widths: new Array(cols).fill((contentW) / cols),
+      body: rows.map((r, ri) => pad(r).map((t, i) => cell(t, i, ri < head.length))),
+    },
+    layout: 'lightHorizontalLines',
+    margin: [0, 8, 0, 8],
   };
 }
 
@@ -272,6 +302,29 @@ function buildPagedPptx(pages: any[], report: any) {
           const vals = b.rows.map((k: any) => ({ text: k.value, options: { bold: true, color: REPORT_CX.strong, fontSize: 20 } }));
           slide.addTable([head, vals], { x: 0.6, y, w: PPT_W - 1.2, border: { type: 'none' }, autoPage: false });
           y += 1.1;
+          break;
+        }
+        case 'grid': {
+          // A native PowerPoint table, for the same reason the KPI row is one.
+          const rows: any[][] = [];
+          for (const r of b.head) {
+            rows.push(r.map((t: string) => ({
+              text: t, options: { bold: true, color: REPORT_CX.muted, fontSize: 9 },
+            })));
+          }
+          for (const r of b.body) {
+            rows.push(r.map((t: string, i: number) => ({
+              text: t,
+              options: { color: REPORT_CX.strong, fontSize: 10, align: i === 0 ? 'left' : 'right' },
+            })));
+          }
+          const h = Math.max(1.0, PPT_H - y - 0.9);
+          slide.addTable(rows, {
+            x: 0.6, y, w: PPT_W - 1.2, h,
+            border: { type: 'solid', pt: 0.5, color: 'E5E7EB' },
+            autoPage: false,
+          });
+          y += h + 0.15;
           break;
         }
         case 'image': {
@@ -466,6 +519,31 @@ function buildPagedDocx(pages: any[], report: any, dims: Map<string, { w: number
             }));
           }
           push(new Table({ width: { size: CONTENT_TW, type: WidthType.DXA }, borders: blank, rows }));
+          push(new Paragraph({ spacing: { after: 200 }, children: [] }));
+          break;
+        }
+        case 'grid': {
+          // A native Word table, like the KPI one directly above.
+          const all = b.head.concat(b.body);
+          const cols = Math.max(1, ...all.map((r: string[]) => r.length));
+          const cw = Math.round(CONTENT_TW / cols);
+          const rows = all.map((r: string[], ri: number) => new TableRow({
+            tableHeader: ri < b.head.length,
+            children: new Array(cols).fill('').map((_, ci) => new TableCell({
+              width: { size: cw, type: WidthType.DXA },
+              children: [new Paragraph({
+                alignment: ci === 0 ? undefined : AlignmentType.RIGHT,
+                children: [new TextRun({
+                  text: r[ci] ?? '',
+                  bold: ri < b.head.length,
+                  color: ri < b.head.length ? REPORT_CX.muted : REPORT_CX.strong,
+                  size: ri < b.head.length ? 16 : 18,
+                  font: FONT,
+                })],
+              })],
+            })),
+          }));
+          push(new Table({ width: { size: CONTENT_TW, type: WidthType.DXA }, rows }));
           push(new Paragraph({ spacing: { after: 200 }, children: [] }));
           break;
         }

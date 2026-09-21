@@ -24,6 +24,9 @@ let vizDatasetId = ''; // dataset currently loaded into the builder
 // Created on first open, because the template it clones must be in the DOM and
 // this file's top level runs before that is guaranteed.
 let vizForm: EncodingFormApi | null = null;
+// The pivot shelves, mounted BESIDE the encoding form and shown instead of its
+// chart fields when the chart type is `pivot` (pivotBuilder.ts).
+let vizPivotForm: PivotBuilderApi | null = null;
 let vizEditingId = ''; // open saved visual's id ('' = building a new one)
 let vizCurrentChartType = ''; // the type currently shown / to be saved
 let vizPicker: any = null; // last buildVizPicker() instance (owns the chip row)
@@ -164,4 +167,9 @@ function ensureVizForm(): void {
     dataset: () =>
       currentProjectId && vizDatasetId ? { projectId: currentProjectId, datasetId: vizDatasetId } : null,
   });
+  // Mounted BEFORE the encoding form's own root so the shelves sit where
+  // Category/Measures sit, with Filters still below them.
+  vizPivotForm = createPivotBuilder(mount, { onChange: () => scheduleRecompute() });
+  mount.insertBefore(vizPivotForm.el, vizForm.el);
+  vizPivotForm.show(false);
 }

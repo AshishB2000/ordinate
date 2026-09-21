@@ -14611,3 +14611,301 @@ body.no-sidebar .app-sidebar { display: none; }
   border-radius: var(--r-sm);
   padding: 4px var(--sp-8);
 }
+/* ── The pivot table (pivotRender.js) ─────────────────────────────────────
+   A grid of figures, so it is typeset like one: 13px cells in tabular
+   figures on a 32px row, an 11px uppercase muted header, and NO zebra. Zebra
+   striping is what you reach for when the rows have no other structure; a
+   pivot's rows already carry a hierarchy (indent, subtotal weight, grand
+   total), and stripes fight all three at once.
+
+   `--pivot-row-h` is a token and not a literal because pivotRender.ts READS
+   IT BACK with getComputedStyle to size its virtual scroll window — the same
+   arrangement as the dashboard grid's geometry tokens, and for the same
+   reason: one number, not two that drift.
+
+   Every colour here is a theme token, so both themes and every dashboard
+   style preset (which remaps the --surface and --chart tokens on a container
+   class) come out right without a second rule. A `*` followed by a `/` inside
+   a CSS comment ENDS it — which is how the rule below this block went missing
+   once already, and why the token names are spelled out here. */
+.pivot-wrap {
+  --pivot-row-h: 32px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.pivot-note {
+  flex: none;
+  padding: var(--sp-4) var(--sp-8);
+  font-size: var(--t-11);
+  color: var(--muted);
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+.pivot-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  /* Viewport-aware, like `.cv-canvas-wrap`: on a surface that scrolls as a whole
+     (the builder, the Ask thread) a 2,000-row grid would otherwise extend the
+     PAGE and put every row in the DOM, which is the one thing the virtual
+     window exists to avoid. Inside a dashboard card the card's own height wins
+     — see the override below. */
+  max-height: clamp(300px, 58vh, 640px);
+}
+
+.pivot-table {
+  border-collapse: separate;   /* `collapse` drops the borders of sticky cells */
+  border-spacing: 0;
+  width: 100%;
+  font-size: var(--t-13);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Header. Sticky vertically; the corner is sticky in BOTH axes so it stays
+   over the row-header column while the grid scrolls sideways. */
+.pivot-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 28px;
+  padding: 0 var(--sp-8);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.pivot-corner,
+.pivot-row-head {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  text-align: left;
+  /* The one vertical rule in the table: it is what separates the labels from
+     the figures when the grid is scrolled sideways under them. */
+  border-right: 1px solid var(--border);
+  background: var(--surface-1);
+}
+
+.pivot-table thead .pivot-corner {
+  z-index: 3;
+  background: var(--surface-2);
+}
+
+.pivot-total-head { border-left: 1px solid var(--border); }
+
+/* A header that sorts. It fills its cell so the whole header is the target. */
+.pivot-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  width: 100%;
+  justify-content: flex-end;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.pivot-corner .pivot-sort { justify-content: flex-start; }
+.pivot-sort:hover { color: var(--text-strong); }
+.pivot-sort.is-sorted { color: var(--text-strong); }
+.pivot-arrow { font-size: 10px; line-height: 1; }
+
+/* Body. */
+.pivot-row > th,
+.pivot-row > td {
+  height: var(--pivot-row-h);
+  padding: 0 var(--sp-8);
+  border-bottom: 1px solid var(--border-hairline);
+  white-space: nowrap;
+}
+
+.pivot-cell {
+  text-align: right;
+  color: var(--text);
+}
+
+.pivot-row-head {
+  font-weight: 400;
+  color: var(--text);
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pivot-row:hover > th,
+.pivot-row:hover > td { background: var(--surface-2); }
+
+/* A subtotal row is the same figures one level up, so it reads as a heavier
+   version of a row rather than as a different kind of thing: surface-1 and
+   medium weight, not a rule and not a colour. */
+.pivot-row.is-subtotal > th,
+.pivot-row.is-subtotal > td {
+  background: var(--surface-1);
+  font-weight: 500;
+  color: var(--text-strong);
+}
+
+.pivot-grand > th,
+.pivot-grand > td {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.pivot-grand > th { z-index: 3; }
+
+.pivot-total-cell { border-left: 1px solid var(--border); }
+
+/* Collapse. The caret rotates rather than swapping glyph — one element, and
+   the rotation is what says "this reopens". */
+.pivot-collapse {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.pivot-caret {
+  flex: none;
+  color: var(--muted);
+  transition: transform 120ms ease;
+}
+.pivot-caret.is-closed { transform: rotate(-90deg); }
+
+/* Conditional formatting. `scale` and `bars` paint a background from JS (a
+   per-cell ramp position cannot be a class); only the threshold pair is
+   static enough to live here. */
+.pivot-cell.is-above { color: var(--ok); }
+.pivot-cell.is-below { color: var(--error); }
+
+.pivot-spacer > td { padding: 0; border: 0; }
+
+.pivot-tip { white-space: nowrap; }
+
+/* ── The pivot shelves in the builder (pivotBuilder.js) ─────────────────── */
+.pivot-shelf-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+
+.pivot-add {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--surface-1);
+  color: var(--muted);
+  font-size: var(--t-13);
+  line-height: 1;
+  cursor: pointer;
+}
+.pivot-add:hover:not(:disabled) { color: var(--text-strong); border-color: var(--border-3); }
+.pivot-add:disabled { opacity: 0.4; cursor: default; }
+
+.pivot-shelf-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.pivot-chip.is-dragging { opacity: 0.5; }
+.pivot-chip.is-drop { box-shadow: inset 0 2px 0 0 var(--accent); }
+.pivot-chip[draggable='true'] { cursor: grab; }
+
+.pivot-grain { max-width: 110px; }
+
+.pivot-opts { align-items: center; }
+.pivot-checks { display: flex; flex-wrap: wrap; gap: var(--sp-12); }
+.pivot-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  font-size: var(--t-12);
+  color: var(--text);
+}
+.pivot-sort-state { font-size: var(--t-12); color: var(--muted); }
+.pivot-topn { max-width: 80px; }
+.pivot-threshold { max-width: 90px; }
+
+.pivot-cond-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.pivot-cond-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.pivot-cond-name {
+  flex: 0 0 auto;
+  min-width: 80px;
+  font-size: var(--t-12);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A pivot inside a DASHBOARD CARD must fit the card and scroll inside itself.
+   The same rule `.cv-canvas-wrap` gets a few hundred lines up, and for the same
+   reason: `.cv-viz-area`'s 300px floor is right on a page that scrolls and
+   wrong in a fixed-height tile, where it pushes the grand total out under the
+   card's edge with `overflow: hidden` over it. Caught by smoke-pivot.ts, which
+   asserts the Total row is inside the card's own box. */
+.dash-card .cv-viz-area { min-height: 0; }
+.dash-card .pivot-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
+.dash-card .pivot-scroll { max-height: none; }
+
+/* A pivot printed as a real table on a report page. Matches the on-screen grid
+   (11px uppercase muted header, tabular figures, right-aligned) so the preview
+   and the exported PDF/PPTX/DOCX read as the same document. */
+.rb-grid {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--sp-8) 0;
+  font-size: var(--t-11);
+  font-variant-numeric: tabular-nums;
+}
+.rb-grid th,
+.rb-grid td {
+  padding: 3px var(--sp-4);
+  text-align: right;
+  border-bottom: 1px solid var(--border-hairline);
+  white-space: nowrap;
+}
+.rb-grid th {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.rb-grid .rb-grid-label { text-align: left; }

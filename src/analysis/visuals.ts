@@ -20,6 +20,8 @@ import { sanitizeSteps } from '../data/transforms';
 import type { FilterStep } from '../data/transforms';
 import { isDateGrain, sanitizeBins } from './categoryKey';
 import type { DateGrain } from './categoryKey';
+import { sanitizePivot } from './pivotData';
+import type { PivotEncoding } from './pivotData';
 
 export type VizAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max' | 'none';
 
@@ -67,6 +69,21 @@ export interface VizEncoding {
    * by reading it, not by re-saving it.
    */
   bins?: number;
+  /**
+   * The PIVOT encoding — rows / columns / values / totals / sort, its own
+   * shape because a pivot's shelves are not a chart's `category` + `values`
+   * (three row dimensions, two column ones, four value fields).
+   *
+   * It sits BESIDE the chart fields rather than replacing them, and the builder
+   * mirrors `rows[0]` → `category`, `columns[0]` → `series` and `values[0]` →
+   * `values[0]`. That is what lets every surface that reads an encoding without
+   * caring about chart type — the drill panel, the AI suggestion prompt, the
+   * name suggester, a switch back to a column chart — keep working unchanged.
+   *
+   * Absent for every visual saved before pivots existed, which is exactly what
+   * "not a pivot" means, so there is no migration.
+   */
+  pivot?: PivotEncoding;
 }
 
 // Whitelisted chart-styling overrides — the SAME object shape the capture-flow ⋯
@@ -207,6 +224,10 @@ export function sanitizeEncoding(raw: unknown): VizEncoding {
   // default instead of silently becoming a chart nobody asked for.
   const bins = sanitizeBins(o.bins);
   if (bins !== undefined) enc.bins = bins;
+  // Its own whitelist, in the file that owns the shape. Same discipline as
+  // `grain` and `bins`: unknown keys dropped, every enum clamped to its set.
+  const pivot = sanitizePivot(o.pivot);
+  if (pivot) enc.pivot = pivot;
   if (o.geo && typeof o.geo === 'object') {
     const level = (o.geo as Record<string, unknown>).level;
     if (typeof level === 'string' && GEO_LEVELS.has(level)) enc.geo = { level: level as VizGeo['level'] };

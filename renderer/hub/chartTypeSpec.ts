@@ -37,6 +37,8 @@ interface ChartTypeSpec {
   isBoxplot: boolean;
   isLine: boolean;
   isHoriz: boolean;
+  /** A PIVOT TABLE, which Chart.js never draws — see the note on the case below. */
+  isPivot: boolean;
 }
 
 function resolveChartType(type: string): ChartTypeSpec {
@@ -67,6 +69,12 @@ function resolveChartType(type: string): ChartTypeSpec {
     case 'sankey':           chartType = 'sankey'; break;
     case 'candlestick':      chartType = 'candlestick'; break;
     case 'boxplot':          chartType = 'boxplot'; break;
+    // A pivot is a <table>: renderResult dispatches it to pivotRender BEFORE
+    // buildChart is reached, so no Chart.js type here is ever used. The case
+    // exists so the flag is set — anything that DOES reach buildChart with a
+    // pivot id (an old override, a hand-edited record) falls back to a bar
+    // rather than silently becoming one under the default branch.
+    case 'pivot':            chartType = 'bar'; opts.pivot = true; break;
     default:                 chartType = 'bar';  break;
   }
 
@@ -86,5 +94,6 @@ function resolveChartType(type: string): ChartTypeSpec {
     isBoxplot:     chartType === 'boxplot',     // chartjs-chart-boxplot plugin
     isLine:        chartType === 'line',
     isHoriz:       opts.indexAxis === 'y',  // horizontal bar/column
+    isPivot:       opts.pivot === true,     // a <table>, drawn by pivotRender.js
   };
 }

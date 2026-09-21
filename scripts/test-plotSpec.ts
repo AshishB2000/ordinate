@@ -55,7 +55,7 @@ const VIZ_LABELS: Record<string, string> = result.VIZ_LABELS;
 // set plus "everything else": a chart type added to the picker without a Mosaic
 // decision must fail HERE, not quietly render on Chart.js forever.
 const everyType = ALL_CHART_TYPE_IDS.concat(['table', 'map_bubble', 'map_choropleth']);
-ok('the id list under test is the real one', everyType.length === 28, `${everyType.length} types`);
+ok('the id list under test is the real one', everyType.length === 29, `${everyType.length} types`);
 
 for (const type of everyType) {
   const inMosaic = MOSAIC_CHART_TYPES.has(type);
