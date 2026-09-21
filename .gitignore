@@ -240,6 +240,10 @@ scripts/**/*.js
 /renderer/hub/dashFiltersUi.js
 /renderer/hub/dashAi.js
 /renderer/hub/dashShare.js
+/renderer/hub/reportRender.js
+/renderer/hub/reportWriters.js
+/renderer/hub/reportBuilder.js
+/renderer/hub/reportList.js
 
 # authoring.ts split by job (.claude/rules/file-size.md) — emitted siblings.
 /renderer/hub/authoringRail.js
@@ -378,3 +382,9 @@ scripts/**/*.js
 # Emitted siblings.
 /renderer/hub/emptyState.js
 /renderer/hub/skeleton.js
+
+# Reports (the Report record, the builder, the three writers) — emitted siblings.
+/src/ipc/reports.js
+/scripts/test-captions.js
+/scripts/test-reportSpec.js
+/scripts/smoke-reports.js

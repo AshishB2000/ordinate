@@ -1152,6 +1152,32 @@
             <button class="btn btn-primary" type="button" id="an-new-btn">Create dashboard</button>
           </div>
         </div>
+        <!-- Dashboards and Reports are two views of the same work — what this
+             project publishes — so they are two tabs of one page, not two
+             sections. Same `.ds-tabs`/`.ds-tab` strip the Data page uses;
+             reportBuilder.ts drives the switch. -->
+        <div class="ds-tabs" role="tablist" aria-label="Dashboard views">
+          <button class="ds-tab" type="button" role="tab" id="rp-tab-dashboards"
+                  aria-selected="true" aria-controls="an-table">Dashboards</button>
+          <button class="ds-tab" type="button" role="tab" id="rp-tab-reports"
+                  aria-selected="false" aria-controls="rp-list-wrap" tabindex="-1">Reports</button>
+        </div>
+
+        <!-- The Reports tab. One card per report: its cover drawn small, the
+             format, the schedule line and when it last produced a file. -->
+        <div id="rp-list-wrap" role="tabpanel" aria-labelledby="rp-tab-reports" hidden>
+          <div class="rb-grid" id="rp-grid" hidden></div>
+          <div class="ws-empty" id="rp-empty" hidden>
+            <div class="ws-empty-art" aria-hidden="true">
+              <span class="ws-bar ws-bar--3"></span>
+              <span class="ws-bar ws-bar--2"></span>
+              <span class="ws-bar ws-bar--4"></span>
+            </div>
+            <h3 class="ws-empty-h">No reports yet</h3>
+            <p class="ws-empty-p">A report turns a dashboard into a file you can send — PDF, PowerPoint or Word — with the app's own sentence under every chart. Open a dashboard and choose “Create report…” from its More actions menu; you can schedule it to regenerate into a folder on its own.</p>
+          </div>
+        </div>
+
         <!-- The populated state: a card grid, not a table. A dashboard is mostly
              pictures, so each card previews its first sheet's first one or two
              visuals as LIVE thumbnails (anList.ts → vizThumbs.ts). The wrapper
@@ -1182,6 +1208,103 @@
           <p class="viz-empty-hint" id="an-empty-hint" hidden></p>
         </div>
       </div>
+      <!-- THE REPORT BUILDER — the third view of this section, beside the list
+           and the authoring workbench. Three panes: the page list, a live
+           preview at true page size, and the settings (which collapse at
+           1000px — the preview is the part that has to stay readable). -->
+      <div class="rb-panel" id="rp-builder" hidden>
+        <div class="rb-head">
+          <button class="btn btn-sm" type="button" id="rp-back">← Back</button>
+          <div class="rb-head-title">
+            <h2 class="rb-head-h">Report builder</h2>
+            <span class="rb-dirty" id="rp-dirty" hidden>Unsaved changes</span>
+          </div>
+          <div class="rb-head-actions">
+            <button class="btn btn-sm" type="button" id="rp-save">Save</button>
+            <button class="btn btn-sm btn-primary" type="button" id="rp-generate">Generate</button>
+          </div>
+        </div>
+        <div class="rb-body">
+          <aside class="rb-pane rb-pages" aria-label="Pages">
+            <div class="rb-pane-head">
+              <span class="rb-pane-h">Pages</span>
+              <div class="rb-pane-head-actions">
+                <button class="btn btn-sm btn-ghost" type="button" id="rp-add-notes">+ Notes</button>
+                <button class="btn btn-sm btn-ghost" type="button" id="rp-add-tile" aria-haspopup="true">+ Tile</button>
+              </div>
+            </div>
+            <p class="rb-pane-hint">Drag to reorder. Untick a page to leave it out.</p>
+            <ol class="rb-page-list" id="rp-page-list"></ol>
+          </aside>
+
+          <section class="rb-preview" aria-label="Preview">
+            <div class="rb-stage" id="rp-stage"></div>
+            <div class="rb-editrow" id="rp-caption-row" hidden>
+              <label class="rb-field-label" for="rp-caption">Caption</label>
+              <textarea class="rb-textarea" id="rp-caption" rows="2"></textarea>
+              <button class="rb-link" type="button" id="rp-caption-reset" hidden>Reset to app caption</button>
+            </div>
+            <div class="rb-editrow" id="rp-notes-row" hidden>
+              <label class="rb-field-label" for="rp-notes">Notes</label>
+              <textarea class="rb-textarea" id="rp-notes" rows="4"></textarea>
+            </div>
+          </section>
+
+          <aside class="rb-pane rb-settings" aria-label="Report settings">
+            <div class="rb-pane-head"><span class="rb-pane-h">Settings</span></div>
+            <label class="rb-field"><span class="rb-field-label">Name</span>
+              <input class="rb-input" type="text" id="rp-set-name"></label>
+            <label class="rb-field"><span class="rb-field-label">Format</span>
+              <select class="rb-input" id="rp-set-format">
+                <option value="pdf">PDF document</option>
+                <option value="pptx">PowerPoint deck</option>
+                <option value="docx">Word document</option>
+              </select></label>
+            <div class="rb-field-group" id="rp-paper-row">
+              <label class="rb-field"><span class="rb-field-label">Paper</span>
+                <select class="rb-input" id="rp-set-paper">
+                  <option value="letter">Letter</option>
+                  <option value="a4">A4</option>
+                </select></label>
+              <label class="rb-field"><span class="rb-field-label">Orientation</span>
+                <select class="rb-input" id="rp-set-orient">
+                  <option value="portrait">Portrait</option>
+                  <option value="landscape">Landscape</option>
+                </select></label>
+            </div>
+            <p class="rb-note" id="rp-paper-note" hidden>A deck is always 16:9 — paper settings don't apply.</p>
+
+            <div class="rb-pane-head"><span class="rb-pane-h">Cover</span></div>
+            <label class="rb-field"><span class="rb-field-label">Title</span>
+              <input class="rb-input" type="text" id="rp-set-title"></label>
+            <label class="rb-field"><span class="rb-field-label">Subtitle</span>
+              <input class="rb-input" type="text" id="rp-set-subtitle"></label>
+            <label class="rb-check"><input type="checkbox" id="rp-set-logo"><span>Show the Ordinate mark</span></label>
+            <label class="rb-check"><input type="checkbox" id="rp-set-filters"><span>Print the current filters</span></label>
+            <label class="rb-check"><input type="checkbox" id="rp-set-narrative"><span>Add a Narrative page (needs a model)</span></label>
+
+            <div class="rb-pane-head"><span class="rb-pane-h">Schedule</span></div>
+            <label class="rb-field"><span class="rb-field-label">Regenerate</span>
+              <select class="rb-input" id="rp-set-cadence">
+                <option value="off">Never</option>
+                <option value="daily">Every day</option>
+                <option value="weekly">Every week</option>
+                <option value="monthly">Every month</option>
+              </select></label>
+            <div class="rb-field-group" id="rp-schedule-rows" hidden>
+              <label class="rb-field"><span class="rb-field-label">At</span>
+                <input class="rb-input" type="time" id="rp-set-at"></label>
+              <div class="rb-field">
+                <span class="rb-field-label">Folder</span>
+                <button class="btn btn-sm" type="button" id="rp-set-folder">Choose…</button>
+                <span class="rb-note" id="rp-set-folder-path">No folder chosen</span>
+              </div>
+              <p class="rb-note">Ordinate has no background service: a schedule fires while the app is running, and anything that came due while it was closed runs on the next launch.</p>
+            </div>
+          </aside>
+        </div>
+      </div>
+
       <!-- The authoring workbench. #dash-editor is re-parented into this host
            (CSS `order` places the canvas between the rail and the flyout
            panels); the shared editor markup lives at the end of this section. -->
@@ -1397,6 +1520,7 @@
             <button class="btn btn-sm" type="button" id="dash-style-btn">Style…</button>
             <button class="btn btn-sm" type="button" id="dash-present-btn">Present</button>
             <button class="btn btn-sm" type="button" id="dash-export-btn">Export…</button>
+            <button class="btn btn-sm" type="button" id="dash-report-btn">Create report…</button>
             <button class="btn btn-sm" type="button" id="dash-share-btn">Share</button>
           </div>
         </div>
@@ -2463,6 +2587,15 @@
 <script src="dashControlBar.js"></script>
 <script src="dashAi.js"></script>
 <script src="dashShare.js"></script>
+<!-- Reports. reportRender resolves a Report's pages into the block list that
+     reportWriters turns into a file and reportBuilder previews, so they load in
+     that order — and all of them after dashShare.js, whose capture and style
+     helpers they call. reportList (the Reports tab) is last: it calls into the
+     builder, never the other way round. -->
+<script src="reportRender.js"></script>
+<script src="reportWriters.js"></script>
+<script src="reportBuilder.js"></script>
+<script src="reportList.js"></script>
 <script src="authoring.js"></script>
 <!-- authoring.ts was 1341 lines; these five are it, split by job. authoring.js
      stays first — it keeps the module-local state the rest read. -->

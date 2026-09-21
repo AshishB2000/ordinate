@@ -90,6 +90,7 @@ const HOME_TYPE_LABEL: Record<string, string> = {
   analysis: 'Dashboard',
   dashboard: 'Dashboard',
   capture: 'Capture',
+  report: 'Report',
 };
 
 // One inline SVG path per record type. Inline, not an icon library: no new
@@ -103,6 +104,9 @@ const HOME_TYPE_PATH: Record<string, string> = {
   // The camera: the same mark the Captures grid and a capture-sourced dataset
   // row carry, so one glyph means "this came from a screenshot" everywhere.
   capture: 'M3 8.5A2 2 0 0 1 5 6.5h1.2l.8-1.4A1.5 1.5 0 0 1 8.3 4.3h7.4a1.5 1.5 0 0 1 1.3.8l.8 1.4H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM15.4 13a3.4 3.4 0 1 1-6.8 0 3.4 3.4 0 0 1 6.8 0Z',
+  // A printed sheet with a fold: a report is the one record type that leaves
+  // the app as a FILE, so its mark is a document rather than a chart.
+  report: 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Zm0 0v5h5M9 13h6M9 17h4',
 };
 
 function homeTypeIcon(type: string): SVGSVGElement {
@@ -348,6 +352,11 @@ async function openRecentItem(it: any): Promise<void> {
   } else if (it.type === 'analysis') {
     selectSection('analyses');
     if (typeof openAnalysis === 'function') openAnalysis(String(it.id));
+  } else if (it.type === 'report') {
+    // Land on the Reports tab with this report open in the builder — the same
+    // place its Edit action goes, so one row and one button mean one thing.
+    selectSection('analyses');
+    if (typeof rbOpenReportById === 'function') void rbOpenReportById(String(it.id));
   } else if (it.type === 'capture') {
     // A Recent row carries `name`; a capture summary calls that `title`. The
     // page fetches the crop and the stored result itself (hubCapture.ts).

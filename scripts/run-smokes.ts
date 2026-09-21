@@ -53,6 +53,9 @@ const SMOKES = [
   // Last, and after smoke-theme deliberately: both drive the real Appearance
   // control, and this one is about what survives it into a FILE.
   'smoke-export',
+  // After smoke-export, for the same reason it is after smoke-theme: this one
+  // is also about what survives into a FILE, and it unzips the ones it makes.
+  'smoke-reports',
 ];
 
 const results: { name: string; code: number }[] = [];

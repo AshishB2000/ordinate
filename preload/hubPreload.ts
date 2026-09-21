@@ -561,6 +561,33 @@ contextBridge.exposeInMainWorld('hub', {
   // Reveal the project's on-disk folder — the git-shareable, secret-free artifact.
   // projectId is UUID-guarded in MAIN so the path can never escape userData/projects.
   revealProjectFolder: (projectId: string) => ipcRenderer.invoke('dashboard:revealFolder', { projectId }),
+  // ── Reports (src/ipc/reports.ts) ──
+  // The record's CRUD. The pages are built in MAIN from the dashboard's own
+  // sheets (reportsCreate takes no page list), and every id is UUID-guarded
+  // there before it reaches a path.
+  reportsList: (projectId: string) => ipcRenderer.invoke('reports:list', { projectId }),
+  reportsGet: (projectId: string, id: string) => ipcRenderer.invoke('reports:get', { projectId, id }),
+  reportsCreate: (projectId: string, analysisId: string) =>
+    ipcRenderer.invoke('reports:create', { projectId, analysisId }),
+  reportsUpdate: (projectId: string, id: string, patch: any) =>
+    ipcRenderer.invoke('reports:update', { projectId, id, patch }),
+  reportsDelete: (projectId: string, id: string) => ipcRenderer.invoke('reports:delete', { projectId, id }),
+  reportsDuplicate: (projectId: string, id: string) => ipcRenderer.invoke('reports:duplicate', { projectId, id }),
+  // The app's own sentence for one tile — pure arithmetic in main over figures
+  // the renderer already computed. One implementation, pinned by test-captions.
+  reportsCaption: (input: any) => ipcRenderer.invoke('reports:caption', { input }),
+  reportsPickFolder: () => ipcRenderer.invoke('reports:pickFolder'),
+  // A manual Generate → the native save panel. A SCHEDULED run → the folder
+  // stored on the record; main reads the destination off the record, never off
+  // this payload.
+  reportsSaveAs: (projectId: string, id: string, base64: string, ext: string) =>
+    ipcRenderer.invoke('reports:saveAs', { projectId, id, base64, ext }),
+  reportsWriteScheduled: (projectId: string, id: string, base64: string, nowMs?: number) =>
+    ipcRenderer.invoke('reports:writeScheduled', { projectId, id, base64, nowMs }),
+  reportsDue: (nowMs?: number) => ipcRenderer.invoke('reports:due', { nowMs }),
+  reportsReveal: (projectId: string, id: string) => ipcRenderer.invoke('reports:reveal', { projectId, id }),
+  // Main rings the bell at the end of the refresh tick; the hub does the work.
+  onReportsRunDue: (cb: () => void) => ipcRenderer.on('reports:run-due', () => cb()),
   // ── AI Copilot (Week 11) — per-project, context-aware chat ──
   // Load one conversation's turns (survives reload); returns { ok, turns, threadId }.
   // threadId is optional and defaults to the most recent conversation, so every

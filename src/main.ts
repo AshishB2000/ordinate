@@ -621,9 +621,26 @@ require("./ipc/insights").register();
     }
   });
 
+  // THE REPORT HOOK. Scheduled reports ride the dataset scheduler's tick rather
+  // than starting a second timer: a report prints figures, so it must be
+  // generated AFTER any refresh due for its datasets in the same tick, and
+  // "after" is only guaranteed if there is one tick. `afterTick` fires when the
+  // refresh pass has finished (serially — see refreshScheduler's header).
+  //
+  // Main only rings the bell. The hub renderer owns generation, because the
+  // chart engine and the three document libraries live there; it answers by
+  // calling `reports:writeScheduled`, which is where the bytes reach disk.
+  scheduler.afterTick(() => {
+    if (hubWindow && !hubWindow.isDestroyed()) hubWindow.webContents.send("reports:run-due");
+  });
+
   scheduler.start();
   app.on("before-quit", () => scheduler.stop());
 }
+
+// Reports — the Report record's CRUD, the app-written caption, the folder
+// picker and the scheduled write. Generation itself is the renderer's job.
+require("./ipc/reports").register();
 
 require("./ipc/connections").register();
 

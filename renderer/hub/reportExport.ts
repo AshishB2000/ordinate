@@ -1,7 +1,20 @@
-// Report export — chart→PNG capture, the export dialog, and PDF/PPTX/DOCX
-// generation. Extracted from hub.js as a pure structural move (no logic changes).
-// Classic script sharing global scope with hub.js: buildChart, window.hub.save*,
-// and the pdfMake / PptxGenJS / docx globals all resolve at call time.
+// Report export — chart→PNG capture, the capture export dialog, and the
+// standalone HTML/PNG one-pager. Classic script sharing global scope with
+// hub.js: buildChart, window.hub.save* and the vendor globals all resolve at
+// call time.
+//
+// The three DOCUMENT writers used to live here too. They moved to
+// reportWriters.ts when they were generalised from "one capture, one page" to
+// "any Report's page list" and this file went past the 800-line cap
+// (.claude/rules/file-size.md). One set of writers, still — a capture report is
+// now a Report whose page list holds a single Tile page, which is exactly what
+// stops the capture export drifting away from the dashboard report. Three
+// files, three jobs:
+//
+//   reportExport.ts   capture a chart or a map to a PNG; the export dialog.
+//   reportRender.ts   a Report's pages → `RenderedPage`s → `reportPageBlocks`;
+//                     the builder's live preview reads the same blocks.
+//   reportWriters.ts  blocks → PDF / PPTX / DOCX bytes.
 
 // How a caller wants a capture FRAMED.
 //
@@ -233,9 +246,6 @@ function reportFilename(title: string | null | undefined, ext: string): string {
 }
 
 
-// Build the pdfmake document definition for the one-page report. Colors are the
-// app's LIGHT-theme tokens hardcoded (the PDF is always a white page, regardless
-// of the app's current theme). A4 with 36pt side margins → 523pt content width.
 // The app's brand mark, inlined as a PNG data URL. Inlined because assets/
 // icons is excluded from the packaged asar (see package.json build.files), so
 // the report paths cannot read it off disk. A PNG rather than the SVG the
@@ -244,325 +254,9 @@ function reportFilename(title: string | null | undefined, ext: string): string {
 const REPORT_LOGO_PNG =
   'data:image/png;base64,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';
 
-// ponytail: the export args ({ title, analysis, headlineSegments, png, … }) and the
-// pdfmake/pptxgenjs/docx document trees are big untyped envelopes — typed `any`
-// throughout this file; the vendor globals are already `any` in globals.d.ts.
-function buildReportDoc({ title, analysis, headlineSegments, png }: any) {
-  // Mirror renderer/theme.css light tokens — kept literal since a PDF can't read CSS vars.
-  const C = { ink: '#18181b', strong: '#0f1117', muted: '#6b7280', accent: '#2563eb', border: '#e5e7eb' };
-  const CONTENT_W = 523;
-  const dateStr = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
-
-  const content: any[] = [];
-  // Header: capture title (left) + a small brand lockup, top-right — logo mark,
-  // then the Ordinate wordmark with the date beneath it.
-  content.push({
-    columns: [
-      { text: title || 'Analysis', style: 'title', width: '*' },
-      { image: REPORT_LOGO_PNG, width: 13, height: 13, margin: [0, 2, 5, 0] },
-      { stack: [{ text: 'Ordinate', style: 'wordmark' }, { text: dateStr, style: 'date' }], width: 'auto' },
-    ],
-    columnGap: 0,
-  });
-  // Accent rule under the header.
-  content.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: CONTENT_W, y2: 0, lineWidth: 2, lineColor: C.accent }], margin: [0, 10, 0, 16] });
-  // Qualitative analysis paragraph.
-  const hasHeadline = Array.isArray(headlineSegments) && headlineSegments.length;
-  if (analysis) content.push({ text: analysis, style: 'analysis', margin: [0, 0, 0, hasHeadline ? 10 : 16] });
-  // Headline — keep the bold emphasis on the key figures (our segments → pdfmake runs).
-  if (hasHeadline) {
-    content.push({
-      text: headlineSegments.map((s: any) => (s && s.bold) ? { text: s.text, bold: true, color: C.strong } : (s ? s.text : '')),
-      style: 'headline', margin: [0, 0, 0, 18],
-    });
-  }
-  // The chosen chart as the crisp PNG — fit (preserves aspect, never stretches).
-  if (png) content.push({ image: png, fit: [CONTENT_W, 360], alignment: 'center' });
-  else content.push({ text: '(chart unavailable for this view)', style: 'muted', italics: true, margin: [0, 8, 0, 0] });
-
-  return {
-    pageSize: 'A4',
-    pageMargins: [36, 40, 36, 52],
-    content,
-    // Subtle footer: attribution + date on the left; a page number on the right
-    // only when the report spills past one page.
-    footer: (currentPage: number, pageCount: number) => {
-      const cols: any[] = [{ text: 'Generated by Ordinate · ' + dateStr, style: 'footer' }];
-      if (pageCount > 1) cols.push({ text: currentPage + ' / ' + pageCount, style: 'footer', alignment: 'right', width: 'auto' });
-      return { margin: [36, 8, 36, 0], columns: cols, columnGap: 8 };
-    },
-    styles: {
-      title: { fontSize: 18, bold: true, color: C.strong },
-      wordmark: { fontSize: 11, bold: true, color: C.accent },
-      date: { fontSize: 9, color: C.muted, margin: [0, 2, 0, 0] },
-      analysis: { fontSize: 11, color: C.ink, lineHeight: 1.4 },
-      headline: { fontSize: 12, color: C.ink, lineHeight: 1.4 },
-      muted: { fontSize: 10, color: C.muted },
-      footer: { fontSize: 8, color: C.muted },
-    },
-    defaultStyle: { font: 'Roboto', fontSize: 11, color: C.ink },
-    info: { title: title || 'Ordinate report', creator: 'Ordinate' },
-  };
-}
-
-// Generate the one-page PDF (pdfmake, in-renderer) and save it via the native
-// dialog (main process). png is the Stage-A capture (null if the chart couldn't
-// be drawn — the doc then notes that gracefully instead of failing).
-async function exportPdf({ title, analysis, headlineSegments, type, png }: any) {
-  showToast('Preparing PDF engine…');
-  await ensureBundle('pdf');
-  if (!window.pdfMake || typeof window.pdfMake.createPdf !== 'function') {
-    showToast('PDF engine not loaded'); return;
-  }
-  showToast('Building PDF…');
-  let base64;
-  try {
-    const doc = buildReportDoc({ title, analysis, headlineSegments, png });
-    // pdfmake 0.3.x: getBase64() returns a Promise (no callback) — await it directly.
-    // (Passing a callback here silently hung at "Building PDF…".)
-    base64 = await window.pdfMake.createPdf(doc).getBase64();
-  } catch (e) {
-    console.error('[export] PDF build failed', e);
-    showToast('Couldn’t build the PDF'); return;
-  }
-  try {
-    const res = await window.hub.savePdf(base64, reportFilename(title, 'pdf'));
-    if (res && res.ok) showToast(`Saved: ${String(res.dest).split(/[\\/]/).pop()}`);
-    else if (!res || !res.canceled) showToast('Save failed');
-  } catch (e) {
-    console.error('[export] save failed', e);
-    showToast('Save failed');
-  }
-}
-
-// Build the .pptx deck — same content as the PDF, laid out as SLIDES (16:9). Slide 1
-// is title + brand lockup + analysis + the bold-figure headline; slide 2 is the chart
-// big and centered. pptxgenjs colors are bare hex (no '#'). logoPng is the rasterized
-// brand mark (null → omitted). Returns the configured PptxGenJS instance.
-function buildReportPptx({ title, analysis, headlineSegments, png, logoPng }: any) {
-  const C = { ink: '18181B', strong: '0F1117', muted: '6B7280', accent: '2563EB' };
-  const dateStr = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
-  const pptx = new window.PptxGenJS();
-  pptx.layout = 'LAYOUT_WIDE'; // 13.33 x 7.5 in (16:9 widescreen)
-  const W = 13.33;
-  const t = title || 'Analysis';
-
-  const header = (slide: any) => {
-    if (logoPng) slide.addImage({ data: logoPng, x: 11.3, y: 0.4, w: 0.38, h: 0.38 });
-    slide.addText('Ordinate', { x: 11.74, y: 0.34, w: 1.55, h: 0.3, fontSize: 14, bold: true, color: C.accent });
-    slide.addText(dateStr, { x: 11.74, y: 0.64, w: 1.55, h: 0.22, fontSize: 9, color: C.muted });
-    slide.addText(t, { x: 0.6, y: 0.4, w: 10.6, h: 0.7, fontSize: 26, bold: true, color: C.strong, valign: 'top' });
-    slide.addShape(pptx.ShapeType.rect, { x: 0.6, y: 1.18, w: W - 1.2, h: 0.03, fill: { color: C.accent } });
-  };
-  const footer = (slide: any, n: number) => slide.addText(`Ordinate  ·  ${dateStr}  ·  ${n}`,
-    { x: 0.6, y: 7.05, w: W - 1.2, h: 0.3, fontSize: 9, color: C.muted });
-
-  // Slide 1 — analysis + headline (key figures bold).
-  const s1 = pptx.addSlide();
-  header(s1);
-  if (analysis) s1.addText(analysis, { x: 0.6, y: 1.5, w: W - 1.2, h: 1.6, fontSize: 16, color: C.ink, lineSpacingMultiple: 1.25, valign: 'top' });
-  if (Array.isArray(headlineSegments) && headlineSegments.length) {
-    s1.addText(
-      headlineSegments.map((s: any) => ({ text: (s && s.text) || '', options: { bold: !!(s && s.bold), color: (s && s.bold) ? C.strong : C.ink } })),
-      { x: 0.6, y: analysis ? 3.3 : 1.6, w: W - 1.2, h: 1.7, fontSize: 18, color: C.ink, lineSpacingMultiple: 1.25, valign: 'top' });
-  }
-  footer(s1, 1);
-
-  // Slide 2 — the chosen chart, large + centered (contain = never stretched).
-  const s2 = pptx.addSlide();
-  header(s2);
-  if (png) s2.addImage({ data: png, x: 1.0, y: 1.5, w: W - 2.0, h: 5.2, sizing: { type: 'contain', w: W - 2.0, h: 5.2 } });
-  else s2.addText('(chart unavailable for this view)', { x: 0.6, y: 3.5, w: W - 1.2, h: 0.5, fontSize: 14, italic: true, color: C.muted, align: 'center' });
-  footer(s2, 2);
-
-  return pptx;
-}
-
-// Generate the .pptx (pptxgenjs, in-renderer) and save via the native dialog.
-async function exportPptx({ title, analysis, headlineSegments, png }: any) {
-  showToast('Preparing PowerPoint engine…');
-  await ensureBundle('pptx');
-  if (!window.PptxGenJS) { showToast('PowerPoint engine not loaded'); return; }
-  showToast('Building PowerPoint…');
-  let base64;
-  try {
-    const logoPng = REPORT_LOGO_PNG;
-    const pptx = buildReportPptx({ title, analysis, headlineSegments, png, logoPng });
-    base64 = await pptx.write({ outputType: 'base64' });
-  } catch (e) {
-    console.error('[export] PPTX build failed', e);
-    showToast('Couldn’t build the PowerPoint'); return;
-  }
-  try {
-    const res = await window.hub.savePptx(base64, reportFilename(title, 'pptx'));
-    if (res && res.ok) showToast(`Saved: ${String(res.dest).split(/[\\/]/).pop()}`);
-    else if (!res || !res.canceled) showToast('Save failed');
-  } catch (e) {
-    console.error('[export] save failed', e);
-    showToast('Save failed');
-  }
-}
-
-// Natural pixel size of a PNG data URL (for sizing the image in the .docx).
-function imageSize(dataUrl: string): Promise<{ w: number; h: number } | null> {
-  return new Promise<{ w: number; h: number } | null>((resolve) => {
-    const img = new Image();
-    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
-    img.onerror = () => resolve(null);
-    img.src = dataUrl;
-  });
-}
-// data: URL → Uint8Array (docx ImageRun wants raw bytes, not a data URL).
-function dataUrlToBytes(dataUrl: string): Uint8Array {
-  const bin = atob(String(dataUrl).split(',')[1] || '');
-  const u8 = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-  return u8;
-}
-
-// Build the one-page Word document — same content + feel as the PDF, as a real
-// editable .docx (heading run, body font, accent divider, bold key figures, the
-// chart PNG sized to the content width, subtle footer). Colors are the app's LIGHT
-// tokens as bare hex (docx wants no '#'); the doc is always a white page.
-function buildReportDocx({ title, analysis, headlineSegments, png, logoPng, pngDims }: any) {
-  const d = window.docx;
-  const { Document, Paragraph, TextRun, ImageRun, AlignmentType, BorderStyle, Header, Footer,
-    PageNumber, TabStopType, Table, TableRow, TableCell, WidthType, VerticalAlign } = d;
-  const C = { ink: '18181B', strong: '0F1117', muted: '6B7280', accent: '2563EB' };
-  const FONT = 'Calibri';
-  const dateStr = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
-
-  // A4 in twips (1pt = 20 twips); margins mirror the PDF [L36 T40 R36 B52]pt.
-  const PAGE_W = 11906, PAGE_H = 16838, MARGIN = { top: 800, right: 720, bottom: 1040, left: 720 };
-  const CONTENT_TW = PAGE_W - MARGIN.left - MARGIN.right;          // content width, twips
-  const CONTENT_PX = Math.round((CONTENT_TW / 20) * (96 / 72));    // ≈ content width in px
-
-  // ── Header: title (left) + brand lockup (right) in a borderless 2-col table ──
-  const brandRuns: any[] = [];
-  if (logoPng) brandRuns.push(new ImageRun({ type: 'png', data: dataUrlToBytes(logoPng), transformation: { width: 22, height: 22 } }));
-  brandRuns.push(new TextRun({ text: (logoPng ? '  ' : '') + 'Ordinate', bold: true, color: C.accent, size: 26, font: FONT }));
-  const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
-  // The accent rule under the header lives on the header cells' BOTTOM border (a
-  // full-width 2pt blue line under the row) — more reliable than an empty-paragraph
-  // border, which some editors don't render. Matches the PDF's accent divider.
-  const accentRule = { style: BorderStyle.SINGLE, size: 16, color: C.accent, space: 4 };
-  const cellBorders = { top: noBorder, bottom: accentRule, left: noBorder, right: noBorder };
-  const headerTable = new Table({
-    width: { size: CONTENT_TW, type: WidthType.DXA },
-    borders: { top: noBorder, bottom: accentRule, left: noBorder, right: noBorder, insideHorizontal: noBorder, insideVertical: noBorder },
-    columnWidths: [Math.round(CONTENT_TW * 0.62), Math.round(CONTENT_TW * 0.38)],
-    rows: [new TableRow({
-      children: [
-        new TableCell({
-          borders: cellBorders, verticalAlign: VerticalAlign.CENTER,
-          width: { size: Math.round(CONTENT_TW * 0.62), type: WidthType.DXA },
-          children: [new Paragraph({ children: [new TextRun({ text: title || 'Analysis', bold: true, color: C.strong, size: 36, font: FONT })] })],
-        }),
-        new TableCell({
-          borders: cellBorders, verticalAlign: VerticalAlign.CENTER,
-          width: { size: Math.round(CONTENT_TW * 0.38), type: WidthType.DXA },
-          children: [
-            new Paragraph({ alignment: AlignmentType.RIGHT, children: brandRuns }),
-            new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: dateStr, color: C.muted, size: 18, font: FONT })] }),
-          ],
-        }),
-      ],
-    })],
-  });
-
-  // Spacer below the accent rule (the rule itself is the header cells' bottom border).
-  const divider = new Paragraph({ spacing: { after: 220 }, children: [] });
-
-  const children = [headerTable, divider];
-
-  if (analysis) {
-    children.push(new Paragraph({
-      spacing: { after: 200, line: 336, lineRule: 'auto' },
-      children: [new TextRun({ text: analysis, color: C.ink, size: 22, font: FONT })],
-    }));
-  }
-  if (Array.isArray(headlineSegments) && headlineSegments.length) {
-    children.push(new Paragraph({
-      spacing: { after: 320, line: 336, lineRule: 'auto' },
-      children: headlineSegments.map((s: any) => new TextRun({
-        text: (s && s.text) || '', bold: !!(s && s.bold),
-        color: (s && s.bold) ? C.strong : C.ink, size: 24, font: FONT,
-      })),
-    }));
-  }
-
-  // Chart PNG, sized to content width (preserve aspect; cap height like the PDF).
-  if (png) {
-    const maxW = CONTENT_PX, maxH = 480;
-    let w = maxW, h = maxW;
-    if (pngDims && pngDims.w && pngDims.h) {
-      h = Math.round(maxW * (pngDims.h / pngDims.w));
-      if (h > maxH) { h = maxH; w = Math.round(maxH * (pngDims.w / pngDims.h)); }
-    } else { h = Math.round(maxW * 0.6); }
-    children.push(new Paragraph({
-      alignment: AlignmentType.CENTER, spacing: { before: 60 },
-      children: [new ImageRun({ type: 'png', data: dataUrlToBytes(png), transformation: { width: w, height: h } })],
-    }));
-  } else {
-    children.push(new Paragraph({
-      spacing: { before: 120 },
-      children: [new TextRun({ text: '(chart unavailable for this view)', italics: true, color: C.muted, size: 20, font: FONT })],
-    }));
-  }
-
-  // Subtle footer: attribution left, page number right (Word footers are uniform,
-  // so the page number always shows; it reads "Page 1 of 1" on a one-pager).
-  const footer = new Footer({
-    children: [new Paragraph({
-      tabStops: [{ type: TabStopType.RIGHT, position: CONTENT_TW }],
-      children: [
-        new TextRun({ text: 'Generated by Ordinate · ' + dateStr, color: C.muted, size: 16, font: FONT }),
-        new TextRun({ text: '\tPage ', color: C.muted, size: 16, font: FONT }),
-        new TextRun({ children: [PageNumber.CURRENT], color: C.muted, size: 16, font: FONT }),
-        new TextRun({ text: ' of ', color: C.muted, size: 16, font: FONT }),
-        new TextRun({ children: [PageNumber.TOTAL_PAGES], color: C.muted, size: 16, font: FONT }),
-      ],
-    })],
-  });
-
-  return new Document({
-    creator: 'Ordinate',
-    title: title || 'Ordinate report',
-    styles: { default: { document: { run: { font: FONT, size: 22, color: C.ink } } } },
-    sections: [{
-      properties: { page: { size: { width: PAGE_W, height: PAGE_H }, margin: MARGIN } },
-      footers: { default: footer },
-      children,
-    }],
-  });
-}
-
-// Generate the one-page .docx (docx lib, in-renderer) and save via the native dialog.
-async function exportDocx({ title, analysis, headlineSegments, png }: any) {
-  showToast('Preparing Word engine…');
-  await ensureBundle('docx');
-  if (!window.docx || !window.docx.Packer) { showToast('Word engine not loaded'); return; }
-  showToast('Building Word…');
-  let base64;
-  try {
-    const logoPng = REPORT_LOGO_PNG;
-    const pngDims = png ? await imageSize(png) : null;
-    const doc = buildReportDocx({ title, analysis, headlineSegments, png, logoPng, pngDims });
-    base64 = await window.docx.Packer.toBase64String(doc);
-  } catch (e) {
-    console.error('[export] DOCX build failed', e);
-    showToast('Couldn’t build the Word doc'); return;
-  }
-  try {
-    const res = await window.hub.saveDocx(base64, reportFilename(title, 'docx'));
-    if (res && res.ok) showToast(`Saved: ${String(res.dest).split(/[\\/]/).pop()}`);
-    else if (!res || !res.canceled) showToast('Save failed');
-  } catch (e) {
-    console.error('[export] save failed', e);
-    showToast('Save failed');
-  }
-}
-
+// ponytail: the export args ({ title, analysis, headlineSegments, png, … }) are
+// big untyped envelopes — typed `any` throughout this file; the vendor globals
+// are already `any` in globals.d.ts.
 function escapeHtml(s: any): string {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

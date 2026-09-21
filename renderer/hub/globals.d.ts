@@ -344,6 +344,21 @@ declare global {
       exportDashboardPng(html: string, width: number, defaultName?: string): Promise<any>;
       exportDashboardPdf(html: string, width: number, defaultName?: string): Promise<any>;
       revealProjectFolder(projectId: string): Promise<any>;
+      // Reports (src/ipc/reports.ts) — record CRUD, the app-written caption,
+      // the folder picker, and the two write paths (panel / scheduled folder).
+      reportsList(projectId: string): Promise<any>;
+      reportsGet(projectId: string, id: string): Promise<any>;
+      reportsCreate(projectId: string, analysisId: string): Promise<any>;
+      reportsUpdate(projectId: string, id: string, patch: any): Promise<any>;
+      reportsDelete(projectId: string, id: string): Promise<any>;
+      reportsDuplicate(projectId: string, id: string): Promise<any>;
+      reportsCaption(input: any): Promise<string>;
+      reportsPickFolder(): Promise<any>;
+      reportsSaveAs(projectId: string, id: string, base64: string, ext: string): Promise<any>;
+      reportsWriteScheduled(projectId: string, id: string, base64: string, nowMs?: number): Promise<any>;
+      reportsDue(nowMs?: number): Promise<any>;
+      reportsReveal(projectId: string, id: string): Promise<any>;
+      onReportsRunDue(cb: () => void): void;
       // ── AI Copilot (Week 11) ──
       copilotHistory(projectId: string, threadId?: string): Promise<any>;
       copilotThreads(projectId: string): Promise<any>;
