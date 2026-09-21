@@ -32,7 +32,12 @@ interface LocalCliBlock {
 }
 
 export interface MemoryModel { mode: string; provider: string | null; model: string }
-interface Notifications { sound: boolean; desktop: boolean }
+// `alerts` defaults ON and the other three OFF, which is the whole difference
+// between the two kinds of notification this app sends. sound/desktop are about
+// an analysis you started and are watching; `alerts` is about a rule you wrote
+// for a number you are NOT watching, so a default of off would make the feature
+// quietly do nothing. `alertExplain` is opt-in because it spends a model call.
+interface Notifications { sound: boolean; desktop: boolean; alerts: boolean; alertExplain: boolean }
 
 // Per-connection secret (pg password, URL auth token). Stored EXACTLY like an API
 // key: plaintext in userData/config.json (gitignored), keyed by the connection's
@@ -158,7 +163,9 @@ const DEFAULTS: Omit<Config, 'providers' | 'byok'> = {
   // Completion notifications, both OFF by default. sound: play a short beep when
   // an analysis turn finishes. desktop: OS notification when it finishes AND the
   // window isn't focused. Best-effort — never block/error the analysis.
-  notifications: { sound: false, desktop: false },
+  // `alerts`/`alertExplain` are the alert rules' own switches — see the
+  // Notifications interface above for why one of them defaults the other way.
+  notifications: { sound: false, desktop: false, alerts: true, alertExplain: false },
   autoRefresh: true,
   // AI Copilot panel is ON by default — it stays fully optional (execution-gated),
   // but the user can also switch it OFF entirely from the panel's toggle.
@@ -216,6 +223,10 @@ function sanitize(input: any): Partial<Config> {
     out.notifications = {
       sound: Boolean(input.notifications.sound),
       desktop: Boolean(input.notifications.desktop),
+      // Absent means ON, so a config written before alerts existed does not
+      // arrive with the feature already switched off.
+      alerts: input.notifications.alerts === undefined ? true : Boolean(input.notifications.alerts),
+      alertExplain: Boolean(input.notifications.alertExplain),
     };
   }
   if (typeof input.copilotEnabled === 'boolean') out.copilotEnabled = input.copilotEnabled;
@@ -390,10 +401,12 @@ export function setAutoRefreshEnabled(on: boolean): { ok: boolean; autoRefresh: 
 
 export function setNotifications(fields: any): { ok: boolean; notifications: Notifications } {
   const cfg = get();
-  const cur = cfg.notifications || { sound: false, desktop: false };
+  const cur = cfg.notifications || { sound: false, desktop: false, alerts: true, alertExplain: false };
   const next = { ...cur };
   if (fields && 'sound' in fields)   next.sound = Boolean(fields.sound);
   if (fields && 'desktop' in fields) next.desktop = Boolean(fields.desktop);
+  if (fields && 'alerts' in fields)  next.alerts = Boolean(fields.alerts);
+  if (fields && 'alertExplain' in fields) next.alertExplain = Boolean(fields.alertExplain);
   cfg.notifications = next;
   persist(cfg);
   return { ok: true, notifications: next };
@@ -424,7 +437,7 @@ export function resetToDefaults(): { ok: boolean } {
   const fresh = { ...DEFAULTS, providers: freshProviders(), byok: freshByok(),
     localCli: { activeId: null, lastDetection: null, models: {} },
     memoryModel: { mode: 'same_as_chat', provider: null, model: '' },
-    modelCache: {}, notifications: { sound: false, desktop: false },
+    modelCache: {}, notifications: { sound: false, desktop: false, alerts: true, alertExplain: false },
     connectionSecrets: {} };
   persist(fresh);
   return { ok: true };

@@ -115,6 +115,30 @@ async function loadMetricTarget(projectId: string, datasetId: string): Promise<M
 }
 
 /**
+ * The ONE app-computed number for a metric card, resolved from scratch.
+ *
+ * EXPORTED for src/analysis/alertStore.ts, which is the only other caller: an
+ * alert about a KPI must be about THE SAME NUMBER the card shows, and the only
+ * way to guarantee that is for both to run this function rather than two
+ * implementations that agree today. (scripts/test-alerts.ts still asserts the
+ * agreement against `metricValue.computeMetric` with `Object.is`, so a future
+ * fork of this path fails loudly instead of quietly drifting.)
+ *
+ * `filters` must ALREADY be sanitized by the caller — this is the same
+ * `sanitizeDashboardFilters` contract the handler below holds, and it is a
+ * security control, not a formatter.
+ */
+export async function computeCardMetric(
+  projectId: string,
+  datasetId: string,
+  spec: { column: string; aggregation: MetricAggregation },
+  filters: FilterStep[] = [],
+): Promise<{ ok: boolean; value: number | null }> {
+  const target = await loadMetricTarget(projectId, datasetId);
+  return metricFor(projectId, datasetId, spec, filters, target);
+}
+
+/**
  * The ONE app-computed number for a metric card. Tries the resident query, then
  * falls back to hydrate-and-fold.
  *

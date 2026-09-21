@@ -51,6 +51,9 @@ const SMOKES = [
   'smoke-dashboards',
   'smoke-dashboard-edit',
   'smoke-insights',
+  // After smoke-insights: both write to the sample project, and this one's
+  // rules are created from the sample dashboard's own KPI card.
+  'smoke-alerts',
   'smoke-dashboard-styles',
   'smoke-theme',
   // Last, and after smoke-theme deliberately: both drive the real Appearance

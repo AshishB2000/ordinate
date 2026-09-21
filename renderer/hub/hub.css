@@ -14031,6 +14031,345 @@ body.no-sidebar .app-sidebar { display: none; }
   .rb-settings .rb-pane-head { grid-column: 1 / -1; }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   ALERTS — the rule dialog, the top-bar bell + inbox popover, the rules
+   page, and the small bell a watched KPI card wears.
+
+   ONE COLOUR RULE, and it is the reason this block is short: nothing here
+   is red unless a rule is actually firing. A standing rule is information
+   (muted, then --accent on hover); an UNSEEN event is news (--error for a
+   fall, --ok for a rise). `--ok` is this app's positive token and already
+   exists in both themes, so there is no new `--success` beside it.
+
+   Every colour is a theme var, so light and dark are one definition.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── The top-bar bell ──────────────────────────────────────────────────── */
+.hub-alerts-btn { position: relative; }
+/* The count. Absent — not "0" — when nothing is unread (aiPaintBell), so a
+   quiet inbox leaves the bar exactly as it was. */
+.al-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  border-radius: var(--r-full);
+  background: var(--error);
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+.hub-alerts-btn.has-unread { color: var(--text-strong); }
+
+/* ── The inbox popover ─────────────────────────────────────────────────── */
+.al-pop {
+  position: fixed;
+  z-index: 100002; /* above .ws-modal-overlay (100001) — the rules page opens FROM here */
+  width: 380px;
+  max-height: min(60vh, 520px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-float);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.al-pop-head,
+.al-pop-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
+  border-bottom: 1px solid var(--border);
+}
+.al-pop-foot {
+  border-bottom: 0;
+  border-top: 1px solid var(--border);
+}
+.al-pop-title {
+  font-family: var(--font-ui);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.al-pop-link {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
+  color: var(--accent);
+  cursor: pointer;
+}
+.al-pop-link:hover { text-decoration: underline; }
+.al-pop-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* One event. 64px is the row; the grid is [text | sparkline], with the
+   actions on a second line that only appears on hover or focus — four
+   buttons permanently visible on every row is the noise this inbox exists
+   to replace. */
+.al-ev {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--sp-8);
+  min-height: 64px;
+  padding: var(--sp-8) var(--sp-12);
+  border-bottom: 1px solid var(--border);
+}
+.al-ev:last-child { border-bottom: 0; }
+.al-ev:hover { background: var(--surface-2); }
+.al-ev-main { min-width: 0; }
+.al-ev-name {
+  font-family: var(--font-ui);
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.al-ev-msg {
+  font-size: var(--t-12);
+  line-height: var(--lh-snug);
+  color: var(--text);
+}
+.al-ev-when {
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+/* The unseen mark: a 2px bar, and the message in the alert colour. Nothing
+   else changes, because "new" is a state of the row, not a different row. */
+.al-ev.is-unseen {
+  border-left: 2px solid var(--error);
+  padding-left: calc(var(--sp-12) - 2px);
+}
+.al-ev.is-unseen .al-ev-msg { color: var(--error); }
+.al-spark {
+  grid-row: 1;
+  grid-column: 2;
+  color: var(--accent);
+  opacity: 0.85;
+}
+.al-ev-acts {
+  grid-column: 1 / -1;
+  display: none;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  padding-top: 2px;
+}
+.al-ev:hover .al-ev-acts,
+.al-ev:focus-within .al-ev-acts { display: flex; }
+.al-ev-act {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: var(--t-11);
+  color: var(--muted);
+  cursor: pointer;
+}
+.al-ev-act:hover { color: var(--accent); text-decoration: underline; }
+
+/* ── The rule dialog ───────────────────────────────────────────────────── */
+/* `.ws-modal` sets width: min(360px, …) and is defined EARLIER in this file,
+   so the class pair is what wins — the same trick .fd-modal and .an-wiz use. */
+.ws-modal.al-modal {
+  width: min(560px, calc(100vw - 48px));
+  text-align: left;
+}
+/* The metric summary. The dialog's first job is to prove it is about the
+   number on screen, so this sits above the tabs and carries the app-computed
+   value at card size. */
+.al-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-12);
+  margin-bottom: var(--sp-12);
+  padding: var(--sp-8) var(--sp-12);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.al-summary-label {
+  font-family: var(--font-ui);
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+.al-summary-value {
+  font-family: var(--font-ui);
+  font-size: var(--t-20);
+  font-weight: 600;
+  letter-spacing: var(--tr-tight);
+  color: var(--text-strong);
+}
+.al-body { padding-bottom: var(--sp-4); }
+.al-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}
+.al-row-label {
+  font-family: var(--font-ui);
+  font-size: var(--t-13);
+  color: var(--text);
+}
+/* A `.dd` stretches to its container by default, which would put the operator
+   on one line and its value on the next — the condition has to read as ONE
+   sentence, so the picker is sized to its longest option instead. */
+.al-row .dd {
+  flex: 0 0 auto;
+  width: 160px;
+}
+.al-num { width: 140px; }
+.al-name { flex: 1; min-width: 0; }
+.al-note {
+  margin: 0;
+  font-size: var(--t-12);
+  line-height: 1.6;
+  color: var(--muted);
+}
+/* Test sits on the LEFT of the action row, away from Cancel/Save: it is not a
+   way out of the dialog and must not read as one. */
+.al-actions-spacer { flex: 1; }
+.al-actions { align-items: center; }
+.al-test {
+  margin-top: var(--sp-12);
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-md);
+  font-size: var(--t-12);
+  line-height: var(--lh-snug);
+  background: var(--surface-1);
+  color: var(--text);
+}
+.al-test.is-fire {
+  background: var(--error-soft);
+  color: var(--error);
+}
+.al-test.is-quiet {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.al-test.is-bad { color: var(--muted); }
+
+/* ── The rules page ────────────────────────────────────────────────────── */
+.ws-modal.al-rules-modal {
+  width: min(880px, calc(100vw - 48px));
+  text-align: left;
+}
+.al-rules-body {
+  max-height: 60vh;
+  overflow: auto;
+}
+.al-rules-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-13);
+}
+.al-rules-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  text-align: left;
+  white-space: nowrap;
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: var(--sp-4) var(--sp-8);
+  border-bottom: 1px solid var(--border);
+}
+.al-rules-table td {
+  padding: var(--sp-8);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: middle;
+}
+/* The name is what a row is scanned by, so it gets the slack the fixed-width
+   columns beside it do not need. */
+.al-rule-name {
+  font-weight: 600;
+  color: var(--text-strong);
+  min-width: 18ch;
+}
+.al-rule-del { color: var(--muted); }
+.al-rule-del:hover { color: var(--error); }
+.al-quiet {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.al-quiet-sel {
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 2px var(--sp-4);
+}
+.al-quiet-dash { color: var(--muted); }
+.al-digest {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  font-size: var(--t-12);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+/* ── The KPI card's bell ───────────────────────────────────────────────── */
+/* Muted while a rule is merely watching; accented the moment its newest event
+   is unseen. Beside the title, before the ⋯ cluster, so it reads as part of
+   what the card IS rather than as another control. */
+.al-card-bell {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin-left: var(--sp-4);
+  color: var(--text-dim);
+}
+.al-card-bell.is-fired { color: var(--error); }
+/* The VALUE carries the mark, not the card: the number is what the rule is
+   about. An underline rather than a fill, so the figure stays legible. */
+.dash-card.al-fired .dash-metric-value {
+  text-decoration: underline;
+  text-decoration-color: var(--error);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+/* The inbox popover is a dropdown-sized host, so it joins the compact
+   empty-state group rather than wearing --sp-48. ('rules' takes the base
+   padding — it sits in an 880px modal.) */
+.ws-empty--alerts {
+  padding: var(--sp-24) var(--sp-16);
+  gap: 2px;
+  border: 0;
+  background: transparent;
+}
+
 /* ── The pivot table (pivotRender.js) ─────────────────────────────────────
    A grid of figures, so it is typeset like one: 13px cells in tabular
    figures on a 32px row, an 11px uppercase muted header, and NO zebra. Zebra

@@ -93,6 +93,18 @@
            exist via execBtns()/execBtnVisible()) — only the parent moved. -->
       <button id="exec-mode-btn-cap" class="as-icon-btn exec-btn-cap exec-btn-empty" type="button"
         aria-haspopup="true" aria-expanded="false" aria-label="No model connected" title="No model connected"></button>
+      <!-- The alert inbox. Right of search, because an alert is not a place you
+           go — it is something that happened while you were somewhere else, so
+           its unread count has to be visible from every surface. The popover,
+           the rule dialog and the rules page are all built in JS
+           (alertsInbox.ts / alerts.ts), the way every other dialog in this hub
+           is; only the door lives in markup. The badge is appended by
+           aiPaintBell() and is absent, not "0", when nothing is unread. -->
+      <button id="topbar-alerts" class="icon-btn hub-alerts-btn" type="button"
+        aria-haspopup="dialog" aria-expanded="false"
+        title="Alerts" aria-label="Alerts">
+        <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-bell"/></svg>
+      </button>
       <span class="hub-topbar-div" aria-hidden="true"></span>
       <!-- The Agent toggle — the dock's ONE on-screen door (⌘L is the other
            way in). It was two doors that looked nothing alike: a labelled
@@ -1024,6 +1036,9 @@
                 <div class="dsp-actions">
                   <button class="btn btn-sm js-dsp-chart-btn" type="button">Chart this column</button>
                   <button class="btn btn-sm js-dsp-filter-btn" type="button">Filter rows on this</button>
+                  <!-- Numeric columns only — dsWireProfileActions hides it for
+                       the rest, because an alert watches a number. -->
+                  <button class="btn btn-sm js-dsp-alert-btn" type="button" hidden>Alert me…</button>
                   <button class="btn btn-sm js-dsp-rename-btn" type="button">Rename</button>
                 </div>
               </aside>
@@ -1842,6 +1857,44 @@
                 </button>
               </div>
             </div>
+            <!-- Alerts. ON by default and separate from the two completion
+                 toggles below on purpose: those are about work you started and
+                 are watching, this is about a rule you wrote for a number you
+                 are NOT watching — a default of off would make the feature
+                 quietly do nothing. -->
+            <div class="stp-row">
+              <div class="stp-rl">
+                <div class="stp-rt">Alert notifications</div>
+                <div class="stp-rd">Tell me when one of my alert rules fires, whether or not this window is focused.</div>
+              </div>
+              <div class="stp-rr">
+                <button id="stp-notif-alerts" class="stp-switch stp-switch-on" type="button" role="switch"
+                  aria-checked="true" aria-label="Alert notifications">
+                  <span class="stp-switch-thumb"></span>
+                </button>
+              </div>
+            </div>
+            <div class="stp-row">
+              <div class="stp-rl">
+                <div class="stp-rt">Explain alerts</div>
+                <div class="stp-rd">After an alert fires, start a conversation about it. Needs a connected model; the alert never waits for it.</div>
+              </div>
+              <div class="stp-rr">
+                <button id="stp-notif-alert-explain" class="stp-switch" type="button" role="switch"
+                  aria-checked="false" aria-label="Explain alerts">
+                  <span class="stp-switch-thumb"></span>
+                </button>
+              </div>
+            </div>
+            <div class="stp-row">
+              <div class="stp-rl">
+                <div class="stp-rt">Alert rules</div>
+                <div class="stp-rd">What each rule watches, its quiet hours, and what it last saw.</div>
+              </div>
+              <div class="stp-rr">
+                <button id="stp-alerts-manage" class="btn btn-sm" type="button">Manage rules</button>
+              </div>
+            </div>
             <div class="stp-row">
               <div class="stp-rl">
                 <div class="stp-rt">Completion sound</div>
@@ -2588,6 +2641,10 @@
      stays FIRST of the group — it keeps the module-local state the rest read —
      and authoring.js / analyses.js stay after all of them, as before. -->
 <script src="dashGrid.js"></script>
+<!-- A card's chrome — the element, the header row, the ⋯ menu, the title —
+     split out of dashGrid.js at the 800-line cap. After it: the menu's rows
+     call dashGrid's nudge/resize/remove at CLICK time. -->
+<script src="dashCardChrome.js"></script>
 <script src="dashAdd.js"></script>
 <script src="dashAddControl.js"></script>
 <script src="dashFiltersUi.js"></script>
@@ -2680,6 +2737,13 @@
 <script src="commandDefs.js"></script>
 <script src="paletteRows.js"></script>
 <script src="palette.js"></script>
+<!-- Alerts. alerts.js owns the rule dialog and the rules/events cache the
+     dashboard grid reads while painting a KPI card's bell; alertsInbox.js owns
+     the top-bar bell, its popover and the rules page, and fills that cache. In
+     that order — the inbox calls alRefreshRules(). Both load AFTER the surfaces
+     they reach into (dashGrid, insights, dsProfile, dock). -->
+<script src="alerts.js"></script>
+<script src="alertsInbox.js"></script>
 <script src="hub.js"></script>
 
 <!-- Phase 5 — the Svelte islands bundle. An IIFE assigning ONE global

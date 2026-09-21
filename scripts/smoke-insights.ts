@@ -102,8 +102,11 @@ async function main(): Promise<void> {
   ok('…each card printing the app\'s own figures as chips',
     home.chips.every((n: number) => n > 0), JSON.stringify(home.chips));
   ok('…and drawing its chart', home.sparks >= 1, String(home.sparks));
-  ok('…offering Add to dashboard and Ask why',
-    home.actions.join('|') === 'Add to dashboard|Ask why', JSON.stringify(home.actions));
+  // The third is feat/alerts: "again" is a standing rule, so an insight is a
+  // place a rule is born (renderer/hub/alerts.ts).
+  ok('…offering Add to dashboard, Ask why, and an alert',
+    home.actions.join('|') === 'Add to dashboard|Ask why|Alert me if this happens again',
+    JSON.stringify(home.actions));
   await win.screenshot({ path: path.join(shotDir, 'insights-home.png') });
 
   // ── "Add to dashboard" writes a real record ──────────────────────────────

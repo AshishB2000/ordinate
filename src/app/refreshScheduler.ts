@@ -28,9 +28,7 @@ import * as datasets from '../data/datasets';
 import type { AutoRefreshEvery, DatasetSummary } from '../data/datasets';
 import * as projects from './projects';
 import { refreshDataset } from '../data/datasetRefresh';
-import { detectAnomalies } from '../analysis/anomalies';
-import { detectAnomaliesResident } from '../engine/anomaliesResident';
-import { diffAnomalies } from '../analysis/anomalyWatch';
+import type { AlertEvent } from '../analysis/alerts';
 
 /** How often the tick looks for work. The schedules themselves are hours apart. */
 const TICK_MS = 60_000;
@@ -111,8 +109,8 @@ export interface AutoRefreshOutcome {
   error?: string;
   rowsBefore: number;
   rowsAfter: number;
-  /** Anomalies found this run that were not there last run. App-computed; no model. */
-  newAnomalies?: number;
+  /** Alert rules on this dataset that fired this run. App-computed; no model. */
+  alertsFired?: number;
 }
 
 type Reporter = (outcome: AutoRefreshOutcome) => void;
@@ -131,11 +129,55 @@ export function onRefreshed(fn: Reporter): void {
  * has moved — which only holds if there is one tick, in one order, not two
  * timers racing. It fires on EVERY tick, including one that refreshed nothing,
  * because a report's own cadence is independent of any dataset's.
+ *
+ * NOT the same thing as `onTickAlerts` below, and the difference is the whole
+ * reason both exist: this one answers "the pass is over" and carries nothing,
+ * so a report can run on its own cadence. That one answers "here is what fired"
+ * and carries the events, because a digest cannot be built without them.
  */
 type AfterTick = () => void;
 let afterTickFn: AfterTick | null = null;
 export function afterTick(fn: AfterTick): void {
   afterTickFn = fn;
+}
+
+/**
+ * THE ALERT HOOK — the one thing this module gained when alerts landed.
+ *
+ * Set by main.ts to `alertStore.evaluateProject`, and AWAITED inside the tick
+ * rather than fired off beside it. Awaiting is what makes "one digest per
+ * refresh tick" possible: the tick knows when every rule has been considered,
+ * and a caller that dispatched evaluation and moved on would have no such
+ * moment to batch at.
+ *
+ * It replaced `runWatch`, which was a second, parallel notification path for the
+ * one question "did something change that I care about". An `anomaly` rule now
+ * answers that question, `alertStore.syncWatchRules` turns the existing
+ * per-dataset watch toggle into one, and there is a single mechanism again.
+ *
+ * Injected, not imported, for the reason every hook in this file is: the
+ * scheduler's job is deciding WHEN, and a module that also decided what to say
+ * would be two jobs (and, here, a cycle back through the IPC layer).
+ */
+type Evaluator = (projectId: string, datasetId: string) => Promise<AlertEvent[]>;
+let evaluate: Evaluator | null = null;
+export function onEvaluateAlerts(fn: Evaluator): void {
+  evaluate = fn;
+}
+
+/**
+ * Everything the tick fired, once, grouped by project — the batching point the
+ * "digest instead of individual" option needs.
+ *
+ * The evaluator deliberately does NOT notify; it only decides. Delivery happens
+ * here, after the last dataset, so a tick that refreshed four datasets and fired
+ * six rules can be one banner instead of six.
+ */
+export interface TickAlerts { projectId: string; events: AlertEvent[] }
+type TickReporter = (batches: TickAlerts[]) => void;
+let reportTick: TickReporter | null = null;
+export function onTickAlerts(fn: TickReporter): void {
+  reportTick = fn;
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -152,6 +194,7 @@ export function setEnabledCheck(fn: () => boolean): void {
  */
 export async function tickNow(now = Date.now()): Promise<AutoRefreshOutcome[]> {
   const outcomes: AutoRefreshOutcome[] = [];
+  const byProject = new Map<string, AlertEvent[]>();
   if (running) return outcomes; // the previous tick is still working
   running = true;
   try {
@@ -174,8 +217,21 @@ export async function tickNow(now = Date.now()): Promise<AutoRefreshOutcome[]> {
         rowsAfter: (after && after.rowCount) || 0,
       };
       if (!outcome.ok) outcome.error = (res as any).error || 'Refresh failed.';
-      if (outcome.ok && m.autoRefresh && m.autoRefresh.watch) {
-        outcome.newAnomalies = await runWatch(m.projectId, m.id, m.autoRefresh.lastAnomalyKeys);
+      // The alert pass runs on FRESH data, which is why it is here rather than
+      // in the reporter: a rule evaluated before the refresh landed would be
+      // reporting yesterday's number as today's.
+      if (outcome.ok && evaluate) {
+        try {
+          const fired = await evaluate(m.projectId, m.id);
+          outcome.alertsFired = fired.length;
+          if (fired.length) {
+            const bucket = byProject.get(m.projectId) || [];
+            for (const e of fired) bucket.push(e);
+            byProject.set(m.projectId, bucket);
+          }
+        } catch (_) {
+          // An evaluation that throws must not take the refresh down with it.
+        }
       }
       outcomes.push(outcome);
       if (report) {
@@ -196,37 +252,14 @@ export async function tickNow(now = Date.now()): Promise<AutoRefreshOutcome[]> {
       try { afterTickFn(); } catch (_) { /* a ride-along must never stop the loop */ }
     }
   }
-  return outcomes;
-}
-
-/**
- * The anomaly watch for one dataset that just refreshed successfully.
- *
- * Resident fast path first, JS reference as the fallback — the pairing this
- * codebase already uses everywhere, and for the same reason: a resident `null`
- * means "fall back", never "no anomalies".
- *
- * Returns how many findings are NEW. Zero (or a failure to read the table at
- * all) means nothing to say, which is the common case and must stay silent.
- */
-async function runWatch(projectId: string, id: string, previous?: string[]): Promise<number> {
-  try {
-    let found = null as ReturnType<typeof detectAnomalies> | null;
-    const src = await datasets.residentSource(projectId, id);
-    if (src) found = detectAnomaliesResident(src);
-    if (!found) {
-      const ds = await datasets.getDataset(projectId, id);
-      if (!ds) return 0;
-      found = detectAnomalies(ds.columns, ds.rows);
-    }
-    const { newKeys, keep } = diffAnomalies(found, previous);
-    // Store the CURRENT set even when nothing is new: a resolved anomaly has to
-    // drop out, or it counts as new again the day it returns having never left.
-    await datasets.setAutoRefresh(projectId, id, { lastAnomalyKeys: keep });
-    return newKeys.length;
-  } catch (_) {
-    return 0; // a watch that throws must not take the refresh down with it
+  // AFTER the loop, and only once: this is the batching point the digest option
+  // needs. Outside the try/finally on purpose — `running` is already cleared, so
+  // a throwing reporter cannot wedge the scheduler.
+  if (reportTick && byProject.size) {
+    const batches = Array.from(byProject, ([projectId, events]) => ({ projectId, events }));
+    try { reportTick(batches); } catch (_) { /* a reporter must never stop the tick */ }
   }
+  return outcomes;
 }
 
 export function start(): void {

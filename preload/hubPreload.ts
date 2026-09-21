@@ -274,6 +274,29 @@ contextBridge.exposeInMainWorld('hub', {
     ipcRenderer.invoke('dataset:update', { projectId, datasetId, autoRefresh }),
   setDatasetWatch: (projectId: string, datasetId: string, watch: boolean) =>
     ipcRenderer.invoke('dataset:update', { projectId, datasetId, watch }),
+
+  // ── Alerts ──
+  // Rules + their events live on the project (userData/projects/<id>/alerts.json).
+  // Every figure in an event is computed in MAIN by the same function a KPI card
+  // uses; the renderer only ever displays one.
+  listAlerts: (projectId: string) => ipcRenderer.invoke('alerts:list', { projectId }),
+  saveAlertRule: (projectId: string, rule: any) => ipcRenderer.invoke('alerts:save', { projectId, rule }),
+  patchAlertRule: (projectId: string, ruleId: string, patch: any) =>
+    ipcRenderer.invoke('alerts:patch', { projectId, ruleId, patch }),
+  deleteAlertRule: (projectId: string, ruleId: string) =>
+    ipcRenderer.invoke('alerts:delete', { projectId, ruleId }),
+  // "Would fire / would not fire", with the app-computed numbers behind it.
+  testAlertRule: (projectId: string, rule: any) => ipcRenderer.invoke('alerts:test', { projectId, rule }),
+  evaluateAlerts: (projectId: string, datasetId?: string) =>
+    ipcRenderer.invoke('alerts:evaluate', { projectId, datasetId }),
+  // Omit eventId to mark the whole inbox seen.
+  markAlertSeen: (projectId: string, eventId?: string) =>
+    ipcRenderer.invoke('alerts:markSeen', { projectId, eventId }),
+  setAlertDigest: (projectId: string, on: boolean) => ipcRenderer.invoke('alerts:setDigest', { projectId, on }),
+  // OPTIONAL model narration of one event → { ok, threadId } | { ok:false, reason:'not_ready' }.
+  explainAlert: (projectId: string, event: any) => ipcRenderer.invoke('alerts:explain', { projectId, event }),
+  // Fire-and-forget from main the moment rules fire: { projectId, events }.
+  onAlertsFired: (cb: (p: any) => void) => ipcRenderer.on('alerts:fired', (_e, p) => cb(p)),
   updateDataset: (projectId: string, datasetId: string, columns: any[]) =>
     ipcRenderer.invoke('dataset:update', { projectId, datasetId, columns }),
   // OPTIONAL AI narration of an opened dataset (numbers computed in main, not by

@@ -78,7 +78,11 @@ const GUARD_NOTE = 'Contains a figure the app did not compute: ';
 // the first did not, and a flooded log is a log nobody reads.
 let guardWarned = false;
 
-function guardAnswer(text: string, ledger: LedgerEntry[]): { text: string; audit: NumberAudit } {
+// Exported for src/ipc/alerts.ts, the one other place a model narrates in this
+// app (the "Explain alerts" conversation). The guard is a safety control, not a
+// formatter — a second copy of it is a second thing that can silently stop
+// running, so there is one.
+export function guardAnswer(text: string, ledger: LedgerEntry[]): { text: string; audit: NumberAudit } {
   const audit = auditNumbers(text, ledger);
   if (audit.ok) return { text, audit };
   const tokens = audit.violations.map((v) => v.token).join(', ');

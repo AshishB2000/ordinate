@@ -82,7 +82,10 @@ async function main(): Promise<void> {
     //   2. the metric changes (a skipped predicate would return the full sum),
     //   3. residentTrace says 'resident', not 'skipped' or 'failed'.
     const trace = req('./src/engine/residentTrace.js');
-    const ipcVisuals = req('./src/ipc/visuals.js');
+    // The two resident fast paths moved out of ipc/visuals.js at the 800-line
+    // cap (.claude/rules/file-size.md); this is still the SHIPPED helper that
+    // `visual:data` calls.
+    const ipcVisuals = req('./src/ipc/visualsResident.js');
     const inFilter = [
       { type: 'filter', column: 'region', op: 'in', values: ['region0', 'region2', 'region4'] },
     ];
