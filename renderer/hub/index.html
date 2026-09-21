@@ -709,6 +709,45 @@
                   aria-selected="true" aria-controls="ds-saved">Datasets</button>
           <button class="ds-tab" type="button" role="tab" id="ds-tab-captures"
                   aria-selected="false" aria-controls="cap-grid-wrap" tabindex="-1">Captures</button>
+          <button class="ds-tab" type="button" role="tab" id="ds-tab-metrics"
+                  aria-selected="false" aria-controls="mp-wrap" tabindex="-1">Metrics</button>
+        </div>
+
+        <!-- The Metrics tab: the project's NAMED numbers. Same `.ws-table` /
+             `.ws-table-cols` / `.ws-row` the saved-dataset list uses — the
+             column labels live here, one template shared with the rows in
+             hub.css, so a label cannot drift out of line with the cell under
+             it. metricsPage.ts fills the list. -->
+        <div id="mp-wrap" role="tabpanel" aria-labelledby="ds-tab-metrics" hidden>
+          <div class="ds-head-actions mp-actions-row" id="mp-actions-row">
+            <button class="btn btn-primary" type="button" id="mp-new"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-plus"/></svg><span>New metric</span></button>
+            <!-- Filled by refreshMetricsList; the same chip the Visuals header uses. -->
+            <span class="viz-count mp-count-chip" id="mp-count"></span>
+          </div>
+          <div class="ws-table mp-table">
+            <div class="ws-table-cols mp-cols">
+              <span>Name</span>
+              <span>Dataset</span>
+              <span>Definition</span>
+              <span>Format</span>
+              <span>Value</span>
+              <span>Trend</span>
+              <span>Used in</span>
+              <span class="ws-col-action">Action</span>
+            </div>
+            <div class="mp-list" id="mp-list"></div>
+            <!-- The shared empty state (see .ws-empty in hub.css): icon circle,
+                 title, line, one primary. Spelled in markup here rather than
+                 built, because the button is wired by id in metricsPage.ts. -->
+            <div class="ws-empty mp-empty" id="mp-empty" hidden>
+              <span class="ws-empty-icon" aria-hidden="true"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chart-line"/></svg></span>
+              <h3 class="ws-empty-h">No metrics yet</h3>
+              <p class="ws-empty-p">A metric names a number once — "Revenue" is the sum of the revenue column — so every card, chart and alert that shows it agrees on what it is and how it reads.</p>
+              <div class="ws-empty-actions">
+                <button class="btn btn-primary" type="button" id="mp-empty-new">New metric</button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- The Captures tab: a card grid of screenshots. Same `.viz-grid` /
@@ -2716,6 +2755,14 @@
 <script src="captureStatus.js"></script>
 <script src="hubCapture.js"></script>
 <script src="captureList.js"></script>
+<!-- The metrics layer, after captureList.js — which owns the Data tab strip and
+     is what calls refreshMetricsList. The other two dependencies are reached
+     from handlers rather than at load: openMiniMenu (chartControls.js, above)
+     is the picker's popover and aiSparkline (alertsInbox.js, BELOW) is the
+     table's trend line, and both are called long after every script has run. -->
+<script src="metricPicker.js"></script>
+<script src="metricEditor.js"></script>
+<script src="metricsPage.js"></script>
 <script src="hubResultMenus.js"></script>
 <!-- The command registry, its contents, and the palette that reads them.
      commands.js is the machinery, commandDefs.js registers every command (so it

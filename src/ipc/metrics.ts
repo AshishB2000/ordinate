@@ -1,0 +1,469 @@
+// Metrics IPC — list/get/save/update/duplicate/delete a Metric, plus the three
+// reads that make a metric worth having: `metric:value` (the ONE app-computed
+// figure under a scope), `metric:series` (that figure broken out by a column)
+// and `metric:usage` (everything that points at it).
+//
+// THE NUMBER IS NEVER COMPUTED HERE FROM SCRATCH. Every figure bottoms out in
+// `computeCardMetric` (src/ipc/dashboards.ts) — the same call a KPI card and an
+// alert already make, resident fast path then JS fallback, already differential-
+// tested against `metricValue.computeMetric`. A second resolver would be a
+// second answer to "what is Revenue", which is the exact problem this layer
+// exists to remove.
+//
+// ── Scope is FILTERS ─────────────────────────────────────────────────────────
+// A dashboard's controls and a chart's click-selection are already compiled to
+// `FilterStep[]` before they leave the renderer (dashboardFilters.controlSteps),
+// so a scope with separate `controls`/`selection` fields would be three names
+// for one thing and three places to sanitize. Scope is filters, and they are
+// sanitized by `sanitizeDashboardFilters` — a security control, not a formatter —
+// exactly as the metric-card handler does.
+//
+// ── Why a formula resolves its operands, not its ratios ─────────────────────
+// `[Margin %]` under a West filter must be West's profit over West's revenue.
+// So each operand is resolved UNDER THE SAME SCOPE and the expression runs on
+// the results. Folding a stored ratio, or averaging per-row ratios, gives a
+// number that is wrong in a way no one can see.
+
+import { ipcMain } from 'electron';
+
+import * as metrics from '../analysis/metrics';
+import type { Metric, MetricDefinition } from '../analysis/metrics';
+import { isFormulaDefinition } from '../analysis/metrics';
+import { formatMetricValue, describeDefinition } from '../analysis/metricFormat';
+import { compileMetricFormula, evaluateMetricFormula } from '../analysis/metricFormula';
+import { proposeMetrics } from '../analysis/metricAuto';
+import { metricUsage } from '../analysis/metricUsage';
+import { computeCardMetric } from './dashboards';
+import { sanitizeDashboardFilters } from '../analysis/dashboards';
+import * as datasets from '../data/datasets';
+import { readDistinctPage, distinctValuesPageJs } from '../engine/datasetPage';
+import { periodPlan, orderPeriods } from '../analysis/insightsAgg';
+import type { FilterStep } from '../data/transforms';
+
+/** How many distinct values of a breakout column are read before rolling up. */
+const SERIES_SCAN = 2000;
+/** A sparkline is a sparkline. Past this it is a chart, and the page has one. */
+const SERIES_MAX_POINTS = 24;
+/**
+ * How deep `[A]` → `[B]` → `[C]` may go before a formula is assumed circular.
+ *
+ * The stack below already refuses a metric that references ITSELF, directly or
+ * around a loop; this is the belt to that's braces — a legitimate chain of
+ * derived metrics is two or three deep, and anything past ten is a mistake
+ * nobody is going to debug from a "—".
+ */
+const MAX_FORMULA_DEPTH = 10;
+
+/** One resolution's working state: a per-call memo so `[Profit] / [Revenue]`
+ *  and a sibling metric that also uses Revenue cost one query, not two. */
+interface ResolveCtx {
+  projectId: string;
+  scope: FilterStep[];
+  byName: Map<string, Metric> | null;
+  memo: Map<string, number | null>;
+  /** Lowercased names currently being resolved — the cycle guard. */
+  stack: Set<string>;
+}
+
+async function namesFor(ctx: ResolveCtx): Promise<Map<string, Metric>> {
+  if (!ctx.byName) ctx.byName = await metrics.metricsByName(ctx.projectId);
+  return ctx.byName;
+}
+
+/**
+ * The value of one DEFINITION — the shared core of `metric:value` and the
+ * editor's live preview, which is why it takes a definition rather than a
+ * record: the preview shows a figure for something not yet saved, and a second
+ * code path for it would be a preview that can disagree with what gets saved.
+ *
+ * `filters` are the metric's OWN filters; `ctx.scope` is the dashboard's. Both
+ * apply, metric-first, because "revenue excluding refunds, in the West" is one
+ * filtered question and the order does not change the answer.
+ */
+async function resolveDefinition(
+  ctx: ResolveCtx,
+  datasetId: string,
+  definition: MetricDefinition,
+  filters: FilterStep[],
+  depth: number,
+): Promise<number | null> {
+  const all = filters.concat(ctx.scope);
+
+  if (!isFormulaDefinition(definition)) {
+    if (!definition.column) return null;
+    const res = await computeCardMetric(ctx.projectId, datasetId, definition, all);
+    return res.ok ? res.value : null;
+  }
+
+  if (depth > MAX_FORMULA_DEPTH) return null;
+
+  const meta = await datasets.getDatasetMeta(ctx.projectId, datasetId);
+  const columns = meta ? meta.columns.map((c) => c.name) : [];
+  const compiled = compileMetricFormula(definition.formula, columns);
+  if (!compiled.ok) return null;
+
+  const values = new Map<string, number | null>();
+
+  // Aggregations over this metric's own dataset — `sum(revenue)`.
+  for (const agg of compiled.program.aggregates) {
+    const res = await computeCardMetric(
+      ctx.projectId,
+      datasetId,
+      { column: agg.column, aggregation: agg.aggregation },
+      all,
+    );
+    values.set(agg.ref, res.ok ? res.value : null);
+  }
+
+  // References to other metrics — `[Revenue]`. Each resolved under the SAME
+  // scope, which is what makes a ratio of two metrics a ratio of two scoped
+  // figures rather than a scoped ratio of two unscoped ones.
+  for (const ref of compiled.program.metricRefs) {
+    values.set(ref, await resolveByName(ctx, ref, depth + 1));
+  }
+
+  return evaluateMetricFormula(compiled.program, values);
+}
+
+/** One metric by NAME, memoized, cycle-guarded. An unknown name resolves to
+ *  null — the formula then degrades to null too, rather than treating a typo as
+ *  zero. */
+async function resolveByName(ctx: ResolveCtx, name: string, depth: number): Promise<number | null> {
+  const key = String(name).toLowerCase();
+  if (ctx.memo.has(key)) return ctx.memo.get(key) ?? null;
+  // A metric that references itself, directly or around a loop, has no value.
+  // Without this the recursion below would not terminate.
+  if (ctx.stack.has(key)) return null;
+
+  const byName = await namesFor(ctx);
+  const metric = byName.get(key);
+  if (!metric) return null;
+
+  ctx.stack.add(key);
+  let value: number | null;
+  try {
+    value = await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, depth);
+  } finally {
+    ctx.stack.delete(key);
+  }
+  ctx.memo.set(key, value);
+  return value;
+}
+
+function newCtx(projectId: string, scope: FilterStep[]): ResolveCtx {
+  return { projectId, scope, byName: null, memo: new Map(), stack: new Set() };
+}
+
+export interface ResolvedMetric {
+  ok: boolean;
+  id: string;
+  name: string;
+  value: number | null;
+  /** The figure AS TEXT, formatted by the metric's own format. The renderer
+   *  prints this rather than re-formatting — see metricFormat.ts's header. */
+  display: string;
+  format: metrics.MetricFormat;
+  definitionText: string;
+  direction?: 'up_good' | 'down_good';
+}
+
+/**
+ * The ONE app-computed figure for a saved metric, under a scope.
+ *
+ * EXPORTED for scripts/test-metrics.ts and for any main-process caller that
+ * needs the same number a card shows (the same reason `computeCardMetric` and
+ * `buildFacts` are exported). `filters` must ALREADY be sanitized.
+ */
+export async function resolveMetric(
+  projectId: string,
+  metricId: string,
+  scope: { filters?: FilterStep[] } = {},
+): Promise<ResolvedMetric | null> {
+  const metric = await metrics.getMetric(projectId, metricId);
+  if (!metric) return null;
+  const ctx = newCtx(projectId, Array.isArray(scope.filters) ? scope.filters : []);
+  // Seeded so a self-reference inside this metric's own formula is caught by the
+  // same guard that catches a loop between two of them.
+  ctx.stack.add(metric.name.toLowerCase());
+  const value = await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, 0);
+  ctx.stack.delete(metric.name.toLowerCase());
+  const out: ResolvedMetric = {
+    ok: true,
+    id: metric.id,
+    name: metric.name,
+    value,
+    display: formatMetricValue(value, metric.format),
+    format: metric.format,
+    definitionText: describeDefinition(metric),
+  };
+  if (metric.direction) out.direction = metric.direction;
+  return out;
+}
+
+/** Distinct values of a column, resident-first. Mirrors alertStore's own
+ *  `distinctValues` — same two calls, same "null means we could not read it". */
+async function distinctValues(projectId: string, datasetId: string, column: string): Promise<string[] | null> {
+  try {
+    const src = await datasets.residentSource(projectId, datasetId);
+    if (src) {
+      const fast = readDistinctPage(src, column, { limit: SERIES_SCAN, search: '' });
+      if (fast) return fast.values;
+    }
+    const ds = await datasets.getDataset(projectId, datasetId);
+    if (!ds) return null;
+    return distinctValuesPageJs(ds.columns, ds.rows, column, { limit: SERIES_SCAN, search: '' }).values;
+  } catch (_) {
+    return null;
+  }
+}
+
+export interface MetricSeries {
+  labels: string[];
+  values: (number | null)[];
+  display: string[];
+}
+
+/**
+ * The metric, broken out by one column — the Metrics table's sparkline, and the
+ * shape a chart consumes.
+ *
+ * Each point is a FULL resolution under that point's filter, not a group-by.
+ * That costs one query per point where a simple metric could have had one
+ * query total — and it is the only way a FORMULA metric is right per point,
+ * because `[Profit] / [Revenue]` per month is each month's ratio, never the
+ * year's. The point count is capped at SERIES_MAX_POINTS, so the ceiling is
+ * bounded and small.
+ *
+ * ponytail: N+1 queries by design, capped at 24. If a metric page ever shows
+ * hundreds of series at once, give the SIMPLE definition a single grouped query
+ * (residentQuery.aggregateResident) and keep this path for formulas.
+ *
+ * Periods come from `insightsAgg.periodPlan`, so "by month" means exactly what
+ * the Insights cards and the alert evaluator already mean by it — a third
+ * definition of a period is two too many. A non-date column rolls up to itself,
+ * which makes this "by region" without a second code path.
+ */
+export async function resolveMetricSeries(
+  projectId: string,
+  metricId: string,
+  byColumn: string,
+  scope: { filters?: FilterStep[] } = {},
+): Promise<MetricSeries | null> {
+  const metric = await metrics.getMetric(projectId, metricId);
+  if (!metric || !byColumn) return null;
+  const labels = await distinctValues(projectId, metric.datasetId, byColumn);
+  if (!labels || !labels.length) return null;
+
+  const plan = periodPlan(labels);
+  const keys = orderPeriods(Array.from(new Set(labels.map((l) => plan.of(l))))).slice(-SERIES_MAX_POINTS);
+  if (!keys.length) return null;
+
+  const base = Array.isArray(scope.filters) ? scope.filters : [];
+  const out: MetricSeries = { labels: keys, values: [], display: [] };
+  for (const key of keys) {
+    const ctx = newCtx(projectId, base.concat([
+      { type: 'filter', column: byColumn, op: plan.op, value: key } as FilterStep,
+    ]));
+    ctx.stack.add(metric.name.toLowerCase());
+    const v = await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, 0);
+    out.values.push(v);
+    out.display.push(formatMetricValue(v, metric.format));
+  }
+  return out;
+}
+
+/**
+ * The date column a sparkline runs along, or null.
+ *
+ * First declared date column: a dataset with two of them (ordered/shipped) has
+ * no app-knowable "the" date, and the first one is at least the same choice
+ * every time rather than a different one per machine.
+ */
+async function sparkColumn(projectId: string, datasetId: string): Promise<string | null> {
+  const meta = await datasets.getDatasetMeta(projectId, datasetId);
+  if (!meta) return null;
+  const date = meta.columns.find((c) => c.type === 'date');
+  return date ? date.name : null;
+}
+
+/**
+ * Seed a project's metrics from its columns, once.
+ *
+ * Returns the existing list untouched when there is one — this is called on
+ * every open of the Metrics tab, and a proposer that re-proposed would put back
+ * every metric the user deleted. `datasetId` picks the dataset to read; with
+ * none given it is the project's first, which is the only dataset a fresh
+ * project has.
+ */
+async function ensureDefaults(projectId: string, datasetId?: string): Promise<metrics.MetricSummary[]> {
+  const existing = await metrics.listMetrics(projectId);
+  if (existing.length) return existing;
+
+  const list = await datasets.listDatasets(projectId);
+  const target = datasetId ? list.find((d) => d.id === datasetId) : list[0];
+  if (!target) return existing;
+  const meta = await datasets.getDatasetMeta(projectId, target.id);
+  if (!meta) return existing;
+
+  for (const input of proposeMetrics(target.id, meta.columns)) {
+    await metrics.saveMetric(projectId, input);
+  }
+  return metrics.listMetrics(projectId);
+}
+
+/** A summary plus the two strings every surface shows beside it. */
+async function decorate(projectId: string, list: metrics.MetricSummary[]): Promise<any[]> {
+  const out: any[] = [];
+  for (const s of list) {
+    const ds = await datasets.getDatasetMeta(projectId, s.datasetId);
+    out.push({
+      ...s,
+      datasetName: ds ? ds.name : null,
+      definitionText: describeDefinition({ definition: s.definition, filters: [] }),
+    });
+  }
+  return out;
+}
+
+/**
+ * Is this name already a metric in this project?
+ *
+ * A duplicate NAME is refused, not disambiguated: a formula references a metric
+ * by name, so two called "Revenue" would make `[Revenue]` mean whichever one
+ * sorted first — a figure that changes when a record is renamed somewhere else
+ * entirely. Exported for scripts/test-metrics.ts.
+ */
+export async function nameTaken(projectId: string, name: unknown, exceptId?: string): Promise<boolean> {
+  const key = String(name || '').trim().toLowerCase();
+  if (!key) return false;
+  const list = await metrics.listMetrics(projectId);
+  return list.some((m) => m.name.toLowerCase() === key && m.id !== exceptId);
+}
+
+export function register() {
+  ipcMain.handle('metric:list', async (_e, { projectId }: any = {}) => {
+    try {
+      const list = await metrics.listMetrics(projectId);
+      return { ok: true, metrics: await decorate(projectId, list) };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Failed to list metrics' };
+    }
+  });
+
+  // Separate from `metric:list` on purpose: listing must never write, and the
+  // Metrics tab is not the only thing that lists.
+  ipcMain.handle('metric:ensureDefaults', async (_e, { projectId, datasetId }: any = {}) => {
+    try {
+      const list = await ensureDefaults(projectId, datasetId);
+      return { ok: true, metrics: await decorate(projectId, list) };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Failed to propose metrics' };
+    }
+  });
+
+  ipcMain.handle('metric:get', async (_e, { projectId, id }: any = {}) => {
+    const m = await metrics.getMetric(projectId, id);
+    if (!m) return { ok: false, error: 'Metric not found' };
+    return { ok: true, metric: m, definitionText: describeDefinition(m) };
+  });
+
+  ipcMain.handle('metric:save', async (_e, { projectId, input }: any = {}) => {
+    try {
+      const raw = input && typeof input === 'object' ? input : {};
+      if (await nameTaken(projectId, raw.name)) {
+        return { ok: false, error: `A metric called "${String(raw.name).trim()}" already exists.` };
+      }
+      const m = await metrics.saveMetric(projectId, {
+        ...raw,
+        filters: sanitizeDashboardFilters(raw.filters),
+      });
+      if (!m) return { ok: false, error: 'Could not save the metric — check the dataset still exists.' };
+      return { ok: true, metric: m };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Failed to save the metric' };
+    }
+  });
+
+  ipcMain.handle('metric:update', async (_e, { projectId, id, patch }: any = {}) => {
+    try {
+      const raw = patch && typeof patch === 'object' ? patch : {};
+      if (raw.name !== undefined && (await nameTaken(projectId, raw.name, id))) {
+        return { ok: false, error: `A metric called "${String(raw.name).trim()}" already exists.` };
+      }
+      const next = { ...raw };
+      if (raw.filters !== undefined) next.filters = sanitizeDashboardFilters(raw.filters);
+      const m = await metrics.updateMetric(projectId, id, next);
+      if (!m) return { ok: false, error: 'Metric not found' };
+      return { ok: true, metric: m };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Failed to update the metric' };
+    }
+  });
+
+  ipcMain.handle('metric:duplicate', async (_e, { projectId, id }: any = {}) => {
+    const m = await metrics.duplicateMetric(projectId, id);
+    return m ? { ok: true, metric: m } : { ok: false, error: 'Metric not found' };
+  });
+
+  ipcMain.handle('metric:delete', async (_e, { projectId, id }: any = {}) => {
+    const done = await metrics.deleteMetric(projectId, id);
+    return done ? { ok: true } : { ok: false, error: 'Could not delete the metric' };
+  });
+
+  ipcMain.handle('metric:value', async (_e, { projectId, id, filters }: any = {}) => {
+    try {
+      const scope = { filters: sanitizeDashboardFilters(filters) };
+      const res = await resolveMetric(projectId, id, scope);
+      if (!res) return { ok: false, error: 'Metric not found' };
+      return res;
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Failed to compute the metric' };
+    }
+  });
+
+  /**
+   * The editor's live preview: a figure for a definition that has NOT been
+   * saved. Same resolver, same formatter, so what the preview shows is what the
+   * record will produce.
+   */
+  ipcMain.handle('metric:preview', async (_e, { projectId, datasetId, definition, filters, format }: any = {}) => {
+    try {
+      const def = metrics.sanitizeDefinition(definition);
+      const own = sanitizeDashboardFilters(filters);
+      const ctx = newCtx(projectId, []);
+      const value = await resolveDefinition(ctx, datasetId, def, own, 0);
+      const fmt = metrics.sanitizeFormat(format);
+      return {
+        ok: true,
+        value,
+        display: formatMetricValue(value, fmt),
+        definitionText: describeDefinition({ definition: def, filters: own }),
+      };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Failed to preview the metric' };
+    }
+  });
+
+  ipcMain.handle('metric:series', async (_e, { projectId, id, column, filters }: any = {}) => {
+    try {
+      const m = await metrics.getMetric(projectId, id);
+      if (!m) return { ok: false, error: 'Metric not found' };
+      const by = typeof column === 'string' && column ? column : await sparkColumn(projectId, m.datasetId);
+      // No date column is not an error — it is a metric with no sparkline, and
+      // the cell stays blank.
+      if (!by) return { ok: true, series: null };
+      const series = await resolveMetricSeries(projectId, id, by, { filters: sanitizeDashboardFilters(filters) });
+      return { ok: true, series, column: by };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Failed to compute the series' };
+    }
+  });
+
+  ipcMain.handle('metric:usage', async (_e, { projectId, id }: any = {}) => {
+    try {
+      return { ok: true, usage: await metricUsage(projectId, id) };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Failed to read usage' };
+    }
+  });
+}

@@ -352,6 +352,27 @@ declare global {
         aggregation: string,
         filters?: any,
       ): Promise<any>;
+      // Metrics (src/ipc/metrics.ts) — the project's NAMED numbers. A record is
+      // a definition, never a figure; `metricValue` resolves one on demand and
+      // returns the number AND the finished `display` string, which is what the
+      // renderer prints (it never re-formats a metric).
+      listMetrics(projectId: string): Promise<any>;
+      ensureDefaultMetrics(projectId: string, datasetId?: string): Promise<any>;
+      getMetric(projectId: string, id: string): Promise<any>;
+      saveMetric(projectId: string, input: any): Promise<any>;
+      updateMetric(projectId: string, id: string, patch: any): Promise<any>;
+      duplicateMetric(projectId: string, id: string): Promise<any>;
+      deleteMetric(projectId: string, id: string): Promise<any>;
+      metricValue(projectId: string, id: string, filters?: any): Promise<any>;
+      previewMetric(
+        projectId: string,
+        datasetId: string,
+        definition: any,
+        filters?: any,
+        format?: any,
+      ): Promise<any>;
+      metricSeries(projectId: string, id: string, column?: string, filters?: any): Promise<any>;
+      metricUsage(projectId: string, id: string): Promise<any>;
       exportDashboardHtml(bundle: any, defaultName?: string): Promise<any>;
       exportDashboardPng(html: string, width: number, defaultName?: string): Promise<any>;
       exportDashboardPdf(html: string, width: number, defaultName?: string): Promise<any>;

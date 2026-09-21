@@ -209,8 +209,52 @@ function openVisualPicker(
   });
 }
 
+/**
+ * Add a metric card.
+ *
+ * The PICKER first (metricPicker.ts), the form second. A project that has
+ * already named its numbers should not be asked which column and which
+ * aggregation again — that is how one dashboard ends up with two cards both
+ * called Revenue that do not agree. "Custom…" in the picker falls through to
+ * the original dialog, unchanged, which is still the right way to ask a
+ * question you only have once.
+ *
+ * `anchor` is whatever was clicked: the Add menu's button, or the command
+ * palette's invisible focus. With neither, the picker anchors on the dashboard
+ * body, which positions it sensibly rather than at 0,0.
+ */
 async function handleAddMetric(): Promise<void> {
   if (!currentProjectId) { window.alert('Open a project first.'); return; }
+
+  const anchor = (document.activeElement as HTMLElement | null)
+    || document.getElementById('dash-add-metric')
+    || document.body;
+  const picked = await openMetricPicker(anchor);
+  if (!picked) return;
+
+  if (picked.kind === 'metric' && picked.metric) {
+    const m = picked.metric;
+    const def = m.definition || {};
+    // column/aggregation are stored ALONGSIDE the id, never instead of it: a
+    // card whose metric is later deleted keeps showing its number from these.
+    // A formula metric has no column to fall back to, so it stores the metric's
+    // own name as the label and a `count` of nothing, which renders "—" rather
+    // than a wrong figure if the metric goes away.
+    pushCard({
+      id: dashUuid(),
+      type: 'metric',
+      metric: {
+        datasetId: m.datasetId,
+        column: typeof def.column === 'string' ? def.column : '',
+        aggregation: typeof def.aggregation === 'string' ? def.aggregation : 'count',
+        label: m.name,
+        metricId: m.id,
+      },
+      layout: { ...dashFindSlot(dashCards(), 3, 2), w: 3, h: 2 },
+    });
+    return;
+  }
+
   let datasets: any[] = [];
   try {
     datasets = await window.hub.listDatasets(currentProjectId);

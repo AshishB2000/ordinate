@@ -48,6 +48,7 @@ const SMOKES = [
   'smoke-dashboards',
   'smoke-dashboard-edit',
   'smoke-insights',
+  'smoke-metrics',
   // After smoke-insights: both write to the sample project, and this one's
   // rules are created from the sample dashboard's own KPI card.
   'smoke-alerts',

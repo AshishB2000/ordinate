@@ -3,7 +3,8 @@ import * as datasets from '../data/datasets';
 import { sampleRowsResident } from '../engine/statsResident';
 import { loadPlanContext, type PlanDataset } from '../analysis/analysisPlan';
 import { resolveGeoHits } from '../analysis/geoResolve';
-import { mapRoles, type GeoHits, type RoleMapping } from '../analysis/templateRoles';
+import { mapRoles, type GeoHits, type RoleMapping, type DefinedMeasure } from '../analysis/templateRoles';
+import * as metrics from '../analysis/metrics';
 import { TEMPLATES, templateById } from '../analysis/templates';
 
 // TEMPLATES IPC — the gallery's two channels. NOT an AI path: both work with no
@@ -73,8 +74,19 @@ export function register() {
       const ds = ctx.datasets[0];
       if (!ds) return { ok: false, error: 'Import a dataset first — a template builds from one.' };
       const geoHits = await geoHitsFor(projectId, ds);
+      // The project's own names for its numbers. A template's measure role
+      // takes the matching metric's column rather than whichever numeric column
+      // scored highest — the user already said which one is Revenue. Formula
+      // metrics are skipped: a role resolves to a COLUMN and a ratio is not one.
+      const defined: DefinedMeasure[] = (await metrics.listMetrics(projectId))
+        .filter((m) => m.datasetId === ds.id)
+        .map((m) => {
+          const def = m.definition as { column?: string };
+          return { id: m.id, name: m.name, column: def && def.column ? def.column : '' };
+        })
+        .filter((m) => m.column);
       const templates = TEMPLATES.map((t) => {
-        const { matches, missingRequired } = mapRoles(t.roles, ds, geoHits);
+        const { matches, missingRequired } = mapRoles(t.roles, ds, geoHits, defined);
         return {
           id: t.id,
           group: t.group,

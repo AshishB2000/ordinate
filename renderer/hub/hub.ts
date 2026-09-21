@@ -87,7 +87,8 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
   selectSection('home'); // workspace.ts — Home is the default section (paints via refreshHome)
   initHome();            // projects.ts
   initDatasets();        // datasets.ts
-  initCaptureList();     // captureList.ts — the Captures tab beside Datasets
+  initCaptureList();     // captureList.ts — the Data tab strip + the Captures tab
+  initMetricsPage();     // metricsPage.ts — the Metrics tab, third in that strip
   initComposer();        // composer.ts — the full-page create surface
   initPrepare();         // prepare.ts
   initConnections();     // connections.ts

@@ -570,9 +570,10 @@ function dashCardMenuBtn(card: any): HTMLButtonElement {
       // The chart's own controls popover is a .chart-menu too — this one needs
       // a hook of its own, or a selector for either finds both.
       menu.classList.add('dash-card-menu');
-      // "Alert me…" leads on a metric card (alerts.ts): it is the one item here
-      // about the card's NUMBER rather than about the tile's geometry.
-      (alCardMenuItems(card).concat([
+      // Two additive contributors, each owned by its own feature: alerts.ts's
+      // "Alert me…" and metricsPage.ts's "Save as metric…" / "Edit metric…".
+      // Both lead — they are about the card's NUMBER, not the tile's geometry.
+      (alCardMenuItems(card).concat(mpCardMenuItems(card)).concat([
         ['Move up', () => nudgeCard(card, 0, -1)],
         ['Move down', () => nudgeCard(card, 0, 1)],
         ['Move left', () => nudgeCard(card, -1, 0)],

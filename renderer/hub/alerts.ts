@@ -60,6 +60,16 @@ interface AlertDialogOpts {
   cardId?: string;
   /** Editing an existing rule rather than creating one. */
   existing?: any;
+  /**
+   * The saved Metric this rule watches, when the source surface had one.
+   *
+   * ADDITIVE: `column`/`aggregation` above stay required and stay filled from
+   * the metric's own definition, so `alertStore.metricFor` and the whole
+   * evaluator are untouched and a rule outlives the metric it was named after.
+   * What it buys is the metric's name in the message, and a row in
+   * `metric:usage` so deleting the metric warns about this rule.
+   */
+  metricId?: string;
 }
 
 // ── The dialog ───────────────────────────────────────────────────────────────
@@ -322,6 +332,7 @@ function openAlertDialog(opts: AlertDialogOpts): Promise<any> {
           // The surface's word for this number, so the message reads the way
           // the card it is about reads.
           label: opts.label && opts.label !== opts.column ? opts.label : undefined,
+          metricId: opts.metricId,
         },
         compare: mode,
         enabled: existing.enabled !== false,
@@ -519,6 +530,8 @@ async function alertMeFromCard(card: any): Promise<void> {
     column: String(m.column),
     aggregation: String(m.aggregation),
     label: m.label || String(m.column),
+    // A card that names a metric makes a rule that names the same metric.
+    metricId: m.metricId ? String(m.metricId) : undefined,
     // The card's own slice, so the rule watches the number the card shows and
     // not a wider one that happens to share its column.
     filters: typeof effectiveFilters === 'function' ? effectiveFilters() : [],

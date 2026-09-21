@@ -91,7 +91,20 @@ interface EncCategoryInfo {
 
 type EncAgg = 'sum' | 'avg' | 'count' | 'min' | 'max' | 'none';
 interface EncCol { name: string; type: string }
-interface EncMeasure { column: string; aggregation: EncAgg }
+interface EncMeasure {
+  column: string;
+  aggregation: EncAgg;
+  /**
+   * The saved Metric this measure IS, when it was filled from the metric
+   * picker. ADDITIVE and never a replacement — `column`/`aggregation` stay
+   * filled, `buildVizData` never reads this, and a chart whose metric is later
+   * deleted plots exactly as it did. What it buys is the metric's NAME on the
+   * pill, and a row in `metric:usage`.
+   */
+  metricId?: string;
+  /** The metric's name, for the pill. Not persisted — re-read from the record. */
+  metricName?: string;
+}
 
 const ENC_AGGS: EncAgg[] = ['sum', 'avg', 'count', 'min', 'max', 'none'];
 const ENC_AGG_LABELS: Record<EncAgg, string> = {
@@ -314,22 +327,33 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       const row = document.createElement('div');
       row.className = wells ? 'viz-value-row enc-pill' : 'viz-value-row';
 
-      const colSel = document.createElement('select');
-      colSel.className = 'viz-select viz-value-col';
-      colSel.setAttribute('aria-label', 'Measure column');
-      fill(colSel, nums.map((c) => ({ value: c.name, label: c.name })), m.column);
-      colSel.addEventListener('change', () => { measures[i].column = colSel.value; opts.onChange(); });
-      row.appendChild(colSel);
+      if (m.metricId) {
+        // A measure that IS a metric shows the metric's name, not the column
+        // and aggregation behind it — "Revenue", which is the whole point of
+        // having named it. The ⋮ menu is how it goes back to being a column.
+        const chip = document.createElement('span');
+        chip.className = 'viz-value-metric';
+        chip.textContent = m.metricName || m.column || 'Metric';
+        chip.title = 'A saved metric. ⋮ to change it or go back to a column.';
+        row.appendChild(chip);
+      } else {
+        const colSel = document.createElement('select');
+        colSel.className = 'viz-select viz-value-col';
+        colSel.setAttribute('aria-label', 'Measure column');
+        fill(colSel, nums.map((c) => ({ value: c.name, label: c.name })), m.column);
+        colSel.addEventListener('change', () => { measures[i].column = colSel.value; opts.onChange(); });
+        row.appendChild(colSel);
 
-      const aggSel = document.createElement('select');
-      aggSel.className = 'viz-select viz-value-agg';
-      aggSel.setAttribute('aria-label', 'Aggregation');
-      fill(aggSel, ENC_AGGS.map((a) => ({ value: a, label: ENC_AGG_LABELS[a] })), m.aggregation);
-      aggSel.addEventListener('change', () => {
-        measures[i].aggregation = aggSel.value as EncAgg;
-        opts.onChange();
-      });
-      row.appendChild(aggSel);
+        const aggSel = document.createElement('select');
+        aggSel.className = 'viz-select viz-value-agg';
+        aggSel.setAttribute('aria-label', 'Aggregation');
+        fill(aggSel, ENC_AGGS.map((a) => ({ value: a, label: ENC_AGG_LABELS[a] })), m.aggregation);
+        aggSel.addEventListener('change', () => {
+          measures[i].aggregation = aggSel.value as EncAgg;
+          opts.onChange();
+        });
+        row.appendChild(aggSel);
+      }
 
       if (wells) {
         // The reference puts a ⋮ on each field pill. openRowMenu is the popup
@@ -346,8 +370,23 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
           const items: Array<{ label: string; danger?: boolean; onClick: () => void }> =
             ENC_AGGS.map((a) => ({
               label: ENC_AGG_LABELS[a],
-              onClick: () => { measures[i].aggregation = a; renderMeasures(); opts.onChange(); },
+              // Choosing a raw aggregation drops the metric link: the pill is
+              // no longer showing that metric, and leaving the id on it would
+              // claim otherwise to `metric:usage`.
+              onClick: () => {
+                measures[i].aggregation = a;
+                delete measures[i].metricId;
+                delete measures[i].metricName;
+                renderMeasures();
+                opts.onChange();
+              },
             }));
+          // The metric picker, on the pill that already carries this measure —
+          // the same popover KPI add and the alert form open (metricPicker.ts).
+          items.unshift({
+            label: measures[i].metricId ? 'Change metric…' : 'Use a metric…',
+            onClick: () => { void pickMeasureMetric(i, menu); },
+          });
           if (measures.length > 1) {
             items.push({
               label: 'Remove',
@@ -374,6 +413,41 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       }
       valuesList.appendChild(row);
     });
+  }
+
+  /**
+   * Fill measure `i` from the metric picker.
+   *
+   * A FORMULA metric is refused here, and says so: a chart measure is a column
+   * rolled up per category, and `[Profit] / [Revenue]` is not one — plotting it
+   * would need a per-category resolution the chart bridge has no vocabulary
+   * for. The KPI card, which shows ONE number, takes formula metrics happily.
+   */
+  async function pickMeasureMetric(i: number, anchor: HTMLElement): Promise<void> {
+    const ds = opts.dataset ? opts.dataset() : null;
+    const picked = await openMetricPicker(anchor, { datasetId: ds ? ds.datasetId : undefined });
+    if (!picked) return;
+    if (picked.kind === 'custom') {
+      delete measures[i].metricId;
+      delete measures[i].metricName;
+      renderMeasures();
+      opts.onChange();
+      return;
+    }
+    const m = picked.metric;
+    const def = m && m.definition ? m.definition : {};
+    if (typeof def.formula === 'string') {
+      window.alert(`"${m.name}" is a formula metric. A chart measure has to be a column rolled up per category — use it on a KPI card instead.`);
+      return;
+    }
+    measures[i] = {
+      column: def.column || '',
+      aggregation: ENC_AGGS.indexOf(def.aggregation) >= 0 ? def.aggregation : 'sum',
+      metricId: m.id,
+      metricName: m.name,
+    };
+    renderMeasures();
+    opts.onChange();
   }
 
   // ── Filters (transforms `filter` steps; rows are filtered BEFORE aggregation,
@@ -502,6 +576,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
         measures = preset.values.map((v: any) => ({
           column: v && typeof v.column === 'string' ? v.column : '',
           aggregation: ENC_AGGS.indexOf(v && v.aggregation) >= 0 ? (v.aggregation as EncAgg) : 'sum',
+          ...(v && typeof v.metricId === 'string' ? { metricId: v.metricId } : {}),
         }));
       } else {
         const nums = numberCols();
@@ -560,7 +635,11 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     getEncoding(): any {
       const enc: any = {
         category: catSel ? catSel.value : '',
-        values: measures.filter((m) => m.column).map((m) => ({ column: m.column, aggregation: m.aggregation })),
+        values: measures.filter((m) => m.column).map((m) => (
+          m.metricId
+            ? { column: m.column, aggregation: m.aggregation, metricId: m.metricId }
+            : { column: m.column, aggregation: m.aggregation }
+        )),
       };
       const series = serSel ? serSel.value : '';
       if (series) enc.series = series;
