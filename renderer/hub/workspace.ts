@@ -77,6 +77,10 @@ async function adoptProject(id: string): Promise<boolean> {
   // dock keeps showing the PREVIOUS project's transcript until the next
   // entity-open or section-switch.
   if (typeof dkSync === 'function') dkSync();
+  // Alerts are per project, so the bell's count belongs to THIS project. Same
+  // reason as the dkSync above: an adoption with no section change would
+  // otherwise leave the previous project's unread count on screen.
+  if (typeof aiRefresh === 'function') void aiRefresh();
   return true;
 }
 

@@ -342,6 +342,13 @@ export function register() {
     try {
       const res = await refreshDataset(projectId, id);
       if (!res.ok) return res;
+      // Alert rules are evaluated after EVERY refresh of this dataset, and this
+      // handler is the one manual entry point — both the Data row's ↻ and the
+      // dashboard card's come through here, so the hook belongs at the join
+      // rather than duplicated at each button. Awaited so the renderer's bell
+      // is already right by the time the refresh reports done; a failure inside
+      // is swallowed by the evaluator and can never fail the refresh.
+      await require('./alerts').evaluateAndDeliver(projectId, id);
       return {
         ok: true,
         dataset: res.dataset,

@@ -62,9 +62,14 @@ async function refreshKeyStatus() {
 // ── Completion notifications (settings + sound) ─────────────────────────────
 // Cached so the completion handlers can decide whether to beep without an async
 // round-trip. Desktop notifications fire in MAIN; the sound plays here.
-let notifPrefs = { sound: false, desktop: false };
+let notifPrefs = { sound: false, desktop: false, alerts: true, alertExplain: false };
 const stpNotifSound   = document.getElementById('stp-notif-sound');
 const stpNotifDesktop = document.getElementById('stp-notif-desktop');
+// Alert rules have their own two switches. `alerts` defaults ON (an alert about
+// a number you are not watching is the whole point) and `alertExplain` OFF (it
+// spends a model call). See the Notifications interface in src/app/config.ts.
+const stpNotifAlerts  = document.getElementById('stp-notif-alerts');
+const stpNotifExplain = document.getElementById('stp-notif-alert-explain');
 
 // Instructions / Rules box → config.globalRules (debounced; empty allowed).
 const stpPromptEl = document.getElementById('stp-prompt') as HTMLTextAreaElement;
@@ -87,9 +92,18 @@ function reflectSwitch(btn, on) {
 }
 
 function applyNotifPrefs(n) {
-  notifPrefs = { sound: !!n.sound, desktop: !!n.desktop };
+  // `alerts` absent means ON — a config written before alerts existed must not
+  // arrive with the feature already switched off.
+  notifPrefs = {
+    sound: !!n.sound,
+    desktop: !!n.desktop,
+    alerts: n.alerts === undefined ? true : !!n.alerts,
+    alertExplain: !!n.alertExplain,
+  };
   reflectSwitch(stpNotifSound, notifPrefs.sound);
   reflectSwitch(stpNotifDesktop, notifPrefs.desktop);
+  reflectSwitch(stpNotifAlerts, notifPrefs.alerts);
+  reflectSwitch(stpNotifExplain, notifPrefs.alertExplain);
 }
 
 async function setNotif(field, value) {
@@ -113,6 +127,25 @@ if (stpAutoRefresh) {
       reflectSwitch(stpAutoRefresh, !on); // put it back; nothing was saved
       showToast('Could not change that setting.');
     }
+  });
+}
+
+// The two alert switches. Same reflectSwitch/aria pattern as the pair below;
+// neither needs the OS-registration dance stpNotifDesktop does, because an alert
+// notification goes out whether or not the window is focused and the user has
+// already been through that prompt if they ever enabled Desktop.
+if (stpNotifAlerts) {
+  stpNotifAlerts.addEventListener('click', () => {
+    const on = !stpNotifAlerts.classList.contains('stp-switch-on');
+    reflectSwitch(stpNotifAlerts, on);
+    setNotif('alerts', on);
+  });
+}
+if (stpNotifExplain) {
+  stpNotifExplain.addEventListener('click', () => {
+    const on = !stpNotifExplain.classList.contains('stp-switch-on');
+    reflectSwitch(stpNotifExplain, on);
+    setNotif('alertExplain', on);
   });
 }
 

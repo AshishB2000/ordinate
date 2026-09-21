@@ -46,14 +46,7 @@ if (process.platform === 'darwin') {
 app.setAppUserModelId('app.screenshot.desktop');
 
 // Another launch happened while we're running — focus our existing window.
-app.on('second-instance', () => {
-  if (hubWindow && !hubWindow.isDestroyed()) {
-    if (hubWindow.isMinimized()) hubWindow.restore();
-    hubWindow.focus();
-  } else {
-    openHub();
-  }
-});
+app.on('second-instance', () => focusHub());
 
 import { captureFrozenFrame, cropToRect, getActiveDisplay } from './app/capture';
 import * as config from './app/config';
@@ -75,6 +68,13 @@ import { bootstrapNotification, maybeNotify, maybeNotifyDone } from './app/notif
 
 /** Whether the hub is on screen and focused — the one thing notify.ts needs to know. */
 const hubFocused = (): boolean => !!(hubWindow && !hubWindow.isDestroyed() && hubWindow.isFocused());
+
+/** Bring the hub forward, opening it if it is gone. Three callers, one rule. */
+const focusHub = (): void => {
+  if (!hubWindow || hubWindow.isDestroyed()) { openHub(); return; }
+  if (hubWindow.isMinimized()) hubWindow.restore();
+  hubWindow.focus();
+};
 
 // Packaged macOS/Linux GUI launches inherit a stripped PATH (no Homebrew, nvm,
 // ~/.local/bin…), which would make Local CLI detection (claude, agy) find nothing.
@@ -614,12 +614,14 @@ require("./ipc/insights").register();
     const before = o.rowsBefore;
     if (before > 0 && Math.abs(o.rowsAfter - before) / before > BIG_CHANGE) {
       maybeNotify(`"${o.name}" changed: ${before.toLocaleString()} → ${o.rowsAfter.toLocaleString()} rows.`, hubFocused);
-      return; // one notification per dataset per tick
     }
-    if (o.newAnomalies > 0) {
-      maybeNotify(require("./analysis/anomalyWatch").watchMessage(o.name, o.newAnomalies), hubFocused);
-    }
+    // A rule firing is NOT reported here — it goes out at the end of the tick,
+    // which is what lets the digest option exist (ipc/alerts.wireScheduler).
   });
+
+  // THE ALERT HOOKS, wired by ipc/alerts itself — evaluating on fresh data and
+  // batching a tick into one digest are that module's rules, not this file's.
+  require("./ipc/alerts").wireScheduler(scheduler);
 
   // THE REPORT HOOK. Scheduled reports ride the dataset scheduler's tick rather
   // than starting a second timer: a report prints figures, so it must be
@@ -647,6 +649,9 @@ require("./ipc/connections").register();
 require("./ipc/visuals").register();
 
 require("./ipc/dashboards").register();
+
+// Alert rules and their inbox. After dashboards deliberately — see ipc/alerts.
+require("./ipc/alerts").register({ getHubWindow: () => hubWindow, focusHub });
 
 // Analyses — the AUTHORING container a dashboard is published FROM. Also owns
 // `analysis:draft`, which replaced the deleted `dashboard:draft`.

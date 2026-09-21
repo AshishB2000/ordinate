@@ -9,6 +9,8 @@
 
 import { Notification, shell } from 'electron';
 import * as config from './config';
+import type { AlertEvent } from '../analysis/alerts';
+import { digestMessage } from '../analysis/alerts';
 
 // Best-effort OS notification when an analysis turn finishes AND the window is
 // not focused. Gated on the user's setting; failures are swallowed so they can
@@ -26,6 +28,45 @@ export function maybeNotify(body: string, isHubFocused: () => boolean): void {
 
 export function maybeNotifyDone(title: string | undefined, isHubFocused: () => boolean): void {
   maybeNotify(title ? `Analysis ready — ${title}` : 'Analysis ready.', isHubFocused);
+}
+
+/**
+ * An alert that fired. Deliberately NOT `maybeNotify`, for two reasons.
+ *
+ * 1. FOCUS IS IRRELEVANT. "Analysis ready" is silent when you are already
+ *    looking at the window because you can see it finish. An alert is about a
+ *    number on a schedule you are not watching, so it fires either way — the
+ *    inbox count is what a focused user would otherwise have to notice.
+ * 2. IT HAS ITS OWN SWITCH, `notifications.alerts`, and it is ON by default.
+ *    `notifications.desktop` is off by default and is about completion chatter;
+ *    a rule the user deliberately wrote is not chatter, and an alert that
+ *    silently never arrives is worse than no alert at all.
+ *
+ * `onClick` is how main takes the user to the event — the caller owns window
+ * focus, so it is passed in rather than reached for here.
+ *
+ * Returns whether a notification was actually shown, so a caller can fall back
+ * (and so the smoke can assert it). Never throws.
+ */
+export function notifyAlert(events: AlertEvent[], onClick?: () => void): boolean {
+  try {
+    const list = Array.isArray(events) ? events.filter(Boolean) : [];
+    if (list.length === 0) return false;
+    const prefs = config.get().notifications || {};
+    if (prefs.alerts === false) return false;
+    if (!Notification.isSupported || !Notification.isSupported()) return false;
+    // One notification per call. A caller batching a whole tick passes every
+    // event and gets the digest sentence; a caller notifying individually calls
+    // this once per event. Either way the BODY is app-composed (alerts.ts) out
+    // of app-computed figures — no model is on this path.
+    const title = list.length === 1 ? list[0].ruleName : 'Ordinate alerts';
+    const n = new Notification({ title, body: digestMessage(list), silent: false });
+    if (onClick) n.on('click', () => { try { onClick(); } catch (_) { /* never throw at the OS */ } });
+    n.show();
+    return true;
+  } catch (_) {
+    return false; // a notification must never block the thing it reports on
+  }
 }
 
 // Register with the OS the moment the user ENABLES the Desktop toggle — a benign,

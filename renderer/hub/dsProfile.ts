@@ -187,6 +187,12 @@ function dsPaintProfileFacts(c: number, extra?: { median?: number | null; distin
   const sum: any = expSummaries[c];
   host.innerHTML = '';
 
+  // "Alert me…" is a number's action. Toggled here rather than in
+  // dsWireProfileActions because that runs once at boot and this runs on every
+  // column, which is when the answer can actually change.
+  const alertBtn = dsProfileEl('.js-dsp-alert-btn') as HTMLElement | null;
+  if (alertBtn) alertBtn.hidden = col.type !== 'number';
+
   const add = (label: string, value: string): void => {
     const k = document.createElement('dt');
     k.textContent = label;
@@ -422,6 +428,13 @@ function dsWireProfileActions(): void {
       input.focus();
     });
   }
+
+  // "Alert me…" — the whole-dataset alert narrowed to this column, like the two
+  // above. Shown only for a `number` column (dsPaintProfileFacts toggles it),
+  // because sum/avg/min/max over text is exactly the wrong figure this codebase
+  // refuses to produce.
+  const alert = dsProfileEl('.js-dsp-alert-btn');
+  if (alert) alert.addEventListener('click', () => { void alertMeFromColumn(); });
 
   const rename = dsProfileEl('.js-dsp-rename-btn');
   if (rename) {

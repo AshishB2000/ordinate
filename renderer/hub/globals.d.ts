@@ -161,6 +161,18 @@ declare global {
       datasetMedian(projectId: string, datasetId: string, column: string): Promise<any>;
       setDatasetAutoRefresh(projectId: string, datasetId: string, autoRefresh: string | null): Promise<any>;
       setDatasetWatch(projectId: string, datasetId: string, watch: boolean): Promise<any>;
+      // ── Alerts (src/ipc/alerts.ts). Every figure in a rule or an event is
+      // computed in MAIN; the renderer only ever displays one.
+      listAlerts(projectId: string): Promise<any>;
+      saveAlertRule(projectId: string, rule: any): Promise<any>;
+      patchAlertRule(projectId: string, ruleId: string, patch: any): Promise<any>;
+      deleteAlertRule(projectId: string, ruleId: string): Promise<any>;
+      testAlertRule(projectId: string, rule: any): Promise<any>;
+      evaluateAlerts(projectId: string, datasetId?: string): Promise<any>;
+      markAlertSeen(projectId: string, eventId?: string): Promise<any>;
+      setAlertDigest(projectId: string, on: boolean): Promise<any>;
+      explainAlert(projectId: string, event: any): Promise<any>;
+      onAlertsFired(cb: (p: any) => void): void;
       updateDataset(projectId: string, datasetId: string, columns: any[]): Promise<any>;
       explainDataset(projectId: string, datasetId: string): Promise<any>;
       // ── Data preparation (reversible transform pipeline) ──
