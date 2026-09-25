@@ -5,6 +5,7 @@ import { parsePaste } from '../data/parse';
 // src/fileImport.ts for why they moved out of this file.
 import { parseFile, sourceKindFor } from '../data/fileImport';
 import { refreshDataset } from '../data/datasetRefresh';
+import { refreshDependents } from '../data/datasetDependents';
 import * as datasets from '../data/datasets';
 import * as transforms from '../data/transforms';
 import * as compose from './datasetCompose';
@@ -349,6 +350,9 @@ export function register() {
       // is already right by the time the refresh reports done; a failure inside
       // is swallowed by the evaluator and can never fail the refresh.
       await require('./alerts').evaluateAndDeliver(projectId, id);
+      // SQL datasets built on this one re-run. Not awaited: never rejects, and
+      // the refresh the user asked for is done.
+      void refreshDependents(projectId, id);
       return {
         ok: true,
         dataset: res.dataset,
@@ -526,6 +530,7 @@ export function register() {
       const ds = await datasets.updateDataset(projectId, datasetId, {
         columns: Array.isArray(columns) ? columns : undefined,
       });
+      if (ds && Array.isArray(columns)) void refreshDependents(projectId, datasetId); // a retype changes what SQL sees
       return ds ? { ok: true, dataset: ds } : { ok: false, error: 'Could not update the dataset' };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to update the dataset' };
@@ -592,6 +597,7 @@ export function register() {
   async function commitSteps(projectId: string, datasetId: string, steps: unknown) {
     const res = await datasets.updateSteps(projectId, datasetId, steps);
     if (!res) return { ok: false, error: 'Dataset not found' };
+    void refreshDependents(projectId, datasetId); // the rows SQL datasets read just changed
     const { dataset, output } = res;
     return {
       ok: true,

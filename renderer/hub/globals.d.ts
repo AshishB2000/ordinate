@@ -235,6 +235,11 @@ declare global {
       describeConnectionTable(projectId: string, connId: string, table: string): Promise<any>;
       sampleConnectionTable(projectId: string, connId: string, table: string, limit?: number): Promise<any>;
       explainConnectionSql(projectId: string, connId: string, sql: string): Promise<any>;
+      // ── SQL over the project's own datasets (Data → Query; src/ipc/sqlQuery.ts) ──
+      sqlSchema(projectId: string): Promise<any>;
+      sqlRun(projectId: string, sql: string, params: any[]): Promise<any>;
+      sqlExplain(projectId: string, sql: string, params: any[]): Promise<any>;
+      sqlPrepareSave(projectId: string, sql: string, params: any[]): Promise<any>;
       saveConnectionQuery(
         projectId: string,
         connId: string,

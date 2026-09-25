@@ -160,12 +160,20 @@ async function openSavedDataset(id: string): Promise<void> {
  * is the stored one.
  */
 function renderExplorerIdent(d: any): void {
+  // The page is painted from `dataset:meta`, which carries the whole `origin`
+  // but not the list summary's derived `originKind` — so without this, Refresh,
+  // "Data as of" and the schedule picker never appeared on a dataset's own
+  // page. Same rule as datasetSummary: a capture is not re-fetchable.
+  if (d && !d.originKind && d.origin && d.origin.kind && d.origin.kind !== 'capture') d = { ...d, originKind: d.origin.kind };
   const kind = d && d.sourceKind ? String(d.sourceKind) : '';
   const badge = dsEl('ds-explorer-source');
   if (badge) {
     badge.textContent = DS_SOURCE_LABELS[kind] || kind;
     badge.hidden = !badge.textContent;
   }
+
+  // Reads from / Used by, and "View query" for a SQL dataset (dsLineage.ts).
+  void dsRenderLineage(d);
 
   const fresh = dsEl('ds-explorer-fresh');
   if (fresh) {

@@ -27,14 +27,17 @@ import { isValidId } from '../app/ids';
 import type { DatasetOrigin } from './datasetOrigin';
 import { sanitizeOrigin } from './datasetOrigin';
 import { sanitizeAnomalyKeys } from '../analysis/anomalyWatch';
+import { summarize } from './datasetSummary';
+import type { DatasetSummary } from './datasetSummary';
 export type { DatasetOrigin } from './datasetOrigin';
+export type { DatasetSummary } from './datasetSummary';
 export { sanitizeOrigin };
 
 export interface Dataset {
   id: string;
   projectId: string;
   name: string;
-  sourceKind: 'csv' | 'json' | 'paste' | 'xlsx' | 'postgres' | 'url' | 'combined' | 'capture';
+  sourceKind: 'csv' | 'json' | 'paste' | 'xlsx' | 'postgres' | 'url' | 'combined' | 'capture' | 'sql';
   columns: ParsedColumn[];
   rows: (string | number | null)[][];
   rowCount: number;
@@ -105,30 +108,6 @@ export interface AutoRefresh {
 
 export type AutoRefreshEvery = 'hourly' | 'daily' | 'weekly';
 
-export interface DatasetSummary {
-  id: string;
-  name: string;
-  sourceKind: Dataset['sourceKind'];
-  rowCount: number;
-  columnCount: number;
-  updatedAt: string;
-  // Week 13 — just the crop path (not the full capture object) so the saved-list
-  // can render a capture thumbnail + badge without a full dataset load.
-  capture?: { cropPath: string | null };
-  // Freshness for the saved list, WITHOUT a full dataset load: enough of the
-  // origin to decide "is this refreshable" and to name the source, never the
-  // path, the URL or the SQL. `lastRefreshError` is the REASON a red dot shows,
-  // so a row can say it on hover — secret-free, like the record's.
-  originKind?: DatasetOrigin['kind'];
-  originConnId?: string;
-  lastRefreshedAt?: string;
-  lastRefreshStatus?: 'ok' | 'error';
-  lastRefreshError?: string | null;
-  // Carried on the SUMMARY so the scheduler can find due datasets from the
-  // metadata alone. Reading a schedule must never hydrate a table.
-  autoRefresh?: AutoRefresh;
-}
-
 let projectsBase: string | null = null;
 
 function getProjectsBase(): string {
@@ -144,7 +123,7 @@ function datasetFilePath(projectId: string, id: string): string {
   return path.join(datasetsDir(projectId), id + '.json');
 }
 
-const SOURCE_KINDS: ReadonlySet<string> = new Set(['csv', 'json', 'paste', 'xlsx', 'postgres', 'url', 'combined', 'capture']);
+const SOURCE_KINDS: ReadonlySet<string> = new Set(['csv', 'json', 'paste', 'xlsx', 'postgres', 'url', 'combined', 'capture', 'sql']);
 
 // Coerce an untrusted `capture` link (from a stored file OR a save/recapture IPC
 // payload) into the stored shape, or undefined if there is nothing usable. Accepts
@@ -354,27 +333,7 @@ export async function listDatasets(projectId: string): Promise<DatasetSummary[]>
       const raw = await fs.promises.readFile(datasetFilePath(projectId, id), 'utf8');
       const data = JSON.parse(raw);
       if (!isValidDataset(data)) continue;
-      const ds = normalize(data, projectId);
-      const summary: DatasetSummary = {
-        id: ds.id,
-        name: ds.name,
-        sourceKind: ds.sourceKind,
-        rowCount: ds.rowCount,
-        columnCount: ds.columns.length,
-        updatedAt: ds.updatedAt,
-      };
-      if (ds.capture) summary.capture = { cropPath: ds.capture.cropPath };
-      // 'capture' is deliberately withheld: `originKind` is what the list and
-      // the explorer read to offer "↻ Refresh", and a screenshot has nothing to
-      // re-fetch. The origin itself stays on the full record (the capture page
-      // reads it) — this is only about the refresh affordance.
-      if (ds.origin && ds.origin.kind !== 'capture') summary.originKind = ds.origin.kind;
-      if (ds.origin && ds.origin.kind === 'connection') summary.originConnId = ds.origin.connId;
-      if (ds.lastRefreshedAt) summary.lastRefreshedAt = ds.lastRefreshedAt;
-      if (ds.lastRefreshStatus) summary.lastRefreshStatus = ds.lastRefreshStatus;
-      if (ds.lastRefreshStatus === 'error' && ds.lastRefreshError) summary.lastRefreshError = ds.lastRefreshError;
-      if (ds.autoRefresh) summary.autoRefresh = ds.autoRefresh;
-      out.push(summary);
+      out.push(summarize(normalize(data, projectId)));
     } catch (err: any) { // ponytail: fs errors carry .code, JSON errors don't
       if (err.code !== 'ENOENT') {
         console.error('[datasets] Skipping corrupt or unreadable dataset:', id, err.message);

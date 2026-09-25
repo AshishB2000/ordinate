@@ -711,6 +711,8 @@
                   aria-selected="false" aria-controls="cap-grid-wrap" tabindex="-1">Captures</button>
           <button class="ds-tab" type="button" role="tab" id="ds-tab-metrics"
                   aria-selected="false" aria-controls="mp-wrap" tabindex="-1">Metrics</button>
+          <button class="ds-tab" type="button" role="tab" id="ds-tab-query"
+                  aria-selected="false" aria-controls="qt-wrap" tabindex="-1">Query</button>
         </div>
 
         <!-- The Metrics tab: the project's NAMED numbers. Same `.ws-table` /
@@ -745,6 +747,70 @@
               <p class="ws-empty-p">A metric names a number once — "Revenue" is the sum of the revenue column — so every card, chart and alert that shows it agrees on what it is and how it reads.</p>
               <div class="ws-empty-actions">
                 <button class="btn btn-primary" type="button" id="mp-empty-new">New metric</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- The Query tab: SQL over THIS project's datasets, each one a table by
+             its own name. The connection workbench's panes, classes and editor
+             (`.cw-*`, cwHighlightHtml, cwBuildTable) pointed at the project's
+             own data — the rows checked here are the rows a saved dataset gets.
+             queryTab.ts / queryEditor.ts fill it; main does the running. -->
+        <div id="qt-wrap" class="qt" role="tabpanel" aria-labelledby="ds-tab-query" hidden>
+          <div class="qt-empty-host" id="qt-empty-host" hidden></div>
+          <div class="cw-body qt-body" id="qt-body">
+            <div class="cw-pane cw-tree-pane qt-tree-pane">
+              <div class="qt-tree-head">
+                <span class="qt-tree-title">Datasets</span>
+                <span class="cw-num" id="qt-tree-count"></span>
+              </div>
+              <input class="conn-input cw-tree-search" id="qt-tree-search" type="text" placeholder="Search datasets and columns&hellip;" autocomplete="off" spellcheck="false" aria-label="Search datasets and columns" />
+              <div class="cw-tree" id="qt-tree" role="tree" aria-label="Datasets you can query"></div>
+              <p class="cw-msg" id="qt-tree-msg" hidden></p>
+              <p class="qt-tree-foot">Click a name to insert it, or drag it into the editor.</p>
+            </div>
+
+            <div class="cw-pane cw-main qt-main">
+              <div class="cw-editor">
+                <div class="cw-edit-wrap">
+                  <pre class="cw-hl" id="qt-hl" aria-hidden="true"></pre>
+                  <textarea class="cw-input qt-input" id="qt-sql" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="SQL over this project's datasets"></textarea>
+                </div>
+                <div class="cw-ac" id="qt-ac" hidden role="listbox" aria-label="Completions"></div>
+                <div class="cw-bar">
+                  <button class="btn btn-primary btn-sm" type="button" id="qt-run"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-play"/></svg><span>Run</span></button>
+                  <button class="btn btn-sm" type="button" id="qt-explain"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-check"/></svg><span>Explain</span></button>
+                  <button class="btn btn-sm" type="button" id="qt-save" disabled><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-database"/></svg><span>Save as dataset</span></button>
+                  <span class="cw-bar-gap"></span>
+                  <span class="cw-hint qt-hint">&#8984;&#8617; runs &middot; previews 500 rows &middot; <code>[[name]]</code> adds a parameter</span>
+                </div>
+              </div>
+
+              <div class="qt-params" id="qt-params" hidden>
+                <span class="qt-params-label">Parameters</span>
+                <div class="qt-params-list" id="qt-params-list"></div>
+              </div>
+
+              <div class="cw-results qt-results">
+                <div class="cw-results-head">
+                  <span class="qt-status" id="qt-status"></span>
+                  <span class="cw-results-note" id="qt-note"></span>
+                </div>
+                <div class="qt-error" id="qt-error" role="alert" hidden>
+                  <span class="qt-error-icon" aria-hidden="true"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="#i-alert"/></svg></span>
+                  <div class="qt-error-body">
+                    <p class="qt-error-h" id="qt-error-h">The query did not run</p>
+                    <p class="qt-error-msg" id="qt-error-msg"></p>
+                  </div>
+                </div>
+                <div class="cw-cols qt-cols" id="qt-cols" hidden></div>
+                <div class="ds-table-scroll cw-grid" id="qt-grid" hidden></div>
+                <div class="qt-idle" id="qt-idle">
+                  <span class="ws-empty-icon" aria-hidden="true"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="#i-table"/></svg></span>
+                  <p class="qt-idle-h">Results appear here</p>
+                  <p class="qt-idle-p">Every dataset in this project is a table — by its own name in quotes, or by the short name beside it on the left. Run previews the first 500 rows; Save as dataset keeps the whole result and refreshes it when its inputs change.</p>
+                </div>
               </div>
             </div>
           </div>
@@ -955,6 +1021,9 @@
                 <span class="ds-auto-host" id="ds-explorer-auto" hidden></span>
                 <button class="btn btn-sm" type="button" id="ds-explorer-refresh" hidden><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-refresh"/></svg><span>Refresh</span></button>
               </div>
+              <!-- Lineage: what this dataset was built from, and which SQL
+                   datasets are built on it. Filled by dsLineage.ts. -->
+              <div class="ds-lineage" id="ds-lineage" hidden></div>
             </div>
             <div class="ds-explorer-actions">
               <button class="btn btn-primary btn-sm" type="button" id="ds-act-visual">New visual</button>
@@ -2669,6 +2738,18 @@
 <script src="connWorkbench.js"></script>
 <script src="connDetails.js"></script>
 <script src="connEditor.js"></script>
+<!-- The Data page's Query tab: SQL over the project's OWN datasets. After the
+     three connection files because it reuses their PURE helpers
+     (cwHighlightHtml/cwTokenize/CW_KEYWORDS from connEditor.js, cwBuildTable
+     from connWorkbench.js) — at call time, but in dependency order anyway.
+     queryEditor.js is the textarea (highlight, completion, keys);
+     queryParams.js the [[name]] parameters row; queryTab.js the tab around
+     them; dsLineage.js is the dataset page's "Reads from / Used by" line,
+     whose "View query" opens the tab. -->
+<script src="queryEditor.js"></script>
+<script src="queryParams.js"></script>
+<script src="queryTab.js"></script>
+<script src="dsLineage.js"></script>
 <script src="encodingForm.js"></script>
 <!-- The pivot shelves (Rows / Columns / Values), mounted beside the encoding
      form by visuals.js and shown instead of its chart fields when the type is

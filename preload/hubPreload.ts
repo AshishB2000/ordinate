@@ -403,6 +403,17 @@ contextBridge.exposeInMainWorld('hub', {
   // Check a statement and report the columns it WOULD return, fetching no rows.
   explainConnectionSql: (projectId: string, connId: string, sql: string) =>
     ipcRenderer.invoke('connection:explain', { projectId, connId, sql }),
+  // ── SQL over the project's OWN datasets (Data → Query, src/ipc/sqlQuery.ts) ──
+  // `params` are the `[[name]]` values: [{ name, kind, value }]. Main binds them;
+  // nothing here ever splices a value into the SQL.
+  sqlSchema: (projectId: string) => ipcRenderer.invoke('sql:schema', { projectId }),
+  sqlRun: (projectId: string, sql: string, params: any[]) =>
+    ipcRenderer.invoke('sql:run', { projectId, sql, params }),
+  sqlExplain: (projectId: string, sql: string, params: any[]) =>
+    ipcRenderer.invoke('sql:explain', { projectId, sql, params }),
+  // The whole result at the dataset cap, plus the `sql` origin — for the composer.
+  sqlPrepareSave: (projectId: string, sql: string, params: any[]) =>
+    ipcRenderer.invoke('sql:prepareSave', { projectId, sql, params }),
   // Create / edit / rename a saved query on a connection; resolves the whole list.
   saveConnectionQuery: (projectId: string, connId: string, q: { id?: string; name?: string; sql?: string }) =>
     ipcRenderer.invoke('connection:saveQuery', { projectId, connId, ...q }),

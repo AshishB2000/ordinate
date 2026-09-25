@@ -591,7 +591,7 @@ require("./app/refreshWiring").start({ getHubWindow: () => hubWindow, hubFocused
 require("./ipc/reports").register();
 
 require("./ipc/connections").register();
-
+require("./ipc/sqlQuery").register(); // Data → Query: SQL over this project's own datasets
 require("./ipc/visuals").register();
 
 require("./ipc/dashboards").register();

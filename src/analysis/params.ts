@@ -379,3 +379,189 @@ export function bindStepParams(steps: TransformStep[], values: ParamValues): { s
   }
   return { steps: out, errors };
 }
+
+// ── [[name]] in the SQL of the Query tab ────────────────────────────────────
+//
+// THE RULE: a value is NEVER spliced into SQL text. Each placeholder becomes a
+// positional `?` and its value travels in `binds`, to be bound by DuckDB; a
+// list becomes `(?, ?, …)` with one bind per element. So a text value of
+// `'); DROP TABLE x; --` is a string DuckDB compares against, nothing more.
+//
+// Placeholders inside a string literal, a quoted identifier, a comment or a
+// dollar-quoted body are left exactly as written — `'[[not a param]]'` is data.
+// The scanner below skips those forms the same way `engine/sqlLex.ts` does; it
+// is a second copy of ~25 lines ON PURPOSE, so this module — the one resolver
+// every host shares — stays free of the engine layer.
+//
+// A Query-tab parameter is typed in its own parameters row (the SQL dataset
+// then stores the values it was saved with on its `sql` origin), so the list
+// arrives as `[{ name, kind, value }]` and is checked STRICTLY: any malformed
+// entry is an error naming it, never a silently-dropped value.
+
+export type SqlParamKind = ParamKind;
+export type SqlBindValue = string | number;
+
+export interface SqlParam {
+  name: string;
+  kind: SqlParamKind;
+  value: unknown;
+}
+
+const SQL_PLACEHOLDER_RE = /^\[\[\s*([A-Za-z_][A-Za-z0-9_]{0,39})\s*\]\]/;
+const KINDS: ReadonlySet<string> = new Set<string>(PARAM_KINDS);
+/** A list parameter's ceiling — an `IN (…)` of more is a join, not a filter. */
+export const MAX_LIST_VALUES = 1000;
+/** Parameters per query. */
+export const MAX_SQL_PARAMS = 32;
+
+/** `YYYY-MM-DD` that is also a real calendar day (no 2024-02-30). */
+function isIsoDate(v: unknown): v is string {
+  return typeof v === 'string' && daysFromIso(v) !== null;
+}
+
+/** Why `p.value` does not fit `p.kind`, or null when it does. */
+export function paramValueError(p: SqlParam): string | null {
+  const tag = `[[${p.name}]]`;
+  switch (p.kind) {
+    case 'number':
+      return typeof p.value === 'number' && Number.isFinite(p.value) ? null : `${tag} must be a number.`;
+    case 'text':
+      return typeof p.value === 'string' ? null : `${tag} must be text.`;
+    case 'date':
+      return isIsoDate(p.value) ? null : `${tag} must be a date written YYYY-MM-DD.`;
+    case 'list': {
+      const v = p.value;
+      if (!Array.isArray(v)) return `${tag} must be a list of values.`;
+      if (v.length > MAX_LIST_VALUES) return `${tag} has more than ${MAX_LIST_VALUES} values.`;
+      const bad = v.some((x) => !(typeof x === 'string' || (typeof x === 'number' && Number.isFinite(x))));
+      return bad ? `${tag} may only hold text and numbers.` : null;
+    }
+    default:
+      return `${tag} has an unknown type.`;
+  }
+}
+
+/**
+ * Whitelist an untrusted parameter list (a stored origin, an IPC payload).
+ * Returns null when ANY entry is malformed — never repaired, never partially
+ * kept, because a query re-run with one parameter silently missing is a
+ * different query.
+ */
+export function sanitizeSqlParams(raw: unknown): SqlParam[] | null {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw) || raw.length > MAX_SQL_PARAMS) return null;
+  const out: SqlParam[] = [];
+  const seen = new Set<string>();
+  for (const r of raw) {
+    if (!r || typeof r !== 'object') return null;
+    const o = r as Record<string, unknown>;
+    if (typeof o.name !== 'string' || !PARAM_NAME_RE.test(o.name) || seen.has(o.name)) return null;
+    if (typeof o.kind !== 'string' || !KINDS.has(o.kind)) return null;
+    const p: SqlParam = {
+      name: o.name,
+      kind: o.kind as SqlParamKind,
+      value: Array.isArray(o.value) ? o.value.slice() : o.value,
+    };
+    if (paramValueError(p)) return null;
+    seen.add(p.name);
+    out.push(p);
+  }
+  return out;
+}
+
+/**
+ * Replace every `[[name]]` outside strings/identifiers/comments with bound
+ * placeholders. An unknown name, a malformed definition or a value of the wrong
+ * kind is an error that NAMES the parameter; nothing is guessed.
+ */
+export function bindSqlParams(
+  sql: string,
+  params: unknown, // SqlParam[] from a caller that may not be trusted — every entry is checked
+): { sql: string; binds: SqlBindValue[]; used: string[] } | { error: string } {
+  const src = typeof sql === 'string' ? sql : '';
+  const defs = new Map<string, SqlParam>();
+  for (const raw of Array.isArray(params) ? params : []) {
+    const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+    const name = typeof o.name === 'string' ? o.name : '';
+    if (!PARAM_NAME_RE.test(name)) return { error: `"${name.slice(0, 40)}" is not a valid parameter name.` };
+    if (!KINDS.has(String(o.kind))) return { error: `[[${name}]] has an unknown type.` };
+    if (defs.has(name)) return { error: `[[${name}]] is defined twice.` };
+    defs.set(name, { name, kind: o.kind as SqlParamKind, value: o.value });
+  }
+
+  const n = src.length;
+  const binds: SqlBindValue[] = [];
+  const used: string[] = [];
+  let out = '';
+  let i = 0;
+  const copyTo = (j: number): void => {
+    out += src.slice(i, j);
+    i = j;
+  };
+
+  while (i < n) {
+    const ch = src[i];
+    if (ch === '-' && src[i + 1] === '-') {
+      const nl = src.indexOf('\n', i);
+      copyTo(nl < 0 ? n : nl);
+      continue;
+    }
+    if (ch === '/' && src[i + 1] === '*') {
+      let depth = 1;
+      let j = i + 2;
+      while (j < n && depth > 0) {
+        if (src[j] === '/' && src[j + 1] === '*') { depth += 1; j += 2; }
+        else if (src[j] === '*' && src[j + 1] === '/') { depth -= 1; j += 2; }
+        else j += 1;
+      }
+      copyTo(j);
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      const escapes = ch === "'" && /[eE]/.test(src[i - 1] || '') && !/[A-Za-z0-9_$]/.test(src[i - 2] || '');
+      let j = i + 1;
+      while (j < n) {
+        if (escapes && src[j] === '\\') { j += 2; continue; }
+        if (src[j] === ch) {
+          if (src[j + 1] === ch) { j += 2; continue; }
+          j += 1;
+          break;
+        }
+        j += 1;
+      }
+      copyTo(Math.min(j, n));
+      continue;
+    }
+    if (ch === '$') {
+      const open = /^\$([A-Za-z_][A-Za-z0-9_]*)?\$/.exec(src.slice(i, i + 130));
+      if (open) {
+        const close = src.indexOf(open[0], i + open[0].length);
+        copyTo(close < 0 ? n : close + open[0].length);
+        continue;
+      }
+    }
+    if (ch === '[' && src[i + 1] === '[') {
+      const m = SQL_PLACEHOLDER_RE.exec(src.slice(i, i + 80));
+      if (m) {
+        const p = defs.get(m[1]);
+        if (!p) return { error: `[[${m[1]}]] is not defined — give it a type and a value in the parameters row.` };
+        const bad = paramValueError(p);
+        if (bad) return { error: bad };
+        if (!used.includes(p.name)) used.push(p.name);
+        if (p.kind === 'list') {
+          const list = p.value as SqlBindValue[];
+          // `IN (NULL)` matches nothing, which is what an empty selection means.
+          out += list.length ? '(' + list.map(() => '?').join(', ') + ')' : '(NULL)';
+          binds.push(...list);
+        } else {
+          out += '?';
+          binds.push(p.value as SqlBindValue);
+        }
+        i += m[0].length;
+        continue;
+      }
+    }
+    copyTo(i + 1);
+  }
+  return { sql: out, binds, used };
+}
