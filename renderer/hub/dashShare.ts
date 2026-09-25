@@ -329,6 +329,9 @@ async function assembleExportBundle(forCapture: boolean): Promise<any> {
         cards.push(built);
         continue;
       }
+      // cardKinds.ts: an image exports as its picture; layout-only kinds as nothing.
+      const extra = await exportAuthoringCard(card, layout);
+      if (extra !== undefined) { if (extra) cards.push(extra); continue; }
       cards.push({ kind: 'broken', layout, reason: 'Unknown card' });
     }
     pages.push({ name: page.name || 'Page', cards });

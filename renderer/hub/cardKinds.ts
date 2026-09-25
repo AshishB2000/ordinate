@@ -9,13 +9,26 @@
 
 /** Draw a card of one of these kinds. False: not ours. */
 function renderAuthoringCard(card: any, body: HTMLElement): boolean {
-  if (card.type === 'nav') { renderNavCard(card, body); return true; }
-  return false;
+  const draw: Record<string, (c: any, b: HTMLElement) => void> = {
+    nav: renderNavCard,
+    text: renderMarkdownCard,
+    image: renderImageCard,
+    divider: renderDividerCard,
+    container: renderContainerCard,
+    tabs: renderTabsCard,
+  };
+  const fn = draw[card.type];
+  if (!fn) return false;
+  fn(card, body);
+  return true;
 }
 
 /** The head title when a card has no heading of its own. */
 function cardKindTitle(card: any): string {
   if (card.type === 'nav') return 'Navigation';
+  if (card.type === 'image') return (card.image && card.image.alt) || 'Image';
+  if (card.type === 'divider') return 'Divider';
+  if (card.type === 'container' || card.type === 'tabs') return groupTitle(card);
   return 'Text';
 }
 
@@ -24,6 +37,11 @@ function cardKindTitle(card: any): string {
 // a panel of their own beside them.
 const KIND_EDITORS: Record<string, (card: any, host: HTMLElement) => void | Promise<void>> = {
   nav: renderNavProps,
+  text: renderTextProps,
+  image: renderImageProps,
+  divider: renderDividerProps,
+  container: renderGroupProps,
+  tabs: renderGroupProps,
 };
 
 function renderKindProps(card: any): void {
@@ -46,8 +64,21 @@ function renderKindProps(card: any): void {
 // The editor head's add row holds four buttons; the new kinds share a fifth,
 // "More", whose menu lists them.
 const KIND_ADDS: Array<[string, string, () => void | Promise<void>]> = [
+  ['Image', 'camera', handleAddImage],
+  ['Divider', 'minus', handleAddDivider],
+  ['Container', 'layout-dashboard', () => handleAddGroup('container')],
+  ['Tabs', 'columns', () => handleAddGroup('tabs')],
   ['Navigation', 'arrow-right', handleAddNav],
 ];
+
+/** What an export shows for a kind here: an image as its picture; layout-only kinds as nothing. */
+async function exportAuthoringCard(card: any, layout: any): Promise<any> {
+  if (card.type === 'image' && currentProjectId && card.image) {
+    const res = await window.hub.readProjectImage(currentProjectId, card.image.assetId, card.image.ext).catch(() => null);
+    return res && res.ok ? { kind: 'image', layout, png: res.dataUrl, title: card.image.alt || '' } : null;
+  }
+  return ['nav', 'divider', 'container', 'tabs'].includes(card.type) ? null : undefined;
+}
 
 function initCardKinds(): void {
   const after = document.getElementById('dash-add-control');

@@ -221,6 +221,9 @@ contextBridge.exposeInMainWorld('hub', {
     ipcRenderer.invoke('relationship:suggest', { projectId, fromId, toId }),
   relatedColumns: (projectId: string, datasetId: string) =>
     ipcRenderer.invoke('relationship:related', { projectId, datasetId }),
+  // Image cards: pick into the project, read back as a data: URL (src/ipc/projectAssets.ts).
+  pickProjectImage: (projectId: string) => ipcRenderer.invoke('asset:pickImage', { projectId }),
+  readProjectImage: (projectId: string, id: string, ext: string) => ipcRenderer.invoke('asset:read', { projectId, id, ext }),
   // ── Capture → dataset (Week 13) ──
   // Turn a capture's extractedTable into a review-grid draft (strictly typed,
   // rectangular) WITHOUT saving. Returns { ok, columns, rows, warnings }.

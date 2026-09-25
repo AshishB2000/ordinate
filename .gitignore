@@ -232,6 +232,14 @@ scripts/**/*.js
 /renderer/hub/navCard.js
 /renderer/hub/cardKinds.js
 /scripts/test-tileActions.js
+/renderer/hub/markdown.js
+/renderer/hub/textCard.js
+/renderer/hub/layoutKinds.js
+/renderer/hub/gridArrange.js
+/src/app/projectAssets.js
+/src/ipc/projectAssets.js
+/scripts/test-markdown.js
+/scripts/test-cardLayout.js
 
 # Command palette: the registry, its contents, the overlay, and the native menu
 # built from the same list — emitted siblings.

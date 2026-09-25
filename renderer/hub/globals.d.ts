@@ -208,6 +208,8 @@ declare global {
       deleteRelationship(projectId: string, id: string): Promise<any>;
       suggestRelationshipKeys(projectId: string, fromId: string, toId: string): Promise<any>;
       relatedColumns(projectId: string, datasetId: string): Promise<any>;
+      pickProjectImage(projectId: string): Promise<any>;
+      readProjectImage(projectId: string, id: string, ext: string): Promise<any>;
       // ── Connected data sources (every source is a connector in src/connectors) ──
       // The picker/form catalog. Form SHAPE only — `secret` marks a field whose
       // value goes one-way into the `secret` payload; no value ever comes back.

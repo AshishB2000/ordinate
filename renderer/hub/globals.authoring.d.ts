@@ -7,3 +7,9 @@
 // renderer/hub/cardModel.ts attaches this to window (UMD, the geoMatch pattern).
 // ponytail: its shapes are validated inside the module; callers treat it as a namespace
 declare const cardModel: any;
+
+// renderer/hub/markdown.ts (UMD): the text card's Markdown subset.
+// ponytail: the block/inline AST is internal to markdown.ts
+declare function mdParse(src: unknown): any[];
+declare function mdRender(blocks: any[], doc: Document, hooks?: any): DocumentFragment;
+declare function mdTokens(src: unknown): string[];

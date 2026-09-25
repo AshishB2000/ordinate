@@ -45,7 +45,7 @@ const cardModel = require('../../renderer/hub/cardModel') as {
   sanitizeExtras: (o: Record<string, unknown>, card: Card) => boolean;
 };
 
-export type CardType = 'visual' | 'text' | 'metric' | 'control' | 'nav';
+export type CardType = 'visual' | 'text' | 'metric' | 'control' | 'nav' | 'image' | 'divider' | 'container' | 'tabs';
 export type CardAction = 'delete-sample';
 export type MetricAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';
 export type ControlKind = 'dropdown' | 'multi' | 'date_range';
@@ -149,6 +149,13 @@ export interface Card {
   // ponytail: shapes owned and sanitized by cardModel; typed loosely across the require
   actions?: any[]; // type 'visual'
   nav?: any; // type 'nav'
+  image?: any; // type 'image' — a project asset (app/projectAssets.ts), fit, alt
+  divider?: any; // type 'divider'
+  container?: any; // type 'container' — title, background, padding, collapsible
+  tabs?: any; // type 'tabs' — the named tabs
+  /** The container / tabs card this card sits in, and which tab. Cards stay a flat list. */
+  parentId?: string;
+  tabId?: string;
 }
 
 export interface Page {
