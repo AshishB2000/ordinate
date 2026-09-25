@@ -649,8 +649,7 @@ require("./ipc/visuals").register();
 
 require("./ipc/dashboards").register();
 
-// Metrics. After dashboards: every figure bottoms out in computeCardMetric.
-require("./ipc/metrics").register();
+require("./ipc/metrics").register(); // after dashboards: figures bottom out in computeCardMetric
 // Alert rules and their inbox. After dashboards deliberately — see ipc/alerts.
 require("./ipc/alerts").register({ getHubWindow: () => hubWindow, focusHub });
 
@@ -659,6 +658,7 @@ require("./ipc/alerts").register({ getHubWindow: () => hubWindow, focusHub });
 require("./ipc/analyses").register();
 require("./ipc/versions").register(); // every save of a record, kept and restorable
 require("./ipc/trash").register({ getHubWindow: () => hubWindow }); // deletes land here for 30 days
+require("./ipc/lineage").register(); // what a record is built from, and what is built from it
 
 // Dashboard TEMPLATES — the create wizard's gallery. Model-free; its plans go
 // through `analysis:previewPlan` / `analysis:buildPlan` like every other plan.

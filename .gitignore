@@ -407,3 +407,8 @@ scripts/**/*.js
 /src/ipc/trash.js
 /renderer/hub/trashPage.js
 /scripts/test-trash.js
+# Workspace maturity — Lineage (emitted siblings).
+/src/analysis/lineage.js
+/src/ipc/lineage.js
+/renderer/hub/lineagePanel.js
+/scripts/test-lineage.js

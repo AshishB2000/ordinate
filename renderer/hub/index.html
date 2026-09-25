@@ -960,6 +960,8 @@
               <div class="ds-explorer-meta">
                 <span class="ds-fresh" id="ds-explorer-fresh"></span>
                 <span class="ds-auto-host" id="ds-explorer-auto" hidden></span>
+                <!-- "Used in 3 visuals · 1 dashboard" — opens Lineage (lineagePanel.ts). -->
+                <button class="ds-usedin" type="button" id="ds-explorer-usedin" hidden><svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-lineage"/></svg><span></span></button>
                 <button class="btn btn-sm" type="button" id="ds-explorer-refresh" hidden><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-refresh"/></svg><span>Refresh</span></button>
               </div>
             </div>
@@ -2821,6 +2823,7 @@
 <script src="sidePanel.js"></script>
 <script src="versionsPanel.js"></script>
 <script src="trashPage.js"></script>
+<script src="lineagePanel.js"></script>
 <!-- The command registry, its contents, and the palette that reads them.
      commands.js is the machinery, commandDefs.js registers every command (so it
      loads after the surfaces it calls into), palette.js paints. hub.js boots

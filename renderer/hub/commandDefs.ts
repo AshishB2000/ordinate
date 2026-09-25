@@ -174,6 +174,7 @@ function registerAppCommands(): void {
   });
   registerCommand({ id: 'data.refresh', title: 'Refresh this dataset', group: 'Data', icon: 'refresh', when: cmdDatasetOpen, run: () => { void handleRefreshDataset(expId, null, null); } });
   registerCommand({ id: 'data.history', title: 'Pipeline history', group: 'Data', icon: 'history', when: cmdDatasetOpen, run: () => { void vhOpen('dataset', expId, expName); } });
+  registerCommand({ id: 'data.lineage', title: 'Show lineage', group: 'Data', icon: 'lineage', when: cmdDatasetOpen, run: () => { void lnOpen('dataset', expId, expName); } });
 
   // ── Visual ─────────────────────────────────────────────────────────────────
   registerCommand({
@@ -187,6 +188,7 @@ function registerAppCommands(): void {
   registerCommand({ id: 'visual.save', title: 'Save this visual', group: 'Visual', icon: 'check', when: cmdVisualBuilderOpen, run: () => handleSaveVisual() });
   registerCommand({ id: 'visual.suggest', title: 'Suggest a visual', group: 'Visual', icon: 'sparkles', when: cmdVisualBuilderOpen, run: () => handleSuggestVisual() });
   registerCommand({ id: 'visual.history', title: 'Version history', group: 'Visual', icon: 'history', when: () => cmdVisualBuilderOpen() && !!vizEditingId, run: () => { document.getElementById('viz-history-btn')?.click(); } });
+  registerCommand({ id: 'visual.lineage', title: 'Show lineage', group: 'Visual', icon: 'lineage', when: () => cmdVisualBuilderOpen() && !!vizEditingId, run: () => { void lnOpen('visual', vizEditingId, document.getElementById('viz-builder-name')?.textContent || ''); } });
 
   // ── Dashboard (the editor is open) ─────────────────────────────────────────
   registerCommand({ id: 'dash.addVisual', title: 'Add a visual', group: 'Dashboard', icon: 'columns', when: cmdDashboardOpen, run: () => handleAddVisual() });
@@ -198,6 +200,7 @@ function registerAppCommands(): void {
   registerCommand({ id: 'dash.save', title: 'Save', group: 'Dashboard', icon: 'check', keys: 'mod+s', when: cmdDashboardOpen, run: () => handleSaveDashboard() });
   registerCommand({ id: 'dash.present', title: 'Present', group: 'Dashboard', icon: 'maximize', keys: 'mod+p', when: () => !!dashCurrent, run: () => enterDashPresent() });
   registerCommand({ id: 'dash.history', title: 'Version history', group: 'Dashboard', icon: 'history', when: () => !!dashCurrent, run: () => { void vhOpen('dashboard', String(dashCurrent.id), String(dashCurrent.name || '')); } });
+  registerCommand({ id: 'dash.lineage', title: 'Show lineage', group: 'Dashboard', icon: 'lineage', when: () => !!dashCurrent, run: () => { void lnOpen('dashboard', String(dashCurrent.id), String(dashCurrent.name || '')); } });
   registerCommand({ id: 'dash.export', title: 'Export…', group: 'Dashboard', icon: 'download', keys: 'mod+e', when: () => !!dashCurrent, run: () => handleDashExport() });
   registerCommand({ id: 'dash.exportPdf', title: 'Export as PDF', group: 'Dashboard', icon: 'download', when: () => !!dashCurrent, run: () => dashExportAs('pdf') });
   registerCommand({ id: 'dash.exportPng', title: 'Export as PNG', group: 'Dashboard', icon: 'download', when: () => !!dashCurrent, run: () => dashExportAs('png') });

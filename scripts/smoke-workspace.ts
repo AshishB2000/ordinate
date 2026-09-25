@@ -39,7 +39,10 @@ async function waitFor(win: Win, fn: string, timeout = 15000): Promise<boolean> 
   return false;
 }
 
+/** A screenshot for the PR: earlier steps' toasts are cleared first — they were
+ *  asserted where they appeared, and in a picture of a later page they are noise. */
 async function shot(win: Win, name: string): Promise<void> {
+  await win.evaluate(() => document.querySelectorAll('#hub-toast .toast').forEach((t) => t.remove()));
   await win.screenshot({ path: path.join(shotDir, name + '.png') });
 }
 
@@ -179,6 +182,47 @@ async function trashSection(win: Win): Promise<void> {
     await waitFor(win, `[...document.querySelectorAll('.viz-card')].some((c) => /${NAME}/.test(c.textContent || ''))`));
 }
 
+// ── 3. Lineage ───────────────────────────────────────────────────────────────
+async function lineageSection(win: Win, ids: { projectId: string; datasetId: string }): Promise<void> {
+  await win.evaluate(async (a: any) => {
+    const w = window as any;
+    w.selectSection('datasets');
+    await w.openSavedDataset(a.datasetId);
+  }, ids);
+  await waitFor(win, `!document.getElementById('ds-explorer-usedin').hidden`);
+  const usedIn = await win.evaluate(() => (document.querySelector('#ds-explorer-usedin span') || {} as any).textContent);
+  ok('the dataset header says what uses it', usedIn === 'Used in 3 visuals · 1 dashboard', String(usedIn));
+
+  await win.click('#ds-explorer-usedin');
+  await waitFor(win, `document.querySelectorAll('.ws-side[data-kind="lineage"] .ln-node').length > 0`);
+  const graph = await win.evaluate(() => {
+    const nodes = [...document.querySelectorAll('.ln-node')].map((g) => ({
+      kind: ([...g.classList].find((c) => c.startsWith('ln-node--')) || '').slice(9),
+      name: ((g.querySelector('title') || {} as any).textContent || '').split('\n')[0],
+      focus: g.classList.contains('is-focus'),
+    }));
+    return { nodes, edges: document.querySelectorAll('.ln-edge').length };
+  });
+  const of = (k: string) => graph.nodes.filter((n: any) => n.kind === k).map((n: any) => n.name).sort();
+  ok('Lineage opens on the dataset, highlighted',
+    graph.nodes.some((n: any) => n.kind === 'dataset' && n.name === 'Retail orders' && n.focus), JSON.stringify(graph.nodes));
+  ok('…with the Month calculated field', of('calc').join() === 'Month', JSON.stringify(of('calc')));
+  ok('…three visuals', of('visual').length === 3, JSON.stringify(of('visual')));
+  ok('…and one dashboard', of('dashboard').join() === 'Retail overview', JSON.stringify(of('dashboard')));
+  ok('…joined by curves', graph.edges >= 6, String(graph.edges));
+
+  // Hover a chart: the other two charts are not on its path and step back.
+  await win.locator('.ln-node--visual', { hasText: 'Revenue by month' }).hover();
+  const hover = await win.evaluate(() => ({
+    hovering: document.querySelector('.ln-svg')!.classList.contains('is-hovering'),
+    dimmedVisuals: [...document.querySelectorAll('.ln-node--visual:not(.is-related)')].length,
+  }));
+  ok('hovering a node dims the paths it is not on', hover.hovering && hover.dimmedVisuals === 2, JSON.stringify(hover));
+  await win.mouse.move(5, 5);
+  await shot(win, 'lineage');
+  await win.click('.ws-side .ws-side-x');
+}
+
 async function main(): Promise<void> {
   const app = await _electron.launch({
     args: ['.', '--password-store=basic', '--user-data-dir=' + userData, '--enable-unsafe-swiftshader'],
@@ -200,6 +244,7 @@ async function main(): Promise<void> {
   try {
     await historySection(win, ids);
     await trashSection(win);
+    await lineageSection(win, ids);
   } finally {
     ok('zero renderer console errors', errors.length === 0, errors.slice(0, 5).join(' | '));
     await app.close().catch(() => {});

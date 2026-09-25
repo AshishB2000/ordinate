@@ -83,7 +83,16 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
     histBtn.type = 'button';
     histBtn.className = 'btn btn-sm btn-ghost me-history-btn';
     iconLabel(histBtn, 'history', 'History');
-    if (editingId) h.appendChild(histBtn);
+    const linBtn = document.createElement('button');
+    linBtn.type = 'button';
+    linBtn.className = 'btn btn-sm btn-ghost me-history-btn';
+    iconLabel(linBtn, 'lineage', 'Lineage');
+    if (editingId) {
+      const tools = document.createElement('span');
+      tools.className = 'me-title-tools';
+      tools.append(linBtn, histBtn);
+      h.appendChild(tools);
+    }
 
     // ── State ────────────────────────────────────────────────────────────────
     const def = (existing && existing.definition) || {};
@@ -418,6 +427,10 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
     };
 
     cancel.addEventListener('click', () => finish(null));
+    linBtn.addEventListener('click', () => {
+      finish(null);
+      void lnOpen('metric', editingId, existing && existing.name ? String(existing.name) : '');
+    });
     histBtn.addEventListener('click', () => {
       finish(null);
       void vhOpen('metric', editingId, existing && existing.name ? String(existing.name) : '');

@@ -397,6 +397,8 @@ declare global {
       versionsList(projectId: string, type: string, id: string): Promise<any[]>;
       versionsGet(projectId: string, type: string, id: string, key: string): Promise<any>;
       versionsRestore(projectId: string, type: string, id: string, key: string): Promise<any>;
+      // ── Lineage (src/ipc/lineage.ts) ──
+      lineageGet(projectId: string, type: string, id: string): Promise<any>;
       // ── Trash (src/ipc/trash.ts) ──
       trashList(projectId: string): Promise<any[]>;
       trashRestore(projectId: string, type: string, id: string): Promise<any>;

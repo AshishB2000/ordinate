@@ -654,6 +654,9 @@ contextBridge.exposeInMainWorld('hub', {
     ipcRenderer.invoke('versions:get', { projectId, type, id, key }),
   versionsRestore: (projectId: string, type: string, id: string, key: string) =>
     ipcRenderer.invoke('versions:restore', { projectId, type, id, key }),
+  // ── Lineage (src/ipc/lineage.ts) — the graph around one record, laid out ──
+  lineageGet: (projectId: string, type: string, id: string) =>
+    ipcRenderer.invoke('lineage:get', { projectId, type, id }),
   // ── Trash (src/ipc/trash.ts) — every delete lands here for 30 days ──
   trashList: (projectId: string) => ipcRenderer.invoke('trash:list', { projectId }),
   trashRestore: (projectId: string, type: string, id: string) =>

@@ -138,6 +138,7 @@ async function openSavedDataset(id: string): Promise<void> {
   }
   const title = dsEl('ds-explorer-title');
   if (title) title.textContent = expName;
+  if (typeof lnPaintUsedIn === 'function') void lnPaintUsedIn(expId); // lineagePanel.ts
   renderExplorerIdent(ds);
 
   // Week 13 — capture provenance strip (thumbnail + view-original + recapture).
@@ -362,6 +363,7 @@ function dsOpenMoreMenu(anchor: HTMLElement): void {
       b.addEventListener('click', () => { close(); run(); });
       el.appendChild(b);
     };
+    add('lineage', 'Lineage', () => void lnOpen('dataset', id, expName));
     add('history', 'Pipeline history', () => void vhOpen('dataset', id, expName));
     add('trash', 'Move to Trash', () => void handleDeleteDataset(id), true);
   }, () => anchor.setAttribute('aria-expanded', 'false'));
