@@ -3,7 +3,7 @@
 // decided once, before any data is touched.
 //
 // This is the FIRST thing buildChart does and the only thing that reads the raw
-// chart id string. Twenty-five ids collapse onto nine Chart.js types plus a
+// chart id string. Thirty-one ids collapse onto twelve Chart.js types plus a
 // handful of flags (`gauge`, `funnel`, `histogram`, `combo`, `pct`, `stacked`,
 // `fill`, `markers`, `indexAxis`), and every later block asks the RESULT — is
 // this round? is it horizontal? — never the id again. Splitting the resolution
@@ -39,6 +39,12 @@ interface ChartTypeSpec {
   isHoriz: boolean;
   /** A PIVOT TABLE, which Chart.js never draws — see the note on the case below. */
   isPivot: boolean;
+  /** The five families chartFamiliesExtra.js draws — see isExtraFamily there. */
+  isWaterfall: boolean;
+  isBullet: boolean;
+  isCalendar: boolean;
+  isRadar: boolean;
+  isPareto: boolean;
 }
 
 function resolveChartType(type: string): ChartTypeSpec {
@@ -75,6 +81,11 @@ function resolveChartType(type: string): ChartTypeSpec {
     // pivot id (an old override, a hand-edited record) falls back to a bar
     // rather than silently becoming one under the default branch.
     case 'pivot':            chartType = 'bar'; opts.pivot = true; break;
+    case 'waterfall':        chartType = 'bar'; opts.waterfall = true; break;
+    case 'bullet':           chartType = 'bar'; opts.bullet = true; opts.indexAxis = 'y'; break;
+    case 'pareto':           chartType = 'bar'; opts.pareto = true; break;
+    case 'calendar':         chartType = 'matrix'; opts.calendar = true; break;
+    case 'radar':            chartType = 'radar'; break;
     default:                 chartType = 'bar';  break;
   }
 
@@ -86,7 +97,7 @@ function resolveChartType(type: string): ChartTypeSpec {
     isScatter:     chartType === 'scatter',
     isBubble:      chartType === 'bubble',
     isTreemap:     chartType === 'treemap',   // chartjs-chart-treemap plugin
-    isMatrix:      chartType === 'matrix',    // chartjs-chart-matrix plugin (heatmap)
+    isMatrix:      chartType === 'matrix' && !opts.calendar, // chartjs-chart-matrix plugin (heatmap)
     isFunnel:      opts.funnel === true,      // centered stacked-bar funnel
     isHistogram:   opts.histogram === true,   // binned single-series distribution
     isSankey:      chartType === 'sankey',      // chartjs-chart-sankey plugin
@@ -95,5 +106,10 @@ function resolveChartType(type: string): ChartTypeSpec {
     isLine:        chartType === 'line',
     isHoriz:       opts.indexAxis === 'y',  // horizontal bar/column
     isPivot:       opts.pivot === true,     // a <table>, drawn by pivotRender.js
+    isWaterfall:   opts.waterfall === true, // floating bars + connectors
+    isBullet:      opts.bullet === true,    // horizontal bar over qualitative bands
+    isCalendar:    opts.calendar === true,  // a matrix laid out week × weekday
+    isRadar:       chartType === 'radar',   // Chart.js built-in radar
+    isPareto:      opts.pareto === true,    // sorted bars + cumulative % line
   };
 }

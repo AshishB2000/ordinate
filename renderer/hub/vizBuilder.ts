@@ -256,6 +256,13 @@ async function recomputeVisual(): Promise<void> {
         void recomputeVisual();
         return;
       }
+      // A calendar heatmap is one cell per DAY: an auto-grained date axis
+      // (months, for two years of orders) would leave 24 lonely cells. Ask main
+      // for days — an explicit grain is never capped — and draw that instead.
+      if (type === 'calendar' && vizForm!.setGrain('day')) {
+        void recomputeVisual();
+        return;
+      }
       if (!info.canRender) {
         area.innerHTML = '';
         const m = document.createElement('div');

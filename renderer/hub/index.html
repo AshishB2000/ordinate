@@ -2728,6 +2728,12 @@
      which dispatches the `pivot` chart type to it. -->
 <script src="pivotRender.js"></script>
 <script src="chartTypeSpec.js"></script>
+<!-- Waterfall / bullet / calendar / radar / Pareto: the pure shapes (also
+     require()d by scripts/test-chartShapes.js), then the family module the
+     three builders below hand those five ids to, then what they draw by hand. -->
+<script src="chartShapes.js"></script>
+<script src="chartFamiliesExtra.js"></script>
+<script src="chartFamiliesPlugins.js"></script>
 <script src="chartValueLabels.js"></script>
 <script src="chartDatasets.js"></script>
 <script src="chartScales.js"></script>

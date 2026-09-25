@@ -420,3 +420,10 @@ scripts/**/*.js
 /renderer/hub/catalogPage.js
 /scripts/test-catalog.js
 /scripts/wfCatalog.js
+# Waterfall / bullet / calendar / radar / Pareto — emitted siblings.
+/renderer/hub/chartShapes.js
+/renderer/hub/chartFamiliesExtra.js
+/renderer/hub/chartFamiliesPlugins.js
+/src/analysis/chartFigures.js
+/scripts/test-chartShapes.js
+/scripts/wfCharts.js

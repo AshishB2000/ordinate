@@ -120,6 +120,10 @@ export interface VizOverrides {
    */
   crossFilter?: boolean;
   showTooltips?: boolean;
+  /** Bullet: the fixed target, used when the encoding has no second (target) measure. */
+  bulletTarget?: number;
+  /** Waterfall: categories drawn as totals, beyond those LABELLED "Total"/"Subtotal"/"Grand total". */
+  waterfallTotals?: string[];
 }
 
 export interface Visual {
@@ -261,6 +265,7 @@ export const SUGGESTABLE_CHART_TYPES: readonly string[] = [
   'pie', 'donut', 'scatter', 'gauge', 'combo', 'bubble',
   'treemap', 'heatmap', 'funnel', 'histogram',
   'sankey', 'candlestick', 'boxplot',
+  'waterfall', 'bullet', 'calendar', 'radar', 'pareto',
 ];
 
 // Allowed enum sets for the clamped override fields.
@@ -311,6 +316,13 @@ export function sanitizeOverrides(raw: unknown): VizOverrides {
     out.hiddenSeries = o.hiddenSeries.filter((n): n is number => typeof n === 'number' && Number.isFinite(n));
   }
   if (typeof o.periodIdx === 'number' && Number.isFinite(o.periodIdx)) out.periodIdx = o.periodIdx;
+  if (typeof o.bulletTarget === 'number' && Number.isFinite(o.bulletTarget)) out.bulletTarget = o.bulletTarget;
+  // Category labels, so strings only — bounded, since a record is untrusted.
+  if (Array.isArray(o.waterfallTotals)) {
+    out.waterfallTotals = o.waterfallTotals
+      .filter((s): s is string => typeof s === 'string' && s.length <= 200)
+      .slice(0, 200);
+  }
 
   return out;
 }

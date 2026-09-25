@@ -42,7 +42,7 @@ import * as vm from 'vm';
 const HUB = path.join(__dirname, '..', 'renderer', 'hub');
 const CHART_UMD = path.join(__dirname, '..', 'node_modules', 'chart.js', 'dist', 'chart.umd.js');
 const CHART_SCRIPTS = [
-  'chartTraits.js', 'chartPalette.js', 'chartTypeSpec.js',
+  'chartTraits.js', 'chartPalette.js', 'chartTypeSpec.js', 'chartShapes.js', 'chartFamiliesExtra.js', 'chartFamiliesPlugins.js',
   'chartValueLabels.js', 'chartDatasets.js', 'chartScales.js', 'chartRender.js',
 ];
 const THEME: Record<string, string> = {
@@ -134,6 +134,13 @@ for (const type of ['line', 'area', 'funnel']) {
   ok(`${type}: keeps its natural order under desc`,
      labelsOf(type, 'desc').join() === 'North,South,East', labelsOf(type, 'desc').join());
 }
+// A waterfall's order is its story (a total sits where it sits), so Sort never
+// reaches it — and a Pareto sorts ITSELF descending, whatever `asc` asks.
+ok('waterfall: keeps its natural order under asc (plus its closing Total)',
+   labelsOf('waterfall', 'asc').join() === 'North,South,East,Total', labelsOf('waterfall', 'asc').join());
+ok('pareto: always descending, even under asc',
+   labelsOf('pareto', 'asc').join() === 'South,North,East', labelsOf('pareto', 'asc').join());
+ok('bullet: sorts like a bar', labelsOf('bullet', 'desc').join() === 'South,North,East');
 
 // ── The UI gate that made this latent is still in place ────────────────────
 // `sortableType` in chartControls.ts is why nobody could reach the bug from the

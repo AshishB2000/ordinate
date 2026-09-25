@@ -86,6 +86,11 @@ interface EncodingFormApi {
    * so this cannot loop back into a recompute.
    */
   applyCategoryInfo(info: EncCategoryInfo | null | undefined): void;
+  /**
+   * Put the date grain to `grain` when the category IS a date. Returns true
+   * only when that changed it — the caller recomputes; fires no `change`.
+   */
+  setGrain(grain: string): boolean;
   show(on: boolean): void;
 }
 
@@ -700,6 +705,13 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
         if (!grainSel.value) grainSel.value = info.grain;
       }
       setCatNote(info && typeof info.note === 'string' ? info.note : '');
+    },
+
+    setGrain(grain: string): boolean {
+      syncGrain();
+      if (!grainSel || grainSel.hidden || grainSel.value === grain) return false;
+      grainSel.value = grain;
+      return grainSel.value === grain;
     },
 
     showFields(on: boolean): void {

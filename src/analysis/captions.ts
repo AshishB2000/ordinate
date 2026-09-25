@@ -19,6 +19,7 @@
 
 import type { ChartData } from './vizData';
 import type { PivotGrid } from './pivotData';
+import { waterfallFigures, paretoFigures } from './chartFigures';
 
 // ── the app's compact number format ──────────────────────────────────────────
 //
@@ -39,11 +40,16 @@ export function compact(v: number | null | undefined): string {
 
 // ── chart family ─────────────────────────────────────────────────────────────
 //
-// The 28 chart ids collapse to five shapes a sentence can be written about,
-// plus `other` for the ones where the honest sentence is a count. Mapping by
-// FAMILY rather than per-id is what keeps this file from growing a branch every
-// time renderResult.ts gains a chart.
-export type CaptionFamily = 'bar' | 'line' | 'part' | 'map' | 'point' | 'pivot' | 'other';
+// The 34 chart ids collapse to a handful of shapes a sentence can be written
+// about, plus `other` for the ones where the honest sentence is a count.
+// Mapping by FAMILY rather than per-id is what keeps this file from growing a
+// branch every time renderResult.ts gains a chart. The five that DO get their
+// own family — waterfall, Pareto, bullet, radar, calendar — each say something
+// no bar sentence can: where a total went, how concentrated it is, how far off
+// target, who wins which axis, which day peaked.
+export type CaptionFamily =
+  | 'bar' | 'line' | 'part' | 'map' | 'point' | 'pivot'
+  | 'waterfall' | 'pareto' | 'bullet' | 'radar' | 'calendar' | 'other';
 
 const FAMILY: Record<string, CaptionFamily> = {
   column: 'bar', bar: 'bar',
@@ -57,6 +63,7 @@ const FAMILY: Record<string, CaptionFamily> = {
   map_bubble: 'map', map_choropleth: 'map',
   scatter: 'point', bubble: 'point',
   pivot: 'pivot',
+  waterfall: 'waterfall', pareto: 'pareto', bullet: 'bullet', radar: 'radar', calendar: 'calendar',
 };
 
 export function captionFamily(chartType: string | null | undefined): CaptionFamily {
@@ -85,6 +92,12 @@ export interface CaptionInput {
   pivot?: PivotGrid | null;
   /** column → the display name the catalog gives it (catalog.displayNames). */
   names?: Record<string, string> | null;
+  /**
+   * The two chart overrides that change a FIGURE rather than a look: the
+   * waterfall's "is total" categories and the bullet's fixed target. Without
+   * them the sentence would describe a different chart from the picture.
+   */
+  overrides?: { waterfallTotals?: string[]; bulletTarget?: number } | null;
 }
 
 const NOTHING = 'No data to summarize';
@@ -106,11 +119,17 @@ export function tileCaption(input: CaptionInput): string {
   if (family === 'map') return leaderCaption(geoPairs(input.geo), measure, true);
 
   const pairs = chartPairs(input.data);
+  const ov = input.overrides || {};
   switch (family) {
     case 'line': return lineCaption(pairs, measure);
     case 'part': return partCaption(pairs, measure);
     case 'point': return pointCaption(input.data, measure);
     case 'bar': return leaderCaption(pairs, measure, false);
+    case 'waterfall': return waterfallCaption(input.data, ov.waterfallTotals, measure, pairs);
+    case 'pareto': return paretoCaption(input.data, measure, pairs);
+    case 'bullet': return bulletCaption(input.data, ov.bulletTarget, measure, pairs);
+    case 'radar': return radarCaption(input.data);
+    case 'calendar': return calendarCaption(pairs, measure);
     default: return genericCaption(pairs, measure);
   }
 }
@@ -340,4 +359,100 @@ function kpiCaption(kpis: CaptionKpi[]): string {
     .filter((k) => k && typeof k.label === 'string')
     .map((k) => `${k.label} ${k.value == null ? '—' : compact(k.value)}`);
   return parts.length ? parts.join(' · ') : 'No metrics on this sheet';
+}
+
+// ── waterfall · Pareto · bullet · radar · calendar ───────────────────────────
+//
+// The waterfall's start/end and the Pareto's 80% count come from ./chartFigures,
+// the main-side twin of the renderer's chartShapes (differential-tested).
+
+const finite = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+/** "Four steps take revenue from 4.1M to 5.2M; the largest is Technology at +1.3M" */
+function waterfallCaption(
+  data: ChartData | null | undefined, totals: string[] | undefined, measure: string, pairs: Pair[],
+): string {
+  const f = waterfallFigures(data, totals);
+  if (!f.steps.length) return genericCaption(pairs, measure);
+  let big = f.steps[0];
+  for (const s of f.steps) if (Math.abs(s.value) > Math.abs(big.value)) big = s;
+  const n = f.steps.length;
+  const head = `${sentenceCase(countWord(n))} ${n === 1 ? 'step takes' : 'steps take'} ${measure} from ${compact(f.from)} to ${compact(f.to)}`;
+  const at = `${big.label} at ${big.value > 0 ? '+' : ''}${compact(big.value)}`;
+  return n === 1 ? `${head}: ${at}` : `${head}; the largest is ${at}`;
+}
+
+/** "Three categories make 80% of revenue" */
+function paretoCaption(data: ChartData | null | undefined, measure: string, pairs: Pair[]): string {
+  const p = paretoFigures(data);
+  if (!p.count80) return leaderCaption(pairs, measure, false);
+  if (p.count80 === 1) return `${p.top} alone makes 80% of ${measure}`;
+  if (p.count80 >= p.positives) {
+    return `It takes ${p.positives === 2 ? 'both' : 'all ' + countWord(p.positives)} categories to make 80% of ${measure}`;
+  }
+  return `${sentenceCase(countWord(p.count80))} categories make 80% of ${measure}`;
+}
+
+/** "Two of three categories reach target; Technology leads at 128%" */
+function bulletCaption(
+  data: ChartData | null | undefined, fixed: number | undefined, measure: string, pairs: Pair[],
+): string {
+  const labels = (data && Array.isArray(data.labels)) ? data.labels : [];
+  const series = (data && Array.isArray(data.series)) ? data.series : [];
+  const s0: unknown[] = (series[0] && series[0].values) || [];
+  const s1: unknown[] | null = series[1] ? series[1].values || [] : null;
+  const rows = labels
+    .map((l, i) => ({ label: String(l), v: finite(s0[i]), t: s1 ? finite(s1[i]) : finite(fixed) }))
+    .filter((r): r is { label: string; v: number; t: number } => r.v !== null && r.t !== null && r.t > 0);
+  // No usable target: say what the bars say, about the MEASURE (not measure + target).
+  if (!rows.length) return leaderCaption(s1 ? chartPairs({ labels, series: [series[0]] }) : pairs, measure, false);
+  const pct = (r: { v: number; t: number }): number => Math.round((r.v / r.t) * 100);
+  if (rows.length === 1) return `${rows[0].label} is at ${pct(rows[0])}% of its ${compact(rows[0].t)} target`;
+  let best = rows[0];
+  for (const r of rows) if (r.v / r.t > best.v / best.t) best = r;
+  const n = rows.length;
+  const met = rows.filter((r) => r.v >= r.t).length;
+  const head = met === n ? (n === 2 ? 'Both categories reach target' : `All ${countWord(n)} categories reach target`)
+    : met === 0 ? (n === 2 ? 'Neither category reaches target' : `None of ${countWord(n)} categories reach target`)
+    : `${sentenceCase(countWord(met))} of ${countWord(n)} categories ${met === 1 ? 'reaches' : 'reach'} target`;
+  return `${head}; ${best.label} ${met === 0 ? 'is closest' : 'leads'} at ${pct(best)}%`;
+}
+
+/**
+ * "West leads on four of five measures" — within the radar's own caps (six
+ * axes, eight categories); a category WINS an axis by its raw figure.
+ */
+function radarCaption(data: ChartData | null | undefined): string {
+  const labels = ((data && Array.isArray(data.labels)) ? data.labels : []).slice(0, 8);
+  const axes = ((data && Array.isArray(data.series)) ? data.series : []).slice(0, 6);
+  if (axes.length < 2) return leaderCaption(chartPairs(data), measureNoun(data), false);
+  if (!labels.length) return NOTHING;
+  const m = axes.length;
+  if (labels.length === 1) return `${labels[0]} is the only category, across ${countWord(m)} measures`;
+  const wins = labels.map(() => 0);
+  for (const s of axes) {
+    let bi = -1;
+    let bv = -Infinity;
+    labels.forEach((_, i) => {
+      const v = finite(s && Array.isArray(s.values) ? s.values[i] : null);
+      if (v !== null && v > bv) { bv = v; bi = i; }
+    });
+    if (bi >= 0) wins[bi] += 1;
+  }
+  let lead = 0;
+  wins.forEach((w, i) => { if (w > wins[lead]) lead = i; });
+  if (!wins[lead]) return NOTHING;
+  return wins[lead] === m
+    ? `${labels[lead]} leads on all ${countWord(m)} measures`
+    : `${labels[lead]} leads on ${countWord(wins[lead])} of ${countWord(m)} measures`;
+}
+
+/** "Revenue peaked at 12.3K on 2024-11-29, across 731 days" */
+function calendarCaption(pairs: Pair[], measure: string): string {
+  if (!pairs.length) return NOTHING;
+  const noun = sentenceCase(measure);
+  if (pairs.length === 1) return `${noun} was ${compact(pairs[0].value)} on ${pairs[0].label}`;
+  let peak = pairs[0];
+  for (const p of pairs) if (p.value > peak.value) peak = p;
+  return `${noun} peaked at ${compact(peak.value)} on ${peak.label}, across ${pairs.length} days`;
 }

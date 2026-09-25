@@ -486,6 +486,14 @@ declare global {
   function mdPlain(src: string): string;
   function storyOutline(blocks: any[]): Array<{ blockId: string; level: number; text: string }>;
   function storyPages(blocks: any[]): Array<{ heading: string; level: number; items: Array<{ block: any; text?: string }> }>;
+  // chartShapes.js — the same IIFE pattern; its result shapes are declared there.
+  function waterfallSteps(labels: any[], series: any[], totals?: string[] | null): WaterfallShape;
+  function paretoShape(labels: any[], values: any[]): ParetoShape;
+  function calendarCells(labels: any[], values: any[]): CalendarShape | null;
+  function calendarBands(weeks: number, availW: number, availH: number, gapRows: number, maxCell?: number):
+    { bands: number; perRow: number; rows: number };
+  function radarShape(labels: any[], series: any[]): RadarShape;
+  function bulletShape(labels: any[], series: any[], target?: number | null): BulletShape;
 
   // PRE-EXISTING BUG (present in the original hub.js): called in the stpTestPerm
   // click handler but defined nowhere, so it throws at runtime. Declared here to

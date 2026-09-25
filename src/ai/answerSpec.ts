@@ -90,6 +90,10 @@ export const ANSWER_CHART_TYPES: ReadonlySet<string> = new Set([
   'column', 'bar', 'clustered_column', 'clustered_bar', 'stacked_column', 'stacked_bar',
   'pct_stacked_column', 'pct_stacked_bar', 'line', 'line_markers', 'area', 'stacked_area',
   'pie', 'donut', 'treemap', 'funnel', 'heatmap', 'table',
+  // Category-and-measures types too: a Pareto is "top N by X" with its
+  // cumulative share, a waterfall is the steps between them, a bullet reads a
+  // second measure as its target, a radar compares several measures.
+  'pareto', 'waterfall', 'bullet', 'radar',
 ]);
 
 /** Aggregations that need a number column — the rule analysisPlan.NUMERIC_AGGS states. */

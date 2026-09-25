@@ -58,7 +58,9 @@ function makeAreaGradient(color: string) {
 // gauge, histogram and boxplot all replace the labels with their own.
 // Locals are destructured under their ORIGINAL names so every family block below
 // is the same code it was inside buildChart.
-function buildChartDatasets(c: ChartCtx): { datasets: any[]; chartLabels: any[] } {
+function buildChartDatasets(c: ChartCtx): { datasets: any[]; chartLabels: any[] } | null {
+  // Waterfall / bullet / calendar / radar / Pareto: chartFamiliesExtra.js.
+  if (isExtraFamily(c)) return buildExtraDatasets(c);
   const {
     canvas, labels, series, opts, overrides, palette, fmt, lineTension,
     gridColor, surfColor, fontFamily,

@@ -156,6 +156,10 @@ const chartMenuEl = (function () {
           <option value="currency">Currency ($1,234)</option>
         </select>
       </div>
+      <div class="cm-field" id="cm-target-field" hidden>
+        <label class="cm-label" for="cm-target">Target value</label>
+        <input class="cm-input" id="cm-target" type="number" step="any" placeholder="Second measure, if any" autocomplete="off"/>
+      </div>
       <div class="cm-toggle-row" id="cm-smooth-row">
         <span class="cm-toggle-label">Smooth lines</span>
         <button class="cm-switch" id="cm-smooth" role="switch" aria-checked="true" type="button">
@@ -198,6 +202,8 @@ const cmYZeroRow     = document.getElementById('cm-y-zero-row');
 const cmSort         = document.getElementById('cm-sort') as HTMLSelectElement;
 const cmSortField    = document.getElementById('cm-sort-field');
 const cmNumFmt       = document.getElementById('cm-numfmt') as HTMLSelectElement;
+const cmTarget       = document.getElementById('cm-target') as HTMLInputElement;
+const cmTargetField  = document.getElementById('cm-target-field');
 const cmSmooth       = document.getElementById('cm-smooth');
 const cmSmoothRow    = document.getElementById('cm-smooth-row');
 const cmAxisSection  = document.getElementById('cm-axis-section');

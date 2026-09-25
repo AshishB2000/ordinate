@@ -195,6 +195,7 @@ async function reportTile(
     caption = await window.hub.reportsCaption({
       chartType: type, data, geo: data.geo || null, pivot: data.pivot || null,
       projectId: ctx.projectId, datasetId: visual.datasetId, // → the catalog's column display names
+      overrides: visual.overrides || null,   // a waterfall's totals, a bullet's target
     });
   } catch (_) { caption = ''; }
   return { cardId: card.id, title: visual.name || '', png, caption, grid };

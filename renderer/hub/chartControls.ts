@@ -31,7 +31,7 @@ function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx,
   const defaultShowLegend = legendOnByDefault(type, chartSeries(data));
 
   if (cmTitleInput) cmTitleInput.value = currentOverrides.title || '';
-  if (cmAxisSection) cmAxisSection.hidden = isRound;
+  if (cmAxisSection) cmAxisSection.hidden = isRound || type === 'radar' || type === 'calendar';
   if (cmXAxis) cmXAxis.value = currentOverrides.xAxisLabel || '';
   if (cmYAxis) cmYAxis.value = currentOverrides.yAxisLabel || '';
 
@@ -54,8 +54,9 @@ function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx,
   // Advanced controls — populate current values + show only where they apply.
   const _ser = chartSeries(data);
   const isLineType = ['line', 'area', 'stacked_area', 'line_markers', 'combo'].includes(type);
-  const valueAxisType = !isRound && !['scatter', 'bubble', 'treemap', 'heatmap', 'sankey', 'candlestick', 'boxplot', 'gauge', 'funnel'].includes(type);
-  const sortableType = ['column', 'bar', 'clustered_column', 'clustered_bar', 'stacked_column', 'stacked_bar', 'pct_stacked_column', 'pct_stacked_bar', 'pie', 'donut'].includes(type);
+  const valueAxisType = !isRound && !['scatter', 'bubble', 'treemap', 'heatmap', 'sankey', 'candlestick', 'boxplot', 'gauge', 'funnel', 'radar', 'calendar'].includes(type);
+  // Not waterfall or pareto: a waterfall's order is its story, a Pareto sorts itself.
+  const sortableType = ['column', 'bar', 'clustered_column', 'clustered_bar', 'stacked_column', 'stacked_bar', 'pct_stacked_column', 'pct_stacked_bar', 'pie', 'donut', 'bullet'].includes(type);
   const canLegend = isRound || _ser.length > 1;
   if (cmLegendPos) cmLegendPos.value = currentOverrides.legendPosition || 'bottom';
   if (cmLegendPosField) cmLegendPosField.hidden = !canLegend;
@@ -64,6 +65,9 @@ function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx,
   if (cmSort) cmSort.value = currentOverrides.sort || 'none';
   if (cmSortField) cmSortField.hidden = !sortableType;
   if (cmNumFmt) cmNumFmt.value = currentOverrides.numberFormat || 'auto';
+  // A bullet's fixed target — used when the chart has no second (target) measure.
+  if (cmTarget) cmTarget.value = typeof currentOverrides.bulletTarget === 'number' ? String(currentOverrides.bulletTarget) : '';
+  if (cmTargetField) cmTargetField.hidden = type !== 'bullet';
   setSwitch(cmSmooth, currentOverrides.smooth !== false);
   if (cmSmoothRow) cmSmoothRow.hidden = !isLineType;
 
@@ -242,6 +246,10 @@ function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx,
   if (cmYZero)         cmYZero.addEventListener('click', () => onToggleSwitch(cmYZero, 'yZero', true), sig);
   if (cmSort)          cmSort.addEventListener('change', () => applyOverride({ sort: cmSort.value === 'none' ? null : cmSort.value }), sig);
   if (cmNumFmt)        cmNumFmt.addEventListener('change', () => applyOverride({ numberFormat: cmNumFmt.value === 'auto' ? null : cmNumFmt.value }), sig);
+  if (cmTarget)        cmTarget.addEventListener('change', () => {
+    const n = parseFloat(cmTarget.value);
+    applyOverride({ bulletTarget: Number.isFinite(n) ? n : null });
+  }, sig);
   if (cmSmooth)        cmSmooth.addEventListener('click', () => onToggleSwitch(cmSmooth, 'smooth', true), sig);
   if (cmXAxis)         cmXAxis.addEventListener('input', onAxisInput, sig);
   if (cmYAxis)         cmYAxis.addEventListener('input', onAxisInput, sig);

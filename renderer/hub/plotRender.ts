@@ -96,6 +96,9 @@ const MOSAIC_CHART_TYPES: ReadonlySet<string> = new Set([
 const MOSAIC_FALLBACK_TYPES: ReadonlySet<string> = new Set([
   'pie', 'donut', 'gauge', 'treemap', 'sankey',
   'combo', 'funnel', 'candlestick', 'boxplot',
+  // Each needs a plugin-drawn mark (connectors, bands, a week grid, the 80%
+  // marker) or a radial axis that vgplot has no equivalent for.
+  'waterfall', 'bullet', 'calendar', 'radar', 'pareto',
   // 'pivot' for the same reason as 'table': it is a <table>, and rendering one
   // through vgplot would mean `vg.table()`, whose per-instance CSS violates the
   // hub's style-src on every update.
