@@ -33,6 +33,8 @@ import { sanitizePages, sanitizeDashboardFilters, sanitizeStyle } from './dashbo
 import type { CardType } from './dashboards';
 import * as visuals from './visuals';
 import type { FilterStep } from '../data/transforms';
+import { sanitizeParameters } from './params';
+import type { Parameter } from './params';
 
 // Re-exported so callers can type an analysis sheet without importing two
 // modules — and so it stays visible that a sheet IS a dashboard Page.
@@ -72,6 +74,16 @@ export interface Analysis {
    * three strings whose absence already means the right thing.
    */
   style: DashboardStyle;
+
+  /**
+   * Named values the sheet references — `{{name}}` in titles and text cards,
+   * `[[name]]` in filters, calculated fields and metric formulas — each moved by
+   * a `parameter` control. `value` is the DEFAULT; what a reader has picked is
+   * view state, and only "Save as default" writes it here. See ./params.
+   * Absent on every record written before parameters existed, which is exactly
+   * "no parameters" — no migration.
+   */
+  parameters: Parameter[];
 
   createdAt: string;
   /** Bumped by any sheet/filter/name edit. */
@@ -138,6 +150,7 @@ function normalize(data: any, projectId: string): Analysis {
     filters: sanitizeDashboardFilters(data.filters),
     // Absent on every record written before styles existed → the default.
     style: sanitizeStyle(data.style),
+    parameters: sanitizeParameters(data.parameters, randomUUID),
     createdAt,
     updatedAt: data.updatedAt || createdAt,
     schemaVersion: 1,
@@ -215,6 +228,7 @@ export async function saveAnalysis(
     sheets?: unknown;
     filters?: unknown;
     style?: unknown;
+    parameters?: unknown;
   },
 ): Promise<Analysis | null> {
   if (!isValidId(projectId)) return null;
@@ -230,6 +244,7 @@ export async function saveAnalysis(
     sheets: sanitizePages(input.sheets),
     filters: sanitizeDashboardFilters(input.filters),
     style: sanitizeStyle(input.style),
+    parameters: sanitizeParameters(input.parameters, randomUUID),
     createdAt: now,
     updatedAt: now,
     schemaVersion: 1,
@@ -252,6 +267,7 @@ export async function updateAnalysis(
     sheets?: unknown;
     filters?: unknown;
     style?: unknown;
+    parameters?: unknown;
   },
 ): Promise<Analysis | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
@@ -269,6 +285,8 @@ export async function updateAnalysis(
     // must send the whole triple — sanitizeStyle defaults the axes it is not
     // given, and a half-patch would quietly reset the other two.
     style: patch.style !== undefined ? sanitizeStyle(patch.style) : existing.style,
+    // Replace-or-keep, like every array here.
+    parameters: patch.parameters !== undefined ? sanitizeParameters(patch.parameters, randomUUID) : existing.parameters,
     updatedAt: new Date().toISOString(),
   };
   await fs.promises.mkdir(analysesDir(projectId), { recursive: true });
@@ -355,8 +373,9 @@ export async function listAnalysisTiles(projectId: string, a: Analysis): Promise
       } else if (card.type === 'text') {
         tile.title = card.heading || 'Text';
       } else if (card.type === 'control' && card.control) {
-        tile.title = card.control.label || card.control.column;
-        tile.datasetId = card.control.datasetId;
+        const param = card.control.kind === 'parameter' ? (a.parameters || []).find((x) => x.id === card.control!.paramId) : undefined;
+        tile.title = card.control.label || (param ? param.name : card.control.column);
+        if (card.control.datasetId) tile.datasetId = card.control.datasetId;
       }
       if (!tile.title) tile.title = card.type;
       out.push(tile);

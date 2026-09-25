@@ -19,6 +19,7 @@
 // so the strict-number rule is untouched.
 
 import type { FilterStep } from '../data/transforms';
+import { sanitizePeriod } from './dateIntel';
 import type { CardControl, ControlValue } from './dashboards';
 
 // Byte-for-byte identity of a filter step: same column, op, and operand
@@ -29,7 +30,8 @@ import type { CardControl, ControlValue } from './dashboards';
 // comparison, and re-ordering a list produces the same rows but a different
 // step, which is cheap to keep and wrong to guess at.
 function stepKey(s: FilterStep): string {
-  return JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null]);
+  // `period` too: two different relative ranges on one column are two filters.
+  return JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null]);
 }
 
 // Merge dashboard-wide filters with a card's own filters into ONE ordered list:
@@ -121,12 +123,19 @@ export function controlSteps(
   }
 
   if (control.kind === 'date_range') {
+    // A relative pick travels as its PRESET — resolved against today when the
+    // query runs, so "Last 30 days" is current every time the sheet opens. Two
+    // fixed dates travel as a `custom` period, compared as DATES rather than
+    // as strings (so `03/01/2024` is not "before" `12/31/2023`).
+    if ('preset' in state && typeof state.preset === 'string' && state.preset !== 'custom') {
+      const period = sanitizePeriod(state);
+      return period ? [{ type: 'filter', column, op: 'period', period }] : [];
+    }
     const from = 'from' in state ? state.from : undefined;
     const to = 'to' in state ? state.to : undefined;
-    const steps: FilterStep[] = [];
-    if (from) steps.push({ type: 'filter', column, op: '>=', value: from });
-    if (to) steps.push({ type: 'filter', column, op: '<=', value: to });
-    return steps; // neither end set → []
+    if (!from && !to) return []; // neither end set → []
+    const period = sanitizePeriod({ preset: 'custom', from, to });
+    return period ? [{ type: 'filter', column, op: 'period', period }] : [];
   }
 
   return []; // a `state` shape that doesn't match this control's own kind

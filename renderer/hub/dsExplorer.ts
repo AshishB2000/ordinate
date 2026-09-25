@@ -131,6 +131,8 @@ async function openSavedDataset(id: string): Promise<void> {
   // A panel left open from the previous dataset would describe a column this
   // one may not even have.
   dsCloseProfile();
+  // dsRules.ts — a failing-rows filter or a rules list never carries over.
+  dqResetForDataset();
   const quality = dsEl('ds-quality');
   if (quality) {
     quality.innerHTML = '';
@@ -161,6 +163,11 @@ async function openSavedDataset(id: string): Promise<void> {
  * is the stored one.
  */
 function renderExplorerIdent(d: any): void {
+  // The page is painted from `dataset:meta`, which carries the whole `origin`
+  // but not the list summary's derived `originKind` — so without this, Refresh,
+  // "Data as of" and the schedule picker never appeared on a dataset's own
+  // page. Same rule as datasetSummary: a capture is not re-fetchable.
+  if (d && !d.originKind && d.origin && d.origin.kind && d.origin.kind !== 'capture') d = { ...d, originKind: d.origin.kind };
   const kind = d && d.sourceKind ? String(d.sourceKind) : '';
   const badge = dsEl('ds-explorer-source');
   if (badge) {
@@ -169,6 +176,8 @@ function renderExplorerIdent(d: any): void {
   }
 
   void ctPaintHeaderChips(dsEl('ds-explorer-tags'), 'dataset:' + String((d && d.id) || expId)); // catalog tags
+  // Reads from / Used by, and "View query" for a SQL dataset (dsLineage.ts).
+  void dsRenderLineage(d);
 
   const fresh = dsEl('ds-explorer-fresh');
   if (fresh) {
@@ -266,9 +275,12 @@ async function loadExplorerStats(): Promise<void> {
   try {
     res = await window.hub.datasetStats(currentProjectId, expId);
   } catch (_) {
+    res = null;
+  }
+  if (!res || !res.ok) {
+    void dqRenderRules(); // the rules do not depend on the profile — only its suggestions do
     return;
   }
-  if (!res || !res.ok) return;
   expSummaries = Array.isArray(res.summaries) ? res.summaries : [];
   renderQuality(Array.isArray(res.issues) ? res.issues : []);
   paintExplorerTable(); // headers now carry summary chips — same rows, no refetch
@@ -296,6 +308,7 @@ function renderQuality(issues: any[]): void {
   });
   box.hidden = issues.length === 0;
   dsRenderQualityTable();
+  void dqRenderRules(); // dsRules.ts — the Rules section above the findings
 }
 
 

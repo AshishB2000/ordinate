@@ -52,8 +52,7 @@ function explorerDisplayRows(): ExpCell[][] {
 
 function fmtNum(n: number): string {
   if (!Number.isFinite(n)) return '';
-  const r = Math.round(n * 100) / 100;
-  return String(r);
+  return OrdFormat.formatNumber(n, { maxDecimals: 2 });
 }
 
 function truncate(s: string, max: number): string {
@@ -216,7 +215,9 @@ async function refreshExplorerPage(retried?: boolean): Promise<void> {
   let res: any = null;
   try {
     const page = datasetPageBridge();
-    if (page && currentProjectId) res = await page(currentProjectId, wantId, req);
+    // "Show failing rows" (dsRules.ts): the same window, filtered in main by the rule.
+    if (dqGridRule && currentProjectId) res = await window.hub.qualityFailingRows(currentProjectId, wantId, dqGridRule.id, req);
+    else if (page && currentProjectId) res = await page(currentProjectId, wantId, req);
   } catch (_) {
     res = null; // dead bridge — fall through to the client-side path
   }
@@ -244,6 +245,7 @@ async function refreshExplorerPage(retried?: boolean): Promise<void> {
     expPageRows = all.slice(expOffset, expOffset + DS_PAGE_ROWS);
   }
   paintExplorerTable();
+  dqPaintBanner();
 }
 
 // Public entry for "the underlying data or its order changed" — used by
@@ -292,7 +294,12 @@ function paintExplorerTable(): void {
       const td = document.createElement('td');
       td.className = 'ds-td';
       const v = cells[c];
-      td.textContent = v == null ? '' : String(v);
+      // A number reads grouped, in the workspace's marks, without float noise
+      // (1565150.4600000004 → 1,565,150.46). Display only — the cell is exact.
+      if (typeof v === 'number' && Number.isFinite(v)) {
+        td.textContent = OrdFormat.formatNumber(v, { maxDecimals: 4 });
+        td.classList.add('ds-td-num');
+      } else td.textContent = v == null ? '' : String(v);
       tr.appendChild(td);
     });
     tbody.appendChild(tr);

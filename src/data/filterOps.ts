@@ -29,11 +29,12 @@ export type FilterOp =
   | 'is_empty'
   | 'not_empty'
   | 'in'
-  | 'not in';
+  | 'not in'
+  | 'period';
 
 /** Every operator a `FilterStep` may carry. An op outside this set is SKIPPED with a warning. */
 export const FILTER_OPS: ReadonlySet<string> = new Set<FilterOp>([
-  '=', '!=', '>', '<', '>=', '<=', 'contains', 'is_empty', 'not_empty', 'in', 'not in',
+  '=', '!=', '>', '<', '>=', '<=', 'contains', 'is_empty', 'not_empty', 'in', 'not in', 'period',
 ]);
 
 /** Ordering/equality operators, which read the scalar `value` and branch on the DECLARED column type. */
@@ -41,6 +42,14 @@ export const COMPARE_OPS: ReadonlySet<string> = new Set<FilterOp>(['=', '!=', '>
 
 /** The operators that read `values: Cell[]` instead of the scalar `value`. */
 export const LIST_OPS: ReadonlySet<string> = new Set<FilterOp>(['in', 'not in']);
+
+/**
+ * `period` reads `period: PeriodSpec` — a RELATIVE date range stored as its
+ * preset ("last 30 days") and resolved to dates only when evaluated, by
+ * `src/analysis/dateIntel.ts`. It keeps a row whose cell is a date inside the
+ * resolved range, both ends inclusive.
+ */
+export const PERIOD_OP = 'period';
 
 /** Operators that need no operand at all. */
 export const VALUELESS_OPS: ReadonlySet<string> = new Set<FilterOp>(['is_empty', 'not_empty']);
@@ -56,4 +65,9 @@ export const VALUELESS_OPS: ReadonlySet<string> = new Set<FilterOp>(['is_empty',
  */
 export function emptyListWarning(column: string, op: string): string {
   return `Filter skipped: "${op}" on "${column}" has no values`;
+}
+
+/** The ONE warning for a `period` step that resolves to nothing — shared for the same reason. */
+export function periodSkipWarning(column: string): string {
+  return `Filter skipped: "${column}" has no period to filter on`;
 }

@@ -48,8 +48,24 @@ interface RenderedPage {
   bullets?: string[];
   /** Cover only: the filter line and the date. */
   meta?: string[];
-  logo?: boolean;
+  /** Cover only: the mark to draw, with its natural size so every writer can
+   *  keep its aspect. Null when the dashboard's Style says no logo. */
+  logo?: ReportLogo | null;
   layout?: string;
+}
+
+interface ReportLogo { src: string; w: number; h: number }
+
+/**
+ * The cover's mark: the dashboard's own logo, else the workspace's (Settings →
+ * Appearance → Branding), else Ordinate's. A dashboard styled "No logo" gets
+ * none. Always a PNG — pdfmake, pptxgenjs and docx cannot embed an SVG.
+ */
+async function reportLogo(analysis: any): Promise<ReportLogo | null> {
+  if (analysis && analysis.style && analysis.style.logo === 'none') return null;
+  const src = (await dashLogoFor(analysis, true)) || REPORT_LOGO_PNG;
+  const size = await imageSize(src);
+  return { src, w: size ? size.w : 1, h: size ? size.h : 1 };
 }
 
 /** Everything a page list needs to resolve. Supplied, never read off globals. */
@@ -61,6 +77,9 @@ interface ReportContext {
   filters: any[];
   /** The Report record. */
   report: any;
+  /** Parameters in force, `[{ name, kind, value }]` — the live ones when the
+   *  builder was opened from the dashboard on screen, else its saved defaults. */
+  params?: any[];
 }
 
 // ── page geometry ────────────────────────────────────────────────────────────
@@ -160,7 +179,7 @@ async function reportTile(
   const merged = mergeDashFilters(ctx.filters, visual.filters);
   let res: any;
   try {
-    res = await window.hub.computeVisualData(ctx.projectId, visual.datasetId, visual.encoding, merged);
+    res = await window.hub.computeVisualData(ctx.projectId, visual.datasetId, visual.encoding, merged, ctx.params);
   } catch (_) { res = { ok: false }; }
   if (!res || res.ok === false) return null;
   const data = res.data || { labels: [], series: [] };
@@ -180,7 +199,7 @@ async function reportTile(
     }
   }
 
-  const frame = Object.assign({ themeClasses: reportStyleClasses(ctx.analysis) }, box);
+  const frame = Object.assign({ themeClasses: reportStyleClasses(ctx.analysis), accentHex: dashSanitizeStyle(ctx.analysis && ctx.analysis.style).accentHex }, box);
   let png: string | null = null;
   if (!grid) {
     try {
@@ -198,7 +217,7 @@ async function reportTile(
       overrides: visual.overrides || null,   // a waterfall's totals, a bullet's target
     });
   } catch (_) { caption = ''; }
-  return { cardId: card.id, title: visual.name || '', png, caption, grid };
+  return { cardId: card.id, title: paramSubst(visual.name || '', ctx.params || []), png, caption, grid };
 }
 
 /** Every metric card on a sheet → its app-computed figure, formatted. */
@@ -208,10 +227,10 @@ async function reportKpis(ctx: ReportContext, sheet: any): Promise<Array<{ label
   for (const card of cards) {
     if (!card || card.type !== 'metric' || !card.metric) continue;
     const m = card.metric;
-    const label = m.label || ((DASH_AGG_LABELS[m.aggregation as DashAgg] || m.aggregation) + ' of ' + (m.column || ''));
+    const label = paramSubst(m.label || ((DASH_AGG_LABELS[m.aggregation as DashAgg] || m.aggregation) + ' of ' + (m.column || '')), ctx.params || []);
     let value: number | null = null;
     try {
-      const r = await window.hub.computeMetric(ctx.projectId, m.datasetId, m.column, m.aggregation, ctx.filters);
+      const r = await window.hub.computeMetric(ctx.projectId, m.datasetId, m.column, m.aggregation, ctx.filters, ctx.params);
       value = (r && r.ok !== false && typeof r.value === 'number') ? r.value : null;
     } catch (_) { value = null; }
     out.push({ label, value, text: value == null ? '—' : fmtWith(value, m.format || 'auto') });
@@ -237,7 +256,6 @@ function reportFilterLine(ctx: ReportContext): string {
 
 // ── the page list ────────────────────────────────────────────────────────────
 
-const REPORT_DATE_OPTS: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' };
 
 /**
  * Resolve a Report's page list into `RenderedPage`s, in order, skipping the
@@ -301,7 +319,7 @@ async function buildReportPages(ctx: ReportContext): Promise<RenderedPage[]> {
     const cover = report.cover || {};
     switch (page.kind) {
       case 'cover': {
-        const meta = [new Date().toLocaleDateString(undefined, REPORT_DATE_OPTS)];
+        const meta = [reportDateStr()];
         if (report.includeFilters !== false) {
           const line = reportFilterLine(ctx);
           if (line) meta.push(line);
@@ -312,7 +330,7 @@ async function buildReportPages(ctx: ReportContext): Promise<RenderedPage[]> {
           kind: 'cover', layout: page.layout,
           title: cover.title || report.name || 'Report',
           subtitle: cover.subtitle || '',
-          meta, logo: cover.logo !== false,
+          meta, logo: cover.logo !== false ? await reportLogo(ctx.analysis) : null,
         };
       }
       case 'summary':
@@ -414,7 +432,7 @@ async function reportNarrative(ctx: ReportContext, captions: string[]): Promise<
 // missing. Now each consumer answers one question per block kind, and adding a
 // page kind is a change HERE, once.
 type ReportBlock =
-  | { t: 'logo' }
+  | { t: 'logo'; src: string; w: number; h: number }
   | { t: 'title'; text: string }
   | { t: 'sub'; text: string }
   | { t: 'meta'; text: string }
@@ -429,7 +447,7 @@ type ReportBlock =
 
 function reportPageBlocks(rp: RenderedPage): ReportBlock[] {
   const out: ReportBlock[] = [];
-  if (rp.kind === 'cover' && rp.logo) out.push({ t: 'logo' });
+  if (rp.kind === 'cover' && rp.logo) out.push({ t: 'logo', ...rp.logo });
   if (rp.title) out.push({ t: 'title', text: rp.title });
   if (rp.subtitle) out.push({ t: 'sub', text: rp.subtitle });
   for (const line of (rp.meta || [])) out.push({ t: 'meta', text: line });
@@ -451,8 +469,11 @@ function reportPageBlocks(rp: RenderedPage): ReportBlock[] {
 }
 
 /** The one date string a report prints, everywhere it prints one. */
+/** Today, in the workspace's date style (Settings → Formats). */
 function reportDateStr(): string {
-  return new Date().toLocaleDateString(undefined, REPORT_DATE_OPTS);
+  const d = new Date();
+  const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return OrdFormat.formatDate(iso);
 }
 
 /**
@@ -544,7 +565,7 @@ function renderPreviewPage(host: HTMLElement, rp: RenderedPage | null, report: a
       case 'logo': {
         const mark = document.createElement('img');
         mark.className = 'rb-cover-mark';
-        mark.src = REPORT_LOGO_PNG;
+        mark.src = b.src;
         mark.alt = '';
         body.appendChild(mark);
         break;

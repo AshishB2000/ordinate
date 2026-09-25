@@ -238,8 +238,10 @@ function buildChartPlugins(c: ChartCtx): any[] {
       afterDatasetsDraw(chart: ChartJsCtx) {
         const { ctx } = chart;
         // Build the value grid from visible datasets only (hidden → all-null row).
+        // A period overlay is context, not a figure to read off: no labels, and
+        // its peaks must not crowd out the real series' (visualsOverlay.ts).
         const grid = chart.data.datasets.map((ds: ChartJsCtx, di: number) =>
-          chart.getDatasetMeta(di).hidden ? [] : (ds.data || []).map(numOf));
+          chart.getDatasetMeta(di).hidden || ds._overlay ? [] : (ds.data || []).map(numOf));
         const keys = valueLabelKeys(valueMode, grid);
         // Place each label in the first free vertical slot near its point so labels never
         // overlap. Sparse max/min modes nudge a collision into a small stack (keeping every
@@ -262,7 +264,7 @@ function buildChartPlugins(c: ChartCtx): any[] {
         ctx.textAlign = 'center';
         chart.data.datasets.forEach((dataset: ChartJsCtx, di: number) => {
           const meta = chart.getDatasetMeta(di);
-          if (meta.hidden) return;
+          if (meta.hidden || dataset._overlay) return;
           meta.data.forEach((element: ChartJsCtx, j: number) => {
             if (!keys.has(di + ':' + j)) return;
             let displayVal = numOf(dataset.data[j]);

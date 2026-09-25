@@ -10,6 +10,8 @@ import * as path from 'path';
 import { isValidId } from '../app/ids';
 import type { CombineMode } from './combine';
 import { normalizeCombineMode } from './combine';
+import { sanitizeSqlParams } from '../analysis/params';
+import type { SqlParam } from '../analysis/params';
 
 /**
  * WHERE a dataset's rows came from, so they can be fetched again.
@@ -70,7 +72,15 @@ export type DatasetOrigin =
         mode: CombineMode;
         on?: { left: string; right: string };
       }>;
-    };
+    }
+  /**
+   * A query over this project's OWN datasets (the Data page's Query tab,
+   * src/engine/sqlDatasets.ts). `sql` is the text as written, `[[params]]` and
+   * all; `params` are the values it was saved with; `deps` are the datasets it
+   * read, which is what a change to one of them re-runs this for
+   * (datasetDependents.ts) and what the lineage line names.
+   */
+  | { kind: 'sql'; sql: string; params?: SqlParam[]; deps: string[] };
 
 /**
  * Whitelist an untrusted `origin` — from a stored file OR a save IPC payload —
@@ -87,7 +97,9 @@ export type DatasetOrigin =
  */
 /** Same ceiling as connections.MAX_QUERY_SQL. A dataset record is read on
  *  every list; an unbounded statement pasted into it is a slow Data page. */
-const MAX_ORIGIN_SQL = 20_000;
+export const MAX_ORIGIN_SQL = 20_000;
+/** Datasets one query may read. A query naming more is not a query, it is a join plan. */
+const MAX_SQL_DEPS = 64;
 
 export function sanitizeOrigin(raw: unknown): DatasetOrigin | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
@@ -173,6 +185,19 @@ export function sanitizeOrigin(raw: unknown): DatasetOrigin | undefined {
         joins.push(entry);
       }
       return { kind: 'composed', baseId, joins };
+    }
+    case 'sql': {
+      // NOT sliced like a connection's: a truncated statement is a different
+      // query, and refreshing into it would be worse than not refreshing.
+      const sql = typeof o.sql === 'string' ? o.sql : '';
+      if (!sql.trim() || sql.length > MAX_ORIGIN_SQL) return undefined;
+      const deps = Array.isArray(o.deps) ? o.deps : [];
+      if (deps.length > MAX_SQL_DEPS || !deps.every((d) => isValidId(d))) return undefined;
+      const params = sanitizeSqlParams(o.params);
+      if (params === null) return undefined; // one bad value drops the origin, as a bad join does
+      const out: DatasetOrigin = { kind: 'sql', sql, deps: [...new Set(deps as string[])] };
+      if (params.length) out.params = params;
+      return out;
     }
     default:
       return undefined;

@@ -133,6 +133,19 @@ export async function prepareEngine(dir: string): Promise<void> {
   const base = userDataDir();
   if (!base) return;
   rememberDir(base, dir);
+  await hardenEngine();
+}
+
+/**
+ * Harden with every folder remembered so far, recording nothing new. For a
+ * caller that only ever reads userData (SQL over the project's own datasets)
+ * but must not be the one that locks the engine WITHOUT the folders the local
+ * connectors were pointed at — whichever caller hardens first fixes the list
+ * for the whole process.
+ */
+export async function hardenEngine(): Promise<void> {
+  const base = userDataDir();
+  if (!base) return;
   const dirs = [base, ...readRegistry(base)];
   const unique = dirs.filter((d, i) => dirs.indexOf(d) === i);
   await hardenConnection(unique);

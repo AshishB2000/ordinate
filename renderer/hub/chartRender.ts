@@ -48,7 +48,16 @@
 interface ChartSeriesShape {
   name?: string;
   values: any[];
+  /** 'overlay' = a prior period drawn muted beside its own series (visualsOverlay.ts). */
+  role?: string;
 }
+
+/**
+ * The chart types a period overlay is drawn on. Everywhere else a comparison
+ * series would be read as a real category — a pie slice, a stacked segment —
+ * so buildChart drops it rather than draw something that means something else.
+ */
+const CHART_OVERLAY_TYPES = new Set(['line', 'area', 'line_markers', 'column', 'clustered_column', 'bar', 'clustered_bar']);
 interface ChartDataShape {
   labels?: any[];
   series?: ChartSeriesShape[];
@@ -147,6 +156,7 @@ function buildChart(
   overrides = overrides || {};
   let labels = asMonthLabels(Array.isArray(data.labels) ? data.labels : []);
   let series = chartSeries(data);
+  if (!CHART_OVERLAY_TYPES.has(type)) series = series.filter((s: ChartSeriesShape) => s.role !== 'overlay');
   if (!labels.length || !series.length || !canvas) return null;
 
   // Number formatter for display (axis ticks, value labels, tooltips). When the

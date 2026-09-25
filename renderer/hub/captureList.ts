@@ -1,7 +1,7 @@
 'use strict';
 
-// The Data page's TAB STRIP — Datasets · Captures · Metrics — plus the Captures
-// tab itself. Classic global-scope renderer <script>: no import/export.
+// The Data page's TAB STRIP — Datasets · Captures · Metrics · Query — plus the
+// Captures tab itself. Classic global-scope renderer <script>: no import/export.
 //
 // The strip lives here because Captures was the second tab and built it; the
 // third (metricsPage.ts) joins the same table rather than growing a strip of
@@ -18,7 +18,8 @@
 // the empty state is `.ws-empty`. Only `.cap-card-img` is new, and it is the
 // image frame.
 
-let clActive: 'datasets' | 'captures' | 'metrics' | 'catalog' = 'datasets';
+type ClTab = 'datasets' | 'captures' | 'metrics' | 'query' | 'catalog';
+let clActive: ClTab = 'datasets';
 
 function clEl(id: string): HTMLElement | null {
   return document.getElementById(id);
@@ -32,7 +33,7 @@ function clEl(id: string): HTMLElement | null {
  * makes a capture. So the tab switch swaps the sentence and hides that row
  * rather than leaving four buttons that do nothing for what is on screen.
  */
-const CL_TABS: Array<{ id: 'datasets' | 'captures' | 'metrics' | 'catalog'; tab: string; panel: string; sub: string }> = [
+const CL_TABS: Array<{ id: ClTab; tab: string; panel: string; sub: string }> = [
   {
     id: 'datasets', tab: 'ds-tab-datasets', panel: 'ds-saved',
     sub: 'Import CSV, JSON, or Excel — or paste data — to save a structured dataset in this project.',
@@ -46,12 +47,16 @@ const CL_TABS: Array<{ id: 'datasets' | 'captures' | 'metrics' | 'catalog'; tab:
     sub: 'The numbers this project is about, defined once and shown the same way everywhere.',
   },
   {
+    id: 'query', tab: 'ds-tab-query', panel: 'qt-wrap',
+    sub: 'Query this project’s datasets with SQL — join, filter and aggregate them, then save the result as a dataset.',
+  },
+  {
     id: 'catalog', tab: 'ds-tab-catalog', panel: 'ct-wrap',
     sub: 'Everything in this project — what it is, who owns it, what uses it and whether it is fresh.',
   },
 ];
 
-function clSelectTab(tab: 'datasets' | 'captures' | 'metrics' | 'catalog'): void {
+function clSelectTab(tab: ClTab): void {
   clActive = tab;
 
   // A table, not a chain of booleans: this started as two tabs and an
@@ -84,6 +89,7 @@ function clSelectTab(tab: 'datasets' | 'captures' | 'metrics' | 'catalog'): void
 
   if (tab === 'captures') void refreshCaptureList();
   if (tab === 'metrics') void refreshMetricsList();
+  if (tab === 'query') void qtOpen(); // queryTab.ts — wires itself on first open
   if (tab === 'catalog') void ctRefreshCatalog();
 }
 
@@ -205,6 +211,8 @@ function initCaptureList(): void {
   if (capTab) capTab.addEventListener('click', () => clSelectTab('captures'));
   const metricTab = clEl('ds-tab-metrics');
   if (metricTab) metricTab.addEventListener('click', () => clSelectTab('metrics'));
+  const queryTab = clEl('ds-tab-query');
+  if (queryTab) queryTab.addEventListener('click', () => clSelectTab('query'));
   const emptyNew = clEl('cap-empty-new');
   if (emptyNew) emptyNew.addEventListener('click', () => doCapture());
   // Settings → "Delete capture history" wipes the files under main; without

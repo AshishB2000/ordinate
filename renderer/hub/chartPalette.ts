@@ -100,3 +100,110 @@ function interpolatePalette(base: string[], n: number): string[] {
   }
   return out;
 }
+
+// ── The workspace ACCENT → every token it drives ────────────────────────────
+//
+// Settings → Appearance → Branding picks ONE colour. The app needs a dozen from
+// it — the accent, its hover shade, two tints, the focus ring and a five-colour
+// chart ramp — in BOTH themes, and each has a contrast floor: white text on
+// the accent (a primary button) at 4.5:1, and every chart colour at 3:1
+// against the surface it is drawn on. So the pick is a SEED: its hue is kept,
+// its lightness is walked until each floor holds. A pale yellow still produces
+// a readable button; a near-black still produces a visible dark-mode line.
+//
+// Returned as CSS custom properties (`--brand-*` for light, `--brand-dk-*` for
+// dark). theme.css and the dashboard "blue" accent READ those with the app's
+// own blue as the fallback, so clearing the accent is removing the properties.
+
+function brandLum(hex: string): number {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+}
+
+/** WCAG contrast ratio of two #rrggbb colours. */
+function brandContrast(a: string, b: string): number {
+  const la = brandLum(a);
+  const lb = brandLum(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+/** Walk lightness (keeping hue and saturation) until `ok` holds, darker or lighter. */
+function brandWalk(hex: string, dir: -1 | 1, ok: (h: string) => boolean): string {
+  const hsl = hexToHsl(hex);
+  if (!hsl) return hex;
+  let l = hsl.l;
+  let out = hex;
+  for (let i = 0; i < 60 && !ok(out); i += 1) {
+    l = Math.max(0, Math.min(1, l + dir * 0.02));
+    out = hslToHex(hsl.h, hsl.s, l);
+  }
+  return out;
+}
+
+function brandRgba(hex: string, a: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+
+/** The surfaces the ramp must read on — theme.css --surface in each theme, and the dark sheet. */
+const BRAND_LIGHT_SURFACE = '#ffffff';
+const BRAND_DARK_SURFACES = ['#1c1c20', '#232327'];
+
+/**
+ * One accent → `{ light, dark }` token maps, every contrast floor met. Null
+ * for anything that is not a #rrggbb.
+ */
+function brandTokens(hex: string): { light: Record<string, string>; dark: Record<string, string> } | null {
+  if (!/^#[0-9a-f]{6}$/i.test(String(hex))) return null;
+  const seed = hex.toLowerCase();
+  // Light: dark enough for white text on it.
+  const accent = brandWalk(seed, -1, (h) => brandContrast(h, '#ffffff') >= 4.5);
+  const accentHsl = hexToHsl(accent) as { h: number; s: number; l: number };
+  const light: Record<string, string> = {
+    '--brand-accent': accent,
+    '--brand-accent-2': hslToHex(accentHsl.h, accentHsl.s, Math.max(0, accentHsl.l - 0.07)),
+    '--brand-accent-soft': brandRgba(accent, 0.08),
+    '--brand-accent-line': brandRgba(accent, 0.22),
+    '--brand-focus': brandRgba(accent, 0.4),
+  };
+  paletteFromSeed(accent, 5).forEach((c, i) => {
+    light['--brand-chart-' + (i + 1)] = i === 0 ? accent : brandWalk(c, -1, (h) => brandContrast(h, BRAND_LIGHT_SURFACE) >= 3);
+  });
+  // Dark: light enough to read on the dark surfaces, still dark enough for
+  // white button text at the large-text floor.
+  const readsOnDark = (h: string): boolean => BRAND_DARK_SURFACES.every((s) => brandContrast(h, s) >= 4);
+  let dk = brandWalk(seed, 1, readsOnDark);
+  if (brandContrast(dk, '#ffffff') < 3) dk = brandWalk(dk, -1, (h) => brandContrast(h, '#ffffff') >= 3);
+  const dkHsl = hexToHsl(dk) as { h: number; s: number; l: number };
+  const dark: Record<string, string> = {
+    '--brand-dk-accent': dk,
+    '--brand-dk-accent-2': hslToHex(dkHsl.h, dkHsl.s, Math.max(0, dkHsl.l - 0.06)),
+    '--brand-dk-accent-soft': brandRgba(dk, 0.16),
+    '--brand-dk-accent-line': brandRgba(dk, 0.32),
+    '--brand-dk-focus': brandRgba(dk, 0.4),
+  };
+  paletteFromSeed(dk, 5).forEach((c, i) => {
+    dark['--brand-dk-chart-' + (i + 1)] = i === 0 ? dk
+      : brandWalk(c, 1, (h) => BRAND_DARK_SURFACES.every((s) => brandContrast(h, s) >= 3));
+  });
+  return { light, dark };
+}
+
+/** Every property brandTokens can set — what clearing an accent removes. */
+function brandTokenNames(): string[] {
+  const t = brandTokens('#2563eb') as { light: Record<string, string>; dark: Record<string, string> };
+  return Object.keys(t.light).concat(Object.keys(t.dark));
+}
+
+/** Set (or, with no hex, clear) the brand tokens on an element — :root, or one dashboard sheet. */
+function applyBrandTokens(el: HTMLElement, hex: string): void {
+  const t = hex ? brandTokens(hex) : null;
+  brandTokenNames().forEach((n) => el.style.removeProperty(n));
+  if (!t) return;
+  Object.entries(t.light).forEach(([k, v]) => el.style.setProperty(k, v));
+  Object.entries(t.dark).forEach(([k, v]) => el.style.setProperty(k, v));
+}

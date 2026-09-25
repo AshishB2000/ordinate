@@ -179,30 +179,19 @@ function showToast(msg, opts?) {
   _toastTimers.set(el, setTimeout(() => _dropToast(el), 4000));
 }
 
+// The two names every chart and card have always called, now the ONE formatter
+// (src/app/format.ts via OrdFormat): same outputs under the default formats,
+// and Settings → Formats now reaches every one of them.
 function _fmtVal(v) {
   if (v == null) return '';
-  if (Math.abs(v) >= 1e9) return (v/1e9).toFixed(1) + 'B';
-  if (Math.abs(v) >= 1e6) return (v/1e6).toFixed(1) + 'M';
-  if (Math.abs(v) >= 1e3) return (v/1e3).toFixed(1) + 'K';
-  return v.toLocaleString();
+  return OrdFormat.formatCompact(v);
 }
 
-// Number formatter selected by the Customize "Number format" override. `auto`
-// (and any unknown mode) delegates to _fmtVal so charts with no override render
-// byte-identically to before this control existed. Pure display — never touches
-// the app-computed numbers themselves.
+// Number formatter selected by the Customize "Number format" override (auto /
+// plain / thousands / compact / percent / currency). Pure display — never
+// touches the app-computed numbers themselves.
 function fmtWith(v, mode) {
-  if (v == null) return '';
-  if (typeof v !== 'number') return String(v);
-  switch (mode) {
-    case 'plain':     return v.toLocaleString();
-    case 'thousands': return Math.round(v).toLocaleString();
-    case 'compact':   return _fmtVal(v);
-    // Ratio → percent: 0.12 shows as "12%" (matches the "Percent (12%)" label).
-    case 'percent':   return (v * 100).toLocaleString(undefined, { maximumFractionDigits: 2 }) + '%';
-    case 'currency':  return '$' + Math.round(v).toLocaleString();
-    default:          return _fmtVal(v);
-  }
+  return OrdFormat.formatValue(v, mode);
 }
 
 // Bin numeric values into ~sqrt(n) equal-width buckets for a histogram.

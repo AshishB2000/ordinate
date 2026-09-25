@@ -27,7 +27,8 @@ import type { PivotGrid } from './pivotData';
 // `typeof v === 'number'` everywhere).
 export interface ChartData {
   labels: (string | number)[];
-  series: { name: string; values: (number | null)[] }[];
+  /** `role: 'overlay'` marks a comparison series (a prior period) — drawn muted. */
+  series: { name: string; values: (number | null)[]; role?: 'overlay' }[];
 }
 
 export interface VizDataResult {

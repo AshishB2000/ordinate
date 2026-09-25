@@ -66,6 +66,9 @@ const SMOKES = [
   // Workflow depth — answers with charts, stories, the catalog, the five new
   // chart types and record tabs, in ONE launch (sections in scripts/wf*.ts).
   'smoke-workflow',
+  // Date intelligence, parameters, SQL, quality rules, formats and branding —
+  // its own fresh userData, so it can change the workspace currency and accent.
+  'smoke-depth',
   // History, Trash, Lineage, Projects and first-run guidance. Its own fresh
   // profile: the Get-started card and the coach marks only exist on first launch.
   'smoke-workspace',

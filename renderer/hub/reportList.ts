@@ -97,7 +97,7 @@ function rbCard(r: any): HTMLElement {
     r.format === 'pptx' ? '16 / 9' : (r.paper && r.paper.size === 'a4' ? '8.27 / 11.69' : '8.5 / 11'));
   const mark = document.createElement('img');
   mark.className = 'rb-card-thumb-mark';
-  mark.src = REPORT_LOGO_PNG;
+  mark.src = wsLogoUrl || REPORT_LOGO_PNG;
   mark.alt = '';
   thumb.appendChild(mark);
   const tTitle = document.createElement('span');

@@ -40,7 +40,9 @@ import type { ColumnType } from '../data/parse';
 import { coerceValue } from '../data/parse';
 import type { Aggregation, AggFn, Cell, TransformStep } from '../data/transforms';
 import type { FilterOp } from '../data/filterOps';
-import { FILTER_OPS, COMPARE_OPS, LIST_OPS, emptyListWarning } from '../data/filterOps';
+import { FILTER_OPS, COMPARE_OPS, LIST_OPS, PERIOD_OP, emptyListWarning, periodSkipWarning } from '../data/filterOps';
+import { resolvePeriodNow } from '../analysis/dateIntel';
+import { sqlPeriodPredicate } from './periodSql';
 
 // ── Public shapes ────────────────────────────────────────────────────────────
 
@@ -281,6 +283,16 @@ export function generateSql(relation: string, columns: SqlColumn[], steps: Trans
           // empty needle that matches EVERY row — coalesce reproduces both.
           where = `contains(${sqlStr(col.physical)}, CAST(? AS VARCHAR))`;
           params.push(cellToString(step.value));
+        } else if (op === PERIOD_OP) {
+          if (retyped.has(col.physical)) {
+            return bail(`filter on "${step.column}" needs a data-derived type (retyped by an earlier fill_empty)`);
+          }
+          const r = step.period ? resolvePeriodNow(step.period) : null;
+          if (!r) {
+            warnings.push(periodSkipWarning(step.column));
+            break;
+          }
+          where = sqlPeriodPredicate(col.physical, r, params);
         } else if (LIST_OPS.has(op)) {
           if (retyped.has(col.physical)) {
             return bail(`filter on "${step.column}" needs a data-derived type (retyped by an earlier fill_empty)`);

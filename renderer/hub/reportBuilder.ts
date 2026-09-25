@@ -42,8 +42,15 @@ function rbFilters(): any[] {
   return (rbAnalysis && Array.isArray(rbAnalysis.filters)) ? rbAnalysis.filters : [];
 }
 
+/** The parameters a report prints under — the same live-or-saved rule as rbFilters. */
+function rbParams(): any[] {
+  if (dashCurrent && rbAnalysis && dashCurrent.id === rbAnalysis.id) return dashParamPayload();
+  const list = rbAnalysis && Array.isArray(rbAnalysis.parameters) ? rbAnalysis.parameters : [];
+  return list.map((p: any) => ({ name: p.name, kind: p.kind, value: p.value, min: p.min, max: p.max }));
+}
+
 function rbContext(report?: any): any {
-  return { projectId: currentProjectId, analysis: rbAnalysis, filters: rbFilters(), report: report || rbReport };
+  return { projectId: currentProjectId, analysis: rbAnalysis, filters: rbFilters(), report: report || rbReport, params: rbParams() };
 }
 
 // ── page list ────────────────────────────────────────────────────────────────
