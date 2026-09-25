@@ -99,6 +99,7 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
   initAuthoring();       // authoring.ts — the analysis workbench panels
   initAskActivity();     // askActivity.ts — live activity chips for an in-flight ask
   initVersionsPanel();   // versionsPanel.ts — the page-level History buttons
+  initTrash();           // trashPage.ts — the Trash page and the sidebar count
   // The command registry, then the palette that reads it. Registration is LAST
   // of the three so every surface's functions exist before a command can name
   // one; initCommandKeys binds the one keydown handler, and initCommandMenu

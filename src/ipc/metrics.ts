@@ -40,6 +40,7 @@ import { readDistinctPage, distinctValuesPageJs } from '../engine/datasetPage';
 import { periodPlan, orderPeriods } from '../analysis/insightsAgg';
 import type { FilterStep } from '../data/transforms';
 import * as versions from '../app/versions';
+import * as trash from '../app/trash';
 
 /** How many distinct values of a breakout column are read before rolling up. */
 const SERIES_SCAN = 2000;
@@ -410,8 +411,8 @@ export function register() {
   });
 
   ipcMain.handle('metric:delete', async (_e, { projectId, id }: any = {}) => {
-    const done = await metrics.deleteMetric(projectId, id);
-    return done ? { ok: true } : { ok: false, error: 'Could not delete the metric' };
+    const done = await trash.trashRecord(projectId, 'metric', id); // to the Trash
+    return done.ok ? { ok: true } : { ok: false, error: 'Could not delete the metric' };
   });
 
   ipcMain.handle('metric:value', async (_e, { projectId, id, filters }: any = {}) => {

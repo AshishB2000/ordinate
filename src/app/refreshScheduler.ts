@@ -136,9 +136,11 @@ export function onRefreshed(fn: Reporter): void {
  * and carries the events, because a digest cannot be built without them.
  */
 type AfterTick = () => void;
-let afterTickFn: AfterTick | null = null;
+// A list, not a slot: reports and the Trash purge (src/ipc/trash.ts) both ride
+// the tick, and a second caller must not silently unhook the first.
+const afterTickFns: AfterTick[] = [];
 export function afterTick(fn: AfterTick): void {
-  afterTickFn = fn;
+  afterTickFns.push(fn);
 }
 
 /**
@@ -248,8 +250,8 @@ export async function tickNow(now = Date.now()): Promise<AutoRefreshOutcome[]> {
     // is deliberate: the master switch turns off unattended DATASET REFRESH,
     // and a report schedule is a different promise to the user. Its own failure
     // is swallowed here for the same reason every other callback's is.
-    if (afterTickFn) {
-      try { afterTickFn(); } catch (_) { /* a ride-along must never stop the loop */ }
+    for (const fn of afterTickFns) {
+      try { fn(); } catch (_) { /* a ride-along must never stop the loop */ }
     }
   }
   // AFTER the loop, and only once: this is the batching point the digest option

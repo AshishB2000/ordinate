@@ -31,6 +31,7 @@ import * as alerts from './alerts';
 import type { AlertEvent, AlertRule } from './alerts';
 import * as datasets from '../data/datasets';
 import * as projects from '../app/projects';
+import * as trashStore from '../app/trashStore';
 import { computeCardMetric } from '../ipc/dashboards';
 import { sanitizeDashboardFilters } from './dashboards';
 import { detectAnomalies } from './anomalies';
@@ -178,6 +179,19 @@ export async function patchRule(projectId: string, ruleId: string, patch: any): 
   return merged;
 }
 
+/** Put a rule from the Trash back, with its inbox events. False if one with
+ *  that id is already live — a restore never overwrites. */
+// ponytail: the trashed rule as stored; saveRule's sanitizer already shaped it once
+export async function restoreRule(projectId: string, raw: any): Promise<boolean> {
+  if (!raw || typeof raw.id !== 'string') return false;
+  const file = await load(projectId);
+  if (file.rules.some((r) => r.id === raw.id)) return false;
+  const { events, ...rule } = raw;
+  file.rules.push(rule as AlertRule);
+  if (Array.isArray(events)) file.events.push(...events);
+  return save(projectId, file);
+}
+
 /**
  * Delete one rule, and its events with it — an inbox row whose rule is gone
  * offers Snooze and Open on nothing.
@@ -190,6 +204,12 @@ export async function deleteRule(projectId: string, ruleId: string): Promise<boo
   const file = await load(projectId);
   const rule = file.rules.find((r) => r.id === ruleId);
   if (!rule) return false;
+  // A rule the user wrote goes to the Trash (src/app/trash.ts) with its inbox
+  // events; one mirrored from a dataset's watch toggle is not theirs to restore.
+  if (!rule.fromWatch) {
+    const events = file.events.filter((e) => e.ruleId === ruleId);
+    if (!(await trashStore.stash(projectId, 'alert', ruleId, { ...rule, events }))) return false;
+  }
   file.rules = file.rules.filter((r) => r.id !== ruleId);
   file.events = file.events.filter((e) => e.ruleId !== ruleId);
   const ok = await save(projectId, file);

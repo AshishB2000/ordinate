@@ -144,8 +144,9 @@ function rbCard(r: any): HTMLElement {
     await rbRefreshList();
   }, secondary);
   act('Delete', 'rb-link rb-link--danger', async () => {
-    if (!window.confirm(`Delete “${r.name}”? The files it already generated are left alone.`)) return;
-    await window.hub.reportsDelete(currentProjectId as string, r.id);
+    // To the Trash (trashPage.ts); the files it generated are never touched.
+    const res = await window.hub.reportsDelete(currentProjectId as string, r.id);
+    trDeletedToast('report', r.id, r.name || '', res, () => void rbRefreshList());
     await rbRefreshList();
   }, secondary);
   actions.appendChild(secondary);

@@ -401,3 +401,9 @@ scripts/**/*.js
 /scripts/test-recordDiff.js
 /scripts/test-versionHistory.js
 /scripts/smoke-workspace.js
+# Workspace maturity — Trash (emitted siblings).
+/src/app/trashStore.js
+/src/app/trash.js
+/src/ipc/trash.js
+/renderer/hub/trashPage.js
+/scripts/test-trash.js

@@ -9,6 +9,7 @@ import { buildStarterPlan } from '../analysis/starterPlan';
 import * as delta from '../analysis/dashboardDelta';
 import * as execConfig from '../app/execConfig';
 import * as versions from '../app/versions';
+import * as trash from '../app/trash';
 
 // Analyses IPC — list/get/create/rename/update/delete an Analysis (the AUTHORING
 // container), plus the AI layout draft channel `analysis:draft` (MOVED from the
@@ -98,9 +99,8 @@ export function register() {
     }
   });
 
-  ipcMain.handle('analysis:delete', async (_e, { projectId, id }: any = {}) => ({
-    ok: await analysis.deleteAnalysis(projectId, id),
-  }));
+  ipcMain.handle('analysis:delete', async (_e, { projectId, id }: any = {}) =>
+    trash.trashRecord(projectId, 'dashboard', id)); // to the Trash, restorable for 30 days
 
   // Exported so the self-check drives the real handler body, not a copy of it.
   ipcMain.handle('analysis:draft', async (_e, { projectId, datasetId, intent }: any = {}) =>

@@ -640,8 +640,7 @@ require("./ipc/insights").register();
   app.on("before-quit", () => scheduler.stop());
 }
 
-// Reports — the Report record's CRUD, the app-written caption, the folder
-// picker and the scheduled write. Generation itself is the renderer's job.
+// Reports — the record's CRUD, caption, folder picker and scheduled write.
 require("./ipc/reports").register();
 
 require("./ipc/connections").register();
@@ -659,6 +658,7 @@ require("./ipc/alerts").register({ getHubWindow: () => hubWindow, focusHub });
 // `analysis:draft`, which replaced the deleted `dashboard:draft`.
 require("./ipc/analyses").register();
 require("./ipc/versions").register(); // every save of a record, kept and restorable
+require("./ipc/trash").register({ getHubWindow: () => hubWindow }); // deletes land here for 30 days
 
 // Dashboard TEMPLATES — the create wizard's gallery. Model-free; its plans go
 // through `analysis:previewPlan` / `analysis:buildPlan` like every other plan.

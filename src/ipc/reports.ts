@@ -8,6 +8,7 @@ import { tileCaption } from '../analysis/captions';
 import type { CaptionInput } from '../analysis/captions';
 import { notifyFile } from '../app/notify';
 import * as versions from '../app/versions';
+import * as trash from '../app/trash';
 
 // Reports IPC — the record's CRUD, the app-written caption, the folder picker,
 // the scheduled write, and the due list.
@@ -82,7 +83,7 @@ export function register() {
   });
 
   ipcMain.handle('reports:delete', async (_e, { projectId, id }: any = {}) =>
-    ({ ok: await reportSpec.deleteReport(String(projectId || ''), String(id || '')) }));
+    trash.trashRecord(String(projectId || ''), 'report', String(id || ''))); // to the Trash
 
   /** A copy with its own id, its own name and NO run history or schedule — a
    *  duplicate that inherited a schedule would silently double the deliveries. */

@@ -24,6 +24,7 @@ import { computeColumnSummary } from '../data/datasetStats';
 import type { ColumnSummary } from '../data/datasetStats';
 import { suggestCharts } from '../ai/analyze';
 import * as versions from '../app/versions';
+import * as trash from '../app/trash';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus
 // `visual:data` which loads a dataset and runs the PURE bridge (src/vizData.ts) to
@@ -444,9 +445,13 @@ export function register() {
     }
   });
 
-  ipcMain.handle('visual:delete', async (_e, { projectId, id }: any = {}) => ({
-    ok: await visuals.deleteVisual(projectId, id),
-  }));
+  // To the Trash. `permanent` is for undoing an Assistant edit that CREATED the
+  // visual — taking back your own draft is not a delete to keep for 30 days.
+  ipcMain.handle('visual:delete', async (_e, { projectId, id, permanent }: any = {}) => {
+    if (permanent !== true) return trash.trashRecord(projectId, 'visual', id);
+    await versions.forget(projectId, 'visual', id);
+    return { ok: await visuals.deleteVisual(projectId, id) };
+  });
 
   // Duplicate a saved visual into an independent copy (new UUID, name + " (copy)",
   // dataset/encoding/type/overrides/filters copied). Returns the new Visual.

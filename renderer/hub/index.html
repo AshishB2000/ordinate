@@ -261,6 +261,13 @@
            page's #exec-mode-btn-cap still opens it, and every other consumer
            already reaches both through execBtns()/execBtnVisible(). -->
       <div class="as-bottom">
+        <!-- Trash: every delete lands here for 30 days (trashPage.ts). A nav
+             item, so selectSection lights it; the count is hidden at zero. -->
+        <button class="as-nav-item as-trash-item" id="as-trash-btn" type="button" data-section="trash">
+          <svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-trash"/></svg>
+          <span>Trash</span>
+          <span class="as-trash-count" id="as-trash-count" hidden></span>
+        </button>
         <button id="settings-gear" class="as-tool" type="button"
           aria-haspopup="true" aria-expanded="false" aria-label="Settings menu">
           <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-settings"/></svg>
@@ -1190,6 +1197,30 @@
          element the Dashboards section uses: the grid editor is re-parented into
          #an-editor-host when an analysis is open and back into #dash-editor-host
          when a dashboard is. One editor, one set of behaviour, two hosts. -->
+    <!-- TRASH — what was deleted, kept 30 days (trashPage.ts). The standard
+         .ws-table, the section header every list page uses. -->
+    <section class="ws-panel" id="ws-trash" data-section="trash" hidden>
+      <div class="dash-panel tr-panel">
+        <div class="an-list-head">
+          <div class="an-list-head-text">
+            <div class="viz-title-row">
+              <h2 class="viz-h">Trash</h2>
+              <span class="viz-count an-count" id="tr-count" hidden></span>
+            </div>
+            <p class="viz-sub">Deleted items stay here for 30 days, then they are removed for good. Restore puts one back exactly where it was.</p>
+          </div>
+          <div class="an-list-head-actions">
+            <button class="btn tr-empty-btn" type="button" id="tr-empty-btn" disabled><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-trash"/></svg><span>Empty trash</span></button>
+          </div>
+        </div>
+        <div class="ws-table tr-table" id="tr-table" hidden>
+          <div class="ws-table-cols tr-cols"><span>Name</span><span>Type</span><span>Deleted</span><span>Kept for</span><span></span></div>
+          <div class="tr-list" id="tr-list"></div>
+        </div>
+        <div id="tr-empty" hidden></div>
+      </div>
+    </section>
+
     <section class="ws-panel" id="ws-analyses" data-section="analyses" hidden>
       <div class="dash-panel" id="an-list-view">
         <!-- The section header, matching Data and Visuals: what this is (with
@@ -2789,6 +2820,7 @@
      after every surface whose opener it calls, before the command registry. -->
 <script src="sidePanel.js"></script>
 <script src="versionsPanel.js"></script>
+<script src="trashPage.js"></script>
 <!-- The command registry, its contents, and the palette that reads them.
      commands.js is the machinery, commandDefs.js registers every command (so it
      loads after the surfaces it calls into), palette.js paints. hub.js boots

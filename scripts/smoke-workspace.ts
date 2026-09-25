@@ -134,6 +134,51 @@ async function historySection(win: Win, ids: { projectId: string; analysisId: st
   await win.evaluate(() => (window as any).handleBackToList());
 }
 
+// ── 2. Trash ─────────────────────────────────────────────────────────────────
+async function trashSection(win: Win): Promise<void> {
+  const NAME = 'Revenue by category';
+  await win.evaluate(async () => { const w = window as any; w.selectSection('visuals'); await w.refreshVisualList(); });
+  await waitFor(win, `[...document.querySelectorAll('.viz-card')].some((c) => /${NAME}/.test(c.textContent || ''))`);
+  // Through the card's own ⋯ → Delete, as a user would.
+  await win.evaluate((name: string) => {
+    const card = [...document.querySelectorAll('.viz-card')].find((c) => (c.textContent || '').includes(name)) as HTMLElement;
+    (card.querySelector('.viz-card-menu') as HTMLElement).click();
+  }, NAME);
+  await win.locator('.viz-card-pop .chart-menu-item', { hasText: 'Delete' }).click();
+  await waitFor(win, `![...document.querySelectorAll('.viz-card')].some((c) => /${NAME}/.test(c.textContent || ''))`);
+  const toast = await win.evaluate(() => [...document.querySelectorAll('#hub-toast .toast')].map((t) => t.textContent || '').join(' | '));
+  ok('deleting a visual takes it off the gallery with a "Moved to Trash · Undo" toast',
+    /Moved “Revenue by category” to Trash/.test(toast) && /Undo/.test(toast), toast);
+  await waitFor(win, `document.getElementById('as-trash-count') && !document.getElementById('as-trash-count').hidden`);
+  ok('…and the sidebar\'s Trash entry counts it',
+    (await win.evaluate(() => document.getElementById('as-trash-count')!.textContent)) === '1');
+
+  await win.click('#as-trash-btn');
+  await waitFor(win, `document.querySelectorAll('#tr-list .tr-row').length === 1`);
+  const row = await win.evaluate(() => {
+    const r = document.querySelector('#tr-list .tr-row') as HTMLElement;
+    return {
+      name: (r.querySelector('.tr-name') || {} as any).textContent,
+      type: r.dataset.type,
+      left: (r.querySelector('.tr-left') || {} as any).textContent,
+      actions: [...r.querySelectorAll('button')].map((b) => (b.textContent || '').trim()),
+    };
+  });
+  ok('Trash lists it by name and type', row.name === NAME && row.type === 'visual', JSON.stringify(row));
+  ok('…with "30 days left"', row.left === '30 days left', JSON.stringify(row));
+  ok('…and Restore / Delete permanently on the row',
+    JSON.stringify(row.actions) === JSON.stringify(['Restore', 'Delete permanently']), JSON.stringify(row));
+  await shot(win, 'trash-page');
+
+  await win.click('#tr-list .tr-restore');
+  await waitFor(win, `document.querySelectorAll('#tr-list .tr-row').length === 0 && !document.getElementById('tr-empty').hidden`);
+  ok('Restore empties the Trash, which shows its empty state',
+    await win.evaluate(() => !!document.querySelector('#tr-empty .ws-empty') && document.getElementById('as-trash-count')!.hidden));
+  await win.evaluate(async () => { const w = window as any; w.selectSection('visuals'); await w.refreshVisualList(); });
+  ok('…and the visual is back on Visuals',
+    await waitFor(win, `[...document.querySelectorAll('.viz-card')].some((c) => /${NAME}/.test(c.textContent || ''))`));
+}
+
 async function main(): Promise<void> {
   const app = await _electron.launch({
     args: ['.', '--password-store=basic', '--user-data-dir=' + userData, '--enable-unsafe-swiftshader'],
@@ -154,6 +199,7 @@ async function main(): Promise<void> {
   const ids = await sampleIds(app);
   try {
     await historySection(win, ids);
+    await trashSection(win);
   } finally {
     ok('zero renderer console errors', errors.length === 0, errors.slice(0, 5).join(' | '));
     await app.close().catch(() => {});

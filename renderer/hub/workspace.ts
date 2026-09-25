@@ -81,6 +81,8 @@ async function adoptProject(id: string): Promise<boolean> {
   // reason as the dkSync above: an adoption with no section change would
   // otherwise leave the previous project's unread count on screen.
   if (typeof aiRefresh === 'function') void aiRefresh();
+  // …and so is the Trash badge (trashPage.ts).
+  if (typeof trSyncCount === 'function') void trSyncCount();
   return true;
 }
 
@@ -130,6 +132,8 @@ function selectSection(section: string): void {
   // Refresh the dashboards list when the Dashboards section becomes active
   // (analyses.ts — the section id stays "analyses" internally).
   if (section === 'analyses' && typeof refreshAnalysisList === 'function') refreshAnalysisList();
+  // The Trash page reads the active project's trash each time it is shown.
+  if (section === 'trash' && typeof trRefresh === 'function') void trRefresh();
   // Reload the connector catalogue when Connect becomes active (connections.ts).
   if (section === 'connect' && typeof refreshConnPanel === 'function') void refreshConnPanel();
   // Recompute the AI dock's visibility for the new section (dock.ts) — this is

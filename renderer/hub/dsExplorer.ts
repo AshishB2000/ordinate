@@ -363,17 +363,23 @@ function dsOpenMoreMenu(anchor: HTMLElement): void {
       el.appendChild(b);
     };
     add('history', 'Pipeline history', () => void vhOpen('dataset', id, expName));
+    add('trash', 'Move to Trash', () => void handleDeleteDataset(id), true);
   }, () => anchor.setAttribute('aria-expanded', 'false'));
 }
 
+// A delete is a move to the Trash (trashPage.ts), taking the dataset's visuals
+// with it — so no "cannot be undone" confirm: the toast carries Undo.
 async function handleDeleteDataset(id: string): Promise<void> {
   if (!currentProjectId) return;
-  if (!window.confirm('Delete this dataset? This cannot be undone.')) return;
+  let res: any = null;
   try {
-    await window.hub.deleteDataset(currentProjectId, id);
+    res = await window.hub.deleteDataset(currentProjectId, id);
   } catch (_) {
-    /* ignore */
+    res = null;
   }
+  // Leave the page of a dataset that is no longer there — the same path Back takes.
+  if (expId === id) document.getElementById('ds-explorer-close')?.click();
+  trDeletedToast('dataset', id, (res && res.name) || '', res, () => void refreshDatasetList());
   await refreshDatasetList();
 }
 
