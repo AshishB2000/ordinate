@@ -210,6 +210,9 @@ declare global {
       relatedColumns(projectId: string, datasetId: string): Promise<any>;
       pickProjectImage(projectId: string): Promise<any>;
       readProjectImage(projectId: string, id: string, ext: string): Promise<any>;
+      importBoundaries(projectId: string): Promise<any>;
+      listBoundaries(projectId: string): Promise<any>;
+      getBoundary(projectId: string, id: string, property?: string): Promise<any>;
       // ── Connected data sources (every source is a connector in src/connectors) ──
       // The picker/form catalog. Form SHAPE only — `secret` marks a field whose
       // value goes one-way into the `secret` payload; no value ever comes back.

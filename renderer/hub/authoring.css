@@ -683,3 +683,43 @@
   border: 1px dashed var(--border-2);
   border-radius: var(--r-md);
 }
+
+/* ── Maps: the builder's map settings, clusters, colour legend ─────────────── */
+
+.enc-map-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--sp-8) var(--sp-12);
+  margin-top: calc(-1 * var(--sp-4));
+}
+.enc-map-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.cv-map-cluster {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font: 600 var(--t-11) / 1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-ink);
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px var(--accent-soft);
+  cursor: zoom-in;
+}
+.cv-map-cluster:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+/* Bottom-LEFT, clear of the size legend (bottom-right) and the unmatched note under it. */
+.cv-map-legend--colors { left: 8px; right: auto; bottom: 36px; max-height: 180px; overflow: auto; }
+.cv-map-legend--colors .cv-map-legend-row { gap: 6px; }
+/* A map on a dashboard fills its tile, as a chart does (hub.css pins every
+   .cv-map-wrap to 320px, which left an empty band under a tall map tile). */
+:root .dash-card .cv-viz-area .cv-map-wrap,
+:root .dash-card .cv-viz-area .cv-map-wrap .cv-map-container { height: 100%; min-height: 220px; }

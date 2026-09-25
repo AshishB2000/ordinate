@@ -149,7 +149,8 @@ function _escGeo(s: any): string {
 // window globals; us_county is lazy-loaded from main via IPC. us_city/us_zip have
 // no bundled polygons (nationwide data is too large), so they return null and the
 // caller falls back to a bubble map or bar chart.
-async function loadChoroplethData(level: string): Promise<any> {
+async function loadChoroplethData(level: string, geo?: any): Promise<any> {
+  if (level === 'custom') return mapCustomBoundary(geo); // mapBasemap.ts — a project's own boundaries
   if (level === 'country')  return window.__GEO_WORLD__ || null;
   if (level === 'us_state') return window.__GEO_US_STATES__ || null;
   if (level === 'us_county') {
@@ -267,11 +268,12 @@ function fillCentroidsFromBoundaries(items: any[], geoData: any): void {
 
 // Create the MapLibre map. The style is an inline object over the three CSP-allowed
 // OSM raster hosts — no style URL, no glyphs, no sprite, so no extra network host.
-function _createMap(mapDiv: HTMLElement): any {
+function _createMap(mapDiv: HTMLElement, offlineStyle?: any): any {
   const mlgl = _mlgl();
   const map = new mlgl.Map({
     container: mapDiv,
-    style: {
+    // The "none" basemap (mapBasemap.ts) replaces the tile source outright.
+    style: offlineStyle || {
       version: 8,
       sources: {
         osm: {
@@ -365,9 +367,10 @@ async function renderMapInArea(container: HTMLElement, data: any, type: string):
   }
 
   // For a choropleth, resolve boundary data for the level before drawing anything.
+  // Items that carry their own coordinates (a point or place level) are points, whatever the type.
   let geoData: any = null;
-  if (type === 'map_choropleth') {
-    geoData = await loadChoroplethData(geo.level);
+  if (type === 'map_choropleth' && !geo.points) {
+    geoData = await loadChoroplethData(geo.level, geo);
     if (!geoData || !geoData.features || geoData.features.length === 0) {
       renderGeoFallback(container, data, "No map boundaries for this level — showing the data instead.");
       return;
@@ -376,8 +379,8 @@ async function renderMapInArea(container: HTMLElement, data: any, type: string):
 
   // Bubble maps need point coords; region data (names only) has none. Derive each
   // region's centroid from the level's boundaries so the bubbles have a home.
-  if (type === 'map_bubble' && geo.items.some((i: any) => typeof i.lat !== 'number' || typeof i.lng !== 'number')) {
-    const boundaries = await loadChoroplethData(geo.level);
+  if (type === 'map_bubble' && !geo.points && geo.items.some((i: any) => typeof i.lat !== 'number' || typeof i.lng !== 'number')) {
+    const boundaries = await loadChoroplethData(geo.level, geo);
     if (boundaries) fillCentroidsFromBoundaries(geo.items, boundaries);
   }
 
@@ -390,10 +393,10 @@ async function renderMapInArea(container: HTMLElement, data: any, type: string):
   container.appendChild(wrap);
 
   let map: any;
+  // OSM tiles (the one declared external fetch), or the offline land/water fill.
+  const basemap = mapBasemapFor(geo, container);
   try {
-    // Note: tiles fetch from OpenStreetMap servers — the one planned external call for maps
-    // TODO: replace with bundled/offline tiles for fully local operation
-    map = _createMap(mapDiv);
+    map = _createMap(mapDiv, mapStyleFor(basemap, wrap));
   } catch (e) {
     wrap.remove();
     container.innerHTML = '<div class="cv-chart-fallback">This map needs WebGL, which isn\'t available here.</div>';
@@ -406,6 +409,8 @@ async function renderMapInArea(container: HTMLElement, data: any, type: string):
   await _whenMapLoaded(map);
   if (mapInstances.get(container) !== map) return;   // torn down while loading
   try { map.resize(); } catch (_) {}
+  if (basemap === 'none') mapAddOfflineLand(map, wrap);
+  if (geo.points) { renderPointMap(map, wrap, container, geo, data); return; } // mapPoints.ts
 
   // Time-series maps: derive per-period region values from data.labels + data.series
   // (one series per period for a time_series shape), so the map can step through years.
@@ -418,6 +423,12 @@ async function renderMapInArea(container: HTMLElement, data: any, type: string):
     _renderBubbleMap(map, wrap, geo, periodInfo, data);
   } else if (type === 'map_choropleth') {
     const matched = _renderChoroplethMap(map, wrap, geo, geoData, periodInfo, data);
+    wrap.dataset.matched = String(matched);
+    // A region click selects its value, like a bar's (mapBasemap.mapMarkClick).
+    map.on('click', 'cv-choropleth-fill', (e: any) => {
+      const f = e.features && e.features[0];
+      if (f && f.properties && f.properties.__item) mapMarkClick(container, data.markColumn, f.properties.__item);
+    });
     if (matched === 0) {
       renderGeoFallback(container, data, "Couldn't place these regions on the map — showing the data instead.");
     }
@@ -600,6 +611,7 @@ function _renderChoroplethMap(map: any, wrap: HTMLElement, geo: any, geoData: an
           __color: color,
           __has: hasValue,
           __matched: !!item,
+          __item: item ? String(item.name) : '',
           __name: String(props.name || ''),
           __val: hasValue ? item.value : null,
         }),
@@ -681,153 +693,3 @@ function _renderChoroplethMap(map: any, wrap: HTMLElement, geo: any, geoData: an
   return matchedCount;
 }
 
-function _addUnmatchedNote(wrap: HTMLElement, names: string[]): void {
-  if (!names || names.length === 0) return;
-  const note = document.createElement('div');
-  note.className = 'cv-map-unmatched';
-  note.title = 'Couldn\'t place: ' + names.join(', ');
-  note.textContent = 'Couldn\'t place: ' + names.join(', ');
-  wrap.appendChild(note);
-}
-
-// Top-center period dropdown for time-series maps. onChange(idx) recolors in place.
-// (No Leaflet DomEvent guards needed — the controls are siblings of the map
-// container, not children of it, so MapLibre never sees their events.)
-function _addMapPeriodDropdown(wrap: HTMLElement, periods: string[], defaultIdx: number, onChange: (idx: number) => void): void {
-  const box = document.createElement('div');
-  box.className = 'cv-map-period';
-  const select = document.createElement('select');
-  select.className = 'cv-map-period-select';
-  select.setAttribute('aria-label', 'Select period');
-  periods.forEach((p, i) => {
-    const opt = document.createElement('option');
-    opt.value = String(i);
-    opt.textContent = p || ('Period ' + (i + 1));
-    if (i === defaultIdx) opt.selected = true;
-    select.appendChild(opt);
-  });
-  select.addEventListener('change', () => onChange(parseInt(select.value, 10) || 0));
-  box.appendChild(select);
-  wrap.appendChild(box);
-}
-
-// Values ▾ menu for maps (same modes as charts). getMode()/onPick(mode) drive a single
-// "series" = the selected period's region values, so Max/Min label the top/bottom region.
-function _addMapValuesMenu(parent: HTMLElement, getMode: () => string, onPick: (mode: string) => void): void {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'cv-values-btn';
-  btn.append('Values', icon('chevron-down'));   // caret TRAILS the label, so not iconLabel()
-  btn.setAttribute('aria-label', 'Value labels');
-  const sync = () => btn.classList.toggle('active', getMode() !== 'off');
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    openValuesMenu(btn, getMode(), (mode) => { onPick(mode); sync(); });
-  });
-  parent.appendChild(btn);
-  sync();
-}
-
-// Minimal ⋯ menu for maps — just Copy data (maps have no PNG/axis/color options).
-function _addMapMenuButton(parent: HTMLElement, data: any): void {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'cv-chart-menu-btn';
-  iconOnly(btn, 'more-horizontal', 'Map options');
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    openMiniMenu(btn, (el, close) => {
-      const sec = document.createElement('div');
-      sec.className = 'chart-menu-section';
-      const row = document.createElement('button');
-      row.type = 'button';
-      row.className = 'chart-menu-item';
-      row.textContent = 'Copy data';
-      row.addEventListener('click', () => {
-        close();
-        if (window.hub) { window.hub.copyText(dataToTSV(data)); showToast('Data copied to clipboard'); }
-      });
-      sec.appendChild(row);
-      el.appendChild(sec);
-    });
-  });
-  parent.appendChild(btn);
-}
-
-function _addBubbleLegend(wrap: HTMLElement, minVal: number, maxVal: number, color: string, minR: number, maxR: number): void {
-  const leg = document.createElement('div');
-  leg.className = 'cv-map-legend';
-
-  const title = document.createElement('div');
-  title.className = 'cv-map-legend-title';
-  title.textContent = 'Size = value';
-  leg.appendChild(title);
-
-  [[minR, minVal], [maxR, maxVal]].forEach(([r, v]) => {
-    const row = document.createElement('div');
-    row.className = 'cv-map-legend-row';
-    const sw = document.createElement('span');
-    sw.className = 'cv-map-legend-bubble';
-    sw.dataset.r = String(r);  // used in CSS via --r custom prop
-    // Build a small inline SVG circle — avoids inline style
-    sw.innerHTML = `<svg width="${r*2+2}" height="${r*2+2}" viewBox="0 0 ${r*2+2} ${r*2+2}" aria-hidden="true">` +
-      `<circle cx="${r+1}" cy="${r+1}" r="${r}" fill="${color}" fill-opacity="0.55" stroke="${color}" stroke-width="1.5"/>` +
-      `</svg>`;
-    const label = document.createElement('span');
-    label.textContent = _fmtVal(v);
-    row.appendChild(sw);
-    row.appendChild(label);
-    leg.appendChild(row);
-  });
-
-  wrap.appendChild(leg);
-}
-
-function _addChoroplethLegend(wrap: HTMLElement, minVal: number, maxVal: number): void {
-  const stops = isDarkSurface(wrap) ? CHOROPLETH_STOPS_DARK : CHOROPLETH_STOPS_LIGHT;
-  const leg = document.createElement('div');
-  leg.className = 'cv-map-legend';
-
-  const title = document.createElement('div');
-  title.className = 'cv-map-legend-title';
-  title.textContent = 'Value';
-  leg.appendChild(title);
-
-  // Gradient bar as inline SVG — no inline CSS needed
-  const barW = 96, barH = 8;
-  const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svgEl.setAttribute('width', String(barW));
-  svgEl.setAttribute('height', String(barH));
-  svgEl.setAttribute('viewBox', `0 0 ${barW} ${barH}`);
-  svgEl.setAttribute('aria-hidden', 'true');
-  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-  const grad = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
-  grad.id = 'cv-choro-grad-' + (Math.random() * 1e6 | 0);
-  grad.setAttribute('x1', '0%');  grad.setAttribute('x2', '100%');
-  grad.setAttribute('y1', '0%');  grad.setAttribute('y2', '0%');
-  stops.forEach((c, i) => {
-    const stop = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
-    stop.setAttribute('offset', (i / (stops.length - 1) * 100) + '%');
-    stop.setAttribute('stop-color', c);
-    grad.appendChild(stop);
-  });
-  defs.appendChild(grad);
-  svgEl.appendChild(defs);
-  const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-  rect.setAttribute('x', '0');  rect.setAttribute('y', '0');
-  rect.setAttribute('width', String(barW));  rect.setAttribute('height', String(barH));
-  rect.setAttribute('rx', '4');
-  rect.setAttribute('fill', `url(#${grad.id})`);
-  svgEl.appendChild(rect);
-  leg.appendChild(svgEl);
-
-  const labels = document.createElement('div');
-  labels.className = 'cv-map-legend-range';
-  const lo = document.createElement('span');  lo.textContent = _fmtVal(minVal);
-  const hi = document.createElement('span');  hi.textContent = _fmtVal(maxVal);
-  labels.appendChild(lo);
-  labels.appendChild(hi);
-  leg.appendChild(labels);
-
-  wrap.appendChild(leg);
-}

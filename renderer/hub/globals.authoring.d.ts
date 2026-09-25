@@ -13,3 +13,7 @@ declare const cardModel: any;
 declare function mdParse(src: unknown): any[];
 declare function mdRender(blocks: any[], doc: Document, hooks?: any): DocumentFragment;
 declare function mdTokens(src: unknown): string[];
+
+// renderer/hub/geoCluster.ts (UMD): lat/long detection and grid clustering.
+// ponytail: shapes documented in geoCluster.ts; typed loosely across the UMD boundary
+declare const geoCluster: any;

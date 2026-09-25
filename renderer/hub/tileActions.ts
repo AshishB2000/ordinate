@@ -46,7 +46,15 @@ function wireTileActions(area: HTMLElement, card: any, visual: any): boolean {
   const tip = actions.find((a) => a.kind === 'tooltip_visual' && a.tooltipVisualId);
   if (tip) wireTooltipVisual(area, visual, tip);
   const clicks = actions.filter((a) => a.trigger === 'click' && a.kind !== 'tooltip_visual');
-  if (!clicks.length) return false;
+  if (!clicks.length) {
+    // No action owns the click: a clicked map region or point joins the sheet's
+    // selection layer (a chart bar keeps cross-filter / drill, wired by the caller).
+    area.addEventListener('cv-mark-click', (e: Event) => {
+      const d = (e as CustomEvent).detail;
+      if (d && d.column && d.category !== undefined) dashSelToggle({ type: 'filter', column: String(d.column), op: '=', value: d.category });
+    });
+    return false;
+  }
   area.classList.add('has-tile-actions');
   area.addEventListener('click', (e) => {
     const mark = chartMarkAt(area, e);

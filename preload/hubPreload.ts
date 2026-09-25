@@ -224,6 +224,10 @@ contextBridge.exposeInMainWorld('hub', {
   // Image cards: pick into the project, read back as a data: URL (src/ipc/projectAssets.ts).
   pickProjectImage: (projectId: string) => ipcRenderer.invoke('asset:pickImage', { projectId }),
   readProjectImage: (projectId: string, id: string, ext: string) => ipcRenderer.invoke('asset:read', { projectId, id, ext }),
+  // Custom map boundaries (src/ipc/projectBoundaries.ts).
+  importBoundaries: (projectId: string) => ipcRenderer.invoke('boundary:import', { projectId }),
+  listBoundaries: (projectId: string) => ipcRenderer.invoke('boundary:list', { projectId }),
+  getBoundary: (projectId: string, id: string, property?: string) => ipcRenderer.invoke('boundary:get', { projectId, id, property }),
   // ── Capture → dataset (Week 13) ──
   // Turn a capture's extractedTable into a review-grid draft (strictly typed,
   // rectangular) WITHOUT saving. Returns { ok, columns, rows, warnings }.

@@ -240,6 +240,18 @@ scripts/**/*.js
 /src/ipc/projectAssets.js
 /scripts/test-markdown.js
 /scripts/test-cardLayout.js
+/renderer/hub/geoCluster.js
+/renderer/hub/mapOverlays.js
+/renderer/hub/mapBasemap.js
+/renderer/hub/mapPoints.js
+/renderer/hub/encodingMap.js
+/src/analysis/places.js
+/src/analysis/geojsonCheck.js
+/src/analysis/mapData.js
+/src/app/projectBoundaries.js
+/src/ipc/projectBoundaries.js
+/scripts/build-places.js
+/scripts/test-mapPoints.js
 
 # Command palette: the registry, its contents, the overlay, and the native menu
 # built from the same list — emitted siblings.

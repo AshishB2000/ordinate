@@ -4,4 +4,5 @@
 export function register(): void {
   require('./relationships').register();
   require('./projectAssets').register();
+  require('./projectBoundaries').register();
 }

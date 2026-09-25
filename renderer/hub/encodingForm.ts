@@ -152,6 +152,8 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
 
   const wells = opts.variant === 'wells';
   if (wells) root.classList.add('is-wells');
+  // Points, world cities, imported boundaries and the basemap (encodingMap.ts).
+  const mapFields = encMapMount(root, geoSel, () => opts.onChange());
 
   let columns: EncCol[] = [];
   let measures: EncMeasure[] = [];
@@ -609,9 +611,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       );
       encAppendRelated(serSel, related, (c) => c.type !== 'number', preset && typeof preset.series === 'string' ? preset.series : '');
 
-      if (geoSel) {
-        geoSel.value = preset && preset.geo && typeof preset.geo.level === 'string' ? preset.geo.level : '';
-      }
+      mapFields.set(preset && preset.geo, columns);
 
       if (preset && Array.isArray(preset.values) && preset.values.length) {
         measures = preset.values.map((v: any) => ({
@@ -691,8 +691,8 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       // grain reappear when the dimension goes back to being a date.
       const grain = grainSel && !grainSel.hidden ? grainSel.value : '';
       if (grain) enc.grain = grain;
-      const geoLevel = geoSel ? geoSel.value : '';
-      if (geoLevel) enc.geo = { level: geoLevel };
+      const geo = mapFields.get();
+      if (geo) enc.geo = geo;
       return encSplitRefs(enc);
     },
 

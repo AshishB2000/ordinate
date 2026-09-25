@@ -48,7 +48,21 @@ export interface VizMeasure {
 }
 
 export interface VizGeo {
-  level: 'country' | 'us_state' | 'us_county' | 'us_city' | 'us_zip';
+  /**
+   * `point` plots rows at their `lat`/`lon` columns; `world_city` (and
+   * `us_city` / `us_zip`) places values through the offline place table
+   * (analysis/places.ts); `custom` is a project-imported boundary set.
+   */
+  level: 'country' | 'us_state' | 'us_county' | 'us_city' | 'us_zip' | 'world_city' | 'point' | 'custom';
+  lat?: string;
+  lon?: string;
+  /** Colour points by this column (text → categories, number → a ramp). */
+  color?: string;
+  /** `custom`: the imported boundary set, and the feature property joined to the category. */
+  boundaryId?: string;
+  property?: string;
+  /** OSM raster tiles (the default on screen) or none — an offline land/water fill (the default in exports). */
+  basemap?: 'osm' | 'none';
 }
 
 export interface VizEncoding {
@@ -185,7 +199,9 @@ function visualFilePath(projectId: string, id: string): string {
 }
 
 const AGG_FNS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max', 'none']);
-const GEO_LEVELS: ReadonlySet<string> = new Set(['country', 'us_state', 'us_county', 'us_city', 'us_zip']);
+const GEO_LEVELS: ReadonlySet<string> = new Set([
+  'country', 'us_state', 'us_county', 'us_city', 'us_zip', 'world_city', 'point', 'custom',
+]);
 
 // Atomic JSON write: temp sibling then rename (atomic on same fs). Copied from
 // datasets.ts.
@@ -243,8 +259,17 @@ export function sanitizeEncoding(raw: unknown): VizEncoding {
   const pivot = sanitizePivot(o.pivot);
   if (pivot) enc.pivot = pivot;
   if (o.geo && typeof o.geo === 'object') {
-    const level = (o.geo as Record<string, unknown>).level;
-    if (typeof level === 'string' && GEO_LEVELS.has(level)) enc.geo = { level: level as VizGeo['level'] };
+    const g = o.geo as Record<string, unknown>;
+    if (typeof g.level === 'string' && GEO_LEVELS.has(g.level)) {
+      const geo: VizGeo = { level: g.level as VizGeo['level'] };
+      for (const k of ['lat', 'lon', 'color', 'property'] as const) {
+        const v = g[k];
+        if (typeof v === 'string' && v) geo[k] = v;
+      }
+      if (typeof g.boundaryId === 'string' && UUID_RE.test(g.boundaryId)) geo.boundaryId = g.boundaryId;
+      if (g.basemap === 'osm' || g.basemap === 'none') geo.basemap = g.basemap;
+      enc.geo = geo;
+    }
   }
   return enc;
 }

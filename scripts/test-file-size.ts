@@ -49,7 +49,6 @@ const CAP = 800;
  * number) is the point; adding one is the failure this file exists to prevent.
  */
 const ALLOWED: Record<string, number> = {
-  'renderer/hub/mapRender.ts': 834,
   // WAS 3,725 lines — by a wide margin the largest entry on this list, and the
   // file every other smoke file existed to avoid growing (smoke-sample,
   // smoke-dock, smoke-dockHero, smoke-composer and smoke-section-hero each open
