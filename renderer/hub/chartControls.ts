@@ -335,6 +335,8 @@ function openMiniMenu(anchorBtn, populate, onClose?) {
   _activeMiniMenu = close;
   populate(el, close);
   document.body.appendChild(el);
+  // Menu semantics, ↑↓ Home End, focus in and back to the trigger (a11y.ts).
+  a11yMenu(el, anchorBtn);
   const rect = anchorBtn.getBoundingClientRect();
   const menuW = el.offsetWidth || 200;
   let left = rect.right - menuW;

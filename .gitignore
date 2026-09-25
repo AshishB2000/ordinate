@@ -252,6 +252,9 @@ scripts/**/*.js
 /src/ipc/projectBoundaries.js
 /scripts/build-places.js
 /scripts/test-mapPoints.js
+/renderer/hub/a11y.js
+/scripts/test-a11y.js
+/scripts/smoke-authoring.js
 
 # Command palette: the registry, its contents, the overlay, and the native menu
 # built from the same list — emitted siblings.

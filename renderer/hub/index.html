@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="../theme.css"/>
   <link rel="stylesheet" href="hub.css"/>
   <link rel="stylesheet" href="authoring.css"/>
+  <link rel="stylesheet" href="a11y.css"/>
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
        injecting a <style> at render time, which the hub CSP (style-src 'self')
@@ -2788,6 +2789,9 @@
 <script src="layoutKinds.js"></script>
 <script src="gridArrange.js"></script>
 <script src="cardKinds.js"></script>
+<!-- The accessibility layer: live regions, modal focus, menu / tab / list keys,
+     chart descriptions and keyboard marks. Wires itself on DOMContentLoaded. -->
+<script src="a11y.js"></script>
 <script src="captureStatus.js"></script>
 <script src="hubCapture.js"></script>
 <script src="captureList.js"></script>

@@ -69,17 +69,24 @@ function wireTileActions(area: HTMLElement, card: any, visual: any): boolean {
   return true;
 }
 
-/** The ⋯-menu entries for a tile's `menu`-triggered actions. */
+/** The ⋯-menu entries for a tile's `menu`-triggered actions, and its table view. */
 function tileActionMenuItems(card: any): Array<[string, () => void]> {
   const actions: any[] = card && card.type === 'visual' && Array.isArray(card.actions) ? card.actions : [];
-  return actions
+  const el = card && card.type === 'visual'
+    ? document.querySelector(`#dash-grid .dash-card[data-card-id="${card.id}"]`) as HTMLElement | null
+    : null;
+  // The accessible alternative to a drawn chart: its figures as a real table (a11y.ts).
+  const table: Array<[string, () => void]> = el && el.querySelector('.dash-viz-area canvas')
+    ? [[el.querySelector('.a11y-table-wrap') ? 'View as chart' : 'View as table', () => a11yToggleTable(el)]]
+    : [];
+  return table.concat(actions
     .filter((a) => a.trigger === 'menu' && a.kind !== 'tooltip_visual')
     .map((a) => [a.label || tileActionLabel(a), () => {
       void (async () => {
         const v = card.visualId && currentProjectId ? await window.hub.getVisual(currentProjectId, card.visualId) : null;
         await runTileAction(a, card, v);
       })();
-    }] as [string, () => void]);
+    }] as [string, () => void]));
 }
 
 function tileActionLabel(a: any): string {

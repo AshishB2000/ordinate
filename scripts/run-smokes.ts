@@ -50,6 +50,9 @@ const SMOKES = [
   'smoke-templates',
   'smoke-dashboards',
   'smoke-dashboard-edit',
+  // Accessibility, enforced across every surface — names, tab order, modal
+  // focus, WCAG AA contrast in both themes and every style preset, and `?`.
+  'test-a11y',
   'smoke-insights',
   'smoke-metrics',
   // After smoke-insights: both write to the sample project, and this one's
