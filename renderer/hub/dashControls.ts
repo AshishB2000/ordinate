@@ -52,6 +52,7 @@ function controlCurrentValue(card: any): any {
 // held anything but plain JSON-shaped objects (ControlValue), so a stringify
 // compare is enough — no deep-equal library earns its keep for three fields.
 function controlIsAtDefault(card: any): boolean {
+  if (card.control && card.control.kind === 'parameter') return paramIsAtDefault(card);
   const cur = controlState.get(card.id);
   if (cur === undefined) return true;
   return JSON.stringify(cur) === JSON.stringify(controlDefaultValue(card.control));
@@ -83,6 +84,7 @@ function resetAllControls(): void {
     if (card.control.default) controlState.set(card.id, card.control.default);
     else controlState.delete(card.id);
   });
+  paramState = new Map(); // every parameter back to its saved default
   renderDashGrid();
 }
 
@@ -98,7 +100,8 @@ function resetAllControls(): void {
 // default exists to go back to.
 function updateResetControlsBtn(): void {
   const cards = allControlCards();
-  dashShow('dash-reset-controls', anyControlNonDefault() && cards.some((c) => c.control && c.control.default));
+  dashShow('dash-reset-controls', anyControlNonDefault()
+    && cards.some((c) => c.control && (c.control.default || c.control.kind === 'parameter')));
 }
 
 // ── Dropdown ─────────────────────────────────────────────────────────────────

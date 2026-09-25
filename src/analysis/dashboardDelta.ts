@@ -33,6 +33,8 @@ import type { FilterStep } from '../data/transforms';
 import * as visuals from './visuals';
 import type { VizEncoding } from './visuals';
 import type { ControlKind, MetricAggregation } from './dashboards';
+import { sanitizeParameters } from './params';
+import type { Parameter } from './params';
 import { METRIC_AGGS } from './dashboards';
 import { CHART_TYPE_IDS } from './analysisPlan';
 import type { PlanDataset } from './analysisPlan';
@@ -42,7 +44,7 @@ import type { PlanDataset } from './analysisPlan';
  *  any column: it counts non-empty cells (metricValue.computeMetric). */
 const NUMERIC_AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'min', 'max', 'none']);
 
-const CONTROL_KINDS: ReadonlySet<string> = new Set(['dropdown', 'multi', 'date_range']);
+const CONTROL_KINDS: ReadonlySet<string> = new Set(['dropdown', 'multi', 'date_range', 'parameter']);
 
 // ── Shapes ─────────────────────────────────────────────────────────────────
 
@@ -112,6 +114,9 @@ export type ValidatedDeltaOp =
       datasetId: string;
       column: string;
       label: string;
+      /** `parameter` only: the parameter the control creates and moves. The
+       *  renderer mints its id; `datasetId`/`column` are '' for this kind. */
+      param?: Omit<Parameter, 'id'>;
     }
   | { op: 'renamePage'; pageIndex: number; name: string }
   | { op: 'addPage'; name: string }
@@ -615,10 +620,11 @@ function opAddControl(
     dropped.push({
       kind: 'control',
       where,
-      message: `${at} dropped: control kind ${JSON.stringify(ckind)} is not "dropdown", "multi" or "date_range".`,
+      message: `${at} dropped: control kind ${JSON.stringify(ckind)} is not "dropdown", "multi", "date_range" or "parameter".`,
     });
     return null;
   }
+  if (ckind === 'parameter') return opAddParameter(raw, ctx, where, at, dropped);
   const ds = resolveDataset(ctx, raw);
   if (!ds) {
     dropped.push({ kind: 'dataset', where, message: `${at} dropped: unknown dataset ${JSON.stringify(datasetRef(raw))}.` });
@@ -650,5 +656,40 @@ function opAddControl(
     // A label is decorative: it defaults to the column name rather than
     // dropping the op, matching sanitizeCard's own treatment of it.
     label: str(raw.label) || column,
+  };
+}
+
+/**
+ * `addControl` with kind `parameter`: a new dashboard parameter plus the
+ * control that moves it. Everything about the parameter goes through the SAME
+ * sanitizer a saved dashboard does (params.sanitizeParameters), so a model can
+ * propose nothing a person could not have typed into the dialog.
+ */
+function opAddParameter(
+  raw: Record<string, unknown>, ctx: DeltaContext, where: string, at: string, dropped: DeltaDrop[],
+): ValidatedDeltaOp | null {
+  const spec = {
+    name: str(raw.name) || str(raw.parameter),
+    kind: str(raw.paramKind) || str(raw.valueKind) || 'number',
+    value: raw.value, min: raw.min, max: raw.max, step: raw.step,
+    list: Array.isArray(raw.options) ? raw.options : undefined,
+  };
+  const [param] = sanitizeParameters([spec], () => '00000000-0000-4000-8000-000000000000');
+  if (!param) {
+    dropped.push({
+      kind: 'control', where,
+      message: `${at} dropped: a parameter needs a name of letters, digits and underscores and a kind of number, text, date or list.`,
+    });
+    return null;
+  }
+  const pageIndex = resolvePageIndex(ctx, raw);
+  if (pageIndex === null) {
+    dropped.push({ kind: 'page', where, message: `${at} dropped: no page called ${JSON.stringify(str(raw.pageName) || str(raw.page))}.` });
+    return null;
+  }
+  const { id: _unused, ...rest } = param;
+  return {
+    op: 'addControl', pageIndex: pageIndex ?? 0, kind: 'parameter', datasetId: '', column: '',
+    label: str(raw.label) || param.name, param: rest,
   };
 }

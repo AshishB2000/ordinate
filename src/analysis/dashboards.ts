@@ -42,7 +42,12 @@ import type { CompareMode, PeriodPreset } from './dateIntel';
 export type CardType = 'visual' | 'text' | 'metric' | 'control';
 export type CardAction = 'delete-sample';
 export type MetricAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';
-export type ControlKind = 'dropdown' | 'multi' | 'date_range';
+/**
+ * `parameter` is the odd one out: it filters no column itself. It is the
+ * reader's handle on one of the dashboard's `parameters` (analysis/params.ts),
+ * which filters, formulas and titles reference by name.
+ */
+export type ControlKind = 'dropdown' | 'multi' | 'date_range' | 'parameter';
 
 /**
  * The shape of a control's current (or author-set default) selection — one
@@ -63,6 +68,9 @@ export interface CardControl {
   datasetId: string; // where options come from (UUID-checked)
   column: string; // the column it filters
   default?: ControlValue; // optional author-set initial value
+  /** `parameter` only: which of the dashboard's parameters this control moves.
+   *  Its default is the parameter's own `value`, not `default` above. */
+  paramId?: string;
 }
 
 // The fixed column count the renderer's CSS grid uses (kept in sync with the
@@ -167,7 +175,7 @@ const CARD_TYPES: ReadonlySet<string> = new Set(['visual', 'text', 'metric', 'co
  *  than a fourth copy of it — dashboardDelta.ts already restates one, and it
  *  says so apologetically. One whitelist, one place to widen it. */
 export const METRIC_AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
-const CONTROL_KINDS: ReadonlySet<string> = new Set(['dropdown', 'multi', 'date_range']);
+const CONTROL_KINDS: ReadonlySet<string> = new Set(['dropdown', 'multi', 'date_range', 'parameter']);
 const METRIC_FORMATS: ReadonlySet<string> = new Set([
   'auto',
   'plain',
@@ -312,6 +320,15 @@ export function sanitizeCard(raw: unknown): Card | null {
     if (!c) return null;
     const kind =
       typeof c.kind === 'string' && CONTROL_KINDS.has(c.kind) ? (c.kind as ControlKind) : null;
+    // A PARAMETER control filters no column: it needs only the id of the
+    // parameter it moves. A dangling id degrades to a "parameter removed" chip.
+    if (kind === 'parameter') {
+      if (!isValidId(c.paramId)) return null;
+      card.control = {
+        kind, label: typeof c.label === 'string' ? c.label : '', datasetId: '', column: '', paramId: c.paramId,
+      };
+      return card;
+    }
     const column = typeof c.column === 'string' ? c.column : '';
     if (!kind || !isValidId(c.datasetId) || !column) return null;
     const control: CardControl = {

@@ -34,6 +34,8 @@ interface DrillOpts {
   encoding: any;
   /** The SAME filter list that produced the figure (visual + sheet, merged). */
   filters?: any[];
+  /** The dashboard's parameters at the values that drew it — main resolves them. */
+  params?: any[];
   /** The clicked mark, or omitted to drill the whole visual. */
   mark?: { category?: any; series?: any } | null;
   /** The control that opened the panel; gets aria-expanded and the focus back. */
@@ -253,7 +255,7 @@ async function drillFetch(): Promise<void> {
         search: drillSearch.trim(),
         sortColumn: drillSortCol,
         sortDir: drillSortDir,
-      });
+      }, o.params);
     } catch (_) {
       res = null;
     }
@@ -441,7 +443,7 @@ async function exportDrillRows(): Promise<void> {
       search: drillSearch.trim(),
       sortColumn: drillSortCol,
       sortDir: drillSortDir,
-    }, o.name || '');
+    }, o.name || '', o.params);
   } catch (_) {
     res = null;
   }

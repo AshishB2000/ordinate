@@ -485,6 +485,8 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       column: cur.column,
       type: col ? col.type : 'text',
       existing: cur,
+      // On a dashboard, its parameters can drive a visual's own filter too.
+      params: dashCurrent ? dashParams() : undefined,
     });
     if (steps === null) return; // cancelled — leave the row exactly as it was
     // A min/max range is TWO steps and always was; splicing in place keeps each

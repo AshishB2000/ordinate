@@ -22,6 +22,7 @@ import type { MetricAggregation } from '../analysis/metricValue';
 import { formatMetricValue } from '../analysis/metricFormat';
 import { describeCompare, describePeriod, getCalendar, resolvePeriodNow, sanitizeCompare, sanitizePeriod, todayIso } from '../analysis/dateIntel';
 import { compareScope } from '../analysis/periodScope';
+import { paramValues, resolveFilterParams } from '../analysis/params';
 import { computeCardMetric } from './dashboards';
 import { resolveMetric } from './metrics';
 
@@ -55,10 +56,12 @@ export async function compareMetric(
   card: { metricId?: string; datasetId?: string; column?: string; aggregation?: string },
   rawFilters: unknown,
   rawCompare: unknown,
+  rawParams?: unknown,
 ): Promise<CompareResult> {
   const cmp = sanitizeCompare(rawCompare);
   if (!cmp) return { ok: false, error: 'Nothing to compare with' };
-  const filters = sanitizeDashboardFilters(rawFilters);
+  const params = paramValues(rawParams);
+  const filters = resolveFilterParams(sanitizeDashboardFilters(rawFilters), params).steps;
   const metric = card.metricId && UUID_RE.test(card.metricId) ? await metrics.getMetric(projectId, card.metricId) : null;
   const datasetId = metric ? metric.datasetId : String(card.datasetId || '');
   if (!UUID_RE.test(datasetId)) return { ok: false, error: 'Dataset not found' };
@@ -73,7 +76,8 @@ export async function compareMetric(
   let previous: number | null;
   const out: CompareResult = { ok: true, label, prior: moved.prior };
   if (metric) {
-    const [a, b] = [await resolveMetric(projectId, metric.id, { filters }), await resolveMetric(projectId, metric.id, { filters: moved.filters })];
+    const a = await resolveMetric(projectId, metric.id, { filters, params });
+    const b = await resolveMetric(projectId, metric.id, { filters: moved.filters, params });
     if (!a || !b) return { ok: false, error: 'Metric not found' };
     value = finite(a.value);
     previous = finite(b.value);
@@ -82,8 +86,8 @@ export async function compareMetric(
     if (metric.direction) out.direction = metric.direction;
   } else {
     const spec = { column: String(card.column || ''), aggregation: card.aggregation as MetricAggregation };
-    const a = await computeCardMetric(projectId, datasetId, spec, filters);
-    const b = await computeCardMetric(projectId, datasetId, spec, moved.filters);
+    const a = await computeCardMetric(projectId, datasetId, spec, filters, params);
+    const b = await computeCardMetric(projectId, datasetId, spec, moved.filters, params);
     if (!a.ok || !b.ok) return { ok: false, error: 'Dataset not found' };
     value = finite(a.value);
     previous = finite(b.value);
@@ -115,10 +119,10 @@ export function register(): void {
     return { ok: true, from: r.from, to: r.to, label: describePeriod(spec, getCalendar()), today: todayIso() };
   });
 
-  ipcMain.handle('metric:compare', async (_e, { projectId, card, filters, compare }: any = {}) => {
+  ipcMain.handle('metric:compare', async (_e, { projectId, card, filters, compare, params }: any = {}) => {
     try {
       if (typeof projectId !== 'string' || !UUID_RE.test(projectId)) return { ok: false, error: 'Invalid project' };
-      return await compareMetric(projectId, card && typeof card === 'object' ? card : {}, filters, compare);
+      return await compareMetric(projectId, card && typeof card === 'object' ? card : {}, filters, compare, params);
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compare' };
     }

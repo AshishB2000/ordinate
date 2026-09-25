@@ -360,7 +360,7 @@ async function buildMetricExportCard(card: any, layout: any): Promise<any> {
   try {
     r = await window.hub.computeMetric(
       currentProjectId, m.datasetId, m.column, m.aggregation,
-      effectiveFilters(),
+      effectiveFilters(), dashParamPayload(),
     );
   } catch (_) { r = { ok: false }; }
   if (!r || r.ok === false) return { kind: 'broken', layout, reason: 'Source removed' };
@@ -380,12 +380,12 @@ async function buildVisualExportCard(
   const visual = resolved.visual;
   const merged = mergeDashFilters(effectiveFilters(), visual.filters);
   let res: any;
-  try { res = await window.hub.computeVisualData(currentProjectId, visual.datasetId, visual.encoding, merged); }
+  try { res = await window.hub.computeVisualData(currentProjectId, visual.datasetId, visual.encoding, merged, dashParamPayload()); }
   catch (_) { res = { ok: false }; }
   if (!res || res.ok === false) return { kind: 'broken', layout, reason: 'Could not draw this visual' };
   const data = res.data || { labels: [], series: [] };
   const type = typeof visual.chartType === 'string' && visual.chartType ? visual.chartType : 'column';
-  const title = visual.name || '';
+  const title = dashSubst(visual.name || '');
 
   // Live-chartable core type in the HTML export → inline data (interactive).
   if (!forCapture && !dashIsMapType(type) && DASH_EXPORT_LIVE_TYPES[type]) {

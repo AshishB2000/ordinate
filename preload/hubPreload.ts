@@ -440,8 +440,10 @@ contextBridge.exposeInMainWorld('hub', {
   // Compute the renderer-ready { labels, series } (+ optional geo) for an encoding
   // over a dataset — ALL aggregation math runs in main's pure bridge (no model).
   // Optional `filters` (transforms filter steps) are applied BEFORE aggregation.
-  computeVisualData: (projectId: string, datasetId: string, encoding: any, filters?: any) =>
-    ipcRenderer.invoke('visual:data', { projectId, datasetId, encoding, filters }),
+  // `params`: the open dashboard's parameters at their current values,
+  // [{ name, kind, value }] — resolved in main by analysis/params.ts.
+  computeVisualData: (projectId: string, datasetId: string, encoding: any, filters?: any, params?: any) =>
+    ipcRenderer.invoke('visual:data', { projectId, datasetId, encoding, filters, params }),
   // The ROWS behind one mark of that same chart — same dataset, same filter
   // list, plus an equality filter per clicked axis. Paged/searched/sorted in
   // main against the stored .parquet. Returns
@@ -455,7 +457,8 @@ contextBridge.exposeInMainWorld('hub', {
     filters: any,
     mark: any,
     page: { offset: number; limit: number; search?: string; sortColumn?: string; sortDir?: 'asc' | 'desc' },
-  ) => ipcRenderer.invoke('visual:rows', { projectId, datasetId, encoding, filters, mark, page }),
+    params?: any,
+  ) => ipcRenderer.invoke('visual:rows', { projectId, datasetId, encoding, filters, mark, page, params }),
   // The same row set as a CSV file. Main re-resolves the drill, opens the native
   // save panel and streams the rows — the renderer sends arguments, never rows.
   // Returns { ok:true, dest, rows } | { ok:false, canceled } | { ok:false, error }.
@@ -467,7 +470,8 @@ contextBridge.exposeInMainWorld('hub', {
     mark: any,
     page: { search?: string; sortColumn?: string; sortDir?: 'asc' | 'desc' },
     name?: string,
-  ) => ipcRenderer.invoke('visual:rowsExport', { projectId, datasetId, encoding, filters, mark, page, name }),
+    params?: any,
+  ) => ipcRenderer.invoke('visual:rowsExport', { projectId, datasetId, encoding, filters, mark, page, name, params }),
   // ── Mosaic connector (Phase 3c) — Mosaic's whole database contract is one
   // method, so it is two channels here. Ensure the typed, user-named SQL VIEW
   // over a dataset's stored Parquet and report the columns it exposes; returns
@@ -550,14 +554,14 @@ contextBridge.exposeInMainWorld('hub', {
   duplicateMetric: (projectId: string, id: string) => ipcRenderer.invoke('metric:duplicate', { projectId, id }),
   deleteMetric: (projectId: string, id: string) => ipcRenderer.invoke('metric:delete', { projectId, id }),
   // { ok, id, name, value, display, format, definitionText } | { ok:false, error }.
-  metricValue: (projectId: string, id: string, filters?: any) =>
-    ipcRenderer.invoke('metric:value', { projectId, id, filters }),
+  metricValue: (projectId: string, id: string, filters?: any, params?: any) =>
+    ipcRenderer.invoke('metric:value', { projectId, id, filters, params }),
   // A KPI card's Compare: the card's figure AND the same figure under the
   // filters' date range moved to the comparison period, resolved in main.
   // { ok, value, previous, delta, pct, label, prior, display?, previousDisplay?,
   //   deltaDisplay?, direction? } | { ok, reason: 'no_date_filter', label }.
-  compareMetric: (projectId: string, card: any, filters: any, compare: any) =>
-    ipcRenderer.invoke('metric:compare', { projectId, card, filters, compare }),
+  compareMetric: (projectId: string, card: any, filters: any, compare: any, params?: any) =>
+    ipcRenderer.invoke('metric:compare', { projectId, card, filters, compare, params }),
   // A relative period → its dates today, under the workspace calendar.
   resolvePeriod: (period: any) => ipcRenderer.invoke('period:resolve', period),
   // The editor's live figure for a definition that is not saved yet — same
@@ -590,13 +594,13 @@ contextBridge.exposeInMainWorld('hub', {
   // closed enums (dashboards.sanitizeStyle), so this side stays untyped `any`
   // like every other structured payload here — the renderer never gets a vote
   // on what a valid style is.
-  createAnalysis: (payload: { projectId: string; name: string; sheets?: any; filters?: any; style?: any }) =>
+  createAnalysis: (payload: { projectId: string; name: string; sheets?: any; filters?: any; style?: any; parameters?: any }) =>
     ipcRenderer.invoke('analysis:create', payload),
   renameAnalysis: (projectId: string, id: string, name: string) =>
     ipcRenderer.invoke('analysis:rename', { projectId, id, name }),
   // A supplied `style` REPLACES the stored one wholesale — send the whole
   // triple, not one axis.
-  updateAnalysis: (projectId: string, id: string, patch: { name?: string; sheets?: any; filters?: any; style?: any }) =>
+  updateAnalysis: (projectId: string, id: string, patch: { name?: string; sheets?: any; filters?: any; style?: any; parameters?: any }) =>
     ipcRenderer.invoke('analysis:update', { projectId, id, ...patch }),
   deleteAnalysis: (projectId: string, id: string) => ipcRenderer.invoke('analysis:delete', { projectId, id }),
   // PUBLISH — take a SNAPSHOT of the analysis as a dashboard. Each referenced
@@ -608,8 +612,8 @@ contextBridge.exposeInMainWorld('hub', {
   // model, never the renderer). Optional dashboard-wide `filters` are applied (in MAIN)
   // over the dataset BEFORE the number is computed. Returns
   // { ok:true, value:number|null } | { ok:false, error }.
-  computeMetric: (projectId: string, datasetId: string, column: string, aggregation: string, filters?: any) =>
-    ipcRenderer.invoke('dashboard:metric', { projectId, datasetId, column, aggregation, filters }),
+  computeMetric: (projectId: string, datasetId: string, column: string, aggregation: string, filters?: any, params?: any) =>
+    ipcRenderer.invoke('dashboard:metric', { projectId, datasetId, column, aggregation, filters, params }),
   // ── Dashboard export + share (Week 10) ──
   // Build + save a self-contained, offline interactive .html of the dashboard (inlined
   // app-computed data + a copy of Chart.js + a render script). Returns { ok, dest? }.

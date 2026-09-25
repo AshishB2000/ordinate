@@ -13120,6 +13120,8 @@ body.an-focus .an-workbench.is-active #dash-pages {
 .fx-input::selection { background: var(--accent-soft); }
 
 .fx-t-col { color: var(--accent); }
+/* A dashboard parameter, [[name]] — the ok hue, so it never reads as a column. */
+.fx-t-param { color: var(--ok); font-weight: 600; }
 .fx-t-fn { color: var(--text-strong); font-weight: 600; }
 .fx-t-str { color: var(--muted); }
 .fx-t-num { color: var(--text); }
@@ -15063,4 +15065,86 @@ select.ws-modal-input { height: 38px; }
 .dash-card-body:has(> .viz-overlay-caption) { display: flex; flex-direction: column; }
 .dash-card-body:has(> .viz-overlay-caption) > .dash-viz-area { height: auto; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .viz-analytics-row .viz-enc-note { order: 1; }
+
+/* ── Dashboard parameters (dashParams.ts, paramDialog.ts) ────────────────────
+   A parameter chip is a filter-bar chip with a slider (or a box) in it, marked
+   with the sliders glyph so it never reads as a column filter. */
+.dash-fb-chip--param .dash-fb-chip-label { display: inline-flex; align-items: center; gap: 5px; }
+.dash-fb-chip--param .dash-fb-chip-label .ic { color: var(--ok); flex: 0 0 auto; }
+.dash-param-slider { display: inline-flex; align-items: center; gap: var(--sp-8); }
+.dash-param-slider input[type='range'] {
+  width: 140px;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.dash-param-out {
+  min-width: 52px;
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--t-12);
+  font-weight: 600;
+  text-align: center;
+}
+.dash-param-input { width: 120px; flex: 0 0 auto; }
+.dash-param-input[type='date'] { width: 140px; }
+.dash-param-select { max-width: 180px; }
+/* A validation message a query answered with — on the card it spoiled. */
+.dash-param-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: var(--sp-4) 0 0;
+  font-size: var(--t-11);
+  line-height: 1.4;
+  color: var(--warn);
+}
+.dash-param-warn .ic { flex: 0 0 auto; margin-top: 1px; }
+.dash-card--metric .dash-param-warn { justify-content: center; }
+
+.ws-modal.pd-modal { width: min(480px, calc(100vw - 48px)); }
+.pd-lede { margin: -4px 0 var(--sp-12); font-size: var(--t-12); color: var(--muted); }
+.pd-refs { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 2px; font-size: var(--t-11); color: var(--muted); }
+.pd-ref code {
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--ok);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--t-11);
+}
+.pd-kinds .dc-kind-tile { min-width: 0; }
+.pd-value { display: flex; flex-direction: column; }
+.pd-bounds { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-8); }
+.pd-bounds .dm-field { min-width: 0; }
+.pd-hint { margin: -2px 0 var(--sp-8); font-size: var(--t-11); color: var(--muted); }
+.pd-opts { resize: vertical; min-height: 64px; font-size: var(--t-13); }
+.pd-err { min-height: 1.2em; margin: 0; font-size: var(--t-12); color: var(--error); }
+.pd-err:empty { min-height: 0; }
+
+/* "Or use a parameter" in the filter dialog. */
+.fd-params { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: var(--sp-4); }
+.fd-params-lead { font-size: var(--t-11); color: var(--muted); margin-right: 2px; }
+.fd-param-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.fd-param-chip .ic { color: var(--ok); }
+.fd-param-chip:hover { border-color: var(--accent); color: var(--accent); }
+.fd-param-val { color: var(--ok); font-weight: 600; }
 

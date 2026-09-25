@@ -48,6 +48,11 @@ let dashCurrent: any = null;       // the open Dashboard (full), or null on the 
 // as part of a dashboard/analysis record, cleared every time a sheet opens or
 // closes so one reader's picks never leak into the next dashboard opened.
 let controlState: Map<string, any> = new Map();
+// A PARAMETER's current value: paramId -> value. Same rules as controlState —
+// renderer memory, never persisted, cleared whenever a sheet opens or closes.
+// Absent means the parameter's own default (`Parameter.value`); only "Save as
+// default" (dashParams.ts) writes a value back to the record.
+let paramState: Map<string, any> = new Map();
 // WHICH RECORD the editor is bound to. The editor now only ever holds an
 // Analysis (the single Dashboards surface); its `sheets` ARE the card `pages`.
 // ponytail: `dashMode` is vestigial — it is always 'analysis' now that the
@@ -236,6 +241,8 @@ async function persistAnalysis(): Promise<void> {
       // Saved WITH the record, not as a view preference: a dashboard's look is
       // part of what gets shared, so it must survive a reopen on another machine.
       style: dashCurrentStyle(),
+      // Definitions and DEFAULTS only — a reader's live values are paramState.
+      parameters: dashParams(),
     });
     if (res && res.ok && res.analysis) {
       // Adopt main's sanitized copy, keeping the pages/sheets alias intact.

@@ -61,6 +61,9 @@ interface ReportContext {
   filters: any[];
   /** The Report record. */
   report: any;
+  /** Parameters in force, `[{ name, kind, value }]` — the live ones when the
+   *  builder was opened from the dashboard on screen, else its saved defaults. */
+  params?: any[];
 }
 
 // ── page geometry ────────────────────────────────────────────────────────────
@@ -160,7 +163,7 @@ async function reportTile(
   const merged = mergeDashFilters(ctx.filters, visual.filters);
   let res: any;
   try {
-    res = await window.hub.computeVisualData(ctx.projectId, visual.datasetId, visual.encoding, merged);
+    res = await window.hub.computeVisualData(ctx.projectId, visual.datasetId, visual.encoding, merged, ctx.params);
   } catch (_) { res = { ok: false }; }
   if (!res || res.ok === false) return null;
   const data = res.data || { labels: [], series: [] };
@@ -196,7 +199,7 @@ async function reportTile(
       chartType: type, data, geo: data.geo || null, pivot: data.pivot || null,
     });
   } catch (_) { caption = ''; }
-  return { cardId: card.id, title: visual.name || '', png, caption, grid };
+  return { cardId: card.id, title: paramSubst(visual.name || '', ctx.params || []), png, caption, grid };
 }
 
 /** Every metric card on a sheet → its app-computed figure, formatted. */
@@ -206,10 +209,10 @@ async function reportKpis(ctx: ReportContext, sheet: any): Promise<Array<{ label
   for (const card of cards) {
     if (!card || card.type !== 'metric' || !card.metric) continue;
     const m = card.metric;
-    const label = m.label || ((DASH_AGG_LABELS[m.aggregation as DashAgg] || m.aggregation) + ' of ' + (m.column || ''));
+    const label = paramSubst(m.label || ((DASH_AGG_LABELS[m.aggregation as DashAgg] || m.aggregation) + ' of ' + (m.column || '')), ctx.params || []);
     let value: number | null = null;
     try {
-      const r = await window.hub.computeMetric(ctx.projectId, m.datasetId, m.column, m.aggregation, ctx.filters);
+      const r = await window.hub.computeMetric(ctx.projectId, m.datasetId, m.column, m.aggregation, ctx.filters, ctx.params);
       value = (r && r.ok !== false && typeof r.value === 'number') ? r.value : null;
     } catch (_) { value = null; }
     out.push({ label, value, text: value == null ? '—' : fmtWith(value, m.format || 'auto') });

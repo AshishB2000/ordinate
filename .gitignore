@@ -404,3 +404,11 @@ scripts/**/*.js
 /scripts/test-dateIntel.js
 /scripts/test-periodResident.js
 /scripts/test-periodLabels.js
+
+# Dashboard parameters — emitted siblings.
+/src/analysis/params.js
+/src/data/paramReplay.js
+/renderer/hub/dashParams.js
+/renderer/hub/paramDialog.js
+/scripts/test-params.js
+/scripts/test-paramsParity.js

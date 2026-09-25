@@ -59,10 +59,10 @@ export function register() {
   // NOTE the destructure: these handlers forward NAMED fields, not the whole
   // payload, so a field that is not listed here is silently dropped on the way
   // to disk however correctly the record and the sanitizer handle it. `style`
-  // is listed for exactly that reason.
-  ipcMain.handle('analysis:create', async (_e, { projectId, name, sheets, filters, style }: any = {}) => {
+  // is listed for exactly that reason, and so is `parameters`.
+  ipcMain.handle('analysis:create', async (_e, { projectId, name, sheets, filters, style, parameters }: any = {}) => {
     try {
-      const saved = await analysis.saveAnalysis(projectId, { name, sheets, filters, style });
+      const saved = await analysis.saveAnalysis(projectId, { name, sheets, filters, style, parameters });
       if (!saved) return { ok: false, error: 'Invalid project, or it no longer exists' };
       return saved;
     } catch (err: any) {
@@ -81,9 +81,9 @@ export function register() {
 
   // Mirrors dashboard:update exactly — a supplied array REPLACES the stored one
   // wholesale; it is never patch-merged.
-  ipcMain.handle('analysis:update', async (_e, { projectId, id, name, sheets, filters, style }: any = {}) => {
+  ipcMain.handle('analysis:update', async (_e, { projectId, id, name, sheets, filters, style, parameters }: any = {}) => {
     try {
-      const updated = await analysis.updateAnalysis(projectId, id, { name, sheets, filters, style });
+      const updated = await analysis.updateAnalysis(projectId, id, { name, sheets, filters, style, parameters });
       return updated ? { ok: true, analysis: updated } : { ok: false, error: 'Could not update the analysis' };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to update the analysis' };
@@ -294,6 +294,7 @@ const EDIT_DELTA_SYSTEM_PROMPT =
   '  {"op":"removeTile","tile":"<existing tile title>"}\n' +
   '  {"op":"moveTile","tile":"<title>","position":"top|bottom|before|after","anchor":"<title, for before/after>"}\n' +
   '  {"op":"addControl","page":<n>,"kind":"dropdown|multi|date_range","dataset":"<name>","column":"<col>","label":"<label>"}\n' +
+  '  {"op":"addControl","page":<n>,"kind":"parameter","name":"<identifier>","paramKind":"number|text|date|list","value":<default>,"min":<n>,"max":<n>,"step":<n>,"options":["<v>"],"label":"<label>"}  (a value the sheet references as [[name]] in filters and formulas, {{name}} in titles)\n' +
   '  {"op":"renamePage","page":<n>,"name":"<new name>"}\n' +
   '  {"op":"addPage","name":"<name>"}\n' +
   '  {"op":"setTitle","name":"<new dashboard name>"}\n' +

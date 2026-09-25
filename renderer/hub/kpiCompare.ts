@@ -46,6 +46,7 @@ async function paintMetricCompare(card: any, body: HTMLElement): Promise<void> {
       { metricId: m.metricId, datasetId: m.datasetId, column: m.column, aggregation: m.aggregation },
       effectiveFilters(),
       m.compare,
+      dashParamPayload(),
     );
   } catch (_) {
     r = null;

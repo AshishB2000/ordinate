@@ -46,6 +46,9 @@ function dashBarControls(): any[] {
  *  the × and Clear all act on. Distinct from `controlIsAtDefault`, which asks
  *  the different question of whether it matches what the AUTHOR published. */
 function controlIsAll(card: any): boolean {
+  // A parameter is never "All": it always has a value. Its × and Clear all
+  // put it back to the value the dashboard was saved with.
+  if (card.control && card.control.kind === 'parameter') return paramIsAtDefault(card);
   const v = controlState.get(card.id);
   if (v === undefined) return true;
   const kind = card.control && card.control.kind;
@@ -61,12 +64,14 @@ function anyControlActive(): boolean {
 /** Back to All — unset, which `controlSteps` already reads as "filters
  *  nothing". NOT `clearOneControl`, which reverts to the author's default. */
 function clearControlToAll(card: any): void {
-  controlState.delete(card.id);
+  if (card.control && card.control.kind === 'parameter') paramState.delete(card.control.paramId);
+  else controlState.delete(card.id);
   renderDashGrid();
 }
 
 function clearAllControlsToAll(): void {
   dashBarControls().forEach((card) => controlState.delete(card.id));
+  paramState = new Map();
   renderDashGrid();
 }
 
@@ -95,7 +100,12 @@ function makeControlChip(card: any): HTMLElement {
 
   const label = document.createElement('span');
   label.className = 'dash-fb-chip-label';
-  label.textContent = control.label || 'Filter';
+  const param = control.kind === 'parameter' ? dashParamById(control.paramId) : null;
+  label.textContent = control.label || (param ? param.name : 'Filter');
+  if (control.kind === 'parameter') {
+    chip.classList.add('dash-fb-chip--param');
+    label.prepend(icon('sliders', 12));
+  }
   chip.appendChild(label);
 
   const wrap = document.createElement('div');
@@ -105,7 +115,9 @@ function makeControlChip(card: any): HTMLElement {
   wrap.addEventListener('keydown', (e) => e.stopPropagation());
   chip.appendChild(wrap);
 
-  if (!control.datasetId || !control.column) {
+  if (control.kind === 'parameter') {
+    renderParamControl(card, wrap);
+  } else if (!control.datasetId || !control.column) {
     dashCardMissing(wrap, 'No source column.');
   } else if (control.kind === 'multi') {
     renderMultiControl(card, wrap);
@@ -147,6 +159,14 @@ function makeControlChip(card: any): HTMLElement {
 // so there is one row-menu implementation in the renderer, not two.
 function openControlChipMenu(card: any, trigger: HTMLElement): void {
   const atAll = controlIsAll(card);
+  if (card.control && card.control.kind === 'parameter') {
+    // "Save as default" is the ONLY way a reader's value reaches the record.
+    const items: any[] = [{ label: 'Edit parameter…', onClick: () => { void editParameterControl(card); } }];
+    if (!atAll) items.push({ label: 'Save as default', onClick: () => saveParamDefault(card) });
+    items.push({ label: 'Remove', danger: true, onClick: () => removeParameterControl(card) });
+    openRowMenu(trigger, items);
+    return;
+  }
   openRowMenu(trigger, [
     { label: 'Edit…', onClick: () => { void handleEditControl(card); } },
     {

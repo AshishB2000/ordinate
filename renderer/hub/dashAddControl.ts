@@ -19,6 +19,9 @@ async function handleAddControl(): Promise<void> {
   if (!Array.isArray(datasets)) datasets = [];
   const control = await openControlDialog(datasets);
   if (!control) return;
+  // A parameter has a dialog of its own: it filters no column, so none of the
+  // dataset/column/preview fields above apply to it.
+  if (control.kind === 'parameter') { void addParameterControl(); return; }
   // ZEROED, and ignored on read. A control is a chip in the filter bar
   // (dashControlBar.ts), not a tile, so there is no cell for it to occupy —
   // and this used to be `dashFindSlot(dashCards(), 3, 1)`, which on a full
@@ -40,6 +43,7 @@ const CONTROL_KINDS_UI: Array<{ kind: string; label: string; hint: string }> = [
   { kind: 'dropdown', label: 'Dropdown', hint: 'Pick one value' },
   { kind: 'multi', label: 'Multi-select', hint: 'Pick several values' },
   { kind: 'date_range', label: 'Date range', hint: 'Relative or fixed dates' },
+  { kind: 'parameter', label: 'Parameter', hint: 'A value you slide or type' },
 ];
 const CONTROL_KIND_LABELS: Record<string, string> = Object.fromEntries(
   CONTROL_KINDS_UI.map((k) => [k.kind, k.label]),
@@ -118,6 +122,7 @@ function openControlDialog(
       b.appendChild(s);
       b.addEventListener('click', () => {
         if (kind === k.kind) return;
+        if (k.kind === 'parameter') { close({ kind: 'parameter', datasetId: '', column: '', label: '' }); return; }
         kind = k.kind;
         paintKind();
         renderColumns(); // column order depends on kind (date-first for date_range)
