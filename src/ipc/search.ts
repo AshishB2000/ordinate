@@ -20,12 +20,15 @@ import * as connections from '../connectors/connections';
 import * as projects from '../app/projects';
 import { tagSearch, attachTags } from '../app/catalogIndex';
 import type { TagChip } from '../app/catalogIndex';
+import * as metrics from '../analysis/metrics';
+import * as reportSpec from '../analysis/reportSpec';
+import * as alertStore from '../analysis/alertStore';
 
 /** Enough to be useful, few enough to read without scrolling. */
 const MAX_RESULTS = 20;
 
 export interface SearchHit {
-  kind: 'dataset' | 'visual' | 'analysis' | 'connection' | 'metric' | 'report' | 'story';
+  kind: 'dataset' | 'visual' | 'analysis' | 'connection' | 'metric' | 'report' | 'story' | 'alert';
   id: string;
   name: string;
   /** A dim second line: rows, chart type, sheet count — whatever the list already knows. */
@@ -50,6 +53,7 @@ const TYPE_LABEL: Record<SearchHit['kind'], string> = {
   metric: 'Metric',
   report: 'Report',
   story: 'Story',
+  alert: 'Alert',
 };
 
 function matches(name: unknown, q: string): boolean {
@@ -66,7 +70,8 @@ async function scope(projectId: string): Promise<{ id: string; name: string }[]>
   // search box that answers nothing there is the box that made this feature
   // necessary. Project lists are metadata-only (src/app/projects.ts), so this
   // is the same cost per project the sidebar already pays to paint itself.
-  return (await projects.listProjects()).map((p) => ({ id: p.id, name: p.name }));
+  // Archived projects are out of the search, as they are out of Recent.
+  return (await projects.listProjects()).filter((p) => !p.archivedAt).map((p) => ({ id: p.id, name: p.name }));
 }
 
 async function search(projectId: string, query: string): Promise<SearchHit[]> {
@@ -129,6 +134,24 @@ async function searchOne(projectId: string, q: string, push: Push): Promise<void
   try {
     for (const c of await connections.listConnections(projectId)) {
       if (matches(c.name, q)) push('connection', c.id, c.name, String((c as any).kind || 'connection'));
+    }
+  } catch (_) { /* ignore */ }
+
+  // Metrics, reports and alert rules are records too — the palette's → actions
+  // (History, Lineage) are how a metric or an alert reaches either.
+  try {
+    for (const m of await metrics.listMetrics(projectId)) {
+      if (matches(m.name, q)) push('metric', m.id, m.name, 'formula' in m.definition ? 'Formula metric' : `${m.definition.aggregation}(${m.definition.column})`);
+    }
+  } catch (_) { /* ignore */ }
+  try {
+    for (const r of await reportSpec.listReports(projectId)) {
+      if (matches(r.name, q)) push('report', r.id, r.name, String(r.format || 'pdf').toUpperCase() + ' report');
+    }
+  } catch (_) { /* ignore */ }
+  try {
+    for (const a of (await alertStore.load(projectId)).rules) {
+      if (!a.fromWatch && matches(a.name, q)) push('alert', a.id, a.name, 'Alert rule');
     }
   } catch (_) { /* ignore */ }
 }

@@ -8,6 +8,8 @@ import { tileCaption } from '../analysis/captions';
 import type { CaptionInput } from '../analysis/captions';
 import { notifyFile } from '../app/notify';
 import { displayNames } from '../app/catalog';
+import * as versions from '../app/versions';
+import * as trash from '../app/trash';
 
 // Reports IPC — the record's CRUD, the app-written caption, the folder picker,
 // the scheduled write, and the due list.
@@ -70,16 +72,19 @@ export function register() {
       pages: reportSpec.defaultPages(a.sheets),
       cover: { title: a.name, logo: true },
     });
+    if (report) await versions.record(pid, 'report', report);
     return report ? { ok: true, report } : { ok: false, error: 'Could not create the report.' };
   });
 
   ipcMain.handle('reports:update', async (_e, { projectId, id, patch }: any = {}) => {
+    const before = await reportSpec.getReport(String(projectId || ''), String(id || ''));
     const r = await reportSpec.updateReport(String(projectId || ''), String(id || ''), patch || {});
+    if (r) await versions.record(String(projectId), 'report', r, { before });
     return r ? { ok: true, report: r } : { ok: false, error: 'Report not found.' };
   });
 
   ipcMain.handle('reports:delete', async (_e, { projectId, id }: any = {}) =>
-    ({ ok: await reportSpec.deleteReport(String(projectId || ''), String(id || '')) }));
+    trash.trashRecord(String(projectId || ''), 'report', String(id || ''))); // to the Trash
 
   /** A copy with its own id, its own name and NO run history or schedule — a
    *  duplicate that inherited a schedule would silently double the deliveries. */

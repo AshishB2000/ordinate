@@ -44,6 +44,7 @@ import * as path from 'path';
 import { app } from 'electron';
 
 import * as config from './config';
+import * as onboarding from './onboarding';
 import * as execConfig from './execConfig';
 import * as projects from './projects';
 import * as datasets from '../data/datasets';
@@ -242,7 +243,9 @@ export async function seedSampleProject(): Promise<{ seeded: boolean; projectId?
     console.error('[sample] bundled CSV missing at', csv, '— skipping seed');
     return { seeded: false };
   }
-  config.save({ sampleSeeded: true });
+  // First-run guidance starts with the first launch, and only then: an install
+  // that seeded before it existed never gets the card or the tour.
+  config.save({ sampleSeeded: true, onboarding: onboarding.fresh() });
 
   // The user's own first project, and the only one. Created here rather than by
   // resolveProjectId so the sample has somewhere to land; resolveProjectId finds
@@ -289,6 +292,12 @@ export async function seedSampleProject(): Promise<{ seeded: boolean; projectId?
   } else {
     console.error('[sample] could not build the sample dashboard:', built.error);
   }
+  // What the seed made, by id — the switcher's "Sample" badge and first-run
+  // guidance both need to tell these apart from the user's own records.
+  config.save({ sample: {
+    projectId: project.id, datasetId: ds.id, analysisId: analysisId || '',
+    visualIds: (await visuals.listVisuals(project.id)).map((v) => v.id),
+  } });
 
   return { seeded: true, projectId: project.id, analysisId };
 }

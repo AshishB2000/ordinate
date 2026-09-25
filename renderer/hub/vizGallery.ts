@@ -298,7 +298,9 @@ function openVisualCardMenu(anchor: HTMLButtonElement, v: any): void {
       add('Add to dashboard', () => handleAddVisualToAnalysis(id));
       add('Explain', () => { void ansExplain({ visualId: id }); });
       add('Export', () => handleExportVisual(id));
-      add('Delete', () => handleDeleteVisual(id));
+      add('History', () => void vhOpen('visual', id, v && v.name ? String(v.name) : ''));
+      add('Lineage', () => void lnOpen('visual', id, v && v.name ? String(v.name) : ''));
+      add('Delete', () => handleDeleteVisual(id, v && v.name ? String(v.name) : ''));
     },
     () => anchor.setAttribute('aria-expanded', 'false'),
   );
@@ -469,15 +471,18 @@ async function handleDuplicateVisual(id: string): Promise<void> {
   await refreshVisualList();
 }
 
-async function handleDeleteVisual(id: string): Promise<void> {
+// To the Trash, with Undo on the toast (trashPage.ts) — no confirm for a
+// delete that can be taken back.
+async function handleDeleteVisual(id: string, name?: string): Promise<void> {
   if (!currentProjectId) return;
-  if (!window.confirm('Delete this visual? This cannot be undone.')) return;
+  let res: any = null;
   try {
-    await window.hub.deleteVisual(currentProjectId, id);
+    res = await window.hub.deleteVisual(currentProjectId, id);
   } catch (_) {
-    /* ignore */
+    res = null;
   }
   if (vizEditingId === id) closeVisualBuilder();
+  trDeletedToast('visual', id, name || (res && res.name) || '', res, () => void refreshVisualList());
   await refreshVisualList();
 }
 

@@ -7,6 +7,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
+import type { OnboardingState } from './onboarding';
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
 export interface LegacyProviderEntry { apiKey?: string | null; endpoint?: string; model: string }
@@ -32,6 +33,7 @@ interface LocalCliBlock {
 }
 
 export interface MemoryModel { mode: string; provider: string | null; model: string }
+export interface SampleIds { projectId: string; datasetId: string; analysisId: string; visualIds: string[] }
 // `alerts` defaults ON and the other three OFF, which is the whole difference
 // between the two kinds of notification this app sends. sound/desktop are about
 // an analysis you started and are watching; `alerts` is about a rule you wrote
@@ -75,6 +77,13 @@ interface Config {
    *  Records the event, not the sample's presence — the user may delete it, and
    *  re-creating it next launch would make that impossible. Main-only. */
   sampleSeeded: boolean;
+  /** WHAT the seed created, so the project switcher can badge the project it
+   *  landed in and first-run guidance can tell the user's own work from it.
+   *  Null on an install seeded before this existed. Main-only. */
+  sample: SampleIds | null;
+  /** First-run guidance (onboarding.ts). Null on an install seeded before it
+   *  existed, which is what keeps the card and the tour off those. Main-only. */
+  onboarding: OnboardingState | null;
   // Home "Starred" pins — a flat list of "type:id" keys (e.g. "analysis:<uuid>").
   // ONE array for all four record types, so a record never carries a starred flag
   // and there are no per-type migrations.
@@ -172,6 +181,8 @@ const DEFAULTS: Omit<Config, 'providers' | 'byok'> = {
   copilotEnabled: true,
   // Absent means not-yet-seeded, so an existing config.json seeds once on upgrade.
   sampleSeeded: false,
+  sample: null,
+  onboarding: null,
   // Home "Starred" pins, as "type:id" keys. One flat array, one setter — no
   // per-record flag, no migration.
   starred: [],
@@ -205,6 +216,30 @@ function cleanStarred(raw: unknown): string[] {
   return out;
 }
 
+const SAMPLE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// ponytail: raw disk JSON — every field is checked before it is kept
+function cleanSample(raw: any): SampleIds | null {
+  const id = (v: unknown): string => (typeof v === 'string' && SAMPLE_UUID.test(v) ? v : '');
+  const s: SampleIds = {
+    projectId: id(raw.projectId), datasetId: id(raw.datasetId), analysisId: id(raw.analysisId),
+    visualIds: Array.isArray(raw.visualIds) ? raw.visualIds.map(id).filter(Boolean).slice(0, 50) : [],
+  };
+  return s.projectId && s.datasetId ? s : null;
+}
+
+const ONBOARDING_STEPS = ['import', 'visual', 'dashboard', 'assistant'];
+// ponytail: raw disk JSON — every field is checked before it is kept
+function cleanOnboarding(raw: any): OnboardingState | null {
+  if (typeof raw.startedAt !== 'string') return null;
+  const done: OnboardingState['done'] = {};
+  const d = raw.done && typeof raw.done === 'object' ? raw.done : {};
+  for (const k of ONBOARDING_STEPS) if (typeof d[k] === 'string') done[k as keyof OnboardingState['done']] = d[k];
+  return {
+    startedAt: raw.startedAt, done,
+    collapsed: raw.collapsed === true, dismissed: raw.dismissed === true, coachSeen: raw.coachSeen === true,
+  };
+}
+
 // ponytail: input is raw disk/IPC JSON — validated field-by-field below.
 function sanitize(input: any): Partial<Config> {
   const out: Partial<Config> = {};
@@ -231,6 +266,10 @@ function sanitize(input: any): Partial<Config> {
   }
   if (typeof input.copilotEnabled === 'boolean') out.copilotEnabled = input.copilotEnabled;
   if (typeof input.sampleSeeded === 'boolean') out.sampleSeeded = input.sampleSeeded;
+  if (input.sample === null) out.sample = null;
+  else if (input.sample && typeof input.sample === 'object') out.sample = cleanSample(input.sample);
+  if (input.onboarding === null) out.onboarding = null;
+  else if (input.onboarding && typeof input.onboarding === 'object') out.onboarding = cleanOnboarding(input.onboarding);
   // Whitelisted so it survives disk load ({...DEFAULTS, ...sanitize(onDisk)}).
   if (Array.isArray(input.starred)) out.starred = cleanStarred(input.starred);
   return out;

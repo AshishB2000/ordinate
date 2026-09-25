@@ -138,6 +138,7 @@ async function openSavedDataset(id: string): Promise<void> {
   }
   const title = dsEl('ds-explorer-title');
   if (title) title.textContent = expName;
+  if (typeof lnPaintUsedIn === 'function') void lnPaintUsedIn(expId); // lineagePanel.ts
   renderExplorerIdent(ds);
 
   // Week 13 — capture provenance strip (thumbnail + view-original + recapture).
@@ -349,14 +350,40 @@ function dsAskAboutDataset(): void {
   if (input && !input.disabled) input.focus();
 }
 
+/** The dataset page's ⋯: what you do TO the record rather than with its rows.
+ *  Same mini-menu the visual cards use (chartControls.ts openMiniMenu). */
+function dsOpenMoreMenu(anchor: HTMLElement): void {
+  if (!expId) return;
+  const id = expId;
+  anchor.setAttribute('aria-expanded', 'true');
+  openMiniMenu(anchor, (el: HTMLElement, close: () => void) => {
+    const add = (ic: string, label: string, run: () => void, danger?: boolean): void => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chart-menu-item' + (danger ? ' chart-menu-item--danger' : '');
+      iconLabel(b, ic, label);
+      b.addEventListener('click', () => { close(); run(); });
+      el.appendChild(b);
+    };
+    add('lineage', 'Lineage', () => void lnOpen('dataset', id, expName));
+    add('history', 'Pipeline history', () => void vhOpen('dataset', id, expName));
+    add('trash', 'Move to Trash', () => void handleDeleteDataset(id), true);
+  }, () => anchor.setAttribute('aria-expanded', 'false'));
+}
+
+// A delete is a move to the Trash (trashPage.ts), taking the dataset's visuals
+// with it — so no "cannot be undone" confirm: the toast carries Undo.
 async function handleDeleteDataset(id: string): Promise<void> {
   if (!currentProjectId) return;
-  if (!window.confirm('Delete this dataset? This cannot be undone.')) return;
+  let res: any = null;
   try {
-    await window.hub.deleteDataset(currentProjectId, id);
+    res = await window.hub.deleteDataset(currentProjectId, id);
   } catch (_) {
-    /* ignore */
+    res = null;
   }
+  // Leave the page of a dataset that is no longer there — the same path Back takes.
+  if (expId === id) document.getElementById('ds-explorer-close')?.click();
+  trDeletedToast('dataset', id, (res && res.name) || '', res, () => void refreshDatasetList());
   await refreshDatasetList();
 }
 

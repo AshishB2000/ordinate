@@ -72,6 +72,7 @@ async function adoptProject(id: string): Promise<boolean> {
   // future header stays in sync without a hard dependency.
   const nameEl = document.getElementById('ws-project-name');
   if (nameEl) nameEl.textContent = project.name || 'Untitled project';
+  if (typeof pjPaintCurrent === 'function') pjPaintCurrent(project.name || 'Untitled project');
   // A project can be adopted with no section change (e.g. "+New → Data
   // source"), which dkSync()'s other call sites never see — without this the
   // dock keeps showing the PREVIOUS project's transcript until the next
@@ -81,12 +82,21 @@ async function adoptProject(id: string): Promise<boolean> {
   // reason as the dkSync above: an adoption with no section change would
   // otherwise leave the previous project's unread count on screen.
   if (typeof aiRefresh === 'function') void aiRefresh();
+  // …and so is the Trash badge (trashPage.ts).
+  if (typeof trSyncCount === 'function') void trSyncCount();
+  // Home's Recent is scoped to the active project (homePage.ts). At launch the
+  // list can land before the project is adopted — repaint it from what it
+  // already holds, so it is never left showing every project unasked.
+  if (currentSection === 'home' && typeof paintHome === 'function') paintHome();
   return true;
 }
 
 // Switch which workspace section is visible. Flips the .hub-body[data-section]
 // attribute (CSS shows exactly one body) and toggles nav + placeholder state.
 function selectSection(section: string): void {
+  // The right panel (History, Lineage) is about a record on THIS page; a new
+  // section is a new page, so it closes (sidePanel.ts).
+  if (section !== currentSection && typeof spClose === 'function') spClose();
   if (section !== currentSection) previousSection = currentSection;
   currentSection = section;
   const body = wsBodyEl();
@@ -103,6 +113,7 @@ function selectSection(section: string): void {
   if (section === 'home') {
     if (typeof renderRecent === 'function') renderRecent();
     if (typeof refreshHome === 'function') void refreshHome();
+    if (typeof gsRender === 'function') void gsRender(); // getStarted.ts — the checklist ticks from real records
   }
   // Refresh the datasets list when its section becomes active (datasets.ts),
   // and the Captures grid with it — they are two tabs of one page, and a
@@ -117,6 +128,8 @@ function selectSection(section: string): void {
   // Refresh the dashboards list when the Dashboards section becomes active
   // (analyses.ts — the section id stays "analyses" internally).
   if (section === 'analyses' && typeof refreshAnalysisList === 'function') refreshAnalysisList();
+  // The Trash page reads the active project's trash each time it is shown.
+  if (section === 'trash' && typeof trRefresh === 'function') void trRefresh();
   // Reload the connector catalogue when Connect becomes active (connections.ts).
   if (section === 'connect' && typeof refreshConnPanel === 'function') void refreshConnPanel();
   // Recompute the AI dock's visibility for the new section (dock.ts) — this is

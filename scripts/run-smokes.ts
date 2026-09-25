@@ -66,6 +66,9 @@ const SMOKES = [
   // Workflow depth — answers with charts, stories, the catalog, the five new
   // chart types and record tabs, in ONE launch (sections in scripts/wf*.ts).
   'smoke-workflow',
+  // History, Trash, Lineage, Projects and first-run guidance. Its own fresh
+  // profile: the Get-started card and the coach marks only exist on first launch.
+  'smoke-workspace',
 ];
 
 const results: { name: string; code: number }[] = [];

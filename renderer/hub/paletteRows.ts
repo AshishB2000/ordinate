@@ -74,9 +74,10 @@ const CP_KIND_ICON: Record<string, string> = {
   analysis: 'grid',
   capture: 'camera',
   connection: 'plug',
-  metric: 'chart-line',
+  metric: 'gauge',
   report: 'file-text',
   story: 'file-text',
+  alert: 'bell',
 };
 
 /** A search hit or a recent item, both flattened to the one shape rows use. */
@@ -102,6 +103,9 @@ const CP_KIND_LABEL: Record<string, string> = {
   analysis: 'Dashboard',
   capture: 'Capture',
   connection: 'Connection',
+  metric: 'Metric',
+  report: 'Report',
+  alert: 'Alert',
 };
 
 /** `#sal` — the project's tags as rows; picking one shows everything carrying it in the Catalog. */
@@ -200,7 +204,35 @@ function cpActionGroups(r: CpRecord): CpGroup[] {
   if (r.kind === 'analysis') {
     rows.push({ title: 'Export', meta: 'PDF, PNG or HTML', icon: 'download', run: () => { paletteClose(); void cpExportDashboard(r); } });
   }
+  const histType = CP_HISTORY_TYPE[r.kind];
+  if (histType) {
+    rows.push({ title: 'Version history', meta: 'Every save, restorable', icon: 'history', run: () => { paletteClose(); void cpOpenHistory(r, histType); } });
+  }
+  const linType = CP_LINEAGE_TYPE[r.kind];
+  if (linType) {
+    rows.push({ title: 'Lineage', meta: 'What it is built from, and what uses it', icon: 'lineage', run: () => { paletteClose(); void cpOpenLineage(r, linType); } });
+  }
   return [{ label: r.name, rows }];
+}
+
+/** Search kinds → version-history types. A dashboard is `analysis` to search. */
+const CP_HISTORY_TYPE: Record<string, string> = {
+  dataset: 'dataset', visual: 'visual', analysis: 'dashboard', metric: 'metric', report: 'report',
+};
+
+const CP_LINEAGE_TYPE: Record<string, string> = { ...CP_HISTORY_TYPE, alert: 'alert' };
+
+/** Lineage is a panel over whatever page is showing: only the PROJECT has to
+ *  be the record's, so the graph is read from the right place. */
+async function cpOpenLineage(r: CpRecord, type: string): Promise<void> {
+  if (r.projectId && r.projectId !== currentProjectId) await adoptProject(r.projectId);
+  await lnOpen(type, r.id, r.name);
+}
+
+/** Open the record first, so a preview has its page to show on. */
+async function cpOpenHistory(r: CpRecord, type: string): Promise<void> {
+  await paletteOpenRecord(r);
+  await vhOpen(type, r.id, r.name);
 }
 
 function cpAddVisualToDashboard(r: CpRecord): void {
@@ -226,6 +258,16 @@ async function paletteOpenRecord(r: CpRecord): Promise<void> {
   if (r.kind === 'connection') {
     if (r.projectId && r.projectId !== currentProjectId) await openWorkspace(r.projectId);
     selectSection('connect');
+    return;
+  }
+  if (r.kind === 'metric' || r.kind === 'report' || r.kind === 'alert') {
+    if (r.projectId && r.projectId !== currentProjectId) await openWorkspace(r.projectId);
+    if (r.kind === 'report') { selectSection('analyses'); await rbOpenReportById(r.id); return; }
+    if (r.kind === 'alert') { await aiOpenRulesPage(); return; }
+    selectSection('datasets');
+    clSelectTab('metrics');
+    const res = await window.hub.getMetric(r.projectId || currentProjectId, r.id).catch(() => null);
+    if (res && res.ok) await mpOpenEditor(res.metric);
     return;
   }
   // dataset · analysis · capture — Home's opener already does all three,

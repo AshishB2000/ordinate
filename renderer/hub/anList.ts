@@ -53,14 +53,19 @@ const AN_PREVIEW_MAX = 2;
  * its RAF and resize hooks alive (vizThumbs.ts). Same call, same reason, as
  * refreshVisualList and hdRenderViz.
  */
+let anPaintGen = 0;
 async function anPaintList(list: HTMLElement, items: any[]): Promise<void> {
-  if (typeof vizThumbsReset === 'function') vizThumbsReset();
-  list.innerHTML = '';
+  const gen = ++anPaintGen;
   const projectId = currentProjectId;
   const previews = await anPreviewVisuals(projectId, items);
   // A project switch mid-fetch: drop this paint rather than filling the new
-  // project's grid with the old project's dashboards.
-  if (currentProjectId !== projectId || !list.isConnected) return;
+  // project's grid with the old project's dashboards. And only the LATEST
+  // paint writes: two overlapping refreshes (a section switch and a save
+  // landing together) used to both clear, both await, and both append — every
+  // dashboard twice.
+  if (gen !== anPaintGen || currentProjectId !== projectId || !list.isConnected) return;
+  if (typeof vizThumbsReset === 'function') vizThumbsReset();
+  list.innerHTML = '';
   items.forEach((a) => list.appendChild(makeAnListItem(a, previews.get(String(a.id)) || [])));
   void ctAfterPaint(list); // catalog tag bar + chips
 }
@@ -231,6 +236,8 @@ function makeAnListItem(a: any, previews: any[]): HTMLElement {
         label: 'Rename',
         onClick: () => handleRenameAnalysis(String(a.id), a && a.name ? String(a.name) : ''),
       },
+      { label: 'History', onClick: () => void vhOpen('dashboard', String(a.id), a && a.name ? String(a.name) : '') },
+      { label: 'Lineage', onClick: () => void lnOpen('dashboard', String(a.id), a && a.name ? String(a.name) : '') },
       { label: 'Delete', danger: true, onClick: () => handleDeleteAnalysis(String(a.id)) },
     ]);
   });

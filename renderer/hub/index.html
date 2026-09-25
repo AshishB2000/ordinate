@@ -184,6 +184,7 @@
       <div class="as-project">
         <button id="as-project-btn" class="as-project-btn" type="button"
           aria-haspopup="true" aria-expanded="false" aria-label="Switch project">
+          <span class="pj-avatar" id="as-project-avatar" aria-hidden="true"></span>
           <span class="as-project-name" id="ws-project-name">All projects</span>
           <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-chevron-down"/></svg>
         </button>
@@ -267,6 +268,13 @@
            page's #exec-mode-btn-cap still opens it, and every other consumer
            already reaches both through execBtns()/execBtnVisible(). -->
       <div class="as-bottom">
+        <!-- Trash: every delete lands here for 30 days (trashPage.ts). A nav
+             item, so selectSection lights it; the count is hidden at zero. -->
+        <button class="as-nav-item as-trash-item" id="as-trash-btn" type="button" data-section="trash">
+          <svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-trash"/></svg>
+          <span>Trash</span>
+          <span class="as-trash-count" id="as-trash-count" hidden></span>
+        </button>
         <button id="settings-gear" class="as-tool" type="button"
           aria-haspopup="true" aria-expanded="false" aria-label="Settings menu">
           <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-settings"/></svg>
@@ -302,6 +310,8 @@
           <!-- "+ New" opens a menu of the things a user actually creates
                (Dashboard / data source). Projects are demoted — created
                implicitly on disk. Menu built in projects.ts (openRowMenu). -->
+          <!-- The Get-started checklist, folded: "2 of 4" (getStarted.ts). -->
+          <button id="home-gs-pill" class="gs-pill" type="button" hidden><svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-circle-check"/></svg><span>Get started</span><span class="gs-pill-text tnum"></span></button>
           <button id="home-new-project" class="btn btn-primary" type="button"
             aria-haspopup="true" aria-expanded="false">
             <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-plus"/></svg>
@@ -338,6 +348,11 @@
           <div class="home-ask-suggests" id="home-ask-suggests" hidden></div>
         </div>
 
+        <!-- First-run guidance, full width under the ask bar and above Recent:
+             four steps with their doors, ticked from real records in main
+             (getStarted.ts, src/app/onboarding.ts). Gone once done or dismissed. -->
+        <section class="gs-card" id="home-getstarted" hidden aria-label="Get started"></section>
+
         <!-- ── WHAT STANDS OUT ──────────────────────────────────────────────
              insights.ts fills #home-insights-row from `insights:list` and
              UNHIDES the section. With nothing to say it stays hidden: there is
@@ -363,6 +378,9 @@
               <button class="home-pill is-active" type="button" data-filter="all" role="tab">All</button>
               <button class="home-pill" type="button" data-filter="dataset" role="tab">Datasets</button>
               <button class="home-pill" type="button" data-filter="dashboard" role="tab">Dashboards</button>
+              <!-- Recent is this project's; this widens it to every project (homePage.ts). -->
+              <button class="home-scope" id="home-scope-all" type="button" aria-pressed="false"
+                title="Show recent work from every project"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-layers"/></svg><span>All projects</span></button>
             </div>
 
             <section class="home-sec" id="home-starred">
@@ -996,6 +1014,8 @@
               <div class="ds-explorer-meta">
                 <span class="ds-fresh" id="ds-explorer-fresh"></span>
                 <span class="ds-auto-host" id="ds-explorer-auto" hidden></span>
+                <!-- "Used in 3 visuals · 1 dashboard" — opens Lineage (lineagePanel.ts). -->
+                <button class="ds-usedin" type="button" id="ds-explorer-usedin" hidden><svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-lineage"/></svg><span></span></button>
                 <button class="btn btn-sm" type="button" id="ds-explorer-refresh" hidden><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-refresh"/></svg><span>Refresh</span></button>
               </div>
             </div>
@@ -1004,6 +1024,9 @@
               <button class="btn btn-sm" type="button" id="ds-act-dashboard">New dashboard</button>
               <button class="btn btn-sm" type="button" id="ds-act-ask">Ask</button>
               <button class="btn btn-sm ct-details-btn" type="button" id="ds-act-details"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-info"/></svg><span>Details</span></button>
+              <!-- History, Lineage and Move to Trash (dsExplorer.ts dsOpenMoreMenu). -->
+              <button class="btn btn-sm ds-act-more" type="button" id="ds-act-more"
+                aria-haspopup="menu" aria-label="More dataset actions" title="More"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-more-horizontal"/></svg></button>
             </div>
           </div>
 
@@ -1206,6 +1229,7 @@
               <select class="viz-select" id="viz-dataset-select" aria-label="Dataset"></select>
               <button class="btn btn-sm viz-suggest-btn" type="button" id="viz-suggest-btn"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-sparkles"/></svg><span>Suggest chart</span></button>
               <button class="btn btn-sm ct-details-btn" type="button" id="viz-details-btn"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-info"/></svg><span>Details</span></button>
+              <button class="btn btn-sm" type="button" id="viz-history-btn" hidden title="Version history"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-history"/></svg><span>History</span></button>
               <button class="btn btn-primary" type="button" id="viz-save-btn">Save visual</button>
             </div>
           </div>
@@ -1244,6 +1268,30 @@
          element the Dashboards section uses: the grid editor is re-parented into
          #an-editor-host when an analysis is open and back into #dash-editor-host
          when a dashboard is. One editor, one set of behaviour, two hosts. -->
+    <!-- TRASH — what was deleted, kept 30 days (trashPage.ts). The standard
+         .ws-table, the section header every list page uses. -->
+    <section class="ws-panel" id="ws-trash" data-section="trash" hidden>
+      <div class="dash-panel tr-panel">
+        <div class="an-list-head">
+          <div class="an-list-head-text">
+            <div class="viz-title-row">
+              <h2 class="viz-h">Trash</h2>
+              <span class="viz-count an-count" id="tr-count" hidden></span>
+            </div>
+            <p class="viz-sub">Deleted items stay here for 30 days, then they are removed for good. Restore puts one back exactly where it was.</p>
+          </div>
+          <div class="an-list-head-actions">
+            <button class="btn tr-empty-btn" type="button" id="tr-empty-btn" disabled><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-trash"/></svg><span>Empty trash</span></button>
+          </div>
+        </div>
+        <div class="ws-table tr-table" id="tr-table" hidden>
+          <div class="ws-table-cols tr-cols"><span>Name</span><span>Type</span><span>Deleted</span><span>Kept for</span><span></span></div>
+          <div class="tr-list" id="tr-list"></div>
+        </div>
+        <div id="tr-empty" hidden></div>
+      </div>
+    </section>
+
     <section class="ws-panel" id="ws-analyses" data-section="analyses" hidden>
       <div class="dash-panel" id="an-list-view">
         <!-- The section header, matching Data and Visuals: what this is (with
@@ -1668,6 +1716,11 @@
                  action, not two. Shown by CSS in focus mode only. -->
             <button class="btn btn-sm an-more-btn" type="button" id="an-more-btn"
               aria-haspopup="true" aria-label="More actions" title="More actions"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-more-horizontal"/></svg></button>
+            <!-- Every save of this dashboard, kept (versionsPanel.ts). NOT
+                 dash-edit-only: it stays up while a version is previewed
+                 read-only, which is exactly when you need the list beside it. -->
+            <button class="btn btn-sm dash-history-btn" type="button" id="dash-history-btn"
+              aria-label="Version history" title="Version history"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-history"/></svg></button>
             <!-- ↶ / ↷ as CHARACTERS were a pair of hairline hooks at 14px — present
                  in the DOM, unreadable on screen. Stroke SVG, same build as the
                  Rescan icon, so they carry at button size and in both themes. -->
@@ -2937,6 +2990,15 @@
 <script src="catalogDetails.js"></script>
 <script src="catalogPage.js"></script>
 <script src="hubResultMenus.js"></script>
+<!-- The right panel History and Lineage share (sidePanel.ts), then History —
+     after every surface whose opener it calls, before the command registry. -->
+<script src="sidePanel.js"></script>
+<script src="versionsPanel.js"></script>
+<script src="trashPage.js"></script>
+<script src="lineagePanel.js"></script>
+<script src="projectSwitcher.js"></script>
+<script src="getStarted.js"></script>
+<script src="coachMarks.js"></script>
 <!-- The command registry, its contents, and the palette that reads them.
      commands.js is the machinery, commandDefs.js registers every command (so it
      loads after the surfaces it calls into), palette.js paints. hub.js boots

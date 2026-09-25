@@ -77,6 +77,22 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
     h.className = 'ws-modal-title';
     h.textContent = editingId ? 'Edit metric' : 'New metric';
     box.appendChild(h);
+    // A saved metric's History (versionsPanel.ts) — the metrics table's ⋯ is
+    // another branch's file, so the editor is this record's door to it.
+    const histBtn = document.createElement('button');
+    histBtn.type = 'button';
+    histBtn.className = 'btn btn-sm btn-ghost me-history-btn';
+    iconLabel(histBtn, 'history', 'History');
+    const linBtn = document.createElement('button');
+    linBtn.type = 'button';
+    linBtn.className = 'btn btn-sm btn-ghost me-history-btn';
+    iconLabel(linBtn, 'lineage', 'Lineage');
+    if (editingId) {
+      const tools = document.createElement('span');
+      tools.className = 'me-title-tools';
+      tools.append(linBtn, histBtn);
+      h.appendChild(tools);
+    }
 
     // ── State ────────────────────────────────────────────────────────────────
     const def = (existing && existing.definition) || {};
@@ -413,6 +429,14 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
     };
 
     cancel.addEventListener('click', () => finish(null));
+    linBtn.addEventListener('click', () => {
+      finish(null);
+      void lnOpen('metric', editingId, existing && existing.name ? String(existing.name) : '');
+    });
+    histBtn.addEventListener('click', () => {
+      finish(null);
+      void vhOpen('metric', editingId, existing && existing.name ? String(existing.name) : '');
+    });
     overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) finish(null); });
     box.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { e.stopPropagation(); finish(null); return; }

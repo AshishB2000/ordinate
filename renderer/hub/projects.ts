@@ -177,9 +177,12 @@ async function resolveProjectId(opts: { create?: boolean } = {}): Promise<string
 
   let id = '';
   try {
-    const list = await window.hub.listProjects();
-    // Newest-first from main, so [0] is the one the user most likely means.
-    if (Array.isArray(list) && list.length) id = String(list[0].id || '');
+    // The one the user was last IN (lastOpenedAt), else the newest-edited —
+    // never an archived one: archiving is how a user says "not this".
+    const list = (await window.hub.listProjects() || []).filter((p: any) => p && !p.archivedAt);
+    const key = (p: any): string => String(p.lastOpenedAt || p.updatedAt || '');
+    list.sort((a: any, b: any) => (key(a) < key(b) ? 1 : key(a) > key(b) ? -1 : 0));
+    if (list.length) id = String(list[0].id || '');
   } catch (_) { /* fall through and create one */ }
 
   if (!id && mayCreate) {
@@ -316,42 +319,9 @@ function fillHomeSourceLogos(): void {
   });
 }
 
-/**
- * The project switcher, behind the sidebar's project block and the top bar's
- * project button. ONE function for both: two triggers, one list, because the
- * sidebar is hidden in body.cap-focus / body.an-focus and the top bar is not.
- *
- * It only SWITCHES. Creating a project stays implicit (resolveProjectId) and
- * renaming/deleting stays out — the gallery that owned those is deliberately
- * gone, and re-growing it behind a chevron would bring it back one item at a
- * time. Reuses openRowMenu, so positioning, dismissal and the one-menu-open
- * slot are the same as every other popup.
- */
-async function openProjectSwitcher(trigger: HTMLElement): Promise<void> {
-  let list: any[] = [];
-  try {
-    list = (await window.hub.listProjects()) || [];
-  } catch (_) {
-    list = [];
-  }
-  if (!list.length) return;
-  openRowMenu(
-    trigger,
-    list.map((p: any) => ({
-      label: String(p && p.name ? p.name : 'Untitled project'),
-      onClick: () => {
-        void (async () => {
-          if (await adoptProject(String(p.id))) {
-            // Home is cross-project, but every OTHER section is showing the
-            // previous project's contents until it repaints.
-            selectSection(currentSection === 'home' ? 'home' : currentSection);
-          }
-        })();
-      },
-    })),
-  );
-}
-
+// The project switcher itself — rows, New / Import, Rename / Export / Archive —
+// lives in projectSwitcher.ts (openProjectSwitcher). This file only wires the
+// two triggers to it.
 function wireProjectSwitcher(id: string): void {
   const btn = document.getElementById(id);
   if (!btn) return;

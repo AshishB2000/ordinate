@@ -151,14 +151,17 @@ function rbCard(r: any): HTMLElement {
   };
   act('Generate now', 'btn btn-sm btn-primary', () => void rbGenerateFromList(r.id));
   act('Edit', 'btn btn-sm', () => void rbOpenReportById(r.id));
+  act('History', 'rb-link', () => void vhOpen('report', String(r.id), r.name || 'Report'), secondary);
+  act('Lineage', 'rb-link', () => void lnOpen('report', String(r.id), r.name || 'Report'), secondary);
   act('Duplicate', 'rb-link', async () => {
     const res = await window.hub.reportsDuplicate(currentProjectId as string, r.id);
     if (!res || res.ok === false) { showToast((res && res.error) || 'Could not duplicate'); return; }
     await rbRefreshList();
   }, secondary);
   act('Delete', 'rb-link rb-link--danger', async () => {
-    if (!window.confirm(`Delete “${r.name}”? The files it already generated are left alone.`)) return;
-    await window.hub.reportsDelete(currentProjectId as string, r.id);
+    // To the Trash (trashPage.ts); the files it generated are never touched.
+    const res = await window.hub.reportsDelete(currentProjectId as string, r.id);
+    trDeletedToast('report', r.id, r.name || '', res, () => void rbRefreshList());
     await rbRefreshList();
   }, secondary);
   actions.appendChild(secondary);

@@ -87,6 +87,8 @@ function initDatasets(): void {
   if (actDash) actDash.addEventListener('click', () => void dsNewDashboardFromDataset());
   const actAsk = dsEl('ds-act-ask');
   if (actAsk) actAsk.addEventListener('click', () => dsAskAboutDataset());
+  const actMore = dsEl('ds-act-more');
+  if (actMore) actMore.addEventListener('click', () => dsOpenMoreMenu(actMore));
 
   // The column-profile panel's own controls (dsProfile.ts). Wired once, here,
   // rather than per open — the panel is static markup, not a cloned template.
