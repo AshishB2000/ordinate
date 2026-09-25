@@ -195,10 +195,7 @@ function describeControlDefault(control: any): string {
     return Array.isArray(d.values) && d.values.length ? d.values.length + ' value(s)' : 'none';
   }
   if (control.kind === 'date_range') {
-    const parts: string[] = [];
-    if (d.from) parts.push('from ' + d.from);
-    if (d.to) parts.push('to ' + d.to);
-    return parts.length ? parts.join(' ') : 'none';
+    return ppIsRelative(d) || d.from || d.to ? periodValueText(d) : 'none';
   }
   return d.value ? String(d.value) : 'none';
 }

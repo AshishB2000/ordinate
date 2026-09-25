@@ -21,6 +21,7 @@ import type { Cell } from '../data/transforms';
 import { binLabel, dateBucketLabel } from '../analysis/categoryKey';
 import type { DateGrain } from '../analysis/categoryKey';
 import { sqlEmpty } from './sqlGen';
+import { shapeDate } from './periodSql';
 import type { DuckValue } from './duckdb';
 
 /**
@@ -97,16 +98,6 @@ function groupKeyExpr(cols: ParsedColumn[], gi: number): { group: string; label:
 const ISO_RE = '^(\\d{4})[-/](\\d{1,2})[-/](\\d{1,2})$';
 const US_RE = '^(\\d{1,2})[-/](\\d{1,2})[-/](\\d{4})$';
 
-function shapeDate(v: string, re: string, y: number, m: number, d: number): string {
-  // A non-match makes regexp_extract return '', nullif turns that into NULL,
-  // and `||` propagates it — so any other shape yields NULL without a match
-  // test of its own.
-  return (
-    `TRY_CAST(nullif(regexp_extract(${v}, '${re}', ${y}), '') || '-' || ` +
-    `lpad(regexp_extract(${v}, '${re}', ${m}), 2, '0') || '-' || ` +
-    `lpad(regexp_extract(${v}, '${re}', ${d}), 2, '0') AS DATE)`
-  );
-}
 
 /** A stored date cell → DATE, or NULL when it is not one of the canonical shapes. */
 export function sqlCanonicalDate(p: string): string {

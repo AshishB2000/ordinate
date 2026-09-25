@@ -116,7 +116,7 @@ export function parseDateCell(cell: Cell): CivilDate | null {
 // years 0–99 into 1900–1999, and over a hand-rolled leap-year loop because this
 // is exact for every proleptic-Gregorian date — the same calendar DuckDB uses,
 // which is what makes `dateBucket` equal `epoch day of date_trunc(...)`.
-function daysFromCivil(y: number, m: number, d: number): number {
+export function daysFromCivil(y: number, m: number, d: number): number {
   const yy = y - (m <= 2 ? 1 : 0);
   const era = Math.floor(yy / 400);
   const yoe = yy - era * 400;
@@ -125,7 +125,7 @@ function daysFromCivil(y: number, m: number, d: number): number {
   return era * 146097 + doe - 719468;
 }
 
-function civilFromDays(z: number): CivilDate {
+export function civilFromDays(z: number): CivilDate {
   const n = z + 719468;
   const era = Math.floor(n / 146097);
   const doe = n - era * 146097;

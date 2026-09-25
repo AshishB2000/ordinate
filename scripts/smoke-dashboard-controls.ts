@@ -119,12 +119,21 @@ async function main(): Promise<void> {
   ok('the multi kind previews as a checkbox list',
      await win.evaluate(() => !!document.querySelector('.dash-control-modal .dc-preview .fd-list')));
 
-  // date_range kind → preview is two native date inputs.
+  // date_range kind → preview is the period picker: relative presets, and a
+  // Between-dates tab holding two native date inputs.
   await win.evaluate(() => {
     (document.querySelector('.dash-control-modal .dc-kind-tile[data-kind="date_range"]') as HTMLElement).click();
   });
   await win.waitForTimeout(400);
-  ok('the date_range kind previews as two date inputs',
+  ok('the date_range kind previews as the period picker (relative presets)',
+     await win.evaluate(() =>
+       document.querySelectorAll('.dash-control-modal .dc-preview .pp-pill').length >= 12));
+  await win.evaluate(() => {
+    const tabs = [...document.querySelectorAll('.dash-control-modal .dc-preview .pp-tabs .fd-tab')] as HTMLElement[];
+    tabs[1].click();
+  });
+  await win.waitForTimeout(200);
+  ok('…whose Between-dates tab is two date inputs',
      await win.evaluate(() =>
        document.querySelectorAll('.dash-control-modal .dc-preview input[type=date]').length === 2));
 
@@ -255,12 +264,12 @@ async function main(): Promise<void> {
     chips: document.querySelectorAll('.dash-filter-bar .dash-fb-chip').length,
     dropdown: !!document.querySelector('.dash-filter-bar .dash-ctrl-select'),
     multiChip: !!document.querySelector('.dash-filter-bar .dash-ctrl-chip'),
-    dateInputs: document.querySelectorAll('.dash-filter-bar .dash-ctrl-date').length,
+    dateChip: !!document.querySelector('.dash-filter-bar .dash-ctrl-period'),
   }));
   ok('all three control kinds sit in the bar as chips, none in the grid',
      withAllControlCards.tiles === 3 && withAllControlCards.inGrid === 0 &&
        withAllControlCards.chips === 3 && withAllControlCards.dropdown &&
-       withAllControlCards.multiChip && withAllControlCards.dateInputs === 2,
+       withAllControlCards.multiChip && withAllControlCards.dateChip,
      JSON.stringify(withAllControlCards));
 
   // Snapshot the first live chart's labels+values, to prove a control redraws it.

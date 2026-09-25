@@ -174,20 +174,22 @@ ok('sum(sales) over the leading-zero-filtered subset is the one row (100)',
   ok('multi with no selection (undefined) → []', controlSteps(multi, undefined).length === 0);
 
   // date_range → up to two steps, `>=` and/or `<=`.
-  ok('date_range with BOTH ends set produces two steps',
+  // Two fixed dates travel as ONE `custom` period — compared as dates by the
+  // evaluators, so `03/01/2024` is not "before" `12/31/2023` the way a string
+  // `>=` made it.
+  ok('date_range with BOTH ends set produces one custom period step',
     JSON.stringify(controlSteps(dateRange, { from: '2026-01-01', to: '2026-06-30' })) ===
     JSON.stringify([
-      { type: 'filter', column: 'order_date', op: '>=', value: '2026-01-01' },
-      { type: 'filter', column: 'order_date', op: '<=', value: '2026-06-30' },
+      { type: 'filter', column: 'order_date', op: 'period', period: { preset: 'custom', from: '2026-01-01', to: '2026-06-30' } },
     ]));
   // Single-ended range: only `from`.
-  ok('date_range with only `from` produces one `>=` step',
+  ok('date_range with only `from` produces an open-ended period',
     JSON.stringify(controlSteps(dateRange, { from: '2026-01-01' })) ===
-    JSON.stringify([{ type: 'filter', column: 'order_date', op: '>=', value: '2026-01-01' }]));
+    JSON.stringify([{ type: 'filter', column: 'order_date', op: 'period', period: { preset: 'custom', from: '2026-01-01' } }]));
   // Single-ended range: only `to`.
-  ok('date_range with only `to` produces one `<=` step',
+  ok('date_range with only `to` produces an open-ended period',
     JSON.stringify(controlSteps(dateRange, { to: '2026-06-30' })) ===
-    JSON.stringify([{ type: 'filter', column: 'order_date', op: '<=', value: '2026-06-30' }]));
+    JSON.stringify([{ type: 'filter', column: 'order_date', op: 'period', period: { preset: 'custom', to: '2026-06-30' } }]));
   // date_range: neither end set → [].
   ok('date_range with neither end set → []', controlSteps(dateRange, {}).length === 0);
   ok('date_range with no selection (undefined) → []', controlSteps(dateRange, undefined).length === 0);
@@ -206,8 +208,10 @@ ok('sum(sales) over the leading-zero-filtered subset is the one row (100)',
   ok('a multi value with quotes/commas/whitespace passes through unchanged',
     controlSteps(multi, { values: [tricky, 'Nice, France'] }).length === 1
     && JSON.stringify((controlSteps(multi, { values: [tricky, 'Nice, France'] })[0] as FilterStep).values) === JSON.stringify([tricky, 'Nice, France']));
-  ok('a date_range value with whitespace passes through unchanged',
-    controlSteps(dateRange, { from: '  2026-01-01  ' })[0].value === '  2026-01-01  ');
+  // A date range is compared as DATES now, so a bound that is not a date is
+  // not passed through to become a string comparison against garbage.
+  ok('a date_range bound that is not a real date filters nothing',
+    controlSteps(dateRange, { from: '  2026-01-01  ' }).length === 0);
 }
 
 // ── effective-filter composition: dashboard filters, then controls, then a
@@ -253,13 +257,13 @@ ok('sum(sales) over the leading-zero-filtered subset is the one row (100)',
     finalList[0].column === 'region' && finalList[0].op === '!=' && finalList[0].value === 'North');
   ok('…then the FIRST control (dropdown) in page order',
     finalList[1].column === 'region' && finalList[1].op === '=' && finalList[1].value === 'West');
-  ok('…then the SECOND control (date_range), both of its ends',
-    finalList[2].column === 'order_date' && finalList[2].op === '>=' && finalList[2].value === '2026-01-01' &&
-    finalList[3].column === 'order_date' && finalList[3].op === '<=' && finalList[3].value === '2026-06-30');
+  ok('…then the SECOND control (date_range), as one period over both ends',
+    finalList[2].column === 'order_date' && finalList[2].op === 'period' &&
+    !!finalList[2].period && finalList[2].period.from === '2026-01-01' && finalList[2].period.to === '2026-06-30');
   ok('…then the card\'s own filter that is NOT a duplicate of anything above',
-    finalList[4].column === 'sales' && finalList[4].op === '>=' && finalList[4].value === 100);
+    finalList[3].column === 'sales' && finalList[3].op === '>=' && finalList[3].value === 100);
   ok('the card\'s OWN filter that duplicates a control-derived step is dropped, not doubled',
-    finalList.length === 5);
+    finalList.length === 4);
 
   // The oracle for "what SHOULD this produce" is mergeDashboardFilters itself
   // (already node-tested above for order/dedup) — not a hand-written array — so

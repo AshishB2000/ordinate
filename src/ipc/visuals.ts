@@ -8,6 +8,7 @@ import type { VizDataResult } from '../analysis/vizData';
 import * as trace from '../engine/residentTrace';
 // The two resident fast paths `vizDataFor` tries before hydrating a row.
 import { residentPivotData, residentVizData } from './visualsResident';
+import { withPeriodOverlay } from './visualsOverlay';
 import { sanitizeEncoding, sanitizeChartType } from '../analysis/visuals';
 import type { VizEncoding } from '../analysis/visuals';
 import type { Cell, FilterStep } from '../data/transforms';
@@ -350,6 +351,8 @@ export type VizDataReply =
       warnings: string[];
       /** How the category axis was bucketed — see analysis/categoryKey. */
       category?: VizDataResult['category'];
+      /** Present when a period overlay was drawn — see ./visualsOverlay. */
+      overlay?: { kind: 'previous_year'; caption?: string; pct?: number };
     }
   | { ok: false; error: string; tooLarge?: true };
 
@@ -464,7 +467,7 @@ export function register() {
       // renderer input, and both paths below consume the sanitized values.
       const enc = sanitizeEncoding(encoding);
       const flt = visuals.sanitizeFilters(filters);
-      return await vizDataFor(projectId, datasetId, enc, flt);
+      return await withPeriodOverlay(await vizDataFor(projectId, datasetId, enc, flt), projectId, datasetId, enc, flt, vizDataFor);
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute the visual data' };
     }

@@ -326,6 +326,7 @@ function drillChipText(f: any): string {
   if (!f || typeof f !== 'object') return '';
   const col = String(f.column ?? '');
   const op = String(f.op ?? '');
+  if (op === 'period') return col + ': ' + periodLabel(f.period);
   if (op === 'is_empty') return col + ' is empty';
   if (op === 'not_empty') return col + ' is not empty';
   if (op === 'in' || op === 'not in') {

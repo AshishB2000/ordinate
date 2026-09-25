@@ -684,6 +684,7 @@ async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void>
   renderVizInArea(area, data, type, entry, 'v', {
     projectId: currentProjectId, datasetId: visual.datasetId, encoding: visual.encoding, filters: merged,
   });
+  paintOverlayCaption(area, res, type);
   // Cross-filter first: when it is on it owns the plain click (it writes), and
   // drilling stays available through the ⋯ menu. Otherwise the click drills.
   // Drilling is a READ, so it is offered on a published snapshot too.

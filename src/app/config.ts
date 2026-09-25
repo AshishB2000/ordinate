@@ -7,6 +7,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
+import { sanitizeCalendar, setCalendar } from '../analysis/dateIntel';
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
 export interface LegacyProviderEntry { apiKey?: string | null; endpoint?: string; model: string }
@@ -39,6 +40,13 @@ export interface MemoryModel { mode: string; provider: string | null; model: str
 // quietly do nothing. `alertExplain` is opt-in because it spends a model call.
 interface Notifications { sound: boolean; desktop: boolean; alerts: boolean; alertExplain: boolean }
 
+/**
+ * Workspace formats. For now the CALENDAR half — first day of week and fiscal
+ * year start month — which every relative period ("this fiscal quarter") is
+ * resolved under (src/analysis/dateIntel.ts).
+ */
+export interface Formats { weekStart: number; fiscalYearStart: number }
+
 // Per-connection secret (pg password, URL auth token). Stored EXACTLY like an API
 // key: plaintext in userData/config.json (gitignored), keyed by the connection's
 // generated UUID. NEVER written into a project's connections/*.json, NEVER copied
@@ -60,6 +68,7 @@ interface Config {
   prompt: string;
   globalRules: string;
   notifications: Notifications;
+  formats: Formats;
   /**
    * The master switch for unattended dataset refresh. ON by default: a schedule
    * a user set is a schedule they want run, and this exists to stop it globally
@@ -166,6 +175,8 @@ const DEFAULTS: Omit<Config, 'providers' | 'byok'> = {
   // `alerts`/`alertExplain` are the alert rules' own switches — see the
   // Notifications interface above for why one of them defaults the other way.
   notifications: { sound: false, desktop: false, alerts: true, alertExplain: false },
+  // Monday weeks and calendar-year quarters until the user says otherwise.
+  formats: { weekStart: 1, fiscalYearStart: 1 },
   autoRefresh: true,
   // AI Copilot panel is ON by default — it stays fully optional (execution-gated),
   // but the user can also switch it OFF entirely from the panel's toggle.
@@ -229,6 +240,7 @@ function sanitize(input: any): Partial<Config> {
       alertExplain: Boolean(input.notifications.alertExplain),
     };
   }
+  if (input.formats && typeof input.formats === 'object') out.formats = sanitizeCalendar(input.formats);
   if (typeof input.copilotEnabled === 'boolean') out.copilotEnabled = input.copilotEnabled;
   if (typeof input.sampleSeeded === 'boolean') out.sampleSeeded = input.sampleSeeded;
   // Whitelisted so it survives disk load ({...DEFAULTS, ...sanitize(onDisk)}).
@@ -325,6 +337,9 @@ function migrate(cfg: any): Config {
 // goes through save().
 export function persist(cfg: Config): void {
   cache = cfg;
+  // Every write passes here, reset-to-defaults included, so the calendar the
+  // date evaluators read can never lag the one on disk.
+  setCalendar(cfg.formats);
   // Atomic write (temp sibling → rename), mirroring the BI stores. config.json
   // holds every plaintext API key + connection secret; a crash / full disk mid-
   // write must never leave it truncated (which load() would then read as {} and
@@ -361,6 +376,7 @@ export function load(): Config {
   // carry them verbatim from disk, exactly like byok keys.
   if (onDisk.connectionSecrets && typeof onDisk.connectionSecrets === 'object') merged.connectionSecrets = onDisk.connectionSecrets;
   cache = migrate(merged);
+  setCalendar(cache.formats);
   return cache;
 }
 

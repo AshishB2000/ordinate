@@ -53,10 +53,13 @@ async function anSelectCard(cardId: string | null): Promise<void> {
 
   // Fields + wells are a VISUAL card's business. A text or metric card still
   // selects, and still gets Properties — it just has no encoding to edit.
+  anRenderKpiProps(card && card.type === 'metric' ? card : null);
   if (!card || card.type !== 'visual' || !card.visualId || !currentProjectId) {
     anVisual = null;
     anColumns = [];
-    anShowEncoding(false, card ? 'That card has no fields to edit.' : 'Select a visual card to see its fields.');
+    anShowEncoding(false, card
+      ? (card.type === 'metric' ? 'A KPI card — its figure is set when it is added. Compare it with another period here.' : 'That card has no fields to edit.')
+      : 'Select a visual card to see its fields.');
     return;
   }
 

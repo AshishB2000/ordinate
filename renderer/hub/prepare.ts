@@ -93,6 +93,7 @@ function stepSummaryText(step: any): string {
     case 'calculated_field':
       return 'Calculated field "' + step.name + '" = ' + step.expression;
     case 'filter':
+      if (step.op === 'period') return 'Filter: ' + step.column + ' in ' + periodLabel(step.period).toLowerCase();
       if (step.op === 'is_empty') return 'Filter: ' + step.column + ' is empty';
       if (step.op === 'not_empty') return 'Filter: ' + step.column + ' is not empty';
       if (isListFilterOp(step.op)) {

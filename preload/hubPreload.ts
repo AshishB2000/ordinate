@@ -552,6 +552,14 @@ contextBridge.exposeInMainWorld('hub', {
   // { ok, id, name, value, display, format, definitionText } | { ok:false, error }.
   metricValue: (projectId: string, id: string, filters?: any) =>
     ipcRenderer.invoke('metric:value', { projectId, id, filters }),
+  // A KPI card's Compare: the card's figure AND the same figure under the
+  // filters' date range moved to the comparison period, resolved in main.
+  // { ok, value, previous, delta, pct, label, prior, display?, previousDisplay?,
+  //   deltaDisplay?, direction? } | { ok, reason: 'no_date_filter', label }.
+  compareMetric: (projectId: string, card: any, filters: any, compare: any) =>
+    ipcRenderer.invoke('metric:compare', { projectId, card, filters, compare }),
+  // A relative period → its dates today, under the workspace calendar.
+  resolvePeriod: (period: any) => ipcRenderer.invoke('period:resolve', period),
   // The editor's live figure for a definition that is not saved yet — same
   // resolver, same formatter, so the preview cannot disagree with the record.
   previewMetric: (projectId: string, datasetId: string, definition: any, filters?: any, format?: any) =>

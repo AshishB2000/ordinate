@@ -99,6 +99,7 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
     if (mr && mr.ok !== false) {
       valEl.textContent = mr.display || '—';
       if (!m.label && mr.name) labelEl.textContent = mr.name;
+      void paintMetricCompare(card, body);
       return;
     }
   }
@@ -120,6 +121,7 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
   if (r.value == null) { valEl.textContent = '—'; return; }
   // Reuse the shared chart number formatter (auto/plain/thousands/compact/…).
   valEl.textContent = fmtWith(r.value, m.format || 'auto');
+  void paintMetricCompare(card, body);
 }
 
 // The heading is NOT drawn here. dashCardTitle (dashGrid.ts) already puts it in
@@ -312,6 +314,7 @@ function dashFilters(): any[] {
 }
 
 function dashFilterLabel(step: any): string {
+  if (step.op === 'period') return `${step.column}: ${periodLabel(step.period)}`;
   const opLabel = (DASH_FILTER_OPS.find((o) => o.value === step.op) || { label: step.op }).label;
   if (DASH_VALUELESS_OPS.has(step.op)) return `${step.column} ${opLabel}`;
   if (isListFilterOp(step.op)) {
@@ -445,7 +448,8 @@ async function distinctColumnOptions(
 // Mirrors src/dashboardFilters.stepKey — `values` is part of the identity, or
 // two different `in` lists on one column would look like the same chip.
 function dashStepKey(s: any): string {
-  return JSON.stringify([s.column, s.op, s.value == null ? null : s.value, s.values == null ? null : s.values]);
+  return JSON.stringify([s.column, s.op, s.value == null ? null : s.value, s.values == null ? null : s.values,
+    s.period == null ? null : s.period]);
 }
 
 // + Filter: dataset → column → the type-aware dialog. The dialog replaces the

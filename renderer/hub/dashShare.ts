@@ -281,9 +281,7 @@ function formatControlSummaryPart(card: any): string {
       ? vals.slice(0, 5).join(', ') + ', and ' + (vals.length - 5) + ' more'
       : vals.join(', ');
   } else if (control.kind === 'date_range') {
-    const from = cur.from || '';
-    const to = cur.to || '';
-    value = from && to ? from + '–' + to : (from || to);
+    value = ppIsRelative(cur) || cur.from || cur.to ? periodValueText(cur) : '';
   } else {
     value = cur.value || '';
   }

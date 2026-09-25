@@ -26,7 +26,11 @@ async function handleAddControl(): Promise<void> {
   // the notes at the very bottom. The field stays on the record because every
   // card carries one; `dashFindSlot` now skips control cards so a zeroed
   // layout cannot block the top-left cell either.
-  pushCard({ id: dashUuid(), type: 'control', control, layout: { x: 0, y: 0, w: 0, h: 0 } });
+  const id = dashUuid();
+  // The preview doubles as the default, and a default the author just picked
+  // should be what the sheet shows NOW — not only after it is reopened.
+  if (control.default) controlState.set(id, control.default);
+  pushCard({ id, type: 'control', control, layout: { x: 0, y: 0, w: 0, h: 0 } });
 }
 
 // The three control kinds, named once — read here (dialog tiles) and from
@@ -35,7 +39,7 @@ async function handleAddControl(): Promise<void> {
 const CONTROL_KINDS_UI: Array<{ kind: string; label: string; hint: string }> = [
   { kind: 'dropdown', label: 'Dropdown', hint: 'Pick one value' },
   { kind: 'multi', label: 'Multi-select', hint: 'Pick several values' },
-  { kind: 'date_range', label: 'Date range', hint: 'From / to' },
+  { kind: 'date_range', label: 'Date range', hint: 'Relative or fixed dates' },
 ];
 const CONTROL_KIND_LABELS: Record<string, string> = Object.fromEntries(
   CONTROL_KINDS_UI.map((k) => [k.kind, k.label]),
@@ -206,8 +210,14 @@ function openControlDialog(
         opt.textContent = String(c.name) + (c.type ? ' (' + c.type + ')' : '');
         colSel.appendChild(opt);
       });
-      // Switching kind re-orders the list; a column already chosen survives it.
-      const want = keep || (editing && existing.column ? String(existing.column) : '') || bestColumn();
+      // Switching kind re-orders the list; a column already chosen survives it —
+      // unless the kind is now Date range and the choice is not a date while a
+      // date column exists: a period over `category` keeps no rows, and every
+      // card on the sheet would go blank the moment the control was added.
+      const typeOf = (n: string): string => String((colsCache.find((c) => c && c.name === n) || {}).type || '');
+      const hasDate = colsCache.some((c) => c && c.type === 'date');
+      const keepFits = !!keep && !(kind === 'date_range' && hasDate && typeOf(keep) !== 'date');
+      const want = (keepFits ? keep : '') || (editing && existing.column ? String(existing.column) : '') || bestColumn();
       if ([...colSel.options].some((o) => o.value === want)) colSel.value = want;
       ok.disabled = colSel.options.length === 0;
     };
@@ -312,30 +322,13 @@ function openControlDialog(
           });
         });
       } else if (kind === 'date_range') {
-        const row = document.createElement('div');
-        row.className = 'dash-ctrl-daterange';
-        const from = document.createElement('input');
-        from.type = 'date';
-        from.className = 'dash-ctrl-date';
-        const sep = document.createElement('span');
-        sep.className = 'dash-ctrl-date-sep';
-        sep.textContent = '–';
-        const to = document.createElement('input');
-        to.type = 'date';
-        to.className = 'dash-ctrl-date';
-        if (seed) { from.value = seed.from || ''; to.value = seed.to || ''; }
-        const commit = (): void => {
-          const next: any = {};
-          if (from.value) next.from = from.value;
-          if (to.value) next.to = to.value;
-          previewValue = next;
-        };
-        from.addEventListener('change', commit);
-        to.addEventListener('change', commit);
-        row.appendChild(from);
-        row.appendChild(sep);
-        row.appendChild(to);
-        previewWrap.appendChild(row);
+        // The same picker the filter bar opens — what is picked here is the
+        // control's default, relative or fixed.
+        previewValue = seed && (ppIsRelative(seed) || seed.from || seed.to) ? { ...seed } : {};
+        previewWrap.appendChild(buildPeriodPanel({
+          value: previewValue.preset || previewValue.from || previewValue.to ? previewValue : null,
+          onChange: (v) => { previewValue = v || {}; },
+        }));
       } else {
         const sel = document.createElement('select');
         sel.className = 'dash-ctrl-select';
@@ -400,7 +393,7 @@ function openControlDialog(
       const hasDefault = kind === 'multi'
         ? Array.isArray(previewValue.values) && previewValue.values.length > 0
         : kind === 'date_range'
-          ? !!(previewValue.from || previewValue.to)
+          ? !!(ppIsRelative(previewValue) || previewValue.from || previewValue.to)
           : !!previewValue.value;
       if (hasDefault) out.default = previewValue;
       close(out);

@@ -13,8 +13,9 @@
 //            is empty / is not empty via the Condition tab.
 //   number → min / max, which compiles to two AND-ed steps (already supported),
 //            plus the comparison operators.
-//   date   → from / to. Relative dates ("last 30 days") are deliberately OUT OF
-//            SCOPE: they need a design of their own, not a checkbox here.
+//   date   → from / to, or a RELATIVE period ("last 30 days", "this fiscal
+//            quarter") stored as its preset and resolved in main at query
+//            time — the picker is periodPicker.ts, shared with the filter bar.
 //
 // This is Tableau's model deliberately, not Power BI's. Power BI splits the same
 // job into a Basic/Advanced toggle capped at two conditions — two modes for one
@@ -87,16 +88,15 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
     box.appendChild(sub);
 
     // ── Mode tabs ────────────────────────────────────────────────────────────
-    // A date column has ONE mode, so it gets no tab strip — a single tab is
-    // furniture, not a choice.
     const modes: Array<{ id: string; label: string }> =
       type === 'number'
         ? [{ id: 'range', label: 'Range' }, { id: 'cond', label: 'Condition' }]
         : type === 'date'
-          ? [{ id: 'range', label: 'Range' }]
+          ? [{ id: 'range', label: 'Range' }, { id: 'relative', label: 'Relative' }]
           : [{ id: 'values', label: 'Values' }, { id: 'cond', label: 'Condition' }];
 
     let mode = modes[0].id;
+    if (existing.op === 'period') mode = 'relative';
     // Re-open in the mode that matches the step being edited, so editing a
     // `contains` filter doesn't drop the user on a checkbox list.
     if (existing.op) {
@@ -170,6 +170,7 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
     if (existing.op === '>=') rangeMin = condVal;
     if (existing.op === '<=') rangeMax = condVal;
 
+    let relSpec: any = existing.op === 'period' && existing.period ? { ...existing.period } : null;
     let isoDates = true; // assumed until a sample says otherwise
     let searchTerm = '';
     let searchTimer: number | null = null;
@@ -180,6 +181,9 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
       if (mode === 'values') {
         if (selected.size === 0) return [];
         return [{ type: 'filter', column, op: exclude ? 'not in' : 'in', values: [...selected] }];
+      }
+      if (mode === 'relative') {
+        return relSpec ? [{ type: 'filter', column, op: 'period', period: relSpec }] : [];
       }
       if (mode === 'range') {
         const out: any[] = [];
@@ -200,7 +204,13 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
     function paintBody(): void {
       body.innerHTML = '';
       if (mode === 'values') paintValues();
-      else if (mode === 'range') paintRange();
+      else if (mode === 'relative') {
+        body.appendChild(buildPeriodPanel({
+          value: relSpec,
+          relativeOnly: true,
+          onChange: (v) => { relSpec = v; syncApply(); },
+        }));
+      } else if (mode === 'range') paintRange();
       else paintCondition();
     }
 

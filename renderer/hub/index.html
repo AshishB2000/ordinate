@@ -1446,6 +1446,10 @@
             <header class="an-pane-head"><span class="an-pane-title">Properties</span></header>
             <div class="an-pane-body" id="an-props-body">
               <p class="an-pane-hint" id="an-props-hint">Select a visual card to edit it.</p>
+              <!-- A KPI card's own settings (kpiCompare.ts) — what its figure is
+                   compared with. Beside the hint, not inside the tabs: a metric
+                   card has no encoding, so the tabs are hidden for it. -->
+              <div class="an-kpi-props" id="an-kpi-props" hidden></div>
               <div id="an-props-inner" hidden>
                 <div class="an-tabs tabs" id="an-tabs" role="tablist" aria-label="Visual settings">
                   <button class="an-tab tab is-on" type="button" role="tab" id="an-tab-build"
@@ -2408,6 +2412,17 @@
         <p class="viz-enc-note js-enc-cat-note" hidden></p>
       </div>
 
+      <!-- Analytics: shown only for a DATE category (encodingForm.syncGrain).
+           The overlay rides on the encoding because it changes the data. -->
+      <div class="viz-build-row viz-analytics-row js-enc-analytics-row" hidden>
+        <label class="viz-field-label" for="viz-overlay-select">Analytics</label>
+        <select class="viz-select js-enc-overlay" id="viz-overlay-select" aria-label="Period overlay">
+          <option value="">No period overlay</option>
+          <option value="previous_year">Overlay: vs previous year</option>
+        </select>
+        <p class="viz-enc-note viz-analytics-hint">Draws the same periods a year earlier as a muted series, on line and column charts.</p>
+      </div>
+
       <div class="viz-build-row" data-well="values">
         <label class="viz-field-label">Measures</label>
         <div class="viz-values-list js-enc-values"></div>
@@ -2634,6 +2649,7 @@
 <script src="dataSection.js"></script>
 <script src="captureDataset.js"></script>
 <script src="filterValues.js"></script>
+<script src="periodPicker.js"></script>
 <script src="filterDialog.js"></script>
 <!-- The one calculated-field editor, opened by prepare.js, authoringRail.js and
      the AI dock's proposal card. Before all three: they call into it. -->
@@ -2687,6 +2703,7 @@
 <script src="dashAdd.js"></script>
 <script src="dashAddControl.js"></script>
 <script src="dashFiltersUi.js"></script>
+<script src="kpiCompare.js"></script>
 <script src="dashControls.js"></script>
 <script src="dashControlBar.js"></script>
 <script src="dashAi.js"></script>

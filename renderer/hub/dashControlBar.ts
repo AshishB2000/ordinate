@@ -50,7 +50,7 @@ function controlIsAll(card: any): boolean {
   if (v === undefined) return true;
   const kind = card.control && card.control.kind;
   if (kind === 'multi') return !Array.isArray(v.values) || v.values.length === 0;
-  if (kind === 'date_range') return !v.from && !v.to;
+  if (kind === 'date_range') return !ppIsRelative(v) && !v.from && !v.to;
   return !v.value;
 }
 

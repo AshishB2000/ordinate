@@ -36,6 +36,8 @@ import { sanitizeChartType, sanitizeEncoding, sanitizeOverrides, sanitizeFilters
 import type { Visual } from './visuals';
 import { sanitizeSteps } from '../data/transforms';
 import type { FilterStep } from '../data/transforms';
+import { sanitizePeriod, sanitizeCompare } from './dateIntel';
+import type { CompareMode, PeriodPreset } from './dateIntel';
 
 export type CardType = 'visual' | 'text' | 'metric' | 'control';
 export type CardAction = 'delete-sample';
@@ -52,7 +54,8 @@ export type ControlKind = 'dropdown' | 'multi' | 'date_range';
 export type ControlValue =
   | { value: string } // dropdown
   | { values: string[] } // multi
-  | { from?: string; to?: string }; // date_range (ISO dates as stored text)
+  | { from?: string; to?: string } // date_range: two fixed ISO dates…
+  | { preset: PeriodPreset; n?: number }; // …or a RELATIVE period, resolved at query time
 
 export interface CardControl {
   kind: ControlKind;
@@ -91,6 +94,12 @@ export interface CardMetric {
    * guessing one from `format` above.
    */
   metricId?: string;
+  /**
+   * Compare the figure with another period — computed on every render as a
+   * SECOND scoped resolution (the same filters with their date ranges moved),
+   * never stored. `from`/`to` only for `custom`.
+   */
+  compare?: { mode: CompareMode; from?: string; to?: string };
 }
 
 /**
@@ -241,7 +250,12 @@ function sanitizeControlDefault(kind: ControlKind, raw: unknown): ControlValue |
     if (!Array.isArray(o.values)) return undefined;
     return { values: o.values.filter((v): v is string => typeof v === 'string') };
   }
-  // date_range
+  // date_range — a relative preset wins over dates when both are present.
+  if (typeof o.preset === 'string' && o.preset !== 'custom') {
+    const p = sanitizePeriod(o);
+    if (!p) return undefined;
+    return p.n != null ? { preset: p.preset, n: p.n } : { preset: p.preset };
+  }
   const from = typeof o.from === 'string' ? o.from : undefined;
   const to = typeof o.to === 'string' ? o.to : undefined;
   if (from === undefined && to === undefined) return undefined;
@@ -336,6 +350,8 @@ export function sanitizeCard(raw: unknown): Card | null {
   if (typeof m.format === 'string' && METRIC_FORMATS.has(m.format)) {
     metric.format = m.format as CardMetric['format'];
   }
+  const compare = sanitizeCompare(m.compare);
+  if (compare) metric.compare = compare;
   card.metric = metric;
   return card;
 }

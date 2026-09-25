@@ -385,5 +385,7 @@ export function publicConfig() {
     copilotEnabled: cfg.copilotEnabled !== false,
     // Home "Starred" pins — a flat "type:id" list, safe to expose (no secrets).
     starred: [...(cfg.starred || [])],
+    // Formats carry no secrets: the renderer needs them to NAME a fiscal period.
+    formats: { ...(cfg.formats || { weekStart: 1, fiscalYearStart: 1 }) },
   };
 }
