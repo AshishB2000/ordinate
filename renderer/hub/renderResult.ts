@@ -20,6 +20,11 @@ function renderVizInArea(container, data, type, entry, turnIdx, source?) {
   if (old) { (Array.isArray(old) ? old : [old]).forEach(c => { try { c.destroy(); } catch (_) {} }); chartInstances.delete(container); }
   destroyMapInContainer(container);
   container.innerHTML = '';
+  // The Values / ⋯ cluster of a surface with a header slot lives OUTSIDE the
+  // container, so clearing the container never cleared it — every redraw of the
+  // builder stacked one more cluster in the stage head.
+  const slot = controlsSlotFor(container);
+  if (slot) slot.innerHTML = '';
 
   // ── The Mosaic seam: ONE branch, default off (localStorage 'scMosaic'). ──
   // Any miss — flag off, no identity, a type or encoding vgplot can't express,

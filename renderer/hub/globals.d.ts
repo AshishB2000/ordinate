@@ -123,6 +123,10 @@ declare global {
       renameProject(id: string, name: string): Promise<any>;
       deleteProject(id: string): Promise<{ ok: boolean }>;
       openProject(id: string): Promise<any>;
+      projectsOverview(): Promise<any[]>;
+      archiveProject(id: string, archived: boolean): Promise<any>;
+      exportProject(id: string): Promise<any>;
+      importProject(): Promise<any>;
       // ── Datasets (file-based data sources) ──
       pickAndParseDataset(sheetName?: string, filePath?: string): Promise<any>;
       parsePasteDataset(text: string): Promise<any>;
@@ -156,7 +160,7 @@ declare global {
         limit?: number,
         search?: string,
       ): Promise<{ values: string[]; total: number }>;
-      deleteDataset(projectId: string, id: string): Promise<{ ok: boolean }>;
+      deleteDataset(projectId: string, id: string): Promise<{ ok: boolean; name?: string; cascaded?: number }>;
       datasetStats(projectId: string, datasetId: string): Promise<any>;
       datasetMedian(projectId: string, datasetId: string, column: string): Promise<any>;
       setDatasetAutoRefresh(projectId: string, datasetId: string, autoRefresh: string | null): Promise<any>;
@@ -260,7 +264,7 @@ declare global {
         id: string,
         patch: { name?: string; chartType?: string; encoding?: any; overrides?: any; filters?: any; favorite?: boolean },
       ): Promise<any>;
-      deleteVisual(projectId: string, id: string): Promise<{ ok: boolean }>;
+      deleteVisual(projectId: string, id: string, opts?: { permanent?: boolean }): Promise<{ ok: boolean }>;
       duplicateVisual(projectId: string, id: string): Promise<any>;
       suggestVisual(projectId: string, datasetId: string, intent?: string): Promise<any>;
       computeVisualData(projectId: string, datasetId: string, encoding: any, filters?: any): Promise<any>;
@@ -393,6 +397,21 @@ declare global {
       reportsDue(nowMs?: number): Promise<any>;
       reportsReveal(projectId: string, id: string): Promise<any>;
       onReportsRunDue(cb: () => void): void;
+      // ── Version history (src/ipc/versions.ts) ──
+      versionsList(projectId: string, type: string, id: string): Promise<any[]>;
+      versionsGet(projectId: string, type: string, id: string, key: string): Promise<any>;
+      versionsRestore(projectId: string, type: string, id: string, key: string): Promise<any>;
+      // ── First-run guidance (src/ipc/onboarding.ts) ──
+      onboardingStatus(): Promise<any>;
+      onboardingSet(patch: { collapsed?: boolean; dismissed?: boolean; coachSeen?: boolean }): Promise<{ ok: boolean }>;
+      // ── Lineage (src/ipc/lineage.ts) ──
+      lineageGet(projectId: string, type: string, id: string): Promise<any>;
+      // ── Trash (src/ipc/trash.ts) ──
+      trashList(projectId: string): Promise<any[]>;
+      trashRestore(projectId: string, type: string, id: string): Promise<any>;
+      trashPurge(projectId: string, type: string, id: string): Promise<{ ok: boolean }>;
+      trashEmpty(projectId: string): Promise<{ ok: boolean; removed: number }>;
+      onTrashChanged(cb: (o: { projectId: string }) => void): void;
       // ── AI Copilot (Week 11) ──
       copilotHistory(projectId: string, threadId?: string): Promise<any>;
       copilotThreads(projectId: string): Promise<any>;

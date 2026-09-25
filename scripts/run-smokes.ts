@@ -63,6 +63,9 @@ const SMOKES = [
   // After smoke-export, for the same reason it is after smoke-theme: this one
   // is also about what survives into a FILE, and it unzips the ones it makes.
   'smoke-reports',
+  // History, Trash, Lineage, Projects and first-run guidance. Its own fresh
+  // profile: the Get-started card and the coach marks only exist on first launch.
+  'smoke-workspace',
 ];
 
 const results: { name: string; code: number }[] = [];

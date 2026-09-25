@@ -194,6 +194,12 @@ contextBridge.exposeInMainWorld('hub', {
   deleteProject: (id: string) => ipcRenderer.invoke('projects:delete', { id }),
   // Load a single validated project to enter its workspace; returns Project or null.
   openProject: (id: string) => ipcRenderer.invoke('projects:open', { id }),
+  // The switcher's rows: counts, last opened, archived, the sample badge.
+  projectsOverview: () => ipcRenderer.invoke('projects:overview'),
+  archiveProject: (id: string, archived: boolean) => ipcRenderer.invoke('projects:archive', { id, archived }),
+  // A .ordinate bundle through the NATIVE save/open dialog — main picks the path.
+  exportProject: (id: string) => ipcRenderer.invoke('projects:export', { id }),
+  importProject: () => ipcRenderer.invoke('projects:import'),
   // ── Datasets (file-based data sources) ──
   // Open the native file picker (or, with { filePath }, re-parse a picked file's
   // sheet); returns { ok, canceled?, filePath?, fileName?, sourceKind?, preview? }.
@@ -429,7 +435,9 @@ contextBridge.exposeInMainWorld('hub', {
   updateVisual: (projectId: string, id: string, patch: { name?: string; chartType?: string; encoding?: any; overrides?: any; filters?: any; favorite?: boolean }) =>
     ipcRenderer.invoke('visual:update', { projectId, id, ...patch }),
   // Delete a visual; returns { ok: boolean }.
-  deleteVisual: (projectId: string, id: string) => ipcRenderer.invoke('visual:delete', { projectId, id }),
+  // To the Trash; `permanent` only for taking back a visual an Assistant edit made.
+  deleteVisual: (projectId: string, id: string, opts?: { permanent?: boolean }) =>
+    ipcRenderer.invoke('visual:delete', { projectId, id, permanent: !!(opts && opts.permanent) }),
   // Duplicate a visual into an independent copy; returns { ok, visual } | { ok:false, error }.
   duplicateVisual: (projectId: string, id: string) => ipcRenderer.invoke('visual:duplicate', { projectId, id }),
   // OPTIONAL AI chart suggestions (structure only, execution-gated). Returns
@@ -643,6 +651,31 @@ contextBridge.exposeInMainWorld('hub', {
   reportsReveal: (projectId: string, id: string) => ipcRenderer.invoke('reports:reveal', { projectId, id }),
   // Main rings the bell at the end of the refresh tick; the hub does the work.
   onReportsRunDue: (cb: () => void) => ipcRenderer.on('reports:run-due', () => cb()),
+  // ── Version history (src/ipc/versions.ts) ──
+  // type is 'dashboard' | 'visual' | 'metric' | 'report' | 'dataset'. A restore
+  // is a SAVE of the old content through the record's own store — append-only.
+  versionsList: (projectId: string, type: string, id: string) =>
+    ipcRenderer.invoke('versions:list', { projectId, type, id }),
+  versionsGet: (projectId: string, type: string, id: string, key: string) =>
+    ipcRenderer.invoke('versions:get', { projectId, type, id, key }),
+  versionsRestore: (projectId: string, type: string, id: string, key: string) =>
+    ipcRenderer.invoke('versions:restore', { projectId, type, id, key }),
+  // ── First-run guidance (src/ipc/onboarding.ts) — ticks are computed in main ──
+  onboardingStatus: () => ipcRenderer.invoke('onboarding:status'),
+  onboardingSet: (patch: { collapsed?: boolean; dismissed?: boolean; coachSeen?: boolean }) =>
+    ipcRenderer.invoke('onboarding:set', patch),
+  // ── Lineage (src/ipc/lineage.ts) — the graph around one record, laid out ──
+  lineageGet: (projectId: string, type: string, id: string) =>
+    ipcRenderer.invoke('lineage:get', { projectId, type, id }),
+  // ── Trash (src/ipc/trash.ts) — every delete lands here for 30 days ──
+  trashList: (projectId: string) => ipcRenderer.invoke('trash:list', { projectId }),
+  trashRestore: (projectId: string, type: string, id: string) =>
+    ipcRenderer.invoke('trash:restore', { projectId, type, id }),
+  trashPurge: (projectId: string, type: string, id: string) =>
+    ipcRenderer.invoke('trash:purge', { projectId, type, id }),
+  trashEmpty: (projectId: string) => ipcRenderer.invoke('trash:empty', { projectId }),
+  onTrashChanged: (cb: (o: { projectId: string }) => void) =>
+    ipcRenderer.on('trash:changed', (_e, o) => cb(o)),
   // ── AI Copilot (Week 11) — per-project, context-aware chat ──
   // Load one conversation's turns (survives reload); returns { ok, turns, threadId }.
   // threadId is optional and defaults to the most recent conversation, so every

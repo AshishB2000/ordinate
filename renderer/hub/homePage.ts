@@ -34,6 +34,15 @@ let starredSet = new Set<string>();
 // pin); only the Recent list narrows.
 let recentFilter = 'all';
 
+// Recent is the ACTIVE project's unless "All projects" is on. A per-viewer
+// preference, so localStorage — read defensively, since it can be missing.
+let recentAllProjects = false;
+try { recentAllProjects = localStorage.getItem('ordinate.recentAllProjects') === '1'; } catch (_) { /* default: this project */ }
+
+function recentInScope(it: any): boolean {
+  return recentAllProjects || !currentProjectId || String(it.projectId) === String(currentProjectId);
+}
+
 // Recent rows are datasets or analyses; an "analysis" record IS a user-facing
 // dashboard (same rename as everywhere else), so the Dashboards pill matches
 // both 'analysis' and the legacy 'dashboard' type.
@@ -276,7 +285,9 @@ function paintHome(): void {
   const count = document.getElementById('home-recent-count');
 
   const starred = recentItems.filter((it) => starredSet.has(starKey(it)));
-  const rest = recentItems.filter((it) => !starredSet.has(starKey(it)) && recentMatchesFilter(it));
+  const rest = recentItems.filter((it) => !starredSet.has(starKey(it)) && recentMatchesFilter(it) && recentInScope(it));
+  const scopeBtn = document.getElementById('home-scope-all');
+  if (scopeBtn) scopeBtn.setAttribute('aria-pressed', String(recentAllProjects));
 
   if (starredSec) starredSec.hidden = false;
   if (starredRows) {
@@ -308,7 +319,9 @@ function paintHome(): void {
           variant: 'recent',
           iconName: 'list',   // no clock in the sprite; the section IS a list
           title: 'Your work will collect here',
-          line: 'Every dataset and dashboard you open shows up in this list — newest first, across all projects.',
+          line: recentAllProjects
+            ? 'Every dataset and dashboard you open shows up in this list — newest first, across all projects.'
+            : 'Every dataset and dashboard in this project shows up here, newest first. “All projects” shows the rest.',
           actionLabel: 'Bring in some data',
           // The same door the quick-start row opens, so the empty state ends in
           // the action it is describing rather than in advice.
@@ -392,6 +405,17 @@ function initHomePage(): void {
       filter.querySelectorAll('.home-pill').forEach((p) => {
         (p as HTMLElement).classList.toggle('is-active', (p as HTMLElement).dataset.filter === recentFilter);
       });
+      paintHome();
+    });
+  }
+  // This project / All projects, over Recent only — Starred is a pin, and a
+  // pin is shown wherever it lives.
+  const scope = document.getElementById('home-scope-all');
+  if (scope) {
+    scope.addEventListener('click', () => {
+      recentAllProjects = !recentAllProjects;
+      try { localStorage.setItem('ordinate.recentAllProjects', recentAllProjects ? '1' : '0'); } catch (_) { /* per session then */ }
+      recentExpanded = false;
       paintHome();
     });
   }
