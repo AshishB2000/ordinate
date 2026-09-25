@@ -174,6 +174,8 @@ function makeRecentRow(it: any): HTMLElement {
   row.dataset.type = String(it.type || '');
   row.dataset.id = String(it.id || '');
   row.dataset.projectId = String(it.projectId || '');
+  // ⌘-click → background tab (tabStrip.ts), for a record of the open project.
+  row.dataset.recKind = String(it.type || ''); row.dataset.recId = String(it.id || ''); row.dataset.recProject = String(it.projectId || '');
 
   const icon = document.createElement('span');
   icon.className = 'home-row-icon';

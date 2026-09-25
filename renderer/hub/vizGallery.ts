@@ -201,6 +201,7 @@ function makeVisualCard(v: any): HTMLElement {
   const chartType = (v && v.chartType) ? String(v.chartType) : 'column';
   const card = document.createElement('div');
   card.className = 'viz-card' + (v && v.favorite === true ? ' viz-card--fav' : '');
+  card.dataset.recKind = 'visual'; card.dataset.recId = id; // ⌘-click → background tab (tabStrip.ts)
 
   // The whole card is ONE button, so a card is a single Tab stop. The star and
   // the ⋯ menu are siblings of it (nested buttons are invalid HTML) positioned

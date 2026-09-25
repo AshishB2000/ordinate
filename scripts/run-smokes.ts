@@ -63,6 +63,9 @@ const SMOKES = [
   // After smoke-export, for the same reason it is after smoke-theme: this one
   // is also about what survives into a FILE, and it unzips the ones it makes.
   'smoke-reports',
+  // Workflow depth — answers with charts, stories, the catalog, the five new
+  // chart types and record tabs, in ONE launch (sections in scripts/wf*.ts).
+  'smoke-workflow',
 ];
 
 const results: { name: string; code: number }[] = [];

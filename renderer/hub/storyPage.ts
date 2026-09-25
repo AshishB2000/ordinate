@@ -51,6 +51,8 @@ async function stOpen(id: string, opts: { focusEnd?: boolean } = {}): Promise<vo
     s = null;
   }
   if (!s || !s.id) { showToast('That story could not be opened.'); return; }
+  // The dashboard editor lives on the same section: leave it (saved) first.
+  if (dashCurrent) await handleBackToList();
   if (currentSection !== 'analyses') selectSection('analyses');
   rbSelectTab('stories');
   stStory = { id: s.id, name: s.name, blocks: Array.isArray(s.blocks) ? s.blocks : [] };

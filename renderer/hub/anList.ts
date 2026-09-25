@@ -186,6 +186,7 @@ async function refreshAnalysisListKeepEditor(): Promise<void> {
 function makeAnListItem(a: any, previews: any[]): HTMLElement {
   const card = document.createElement('div');
   card.className = 'an-card';
+  card.dataset.recKind = 'analysis'; card.dataset.recId = String(a.id); // ⌘-click → background tab (tabStrip.ts)
 
   // The whole card is ONE button, so a card is a single Tab stop; the ⋯ trigger
   // is a sibling positioned over the preview (nested buttons are invalid HTML).

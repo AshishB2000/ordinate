@@ -66,14 +66,15 @@ import { captureProjectId, persistableResult, seedCaptureConversation, setActive
 import { resolveUserPath } from './cli/userPath';
 import { bootstrapNotification, maybeNotify, maybeNotifyDone } from './app/notify';
 
-/** Whether the hub is on screen and focused — the one thing notify.ts needs to know. */
-const hubFocused = (): boolean => !!(hubWindow && !hubWindow.isDestroyed() && hubWindow.isFocused());
+/** Whether a hub window is on screen and focused — the one thing notify.ts needs to know. */
+const hubFocused = (): boolean => hubs.all().some((w) => w.isFocused());
 
 /** Bring the hub forward, opening it if it is gone. Three callers, one rule. */
 const focusHub = (): void => {
-  if (!hubWindow || hubWindow.isDestroyed()) { openHub(); return; }
-  if (hubWindow.isMinimized()) hubWindow.restore();
-  hubWindow.focus();
+  const w = hubs.primary();
+  if (!w) { openHub(); return; }
+  if (w.isMinimized()) w.restore();
+  w.focus();
 };
 
 // Packaged macOS/Linux GUI launches inherit a stripped PATH (no Homebrew, nvm,
@@ -87,11 +88,13 @@ if (app.isPackaged) {
 
 import { createOverlayWindow } from './windows/overlayWindow';
 import { createHubWindow } from './windows/hubWindow';
+// Every hub window main has open. Pushes go to the PRIMARY (once-only work) or
+// to all of them (state each window paints) — see the module header.
+import * as hubs from './windows/hubRegistry';
 
 import { platformDefaultHotkey, hotkeyLabel } from './app/hotkey';
 
 let overlayWindow: BrowserWindow | null = null;
-let hubWindow: BrowserWindow | null = null;
 
 // Whether the global shortcut registered successfully on startup.
 let hotkeyRegistered = true;
@@ -217,29 +220,30 @@ async function startCapture(): Promise<void> {
   }
 }
 
+/**
+ * Run `fn` on the PRIMARY hub window — opening one first, and waiting for it to
+ * load, when none is open. Every "bring the hub up and tell it X" in this file
+ * is this one shape; it was four hand-written copies of it.
+ */
+function withHub(fn: (w: BrowserWindow) => void): void {
+  const w = hubs.primary();
+  if (w) { fn(w); return; }
+  const fresh = hubs.add(createHubWindow());
+  fresh.webContents.once('did-finish-load', () => { if (!fresh.isDestroyed()) fn(fresh); });
+}
+
 // Open the hub and show the Execution mode settings (the modern setup surface —
 // Local CLI + BYOK live here). Replaces the old standalone/onboarding setup.
 function openExecutionSettings(): void {
-  if (!hubWindow || hubWindow.isDestroyed()) {
-    hubWindow = createHubWindow();
-    hubWindow.on('closed', () => { hubWindow = null; });
-    hubWindow.webContents.once('did-finish-load', () => {
-      if (hubWindow && !hubWindow.isDestroyed()) {
-        hubWindow.webContents.send('hub:open-settings', 'exec');
-      }
-    });
-  } else {
-    hubWindow.focus();
-    hubWindow.webContents.send('hub:open-settings', 'exec');
-  }
+  withHub((w) => { w.focus(); w.webContents.send('hub:open-settings', 'exec'); });
 }
 
 // Push the current hotkey registration state to the hub (both success and
 // failure) so the banner shows on failure and clears on success.
 function notifyHotkeyState(): void {
-  if (!hubWindow || hubWindow.isDestroyed()) return;
+  if (!hubs.primary()) return;
   console.log('[hotkey] notifyHotkeyState read hotkeyRegistered =', hotkeyRegistered);
-  hubWindow.webContents.send('hub:hotkey-state', {
+  hubs.send('hub:hotkey-state', {
     registered: hotkeyRegistered,
     label: hotkeyLabel(config.get().hotkey),
   });
@@ -247,42 +251,19 @@ function notifyHotkeyState(): void {
 
 // Open (or focus) the hub window.
 function openHub(): void {
-  if (hubWindow && !hubWindow.isDestroyed()) {
-    hubWindow.focus();
-    notifyHotkeyState();
-    return;
-  }
-  hubWindow = createHubWindow();
-  hubWindow.on('closed', () => { hubWindow = null; });
-  hubWindow.webContents.once('did-finish-load', () => {
-    if (!hubWindow || hubWindow.isDestroyed()) return;
-    notifyHotkeyState();
-  });
+  withHub((w) => { w.focus(); notifyHotkeyState(); });
 }
 
-// Notify the hub that key status changed (if it's open).
+// Notify every hub window that key status changed.
 function notifyKeyChanged(): void {
-  if (hubWindow && !hubWindow.isDestroyed()) {
-    hubWindow.webContents.send('key:changed');
-  }
+  hubs.broadcast('key:changed');
 }
 
 ipcMain.handle('notifications:bootstrap', () => bootstrapNotification());
 
 // Show the permission panel inside the hub (single-window experience).
 function openPermission(): void {
-  if (!hubWindow || hubWindow.isDestroyed()) {
-    hubWindow = createHubWindow();
-    hubWindow.on('closed', () => { hubWindow = null; });
-    hubWindow.webContents.once('did-finish-load', () => {
-      if (hubWindow && !hubWindow.isDestroyed()) {
-        hubWindow.webContents.send('hub:show-permission');
-      }
-    });
-  } else {
-    hubWindow.focus();
-    hubWindow.webContents.send('hub:show-permission');
-  }
+  withHub((w) => { w.focus(); w.webContents.send('hub:show-permission'); });
 }
 
 // Detect Local CLIs ONCE at startup using the recovered PATH, so the capture
@@ -352,12 +333,11 @@ export function ingestCapture(dataUrl: string): void {
       return null;
     });
 
-  function sendToHub() {
-    if (!hubWindow || hubWindow.isDestroyed()) return;
-    hubWindow.focus();
-    hubWindow.webContents.send('hub:new-entry', { entryId, dataUrl });
+  function sendToHub(hub: BrowserWindow) {
+    hub.focus();
+    hub.webContents.send('hub:new-entry', { entryId, dataUrl });
     analyze(dataUrl).then(async (result: any) => {
-      if (!hubWindow || hubWindow.isDestroyed()) return;
+      if (!hubs.primary()) return;
       if (result.ok && result._messages) {
         entryThreads.set(entryId, result._messages);
         const cropPath = await cropPromise;
@@ -388,24 +368,17 @@ export function ingestCapture(dataUrl: string): void {
         delete result._messages;
         result.copilotThreadId = copilotThreadId;
       }
-      if (!hubWindow || hubWindow.isDestroyed()) return;
-      hubWindow.webContents.send('hub:entry-result', { entryId, ...result });
+      if (!hubs.primary()) return;
+      hubs.send('hub:entry-result', { entryId, ...result });
       if (result.ok) maybeNotifyDone(result.title, hubFocused);
     }).catch(() => {
-      if (!hubWindow || hubWindow.isDestroyed()) return;
-      hubWindow.webContents.send('hub:entry-result', {
+      hubs.send('hub:entry-result', {
         entryId, ok: false, errorType: 'unknown', message: 'Something went wrong. Try again.',
       });
     });
   }
 
-  if (!hubWindow || hubWindow.isDestroyed()) {
-    hubWindow = createHubWindow();
-    hubWindow.on('closed', () => { hubWindow = null; });
-    hubWindow.webContents.once('did-finish-load', sendToHub);
-  } else {
-    sendToHub();
-  }
+  withHub(sendToHub);
 }
 
 ipcMain.on('capture:cancel', () => {
@@ -437,10 +410,10 @@ ipcMain.handle('key:status', () => execConfig.publicConfig());
 // calls (not hoisted imports) so module load order matches the original main.js.
 require("./ipc/geo").register();
 
-require("./ipc/theme").register({ getHubWindow: () => hubWindow });
+require("./ipc/theme").register();
 
 require("./ipc/providers").register({
-  getHubWindow: () => hubWindow, notifyKeyChanged,
+  getHubWindow: hubs.primary, notifyKeyChanged,
   entryData, entryThreads, entryDataUrls,
   clearHistorySummaries: () => { historySummaries = []; },
 });
@@ -489,11 +462,11 @@ require("./ipc/shell").register();
 // Re-analyze the same crop for a specific entry without re-capturing.
 ipcMain.on('hub:retry', (_e, { entryId }) => {
   const dataUrl = entryDataUrls.get(entryId);
-  if (!dataUrl || !hubWindow || hubWindow.isDestroyed()) return;
+  if (!dataUrl || !hubs.primary()) return;
   entryThreads.delete(entryId);
   const existingData = entryData.get(entryId);
   analyze(dataUrl).then((result: any) => {
-    if (!hubWindow || hubWindow.isDestroyed()) return;
+    if (!hubs.primary()) return;
     if (result.ok && result._messages) {
       entryThreads.set(entryId, result._messages);
       const thread = {
@@ -511,11 +484,10 @@ ipcMain.on('hub:retry', (_e, { entryId }) => {
       historySummaries = [{ id: entryId, title: thread.title, updatedAt: thread.updatedAt, cropPath: thread.cropPath }, ...historySummaries.filter(s => s.id !== entryId)];
       delete result._messages;
     }
-    hubWindow.webContents.send('hub:entry-result', { entryId, ...result });
+    hubs.send('hub:entry-result', { entryId, ...result });
     if (result.ok) maybeNotifyDone(result.title, hubFocused); // parity with initial capture + follow-up
   }).catch(() => {
-    if (!hubWindow || hubWindow.isDestroyed()) return;
-    hubWindow.webContents.send('hub:entry-result', {
+    hubs.send('hub:entry-result', {
       entryId, ok: false, errorType: 'unknown', message: 'Something went wrong. Try again.',
     });
   });
@@ -524,9 +496,9 @@ ipcMain.on('hub:retry', (_e, { entryId }) => {
 // Follow-up question on an existing thread.
 ipcMain.on('hub:followup', (_e, { entryId, text }) => {
   const messages = entryThreads.get(entryId);
-  if (!messages || !hubWindow || hubWindow.isDestroyed()) return;
+  if (!messages || !hubs.primary()) return;
   analyzeFollowup(messages, text).then((result: any) => {
-    if (!hubWindow || hubWindow.isDestroyed()) return;
+    if (!hubs.primary()) return;
     if (result.ok && result._messages) {
       entryThreads.set(entryId, result._messages);
       const thread = entryData.get(entryId);
@@ -544,11 +516,10 @@ ipcMain.on('hub:followup', (_e, { entryId, text }) => {
       }
       delete result._messages;
     }
-    hubWindow.webContents.send('hub:followup-result', { entryId, ...result });
+    hubs.send('hub:followup-result', { entryId, ...result });
     if (result.ok) maybeNotifyDone(result.title, hubFocused);
   }).catch(() => {
-    if (!hubWindow || hubWindow.isDestroyed()) return;
-    hubWindow.webContents.send('hub:followup-result', {
+    hubs.send('hub:followup-result', {
       entryId, ok: false, errorType: 'unknown', message: 'Something went wrong. Try again.',
     });
   });
@@ -577,6 +548,8 @@ require("./ipc/formula").register();
 require("./ipc/search").register();
 // The application menu, built from the renderer's command registry (src/ipc/menu.ts).
 require("./ipc/menu").register();
+// "Open in new window" — a second hub window on one record (src/ipc/windows.ts).
+require("./ipc/windows").register();
 
 // What the app found in the data. Pure disk + the resident query layer; no deps.
 require("./ipc/insights").register();
@@ -598,11 +571,9 @@ require("./ipc/insights").register();
   const BIG_CHANGE = 0.2;
 
   scheduler.onRefreshed((o: any) => {
-    // Always push to the hub: it updates the freshness line in place. send/on,
-    // not invoke/handle — nothing is asked for and no answer is wanted.
-    if (hubWindow && !hubWindow.isDestroyed()) {
-      hubWindow.webContents.send("hub:dataset-refreshed", o);
-    }
+    // Always push to every hub window: each updates its freshness line in
+    // place. send/on, not invoke/handle — no answer is wanted.
+    hubs.broadcast("hub:dataset-refreshed", o);
     // At most ONE notification per dataset per tick, and only for these two.
     // A success inside the interval is silent by design.
     if (!o.ok) {
@@ -630,9 +601,8 @@ require("./ipc/insights").register();
   // Main only rings the bell. The hub renderer owns generation, because the
   // chart engine and the three document libraries live there; it answers by
   // calling `reports:writeScheduled`, which is where the bytes reach disk.
-  scheduler.afterTick(() => {
-    if (hubWindow && !hubWindow.isDestroyed()) hubWindow.webContents.send("reports:run-due");
-  });
+  // PRIMARY only: every window would otherwise generate the same file.
+  scheduler.afterTick(() => hubs.send("reports:run-due"));
 
   scheduler.start();
   app.on("before-quit", () => scheduler.stop());
@@ -649,7 +619,7 @@ require("./ipc/catalog").register();
 // Metrics. After dashboards: every figure bottoms out in computeCardMetric.
 require("./ipc/metrics").register();
 // Alert rules and their inbox. After dashboards deliberately — see ipc/alerts.
-require("./ipc/alerts").register({ getHubWindow: () => hubWindow, focusHub });
+require("./ipc/alerts").register({ focusHub });
 
 // Analyses — the AUTHORING container a dashboard is published FROM. Also owns
 // `analysis:draft`, which replaced the deleted `dashboard:draft`.

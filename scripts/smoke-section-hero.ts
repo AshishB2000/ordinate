@@ -39,7 +39,11 @@ const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-smoke-hero-'));
 /** Everything a "is there a teach banner over the content?" answer needs. */
 function probe(): any {
   const panel = document.querySelector('.ws-panel:not([hidden])');
-  const empty = document.querySelector('.ws-panel:not([hidden]) .ws-empty') as HTMLElement | null;
+  // The empty state ON SCREEN: a section can hold several (Dashboards has one
+  // per tab — Reports and Stories sit in the DOM before Dashboards' own), and
+  // the first in document order is a hidden tab's since #171.
+  const all = [...document.querySelectorAll('.ws-panel:not([hidden]) .ws-empty')] as HTMLElement[];
+  const empty = all.find((e) => e.offsetParent !== null) || all[0] || null;
   return {
     section: panel ? panel.getAttribute('data-section') : null,
     // The element itself, and the class, and any surviving id — a banner could

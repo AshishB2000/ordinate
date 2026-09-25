@@ -213,6 +213,16 @@ ok('every registered key round-trips from a keydown back to its command',
     });
     return mac.cmdKeyToken(e) === k;
   }));
+// The tab keys: ⌘⇧] types '}' (US) and ⌘\ types '\', so these match on the
+// physical key, and shift is part of the chord as it is for a letter.
+ok('⌘⇧] and ⌘⇧[ match by position, whatever character the layout types',
+  mac.cmdKeyToken(ev({ key: '}', code: 'BracketRight', metaKey: true, shiftKey: true })) === 'mod+shift+]'
+  && mac.cmdKeyToken(ev({ key: '{', code: 'BracketLeft', metaKey: true, shiftKey: true })) === 'mod+shift+['
+  && win.cmdKeyToken(ev({ key: 'ü', code: 'BracketLeft', ctrlKey: true, shiftKey: true })) === 'mod+shift+[');
+ok('…and ⌘\\ is mod+\\ with a printable label and accelerator',
+  mac.cmdKeyToken(ev({ key: '\\', code: 'Backslash', metaKey: true })) === 'mod+\\'
+  && mac.keyLabel('mod+\\') === '⌘\\' && mac.keyAccelerator('mod+shift+]') === 'CommandOrControl+Shift+]',
+  mac.keyLabel('mod+\\') + ' ' + mac.keyAccelerator('mod+shift+]'));
 
 // ── Tooltips ─────────────────────────────────────────────────────────────────
 

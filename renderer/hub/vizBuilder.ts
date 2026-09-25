@@ -135,6 +135,11 @@ function clearVizArea(): void {
   if (area) area.innerHTML = '';
   const mount = vizEl('viz-switcher-mount');
   if (mount) mount.innerHTML = '';
+  // The chart's Values / ⋯ cluster lives OUTSIDE #viz-area (the stage head's
+  // .cv-controls-slot), so emptying the area left it behind and every reopen
+  // stacked another beside it — twice as many after one Back, and the tab
+  // strip reopens visuals all the time.
+  document.querySelectorAll('.viz-builder-stage .cv-controls-slot').forEach((slot) => { slot.textContent = ''; });
   vizPicker = null;
 }
 

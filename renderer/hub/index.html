@@ -140,6 +140,12 @@
     </div>
   </div>
 
+  <!-- The tab strip — one tab per open RECORD (Home and the section lists are
+       not tabs). Painted entirely by tabStrip.ts; hidden while there are none,
+       so the content still starts right under the top bar. Hidden while
+       presenting, with the top bar (hub.css). -->
+  <div id="tab-strip" class="hub-tabstrip" role="tablist" aria-label="Open records" hidden></div>
+
   <!-- Hotkey registration failure — shown when globalShortcut.register() returns
        false. It sat inside the capture shell; it is a WINDOW-level condition
        (the global shortcut is dead everywhere, not just on one page), so it now
@@ -2946,6 +2952,16 @@
      they reach into (dashGrid, insights, dsProfile, dock). -->
 <script src="alerts.js"></script>
 <script src="alertsInbox.js"></script>
+<!-- Tabs: open records as tabs under the top bar, split view, a second window.
+     tabModel.js is the pure tab set; tabKinds.js the one table of record kinds;
+     tabNav.js keeps the tabs in step with the screen; tabSplit.js lays out two
+     panes; tabStrip.js is the strip itself. All reached only at call time
+     (hub.js boots them), so they sit after every page they open. -->
+<script src="tabModel.js"></script>
+<script src="tabKinds.js"></script>
+<script src="tabNav.js"></script>
+<script src="tabSplit.js"></script>
+<script src="tabStrip.js"></script>
 <script src="hub.js"></script>
 
 <!-- Phase 5 — the Svelte islands bundle. An IIFE assigning ONE global

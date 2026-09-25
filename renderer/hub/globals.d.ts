@@ -437,6 +437,8 @@ declare global {
         { src: string; title: string }
       >;
       appVersion: string;
+      // Tabs: open one record in a second hub window (src/ipc/windows.ts).
+      openRecordWindow(kind: string, id: string, projectId: string): Promise<{ ok: boolean; error?: string }>;
     };
 
     // ── Vendor libraries loaded via <script> tags in index.html ────────────

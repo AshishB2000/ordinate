@@ -99,6 +99,7 @@ function clMakeCard(c: any): HTMLElement {
   const card = document.createElement('div');
   card.className = 'viz-card cap-card';
   card.dataset.captureId = String(c.id);
+  card.dataset.recKind = 'capture'; card.dataset.recId = String(c.id); // ⌘-click → background tab (tabStrip.ts)
 
   const body = document.createElement('button');
   body.type = 'button';

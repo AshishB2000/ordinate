@@ -221,6 +221,7 @@ const DS_NOT_REFRESHABLE_HINT =
 function makeSavedItem(d: any): HTMLElement {
   const row = document.createElement('div');
   row.className = 'ds-saved-item';
+  row.dataset.recKind = 'dataset'; row.dataset.recId = String(d && d.id ? d.id : ''); // ⌘-click → background tab (tabStrip.ts)
 
   const open = document.createElement('button');
   open.type = 'button';

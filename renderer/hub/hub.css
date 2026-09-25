@@ -15874,3 +15874,210 @@ textarea.ct-cell-input { min-height: 28px; field-sizing: content; }
 }
 .ct-cell-select[data-sensitivity="personal"] { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
 .ct-cell-select[data-sensitivity="financial"] { color: var(--error); background: var(--error-soft); border-color: transparent; }
+
+/* ── Tabs and split view (tabStrip.ts, tabSplit.ts) ───────────────────────────
+   One tab per open RECORD, in a strip under the top bar. The strip sits on the
+   page plane (--bg) like the sidebar rail, and a tab reads the way a rail row
+   does: hover darkens to --surface-2, the active tab is a --surface-1 card
+   lifted off the ground by its hairline. Nothing here is a new colour.
+
+   --tab-strip-h is the strip's height while it shows, and 0 otherwise, so the
+   two places that SUM the chrome by hand (focus mode's panel height, the
+   overlaid dock's top) take it into account instead of being clipped by it. */
+body { --tab-strip-h: 0px; }
+body.has-tabs { --tab-strip-h: 36px; }
+html.dash-presenting body { --tab-strip-h: 0px; }
+html.dash-presenting .hub-tabstrip { display: none; }
+
+.hub-tabstrip {
+  flex: 0 0 36px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-8);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-hairline);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  user-select: none;
+}
+.hub-tabstrip::-webkit-scrollbar { display: none; }
+
+.tab-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
+  min-width: 96px;
+  max-width: 220px;
+  height: 28px;
+  padding: 0 var(--sp-4) 0 var(--sp-8);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  font-size: var(--t-12);
+  line-height: 1;
+  cursor: default;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.tab-item:hover { background: var(--surface-2); color: var(--text); }
+.tab-item:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+.tab-item > .ic { flex: none; color: var(--text-dim); }
+.tab-item.is-active {
+  background: var(--surface-1);
+  border-color: var(--border-hairline);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-strong);
+  font-weight: 500;
+}
+.tab-item.is-active > .ic { color: var(--accent); }
+/* The OTHER half of a split is on screen too — it reads as open, not focused. */
+.tab-item.is-split:not(.is-active) {
+  background: var(--surface-1);
+  border-color: var(--border-hairline);
+  color: var(--text);
+}
+.tab-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* × — shown on hover and on the active tab. A DIRTY tab shows its dot in the
+   same slot instead, and the × comes back under the pointer (the convention
+   every editor with tabs uses). */
+.tab-close {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.tab-item:hover .tab-close,
+.tab-item:focus-within .tab-close,
+.tab-item.is-active .tab-close,
+.tab-item.is-dirty .tab-close { opacity: 1; }
+.tab-close:hover { background: var(--surface-3); color: var(--text-strong); }
+.tab-dirty {
+  display: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.tab-item.is-active .tab-dirty { background: var(--accent); }
+.tab-item.is-dirty .tab-close .tab-dirty { display: block; }
+.tab-item.is-dirty .tab-close > .ic { display: none; }
+.tab-item.is-dirty .tab-close:hover .tab-dirty { display: none; }
+.tab-item.is-dirty .tab-close:hover > .ic { display: block; }
+
+/* Reorder: the tab in flight fades; an accent bar marks where it will land. */
+.tab-item.is-dragging { opacity: 0.45; }
+.tab-item.drop-before::before,
+.tab-item.drop-after::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+.tab-item.drop-before::before { left: -4px; }
+.tab-item.drop-after::after { right: -4px; }
+.tab-item.is-new { animation: tabIn var(--dur-menu) var(--ease-out); }
+@keyframes tabIn { from { opacity: 0; transform: translateY(3px); } }
+
+/* ── Split view: two panels in the .hub-body row, the divider between ─────────
+   Placed by `order` (tabSplit.ts sets 1 and 3 on the two panes, the divider is
+   2), so the sidebar before them and the dock after them need theirs. */
+.hub-body.tab-split > .app-sidebar { order: 0; }
+.hub-body.tab-split > .dk-scrim,
+.hub-body.tab-split > .dk-panel { order: 4; }
+.hub-body.tab-split > .ws-panel.is-pane {
+  min-width: 0;
+  overflow: hidden;
+  border-top: 2px solid transparent;
+}
+/* Which pane the keyboard, the dock and ⌘W are talking to. */
+.hub-body.tab-split > .ws-panel.is-pane-focus { border-top-color: var(--accent); }
+
+.tab-divider {
+  order: 2;
+  position: relative;
+  flex: 0 0 6px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+.tab-divider::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--border);
+  transition: width var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.tab-divider:hover::before,
+.tab-divider:focus-visible::before,
+body.tab-resizing .tab-divider::before {
+  width: 3px;
+  background: var(--accent);
+}
+body.tab-resizing,
+body.tab-resizing * { cursor: col-resize !important; user-select: none; }
+/* Charts and maps must not eat the pointer mid-drag. */
+body.tab-resizing .ws-panel { pointer-events: none; }
+
+/* The right-edge drop target while a tab is dragged. */
+.tab-drop {
+  position: fixed;
+  z-index: 9000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-8);
+  border: 2px dashed var(--accent-line);
+  border-radius: var(--r-lg);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--t-13);
+  font-weight: 500;
+  animation: fadeUp var(--dur-menu) var(--ease-out);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+.tab-drop.is-over { border-color: var(--accent); }
+.tab-drop > * { pointer-events: none; }
+
+/* The two chrome sums, now including the strip. */
+body.an-focus #ws-analyses { height: calc(100vh - 40px - var(--tab-strip-h)); }
+@media (max-width: 1100px) {
+  .dk-panel,
+  body.dk-open .dk-scrim { top: calc(40px + var(--tab-strip-h)); }
+}
+
+/* The tab's menu reuses .chart-menu rows. Rows without a shortcut must not
+   centre, keyboard focus reads as the hover row (an outline would be clipped by
+   the menu's own scroll box), and a row that cannot apply says so. */
+.tab-menu .chart-menu-item { justify-content: flex-start; }
+.tab-menu .chart-menu-item:focus-visible { outline: none; background: var(--surface-2); }
+.tab-menu .chart-menu-item:disabled { opacity: 0.45; cursor: default; background: none; }

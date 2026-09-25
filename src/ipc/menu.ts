@@ -11,7 +11,7 @@
 // Nothing in a command crosses the boundary except strings: id, title, group
 // and accelerator. Main never learns what a command DOES.
 
-import { ipcMain, Menu, MenuItemConstructorOptions, BrowserWindow } from 'electron';
+import { app, ipcMain, Menu, MenuItemConstructorOptions, BrowserWindow } from 'electron';
 
 interface MenuCommand {
   id: string;
@@ -47,9 +47,25 @@ function sanitize(raw: unknown): MenuCommand[] {
     }));
 }
 
+// Edit sits after File, with the platform's OWN roles. ⌘Z inside a text field
+// means "undo my typing", and a command that took that key would be a data-loss
+// bug wearing a shortcut — the dashboard's Undo is a registry command bound in
+// the renderer and guarded to the editor.
+const EDIT_MENU: MenuItemConstructorOptions = {
+  label: 'Edit',
+  submenu: [
+    { role: 'undo' }, { role: 'redo' }, { type: 'separator' },
+    { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' },
+  ],
+};
+
+/** The app menu (macOS) — the only thing every template starts with. */
+function base(): MenuItemConstructorOptions[] {
+  return process.platform === 'darwin' ? [{ role: 'appMenu' }] : [];
+}
+
 function build(commands: MenuCommand[]): void {
-  const template: MenuItemConstructorOptions[] = [];
-  if (process.platform === 'darwin') template.push({ role: 'appMenu' });
+  const template: MenuItemConstructorOptions[] = base();
 
   for (const menu of MENUS) {
     const items: MenuItemConstructorOptions[] = [];
@@ -63,19 +79,7 @@ function build(commands: MenuCommand[]): void {
     }
     if (!items.length) continue;
     template.push({ label: menu.label, submenu: items });
-    // Edit sits after File, with the platform's OWN roles. ⌘Z inside a text
-    // field means "undo my typing", and a command that took that key would be a
-    // data-loss bug wearing a shortcut — the dashboard's Undo is a registry
-    // command bound in the renderer and guarded to the editor.
-    if (menu.label === 'File') {
-      template.push({
-        label: 'Edit',
-        submenu: [
-          { role: 'undo' }, { role: 'redo' }, { type: 'separator' },
-          { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' },
-        ],
-      });
-    }
+    if (menu.label === 'File') template.push(EDIT_MENU);
   }
 
   if (template.length < 2) return; // nothing registered — leave the default menu alone
@@ -83,6 +87,14 @@ function build(commands: MenuCommand[]): void {
 }
 
 export function register(): void {
+  // The BOOT menu: app + Edit, and nothing else, until the renderer sends the
+  // registry. Electron's DEFAULT menu is live until then, and its Window menu
+  // binds ⌘W to Close Window — but ⌘W closes a TAB in this app (tabStrip.ts),
+  // so a ⌘W pressed during the splash would take the whole window with it.
+  // Installed on ready, before any window exists; menu:build replaces it.
+  void app.whenReady().then(() => {
+    Menu.setApplicationMenu(Menu.buildFromTemplate([...base(), EDIT_MENU]));
+  });
   ipcMain.handle('menu:build', (_e, commands: unknown) => {
     try {
       const list = sanitize(commands);

@@ -97,6 +97,10 @@ contextBridge.exposeInMainWorld('hub', {
   // as an id on 'menu:run' and the RENDERER decides what that means.
   buildMenu: (commands: any[]) => ipcRenderer.invoke('menu:build', commands),
   onMenuRun: (cb: (id: string) => void) => ipcRenderer.on('menu:run', (_e, id) => cb(id)),
+  // A tab's "Open in new window": a second hub window booted on one record
+  // (src/ipc/windows.ts). Returns { ok } — main validates every field.
+  openRecordWindow: (kind: string, id: string, projectId: string) =>
+    ipcRenderer.invoke('windows:openRecord', { kind, id, projectId }),
   // Page zoom. webFrame is the platform's own answer, kept per window by
   // Electron, so nothing here has to store or re-apply a scale. `null` resets.
   setZoom: (step: number | null) => {

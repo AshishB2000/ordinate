@@ -162,6 +162,14 @@ const CMD_ACCEL_NAMES: Record<string, string> = {
   '-': '-',
 };
 
+/**
+ * Keys matched by POSITION (e.code), not by the character they type. ⌘⇧] types
+ * '}' on a US layout (and something else again on others), so a binding written
+ * 'mod+shift+]' would never match off e.key. For these three the physical key
+ * IS the binding, and shift is part of the chord — as it is for a letter.
+ */
+const CMD_CODE_KEYS: Record<string, string> = { BracketLeft: '[', BracketRight: ']', Backslash: '\\' };
+
 /** A keydown as a canonical key string, or '' for a bare modifier. */
 function cmdKeyToken(e: KeyboardEvent): string {
   const key = String(e.key || '');
@@ -170,12 +178,13 @@ function cmdKeyToken(e: KeyboardEvent): string {
   const mod = CMD_IS_MAC ? e.metaKey : e.ctrlKey;
   const foreign = CMD_IS_MAC ? e.ctrlKey : e.metaKey;
   if (foreign) return '';
+  const byCode = CMD_CODE_KEYS[String(e.code || '')];
   const parts: string[] = [];
   if (mod) parts.push('mod');
   // '?' IS shift+/ — the shift is how you type it, not part of the binding.
-  if (e.shiftKey && key.length === 1 && /[a-z0-9]/i.test(key)) parts.push('shift');
+  if (e.shiftKey && (byCode || (key.length === 1 && /[a-z0-9]/i.test(key)))) parts.push('shift');
   if (e.altKey) parts.push('alt');
-  parts.push(key.toLowerCase());
+  parts.push(byCode || key.toLowerCase());
   return parts.join('+');
 }
 

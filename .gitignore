@@ -427,3 +427,20 @@ scripts/**/*.js
 /src/analysis/chartFigures.js
 /scripts/test-chartShapes.js
 /scripts/wfCharts.js
+# Tabs and windows — the tab set, its kinds, the strip, split view, the window
+# registry and "Open in new window". Emitted siblings.
+/renderer/hub/tabModel.js
+/renderer/hub/tabKinds.js
+/renderer/hub/tabNav.js
+/renderer/hub/tabSplit.js
+/renderer/hub/tabStrip.js
+/src/windows/hubRegistry.js
+/src/ipc/windows.js
+/scripts/test-tabModel.js
+/scripts/test-hubRegistry.js
+/scripts/wfTabs.js
+# Workflow depth — the one end-to-end smoke and its sections. Emitted siblings.
+/scripts/smoke-workflow.js
+/scripts/wfStub.js
+/scripts/wfAnswers.js
+/scripts/wfStories.js

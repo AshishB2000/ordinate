@@ -82,6 +82,7 @@ function rbCard(r: any): HTMLElement {
   const card = document.createElement('div');
   card.className = 'rb-card';
   card.dataset.reportId = r.id;
+  card.dataset.recKind = 'report'; card.dataset.recId = String(r.id); // ⌘-click → background tab (tabStrip.ts)
 
   // The "cover thumbnail" is the cover itself, drawn small in CSS: a portrait
   // sheet of paper carrying the mark and the title, at the report's own paper
