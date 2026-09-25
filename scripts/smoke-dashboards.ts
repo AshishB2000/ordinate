@@ -297,7 +297,7 @@ async function main(): Promise<void> {
   const menu = await win.evaluate(() =>
     [...document.querySelectorAll('.dash-card-menu .chart-menu-item')].map((r) => (r.textContent || '').trim()));
   ok('the card\u2019s ⋯ menu carries move, resize and remove',
-    JSON.stringify(menu) === JSON.stringify(['Move up', 'Move down', 'Move left', 'Move right',
+    JSON.stringify(menu) === JSON.stringify(['Explain', 'Move up', 'Move down', 'Move left', 'Move right',
       'Wider', 'Narrower', 'Taller', 'Shorter', 'Remove']), JSON.stringify(menu));
 
   await win.evaluate(() => {

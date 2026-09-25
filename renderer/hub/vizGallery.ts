@@ -293,6 +293,7 @@ function openVisualCardMenu(anchor: HTMLButtonElement, v: any): void {
       add('Rename', () => handleRenameVisual(id, v && v.name ? String(v.name) : ''));
       add('Duplicate', () => handleDuplicateVisual(id));
       add('Add to dashboard', () => handleAddVisualToAnalysis(id));
+      add('Explain', () => { void ansExplain({ visualId: id }); });
       add('Export', () => handleExportVisual(id));
       add('Delete', () => handleDeleteVisual(id));
     },

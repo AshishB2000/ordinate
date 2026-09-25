@@ -391,3 +391,11 @@ scripts/**/*.js
 /scripts/test-captions.js
 /scripts/test-reportSpec.js
 /scripts/smoke-reports.js
+
+# Workflow depth — answer cards, Explain, follow-up chips. Emitted siblings.
+/src/ai/answerSpec.js
+/src/ai/answerFacts.js
+/src/ipc/answers.js
+/renderer/hub/answerCard.js
+/scripts/test-answerSpec.js
+/scripts/test-answerFacts.js

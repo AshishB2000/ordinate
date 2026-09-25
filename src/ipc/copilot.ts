@@ -19,6 +19,7 @@ import type { FactMetric } from '../ai/copilotFacts';
 import * as history from '../app/history';
 import * as captureDataset from '../data/captureDataset';
 import type { LedgerEntry, NumberAudit } from '../ai/numberAudit';
+import * as answers from './answers';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
 // (request/response). Every handler is wrapped so a throw becomes { ok:false, error }
@@ -265,14 +266,21 @@ export async function buildFacts(
     label: 'Scanned the project',
     detail: plural(dsList.length, 'dataset') + ', ' + plural(vList.length, 'visual') + ', ' + plural(dashList.length, 'dashboard'),
   });
+  // Column names and types only — a metadata read, no rows — so a question
+  // asked from Home can still come back as an answer chart.
+  const metas = await Promise.all(dsList.slice(0, 12).map((d) => datasets.getDatasetMeta(projectId, d.id)));
   return copilot.projectFacts(proj ? proj.name : 'Untitled project', {
     datasets: dsList.map((x) => x.name),
     visuals: vList.map((x) => x.name),
     dashboards: dashList.map((x) => x.name),
-  });
+  }, metas.filter((m) => !!m).map((m) => ({ name: m!.name, columns: m!.columns })));
 }
 
 export function register() {
+  // Answer cards, "Explain" and the follow-up chips (./answers), handed the ONE
+  // number guard rather than importing it back from here.
+  answers.register(guardAnswer);
+
   // Load ONE conversation's turns (survives reload). threadId is optional — omit it
   // and main resolves the most recent thread, which is what the pre-threads
   // renderer does by simply not sending the field.
@@ -374,16 +382,30 @@ export function register() {
         let target = tid || (await copilot.latestThreadId(projectId)) || undefined;
         if (!target) target = (await copilot.createThread(projectId))?.id;
 
+        // An ANSWER action: the app builds the chart from the spec, and the turn's
+        // prose becomes a SECOND, narrow narration of that chart's own facts,
+        // audited against that chart's own ledger (./answers). A spec that does
+        // not resolve keeps the prose answer and says plainly why no chart came.
+        let answer: Awaited<ReturnType<typeof answers.answerFromAction>> | null = null;
+        if (res.suggestedAction && res.suggestedAction.kind === 'answer') {
+          emit({ kind: 'compute', label: 'Built the answer chart' });
+          answer = await answers.answerFromAction(projectId, context || {}, res.suggestedAction, q, guardAnswer);
+        }
+
         // The guard runs BEFORE persistence, so the stored turn carries the note
         // and a reloaded conversation shows it too. `answer` below is the guarded
         // text for the same reason — one string, seen everywhere.
-        const guarded = guardAnswer(res.text, facts.ledger);
+        const guarded = answer && answer.ok
+          ? { text: answer.text, audit: answer.audit }
+          : guardAnswer(answer ? `${res.text}\n\n(No chart: ${answer.reason})` : res.text, facts.ledger);
+        const built = answer && answer.ok ? answer : null;
 
         await copilot.appendTurn(projectId, { role: 'user', text: q }, target);
         const turns = await copilot.appendTurn(projectId, {
           role: 'assistant',
           text: guarded.text,
-          provenance: facts.provenance,
+          provenance: built ? built.provenance : facts.provenance,
+          answer: built ? built.spec : undefined,
         }, target);
         // `suggestedAction` is the model's STRUCTURED read of what the question
         // wanted (src/ai/suggestedAction.ts) — a whitelisted kind plus an intent
@@ -393,11 +415,12 @@ export function register() {
         return {
           ok: true, answer: guarded.text, provenance: facts.provenance,
           turns: turns || [], threadId: target || null,
-          suggestedAction: res.suggestedAction || { kind: 'none', intent: '' },
+          // An answer is fully handled here, so it proposes nothing further.
+          suggestedAction: answer ? { kind: 'none', intent: '' } : res.suggestedAction || { kind: 'none', intent: '' },
           // App-side records, for tests and the fidelity gate. The renderer shows
           // neither: the ledger is internal, and the audit's finding is already
           // in `answer`. Nothing new reaches a user in this PR.
-          ledger: facts.ledger,
+          ledger: built ? built.ledger : facts.ledger,
           numberAudit: guarded.audit,
         };
       }

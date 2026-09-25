@@ -14912,3 +14912,119 @@ body.no-sidebar .app-sidebar { display: none; }
   color: var(--muted);
 }
 .rb-grid .rb-grid-label { text-align: left; }
+
+/* ── Answer cards (answerCard.ts) ─────────────────────────────────────────────
+   The chart an assistant answer carries, drawn above its narration in the dock.
+   A card on the panel like the proposals above it (surface, hairline, --r-lg),
+   but denser: the headline figures read first, then the 320×180 chart, then the
+   app's caption, the actions and the follow-up chips. */
+.xp-msg-answer { width: 100%; }
+.ans-card {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--sp-12);
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  animation: fadeUp var(--dur-panel) var(--ease-out);
+}
+.ans-card.is-error { border-style: dashed; box-shadow: none; }
+.ans-head { display: flex; flex-direction: column; gap: var(--sp-4); }
+.ans-title {
+  font-size: var(--t-13);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  color: var(--text-strong);
+}
+.ans-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); }
+.ans-meta-ds { font-size: var(--t-11); color: var(--muted); margin-right: var(--sp-4); }
+.ans-filter {
+  font-size: var(--t-11);
+  padding: 1px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+}
+.ans-kpis { display: flex; gap: var(--sp-16); flex-wrap: wrap; }
+.ans-kpi { display: flex; flex-direction: column; min-width: 0; }
+.ans-kpi-value {
+  font-family: var(--font-numeric);
+  font-size: var(--t-20);
+  font-weight: 600;
+  letter-spacing: var(--tr-tighter);
+  line-height: var(--lh-tight);
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+.ans-kpi-label {
+  font-size: var(--t-11);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 320×180 when the dock is wide enough to hold it; in the default 340px dock it
+   narrows to the card and keeps its height. `.cv-canvas-wrap` sizes itself
+   against the VIEWPORT (clamp(300px, 44vh, 480px)) and the wrapper between is an
+   auto-height column, so both are told to fill this box, and the box clips —
+   the same three rules `.dk-plan-grid .an-draft-viz` needs, for the same reason.
+   Without them the plot painted 300px tall straight over the caption. */
+.ans-chart {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  height: 180px;
+  min-height: 0;
+  margin-top: 0;
+  overflow: hidden;
+}
+.ans-chart .cv-chart-wrapper,
+.ans-chart .cv-canvas-wrap { height: 100%; min-height: 0; }
+.ans-skel { height: 180px; max-width: 320px; border-radius: var(--r-md); }
+.ans-caption { font-size: var(--t-12); line-height: var(--lh-body); color: var(--text); }
+.ans-note { font-size: var(--t-11); color: var(--muted); }
+.ans-facts {
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12) var(--sp-8) var(--sp-24);
+  background: var(--inset);
+  border-radius: var(--r-md);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--text);
+}
+.ans-facts li + li { margin-top: var(--sp-4); }
+.ans-table-wrap {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.ans-table { width: 100%; font-size: var(--t-12); }
+.ans-actions { display: flex; flex-wrap: wrap; gap: var(--sp-4); }
+.ans-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  padding-top: var(--sp-8);
+  border-top: 1px solid var(--border-hairline);
+}
+.ans-chip {
+  font: inherit;
+  font-size: var(--t-12);
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-12);
+  border-radius: var(--r-full);
+  border: 1px solid var(--border-2);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.ans-chip:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
+.ans-chip:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
+.ans-chip.is-busy { opacity: 0.6; cursor: progress; }

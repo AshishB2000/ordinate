@@ -2748,6 +2748,11 @@
      hub.js. -->
 <script src="dockHero.js"></script>
 <script src="dockEdit.js"></script>
+<!-- Answer cards and "Explain" (feat/workflow-depth) — the chart an answer turn
+     carries, drawn above its narration by askCore's xpAppendBubble. Everything it
+     calls (renderVizInArea, dkTurnIntoAnalysis, dkOpenThread …) resolves at call
+     time; it only defines functions and two constants at load. -->
+<script src="answerCard.js"></script>
 <!-- Ask activity chips (feat/ask-activity) — the live "app showing its work"
      region for an in-flight ask, mounted into 'dk-messages' (dock.js). Reads
      xpScrollToBottom (askCore.js); dkSend calls its helpers at ask time;

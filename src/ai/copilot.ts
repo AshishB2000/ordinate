@@ -28,6 +28,8 @@ import { randomUUID } from 'crypto';
 import { app } from 'electron';
 import * as projects from '../app/projects';
 import type { LedgerEntry } from './numberAudit';
+import { sanitizeStoredSpec } from './answerSpec';
+import type { AnswerSpec } from './answerSpec';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -47,6 +49,12 @@ export interface CopilotTurn {
   text: string;
   createdAt: string;                 // ISO timestamp
   provenance?: CopilotProvenance;    // assistant turns only
+  /**
+   * The CHART this assistant turn answered with (./answerSpec). The spec is
+   * stored, never its figures: the card recomputes them on every render, like a
+   * dashboard's metric cards, so a refreshed dataset moves the answer with it.
+   */
+  answer?: AnswerSpec;
 }
 
 // One conversation. `id` is a randomUUID — a renderer key, never a path component.
@@ -80,6 +88,7 @@ export interface NewCopilotTurn {
   role: 'user' | 'assistant';
   text: string;
   provenance?: CopilotProvenance;
+  answer?: AnswerSpec;
 }
 
 // A compact FACTS block + its provenance — what a context builder returns.
@@ -192,6 +201,8 @@ function normalizeTurns(raw: any): CopilotTurn[] {
     };
     const prov = normalizeProvenance(t.provenance);
     if (prov) turn.provenance = prov;
+    const answer = role === 'assistant' ? sanitizeStoredSpec(t.answer) : undefined;
+    if (answer) turn.answer = answer;
     turns.push(turn);
   }
   // Defensive cap on load too, in case a file predates a lower MAX_TURNS.
@@ -387,6 +398,8 @@ export async function appendTurn(
   };
   const prov = normalizeProvenance(turn && turn.provenance);
   if (prov) record.provenance = prov;
+  const answer = role === 'assistant' ? sanitizeStoredSpec(turn && turn.answer) : undefined;
+  if (answer) record.answer = answer;
 
   const threads = await loadThreads(projectId);
   let target = (threadId && threads.find((t) => t.id === threadId)) || mostRecent(threads);

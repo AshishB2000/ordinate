@@ -682,6 +682,13 @@ contextBridge.exposeInMainWorld('hub', {
   copilotClear: (projectId: string) => ipcRenderer.invoke('copilot:clear', { projectId }),
   // Flip the hard ON/OFF switch; returns { ok, enabled }.
   setCopilotEnabled: (enabled: boolean) => ipcRenderer.invoke('copilot:setEnabled', { enabled }),
+  // Answer cards (src/ipc/answers.ts): draw one from a stored spec, explain a
+  // chart into a new conversation, re-run a follow-up chip. Main computes all.
+  answerCard: (projectId: string, spec: unknown) => ipcRenderer.invoke('answer:card', { projectId, spec }),
+  answerExplain: (projectId: string, target: { visualId?: string; tile?: unknown }) =>
+    ipcRenderer.invoke('answer:explain', { projectId, ...target }),
+  answerRerun: (projectId: string, threadId: string, spec: unknown, label: string) =>
+    ipcRenderer.invoke('answer:rerun', { projectId, threadId, spec, label }),
   // Shared map { providerId: { path, color, title } } for real brand icons (no keys).
   providerLogos: PROVIDER_LOGOS,
   // Static map of { agentId: dataUri } for full-color logos (no keys).

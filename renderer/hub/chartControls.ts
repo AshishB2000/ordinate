@@ -225,6 +225,14 @@ function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx,
   if (cmDownload)      cmDownload.addEventListener('click', onDownload, sig);
   if (cmCopyData)      cmCopyData.addEventListener('click', onCopyData, sig);
   if (cmDrill)       { cmDrill.hidden = !entry.drill; cmDrill.addEventListener('click', onDrill, sig); }
+  if (cmExplain) {
+    cmExplain.hidden = !entry.drill;
+    cmExplain.addEventListener('click', () => {
+      closeChartMenu();
+      const d = entry.drill;
+      void ansExplain({ tile: { datasetId: d.datasetId, encoding: d.encoding, filters: d.filters, chartType: type, name: d.name } });
+    }, sig);
+  }
   if (cmCustomToggle)  cmCustomToggle.addEventListener('click', onCustomizeToggle, sig);
   if (cmTitleInput)    cmTitleInput.addEventListener('input', onTitleInput, sig);
   if (cmSwatches)      cmSwatches.addEventListener('click', onSwatchClick, sig);

@@ -437,6 +437,10 @@ export function captureFacts(
 export function projectFacts(
   name: string,
   inventory: { datasets: string[]; visuals: string[]; dashboards: string[] },
+  // Each dataset's COLUMNS — names and declared types, no figures — so a
+  // question asked from Home can still be answered with a chart: the model
+  // needs real column names to write an answer spec, and the app resolves them.
+  schemas: { name: string; columns: { name: string; type: string }[] }[] = [],
 ): CopilotFacts {
   const lines: string[] = [GUARD_LINE, ''];
   const ledger: LedgerEntry[] = [];
@@ -447,9 +451,16 @@ export function projectFacts(
   num(ledger, 'dataset count', inventory.datasets.length, 'count', 'project');
   num(ledger, 'visual count', inventory.visuals.length, 'count', 'project');
   num(ledger, 'dashboard count', inventory.dashboards.length, 'count', 'project');
+  if (schemas.length) {
+    lines.push('');
+    lines.push('Dataset columns (name and type — use these exact names in an answer spec):');
+    schemas.forEach((s) => {
+      lines.push(`- ${s.name}: ${s.columns.map((c) => `${c.name} (${c.type})`).join(', ') || '(no columns)'}`);
+    });
+  }
   lines.push('');
   lines.push('No specific dataset/visual/dashboard is open, so no per-entity figures are available. ' +
-    'Ask the user to open one for numeric detail.');
+    'A question answerable from these columns can be answered with an "answer" action; the app computes it.');
   const text = lines.join('\n');
   // Entity NAMES are the only other digits here, and a model is entitled to
   // repeat the inventory it was handed.

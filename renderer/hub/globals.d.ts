@@ -410,6 +410,10 @@ declare global {
       onAskActivity(cb: (o: { askId: string; step: ActivityStep }) => void): void;
       copilotClear(projectId: string): Promise<any>;
       setCopilotEnabled(enabled: boolean): Promise<any>;
+      // ── Answer cards (src/ipc/answers.ts) ──
+      answerCard(projectId: string, spec: unknown): Promise<any>;
+      answerExplain(projectId: string, target: { visualId?: string; tile?: unknown }): Promise<any>;
+      answerRerun(projectId: string, threadId: string, spec: unknown, label: string): Promise<any>;
       providerLogos: Record<string, { path: string; color: string; title: string }>;
       agentLogos: Record<string, string>;
       connectorLogos: Record<string,
