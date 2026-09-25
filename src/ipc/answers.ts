@@ -28,6 +28,7 @@ import type { VizEncoding } from '../analysis/visuals';
 import type { ParsedColumn } from '../data/parse';
 import type { Cell, FilterStep } from '../data/transforms';
 import { tileCaption } from '../analysis/captions';
+import { displayNames } from '../app/catalog';
 import { askCopilot } from '../ai/analyze';
 import {
   ANSWER_CHART_TYPES, answerChips, defaultAnswerChart, sanitizeStoredSpec, specFilterSteps, splitCandidates,
@@ -147,7 +148,8 @@ export async function computeCard(projectId: string, spec: AnswerSpec): Promise<
   if (!isDate) data = ranked(data, spec.top);
 
   const chartType = ANSWER_CHART_TYPES.has(spec.chartType) ? spec.chartType : defaultAnswerChart(catCol ? catCol.type : 'text', !!spec.series);
-  const caption = tileCaption({ chartType, data });
+  // A column the user gave a display name reads as that name (the catalog).
+  const caption = tileCaption({ chartType, data, names: await displayNames(projectId, ds.id).catch(() => ({})) });
   const additive = spec.measures.every((m) => m.aggregation === 'sum' || m.aggregation === 'count');
   const facts = answerFacts({
     title: spec.title, datasetName: ds.name, describe: describe(spec), data,

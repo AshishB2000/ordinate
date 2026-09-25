@@ -411,3 +411,12 @@ scripts/**/*.js
 /src/ipc/stories.js
 /scripts/test-storyModel.js
 /scripts/test-storyText.js
+# Catalog & docs (descriptions, tags, owners, column docs) — emitted siblings.
+/src/app/catalog.js
+/src/app/catalogIndex.js
+/src/ipc/catalog.js
+/renderer/hub/catalogUi.js
+/renderer/hub/catalogDetails.js
+/renderer/hub/catalogPage.js
+/scripts/test-catalog.js
+/scripts/wfCatalog.js

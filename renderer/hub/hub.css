@@ -15455,3 +15455,422 @@ html.st-presenting .hub-topbar { display: none; }
   background: var(--surface);
 }
 .st-present-count { font-size: var(--t-12); color: var(--muted); min-width: 56px; text-align: center; font-variant-numeric: tabular-nums; }
+
+/* ── Catalog & docs (catalogUi.ts / catalogDetails.ts / catalogPage.ts) ───────
+   Tag chips, the tag-filter bar every list mounts, the Details popover, the
+   Data page's Catalog tab and the dataset page's Columns tab.
+
+   EIGHT tag hues, each ONE ink token per theme; a chip is that ink on a 12%
+   tint of itself, so the same class reads on a light card and a dark one
+   without a second rule. A tag's colour index is stored in catalog.json and
+   never recomputed — `.tag-c0`…`.tag-c7` are the whole contract. */
+:root {
+  --tag-0: #2563eb;
+  --tag-1: #0f766e;
+  --tag-2: #c2410c;
+  --tag-3: #7c3aed;
+  --tag-4: #be185d;
+  --tag-5: #4d7c0f;
+  --tag-6: #a16207;
+  --tag-7: #475569;
+}
+[data-theme="dark"] {
+  --tag-0: #60a5fa;
+  --tag-1: #2dd4bf;
+  --tag-2: #fb923c;
+  --tag-3: #a78bfa;
+  --tag-4: #f472b6;
+  --tag-5: #a3e635;
+  --tag-6: #facc15;
+  --tag-7: #94a3b8;
+}
+.tag-c0 { --tag-ink: var(--tag-0); }
+.tag-c1 { --tag-ink: var(--tag-1); }
+.tag-c2 { --tag-ink: var(--tag-2); }
+.tag-c3 { --tag-ink: var(--tag-3); }
+.tag-c4 { --tag-ink: var(--tag-4); }
+.tag-c5 { --tag-ink: var(--tag-5); }
+.tag-c6 { --tag-ink: var(--tag-6); }
+.tag-c7 { --tag-ink: var(--tag-7); }
+
+.ct-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-width: 0;
+  overflow: hidden;
+}
+.ct-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--r-full);
+  font-family: var(--font-ui);
+  font-size: var(--t-11);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--tag-ink, var(--muted));
+  background: color-mix(in srgb, var(--tag-ink, var(--muted)) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tag-ink, var(--muted)) 26%, transparent);
+}
+.ct-chip--more { --tag-ink: var(--text-dim); }
+.ct-muted { color: var(--text-dim); }
+
+/* Where a list puts its chips: after the name, never growing the row. */
+.ct-slot { display: inline-flex; flex: 0 1 auto; min-width: 0; }
+.ct-slot:empty { display: none; }
+.viz-card-body > .ct-slot { padding: var(--sp-4) var(--sp-16) 0; }
+.rb-card-body > .ct-slot { display: flex; margin: 0 0 var(--sp-8); }
+.mp-name .ct-slot { margin-left: var(--sp-8); vertical-align: middle; }
+.ct-head-chips { display: inline-flex; flex: none; }
+
+/* The tag-filter bar — one per list, one filter state per project. */
+.ct-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 0 0 var(--sp-4);
+}
+.ws-table > .ct-filter { padding: 0 var(--sp-8); }
+.ct-filter-label {
+  margin-right: 2px;
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.ct-chip--btn {
+  height: 24px;
+  padding: 0 10px;
+  font-size: var(--t-12);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.ct-chip--btn:hover { background: color-mix(in srgb, var(--tag-ink, var(--muted)) 22%, transparent); }
+.ct-chip--btn.is-on {
+  color: var(--surface);
+  background: var(--tag-ink, var(--accent));
+  border-color: var(--tag-ink, var(--accent));
+}
+.ct-chip--btn:focus-visible,
+.ct-filter-clear:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
+.ct-filter-clear {
+  padding: 0 var(--sp-4);
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--t-12);
+  color: var(--accent);
+  cursor: pointer;
+}
+.ct-filter-note { margin-left: auto; font-size: var(--t-12); color: var(--muted); }
+
+/* The Details trigger on each header. */
+.ct-details-btn svg { color: var(--muted); }
+.ct-details-btn--icon { width: var(--ctl-sm); padding: 0; }
+
+/* ── The Details popover. `.chart-menu` gives position, Escape and
+   outside-click; this is the form inside it. Above `.ws-modal-overlay`
+   (100001) because the metric editor opens it from inside a modal. */
+.chart-menu.ct-pop {
+  z-index: 100002;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  width: 340px;
+  min-width: 0;
+  max-width: calc(100vw - 16px);
+  padding: var(--sp-16);
+  background: var(--surface-float);
+  box-shadow: var(--shadow-md);
+}
+.ct-pop-head { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ct-pop-kicker {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.ct-pop-name {
+  font-size: var(--t-15);
+  font-weight: 600;
+  letter-spacing: var(--tr-tight);
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ct-field { display: flex; flex-direction: column; gap: var(--sp-4); }
+.ct-field-label { font-size: var(--t-12); font-weight: 600; color: var(--muted); }
+.ct-input,
+.ct-tagedit {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-ui);
+  font-size: var(--t-13);
+  color: var(--text);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  outline: none;
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.ct-input { padding: 6px var(--sp-8); }
+.ct-input:focus-visible { outline: none; }
+.ct-input--area { min-height: 68px; resize: vertical; line-height: var(--lh-body); }
+.ct-input::placeholder,
+.ct-tag-input::placeholder { color: var(--text-faint); }
+.ct-input:focus,
+.ct-tagedit:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.ct-tagedit {
+  cursor: text;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: var(--ctl-md);
+  padding: 4px 6px;
+}
+.ct-tagedit-chips { display: contents; }
+.ct-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-right: -3px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-full);
+  background: none;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+}
+.ct-chip-x:hover { opacity: 1; background: color-mix(in srgb, var(--tag-ink, var(--muted)) 22%, transparent); }
+.ct-chip-x:focus-visible { opacity: 1; outline: var(--focus-ring-w) solid var(--focus-ring); }
+/* Four classes: it has to outrank the base `input:not(…)×4` field rule, which
+   would otherwise draw a second box inside the tag field. */
+.chart-menu.ct-pop .ct-tagedit input.ct-tag-input {
+  flex: 1 1 90px;
+  min-width: 90px;
+  height: 24px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  box-shadow: none;
+  background: transparent;
+  font-size: var(--t-13);
+  color: var(--text);
+}
+/* In the flow, not floating: a floating list would be clipped by the popover's
+   own scroll box. */
+.ct-sugg {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 2px;
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--border-hairline);
+}
+.ct-sugg-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  font: inherit;
+  font-size: var(--t-12);
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+}
+.ct-sugg-row:hover,
+.ct-sugg-row.is-on { background: var(--surface-2); }
+.ct-sugg-new { font-weight: 600; color: var(--text); }
+.ct-seg {
+  display: flex;
+  overflow: hidden;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.ct-seg-btn {
+  flex: 1;
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-8);
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--t-12);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.ct-seg-btn + .ct-seg-btn { border-left: 1px solid var(--border); }
+.ct-seg-btn:hover { background: var(--surface-2); }
+.ct-seg-btn:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: -2px; }
+.ct-seg-btn.is-on { font-weight: 600; color: var(--accent); background: var(--accent-soft); }
+.ct-seg-btn--personal.is-on { color: var(--warn); background: var(--warn-soft); }
+.ct-seg-btn--financial.is-on { color: var(--error); background: var(--error-soft); }
+.ct-stamp {
+  margin: 0;
+  padding-top: var(--sp-8);
+  border-top: 1px solid var(--border-hairline);
+  font-size: var(--t-12);
+  color: var(--text-dim);
+}
+.ct-me-line { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-8); min-height: var(--ctl-sm); }
+.ct-me-chips { display: inline-flex; min-width: 0; font-size: var(--t-12); }
+.dsp-head-btns { display: inline-flex; flex: none; align-items: center; gap: var(--sp-4); }
+.dsp-doc {
+  display: -webkit-box;
+  margin: var(--sp-4) 0 0;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+
+/* ── The Catalog tab ─────────────────────────────────────────────────────── */
+#ct-wrap { display: flex; flex-direction: column; gap: var(--sp-12); }
+.ct-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-12); }
+.ct-search {
+  width: 320px;
+  max-width: 100%;
+  height: var(--ctl-md);
+  box-sizing: border-box;
+  padding: 0 var(--sp-12);
+  font-family: var(--font-ui);
+  font-size: var(--t-13);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  outline: none;
+}
+.ct-search:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.ct-kinds { display: flex; flex-wrap: wrap; gap: var(--sp-4); }
+.ct-kind-n { margin-left: 6px; font-size: var(--t-11); color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.ct-count { margin-left: auto; }
+.ct-cols,
+.ct-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 2.4fr) minmax(120px, 1.2fr) minmax(90px, 0.8fr) 88px 72px 40px;
+  align-items: center;
+  gap: var(--sp-12);
+}
+.ct-cols span:nth-child(5) { text-align: right; }
+.ct-list { display: flex; flex-direction: column; }
+.ct-row { min-height: 52px; cursor: pointer; }
+.ct-row:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: -2px; }
+.ct-name-cell { display: flex; align-items: center; gap: var(--sp-12); min-width: 0; }
+.ct-kind-ic {
+  --tag-ink: var(--tag-0);
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-md);
+  color: var(--tag-ink);
+  background: color-mix(in srgb, var(--tag-ink) 12%, transparent);
+}
+.ct-kind-ic--visual { --tag-ink: var(--tag-3); }
+.ct-kind-ic--analysis { --tag-ink: var(--tag-1); }
+.ct-kind-ic--metric { --tag-ink: var(--tag-2); }
+.ct-kind-ic--report { --tag-ink: var(--tag-7); }
+.ct-kind-ic--story { --tag-ink: var(--tag-4); }
+.ct-name-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ct-name-top { display: flex; align-items: center; gap: var(--sp-8); min-width: 0; }
+.ct-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.ct-row:hover .ct-name { color: var(--accent); }
+.ct-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-12); color: var(--muted); }
+.ct-stale {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: var(--r-full);
+  font-size: var(--t-11);
+  font-weight: 600;
+  color: var(--warn);
+  background: var(--warn-soft);
+}
+.ct-usage { text-align: right; }
+.ct-row-details { width: var(--ctl-sm); padding: 0; opacity: 0.55; transition: opacity var(--dur-fast) var(--ease-out); }
+.ct-row:hover .ct-row-details,
+.ct-row:focus-within .ct-row-details { opacity: 1; }
+.ct-none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-12);
+  padding: var(--sp-24) 0;
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+
+/* ── The dataset page's Columns tab: docs you edit in place ─────────────── */
+.ds-explorer.tab-columns .ds-grid-pane { display: none; }
+.ct-coldoc { display: flex; flex-direction: column; gap: var(--sp-12); }
+.ct-coldoc-lead { margin: 0; font-size: var(--t-13); color: var(--muted); }
+.ct-coldoc-table .ds-quality-grid td { padding: 3px var(--sp-8); }
+.ct-coldoc-name { white-space: nowrap; }
+.ct-coldoc-cell--description { width: 40%; }
+.ct-coldoc .ct-coldoc-table .ds-quality-grid .ct-cell-input {
+  width: 100%;
+  height: auto;
+  box-sizing: border-box;
+  padding: 5px 6px;
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  outline: none;
+  resize: none;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+textarea.ct-cell-input { min-height: 28px; field-sizing: content; }
+.ct-coldoc .ct-coldoc-table .ds-quality-grid .ct-cell-input:hover { border-color: var(--border); }
+.ct-coldoc .ct-coldoc-table .ds-quality-grid .ct-cell-input:focus {
+  outline: none;
+  background: var(--surface-1);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.ct-cell-input::placeholder { color: var(--text-faint); }
+.ct-cell-select {
+  height: var(--ctl-sm);
+  padding: 0 6px;
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.ct-cell-select[data-sensitivity="personal"] { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
+.ct-cell-select[data-sensitivity="financial"] { color: var(--error); background: var(--error-soft); border-color: transparent; }

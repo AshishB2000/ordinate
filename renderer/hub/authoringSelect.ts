@@ -93,6 +93,8 @@ async function anSelectCard(cardId: string | null): Promise<void> {
       }))
     : [];
 
+  anColumns = await ctDocColumns(String(visual.datasetId || ''), anColumns); // + catalog display names/descriptions
+  if (anSelectedCardId !== cardId) return;
   anRenderFields();
   // Repaint Properties now that anVisual is loaded: the first call above ran
   // before the awaits, so the title field had no name to show.

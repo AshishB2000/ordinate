@@ -170,6 +170,7 @@ async function refreshVisualList(): Promise<void> {
   grid.hidden = items.length === 0;
   if (empty) empty.hidden = items.length > 0;
   items.forEach((v) => grid.appendChild(makeVisualCard(v)));
+  void ctAfterPaint(grid); // catalog tag bar + chips
 
   // Count chip beside the heading — hidden at zero, where the empty state is
   // already saying it.
@@ -238,6 +239,7 @@ function makeVisualCard(v: any): HTMLElement {
   body.appendChild(name);
   body.appendChild(meta);
   body.addEventListener('click', () => openSavedVisual(id));
+  ctDecorate(card, 'visual', id, body); // catalog tag chips
 
   const star = document.createElement('button');
   star.type = 'button';

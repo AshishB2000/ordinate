@@ -62,6 +62,7 @@ async function anPaintList(list: HTMLElement, items: any[]): Promise<void> {
   // project's grid with the old project's dashboards.
   if (currentProjectId !== projectId || !list.isConnected) return;
   items.forEach((a) => list.appendChild(makeAnListItem(a, previews.get(String(a.id)) || [])));
+  void ctAfterPaint(list); // catalog tag bar + chips
 }
 
 /**
@@ -211,6 +212,7 @@ function makeAnListItem(a: any, previews: any[]): HTMLElement {
 
   open.appendChild(name);
   open.appendChild(meta);
+  ctDecorate(card, 'analysis', String(a.id), open); // catalog tag chips
 
   // One ⋯ trigger, opening the shared row menu from projects.ts. Rename and
   // Delete live inside it: two glyphs on a card read as content competing with

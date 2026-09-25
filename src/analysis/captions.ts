@@ -83,6 +83,8 @@ export interface CaptionInput {
   kpis?: CaptionKpi[] | null;
   /** A pivot's grid — pivots only. Its shape IS the sentence, so it is read directly. */
   pivot?: PivotGrid | null;
+  /** column → the display name the catalog gives it (catalog.displayNames). */
+  names?: Record<string, string> | null;
 }
 
 const NOTHING = 'No data to summarize';
@@ -93,7 +95,7 @@ export function tileCaption(input: CaptionInput): string {
   if (Array.isArray(input.kpis)) return kpiCaption(input.kpis);
 
   const family = captionFamily(input.chartType);
-  const measure = measureNoun(input.data);
+  const measure = measureNoun(input.data, input.names);
   // A pivot's sentence is about the GRID — how big it is and where its peak
   // sits — which `{labels, series}` cannot say: a leaf row's label is a joined
   // path and the shape of the thing is the point.
@@ -156,12 +158,15 @@ function geoPairs(geo: CaptionInput['geo']): Pair[] {
  * stays `Revenue`). More than one series means the caption is talking about the
  * stack total, and no single column names that.
  */
-function measureNoun(data: ChartData | null | undefined): string {
+function measureNoun(data: ChartData | null | undefined, names?: Record<string, string> | null): string {
   const series = (data && Array.isArray(data.series)) ? data.series : [];
   if (series.length !== 1) return series.length > 1 ? 'the total' : 'value';
   const name = String((series[0] && series[0].name) || '').trim();
   const m = /^(?:sum|avg|min|max|count) of (.+)$/.exec(name);
-  return (m ? m[1] : name) || 'value';
+  const column = (m ? m[1] : name) || 'value';
+  // A column the user gave a display name reads as THAT name.
+  const shown = names && Object.prototype.hasOwnProperty.call(names, column) ? names[column] : '';
+  return typeof shown === 'string' && shown.trim() ? shown.trim() : column;
 }
 
 /** First letter upper-cased, rest untouched — a noun starting a sentence. */

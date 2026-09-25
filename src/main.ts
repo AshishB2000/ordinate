@@ -641,12 +641,10 @@ require("./ipc/insights").register();
 // Reports — the Report record's CRUD, the app-written caption, the folder
 // picker and the scheduled write. Generation itself is the renderer's job.
 require("./ipc/reports").register();
-
 require("./ipc/connections").register();
-
 require("./ipc/visuals").register();
-
 require("./ipc/dashboards").register();
+require("./ipc/catalog").register();
 
 // Metrics. After dashboards: every figure bottoms out in computeCardMetric.
 require("./ipc/metrics").register();

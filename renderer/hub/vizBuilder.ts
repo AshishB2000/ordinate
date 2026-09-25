@@ -86,12 +86,12 @@ async function onDatasetChange(datasetId: string, preset?: any): Promise<void> {
     return;
   }
   vizDatasetId = String(ds.id || datasetId);
-  const cols = Array.isArray(ds.columns)
+  const cols = await ctDocColumns<EncCol>(vizDatasetId, Array.isArray(ds.columns) // + catalog display names/descriptions
     ? ds.columns.map((c: any) => ({
         name: c && c.name != null ? String(c.name) : '',
         type: c && (c.type === 'number' || c.type === 'date') ? c.type : 'text',
       }))
-    : [];
+    : []);
   ensureVizForm();
   // The form decides the default category, the default measure and the sort
   // order of the options. Restoring a saved visual is the same call with a

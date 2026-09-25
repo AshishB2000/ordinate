@@ -48,7 +48,7 @@ function anRenderFields(): void {
  * the DATA flyout's browse one (drag reaches nothing there, so it does not
  * offer it). One builder, so the two cannot drift.
  */
-function anFieldItem(col: { name: string; type: string }, draggable: boolean): HTMLElement {
+function anFieldItem(col: { name: string; type: string; label?: string; title?: string }, draggable: boolean): HTMLElement {
   const item = document.createElement('button');
   item.type = 'button';
   item.className = 'an-field an-field--' + col.type;
@@ -68,10 +68,11 @@ function anFieldItem(col: { name: string; type: string }, draggable: boolean): H
   }
   const name = document.createElement('span');
   name.className = 'an-field-name';
-  name.textContent = col.name;
+  name.textContent = col.label || col.name;
   item.appendChild(icon);
   item.appendChild(name);
-  item.title = col.name + ' · ' + col.type + (draggable ? ' — drag or click to add' : ' — click to add');
+  item.title = col.name + ' · ' + col.type + (draggable ? ' — drag or click to add' : ' — click to add')
+    + (col.title ? '\n' + col.title : ''); // the catalog description
 
   if (draggable) {
     item.addEventListener('dragstart', (e) => {

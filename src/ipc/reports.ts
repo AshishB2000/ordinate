@@ -7,6 +7,7 @@ import * as projects from '../app/projects';
 import { tileCaption } from '../analysis/captions';
 import type { CaptionInput } from '../analysis/captions';
 import { notifyFile } from '../app/notify';
+import { displayNames } from '../app/catalog';
 
 // Reports IPC — the record's CRUD, the app-written caption, the folder picker,
 // the scheduled write, and the due list.
@@ -102,8 +103,12 @@ export function register() {
    * in the renderer so there is exactly ONE caption implementation, and it is
    * the one scripts/test-captions.ts pins to exact strings.
    */
-  ipcMain.handle('reports:caption', async (_e, { input }: any = {}) =>
-    tileCaption((input || {}) as CaptionInput));
+  ipcMain.handle('reports:caption', async (_e, { input }: any = {}) => {
+    const i = { ...(input || {}) } as CaptionInput & { projectId?: string; datasetId?: string };
+    // Column display names from the catalog, when the caller says which dataset.
+    if (i.projectId && i.datasetId) i.names = await displayNames(String(i.projectId), String(i.datasetId));
+    return tileCaption(i);
+  });
 
   /** The native folder picker — the ONLY way a schedule's folder is ever set.
    *  Picking grants access to that directory; the app never writes to a user

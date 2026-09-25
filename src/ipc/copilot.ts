@@ -20,6 +20,7 @@ import * as history from '../app/history';
 import * as captureDataset from '../data/captureDataset';
 import type { LedgerEntry, NumberAudit } from '../ai/numberAudit';
 import * as answers from './answers';
+import { getColumns as catalogColumns } from '../app/catalog';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
 // (request/response). Every handler is wrapped so a throw becomes { ok:false, error }
@@ -122,7 +123,7 @@ async function factMetrics(projectId: string, datasetId?: string): Promise<FactM
       if (datasetId && s.datasetId !== datasetId) continue;
       const r = await resolveMetric(projectId, s.id);
       if (!r) continue;
-      out.push({ name: r.name, definitionText: r.definitionText, value: r.value, display: r.display });
+      out.push({ name: r.name, definitionText: r.definitionText, value: r.value, display: r.display, description: s.description });
     }
     return out;
   } catch (_) {
@@ -192,7 +193,8 @@ export async function buildFacts(
       if (defined.length) {
         emit({ kind: 'compute', label: 'Resolved ' + plural(defined.length, 'metric'), count: defined.length });
       }
-      return copilot.datasetFacts(ds, summaries, issues, insights, defined);
+      const columnDocs = await catalogColumns(projectId, id); // the user's own column notes (catalog)
+      return copilot.datasetFacts(ds, summaries, issues, insights, defined, columnDocs);
     }
   }
 
@@ -209,7 +211,8 @@ export async function buildFacts(
         v.filters,
       );
       emit({ kind: 'compute', label: 'Built chart data' });
-      return copilot.visualFacts(v, ds ? ds.name : '(missing dataset)', viz);
+      const columnDocs = await catalogColumns(projectId, v.datasetId); // the user's own column notes (catalog)
+      return copilot.visualFacts(v, ds ? ds.name : '(missing dataset)', viz, columnDocs);
     }
   }
 
@@ -273,7 +276,9 @@ export async function buildFacts(
     datasets: dsList.map((x) => x.name),
     visuals: vList.map((x) => x.name),
     dashboards: dashList.map((x) => x.name),
-  }, metas.filter((m) => !!m).map((m) => ({ name: m!.name, columns: m!.columns })));
+  }, await Promise.all(metas.filter((m) => !!m).map(async (m) => ({
+    name: m!.name, columns: m!.columns, docs: await catalogColumns(projectId, m!.id),
+  }))));
 }
 
 export function register() {

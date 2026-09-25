@@ -393,6 +393,14 @@ declare global {
       reportsDue(nowMs?: number): Promise<any>;
       reportsReveal(projectId: string, id: string): Promise<any>;
       onReportsRunDue(cb: () => void): void;
+      // Catalog (src/ipc/catalog.ts) — descriptions, tags, owners, column docs.
+      catalogGet(projectId: string, ref: string): Promise<any>;
+      catalogSet(projectId: string, ref: string, patch: any): Promise<any>;
+      catalogColumns(projectId: string, datasetId: string): Promise<any>;
+      catalogSetColumn(projectId: string, datasetId: string, column: string, patch: any): Promise<any>;
+      catalogTags(projectId: string): Promise<any>;
+      catalogList(projectId: string): Promise<any>;
+      catalogSensitivity(projectId: string, analysisId: string): Promise<any>;
       // ── AI Copilot (Week 11) ──
       copilotHistory(projectId: string, threadId?: string): Promise<any>;
       copilotThreads(projectId: string): Promise<any>;

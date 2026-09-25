@@ -68,6 +68,7 @@ async function rbRefreshList(): Promise<void> {
   if (!Array.isArray(items)) items = [];
   grid.textContent = '';
   for (const r of items) grid.appendChild(rbCard(r));
+  void ctAfterPaint(grid); // catalog tag bar + chips
   const empty = rbEl('rp-empty');
   if (empty) empty.hidden = items.length > 0;
   grid.hidden = items.length === 0;
@@ -115,6 +116,7 @@ function rbCard(r: any): HTMLElement {
   h.className = 'rb-card-name';
   h.textContent = r.name || 'Report';
   body.appendChild(h);
+  ctDecorate(card, 'report', String(r.id), body); // catalog tag chips
 
   const lines: string[] = [];
   lines.push(`${r.pageCount} ${r.pageCount === 1 ? 'page' : 'pages'}`);

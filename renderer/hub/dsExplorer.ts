@@ -167,6 +167,8 @@ function renderExplorerIdent(d: any): void {
     badge.hidden = !badge.textContent;
   }
 
+  void ctPaintHeaderChips(dsEl('ds-explorer-tags'), 'dataset:' + String((d && d.id) || expId)); // catalog tags
+
   const fresh = dsEl('ds-explorer-fresh');
   if (fresh) {
     fresh.textContent = dsFreshnessText(d);

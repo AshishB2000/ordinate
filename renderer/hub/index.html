@@ -711,6 +711,42 @@
                   aria-selected="false" aria-controls="cap-grid-wrap" tabindex="-1">Captures</button>
           <button class="ds-tab" type="button" role="tab" id="ds-tab-metrics"
                   aria-selected="false" aria-controls="mp-wrap" tabindex="-1">Metrics</button>
+          <button class="ds-tab" type="button" role="tab" id="ds-tab-catalog"
+                  aria-selected="false" aria-controls="ct-wrap" tabindex="-1">Catalog</button>
+        </div>
+
+        <!-- The Catalog tab: every record of every kind, with its description,
+             tags, owner, last update and usage (catalogPage.ts). The shared
+             tag bar (catalogUi.ts) mounts itself above the column labels. -->
+        <div id="ct-wrap" role="tabpanel" aria-labelledby="ds-tab-catalog" hidden>
+          <div class="ct-toolbar">
+            <input class="ct-search" id="ct-search" type="search" placeholder="Filter by name, description, owner or #tag" aria-label="Filter the catalog" />
+            <div class="ct-kinds" id="ct-kinds" role="group" aria-label="Record kinds"></div>
+            <span class="viz-count ct-count" id="ct-count" hidden></span>
+          </div>
+          <div class="ws-table ct-table" id="ct-table" hidden>
+            <div class="ws-table-cols ct-cols">
+              <span>Name</span>
+              <span>Tags</span>
+              <span>Owner</span>
+              <span>Updated</span>
+              <span>Used by</span>
+              <span class="ws-col-action">Details</span>
+            </div>
+            <div class="ct-list" id="ct-list"></div>
+            <div class="ct-none" id="ct-none" hidden>
+              <span>Nothing matches these filters.</span>
+              <button class="btn btn-sm btn-ghost" type="button" id="ct-none-clear">Clear filters</button>
+            </div>
+          </div>
+          <div class="ws-empty ct-empty" id="ct-empty" hidden>
+            <span class="ws-empty-icon" aria-hidden="true"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="#i-list"/></svg></span>
+            <h3 class="ws-empty-h">Nothing to catalog yet</h3>
+            <p class="ws-empty-p">Every dataset, visual, dashboard, metric and report in this project is listed here with its description, tags and owner — so anyone can find the right one and know who to ask.</p>
+            <div class="ws-empty-actions">
+              <button class="btn btn-primary" type="button" id="ct-empty-import">Import a dataset</button>
+            </div>
+          </div>
         </div>
 
         <!-- The Metrics tab: the project's NAMED numbers. Same `.ws-table` /
@@ -949,6 +985,7 @@
               <div class="ds-explorer-titlerow">
                 <h3 class="ds-explorer-title" id="ds-explorer-title"></h3>
                 <span class="ds-source-badge" id="ds-explorer-source" hidden></span>
+                <span class="ct-head-chips" id="ds-explorer-tags" hidden></span>
               </div>
               <div class="ds-explorer-meta">
                 <span class="ds-fresh" id="ds-explorer-fresh"></span>
@@ -960,6 +997,7 @@
               <button class="btn btn-primary btn-sm" type="button" id="ds-act-visual">New visual</button>
               <button class="btn btn-sm" type="button" id="ds-act-dashboard">New dashboard</button>
               <button class="btn btn-sm" type="button" id="ds-act-ask">Ask</button>
+              <button class="btn btn-sm ct-details-btn" type="button" id="ds-act-details"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-info"/></svg><span>Details</span></button>
             </div>
           </div>
 
@@ -981,6 +1019,8 @@
                     aria-selected="false" aria-controls="ds-tabp-quality" tabindex="-1">Quality</button>
             <button class="ds-tab tab" type="button" role="tab" id="ds-tab-insights"
                     aria-selected="false" aria-controls="ds-tabp-insights" tabindex="-1">Insights</button>
+            <button class="ds-tab tab" type="button" role="tab" id="ds-tab-columns"
+                    aria-selected="false" aria-controls="ds-tabp-columns" tabindex="-1">Columns</button>
           </div>
 
           <div class="ds-tab-body">
@@ -1015,6 +1055,11 @@
                finding for the open dataset, grouped by kind with counts. -->
           <div class="ds-tabp" id="ds-tabp-insights" role="tabpanel" aria-labelledby="ds-tab-insights" hidden>
             <div class="ins-tab-body" id="ds-insights-body"></div>
+          </div>
+
+          <!-- The column docs, editable in place (catalogPage.ts ctPaintColumnsTab). -->
+          <div class="ds-tabp" id="ds-tabp-columns" role="tabpanel" aria-labelledby="ds-tab-columns" hidden>
+            <div class="ct-coldoc" id="ct-coldoc"></div>
           </div>
 
           <div class="ds-tabp" id="ds-tabp-prepare" role="tabpanel" aria-labelledby="ds-tab-prepare" hidden>
@@ -1061,8 +1106,14 @@
                   <div class="dsp-ident">
                     <h4 class="dsp-name js-dsp-name"></h4>
                     <span class="dsp-kind js-dsp-kind"></span>
+                    <p class="dsp-doc js-dsp-doc" hidden></p>
                   </div>
+                  <!-- Column details (catalogDetails.ts) — in the head, not the action
+                       stack, so the histogram keeps the body's full height. -->
+                  <span class="dsp-head-btns">
+                  <button class="dsp-x js-dsp-details-btn" type="button" aria-label="Column details — description, display name, sensitivity" title="Column details — description, display name, sensitivity"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-info"/></svg></button>
                   <button class="dsp-x js-dsp-x" type="button" aria-label="Close the column profile"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-x"/></svg></button>
+                  </span>
                 </div>
                 <!-- The body scrolls; the actions below it do not. A ten-bar
                      histogram is taller than the panel, and with everything in
@@ -1148,6 +1199,7 @@
               <label class="viz-field-label" for="viz-dataset-select">Dataset</label>
               <select class="viz-select" id="viz-dataset-select" aria-label="Dataset"></select>
               <button class="btn btn-sm viz-suggest-btn" type="button" id="viz-suggest-btn"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-sparkles"/></svg><span>Suggest chart</span></button>
+              <button class="btn btn-sm ct-details-btn" type="button" id="viz-details-btn"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-info"/></svg><span>Details</span></button>
               <button class="btn btn-primary" type="button" id="viz-save-btn">Save visual</button>
             </div>
           </div>
@@ -1306,6 +1358,7 @@
             <span class="rb-dirty" id="rp-dirty" hidden>Unsaved changes</span>
           </div>
           <div class="rb-head-actions">
+            <button class="btn btn-sm ct-details-btn" type="button" id="rp-details-btn"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-info"/></svg><span>Details</span></button>
             <button class="btn btn-sm" type="button" id="rp-save">Save</button>
             <button class="btn btn-sm btn-primary" type="button" id="rp-generate">Generate</button>
           </div>
@@ -1403,6 +1456,7 @@
           <div class="st-head-actions">
             <button class="icon-btn" type="button" id="st-undo" aria-label="Undo" title="Undo"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-undo"/></svg></button>
             <button class="icon-btn" type="button" id="st-redo" aria-label="Redo" title="Redo"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-redo"/></svg></button>
+            <button class="btn btn-sm ct-details-btn ct-details-btn--icon" type="button" id="st-details-btn" aria-label="Details — description, tags, owner" title="Details — description, tags, owner"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-info"/></svg></button>
             <button class="btn btn-sm" type="button" id="st-export">Export PDF</button>
             <button class="btn btn-sm btn-primary" type="button" id="st-present">Present</button>
             <button class="icon-btn" type="button" id="st-more" aria-label="More story actions" aria-haspopup="true"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-more-horizontal"/></svg></button>
@@ -1588,6 +1642,7 @@
           <button class="btn btn-sm" type="button" id="dash-back-btn"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-chevron-left"/></svg><span>Back</span></button>
           <span class="dash-name" id="dash-name"></span>
           <button class="btn btn-sm dash-edit-only" type="button" id="dash-rename-btn">Rename</button>
+          <button class="btn btn-sm ct-details-btn ct-details-btn--icon" type="button" id="dash-details-btn" aria-label="Details — description, tags, owner" title="Details — description, tags, owner"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-info"/></svg></button>
           <!-- Freshness of the DATA behind this sheet. One element for both
                hosts: analyses and published dashboards share this editor. -->
           <span class="dash-fresh" id="dash-fresh" hidden></span>
@@ -2277,6 +2332,7 @@
         <span><span class="kbd">&gt;</span> commands</span>
         <span><span class="kbd">/</span> your data</span>
         <span><span class="kbd">@</span> columns</span>
+        <span><span class="kbd">#</span> tags</span>
       </div>
     </div>
   </div>
@@ -2653,6 +2709,8 @@
      not exist yet and its position in this list is free — it sits with the
      other foundations because that is what it is. -->
 <script src="tooltip.js"></script>
+<!-- Catalog: shared tag chips, the tag-filter bar and the column-docs cache. -->
+<script src="catalogUi.js"></script>
 <script src="geoMatch.js"></script>
 <!-- Chart scripts, in DEPENDENCY ORDER. chartTraits has no dependencies of its
      own; chartPalette defines CHART_PALETTE + getCSSVar; chartTable reads
@@ -2863,6 +2921,9 @@
 <script src="metricPicker.js"></script>
 <script src="metricEditor.js"></script>
 <script src="metricsPage.js"></script>
+<!-- Catalog: the Details popover, then the Catalog tab + Columns tab (wires both). -->
+<script src="catalogDetails.js"></script>
+<script src="catalogPage.js"></script>
 <script src="hubResultMenus.js"></script>
 <!-- The command registry, its contents, and the palette that reads them.
      commands.js is the machinery, commandDefs.js registers every command (so it

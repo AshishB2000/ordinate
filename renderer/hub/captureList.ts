@@ -18,7 +18,7 @@
 // the empty state is `.ws-empty`. Only `.cap-card-img` is new, and it is the
 // image frame.
 
-let clActive: 'datasets' | 'captures' | 'metrics' = 'datasets';
+let clActive: 'datasets' | 'captures' | 'metrics' | 'catalog' = 'datasets';
 
 function clEl(id: string): HTMLElement | null {
   return document.getElementById(id);
@@ -32,7 +32,7 @@ function clEl(id: string): HTMLElement | null {
  * makes a capture. So the tab switch swaps the sentence and hides that row
  * rather than leaving four buttons that do nothing for what is on screen.
  */
-const CL_TABS: Array<{ id: 'datasets' | 'captures' | 'metrics'; tab: string; panel: string; sub: string }> = [
+const CL_TABS: Array<{ id: 'datasets' | 'captures' | 'metrics' | 'catalog'; tab: string; panel: string; sub: string }> = [
   {
     id: 'datasets', tab: 'ds-tab-datasets', panel: 'ds-saved',
     sub: 'Import CSV, JSON, or Excel — or paste data — to save a structured dataset in this project.',
@@ -45,9 +45,13 @@ const CL_TABS: Array<{ id: 'datasets' | 'captures' | 'metrics'; tab: string; pan
     id: 'metrics', tab: 'ds-tab-metrics', panel: 'mp-wrap',
     sub: 'The numbers this project is about, defined once and shown the same way everywhere.',
   },
+  {
+    id: 'catalog', tab: 'ds-tab-catalog', panel: 'ct-wrap',
+    sub: 'Everything in this project — what it is, who owns it, what uses it and whether it is fresh.',
+  },
 ];
 
-function clSelectTab(tab: 'datasets' | 'captures' | 'metrics'): void {
+function clSelectTab(tab: 'datasets' | 'captures' | 'metrics' | 'catalog'): void {
   clActive = tab;
 
   // A table, not a chain of booleans: this started as two tabs and an
@@ -80,6 +84,7 @@ function clSelectTab(tab: 'datasets' | 'captures' | 'metrics'): void {
 
   if (tab === 'captures') void refreshCaptureList();
   if (tab === 'metrics') void refreshMetricsList();
+  if (tab === 'catalog') void ctRefreshCatalog();
 }
 
 /** Land on the Data page with the Captures tab showing — where "‹ Back" goes. */

@@ -24,6 +24,7 @@ async function stRefreshList(): Promise<void> {
   if (!Array.isArray(items)) items = [];
   grid.textContent = '';
   items.forEach((s) => grid.appendChild(stCard(s)));
+  void ctAfterPaint(grid); // catalog tag bar + chips
   grid.hidden = items.length === 0;
   if (empty) empty.hidden = items.length > 0;
   // The empty state carries the same two buttons; one set on screen, not two.
@@ -67,6 +68,7 @@ function stCard(s: any): HTMLElement {
   meta.textContent = `${n} block${n === 1 ? '' : 's'} · ${formatSidebarTime(s.updatedAt)}`;
   body.appendChild(meta);
   card.appendChild(body);
+  ctDecorate(card, 'story', String(s.id), body); // catalog tag chips
 
   const more = document.createElement('button');
   more.type = 'button';

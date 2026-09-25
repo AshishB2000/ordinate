@@ -124,7 +124,7 @@ function makeExplorerTh(col: ExpCol, c: number): HTMLElement {
   nameBtn.type = 'button';
   nameBtn.className = 'ds-th-name';
   nameBtn.textContent = col.name;
-  nameBtn.title = 'Profile this column';
+  nameBtn.title = ctColumnTitle(expId, col.name, 'Profile this column', paintExplorerTable); // + its catalog description
   nameBtn.setAttribute('aria-expanded', String(dsProfileCol === c));
   nameBtn.addEventListener('click', (e) => {
     e.stopPropagation();

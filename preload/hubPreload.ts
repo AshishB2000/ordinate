@@ -643,6 +643,17 @@ contextBridge.exposeInMainWorld('hub', {
   reportsReveal: (projectId: string, id: string) => ipcRenderer.invoke('reports:reveal', { projectId, id }),
   // Main rings the bell at the end of the refresh tick; the hub does the work.
   onReportsRunDue: (cb: () => void) => ipcRenderer.on('reports:run-due', () => cb()),
+  // ── Catalog (src/ipc/catalog.ts) — descriptions, tags, owners, column docs.
+  // `ref` is `${kind}:${id}`; main validates both and stamps updatedBy itself.
+  catalogGet: (projectId: string, ref: string) => ipcRenderer.invoke('catalog:get', { projectId, ref }),
+  catalogSet: (projectId: string, ref: string, patch: any) => ipcRenderer.invoke('catalog:set', { projectId, ref, patch }),
+  catalogColumns: (projectId: string, datasetId: string) => ipcRenderer.invoke('catalog:columns', { projectId, datasetId }),
+  catalogSetColumn: (projectId: string, datasetId: string, column: string, patch: any) =>
+    ipcRenderer.invoke('catalog:setColumn', { projectId, datasetId, column, patch }),
+  catalogTags: (projectId: string) => ipcRenderer.invoke('catalog:tags', { projectId }),
+  catalogList: (projectId: string) => ipcRenderer.invoke('catalog:list', { projectId }),
+  catalogSensitivity: (projectId: string, analysisId: string) =>
+    ipcRenderer.invoke('catalog:sensitivity', { projectId, analysisId }),
   // ── AI Copilot (Week 11) — per-project, context-aware chat ──
   // Load one conversation's turns (survives reload); returns { ok, turns, threadId }.
   // threadId is optional and defaults to the most recent conversation, so every

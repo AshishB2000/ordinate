@@ -107,6 +107,8 @@ export interface FactMetric {
   value: number | null;
   /** The metric's OWN formatting, which is how it should be written back. */
   display: string;
+  /** What the metric means, in the user's words (Metric.description). */
+  description?: string;
 }
 
 function metricLines(lines: string[], ledger: LedgerEntry[], metrics: FactMetric[]): void {
@@ -114,9 +116,35 @@ function metricLines(lines: string[], ledger: LedgerEntry[], metrics: FactMetric
   lines.push('');
   lines.push('Defined metrics — use THESE names for these numbers, and write them the way the app does:');
   metrics.forEach((m) => {
-    lines.push(`- "${m.name}" = ${m.definitionText}. Currently ${m.display}.`);
+    lines.push(`- "${m.name}" = ${m.definitionText}. Currently ${m.display}.` + (m.description ? ` Means: ${m.description}` : ''));
     num(ledger, m.name, m.value, 'number', 'metrics');
   });
+}
+
+/** A column's catalog notes, as the Assistant needs them (src/app/catalog.ts). */
+export interface FactColumnDoc { description?: string; displayName?: string; sensitivity?: string }
+
+/**
+ * The user's OWN notes on columns — what a column means, what they call it,
+ * whether it is personal or financial — so an answer uses their words. Words,
+ * not figures: a digit a note happens to contain reaches the ledger through
+ * sealLedger, exactly like a digit in a dataset name.
+ */
+function columnNoteLines(lines: string[], docs: Record<string, FactColumnDoc>, only?: string[]): void {
+  const notes: string[] = [];
+  for (const name of Object.keys(docs || {})) {
+    if (only && only.indexOf(name) < 0) continue;
+    const d = docs[name] || {};
+    const bits: string[] = [];
+    if (d.displayName) bits.push(`called "${d.displayName}"`);
+    if (d.description) bits.push(d.description);
+    if (d.sensitivity && d.sensitivity !== 'none') bits.push(`${d.sensitivity} data`);
+    if (bits.length) notes.push(`- ${name}: ${bits.join('; ')}`);
+  }
+  if (!notes.length) return;
+  lines.push('');
+  lines.push('Column notes (written by the user) — use these names and meanings for these columns:');
+  lines.push(...notes);
 }
 
 // Dataset: columns + types + app-computed stats (min/max/mean/count |
@@ -137,6 +165,8 @@ export function datasetFacts(
   // src/ipc/metrics.ts. Optional and defaulted, so every existing caller — and
   // every existing test — produces a byte-identical block without them.
   metrics: FactMetric[] = [],
+  // The user's column notes from the catalog. Optional, same reason.
+  columnDocs: Record<string, FactColumnDoc> = {},
 ): CopilotFacts {
   const lines: string[] = [GUARD_LINE, ''];
   const ledger: LedgerEntry[] = [];
@@ -168,6 +198,7 @@ export function datasetFacts(
       if (s.mostCommon) num(ledger, `${s.name} most common count`, s.mostCommon.count, 'count', SRC);
     }
   });
+  columnNoteLines(lines, columnDocs);
   metricLines(lines, ledger, metrics);
   if (issues.length > 0) {
     lines.push('');
@@ -216,7 +247,9 @@ export function datasetFacts(
 // Visual: chart type + encoding (category, measures+aggregations, optional series)
 // + the COMPUTED labels/series from vizData.buildVizData (real, app-computed
 // numbers). No figure is derived here — viz already did the math.
-export function visualFacts(v: Visual, datasetName: string, viz: VizDataResult): CopilotFacts {
+export function visualFacts(
+  v: Visual, datasetName: string, viz: VizDataResult, columnDocs: Record<string, FactColumnDoc> = {},
+): CopilotFacts {
   const lines: string[] = [GUARD_LINE, ''];
   lines.push(`Visual: "${v.name}" — a ${v.chartType} chart over dataset "${datasetName}".`);
   const measures = (v.encoding.values || [])
@@ -224,6 +257,8 @@ export function visualFacts(v: Visual, datasetName: string, viz: VizDataResult):
     .join(', ');
   lines.push(`Category (x): ${v.encoding.category}. Measures: ${measures || '(none)'}` +
     (v.encoding.series ? `. Split by: ${v.encoding.series}.` : '.'));
+  columnNoteLines(lines, columnDocs,
+    [v.encoding.category, v.encoding.series || '', ...(v.encoding.values || []).map((m) => m.column)]);
 
   const ledger: LedgerEntry[] = [];
   const data = viz && viz.data ? viz.data : { labels: [], series: [] };
@@ -440,7 +475,9 @@ export function projectFacts(
   // Each dataset's COLUMNS — names and declared types, no figures — so a
   // question asked from Home can still be answered with a chart: the model
   // needs real column names to write an answer spec, and the app resolves them.
-  schemas: { name: string; columns: { name: string; type: string }[] }[] = [],
+  // …and the user's catalog notes on those columns, so "revenue" is written the
+  // way the user names it and a described column is picked for what it means.
+  schemas: { name: string; columns: { name: string; type: string }[]; docs?: Record<string, FactColumnDoc> }[] = [],
 ): CopilotFacts {
   const lines: string[] = [GUARD_LINE, ''];
   const ledger: LedgerEntry[] = [];
@@ -455,7 +492,14 @@ export function projectFacts(
     lines.push('');
     lines.push('Dataset columns (name and type — use these exact names in an answer spec):');
     schemas.forEach((s) => {
-      lines.push(`- ${s.name}: ${s.columns.map((c) => `${c.name} (${c.type})`).join(', ') || '(no columns)'}`);
+      const note = (col: string): string => {
+        const d = (s.docs || {})[col];
+        if (!d) return '';
+        const bits = [d.displayName ? `called "${d.displayName}"` : '', d.description ? d.description.slice(0, 120) : '']
+          .filter(Boolean);
+        return bits.length ? '; ' + bits.join('; ') : '';
+      };
+      lines.push(`- ${s.name}: ${s.columns.map((c) => `${c.name} (${c.type}${note(c.name)})`).join(', ') || '(no columns)'}`);
     });
   }
   lines.push('');

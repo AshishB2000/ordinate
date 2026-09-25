@@ -233,7 +233,8 @@ async function stVisualData(block: any): Promise<{ visual: any; data: any; capti
   const data = res && res.ok !== false && res.data ? res.data : { labels: [], series: [] };
   let caption = '';
   try {
-    caption = await window.hub.reportsCaption({ chartType: v.chartType, data, geo: data.geo || null, pivot: data.pivot || null });
+    caption = await window.hub.reportsCaption({ chartType: v.chartType, data, geo: data.geo || null, pivot: data.pivot || null,
+      projectId: currentProjectId, datasetId: v.datasetId, overrides: v.overrides || {} });
   } catch (_) { caption = ''; }
   return { visual: v, data, caption: typeof caption === 'string' ? caption : '' };
 }
