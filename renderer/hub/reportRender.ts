@@ -48,8 +48,24 @@ interface RenderedPage {
   bullets?: string[];
   /** Cover only: the filter line and the date. */
   meta?: string[];
-  logo?: boolean;
+  /** Cover only: the mark to draw, with its natural size so every writer can
+   *  keep its aspect. Null when the dashboard's Style says no logo. */
+  logo?: ReportLogo | null;
   layout?: string;
+}
+
+interface ReportLogo { src: string; w: number; h: number }
+
+/**
+ * The cover's mark: the dashboard's own logo, else the workspace's (Settings →
+ * Appearance → Branding), else Ordinate's. A dashboard styled "No logo" gets
+ * none. Always a PNG — pdfmake, pptxgenjs and docx cannot embed an SVG.
+ */
+async function reportLogo(analysis: any): Promise<ReportLogo | null> {
+  if (analysis && analysis.style && analysis.style.logo === 'none') return null;
+  const src = (await dashLogoFor(analysis, true)) || REPORT_LOGO_PNG;
+  const size = await imageSize(src);
+  return { src, w: size ? size.w : 1, h: size ? size.h : 1 };
 }
 
 /** Everything a page list needs to resolve. Supplied, never read off globals. */
@@ -183,7 +199,7 @@ async function reportTile(
     }
   }
 
-  const frame = Object.assign({ themeClasses: reportStyleClasses(ctx.analysis) }, box);
+  const frame = Object.assign({ themeClasses: reportStyleClasses(ctx.analysis), accentHex: dashSanitizeStyle(ctx.analysis && ctx.analysis.style).accentHex }, box);
   let png: string | null = null;
   if (!grid) {
     try {
@@ -238,7 +254,6 @@ function reportFilterLine(ctx: ReportContext): string {
 
 // ── the page list ────────────────────────────────────────────────────────────
 
-const REPORT_DATE_OPTS: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' };
 
 /**
  * Resolve a Report's page list into `RenderedPage`s, in order, skipping the
@@ -302,7 +317,7 @@ async function buildReportPages(ctx: ReportContext): Promise<RenderedPage[]> {
     const cover = report.cover || {};
     switch (page.kind) {
       case 'cover': {
-        const meta = [new Date().toLocaleDateString(undefined, REPORT_DATE_OPTS)];
+        const meta = [reportDateStr()];
         if (report.includeFilters !== false) {
           const line = reportFilterLine(ctx);
           if (line) meta.push(line);
@@ -311,7 +326,7 @@ async function buildReportPages(ctx: ReportContext): Promise<RenderedPage[]> {
           kind: 'cover', layout: page.layout,
           title: cover.title || report.name || 'Report',
           subtitle: cover.subtitle || '',
-          meta, logo: cover.logo !== false,
+          meta, logo: cover.logo !== false ? await reportLogo(ctx.analysis) : null,
         };
       }
       case 'summary':
@@ -413,7 +428,7 @@ async function reportNarrative(ctx: ReportContext, captions: string[]): Promise<
 // missing. Now each consumer answers one question per block kind, and adding a
 // page kind is a change HERE, once.
 type ReportBlock =
-  | { t: 'logo' }
+  | { t: 'logo'; src: string; w: number; h: number }
   | { t: 'title'; text: string }
   | { t: 'sub'; text: string }
   | { t: 'meta'; text: string }
@@ -428,7 +443,7 @@ type ReportBlock =
 
 function reportPageBlocks(rp: RenderedPage): ReportBlock[] {
   const out: ReportBlock[] = [];
-  if (rp.kind === 'cover' && rp.logo) out.push({ t: 'logo' });
+  if (rp.kind === 'cover' && rp.logo) out.push({ t: 'logo', ...rp.logo });
   if (rp.title) out.push({ t: 'title', text: rp.title });
   if (rp.subtitle) out.push({ t: 'sub', text: rp.subtitle });
   for (const line of (rp.meta || [])) out.push({ t: 'meta', text: line });
@@ -450,8 +465,11 @@ function reportPageBlocks(rp: RenderedPage): ReportBlock[] {
 }
 
 /** The one date string a report prints, everywhere it prints one. */
+/** Today, in the workspace's date style (Settings → Formats). */
 function reportDateStr(): string {
-  return new Date().toLocaleDateString(undefined, REPORT_DATE_OPTS);
+  const d = new Date();
+  const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return OrdFormat.formatDate(iso);
 }
 
 /**
@@ -543,7 +561,7 @@ function renderPreviewPage(host: HTMLElement, rp: RenderedPage | null, report: a
       case 'logo': {
         const mark = document.createElement('img');
         mark.className = 'rb-cover-mark';
-        mark.src = REPORT_LOGO_PNG;
+        mark.src = b.src;
         mark.alt = '';
         body.appendChild(mark);
         break;

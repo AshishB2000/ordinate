@@ -494,7 +494,7 @@ function qtFormatNumbers(table: HTMLElement, columns: any[]): HTMLElement {
       if (!numeric[i]) return;
       td.classList.add('qt-num');
       const n = Number(td.textContent);
-      if (td.textContent !== '' && Number.isFinite(n)) td.textContent = n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+      if (td.textContent !== '' && Number.isFinite(n)) td.textContent = OrdFormat.formatNumber(n, { maxDecimals: 2 });
     });
   });
   return table;

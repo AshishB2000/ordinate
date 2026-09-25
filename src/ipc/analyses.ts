@@ -8,6 +8,8 @@ import * as planBuild from '../analysis/planBuild';
 import { buildStarterPlan } from '../analysis/starterPlan';
 import * as delta from '../analysis/dashboardDelta';
 import * as execConfig from '../app/execConfig';
+import * as config from '../app/config';
+import { DASHBOARD_STYLE_PRESETS } from '../analysis/dashboards';
 
 // Analyses IPC — list/get/create/rename/update/delete an Analysis (the AUTHORING
 // container), plus the AI layout draft channel `analysis:draft` (MOVED from the
@@ -62,7 +64,10 @@ export function register() {
   // is listed for exactly that reason, and so is `parameters`.
   ipcMain.handle('analysis:create', async (_e, { projectId, name, sheets, filters, style, parameters }: any = {}) => {
     try {
-      const saved = await analysis.saveAnalysis(projectId, { name, sheets, filters, style, parameters });
+      // A new dashboard starts in the workspace's default style (Settings →
+      // Appearance → Branding) unless the caller brought one.
+      const preset = DASHBOARD_STYLE_PRESETS[config.get().branding.dashboardStyle];
+      const saved = await analysis.saveAnalysis(projectId, { name, sheets, filters, style: style ?? preset, parameters });
       if (!saved) return { ok: false, error: 'Invalid project, or it no longer exists' };
       return saved;
     } catch (err: any) {

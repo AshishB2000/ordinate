@@ -2,6 +2,7 @@ import { ipcMain, dialog, app, shell } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { buildSelfContainedHtml } from '../analysis/dashboardExport';
+import { getFormatPrefs } from '../app/format';
 import { captureHtmlToPng, captureHtmlToPdf } from '../app/reportCapture';
 
 // Dashboard EXPORT + SHARE IPC — MAIN PROCESS.
@@ -70,7 +71,13 @@ export function register() {
         // the exported file rather than failing the whole export.
         console.error('[dashboardExport] could not read Chart.js UMD', e);
       }
-      const html = buildSelfContainedHtml(bundle, chartLibJs);
+      let formatJs = '';
+      try {
+        formatJs = await fs.promises.readFile(path.join(__dirname, '..', 'app', 'format.js'), 'utf8');
+      } catch (e) {
+        console.error('[dashboardExport] could not read the formatter', e);
+      }
+      const html = buildSelfContainedHtml(bundle, chartLibJs, { js: formatJs, prefs: getFormatPrefs() });
       const res = await saveBuffer(Buffer.from(html, 'utf8'), {
         title: 'Export dashboard (HTML)',
         defaultName: safeName(defaultName, 'html', 'dashboard'),

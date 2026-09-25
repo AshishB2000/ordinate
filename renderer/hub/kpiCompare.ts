@@ -22,7 +22,7 @@ const KPI_COMPARE_OPTIONS: Array<{ value: string; label: string }> = [
 /** "+18.2%" / "−4.1%" — one decimal under 10%, none above, a real minus sign. */
 function kpiPct(pct: number): string {
   const a = Math.abs(pct);
-  const body = a.toLocaleString(undefined, { maximumFractionDigits: a < 10 ? 1 : 0 });
+  const body = OrdFormat.formatNumber(a, { maxDecimals: a < 10 ? 1 : 0 });
   return (pct > 0 ? '+' : pct < 0 ? '−' : '') + body + '%';
 }
 

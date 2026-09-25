@@ -321,38 +321,35 @@ ok('a disabled rule never fires however far it crosses',
     step(rule(), null, NOON).rule.history === undefined);
 }
 
-// ── Formatting: the mirror of the renderer's _fmtVal ─────────────────────────
+// ── Formatting: the SAME formatter as the card ─────────────────────────────
 //
-// THE DIFFERENTIAL THAT MATTERS MOST TO A READER. The alert is about a KPI card,
-// and a banner reading "5.19M" under a card reading "5.2M" is two numbers. This
-// is the renderer's function, copied verbatim from renderer/hub/hub.ts, asserted
-// against main's `fmtMetric` with Object.is — so the mirror cannot drift.
+// THE CHECK THAT MATTERS MOST TO A READER. The alert is about a KPI card, and a
+// banner reading "5.19M" under a card reading "5.2M" is two numbers. There used
+// to be a hand-kept copy of the renderer's _fmtVal here; both sides now call
+// src/app/format.ts, so this pins that they still do, and what it prints.
 
 {
-  function rendererFmtVal(v: any): string {
-    if (v == null) return '';
-    if (Math.abs(v) >= 1e9) return (v / 1e9).toFixed(1) + 'B';
-    if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(1) + 'M';
-    if (Math.abs(v) >= 1e3) return (v / 1e3).toFixed(1) + 'K';
-    return v.toLocaleString();
-  }
+  const { formatCompact } = require('../src/app/format') as typeof import('../src/app/format');
+  const fs: typeof import('fs') = require('fs');
+  const path: typeof import('path') = require('path');
+  const hubSrc = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'hub', 'hub.ts'), 'utf8');
+  const fmtVal = hubSrc.slice(hubSrc.indexOf('function _fmtVal('), hubSrc.indexOf('\n}', hubSrc.indexOf('function _fmtVal(')));
+  ok('the renderer\'s _fmtVal is OrdFormat.formatCompact', /return OrdFormat\.formatCompact\(v\);/.test(fmtVal), fmtVal);
   const cases = [
     0, 1, 7, 999, 1000, 1500, 9999, 10_000, 999_999, 1_000_000,
     5_194_598.73, 6_000_000, 999_999_999, 1_000_000_000, 4.5e9,
     -1500, -5_194_598.73, 0.5, 12.25,
   ];
-  let same = 0;
-  for (const v of cases) {
-    if (Object.is(fmtMetric(v), rendererFmtVal(v))) same += 1;
-    else ok('fmtMetric matches the renderer for ' + v, false, `${fmtMetric(v)} vs ${rendererFmtVal(v)}`);
-  }
-  ok(`fmtMetric is byte-identical to the renderer's _fmtVal (${cases.length} cases)`,
-    same === cases.length);
-  // The one place they part company, and it is deliberate: the renderer prints
-  // '' for a missing value inside a card that already says "—"; a SENTENCE needs
-  // a word there.
+  ok(`fmtMetric is formatCompact (${cases.length} cases)`, cases.every((v) => Object.is(fmtMetric(v), formatCompact(v))),
+    cases.filter((v) => fmtMetric(v) !== formatCompact(v)).join(', '));
+  const want: Array<[number, string]> = [
+    [5_194_598.73, '5.2M'], [1500, '1.5K'], [-1500, '-1.5K'], [999, '999'], [12.25, '12.25'],
+    // Rounding up to the next unit names that unit: never "1000.0K".
+    [999_999, '1.0M'], [999_999_999, '1.0B'],
+  ];
+  for (const [v, text] of want) ok(`fmtMetric(${v}) is "${text}"`, fmtMetric(v) === text, fmtMetric(v));
   ok('…except for null, where a sentence needs a dash and a card does not',
-    fmtMetric(null) === '—' && rendererFmtVal(null) === '');
+    fmtMetric(null) === '—' && formatCompact(null) === '');
   ok('…and for a non-finite number, which is never a figure', fmtMetric(NaN) === '—');
 
   ok('a percentage is one decimal with no trailing zero', fmtPct(12.4) === '12.4%' && fmtPct(10) === '10%');

@@ -107,6 +107,13 @@ declare global {
       captureRegion(rect: { x: number; y: number; width: number; height: number }): Promise<any>;
       captureReport(html: string, width: number): Promise<any>;
       getThemePreference(): Promise<any>;
+      getPrefs(): Promise<any>;
+      setFormats(patch: any): Promise<any>;
+      setBranding(patch: any): Promise<any>;
+      pickLogo(scope: string): Promise<any>;
+      clearLogo(scope: string): Promise<any>;
+      getLogo(scope: string): Promise<any>;
+      onPrefsChanged(cb: (data: any) => void): void;
       setThemePreference(preference: string): Promise<any>;
       onThemeApply(cb: (data: any) => void): void;
       saveChartOverrides(entryId: string, key: string, overrides: any): Promise<any>;

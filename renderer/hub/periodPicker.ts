@@ -86,26 +86,14 @@ function periodLabel(spec: any): string {
   }
 }
 
-/** A stored ISO date → "Sep 3, 2026". UTC, so no timezone can move the day. */
+/** A stored ISO date in the workspace's date style (OrdFormat). */
 function ppFmtDate(iso: string, withYear = true): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
-  if (!m) return String(iso || '');
-  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
-  const o: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', timeZone: 'UTC' };
-  if (withYear) o.year = 'numeric';
-  return d.toLocaleDateString(undefined, o);
+  return OrdFormat.formatDate(iso, undefined, withYear);
 }
 
 /** Two ISO bounds → "Sep 1 – Sep 30, 2026" (one year) or "Jul 1, 2024 – Jun 30, 2025". */
 function ppFmtRange(from?: string, to?: string): string {
-  if (from && to) {
-    if (from === to) return ppFmtDate(from);
-    const sameYear = from.slice(0, 4) === to.slice(0, 4);
-    return ppFmtDate(from, !sameYear) + ' – ' + ppFmtDate(to);
-  }
-  if (from) return 'From ' + ppFmtDate(from);
-  if (to) return 'Until ' + ppFmtDate(to);
-  return '';
+  return OrdFormat.formatDateRange(from, to);
 }
 
 /** Whether a date-range ControlValue is relative (a preset) rather than two dates. */

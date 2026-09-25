@@ -166,6 +166,15 @@ contextBridge.exposeInMainWorld('hub', {
   setThemePreference: (preference: string) => ipcRenderer.invoke('theme:setPreference', preference),
   // Fired when main resolves a new effective theme (OS change in 'system' mode).
   onThemeApply: (cb: (data: any) => void) => ipcRenderer.on('theme:apply', (_e, data) => cb(data)),
+  // Workspace formats + branding (src/ipc/prefs.ts). `{ formats, branding }`.
+  getPrefs: () => ipcRenderer.invoke('prefs:get'),
+  setFormats: (patch: any) => ipcRenderer.invoke('formats:set', patch),
+  setBranding: (patch: any) => ipcRenderer.invoke('branding:set', patch),
+  // `scope` is 'workspace' or a dashboard (analysis) id. Returns { ok, dataUrl }.
+  pickLogo: (scope: string) => ipcRenderer.invoke('branding:pickLogo', scope),
+  clearLogo: (scope: string) => ipcRenderer.invoke('branding:clearLogo', scope),
+  getLogo: (scope: string) => ipcRenderer.invoke('branding:logo', scope),
+  onPrefsChanged: (cb: (data: any) => void) => ipcRenderer.on('prefs:changed', (_e, data) => cb(data)),
   // Persist chart customization overrides for a specific chart slot in a thread.
   saveChartOverrides: (entryId: string, key: string, overrides: any) =>
     ipcRenderer.invoke('hub:saveChartOverrides', { entryId, key, overrides }),

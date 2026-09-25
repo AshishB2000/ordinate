@@ -29,6 +29,7 @@
 // An ANOMALY rule delegates the whole question to ./anomalyWatch's key diff,
 // which is the edge-trigger it already implements.
 
+import { formatCompact } from '../app/format';
 import type { MetricAggregation } from './metricValue';
 import type { FilterStep } from '../data/transforms';
 import type { Anomaly } from './anomalies';
@@ -148,11 +149,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  */
 export function fmtMetric(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return '—';
-  const a = Math.abs(v);
-  if (a >= 1e9) return (v / 1e9).toFixed(1) + 'B';
-  if (a >= 1e6) return (v / 1e6).toFixed(1) + 'M';
-  if (a >= 1e3) return (v / 1e3).toFixed(1) + 'K';
-  return v.toLocaleString();
+  return formatCompact(v);
 }
 
 /** A percentage for prose: one decimal, no trailing ".0", never signed. */

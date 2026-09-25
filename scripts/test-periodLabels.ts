@@ -20,7 +20,8 @@ import type { PeriodSpec } from '../src/analysis/dateIntel';
 import { ok, finish } from './selfcheck';
 
 const code = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'hub', 'periodPicker.js'), 'utf8');
-const ctx = vm.createContext({});
+// The one formatter, as the renderer binds it (formatBind.ts).
+const ctx = vm.createContext({ OrdFormat: require('../src/app/format') });
 vm.runInContext(code, ctx);
 
 const specs: PeriodSpec[] = [];

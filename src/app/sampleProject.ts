@@ -213,10 +213,21 @@ async function patchSampleSheet(projectId: string, analysisId: string): Promise<
   const mapIds = new Set((await visuals.listVisuals(projectId))
     .filter((v) => v.chartType.startsWith('map_'))
     .map((v) => v.id));
+  // A KPI tile IS the seeded metric it shows, so it formats as the metric says:
+  // Revenue in the workspace currency ("$5.2M", "€5.2M"), not a bare "5.2M".
+  const metricIds = new Map<string, string>();
+  for (const m of await metrics.listMetrics(projectId)) {
+    const d = m.definition as { column?: string; aggregation?: string };
+    if (d.column) metricIds.set(d.column + '|' + d.aggregation, m.id);
+  }
   const sheets = rec.sheets.map((page) => ({
     ...page,
     cards: page.cards.map((c) => {
       if (c.type === 'text') return { ...c, action: 'delete-sample' };
+      if (c.type === 'metric' && c.metric) {
+        const metricId = metricIds.get(c.metric.column + '|' + c.metric.aggregation);
+        if (metricId) return { ...c, metric: { ...c.metric, metricId } };
+      }
       if (c.type === 'visual' && c.visualId && mapIds.has(c.visualId)) {
         return { ...c, layout: { ...c.layout, x: 0, w: dashboards.GRID_COLS } };
       }

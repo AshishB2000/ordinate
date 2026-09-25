@@ -424,6 +424,12 @@ export interface DashboardStyle {
   theme: 'auto' | 'clean' | 'executive' | 'dark';
   density: 'comfortable' | 'compact';
   accent: 'blue' | 'teal' | 'slate';
+  /** A custom accent, `#rrggbb`. Wins over `accent` and over the workspace's
+   *  brand accent, for this dashboard only. Strict hex, so safe in CSS. */
+  accentHex?: string;
+  /** Which logo this dashboard's surfaces carry. Absent = the workspace's;
+   *  'custom' = its own, stored in userData/branding (app/branding.ts). */
+  logo?: 'none' | 'custom';
   /** The user (or the Assistant on their behalf) picked this, so it is an
    *  override to keep rather than a default to migrate. Absent means defaulted. */
   chosen?: true;
@@ -495,6 +501,9 @@ export function sanitizeStyle(raw: unknown): DashboardStyle {
       typeof o.accent === 'string' && STYLE_ACCENTS.has(o.accent)
         ? (o.accent as DashboardStyle['accent'])
         : DEFAULT_DASHBOARD_STYLE.accent,
+    ...(typeof o.accentHex === 'string' && /^#[0-9a-f]{6}$/i.test(o.accentHex)
+      ? { accentHex: o.accentHex.toLowerCase() } : {}),
+    ...(o.logo === 'none' || o.logo === 'custom' ? { logo: o.logo } : {}),
     // Last, so a preset literal and its sanitized copy serialise identically.
     ...(chosen ? { chosen: true as const } : {}),
   };

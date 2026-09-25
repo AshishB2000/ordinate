@@ -52,8 +52,7 @@ function explorerDisplayRows(): ExpCell[][] {
 
 function fmtNum(n: number): string {
   if (!Number.isFinite(n)) return '';
-  const r = Math.round(n * 100) / 100;
-  return String(r);
+  return OrdFormat.formatNumber(n, { maxDecimals: 2 });
 }
 
 function truncate(s: string, max: number): string {
@@ -295,7 +294,12 @@ function paintExplorerTable(): void {
       const td = document.createElement('td');
       td.className = 'ds-td';
       const v = cells[c];
-      td.textContent = v == null ? '' : String(v);
+      // A number reads grouped, in the workspace's marks, without float noise
+      // (1565150.4600000004 → 1,565,150.46). Display only — the cell is exact.
+      if (typeof v === 'number' && Number.isFinite(v)) {
+        td.textContent = OrdFormat.formatNumber(v, { maxDecimals: 4 });
+        td.classList.add('ds-td-num');
+      } else td.textContent = v == null ? '' : String(v);
       tr.appendChild(td);
     });
     tbody.appendChild(tr);

@@ -438,6 +438,8 @@ ipcMain.handle('key:status', () => execConfig.publicConfig());
 require("./ipc/geo").register();
 
 require("./ipc/theme").register({ getHubWindow: () => hubWindow });
+// Workspace formats and branding (Settings → General / Appearance).
+require("./ipc/prefs").register({ getHubWindow: () => hubWindow });
 
 require("./ipc/providers").register({
   getHubWindow: () => hubWindow, notifyKeyChanged,

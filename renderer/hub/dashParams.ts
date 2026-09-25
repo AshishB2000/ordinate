@@ -44,7 +44,7 @@ function dashParamPayload(): any[] {
 function dashParamDisplay(kind: string, value: any): string {
   if (value == null) return '—';
   if (Array.isArray(value)) return value.length ? value.join(', ') : '—';
-  if (kind === 'number' && typeof value === 'number') return value.toLocaleString(undefined, { maximumFractionDigits: 6 });
+  if (kind === 'number' && typeof value === 'number') return OrdFormat.formatNumber(value, { maxDecimals: 6 });
   return String(value);
 }
 

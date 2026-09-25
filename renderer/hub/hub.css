@@ -8832,6 +8832,18 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   cursor: pointer;
 }
 .dash-present-exit:hover { border-color: var(--accent); color: var(--accent); }
+/* The brand mark, bottom-right while presenting (dashShare.enterDashPresent). */
+.dash-present-logo {
+  position: fixed;
+  right: 20px;
+  bottom: 16px;
+  z-index: 60;
+  max-width: 140px;
+  max-height: 28px;
+  object-fit: contain;
+  pointer-events: none;
+}
+.dash-present-logo[hidden] { display: none; }
 
 /* TWO rails, and the old rule named NEITHER. `.sidebar` was a different
    element entirely — the capture shell's column, deleted with that shell — so
@@ -9148,17 +9160,20 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
    with one colour from another palette looks like a rendering bug, not a style.
    --accent-ink is deliberately NOT on this axis: it is the ink ON the accent,
    and every accent here is dark enough for white. */
+/* The default accent is the WORKSPACE accent (Settings → Branding, or a
+   dashboard's own custom colour — both set --brand-* on an element; see
+   chartPalette.applyBrandTokens). Unbranded, it is the app's blue. */
 .dash-accent--blue {
-  --accent: #2563eb;
-  --accent-2: #1d4fd0;
-  --accent-soft: rgba(37, 99, 235, 0.08);
-  --accent-line: rgba(37, 99, 235, 0.22);
-  --chart-accent: #2563eb;
-  --chart-1: #2563eb;
-  --chart-2: #0e7490;
-  --chart-3: #14b8a6;
-  --chart-4: #6366f1;
-  --chart-5: #64748b;
+  --accent: var(--brand-accent, #2563eb);
+  --accent-2: var(--brand-accent-2, #1d4fd0);
+  --accent-soft: var(--brand-accent-soft, rgba(37, 99, 235, 0.08));
+  --accent-line: var(--brand-accent-line, rgba(37, 99, 235, 0.22));
+  --chart-accent: var(--brand-accent, #2563eb);
+  --chart-1: var(--brand-chart-1, #2563eb);
+  --chart-2: var(--brand-chart-2, #0e7490);
+  --chart-3: var(--brand-chart-3, #14b8a6);
+  --chart-4: var(--brand-chart-4, #6366f1);
+  --chart-5: var(--brand-chart-5, #64748b);
 }
 
 .dash-accent--teal {
@@ -9194,16 +9209,16 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
    same hues have to be lifted in lightness and saturation, matching the level
    theme.css's [data-theme="dark"] already establishes for the app chrome. */
 .dash-theme--dark.dash-accent--blue {
-  --accent: #3b82f6;
-  --accent-2: #2f6fe0;
-  --accent-soft: rgba(59, 130, 246, 0.16);
-  --accent-line: rgba(59, 130, 246, 0.32);
-  --chart-accent: #3b82f6;
-  --chart-1: #3b82f6;
-  --chart-2: #22d3ee;
-  --chart-3: #2dd4bf;
-  --chart-4: #818cf8;
-  --chart-5: #94a3b8;
+  --accent: var(--brand-dk-accent, #3b82f6);
+  --accent-2: var(--brand-dk-accent-2, #2f6fe0);
+  --accent-soft: var(--brand-dk-accent-soft, rgba(59, 130, 246, 0.16));
+  --accent-line: var(--brand-dk-accent-line, rgba(59, 130, 246, 0.32));
+  --chart-accent: var(--brand-dk-accent, #3b82f6);
+  --chart-1: var(--brand-dk-chart-1, #3b82f6);
+  --chart-2: var(--brand-dk-chart-2, #22d3ee);
+  --chart-3: var(--brand-dk-chart-3, #2dd4bf);
+  --chart-4: var(--brand-dk-chart-4, #818cf8);
+  --chart-5: var(--brand-dk-chart-5, #94a3b8);
 }
 
 .dash-theme--dark.dash-accent--teal {
@@ -10140,6 +10155,8 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
 .qt-hint { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .qt-results th.qt-num { text-align: right; }
 .qt-results td.qt-num { text-align: right; font-variant-numeric: tabular-nums; }
+/* A number cell in the dataset grid: figures line up at the right. */
+.ds-td.ds-td-num { text-align: right; font-variant-numeric: tabular-nums; }
 .qt-hint code {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: var(--t-11);
@@ -13035,6 +13052,35 @@ body.an-focus .an-workbench.is-active #dash-pages {
 }
 
 .ws-modal.dash-style-modal { width: min(470px, calc(100vw - 48px)); }
+/* Accent + logo overrides under the preset strip (dashStyle.buildDashBrandControls). */
+.dash-style-brand {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  margin-top: var(--sp-16);
+  padding-top: var(--sp-16);
+  border-top: 1px solid var(--border-hairline);
+}
+.dash-style-field { display: flex; align-items: center; gap: var(--sp-12); }
+.dash-style-label { flex: 0 0 52px; font-size: var(--t-12); font-weight: 600; color: var(--muted); }
+.dash-style-brand .sf-accent { flex-wrap: wrap; gap: var(--sp-8); }
+.dash-style-brand .sf-swatch { width: 22px; height: 22px; }
+.dash-style-logo.sf-logo-frame { width: 112px; height: 40px; }
+/* "No override": an empty ring with a slash, the usual no-colour swatch. */
+.sf-swatch.sf-swatch--none {
+  position: relative;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-2);
+}
+.sf-swatch.sf-swatch--none::after {
+  content: '';
+  position: absolute;
+  inset: 50% 3px auto;
+  height: 1.5px;
+  background: var(--text-faint);
+  transform: rotate(-45deg);
+}
+.sf-swatch.sf-swatch--none.is-on { border-color: var(--surface); box-shadow: 0 0 0 2px var(--text-faint); }
 .dash-style-sub {
   margin: 0 0 var(--sp-4);
   font-size: var(--t-13);
@@ -13959,7 +14005,7 @@ body.no-sidebar .app-sidebar { display: none; }
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14), 0 6px 14px rgba(0, 0, 0, 0.12);
   overflow: hidden;
 }
-.rb-card-thumb-mark { width: 14px; height: 14px; }
+.rb-card-thumb-mark { max-width: 48px; height: 14px; object-fit: contain; object-position: left; }
 .rb-card-thumb-title {
   font-size: 9px;
   font-weight: 700;
@@ -14167,7 +14213,7 @@ body.no-sidebar .app-sidebar { display: none; }
 }
 .rb-sheet-body { flex: 1; min-height: 0; padding-top: var(--sp-16); overflow: hidden; }
 .rb-sheet--cover .rb-sheet-body { justify-content: center; display: flex; flex-direction: column; }
-.rb-cover-mark { width: 40px; height: 40px; margin-bottom: var(--sp-16); }
+.rb-cover-mark { display: block; max-width: 160px; height: 40px; object-fit: contain; object-position: left; margin-bottom: var(--sp-16); }
 .rb-sheet-title { margin: 0 0 var(--sp-8); font-size: 20pt; font-weight: 700; color: #0f1117; }
 .rb-sheet--cover .rb-sheet-title { font-size: 28pt; }
 .rb-sheet-sub { margin: 0 0 var(--sp-12); font-size: 13pt; color: #6b7280; }
@@ -15675,3 +15721,75 @@ select.ws-modal-input { height: 38px; }
 .dq-preview.is-busy::before { animation: dq-pulse 0.9s var(--ease-out) infinite alternate; }
 @keyframes dq-pulse { from { opacity: 0.25; } to { opacity: 1; } }
 .dq-err { margin: var(--sp-8) 0 0; font-size: var(--t-12); color: var(--error); }
+
+/* ── Settings: Formats and Branding (settingsFormats.ts) ─────────────────────
+   Built from the panel's own row (.stp-row); these rules only add the group
+   headings, the live preview strip, the swatches and the logo frame. */
+.stp-group { display: flex; flex-direction: column; margin-bottom: var(--sp-16); }
+.stp-group .stp-row + .stp-row { border-top: 1px solid var(--border-hairline); }
+.stp-subhead { padding: var(--sp-16) 0 var(--sp-8); }
+.stp-group > .stp-subhead:first-child { padding-top: var(--sp-4); }
+.stp-subhead-t {
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.stp-subhead-d { margin-top: 4px; font-size: var(--t-13); line-height: var(--lh-body); color: var(--muted); max-width: 62ch; }
+.sf-preview {
+  /* Flex, not a 5-column grid: each sample takes the width its text needs and
+     the strip wraps, so "1,234,567.89" and "Sep 25, 2026" are never clipped. */
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  margin: var(--sp-8) 0 var(--sp-12);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--border);
+}
+.sf-preview-cell { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; padding: var(--sp-8) var(--sp-12); background: var(--surface-2); }
+.sf-preview-k { font-size: var(--t-11); color: var(--muted); }
+.sf-preview-v { font-size: var(--t-15); font-weight: 600; color: var(--text-strong); white-space: nowrap; }
+.stp-select.sf-select-sm { min-width: 150px; }
+.sf-accent { display: flex; align-items: center; gap: var(--sp-12); }
+.sf-swatches { display: flex; gap: 6px; }
+.sf-swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: var(--sw);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.sf-swatch:hover { transform: scale(1.08); }
+.sf-swatch.is-on { border-color: var(--surface); box-shadow: 0 0 0 2px var(--sw); }
+.sf-swatch:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 2px; }
+.stp-input.sf-hex { width: 104px; font-family: var(--font-mono); font-size: var(--t-12); }
+.stp-input.sf-hex.is-bad { border-color: var(--error); }
+.sf-logo { display: flex; align-items: center; gap: var(--sp-12); }
+.sf-logo-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 132px;
+  height: 52px;
+  padding: 6px 10px;
+  box-sizing: border-box;
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text-faint);
+  font-size: var(--t-12);
+}
+.sf-logo-frame img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.sf-logo-frame:has(img) { border-style: solid; background: var(--surface); }
+.sf-logo-btns { display: flex; flex-direction: column; gap: 6px; }
+.sf-logo-row { flex-wrap: wrap; }
+.sf-logo-msg { flex-basis: 100%; font-size: var(--t-12); color: var(--error); }
+.sf-logo-msg:empty { display: none; }

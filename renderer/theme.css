@@ -14,12 +14,14 @@
 :root {
   /* chart palette — shared across themes (blue, teal, amber, violet, rose) */
   /* Restrained, accent-led categorical palette (cool, harmonious — not a rainbow) */
-  --chart-1: #2563eb;  /* accent blue  */
-  --chart-2: #0e7490;  /* cyan-700     */
-  --chart-3: #14b8a6;  /* teal-500     */
-  --chart-4: #6366f1;  /* indigo-500   */
-  --chart-5: #64748b;  /* slate-500    */
-  --chart-accent: #2563eb;
+  /* Each reads the workspace accent's ramp (--brand-chart-*, set by brand.ts
+     from Settings → Branding) and falls back to the app's own. */
+  --chart-1: var(--brand-chart-1, #2563eb);  /* accent blue  */
+  --chart-2: var(--brand-chart-2, #0e7490);  /* cyan-700     */
+  --chart-3: var(--brand-chart-3, #14b8a6);  /* teal-500     */
+  --chart-4: var(--brand-chart-4, #6366f1);  /* indigo-500   */
+  --chart-5: var(--brand-chart-5, #64748b);  /* slate-500    */
+  --chart-accent: var(--brand-accent, #2563eb);
 
   /* type + shape */
   --font-ui: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system,
@@ -141,10 +143,10 @@
   --border-2: #d6dae1;
   --border-3: #bfc5cf;
 
-  --accent: #2563eb;
-  --accent-2: #1d4fd0;
-  --accent-soft: rgba(37, 99, 235, 0.08);
-  --accent-line: rgba(37, 99, 235, 0.22);
+  --accent: var(--brand-accent, #2563eb);
+  --accent-2: var(--brand-accent-2, #1d4fd0);
+  --accent-soft: var(--brand-accent-soft, rgba(37, 99, 235, 0.08));
+  --accent-line: var(--brand-accent-line, rgba(37, 99, 235, 0.22));
   --accent-ink: #ffffff;
 
   --error: #e11d48;
@@ -184,7 +186,7 @@
 
   /* One focus treatment, defined once. 2px accent at 40%, OUTSIDE the
      control so it never eats a pixel of the border it sits on. */
-  --focus-ring: rgba(37, 99, 235, 0.4);
+  --focus-ring: var(--brand-focus, rgba(37, 99, 235, 0.4));
   --focus-ring-w: 2px;
   color-scheme: light;
 }
@@ -211,19 +213,19 @@
   --border-2: #3a3a42;
   --border-3: #4a4a55;
 
-  --accent: #3b82f6;
-  --accent-2: #2f6fe0;
-  --accent-soft: rgba(59, 130, 246, 0.16);
-  --accent-line: rgba(59, 130, 246, 0.32);
+  --accent: var(--brand-dk-accent, #3b82f6);
+  --accent-2: var(--brand-dk-accent-2, #2f6fe0);
+  --accent-soft: var(--brand-dk-accent-soft, rgba(59, 130, 246, 0.16));
+  --accent-line: var(--brand-dk-accent-line, rgba(59, 130, 246, 0.32));
   --accent-ink: #ffffff;
 
   /* Same hues lifted in lightness/saturation so they read on the dark surface */
-  --chart-1: #3b82f6;  /* accent blue */
-  --chart-2: #22d3ee;  /* cyan-400    */
-  --chart-3: #2dd4bf;  /* teal-400    */
-  --chart-4: #818cf8;  /* indigo-400  */
-  --chart-5: #94a3b8;  /* slate-400   */
-  --chart-accent: #3b82f6;
+  --chart-1: var(--brand-dk-chart-1, #3b82f6);  /* accent blue */
+  --chart-2: var(--brand-dk-chart-2, #22d3ee);  /* cyan-400    */
+  --chart-3: var(--brand-dk-chart-3, #2dd4bf);  /* teal-400    */
+  --chart-4: var(--brand-dk-chart-4, #818cf8);  /* indigo-400  */
+  --chart-5: var(--brand-dk-chart-5, #94a3b8);  /* slate-400   */
+  --chart-accent: var(--brand-dk-accent, #3b82f6);
 
   --error: #f87171;
   --error-soft: rgba(248, 113, 113, 0.13);
@@ -248,6 +250,6 @@
   --border-2: #3a3a42;
   --border-3: #4a4a55;
 
-  --focus-ring: rgba(59, 130, 246, 0.4);
+  --focus-ring: var(--brand-dk-focus, rgba(59, 130, 246, 0.4));
   color-scheme: dark;
 }

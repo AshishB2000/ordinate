@@ -7,86 +7,29 @@
 // `describeDefinition` renders the definition, and both are called from main —
 // the IPC reply carries the finished strings.
 //
-// THE RENDERER DOES NOT FORMAT A METRIC. `renderer/hub/hub.ts`'s `fmtWith` still
-// formats everything else (a chart axis, a metric card with no metricId), but it
-// cannot express decimals/prefix/suffix, and a second formatter is how "Revenue"
-// comes to read as $5.2M on a card and 5194598.73 in a caption. So `metric:value`
-// returns `{ value, display }` and the renderer prints `display`.
+// THE RENDERER DOES NOT FORMAT A METRIC: `metric:value` returns `{ value,
+// display }` and the renderer prints `display`. Both sides now run the same
+// formatter (src/app/format.ts) — the renderer for axes and unformatted cards,
+// main for metrics — so the two can no longer disagree.
 
 import type { FilterStep } from '../data/transforms';
 import { VALUELESS_OPS, LIST_OPS } from '../data/filterOps';
 import type { Metric, MetricFormat, MetricDefinition } from './metrics';
+import { formatMetric } from '../app/format';
 import { describePeriod, getCalendar } from './dateIntel';
 import { isFormulaDefinition } from './metrics';
 
 /**
- * A compact number keeps ONE fraction digit at minimum.
+ * The ONE rendering of a metric's number — now `app/format.formatMetric`, the
+ * formatter every surface shares, so a metric reads the same on a card, in a
+ * caption and in an export, and follows Settings → Formats (locale, separators,
+ * the workspace currency) while its own format still decides decimals, compact
+ * and any explicit prefix.
  *
- * `compact` with `decimals: 0` renders 5,194,598 as "5M", which throws away the
- * digit the compact form exists to show. The floor applies to the compact
- * branch only — a plain integer metric still renders as an integer.
- */
-function compactDigits(decimals: number): number {
-  return Math.max(1, decimals);
-}
-
-/** Seconds → the two largest non-zero units: `45s`, `12m 30s`, `1h 23m`, `3d 4h`. */
-function formatDuration(totalSeconds: number): string {
-  const sign = totalSeconds < 0 ? '-' : '';
-  const s = Math.floor(Math.abs(totalSeconds));
-  const d = Math.floor(s / 86400);
-  const h = Math.floor((s % 86400) / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  if (d > 0) return `${sign}${d}d${h ? ' ' + h + 'h' : ''}`;
-  if (h > 0) return `${sign}${h}h${m ? ' ' + m + 'm' : ''}`;
-  if (m > 0) return `${sign}${m}m${sec ? ' ' + sec + 's' : ''}`;
-  return `${sign}${sec}s`;
-}
-
-/**
- * The ONE rendering of a metric's number.
- *
- * `null` is the app's honest "no figure" (unknown column, no numeric cells, a
- * formula whose operand is missing) and renders as an em dash — never as 0,
- * which is a fact about the data rather than the absence of one.
- *
- * `percent` multiplies by 100: a ratio metric stores 0.132 and shows "13.2%",
- * matching the renderer's existing `fmtWith(v,'percent')` so a card that gains
- * a metricId does not change what it says.
+ * `null` is the app's honest "no figure" and renders as an em dash — never 0.
  */
 export function formatMetricValue(value: number | null | undefined, format: MetricFormat): string {
-  if (value == null || typeof value !== 'number' || !Number.isFinite(value)) return '—';
-
-  const f = format;
-  const scaled = f.kind === 'percent' ? value * 100 : value;
-
-  let body: string;
-  if (f.kind === 'duration') {
-    // Already compact by construction, and a "1.2h 3m" would be nonsense, so
-    // `compact`/`decimals` are deliberately not consulted here.
-    body = formatDuration(value);
-  } else if (f.compact) {
-    body = scaled.toLocaleString(undefined, {
-      notation: 'compact',
-      maximumFractionDigits: compactDigits(f.decimals),
-    });
-  } else {
-    body = scaled.toLocaleString(undefined, {
-      minimumFractionDigits: f.decimals,
-      maximumFractionDigits: f.decimals,
-    });
-  }
-
-  // A currency with no prefix of its own gets "$" — the same symbol `fmtWith`
-  // already uses. An explicit prefix wins, which is how a non-dollar currency
-  // is spelled without a currency-code vocabulary nobody asked for.
-  const prefix = f.prefix || (f.kind === 'currency' ? '$' : '');
-  const suffix = (f.suffix || '') + (f.kind === 'percent' ? '%' : '');
-
-  // The minus sign leads, always: "-$1,200", never "$-1,200".
-  if (prefix && body.startsWith('-')) return '-' + prefix + body.slice(1) + suffix;
-  return prefix + body + suffix;
+  return formatMetric(value, format);
 }
 
 const AGG_WORDS: Record<string, string> = {

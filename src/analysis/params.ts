@@ -32,6 +32,7 @@
 
 import type { Cell, FilterStep, TransformStep } from '../data/transforms';
 import { daysFromIso } from './dateIntel';
+import { formatNumber } from '../app/format';
 
 export type ParamKind = 'number' | 'text' | 'date' | 'list';
 export const PARAM_KINDS: readonly ParamKind[] = ['number', 'text', 'date', 'list'];
@@ -193,7 +194,7 @@ export function paramRefs(text: unknown): string[] {
 export function paramDisplay(kind: ParamKind, value: ParamValue): string {
   if (value == null) return '—';
   if (Array.isArray(value)) return value.length ? value.join(', ') : '—';
-  if (kind === 'number' && typeof value === 'number') return value.toLocaleString(undefined, { maximumFractionDigits: 6 });
+  if (kind === 'number' && typeof value === 'number') return formatNumber(value, { maxDecimals: 6 });
   return String(value);
 }
 

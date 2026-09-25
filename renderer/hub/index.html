@@ -1659,6 +1659,7 @@
         </div>
 
         <!-- Exit affordance shown only in presentation mode -->
+        <img class="dash-present-logo" id="dash-present-logo" alt="" hidden>
         <button class="dash-present-exit" type="button" id="dash-present-exit" hidden aria-label="Exit presentation (Esc)"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-x"/></svg><span>Exit</span></button>
 
         <!-- `seg` is the base segmented-control; the page tabs ARE one. The
@@ -1959,6 +1960,8 @@
                 </div>
               </div>
             </div>
+            <!-- Accent, logo, default dashboard style — built by settingsFormats.ts. -->
+            <div class="stp-group" id="stp-branding"></div>
           </section>
 
           <!-- Notifications -->
@@ -2041,6 +2044,9 @@
 
           <!-- General -->
           <section class="settings-pane" data-cat="general" hidden>
+            <!-- Locale, numbers, currency, dates, calendar — built by settingsFormats.ts. -->
+            <div class="stp-group" id="stp-formats"></div>
+            <div class="stp-subhead"><div class="stp-subhead-t">App</div></div>
             <div class="stp-row">
               <div class="stp-rl">
                 <div class="stp-rt">Launch at login</div>
@@ -2658,6 +2664,11 @@
      sprite every other file's icon() calls resolve their <use href> against,
      and a panel that renders before the sprite exists draws empty boxes. -->
 <script src="icons.js"></script>
+<!-- The app's ONE formatter (src/app/format.ts), shared with main: a CommonJS
+     module loaded between a two-line shim and its binder — see cjsShim.ts. -->
+<script src="cjsShim.js"></script>
+<script src="../../src/app/format.js"></script>
+<script src="formatBind.js"></script>
 <!-- The two shared STATE components, straight after the sprite: the one empty
      state (makeEmptyState) and the one loading skeleton (skelTable/skelChart/
      skelClear). Both only need icon()/the DOM, and every surface that calls
@@ -2728,6 +2739,8 @@
 <script src="captureDataset.js"></script>
 <script src="filterValues.js"></script>
 <script src="periodPicker.js"></script>
+<script src="brand.js"></script>
+<script src="settingsFormats.js"></script>
 <script src="filterDialog.js"></script>
 <!-- The one calculated-field editor, opened by prepare.js, authoringRail.js and
      the AI dock's proposal card. Before all three: they call into it. -->
