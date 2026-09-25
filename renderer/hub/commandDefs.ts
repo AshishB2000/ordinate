@@ -191,8 +191,13 @@ function registerAppCommands(): void {
   registerCommand({ id: 'dash.addMetric', title: 'Add a metric', group: 'Dashboard', icon: 'zap', when: cmdDashboardOpen, run: () => handleAddMetric() });
   registerCommand({ id: 'dash.addText', title: 'Add text', group: 'Dashboard', icon: 'pencil', when: cmdDashboardOpen, run: () => handleAddText() });
   registerCommand({ id: 'dash.addControl', title: 'Add a control', group: 'Dashboard', icon: 'sliders', when: cmdDashboardOpen, run: () => handleAddControl() });
-  registerCommand({ id: 'dash.undo', title: 'Undo', group: 'Dashboard', icon: 'undo', keys: 'mod+z', when: cmdDashboardOpen, run: () => dashUndo() });
-  registerCommand({ id: 'dash.redo', title: 'Redo', group: 'Dashboard', icon: 'redo', keys: ['mod+shift+z', 'mod+y'], when: cmdDashboardOpen, run: () => dashRedo() });
+  // ONE history, two editors: ⌘Z walks the open story's stack when a story is
+  // open (storyPage.ts keeps it in dashHistory's own structure), else the dashboard's.
+  registerCommand({ id: 'dash.undo', title: 'Undo', group: 'Dashboard', icon: 'undo', keys: 'mod+z', when: () => cmdDashboardOpen() || stIsOpen(), run: () => (stIsOpen() ? stUndo() : dashUndo()) });
+  registerCommand({ id: 'dash.redo', title: 'Redo', group: 'Dashboard', icon: 'redo', keys: ['mod+shift+z', 'mod+y'], when: () => cmdDashboardOpen() || stIsOpen(), run: () => (stIsOpen() ? stRedo() : dashRedo()) });
+  registerCommand({ id: 'story.present', title: 'Present this story', group: 'Dashboard', icon: 'maximize', when: stIsOpen, run: () => { void stEnterPresent(); } });
+  registerCommand({ id: 'story.exportPdf', title: 'Export this story as PDF', group: 'Dashboard', icon: 'download', when: stIsOpen, run: () => { void stExportPdf(); } });
+  registerCommand({ id: 'story.new', title: 'New story', group: 'Create', icon: 'file-text', when: () => !!currentProjectId, run: () => { void stNewStory(); } });
   registerCommand({ id: 'dash.save', title: 'Save', group: 'Dashboard', icon: 'check', keys: 'mod+s', when: cmdDashboardOpen, run: () => handleSaveDashboard() });
   registerCommand({ id: 'dash.present', title: 'Present', group: 'Dashboard', icon: 'maximize', keys: 'mod+p', when: () => !!dashCurrent, run: () => enterDashPresent() });
   registerCommand({ id: 'dash.export', title: 'Export…', group: 'Dashboard', icon: 'download', keys: 'mod+e', when: () => !!dashCurrent, run: () => handleDashExport() });

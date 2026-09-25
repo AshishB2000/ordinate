@@ -1215,6 +1215,38 @@
                   aria-selected="true" aria-controls="an-table">Dashboards</button>
           <button class="ds-tab" type="button" role="tab" id="rp-tab-reports"
                   aria-selected="false" aria-controls="rp-list-wrap" tabindex="-1">Reports</button>
+          <button class="ds-tab" type="button" role="tab" id="rp-tab-stories"
+                  aria-selected="false" aria-controls="st-list-wrap" tabindex="-1">Stories</button>
+        </div>
+
+        <!-- The Stories tab (storyList.ts). A story is the third way this project
+             publishes: one scrolling document, prose around live charts and
+             metrics. Cards show the title, the first line of prose and how long
+             it is; the toolbar creates one blank or drafts one with the Assistant. -->
+        <div id="st-list-wrap" role="tabpanel" aria-labelledby="rp-tab-stories" hidden>
+          <div class="st-list-bar">
+            <p class="st-list-note">Write it up: headings, prose, and live charts and metrics that stay current.</p>
+            <div class="st-list-actions">
+              <button class="btn" type="button" id="st-draft-btn"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-sparkles"/></svg><span>Draft with the Assistant</span></button>
+              <button class="btn btn-primary" type="button" id="st-new-btn">New story</button>
+            </div>
+          </div>
+          <div class="st-grid" id="st-grid" hidden></div>
+          <div class="ws-empty" id="st-empty" hidden>
+            <div class="ws-empty-art ws-empty-art--doc" aria-hidden="true">
+              <span class="ws-line ws-line--h"></span>
+              <span class="ws-line"></span>
+              <span class="ws-line ws-line--short"></span>
+              <span class="ws-bar ws-bar--2"></span>
+              <span class="ws-bar ws-bar--4"></span>
+            </div>
+            <h3 class="ws-empty-h">No stories yet</h3>
+            <p class="ws-empty-p">A story is a document you read top to bottom — headings and prose around live charts and metrics, which recompute every time it opens. Type / in any empty line to add a chart, a metric, an image or a callout; present it a section at a time, or export it as a PDF.</p>
+            <div class="ws-empty-actions">
+              <button class="btn btn-primary btn-lg" type="button" id="st-empty-new">New story</button>
+              <button class="btn btn-ghost btn-lg" type="button" id="st-empty-draft"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-sparkles"/></svg><span>Draft with the Assistant</span></button>
+            </div>
+          </div>
         </div>
 
         <!-- The Reports tab. One card per report: its cover drawn small, the
@@ -1356,6 +1388,46 @@
               <p class="rb-note">Ordinate has no background service: a schedule fires while the app is running, and anything that came due while it was closed runs on the next launch.</p>
             </div>
           </aside>
+        </div>
+      </div>
+
+      <!-- THE STORY PAGE (storyPage.ts) — the fourth view of this section. A
+           left outline built from the headings, then one reading column at
+           760px, edited in place: / in an empty line opens the block picker,
+           ⋮⋮ drags a block, ⌘Z undoes through the dashboards' own history. -->
+      <div class="st-page" id="st-page" hidden>
+        <div class="st-head">
+          <button class="btn btn-sm" type="button" id="st-back">← Back</button>
+          <input class="st-name" id="st-name" type="text" aria-label="Story name" autocomplete="off" spellcheck="false"/>
+          <span class="st-status" id="st-status" aria-live="polite"></span>
+          <div class="st-head-actions">
+            <button class="icon-btn" type="button" id="st-undo" aria-label="Undo" title="Undo"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-undo"/></svg></button>
+            <button class="icon-btn" type="button" id="st-redo" aria-label="Redo" title="Redo"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-redo"/></svg></button>
+            <button class="btn btn-sm" type="button" id="st-export">Export PDF</button>
+            <button class="btn btn-sm btn-primary" type="button" id="st-present">Present</button>
+            <button class="icon-btn" type="button" id="st-more" aria-label="More story actions" aria-haspopup="true"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-more-horizontal"/></svg></button>
+          </div>
+        </div>
+        <div class="st-body">
+          <nav class="st-outline" id="st-outline" aria-label="Outline">
+            <div class="st-outline-h">Outline</div>
+            <ol class="st-outline-list" id="st-outline-list"></ol>
+            <p class="st-outline-empty" id="st-outline-empty">Headings you write appear here. Start a line with # or ##.</p>
+          </nav>
+          <div class="st-scroll" id="st-scroll">
+            <article class="st-doc" id="st-doc"></article>
+          </div>
+        </div>
+      </div>
+
+      <!-- Present mode for a story: one page per heading, full window. -->
+      <div class="st-present" id="st-present-view" hidden>
+        <div class="st-present-stage"><article class="st-present-page" id="st-present-page"></article></div>
+        <div class="st-present-bar">
+          <button class="icon-btn" type="button" id="st-present-prev" aria-label="Previous section"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-chevron-left"/></svg></button>
+          <span class="st-present-count" id="st-present-count"></span>
+          <button class="icon-btn" type="button" id="st-present-next" aria-label="Next section"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+          <button class="btn btn-sm" type="button" id="st-present-exit">Exit</button>
         </div>
       </div>
 
@@ -2700,6 +2772,17 @@
 <script src="reportWriters.js"></script>
 <script src="reportBuilder.js"></script>
 <script src="reportList.js"></script>
+<!-- Stories (feat/workflow-depth) — the third tab beside Dashboards and Reports.
+     storyText.js is the pure Markdown subset / outline / page mapping (an IIFE
+     that attaches to window, like geoMatch.js); the rest only define functions,
+     resolved at call time, and are wired by initStoryPage/initStoryPresent in hub.js. -->
+<script src="storyText.js"></script>
+<script src="storyList.js"></script>
+<script src="storyPage.js"></script>
+<script src="storyBlocks.js"></script>
+<script src="storyPickers.js"></script>
+<script src="storyPresent.js"></script>
+<script src="storyPropose.js"></script>
 <script src="authoring.js"></script>
 <!-- authoring.ts was 1341 lines; these five are it, split by job. authoring.js
      stays first — it keeps the module-local state the rest read. -->

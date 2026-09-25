@@ -237,6 +237,10 @@ ok('action: a spec never rides along on another kind', !('spec' in sa.validateAc
 const line = sa.splitAction('Here is revenue by region.\n@@ACTION {"kind":"answer","intent":"revenue by region","spec":{"dataset":"Retail orders","category":"region","measures":[{"column":"revenue","aggregation":"sum"}]}}');
 ok('action: a marked answer line parses and never reaches the prose',
   line.action.kind === 'answer' && line.text === 'Here is revenue by region.' && (line.action.spec as any).measures.length === 1, JSON.stringify(line));
+ok('action: "story" (the dashboard action\'s sibling) survives the whitelist, with no spec',
+  sa.validateAction({ kind: 'story', intent: 'a regional write-up', spec: {} }).kind === 'story'
+  && !('spec' in sa.validateAction({ kind: 'story', intent: 'x', spec: {} })));
+ok('prompt: offers "story" as a WRITTEN piece, distinct from a dashboard', /"story" when they want a WRITTEN/.test(sa.CHAT_SYSTEM_PROMPT));
 ok('prompt: offers "answer" and describes its spec', /"answer"/.test(sa.CHAT_SYSTEM_PROMPT) && /"spec":\{"dataset"/.test(sa.CHAT_SYSTEM_PROMPT)
   && /NEVER contains a computed number/.test(sa.CHAT_SYSTEM_PROMPT));
 

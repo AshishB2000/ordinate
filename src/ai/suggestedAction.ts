@@ -66,8 +66,8 @@ const ACTION_MARKER_SRC = '@@ACTION';
 export const MAX_INTENT = 400;
 
 /** The whitelist. Anything not on it becomes 'none'. */
-export type SuggestedActionKind = 'dashboard' | 'edit' | 'chart' | 'step' | 'calc' | 'style' | 'answer' | 'none';
-const KIND_LIST = ['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'answer', 'none'] as const;
+export type SuggestedActionKind = 'dashboard' | 'edit' | 'chart' | 'step' | 'calc' | 'style' | 'answer' | 'story' | 'none';
+const KIND_LIST = ['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'answer', 'story', 'none'] as const;
 
 /** The most JSON an answer's spec may carry. A spec names a dataset, a few
  *  columns and a few filter values; anything longer is not a spec. */
@@ -160,8 +160,9 @@ export const NO_ACTION: SuggestedAction = { kind: 'none', intent: '' };
 const ACTION_PROMPT =
   '\n\nAFTER your answer, output ONE final line, exactly:\n' +
   ACTION_MARKER + ' {"kind":"<kind>","intent":"<intent>"}\n' +
-  'where <kind> is one of: dashboard, edit, chart, step, calc, style, answer, none. Use "dashboard" when the ' +
-  'user is asking to BUILD or CREATE a NEW dashboard, report or overview; "edit" when the FACTS ' +
+  'where <kind> is one of: dashboard, story, edit, chart, step, calc, style, answer, none. Use "dashboard" when the ' +
+  'user is asking to BUILD or CREATE a NEW dashboard, report or overview; "story" when they want a WRITTEN ' +
+  'piece instead — a story, write-up, narrative or brief to be read top to bottom, with charts in it; "edit" when the FACTS ' +
   'show a dashboard is already open and they are asking to CHANGE it — add, remove, move, retype ' +
   'or rename something on it; "chart" when they want a ' +
   'single chart or visualisation; "step" when they want the data cleaned or filtered; "calc" when ' +

@@ -560,14 +560,12 @@ require("./ipc/historyIpc").register({
 });
 
 require("./ipc/clipboard").register();
-
 require("./ipc/fileSave").register();
-
 require("./ipc/capture").register();
-
 require("./ipc/projects").register({ onActive: setActiveProject });
-
 require("./ipc/recent").register();
+// Stories — the scrolling document record, and the Assistant's story outline.
+require("./ipc/stories").register();
 
 require("./ipc/datasets").register();
 // The composer's two handlers. Registered AFTER datasets, which hands it the

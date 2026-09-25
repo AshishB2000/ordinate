@@ -689,6 +689,18 @@ contextBridge.exposeInMainWorld('hub', {
     ipcRenderer.invoke('answer:explain', { projectId, ...target }),
   answerRerun: (projectId: string, threadId: string, spec: unknown, label: string) =>
     ipcRenderer.invoke('answer:rerun', { projectId, threadId, spec, label }),
+  // Stories (src/ipc/stories.ts) — the scrolling document record, and the
+  // Assistant's story outline (draft → review → build).
+  listStories: (projectId: string) => ipcRenderer.invoke('story:list', { projectId }),
+  getStory: (projectId: string, id: string) => ipcRenderer.invoke('story:get', { projectId, id }),
+  createStory: (projectId: string, input: { name?: string; blocks?: unknown }) =>
+    ipcRenderer.invoke('story:create', { projectId, ...input }),
+  updateStory: (projectId: string, id: string, patch: { name?: string; blocks?: unknown }) =>
+    ipcRenderer.invoke('story:update', { projectId, id, ...patch }),
+  deleteStory: (projectId: string, id: string) => ipcRenderer.invoke('story:delete', { projectId, id }),
+  draftStory: (projectId: string, intent: string, datasetId?: string) =>
+    ipcRenderer.invoke('story:draft', { projectId, intent, datasetId }),
+  buildStory: (projectId: string, plan: unknown) => ipcRenderer.invoke('story:build', { projectId, plan }),
   // Shared map { providerId: { path, color, title } } for real brand icons (no keys).
   providerLogos: PROVIDER_LOGOS,
   // Static map of { agentId: dataUri } for full-color logos (no keys).

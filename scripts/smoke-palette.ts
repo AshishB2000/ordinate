@@ -137,8 +137,17 @@ async function main(): Promise<void> {
   ok('…and "Add a metric" is offered, because a dashboard IS open',
     cmds.some((r) => /^Add a metric \|/.test(r)), JSON.stringify(cmds));
   await win.keyboard.press('Enter');
+  // Since the metrics layer (#173), "Add a metric" opens the METRIC PICKER
+  // first — the project's named metrics, then "Custom…" for the old dialog.
+  // This file still expected the dialog straight away and has timed out ever
+  // since; the picker is what the command opens now, and Custom… proves the
+  // dialog is still one click behind it.
+  await win.waitForSelector('.mpk-menu', { timeout: 15_000 });
+  ok('Enter runs it — the metric picker opens on the open dashboard',
+    await win.locator('.mpk-menu').isVisible());
+  await win.click('.mpk-menu .mpk-custom');
   await win.waitForSelector('.dash-metric-modal', { timeout: 15_000 });
-  ok('Enter runs it — the add-metric dialog opens on the open dashboard',
+  ok('…and Custom… opens the add-metric dialog behind it',
     await win.locator('.dash-metric-modal').isVisible());
   await win.keyboard.press('Escape');
   await win.waitForSelector('.dash-metric-modal', { state: 'detached', timeout: 8000 }).catch(() => {});

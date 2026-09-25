@@ -399,3 +399,15 @@ scripts/**/*.js
 /renderer/hub/answerCard.js
 /scripts/test-answerSpec.js
 /scripts/test-answerFacts.js
+/renderer/hub/storyText.js
+/renderer/hub/storyList.js
+/renderer/hub/storyPage.js
+/renderer/hub/storyBlocks.js
+/renderer/hub/storyPickers.js
+/renderer/hub/storyPresent.js
+/renderer/hub/storyPropose.js
+/src/analysis/storyModel.js
+/src/analysis/stories.js
+/src/ipc/stories.js
+/scripts/test-storyModel.js
+/scripts/test-storyText.js
