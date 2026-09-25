@@ -565,7 +565,7 @@ require("./ipc/fileSave").register();
 
 require("./ipc/capture").register();
 
-require("./ipc/projects").register({ onActive: setActiveProject });
+require("./ipc/projects").register({ onActive: setActiveProject, getHubWindow: () => hubWindow });
 
 require("./ipc/recent").register();
 

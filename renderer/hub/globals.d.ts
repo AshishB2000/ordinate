@@ -123,6 +123,10 @@ declare global {
       renameProject(id: string, name: string): Promise<any>;
       deleteProject(id: string): Promise<{ ok: boolean }>;
       openProject(id: string): Promise<any>;
+      projectsOverview(): Promise<any[]>;
+      archiveProject(id: string, archived: boolean): Promise<any>;
+      exportProject(id: string): Promise<any>;
+      importProject(): Promise<any>;
       // ── Datasets (file-based data sources) ──
       pickAndParseDataset(sheetName?: string, filePath?: string): Promise<any>;
       parsePasteDataset(text: string): Promise<any>;

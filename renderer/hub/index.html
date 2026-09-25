@@ -178,6 +178,7 @@
       <div class="as-project">
         <button id="as-project-btn" class="as-project-btn" type="button"
           aria-haspopup="true" aria-expanded="false" aria-label="Switch project">
+          <span class="pj-avatar" id="as-project-avatar" aria-hidden="true"></span>
           <span class="as-project-name" id="ws-project-name">All projects</span>
           <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-chevron-down"/></svg>
         </button>
@@ -364,6 +365,9 @@
               <button class="home-pill is-active" type="button" data-filter="all" role="tab">All</button>
               <button class="home-pill" type="button" data-filter="dataset" role="tab">Datasets</button>
               <button class="home-pill" type="button" data-filter="dashboard" role="tab">Dashboards</button>
+              <!-- Recent is this project's; this widens it to every project (homePage.ts). -->
+              <button class="home-scope" id="home-scope-all" type="button" aria-pressed="false"
+                title="Show recent work from every project"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-layers"/></svg><span>All projects</span></button>
             </div>
 
             <section class="home-sec" id="home-starred">
@@ -2824,6 +2828,7 @@
 <script src="versionsPanel.js"></script>
 <script src="trashPage.js"></script>
 <script src="lineagePanel.js"></script>
+<script src="projectSwitcher.js"></script>
 <!-- The command registry, its contents, and the palette that reads them.
      commands.js is the machinery, commandDefs.js registers every command (so it
      loads after the surfaces it calls into), palette.js paints. hub.js boots

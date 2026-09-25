@@ -194,6 +194,12 @@ contextBridge.exposeInMainWorld('hub', {
   deleteProject: (id: string) => ipcRenderer.invoke('projects:delete', { id }),
   // Load a single validated project to enter its workspace; returns Project or null.
   openProject: (id: string) => ipcRenderer.invoke('projects:open', { id }),
+  // The switcher's rows: counts, last opened, archived, the sample badge.
+  projectsOverview: () => ipcRenderer.invoke('projects:overview'),
+  archiveProject: (id: string, archived: boolean) => ipcRenderer.invoke('projects:archive', { id, archived }),
+  // A .ordinate bundle through the NATIVE save/open dialog — main picks the path.
+  exportProject: (id: string) => ipcRenderer.invoke('projects:export', { id }),
+  importProject: () => ipcRenderer.invoke('projects:import'),
   // ── Datasets (file-based data sources) ──
   // Open the native file picker (or, with { filePath }, re-parse a picked file's
   // sheet); returns { ok, canceled?, filePath?, fileName?, sourceKind?, preview? }.

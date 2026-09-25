@@ -412,3 +412,7 @@ scripts/**/*.js
 /src/ipc/lineage.js
 /renderer/hub/lineagePanel.js
 /scripts/test-lineage.js
+# Workspace maturity — Projects and bundles (emitted siblings).
+/src/app/bundle.js
+/renderer/hub/projectSwitcher.js
+/scripts/test-bundle.js

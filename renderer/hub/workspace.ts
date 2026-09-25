@@ -72,6 +72,7 @@ async function adoptProject(id: string): Promise<boolean> {
   // future header stays in sync without a hard dependency.
   const nameEl = document.getElementById('ws-project-name');
   if (nameEl) nameEl.textContent = project.name || 'Untitled project';
+  if (typeof pjPaintCurrent === 'function') pjPaintCurrent(project.name || 'Untitled project');
   // A project can be adopted with no section change (e.g. "+New → Data
   // source"), which dkSync()'s other call sites never see — without this the
   // dock keeps showing the PREVIOUS project's transcript until the next
@@ -83,6 +84,10 @@ async function adoptProject(id: string): Promise<boolean> {
   if (typeof aiRefresh === 'function') void aiRefresh();
   // …and so is the Trash badge (trashPage.ts).
   if (typeof trSyncCount === 'function') void trSyncCount();
+  // Home's Recent is scoped to the active project (homePage.ts). At launch the
+  // list can land before the project is adopted — repaint it from what it
+  // already holds, so it is never left showing every project unasked.
+  if (currentSection === 'home' && typeof paintHome === 'function') paintHome();
   return true;
 }
 

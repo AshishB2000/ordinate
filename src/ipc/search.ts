@@ -65,7 +65,8 @@ async function scope(projectId: string): Promise<{ id: string; name: string }[]>
   // search box that answers nothing there is the box that made this feature
   // necessary. Project lists are metadata-only (src/app/projects.ts), so this
   // is the same cost per project the sidebar already pays to paint itself.
-  return (await projects.listProjects()).map((p) => ({ id: p.id, name: p.name }));
+  // Archived projects are out of the search, as they are out of Recent.
+  return (await projects.listProjects()).filter((p) => !p.archivedAt).map((p) => ({ id: p.id, name: p.name }));
 }
 
 async function search(projectId: string, query: string): Promise<SearchHit[]> {

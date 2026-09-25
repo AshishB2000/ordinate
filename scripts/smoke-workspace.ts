@@ -223,6 +223,76 @@ async function lineageSection(win: Win, ids: { projectId: string; datasetId: str
   await win.click('.ws-side .ws-side-x');
 }
 
+// ── 4. Projects ──────────────────────────────────────────────────────────────
+async function projectsSection(win: Win, app: App): Promise<void> {
+  // The native dialogs cannot be driven, so main's are answered with a path in
+  // the test profile — the handlers, the bundle and the renderer flow are real.
+  const bundlePath = path.join(userData, 'sample.ordinate');
+  await app.evaluate(({ dialog }: any, p: string) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: p });
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [p] });
+  }, bundlePath);
+  await win.evaluate(() => (window as any).selectSection('home'));
+  const openSwitcher = async (): Promise<any[]> => {
+    await win.click('#as-project-btn');
+    await waitFor(win, `document.querySelectorAll('.pj-pop .pj-row').length > 0`);
+    return win.evaluate(() => [...document.querySelectorAll('.pj-pop .pj-row')].map((r) => ({
+      name: (r.querySelector('.pj-row-name') || {} as any).textContent,
+      meta: (r.querySelector('.pj-row-meta') || {} as any).textContent,
+      current: r.classList.contains('is-current'),
+      sample: !!r.querySelector('.pj-badge'),
+    })));
+  };
+  let rows = await openSwitcher();
+  ok('the switcher lists the one project, current, with its counts and the Sample badge',
+    rows.length === 1 && rows[0].current && rows[0].sample && /1 dataset · 1 dashboard · opened/.test(rows[0].meta), JSON.stringify(rows));
+
+  // Export the sample through the row's ⋯.
+  await win.hover('.pj-pop .pj-row');
+  await win.click('.pj-pop .pj-row .pj-more');
+  await win.locator('.pj-menu .chart-menu-item', { hasText: 'Export project' }).click();
+  ok('Export project… writes a .ordinate bundle', await waitFor(win, `[...document.querySelectorAll('#hub-toast .toast')].some((t) => /Exported/.test(t.textContent || ''))`)
+    && fs.existsSync(bundlePath) && fs.statSync(bundlePath).size > 1000);
+
+  // New project "Test".
+  await openSwitcher();
+  await win.click('.pj-pop .pj-new');
+  await win.waitForSelector('.ws-modal-overlay .ws-modal-input');
+  await win.fill('.ws-modal-overlay .ws-modal-input', 'Test');
+  await win.keyboard.press('Enter');
+  await waitFor(win, `(document.getElementById('ws-project-name') || {}).textContent === 'Test'`);
+  ok('New project creates "Test" and switches to it, no reload',
+    (await win.evaluate(() => document.getElementById('ws-project-name')!.textContent)) === 'Test');
+  rows = await openSwitcher();
+  ok('…and the switcher shows two', rows.length === 2 && rows.some((r) => r.name === 'Test' && r.current), JSON.stringify(rows));
+
+  // Import the bundle: a third project.
+  await win.click('.pj-pop .pj-import');
+  await waitFor(win, `/^My project/.test((document.getElementById('ws-project-name') || {}).textContent || '') && document.getElementById('ws-project-name').textContent !== 'My project'`, 30000);
+  const imported = await win.evaluate(() => document.getElementById('ws-project-name')!.textContent);
+  ok('Import project… opens the bundle into a NEW project and switches to it', /^My project \(imported\)$/.test(String(imported)), String(imported));
+  await sleep(1500); // let Home finish repainting for the new project before the picture
+  rows = await openSwitcher();
+  ok('…a third project in the switcher', rows.length === 3, JSON.stringify(rows.map((r) => r.name)));
+  await sleep(400); // the popover fades in (--dur-menu); a shot fired at once catches it transparent
+  await shot(win, 'projects-switcher');
+  await win.keyboard.press('Escape');
+
+  // Its dashboard renders, drawn from the imported dataset.
+  await win.evaluate(() => (window as any).selectSection('analyses'));
+  await waitFor(win, `document.querySelectorAll('#an-list .an-card').length === 1`);
+  await win.evaluate(() => (document.querySelector('#an-list .an-card .an-card-body') as HTMLElement).click());
+  await waitFor(win, `document.querySelectorAll('#dash-grid .dash-card canvas').length >= 2`, 30000);
+  const dash = await win.evaluate(() => ({
+    name: document.getElementById('dash-name')!.textContent,
+    canvases: document.querySelectorAll('#dash-grid .dash-card canvas').length,
+    missing: document.querySelectorAll('#dash-grid .dash-card-missing').length,
+  }));
+  ok('the imported dashboard renders its charts, none missing a source',
+    dash.name === 'Retail overview' && dash.canvases >= 2 && dash.missing === 0, JSON.stringify(dash));
+  await win.evaluate(() => (window as any).handleBackToList());
+}
+
 async function main(): Promise<void> {
   const app = await _electron.launch({
     args: ['.', '--password-store=basic', '--user-data-dir=' + userData, '--enable-unsafe-swiftshader'],
@@ -245,6 +315,7 @@ async function main(): Promise<void> {
     await historySection(win, ids);
     await trashSection(win);
     await lineageSection(win, ids);
+    await projectsSection(win, app);
   } finally {
     ok('zero renderer console errors', errors.length === 0, errors.slice(0, 5).join(' | '));
     await app.close().catch(() => {});

@@ -289,6 +289,12 @@ export async function seedSampleProject(): Promise<{ seeded: boolean; projectId?
   } else {
     console.error('[sample] could not build the sample dashboard:', built.error);
   }
+  // What the seed made, by id — the switcher's "Sample" badge and first-run
+  // guidance both need to tell these apart from the user's own records.
+  config.save({ sample: {
+    projectId: project.id, datasetId: ds.id, analysisId: analysisId || '',
+    visualIds: (await visuals.listVisuals(project.id)).map((v) => v.id),
+  } });
 
   return { seeded: true, projectId: project.id, analysisId };
 }
