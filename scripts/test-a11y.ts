@@ -153,6 +153,11 @@ async function focusOrder(win: Win, scope: string | null, max = 40): Promise<{ o
   }, { scope });
   const steps = Math.min(n - 1, max);
   for (let i = 1; i <= steps; i++) {
+    // An editor where Tab indents must offer the documented way out (Escape,
+    // then Tab) — the walk takes it, and so proves it exists.
+    if (await win.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.tabIndents === '1')) {
+      await win.keyboard.press('Escape');
+    }
     await win.keyboard.press('Tab');
     const r = await win.evaluate((i: number) => {
       const list = (window as any).__a11yList as HTMLElement[];
@@ -275,7 +280,10 @@ async function main(): Promise<void> {
     await go('home');
     await check(win, `Home (${t})`, '.hub-body', { order: t === 'light' });
     await go('datasets');
-    for (const id of ['ds-tab-datasets', 'ds-tab-captures', 'ds-tab-relationships', 'ds-tab-metrics']) {
+    // Every tab the strip has, whatever it has grown to: read from the DOM.
+    const dataTabs: string[] = await win.evaluate(() =>
+      [...document.querySelectorAll('#ds-tab-datasets ~ [role="tab"], #ds-tab-datasets')].map((t) => t.id));
+    for (const id of dataTabs) {
       await tab(id);
       await check(win, `Data › ${id.replace('ds-tab-', '')} (${t})`, '.hub-body', { order: t === 'light' });
     }
@@ -283,6 +291,8 @@ async function main(): Promise<void> {
     await check(win, `Visuals (${t})`, '.hub-body', { order: t === 'light' });
     await go('analyses');
     await check(win, `Dashboards (${t})`, '.hub-body', { order: t === 'light' });
+    await go('trash');
+    await check(win, `Trash (${t})`, '.hub-body', { order: t === 'light' });
   }
   await theme(win, 'light');
 
