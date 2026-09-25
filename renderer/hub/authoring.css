@@ -1,0 +1,285 @@
+/* Authoring depth — relationships, actions and navigation, card kinds, maps and
+   the accessibility layer. Its own sheet (linked after hub.css) so these
+   surfaces carry no merge weight in the 14k-line shared one. Tokens only: every
+   colour, size and duration comes from theme.css. */
+
+/* ── Relationships (Data → Relationships) ─────────────────────────────────── */
+
+.rel-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+.rel-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  flex-wrap: wrap;
+}
+.rel-explain {
+  margin: 0;
+  flex: 1 1 320px;
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+.rel-canvas {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 120px;
+  min-height: 300px;
+  padding: var(--sp-32);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background-color: var(--surface-2);
+  background-image: radial-gradient(var(--border-2) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+.rel-canvas.is-empty {
+  display: block;
+  background-image: none;
+}
+.rel-lane {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-24);
+}
+.rel-lane-cap {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.rel-node {
+  width: 224px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--sp-12);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+}
+.rel-node-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.rel-node-head .ic { color: var(--accent); flex: none; }
+.rel-node-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rel-node-meta {
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.rel-node-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.rel-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--sp-8);
+  font-family: var(--font-mono);
+  font-size: var(--t-11);
+  color: var(--accent-2);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-full);
+}
+.rel-edges {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.rel-edge {
+  fill: none;
+  stroke: var(--border-3);
+  stroke-width: 2;
+}
+.rel-edge.is-selected {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+.rel-edge-end {
+  fill: var(--surface);
+  stroke: var(--border-3);
+  stroke-width: 2;
+}
+.rel-edge-label {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  padding: 4px var(--sp-8);
+  font: 600 var(--t-11) / 1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-full);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+.rel-edge-label:hover,
+.rel-edge-label.is-selected {
+  color: var(--accent-2);
+  border-color: var(--accent);
+}
+.rel-canvas-hint {
+  align-self: center;
+  max-width: 280px;
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+.rel-cols,
+.rel-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.4fr) minmax(160px, 1.4fr) 120px 150px 110px 40px;
+  align-items: center;
+  gap: var(--sp-12);
+  min-height: 44px;
+}
+.rel-row { cursor: pointer; }
+.rel-row.is-selected { background: var(--accent-soft); }
+.rel-end {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.rel-end-ds {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.rel-end-col {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.rel-kind { font-size: var(--t-13); }
+.rel-num {
+  font-size: var(--t-13);
+  font-variant-numeric: tabular-nums;
+}
+.rel-num.is-warn { color: var(--warn); }
+.rel-none {
+  padding: var(--sp-16) var(--sp-8);
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+
+/* The New relationship dialog. Scrolls inside itself on a short window, and
+   gives its selects the same explicit height the metric editor does (a native
+   <select> clips descenders at --t-15 otherwise). */
+.rel-modal {
+  width: min(760px, calc(100vw - 48px));
+  max-height: calc(100vh - var(--sp-48));
+  overflow-y: auto;
+}
+.rel-modal select.ws-modal-input { height: 38px; }
+.rel-modal-intro {
+  margin: 0 0 var(--sp-16);
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+.rel-modal-sides {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--sp-16);
+}
+.rel-modal-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.rel-modal-arrow { color: var(--muted); }
+.rel-sug-head {
+  margin-top: var(--sp-16);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.rel-sug {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: var(--sp-8) 0 var(--sp-16);
+}
+.rel-sug-item {
+  display: grid;
+  grid-template-columns: 1fr 120px 96px;
+  column-gap: var(--sp-12);
+  row-gap: 2px;
+  padding: var(--sp-8) var(--sp-12);
+  text-align: left;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+.rel-sug-item:hover { border-color: var(--border-3); }
+.rel-sug-item[aria-checked="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.rel-sug-pair {
+  font-family: var(--font-mono);
+  font-size: var(--t-13);
+  font-weight: 600;
+}
+.rel-sug-meter {
+  align-self: center;
+  height: 6px;
+  overflow: hidden;
+  background: var(--surface-3);
+  border-radius: var(--r-full);
+}
+.rel-sug-meter > span {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+}
+.rel-sug-rate {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.rel-sug-why {
+  grid-column: 1 / -1;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.rel-sug-none {
+  margin: 0;
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+.rel-modal-note {
+  min-height: 1em;
+  margin: var(--sp-8) 0 0;
+  font-size: var(--t-12);
+  color: var(--warn);
+}

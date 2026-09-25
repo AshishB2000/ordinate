@@ -486,11 +486,28 @@ function runAggregate(
 // group-by over several grouping sets, and a second copy of the ordinal
 // downgrade / the aggregate SQL / the FROM target is exactly the silent
 // divergence this layer's differential tests exist to prevent.
+// A JOINED relation (engine/joinResident.ts) registered under a key that stands
+// in for a path, so every probe and aggregate in this file runs unchanged over a
+// join. The relation exposes the merged `c0..cN` plus the primary's `__ord`.
+// Registered for the duration of one synchronous call and removed after it.
+const joinRelations = new Map<string, string>();
+
+export function withRelation<T>(key: string, sql: string, run: () => T): T {
+  joinRelations.set(key, sql);
+  try {
+    return run();
+  } finally {
+    joinRelations.delete(key);
+  }
+}
+
 export function plainFrom(parquetPath: string): string {
-  return relationSql(parquetPath);
+  return joinRelations.get(parquetPath) ?? relationSql(parquetPath);
 }
 
 function orderedFrom(parquetPath: string, mode: OrdinalMode): { from: string; ord: string } {
+  const joined = joinRelations.get(parquetPath);
+  if (joined) return { from: joined, ord: '__ord' };
   const base = relationSql(parquetPath); // read_parquet('…')  — validated + escaped
   if (mode === 'file_row_number') {
     return { from: `${base.slice(0, -1)}, file_row_number=true)`, ord: 'file_row_number' };

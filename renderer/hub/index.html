@@ -14,6 +14,7 @@
     content="default-src 'none'; style-src 'self'; script-src 'self'; connect-src https://a.tile.openstreetmap.org https://b.tile.openstreetmap.org https://c.tile.openstreetmap.org; img-src data: file: https://a.tile.openstreetmap.org https://b.tile.openstreetmap.org https://c.tile.openstreetmap.org;"/>
   <link rel="stylesheet" href="../theme.css"/>
   <link rel="stylesheet" href="hub.css"/>
+  <link rel="stylesheet" href="authoring.css"/>
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
        injecting a <style> at render time, which the hub CSP (style-src 'self')
@@ -2764,6 +2765,11 @@
 <script src="hubHotkey.js"></script>
 <script src="hubMenus.js"></script>
 <script src="hubNotify.js"></script>
+<!-- Authoring depth. The project data model (Data → Relationships, built by its
+     own script) and the builder's related columns. Wired on DOMContentLoaded. -->
+<script src="encodingRelated.js"></script>
+<script src="relationshipsPage.js"></script>
+<script src="relationshipDialog.js"></script>
 <script src="captureStatus.js"></script>
 <script src="hubCapture.js"></script>
 <script src="captureList.js"></script>

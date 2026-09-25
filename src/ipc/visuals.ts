@@ -8,6 +8,7 @@ import type { VizDataResult } from '../analysis/vizData';
 import * as trace from '../engine/residentTrace';
 // The two resident fast paths `vizDataFor` tries before hydrating a row.
 import { residentPivotData, residentVizData } from './visualsResident';
+import { authoringVizData } from './vizExtras';
 import { sanitizeEncoding, sanitizeChartType } from '../analysis/visuals';
 import type { VizEncoding } from '../analysis/visuals';
 import type { Cell, FilterStep } from '../data/transforms';
@@ -380,6 +381,9 @@ export async function vizDataFor(
   filters: FilterStep[],
   opts: { maxHydrateRows?: number } = {},
 ): Promise<VizDataReply> {
+  // A field or filter from a RELATED dataset: the join chain answers instead.
+  const joined = await authoringVizData(projectId, datasetId, encoding, filters);
+  if (joined) return joined;
   // Fast path: an aggregated chart (or a pivot) over a resident (v3) dataset,
   // answered without hydrating a single row. Null unless provably identical.
   const fast = encoding && encoding.pivot

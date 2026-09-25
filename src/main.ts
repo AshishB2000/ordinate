@@ -694,7 +694,7 @@ try {
       .catch(() => { /* best-effort: a failure costs a restart, never correctness */ });
   }
 } catch (_) { /* connector module absent or registry unreadable — stay lazy */ }
-
+require("./ipc/authoringDepth").register(); // relationships, project assets, boundaries, places
 // Week 13 — capture → dataset bridge. resolveCropPath hands the on-disk crop path
 // from main's per-entry state (entryData, then the summaries cache) so a renderer-
 // sent path is never trusted; both maps already carry cropPath per entryId.

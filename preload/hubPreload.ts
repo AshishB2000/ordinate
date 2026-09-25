@@ -212,6 +212,15 @@ contextBridge.exposeInMainWorld('hub', {
   refreshDataset: (projectId: string, id: string) => ipcRenderer.invoke('dataset:refresh', { projectId, id }),
   // List a project's dataset summaries (newest-updated first).
   listDatasets: (projectId: string) => ipcRenderer.invoke('dataset:list', { projectId }),
+  // ── Authoring depth: the project data model (src/ipc/relationships.ts) ──
+  listRelationships: (projectId: string) => ipcRenderer.invoke('relationship:list', { projectId }),
+  saveRelationship: (projectId: string, relationship: any) =>
+    ipcRenderer.invoke('relationship:save', { projectId, relationship }),
+  deleteRelationship: (projectId: string, id: string) => ipcRenderer.invoke('relationship:delete', { projectId, id }),
+  suggestRelationshipKeys: (projectId: string, fromId: string, toId: string) =>
+    ipcRenderer.invoke('relationship:suggest', { projectId, fromId, toId }),
+  relatedColumns: (projectId: string, datasetId: string) =>
+    ipcRenderer.invoke('relationship:related', { projectId, datasetId }),
   // ── Capture → dataset (Week 13) ──
   // Turn a capture's extractedTable into a review-grid draft (strictly typed,
   // rectangular) WITHOUT saving. Returns { ok, columns, rows, warnings }.

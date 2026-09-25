@@ -7,6 +7,7 @@ import { computeMetric } from '../analysis/metricValue';
 import type { MetricAggregation } from '../analysis/metricValue';
 import { applyPipeline } from '../data/transforms';
 import type { FilterStep } from '../data/transforms';
+import { joinedMetricFor } from './relationships';
 
 // Dashboards IPC — list/get/save/update/delete a Dashboard, plus `dashboard:metric`
 // which loads a dataset and runs the PURE src/metricValue.ts helper to produce the
@@ -161,6 +162,9 @@ async function metricFor(
   filters: FilterStep[],
   target: MetricTarget,
 ): Promise<{ ok: boolean; value: number | null }> {
+  // A column or filter this dataset lacks may live on a RELATED one.
+  const joined = await joinedMetricFor(projectId, datasetId, spec, filters);
+  if (joined) return joined;
   if (target.src) {
     const resident = residentQuery.computeMetricResident(target.src, spec, filters);
     if (resident !== null) {

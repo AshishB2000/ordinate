@@ -212,6 +212,20 @@ scripts/**/*.js
 # Data-section layout (list-first restructure) — emitted sibling.
 /renderer/hub/dataSection.js
 
+# Authoring depth — relationships, actions, card kinds, maps, accessibility.
+/src/analysis/relationships.js
+/src/analysis/joinPlan.js
+/src/analysis/joinJs.js
+/src/analysis/keySuggest.js
+/src/engine/joinResident.js
+/src/ipc/relationships.js
+/src/ipc/vizExtras.js
+/src/ipc/authoringDepth.js
+/renderer/hub/encodingRelated.js
+/renderer/hub/relationshipsPage.js
+/renderer/hub/relationshipDialog.js
+/scripts/test-joins.js
+
 # Command palette: the registry, its contents, the overlay, and the native menu
 # built from the same list — emitted siblings.
 /renderer/hub/commands.js
