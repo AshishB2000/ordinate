@@ -8,6 +8,10 @@ import type { VizDataResult } from '../analysis/vizData';
 import * as trace from '../engine/residentTrace';
 // The two resident fast paths `vizDataFor` tries before hydrating a row.
 import { residentPivotData, residentVizData } from './visualsResident';
+import { withPeriodOverlay } from './visualsOverlay';
+import { paramValues, resolveFilterParams } from '../analysis/params';
+import type { ParamValues } from '../analysis/params';
+import { paramTable } from '../data/paramReplay';
 import { sanitizeEncoding, sanitizeChartType } from '../analysis/visuals';
 import type { VizEncoding } from '../analysis/visuals';
 import type { Cell, FilterStep } from '../data/transforms';
@@ -352,6 +356,8 @@ export type VizDataReply =
       warnings: string[];
       /** How the category axis was bucketed — see analysis/categoryKey. */
       category?: VizDataResult['category'];
+      /** Present when a period overlay was drawn — see ./visualsOverlay. */
+      overlay?: { kind: 'previous_year'; caption?: string; pct?: number };
     }
   | { ok: false; error: string; tooLarge?: true };
 
@@ -380,8 +386,20 @@ export async function vizDataFor(
   datasetId: string,
   encoding: VizEncoding,
   filters: FilterStep[],
-  opts: { maxHydrateRows?: number } = {},
+  opts: { maxHydrateRows?: number; params?: ParamValues } = {},
 ): Promise<VizDataReply> {
+  // A pipeline that references a dashboard parameter answers from the dataset
+  // REPLAYED with the query's values bound (data/paramReplay.ts) — the stored
+  // table holds those fields unbound. Everything else is untouched below.
+  const replay = await paramTable(projectId, datasetId, opts.params);
+  if (replay) {
+    const r = buildVizData(replay.columns, replay.rows, encoding, filters);
+    return {
+      ok: true, data: r.data, recommendedShape: r.recommendedShape,
+      warnings: r.warnings.concat(replay.errors), category: r.category,
+    };
+  }
+
   // Fast path: an aggregated chart (or a pivot) over a resident (v3) dataset,
   // answered without hydrating a single row. Null unless provably identical.
   const fast = encoding && encoding.pivot
@@ -467,13 +485,23 @@ export function register() {
   // Load the dataset's DERIVED columns/rows and run the pure bridge. The encoding
   // and filters are untrusted renderer input → sanitized before the math. Visual
   // filters (transforms filter steps) are applied to rows BEFORE aggregation.
-  ipcMain.handle('visual:data', async (_e, { projectId, datasetId, encoding, filters }: any = {}) => {
+  ipcMain.handle('visual:data', async (_e, { projectId, datasetId, encoding, filters, params }: any = {}) => {
     try {
       // Sanitisation FIRST, always — the encoding and the filters are untrusted
       // renderer input, and both paths below consume the sanitized values.
+      // Then the dashboard's parameters, through the one resolver: a filter
+      // value `[[threshold]]` becomes the typed value it names.
       const enc = sanitizeEncoding(encoding);
-      const flt = visuals.sanitizeFilters(filters);
-      return await vizDataFor(projectId, datasetId, enc, flt);
+      const values = paramValues(params);
+      const bound = resolveFilterParams(visuals.sanitizeFilters(filters), values);
+      const flt = bound.steps;
+      const run = (p: string, d: string, e: VizEncoding, f: FilterStep[]) => vizDataFor(p, d, e, f, { params: values });
+      const reply = await withPeriodOverlay(await run(projectId, datasetId, enc, flt), projectId, datasetId, enc, flt, run);
+      // A parameter that cannot be made well-typed is a VALIDATION message the
+      // tile shows — never a silently empty chart.
+      return reply.ok && bound.errors.length
+        ? { ...reply, warnings: reply.warnings.concat(bound.errors), paramErrors: bound.errors }
+        : reply;
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute the visual data' };
     }
@@ -491,12 +519,13 @@ export function register() {
   //
   // Returns the resolved filter list so the panel can render it as chips, or
   // `available: false` + a reason when the row set cannot be derived faithfully.
-  ipcMain.handle('visual:rows', async (_e, { projectId, datasetId, encoding, filters, mark, page }: any = {}) => {
+  ipcMain.handle('visual:rows', async (_e, { projectId, datasetId, encoding, filters, mark, page, params }: any = {}) => {
     try {
       // Untrusted renderer input, sanitized before anything reads it — the same
-      // two whitelists `visual:data` runs.
+      // two whitelists `visual:data` runs, and the same parameter resolution,
+      // so the rows behind a mark are selected by the filters that drew it.
       const enc = sanitizeEncoding(encoding);
-      const flt = visuals.sanitizeFilters(filters);
+      const flt = resolveFilterParams(visuals.sanitizeFilters(filters), paramValues(params)).steps;
 
       // Metadata only: the column list is all `resolveDrill` needs, and the grid
       // needs it for headers. No rows are hydrated to answer a refusal.
@@ -541,10 +570,10 @@ export function register() {
   // file is the grid: same filters, same search, same order. A refusal here is
   // the same refusal the panel got, and the panel disables the button on one
   // anyway — this is the second lock, not the first.
-  ipcMain.handle('visual:rowsExport', async (_e, { projectId, datasetId, encoding, filters, mark, page, name }: any = {}) => {
+  ipcMain.handle('visual:rowsExport', async (_e, { projectId, datasetId, encoding, filters, mark, page, name, params }: any = {}) => {
     try {
       const enc = sanitizeEncoding(encoding);
-      const flt = visuals.sanitizeFilters(filters);
+      const flt = resolveFilterParams(visuals.sanitizeFilters(filters), paramValues(params)).steps;
       const meta = await datasets.getDatasetMeta(projectId, datasetId);
       if (!meta) return { ok: false, error: 'Dataset not found' };
 

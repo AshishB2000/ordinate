@@ -51,7 +51,8 @@ function buildDataTable(table: HTMLTableElement, data: ChartDataShape): void {
     row.appendChild(tdLabel);
     series.forEach((s: ChartSeriesShape) => {
       const td = document.createElement('td');
-      td.textContent = (s.values && s.values[i] != null) ? s.values[i] : '';
+      const v = s.values ? s.values[i] : null;
+      td.textContent = typeof v === 'number' ? OrdFormat.formatNumber(v, { maxDecimals: 2 }) : v != null ? String(v) : '';
       row.appendChild(td);
     });
     tbody.appendChild(row);

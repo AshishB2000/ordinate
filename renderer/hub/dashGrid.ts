@@ -64,6 +64,8 @@ function openEditorWith(rec: any, title: string): void {
   // set — no conversion). A control with no default stays unset, which
   // `controlSteps` already treats as "filters nothing".
   controlState = new Map();
+  paramState = new Map(); // every parameter opens on its saved default
+  if (!Array.isArray(dashCurrent.parameters)) dashCurrent.parameters = [];
   for (const page of dashCurrent.pages) {
     for (const card of (page && Array.isArray(page.cards) ? page.cards : [])) {
       if (card && card.type === 'control' && card.control && card.control.default) {
@@ -109,6 +111,7 @@ function closeDashboardEditor(): void {
   if (dashSaveTimer !== null) { window.clearTimeout(dashSaveTimer); dashSaveTimer = null; }
   dashCurrent = null;
   controlState = new Map(); // no reader session carries into the next sheet opened
+  paramState = new Map();
   dashPageIdx = 0;
   dashDirty = false;
   dashDragId = null;
@@ -295,6 +298,9 @@ function renderDashGrid(): void {
   const tiles = cards.filter((c: any) => !c || c.type !== 'control');
   dashShow('dash-starters', tiles.length === 0);
   renderDashControlBar();
+  // A filter chip can name a parameter's CURRENT value ("threshold (2,500)"),
+  // so it repaints with everything else that reads one.
+  if (dashParams().length) renderDashFilterBar();
   // Append every card element first (so each body has layout size), then kick
   // off the async body render into each — charts size to their grid cell.
   tiles.forEach((card: any) => {
@@ -401,6 +407,7 @@ async function refreshDashFreshness(): Promise<void> {
     ? 'The oldest of the ' + ids.length + ' datasets this sheet reads.'
     : '';
   btn.hidden = !anyRefreshable;
+  dqPaintDashFlag(label, ids, byId); // dsRules.ts — "· Data quality: N rules failing"
 }
 
 // Refresh exactly the datasets this sheet reads, then re-render it.
@@ -633,7 +640,7 @@ async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void>
   // is built, before this resolve, so it can only guess; this is where the name
   // is actually known, and it costs nothing — the fetch already happened.
   const titleEl = body.closest('.dash-card')?.querySelector('.dash-card-title');
-  if (titleEl && visual.name) titleEl.textContent = String(visual.name);
+  if (titleEl && visual.name) titleEl.textContent = dashSubst(visual.name);
 
   // Merge dashboard-wide filters + every control's live selection (effectiveFilters,
   // dashboards.ts) with the visual's own filters, then pass the combined list through
@@ -643,7 +650,7 @@ async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void>
   const merged = mergeDashFilters(effectiveFilters(), visual.filters);
   let res: any;
   try {
-    res = await window.hub.computeVisualData(currentProjectId, visual.datasetId, visual.encoding, merged);
+    res = await window.hub.computeVisualData(currentProjectId, visual.datasetId, visual.encoding, merged, dashParamPayload());
   } catch (_) {
     res = { ok: false };
   }
@@ -661,11 +668,12 @@ async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void>
   // is the same filter list that computed the figure, which is what makes the
   // rows and the number agree.
   const drill: any = {
-    name: dashCardTitle(card) === 'Visual' ? visual.name : dashCardTitle(card),
+    name: dashCardTitle(card) === 'Visual' ? dashSubst(visual.name) : dashCardTitle(card),
     projectId: currentProjectId,
     datasetId: visual.datasetId,
     encoding: visual.encoding,
     filters: merged,
+    params: dashParamPayload(),
   };
   const entry: any = {
     id: card.id,
@@ -693,6 +701,8 @@ async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void>
   renderVizInArea(area, data, type, entry, 'v', {
     projectId: currentProjectId, datasetId: visual.datasetId, encoding: visual.encoding, filters: merged,
   });
+  paintOverlayCaption(area, res, type);
+  paintParamErrors(body, res.paramErrors);
   // Cross-filter first: when it is on it owns the plain click (it writes), and
   // drilling stays available through the ⋯ menu. Otherwise the click drills.
   // Drilling is a READ, so it is offered on a published snapshot too.

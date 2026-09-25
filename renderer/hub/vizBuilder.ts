@@ -260,6 +260,7 @@ async function recomputeVisual(): Promise<void> {
         return;
       }
       if (!info.canRender) {
+        paintOverlayCaption(area, null, type);
         area.innerHTML = '';
         const m = document.createElement('div');
         m.className = 'cv-chart-fallback';
@@ -274,6 +275,7 @@ async function recomputeVisual(): Promise<void> {
       renderVizViaEntry(area, data, type, {
         projectId: currentProjectId, datasetId: vizDatasetId, encoding, filters: vizForm!.getFilters(),
       });
+      paintOverlayCaption(area, res, type);
     },
   });
   vizPicker = picker;

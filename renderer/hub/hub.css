@@ -8832,6 +8832,18 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   cursor: pointer;
 }
 .dash-present-exit:hover { border-color: var(--accent); color: var(--accent); }
+/* The brand mark, bottom-right while presenting (dashShare.enterDashPresent). */
+.dash-present-logo {
+  position: fixed;
+  right: 20px;
+  bottom: 16px;
+  z-index: 60;
+  max-width: 140px;
+  max-height: 28px;
+  object-fit: contain;
+  pointer-events: none;
+}
+.dash-present-logo[hidden] { display: none; }
 
 /* TWO rails, and the old rule named NEITHER. `.sidebar` was a different
    element entirely — the capture shell's column, deleted with that shell — so
@@ -9148,17 +9160,20 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
    with one colour from another palette looks like a rendering bug, not a style.
    --accent-ink is deliberately NOT on this axis: it is the ink ON the accent,
    and every accent here is dark enough for white. */
+/* The default accent is the WORKSPACE accent (Settings → Branding, or a
+   dashboard's own custom colour — both set --brand-* on an element; see
+   chartPalette.applyBrandTokens). Unbranded, it is the app's blue. */
 .dash-accent--blue {
-  --accent: #2563eb;
-  --accent-2: #1d4fd0;
-  --accent-soft: rgba(37, 99, 235, 0.08);
-  --accent-line: rgba(37, 99, 235, 0.22);
-  --chart-accent: #2563eb;
-  --chart-1: #2563eb;
-  --chart-2: #0e7490;
-  --chart-3: #14b8a6;
-  --chart-4: #6366f1;
-  --chart-5: #64748b;
+  --accent: var(--brand-accent, #2563eb);
+  --accent-2: var(--brand-accent-2, #1d4fd0);
+  --accent-soft: var(--brand-accent-soft, rgba(37, 99, 235, 0.08));
+  --accent-line: var(--brand-accent-line, rgba(37, 99, 235, 0.22));
+  --chart-accent: var(--brand-accent, #2563eb);
+  --chart-1: var(--brand-chart-1, #2563eb);
+  --chart-2: var(--brand-chart-2, #0e7490);
+  --chart-3: var(--brand-chart-3, #14b8a6);
+  --chart-4: var(--brand-chart-4, #6366f1);
+  --chart-5: var(--brand-chart-5, #64748b);
 }
 
 .dash-accent--teal {
@@ -9194,16 +9209,16 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
    same hues have to be lifted in lightness and saturation, matching the level
    theme.css's [data-theme="dark"] already establishes for the app chrome. */
 .dash-theme--dark.dash-accent--blue {
-  --accent: #3b82f6;
-  --accent-2: #2f6fe0;
-  --accent-soft: rgba(59, 130, 246, 0.16);
-  --accent-line: rgba(59, 130, 246, 0.32);
-  --chart-accent: #3b82f6;
-  --chart-1: #3b82f6;
-  --chart-2: #22d3ee;
-  --chart-3: #2dd4bf;
-  --chart-4: #818cf8;
-  --chart-5: #94a3b8;
+  --accent: var(--brand-dk-accent, #3b82f6);
+  --accent-2: var(--brand-dk-accent-2, #2f6fe0);
+  --accent-soft: var(--brand-dk-accent-soft, rgba(59, 130, 246, 0.16));
+  --accent-line: var(--brand-dk-accent-line, rgba(59, 130, 246, 0.32));
+  --chart-accent: var(--brand-dk-accent, #3b82f6);
+  --chart-1: var(--brand-dk-chart-1, #3b82f6);
+  --chart-2: var(--brand-dk-chart-2, #22d3ee);
+  --chart-3: var(--brand-dk-chart-3, #2dd4bf);
+  --chart-4: var(--brand-dk-chart-4, #818cf8);
+  --chart-5: var(--brand-dk-chart-5, #94a3b8);
 }
 
 .dash-theme--dark.dash-accent--teal {
@@ -10070,6 +10085,225 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   .cw-body { grid-template-columns: minmax(0, 1fr); }
   .cw-tree-pane { max-height: 220px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE QUERY TAB (Data → Query) — SQL over this project's own datasets
+
+   The connection workbench's panes, reused as they are: `.cw-body`, the
+   `.cw-tree-pane` rail, `.cw-row`/`.cw-caret`, the `.cw-input`/`.cw-hl` editor
+   pair, the `.cw-ac` popover and the `.cw-results` card. Only what differs
+   lives here: two panes (no details rail) at a fixed working height inside the
+   scrolling Data page, the two-line dataset row, the parameters row, the
+   error block and the idle state. Tokens only, so both themes follow.
+   ═════════════════════════════════════════════════════════════════════════ */
+.qt[hidden],
+.qt-empty-host[hidden],
+.qt-body[hidden] { display: none; }
+.qt-body {
+  grid-template-columns: 280px minmax(0, 1fr);
+  height: max(560px, calc(100vh - 250px));
+}
+
+/* ── Left: the datasets ── */
+.qt-tree-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-8);
+  padding: 0 var(--sp-4);
+}
+.qt-tree-title {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.qt-row-ds {
+  height: auto;
+  min-height: 40px;
+  padding-top: var(--sp-4);
+  padding-bottom: var(--sp-4);
+}
+.qt-ds-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.qt-ds-name { flex: none; font-weight: 500; color: var(--text-strong); }
+.qt-ds-slug {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--t-11);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qt-row-ds.is-off { cursor: default; }
+.qt-row-ds.is-off .qt-ds-name,
+.qt-row-ds.is-off .cw-num { color: var(--text-faint); }
+.qt-node .cw-row-col .ds-type { flex: 0 0 auto; }
+.qt-tree-foot {
+  margin: 0;
+  padding: var(--sp-8) var(--sp-4) 0;
+  border-top: 1px solid var(--border-hairline);
+  font-size: var(--t-11);
+  color: var(--text-faint);
+}
+
+/* ── Centre: the editor ── */
+.qt-main .cw-input,
+.qt-main .cw-hl { min-height: 150px; }
+.qt-input::placeholder { color: var(--text-faint); }
+.qt-main .cw-bar { flex-wrap: nowrap; }
+.qt-hint { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qt-results th.qt-num { text-align: right; }
+.qt-results td.qt-num { text-align: right; font-variant-numeric: tabular-nums; }
+/* A number cell in the dataset grid: figures line up at the right. */
+.ds-td.ds-td-num { text-align: right; font-variant-numeric: tabular-nums; }
+.qt-hint code {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--t-11);
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* The parameters row: one compact field per `[[name]]` in the SQL. */
+.qt-params {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-12);
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+}
+.qt-params[hidden] { display: none; }
+.qt-params-label {
+  flex: 0 0 auto;
+  padding-top: 7px;
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.qt-params-list { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: var(--sp-8); }
+.qt-param {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 2px 2px 2px var(--sp-8);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.qt-param-name {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--t-12);
+  color: var(--accent);
+}
+.qt-param-name::before { content: '[['; color: var(--text-faint); }
+.qt-param-name::after { content: ']]'; color: var(--text-faint); }
+.qt-param-kind { flex: 0 0 auto; width: auto; font-size: var(--t-12); padding: var(--sp-4); }
+.qt-param-value { flex: 0 0 auto; width: 160px; font-size: var(--t-12); padding: var(--sp-4) var(--sp-8); }
+
+/* ── Bottom: the results ── */
+.qt-results .cw-grid { max-height: none; }
+.qt-results .cw-grid[hidden],
+.qt-cols[hidden] { display: none; }
+.qt-status {
+  flex: 0 0 auto;
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.qt-status:empty { display: none; }
+.qt-status.is-error { color: var(--error); }
+.qt-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-12);
+  padding: var(--sp-12);
+  border: 1px solid var(--error);
+  border-radius: var(--r-md);
+  background: var(--error-soft);
+}
+.qt-error[hidden] { display: none; }
+.qt-error-icon { flex: 0 0 auto; display: flex; padding-top: 1px; color: var(--error); }
+.qt-error-body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.qt-error-h { margin: 0; font-size: var(--t-13); font-weight: 600; color: var(--text-strong); }
+.qt-error-msg {
+  margin: 0;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--t-12);
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.qt-idle {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  padding: var(--sp-24);
+  text-align: center;
+}
+.qt-idle[hidden] { display: none; }
+.qt-idle-h { margin: 0; font-size: var(--t-13); font-weight: 600; color: var(--text-strong); }
+.qt-idle-p { margin: 0; max-width: 56ch; font-size: var(--t-12); line-height: 1.6; color: var(--muted); }
+
+@media (max-width: 860px) {
+  /* Stacked like the workbench: the rail becomes a short scroller on top. */
+  .qt-body { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .qt-body .cw-tree-pane { max-height: 220px; }
+  .qt-results { min-height: 360px; }
+}
+
+/* ── The dataset page's lineage line (dsLineage.ts) ── */
+.ds-lineage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4) var(--sp-16);
+  margin-top: var(--sp-4);
+}
+.ds-lineage[hidden] { display: none; }
+.ds-lineage-group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); min-width: 0; }
+.ds-lineage-label {
+  margin-right: 2px;
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ds-lineage-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  max-width: 240px;
+  height: 26px;
+  padding: 0 var(--sp-8);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface-1);
+  font-size: var(--t-12);
+  color: var(--text);
+  cursor: pointer;
+}
+.ds-lineage-chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-lineage-chip .ic { flex: 0 0 auto; color: var(--text-faint); }
+.ds-lineage-chip:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.ds-lineage-chip:hover:not(:disabled) .ic { color: var(--accent); }
+.ds-lineage-chip:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
+.ds-lineage-chip:disabled { cursor: default; border-style: dashed; color: var(--text-faint); }
+/* The code mark a SQL-sourced dataset row carries in the Source column. */
+.ds-sql-glyph { flex: 0 0 auto; color: var(--text-faint); }
 
 /* ── In-app text dialog (project new/rename) — Electron has no window.prompt ── */
 .ws-modal-overlay {
@@ -12818,6 +13052,35 @@ body.an-focus .an-workbench.is-active #dash-pages {
 }
 
 .ws-modal.dash-style-modal { width: min(470px, calc(100vw - 48px)); }
+/* Accent + logo overrides under the preset strip (dashStyle.buildDashBrandControls). */
+.dash-style-brand {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  margin-top: var(--sp-16);
+  padding-top: var(--sp-16);
+  border-top: 1px solid var(--border-hairline);
+}
+.dash-style-field { display: flex; align-items: center; gap: var(--sp-12); }
+.dash-style-label { flex: 0 0 52px; font-size: var(--t-12); font-weight: 600; color: var(--muted); }
+.dash-style-brand .sf-accent { flex-wrap: wrap; gap: var(--sp-8); }
+.dash-style-brand .sf-swatch { width: 22px; height: 22px; }
+.dash-style-logo.sf-logo-frame { width: 112px; height: 40px; }
+/* "No override": an empty ring with a slash, the usual no-colour swatch. */
+.sf-swatch.sf-swatch--none {
+  position: relative;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-2);
+}
+.sf-swatch.sf-swatch--none::after {
+  content: '';
+  position: absolute;
+  inset: 50% 3px auto;
+  height: 1.5px;
+  background: var(--text-faint);
+  transform: rotate(-45deg);
+}
+.sf-swatch.sf-swatch--none.is-on { border-color: var(--surface); box-shadow: 0 0 0 2px var(--text-faint); }
 .dash-style-sub {
   margin: 0 0 var(--sp-4);
   font-size: var(--t-13);
@@ -13120,6 +13383,8 @@ body.an-focus .an-workbench.is-active #dash-pages {
 .fx-input::selection { background: var(--accent-soft); }
 
 .fx-t-col { color: var(--accent); }
+/* A dashboard parameter, [[name]] — the ok hue, so it never reads as a column. */
+.fx-t-param { color: var(--ok); font-weight: 600; }
 .fx-t-fn { color: var(--text-strong); font-weight: 600; }
 .fx-t-str { color: var(--muted); }
 .fx-t-num { color: var(--text); }
@@ -13740,7 +14005,7 @@ body.no-sidebar .app-sidebar { display: none; }
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14), 0 6px 14px rgba(0, 0, 0, 0.12);
   overflow: hidden;
 }
-.rb-card-thumb-mark { width: 14px; height: 14px; }
+.rb-card-thumb-mark { max-width: 48px; height: 14px; object-fit: contain; object-position: left; }
 .rb-card-thumb-title {
   font-size: 9px;
   font-weight: 700;
@@ -13948,7 +14213,7 @@ body.no-sidebar .app-sidebar { display: none; }
 }
 .rb-sheet-body { flex: 1; min-height: 0; padding-top: var(--sp-16); overflow: hidden; }
 .rb-sheet--cover .rb-sheet-body { justify-content: center; display: flex; flex-direction: column; }
-.rb-cover-mark { width: 40px; height: 40px; margin-bottom: var(--sp-16); }
+.rb-cover-mark { display: block; max-width: 160px; height: 40px; object-fit: contain; object-position: left; margin-bottom: var(--sp-16); }
 .rb-sheet-title { margin: 0 0 var(--sp-8); font-size: 20pt; font-weight: 700; color: #0f1117; }
 .rb-sheet--cover .rb-sheet-title { font-size: 28pt; }
 .rb-sheet-sub { margin: 0 0 var(--sp-12); font-size: 13pt; color: #6b7280; }
@@ -14525,8 +14790,9 @@ body.no-sidebar .app-sidebar { display: none; }
 }
 /* A native <select> renders its text on its own line box, and `.ws-modal-input`
    is sized for an <input> — at --t-15 the descenders clipped. An explicit
-   height is the one thing that makes both agree. */
-.me-modal select.ws-modal-input { height: 38px; }
+   height is the one thing that makes both agree. EVERY modal, not just this
+   one: the control dialog's dataset and column selects clipped the same way. */
+select.ws-modal-input { height: 38px; }
 .me-field { display: flex; flex-direction: column; gap: var(--sp-4); margin-bottom: var(--sp-12); }
 .me-field-label { font-size: var(--t-12); font-weight: 600; color: var(--muted); }
 .me-field-hint { font-size: var(--t-11); color: var(--text-dim); }
@@ -14912,6 +15178,621 @@ body.no-sidebar .app-sidebar { display: none; }
   color: var(--muted);
 }
 .rb-grid .rb-grid-label { text-align: left; }
+
+/* ── Date intelligence (periodPicker.ts, kpiCompare.ts, visualsOverlay) ──────
+   The period picker is ONE body drawn in three hosts — the filter bar's
+   popover, the control dialog's preview and the filter-step dialog's Relative
+   tab — so every rule here is scoped to `.pp`, never to a host. */
+.pp { display: flex; flex-direction: column; gap: var(--sp-12); }
+.pp-tabs { margin-bottom: 0; }
+.pp-body { display: flex; flex-direction: column; gap: var(--sp-12); }
+.pp-group { display: flex; flex-direction: column; gap: 6px; }
+.pp-group-title {
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-dim, var(--muted));
+}
+.pp-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pp-pill {
+  appearance: none;
+  padding: 5px 10px;
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
+  line-height: 1.2;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: var(--r-full);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+.pp-pill:hover { background: var(--surface-3); color: var(--text-strong); }
+.pp-pill:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
+.pp-pill.is-on {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  font-weight: 600;
+}
+.pp-custom {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding-top: var(--sp-12);
+  border-top: 1px solid var(--border);
+}
+.pp-custom-lead { font-size: var(--t-12); font-weight: 600; color: var(--text); }
+.pp-custom .ws-modal-input { margin: 0; }
+.pp-n { width: 72px; flex: 0 0 auto; }
+.pp-unit { flex: 1 1 auto; min-width: 0; }
+.pp-abs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-12); }
+.pp-abs .ws-modal-input { margin: 0; width: 100%; box-sizing: border-box; }
+.pp-hint { margin: 0; font-size: var(--t-11); line-height: 1.45; color: var(--muted); }
+.pp-resolved {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--sp-8) 10px;
+  font-size: var(--t-12);
+  color: var(--text);
+  background: var(--surface-2);
+  border-radius: var(--r-sm);
+}
+.pp-resolved .ic { color: var(--accent); flex: 0 0 auto; }
+.pp-resolved strong { font-weight: 600; color: var(--text-strong); }
+/* The popover is wider than the multi-select's: three rows of pills. */
+.dash-ctrl-popover.pp-pop { width: 380px; max-height: min(560px, 80vh); padding: var(--sp-12); gap: var(--sp-12); }
+.pp-actions { align-items: center; }
+.pp-actions .pp-clear { margin-right: auto; }
+/* The closed date control: a calendar glyph and the period's name. */
+.dash-ctrl-chip.dash-ctrl-period { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.dash-ctrl-chip.dash-ctrl-period .ic { color: var(--muted); }
+.dash-ctrl-chip.dash-ctrl-period:hover .ic { color: var(--accent); }
+.dc-preview .pp { padding: var(--sp-4); }
+/* The period picker makes this dialog taller than a laptop window: it scrolls
+   inside itself rather than pushing Add off the bottom of the screen. */
+.ws-modal.dash-control-modal { max-height: calc(100vh - var(--sp-48)); overflow-y: auto; }
+
+/* KPI Compare — the delta line under the figure. Coloured by the metric's
+   DIRECTION, not by the arrow: a cost going up is red. */
+.dash-metric-delta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  font-size: var(--t-12);
+  line-height: 1.4;
+  color: var(--muted);
+}
+.dash-metric-delta.is-loading { min-width: 120px; background: var(--surface-2); }
+.dash-metric-delta.is-good { color: var(--ok); background: var(--ok-soft); }
+.dash-metric-delta.is-bad { color: var(--error); background: var(--error-soft); }
+.dash-metric-delta.is-flat { background: var(--surface-2); }
+.dash-metric-delta.is-hint { font-size: var(--t-11); }
+.dash-metric-delta-val { font-weight: 700; }
+.dash-metric-delta-pct { font-weight: 600; }
+.dash-metric-vs { font-size: var(--t-11); color: var(--muted); line-height: 1.3; }
+.dash-card--metric .dash-card-body.has-delta { gap: 2px; padding-top: 4px; padding-bottom: 4px; }
+/* Three lines in a two-row card: the figure gives up a step so the delta and
+   what it is against both fit, rather than the card clipping its own figure. */
+.dash-card--metric .has-delta .dash-metric-value { font-size: 24px; }
+.dash-card--metric .has-delta .dash-metric-delta { margin-top: 2px; padding: 1px 8px; }
+.an-kpi-props {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  margin-top: var(--sp-12);
+  padding: var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.an-kpi-props[hidden] { display: none; }
+.an-kpi-props-h { display: flex; align-items: center; gap: 6px; font-size: var(--t-13); font-weight: 600; color: var(--text-strong); }
+.an-kpi-props-h .ic { color: var(--accent); }
+.an-compare-range { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-8); }
+.an-compare-range[hidden] { display: none; }
+.an-compare-field { display: flex; flex-direction: column; gap: 2px; font-size: var(--t-11); color: var(--muted); }
+.an-compare-field .an-prop-input { min-width: 0; }
+
+/* Period overlay — the sentence under the chart, keyed to the dashed series. */
+.viz-overlay-caption {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin: var(--sp-8) 0 0;
+  font-size: var(--t-12);
+  line-height: 1.4;
+  color: var(--text);
+  flex: 0 0 auto;
+}
+.viz-overlay-caption.is-up span:last-child,
+.viz-overlay-caption.is-down span:last-child { font-weight: 600; }
+.viz-overlay-key {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 0;
+  border-top: 2px dashed var(--chart-1, var(--accent));
+  opacity: 0.5;
+}
+.dash-card .viz-overlay-caption { margin-top: var(--sp-4); font-size: var(--t-11); }
+/* A tile carrying a caption becomes a column so the chart shrinks to make room
+   for it — the area is otherwise height:100% and would push it off the card. */
+.dash-card-body:has(> .viz-overlay-caption) { display: flex; flex-direction: column; }
+.dash-card-body:has(> .viz-overlay-caption) > .dash-viz-area { height: auto; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.viz-analytics-row .viz-enc-note { order: 1; }
+
+/* ── Dashboard parameters (dashParams.ts, paramDialog.ts) ────────────────────
+   A parameter chip is a filter-bar chip with a slider (or a box) in it, marked
+   with the sliders glyph so it never reads as a column filter. */
+.dash-fb-chip--param .dash-fb-chip-label { display: inline-flex; align-items: center; gap: 5px; }
+.dash-fb-chip--param .dash-fb-chip-label .ic { color: var(--ok); flex: 0 0 auto; }
+.dash-param-slider { display: inline-flex; align-items: center; gap: var(--sp-8); }
+.dash-param-slider input[type='range'] {
+  width: 140px;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.dash-param-out {
+  min-width: 52px;
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--t-12);
+  font-weight: 600;
+  text-align: center;
+}
+.dash-param-input { width: 120px; flex: 0 0 auto; }
+.dash-param-input[type='date'] { width: 140px; }
+.dash-param-select { max-width: 180px; }
+/* A validation message a query answered with — on the card it spoiled. */
+.dash-param-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: var(--sp-4) 0 0;
+  font-size: var(--t-11);
+  line-height: 1.4;
+  color: var(--warn);
+}
+.dash-param-warn .ic { flex: 0 0 auto; margin-top: 1px; }
+.dash-card--metric .dash-param-warn { justify-content: center; }
+
+.ws-modal.pd-modal { width: min(480px, calc(100vw - 48px)); }
+.pd-lede { margin: -4px 0 var(--sp-12); font-size: var(--t-12); color: var(--muted); }
+.pd-refs { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 2px; font-size: var(--t-11); color: var(--muted); }
+.pd-ref code {
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--ok);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--t-11);
+}
+.pd-kinds .dc-kind-tile { min-width: 0; }
+.pd-value { display: flex; flex-direction: column; }
+.pd-bounds { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-8); }
+.pd-bounds .dm-field { min-width: 0; }
+.pd-hint { margin: -2px 0 var(--sp-8); font-size: var(--t-11); color: var(--muted); }
+.pd-opts { resize: vertical; min-height: 64px; font-size: var(--t-13); }
+.pd-err { min-height: 1.2em; margin: 0; font-size: var(--t-12); color: var(--error); }
+.pd-err:empty { min-height: 0; }
+
+/* "Or use a parameter" in the filter dialog. */
+.fd-params { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: var(--sp-4); }
+.fd-params-lead { font-size: var(--t-11); color: var(--muted); margin-right: 2px; }
+.fd-param-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.fd-param-chip .ic { color: var(--ok); }
+.fd-param-chip:hover { border-color: var(--accent); color: var(--accent); }
+.fd-param-val { color: var(--ok); font-weight: 600; }
+
+/* ── Data-quality rules (dsRules.ts, dsRuleEditor.ts) ────────────────────────
+   A test list in the dbt / Great Expectations sense: one row per rule, status
+   first, failures sorted to the top. Every colour is a status token, so the
+   list reads the same in both themes. */
+.dq-rules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding-bottom: var(--sp-16);
+  border-bottom: 1px solid var(--border-hairline);
+}
+.dq-rules:empty { display: none; }
+.dq-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-12);
+}
+.dq-titles { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dq-title {
+  margin: 0;
+  font-size: var(--t-15);
+  font-weight: 600;
+  letter-spacing: var(--tr-tight);
+  line-height: var(--lh-snug);
+  color: var(--text-strong);
+}
+.dq-sub {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+.dq-sub > span + span::before {
+  content: '·';
+  margin: 0 var(--sp-8);
+  color: var(--text-faint);
+  font-weight: 400;
+}
+.dq-sub-bad { color: var(--error); font-weight: 600; }
+.dq-sub-good { color: var(--ok); }
+.dq-head-acts { display: flex; gap: var(--sp-8); }
+
+.dq-list {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+.dq-row {
+  display: grid;
+  /* Every row is its own grid, so every track is FIXED except the rule's —
+     an `auto` actions track would size per row and skew the columns. */
+  grid-template-columns: 84px minmax(0, 1fr) 60px 104px 108px 176px;
+  align-items: center;
+  column-gap: var(--sp-12);
+  min-height: 52px;
+  padding: var(--sp-8) var(--sp-12);
+  border-bottom: 1px solid var(--border-hairline);
+}
+.dq-row:last-child { border-bottom: 0; }
+.dq-row:not(.dq-row-head):hover { background: var(--surface-2); }
+.dq-row-head {
+  min-height: 0;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  background: var(--surface-2);
+  border-bottom-color: var(--border);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+/* The failing rows carry an edge mark, like an unseen alert does. */
+.dq-row.is-fail { box-shadow: inset 2px 0 0 var(--error); }
+.dq-row.is-warn { box-shadow: inset 2px 0 0 var(--warn); }
+
+.dq-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 2px var(--sp-8) 2px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--r-full);
+  font-size: var(--t-11);
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.dq-pill .ic { stroke-width: 2.25; }
+.dq-pill.is-pass { color: var(--ok); background: var(--ok-soft); }
+.dq-pill.is-fail { color: var(--error); background: var(--error-soft); }
+.dq-pill.is-warn { color: var(--warn); background: var(--warn-soft); }
+.dq-pill.is-pending { color: var(--muted); background: var(--surface-2); border-color: var(--border); }
+
+.dq-c-rule { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.dq-words {
+  font-size: var(--t-13);
+  font-weight: 500;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dq-kindline { font-size: var(--t-11); color: var(--text-dim); }
+.dq-rule-err { font-size: var(--t-12); color: var(--error); }
+.dq-sev {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-size: var(--t-11);
+  font-weight: 600;
+  color: var(--muted);
+}
+.dq-sev.is-fail { color: var(--text); }
+.dq-c-count { font-size: var(--t-13); color: var(--text-dim); white-space: nowrap; }
+.dq-row.is-fail .dq-c-count { color: var(--error); font-weight: 600; }
+.dq-row.is-warn .dq-c-count { color: var(--warn); font-weight: 600; }
+.dq-spark { display: flex; align-items: center; height: 24px; }
+.dq-spark .al-spark { opacity: 1; color: var(--text-dim); }
+.dq-spark.is-fail .al-spark { color: var(--error); }
+.dq-spark.is-warn .al-spark { color: var(--warn); }
+.dq-spark.is-pass .al-spark { color: var(--ok); }
+.dq-spark-none { font-size: var(--t-11); color: var(--text-faint); }
+.dq-c-acts { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-4); }
+.dq-show { white-space: nowrap; }
+.dq-more {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ctl-sm);
+  height: var(--ctl-sm);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.dq-more:hover { background: var(--surface-3); color: var(--text); }
+.dq-more:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: -2px; }
+.dq-menu .dq-menu-danger { color: var(--error); }
+
+/* A narrow panel keeps status, rule, count and actions; the rest can wait. */
+@media (max-width: 960px) {
+  .dq-row { grid-template-columns: 80px minmax(0, 1fr) 96px 176px; }
+  .dq-c-sev,
+  .dq-c-spark,
+  .dq-row-head > :nth-child(3),
+  .dq-row-head > :nth-child(5) { display: none; }
+}
+
+/* The designed empty state: the shared .ws-empty card plus one-click rules the
+   column profile already argues for. */
+.ws-empty--rules { padding: var(--sp-32) var(--sp-24); }
+.dq-suggest {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--sp-8);
+  width: 100%;
+  margin-top: var(--sp-16);
+  padding-top: var(--sp-16);
+  border-top: 1px dashed var(--border);
+}
+.dq-suggest-label {
+  width: 100%;
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.dq-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-12) 0 var(--sp-8);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--t-12);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.dq-chip:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.dq-chip:disabled { opacity: 0.6; cursor: default; }
+
+/* "Showing 12 rows failing: …" above the grid while a rule filter is on. */
+.dq-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin-bottom: var(--sp-8);
+  padding: var(--sp-8) var(--sp-8) var(--sp-8) var(--sp-12);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--error);
+  border-radius: var(--r-md);
+  background: var(--error-soft);
+  font-size: var(--t-13);
+  color: var(--text);
+}
+.dq-banner > .ic { flex: none; color: var(--error); }
+.dq-banner-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dq-banner-text strong { font-weight: 600; color: var(--text-strong); }
+.dq-banner-clear {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 2px var(--sp-8);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  font: inherit;
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+.dq-banner-clear:hover { color: var(--text); background: var(--surface); }
+
+/* The red dot — var(--error), never the amber refresh dot (.ds-fresh-dot). */
+.dq-dot {
+  display: inline-block;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--error);
+  box-shadow: 0 0 0 2px var(--error-soft);
+  vertical-align: 1px;
+}
+.ds-saved-name .dq-dot { cursor: pointer; }
+.dq-dash-flag {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--error);
+  cursor: pointer;
+}
+.dq-dash-flag .dq-dot { margin-right: var(--sp-4); vertical-align: 0; }
+.dq-dash-flag:hover span { text-decoration: underline; }
+.dq-dash-flag:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 2px; border-radius: 2px; }
+
+/* The rule editor. `.ws-modal` is defined earlier, so the pair wins. */
+.ws-modal.dq-modal {
+  width: min(600px, calc(100vw - 48px));
+  max-height: calc(100vh - var(--sp-48));
+  overflow-y: auto;
+  text-align: left;
+}
+.dq-modal select.ws-modal-input { height: 38px; }
+.dq-kinds {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: var(--sp-8);
+  margin-bottom: var(--sp-16);
+}
+.dq-kind { min-height: 56px; }
+.dq-args { display: flex; flex-direction: column; }
+.dq-pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-12); }
+.dq-hint { margin: calc(-1 * var(--sp-8)) 0 var(--sp-12); }
+.dq-mono,
+.dq-values { font-family: var(--font-mono); font-size: var(--t-13); }
+.dq-values { min-height: 96px; resize: vertical; }
+.dq-preview {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin-top: var(--sp-4);
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  font-size: var(--t-13);
+  font-weight: 500;
+  color: var(--muted);
+}
+.dq-preview::before {
+  content: '';
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.dq-preview.is-pass { color: var(--ok); background: var(--ok-soft); border-color: transparent; }
+.dq-preview.is-pass::before { background: var(--ok); }
+.dq-preview.is-fail { color: var(--error); background: var(--error-soft); border-color: transparent; }
+.dq-preview.is-fail::before { background: var(--error); }
+.dq-preview.is-busy::before { animation: dq-pulse 0.9s var(--ease-out) infinite alternate; }
+@keyframes dq-pulse { from { opacity: 0.25; } to { opacity: 1; } }
+.dq-err { margin: var(--sp-8) 0 0; font-size: var(--t-12); color: var(--error); }
+
+/* ── Settings: Formats and Branding (settingsFormats.ts) ─────────────────────
+   Built from the panel's own row (.stp-row); these rules only add the group
+   headings, the live preview strip, the swatches and the logo frame. */
+.stp-group { display: flex; flex-direction: column; margin-bottom: var(--sp-16); }
+.stp-group .stp-row + .stp-row { border-top: 1px solid var(--border-hairline); }
+.stp-subhead { padding: var(--sp-16) 0 var(--sp-8); }
+.stp-group > .stp-subhead:first-child { padding-top: var(--sp-4); }
+.stp-subhead-t {
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.stp-subhead-d { margin-top: 4px; font-size: var(--t-13); line-height: var(--lh-body); color: var(--muted); max-width: 62ch; }
+.sf-preview {
+  /* Flex, not a 5-column grid: each sample takes the width its text needs and
+     the strip wraps, so "1,234,567.89" and "Sep 25, 2026" are never clipped. */
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  margin: var(--sp-8) 0 var(--sp-12);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--border);
+}
+.sf-preview-cell { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; padding: var(--sp-8) var(--sp-12); background: var(--surface-2); }
+.sf-preview-k { font-size: var(--t-11); color: var(--muted); }
+.sf-preview-v { font-size: var(--t-15); font-weight: 600; color: var(--text-strong); white-space: nowrap; }
+.stp-select.sf-select-sm { min-width: 150px; }
+.sf-accent { display: flex; align-items: center; gap: var(--sp-12); }
+.sf-swatches { display: flex; gap: 6px; }
+.sf-swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: var(--sw);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.sf-swatch:hover { transform: scale(1.08); }
+.sf-swatch.is-on { border-color: var(--surface); box-shadow: 0 0 0 2px var(--sw); }
+.sf-swatch:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 2px; }
+.stp-input.sf-hex { width: 104px; font-family: var(--font-mono); font-size: var(--t-12); }
+.stp-input.sf-hex.is-bad { border-color: var(--error); }
+.sf-logo { display: flex; align-items: center; gap: var(--sp-12); }
+.sf-logo-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 132px;
+  height: 52px;
+  padding: 6px 10px;
+  box-sizing: border-box;
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text-faint);
+  font-size: var(--t-12);
+}
+.sf-logo-frame img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.sf-logo-frame:has(img) { border-style: solid; background: var(--surface); }
+.sf-logo-btns { display: flex; flex-direction: column; gap: 6px; }
+.sf-logo-row { flex-wrap: wrap; }
+.sf-logo-msg { flex-basis: 100%; font-size: var(--t-12); color: var(--error); }
+.sf-logo-msg:empty { display: none; }
 
 /* ══════════════════════════════════════════════════════════════════════════
    WORKSPACE PANEL (sidePanel.ts) — the right panel History and Lineage open

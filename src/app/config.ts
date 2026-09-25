@@ -7,6 +7,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
+import { setCalendar } from '../analysis/dateIntel';
+import { FORMAT_DEFAULTS, sanitizeFormatPrefs, setFormatPrefs } from './format';
+import type { FormatPrefs } from './format';
+import { BRANDING_DEFAULTS, sanitizeBranding } from './branding';
+import type { Branding } from './branding';
 import type { OnboardingState } from './onboarding';
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
@@ -41,6 +46,13 @@ export interface SampleIds { projectId: string; datasetId: string; analysisId: s
 // quietly do nothing. `alertExplain` is opt-in because it spends a model call.
 interface Notifications { sound: boolean; desktop: boolean; alerts: boolean; alertExplain: boolean }
 
+/**
+ * Workspace formats — locale, number style, currency, date style, compact
+ * numbers (src/app/format.ts renders every figure under them) and the calendar
+ * every relative period is resolved under (src/analysis/dateIntel.ts).
+ */
+export type Formats = FormatPrefs;
+
 // Per-connection secret (pg password, URL auth token). Stored EXACTLY like an API
 // key: plaintext in userData/config.json (gitignored), keyed by the connection's
 // generated UUID. NEVER written into a project's connections/*.json, NEVER copied
@@ -62,6 +74,9 @@ interface Config {
   prompt: string;
   globalRules: string;
   notifications: Notifications;
+  formats: Formats;
+  /** Accent colour, logo and the default dashboard style — src/app/branding.ts. */
+  branding: Branding;
   /**
    * The master switch for unattended dataset refresh. ON by default: a schedule
    * a user set is a schedule they want run, and this exists to stop it globally
@@ -175,6 +190,10 @@ const DEFAULTS: Omit<Config, 'providers' | 'byok'> = {
   // `alerts`/`alertExplain` are the alert rules' own switches — see the
   // Notifications interface above for why one of them defaults the other way.
   notifications: { sound: false, desktop: false, alerts: true, alertExplain: false },
+  // The system locale, dollars, Monday weeks and calendar-year quarters until
+  // the user says otherwise.
+  formats: { ...FORMAT_DEFAULTS },
+  branding: { ...BRANDING_DEFAULTS },
   autoRefresh: true,
   // AI Copilot panel is ON by default — it stays fully optional (execution-gated),
   // but the user can also switch it OFF entirely from the panel's toggle.
@@ -264,6 +283,8 @@ function sanitize(input: any): Partial<Config> {
       alertExplain: Boolean(input.notifications.alertExplain),
     };
   }
+  if (input.formats && typeof input.formats === 'object') out.formats = sanitizeFormatPrefs(input.formats);
+  if (input.branding && typeof input.branding === 'object') out.branding = sanitizeBranding(input.branding);
   if (typeof input.copilotEnabled === 'boolean') out.copilotEnabled = input.copilotEnabled;
   if (typeof input.sampleSeeded === 'boolean') out.sampleSeeded = input.sampleSeeded;
   if (input.sample === null) out.sample = null;
@@ -364,6 +385,11 @@ function migrate(cfg: any): Config {
 // goes through save().
 export function persist(cfg: Config): void {
   cache = cfg;
+  // Every write passes here, reset-to-defaults included, so the calendar the
+  // date evaluators read and the formats every figure is written in can never
+  // lag the ones on disk.
+  setCalendar(cfg.formats);
+  setFormatPrefs(cfg.formats);
   // Atomic write (temp sibling → rename), mirroring the BI stores. config.json
   // holds every plaintext API key + connection secret; a crash / full disk mid-
   // write must never leave it truncated (which load() would then read as {} and
@@ -400,6 +426,8 @@ export function load(): Config {
   // carry them verbatim from disk, exactly like byok keys.
   if (onDisk.connectionSecrets && typeof onDisk.connectionSecrets === 'object') merged.connectionSecrets = onDisk.connectionSecrets;
   cache = migrate(merged);
+  setCalendar(cache.formats);
+  setFormatPrefs(cache.formats);
   return cache;
 }
 

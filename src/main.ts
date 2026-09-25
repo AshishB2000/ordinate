@@ -64,7 +64,7 @@ import * as datasets from './data/datasets';
 import * as copilot from './ai/copilot';
 import { captureProjectId, persistableResult, seedCaptureConversation, setActiveProject } from './app/captureRecord';
 import { resolveUserPath } from './cli/userPath';
-import { bootstrapNotification, maybeNotify, maybeNotifyDone } from './app/notify';
+import { bootstrapNotification, maybeNotifyDone } from './app/notify';
 
 /** Whether the hub is on screen and focused — the one thing notify.ts needs to know. */
 const hubFocused = (): boolean => !!(hubWindow && !hubWindow.isDestroyed() && hubWindow.isFocused());
@@ -438,6 +438,8 @@ ipcMain.handle('key:status', () => execConfig.publicConfig());
 require("./ipc/geo").register();
 
 require("./ipc/theme").register({ getHubWindow: () => hubWindow });
+// Workspace formats and branding (Settings → General / Appearance).
+require("./ipc/prefs").register({ getHubWindow: () => hubWindow });
 
 require("./ipc/providers").register({
   getHubWindow: () => hubWindow, notifyKeyChanged,
@@ -583,73 +585,20 @@ require("./ipc/menu").register();
 // What the app found in the data. Pure disk + the resident query layer; no deps.
 require("./ipc/insights").register();
 
-// Unattended dataset refresh. Ordinate has no daemon: this ticks while the app
-// is RUNNING, and anything that came due while it was closed is simply overdue
-// on the first tick after launch. The settings copy says exactly that.
-//
-// The master switch is read on EVERY tick rather than captured here, so turning
-// it off in Settings takes effect at once instead of at the next restart.
-{
-  const scheduler = require("./app/refreshScheduler");
-  scheduler.setEnabledCheck(() => config.get().autoRefresh !== false);
-
-  // A row count that moves this much is worth interrupting someone for; a
-  // smaller drift is what a refresh is FOR, and the freshness line already says
-  // it happened.
-  // ponytail: fixed ±20%; per-dataset threshold when someone asks
-  const BIG_CHANGE = 0.2;
-
-  scheduler.onRefreshed((o: any) => {
-    // Always push to the hub: it updates the freshness line in place. send/on,
-    // not invoke/handle — nothing is asked for and no answer is wanted.
-    if (hubWindow && !hubWindow.isDestroyed()) {
-      hubWindow.webContents.send("hub:dataset-refreshed", o);
-    }
-    // At most ONE notification per dataset per tick, and only for these two.
-    // A success inside the interval is silent by design.
-    if (!o.ok) {
-      maybeNotify(`Couldn't refresh "${o.name}" — ${o.error || 'refresh failed.'}`, hubFocused);
-      return;
-    }
-    const before = o.rowsBefore;
-    if (before > 0 && Math.abs(o.rowsAfter - before) / before > BIG_CHANGE) {
-      maybeNotify(`"${o.name}" changed: ${before.toLocaleString()} → ${o.rowsAfter.toLocaleString()} rows.`, hubFocused);
-    }
-    // A rule firing is NOT reported here — it goes out at the end of the tick,
-    // which is what lets the digest option exist (ipc/alerts.wireScheduler).
-  });
-
-  // THE ALERT HOOKS, wired by ipc/alerts itself — evaluating on fresh data and
-  // batching a tick into one digest are that module's rules, not this file's.
-  require("./ipc/alerts").wireScheduler(scheduler);
-
-  // THE REPORT HOOK. Scheduled reports ride the dataset scheduler's tick rather
-  // than starting a second timer: a report prints figures, so it must be
-  // generated AFTER any refresh due for its datasets in the same tick, and
-  // "after" is only guaranteed if there is one tick. `afterTick` fires when the
-  // refresh pass has finished (serially — see refreshScheduler's header).
-  //
-  // Main only rings the bell. The hub renderer owns generation, because the
-  // chart engine and the three document libraries live there; it answers by
-  // calling `reports:writeScheduled`, which is where the bytes reach disk.
-  scheduler.afterTick(() => {
-    if (hubWindow && !hubWindow.isDestroyed()) hubWindow.webContents.send("reports:run-due");
-  });
-
-  scheduler.start();
-  app.on("before-quit", () => scheduler.stop());
-}
+// Unattended dataset refresh, and the alert/report hooks that ride its tick.
+require("./app/refreshWiring").start({ getHubWindow: () => hubWindow, hubFocused });
 
 // Reports — the record's CRUD, caption, folder picker and scheduled write.
 require("./ipc/reports").register();
 
 require("./ipc/connections").register();
-
+require("./ipc/sqlQuery").register(); // Data → Query: SQL over this project's own datasets
 require("./ipc/visuals").register();
 
 require("./ipc/dashboards").register();
 
 require("./ipc/metrics").register(); // after dashboards: figures bottom out in computeCardMetric
+require("./ipc/periods").register(); // relative periods: a preset's display, and a KPI card's Compare
 // Alert rules and their inbox. After dashboards deliberately — see ipc/alerts.
 require("./ipc/alerts").register({ getHubWindow: () => hubWindow, focusHub });
 
@@ -664,7 +613,7 @@ require("./ipc/onboarding").register(); // the Get-started card and the sample d
 // Dashboard TEMPLATES — the create wizard's gallery. Model-free; its plans go
 // through `analysis:previewPlan` / `analysis:buildPlan` like every other plan.
 require("./ipc/templates").register();
-
+require("./ipc/quality").register(); // data-quality rules: list/save/delete/run/preview/failingRows
 require("./ipc/dashboardExport").register();
 require("./ipc/copilot").register();
 

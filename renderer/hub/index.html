@@ -729,6 +729,8 @@
                   aria-selected="false" aria-controls="cap-grid-wrap" tabindex="-1">Captures</button>
           <button class="ds-tab" type="button" role="tab" id="ds-tab-metrics"
                   aria-selected="false" aria-controls="mp-wrap" tabindex="-1">Metrics</button>
+          <button class="ds-tab" type="button" role="tab" id="ds-tab-query"
+                  aria-selected="false" aria-controls="qt-wrap" tabindex="-1">Query</button>
         </div>
 
         <!-- The Metrics tab: the project's NAMED numbers. Same `.ws-table` /
@@ -763,6 +765,70 @@
               <p class="ws-empty-p">A metric names a number once — "Revenue" is the sum of the revenue column — so every card, chart and alert that shows it agrees on what it is and how it reads.</p>
               <div class="ws-empty-actions">
                 <button class="btn btn-primary" type="button" id="mp-empty-new">New metric</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- The Query tab: SQL over THIS project's datasets, each one a table by
+             its own name. The connection workbench's panes, classes and editor
+             (`.cw-*`, cwHighlightHtml, cwBuildTable) pointed at the project's
+             own data — the rows checked here are the rows a saved dataset gets.
+             queryTab.ts / queryEditor.ts fill it; main does the running. -->
+        <div id="qt-wrap" class="qt" role="tabpanel" aria-labelledby="ds-tab-query" hidden>
+          <div class="qt-empty-host" id="qt-empty-host" hidden></div>
+          <div class="cw-body qt-body" id="qt-body">
+            <div class="cw-pane cw-tree-pane qt-tree-pane">
+              <div class="qt-tree-head">
+                <span class="qt-tree-title">Datasets</span>
+                <span class="cw-num" id="qt-tree-count"></span>
+              </div>
+              <input class="conn-input cw-tree-search" id="qt-tree-search" type="text" placeholder="Search datasets and columns&hellip;" autocomplete="off" spellcheck="false" aria-label="Search datasets and columns" />
+              <div class="cw-tree" id="qt-tree" role="tree" aria-label="Datasets you can query"></div>
+              <p class="cw-msg" id="qt-tree-msg" hidden></p>
+              <p class="qt-tree-foot">Click a name to insert it, or drag it into the editor.</p>
+            </div>
+
+            <div class="cw-pane cw-main qt-main">
+              <div class="cw-editor">
+                <div class="cw-edit-wrap">
+                  <pre class="cw-hl" id="qt-hl" aria-hidden="true"></pre>
+                  <textarea class="cw-input qt-input" id="qt-sql" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="SQL over this project's datasets"></textarea>
+                </div>
+                <div class="cw-ac" id="qt-ac" hidden role="listbox" aria-label="Completions"></div>
+                <div class="cw-bar">
+                  <button class="btn btn-primary btn-sm" type="button" id="qt-run"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-play"/></svg><span>Run</span></button>
+                  <button class="btn btn-sm" type="button" id="qt-explain"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-check"/></svg><span>Explain</span></button>
+                  <button class="btn btn-sm" type="button" id="qt-save" disabled><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-database"/></svg><span>Save as dataset</span></button>
+                  <span class="cw-bar-gap"></span>
+                  <span class="cw-hint qt-hint">&#8984;&#8617; runs &middot; previews 500 rows &middot; <code>[[name]]</code> adds a parameter</span>
+                </div>
+              </div>
+
+              <div class="qt-params" id="qt-params" hidden>
+                <span class="qt-params-label">Parameters</span>
+                <div class="qt-params-list" id="qt-params-list"></div>
+              </div>
+
+              <div class="cw-results qt-results">
+                <div class="cw-results-head">
+                  <span class="qt-status" id="qt-status"></span>
+                  <span class="cw-results-note" id="qt-note"></span>
+                </div>
+                <div class="qt-error" id="qt-error" role="alert" hidden>
+                  <span class="qt-error-icon" aria-hidden="true"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="#i-alert"/></svg></span>
+                  <div class="qt-error-body">
+                    <p class="qt-error-h" id="qt-error-h">The query did not run</p>
+                    <p class="qt-error-msg" id="qt-error-msg"></p>
+                  </div>
+                </div>
+                <div class="cw-cols qt-cols" id="qt-cols" hidden></div>
+                <div class="ds-table-scroll cw-grid" id="qt-grid" hidden></div>
+                <div class="qt-idle" id="qt-idle">
+                  <span class="ws-empty-icon" aria-hidden="true"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="#i-table"/></svg></span>
+                  <p class="qt-idle-h">Results appear here</p>
+                  <p class="qt-idle-p">Every dataset in this project is a table — by its own name in quotes, or by the short name beside it on the left. Run previews the first 500 rows; Save as dataset keeps the whole result and refreshes it when its inputs change.</p>
+                </div>
               </div>
             </div>
           </div>
@@ -975,6 +1041,9 @@
                 <button class="ds-usedin" type="button" id="ds-explorer-usedin" hidden><svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-lineage"/></svg><span></span></button>
                 <button class="btn btn-sm" type="button" id="ds-explorer-refresh" hidden><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-refresh"/></svg><span>Refresh</span></button>
               </div>
+              <!-- Lineage: what this dataset was built from, and which SQL
+                   datasets are built on it. Filled by dsLineage.ts. -->
+              <div class="ds-lineage" id="ds-lineage" hidden></div>
             </div>
             <div class="ds-explorer-actions">
               <button class="btn btn-primary btn-sm" type="button" id="ds-act-visual">New visual</button>
@@ -1022,6 +1091,9 @@
           </div><!-- /#ds-tabp-data -->
 
           <div class="ds-tabp" id="ds-tabp-quality" role="tabpanel" aria-labelledby="ds-tab-quality" hidden>
+            <!-- Data-quality RULES (dsRules.ts): the checks the user asked for,
+                 above the findings the app volunteers. -->
+            <section class="dq-rules" id="dq-rules" aria-label="Data quality rules"></section>
             <div class="ds-quality" id="ds-quality" hidden></div>
             <!-- Shown only when the findings list is empty: "no issues" is a
                  real answer, and it reads as one above a table rather than
@@ -1072,6 +1144,9 @@
                beside the step machinery so a step's effect is visible as it is
                edited, which is the whole point of a reversible pipeline. -->
           <div class="ds-grid-pane">
+            <!-- "Show failing rows" (dsRules.ts): a temporary filter, and this
+                 banner says so until it is cleared. -->
+            <div class="dq-banner" id="dq-banner" role="status" hidden></div>
             <p class="ds-preview-note" id="ds-explorer-note" hidden></p>
             <div class="ds-grid-row">
               <div class="ds-table-scroll" id="ds-explorer-scroll"></div>
@@ -1494,6 +1569,10 @@
             <header class="an-pane-head"><span class="an-pane-title">Properties</span></header>
             <div class="an-pane-body" id="an-props-body">
               <p class="an-pane-hint" id="an-props-hint">Select a visual card to edit it.</p>
+              <!-- A KPI card's own settings (kpiCompare.ts) — what its figure is
+                   compared with. Beside the hint, not inside the tabs: a metric
+                   card has no encoding, so the tabs are hidden for it. -->
+              <div class="an-kpi-props" id="an-kpi-props" hidden></div>
               <div id="an-props-inner" hidden>
                 <div class="an-tabs tabs" id="an-tabs" role="tablist" aria-label="Visual settings">
                   <button class="an-tab tab is-on" type="button" role="tab" id="an-tab-build"
@@ -1633,6 +1712,7 @@
         </div>
 
         <!-- Exit affordance shown only in presentation mode -->
+        <img class="dash-present-logo" id="dash-present-logo" alt="" hidden>
         <button class="dash-present-exit" type="button" id="dash-present-exit" hidden aria-label="Exit presentation (Esc)"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-x"/></svg><span>Exit</span></button>
 
         <!-- `seg` is the base segmented-control; the page tabs ARE one. The
@@ -1933,6 +2013,8 @@
                 </div>
               </div>
             </div>
+            <!-- Accent, logo, default dashboard style — built by settingsFormats.ts. -->
+            <div class="stp-group" id="stp-branding"></div>
           </section>
 
           <!-- Notifications -->
@@ -2015,6 +2097,9 @@
 
           <!-- General -->
           <section class="settings-pane" data-cat="general" hidden>
+            <!-- Locale, numbers, currency, dates, calendar — built by settingsFormats.ts. -->
+            <div class="stp-group" id="stp-formats"></div>
+            <div class="stp-subhead"><div class="stp-subhead-t">App</div></div>
             <div class="stp-row">
               <div class="stp-rl">
                 <div class="stp-rt">Launch at login</div>
@@ -2461,6 +2546,17 @@
         <p class="viz-enc-note js-enc-cat-note" hidden></p>
       </div>
 
+      <!-- Analytics: shown only for a DATE category (encodingForm.syncGrain).
+           The overlay rides on the encoding because it changes the data. -->
+      <div class="viz-build-row viz-analytics-row js-enc-analytics-row" hidden>
+        <label class="viz-field-label" for="viz-overlay-select">Analytics</label>
+        <select class="viz-select js-enc-overlay" id="viz-overlay-select" aria-label="Period overlay">
+          <option value="">No period overlay</option>
+          <option value="previous_year">Overlay: vs previous year</option>
+        </select>
+        <p class="viz-enc-note viz-analytics-hint">Draws the same periods a year earlier as a muted series, on line and column charts.</p>
+      </div>
+
       <div class="viz-build-row" data-well="values">
         <label class="viz-field-label">Measures</label>
         <div class="viz-values-list js-enc-values"></div>
@@ -2621,6 +2717,11 @@
      sprite every other file's icon() calls resolve their <use href> against,
      and a panel that renders before the sprite exists draws empty boxes. -->
 <script src="icons.js"></script>
+<!-- The app's ONE formatter (src/app/format.ts), shared with main: a CommonJS
+     module loaded between a two-line shim and its binder — see cjsShim.ts. -->
+<script src="cjsShim.js"></script>
+<script src="../../src/app/format.js"></script>
+<script src="formatBind.js"></script>
 <!-- The two shared STATE components, straight after the sprite: the one empty
      state (makeEmptyState) and the one loading skeleton (skelTable/skelChart/
      skelClear). Both only need icon()/the DOM, and every surface that calls
@@ -2682,11 +2783,17 @@
 <script src="dsExplorer.js"></script>
 <script src="dsGrid.js"></script>
 <script src="dsProfile.js"></script>
+<!-- Data-quality rules: the editor, then the Rules section + red dots. -->
+<script src="dsRuleEditor.js"></script>
+<script src="dsRules.js"></script>
 <script src="composer.js"></script>
 <script src="composerGrid.js"></script>
 <script src="dataSection.js"></script>
 <script src="captureDataset.js"></script>
 <script src="filterValues.js"></script>
+<script src="periodPicker.js"></script>
+<script src="brand.js"></script>
+<script src="settingsFormats.js"></script>
 <script src="filterDialog.js"></script>
 <!-- The one calculated-field editor, opened by prepare.js, authoringRail.js and
      the AI dock's proposal card. Before all three: they call into it. -->
@@ -2706,6 +2813,18 @@
 <script src="connWorkbench.js"></script>
 <script src="connDetails.js"></script>
 <script src="connEditor.js"></script>
+<!-- The Data page's Query tab: SQL over the project's OWN datasets. After the
+     three connection files because it reuses their PURE helpers
+     (cwHighlightHtml/cwTokenize/CW_KEYWORDS from connEditor.js, cwBuildTable
+     from connWorkbench.js) — at call time, but in dependency order anyway.
+     queryEditor.js is the textarea (highlight, completion, keys);
+     queryParams.js the [[name]] parameters row; queryTab.js the tab around
+     them; dsLineage.js is the dataset page's "Reads from / Used by" line,
+     whose "View query" opens the tab. -->
+<script src="queryEditor.js"></script>
+<script src="queryParams.js"></script>
+<script src="queryTab.js"></script>
+<script src="dsLineage.js"></script>
 <script src="encodingForm.js"></script>
 <!-- The pivot shelves (Rows / Columns / Values), mounted beside the encoding
      form by visuals.js and shown instead of its chart fields when the type is
@@ -2740,7 +2859,10 @@
 <script src="dashAdd.js"></script>
 <script src="dashAddControl.js"></script>
 <script src="dashFiltersUi.js"></script>
+<script src="kpiCompare.js"></script>
 <script src="dashControls.js"></script>
+<script src="dashParams.js"></script>
+<script src="paramDialog.js"></script>
 <script src="dashControlBar.js"></script>
 <script src="dashAi.js"></script>
 <script src="dashShare.js"></script>

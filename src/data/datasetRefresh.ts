@@ -27,6 +27,7 @@ import * as combine from './combine';
 import { parseFile, sourceKindForPath } from './fileImport';
 import { runConnection } from '../connectors/connectionRun';
 import { refreshConnectionInto } from '../ipc/connections';
+import { runForDataset } from '../engine/sqlDatasets';
 
 /**
  * Row ceiling for a refreshed table. Deliberately the same 1,000,000 the import
@@ -138,6 +139,16 @@ async function runOrigin(
       return refreshCombined(projectId, id, name, origin, walk, warnings);
     case 'composed':
       return refreshComposed(projectId, id, name, origin, walk, warnings);
+    case 'sql': {
+      // Re-run the stored text with its stored parameters, at the dataset cap —
+      // and MORE than the cap fails like the save did, leaving the table as it
+      // was, rather than quietly keeping a first million. It does NOT pull its
+      // inputs first (combined does): a change to an input PUSHES a re-run of
+      // this one instead (datasetDependents.ts).
+      const res = await runForDataset(projectId, origin.sql, origin.params || []);
+      if (!res.ok) return fail(res.error);
+      return store(projectId, id, res.columns, res.rows, warnings);
+    }
     default:
       return fail('This dataset has no re-fetchable source.');
   }

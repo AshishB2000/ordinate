@@ -92,13 +92,15 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
   if (currentProjectId && m.metricId) {
     let mr: any;
     try {
-      mr = await window.hub.metricValue(currentProjectId, m.metricId, effectiveFilters());
+      mr = await window.hub.metricValue(currentProjectId, m.metricId, effectiveFilters(), dashParamPayload());
     } catch (_) {
       mr = null;
     }
     if (mr && mr.ok !== false) {
       valEl.textContent = mr.display || '—';
       if (!m.label && mr.name) labelEl.textContent = mr.name;
+      paintParamErrors(body, mr.paramErrors);
+      void paintMetricCompare(card, body);
       return;
     }
   }
@@ -111,15 +113,17 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
     // computed (still 100% app-computed; the renderer never does the math).
     r = await window.hub.computeMetric(
       currentProjectId, m.datasetId, m.column, m.aggregation,
-      effectiveFilters(),
+      effectiveFilters(), dashParamPayload(),
     );
   } catch (_) {
     r = { ok: false };
   }
   if (!r || r.ok === false) { dashCardMissing(body, (r && r.error) || 'Source removed', true); return; }
+  paintParamErrors(body, r.paramErrors);
   if (r.value == null) { valEl.textContent = '—'; return; }
   // Reuse the shared chart number formatter (auto/plain/thousands/compact/…).
   valEl.textContent = fmtWith(r.value, m.format || 'auto');
+  void paintMetricCompare(card, body);
 }
 
 // The heading is NOT drawn here. dashCardTitle (dashGrid.ts) already puts it in
@@ -132,7 +136,7 @@ function renderTextCard(card: any, body: HTMLElement): void {
   if (card.text) {
     const p = document.createElement('p');
     p.className = 'dash-card-p';
-    p.textContent = String(card.text);
+    p.textContent = dashSubst(card.text);
     body.appendChild(p);
   }
   if (!card.heading && !card.text) {
@@ -308,6 +312,11 @@ function dashFilters(): any[] {
 }
 
 function dashFilterLabel(step: any): string {
+  return dashParamRefLabel(dashFilterLabelRaw(step));
+}
+
+function dashFilterLabelRaw(step: any): string {
+  if (step.op === 'period') return `${step.column}: ${periodLabel(step.period)}`;
   const opLabel = (DASH_FILTER_OPS.find((o) => o.value === step.op) || { label: step.op }).label;
   if (DASH_VALUELESS_OPS.has(step.op)) return `${step.column} ${opLabel}`;
   if (isListFilterOp(step.op)) {
@@ -441,7 +450,8 @@ async function distinctColumnOptions(
 // Mirrors src/dashboardFilters.stepKey — `values` is part of the identity, or
 // two different `in` lists on one column would look like the same chip.
 function dashStepKey(s: any): string {
-  return JSON.stringify([s.column, s.op, s.value == null ? null : s.value, s.values == null ? null : s.values]);
+  return JSON.stringify([s.column, s.op, s.value == null ? null : s.value, s.values == null ? null : s.values,
+    s.period == null ? null : s.period]);
 }
 
 // + Filter: dataset → column → the type-aware dialog. The dialog replaces the
@@ -458,6 +468,7 @@ async function handleAddDashFilter(): Promise<void> {
     datasetId: String(picked.ds && picked.ds.id ? picked.ds.id : ''),
     column: picked.column,
     type: col && col.type ? String(col.type) : 'text',
+    params: dashParams(),
   });
   if (steps === null || steps.length === 0) return;
 
@@ -498,6 +509,7 @@ async function handleEditDashFilter(idx: number): Promise<void> {
     column: step.column,
     type,
     existing: step,
+    params: dashParams(),
   });
   if (steps === null) return;
   list.splice(idx, 1, ...steps);

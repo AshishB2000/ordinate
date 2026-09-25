@@ -34,6 +34,8 @@ import { compileMetricFormula, evaluateMetricFormula } from '../analysis/metricF
 import { proposeMetrics } from '../analysis/metricAuto';
 import { metricUsage } from '../analysis/metricUsage';
 import { computeCardMetric } from './dashboards';
+import { bindFormulaText, paramValues, resolveFilterParams } from '../analysis/params';
+import type { ParamValues } from '../analysis/params';
 import { sanitizeDashboardFilters } from '../analysis/dashboards';
 import * as datasets from '../data/datasets';
 import { readDistinctPage, distinctValuesPageJs } from '../engine/datasetPage';
@@ -65,6 +67,8 @@ interface ResolveCtx {
   memo: Map<string, number | null>;
   /** Lowercased names currently being resolved — the cycle guard. */
   stack: Set<string>;
+  /** The dashboard's parameters at their current values — see analysis/params. */
+  params: ParamValues;
 }
 
 async function namesFor(ctx: ResolveCtx): Promise<Map<string, Metric>> {
@@ -89,11 +93,13 @@ async function resolveDefinition(
   filters: FilterStep[],
   depth: number,
 ): Promise<number | null> {
-  const all = filters.concat(ctx.scope);
+  // The metric's OWN filters may reference a dashboard parameter too; the
+  // scope arrived already resolved by the handler.
+  const all = resolveFilterParams(filters, ctx.params).steps.concat(ctx.scope);
 
   if (!isFormulaDefinition(definition)) {
     if (!definition.column) return null;
-    const res = await computeCardMetric(ctx.projectId, datasetId, definition, all);
+    const res = await computeCardMetric(ctx.projectId, datasetId, definition, all, ctx.params);
     return res.ok ? res.value : null;
   }
 
@@ -101,7 +107,8 @@ async function resolveDefinition(
 
   const meta = await datasets.getDatasetMeta(ctx.projectId, datasetId);
   const columns = meta ? meta.columns.map((c) => c.name) : [];
-  const compiled = compileMetricFormula(definition.formula, columns);
+  // `[Revenue] * [[growth]]` — the parameter becomes a literal before parsing.
+  const compiled = compileMetricFormula(bindFormulaText(definition.formula, ctx.params).text, columns);
   if (!compiled.ok) return null;
 
   const values = new Map<string, number | null>();
@@ -113,6 +120,7 @@ async function resolveDefinition(
       datasetId,
       { column: agg.column, aggregation: agg.aggregation },
       all,
+      ctx.params,
     );
     values.set(agg.ref, res.ok ? res.value : null);
   }
@@ -152,8 +160,8 @@ async function resolveByName(ctx: ResolveCtx, name: string, depth: number): Prom
   return value;
 }
 
-function newCtx(projectId: string, scope: FilterStep[]): ResolveCtx {
-  return { projectId, scope, byName: null, memo: new Map(), stack: new Set() };
+function newCtx(projectId: string, scope: FilterStep[], params: ParamValues = new Map()): ResolveCtx {
+  return { projectId, scope, byName: null, memo: new Map(), stack: new Set(), params };
 }
 
 export interface ResolvedMetric {
@@ -179,11 +187,11 @@ export interface ResolvedMetric {
 export async function resolveMetric(
   projectId: string,
   metricId: string,
-  scope: { filters?: FilterStep[] } = {},
+  scope: { filters?: FilterStep[]; params?: ParamValues } = {},
 ): Promise<ResolvedMetric | null> {
   const metric = await metrics.getMetric(projectId, metricId);
   if (!metric) return null;
-  const ctx = newCtx(projectId, Array.isArray(scope.filters) ? scope.filters : []);
+  const ctx = newCtx(projectId, Array.isArray(scope.filters) ? scope.filters : [], scope.params);
   // Seeded so a self-reference inside this metric's own formula is caught by the
   // same guard that catches a loop between two of them.
   ctx.stack.add(metric.name.toLowerCase());
@@ -415,12 +423,13 @@ export function register() {
     return done.ok ? { ok: true } : { ok: false, error: 'Could not delete the metric' };
   });
 
-  ipcMain.handle('metric:value', async (_e, { projectId, id, filters }: any = {}) => {
+  ipcMain.handle('metric:value', async (_e, { projectId, id, filters, params }: any = {}) => {
     try {
-      const scope = { filters: sanitizeDashboardFilters(filters) };
-      const res = await resolveMetric(projectId, id, scope);
+      const values = paramValues(params);
+      const bound = resolveFilterParams(sanitizeDashboardFilters(filters), values);
+      const res = await resolveMetric(projectId, id, { filters: bound.steps, params: values });
       if (!res) return { ok: false, error: 'Metric not found' };
-      return res;
+      return bound.errors.length ? { ...res, paramErrors: bound.errors } : res;
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute the metric' };
     }

@@ -28,7 +28,11 @@ import * as datasets from '../data/datasets';
 import type { AutoRefreshEvery, DatasetSummary } from '../data/datasets';
 import * as projects from './projects';
 import { refreshDataset } from '../data/datasetRefresh';
+import { refreshDependents } from '../data/datasetDependents';
 import type { AlertEvent } from '../analysis/alerts';
+// Imported, not injected like the alert hook: it decides nothing about WHEN and
+// notifies no one itself — its events join this tick's batch below.
+import { runQualityChecks } from '../analysis/qualityRun';
 
 /** How often the tick looks for work. The schedules themselves are hours apart. */
 const TICK_MS = 60_000;
@@ -219,6 +223,9 @@ export async function tickNow(now = Date.now()): Promise<AutoRefreshOutcome[]> {
         rowsAfter: (after && after.rowCount) || 0,
       };
       if (!outcome.ok) outcome.error = (res as any).error || 'Refresh failed.';
+      // AWAITED, unlike the IPC call sites: the tick is strictly serial, and
+      // a dependent re-run is part of this refresh's work. Never rejects.
+      else await refreshDependents(m.projectId, m.id);
       // The alert pass runs on FRESH data, which is why it is here rather than
       // in the reporter: a rule evaluated before the refresh landed would be
       // reporting yesterday's number as today's.
@@ -234,6 +241,12 @@ export async function tickNow(now = Date.now()): Promise<AutoRefreshOutcome[]> {
         } catch (_) {
           // An evaluation that throws must not take the refresh down with it.
         }
+      }
+      // Data-quality rules, on the same fresh data. Recorded now, DELIVERED with
+      // the tick's batch, so the digest option covers them too. Never throws.
+      if (outcome.ok) {
+        const dq = await runQualityChecks(m.projectId, m.id, { deliver: false });
+        if (dq.length) byProject.set(m.projectId, (byProject.get(m.projectId) || []).concat(dq));
       }
       outcomes.push(outcome);
       if (report) {

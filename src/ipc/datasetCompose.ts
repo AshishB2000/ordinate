@@ -11,6 +11,7 @@ import { ipcMain } from 'electron';
 import * as datasets from '../data/datasets';
 import * as combine from '../data/combine';
 import * as history from '../app/history';
+import { runQualityChecks } from '../analysis/qualityRun';
 import type { Cell, TableData } from '../data/transforms';
 
 const MAX_ROWS = 1_000_000;
@@ -182,6 +183,7 @@ export async function composeSave({ projectId, name, base, joins, steps, sourceK
         await history.setDatasetId(captureLink.entryId, saved.id)
           .catch((e: any) => console.error('[history] setDatasetId failed:', e.message));
       }
+      await runQualityChecks(projectId, saved.id); // the data-quality hook; never throws
       return { ok: true, dataset: withSteps || saved, warnings: [] };
     }
 
@@ -230,6 +232,7 @@ export async function composeSave({ projectId, name, base, joins, steps, sourceK
     if (!saved) return { ok: false, error: 'Invalid project, or the project no longer exists' };
     if (alsoSaved) warnings.push(`"${alsoSaved}" was saved too, so this dataset can be refreshed.`);
     const withSteps = await applyInitialSteps(projectId, saved.id, steps);
+    await runQualityChecks(projectId, saved.id); // the data-quality hook; never throws
     return { ok: true, dataset: withSteps || saved, warnings };
   } catch (err: any) {
     return { ok: false, error: err?.message || 'Could not save the dataset' };

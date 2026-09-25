@@ -75,7 +75,7 @@ function buildPagedPdfDoc(pages: any[], report: any) {
     const nodes: any[] = [];
     for (const b of blocks) {
       switch (b.t) {
-        case 'logo': nodes.push({ image: REPORT_LOGO_PNG, width: 48, alignment: 'center', margin: [0, 40, 0, 20] }); break;
+        case 'logo': nodes.push({ image: b.src, fit: [160, 48], alignment: 'center', margin: [0, 40, 0, 20] }); break;
         case 'title': nodes.push({ text: b.text, style: rp.kind === 'cover' ? 'coverTitle' : 'title' }); break;
         case 'sub': nodes.push({ text: b.text, style: 'sub' }); break;
         case 'meta': nodes.push({ text: b.text, style: 'meta' }); break;
@@ -256,9 +256,13 @@ function buildPagedPptx(pages: any[], report: any) {
     }
     for (const b of reportPageBlocks(rp)) {
       switch (b.t) {
-        case 'logo':
-          slide.addImage({ data: REPORT_LOGO_PNG, x: 0.6, y: 1.0, w: 0.6, h: 0.6 });
+        case 'logo': {
+          // A wordmark is wide: fit it to a 0.6in-tall band, capped at 2.4in.
+          const r = b.w / b.h || 1;
+          const w = Math.min(2.4, 0.6 * r);
+          slide.addImage({ data: b.src, x: 0.6, y: 1.0, w, h: w / r });
           break;
+        }
         case 'title':
           slide.addText(b.text, { x: 0.6, y, w: PPT_W - 1.2, h: cover ? 1.0 : 0.6, fontSize: cover ? 40 : 26, bold: true, color: REPORT_CX.strong, valign: 'top' });
           y += cover ? 1.15 : 0.75;
@@ -397,7 +401,7 @@ async function measureReportImages(pages: any[]): Promise<Map<string, { w: numbe
   const out = new Map<string, { w: number; h: number }>();
   for (const rp of pages) {
     for (const b of reportPageBlocks(rp)) {
-      const urls: string[] = b.t === 'image' ? [b.png]
+      const urls: string[] = b.t === 'image' ? [b.png] : b.t === 'logo' ? [b.src]
         : b.t === 'tiles' ? b.tiles.map((t: any) => t.png).filter(Boolean) : [];
       for (const url of urls) {
         if (out.has(url)) continue;
@@ -464,7 +468,7 @@ function buildPagedDocx(pages: any[], report: any, dims: Map<string, { w: number
     for (const b of reportPageBlocks(rp)) {
       switch (b.t) {
         case 'logo':
-          push(imagePara(REPORT_LOGO_PNG, 64, 64));
+          push(imagePara(b.src, 160, 64));
           break;
         case 'title':
           push(new Paragraph({

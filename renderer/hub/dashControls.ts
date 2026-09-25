@@ -52,6 +52,7 @@ function controlCurrentValue(card: any): any {
 // held anything but plain JSON-shaped objects (ControlValue), so a stringify
 // compare is enough — no deep-equal library earns its keep for three fields.
 function controlIsAtDefault(card: any): boolean {
+  if (card.control && card.control.kind === 'parameter') return paramIsAtDefault(card);
   const cur = controlState.get(card.id);
   if (cur === undefined) return true;
   return JSON.stringify(cur) === JSON.stringify(controlDefaultValue(card.control));
@@ -83,6 +84,7 @@ function resetAllControls(): void {
     if (card.control.default) controlState.set(card.id, card.control.default);
     else controlState.delete(card.id);
   });
+  paramState = new Map(); // every parameter back to its saved default
   renderDashGrid();
 }
 
@@ -98,7 +100,8 @@ function resetAllControls(): void {
 // default exists to go back to.
 function updateResetControlsBtn(): void {
   const cards = allControlCards();
-  dashShow('dash-reset-controls', anyControlNonDefault() && cards.some((c) => c.control && c.control.default));
+  dashShow('dash-reset-controls', anyControlNonDefault()
+    && cards.some((c) => c.control && (c.control.default || c.control.kind === 'parameter')));
 }
 
 // ── Dropdown ─────────────────────────────────────────────────────────────────
@@ -395,40 +398,25 @@ function openMultiControlPopover(card: any, anchor: HTMLElement): void {
 }
 
 // ── Date range ───────────────────────────────────────────────────────────────
-// Two native <input type="date"> — no picker library, no ISO-shape probe: the
-// input itself always emits YYYY-MM-DD, which is what `controlSteps`
-// (src/dashboardFilters.ts) needs its >=/<= comparison to be correct.
+// A chip carrying the period's name ("Last 30 days", "Sep 1 – Sep 30, 2026",
+// "All dates") that opens the shared period picker (periodPicker.ts): relative
+// presets resolved in main at query time, or two fixed dates.
 function renderDateRangeControl(card: any, wrap: HTMLElement): void {
   const control = card.control;
-  const cur = controlCurrentValue(card);
-
-  const row = document.createElement('div');
-  row.className = 'dash-ctrl-daterange';
-  const from = document.createElement('input');
-  from.type = 'date';
-  from.className = 'dash-ctrl-date';
-  from.value = cur.from || '';
-  from.setAttribute('aria-label', (control.label || 'Filter') + ' from');
-  const sep = document.createElement('span');
-  sep.className = 'dash-ctrl-date-sep';
-  sep.textContent = '–';
-  const to = document.createElement('input');
-  to.type = 'date';
-  to.className = 'dash-ctrl-date';
-  to.value = cur.to || '';
-  to.setAttribute('aria-label', (control.label || 'Filter') + ' to');
-  row.appendChild(from);
-  row.appendChild(sep);
-  row.appendChild(to);
-  wrap.appendChild(row);
-
-  function commit(): void {
-    const next: any = {};
-    if (from.value) next.from = from.value;
-    if (to.value) next.to = to.value;
-    controlState.set(card.id, next);
-    renderDashGrid();
-  }
-  from.addEventListener('change', commit);
-  to.addEventListener('change', commit);
+  const chip = document.createElement('button');
+  chip.type = 'button';
+  chip.className = 'dash-ctrl-chip dash-ctrl-period';
+  chip.setAttribute('aria-haspopup', 'dialog');
+  chip.appendChild(icon('calendar', 14));
+  const txt = document.createElement('span');
+  txt.textContent = periodValueText(controlCurrentValue(card));
+  chip.appendChild(txt);
+  wrap.appendChild(chip);
+  chip.addEventListener('click', () => {
+    openPeriodPopover(chip, controlCurrentValue(card), control.label || 'Filter', (v) => {
+      if (v) controlState.set(card.id, v);
+      else controlState.delete(card.id);
+      renderDashGrid();
+    });
+  });
 }

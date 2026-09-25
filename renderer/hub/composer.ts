@@ -607,6 +607,9 @@ async function handleComposerSave(): Promise<void> {
   closeComposer();
   await refreshDatasetList();
   showToast(`Saved "${name}".`);
+  // A dataset saved from the Query tab opens on its own page, where its
+  // lineage (what it reads from, and that it refreshes when they change) is.
+  if (dcOrigin && dcOrigin.kind === 'sql' && res.dataset && res.dataset.id) void openSavedDataset(String(res.dataset.id));
 }
 
 // ── Boot wiring (once) ───────────────────────────────────────────────────────

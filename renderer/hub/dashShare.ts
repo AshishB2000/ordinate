@@ -67,6 +67,13 @@ function enterDashPresent(): void {
   document.documentElement.classList.add('dash-presenting');
   if (typeof dkSync === 'function') dkSync(); // dock.ts — presentation mode suppresses the dock
   dashShow('dash-present-exit', true);
+  // The brand mark in the corner — the dashboard's, else the workspace's.
+  void dashLogoFor(dashCurrent).then((url) => {
+    const img = dashEl('dash-present-logo') as HTMLImageElement | null;
+    if (!img || !dashPresenting || !url) return;
+    img.src = url;
+    img.hidden = false;
+  });
   dashPresentKeyHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); exitDashPresent(); } };
   document.addEventListener('keydown', dashPresentKeyHandler, true);
   // Pitch first, then render: charts size to their cell at construction, so
@@ -83,6 +90,7 @@ function exitDashPresent(): void {
   document.documentElement.classList.remove('dash-presenting');
   if (typeof dkSync === 'function') dkSync(); // dock.ts — re-evaluate now that presenting is off
   dashShow('dash-present-exit', false);
+  dashShow('dash-present-logo', false);
   if (dashPresentKeyHandler) { document.removeEventListener('keydown', dashPresentKeyHandler, true); dashPresentKeyHandler = null; }
   if (dashPresentResizeHandler) { window.removeEventListener('resize', dashPresentResizeHandler); dashPresentResizeHandler = null; }
   fitDashPresentRows(); // dashPresenting is false now, so this only CLEARS the pitch
@@ -180,6 +188,7 @@ function dashExportMeasure(): DashExportMeasure {
   const probe = document.createElement('div');
   probe.className = 'export-capture-holder';
   dashExportStyleClasses().forEach((c) => probe.classList.add(c));
+  applyBrandTokens(probe, dashCurrentStyle().accentHex || '');
 
   const card = document.createElement('div');
   card.className = 'dash-card dash-card--metric';
@@ -281,9 +290,7 @@ function formatControlSummaryPart(card: any): string {
       ? vals.slice(0, 5).join(', ') + ', and ' + (vals.length - 5) + ' more'
       : vals.join(', ');
   } else if (control.kind === 'date_range') {
-    const from = cur.from || '';
-    const to = cur.to || '';
-    value = from && to ? from + '–' + to : (from || to);
+    value = ppIsRelative(cur) || cur.from || cur.to ? periodValueText(cur) : '';
   } else {
     value = cur.value || '';
   }
@@ -344,6 +351,12 @@ async function assembleExportBundle(forCapture: boolean): Promise<any> {
     // travels with the bundle. Main re-clamps it (dashboardExport.sanitizeBundle)
     // — this is a closed enum on both sides, never free-form CSS.
     style: dashCurrentStyle(),
+    // The brand: literal ramp colours (main cannot run the contrast walk) and
+    // the logo for the header. Main re-validates both (sanitizeBrand).
+    brand: {
+      ramp: brandExportRamp(dashCurrentStyle(), dashExportStyle().theme === 'dark'),
+      logo: await dashLogoFor(dashCurrent),
+    },
   };
 }
 
@@ -355,6 +368,15 @@ async function buildMetricExportCard(card: any, layout: any): Promise<any> {
   // KPI tile has room for. When there is no author label the two strings are
   // identical, so it is dropped rather than printed twice.
   const subLabel = m.label ? derived : '';
+  // A card on a saved metric reads as the dashboard shows it — the metric's own
+  // format ("$5.2M"), as dashFiltersUi's card does. Falls through on a dangling id.
+  if (currentProjectId && m.metricId) {
+    let mr: any = null;
+    try { mr = await window.hub.metricValue(currentProjectId, m.metricId, effectiveFilters(), dashParamPayload()); } catch (_) { mr = null; }
+    if (mr && mr.ok !== false) {
+      return { kind: 'metric', layout, label: m.label || mr.name || label, subLabel: mr.name && mr.name !== m.label ? mr.name : '', value: mr.display || '—', format: 'auto' };
+    }
+  }
   if (!currentProjectId || !m.datasetId || !m.column || !m.aggregation) {
     return { kind: 'broken', layout, reason: 'Metric not configured' };
   }
@@ -362,7 +384,7 @@ async function buildMetricExportCard(card: any, layout: any): Promise<any> {
   try {
     r = await window.hub.computeMetric(
       currentProjectId, m.datasetId, m.column, m.aggregation,
-      effectiveFilters(),
+      effectiveFilters(), dashParamPayload(),
     );
   } catch (_) { r = { ok: false }; }
   if (!r || r.ok === false) return { kind: 'broken', layout, reason: 'Source removed' };
@@ -382,12 +404,12 @@ async function buildVisualExportCard(
   const visual = resolved.visual;
   const merged = mergeDashFilters(effectiveFilters(), visual.filters);
   let res: any;
-  try { res = await window.hub.computeVisualData(currentProjectId, visual.datasetId, visual.encoding, merged); }
+  try { res = await window.hub.computeVisualData(currentProjectId, visual.datasetId, visual.encoding, merged, dashParamPayload()); }
   catch (_) { res = { ok: false }; }
   if (!res || res.ok === false) return { kind: 'broken', layout, reason: 'Could not draw this visual' };
   const data = res.data || { labels: [], series: [] };
   const type = typeof visual.chartType === 'string' && visual.chartType ? visual.chartType : 'column';
-  const title = visual.name || '';
+  const title = dashSubst(visual.name || '');
 
   // Live-chartable core type in the HTML export → inline data (interactive).
   if (!forCapture && !dashIsMapType(type) && DASH_EXPORT_LIVE_TYPES[type]) {
@@ -410,7 +432,7 @@ async function buildVisualExportCard(
   // frame — capturePage still does the snapshotting, it just snapshots a holder
   // that now carries the dashboard's own style.
   const frame = Object.assign(
-    { themeClasses: dashExportStyleClasses() },
+    { themeClasses: dashExportStyleClasses(), accentHex: dashCurrentStyle().accentHex },
     dashExportChartBox(measure, layout, !!title),
   );
   let png: string | null = null;
@@ -439,7 +461,8 @@ function buildDashCaptureHtml(bundle: any): string {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const cols = DASH_GRID_COLS;
   const m = dashExportMeasure();
-  let body = `<h1 class="d-title">${esc(bundle.name)}</h1>`;
+  const logo = bundle.brand && bundle.brand.logo ? `<img class="d-logo" alt="" src="${esc(bundle.brand.logo)}">` : '';
+  let body = `<div class="d-head"><h1 class="d-title">${esc(bundle.name)}</h1>${logo}</div>`;
   if (bundle.controlsSummary) body += `<div class="d-controls-summary">${esc(bundle.controlsSummary)}</div>`;
   const multi = Array.isArray(bundle.pages) && bundle.pages.length > 1;
   (bundle.pages || []).forEach((page: any) => {
@@ -479,6 +502,8 @@ function buildDashCaptureHtml(bundle: any): string {
     *{box-sizing:border-box}
     html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui)}
     .d-root{max-width:${DASH_EXPORT_PAGE_W}px;margin:0 auto;padding:24px ${DASH_EXPORT_PAD}px 40px}
+    .d-head{display:flex;align-items:center;justify-content:space-between;gap:16px}
+    .d-logo{max-width:160px;max-height:32px;object-fit:contain}
     .d-title{font-size:22px;font-weight:700;color:var(--text-strong);margin:0 0 4px}
     .d-controls-summary{font-size:13px;font-weight:500;color:var(--muted);margin:0 0 16px}
     .d-page{font-size:14px;font-weight:600;color:var(--muted);margin:18px 0 8px}

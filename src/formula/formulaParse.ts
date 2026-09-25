@@ -195,6 +195,16 @@ export class Parser {
       return () => v;
     }
 
+    // An UNBOUND parameter. Queries that carry parameters bind them first
+    // (params.bindFormulaText rewrites `[[name]]` into a literal), so what
+    // reaches the parser here is a reference with no value — the stored
+    // dataset, a preview — and it reads as null, which every operator and
+    // function already propagates, rather than failing the whole field.
+    if (t.kind === 'param') {
+      this.pos += 1;
+      return () => null;
+    }
+
     if (t.kind === 'col') {
       this.pos += 1;
       const name = t.value;

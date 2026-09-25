@@ -142,6 +142,8 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
   const q = <T extends HTMLElement>(cls: string): T => root.querySelector('.' + cls) as T;
   const catSel = q<HTMLSelectElement>('js-enc-cat');
   const grainSel = q<HTMLSelectElement>('js-enc-grain');
+  const overlaySel = q<HTMLSelectElement>('js-enc-overlay');
+  const analyticsRow = q<HTMLElement>('js-enc-analytics-row');
   const catNote = q<HTMLElement>('js-enc-cat-note');
   const serSel = q<HTMLSelectElement>('js-enc-series');
   const geoSel = q<HTMLSelectElement>('js-enc-geo');
@@ -300,8 +302,10 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
   }
 
   function syncGrain(): void {
+    const isDate = catType() === 'date';
+    if (analyticsRow) analyticsRow.hidden = !isDate;
     if (!grainSel) return;
-    grainSel.hidden = catType() !== 'date';
+    grainSel.hidden = !isDate;
   }
 
   /**
@@ -481,6 +485,8 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       column: cur.column,
       type: col ? col.type : 'text',
       existing: cur,
+      // On a dashboard, its parameters can drive a visual's own filter too.
+      params: dashCurrent ? dashParams() : undefined,
     });
     if (steps === null) return; // cancelled — leave the row exactly as it was
     // A min/max range is TWO steps and always was; splicing in place keeps each
@@ -552,6 +558,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
   [catSel, serSel, geoSel].forEach((s) =>
     s && s.addEventListener('change', () => { syncSingles(); opts.onChange(); }));
   if (grainSel) grainSel.addEventListener('change', () => opts.onChange());
+  if (overlaySel) overlaySel.addEventListener('change', () => opts.onChange());
   // Leaving the select without choosing puts the pill back.
   [catSel, serSel].forEach((s) => s && s.addEventListener('blur', () => syncSingles()));
 
@@ -566,6 +573,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       // latter now means ten ranges rather than one bar per distinct value.
       fillCategory(preset && typeof preset.category === 'string' ? preset.category : '');
       if (grainSel) grainSel.value = preset && typeof preset.grain === 'string' ? preset.grain : '';
+      if (overlaySel) overlaySel.value = preset && preset.overlay === 'previous_year' ? 'previous_year' : '';
       setCatNote('');
       syncGrain();
 
@@ -657,6 +665,9 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       // grain reappear when the dimension goes back to being a date.
       const grain = grainSel && !grainSel.hidden ? grainSel.value : '';
       if (grain) enc.grain = grain;
+      // Same rule as the grain: a date category's business only.
+      const overlay = overlaySel && analyticsRow && !analyticsRow.hidden ? overlaySel.value : '';
+      if (overlay) enc.overlay = overlay;
       const geoLevel = geoSel ? geoSel.value : '';
       if (geoLevel) enc.geo = { level: geoLevel };
       return enc;
@@ -704,6 +715,9 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
         if (row.classList.contains('js-enc-filters-row')) return;
         (row as HTMLElement).hidden = !on;
       });
+      // Analytics belongs to a date category; showing the fields must not
+      // resurrect it for a text one.
+      if (on) syncGrain();
     },
 
     show(on: boolean): void {

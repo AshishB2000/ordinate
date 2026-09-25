@@ -69,6 +69,7 @@ function fxEsc(s: string): string {
  */
 function fxTokenClass(tok: any, names: Set<string>): string {
   if (tok.kind === 'col') return 'fx-t-col';
+  if (tok.kind === 'param') return 'fx-t-param';
   if (tok.kind === 'str') return 'fx-t-str';
   if (tok.kind === 'num') return 'fx-t-num';
   if (tok.kind === 'name') {

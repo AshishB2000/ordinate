@@ -287,7 +287,24 @@ function buildChartDatasets(c: ChartCtx): { datasets: any[]; chartLabels: any[] 
       outlierBackgroundColor: palette[4 % palette.length],
     }];
   } else if (isLine) {
-    datasets = series.map((s: ChartSeriesShape, i: number) => ({
+    datasets = series.map((s: ChartSeriesShape, i: number) => s.role === 'overlay' ? {
+      // The prior period: its series' colour, faded and dashed — present
+      // enough to compare against, quiet enough never to be mistaken for it.
+      _overlay: true,
+      label: s.name || '',
+      data: s.values,
+      borderColor: chartMuted(palette[0]),
+      backgroundColor: 'transparent',
+      borderWidth: 1.8,
+      borderDash: [5, 4],
+      fill: false,
+      tension: lineTension,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      pointHoverBackgroundColor: chartMuted(palette[0]),
+      pointHoverBorderColor: surfColor,
+      order: 2,
+    } : ({
       label: s.name || '',
       data: s.values,
       borderColor: palette[i % palette.length],
@@ -332,7 +349,17 @@ function buildChartDatasets(c: ChartCtx): { datasets: any[]; chartLabels: any[] 
             fill: false, order: 1,
           });
     } else {
-      datasets = series.map((s: ChartSeriesShape, i: number) => ({
+      datasets = series.map((s: ChartSeriesShape, i: number) => s.role === 'overlay' ? {
+        _overlay: true,
+        label: s.name || '',
+        data: s.values,
+        backgroundColor: chartMuted(palette[0]),
+        borderColor: 'transparent',
+        borderWidth: 0,
+        borderRadius: 7,
+        barPercentage: 0.65,
+        categoryPercentage: 0.8,
+      } : ({
         label: s.name || '',
         data: buildBarData(s, i),
         backgroundColor: makeBarGradient(palette[i % palette.length], isHoriz),
@@ -346,4 +373,9 @@ function buildChartDatasets(c: ChartCtx): { datasets: any[]; chartLabels: any[] 
   }
 
   return { datasets, chartLabels };
+}
+
+/** A series colour at ~35% — the prior-period overlay's ink. Hex in, hex+alpha out. */
+function chartMuted(color: string): string {
+  return /^#[0-9a-f]{6}$/i.test(String(color)) ? color + '5c' : 'rgba(128, 128, 128, 0.4)';
 }

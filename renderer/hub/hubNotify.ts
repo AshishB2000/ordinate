@@ -47,6 +47,8 @@ async function refreshKeyStatus() {
       updateExecBtnIcon();
     }
     if (status && status.notifications) applyNotifPrefs(status.notifications);
+    // The workspace calendar — what "This fiscal year" is called in a chip.
+    if (status && status.formats) wsFormats = status.formats;
     if (stpAutoRefresh) reflectSwitch(stpAutoRefresh, status ? status.autoRefresh !== false : true);
     // Load global rules into the box (don't clobber while the user is typing).
     if (stpPromptEl && status && typeof status.globalRules === 'string'

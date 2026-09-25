@@ -13,8 +13,9 @@
 //            is empty / is not empty via the Condition tab.
 //   number → min / max, which compiles to two AND-ed steps (already supported),
 //            plus the comparison operators.
-//   date   → from / to. Relative dates ("last 30 days") are deliberately OUT OF
-//            SCOPE: they need a design of their own, not a checkbox here.
+//   date   → from / to, or a RELATIVE period ("last 30 days", "this fiscal
+//            quarter") stored as its preset and resolved in main at query
+//            time — the picker is periodPicker.ts, shared with the filter bar.
 //
 // This is Tableau's model deliberately, not Power BI's. Power BI splits the same
 // job into a Basic/Advanced toggle capped at two conditions — two modes for one
@@ -55,6 +56,8 @@ interface FilterDialogOpts {
   type: string;
   /** An existing step to re-open for editing, if any. */
   existing?: any;
+  /** The open dashboard's parameters — offered as `[[name]]` values. */
+  params?: Array<{ name: string; kind: string }>;
 }
 
 /**
@@ -87,16 +90,15 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
     box.appendChild(sub);
 
     // ── Mode tabs ────────────────────────────────────────────────────────────
-    // A date column has ONE mode, so it gets no tab strip — a single tab is
-    // furniture, not a choice.
     const modes: Array<{ id: string; label: string }> =
       type === 'number'
         ? [{ id: 'range', label: 'Range' }, { id: 'cond', label: 'Condition' }]
         : type === 'date'
-          ? [{ id: 'range', label: 'Range' }]
+          ? [{ id: 'range', label: 'Range' }, { id: 'relative', label: 'Relative' }]
           : [{ id: 'values', label: 'Values' }, { id: 'cond', label: 'Condition' }];
 
     let mode = modes[0].id;
+    if (existing.op === 'period') mode = 'relative';
     // Re-open in the mode that matches the step being edited, so editing a
     // `contains` filter doesn't drop the user on a checkbox list.
     if (existing.op) {
@@ -170,6 +172,7 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
     if (existing.op === '>=') rangeMin = condVal;
     if (existing.op === '<=') rangeMax = condVal;
 
+    let relSpec: any = existing.op === 'period' && existing.period ? { ...existing.period } : null;
     let isoDates = true; // assumed until a sample says otherwise
     let searchTerm = '';
     let searchTimer: number | null = null;
@@ -180,6 +183,9 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
       if (mode === 'values') {
         if (selected.size === 0) return [];
         return [{ type: 'filter', column, op: exclude ? 'not in' : 'in', values: [...selected] }];
+      }
+      if (mode === 'relative') {
+        return relSpec ? [{ type: 'filter', column, op: 'period', period: relSpec }] : [];
       }
       if (mode === 'range') {
         const out: any[] = [];
@@ -200,7 +206,13 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
     function paintBody(): void {
       body.innerHTML = '';
       if (mode === 'values') paintValues();
-      else if (mode === 'range') paintRange();
+      else if (mode === 'relative') {
+        body.appendChild(buildPeriodPanel({
+          value: relSpec,
+          relativeOnly: true,
+          onChange: (v) => { relSpec = v; syncApply(); },
+        }));
+      } else if (mode === 'range') paintRange();
       else paintCondition();
     }
 
@@ -274,6 +286,10 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
       noteEl = document.createElement('p');
       noteEl.className = 'fd-note';
       body.appendChild(noteEl);
+      // A list parameter joins the selection as `[[name]]`; main expands it
+      // into its values when the filter runs.
+      fdParamChips(body, opts.params, (name) => { selected.add('[[' + name + ']]'); paintNote(); syncApply(); },
+        (p) => p.kind === 'list' || p.kind === 'text');
 
       void loadValues();
     }
@@ -335,6 +351,8 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
       // Say it plainly when the list is a window onto something larger.
       if (lastTotal > lastShown) parts.push(`Showing the first ${lastShown} of ${lastTotal} values — search to narrow.`);
       if (selected.size > 0) parts.push(`${selected.size} selected.`);
+      const refs = [...selected].filter((v) => /^\[\[/.test(v));
+      if (refs.length) parts.push('Follows ' + refs.join(', ') + '.');
       noteEl.textContent = parts.join(' ');
     }
 
@@ -420,13 +438,19 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
       valSpan.textContent = 'Value';
       const valIn = document.createElement('input');
       valIn.className = 'ws-modal-input';
-      valIn.type = type === 'number' ? 'number' : 'text';
+      // A parameter reference is text even on a number column: main replaces
+      // it with the typed value before anything compares it.
+      const isRef = /^\s*\[\[.*\]\]\s*$/.test(condVal);
+      valIn.type = type === 'number' && !isRef ? 'number' : 'text';
+      valIn.classList.toggle('fd-param-val', isRef);
       valIn.value = condVal;
       valIn.addEventListener('input', () => { condVal = valIn.value; syncApply(); });
       valWrap.appendChild(valSpan);
       valWrap.appendChild(valIn);
       body.appendChild(valWrap);
 
+      fdParamChips(body, opts.params, (name) => { condVal = '[[' + name + ']]'; paintBody(); syncApply(); },
+        (p) => p.kind !== 'list' || condOp === '=' || condOp === '!=');
       const syncOp = (): void => { valWrap.hidden = isValuelessFilterOp(condOp); };
       sel.addEventListener('change', () => { condOp = sel.value; syncOp(); syncApply(); });
       syncOp();
@@ -477,3 +501,36 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
     if (type === 'date') void probeDateShape();
   });
 }
+
+/**
+ * "Use a parameter" — one chip per dashboard parameter, each writing
+ * `[[name]]` as the value. Offered only on a dashboard (`params` present);
+ * main resolves the reference, typed, before the filter is evaluated.
+ */
+function fdParamChips(
+  host: HTMLElement,
+  params: Array<{ name: string; kind: string }> | undefined,
+  use: (name: string) => void,
+  fits: (p: { name: string; kind: string }) => boolean,
+): void {
+  const list = (Array.isArray(params) ? params : []).filter((p) => p && p.name && fits(p));
+  if (!list.length) return;
+  const row = document.createElement('div');
+  row.className = 'fd-params';
+  const lead = document.createElement('span');
+  lead.className = 'fd-params-lead';
+  lead.textContent = 'Or use a parameter';
+  row.appendChild(lead);
+  list.forEach((p) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'fd-param-chip';
+    b.appendChild(icon('sliders', 12));
+    b.appendChild(document.createTextNode(' ' + p.name));
+    b.title = 'Filter by [[' + p.name + ']] — follows the ' + p.name + ' control';
+    b.addEventListener('click', () => use(p.name));
+    row.appendChild(b);
+  });
+  host.appendChild(row);
+}
+

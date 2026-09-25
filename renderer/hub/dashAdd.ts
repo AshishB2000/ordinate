@@ -379,7 +379,7 @@ function openMetricDialog(
       try {
         r = await window.hub.computeMetric(
           currentProjectId, dsId, column, aggregation,
-          effectiveFilters(),
+          effectiveFilters(), dashParamPayload(),
         );
       } catch (_) {
         r = { ok: false };
