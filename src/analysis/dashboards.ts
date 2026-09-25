@@ -37,7 +37,15 @@ import type { Visual } from './visuals';
 import { sanitizeSteps } from '../data/transforms';
 import type { FilterStep } from '../data/transforms';
 
-export type CardType = 'visual' | 'text' | 'metric' | 'control';
+// Tile actions and the card kinds beyond these four live in one PURE module
+// the renderer loads too (renderer/hub/cardModel.ts, the geoMatch pattern), so
+// what a card may store is decided here by the same code the editor runs.
+const cardModel = require('../../renderer/hub/cardModel') as {
+  EXTRA_TYPES: string[];
+  sanitizeExtras: (o: Record<string, unknown>, card: Card) => boolean;
+};
+
+export type CardType = 'visual' | 'text' | 'metric' | 'control' | 'nav';
 export type CardAction = 'delete-sample';
 export type MetricAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';
 export type ControlKind = 'dropdown' | 'multi' | 'date_range';
@@ -137,6 +145,10 @@ export interface Card {
   action?: CardAction; // type 'text'
   metric?: CardMetric; // type 'metric'
   control?: CardControl; // type 'control'
+  /** Click / menu / hover behaviours of a visual tile (renderer/hub/cardModel.ts). */
+  // ponytail: shapes owned and sanitized by cardModel; typed loosely across the require
+  actions?: any[]; // type 'visual'
+  nav?: any; // type 'nav'
 }
 
 export interface Page {
@@ -153,7 +165,7 @@ function isValidId(id: unknown): id is string {
   return typeof id === 'string' && UUID_RE.test(id);
 }
 
-const CARD_TYPES: ReadonlySet<string> = new Set(['visual', 'text', 'metric', 'control']);
+const CARD_TYPES: ReadonlySet<string> = new Set(['visual', 'text', 'metric', 'control', ...cardModel.EXTRA_TYPES]);
 /** Exported so analysisPlan's metric validation clamps against THIS set rather
  *  than a fourth copy of it — dashboardDelta.ts already restates one, and it
  *  says so apologetically. One whitelist, one place to widen it. */
@@ -263,6 +275,8 @@ export function sanitizeCard(raw: unknown): Card | null {
   const id = isValidId(o.id) ? o.id : randomUUID();
   const layout = sanitizeLayout(o.layout);
   const card: Card = { id, type, layout };
+  if (!cardModel.sanitizeExtras(o, card)) return null;
+  if (cardModel.EXTRA_TYPES.includes(type)) return card;
 
   if (type === 'visual') {
     // TWO-SHAPED (v3): a visual card is meaningful with a valid `visualId`

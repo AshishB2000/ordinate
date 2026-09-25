@@ -116,7 +116,8 @@ function effectiveFilters(): any[] {
       }
     }
   }
-  return out;
+  // The reader's selection (dashSelection.ts): a navigation's carry, a map click.
+  return out.concat(dashSelectionSteps());
 }
 
 // ── Small DOM helpers ─────────────────────────────────────────────────────────

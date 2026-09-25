@@ -225,6 +225,13 @@ scripts/**/*.js
 /renderer/hub/relationshipsPage.js
 /renderer/hub/relationshipDialog.js
 /scripts/test-joins.js
+/renderer/hub/cardModel.js
+/renderer/hub/dashSelection.js
+/renderer/hub/tileActions.js
+/renderer/hub/actionEditor.js
+/renderer/hub/navCard.js
+/renderer/hub/cardKinds.js
+/scripts/test-tileActions.js
 
 # Command palette: the registry, its contents, the overlay, and the native menu
 # built from the same list — emitted siblings.

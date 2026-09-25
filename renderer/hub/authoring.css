@@ -283,3 +283,192 @@
   font-size: var(--t-12);
   color: var(--warn);
 }
+
+/* ── Selection layer and navigation (dashSelection.ts) ─────────────────────── */
+
+.dash-sel-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  padding: var(--sp-8) 0;
+  border-bottom: 1px solid var(--border-hairline);
+}
+.dash-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin-right: var(--sp-8);
+  padding-right: var(--sp-16);
+  border-right: 1px solid var(--border);
+}
+.dash-crumb-from {
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+.dash-sel-chip {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent-2);
+}
+.dash-sel-chip--narrow { border-style: dashed; }
+.dash-sel-chip-txt { white-space: nowrap; font-weight: 500; }
+.has-tile-actions canvas { cursor: pointer; }
+
+/* The tooltip that draws another visual (tileActions.ts). Body-mounted and
+   fixed, so a card's overflow cannot clip it. */
+.tv-tip {
+  position: fixed;
+  z-index: 1000;
+  width: 272px;
+  padding: var(--sp-12);
+  pointer-events: none;
+  background: var(--surface-float);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+}
+.tv-tip-head {
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.tv-tip-sub {
+  margin-bottom: var(--sp-8);
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.tv-tip-chart {
+  position: relative;
+  width: 240px;
+  height: 140px;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+
+/* ── Properties: actions and the added card kinds ─────────────────────────── */
+
+#an-props-body.has-kind-props #an-props-hint { display: none; }
+.an-kind-props {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+.ae-sec {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  margin-top: var(--sp-16);
+  padding-top: var(--sp-16);
+  border-top: 1px solid var(--border);
+}
+.ae-h {
+  margin: 0;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.ae-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.ae-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--sp-12);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.ae-row-head {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-8);
+}
+.ae-row-head > .ae-field,
+.ae-row-head > .ae-label { flex: 1 1 auto; }
+.ae-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.ae-label {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ae-hint {
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.ae-tiles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.ae-warn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-8);
+  font-size: var(--t-12);
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-radius: var(--r-sm);
+}
+.ae-warn p {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+}
+.ae-warn .ic { flex: none; margin-top: 1px; }
+.ae-add { align-self: flex-start; }
+
+/* ── The Navigation card (navCard.ts) ─────────────────────────────────────── */
+
+.dash-card--nav { background: var(--surface); }
+.dash-card--nav .dash-card-title { visibility: hidden; }
+.nav-card {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  height: 100%;
+  padding: 0 var(--sp-12);
+}
+.nav-card-btn.is-current {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.nav-card--tabs {
+  gap: 0;
+  align-items: stretch;
+  padding: 0;
+}
+.nav-card-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 var(--sp-16);
+  font: 500 var(--t-13) / 1 var(--font-ui);
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+.nav-card-tab:hover { color: var(--text); }
+.nav-card-tab.is-current {
+  color: var(--text-strong);
+  border-bottom-color: var(--accent);
+}

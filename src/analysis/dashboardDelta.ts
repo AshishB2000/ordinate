@@ -55,7 +55,8 @@ export type DeltaOpKind =
 export interface DeltaTile {
   cardId: string;
   pageIndex: number;
-  type: 'visual' | 'metric' | 'text' | 'control';
+  // Every card kind a sheet can hold — the model's own union, not a copy of it.
+  type: import('./dashboards').CardType;
   title: string;
   visualId?: string;
   datasetId?: string;

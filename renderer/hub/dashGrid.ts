@@ -75,6 +75,7 @@ function openEditorWith(rec: any, title: string): void {
   const nameEl = dashEl('dash-name');
   if (nameEl) nameEl.textContent = title;
   dashHistReset(); // this state is the floor — nothing before it is undoable
+  dashSelOnOpen(); // dashSelection.ts — a navigation's carried selection, or none
   renderDashFilterBar();
   renderDashPages();
   renderDashGrid();
@@ -572,6 +573,7 @@ function onDashGridDrop(e: DragEvent, grid: HTMLElement): void {
 // ── Card body renderers ─────────────────────────────────────────────────────
 function renderDashCardBody(card: any, body: HTMLElement): void {
   body.innerHTML = '';
+  if (renderAuthoringCard(card, body)) return; // cardKinds.ts — navigation and the other added kinds
   if (card.type === 'visual') { renderVisualCard(card, body); return; }
   if (card.type === 'metric') { renderMetricCard(card, body); return; }
   renderTextCard(card, body);
@@ -631,7 +633,7 @@ async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void>
   // the UNCHANGED visual:data channel — it sanitizes + applies filters (in order,
   // missing-column-tolerant) before aggregation, so one dashboard filter drives every
   // card. Mirrors mergeDashboardFilters (src/dashboardFilters.ts).
-  const merged = mergeDashFilters(effectiveFilters(), visual.filters);
+  const merged = mergeDashFilters(effectiveFilters(), visual.filters).concat(dashTileSteps(card.id));
   let res: any;
   try {
     res = await window.hub.computeVisualData(currentProjectId, visual.datasetId, visual.encoding, merged);
@@ -687,6 +689,7 @@ async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void>
   // Cross-filter first: when it is on it owns the plain click (it writes), and
   // drilling stays available through the ⋯ menu. Otherwise the click drills.
   // Drilling is a READ, so it is offered on a published snapshot too.
-  if (!wireCrossFilter(area, visual)) wireDrillClick(area, drill);
+  // A tile's own click ACTION (tileActions.ts) outranks both.
+  if (!wireTileActions(area, card, visual) && !wireCrossFilter(area, visual)) wireDrillClick(area, drill);
 }
 
