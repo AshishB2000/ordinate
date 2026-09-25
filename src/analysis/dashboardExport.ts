@@ -39,6 +39,7 @@
 // scope), so scripts/test-dashboardExport.ts still runs under bare `node` with
 // no Electron stub.
 import { sanitizeStyle } from './dashboards';
+import { sanitizeFormatPrefs } from '../app/format';
 import type { DashboardStyle } from './dashboards';
 
 // The fixed grid column count (kept in sync with .dash-grid in hub.css / dashboards.ts).
@@ -114,6 +115,14 @@ export interface ExportBundle {
    * and into the emitted <style> block, where an echoed string would not be.
    */
   style: DashboardStyle;
+  /**
+   * The brand, when one applies: an accent ramp the renderer computed from the
+   * workspace's or the dashboard's hex (it owns the contrast walk), and the
+   * logo for the header. Every colour must match COLOR_RE — `#rrggbb` or the
+   * renderer's own `rgba(r, g, b, a)` spelling — because each one is
+   * interpolated into the <style> block; the logo passes the PNG gate.
+   */
+  brand: { ramp?: AccentRamp; logo?: string };
 }
 
 // Core Chart.js types that render live from inlined data. Anything else (treemap /
@@ -254,7 +263,21 @@ export function sanitizeBundle(raw: unknown): ExportBundle {
     // note on ExportBundle.style. Missing/garbage → the default light style,
     // which is what every export looked like before this field existed.
     style: sanitizeStyle(o.style),
+    brand: sanitizeBrand(o.brand),
   };
+}
+
+const COLOR_RE = /^(#[0-9a-f]{6}|rgba\(\d{1,3}, \d{1,3}, \d{1,3}, (0|1|0?\.\d{1,4})\))$/i;
+
+function sanitizeBrand(raw: unknown): ExportBundle['brand'] {
+  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const r = o.ramp && typeof o.ramp === 'object' ? (o.ramp as Record<string, unknown>) : {};
+  const color = (v: unknown): string => (typeof v === 'string' && COLOR_RE.test(v) ? v : '');
+  const chart = Array.isArray(r.chart) ? r.chart.slice(0, 5).map(color) : [];
+  const ramp: AccentRamp = { accent: color(r.accent), accent2: color(r.accent2), soft: color(r.soft), line: color(r.line), chart };
+  const whole = chart.length === 5 && chart.every(Boolean) && ramp.accent && ramp.accent2 && ramp.soft && ramp.line;
+  const logo = sanitizePng(o.logo);
+  return { ...(whole ? { ramp } : {}), ...(logo ? { logo } : {}) };
 }
 
 // Serialize a JS value for safe embedding inside a <script> tag: escape `<`/`>` (so a
@@ -371,7 +394,9 @@ const ACCENT_RAMPS: Record<string, AccentRamp> = {
 
 // `style` is already clamped by sanitizeStyle, so both halves of the key are one
 // of a fixed set of literals and the lookup can never miss.
-function accentRamp(style: DashboardStyle): AccentRamp {
+// A brand ramp (sanitizeBrand) replaces the named one wholesale.
+function accentRamp(style: DashboardStyle, brand?: ExportBundle['brand']): AccentRamp {
+  if (brand && brand.ramp) return brand.ramp;
   return ACCENT_RAMPS[style.theme === 'dark' ? style.accent + '-dark' : style.accent];
 }
 
@@ -383,8 +408,8 @@ function styleClasses(style: DashboardStyle): string {
 // Theme + density + accent tokens, then the layout rules that consume them. The
 // rules are token-only — that is what lets one style change repaint the whole
 // document without a second copy of every rule per theme.
-function styleBlock(style: DashboardStyle): string {
-  const ramp = accentRamp(style);
+function styleBlock(style: DashboardStyle, brand?: ExportBundle['brand']): string {
+  const ramp = accentRamp(style, brand);
   const chartVars = ramp.chart.map((c, i) => `--chart-${i + 1}: ${c};`).join(' ');
   return `
     .dash-theme--${style.theme} { ${THEME_TOKENS[style.theme]} }
@@ -398,6 +423,8 @@ function styleBlock(style: DashboardStyle): string {
       font-family: -apple-system, system-ui, 'Hanken Grotesk', 'Segoe UI', sans-serif; }
     .dash-root { max-width: 1200px; margin: 0 auto; padding: 24px 20px 40px; }
     .dash-title { font-size: 22px; font-weight: 700; margin: 0 0 4px; color: var(--text-strong); }
+    .dash-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+    .dash-logo { max-width: 160px; max-height: 32px; object-fit: contain; }
     .dash-controls-summary { font-size: 13px; font-weight: 500; color: var(--muted); margin: 0 0 16px; }
     .dash-page { margin-bottom: 28px; }
     .dash-page-title { font-size: 15px; font-weight: 600; color: var(--muted); margin: 0 0 10px; }
@@ -432,8 +459,8 @@ function styleBlock(style: DashboardStyle): string {
 // The vanilla render script embedded in the file. It reads `window.__DASHBOARD__`, lays
 // each card on a CSS grid, and draws chart cards with the inlined Chart.js. All text is
 // set via textContent (never innerHTML) so a label/heading can't inject markup.
-function renderScript(style: DashboardStyle): string {
-  const palette = accentRamp(style).chart.map((c) => `'${c}'`).join(',');
+function renderScript(style: DashboardStyle, brand?: ExportBundle['brand']): string {
+  const palette = accentRamp(style, brand).chart.map((c) => `'${c}'`).join(',');
   return `
 (function () {
   var D = window.__DASHBOARD__;
@@ -444,7 +471,11 @@ function renderScript(style: DashboardStyle): string {
   var root = document.getElementById('dash-root');
   document.title = D.name || 'Dashboard';
   var h1 = document.createElement('h1'); h1.className = 'dash-title'; h1.textContent = D.name || 'Dashboard';
-  root.appendChild(h1);
+  if (D.brand && D.brand.logo) {
+    var head = document.createElement('div'); head.className = 'dash-head';
+    var logo = document.createElement('img'); logo.className = 'dash-logo'; logo.alt = ''; logo.src = D.brand.logo;
+    head.appendChild(h1); head.appendChild(logo); root.appendChild(head);
+  } else root.appendChild(h1);
   if (typeof D.controlsSummary === 'string' && D.controlsSummary) {
     var sub = document.createElement('div'); sub.className = 'dash-controls-summary'; sub.textContent = D.controlsSummary;
     root.appendChild(sub);
@@ -492,13 +523,23 @@ function renderScript(style: DashboardStyle): string {
       var c = PALETTE[i % PALETTE.length];
       return { label: s.label, data: s.values, backgroundColor: c, borderColor: c, borderWidth: 2, fill: false };
     });
+    // The app's formatter, when the file carries it: 5.2M on the axis, the
+    // full figure in the tooltip — as in the app.
+    var F = typeof OrdFormat === 'object' && OrdFormat ? OrdFormat : null;
+    var radial = card.chartType === 'pie' || card.chartType === 'doughnut';
+    var options = { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: datasets.length > 1 } } };
+    if (F) {
+      options.plugins.tooltip = { callbacks: { label: function (c) {
+        var v = typeof c.parsed === 'number' ? c.parsed : c.parsed.y;
+        return (c.dataset.label ? c.dataset.label + ': ' : '') + F.formatNumber(v, { maxDecimals: 2 });
+      } } };
+      if (!radial) options.scales = { y: { ticks: { callback: function (v) { return F.formatCompact(v); } } } };
+    }
     new window.Chart(canvas.getContext('2d'), {
       type: card.chartType || 'bar',
       data: { labels: d.labels, datasets: datasets },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: datasets.length > 1 } }
-      }
+      options: options
     });
   }
 
@@ -544,9 +585,19 @@ function renderScript(style: DashboardStyle): string {
 // `window.__DASHBOARD__ = {…}` + the render script. `chartLibJs` is the raw text of
 // node_modules/chart.js/dist/chart.umd.min.js, supplied by the MAIN handler (read off
 // disk, never fetched). Pure string assembly → node-testable.
-export function buildSelfContainedHtml(bundle: unknown, chartLibJs: string): string {
+//
+// `format` is the app's own formatter (src/app/format.js, read off disk by the
+// handler) and the workspace's prefs, so the file's axes and tooltips print
+// numbers the way the app does. Loaded the way the hub loads it (cjsShim.ts);
+// without it Chart.js's defaults stand.
+export function buildSelfContainedHtml(bundle: unknown, chartLibJs: string, format?: { js: string; prefs: unknown }): string {
   const clean = sanitizeBundle(bundle);
   const lib = typeof chartLibJs === 'string' ? chartLibJs : '';
+  const fmt = format && typeof format.js === 'string' && format.js
+    ? `<script>var module = { exports: {} }; var exports = module.exports;</script>
+<script>${format.js.replace(/<\/script/gi, '<\\/script')}</script>
+<script>var OrdFormat = module.exports; OrdFormat.setFormatPrefs(${embedJson(sanitizeFormatPrefs(format.prefs))});</script>`
+    : '';
   const titleText = clean.name.replace(/[<>]/g, '');
   // The style classes go on <html>, not on #dash-root. They declare the tokens,
   // and `html, body { background: var(--bg) }` below is an ANCESTOR of that div
@@ -560,13 +611,14 @@ export function buildSelfContainedHtml(bundle: unknown, chartLibJs: string): str
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${titleText || 'Dashboard'}</title>
-<style>${styleBlock(clean.style)}</style>
+<style>${styleBlock(clean.style, clean.brand)}</style>
 </head>
 <body>
 <div id="dash-root" class="dash-root"></div>
 <script>${lib}</script>
+${fmt}
 <script>window.__DASHBOARD__ = ${embedJson(clean)};</script>
-<script>${renderScript(clean.style)}</script>
+<script>${renderScript(clean.style, clean.brand)}</script>
 </body>
 </html>`;
 }

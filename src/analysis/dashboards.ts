@@ -36,6 +36,8 @@ import { sanitizeChartType, sanitizeEncoding, sanitizeOverrides, sanitizeFilters
 import type { Visual } from './visuals';
 import { sanitizeSteps } from '../data/transforms';
 import type { FilterStep } from '../data/transforms';
+import { sanitizePeriod, sanitizeCompare } from './dateIntel';
+import type { CompareMode, PeriodPreset } from './dateIntel';
 
 // Tile actions and the card kinds beyond these four live in one PURE module
 // the renderer loads too (renderer/hub/cardModel.ts, the geoMatch pattern), so
@@ -48,7 +50,12 @@ const cardModel = require('../../renderer/hub/cardModel') as {
 export type CardType = 'visual' | 'text' | 'metric' | 'control' | 'nav' | 'image' | 'divider' | 'container' | 'tabs';
 export type CardAction = 'delete-sample';
 export type MetricAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';
-export type ControlKind = 'dropdown' | 'multi' | 'date_range';
+/**
+ * `parameter` is the odd one out: it filters no column itself. It is the
+ * reader's handle on one of the dashboard's `parameters` (analysis/params.ts),
+ * which filters, formulas and titles reference by name.
+ */
+export type ControlKind = 'dropdown' | 'multi' | 'date_range' | 'parameter';
 
 /**
  * The shape of a control's current (or author-set default) selection — one
@@ -60,7 +67,8 @@ export type ControlKind = 'dropdown' | 'multi' | 'date_range';
 export type ControlValue =
   | { value: string } // dropdown
   | { values: string[] } // multi
-  | { from?: string; to?: string }; // date_range (ISO dates as stored text)
+  | { from?: string; to?: string } // date_range: two fixed ISO dates…
+  | { preset: PeriodPreset; n?: number }; // …or a RELATIVE period, resolved at query time
 
 export interface CardControl {
   kind: ControlKind;
@@ -68,6 +76,9 @@ export interface CardControl {
   datasetId: string; // where options come from (UUID-checked)
   column: string; // the column it filters
   default?: ControlValue; // optional author-set initial value
+  /** `parameter` only: which of the dashboard's parameters this control moves.
+   *  Its default is the parameter's own `value`, not `default` above. */
+  paramId?: string;
 }
 
 // The fixed column count the renderer's CSS grid uses (kept in sync with the
@@ -99,6 +110,12 @@ export interface CardMetric {
    * guessing one from `format` above.
    */
   metricId?: string;
+  /**
+   * Compare the figure with another period — computed on every render as a
+   * SECOND scoped resolution (the same filters with their date ranges moved),
+   * never stored. `from`/`to` only for `custom`.
+   */
+  compare?: { mode: CompareMode; from?: string; to?: string };
 }
 
 /**
@@ -177,7 +194,7 @@ const CARD_TYPES: ReadonlySet<string> = new Set(['visual', 'text', 'metric', 'co
  *  than a fourth copy of it — dashboardDelta.ts already restates one, and it
  *  says so apologetically. One whitelist, one place to widen it. */
 export const METRIC_AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
-const CONTROL_KINDS: ReadonlySet<string> = new Set(['dropdown', 'multi', 'date_range']);
+const CONTROL_KINDS: ReadonlySet<string> = new Set(['dropdown', 'multi', 'date_range', 'parameter']);
 const METRIC_FORMATS: ReadonlySet<string> = new Set([
   'auto',
   'plain',
@@ -260,7 +277,12 @@ function sanitizeControlDefault(kind: ControlKind, raw: unknown): ControlValue |
     if (!Array.isArray(o.values)) return undefined;
     return { values: o.values.filter((v): v is string => typeof v === 'string') };
   }
-  // date_range
+  // date_range — a relative preset wins over dates when both are present.
+  if (typeof o.preset === 'string' && o.preset !== 'custom') {
+    const p = sanitizePeriod(o);
+    if (!p) return undefined;
+    return p.n != null ? { preset: p.preset, n: p.n } : { preset: p.preset };
+  }
   const from = typeof o.from === 'string' ? o.from : undefined;
   const to = typeof o.to === 'string' ? o.to : undefined;
   if (from === undefined && to === undefined) return undefined;
@@ -319,6 +341,15 @@ export function sanitizeCard(raw: unknown): Card | null {
     if (!c) return null;
     const kind =
       typeof c.kind === 'string' && CONTROL_KINDS.has(c.kind) ? (c.kind as ControlKind) : null;
+    // A PARAMETER control filters no column: it needs only the id of the
+    // parameter it moves. A dangling id degrades to a "parameter removed" chip.
+    if (kind === 'parameter') {
+      if (!isValidId(c.paramId)) return null;
+      card.control = {
+        kind, label: typeof c.label === 'string' ? c.label : '', datasetId: '', column: '', paramId: c.paramId,
+      };
+      return card;
+    }
     const column = typeof c.column === 'string' ? c.column : '';
     if (!kind || !isValidId(c.datasetId) || !column) return null;
     const control: CardControl = {
@@ -357,6 +388,8 @@ export function sanitizeCard(raw: unknown): Card | null {
   if (typeof m.format === 'string' && METRIC_FORMATS.has(m.format)) {
     metric.format = m.format as CardMetric['format'];
   }
+  const compare = sanitizeCompare(m.compare);
+  if (compare) metric.compare = compare;
   card.metric = metric;
   return card;
 }
@@ -412,6 +445,12 @@ export interface DashboardStyle {
   theme: 'auto' | 'clean' | 'executive' | 'dark';
   density: 'comfortable' | 'compact';
   accent: 'blue' | 'teal' | 'slate';
+  /** A custom accent, `#rrggbb`. Wins over `accent` and over the workspace's
+   *  brand accent, for this dashboard only. Strict hex, so safe in CSS. */
+  accentHex?: string;
+  /** Which logo this dashboard's surfaces carry. Absent = the workspace's;
+   *  'custom' = its own, stored in userData/branding (app/branding.ts). */
+  logo?: 'none' | 'custom';
   /** The user (or the Assistant on their behalf) picked this, so it is an
    *  override to keep rather than a default to migrate. Absent means defaulted. */
   chosen?: true;
@@ -483,6 +522,9 @@ export function sanitizeStyle(raw: unknown): DashboardStyle {
       typeof o.accent === 'string' && STYLE_ACCENTS.has(o.accent)
         ? (o.accent as DashboardStyle['accent'])
         : DEFAULT_DASHBOARD_STYLE.accent,
+    ...(typeof o.accentHex === 'string' && /^#[0-9a-f]{6}$/i.test(o.accentHex)
+      ? { accentHex: o.accentHex.toLowerCase() } : {}),
+    ...(o.logo === 'none' || o.logo === 'custom' ? { logo: o.logo } : {}),
     // Last, so a preset literal and its sanitized copy serialise identically.
     ...(chosen ? { chosen: true as const } : {}),
   };

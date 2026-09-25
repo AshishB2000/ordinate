@@ -8,6 +8,9 @@ import type { MetricAggregation } from '../analysis/metricValue';
 import { applyPipeline } from '../data/transforms';
 import type { FilterStep } from '../data/transforms';
 import { joinedMetricFor } from './relationships';
+import { paramValues, resolveFilterParams } from '../analysis/params';
+import type { ParamValues } from '../analysis/params';
+import { paramTable } from '../data/paramReplay';
 
 // Dashboards IPC — list/get/save/update/delete a Dashboard, plus `dashboard:metric`
 // which loads a dataset and runs the PURE src/metricValue.ts helper to produce the
@@ -134,7 +137,15 @@ export async function computeCardMetric(
   datasetId: string,
   spec: { column: string; aggregation: MetricAggregation },
   filters: FilterStep[] = [],
+  params?: ParamValues,
 ): Promise<{ ok: boolean; value: number | null }> {
+  // A pipeline that references a dashboard parameter is replayed with the
+  // query's values bound (data/paramReplay.ts); everything else is untouched.
+  const replay = await paramTable(projectId, datasetId, params);
+  if (replay) {
+    const table = filters.length ? applyPipeline(replay, filters) : replay;
+    return { ok: true, value: computeMetric(table.columns, table.rows, spec) };
+  }
   const target = await loadMetricTarget(projectId, datasetId);
   return metricFor(projectId, datasetId, spec, filters, target);
 }
@@ -199,14 +210,16 @@ export function register() {
   // still runs FIRST and unchanged — it is the security control that keeps
   // untrusted renderer input to filter-only steps, not a formatter, and BOTH
   // paths consume its output. The response shape is byte-identical either way.
-  ipcMain.handle('dashboard:metric', async (_e, { projectId, datasetId, column, aggregation, filters }: any = {}) => {
+  ipcMain.handle('dashboard:metric', async (_e, { projectId, datasetId, column, aggregation, filters, params }: any = {}) => {
     try {
-      const steps = dashboards.sanitizeDashboardFilters(filters);
+      // Parameters resolve FIRST — `[[threshold]]` becomes the number it names —
+      // so both paths below see ordinary, typed filter steps.
+      const values = paramValues(params);
+      const bound = resolveFilterParams(dashboards.sanitizeDashboardFilters(filters), values);
       const spec = { column, aggregation: aggregation as MetricAggregation };
-      const target = await loadMetricTarget(projectId, datasetId);
-      const res = await metricFor(projectId, datasetId, spec, steps, target);
+      const res = await computeCardMetric(projectId, datasetId, spec, bound.steps, values);
       if (!res.ok) return { ok: false, error: 'Dataset not found' };
-      return { ok: true, value: res.value };
+      return bound.errors.length ? { ok: true, value: res.value, paramErrors: bound.errors } : { ok: true, value: res.value };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute the metric' };
     }

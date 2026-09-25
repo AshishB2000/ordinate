@@ -103,6 +103,16 @@ function initAuthoring(): void {
           row.addEventListener('click', () => { close(); anClick(target); });
           menu.appendChild(row);
         });
+        // Lineage opens a panel rather than pressing a toolbar button.
+        const lin = document.createElement('button');
+        lin.type = 'button';
+        lin.className = 'chart-menu-item';
+        lin.textContent = 'Lineage';
+        lin.addEventListener('click', () => {
+          close();
+          if (dashCurrent) void lnOpen('dashboard', String(dashCurrent.id), String(dashCurrent.name || ''));
+        });
+        menu.appendChild(lin);
       });
     });
   }

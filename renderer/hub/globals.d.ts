@@ -107,6 +107,13 @@ declare global {
       captureRegion(rect: { x: number; y: number; width: number; height: number }): Promise<any>;
       captureReport(html: string, width: number): Promise<any>;
       getThemePreference(): Promise<any>;
+      getPrefs(): Promise<any>;
+      setFormats(patch: any): Promise<any>;
+      setBranding(patch: any): Promise<any>;
+      pickLogo(scope: string): Promise<any>;
+      clearLogo(scope: string): Promise<any>;
+      getLogo(scope: string): Promise<any>;
+      onPrefsChanged(cb: (data: any) => void): void;
       setThemePreference(preference: string): Promise<any>;
       onThemeApply(cb: (data: any) => void): void;
       saveChartOverrides(entryId: string, key: string, overrides: any): Promise<any>;
@@ -123,6 +130,10 @@ declare global {
       renameProject(id: string, name: string): Promise<any>;
       deleteProject(id: string): Promise<{ ok: boolean }>;
       openProject(id: string): Promise<any>;
+      projectsOverview(): Promise<any[]>;
+      archiveProject(id: string, archived: boolean): Promise<any>;
+      exportProject(id: string): Promise<any>;
+      importProject(): Promise<any>;
       // ── Datasets (file-based data sources) ──
       pickAndParseDataset(sheetName?: string, filePath?: string): Promise<any>;
       parsePasteDataset(text: string): Promise<any>;
@@ -156,7 +167,7 @@ declare global {
         limit?: number,
         search?: string,
       ): Promise<{ values: string[]; total: number }>;
-      deleteDataset(projectId: string, id: string): Promise<{ ok: boolean }>;
+      deleteDataset(projectId: string, id: string): Promise<{ ok: boolean; name?: string; cascaded?: number }>;
       datasetStats(projectId: string, datasetId: string): Promise<any>;
       datasetMedian(projectId: string, datasetId: string, column: string): Promise<any>;
       setDatasetAutoRefresh(projectId: string, datasetId: string, autoRefresh: string | null): Promise<any>;
@@ -173,6 +184,19 @@ declare global {
       setAlertDigest(projectId: string, on: boolean): Promise<any>;
       explainAlert(projectId: string, event: any): Promise<any>;
       onAlertsFired(cb: (p: any) => void): void;
+      // ── Data-quality rules (src/ipc/quality.ts). Counts are MAIN's; a rule is
+      // addressed by id and the renderer never sends a predicate.
+      listQuality(projectId: string, datasetId: string): Promise<any>;
+      saveQualityRule(projectId: string, datasetId: string, rule: any): Promise<any>;
+      deleteQualityRule(projectId: string, datasetId: string, ruleId: string): Promise<any>;
+      runQualityChecks(projectId: string, datasetId: string): Promise<any>;
+      previewQualityRule(projectId: string, datasetId: string, rule: any): Promise<any>;
+      qualityFailingRows(
+        projectId: string,
+        datasetId: string,
+        ruleId: string,
+        req: { offset: number; limit: number; search?: string; sortColumn?: string; sortDir?: 'asc' | 'desc' },
+      ): Promise<any>;
       updateDataset(projectId: string, datasetId: string, columns: any[]): Promise<any>;
       explainDataset(projectId: string, datasetId: string): Promise<any>;
       // ── Data preparation (reversible transform pipeline) ──
@@ -246,6 +270,11 @@ declare global {
       describeConnectionTable(projectId: string, connId: string, table: string): Promise<any>;
       sampleConnectionTable(projectId: string, connId: string, table: string, limit?: number): Promise<any>;
       explainConnectionSql(projectId: string, connId: string, sql: string): Promise<any>;
+      // ── SQL over the project's own datasets (Data → Query; src/ipc/sqlQuery.ts) ──
+      sqlSchema(projectId: string): Promise<any>;
+      sqlRun(projectId: string, sql: string, params: any[]): Promise<any>;
+      sqlExplain(projectId: string, sql: string, params: any[]): Promise<any>;
+      sqlPrepareSave(projectId: string, sql: string, params: any[]): Promise<any>;
       saveConnectionQuery(
         projectId: string,
         connId: string,
@@ -271,10 +300,10 @@ declare global {
         id: string,
         patch: { name?: string; chartType?: string; encoding?: any; overrides?: any; filters?: any; favorite?: boolean },
       ): Promise<any>;
-      deleteVisual(projectId: string, id: string): Promise<{ ok: boolean }>;
+      deleteVisual(projectId: string, id: string, opts?: { permanent?: boolean }): Promise<{ ok: boolean }>;
       duplicateVisual(projectId: string, id: string): Promise<any>;
       suggestVisual(projectId: string, datasetId: string, intent?: string): Promise<any>;
-      computeVisualData(projectId: string, datasetId: string, encoding: any, filters?: any): Promise<any>;
+      computeVisualData(projectId: string, datasetId: string, encoding: any, filters?: any, params?: any): Promise<any>;
       // The rows behind one mark of that chart — same dataset, same filters,
       // plus an equality filter per clicked axis. Paged/searched/sorted in main.
       // `{ ok:true, available:false, reason }` when the row set cannot be
@@ -286,6 +315,7 @@ declare global {
         filters: any,
         mark: any,
         page: { offset: number; limit: number; search?: string; sortColumn?: string; sortDir?: 'asc' | 'desc' },
+        params?: any,
       ): Promise<any>;
       // That same row set as a CSV file, written in main through the native save
       // panel. Returns { ok, dest, rows } | { ok:false, canceled|error }.
@@ -297,6 +327,7 @@ declare global {
         mark: any,
         page: { search?: string; sortColumn?: string; sortDir?: 'asc' | 'desc' },
         name?: string,
+        params?: any,
       ): Promise<any>;
       // ── Mosaic connector (Phase 3c) — the whole database contract in two calls ──
       mosaicView(
@@ -339,12 +370,12 @@ declare global {
       // ── Analyses (the AUTHORING container — sheets of cards + filters) ──
       listAnalyses(projectId: string): Promise<any[]>;
       getAnalysis(projectId: string, id: string): Promise<any>;
-      createAnalysis(payload: { projectId: string; name: string; sheets?: any; filters?: any; style?: any }): Promise<any>;
+      createAnalysis(payload: { projectId: string; name: string; sheets?: any; filters?: any; style?: any; parameters?: any }): Promise<any>;
       renameAnalysis(projectId: string, id: string, name: string): Promise<any>;
       updateAnalysis(
         projectId: string,
         id: string,
-        patch: { name?: string; sheets?: any; filters?: any; style?: any },
+        patch: { name?: string; sheets?: any; filters?: any; style?: any; parameters?: any },
       ): Promise<any>;
       deleteAnalysis(projectId: string, id: string): Promise<{ ok: boolean }>;
       // Dashboard TEMPLATES (the create wizard's gallery). Both model-free.
@@ -362,6 +393,7 @@ declare global {
         column: string,
         aggregation: string,
         filters?: any,
+        params?: any,
       ): Promise<any>;
       // Metrics (src/ipc/metrics.ts) — the project's NAMED numbers. A record is
       // a definition, never a figure; `metricValue` resolves one on demand and
@@ -374,7 +406,9 @@ declare global {
       updateMetric(projectId: string, id: string, patch: any): Promise<any>;
       duplicateMetric(projectId: string, id: string): Promise<any>;
       deleteMetric(projectId: string, id: string): Promise<any>;
-      metricValue(projectId: string, id: string, filters?: any): Promise<any>;
+      metricValue(projectId: string, id: string, filters?: any, params?: any): Promise<any>;
+      compareMetric(projectId: string, card: any, filters: any, compare: any, params?: any): Promise<any>;
+      resolvePeriod(period: any): Promise<any>;
       previewMetric(
         projectId: string,
         datasetId: string,
@@ -404,6 +438,21 @@ declare global {
       reportsDue(nowMs?: number): Promise<any>;
       reportsReveal(projectId: string, id: string): Promise<any>;
       onReportsRunDue(cb: () => void): void;
+      // ── Version history (src/ipc/versions.ts) ──
+      versionsList(projectId: string, type: string, id: string): Promise<any[]>;
+      versionsGet(projectId: string, type: string, id: string, key: string): Promise<any>;
+      versionsRestore(projectId: string, type: string, id: string, key: string): Promise<any>;
+      // ── First-run guidance (src/ipc/onboarding.ts) ──
+      onboardingStatus(): Promise<any>;
+      onboardingSet(patch: { collapsed?: boolean; dismissed?: boolean; coachSeen?: boolean }): Promise<{ ok: boolean }>;
+      // ── Lineage (src/ipc/lineage.ts) ──
+      lineageGet(projectId: string, type: string, id: string): Promise<any>;
+      // ── Trash (src/ipc/trash.ts) ──
+      trashList(projectId: string): Promise<any[]>;
+      trashRestore(projectId: string, type: string, id: string): Promise<any>;
+      trashPurge(projectId: string, type: string, id: string): Promise<{ ok: boolean }>;
+      trashEmpty(projectId: string): Promise<{ ok: boolean; removed: number }>;
+      onTrashChanged(cb: (o: { projectId: string }) => void): void;
       // ── AI Copilot (Week 11) ──
       copilotHistory(projectId: string, threadId?: string): Promise<any>;
       copilotThreads(projectId: string): Promise<any>;

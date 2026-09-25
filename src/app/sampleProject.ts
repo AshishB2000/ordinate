@@ -44,6 +44,7 @@ import * as path from 'path';
 import { app } from 'electron';
 
 import * as config from './config';
+import * as onboarding from './onboarding';
 import * as execConfig from './execConfig';
 import * as projects from './projects';
 import * as datasets from '../data/datasets';
@@ -213,10 +214,21 @@ async function patchSampleSheet(projectId: string, analysisId: string): Promise<
   const mapIds = new Set((await visuals.listVisuals(projectId))
     .filter((v) => v.chartType.startsWith('map_'))
     .map((v) => v.id));
+  // A KPI tile IS the seeded metric it shows, so it formats as the metric says:
+  // Revenue in the workspace currency ("$5.2M", "€5.2M"), not a bare "5.2M".
+  const metricIds = new Map<string, string>();
+  for (const m of await metrics.listMetrics(projectId)) {
+    const d = m.definition as { column?: string; aggregation?: string };
+    if (d.column) metricIds.set(d.column + '|' + d.aggregation, m.id);
+  }
   const sheets = rec.sheets.map((page) => ({
     ...page,
     cards: page.cards.map((c) => {
       if (c.type === 'text') return { ...c, action: 'delete-sample' };
+      if (c.type === 'metric' && c.metric) {
+        const metricId = metricIds.get(c.metric.column + '|' + c.metric.aggregation);
+        if (metricId) return { ...c, metric: { ...c.metric, metricId } };
+      }
       if (c.type === 'visual' && c.visualId && mapIds.has(c.visualId)) {
         return { ...c, layout: { ...c.layout, x: 0, w: dashboards.GRID_COLS } };
       }
@@ -242,7 +254,9 @@ export async function seedSampleProject(): Promise<{ seeded: boolean; projectId?
     console.error('[sample] bundled CSV missing at', csv, '— skipping seed');
     return { seeded: false };
   }
-  config.save({ sampleSeeded: true });
+  // First-run guidance starts with the first launch, and only then: an install
+  // that seeded before it existed never gets the card or the tour.
+  config.save({ sampleSeeded: true, onboarding: onboarding.fresh() });
 
   // The user's own first project, and the only one. Created here rather than by
   // resolveProjectId so the sample has somewhere to land; resolveProjectId finds
@@ -289,6 +303,12 @@ export async function seedSampleProject(): Promise<{ seeded: boolean; projectId?
   } else {
     console.error('[sample] could not build the sample dashboard:', built.error);
   }
+  // What the seed made, by id — the switcher's "Sample" badge and first-run
+  // guidance both need to tell these apart from the user's own records.
+  config.save({ sample: {
+    projectId: project.id, datasetId: ds.id, analysisId: analysisId || '',
+    visualIds: (await visuals.listVisuals(project.id)).map((v) => v.id),
+  } });
 
   return { seeded: true, projectId: project.id, analysisId };
 }

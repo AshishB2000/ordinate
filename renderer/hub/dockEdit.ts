@@ -32,6 +32,8 @@
  *  anyone clicked. */
 interface DkDeltaSnapshot {
   pages: any[];
+  /** The dashboard's parameters — an `addControl` of kind parameter adds one. */
+  parameters: any[];
   name: string;
   pageIdx: number;
   /** visualId → the Visual record as it was, or null when the delta CREATED it
@@ -110,6 +112,12 @@ function dkDeltaLine(op: any): { sign: string; cls: string; text: string } | nul
         text: `${op.label} — ${op.aggregation} of ${op.column} → ${dkPageLabel(op.pageIndex)}`,
       };
     case 'addControl':
+      if (op.kind === 'parameter' && op.param) {
+        return {
+          sign: '+', cls: 'dk-delta-add',
+          text: `Parameter [[${op.param.name}]] (${op.param.kind}) — ${op.label} → ${dkPageLabel(op.pageIndex)}`,
+        };
+      }
       return {
         sign: '+', cls: 'dk-delta-add',
         text: `${op.label} — ${op.kind.replace('_', ' ')} filter on ${op.column} → ${dkPageLabel(op.pageIndex)}`,
@@ -284,6 +292,7 @@ async function dkApplyDelta(ops: any[]): Promise<DkDeltaSnapshot | null> {
   if (!dashCurrent || !currentProjectId) return null;
   const snap: DkDeltaSnapshot = {
     pages: dkClonePages(),
+    parameters: JSON.parse(JSON.stringify(dashParams())),
     name: String(dashCurrent.name || ''),
     pageIdx: dashPageIdx,
     visuals: [],
@@ -329,6 +338,16 @@ async function dkApplyDelta(ops: any[]): Promise<DkDeltaSnapshot | null> {
         id: dashUuid(), type: 'metric',
         metric: { datasetId: op.datasetId, column: op.column, aggregation: op.aggregation, label: op.label },
         layout: { x: 0, y: 0, w: 3, h: 2 },
+      });
+    } else if (op.op === 'addControl' && op.kind === 'parameter' && op.param) {
+      // A parameter and the chip that moves it — the same pair + Control →
+      // Parameter creates by hand (paramDialog.ts addParameterControl).
+      const param = { ...op.param, id: dashUuid() };
+      dashParams().push(param);
+      dkPushCardOn(op.pageIndex, {
+        id: dashUuid(), type: 'control',
+        control: { kind: 'parameter', label: op.label, datasetId: '', column: '', paramId: param.id },
+        layout: { x: 0, y: 0, w: 0, h: 0 },
       });
     } else if (op.op === 'addControl') {
       dkPushCardOn(op.pageIndex, {
@@ -424,7 +443,8 @@ async function dkUndoDelta(snap: DkDeltaSnapshot): Promise<void> {
 
   for (const v of snap.visuals) {
     try {
-      if (v.before === null) await window.hub.deleteVisual(currentProjectId, v.id);
+      // Taking back a visual the edit CREATED is not a delete to keep in Trash.
+      if (v.before === null) await window.hub.deleteVisual(currentProjectId, v.id, { permanent: true });
       else {
         await window.hub.updateVisual(currentProjectId, v.id, {
           name: v.before.name, chartType: v.before.chartType, encoding: v.before.encoding,
@@ -445,6 +465,7 @@ async function dkUndoDelta(snap: DkDeltaSnapshot): Promise<void> {
   // sends it as `sheets`, and they must not become two arrays here.
   dashCurrent.pages = JSON.parse(JSON.stringify(snap.pages));
   dashCurrent.sheets = dashCurrent.pages;
+  if (Array.isArray(snap.parameters)) dashCurrent.parameters = JSON.parse(JSON.stringify(snap.parameters));
   // A revert that drops a page must clamp the cursor, exactly as
   // persistAnalysis does after main sanitizes.
   if (dashPageIdx >= dashCurrent.pages.length) dashPageIdx = snap.pageIdx < dashCurrent.pages.length ? snap.pageIdx : 0;

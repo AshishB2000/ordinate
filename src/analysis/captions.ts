@@ -17,6 +17,7 @@
 // picture, not as body prose, and the examples in the spec are written that
 // way. A page that needs a paragraph gets a Notes page.
 
+import { formatCompact } from '../app/format';
 import type { ChartData } from './vizData';
 import type { PivotGrid } from './pivotData';
 
@@ -30,11 +31,7 @@ import type { PivotGrid } from './pivotData';
 // thresholds or suffixes move — the house differential-test rule, applied to
 // the one pair that cannot be compared by calling both.
 export function compact(v: number | null | undefined): string {
-  if (v == null || !Number.isFinite(v)) return '';
-  if (Math.abs(v) >= 1e9) return (v / 1e9).toFixed(1) + 'B';
-  if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(1) + 'M';
-  if (Math.abs(v) >= 1e3) return (v / 1e3).toFixed(1) + 'K';
-  return v.toLocaleString();
+  return formatCompact(v);
 }
 
 // ── chart family ─────────────────────────────────────────────────────────────

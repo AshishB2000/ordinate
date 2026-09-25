@@ -57,13 +57,18 @@ function dashSanitizeStyle(raw: any): any {
     theme: rawTheme === 'clean' && !chosen ? 'auto' : rawTheme,
     density: DASH_DENSITIES.indexOf(o.density) >= 0 ? o.density : DASH_STYLE_DEFAULT.density,
     accent: DASH_ACCENTS.indexOf(o.accent) >= 0 ? o.accent : DASH_STYLE_DEFAULT.accent,
+    ...(typeof o.accentHex === 'string' && /^#[0-9a-f]{6}$/i.test(o.accentHex) ? { accentHex: o.accentHex.toLowerCase() } : {}),
+    ...(o.logo === 'none' || o.logo === 'custom' ? { logo: o.logo } : {}),
     ...(chosen ? { chosen: true } : {}),
   };
 }
 
+// A custom accent rides the BLUE class: .dash-accent--blue is the one block
+// that reads the --brand-* tokens (hub.css), which applyDashStyleTo sets on the
+// sheet itself — so the dashboard's hex wins over the workspace's there.
 function dashStyleClassList(style: any): string[] {
   const s = dashSanitizeStyle(style);
-  return ['dash-theme--' + s.theme, 'dash-density--' + s.density, 'dash-accent--' + s.accent];
+  return ['dash-theme--' + s.theme, 'dash-density--' + s.density, 'dash-accent--' + (s.accentHex ? 'blue' : s.accent)];
 }
 
 // The three axes are orthogonal CLASSES, so a partial swap would leave two
@@ -75,6 +80,7 @@ function applyDashStyleTo(el: HTMLElement | null, style: any): void {
     .filter((c: string) => /^dash-(theme|density|accent)--/.test(c))
     .forEach((c: string) => el.classList.remove(c));
   dashStyleClassList(style).forEach((c) => el.classList.add(c));
+  applyBrandTokens(el, dashSanitizeStyle(style).accentHex || '');
 }
 
 /** The style of the open dashboard, always a valid triple. */
@@ -233,9 +239,128 @@ function setDashStyle(style: any, persist: boolean): void {
 function applyDashStylePreset(preset: string): boolean {
   const next = DASH_STYLE_PRESETS[preset];
   if (!dashCurrent || !next) return false;
-  setDashStyle(next, true);
+  // A preset is theme/density/accent; the dashboard's own accent and logo stay.
+  const cur = dashCurrentStyle();
+  setDashStyle({ ...next, accentHex: cur.accentHex, logo: cur.logo }, true);
   showToast('Style: ' + DASH_STYLE_LABELS[preset]);
   return true;
+}
+
+// ── Accent and logo, this dashboard only ────────────────────────────────────
+// Both override the workspace's (Settings → Appearance → Branding); the empty
+// swatch and "Workspace" clear the override so the sheet follows it again.
+// `state` is the modal's working copy; `onChange` previews it.
+function buildDashBrandControls(state: { accentHex: string; logo: string }, onChange: () => void): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'dash-style-brand';
+  const field = (label: string, ...controls: HTMLElement[]): void => {
+    const row = document.createElement('div');
+    row.className = 'dash-style-field';
+    const l = document.createElement('span');
+    l.className = 'dash-style-label';
+    l.textContent = label;
+    row.appendChild(l);
+    controls.forEach((c) => row.appendChild(c));
+    wrap.appendChild(row);
+  };
+
+  const swatches = document.createElement('div');
+  swatches.className = 'sf-swatches';
+  swatches.setAttribute('role', 'radiogroup');
+  swatches.setAttribute('aria-label', 'Dashboard accent');
+  const hexIn = document.createElement('input');
+  hexIn.className = 'stp-input sf-hex';
+  hexIn.type = 'text';
+  hexIn.spellcheck = false;
+  hexIn.placeholder = 'Workspace';
+  hexIn.setAttribute('aria-label', 'Dashboard accent as hex');
+
+  const logoSeg = document.createElement('div');
+  logoSeg.className = 'stp-seg';
+  logoSeg.setAttribute('role', 'radiogroup');
+  logoSeg.setAttribute('aria-label', 'Dashboard logo');
+  const frame = document.createElement('div');
+  frame.className = 'sf-logo-frame dash-style-logo';
+  const msg = document.createElement('div');
+  msg.className = 'sf-logo-msg';
+
+  const paint = async (): Promise<void> => {
+    swatches.querySelectorAll('.sf-swatch').forEach((b) => {
+      const on = ((b as HTMLElement).dataset.hex || '') === state.accentHex;
+      b.classList.toggle('is-on', on);
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+    if (document.activeElement !== hexIn) { hexIn.value = state.accentHex; hexIn.classList.remove('is-bad'); }
+    logoSeg.querySelectorAll('.stp-seg-opt').forEach((b) => {
+      const on = (b as HTMLElement).dataset.value === (state.logo || 'workspace');
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+    const url = await dashLogoFor({ id: dashCurrent && dashCurrent.id, style: { logo: state.logo } });
+    frame.innerHTML = '';
+    if (url) {
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = '';
+      frame.appendChild(img);
+    } else frame.textContent = state.logo === 'none' ? 'No logo' : 'Ordinate';
+  };
+  const change = (): void => { void paint(); onChange(); };
+
+  const options: Array<[string, string]> = [['', 'Workspace accent']];
+  options.concat(SF_SWATCHES).forEach(([hex, name]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = hex ? 'sf-swatch' : 'sf-swatch sf-swatch--none';
+    b.dataset.hex = hex;
+    b.title = name;
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-label', name);
+    if (hex) b.style.setProperty('--sw', hex);
+    b.addEventListener('click', () => { state.accentHex = hex; change(); });
+    swatches.appendChild(b);
+  });
+  hexIn.addEventListener('change', () => {
+    const v = hexIn.value.trim();
+    const hex = /^#?[0-9a-f]{6}$/i.test(v) ? (v[0] === '#' ? v : '#' + v).toLowerCase() : null;
+    hexIn.classList.toggle('is-bad', hex === null && v !== '');
+    if (hex !== null || v === '') { state.accentHex = hex || ''; change(); }
+  });
+
+  ([['workspace', 'Workspace'], ['none', 'None'], ['custom', 'Custom…']] as Array<[string, string]>).forEach(([v, label]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'stp-seg-opt';
+    b.dataset.value = v;
+    b.textContent = label;
+    b.setAttribute('role', 'radio');
+    b.addEventListener('click', async () => {
+      msg.textContent = '';
+      if (v === 'custom') {
+        if (!dashCurrent) return;
+        const res = await window.hub.pickLogo(String(dashCurrent.id));
+        if (!res || !res.ok) {
+          if (res && !res.canceled) msg.textContent = res.error || 'That logo could not be used.';
+          return;
+        }
+      }
+      state.logo = v === 'workspace' ? '' : v;
+      change();
+    });
+    logoSeg.appendChild(b);
+  });
+
+  const accentBox = document.createElement('div');
+  accentBox.className = 'sf-accent';
+  accentBox.append(swatches, hexIn);
+  field('Accent', accentBox);
+  const logoBox = document.createElement('div');
+  logoBox.className = 'sf-logo';
+  logoBox.append(logoSeg, frame);
+  field('Logo', logoBox);
+  wrap.appendChild(msg);
+  void paint();
+  return wrap;
 }
 
 // The Style button. Picking a tile applies LIVE to the dashboard behind the
@@ -246,6 +371,8 @@ function handleDashStyle(): void {
   if (!dashCurrent) return;
   const before = dashCurrentStyle();
   let picked = dashPresetOf(before) || 'clean';
+  const brand = { accentHex: before.accentHex || '', logo: before.logo || '' };
+  const preview = (): void => setDashStyle({ ...DASH_STYLE_PRESETS[picked], ...brand }, false);
 
   const overlay = document.createElement('div');
   overlay.className = 'ws-modal-overlay';
@@ -258,8 +385,9 @@ function handleDashStyle(): void {
   sub.textContent = 'Applies to this dashboard only, and travels with it when you share.';
   const strip = buildDashStyleStrip(dashMiniCardsFromCurrent(), before, (name) => {
     picked = name;
-    setDashStyle(DASH_STYLE_PRESETS[name], false); // preview, not a write
+    preview(); // preview, not a write
   });
+  const brandControls = buildDashBrandControls(brand, preview);
 
   const actions = document.createElement('div');
   actions.className = 'ws-modal-actions';
@@ -297,6 +425,7 @@ function handleDashStyle(): void {
   box.appendChild(h);
   box.appendChild(sub);
   box.appendChild(strip);
+  box.appendChild(brandControls);
   box.appendChild(actions);
   overlay.appendChild(box);
   document.body.appendChild(overlay);

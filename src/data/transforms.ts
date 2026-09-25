@@ -19,7 +19,9 @@ import { compile } from '../formula/formula';
 import type { FValue } from '../formula/formula';
 import { runOnDuckDb } from '../engine/pipelineDuck';
 import type { FilterOp } from './filterOps';
-import { FILTER_OPS, LIST_OPS, emptyListWarning } from './filterOps';
+import { FILTER_OPS, LIST_OPS, PERIOD_OP, emptyListWarning, periodSkipWarning } from './filterOps';
+import { sanitizePeriod, resolvePeriodNow, periodDay, daysFromIso } from '../analysis/dateIntel';
+import type { PeriodSpec } from '../analysis/dateIntel';
 
 // ── Shared shapes ────────────────────────────────────────────────────────────
 
@@ -66,6 +68,8 @@ export interface FilterStep {
    * one more key. Ignored by every other operator.
    */
   values?: Cell[];
+  /** The relative range for op `period` — the PRESET, resolved when evaluated. */
+  period?: PeriodSpec;
 }
 export interface GroupAggregateStep {
   type: 'group_aggregate';
@@ -127,7 +131,8 @@ export function colIndex(columns: ParsedColumn[], name: string): number {
   return columns.findIndex((c) => c.name === name);
 }
 
-function isEmptyCell(cell: Cell): boolean {
+// Exported for analysis/qualityRules — the app's ONE definition of "empty".
+export function isEmptyCell(cell: Cell): boolean {
   if (cell == null) return true;
   return typeof cell === 'string' && cell.trim() === '';
 }
@@ -289,6 +294,20 @@ function stepFilter(t: TableData, s: FilterStep): StepResult {
 
   const col = t.columns[ci];
   const columns = t.columns.map((c) => ({ ...c }));
+
+  if (s.op === PERIOD_OP) {
+    const r = s.period ? resolvePeriodNow(s.period) : null;
+    if (!r) return skip(t, periodSkipWarning(s.column));
+    const lo = daysFromIso(r.from);
+    const hi = daysFromIso(r.to);
+    const rows = t.rows
+      .filter((row) => {
+        const d = periodDay(row[ci]);
+        return d !== null && (lo === null || d >= lo) && (hi === null || d <= hi);
+      })
+      .map((row) => row.slice());
+    return { table: { columns, rows }, warnings: [] };
+  }
 
   // `in` / `not in` are handled before the scalar operators because they read a
   // different field (`values`, not `value`).
@@ -617,6 +636,11 @@ function sanitizeStep(item: unknown): TransformStep | null {
       // SQL builders — which is where an array would otherwise become an
       // uncontrolled number of bound parameters.
       if (Array.isArray(o.values)) step.values = o.values.filter(isCell);
+      if (op === PERIOD_OP) {
+        const period = sanitizePeriod(o.period);
+        if (!period) return null;
+        step.period = period;
+      }
       return step;
     }
     case 'group_aggregate': {

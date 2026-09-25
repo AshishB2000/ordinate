@@ -303,6 +303,9 @@ scripts/**/*.js
 /renderer/hub/dsList.js
 /renderer/hub/dsExplorer.js
 /renderer/hub/dsGrid.js
+# Data-quality rules (dsRuleEditor + dsRules) — emitted siblings.
+/renderer/hub/dsRuleEditor.js
+/renderer/hub/dsRules.js
 
 # visuals.ts split by job (.claude/rules/file-size.md) — emitted siblings.
 /renderer/hub/vizGallery.js
@@ -332,6 +335,20 @@ scripts/**/*.js
 /renderer/hub/connWorkbench.js
 /renderer/hub/connDetails.js
 /renderer/hub/connEditor.js
+
+# SQL over the project's own datasets (Data → Query) — emitted siblings.
+/renderer/hub/queryEditor.js
+/renderer/hub/queryParams.js
+/renderer/hub/queryTab.js
+/renderer/hub/dsLineage.js
+/src/engine/sqlLex.js
+/src/engine/sqlNames.js
+/src/engine/sqlGate.js
+/src/engine/sqlDatasets.js
+/src/data/datasetSummary.js
+/src/data/datasetDependents.js
+/src/ipc/sqlQuery.js
+/scripts/test-sqlDatasets.js
 
 # The connection workbench's main-process side — emitted siblings.
 /src/connectors/duckdbDirs.js
@@ -435,3 +452,55 @@ scripts/**/*.js
 /scripts/test-captions.js
 /scripts/test-reportSpec.js
 /scripts/smoke-reports.js
+
+# Date intelligence (relative periods, KPI compare, period overlay) — emitted siblings.
+/src/analysis/dateIntel.js
+/src/analysis/periodScope.js
+/src/engine/periodSql.js
+/src/ipc/periods.js
+/src/ipc/visualsOverlay.js
+/src/app/refreshWiring.js
+/renderer/hub/periodPicker.js
+/renderer/hub/kpiCompare.js
+/scripts/test-dateIntel.js
+/scripts/test-periodResident.js
+/scripts/test-periodLabels.js
+
+# Dashboard parameters — emitted siblings.
+/src/analysis/params.js
+/src/data/paramReplay.js
+/renderer/hub/dashParams.js
+/renderer/hub/paramDialog.js
+/scripts/test-params.js
+/scripts/test-paramsParity.js
+# Workspace maturity — version history (emitted siblings; also covered above).
+/src/app/recordKinds.js
+/src/app/versions.js
+/src/analysis/recordDiff.js
+/src/ipc/versions.js
+/renderer/hub/sidePanel.js
+/renderer/hub/versionsPanel.js
+/scripts/test-recordDiff.js
+/scripts/test-versionHistory.js
+/scripts/smoke-workspace.js
+# Workspace maturity — Trash (emitted siblings).
+/src/app/trashStore.js
+/src/app/trash.js
+/src/ipc/trash.js
+/renderer/hub/trashPage.js
+/scripts/test-trash.js
+# Workspace maturity — Lineage (emitted siblings).
+/src/analysis/lineage.js
+/src/ipc/lineage.js
+/renderer/hub/lineagePanel.js
+/scripts/test-lineage.js
+# Workspace maturity — Projects and bundles (emitted siblings).
+/src/app/bundle.js
+/renderer/hub/projectSwitcher.js
+/scripts/test-bundle.js
+# Workspace maturity — first-run guidance (emitted siblings).
+/src/app/onboarding.js
+/src/ipc/onboarding.js
+/renderer/hub/getStarted.js
+/renderer/hub/coachMarks.js
+/scripts/test-onboarding.js

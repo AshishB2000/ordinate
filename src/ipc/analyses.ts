@@ -8,6 +8,10 @@ import * as planBuild from '../analysis/planBuild';
 import { buildStarterPlan } from '../analysis/starterPlan';
 import * as delta from '../analysis/dashboardDelta';
 import * as execConfig from '../app/execConfig';
+import * as config from '../app/config';
+import { DASHBOARD_STYLE_PRESETS } from '../analysis/dashboards';
+import * as versions from '../app/versions';
+import * as trash from '../app/trash';
 
 // Analyses IPC — list/get/create/rename/update/delete an Analysis (the AUTHORING
 // container), plus the AI layout draft channel `analysis:draft` (MOVED from the
@@ -59,11 +63,15 @@ export function register() {
   // NOTE the destructure: these handlers forward NAMED fields, not the whole
   // payload, so a field that is not listed here is silently dropped on the way
   // to disk however correctly the record and the sanitizer handle it. `style`
-  // is listed for exactly that reason.
-  ipcMain.handle('analysis:create', async (_e, { projectId, name, sheets, filters, style }: any = {}) => {
+  // is listed for exactly that reason, and so is `parameters`.
+  ipcMain.handle('analysis:create', async (_e, { projectId, name, sheets, filters, style, parameters }: any = {}) => {
     try {
-      const saved = await analysis.saveAnalysis(projectId, { name, sheets, filters, style });
+      // A new dashboard starts in the workspace's default style (Settings →
+      // Appearance → Branding) unless the caller brought one.
+      const preset = DASHBOARD_STYLE_PRESETS[config.get().branding.dashboardStyle];
+      const saved = await analysis.saveAnalysis(projectId, { name, sheets, filters, style: style ?? preset, parameters });
       if (!saved) return { ok: false, error: 'Invalid project, or it no longer exists' };
+      await versions.record(projectId, 'dashboard', saved);
       return saved;
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to save the analysis' };
@@ -72,7 +80,9 @@ export function register() {
 
   ipcMain.handle('analysis:rename', async (_e, { projectId, id, name }: any = {}) => {
     try {
+      const before = await analysis.getAnalysis(projectId, id);
       const updated = await analysis.updateAnalysis(projectId, id, { name });
+      if (updated) await versions.record(projectId, 'dashboard', updated, { before });
       return updated ? { ok: true, analysis: updated } : { ok: false, error: 'Could not rename the analysis' };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to rename the analysis' };
@@ -81,18 +91,21 @@ export function register() {
 
   // Mirrors dashboard:update exactly — a supplied array REPLACES the stored one
   // wholesale; it is never patch-merged.
-  ipcMain.handle('analysis:update', async (_e, { projectId, id, name, sheets, filters, style }: any = {}) => {
+  ipcMain.handle('analysis:update', async (_e, { projectId, id, name, sheets, filters, style, parameters }: any = {}) => {
     try {
-      const updated = await analysis.updateAnalysis(projectId, id, { name, sheets, filters, style });
+      const before = await analysis.getAnalysis(projectId, id);
+      const updated = await analysis.updateAnalysis(projectId, id, { name, sheets, filters, style, parameters });
+      // Every save is a version (src/app/versions.ts) — the autosave included;
+      // one that changed nothing versioned is dropped there, not here.
+      if (updated) await versions.record(projectId, 'dashboard', updated, { before });
       return updated ? { ok: true, analysis: updated } : { ok: false, error: 'Could not update the analysis' };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to update the analysis' };
     }
   });
 
-  ipcMain.handle('analysis:delete', async (_e, { projectId, id }: any = {}) => ({
-    ok: await analysis.deleteAnalysis(projectId, id),
-  }));
+  ipcMain.handle('analysis:delete', async (_e, { projectId, id }: any = {}) =>
+    trash.trashRecord(projectId, 'dashboard', id)); // to the Trash, restorable for 30 days
 
   // Exported so the self-check drives the real handler body, not a copy of it.
   ipcMain.handle('analysis:draft', async (_e, { projectId, datasetId, intent }: any = {}) =>
@@ -294,6 +307,7 @@ const EDIT_DELTA_SYSTEM_PROMPT =
   '  {"op":"removeTile","tile":"<existing tile title>"}\n' +
   '  {"op":"moveTile","tile":"<title>","position":"top|bottom|before|after","anchor":"<title, for before/after>"}\n' +
   '  {"op":"addControl","page":<n>,"kind":"dropdown|multi|date_range","dataset":"<name>","column":"<col>","label":"<label>"}\n' +
+  '  {"op":"addControl","page":<n>,"kind":"parameter","name":"<identifier>","paramKind":"number|text|date|list","value":<default>,"min":<n>,"max":<n>,"step":<n>,"options":["<v>"],"label":"<label>"}  (a value the sheet references as [[name]] in filters and formulas, {{name}} in titles)\n' +
   '  {"op":"renamePage","page":<n>,"name":"<new name>"}\n' +
   '  {"op":"addPage","name":"<name>"}\n' +
   '  {"op":"setTitle","name":"<new dashboard name>"}\n' +

@@ -108,6 +108,8 @@ import { relationSql } from './parquetStore';
 import { bomSafe, catKeyExpr, catLabel, dateBucketSql, phys, sqlCanonicalDate, sqlNum } from './residentCategory';
 import type { ResidentCatKey } from './residentCategory';
 import * as duck from './duckdb';
+import { sqlPeriodPredicate } from './periodSql';
+import { resolvePeriodNow } from '../analysis/dateIntel';
 
 export type { ResidentCatKey } from './residentCategory';
 
@@ -617,6 +619,12 @@ export function filterPredicate(cols: ParsedColumn[], s: FilterStep, params: duc
 
   if (op === 'is_empty') return sqlEmpty(p);
   if (op === 'not_empty') return `NOT ${sqlEmpty(p)}`;
+  if (op === 'period') {
+    // Resolved HERE, at query time — the stored step carries only its preset.
+    // No range → null, i.e. no predicate: transforms skips the step the same way.
+    const r = s.period ? resolvePeriodNow(s.period) : null;
+    return r ? sqlPeriodPredicate(p, r, params) : null;
+  }
   if (op === 'contains') {
     // Always string-based regardless of column type. A null cell becomes '' and
     // an omitted needle is '' — which matches EVERY row, exactly as JS does.

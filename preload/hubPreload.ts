@@ -166,6 +166,15 @@ contextBridge.exposeInMainWorld('hub', {
   setThemePreference: (preference: string) => ipcRenderer.invoke('theme:setPreference', preference),
   // Fired when main resolves a new effective theme (OS change in 'system' mode).
   onThemeApply: (cb: (data: any) => void) => ipcRenderer.on('theme:apply', (_e, data) => cb(data)),
+  // Workspace formats + branding (src/ipc/prefs.ts). `{ formats, branding }`.
+  getPrefs: () => ipcRenderer.invoke('prefs:get'),
+  setFormats: (patch: any) => ipcRenderer.invoke('formats:set', patch),
+  setBranding: (patch: any) => ipcRenderer.invoke('branding:set', patch),
+  // `scope` is 'workspace' or a dashboard (analysis) id. Returns { ok, dataUrl }.
+  pickLogo: (scope: string) => ipcRenderer.invoke('branding:pickLogo', scope),
+  clearLogo: (scope: string) => ipcRenderer.invoke('branding:clearLogo', scope),
+  getLogo: (scope: string) => ipcRenderer.invoke('branding:logo', scope),
+  onPrefsChanged: (cb: (data: any) => void) => ipcRenderer.on('prefs:changed', (_e, data) => cb(data)),
   // Persist chart customization overrides for a specific chart slot in a thread.
   saveChartOverrides: (entryId: string, key: string, overrides: any) =>
     ipcRenderer.invoke('hub:saveChartOverrides', { entryId, key, overrides }),
@@ -194,6 +203,12 @@ contextBridge.exposeInMainWorld('hub', {
   deleteProject: (id: string) => ipcRenderer.invoke('projects:delete', { id }),
   // Load a single validated project to enter its workspace; returns Project or null.
   openProject: (id: string) => ipcRenderer.invoke('projects:open', { id }),
+  // The switcher's rows: counts, last opened, archived, the sample badge.
+  projectsOverview: () => ipcRenderer.invoke('projects:overview'),
+  archiveProject: (id: string, archived: boolean) => ipcRenderer.invoke('projects:archive', { id, archived }),
+  // A .ordinate bundle through the NATIVE save/open dialog — main picks the path.
+  exportProject: (id: string) => ipcRenderer.invoke('projects:export', { id }),
+  importProject: () => ipcRenderer.invoke('projects:import'),
   // ── Datasets (file-based data sources) ──
   // Open the native file picker (or, with { filePath }, re-parse a picked file's
   // sheet); returns { ok, canceled?, filePath?, fileName?, sourceKind?, preview? }.
@@ -313,6 +328,24 @@ contextBridge.exposeInMainWorld('hub', {
   explainAlert: (projectId: string, event: any) => ipcRenderer.invoke('alerts:explain', { projectId, event }),
   // Fire-and-forget from main the moment rules fire: { projectId, events }.
   onAlertsFired: (cb: (p: any) => void) => ipcRenderer.on('alerts:fired', (_e, p) => cb(p)),
+
+  // ── Data-quality rules (src/ipc/quality.ts). Every count is computed in MAIN;
+  // a rule is addressed by id and the renderer never sends a predicate.
+  listQuality: (projectId: string, datasetId: string) => ipcRenderer.invoke('quality:list', { projectId, datasetId }),
+  saveQualityRule: (projectId: string, datasetId: string, rule: any) =>
+    ipcRenderer.invoke('quality:save', { projectId, datasetId, rule }),
+  deleteQualityRule: (projectId: string, datasetId: string, ruleId: string) =>
+    ipcRenderer.invoke('quality:delete', { projectId, datasetId, ruleId }),
+  runQualityChecks: (projectId: string, datasetId: string) => ipcRenderer.invoke('quality:run', { projectId, datasetId }),
+  previewQualityRule: (projectId: string, datasetId: string, rule: any) =>
+    ipcRenderer.invoke('quality:preview', { projectId, datasetId, rule }),
+  // One grid window of the rows a stored rule fails — `dataset:page`'s shape.
+  qualityFailingRows: (
+    projectId: string,
+    datasetId: string,
+    ruleId: string,
+    req: { offset: number; limit: number; search?: string; sortColumn?: string; sortDir?: 'asc' | 'desc' },
+  ) => ipcRenderer.invoke('quality:failingRows', { projectId, datasetId, ruleId, ...req }),
   updateDataset: (projectId: string, datasetId: string, columns: any[]) =>
     ipcRenderer.invoke('dataset:update', { projectId, datasetId, columns }),
   // OPTIONAL AI narration of an opened dataset (numbers computed in main, not by
@@ -419,6 +452,17 @@ contextBridge.exposeInMainWorld('hub', {
   // Check a statement and report the columns it WOULD return, fetching no rows.
   explainConnectionSql: (projectId: string, connId: string, sql: string) =>
     ipcRenderer.invoke('connection:explain', { projectId, connId, sql }),
+  // ── SQL over the project's OWN datasets (Data → Query, src/ipc/sqlQuery.ts) ──
+  // `params` are the `[[name]]` values: [{ name, kind, value }]. Main binds them;
+  // nothing here ever splices a value into the SQL.
+  sqlSchema: (projectId: string) => ipcRenderer.invoke('sql:schema', { projectId }),
+  sqlRun: (projectId: string, sql: string, params: any[]) =>
+    ipcRenderer.invoke('sql:run', { projectId, sql, params }),
+  sqlExplain: (projectId: string, sql: string, params: any[]) =>
+    ipcRenderer.invoke('sql:explain', { projectId, sql, params }),
+  // The whole result at the dataset cap, plus the `sql` origin — for the composer.
+  sqlPrepareSave: (projectId: string, sql: string, params: any[]) =>
+    ipcRenderer.invoke('sql:prepareSave', { projectId, sql, params }),
   // Create / edit / rename a saved query on a connection; resolves the whole list.
   saveConnectionQuery: (projectId: string, connId: string, q: { id?: string; name?: string; sql?: string }) =>
     ipcRenderer.invoke('connection:saveQuery', { projectId, connId, ...q }),
@@ -445,7 +489,9 @@ contextBridge.exposeInMainWorld('hub', {
   updateVisual: (projectId: string, id: string, patch: { name?: string; chartType?: string; encoding?: any; overrides?: any; filters?: any; favorite?: boolean }) =>
     ipcRenderer.invoke('visual:update', { projectId, id, ...patch }),
   // Delete a visual; returns { ok: boolean }.
-  deleteVisual: (projectId: string, id: string) => ipcRenderer.invoke('visual:delete', { projectId, id }),
+  // To the Trash; `permanent` only for taking back a visual an Assistant edit made.
+  deleteVisual: (projectId: string, id: string, opts?: { permanent?: boolean }) =>
+    ipcRenderer.invoke('visual:delete', { projectId, id, permanent: !!(opts && opts.permanent) }),
   // Duplicate a visual into an independent copy; returns { ok, visual } | { ok:false, error }.
   duplicateVisual: (projectId: string, id: string) => ipcRenderer.invoke('visual:duplicate', { projectId, id }),
   // OPTIONAL AI chart suggestions (structure only, execution-gated). Returns
@@ -456,8 +502,10 @@ contextBridge.exposeInMainWorld('hub', {
   // Compute the renderer-ready { labels, series } (+ optional geo) for an encoding
   // over a dataset — ALL aggregation math runs in main's pure bridge (no model).
   // Optional `filters` (transforms filter steps) are applied BEFORE aggregation.
-  computeVisualData: (projectId: string, datasetId: string, encoding: any, filters?: any) =>
-    ipcRenderer.invoke('visual:data', { projectId, datasetId, encoding, filters }),
+  // `params`: the open dashboard's parameters at their current values,
+  // [{ name, kind, value }] — resolved in main by analysis/params.ts.
+  computeVisualData: (projectId: string, datasetId: string, encoding: any, filters?: any, params?: any) =>
+    ipcRenderer.invoke('visual:data', { projectId, datasetId, encoding, filters, params }),
   // The ROWS behind one mark of that same chart — same dataset, same filter
   // list, plus an equality filter per clicked axis. Paged/searched/sorted in
   // main against the stored .parquet. Returns
@@ -471,7 +519,8 @@ contextBridge.exposeInMainWorld('hub', {
     filters: any,
     mark: any,
     page: { offset: number; limit: number; search?: string; sortColumn?: string; sortDir?: 'asc' | 'desc' },
-  ) => ipcRenderer.invoke('visual:rows', { projectId, datasetId, encoding, filters, mark, page }),
+    params?: any,
+  ) => ipcRenderer.invoke('visual:rows', { projectId, datasetId, encoding, filters, mark, page, params }),
   // The same row set as a CSV file. Main re-resolves the drill, opens the native
   // save panel and streams the rows — the renderer sends arguments, never rows.
   // Returns { ok:true, dest, rows } | { ok:false, canceled } | { ok:false, error }.
@@ -483,7 +532,8 @@ contextBridge.exposeInMainWorld('hub', {
     mark: any,
     page: { search?: string; sortColumn?: string; sortDir?: 'asc' | 'desc' },
     name?: string,
-  ) => ipcRenderer.invoke('visual:rowsExport', { projectId, datasetId, encoding, filters, mark, page, name }),
+    params?: any,
+  ) => ipcRenderer.invoke('visual:rowsExport', { projectId, datasetId, encoding, filters, mark, page, name, params }),
   // ── Mosaic connector (Phase 3c) — Mosaic's whole database contract is one
   // method, so it is two channels here. Ensure the typed, user-named SQL VIEW
   // over a dataset's stored Parquet and report the columns it exposes; returns
@@ -566,8 +616,16 @@ contextBridge.exposeInMainWorld('hub', {
   duplicateMetric: (projectId: string, id: string) => ipcRenderer.invoke('metric:duplicate', { projectId, id }),
   deleteMetric: (projectId: string, id: string) => ipcRenderer.invoke('metric:delete', { projectId, id }),
   // { ok, id, name, value, display, format, definitionText } | { ok:false, error }.
-  metricValue: (projectId: string, id: string, filters?: any) =>
-    ipcRenderer.invoke('metric:value', { projectId, id, filters }),
+  metricValue: (projectId: string, id: string, filters?: any, params?: any) =>
+    ipcRenderer.invoke('metric:value', { projectId, id, filters, params }),
+  // A KPI card's Compare: the card's figure AND the same figure under the
+  // filters' date range moved to the comparison period, resolved in main.
+  // { ok, value, previous, delta, pct, label, prior, display?, previousDisplay?,
+  //   deltaDisplay?, direction? } | { ok, reason: 'no_date_filter', label }.
+  compareMetric: (projectId: string, card: any, filters: any, compare: any, params?: any) =>
+    ipcRenderer.invoke('metric:compare', { projectId, card, filters, compare, params }),
+  // A relative period → its dates today, under the workspace calendar.
+  resolvePeriod: (period: any) => ipcRenderer.invoke('period:resolve', period),
   // The editor's live figure for a definition that is not saved yet — same
   // resolver, same formatter, so the preview cannot disagree with the record.
   previewMetric: (projectId: string, datasetId: string, definition: any, filters?: any, format?: any) =>
@@ -598,13 +656,13 @@ contextBridge.exposeInMainWorld('hub', {
   // closed enums (dashboards.sanitizeStyle), so this side stays untyped `any`
   // like every other structured payload here — the renderer never gets a vote
   // on what a valid style is.
-  createAnalysis: (payload: { projectId: string; name: string; sheets?: any; filters?: any; style?: any }) =>
+  createAnalysis: (payload: { projectId: string; name: string; sheets?: any; filters?: any; style?: any; parameters?: any }) =>
     ipcRenderer.invoke('analysis:create', payload),
   renameAnalysis: (projectId: string, id: string, name: string) =>
     ipcRenderer.invoke('analysis:rename', { projectId, id, name }),
   // A supplied `style` REPLACES the stored one wholesale — send the whole
   // triple, not one axis.
-  updateAnalysis: (projectId: string, id: string, patch: { name?: string; sheets?: any; filters?: any; style?: any }) =>
+  updateAnalysis: (projectId: string, id: string, patch: { name?: string; sheets?: any; filters?: any; style?: any; parameters?: any }) =>
     ipcRenderer.invoke('analysis:update', { projectId, id, ...patch }),
   deleteAnalysis: (projectId: string, id: string) => ipcRenderer.invoke('analysis:delete', { projectId, id }),
   // PUBLISH — take a SNAPSHOT of the analysis as a dashboard. Each referenced
@@ -616,8 +674,8 @@ contextBridge.exposeInMainWorld('hub', {
   // model, never the renderer). Optional dashboard-wide `filters` are applied (in MAIN)
   // over the dataset BEFORE the number is computed. Returns
   // { ok:true, value:number|null } | { ok:false, error }.
-  computeMetric: (projectId: string, datasetId: string, column: string, aggregation: string, filters?: any) =>
-    ipcRenderer.invoke('dashboard:metric', { projectId, datasetId, column, aggregation, filters }),
+  computeMetric: (projectId: string, datasetId: string, column: string, aggregation: string, filters?: any, params?: any) =>
+    ipcRenderer.invoke('dashboard:metric', { projectId, datasetId, column, aggregation, filters, params }),
   // ── Dashboard export + share (Week 10) ──
   // Build + save a self-contained, offline interactive .html of the dashboard (inlined
   // app-computed data + a copy of Chart.js + a render script). Returns { ok, dest? }.
@@ -659,6 +717,31 @@ contextBridge.exposeInMainWorld('hub', {
   reportsReveal: (projectId: string, id: string) => ipcRenderer.invoke('reports:reveal', { projectId, id }),
   // Main rings the bell at the end of the refresh tick; the hub does the work.
   onReportsRunDue: (cb: () => void) => ipcRenderer.on('reports:run-due', () => cb()),
+  // ── Version history (src/ipc/versions.ts) ──
+  // type is 'dashboard' | 'visual' | 'metric' | 'report' | 'dataset'. A restore
+  // is a SAVE of the old content through the record's own store — append-only.
+  versionsList: (projectId: string, type: string, id: string) =>
+    ipcRenderer.invoke('versions:list', { projectId, type, id }),
+  versionsGet: (projectId: string, type: string, id: string, key: string) =>
+    ipcRenderer.invoke('versions:get', { projectId, type, id, key }),
+  versionsRestore: (projectId: string, type: string, id: string, key: string) =>
+    ipcRenderer.invoke('versions:restore', { projectId, type, id, key }),
+  // ── First-run guidance (src/ipc/onboarding.ts) — ticks are computed in main ──
+  onboardingStatus: () => ipcRenderer.invoke('onboarding:status'),
+  onboardingSet: (patch: { collapsed?: boolean; dismissed?: boolean; coachSeen?: boolean }) =>
+    ipcRenderer.invoke('onboarding:set', patch),
+  // ── Lineage (src/ipc/lineage.ts) — the graph around one record, laid out ──
+  lineageGet: (projectId: string, type: string, id: string) =>
+    ipcRenderer.invoke('lineage:get', { projectId, type, id }),
+  // ── Trash (src/ipc/trash.ts) — every delete lands here for 30 days ──
+  trashList: (projectId: string) => ipcRenderer.invoke('trash:list', { projectId }),
+  trashRestore: (projectId: string, type: string, id: string) =>
+    ipcRenderer.invoke('trash:restore', { projectId, type, id }),
+  trashPurge: (projectId: string, type: string, id: string) =>
+    ipcRenderer.invoke('trash:purge', { projectId, type, id }),
+  trashEmpty: (projectId: string) => ipcRenderer.invoke('trash:empty', { projectId }),
+  onTrashChanged: (cb: (o: { projectId: string }) => void) =>
+    ipcRenderer.on('trash:changed', (_e, o) => cb(o)),
   // ── AI Copilot (Week 11) — per-project, context-aware chat ──
   // Load one conversation's turns (survives reload); returns { ok, turns, threadId }.
   // threadId is optional and defaults to the most recent conversation, so every

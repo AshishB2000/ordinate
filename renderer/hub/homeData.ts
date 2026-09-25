@@ -32,6 +32,8 @@ function hdMakeDatasetRow(pid: string, d: any): HTMLElement {
   const name = document.createElement('span');
   name.className = 'home-data-name';
   name.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
+  const dq = dqDot(d && d.qualityFailing); // dsRules.ts — a failing quality rule
+  if (dq) name.prepend(dq);
   const meta = document.createElement('span');
   meta.className = 'home-data-meta';
   meta.textContent = hdMeta(d || {});

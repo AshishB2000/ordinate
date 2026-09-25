@@ -352,8 +352,8 @@ async function main(): Promise<void> {
   ok('its card says the schedule and when it last ran',
     tab.lines.some((l: string) => l.startsWith('Every day at 09:00'))
     && tab.lines.some((l: string) => l.startsWith('Last generated')), JSON.stringify(tab.lines));
-  ok('its card offers all four actions',
-    tab.actions.join(',') === 'Generate now,Edit,Duplicate,Delete', tab.actions.join(','));
+  ok('its card offers its actions, History and Lineage among them',
+    tab.actions.join(',') === 'Generate now,Edit,History,Lineage,Duplicate,Delete', tab.actions.join(','));
   ok('switching to Reports hides the dashboards grid', tab.dashHidden === true);
   await win.screenshot({ path: path.join(shotDir, 'reports-tab.png') });
 

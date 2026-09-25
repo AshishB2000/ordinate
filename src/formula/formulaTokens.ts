@@ -22,7 +22,8 @@ export class FormulaError extends Error {
 
 // ── Tokenizer ────────────────────────────────────────────────────────────────
 
-export type TokKind = 'num' | 'str' | 'name' | 'col' | 'op' | 'punc';
+// `param` is a dashboard parameter, `[[name]]` — see src/analysis/params.ts.
+export type TokKind = 'num' | 'str' | 'name' | 'col' | 'op' | 'punc' | 'param';
 export interface Tok {
   kind: TokKind;
   value: string;
@@ -104,6 +105,16 @@ export function tokenize(src: string): Tok[] {
       if (j >= n) fail('Unterminated string literal', i, n);
       toks.push({ kind: 'str', value: val, start: i, end: j + 1 });
       i = j + 1;
+      continue;
+    }
+
+    // a dashboard parameter [[name]] — checked BEFORE the column form, which
+    // would read `[[name` as a column and then trip over the second `]`.
+    if (c === '[' && src[i + 1] === '[') {
+      const end = src.indexOf(']]', i + 2);
+      if (end < 0) fail('Unterminated [[parameter]] reference', i, n);
+      toks.push({ kind: 'param', value: src.slice(i + 2, end).trim(), start: i, end: end + 2 });
+      i = end + 2;
       continue;
     }
 

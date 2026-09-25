@@ -107,6 +107,13 @@ export interface VizEncoding {
    * "not a pivot" means, so there is no migration.
    */
   pivot?: PivotEncoding;
+  /**
+   * OPTIONAL period overlay for a line/column chart on a DATE category:
+   * `previous_year` adds the same slice a year earlier as a muted series,
+   * aligned bucket by bucket (ipc/visualsOverlay.ts). It changes the DATA,
+   * which is why it rides on the encoding and not on the styling overrides.
+   */
+  overlay?: 'previous_year';
 }
 
 // Whitelisted chart-styling overrides — the SAME object shape the capture-flow ⋯
@@ -256,6 +263,7 @@ export function sanitizeEncoding(raw: unknown): VizEncoding {
   if (bins !== undefined) enc.bins = bins;
   // Its own whitelist, in the file that owns the shape. Same discipline as
   // `grain` and `bins`: unknown keys dropped, every enum clamped to its set.
+  if (o.overlay === 'previous_year') enc.overlay = 'previous_year';
   const pivot = sanitizePivot(o.pivot);
   if (pivot) enc.pivot = pivot;
   if (o.geo && typeof o.geo === 'object') {

@@ -131,6 +131,8 @@ async function openSavedDataset(id: string): Promise<void> {
   // A panel left open from the previous dataset would describe a column this
   // one may not even have.
   dsCloseProfile();
+  // dsRules.ts — a failing-rows filter or a rules list never carries over.
+  dqResetForDataset();
   const quality = dsEl('ds-quality');
   if (quality) {
     quality.innerHTML = '';
@@ -138,6 +140,7 @@ async function openSavedDataset(id: string): Promise<void> {
   }
   const title = dsEl('ds-explorer-title');
   if (title) title.textContent = expName;
+  if (typeof lnPaintUsedIn === 'function') void lnPaintUsedIn(expId); // lineagePanel.ts
   renderExplorerIdent(ds);
 
   // Week 13 — capture provenance strip (thumbnail + view-original + recapture).
@@ -160,12 +163,20 @@ async function openSavedDataset(id: string): Promise<void> {
  * is the stored one.
  */
 function renderExplorerIdent(d: any): void {
+  // The page is painted from `dataset:meta`, which carries the whole `origin`
+  // but not the list summary's derived `originKind` — so without this, Refresh,
+  // "Data as of" and the schedule picker never appeared on a dataset's own
+  // page. Same rule as datasetSummary: a capture is not re-fetchable.
+  if (d && !d.originKind && d.origin && d.origin.kind && d.origin.kind !== 'capture') d = { ...d, originKind: d.origin.kind };
   const kind = d && d.sourceKind ? String(d.sourceKind) : '';
   const badge = dsEl('ds-explorer-source');
   if (badge) {
     badge.textContent = DS_SOURCE_LABELS[kind] || kind;
     badge.hidden = !badge.textContent;
   }
+
+  // Reads from / Used by, and "View query" for a SQL dataset (dsLineage.ts).
+  void dsRenderLineage(d);
 
   const fresh = dsEl('ds-explorer-fresh');
   if (fresh) {
@@ -263,9 +274,12 @@ async function loadExplorerStats(): Promise<void> {
   try {
     res = await window.hub.datasetStats(currentProjectId, expId);
   } catch (_) {
+    res = null;
+  }
+  if (!res || !res.ok) {
+    void dqRenderRules(); // the rules do not depend on the profile — only its suggestions do
     return;
   }
-  if (!res || !res.ok) return;
   expSummaries = Array.isArray(res.summaries) ? res.summaries : [];
   renderQuality(Array.isArray(res.issues) ? res.issues : []);
   paintExplorerTable(); // headers now carry summary chips — same rows, no refetch
@@ -293,6 +307,7 @@ function renderQuality(issues: any[]): void {
   });
   box.hidden = issues.length === 0;
   dsRenderQualityTable();
+  void dqRenderRules(); // dsRules.ts — the Rules section above the findings
 }
 
 
@@ -347,14 +362,40 @@ function dsAskAboutDataset(): void {
   if (input && !input.disabled) input.focus();
 }
 
+/** The dataset page's ⋯: what you do TO the record rather than with its rows.
+ *  Same mini-menu the visual cards use (chartControls.ts openMiniMenu). */
+function dsOpenMoreMenu(anchor: HTMLElement): void {
+  if (!expId) return;
+  const id = expId;
+  anchor.setAttribute('aria-expanded', 'true');
+  openMiniMenu(anchor, (el: HTMLElement, close: () => void) => {
+    const add = (ic: string, label: string, run: () => void, danger?: boolean): void => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chart-menu-item' + (danger ? ' chart-menu-item--danger' : '');
+      iconLabel(b, ic, label);
+      b.addEventListener('click', () => { close(); run(); });
+      el.appendChild(b);
+    };
+    add('lineage', 'Lineage', () => void lnOpen('dataset', id, expName));
+    add('history', 'Pipeline history', () => void vhOpen('dataset', id, expName));
+    add('trash', 'Move to Trash', () => void handleDeleteDataset(id), true);
+  }, () => anchor.setAttribute('aria-expanded', 'false'));
+}
+
+// A delete is a move to the Trash (trashPage.ts), taking the dataset's visuals
+// with it — so no "cannot be undone" confirm: the toast carries Undo.
 async function handleDeleteDataset(id: string): Promise<void> {
   if (!currentProjectId) return;
-  if (!window.confirm('Delete this dataset? This cannot be undone.')) return;
+  let res: any = null;
   try {
-    await window.hub.deleteDataset(currentProjectId, id);
+    res = await window.hub.deleteDataset(currentProjectId, id);
   } catch (_) {
-    /* ignore */
+    res = null;
   }
+  // Leave the page of a dataset that is no longer there — the same path Back takes.
+  if (expId === id) document.getElementById('ds-explorer-close')?.click();
+  trDeletedToast('dataset', id, (res && res.name) || '', res, () => void refreshDatasetList());
   await refreshDatasetList();
 }
 

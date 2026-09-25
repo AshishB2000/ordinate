@@ -48,6 +48,11 @@ let dashCurrent: any = null;       // the open Dashboard (full), or null on the 
 // as part of a dashboard/analysis record, cleared every time a sheet opens or
 // closes so one reader's picks never leak into the next dashboard opened.
 let controlState: Map<string, any> = new Map();
+// A PARAMETER's current value: paramId -> value. Same rules as controlState —
+// renderer memory, never persisted, cleared whenever a sheet opens or closes.
+// Absent means the parameter's own default (`Parameter.value`); only "Save as
+// default" (dashParams.ts) writes a value back to the record.
+let paramState: Map<string, any> = new Map();
 // WHICH RECORD the editor is bound to. The editor now only ever holds an
 // Analysis (the single Dashboards surface); its `sheets` ARE the card `pages`.
 // ponytail: `dashMode` is vestigial — it is always 'analysis' now that the
@@ -86,12 +91,21 @@ function controlStepsRenderer(control: any, state: any): any[] {
     return [{ type: 'filter', column, op: 'in', values: values.slice() }];
   }
   if (control.kind === 'date_range') {
+    // A relative pick travels as its PRESET and main resolves it against today
+    // at query time; two picked dates travel as a `custom` period, which main
+    // compares as dates rather than as strings.
+    if (ppIsRelative(state)) {
+      const period: any = { preset: state.preset };
+      if (state.n != null) period.n = state.n;
+      return [{ type: 'filter', column, op: 'period', period }];
+    }
     const from = 'from' in state ? state.from : undefined;
     const to = 'to' in state ? state.to : undefined;
-    const steps: any[] = [];
-    if (from) steps.push({ type: 'filter', column, op: '>=', value: from });
-    if (to) steps.push({ type: 'filter', column, op: '<=', value: to });
-    return steps;
+    if (!from && !to) return [];
+    const period: any = { preset: 'custom' };
+    if (from) period.from = from;
+    if (to) period.to = to;
+    return [{ type: 'filter', column, op: 'period', period }];
   }
   return [];
 }
@@ -228,6 +242,8 @@ async function persistAnalysis(): Promise<void> {
       // Saved WITH the record, not as a view preference: a dashboard's look is
       // part of what gets shared, so it must survive a reopen on another machine.
       style: dashCurrentStyle(),
+      // Definitions and DEFAULTS only — a reader's live values are paramState.
+      parameters: dashParams(),
     });
     if (res && res.ok && res.analysis) {
       // Adopt main's sanitized copy, keeping the pages/sheets alias intact.

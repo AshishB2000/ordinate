@@ -37,6 +37,8 @@ export interface RecentMeta {
   rowCount?: number;
   columnCount?: number;
   sheetCount?: number;
+  /** FAIL-severity data-quality rules failing in the dataset's latest run (the red dot). */
+  qualityFailing?: number;
 }
 
 export interface RecentItem {
@@ -152,7 +154,9 @@ export function buildRecent(groups: RecentGroup[], limit: number): RecentItem[] 
 export async function listRecent(limit = 50): Promise<RecentItem[]> {
   let projectList: projects.Project[];
   try {
-    projectList = await projects.listProjects();
+    // An archived project is out of sight everywhere but the switcher's
+    // Archived section — Recent included.
+    projectList = (await projects.listProjects()).filter((p) => !p.archivedAt);
   } catch {
     return [];
   }
@@ -172,7 +176,9 @@ export async function listRecent(limit = 50): Promise<RecentItem[]> {
           id: d.id,
           name: d.name,
           updatedAt: d.updatedAt,
-          meta: { rowCount: d.rowCount, columnCount: d.columnCount },
+          meta: d.qualityFailing
+            ? { rowCount: d.rowCount, columnCount: d.columnCount, qualityFailing: d.qualityFailing }
+            : { rowCount: d.rowCount, columnCount: d.columnCount },
         })),
         analyses: an.map((a) => ({
           id: a.id,

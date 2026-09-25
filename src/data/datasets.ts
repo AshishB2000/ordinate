@@ -10,9 +10,7 @@
 // userData/projects/<projectId>/datasets.
 
 import * as fs from 'fs';
-import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
 import type { ParsedColumn } from './parse';
 import { coerceValue } from './parse';
 import * as projects from '../app/projects';
@@ -26,15 +24,26 @@ import type { TableData, TransformStep, ApplyResult } from './transforms';
 import { isValidId } from '../app/ids';
 import type { DatasetOrigin } from './datasetOrigin';
 import { sanitizeOrigin } from './datasetOrigin';
-import { sanitizeAnomalyKeys } from '../analysis/anomalyWatch';
+import { summarize } from './datasetSummary';
+import type { DatasetSummary } from './datasetSummary';
+import { sanitizeQuality } from '../analysis/qualityRules';
+import type { DatasetQuality } from '../analysis/qualityRules';
+// The record FILE (paths, atomic write, metadata-only writers) moved out at the
+// 800-line cap; the writers are re-exported so `datasets.markRefresh` etc. keep
+// working for every caller.
+import {
+  datasetsDir, datasetFilePath, parquetPath, sourceParquetPath, writeJsonAtomic, sanitizeAutoRefresh,
+} from './datasetRecord';
+export { markRefresh, setAutoRefresh, writeQuality } from './datasetRecord';
 export type { DatasetOrigin } from './datasetOrigin';
+export type { DatasetSummary } from './datasetSummary';
 export { sanitizeOrigin };
 
 export interface Dataset {
   id: string;
   projectId: string;
   name: string;
-  sourceKind: 'csv' | 'json' | 'paste' | 'xlsx' | 'postgres' | 'url' | 'combined' | 'capture';
+  sourceKind: 'csv' | 'json' | 'paste' | 'xlsx' | 'postgres' | 'url' | 'combined' | 'capture' | 'sql';
   columns: ParsedColumn[];
   rows: (string | number | null)[][];
   rowCount: number;
@@ -84,6 +93,11 @@ export interface Dataset {
    * lastRefreshStatus/lastRefreshError, which is where the UI reads it.
    */
   autoRefresh?: AutoRefresh;
+  /**
+   * Data-quality rules and their latest results (src/analysis/qualityRules.ts).
+   * Written ONLY through `writeQuality` — metadata-only, never bumps updatedAt.
+   */
+  quality?: DatasetQuality;
 }
 
 export interface AutoRefresh {
@@ -105,46 +119,7 @@ export interface AutoRefresh {
 
 export type AutoRefreshEvery = 'hourly' | 'daily' | 'weekly';
 
-export interface DatasetSummary {
-  id: string;
-  name: string;
-  sourceKind: Dataset['sourceKind'];
-  rowCount: number;
-  columnCount: number;
-  updatedAt: string;
-  // Week 13 — just the crop path (not the full capture object) so the saved-list
-  // can render a capture thumbnail + badge without a full dataset load.
-  capture?: { cropPath: string | null };
-  // Freshness for the saved list, WITHOUT a full dataset load: enough of the
-  // origin to decide "is this refreshable" and to name the source, never the
-  // path, the URL or the SQL. `lastRefreshError` is the REASON a red dot shows,
-  // so a row can say it on hover — secret-free, like the record's.
-  originKind?: DatasetOrigin['kind'];
-  originConnId?: string;
-  lastRefreshedAt?: string;
-  lastRefreshStatus?: 'ok' | 'error';
-  lastRefreshError?: string | null;
-  // Carried on the SUMMARY so the scheduler can find due datasets from the
-  // metadata alone. Reading a schedule must never hydrate a table.
-  autoRefresh?: AutoRefresh;
-}
-
-let projectsBase: string | null = null;
-
-function getProjectsBase(): string {
-  if (!projectsBase) projectsBase = path.join(app.getPath('userData'), 'projects');
-  return projectsBase;
-}
-
-function datasetsDir(projectId: string): string {
-  return path.join(getProjectsBase(), projectId, 'datasets');
-}
-
-function datasetFilePath(projectId: string, id: string): string {
-  return path.join(datasetsDir(projectId), id + '.json');
-}
-
-const SOURCE_KINDS: ReadonlySet<string> = new Set(['csv', 'json', 'paste', 'xlsx', 'postgres', 'url', 'combined', 'capture']);
+const SOURCE_KINDS: ReadonlySet<string> = new Set(['csv', 'json', 'paste', 'xlsx', 'postgres', 'url', 'combined', 'capture', 'sql']);
 
 // Coerce an untrusted `capture` link (from a stored file OR a save/recapture IPC
 // payload) into the stored shape, or undefined if there is nothing usable. Accepts
@@ -162,17 +137,6 @@ function sanitizeCapture(raw: any): { entryId: string | null; cropPath: string |
   return { entryId, cropPath };
 }
 
-// Atomic JSON write: temp sibling then rename (atomic on same fs), so a crash
-// mid-write never leaves a half-written dataset file. Copied from projects.ts.
-async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
-  // Unique tmp per write: a fixed name lets two overlapping writes to the same
-  // record share one temp path and interleave into a corrupt file (or ENOENT on
-  // the second rename). A per-write suffix degrades the race to clean last-writer-wins.
-  const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
-  await fs.promises.rename(tmp, file); // atomic on same fs
-}
-
 // ── Phase 2: Parquet table storage ──────────────────────────────────────────
 //
 // v2 record: <id>.json holds metadata AND both tables inline.
@@ -188,13 +152,6 @@ async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
 // updateSteps snapshots a source even when the step list is empty, and
 // test-datasets.ts:232-238 asserts that source survives clearing all steps.
 // Keying on steps would silently discard it.
-
-function parquetPath(projectId: string, id: string): string {
-  return path.join(datasetsDir(projectId), id + '.parquet');
-}
-function sourceParquetPath(projectId: string, id: string): string {
-  return path.join(datasetsDir(projectId), id + '.source.parquet');
-}
 
 // Write a dataset's tables to Parquet and its metadata to JSON, or fall back to
 // a v2 inline write when DuckDB is unavailable. Parquet first, JSON second: if
@@ -268,26 +225,6 @@ function isValidDataset(data: any): data is Dataset {
 // Backward-compatible: a stored v1 dataset (no source/steps) normalizes to
 // steps=[], source=undefined and reads schemaVersion 2 — its columns/rows are the
 // data, exactly as before. Untrusted stored `steps` are re-sanitized on load.
-/**
- * Whitelist an untrusted `autoRefresh` block, or undefined.
- *
- * `hasOrigin` is a parameter rather than something read here because the answer
- * must be the SANITIZED origin, not the raw one: a record whose origin was just
- * dropped for being malformed has nothing to re-fetch either, and a schedule
- * left on it would be a scheduler retrying forever against nothing.
- */
-function sanitizeAutoRefresh(raw: unknown, hasOrigin: boolean): AutoRefresh | undefined {
-  if (!hasOrigin || !raw || typeof raw !== 'object') return undefined;
-  const o = raw as Record<string, unknown>;
-  if (o.every !== 'hourly' && o.every !== 'daily' && o.every !== 'weekly') return undefined;
-  const out: AutoRefresh = { every: o.every };
-  if (typeof o.lastAutoAt === 'string' && o.lastAutoAt) out.lastAutoAt = o.lastAutoAt;
-  if (o.watch === true) out.watch = true;
-  const keys = sanitizeAnomalyKeys(o.lastAnomalyKeys);
-  if (keys) out.lastAnomalyKeys = keys;
-  return out;
-}
-
 function normalize(data: any, projectId: string): Dataset {
   const createdAt = data.createdAt || new Date().toISOString();
   const kind: Dataset['sourceKind'] = SOURCE_KINDS.has(data.sourceKind) ? data.sourceKind : 'csv';
@@ -324,6 +261,9 @@ function normalize(data: any, projectId: string): Dataset {
   if (typeof data.lastRefreshedAt === 'string' && data.lastRefreshedAt) ds.lastRefreshedAt = data.lastRefreshedAt;
   if (data.lastRefreshStatus === 'ok' || data.lastRefreshStatus === 'error') ds.lastRefreshStatus = data.lastRefreshStatus;
   if (typeof data.lastRefreshError === 'string') ds.lastRefreshError = data.lastRefreshError;
+  // Re-sanitized on every load, like origin: a hand-edited rule cannot reach SQL.
+  const quality = sanitizeQuality(data.quality);
+  if (quality) ds.quality = quality;
   return ds;
 }
 
@@ -354,27 +294,7 @@ export async function listDatasets(projectId: string): Promise<DatasetSummary[]>
       const raw = await fs.promises.readFile(datasetFilePath(projectId, id), 'utf8');
       const data = JSON.parse(raw);
       if (!isValidDataset(data)) continue;
-      const ds = normalize(data, projectId);
-      const summary: DatasetSummary = {
-        id: ds.id,
-        name: ds.name,
-        sourceKind: ds.sourceKind,
-        rowCount: ds.rowCount,
-        columnCount: ds.columns.length,
-        updatedAt: ds.updatedAt,
-      };
-      if (ds.capture) summary.capture = { cropPath: ds.capture.cropPath };
-      // 'capture' is deliberately withheld: `originKind` is what the list and
-      // the explorer read to offer "↻ Refresh", and a screenshot has nothing to
-      // re-fetch. The origin itself stays on the full record (the capture page
-      // reads it) — this is only about the refresh affordance.
-      if (ds.origin && ds.origin.kind !== 'capture') summary.originKind = ds.origin.kind;
-      if (ds.origin && ds.origin.kind === 'connection') summary.originConnId = ds.origin.connId;
-      if (ds.lastRefreshedAt) summary.lastRefreshedAt = ds.lastRefreshedAt;
-      if (ds.lastRefreshStatus) summary.lastRefreshStatus = ds.lastRefreshStatus;
-      if (ds.lastRefreshStatus === 'error' && ds.lastRefreshError) summary.lastRefreshError = ds.lastRefreshError;
-      if (ds.autoRefresh) summary.autoRefresh = ds.autoRefresh;
-      out.push(summary);
+      out.push(summarize(normalize(data, projectId)));
     } catch (err: any) { // ponytail: fs errors carry .code, JSON errors don't
       if (err.code !== 'ENOENT') {
         console.error('[datasets] Skipping corrupt or unreadable dataset:', id, err.message);
@@ -572,87 +492,6 @@ export async function updateDatasetData(
   await fs.promises.mkdir(datasetsDir(projectId), { recursive: true });
   await persist(projectId, updated);
   return updated;
-}
-
-/**
- * Stamp ONLY the refresh markers, leaving the stored table completely alone.
- *
- * Deliberately does NOT go through normalize()/persist(): it reads the record's
- * raw JSON, sets three keys, and writes it back atomically. That is what makes
- * "a failed refresh never destroys data" true rather than merely intended — a
- * v2 record keeps its rows inline in this very file, and a round trip through
- * persist() on a failure path would be a table rewrite driven by a code path
- * whose whole premise is that the fetch did not work.
- *
- * Returns false when the record is missing or unreadable; a failed marker write
- * is never fatal to the refresh that triggered it.
- */
-export async function markRefresh(
-  projectId: string,
-  id: string,
-  status: 'ok' | 'error',
-  error: string | null,
-): Promise<boolean> {
-  if (!isValidId(projectId) || !isValidId(id)) return false;
-  const file = datasetFilePath(projectId, id);
-  try {
-    const raw = JSON.parse(await fs.promises.readFile(file, 'utf8'));
-    if (!raw || typeof raw !== 'object') return false;
-    raw.lastRefreshStatus = status;
-    raw.lastRefreshError = error;
-    // Only a SUCCESS moves the clock. A failed refresh must not make stale data
-    // look newly fetched — that is the exact wrong number this feature exists
-    // to prevent.
-    if (status === 'ok') raw.lastRefreshedAt = new Date().toISOString();
-    await writeJsonAtomic(file, raw);
-    return true;
-  } catch (_) {
-    return false;
-  }
-}
-
-/**
- * Set or clear a dataset's auto-refresh schedule, and stamp its last attempt.
- *
- * METADATA ONLY, like markRefresh above: it reads and rewrites the record's
- * JSON without hydrating the table. The scheduler stamps `lastAutoAt` on every
- * tick it runs, and a blocking hydrate there would freeze every window.
- *
- * `every: null` turns it off. A schedule on a dataset with no origin is refused
- * rather than stored, matching sanitizeAutoRefresh on the way back in.
- */
-export async function setAutoRefresh(
-  projectId: string,
-  id: string,
-  patch: { every?: AutoRefreshEvery | null; lastAutoAt?: string; watch?: boolean; lastAnomalyKeys?: string[] },
-): Promise<AutoRefresh | null | false> {
-  if (!isValidId(projectId) || !isValidId(id)) return false;
-  const file = datasetFilePath(projectId, id);
-  try {
-    const raw = JSON.parse(await fs.promises.readFile(file, 'utf8'));
-    if (!raw || typeof raw !== 'object') return false;
-    if (patch.every === null) {
-      delete raw.autoRefresh;
-      await writeJsonAtomic(file, raw);
-      return null;
-    }
-    if (!sanitizeOrigin(raw.origin)) return false; // nothing to re-fetch
-    const current = sanitizeAutoRefresh(raw.autoRefresh, true);
-    const every = patch.every ?? (current ? current.every : undefined);
-    if (every !== 'hourly' && every !== 'daily' && every !== 'weekly') return false;
-    const next: AutoRefresh = { every };
-    const lastAutoAt = patch.lastAutoAt ?? (current ? current.lastAutoAt : undefined);
-    if (lastAutoAt) next.lastAutoAt = lastAutoAt;
-    const watch = patch.watch ?? (current ? current.watch : undefined);
-    if (watch) next.watch = true;
-    const keys = sanitizeAnomalyKeys(patch.lastAnomalyKeys ?? (current ? current.lastAnomalyKeys : undefined));
-    if (keys) next.lastAnomalyKeys = keys;
-    raw.autoRefresh = next;
-    await writeJsonAtomic(file, raw);
-    return next;
-  } catch (_) {
-    return false;
-  }
 }
 
 // Edit a dataset's column DEFINITIONS: rename columns and/or correct types.

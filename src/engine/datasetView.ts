@@ -205,16 +205,24 @@ export function viewSql(spec: ViewSpec): string {
   if (!isViewName(spec.name)) {
     throw new TypeError(`datasetView: unsafe view name ${JSON.stringify(spec.name)}`);
   }
-  const relation = relationSql(spec.parquetPath); // validates + escapes, or throws
-  const cols = viewColumns(spec.columns);
+  return `CREATE OR REPLACE VIEW ${quoteIdent(spec.name)} AS ${viewSelectSql(spec.parquetPath, spec.columns)};`;
+}
 
+/**
+ * The typed `SELECT … FROM read_parquet(…)` a view is defined as, on its own —
+ * so `sqlDatasets` can use the SAME projection as a per-statement CTE body
+ * without creating a catalog object. Pure; throws on a rejected path, exactly
+ * as `viewSql` does.
+ */
+export function viewSelectSql(parquetPath: string, columns: ParsedColumn[]): string {
+  const relation = relationSql(parquetPath); // validates + escapes, or throws
+  const cols = viewColumns(columns);
   const select =
     cols.length === 0
       ? // Row count preserved, zero user columns, no empty select list.
         `CAST(NULL AS VARCHAR) AS ${quoteIdent(EMPTY_MARK)}`
       : cols.map((c) => `${projection(c)} AS ${quoteIdent(c.name)}`).join(', ');
-
-  return `CREATE OR REPLACE VIEW ${quoteIdent(spec.name)} AS SELECT ${select} FROM ${relation};`;
+  return `SELECT ${select} FROM ${relation}`;
 }
 
 /**
@@ -275,7 +283,7 @@ function projection(c: ViewColumn): string {
 }
 
 /** The whole escape: double an embedded `"`. Everything else is inert inside `"…"`. */
-function quoteIdent(name: string): string {
+export function quoteIdent(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
 }
 
@@ -284,7 +292,7 @@ function quoteIdent(name: string): string {
  * `"É"`/`"é"` and `"İ"`/`"i"` do not. `String.toLowerCase()` would map `İ` onto
  * `i` and invent a collision the engine does not have, so fold by hand.
  */
-function foldKey(name: string): string {
+export function foldKey(name: string): string {
   return name.replace(/[A-Z]/g, (ch) => ch.toLowerCase());
 }
 

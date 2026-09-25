@@ -7,6 +7,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
+import { setCalendar } from '../analysis/dateIntel';
+import { FORMAT_DEFAULTS, sanitizeFormatPrefs, setFormatPrefs } from './format';
+import type { FormatPrefs } from './format';
+import { BRANDING_DEFAULTS, sanitizeBranding } from './branding';
+import type { Branding } from './branding';
+import type { OnboardingState } from './onboarding';
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
 export interface LegacyProviderEntry { apiKey?: string | null; endpoint?: string; model: string }
@@ -32,12 +38,20 @@ interface LocalCliBlock {
 }
 
 export interface MemoryModel { mode: string; provider: string | null; model: string }
+export interface SampleIds { projectId: string; datasetId: string; analysisId: string; visualIds: string[] }
 // `alerts` defaults ON and the other three OFF, which is the whole difference
 // between the two kinds of notification this app sends. sound/desktop are about
 // an analysis you started and are watching; `alerts` is about a rule you wrote
 // for a number you are NOT watching, so a default of off would make the feature
 // quietly do nothing. `alertExplain` is opt-in because it spends a model call.
 interface Notifications { sound: boolean; desktop: boolean; alerts: boolean; alertExplain: boolean }
+
+/**
+ * Workspace formats — locale, number style, currency, date style, compact
+ * numbers (src/app/format.ts renders every figure under them) and the calendar
+ * every relative period is resolved under (src/analysis/dateIntel.ts).
+ */
+export type Formats = FormatPrefs;
 
 // Per-connection secret (pg password, URL auth token). Stored EXACTLY like an API
 // key: plaintext in userData/config.json (gitignored), keyed by the connection's
@@ -60,6 +74,9 @@ interface Config {
   prompt: string;
   globalRules: string;
   notifications: Notifications;
+  formats: Formats;
+  /** Accent colour, logo and the default dashboard style — src/app/branding.ts. */
+  branding: Branding;
   /**
    * The master switch for unattended dataset refresh. ON by default: a schedule
    * a user set is a schedule they want run, and this exists to stop it globally
@@ -75,6 +92,13 @@ interface Config {
    *  Records the event, not the sample's presence — the user may delete it, and
    *  re-creating it next launch would make that impossible. Main-only. */
   sampleSeeded: boolean;
+  /** WHAT the seed created, so the project switcher can badge the project it
+   *  landed in and first-run guidance can tell the user's own work from it.
+   *  Null on an install seeded before this existed. Main-only. */
+  sample: SampleIds | null;
+  /** First-run guidance (onboarding.ts). Null on an install seeded before it
+   *  existed, which is what keeps the card and the tour off those. Main-only. */
+  onboarding: OnboardingState | null;
   // Home "Starred" pins — a flat list of "type:id" keys (e.g. "analysis:<uuid>").
   // ONE array for all four record types, so a record never carries a starred flag
   // and there are no per-type migrations.
@@ -166,12 +190,18 @@ const DEFAULTS: Omit<Config, 'providers' | 'byok'> = {
   // `alerts`/`alertExplain` are the alert rules' own switches — see the
   // Notifications interface above for why one of them defaults the other way.
   notifications: { sound: false, desktop: false, alerts: true, alertExplain: false },
+  // The system locale, dollars, Monday weeks and calendar-year quarters until
+  // the user says otherwise.
+  formats: { ...FORMAT_DEFAULTS },
+  branding: { ...BRANDING_DEFAULTS },
   autoRefresh: true,
   // AI Copilot panel is ON by default — it stays fully optional (execution-gated),
   // but the user can also switch it OFF entirely from the panel's toggle.
   copilotEnabled: true,
   // Absent means not-yet-seeded, so an existing config.json seeds once on upgrade.
   sampleSeeded: false,
+  sample: null,
+  onboarding: null,
   // Home "Starred" pins, as "type:id" keys. One flat array, one setter — no
   // per-record flag, no migration.
   starred: [],
@@ -205,6 +235,30 @@ function cleanStarred(raw: unknown): string[] {
   return out;
 }
 
+const SAMPLE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// ponytail: raw disk JSON — every field is checked before it is kept
+function cleanSample(raw: any): SampleIds | null {
+  const id = (v: unknown): string => (typeof v === 'string' && SAMPLE_UUID.test(v) ? v : '');
+  const s: SampleIds = {
+    projectId: id(raw.projectId), datasetId: id(raw.datasetId), analysisId: id(raw.analysisId),
+    visualIds: Array.isArray(raw.visualIds) ? raw.visualIds.map(id).filter(Boolean).slice(0, 50) : [],
+  };
+  return s.projectId && s.datasetId ? s : null;
+}
+
+const ONBOARDING_STEPS = ['import', 'visual', 'dashboard', 'assistant'];
+// ponytail: raw disk JSON — every field is checked before it is kept
+function cleanOnboarding(raw: any): OnboardingState | null {
+  if (typeof raw.startedAt !== 'string') return null;
+  const done: OnboardingState['done'] = {};
+  const d = raw.done && typeof raw.done === 'object' ? raw.done : {};
+  for (const k of ONBOARDING_STEPS) if (typeof d[k] === 'string') done[k as keyof OnboardingState['done']] = d[k];
+  return {
+    startedAt: raw.startedAt, done,
+    collapsed: raw.collapsed === true, dismissed: raw.dismissed === true, coachSeen: raw.coachSeen === true,
+  };
+}
+
 // ponytail: input is raw disk/IPC JSON — validated field-by-field below.
 function sanitize(input: any): Partial<Config> {
   const out: Partial<Config> = {};
@@ -229,8 +283,14 @@ function sanitize(input: any): Partial<Config> {
       alertExplain: Boolean(input.notifications.alertExplain),
     };
   }
+  if (input.formats && typeof input.formats === 'object') out.formats = sanitizeFormatPrefs(input.formats);
+  if (input.branding && typeof input.branding === 'object') out.branding = sanitizeBranding(input.branding);
   if (typeof input.copilotEnabled === 'boolean') out.copilotEnabled = input.copilotEnabled;
   if (typeof input.sampleSeeded === 'boolean') out.sampleSeeded = input.sampleSeeded;
+  if (input.sample === null) out.sample = null;
+  else if (input.sample && typeof input.sample === 'object') out.sample = cleanSample(input.sample);
+  if (input.onboarding === null) out.onboarding = null;
+  else if (input.onboarding && typeof input.onboarding === 'object') out.onboarding = cleanOnboarding(input.onboarding);
   // Whitelisted so it survives disk load ({...DEFAULTS, ...sanitize(onDisk)}).
   if (Array.isArray(input.starred)) out.starred = cleanStarred(input.starred);
   return out;
@@ -325,6 +385,11 @@ function migrate(cfg: any): Config {
 // goes through save().
 export function persist(cfg: Config): void {
   cache = cfg;
+  // Every write passes here, reset-to-defaults included, so the calendar the
+  // date evaluators read and the formats every figure is written in can never
+  // lag the ones on disk.
+  setCalendar(cfg.formats);
+  setFormatPrefs(cfg.formats);
   // Atomic write (temp sibling → rename), mirroring the BI stores. config.json
   // holds every plaintext API key + connection secret; a crash / full disk mid-
   // write must never leave it truncated (which load() would then read as {} and
@@ -361,6 +426,8 @@ export function load(): Config {
   // carry them verbatim from disk, exactly like byok keys.
   if (onDisk.connectionSecrets && typeof onDisk.connectionSecrets === 'object') merged.connectionSecrets = onDisk.connectionSecrets;
   cache = migrate(merged);
+  setCalendar(cache.formats);
+  setFormatPrefs(cache.formats);
   return cache;
 }
 

@@ -385,5 +385,10 @@ export function publicConfig() {
     copilotEnabled: cfg.copilotEnabled !== false,
     // Home "Starred" pins — a flat "type:id" list, safe to expose (no secrets).
     starred: [...(cfg.starred || [])],
+    // Formats and branding carry no secrets: the renderer formats every figure
+    // under them and paints its accent from them. The logo itself is fetched
+    // separately (branding:logo) — it is a file, not a setting.
+    formats: { ...cfg.formats },
+    branding: { ...cfg.branding },
   };
 }

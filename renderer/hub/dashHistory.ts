@@ -116,7 +116,7 @@ let dashHist: DashHist | null = null;
 let dashHistBusy = false;
 
 /** The slice of the open record the editor mutates, and therefore the slice
- *  undo restores. Exactly the four fields persistAnalysis writes. */
+ *  undo restores. Exactly the five fields persistAnalysis writes. */
 function dashHistRecord(): any {
   if (!dashCurrent) return null;
   return {
@@ -124,6 +124,7 @@ function dashHistRecord(): any {
     pages: dashCurrent.pages,
     filters: Array.isArray(dashCurrent.filters) ? dashCurrent.filters : [],
     style: dashCurrent.style,
+    parameters: Array.isArray(dashCurrent.parameters) ? dashCurrent.parameters : [],
   };
 }
 
@@ -158,6 +159,7 @@ function dashHistApply(snap: any): void {
   dashCurrent.sheets = dashCurrent.pages;
   dashCurrent.filters = snap.filters;
   dashCurrent.style = snap.style;
+  dashCurrent.parameters = Array.isArray(snap.parameters) ? snap.parameters : [];
   if (dashPageIdx >= dashCurrent.pages.length) dashPageIdx = dashCurrent.pages.length - 1;
   if (dashPageIdx < 0) dashPageIdx = 0;
   const nameEl = dashEl('dash-name');

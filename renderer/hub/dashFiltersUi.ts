@@ -92,13 +92,15 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
   if (currentProjectId && m.metricId) {
     let mr: any;
     try {
-      mr = await window.hub.metricValue(currentProjectId, m.metricId, effectiveFilters());
+      mr = await window.hub.metricValue(currentProjectId, m.metricId, effectiveFilters(), dashParamPayload());
     } catch (_) {
       mr = null;
     }
     if (mr && mr.ok !== false) {
       valEl.textContent = mr.display || '—';
       if (!m.label && mr.name) labelEl.textContent = mr.name;
+      paintParamErrors(body, mr.paramErrors);
+      void paintMetricCompare(card, body);
       return;
     }
   }
@@ -111,15 +113,17 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
     // computed (still 100% app-computed; the renderer never does the math).
     r = await window.hub.computeMetric(
       currentProjectId, m.datasetId, m.column, m.aggregation,
-      effectiveFilters(),
+      effectiveFilters(), dashParamPayload(),
     );
   } catch (_) {
     r = { ok: false };
   }
   if (!r || r.ok === false) { dashCardMissing(body, (r && r.error) || 'Source removed', true); return; }
+  paintParamErrors(body, r.paramErrors);
   if (r.value == null) { valEl.textContent = '—'; return; }
   // Reuse the shared chart number formatter (auto/plain/thousands/compact/…).
   valEl.textContent = fmtWith(r.value, m.format || 'auto');
+  void paintMetricCompare(card, body);
 }
 
 // The heading is NOT drawn here. dashCardTitle (dashGrid.ts) already puts it in
@@ -132,7 +136,7 @@ function renderTextCard(card: any, body: HTMLElement): void {
   if (card.text) {
     const p = document.createElement('p');
     p.className = 'dash-card-p';
-    p.textContent = String(card.text);
+    p.textContent = dashSubst(card.text);
     body.appendChild(p);
   }
   if (!card.heading && !card.text) {
@@ -187,6 +191,10 @@ async function dashSampleDatasetIds(pid: string, cards: any[]): Promise<string[]
  * Every visual on the sample dataset goes, not just the three that were seeded:
  * the dataset is leaving, so a visual still pointing at it is a broken card, and
  * the honest thing is to say so in the confirm and take them.
+ *
+ * All of it goes to the TRASH (src/app/trash.ts), not oblivion: the dataset's
+ * delete takes its visuals along, so restoring the dataset brings them back,
+ * and the Starred pin is left alone so a restored dashboard is pinned again.
  */
 async function handleDeleteSampleProject(): Promise<void> {
   const pid = (dashCurrent && dashCurrent.projectId) || currentProjectId;
@@ -205,9 +213,9 @@ async function handleDeleteSampleProject(): Promise<void> {
 
   const name = (dashCurrent && dashCurrent.name) || 'this dashboard';
   if (!window.confirm(
-    'Remove the sample data?\n\nThis deletes ' + name + ', its ' + visualIds.length
-    + ' chart(s) and the sample dataset. The project and anything else in it stay. '
-    + 'This cannot be undone.')) return;
+    'Remove the sample data?\n\nThis moves ' + name + ', its ' + visualIds.length
+    + ' chart(s) and the sample dataset to the Trash, where they stay for 30 days. '
+    + 'The project and anything else in it stay.')) return;
 
   // Dashboard first: it is the only one of the three the user is looking at, so
   // a failure part-way leaves the least confusing state (a dashboard whose cards
@@ -216,23 +224,15 @@ async function handleDeleteSampleProject(): Promise<void> {
     const res = await window.hub.deleteAnalysis(String(pid), analysisId);
     if (!res || res.ok === false) { showToast('Could not remove the sample data.'); return; }
   } catch (_) { showToast('Could not remove the sample data.'); return; }
-  for (const vid of visualIds) {
-    try { await window.hub.deleteVisual(String(pid), vid); } catch (_) { /* next */ }
-  }
+  // The dataset's own delete takes its visuals along (deletedWith), which is
+  // what lets one Restore bring the sample's charts back with it.
   for (const did of datasetIds) {
     try { await window.hub.deleteDataset(String(pid), did); } catch (_) { /* next */ }
   }
-
-  try {
-    const starred = await window.hub.getStarred();
-    if (Array.isArray(starred)) {
-      await window.hub.setStarred(starred.filter((s: string) => s !== 'analysis:' + analysisId));
-    }
-  } catch (_) { /* a stale pin is invisible — Starred filters Recent */ }
   closeDashboardEditor();
   selectSection('home');
   if (typeof refreshHome === 'function') void refreshHome();
-  showToast('Sample data removed.');
+  showToast('Sample data moved to Trash', { action: { label: 'Open Trash', onClick: () => selectSection('trash') } });
 }
 
 // A card whose source (visual / dataset) is gone. `broken` marks it with a clear badge
@@ -312,6 +312,11 @@ function dashFilters(): any[] {
 }
 
 function dashFilterLabel(step: any): string {
+  return dashParamRefLabel(dashFilterLabelRaw(step));
+}
+
+function dashFilterLabelRaw(step: any): string {
+  if (step.op === 'period') return `${step.column}: ${periodLabel(step.period)}`;
   const opLabel = (DASH_FILTER_OPS.find((o) => o.value === step.op) || { label: step.op }).label;
   if (DASH_VALUELESS_OPS.has(step.op)) return `${step.column} ${opLabel}`;
   if (isListFilterOp(step.op)) {
@@ -445,7 +450,8 @@ async function distinctColumnOptions(
 // Mirrors src/dashboardFilters.stepKey — `values` is part of the identity, or
 // two different `in` lists on one column would look like the same chip.
 function dashStepKey(s: any): string {
-  return JSON.stringify([s.column, s.op, s.value == null ? null : s.value, s.values == null ? null : s.values]);
+  return JSON.stringify([s.column, s.op, s.value == null ? null : s.value, s.values == null ? null : s.values,
+    s.period == null ? null : s.period]);
 }
 
 // + Filter: dataset → column → the type-aware dialog. The dialog replaces the
@@ -462,6 +468,7 @@ async function handleAddDashFilter(): Promise<void> {
     datasetId: String(picked.ds && picked.ds.id ? picked.ds.id : ''),
     column: picked.column,
     type: col && col.type ? String(col.type) : 'text',
+    params: dashParams(),
   });
   if (steps === null || steps.length === 0) return;
 
@@ -502,6 +509,7 @@ async function handleEditDashFilter(idx: number): Promise<void> {
     column: step.column,
     type,
     existing: step,
+    params: dashParams(),
   });
   if (steps === null) return;
   list.splice(idx, 1, ...steps);

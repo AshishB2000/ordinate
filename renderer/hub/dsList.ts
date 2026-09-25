@@ -187,6 +187,7 @@ const DS_SOURCE_LABELS: Record<string, string> = {
   postgres: 'Postgres',
   combined: 'Combined',
   capture: 'Screenshot',
+  sql: 'SQL',
 };
 
 /** The camera mark a capture-sourced record carries, wherever it is listed. */
@@ -250,6 +251,13 @@ function makeSavedItem(d: any): HTMLElement {
   const name = document.createElement('span');
   name.className = 'ds-saved-name';
   name.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
+  // Red, not the amber refresh dot: a data-quality rule is failing. The dot goes
+  // straight to the Quality tab; the rest of the row still opens the grid.
+  const dq = dqDot(d && d.qualityFailing);
+  if (dq) {
+    dq.addEventListener('click', (e) => { e.stopPropagation(); void dqOpenQualityTab(String(d.id)); });
+    name.prepend(dq);
+  }
   open.appendChild(name);
 
   // The row is a TABLE ROW now — rows, source and freshness are their own
@@ -279,6 +287,13 @@ function makeSavedItem(d: any): HTMLElement {
     // the badge alone reads "Postgres" for a Redshift import — the logo and the
     // connection's own name are the part that identifies it.
     const conn = d && d.originConnId ? dsConnKinds.get(String(d.originConnId)) : undefined;
+    // A query over this project's datasets: the same code mark the Query tab
+    // and the lineage chips carry.
+    if (kind === 'sql') {
+      const glyph = icon('code', 16);
+      glyph.classList.add('ds-sql-glyph');
+      source.appendChild(glyph);
+    }
     if (conn && typeof connMakeLogoFor === 'function') {
       const logo = connMakeLogoFor(conn.kind, conn.label);
       logo.classList.add('ds-source-logo');

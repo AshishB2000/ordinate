@@ -277,28 +277,19 @@ ok('pivot: and a pivot with no grid at all does too',
 
 ok('captionFamily knows the pivot family', captionFamily('pivot') === 'pivot');
 
-/**
- * PARITY with the renderer's `_fmtVal`.
- *
- * captions.ts cannot import it — `_fmtVal` is a top-level function in a classic
- * <script>, with no module boundary to cross — so the copy is pinned here
- * instead: the four branch expressions are lifted out of both sources as text,
- * whitespace-normalized, and required to match as sets. A threshold or a suffix
- * moving on either side fails this, which is the whole point.
- */
-const REPO = path.resolve(__dirname, '..');
-const squash = (s: string) => s.replace(/\s+/g, '');
-const branches = (src: string, fnName: string): string[] => {
-  const at = src.indexOf('function ' + fnName + '(');
-  const body = at < 0 ? '' : src.slice(at, src.indexOf('\n}', at));
-  return (body.match(/if \(Math\.abs\(v\)[^\n]*/g) || []).map(squash);
-};
-const hubBranches = branches(fs.readFileSync(path.join(REPO, 'renderer/hub/hub.ts'), 'utf8'), '_fmtVal');
-const capBranches = branches(fs.readFileSync(path.join(REPO, 'src/analysis/captions.ts'), 'utf8'), 'compact');
-ok('compact() and the renderer\'s _fmtVal still agree, branch for branch',
-  hubBranches.length === 3 && capBranches.length === 3
-  && hubBranches.every((b, i) => b === capBranches[i]),
-  JSON.stringify({ hubBranches, capBranches }));
+// ONE formatter: captions.compact and the renderer's _fmtVal both call
+// src/app/format.ts's formatCompact, so a caption and its card print one number.
+{
+  const { formatCompact } = require('../src/app/format') as typeof import('../src/app/format');
+  const REPO = path.resolve(__dirname, '..');
+  const hubSrc = fs.readFileSync(path.join(REPO, 'renderer/hub/hub.ts'), 'utf8');
+  const at = hubSrc.indexOf('function _fmtVal(');
+  ok('the renderer\'s _fmtVal is OrdFormat.formatCompact',
+    /return OrdFormat\.formatCompact\(v\);/.test(hubSrc.slice(at, hubSrc.indexOf('\n}', at))));
+  const cases = [0, 12.25, 999, 1500, 999_999, 5_194_598.73, 4.5e9, -1500];
+  ok('compact() is formatCompact', cases.every((v) => compact(v) === formatCompact(v)),
+    JSON.stringify(cases.map((v) => [compact(v), formatCompact(v)])));
+}
 
 if (!failureCount()) console.log('\nAll caption checks passed.');
 finish();

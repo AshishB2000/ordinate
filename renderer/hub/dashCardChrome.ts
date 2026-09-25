@@ -112,6 +112,11 @@ function dashCtrlBtn(name: string, aria: string, onClick: () => void): HTMLButto
 }
 
 function dashCardTitle(card: any): string {
+  return dashSubst(dashCardTitleRaw(card));
+}
+
+/** The title as authored, before `{{name}}` is replaced — see dashParams.ts. */
+function dashCardTitleRaw(card: any): string {
   // A card's own inline snapshot (published) carries the name; an authoring
   // card only has an id, so this is the placeholder renderVisualCard replaces
   // once resolveCardVisual() answers — no second fetch, no cache.
