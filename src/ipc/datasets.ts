@@ -36,6 +36,8 @@ import { compile } from '../formula/formula';
 import * as trace from '../engine/residentTrace';
 // The data-quality hook — never throws into the handler it rides in.
 import { runQualityChecks } from '../analysis/qualityRun';
+import * as versions from '../app/versions';
+import * as trash from '../app/trash';
 
 // Datasets (file-based data sources) IPC — pick+parse/paste/save/list/get/delete.
 // All are ipcMain.handle (request/response). Native open dialog runs in MAIN;
@@ -333,9 +335,10 @@ export function register() {
   ipcMain.handle('dataset:meta', async (_e, { projectId, id }: any = {}) =>
     datasets.getDatasetMeta(projectId, id));
 
-  ipcMain.handle('dataset:delete', async (_e, { projectId, id }: any = {}) => ({
-    ok: await datasets.deleteDataset(projectId, id),
-  }));
+  // A delete is a move to the Trash (src/app/trash.ts), taking the dataset's
+  // visuals with it; `cascaded` says how many, for the toast.
+  ipcMain.handle('dataset:delete', async (_e, { projectId, id }: any = {}) =>
+    trash.trashRecord(projectId, 'dataset', id));
 
   // Re-fetch a dataset from wherever it came from. One channel for every source
   // kind; the service decides how, and a failure leaves the stored table alone.
@@ -599,11 +602,15 @@ export function register() {
   // through the SAME path a later edit does — one commit primitive, one cache
   // invalidation, not two.
   async function commitSteps(projectId: string, datasetId: string, steps: unknown) {
+    const prior = await datasets.getDatasetMeta(projectId, datasetId);
     const res = await datasets.updateSteps(projectId, datasetId, steps);
     if (!res) return { ok: false, error: 'Dataset not found' };
     await runQualityChecks(projectId, datasetId);
     void refreshDependents(projectId, datasetId); // the rows SQL datasets read just changed
     const { dataset, output } = res;
+    // A pipeline edit is a version of the dataset (src/app/versions.ts).
+    await versions.record(projectId, 'dataset', { id: datasetId, steps: dataset.steps || [] },
+      { before: prior ? { id: datasetId, steps: prior.steps || [], updatedAt: prior.updatedAt } : undefined });
     return {
       ok: true,
       dataset,

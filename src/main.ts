@@ -567,7 +567,7 @@ require("./ipc/fileSave").register();
 
 require("./ipc/capture").register();
 
-require("./ipc/projects").register({ onActive: setActiveProject });
+require("./ipc/projects").register({ onActive: setActiveProject, getHubWindow: () => hubWindow });
 
 require("./ipc/recent").register();
 
@@ -588,8 +588,7 @@ require("./ipc/insights").register();
 // Unattended dataset refresh, and the alert/report hooks that ride its tick.
 require("./app/refreshWiring").start({ getHubWindow: () => hubWindow, hubFocused });
 
-// Reports — the Report record's CRUD, the app-written caption, the folder
-// picker and the scheduled write. Generation itself is the renderer's job.
+// Reports — the record's CRUD, caption, folder picker and scheduled write.
 require("./ipc/reports").register();
 
 require("./ipc/connections").register();
@@ -598,24 +597,24 @@ require("./ipc/visuals").register();
 
 require("./ipc/dashboards").register();
 
-// Metrics. After dashboards: every figure bottoms out in computeCardMetric.
-require("./ipc/metrics").register();
-// Relative periods: resolving a preset for display, and a KPI card's Compare.
-require("./ipc/periods").register();
+require("./ipc/metrics").register(); // after dashboards: figures bottom out in computeCardMetric
+require("./ipc/periods").register(); // relative periods: a preset's display, and a KPI card's Compare
 // Alert rules and their inbox. After dashboards deliberately — see ipc/alerts.
 require("./ipc/alerts").register({ getHubWindow: () => hubWindow, focusHub });
 
 // Analyses — the AUTHORING container a dashboard is published FROM. Also owns
 // `analysis:draft`, which replaced the deleted `dashboard:draft`.
 require("./ipc/analyses").register();
+require("./ipc/versions").register(); // every save of a record, kept and restorable
+require("./ipc/trash").register({ getHubWindow: () => hubWindow }); // deletes land here for 30 days
+require("./ipc/lineage").register(); // what a record is built from, and what is built from it
+require("./ipc/onboarding").register(); // the Get-started card and the sample dashboard's tour
 
-// Dashboard TEMPLATES — the gallery in the create wizard. Two channels, both
-// model-free; the plans they produce go through `analysis:previewPlan` /
-// `analysis:buildPlan` above like every other plan.
+// Dashboard TEMPLATES — the create wizard's gallery. Model-free; its plans go
+// through `analysis:previewPlan` / `analysis:buildPlan` like every other plan.
 require("./ipc/templates").register();
 require("./ipc/quality").register(); // data-quality rules: list/save/delete/run/preview/failingRows
 require("./ipc/dashboardExport").register();
-
 require("./ipc/copilot").register();
 
 // Phase 3c — the Mosaic connector (mosaic:view / mosaic:query). Registering is

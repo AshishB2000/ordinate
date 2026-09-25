@@ -569,8 +569,8 @@ async function main(): Promise<void> {
     };
   });
   ok('the ⋯ row menu opens', rowMenu.opened);
-  ok('…with Open / Rename / Delete inside it',
-     JSON.stringify(rowMenu.items) === JSON.stringify(['Open', 'Rename', 'Delete']),
+  ok('…with Open / Rename / History / Lineage / Delete inside it',
+     JSON.stringify(rowMenu.items) === JSON.stringify(['Open', 'Rename', 'History', 'Lineage', 'Delete']),
      JSON.stringify(rowMenu.items));
   ok('…Delete marked as the destructive one', !!rowMenu.danger);
   ok('…painted fully on screen and anchored to its button',

@@ -154,7 +154,9 @@ export function buildRecent(groups: RecentGroup[], limit: number): RecentItem[] 
 export async function listRecent(limit = 50): Promise<RecentItem[]> {
   let projectList: projects.Project[];
   try {
-    projectList = await projects.listProjects();
+    // An archived project is out of sight everywhere but the switcher's
+    // Archived section — Recent included.
+    projectList = (await projects.listProjects()).filter((p) => !p.archivedAt);
   } catch {
     return [];
   }

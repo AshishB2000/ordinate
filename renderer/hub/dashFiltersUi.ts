@@ -191,6 +191,10 @@ async function dashSampleDatasetIds(pid: string, cards: any[]): Promise<string[]
  * Every visual on the sample dataset goes, not just the three that were seeded:
  * the dataset is leaving, so a visual still pointing at it is a broken card, and
  * the honest thing is to say so in the confirm and take them.
+ *
+ * All of it goes to the TRASH (src/app/trash.ts), not oblivion: the dataset's
+ * delete takes its visuals along, so restoring the dataset brings them back,
+ * and the Starred pin is left alone so a restored dashboard is pinned again.
  */
 async function handleDeleteSampleProject(): Promise<void> {
   const pid = (dashCurrent && dashCurrent.projectId) || currentProjectId;
@@ -209,9 +213,9 @@ async function handleDeleteSampleProject(): Promise<void> {
 
   const name = (dashCurrent && dashCurrent.name) || 'this dashboard';
   if (!window.confirm(
-    'Remove the sample data?\n\nThis deletes ' + name + ', its ' + visualIds.length
-    + ' chart(s) and the sample dataset. The project and anything else in it stay. '
-    + 'This cannot be undone.')) return;
+    'Remove the sample data?\n\nThis moves ' + name + ', its ' + visualIds.length
+    + ' chart(s) and the sample dataset to the Trash, where they stay for 30 days. '
+    + 'The project and anything else in it stay.')) return;
 
   // Dashboard first: it is the only one of the three the user is looking at, so
   // a failure part-way leaves the least confusing state (a dashboard whose cards
@@ -220,23 +224,15 @@ async function handleDeleteSampleProject(): Promise<void> {
     const res = await window.hub.deleteAnalysis(String(pid), analysisId);
     if (!res || res.ok === false) { showToast('Could not remove the sample data.'); return; }
   } catch (_) { showToast('Could not remove the sample data.'); return; }
-  for (const vid of visualIds) {
-    try { await window.hub.deleteVisual(String(pid), vid); } catch (_) { /* next */ }
-  }
+  // The dataset's own delete takes its visuals along (deletedWith), which is
+  // what lets one Restore bring the sample's charts back with it.
   for (const did of datasetIds) {
     try { await window.hub.deleteDataset(String(pid), did); } catch (_) { /* next */ }
   }
-
-  try {
-    const starred = await window.hub.getStarred();
-    if (Array.isArray(starred)) {
-      await window.hub.setStarred(starred.filter((s: string) => s !== 'analysis:' + analysisId));
-    }
-  } catch (_) { /* a stale pin is invisible — Starred filters Recent */ }
   closeDashboardEditor();
   selectSection('home');
   if (typeof refreshHome === 'function') void refreshHome();
-  showToast('Sample data removed.');
+  showToast('Sample data moved to Trash', { action: { label: 'Open Trash', onClick: () => selectSection('trash') } });
 }
 
 // A card whose source (visual / dataset) is gone. `broken` marks it with a clear badge

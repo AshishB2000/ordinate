@@ -137,11 +137,13 @@ async function main(): Promise<void> {
   ok('…and "Add a metric" is offered, because a dashboard IS open',
     cmds.some((r) => /^Add a metric \|/.test(r)), JSON.stringify(cmds));
   await win.keyboard.press('Enter');
-  await win.waitForSelector('.dash-metric-modal', { timeout: 15_000 });
-  ok('Enter runs it — the add-metric dialog opens on the open dashboard',
-    await win.locator('.dash-metric-modal').isVisible());
+  // "Add a metric" opens the metric PICKER since the metrics layer (#173); the
+  // column dialog this used to wait for is now its "Custom…" row.
+  await win.waitForSelector('.mpk-menu', { timeout: 15_000 });
+  ok('Enter runs it — the metric picker opens on the open dashboard',
+    await win.locator('.mpk-menu').isVisible());
   await win.keyboard.press('Escape');
-  await win.waitForSelector('.dash-metric-modal', { state: 'detached', timeout: 8000 }).catch(() => {});
+  await win.waitForSelector('.mpk-menu', { state: 'detached', timeout: 8000 }).catch(() => {});
 
   // ── `?` opens the sheet, rendered from the registry ─────────────────────
   await win.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());

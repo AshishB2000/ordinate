@@ -443,7 +443,8 @@ async function dkUndoDelta(snap: DkDeltaSnapshot): Promise<void> {
 
   for (const v of snap.visuals) {
     try {
-      if (v.before === null) await window.hub.deleteVisual(currentProjectId, v.id);
+      // Taking back a visual the edit CREATED is not a delete to keep in Trash.
+      if (v.before === null) await window.hub.deleteVisual(currentProjectId, v.id, { permanent: true });
       else {
         await window.hub.updateVisual(currentProjectId, v.id, {
           name: v.before.name, chartType: v.before.chartType, encoding: v.before.encoding,

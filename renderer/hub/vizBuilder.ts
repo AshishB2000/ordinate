@@ -53,8 +53,11 @@ async function openVisualBuilder(datasetId?: string): Promise<void> {
 }
 
 function closeVisualBuilder(): void {
+  if (typeof vhReset === 'function') vhReset(); // versionsPanel.ts — no preview outlives its page
   showVizGallery(true);
   vizEditingId = '';
+  const histBtn = vizEl('viz-history-btn');
+  if (histBtn) histBtn.hidden = true;
   if (typeof dkSync === 'function') dkSync(); // dock.ts — context line falls back off this visual
   vizDatasetId = '';
   vizCurrentChartType = '';
@@ -312,7 +315,16 @@ async function openSavedVisual(id: string): Promise<void> {
     await refreshVisualList();
     return;
   }
-  vizEditingId = String(visual.id || id);
+  if (typeof vhReset === 'function') vhReset(); // a version preview ends when the live one opens
+  await vizOpenRecord(visual, id);
+}
+
+/** Paint the builder from a visual RECORD — the saved one, or a version of it
+ *  that History is previewing (versionsPanel.ts), which never reaches disk. */
+async function vizOpenRecord(visual: any, id?: string): Promise<void> {
+  vizEditingId = String(visual.id || id || '');
+  const histBtn = vizEl('viz-history-btn');
+  if (histBtn) histBtn.hidden = !vizEditingId; // History is a SAVED visual's
   if (typeof dkSync === 'function') dkSync(); // dock.ts — context line now names this visual
   const nameEl = vizEl('viz-builder-name');
   if (nameEl) nameEl.textContent = String(visual.name || 'Visual');

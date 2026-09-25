@@ -10,6 +10,8 @@ import * as delta from '../analysis/dashboardDelta';
 import * as execConfig from '../app/execConfig';
 import * as config from '../app/config';
 import { DASHBOARD_STYLE_PRESETS } from '../analysis/dashboards';
+import * as versions from '../app/versions';
+import * as trash from '../app/trash';
 
 // Analyses IPC — list/get/create/rename/update/delete an Analysis (the AUTHORING
 // container), plus the AI layout draft channel `analysis:draft` (MOVED from the
@@ -69,6 +71,7 @@ export function register() {
       const preset = DASHBOARD_STYLE_PRESETS[config.get().branding.dashboardStyle];
       const saved = await analysis.saveAnalysis(projectId, { name, sheets, filters, style: style ?? preset, parameters });
       if (!saved) return { ok: false, error: 'Invalid project, or it no longer exists' };
+      await versions.record(projectId, 'dashboard', saved);
       return saved;
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to save the analysis' };
@@ -77,7 +80,9 @@ export function register() {
 
   ipcMain.handle('analysis:rename', async (_e, { projectId, id, name }: any = {}) => {
     try {
+      const before = await analysis.getAnalysis(projectId, id);
       const updated = await analysis.updateAnalysis(projectId, id, { name });
+      if (updated) await versions.record(projectId, 'dashboard', updated, { before });
       return updated ? { ok: true, analysis: updated } : { ok: false, error: 'Could not rename the analysis' };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to rename the analysis' };
@@ -88,16 +93,19 @@ export function register() {
   // wholesale; it is never patch-merged.
   ipcMain.handle('analysis:update', async (_e, { projectId, id, name, sheets, filters, style, parameters }: any = {}) => {
     try {
+      const before = await analysis.getAnalysis(projectId, id);
       const updated = await analysis.updateAnalysis(projectId, id, { name, sheets, filters, style, parameters });
+      // Every save is a version (src/app/versions.ts) — the autosave included;
+      // one that changed nothing versioned is dropped there, not here.
+      if (updated) await versions.record(projectId, 'dashboard', updated, { before });
       return updated ? { ok: true, analysis: updated } : { ok: false, error: 'Could not update the analysis' };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to update the analysis' };
     }
   });
 
-  ipcMain.handle('analysis:delete', async (_e, { projectId, id }: any = {}) => ({
-    ok: await analysis.deleteAnalysis(projectId, id),
-  }));
+  ipcMain.handle('analysis:delete', async (_e, { projectId, id }: any = {}) =>
+    trash.trashRecord(projectId, 'dashboard', id)); // to the Trash, restorable for 30 days
 
   // Exported so the self-check drives the real handler body, not a copy of it.
   ipcMain.handle('analysis:draft', async (_e, { projectId, datasetId, intent }: any = {}) =>

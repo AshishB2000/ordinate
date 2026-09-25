@@ -27,6 +27,12 @@ export interface Project {
    * Capped, because this list is unbounded otherwise.
    */
   dismissedInsights?: string[];
+  /** Set by Archive: hidden from the switcher, Recent and search, restorable.
+   *  Nothing in the project is touched. */
+  archivedAt?: string;
+  /** When it was last switched to — the switcher's "opened 2h ago", and which
+   *  project a launch adopts. Not `updatedAt`: opening changes nothing. */
+  lastOpenedAt?: string;
 }
 
 /** Enough for every card on every dataset in a project, several times over. */
@@ -120,7 +126,30 @@ function normalize(data: any): Project {
     updatedAt: data.updatedAt || createdAt,
     schemaVersion: 1,
     dismissedInsights: sanitizeDismissed(data.dismissedInsights),
+    ...(typeof data.archivedAt === 'string' && data.archivedAt ? { archivedAt: data.archivedAt } : {}),
+    ...(typeof data.lastOpenedAt === 'string' && data.lastOpenedAt ? { lastOpenedAt: data.lastOpenedAt } : {}),
   };
+}
+
+/** Archive or un-archive. Like the insight list, NOT an edit of the project's
+ *  content, so `updatedAt` (and Recent's order) stays put. */
+export async function setArchived(id: string, archived: boolean): Promise<Project | null> {
+  const existing = await getProject(id);
+  if (!existing) return null;
+  const next: Project = { ...existing };
+  if (archived) next.archivedAt = new Date().toISOString();
+  else delete next.archivedAt;
+  await writeJsonAtomic(projectFilePath(id), next);
+  return next;
+}
+
+/** Stamp "opened now". Best effort: a failed write costs a stale "opened …". */
+export async function touchOpened(id: string): Promise<void> {
+  const existing = await getProject(id);
+  if (!existing) return;
+  try {
+    await writeJsonAtomic(projectFilePath(id), { ...existing, lastOpenedAt: new Date().toISOString() });
+  } catch (_) { /* best effort */ }
 }
 
 // Off-disk input: keep only plain non-empty strings, deduped and capped. A

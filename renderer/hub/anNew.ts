@@ -652,15 +652,16 @@ async function handleRenameAnalysis(id: string, currentName: string): Promise<vo
   await refreshAnalysisList();
 }
 
-// Deleting an analysis deliberately does NOT delete the dashboards it published
-// — a published dashboard is a standalone snapshot and outlives its author. The
-// confirmation says so, because "delete" usually means the opposite.
+// Deleting a dashboard moves it to the Trash; the toast offers Undo, which is
+// why there is no confirm in front of it any more.
 async function handleDeleteAnalysis(id: string): Promise<void> {
   if (!currentProjectId) return;
-  if (!window.confirm('Delete this dashboard? This cannot be undone.')) return;
+  // To the Trash, with Undo on the toast (trashPage.ts).
+  let res: any = null;
   try {
-    await window.hub.deleteAnalysis(currentProjectId, id);
-  } catch (_) { /* ignore */ }
+    res = await window.hub.deleteAnalysis(currentProjectId, id);
+  } catch (_) { res = null; }
+  trDeletedToast('dashboard', id, (res && res.name) || '', res, () => void refreshAnalysisList());
   if (dashCurrent && dashMode === 'analysis' && dashCurrent.id === id) closeDashboardEditor();
   await refreshAnalysisList();
 }

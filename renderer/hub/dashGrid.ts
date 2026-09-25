@@ -31,6 +31,7 @@ function mountDashEditor(hostId: string): void {
 // copied: every existing page/card/filter handler keeps working on
 // `dashCurrent.pages`, and the save reads it back out as `sheets`.
 function openAnalysisFrom(a: any): void {
+  if (typeof vhReset === 'function') vhReset(); // versionsPanel.ts — the live record ends a version preview
   dashMode = 'analysis';
   dashReadOnly = false;
   mountDashEditor('an-editor-host');
@@ -40,6 +41,7 @@ function openAnalysisFrom(a: any): void {
   a.pages = a.sheets; // alias, NOT a copy — one array, two names
   dashShow('an-list-view', false);
   openEditorWith(a, a && a.name ? a.name : 'Untitled dashboard');
+  if (typeof cmMaybeStart === 'function') void cmMaybeStart(String(a.id)); // coachMarks.ts — the sample's one-time tour
 }
 
 // The part both entry points share: bind state, paint the editor.
@@ -90,6 +92,11 @@ function applyDashEditorMode(): void {
   if (!ed) return;
   ed.classList.toggle('dash-editor--analysis', dashMode === 'analysis');
   ed.classList.toggle('dash-editor--readonly', dashReadOnly);
+  // In focus mode the head is lifted OUT of the editor (authoring.ts
+  // anMountTopStrip), so the read-only class has to travel with it or Save and
+  // Undo stay up over a version being previewed.
+  const head = document.querySelector('.dash-editor-head');
+  if (head) head.classList.toggle('dash-editor--readonly', dashReadOnly);
   // The workbench columns light up for an open ANALYSIS only. In dashboard mode
   // this turns them off, which is the invariant: a published dashboard is a
   // snapshot, and a panel that can mutate a card plus the 600 ms autosave would
@@ -98,6 +105,8 @@ function applyDashEditorMode(): void {
 }
 
 function closeDashboardEditor(): void {
+  if (typeof vhReset === 'function') vhReset(); // versionsPanel.ts — no preview outlives its page
+  if (typeof cmEnd === 'function') cmEnd(); // coachMarks.ts — nor a tour
   exitDashPresent(); // never leave the app stuck in chrome-hidden mode
   if (dashSaveTimer !== null) { window.clearTimeout(dashSaveTimer); dashSaveTimer = null; }
   dashCurrent = null;

@@ -429,3 +429,34 @@ scripts/**/*.js
 /renderer/hub/paramDialog.js
 /scripts/test-params.js
 /scripts/test-paramsParity.js
+# Workspace maturity — version history (emitted siblings; also covered above).
+/src/app/recordKinds.js
+/src/app/versions.js
+/src/analysis/recordDiff.js
+/src/ipc/versions.js
+/renderer/hub/sidePanel.js
+/renderer/hub/versionsPanel.js
+/scripts/test-recordDiff.js
+/scripts/test-versionHistory.js
+/scripts/smoke-workspace.js
+# Workspace maturity — Trash (emitted siblings).
+/src/app/trashStore.js
+/src/app/trash.js
+/src/ipc/trash.js
+/renderer/hub/trashPage.js
+/scripts/test-trash.js
+# Workspace maturity — Lineage (emitted siblings).
+/src/analysis/lineage.js
+/src/ipc/lineage.js
+/renderer/hub/lineagePanel.js
+/scripts/test-lineage.js
+# Workspace maturity — Projects and bundles (emitted siblings).
+/src/app/bundle.js
+/renderer/hub/projectSwitcher.js
+/scripts/test-bundle.js
+# Workspace maturity — first-run guidance (emitted siblings).
+/src/app/onboarding.js
+/src/ipc/onboarding.js
+/renderer/hub/getStarted.js
+/renderer/hub/coachMarks.js
+/scripts/test-onboarding.js

@@ -306,7 +306,9 @@ async function main(): Promise<void> {
       datasets: only ? (await datasets.listDatasets(only.id)).length : -1,
       visuals: only ? (await visuals.listVisuals(only.id)).length : -1,
       analyses: only ? (await analysis.listAnalyses(only.id)).length : -1,
-      parquet: walk(base).filter((f) => f.endsWith('.parquet')),
+      // Out of the live tree; the Trash keeps its own copy for 30 days.
+      parquet: walk(base).filter((f) => f.endsWith('.parquet') && !/[\\/]trash[\\/]/.test(f)),
+      trashed: only ? (await req('./src/app/trash.js').list(only.id)).map((e: any) => e.type).sort() : [],
     };
   });
   ok('the project SURVIVES — it is the user\'s, and it is their only one',
@@ -314,6 +316,9 @@ async function main(): Promise<void> {
   ok('…with the sample\'s dashboard, charts and dataset all gone',
     after.datasets === 0 && after.visuals === 0 && after.analyses === 0, JSON.stringify(after));
   ok('…and leaving no orphan Parquet behind', after.parquet.length === 0, JSON.stringify(after.parquet));
+  ok('…because all of it went to the Trash, not oblivion: the dashboard, the dataset and its three charts',
+    JSON.stringify(after.trashed) === JSON.stringify(['dashboard', 'dataset', 'visual', 'visual', 'visual']),
+    JSON.stringify(after.trashed));
 
   ok('no renderer console errors on a first launch', errors.length === 0, errors.slice(0, 3).join(' | '));
 

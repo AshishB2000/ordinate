@@ -66,6 +66,9 @@ const SMOKES = [
   // Date intelligence, parameters, SQL, quality rules, formats and branding —
   // its own fresh userData, so it can change the workspace currency and accent.
   'smoke-depth',
+  // History, Trash, Lineage, Projects and first-run guidance. Its own fresh
+  // profile: the Get-started card and the coach marks only exist on first launch.
+  'smoke-workspace',
 ];
 
 const results: { name: string; code: number }[] = [];
