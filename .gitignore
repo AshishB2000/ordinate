@@ -416,3 +416,9 @@ scripts/**/*.js
 /src/app/bundle.js
 /renderer/hub/projectSwitcher.js
 /scripts/test-bundle.js
+# Workspace maturity — first-run guidance (emitted siblings).
+/src/app/onboarding.js
+/src/ipc/onboarding.js
+/renderer/hub/getStarted.js
+/renderer/hub/coachMarks.js
+/scripts/test-onboarding.js

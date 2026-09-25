@@ -659,13 +659,13 @@ require("./ipc/analyses").register();
 require("./ipc/versions").register(); // every save of a record, kept and restorable
 require("./ipc/trash").register({ getHubWindow: () => hubWindow }); // deletes land here for 30 days
 require("./ipc/lineage").register(); // what a record is built from, and what is built from it
+require("./ipc/onboarding").register(); // the Get-started card and the sample dashboard's tour
 
 // Dashboard TEMPLATES — the create wizard's gallery. Model-free; its plans go
 // through `analysis:previewPlan` / `analysis:buildPlan` like every other plan.
 require("./ipc/templates").register();
 
 require("./ipc/dashboardExport").register();
-
 require("./ipc/copilot").register();
 
 // Phase 3c — the Mosaic connector (mosaic:view / mosaic:query). Registering is

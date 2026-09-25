@@ -64,6 +64,85 @@ async function sampleIds(app: App): Promise<{ projectId: string; datasetId: stri
   });
 }
 
+// ── 0. First-run guidance — FIRST, on the fresh profile ─────────────────────
+async function firstRunSection(win: Win, ids: { projectId: string; datasetId: string; analysisId: string }): Promise<void> {
+  const card = async () => win.evaluate(() => {
+    const c = document.getElementById('home-getstarted')!;
+    return {
+      shown: !c.hidden && c.offsetParent !== null,
+      count: (c.querySelector('.gs-count') || {} as any).textContent,
+      items: [...c.querySelectorAll('.gs-item')].map((i) => ({
+        step: (i as HTMLElement).dataset.step, done: i.classList.contains('is-done'),
+        action: (i.querySelector('.gs-action') || {} as any).textContent,
+      })),
+    };
+  });
+  await win.evaluate(() => (window as any).selectSection('home'));
+  await waitFor(win, `!document.getElementById('home-getstarted').hidden && document.querySelectorAll('.gs-item').length === 4`);
+  let gs = await card();
+  ok('a first launch shows Get started on Home', gs.shown, JSON.stringify(gs));
+  ok('…at 0 of 4, with no model and nothing made yet', gs.count === '0 of 4', JSON.stringify(gs));
+  ok('…four steps, each with its door',
+    JSON.stringify(gs.items.map((i: any) => i.step)) === JSON.stringify(['import', 'visual', 'dashboard', 'assistant'])
+    && gs.items.every((i: any) => !i.done && i.action && i.action !== 'Done'), JSON.stringify(gs.items));
+  await shot(win, 'get-started');
+
+  // Saving a visual ticks "Build a visual" — read off the record, in main.
+  const saved = await win.evaluate(async (a: any) => (window as any).hub.saveVisual({
+    projectId: a.projectId, datasetId: a.datasetId, name: 'Units by region', chartType: 'column',
+    encoding: { category: 'region', values: [{ column: 'units', aggregation: 'sum' }] },
+  }), ids);
+  await win.evaluate(() => (window as any).selectSection('visuals'));
+  await win.evaluate(() => (window as any).selectSection('home'));
+  await waitFor(win, `(document.querySelector('#home-getstarted .gs-count') || {}).textContent === '1 of 4'`);
+  gs = await card();
+  ok('saving a visual ticks it: 1 of 4', gs.count === '1 of 4'
+    && gs.items.find((i: any) => i.step === 'visual').done && gs.items.find((i: any) => i.step === 'visual').action === 'Done', JSON.stringify(gs));
+  // The tick latches; the visual itself would skew the lineage counts below.
+  await win.evaluate(async (a: any) => (window as any).hub.deleteVisual(a.p, a.v, { permanent: true }), { p: ids.projectId, v: saved.id });
+
+  // Folding keeps the count in the header.
+  await win.click('#home-getstarted .gs-fold');
+  await waitFor(win, `!document.getElementById('home-gs-pill').hidden`);
+  ok('the card folds into a "1 of 4" pill in the header',
+    (await win.evaluate(() => document.querySelector('#home-gs-pill .gs-pill-text')!.textContent)) === '1 of 4'
+    && (await win.evaluate(() => document.getElementById('home-getstarted')!.hidden)));
+  await win.click('#home-gs-pill');
+  await waitFor(win, `!document.getElementById('home-getstarted').hidden`);
+
+  // The sample dashboard's tour: once.
+  const openSample = async (): Promise<void> => {
+    await win.evaluate(async (a: any) => {
+      const w = window as any;
+      await w.openWorkspace(a.projectId);
+      w.selectSection('analyses');
+      await w.openAnalysis(a.analysisId);
+    }, ids);
+  };
+  await openSample();
+  ok('opening the sample dashboard the first time starts the tour', await waitFor(win, `!!document.querySelector('.cm-card')`, 10000));
+  const tips: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    const t = await win.evaluate(() => ({
+      step: (document.querySelector('.cm-card .cm-step') || {} as any).textContent,
+      target: !!document.querySelector('.cm-target'),
+      next: (document.querySelector('.cm-card .cm-next') || {} as any).textContent,
+    }));
+    tips.push(`${t.step}|${t.target}|${t.next}`);
+    if (i === 1) { await sleep(300); await shot(win, 'coach-mark'); }
+    await win.click('.cm-card .cm-next');
+    await sleep(250);
+  }
+  ok('…three tips, each pointing at its target, the last one "Got it"',
+    JSON.stringify(tips) === JSON.stringify(['Tip 1 of 3|true|Next', 'Tip 2 of 3|true|Next', 'Tip 3 of 3|true|Got it']), JSON.stringify(tips));
+  ok('…and the tour is gone after the last', await win.evaluate(() => !document.querySelector('.cm-card') && !document.querySelector('.cm-target')));
+  await win.evaluate(() => (window as any).handleBackToList());
+  await openSample();
+  await sleep(3000);
+  ok('reopening the sample dashboard does not show it again', await win.evaluate(() => !document.querySelector('.cm-card')));
+  await win.evaluate(() => (window as any).handleBackToList());
+}
+
 // ── 1. Version history ───────────────────────────────────────────────────────
 async function historySection(win: Win, ids: { projectId: string; analysisId: string }): Promise<void> {
   await win.evaluate(async (a: any) => {
@@ -279,8 +358,11 @@ async function projectsSection(win: Win, app: App): Promise<void> {
   await win.keyboard.press('Escape');
 
   // Its dashboard renders, drawn from the imported dataset.
-  await win.evaluate(() => (window as any).selectSection('analyses'));
-  await waitFor(win, `document.querySelectorAll('#an-list .an-card').length === 1`);
+  await win.evaluate(async () => { const w = window as any; w.selectSection('analyses'); await w.refreshAnalysisList(); });
+  const listed = await waitFor(win, `document.querySelectorAll('#an-list .an-card .an-card-body').length === 1`, 30000);
+  ok('the imported project lists its one dashboard', listed,
+    await win.evaluate(() => document.getElementById('an-list')!.textContent!.slice(0, 200)));
+  if (!listed) return;
   await win.evaluate(() => (document.querySelector('#an-list .an-card .an-card-body') as HTMLElement).click());
   await waitFor(win, `document.querySelectorAll('#dash-grid .dash-card canvas').length >= 2`, 30000);
   const dash = await win.evaluate(() => ({
@@ -312,6 +394,7 @@ async function main(): Promise<void> {
 
   const ids = await sampleIds(app);
   try {
+    await firstRunSection(win, ids);
     await historySection(win, ids);
     await trashSection(win);
     await lineageSection(win, ids);

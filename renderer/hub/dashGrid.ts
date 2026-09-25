@@ -41,6 +41,7 @@ function openAnalysisFrom(a: any): void {
   a.pages = a.sheets; // alias, NOT a copy — one array, two names
   dashShow('an-list-view', false);
   openEditorWith(a, a && a.name ? a.name : 'Untitled dashboard');
+  if (typeof cmMaybeStart === 'function') void cmMaybeStart(String(a.id)); // coachMarks.ts — the sample's one-time tour
 }
 
 // The part both entry points share: bind state, paint the editor.
@@ -103,6 +104,7 @@ function applyDashEditorMode(): void {
 
 function closeDashboardEditor(): void {
   if (typeof vhReset === 'function') vhReset(); // versionsPanel.ts — no preview outlives its page
+  if (typeof cmEnd === 'function') cmEnd(); // coachMarks.ts — nor a tour
   exitDashPresent(); // never leave the app stuck in chrome-hidden mode
   if (dashSaveTimer !== null) { window.clearTimeout(dashSaveTimer); dashSaveTimer = null; }
   dashCurrent = null;

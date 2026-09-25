@@ -401,6 +401,9 @@ declare global {
       versionsList(projectId: string, type: string, id: string): Promise<any[]>;
       versionsGet(projectId: string, type: string, id: string, key: string): Promise<any>;
       versionsRestore(projectId: string, type: string, id: string, key: string): Promise<any>;
+      // ── First-run guidance (src/ipc/onboarding.ts) ──
+      onboardingStatus(): Promise<any>;
+      onboardingSet(patch: { collapsed?: boolean; dismissed?: boolean; coachSeen?: boolean }): Promise<{ ok: boolean }>;
       // ── Lineage (src/ipc/lineage.ts) ──
       lineageGet(projectId: string, type: string, id: string): Promise<any>;
       // ── Trash (src/ipc/trash.ts) ──

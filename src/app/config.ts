@@ -7,6 +7,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
+import type { OnboardingState } from './onboarding';
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
 export interface LegacyProviderEntry { apiKey?: string | null; endpoint?: string; model: string }
@@ -80,6 +81,9 @@ interface Config {
    *  landed in and first-run guidance can tell the user's own work from it.
    *  Null on an install seeded before this existed. Main-only. */
   sample: SampleIds | null;
+  /** First-run guidance (onboarding.ts). Null on an install seeded before it
+   *  existed, which is what keeps the card and the tour off those. Main-only. */
+  onboarding: OnboardingState | null;
   // Home "Starred" pins — a flat list of "type:id" keys (e.g. "analysis:<uuid>").
   // ONE array for all four record types, so a record never carries a starred flag
   // and there are no per-type migrations.
@@ -178,6 +182,7 @@ const DEFAULTS: Omit<Config, 'providers' | 'byok'> = {
   // Absent means not-yet-seeded, so an existing config.json seeds once on upgrade.
   sampleSeeded: false,
   sample: null,
+  onboarding: null,
   // Home "Starred" pins, as "type:id" keys. One flat array, one setter — no
   // per-record flag, no migration.
   starred: [],
@@ -222,6 +227,19 @@ function cleanSample(raw: any): SampleIds | null {
   return s.projectId && s.datasetId ? s : null;
 }
 
+const ONBOARDING_STEPS = ['import', 'visual', 'dashboard', 'assistant'];
+// ponytail: raw disk JSON — every field is checked before it is kept
+function cleanOnboarding(raw: any): OnboardingState | null {
+  if (typeof raw.startedAt !== 'string') return null;
+  const done: OnboardingState['done'] = {};
+  const d = raw.done && typeof raw.done === 'object' ? raw.done : {};
+  for (const k of ONBOARDING_STEPS) if (typeof d[k] === 'string') done[k as keyof OnboardingState['done']] = d[k];
+  return {
+    startedAt: raw.startedAt, done,
+    collapsed: raw.collapsed === true, dismissed: raw.dismissed === true, coachSeen: raw.coachSeen === true,
+  };
+}
+
 // ponytail: input is raw disk/IPC JSON — validated field-by-field below.
 function sanitize(input: any): Partial<Config> {
   const out: Partial<Config> = {};
@@ -250,6 +268,8 @@ function sanitize(input: any): Partial<Config> {
   if (typeof input.sampleSeeded === 'boolean') out.sampleSeeded = input.sampleSeeded;
   if (input.sample === null) out.sample = null;
   else if (input.sample && typeof input.sample === 'object') out.sample = cleanSample(input.sample);
+  if (input.onboarding === null) out.onboarding = null;
+  else if (input.onboarding && typeof input.onboarding === 'object') out.onboarding = cleanOnboarding(input.onboarding);
   // Whitelisted so it survives disk load ({...DEFAULTS, ...sanitize(onDisk)}).
   if (Array.isArray(input.starred)) out.starred = cleanStarred(input.starred);
   return out;

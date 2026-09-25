@@ -660,6 +660,10 @@ contextBridge.exposeInMainWorld('hub', {
     ipcRenderer.invoke('versions:get', { projectId, type, id, key }),
   versionsRestore: (projectId: string, type: string, id: string, key: string) =>
     ipcRenderer.invoke('versions:restore', { projectId, type, id, key }),
+  // ── First-run guidance (src/ipc/onboarding.ts) — ticks are computed in main ──
+  onboardingStatus: () => ipcRenderer.invoke('onboarding:status'),
+  onboardingSet: (patch: { collapsed?: boolean; dismissed?: boolean; coachSeen?: boolean }) =>
+    ipcRenderer.invoke('onboarding:set', patch),
   // ── Lineage (src/ipc/lineage.ts) — the graph around one record, laid out ──
   lineageGet: (projectId: string, type: string, id: string) =>
     ipcRenderer.invoke('lineage:get', { projectId, type, id }),

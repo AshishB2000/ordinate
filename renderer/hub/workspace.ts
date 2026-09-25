@@ -123,6 +123,7 @@ function selectSection(section: string): void {
   if (section === 'home') {
     if (typeof renderRecent === 'function') renderRecent();
     if (typeof refreshHome === 'function') void refreshHome();
+    if (typeof gsRender === 'function') void gsRender(); // getStarted.ts — the checklist ticks from real records
   }
   // Refresh the datasets list when its section becomes active (datasets.ts),
   // and the Captures grid with it — they are two tabs of one page, and a
