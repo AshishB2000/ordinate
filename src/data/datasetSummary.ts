@@ -6,6 +6,7 @@
 // full load.
 
 import type { AutoRefresh, Dataset, DatasetOrigin } from './datasets';
+import { qualityFailingCount } from '../analysis/qualityRules';
 
 export interface DatasetSummary {
   id: string;
@@ -35,6 +36,9 @@ export interface DatasetSummary {
   // Carried on the SUMMARY so the scheduler can find due datasets from the
   // metadata alone. Reading a schedule must never hydrate a table.
   autoRefresh?: AutoRefresh;
+  // FAIL-severity quality rules failing in the latest run — the red dot. Absent
+  // when the dataset has never been checked.
+  qualityFailing?: number;
 }
 
 /** The parent ids an origin names, in its own order. */
@@ -68,5 +72,7 @@ export function summarize(ds: Dataset): DatasetSummary {
   if (ds.lastRefreshStatus) summary.lastRefreshStatus = ds.lastRefreshStatus;
   if (ds.lastRefreshStatus === 'error' && ds.lastRefreshError) summary.lastRefreshError = ds.lastRefreshError;
   if (ds.autoRefresh) summary.autoRefresh = ds.autoRefresh;
+  const qualityFailing = qualityFailingCount(ds.quality);
+  if (qualityFailing !== undefined) summary.qualityFailing = qualityFailing;
   return summary;
 }

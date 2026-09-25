@@ -189,8 +189,9 @@ export function catLabel(raw: DuckValue, type: ColumnType, key: ResidentCatKey):
 /**
  * The inverse of `String(cell)`, identical to `parquetStore.toCell` /
  * `pipelineDuck.toCell`. NOT a re-parse: `''` stays `''` for a text column.
+ * Exported for `engine/qualityResident`, whose failing-row samples are cells.
  */
-function toCell(raw: DuckValue, type: ColumnType): Cell {
+export function toCell(raw: DuckValue, type: ColumnType): Cell {
   if (raw == null) return null;
   if (type !== 'number') return typeof raw === 'string' ? raw : String(raw);
   const n = typeof raw === 'number' ? raw : Number(raw);

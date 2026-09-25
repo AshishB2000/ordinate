@@ -297,6 +297,24 @@ contextBridge.exposeInMainWorld('hub', {
   explainAlert: (projectId: string, event: any) => ipcRenderer.invoke('alerts:explain', { projectId, event }),
   // Fire-and-forget from main the moment rules fire: { projectId, events }.
   onAlertsFired: (cb: (p: any) => void) => ipcRenderer.on('alerts:fired', (_e, p) => cb(p)),
+
+  // ── Data-quality rules (src/ipc/quality.ts). Every count is computed in MAIN;
+  // a rule is addressed by id and the renderer never sends a predicate.
+  listQuality: (projectId: string, datasetId: string) => ipcRenderer.invoke('quality:list', { projectId, datasetId }),
+  saveQualityRule: (projectId: string, datasetId: string, rule: any) =>
+    ipcRenderer.invoke('quality:save', { projectId, datasetId, rule }),
+  deleteQualityRule: (projectId: string, datasetId: string, ruleId: string) =>
+    ipcRenderer.invoke('quality:delete', { projectId, datasetId, ruleId }),
+  runQualityChecks: (projectId: string, datasetId: string) => ipcRenderer.invoke('quality:run', { projectId, datasetId }),
+  previewQualityRule: (projectId: string, datasetId: string, rule: any) =>
+    ipcRenderer.invoke('quality:preview', { projectId, datasetId, rule }),
+  // One grid window of the rows a stored rule fails — `dataset:page`'s shape.
+  qualityFailingRows: (
+    projectId: string,
+    datasetId: string,
+    ruleId: string,
+    req: { offset: number; limit: number; search?: string; sortColumn?: string; sortDir?: 'asc' | 'desc' },
+  ) => ipcRenderer.invoke('quality:failingRows', { projectId, datasetId, ruleId, ...req }),
   updateDataset: (projectId: string, datasetId: string, columns: any[]) =>
     ipcRenderer.invoke('dataset:update', { projectId, datasetId, columns }),
   // OPTIONAL AI narration of an opened dataset (numbers computed in main, not by

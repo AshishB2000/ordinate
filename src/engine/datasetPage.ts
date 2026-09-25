@@ -131,6 +131,20 @@ export interface PageRequest {
    * heterogeneous datasets.
    */
   filters?: FilterStep[];
+  /**
+   * MAIN-ONLY, never read off IPC: one more row predicate — a data-quality
+   * rule's failing rows (analysis/qualityRun). `sql` is over c0..cN with its own
+   * bound params (`null` = only the JS twin can answer, so `readPage` falls
+   * back); `keepFor` is built over the WHOLE table, since `unique` needs every
+   * row to judge one.
+   */
+  rowFilter?: RowFilter;
+}
+
+export interface RowFilter {
+  sql: string | null;
+  params: duck.DuckValue[];
+  keepFor: (columns: ParsedColumn[], rows: Cell[][]) => (row: Cell[]) => boolean;
 }
 
 export interface PageResult {
@@ -176,7 +190,7 @@ export function readPage(src: PageSource, req: PageRequest): PageResult | null {
     const cols = schemaOf(src);
     if (!cols) return null;
     const r = normalize(cols, req);
-    if (!r) return null;
+    if (!r || (r.rowFilter && r.rowFilter.sql === null)) return null;
     // A text sort on a build with no ICU cannot be served faithfully (note 3).
     if (r.sort && r.sort.kind === 'text' && !collationOk) return null;
 
@@ -219,6 +233,7 @@ export function pageRowsJs(columns: ParsedColumn[], rows: Cell[][], req: PageReq
   const r = normalize(cols, req) ?? { offset: 0, limit: 0, needle: '', sort: null, filters: [] };
 
   let list: Cell[][] = (Array.isArray(rows) ? rows : []).map((row) => (Array.isArray(row) ? row : []));
+  const keep = r.rowFilter ? r.rowFilter.keepFor(cols, list) : null;
 
   // Filters FIRST, through the pipeline that is already the reference for every
   // filtered figure in the app — so "the rows behind this number" is answered by
@@ -228,6 +243,7 @@ export function pageRowsJs(columns: ParsedColumn[], rows: Cell[][], req: PageReq
   if (r.filters.length > 0) {
     list = applyPipeline({ columns: cols, rows: list }, r.filters).rows;
   }
+  if (keep) list = list.filter(keep);
 
   if (r.needle) {
     const q = r.needle.toLowerCase();
@@ -287,6 +303,7 @@ interface NormalRequest {
   sort: SortSpec | null;
   /** Never undefined past this point; an empty list means "no filters". */
   filters: FilterStep[];
+  rowFilter?: RowFilter;
 }
 
 /**
@@ -329,6 +346,7 @@ function normalize(cols: ParsedColumn[], req: PageRequest): NormalRequest | null
     // Shape only. WHAT a step may contain is `transforms.sanitizeSteps`'s job and
     // it runs at the IPC boundary, over untrusted renderer input, before this.
     filters: Array.isArray(raw.filters) ? raw.filters : [],
+    rowFilter: raw.rowFilter,
   };
 }
 
@@ -461,6 +479,10 @@ function searchPredicate(cols: ParsedColumn[], needle: string, params: duck.Duck
  */
 function whereFor(cols: ParsedColumn[], r: NormalRequest, params: duck.DuckValue[]): string {
   const preds = filterPredicates(cols, r.filters, params);
+  if (r.rowFilter && r.rowFilter.sql) {
+    preds.push(r.rowFilter.sql);
+    params.push(...r.rowFilter.params);
+  }
   const search = searchPredicate(cols, r.needle, params);
   if (search) preds.push(search);
   return preds.length === 0 ? '' : ` WHERE ${preds.join(' AND ')}`;

@@ -186,6 +186,10 @@ function makeRecentRow(it: any): HTMLElement {
   const name = document.createElement('span');
   name.className = 'home-row-name';
   name.textContent = it.name || 'Untitled';
+  if (it.type === 'dataset') {
+    const dq = dqDot(it.meta && it.meta.qualityFailing); // dsRules.ts — a failing quality rule
+    if (dq) name.prepend(dq);
+  }
   body.appendChild(name);
 
   // Line 2 carries type, size and project — the three questions a name alone

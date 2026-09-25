@@ -205,6 +205,19 @@ export async function setDigest(projectId: string, on: boolean): Promise<boolean
   return save(projectId, file);
 }
 
+/**
+ * Add events raised OUTSIDE the rule evaluator — data-quality checks
+ * (analysis/qualityRun). Newest first, capped like every other event; each is
+ * sanitized, so only a UUID id and ruleId survive. Delivery stays `deliver`'s.
+ */
+export async function recordEvents(projectId: string, events: AlertEvent[]): Promise<boolean> {
+  const clean = (Array.isArray(events) ? events : []).map(alerts.sanitizeEvent).filter((e): e is AlertEvent => e !== null);
+  if (!clean.length) return true;
+  const file = await load(projectId);
+  file.events = clean.concat(file.events).slice(0, alerts.MAX_EVENTS);
+  return save(projectId, file);
+}
+
 /** Mark one event seen, or every event when `eventId` is omitted. */
 export async function markSeen(projectId: string, eventId?: string): Promise<boolean> {
   const file = await load(projectId);

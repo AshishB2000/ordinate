@@ -173,6 +173,19 @@ declare global {
       setAlertDigest(projectId: string, on: boolean): Promise<any>;
       explainAlert(projectId: string, event: any): Promise<any>;
       onAlertsFired(cb: (p: any) => void): void;
+      // ── Data-quality rules (src/ipc/quality.ts). Counts are MAIN's; a rule is
+      // addressed by id and the renderer never sends a predicate.
+      listQuality(projectId: string, datasetId: string): Promise<any>;
+      saveQualityRule(projectId: string, datasetId: string, rule: any): Promise<any>;
+      deleteQualityRule(projectId: string, datasetId: string, ruleId: string): Promise<any>;
+      runQualityChecks(projectId: string, datasetId: string): Promise<any>;
+      previewQualityRule(projectId: string, datasetId: string, rule: any): Promise<any>;
+      qualityFailingRows(
+        projectId: string,
+        datasetId: string,
+        ruleId: string,
+        req: { offset: number; limit: number; search?: string; sortColumn?: string; sortDir?: 'asc' | 'desc' },
+      ): Promise<any>;
       updateDataset(projectId: string, datasetId: string, columns: any[]): Promise<any>;
       explainDataset(projectId: string, datasetId: string): Promise<any>;
       // ── Data preparation (reversible transform pipeline) ──

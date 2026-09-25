@@ -398,6 +398,7 @@ async function refreshDashFreshness(): Promise<void> {
     ? 'The oldest of the ' + ids.length + ' datasets this sheet reads.'
     : '';
   btn.hidden = !anyRefreshable;
+  dqPaintDashFlag(label, ids, byId); // dsRules.ts — "· Data quality: N rules failing"
 }
 
 // Refresh exactly the datasets this sheet reads, then re-render it.

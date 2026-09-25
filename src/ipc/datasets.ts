@@ -34,6 +34,8 @@ import { sanitizeFilters } from '../analysis/visuals';
 import { explainText, suggestSteps, suggestCalcField } from '../ai/analyze';
 import { compile } from '../formula/formula';
 import * as trace from '../engine/residentTrace';
+// The data-quality hook — never throws into the handler it rides in.
+import { runQualityChecks } from '../analysis/qualityRun';
 
 // Datasets (file-based data sources) IPC — pick+parse/paste/save/list/get/delete.
 // All are ipcMain.handle (request/response). Native open dialog runs in MAIN;
@@ -350,6 +352,7 @@ export function register() {
       // is already right by the time the refresh reports done; a failure inside
       // is swallowed by the evaluator and can never fail the refresh.
       await require('./alerts').evaluateAndDeliver(projectId, id);
+      await runQualityChecks(projectId, id);
       // SQL datasets built on this one re-run. Not awaited: never rejects, and
       // the refresh the user asked for is done.
       void refreshDependents(projectId, id);
@@ -530,6 +533,7 @@ export function register() {
       const ds = await datasets.updateDataset(projectId, datasetId, {
         columns: Array.isArray(columns) ? columns : undefined,
       });
+      if (ds) await runQualityChecks(projectId, datasetId); // a rename/retype can break or fix a rule
       if (ds && Array.isArray(columns)) void refreshDependents(projectId, datasetId); // a retype changes what SQL sees
       return ds ? { ok: true, dataset: ds } : { ok: false, error: 'Could not update the dataset' };
     } catch (err: any) {
@@ -597,6 +601,7 @@ export function register() {
   async function commitSteps(projectId: string, datasetId: string, steps: unknown) {
     const res = await datasets.updateSteps(projectId, datasetId, steps);
     if (!res) return { ok: false, error: 'Dataset not found' };
+    await runQualityChecks(projectId, datasetId);
     void refreshDependents(projectId, datasetId); // the rows SQL datasets read just changed
     const { dataset, output } = res;
     return {

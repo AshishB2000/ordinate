@@ -216,7 +216,9 @@ async function refreshExplorerPage(retried?: boolean): Promise<void> {
   let res: any = null;
   try {
     const page = datasetPageBridge();
-    if (page && currentProjectId) res = await page(currentProjectId, wantId, req);
+    // "Show failing rows" (dsRules.ts): the same window, filtered in main by the rule.
+    if (dqGridRule && currentProjectId) res = await window.hub.qualityFailingRows(currentProjectId, wantId, dqGridRule.id, req);
+    else if (page && currentProjectId) res = await page(currentProjectId, wantId, req);
   } catch (_) {
     res = null; // dead bridge — fall through to the client-side path
   }
@@ -244,6 +246,7 @@ async function refreshExplorerPage(retried?: boolean): Promise<void> {
     expPageRows = all.slice(expOffset, expOffset + DS_PAGE_ROWS);
   }
   paintExplorerTable();
+  dqPaintBanner();
 }
 
 // Public entry for "the underlying data or its order changed" — used by

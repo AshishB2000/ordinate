@@ -1068,6 +1068,9 @@
           </div><!-- /#ds-tabp-data -->
 
           <div class="ds-tabp" id="ds-tabp-quality" role="tabpanel" aria-labelledby="ds-tab-quality" hidden>
+            <!-- Data-quality RULES (dsRules.ts): the checks the user asked for,
+                 above the findings the app volunteers. -->
+            <section class="dq-rules" id="dq-rules" aria-label="Data quality rules"></section>
             <div class="ds-quality" id="ds-quality" hidden></div>
             <!-- Shown only when the findings list is empty: "no issues" is a
                  real answer, and it reads as one above a table rather than
@@ -1118,6 +1121,9 @@
                beside the step machinery so a step's effect is visible as it is
                edited, which is the whole point of a reversible pipeline. -->
           <div class="ds-grid-pane">
+            <!-- "Show failing rows" (dsRules.ts): a temporary filter, and this
+                 banner says so until it is cleared. -->
+            <div class="dq-banner" id="dq-banner" role="status" hidden></div>
             <p class="ds-preview-note" id="ds-explorer-note" hidden></p>
             <div class="ds-grid-row">
               <div class="ds-table-scroll" id="ds-explorer-scroll"></div>
@@ -2713,6 +2719,9 @@
 <script src="dsExplorer.js"></script>
 <script src="dsGrid.js"></script>
 <script src="dsProfile.js"></script>
+<!-- Data-quality rules: the editor, then the Rules section + red dots. -->
+<script src="dsRuleEditor.js"></script>
+<script src="dsRules.js"></script>
 <script src="composer.js"></script>
 <script src="composerGrid.js"></script>
 <script src="dataSection.js"></script>

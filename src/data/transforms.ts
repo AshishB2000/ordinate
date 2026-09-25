@@ -131,7 +131,8 @@ export function colIndex(columns: ParsedColumn[], name: string): number {
   return columns.findIndex((c) => c.name === name);
 }
 
-function isEmptyCell(cell: Cell): boolean {
+// Exported for analysis/qualityRules — the app's ONE definition of "empty".
+export function isEmptyCell(cell: Cell): boolean {
   if (cell == null) return true;
   return typeof cell === 'string' && cell.trim() === '';
 }

@@ -259,6 +259,9 @@ scripts/**/*.js
 /renderer/hub/dsList.js
 /renderer/hub/dsExplorer.js
 /renderer/hub/dsGrid.js
+# Data-quality rules (dsRuleEditor + dsRules) — emitted siblings.
+/renderer/hub/dsRuleEditor.js
+/renderer/hub/dsRules.js
 
 # visuals.ts split by job (.claude/rules/file-size.md) — emitted siblings.
 /renderer/hub/vizGallery.js

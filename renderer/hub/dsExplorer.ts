@@ -131,6 +131,8 @@ async function openSavedDataset(id: string): Promise<void> {
   // A panel left open from the previous dataset would describe a column this
   // one may not even have.
   dsCloseProfile();
+  // dsRules.ts — a failing-rows filter or a rules list never carries over.
+  dqResetForDataset();
   const quality = dsEl('ds-quality');
   if (quality) {
     quality.innerHTML = '';
@@ -271,9 +273,12 @@ async function loadExplorerStats(): Promise<void> {
   try {
     res = await window.hub.datasetStats(currentProjectId, expId);
   } catch (_) {
+    res = null;
+  }
+  if (!res || !res.ok) {
+    void dqRenderRules(); // the rules do not depend on the profile — only its suggestions do
     return;
   }
-  if (!res || !res.ok) return;
   expSummaries = Array.isArray(res.summaries) ? res.summaries : [];
   renderQuality(Array.isArray(res.issues) ? res.issues : []);
   paintExplorerTable(); // headers now carry summary chips — same rows, no refetch
@@ -301,6 +306,7 @@ function renderQuality(issues: any[]): void {
   });
   box.hidden = issues.length === 0;
   dsRenderQualityTable();
+  void dqRenderRules(); // dsRules.ts — the Rules section above the findings
 }
 
 

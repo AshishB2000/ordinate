@@ -25,6 +25,7 @@
 // Serial per project: two edits in quick succession queue, so an older run can
 // never finish last and leave a dependent on stale input.
 
+import { runQualityChecks } from '../analysis/qualityRun';
 import * as datasets from './datasets';
 import { refreshDataset } from './datasetRefresh';
 
@@ -96,6 +97,9 @@ async function pushFrom(projectId: string, rootId: string): Promise<void> {
       }
       const res = await refreshDataset(projectId, id);
       if (!res.ok) failed.add(id);
+      // Its rows changed, so its OWN quality rules run too (they would on any
+      // other refresh). Delivered like a manual refresh's; never throws.
+      else await runQualityChecks(projectId, id);
     }
   }
 }

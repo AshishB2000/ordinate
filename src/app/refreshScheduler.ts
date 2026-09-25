@@ -30,6 +30,9 @@ import * as projects from './projects';
 import { refreshDataset } from '../data/datasetRefresh';
 import { refreshDependents } from '../data/datasetDependents';
 import type { AlertEvent } from '../analysis/alerts';
+// Imported, not injected like the alert hook: it decides nothing about WHEN and
+// notifies no one itself — its events join this tick's batch below.
+import { runQualityChecks } from '../analysis/qualityRun';
 
 /** How often the tick looks for work. The schedules themselves are hours apart. */
 const TICK_MS = 60_000;
@@ -236,6 +239,12 @@ export async function tickNow(now = Date.now()): Promise<AutoRefreshOutcome[]> {
         } catch (_) {
           // An evaluation that throws must not take the refresh down with it.
         }
+      }
+      // Data-quality rules, on the same fresh data. Recorded now, DELIVERED with
+      // the tick's batch, so the digest option covers them too. Never throws.
+      if (outcome.ok) {
+        const dq = await runQualityChecks(m.projectId, m.id, { deliver: false });
+        if (dq.length) byProject.set(m.projectId, (byProject.get(m.projectId) || []).concat(dq));
       }
       outcomes.push(outcome);
       if (report) {

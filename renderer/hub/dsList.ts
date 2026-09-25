@@ -251,6 +251,13 @@ function makeSavedItem(d: any): HTMLElement {
   const name = document.createElement('span');
   name.className = 'ds-saved-name';
   name.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
+  // Red, not the amber refresh dot: a data-quality rule is failing. The dot goes
+  // straight to the Quality tab; the rest of the row still opens the grid.
+  const dq = dqDot(d && d.qualityFailing);
+  if (dq) {
+    dq.addEventListener('click', (e) => { e.stopPropagation(); void dqOpenQualityTab(String(d.id)); });
+    name.prepend(dq);
+  }
   open.appendChild(name);
 
   // The row is a TABLE ROW now — rows, source and freshness are their own

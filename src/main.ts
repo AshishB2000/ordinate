@@ -611,7 +611,7 @@ require("./ipc/analyses").register();
 // model-free; the plans they produce go through `analysis:previewPlan` /
 // `analysis:buildPlan` above like every other plan.
 require("./ipc/templates").register();
-
+require("./ipc/quality").register(); // data-quality rules: list/save/delete/run/preview/failingRows
 require("./ipc/dashboardExport").register();
 
 require("./ipc/copilot").register();
