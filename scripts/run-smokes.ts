@@ -72,6 +72,9 @@ const SMOKES = [
   // History, Trash, Lineage, Projects and first-run guidance. Its own fresh
   // profile: the Get-started card and the coach marks only exist on first launch.
   'smoke-workspace',
+  // Relationships and joins, tile actions and navigation, the new card kinds,
+  // point / custom-boundary maps — end to end on the sample project.
+  'smoke-authoring',
 ];
 
 const results: { name: string; code: number }[] = [];
