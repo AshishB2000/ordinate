@@ -177,7 +177,22 @@ function cpActionGroups(r: CpRecord): CpGroup[] {
   if (r.kind === 'analysis') {
     rows.push({ title: 'Export', meta: 'PDF, PNG or HTML', icon: 'download', run: () => { paletteClose(); void cpExportDashboard(r); } });
   }
+  const histType = CP_HISTORY_TYPE[r.kind];
+  if (histType) {
+    rows.push({ title: 'Version history', meta: 'Every save, restorable', icon: 'history', run: () => { paletteClose(); void cpOpenHistory(r, histType); } });
+  }
   return [{ label: r.name, rows }];
+}
+
+/** Search kinds → version-history types. A dashboard is `analysis` to search. */
+const CP_HISTORY_TYPE: Record<string, string> = {
+  dataset: 'dataset', visual: 'visual', analysis: 'dashboard', metric: 'metric', report: 'report',
+};
+
+/** Open the record first, so a preview has its page to show on. */
+async function cpOpenHistory(r: CpRecord, type: string): Promise<void> {
+  await paletteOpenRecord(r);
+  await vhOpen(type, r.id, r.name);
 }
 
 function cpAddVisualToDashboard(r: CpRecord): void {

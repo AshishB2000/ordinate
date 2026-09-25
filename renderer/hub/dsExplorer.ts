@@ -347,6 +347,25 @@ function dsAskAboutDataset(): void {
   if (input && !input.disabled) input.focus();
 }
 
+/** The dataset page's ⋯: what you do TO the record rather than with its rows.
+ *  Same mini-menu the visual cards use (chartControls.ts openMiniMenu). */
+function dsOpenMoreMenu(anchor: HTMLElement): void {
+  if (!expId) return;
+  const id = expId;
+  anchor.setAttribute('aria-expanded', 'true');
+  openMiniMenu(anchor, (el: HTMLElement, close: () => void) => {
+    const add = (ic: string, label: string, run: () => void, danger?: boolean): void => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chart-menu-item' + (danger ? ' chart-menu-item--danger' : '');
+      iconLabel(b, ic, label);
+      b.addEventListener('click', () => { close(); run(); });
+      el.appendChild(b);
+    };
+    add('history', 'Pipeline history', () => void vhOpen('dataset', id, expName));
+  }, () => anchor.setAttribute('aria-expanded', 'false'));
+}
+
 async function handleDeleteDataset(id: string): Promise<void> {
   if (!currentProjectId) return;
   if (!window.confirm('Delete this dataset? This cannot be undone.')) return;

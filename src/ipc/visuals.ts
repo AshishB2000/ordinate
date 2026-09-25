@@ -23,6 +23,7 @@ import { computeColumnSummariesResident } from '../engine/statsResident';
 import { computeColumnSummary } from '../data/datasetStats';
 import type { ColumnSummary } from '../data/datasetStats';
 import { suggestCharts } from '../ai/analyze';
+import * as versions from '../app/versions';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus
 // `visual:data` which loads a dataset and runs the PURE bridge (src/vizData.ts) to
@@ -425,6 +426,7 @@ export function register() {
     try {
       const saved = await visuals.saveVisual(projectId, { name, datasetId, chartType, encoding, overrides, filters });
       if (!saved) return { ok: false, error: 'Invalid project/dataset, or it no longer exists' };
+      await versions.record(projectId, 'visual', saved);
       return saved;
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to save the visual' };
@@ -433,7 +435,9 @@ export function register() {
 
   ipcMain.handle('visual:update', async (_e, { projectId, id, name, chartType, encoding, overrides, filters, favorite }: any = {}) => {
     try {
+      const before = await visuals.getVisual(projectId, id);
       const visual = await visuals.updateVisual(projectId, id, { name, chartType, encoding, overrides, filters, favorite });
+      if (visual) await versions.record(projectId, 'visual', visual, { before });
       return visual ? { ok: true, visual } : { ok: false, error: 'Could not update the visual' };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to update the visual' };

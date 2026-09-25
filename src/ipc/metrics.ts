@@ -39,6 +39,7 @@ import * as datasets from '../data/datasets';
 import { readDistinctPage, distinctValuesPageJs } from '../engine/datasetPage';
 import { periodPlan, orderPeriods } from '../analysis/insightsAgg';
 import type { FilterStep } from '../data/transforms';
+import * as versions from '../app/versions';
 
 /** How many distinct values of a breakout column are read before rolling up. */
 const SERIES_SCAN = 2000;
@@ -378,6 +379,7 @@ export function register() {
         filters: sanitizeDashboardFilters(raw.filters),
       });
       if (!m) return { ok: false, error: 'Could not save the metric — check the dataset still exists.' };
+      await versions.record(projectId, 'metric', m);
       return { ok: true, metric: m };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to save the metric' };
@@ -392,8 +394,10 @@ export function register() {
       }
       const next = { ...raw };
       if (raw.filters !== undefined) next.filters = sanitizeDashboardFilters(raw.filters);
+      const before = await metrics.getMetric(projectId, id);
       const m = await metrics.updateMetric(projectId, id, next);
       if (!m) return { ok: false, error: 'Metric not found' };
+      await versions.record(projectId, 'metric', m, { before });
       return { ok: true, metric: m };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to update the metric' };

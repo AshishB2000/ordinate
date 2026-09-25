@@ -87,6 +87,9 @@ async function adoptProject(id: string): Promise<boolean> {
 // Switch which workspace section is visible. Flips the .hub-body[data-section]
 // attribute (CSS shows exactly one body) and toggles nav + placeholder state.
 function selectSection(section: string): void {
+  // The right panel (History, Lineage) is about a record on THIS page; a new
+  // section is a new page, so it closes (sidePanel.ts).
+  if (section !== currentSection && typeof spClose === 'function') spClose();
   if (section !== currentSection) previousSection = currentSection;
   currentSection = section;
   const body = wsBodyEl();

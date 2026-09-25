@@ -658,10 +658,10 @@ require("./ipc/alerts").register({ getHubWindow: () => hubWindow, focusHub });
 // Analyses — the AUTHORING container a dashboard is published FROM. Also owns
 // `analysis:draft`, which replaced the deleted `dashboard:draft`.
 require("./ipc/analyses").register();
+require("./ipc/versions").register(); // every save of a record, kept and restorable
 
-// Dashboard TEMPLATES — the gallery in the create wizard. Two channels, both
-// model-free; the plans they produce go through `analysis:previewPlan` /
-// `analysis:buildPlan` above like every other plan.
+// Dashboard TEMPLATES — the create wizard's gallery. Model-free; its plans go
+// through `analysis:previewPlan` / `analysis:buildPlan` like every other plan.
 require("./ipc/templates").register();
 
 require("./ipc/dashboardExport").register();

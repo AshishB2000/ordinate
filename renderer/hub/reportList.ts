@@ -137,6 +137,7 @@ function rbCard(r: any): HTMLElement {
   };
   act('Generate now', 'btn btn-sm btn-primary', () => void rbGenerateFromList(r.id));
   act('Edit', 'btn btn-sm', () => void rbOpenReportById(r.id));
+  act('History', 'rb-link', () => void vhOpen('report', String(r.id), r.name || 'Report'), secondary);
   act('Duplicate', 'rb-link', async () => {
     const res = await window.hub.reportsDuplicate(currentProjectId as string, r.id);
     if (!res || res.ok === false) { showToast((res && res.error) || 'Could not duplicate'); return; }

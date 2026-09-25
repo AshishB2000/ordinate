@@ -7,6 +7,7 @@ import * as projects from '../app/projects';
 import { tileCaption } from '../analysis/captions';
 import type { CaptionInput } from '../analysis/captions';
 import { notifyFile } from '../app/notify';
+import * as versions from '../app/versions';
 
 // Reports IPC — the record's CRUD, the app-written caption, the folder picker,
 // the scheduled write, and the due list.
@@ -69,11 +70,14 @@ export function register() {
       pages: reportSpec.defaultPages(a.sheets),
       cover: { title: a.name, logo: true },
     });
+    if (report) await versions.record(pid, 'report', report);
     return report ? { ok: true, report } : { ok: false, error: 'Could not create the report.' };
   });
 
   ipcMain.handle('reports:update', async (_e, { projectId, id, patch }: any = {}) => {
+    const before = await reportSpec.getReport(String(projectId || ''), String(id || ''));
     const r = await reportSpec.updateReport(String(projectId || ''), String(id || ''), patch || {});
+    if (r) await versions.record(String(projectId), 'report', r, { before });
     return r ? { ok: true, report: r } : { ok: false, error: 'Report not found.' };
   });
 

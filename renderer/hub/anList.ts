@@ -228,6 +228,7 @@ function makeAnListItem(a: any, previews: any[]): HTMLElement {
         label: 'Rename',
         onClick: () => handleRenameAnalysis(String(a.id), a && a.name ? String(a.name) : ''),
       },
+      { label: 'History', onClick: () => void vhOpen('dashboard', String(a.id), a && a.name ? String(a.name) : '') },
       { label: 'Delete', danger: true, onClick: () => handleDeleteAnalysis(String(a.id)) },
     ]);
   });

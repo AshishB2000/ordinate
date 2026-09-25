@@ -391,3 +391,13 @@ scripts/**/*.js
 /scripts/test-captions.js
 /scripts/test-reportSpec.js
 /scripts/smoke-reports.js
+# Workspace maturity — version history (emitted siblings; also covered above).
+/src/app/recordKinds.js
+/src/app/versions.js
+/src/analysis/recordDiff.js
+/src/ipc/versions.js
+/renderer/hub/sidePanel.js
+/renderer/hub/versionsPanel.js
+/scripts/test-recordDiff.js
+/scripts/test-versionHistory.js
+/scripts/smoke-workspace.js

@@ -643,6 +643,15 @@ contextBridge.exposeInMainWorld('hub', {
   reportsReveal: (projectId: string, id: string) => ipcRenderer.invoke('reports:reveal', { projectId, id }),
   // Main rings the bell at the end of the refresh tick; the hub does the work.
   onReportsRunDue: (cb: () => void) => ipcRenderer.on('reports:run-due', () => cb()),
+  // ── Version history (src/ipc/versions.ts) ──
+  // type is 'dashboard' | 'visual' | 'metric' | 'report' | 'dataset'. A restore
+  // is a SAVE of the old content through the record's own store — append-only.
+  versionsList: (projectId: string, type: string, id: string) =>
+    ipcRenderer.invoke('versions:list', { projectId, type, id }),
+  versionsGet: (projectId: string, type: string, id: string, key: string) =>
+    ipcRenderer.invoke('versions:get', { projectId, type, id, key }),
+  versionsRestore: (projectId: string, type: string, id: string, key: string) =>
+    ipcRenderer.invoke('versions:restore', { projectId, type, id, key }),
   // ── AI Copilot (Week 11) — per-project, context-aware chat ──
   // Load one conversation's turns (survives reload); returns { ok, turns, threadId }.
   // threadId is optional and defaults to the most recent conversation, so every

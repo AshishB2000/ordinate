@@ -115,6 +115,20 @@ const ICONS: Record<string, string> = {
   plug: '<path d="M9 2v6M15 2v6M6 8h12v3a6 6 0 0 1-12 0ZM12 17v5"/>',
   zap: '<path d="M13 2 4 14h7l-1 8 9-12h-7Z"/>',
 
+  /* ── workspace: history, trash, lineage, projects, first run ── */
+  history: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/>',
+  'rotate-ccw': '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  lineage:
+    '<rect x="2.5" y="3" width="7" height="6" rx="1.5"/><rect x="14.5" y="3" width="7" height="6" rx="1.5"/><rect x="14.5" y="15" width="7" height="6" rx="1.5"/><path d="M9.5 6h5M12 6v12h2.5"/>',
+  archive: '<rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/>',
+  package:
+    '<path d="m7.5 4.27 9 5.15M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>',
+  'circle-check': '<circle cx="12" cy="12" r="9.5"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+  circle: '<circle cx="12" cy="12" r="9.5"/>',
+  function:
+    '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3M9 11.2h5.7"/>',
+  gauge: '<path d="m12 14 4-4M3.34 19a10 10 0 1 1 17.32 0"/>',
+
   /* ── column types (the dataset grid header) ── */
   'type-text': '<path d="M4 6V4h16v2M12 4v16M9 20h6"/>',
   'type-number': '<path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/>',

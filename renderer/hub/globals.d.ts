@@ -393,6 +393,10 @@ declare global {
       reportsDue(nowMs?: number): Promise<any>;
       reportsReveal(projectId: string, id: string): Promise<any>;
       onReportsRunDue(cb: () => void): void;
+      // ── Version history (src/ipc/versions.ts) ──
+      versionsList(projectId: string, type: string, id: string): Promise<any[]>;
+      versionsGet(projectId: string, type: string, id: string, key: string): Promise<any>;
+      versionsRestore(projectId: string, type: string, id: string, key: string): Promise<any>;
       // ── AI Copilot (Week 11) ──
       copilotHistory(projectId: string, threadId?: string): Promise<any>;
       copilotThreads(projectId: string): Promise<any>;

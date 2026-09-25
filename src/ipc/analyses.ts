@@ -8,6 +8,7 @@ import * as planBuild from '../analysis/planBuild';
 import { buildStarterPlan } from '../analysis/starterPlan';
 import * as delta from '../analysis/dashboardDelta';
 import * as execConfig from '../app/execConfig';
+import * as versions from '../app/versions';
 
 // Analyses IPC — list/get/create/rename/update/delete an Analysis (the AUTHORING
 // container), plus the AI layout draft channel `analysis:draft` (MOVED from the
@@ -64,6 +65,7 @@ export function register() {
     try {
       const saved = await analysis.saveAnalysis(projectId, { name, sheets, filters, style });
       if (!saved) return { ok: false, error: 'Invalid project, or it no longer exists' };
+      await versions.record(projectId, 'dashboard', saved);
       return saved;
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to save the analysis' };
@@ -72,7 +74,9 @@ export function register() {
 
   ipcMain.handle('analysis:rename', async (_e, { projectId, id, name }: any = {}) => {
     try {
+      const before = await analysis.getAnalysis(projectId, id);
       const updated = await analysis.updateAnalysis(projectId, id, { name });
+      if (updated) await versions.record(projectId, 'dashboard', updated, { before });
       return updated ? { ok: true, analysis: updated } : { ok: false, error: 'Could not rename the analysis' };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to rename the analysis' };
@@ -83,7 +87,11 @@ export function register() {
   // wholesale; it is never patch-merged.
   ipcMain.handle('analysis:update', async (_e, { projectId, id, name, sheets, filters, style }: any = {}) => {
     try {
+      const before = await analysis.getAnalysis(projectId, id);
       const updated = await analysis.updateAnalysis(projectId, id, { name, sheets, filters, style });
+      // Every save is a version (src/app/versions.ts) — the autosave included;
+      // one that changed nothing versioned is dropped there, not here.
+      if (updated) await versions.record(projectId, 'dashboard', updated, { before });
       return updated ? { ok: true, analysis: updated } : { ok: false, error: 'Could not update the analysis' };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to update the analysis' };

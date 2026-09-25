@@ -33,6 +33,7 @@ import { sanitizeFilters } from '../analysis/visuals';
 import { explainText, suggestSteps, suggestCalcField } from '../ai/analyze';
 import { compile } from '../formula/formula';
 import * as trace from '../engine/residentTrace';
+import * as versions from '../app/versions';
 
 // Datasets (file-based data sources) IPC — pick+parse/paste/save/list/get/delete.
 // All are ipcMain.handle (request/response). Native open dialog runs in MAIN;
@@ -590,9 +591,13 @@ export function register() {
   // through the SAME path a later edit does — one commit primitive, one cache
   // invalidation, not two.
   async function commitSteps(projectId: string, datasetId: string, steps: unknown) {
+    const prior = await datasets.getDatasetMeta(projectId, datasetId);
     const res = await datasets.updateSteps(projectId, datasetId, steps);
     if (!res) return { ok: false, error: 'Dataset not found' };
     const { dataset, output } = res;
+    // A pipeline edit is a version of the dataset (src/app/versions.ts).
+    await versions.record(projectId, 'dataset', { id: datasetId, steps: dataset.steps || [] },
+      { before: prior ? { id: datasetId, steps: prior.steps || [], updatedAt: prior.updatedAt } : undefined });
     return {
       ok: true,
       dataset,

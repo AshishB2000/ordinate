@@ -361,8 +361,9 @@ async function main(): Promise<void> {
     };
   });
   ok('the ⋯ menu opens with every action enabled',
-     menu.expanded === 'true' && menu.labels.length === 6 && menu.disabled.length === 0
-     && menu.labels.indexOf('Add to dashboard') >= 0 && menu.labels.indexOf('Export') >= 0,
+     menu.expanded === 'true' && menu.labels.length === 7 && menu.disabled.length === 0
+     && menu.labels.indexOf('Add to dashboard') >= 0 && menu.labels.indexOf('Export') >= 0
+     && menu.labels.indexOf('History') >= 0,
      JSON.stringify(menu));
   await win.keyboard.press('Escape');
   await win.waitForTimeout(400);

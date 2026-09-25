@@ -294,6 +294,7 @@ function openVisualCardMenu(anchor: HTMLButtonElement, v: any): void {
       add('Duplicate', () => handleDuplicateVisual(id));
       add('Add to dashboard', () => handleAddVisualToAnalysis(id));
       add('Export', () => handleExportVisual(id));
+      add('History', () => void vhOpen('visual', id, v && v.name ? String(v.name) : ''));
       add('Delete', () => handleDeleteVisual(id));
     },
     () => anchor.setAttribute('aria-expanded', 'false'),
