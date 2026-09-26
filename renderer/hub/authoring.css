@@ -1,0 +1,745 @@
+/* Authoring depth — relationships, actions and navigation, card kinds, maps and
+   the accessibility layer. Its own sheet (linked after hub.css) so these
+   surfaces carry no merge weight in the 14k-line shared one. Tokens only: every
+   colour, size and duration comes from theme.css. */
+
+/* ── Relationships (Data → Relationships) ─────────────────────────────────── */
+
+.rel-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+.rel-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  flex-wrap: wrap;
+}
+.rel-explain {
+  margin: 0;
+  flex: 1 1 320px;
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+.rel-canvas {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 120px;
+  min-height: 300px;
+  padding: var(--sp-32);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background-color: var(--surface-2);
+  background-image: radial-gradient(var(--border-2) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+.rel-canvas.is-empty {
+  display: block;
+  background-image: none;
+}
+.rel-lane {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-24);
+}
+.rel-lane-cap {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.rel-node {
+  width: 224px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--sp-12);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+}
+.rel-node-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.rel-node-head .ic { color: var(--accent); flex: none; }
+.rel-node-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rel-node-meta {
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.rel-node-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.rel-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--sp-8);
+  font-family: var(--font-mono);
+  font-size: var(--t-11);
+  color: var(--accent-2);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-full);
+}
+.rel-edges {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.rel-edge {
+  fill: none;
+  stroke: var(--border-3);
+  stroke-width: 2;
+}
+.rel-edge.is-selected {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+.rel-edge-end {
+  fill: var(--surface);
+  stroke: var(--border-3);
+  stroke-width: 2;
+}
+.rel-edge-label {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  padding: 4px var(--sp-8);
+  font: 600 var(--t-11) / 1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-full);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+.rel-edge-label:hover,
+.rel-edge-label.is-selected {
+  color: var(--accent-2);
+  border-color: var(--accent);
+}
+.rel-canvas-hint {
+  align-self: center;
+  max-width: 280px;
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+.rel-cols,
+.rel-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.4fr) minmax(160px, 1.4fr) 120px 150px 110px 40px;
+  align-items: center;
+  gap: var(--sp-12);
+  min-height: 44px;
+}
+.rel-row { cursor: pointer; }
+.rel-row.is-selected { background: var(--accent-soft); }
+.rel-end {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.rel-end-ds {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.rel-end-col {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.rel-kind { font-size: var(--t-13); }
+.rel-num {
+  font-size: var(--t-13);
+  font-variant-numeric: tabular-nums;
+}
+.rel-num.is-warn { color: var(--warn); }
+.rel-none {
+  padding: var(--sp-16) var(--sp-8);
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+
+/* The New relationship dialog. Scrolls inside itself on a short window, and
+   gives its selects the same explicit height the metric editor does (a native
+   <select> clips descenders at --t-15 otherwise). */
+.rel-modal {
+  width: min(760px, calc(100vw - 48px));
+  max-height: calc(100vh - var(--sp-48));
+  overflow-y: auto;
+}
+.rel-modal select.ws-modal-input { height: 38px; }
+.rel-modal-intro {
+  margin: 0 0 var(--sp-16);
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+.rel-modal-sides {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--sp-16);
+}
+.rel-modal-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.rel-modal-arrow { color: var(--muted); }
+.rel-sug-head {
+  margin-top: var(--sp-16);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.rel-sug {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: var(--sp-8) 0 var(--sp-16);
+}
+.rel-sug-item {
+  display: grid;
+  grid-template-columns: 1fr 120px 96px;
+  column-gap: var(--sp-12);
+  row-gap: 2px;
+  padding: var(--sp-8) var(--sp-12);
+  text-align: left;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+.rel-sug-item:hover { border-color: var(--border-3); }
+.rel-sug-item[aria-checked="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.rel-sug-pair {
+  font-family: var(--font-mono);
+  font-size: var(--t-13);
+  font-weight: 600;
+}
+.rel-sug-meter {
+  align-self: center;
+  height: 6px;
+  overflow: hidden;
+  background: var(--surface-3);
+  border-radius: var(--r-full);
+}
+.rel-sug-meter > span {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+}
+.rel-sug-rate {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.rel-sug-why {
+  grid-column: 1 / -1;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.rel-sug-none {
+  margin: 0;
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+.rel-modal-note {
+  min-height: 1em;
+  margin: var(--sp-8) 0 0;
+  font-size: var(--t-12);
+  color: var(--warn);
+}
+
+/* ── Selection layer and navigation (dashSelection.ts) ─────────────────────── */
+
+.dash-sel-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  padding: var(--sp-8) 0;
+  border-bottom: 1px solid var(--border-hairline);
+}
+.dash-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin-right: var(--sp-8);
+  padding-right: var(--sp-16);
+  border-right: 1px solid var(--border);
+}
+.dash-crumb-from {
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+.dash-sel-chip {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent-2);
+}
+.dash-sel-chip--narrow { border-style: dashed; }
+.dash-sel-chip-txt { white-space: nowrap; font-weight: 500; }
+.has-tile-actions canvas { cursor: pointer; }
+
+/* The tooltip that draws another visual (tileActions.ts). Body-mounted and
+   fixed, so a card's overflow cannot clip it. */
+.tv-tip {
+  position: fixed;
+  z-index: 1000;
+  width: 272px;
+  padding: var(--sp-12);
+  pointer-events: none;
+  background: var(--surface-float);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+}
+.tv-tip-head {
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.tv-tip-sub {
+  margin-bottom: var(--sp-8);
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.tv-tip-chart {
+  position: relative;
+  width: 240px;
+  height: 140px;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+
+/* ── Properties: actions and the added card kinds ─────────────────────────── */
+
+#an-props-body.has-kind-props #an-props-hint { display: none; }
+.an-kind-props {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+.ae-sec {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  margin-top: var(--sp-16);
+  padding-top: var(--sp-16);
+  border-top: 1px solid var(--border);
+}
+.ae-h {
+  margin: 0;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.ae-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.ae-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--sp-12);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.ae-row-head {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-8);
+}
+.ae-row-head > .ae-field,
+.ae-row-head > .ae-label { flex: 1 1 auto; }
+.ae-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.ae-label {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ae-hint {
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.ae-tiles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.ae-warn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-8);
+  font-size: var(--t-12);
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-radius: var(--r-sm);
+}
+.ae-warn p {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+}
+.ae-warn .ic { flex: none; margin-top: 1px; }
+.ae-add { align-self: flex-start; }
+
+/* ── The Navigation card (navCard.ts) ─────────────────────────────────────── */
+
+/* A one-row Navigation or Divider card has no room for a 36px head: the head
+   (drag handle, menu, properties) floats in the top-right corner instead and
+   the body gets the whole card. Scoped past the workbench's (1,3,0) card rule. */
+:root #dash-grid .dash-card--nav .dash-card-head,
+:root #dash-grid .dash-card--divider .dash-card-head {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 2;
+  flex: none;
+  height: 28px;
+  padding: 0 var(--sp-4);
+  background: transparent;
+  border: 0;
+}
+.dash-card--nav .dash-card-title,
+.dash-card--divider .dash-card-title { display: none; }
+:root #dash-grid .dash-card--nav .dash-card-body { padding: 0; }
+.nav-card {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  height: 100%;
+  padding: 0 var(--sp-12);
+}
+.nav-card-btn.is-current {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.nav-card--tabs {
+  gap: 0;
+  align-items: stretch;
+  padding: 0;
+}
+.nav-card-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 var(--sp-16);
+  font: 500 var(--t-13) / 1 var(--font-ui);
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+.nav-card-tab:hover { color: var(--text); }
+.nav-card-tab.is-current {
+  color: var(--text-strong);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Text cards as Markdown (textCard.ts) ─────────────────────────────────── */
+
+.md-card {
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.md-card > :first-child { margin-top: 0; }
+.md-card > :last-child { margin-bottom: 0; }
+.md-card p { margin: 0 0 var(--sp-8); }
+.md-card .md-h {
+  margin: var(--sp-12) 0 var(--sp-4);
+  line-height: var(--lh-tight);
+  color: var(--text-strong);
+}
+.md-card .md-h1 { font-size: var(--t-20); }
+.md-card .md-h2 { font-size: var(--t-15); }
+.md-card .md-h3 { font-size: var(--t-13); text-transform: uppercase; letter-spacing: var(--tr-label); }
+.md-card ul,
+.md-card ol { margin: 0 0 var(--sp-8); padding-left: 1.4em; }
+.md-card li + li { margin-top: 2px; }
+.md-card code {
+  padding: 1px 4px;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--surface-3);
+  border-radius: 4px;
+}
+.md-card pre {
+  margin: 0 0 var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
+  overflow: auto;
+  background: var(--surface-3);
+  border-radius: var(--r-sm);
+}
+.md-card pre code { padding: 0; background: none; }
+.md-card a { color: var(--accent-2); text-decoration: underline; text-underline-offset: 2px; }
+.md-token.is-resolved { font-variant-numeric: tabular-nums; }
+.md-token.is-missing {
+  color: var(--warn);
+  border-bottom: 1px dashed currentColor;
+}
+.md-editor {
+  min-height: 160px;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+}
+
+/* ── Image and divider cards (layoutKinds.ts) ─────────────────────────────── */
+
+.dash-card--image .dash-card-body,
+.dash-card--divider .dash-card-body { padding: 0; }
+.img-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.img-card img { display: block; width: 100%; height: 100%; }
+.img-card--contain img { object-fit: contain; }
+.img-card--cover img { object-fit: cover; }
+.img-card--fill img { object-fit: fill; }
+:root #dash-grid .dash-card--divider {
+  background: transparent;
+  border-color: transparent;
+}
+.divider-line {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--border-2);
+}
+.dash-card--divider .dash-card-body {
+  display: flex;
+  align-items: center;
+}
+
+/* ── Containers and tabs ──────────────────────────────────────────────────── */
+
+.dash-card.is-group { z-index: 0; }
+.dash-card.in-group { z-index: 1; }
+.dash-card.in-group.in-pad--sm { margin: 2px; }
+.dash-card.in-group.in-pad--md { margin: 6px; }
+.dash-card.in-group.in-pad--lg { margin: 12px; }
+/* Scoped to beat the workbench's `.an-workbench.is-active #dash-grid .dash-card`
+   (1,3,0), which paints every card white. */
+:root #dash-grid .dash-card.grp-bg--subtle { background: var(--surface-3); }
+:root #dash-grid .dash-card.grp-bg--surface { background: var(--surface); }
+:root #dash-grid .dash-card.grp-bg--accent { background: var(--accent-soft); border-color: var(--accent-line); }
+:root #dash-grid .dash-card.grp-bg--none { background: transparent; border-style: dashed; }
+.dash-card.is-group .dash-card-title { font-weight: 600; color: var(--text-strong); }
+.dash-card.is-folded .dash-card-body { display: none; }
+.grp-fold {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.grp-fold:hover { color: var(--text); background: var(--surface-2); }
+.grp-tabs {
+  display: flex;
+  align-self: stretch;
+  flex: 1;
+  min-width: 0;
+  gap: var(--sp-4);
+  overflow-x: auto;
+}
+.grp-tab {
+  padding: 0 var(--sp-12);
+  font: 500 var(--t-13) / 1 var(--font-ui);
+  color: var(--muted);
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+.grp-tab:hover { color: var(--text); }
+.grp-tab[aria-selected="true"] {
+  color: var(--text-strong);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Arranging (gridArrange.ts) ───────────────────────────────────────────── */
+
+#dash-grid { position: relative; }
+.dash-card.is-multi {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+}
+.an-arrange {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-12);
+  margin-bottom: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
+  background: var(--surface);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+}
+.an-arrange-count {
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.an-arrange-group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.an-arrange-label {
+  margin-right: var(--sp-4);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.an-guide {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  background: var(--accent);
+}
+.an-guide--x { top: 0; bottom: 0; width: 1px; }
+.an-guide--y { left: 0; right: 0; height: 1px; }
+.grp-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  margin: 0;
+  font-size: var(--t-13);
+  color: var(--muted);
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-md);
+}
+
+/* ── Maps: the builder's map settings, clusters, colour legend ─────────────── */
+
+.enc-map-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--sp-8) var(--sp-12);
+  margin-top: calc(-1 * var(--sp-4));
+}
+.enc-map-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.cv-map-cluster {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font: 600 var(--t-11) / 1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-ink);
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px var(--accent-soft);
+  cursor: zoom-in;
+}
+.cv-map-cluster:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+/* Bottom-LEFT, clear of the size legend (bottom-right) and the unmatched note under it. */
+.cv-map-legend--colors { left: 8px; right: auto; bottom: 36px; max-height: 180px; overflow: auto; }
+.cv-map-legend--colors .cv-map-legend-row { gap: 6px; }
+/* A map on a dashboard fills its tile, as a chart does (hub.css pins every
+   .cv-map-wrap to 320px, which left an empty band under a tall map tile). */
+:root .dash-card .cv-viz-area .cv-map-wrap,
+:root .dash-card .cv-viz-area .cv-map-wrap .cv-map-container { height: 100%; min-height: 220px; }
+
+/* The focus-mode head is ONE row (hub.css). Measured with the sample open:
+   every button at its natural width, 14 gaps and the name at its 96px floor
+   need 892px of content box. Just under that, More keeps its word for screen
+   readers only (the 900px window CI runs at is 868px, which then fits); under
+   856px — 1180px with the dock pushing — the four add buttons fold into it and
+   it reads "Add". */
+body.an-focus .dash-editor-head { container: dash-head / inline-size; }
+.dash-more-tight { display: none; }
+@container dash-head (max-width: 891px) {
+  #dash-add-more .dash-more-wide {
+    position: absolute; width: 1px; height: 1px; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+}
+@container dash-head (max-width: 855px) {
+  #dash-add-visual, #dash-add-metric, #dash-add-text, #dash-add-control { display: none; }
+  #dash-add-more .dash-more-wide { display: none; }
+  #dash-add-more .dash-more-tight { display: inline; }
+}

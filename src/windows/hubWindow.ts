@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { BrowserWindow, screen, nativeTheme, Rectangle, TitleBarOverlayOptions } from 'electron';
+import { BrowserWindow, screen, nativeTheme, session, Rectangle, TitleBarOverlayOptions } from 'electron';
 
 const ROOT = path.join(__dirname, '..', '..');
 
@@ -70,10 +70,24 @@ function fitToWorkArea(workArea: Rectangle, preferredWidth: number): Rectangle {
   return { x, y, width, height };
 }
 
+// The second half of the hub's bridge (preload/hubAuthoringPreload.ts, split at
+// hubPreload's 800-line cap). A window takes ONE preload, so this one runs from
+// the session — registered once, however many hub windows open.
+let authoringPreload = false;
+function registerAuthoringPreload(): void {
+  if (authoringPreload) return;
+  authoringPreload = true;
+  session.defaultSession.registerPreloadScript({
+    type: 'frame',
+    filePath: path.join(ROOT, 'preload', 'hubAuthoringPreload.js'),
+  });
+}
+
 // The hub — the app's main window. `query` (a tab's "Open in new window", see
 // src/ipc/windows.ts) is handed to the page as its location.search: which
 // record to boot into, in which project, and that it is a SECONDARY window.
 export function createHubWindow(opts: { query?: Record<string, string> } = {}): BrowserWindow {
+  registerAuthoringPreload();
   // Size/position against the primary display's WORK AREA, not its full bounds,
   // so the window opens large but stays above the Dock and below the menu bar.
   const display = screen.getPrimaryDisplay();

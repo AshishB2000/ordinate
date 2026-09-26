@@ -39,7 +39,15 @@ import type { FilterStep } from '../data/transforms';
 import { sanitizePeriod, sanitizeCompare } from './dateIntel';
 import type { CompareMode, PeriodPreset } from './dateIntel';
 
-export type CardType = 'visual' | 'text' | 'metric' | 'control';
+// Tile actions and the card kinds beyond these four live in one PURE module
+// the renderer loads too (renderer/hub/cardModel.ts, the geoMatch pattern), so
+// what a card may store is decided here by the same code the editor runs.
+const cardModel = require('../../renderer/hub/cardModel') as {
+  EXTRA_TYPES: string[];
+  sanitizeExtras: (o: Record<string, unknown>, card: Card) => boolean;
+};
+
+export type CardType = 'visual' | 'text' | 'metric' | 'control' | 'nav' | 'image' | 'divider' | 'container' | 'tabs';
 export type CardAction = 'delete-sample';
 export type MetricAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';
 /**
@@ -154,6 +162,17 @@ export interface Card {
   action?: CardAction; // type 'text'
   metric?: CardMetric; // type 'metric'
   control?: CardControl; // type 'control'
+  /** Click / menu / hover behaviours of a visual tile (renderer/hub/cardModel.ts). */
+  // ponytail: shapes owned and sanitized by cardModel; typed loosely across the require
+  actions?: any[]; // type 'visual'
+  nav?: any; // type 'nav'
+  image?: any; // type 'image' — a project asset (app/projectAssets.ts), fit, alt
+  divider?: any; // type 'divider'
+  container?: any; // type 'container' — title, background, padding, collapsible
+  tabs?: any; // type 'tabs' — the named tabs
+  /** The container / tabs card this card sits in, and which tab. Cards stay a flat list. */
+  parentId?: string;
+  tabId?: string;
 }
 
 export interface Page {
@@ -170,7 +189,7 @@ function isValidId(id: unknown): id is string {
   return typeof id === 'string' && UUID_RE.test(id);
 }
 
-const CARD_TYPES: ReadonlySet<string> = new Set(['visual', 'text', 'metric', 'control']);
+const CARD_TYPES: ReadonlySet<string> = new Set(['visual', 'text', 'metric', 'control', ...cardModel.EXTRA_TYPES]);
 /** Exported so analysisPlan's metric validation clamps against THIS set rather
  *  than a fourth copy of it — dashboardDelta.ts already restates one, and it
  *  says so apologetically. One whitelist, one place to widen it. */
@@ -285,6 +304,8 @@ export function sanitizeCard(raw: unknown): Card | null {
   const id = isValidId(o.id) ? o.id : randomUUID();
   const layout = sanitizeLayout(o.layout);
   const card: Card = { id, type, layout };
+  if (!cardModel.sanitizeExtras(o, card)) return null;
+  if (cardModel.EXTRA_TYPES.includes(type)) return card;
 
   if (type === 'visual') {
     // TWO-SHAPED (v3): a visual card is meaningful with a valid `visualId`

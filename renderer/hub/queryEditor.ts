@@ -192,6 +192,9 @@ function qeAccept(i: number): void {
 
 // ── Keys ─────────────────────────────────────────────────────────────────────
 
+// Set by Escape: the NEXT Tab moves focus on instead of indenting.
+let qeEscaped = false;
+
 function qeKeydown(e: KeyboardEvent, input: HTMLTextAreaElement): void {
   const mod = e.metaKey || e.ctrlKey;
   if (qeAcItems.length > 0 && !mod) {
@@ -219,7 +222,12 @@ function qeKeydown(e: KeyboardEvent, input: HTMLTextAreaElement): void {
     void qtRun();
     return;
   }
-  // A Tab in a SQL editor indents; the buttons around it are how you leave.
+  // No keyboard trap (WCAG 2.1.2): Escape, then Tab, leaves the editor the
+  // ordinary way — Tab alone still indents, which is what a SQL editor is for.
+  if (e.key === 'Escape') { qeEscaped = true; return; }
+  if (e.key === 'Tab' && qeEscaped) { qeEscaped = false; return; }
+  if (e.key !== 'Shift') qeEscaped = false;
+  // A Tab in a SQL editor indents; Shift+Tab, or Escape then Tab, is how you leave.
   if (e.key === 'Tab' && !e.shiftKey && qeAcItems.length === 0) {
     e.preventDefault();
     const at = input.selectionStart ?? 0;
@@ -232,6 +240,14 @@ function qeKeydown(e: KeyboardEvent, input: HTMLTextAreaElement): void {
 function initQueryEditor(): void {
   const input = qeInput();
   if (!input) return;
+  // Say how the Tab key behaves here, since it is not the page's usual one.
+  const hint = document.createElement('span');
+  hint.id = 'qt-sql-keys';
+  hint.className = 'sr-only';
+  hint.textContent = 'Tab indents. Press Escape, then Tab, to leave the editor.';
+  input.after(hint);
+  input.setAttribute('aria-describedby', hint.id);
+  input.dataset.tabIndents = '1';
   input.addEventListener('input', () => { qePaint(); qeRefreshAc(); qtOnSqlChanged(); });
   input.addEventListener('click', () => qeCloseAc());
   input.addEventListener('blur', () => qeCloseAc());

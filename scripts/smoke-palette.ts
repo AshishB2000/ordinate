@@ -56,6 +56,9 @@ async function main(): Promise<void> {
   }).catch(() => {});
   await win.waitForSelector('#side-ai-btn', { timeout: 60_000 });
   await app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].setContentSize(1440, 900); });
+  // The ⌘⇧D checks start from light. The app follows the OS appearance, and a
+  // Mac on Auto turns dark in the evening — which failed this smoke by the clock.
+  await app.evaluate(({ nativeTheme }) => { nativeTheme.themeSource = 'light'; });
   // The sample project is seeded on first launch; the palette searches records
   // through main, so it has to be on disk before anything is typed.
   await win.waitForTimeout(4000);

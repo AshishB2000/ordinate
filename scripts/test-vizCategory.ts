@@ -475,6 +475,18 @@ async function main(): Promise<void> {
       out.data.labels.every((l) => l === '' || /^\d{4}$/.test(String(l))),
       JSON.stringify(out.data.labels));
   }
+
+  // ── 7. The hydrate ceiling holds for a map too ────────────────────────────
+  //
+  // A map always hydrates and is answered by ipc/vizExtras before the ceiling's
+  // own place in vizDataFor, so the plan preview's cap is checked first.
+  {
+    const enc = { category: 'k', values: [{ column: 'v', aggregation: 'sum' }], geo: { level: 'us_state' } } as VizEncoding;
+    const capped = await ipcVisuals.vizDataFor(proj.id, texts.id, enc, [], { maxHydrateRows: texts.rows.length - 1 });
+    ok('map over the ceiling: tooLarge, not a hydrate', !capped.ok && capped.tooLarge === true, JSON.stringify(capped));
+    const under = await ipcVisuals.vizDataFor(proj.id, texts.id, enc, [], { maxHydrateRows: texts.rows.length });
+    ok('map at the ceiling: answered', under.ok === true, JSON.stringify(under).slice(0, 200));
+  }
 }
 
 function cleanup(): void {

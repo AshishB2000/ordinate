@@ -14,6 +14,8 @@
     content="default-src 'none'; style-src 'self'; script-src 'self'; connect-src https://a.tile.openstreetmap.org https://b.tile.openstreetmap.org https://c.tile.openstreetmap.org; img-src data: file: https://a.tile.openstreetmap.org https://b.tile.openstreetmap.org https://c.tile.openstreetmap.org;"/>
   <link rel="stylesheet" href="../theme.css"/>
   <link rel="stylesheet" href="hub.css"/>
+  <link rel="stylesheet" href="authoring.css"/>
+  <link rel="stylesheet" href="a11y.css"/>
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
        injecting a <style> at render time, which the hub CSP (style-src 'self')
@@ -2900,7 +2902,11 @@
 <script src="chartRender.js"></script>
 <script src="plotRender.js"></script>
 <script src="reportExport.js"></script>
+<script src="geoCluster.js"></script>
 <script src="mapRender.js"></script>
+<script src="mapOverlays.js"></script>
+<script src="mapBasemap.js"></script>
+<script src="mapPoints.js"></script>
 <script src="renderResult.js"></script>
 <script src="chartControls.js"></script>
 <script src="customDropdown.js"></script>
@@ -3097,6 +3103,28 @@
 <script src="hubHotkey.js"></script>
 <script src="hubMenus.js"></script>
 <script src="hubNotify.js"></script>
+<!-- Authoring depth. The project data model (Data → Relationships, built by its
+     own script) and the builder's related columns. Wired on DOMContentLoaded. -->
+<script src="encodingRelated.js"></script>
+<script src="encodingMap.js"></script>
+<script src="relationshipsPage.js"></script>
+<script src="relationshipDialog.js"></script>
+<!-- Tile actions, the selection layer and navigation, and the added card kinds.
+     cardModel is the PURE model main shares (UMD); navCard before cardKinds,
+     whose tables name its functions at load. -->
+<script src="cardModel.js"></script>
+<script src="dashSelection.js"></script>
+<script src="tileActions.js"></script>
+<script src="actionEditor.js"></script>
+<script src="navCard.js"></script>
+<script src="markdown.js"></script>
+<script src="textCard.js"></script>
+<script src="layoutKinds.js"></script>
+<script src="gridArrange.js"></script>
+<script src="cardKinds.js"></script>
+<!-- The accessibility layer: live regions, modal focus, menu / tab / list keys,
+     chart descriptions and keyboard marks. Wires itself on DOMContentLoaded. -->
+<script src="a11y.js"></script>
 <script src="captureStatus.js"></script>
 <script src="hubCapture.js"></script>
 <script src="captureList.js"></script>

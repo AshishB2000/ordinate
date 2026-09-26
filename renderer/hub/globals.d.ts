@@ -46,6 +46,20 @@ declare global {
   // Methods mirror the contextBridge surface 1:1. Payloads/results are typed
   // loosely (any) — ponytail: big IPC envelopes, tighten per-method as needed.
   interface Window {
+    // The authoring bridge (preload/hubAuthoringPreload.ts), split from `hub` at
+    // the preload's 800-line cap.
+    hubAuthoring: {
+      listRelationships(projectId: string): Promise<any>;
+      saveRelationship(projectId: string, relationship: any): Promise<any>;
+      deleteRelationship(projectId: string, id: string): Promise<any>;
+      suggestRelationshipKeys(projectId: string, fromId: string, toId: string): Promise<any>;
+      relatedColumns(projectId: string, datasetId: string): Promise<any>;
+      pickProjectImage(projectId: string): Promise<any>;
+      readProjectImage(projectId: string, id: string, ext: string): Promise<any>;
+      importBoundaries(projectId: string): Promise<any>;
+      listBoundaries(projectId: string): Promise<any>;
+      getBoundary(projectId: string, id: string, property?: string): Promise<any>;
+    };
     hub: {
       takeScreenshot(): void;
       getKeyStatus(): Promise<any>;

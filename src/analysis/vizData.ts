@@ -393,6 +393,15 @@ function buildRaw(
   return { labels, series };
 }
 
+/**
+ * `afterKey` runs once the group key exists and before anything is aggregated —
+ * the one point a JOINED table (analysis/joinJs.ts) can mask a related row it
+ * reached more than once in the same group. Absent for every single-dataset call.
+ */
+export interface VizHooks {
+  afterKey?: (table: TableData, keyCols: string[]) => TableData;
+}
+
 // PURE: dataset columns + rows + a user encoding → the EXACT renderer input shape.
 // Never throws — a missing category / no measure / unknown column yields a clear,
 // empty result with a warning.
@@ -401,6 +410,7 @@ export function buildVizData(
   rows: Cell[][],
   encoding: VizEncoding,
   filters?: FilterStep[],
+  hooks?: VizHooks,
 ): VizDataResult {
   const cols = Array.isArray(columns) ? columns : [];
   let table: TableData = { columns: cols, rows: Array.isArray(rows) ? rows : [] };
@@ -462,6 +472,7 @@ export function buildVizData(
       category = re.info;
       relabel = re.relabel;
     }
+    if (hooks?.afterKey) table = hooks.afterKey(table, hasSplit ? [enc.category, enc.series as string] : [enc.category]);
     chart = hasSplit ? buildPivot(table, enc, warnings) : buildAggregated(table, enc, warnings);
     // The bucket ids grouped on are turned into axis text here, once the groups
     // exist — never before, or two buckets sharing a label would become one.

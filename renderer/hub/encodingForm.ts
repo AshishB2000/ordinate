@@ -160,10 +160,17 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
 
   const wells = opts.variant === 'wells';
   if (wells) root.classList.add('is-wells');
+  // Points, world cities, imported boundaries and the basemap (encodingMap.ts).
+  const mapFields = encMapMount(root, geoSel, () => opts.onChange());
 
   let columns: EncCol[] = [];
   let measures: EncMeasure[] = [];
   let filters: any[] = [];
+  // Columns reachable through relationships (encodingRelated.ts), and the
+  // project/dataset they were loaded for. `columns` stays the primary's own.
+  let related: EncRelatedCol[] = [];
+  let relatedFor = '';
+  let relatedPreset: any = null;
 
   /** The dashed "nothing here yet" line an empty well shows. */
   function placeholder(text: string): HTMLElement {
@@ -300,13 +307,33 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     const first = dims[0] || nums[0];
     catSel.value = value;
     if ((!value || catSel.value !== value) && first) catSel.value = first.name;
+    encAppendRelated(catSel, related, () => true, value);
   }
 
   /** The grain control belongs to a date category and nothing else. */
   function catType(): string {
     const name = catSel ? catSel.value : '';
-    const col = columns.find((c) => c.name === name);
+    const col = columns.find((c) => c.name === name) || related.find((c) => c.name === name);
     return col ? col.type : '';
+  }
+
+  /**
+   * Load the related columns for the dataset in hand, once per dataset, and
+   * re-apply the encoding the form was given — which may NAME a related column
+   * the first fill could not offer yet.
+   */
+  async function refreshRelated(): Promise<void> {
+    const ds = opts.dataset ? opts.dataset() : null;
+    const key = ds && ds.projectId && ds.datasetId ? ds.projectId + '/' + ds.datasetId : '';
+    if (!key || key === relatedFor) return;
+    relatedFor = key;
+    const cols = await encLoadRelated(ds.projectId, ds.datasetId);
+    if (relatedFor !== key || (cols.length === 0 && related.length === 0)) return;
+    related = cols;
+    const before = JSON.stringify(api.getEncoding());
+    api.setColumns(columns, relatedPreset || api.getEncoding(), filters);
+    relatedPreset = null;
+    if (JSON.stringify(api.getEncoding()) !== before) opts.onChange();
   }
 
   function syncGrain(): void {
@@ -361,6 +388,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
         colSel.className = 'viz-select viz-value-col';
         colSel.setAttribute('aria-label', 'Measure column');
         fill(colSel, nums.map((c) => ({ value: c.name, label: c.label || c.name, title: c.title })), m.column);
+        encAppendRelated(colSel, related, (c) => c.type === 'number', m.column);
         colSel.addEventListener('change', () => { measures[i].column = colSel.value; opts.onChange(); });
         row.appendChild(colSel);
 
@@ -570,11 +598,17 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
   // Leaving the select without choosing puts the pill back.
   [catSel, serSel].forEach((s) => s && s.addEventListener('blur', () => syncSingles()));
 
-  return {
+  const api: EncodingFormApi = {
     el: root,
 
-    setColumns(cols: EncCol[], preset?: any, presetFilters?: any[]): void {
+    setColumns(cols: EncCol[], rawPreset?: any, presetFilters?: any[]): void {
       columns = Array.isArray(cols) ? cols : [];
+      const preset = encJoinRefs(rawPreset);
+      // A different dataset: its related columns are not these. Keep the preset
+      // until they load, since it may name one of them.
+      const ds = opts.dataset ? opts.dataset() : null;
+      const key = ds && ds.projectId && ds.datasetId ? ds.projectId + '/' + ds.datasetId : '';
+      if (key !== relatedFor) { related = []; relatedPreset = preset; }
 
       // Category: text/date columns first, numbers under "Bin numeric…" — a
       // dimension is far more often one of the former, and choosing one of the
@@ -591,10 +625,9 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
         [{ value: '', label: 'None' }].concat(textCols.map((c) => ({ value: c.name, label: c.label || c.name, title: c.title }))),
         preset && typeof preset.series === 'string' ? preset.series : '',
       );
+      encAppendRelated(serSel, related, (c) => c.type !== 'number', preset && typeof preset.series === 'string' ? preset.series : '');
 
-      if (geoSel) {
-        geoSel.value = preset && preset.geo && typeof preset.geo.level === 'string' ? preset.geo.level : '';
-      }
+      mapFields.set(preset && preset.geo, columns);
 
       if (preset && Array.isArray(preset.values) && preset.values.length) {
         measures = preset.values.map((v: any) => ({
@@ -610,6 +643,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       renderMeasures();
       renderFilters();
       syncSingles();
+      void refreshRelated();
     },
 
     // Re-applies against the columns already loaded, keeping the current
@@ -676,9 +710,9 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       // Same rule as the grain: a date category's business only.
       const overlay = overlaySel && analyticsRow && !analyticsRow.hidden ? overlaySel.value : '';
       if (overlay) enc.overlay = overlay;
-      const geoLevel = geoSel ? geoSel.value : '';
-      if (geoLevel) enc.geo = { level: geoLevel };
-      return enc;
+      const geo = mapFields.get();
+      if (geo) enc.geo = geo;
+      return encSplitRefs(enc);
     },
 
     // Rows with no column — and now rows with no OPERATOR — are dropped here;
@@ -739,4 +773,5 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       root.hidden = !on;
     },
   };
+  return api;
 }

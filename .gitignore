@@ -212,6 +212,50 @@ scripts/**/*.js
 # Data-section layout (list-first restructure) — emitted sibling.
 /renderer/hub/dataSection.js
 
+# Authoring depth — relationships, actions, card kinds, maps, accessibility.
+/src/analysis/relationships.js
+/src/analysis/joinPlan.js
+/src/analysis/joinJs.js
+/src/analysis/keySuggest.js
+/src/engine/joinResident.js
+/src/ipc/relationships.js
+/src/ipc/vizExtras.js
+/src/ipc/authoringDepth.js
+/renderer/hub/encodingRelated.js
+/renderer/hub/relationshipsPage.js
+/renderer/hub/relationshipDialog.js
+/scripts/test-joins.js
+/renderer/hub/cardModel.js
+/renderer/hub/dashSelection.js
+/renderer/hub/tileActions.js
+/renderer/hub/actionEditor.js
+/renderer/hub/navCard.js
+/renderer/hub/cardKinds.js
+/scripts/test-tileActions.js
+/renderer/hub/markdown.js
+/renderer/hub/textCard.js
+/renderer/hub/layoutKinds.js
+/renderer/hub/gridArrange.js
+/src/app/projectAssets.js
+/src/ipc/projectAssets.js
+/scripts/test-markdown.js
+/scripts/test-cardLayout.js
+/renderer/hub/geoCluster.js
+/renderer/hub/mapOverlays.js
+/renderer/hub/mapBasemap.js
+/renderer/hub/mapPoints.js
+/renderer/hub/encodingMap.js
+/src/analysis/places.js
+/src/analysis/geojsonCheck.js
+/src/analysis/mapData.js
+/src/app/projectBoundaries.js
+/src/ipc/projectBoundaries.js
+/scripts/build-places.js
+/scripts/test-mapPoints.js
+/renderer/hub/a11y.js
+/scripts/test-a11y.js
+/scripts/smoke-authoring.js
+
 # Command palette: the registry, its contents, the overlay, and the native menu
 # built from the same list — emitted siblings.
 /renderer/hub/commands.js

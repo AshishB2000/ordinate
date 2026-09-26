@@ -50,6 +50,9 @@ const SMOKES = [
   'smoke-templates',
   'smoke-dashboards',
   'smoke-dashboard-edit',
+  // Accessibility, enforced across every surface — names, tab order, modal
+  // focus, WCAG AA contrast in both themes and every style preset, and `?`.
+  'test-a11y',
   'smoke-insights',
   'smoke-metrics',
   // After smoke-insights: both write to the sample project, and this one's
@@ -72,6 +75,9 @@ const SMOKES = [
   // History, Trash, Lineage, Projects and first-run guidance. Its own fresh
   // profile: the Get-started card and the coach marks only exist on first launch.
   'smoke-workspace',
+  // Relationships and joins, tile actions and navigation, the new card kinds,
+  // point / custom-boundary maps — end to end on the sample project.
+  'smoke-authoring',
 ];
 
 const results: { name: string; code: number }[] = [];

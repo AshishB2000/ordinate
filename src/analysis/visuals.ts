@@ -39,10 +39,30 @@ export interface VizMeasure {
    * `metric:usage` can say which visuals a metric appears on.
    */
   metricId?: string;
+  /**
+   * The RELATED dataset this measure's column belongs to, reached through the
+   * project's relationships (analysis/joinPlan.ts). Absent means the visual's
+   * own dataset — every visual saved before relationships existed.
+   */
+  datasetId?: string;
 }
 
 export interface VizGeo {
-  level: 'country' | 'us_state' | 'us_county' | 'us_city' | 'us_zip';
+  /**
+   * `point` plots rows at their `lat`/`lon` columns; `world_city` (and
+   * `us_city` / `us_zip`) places values through the offline place table
+   * (analysis/places.ts); `custom` is a project-imported boundary set.
+   */
+  level: 'country' | 'us_state' | 'us_county' | 'us_city' | 'us_zip' | 'world_city' | 'point' | 'custom';
+  lat?: string;
+  lon?: string;
+  /** Colour points by this column (text → categories, number → a ramp). */
+  color?: string;
+  /** `custom`: the imported boundary set, and the feature property joined to the category. */
+  boundaryId?: string;
+  property?: string;
+  /** OSM raster tiles (the default on screen) or none — an offline land/water fill (the default in exports). */
+  basemap?: 'osm' | 'none';
 }
 
 export interface VizEncoding {
@@ -50,6 +70,9 @@ export interface VizEncoding {
   values: VizMeasure[]; // one or more measures → one or more series
   series?: string; // OPTIONAL split/pivot column (category × series → grid of series)
   geo?: VizGeo; // present only for map chart types
+  /** The related dataset `category` / `series` come from (analysis/joinPlan.ts); absent = the visual's own. */
+  categoryDatasetId?: string;
+  seriesDatasetId?: string;
   /**
    * OPTIONAL roll-up for a DATE category (day/week/month/quarter/year). Absent
    * means "pick the finest grain that keeps the axis readable", which is what
@@ -187,7 +210,9 @@ function visualFilePath(projectId: string, id: string): string {
 }
 
 const AGG_FNS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max', 'none']);
-const GEO_LEVELS: ReadonlySet<string> = new Set(['country', 'us_state', 'us_county', 'us_city', 'us_zip']);
+const GEO_LEVELS: ReadonlySet<string> = new Set([
+  'country', 'us_state', 'us_county', 'us_city', 'us_zip', 'world_city', 'point', 'custom',
+]);
 
 // Atomic JSON write: temp sibling then rename (atomic on same fs). Copied from
 // datasets.ts.
@@ -220,11 +245,16 @@ export function sanitizeEncoding(raw: unknown): VizEncoding {
     // UUID-shaped only — the same guard `sanitizeCard` puts on a card's
     // metricId, for the same reason: this id reaches a path in the metrics store.
     if (typeof vo.metricId === 'string' && UUID_RE.test(vo.metricId)) measure.metricId = vo.metricId;
+    if (typeof vo.datasetId === 'string' && UUID_RE.test(vo.datasetId)) measure.datasetId = vo.datasetId;
     values.push(measure);
   }
 
   const enc: VizEncoding = { category, values };
   if (typeof o.series === 'string' && o.series) enc.series = o.series;
+  const catDs = o.categoryDatasetId;
+  if (typeof catDs === 'string' && UUID_RE.test(catDs)) enc.categoryDatasetId = catDs;
+  const serDs = o.seriesDatasetId;
+  if (enc.series && typeof serDs === 'string' && UUID_RE.test(serDs)) enc.seriesDatasetId = serDs;
   // Whitelisted against DATE_GRAINS, like every other enum here: a model- or
   // plan-supplied grain survives, anything else is DROPPED rather than clamped
   // to a default, because an absent grain already means "choose one from the
@@ -241,8 +271,17 @@ export function sanitizeEncoding(raw: unknown): VizEncoding {
   const pivot = sanitizePivot(o.pivot);
   if (pivot) enc.pivot = pivot;
   if (o.geo && typeof o.geo === 'object') {
-    const level = (o.geo as Record<string, unknown>).level;
-    if (typeof level === 'string' && GEO_LEVELS.has(level)) enc.geo = { level: level as VizGeo['level'] };
+    const g = o.geo as Record<string, unknown>;
+    if (typeof g.level === 'string' && GEO_LEVELS.has(g.level)) {
+      const geo: VizGeo = { level: g.level as VizGeo['level'] };
+      for (const k of ['lat', 'lon', 'color', 'property'] as const) {
+        const v = g[k];
+        if (typeof v === 'string' && v) geo[k] = v;
+      }
+      if (typeof g.boundaryId === 'string' && UUID_RE.test(g.boundaryId)) geo.boundaryId = g.boundaryId;
+      if (g.basemap === 'osm' || g.basemap === 'none') geo.basemap = g.basemap;
+      enc.geo = geo;
+    }
   }
   return enc;
 }

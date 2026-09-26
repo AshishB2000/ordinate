@@ -79,6 +79,7 @@ function openEditorWith(rec: any, title: string): void {
   const nameEl = dashEl('dash-name');
   if (nameEl) nameEl.textContent = title;
   dashHistReset(); // this state is the floor — nothing before it is undoable
+  dashSelOnOpen(); // dashSelection.ts — a navigation's carried selection, or none
   renderDashFilterBar();
   renderDashPages();
   renderDashGrid();
@@ -315,6 +316,7 @@ function renderDashGrid(): void {
   // The cards were just rebuilt, so the authoring workbench has to repaint its
   // selection ring and drop a selection whose card no longer exists.
   anSyncWorkbench();
+  authoringAfterGrid(); // layoutKinds.ts — groups under their children, the active tab, folds
   // Which datasets the sheet reads can change with any card edit, so the
   // freshness line is derived from the cards on every grid render.
   refreshDashFreshness();
@@ -541,27 +543,37 @@ function reapplyCardStyle(card: any): void {
   if (el) applyDashCardStyle(el, card.layout);
 }
 
+// Each of these three looks the card up again by id: the menu and key handlers
+// that call them captured the card when the grid was drawn, and the autosave
+// has since swapped in main's copy — the old object moves nothing that is saved.
 function nudgeCard(card: any, dx: number, dy: number): void {
+  card = dashCardAnywhere(card.id) || card;
   const l = card.layout || (card.layout = { x: 0, y: 0, w: 6, h: 4 });
+  const x0 = l.x;
+  const y0 = l.y;
   l.x = clampInt(l.x + dx, 0, DASH_GRID_COLS - (l.w || 1), l.x);
   l.y = Math.max(0, (l.y || 0) + dy);
   reapplyCardStyle(card);
+  authoringAfterGesture(card, 'move', l.x - x0, l.y - y0);
   markDashDirty('Move card');
 }
 
 function resizeCard(card: any, dw: number, dh: number): void {
+  card = dashCardAnywhere(card.id) || card;
   const l = card.layout || (card.layout = { x: 0, y: 0, w: 6, h: 4 });
   l.w = clampInt((l.w || 1) + dw, 1, DASH_GRID_COLS - (l.x || 0), l.w);
   l.h = clampInt((l.h || 1) + dh, 1, 100000, l.h);
   reapplyCardStyle(card);
+  authoringAfterGesture(card, 'resize', 0, 0);
   markDashDirty('Resize card');
 }
 
 function removeCard(card: any): void {
   const page = dashCurrentPage();
   if (!page) return;
-  const i = page.cards.indexOf(card);
+  const i = page.cards.findIndex((c: any) => c && c.id === card.id);
   if (i >= 0) page.cards.splice(i, 1);
+  authoringAfterRemove(card.id); // gridArrange.ts — a group's children stay, ungrouped
   markDashDirty('Remove card');
   renderDashGrid();
 }
@@ -588,6 +600,7 @@ function onDashGridDrop(e: DragEvent, grid: HTMLElement): void {
 // ── Card body renderers ─────────────────────────────────────────────────────
 function renderDashCardBody(card: any, body: HTMLElement): void {
   body.innerHTML = '';
+  if (renderAuthoringCard(card, body)) return; // cardKinds.ts — navigation and the other added kinds
   if (card.type === 'visual') { renderVisualCard(card, body); return; }
   if (card.type === 'metric') { renderMetricCard(card, body); return; }
   renderTextCard(card, body);
@@ -647,7 +660,7 @@ async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void>
   // the UNCHANGED visual:data channel — it sanitizes + applies filters (in order,
   // missing-column-tolerant) before aggregation, so one dashboard filter drives every
   // card. Mirrors mergeDashboardFilters (src/dashboardFilters.ts).
-  const merged = mergeDashFilters(effectiveFilters(), visual.filters);
+  const merged = mergeDashFilters(effectiveFilters(), visual.filters).concat(dashTileSteps(card.id));
   let res: any;
   try {
     res = await window.hub.computeVisualData(currentProjectId, visual.datasetId, visual.encoding, merged, dashParamPayload());
@@ -706,6 +719,7 @@ async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void>
   // Cross-filter first: when it is on it owns the plain click (it writes), and
   // drilling stays available through the ⋯ menu. Otherwise the click drills.
   // Drilling is a READ, so it is offered on a published snapshot too.
-  if (!wireCrossFilter(area, visual)) wireDrillClick(area, drill);
+  // A tile's own click ACTION (tileActions.ts) outranks both.
+  if (!wireTileActions(area, card, visual) && !wireCrossFilter(area, visual)) wireDrillClick(area, drill);
 }
 

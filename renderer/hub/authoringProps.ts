@@ -106,6 +106,7 @@ async function anWriteVisual(): Promise<void> {
 // `overrides` (whitelisted in src/visuals.ts) rather than a new storage field —
 // two booleans do not justify a file-format decision.
 function anRenderInteractions(card: any): void {
+  renderKindProps(card); // cardKinds.ts — properties for a card kind with no encoding
   const host = anEl('an-interact');
   if (!host) return;
   host.innerHTML = '';
@@ -175,6 +176,7 @@ function anRenderInteractions(card: any): void {
       + ' yet — only charts are clickable.';
     host.appendChild(p);
   }
+  void renderActionEditor(card, host); // actionEditor.ts — navigate / link / narrow / tooltip
 }
 
 // ── The Properties panel ────────────────────────────────────────────────────

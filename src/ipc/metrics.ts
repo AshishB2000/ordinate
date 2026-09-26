@@ -41,6 +41,7 @@ import * as datasets from '../data/datasets';
 import { readDistinctPage, distinctValuesPageJs } from '../engine/datasetPage';
 import { periodPlan, orderPeriods } from '../analysis/insightsAgg';
 import type { FilterStep } from '../data/transforms';
+import { relatedColumnNames } from './relationships';
 import * as versions from '../app/versions';
 import * as trash from '../app/trash';
 
@@ -106,7 +107,9 @@ async function resolveDefinition(
   if (depth > MAX_FORMULA_DEPTH) return null;
 
   const meta = await datasets.getDatasetMeta(ctx.projectId, datasetId);
-  const columns = meta ? meta.columns.map((c) => c.name) : [];
+  // A related dataset's columns too: `sum(revenue) / sum(target)` reaches Targets
+  // through the project's relationships, resolved by computeCardMetric's join hook.
+  const columns = (meta ? meta.columns.map((c) => c.name) : []).concat(await relatedColumnNames(ctx.projectId, datasetId));
   // `[Revenue] * [[growth]]` — the parameter becomes a literal before parsing.
   const compiled = compileMetricFormula(bindFormulaText(definition.formula, ctx.params).text, columns);
   if (!compiled.ok) return null;

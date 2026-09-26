@@ -220,6 +220,7 @@ function anMoveGesture(e: PointerEvent): void {
     g.next.h = g.mode === 's' || g.mode === 'se'
       ? Math.max(1, g.h0 + dy) : g.h0;
   }
+  authoringSnap(g); // gridArrange.ts — neighbours' edges and centres, with guides
   anShowGhost(g.grid, g.next.x, g.next.y, g.next.w, g.next.h);
 }
 
@@ -230,11 +231,13 @@ function anEndGesture(): void {
   g.el.classList.remove('is-dragging');
   document.body.classList.remove('an-grabbing');
   anClearGhost();
+  authoringClearGuides();
   const l = g.card.layout;
   const changed = l.x !== g.next.x || l.y !== g.next.y || l.w !== g.next.w || l.h !== g.next.h;
   if (!changed) return;
   l.x = g.next.x; l.y = g.next.y; l.w = g.next.w; l.h = g.next.h;
   reapplyCardStyle(g.card);
+  authoringAfterGesture(g.card, g.mode, l.x - g.x0, l.y - g.y0);
   // ONE commit for the whole gesture: anMoveGesture only moves a ghost, so the
   // record is not touched until the pointer comes up, right here.
   markDashDirty(g.mode === 'move' ? 'Move card' : 'Resize card');
@@ -261,9 +264,11 @@ function anWireCards(): void {
     if (head) {
       head.draggable = false;
       head.addEventListener('pointerdown', (e) => {
-        if ((e as PointerEvent).button !== 0) return;
+        if ((e as PointerEvent).button !== 0 || (e as PointerEvent).shiftKey) return;
         anSelectCard(card.id);
-        anBeginGesture(e as PointerEvent, card, el, 'move');
+        // By id, now: `card` is from when the grid was drawn, and the autosave
+        // replaces card objects — a stale one moves nothing that is saved.
+        anBeginGesture(e as PointerEvent, anCardById(card.id) || card, el, 'move');
       });
 
       // The card's own way into Properties. Added here rather than in
@@ -316,7 +321,7 @@ function anWireCards(): void {
         if ((e as PointerEvent).button !== 0) return;
         e.stopPropagation();
         anSelectCard(card.id);
-        anBeginGesture(e as PointerEvent, card, el, mode);
+        anBeginGesture(e as PointerEvent, anCardById(card.id) || card, el, mode);
       });
       el.appendChild(h);
     });
