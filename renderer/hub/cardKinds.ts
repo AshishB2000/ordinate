@@ -89,12 +89,29 @@ function initCardKinds(): void {
   more.className = 'btn btn-sm dash-edit-only';
   more.setAttribute('aria-haspopup', 'menu');
   more.appendChild(icon('plus'));
-  const t = document.createElement('span');
-  t.textContent = 'More';
-  more.appendChild(t);
+  // "More" beside the four add buttons; "Add" once a narrow head folds them in
+  // here (authoring.css, the dash-head container query).
+  for (const [cls, text] of [['dash-more-wide', 'More'], ['dash-more-tight', 'Add']]) {
+    const t = document.createElement('span');
+    t.className = cls;
+    t.textContent = text;
+    more.appendChild(t);
+  }
   more.appendChild(icon('chevron-down', 14));
   more.addEventListener('click', () => {
     openMiniMenu(more, (menu: HTMLElement, close: () => void) => {
+      // The add buttons the head folded away, delegated so each keeps its one handler.
+      for (const id of ['dash-add-visual', 'dash-add-metric', 'dash-add-text', 'dash-add-control']) {
+        const btn = document.getElementById(id);
+        if (!btn || btn.offsetParent !== null) continue;
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'chart-menu-item';
+        row.appendChild(icon('plus', 14));
+        row.append(btn.textContent.trim());
+        row.addEventListener('click', () => { close(); btn.click(); });
+        menu.appendChild(row);
+      }
       KIND_ADDS.forEach(([label, ic, run]) => {
         const row = document.createElement('button');
         row.type = 'button';

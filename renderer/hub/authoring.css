@@ -723,3 +723,23 @@
    .cv-map-wrap to 320px, which left an empty band under a tall map tile). */
 :root .dash-card .cv-viz-area .cv-map-wrap,
 :root .dash-card .cv-viz-area .cv-map-wrap .cv-map-container { height: 100%; min-height: 220px; }
+
+/* The focus-mode head is ONE row (hub.css). Measured with the sample open:
+   every button at its natural width, 14 gaps and the name at its 96px floor
+   need 892px of content box. Just under that, More keeps its word for screen
+   readers only (the 900px window CI runs at is 868px, which then fits); under
+   856px — 1180px with the dock pushing — the four add buttons fold into it and
+   it reads "Add". */
+body.an-focus .dash-editor-head { container: dash-head / inline-size; }
+.dash-more-tight { display: none; }
+@container dash-head (max-width: 891px) {
+  #dash-add-more .dash-more-wide {
+    position: absolute; width: 1px; height: 1px; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+}
+@container dash-head (max-width: 855px) {
+  #dash-add-visual, #dash-add-metric, #dash-add-text, #dash-add-control { display: none; }
+  #dash-add-more .dash-more-wide { display: none; }
+  #dash-add-more .dash-more-tight { display: inline; }
+}

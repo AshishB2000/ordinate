@@ -169,8 +169,9 @@ async function main(): Promise<void> {
        JSON.stringify(form.aggOptions) ===
          JSON.stringify(['Sum', 'Average', 'Count', 'Min', 'Max', 'Raw (no aggregation)']),
      JSON.stringify(form.aggOptions));
-  ok('…Split by defaulting to None, and all six geo levels',
-     form.seriesFirst === 'None' && form.geoOptions === 6,
+  // Six bundled levels, then lat/long points, world cities and "Import boundaries…".
+  ok('…Split by defaulting to None, and all nine geo options',
+     form.seriesFirst === 'None' && form.geoOptions === 9,
      `series="${form.seriesFirst}" geo=${form.geoOptions}`);
   ok('…and every label still resolves to its own control after the id rewrite',
      form.labelResolves && form.labelSuffixed, form.labelFor);

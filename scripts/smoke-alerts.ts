@@ -145,8 +145,9 @@ async function main(): Promise<void> {
     const el = document.querySelector(`.dash-card[data-card-id="${id}"] .dash-metric-value`);
     return (el && el.textContent) || '';
   }, revenueCardId);
-  ok(`the card itself reads ${REVENUE_SHOWN} — the figure every assertion below is about`,
-    shownValue === REVENUE_SHOWN, shownValue);
+  // The card carries the column's currency format; an alert's sentence does not.
+  ok(`the card itself reads $${REVENUE_SHOWN} — the figure every assertion below is about`,
+    shownValue === '$' + REVENUE_SHOWN, shownValue);
 
   // ── The card's menu writes a rule about THAT number ──────────────────────
   await win.evaluate((id: string) => {
