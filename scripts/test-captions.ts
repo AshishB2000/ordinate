@@ -15,6 +15,7 @@
 export {}; // module scope — sibling scripts share top-level names
 import { ok, failureCount, finish } from './selfcheck';
 import { tileCaption, captionFamily, compact } from '../src/analysis/captions';
+import { waterfallFigures, paretoFigures } from '../src/analysis/chartFigures';
 
 const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
@@ -289,6 +290,144 @@ ok('captionFamily knows the pivot family', captionFamily('pivot') === 'pivot');
   const cases = [0, 12.25, 999, 1500, 999_999, 5_194_598.73, 4.5e9, -1500];
   ok('compact() is formatCompact', cases.every((v) => compact(v) === formatCompact(v)),
     JSON.stringify(cases.map((v) => [compact(v), formatCompact(v)])));
+}
+
+// ── waterfall · Pareto · bullet · radar · calendar ───────────────────────────
+
+ok('waterfall: steps, span and the largest step (the spec sentence)',
+  tileCaption({
+    chartType: 'waterfall',
+    data: { labels: ['Total 2023', 'Technology', 'Furniture', 'Office', 'Other'],
+            series: s1('sum of revenue', [4_100_000, 1_300_000, -400_000, 100_000, 100_000]) },
+  }) === 'Four steps take revenue from 4.1M to 5.2M; the largest is Technology at +1.3M',
+  tileCaption({ chartType: 'waterfall', data: { labels: ['Total 2023', 'Technology', 'Furniture', 'Office', 'Other'], series: s1('sum of revenue', [4_100_000, 1_300_000, -400_000, 100_000, 100_000]) } }));
+
+ok('waterfall: with no opening total it starts from 0, and a fall keeps its sign',
+  tileCaption({ chartType: 'waterfall', data: { labels: ['A', 'B', 'C'], series: s1('sum of profit', [500, -900, 100]) } })
+  === 'Three steps take profit from 0 to -300; the largest is B at -900');
+
+ok('waterfall: the override names an opening total the label does not',
+  tileCaption({
+    chartType: 'waterfall',
+    data: { labels: ['Opening', 'Q1'], series: s1('sum of cash', [1_000, 250]) },
+    overrides: { waterfallTotals: ['Opening'] },
+  }) === 'One step takes cash from 1.0K to 1.3K: Q1 at +250');
+
+ok('waterfall: two series are a bridge from one sum to the other',
+  tileCaption({
+    chartType: 'waterfall',
+    data: { labels: ['East', 'West'], series: [{ name: '2023', values: [100, 300] }, { name: '2024', values: [180, 250] }] },
+  }) === 'Two steps take the total from 400 to 430; the largest is East at +80');
+
+ok('pareto: how many categories make 80% (the spec sentence)',
+  tileCaption({
+    chartType: 'pareto',
+    data: { labels: ['A', 'B', 'C', 'D', 'E'], series: s1('sum of revenue', [30, 20, 5, 35, 10]) },
+  }) === 'Three categories make 80% of revenue');
+
+ok('pareto: one dominant category is named',
+  tileCaption({ chartType: 'pareto', data: { labels: ['A', 'B', 'C'], series: s1('sum of revenue', [5, 90, 5]) } })
+  === 'B alone makes 80% of revenue');
+
+ok('pareto: when every category is needed, it says so',
+  tileCaption({ chartType: 'pareto', data: { labels: ['A', 'B', 'C', 'D'], series: s1('sum of revenue', [25, 25, 25, 25]) } })
+  === 'It takes all four categories to make 80% of revenue');
+
+ok('pareto: nothing positive has no 80% — it falls back to comparing',
+  tileCaption({ chartType: 'pareto', data: { labels: ['A', 'B'], series: s1('sum of revenue', [0, 0]) } })
+  === 'A and B tie for the lead in revenue at 0');
+
+ok('bullet: a second measure is the target, per category',
+  tileCaption({
+    chartType: 'bullet',
+    data: { labels: ['Technology', 'Furniture', 'Office'],
+            series: [{ name: 'sum of revenue', values: [128, 95, 101] }, { name: 'sum of target', values: [100, 100, 100] }] },
+  }) === 'Two of three categories reach target; Technology leads at 128%');
+
+ok('bullet: none reaching it names the closest',
+  tileCaption({
+    chartType: 'bullet',
+    data: { labels: ['A', 'B', 'C'], series: s1('sum of revenue', [50, 94, 10]) },
+    overrides: { bulletTarget: 100 },
+  }) === 'None of three categories reach target; B is closest at 94%');
+
+ok('bullet: one row reads as one figure against its target',
+  tileCaption({ chartType: 'bullet', data: { labels: ['Revenue'], series: s1('sum of revenue', [5_200_000]) },
+                overrides: { bulletTarget: 5_000_000 } })
+  === 'Revenue is at 104% of its 5.0M target');
+
+ok('bullet: no target at all says what the bars say',
+  tileCaption({ chartType: 'bullet', data: { labels: ['A', 'B'], series: s1('sum of revenue', [40, 10]) } })
+  === 'A leads revenue at 40, 4.0× B');
+
+ok('radar: who wins the most axes, on raw figures',
+  tileCaption({
+    chartType: 'radar',
+    data: { labels: ['West', 'East'], series: [
+      { name: 'sum of revenue', values: [900, 400] }, { name: 'sum of profit', values: [90, 120] },
+      { name: 'sum of units', values: [30, 20] }, { name: 'avg of discount', values: [0.2, 0.1] },
+    ] },
+  }) === 'West leads on three of four measures');
+
+ok('radar: a clean sweep is "all"',
+  tileCaption({ chartType: 'radar', data: { labels: ['A', 'B'], series: [
+    { name: 'x', values: [2, 1] }, { name: 'y', values: [2, 1] }, { name: 'z', values: [2, 1] },
+  ] } }) === 'A leads on all three measures');
+
+ok('calendar: the peak day and the span',
+  tileCaption({ chartType: 'calendar', data: { labels: ['2024-11-28', '2024-11-29', '2024-11-30'],
+                                               series: s1('sum of revenue', [5_000, 12_300, 800]) } })
+  === 'Revenue peaked at 12.3K on 2024-11-29, across 3 days');
+
+ok('the five newer ids map to their own families', [
+  captionFamily('waterfall') === 'waterfall', captionFamily('pareto') === 'pareto',
+  captionFamily('bullet') === 'bullet', captionFamily('radar') === 'radar', captionFamily('calendar') === 'calendar',
+].every(Boolean));
+
+/**
+ * DIFFERENTIAL: the caption's figures against the chart's.
+ *
+ * A caption is written in MAIN (src/analysis/chartFigures.ts) about a picture
+ * the RENDERER drew from renderer/hub/chartShapes.js — two implementations of
+ * one piece of arithmetic, so the house rule applies: run both over the same
+ * fixtures and require Object.is on every figure the sentence states.
+ */
+const shapes = require('../renderer/hub/chartShapes') as {
+  waterfallSteps: (labels: any[], series: any[], totals?: string[] | null) => { from: number; to: number; kind: string[] };
+  paretoShape: (labels: any[], values: any[]) => { count80: number; labels: any[] };
+};
+const WF: Array<{ name: string; data: any; totals?: string[] }> = [
+  { name: 'plain steps', data: { labels: ['a', 'b', 'c'], series: s1('v', [0.1, 0.2, 0.3]) } },
+  { name: 'opening total', data: { labels: ['Total', 'x', 'y'], series: s1('v', [1e6 / 3, -123.45, 7e-3]) } },
+  { name: 'empty subtotal mid-way', data: { labels: ['a', 'Subtotal', 'b', 'Grand total'], series: s1('v', [5, null, 2, null]) } },
+  { name: 'override total', data: { labels: ['Open', 'a', 'b'], series: [{ name: 'v', values: [10, 'x', -3] }] }, totals: ['Open'] },
+  { name: 'bridge', data: { labels: ['e', 'w', 'Total', 'n'], series: [
+    { name: 'p', values: [0.1, 0.7, 99, null] }, { name: 'q', values: [0.3, null, 1, 0.2] }] } },
+  { name: 'empty', data: { labels: [], series: s1('v', []) } },
+];
+for (const f of WF) {
+  const main = waterfallFigures(f.data, f.totals);
+  const drawn = shapes.waterfallSteps(f.data.labels, f.data.series, f.totals);
+  const steps = drawn.kind.filter((k) => k === 'up' || k === 'down').length;
+  ok(`differential waterfall (${f.name}): same start, end and step count`,
+     Object.is(main.from, drawn.from) && Object.is(main.to, drawn.to) && main.steps.length === steps,
+     JSON.stringify({ main: [main.from, main.to, main.steps.length], drawn: [drawn.from, drawn.to, steps] }));
+}
+const PARETO: Array<{ name: string; data: any }> = [
+  { name: 'spread', data: { labels: ['a', 'b', 'c', 'd', 'e'], series: s1('v', [30, 20, 5, 35, 10]) } },
+  { name: 'exact 80 in floats', data: { labels: ['a', 'b', 'c'], series: s1('v', [0.1, 0.7, 0.2]) } },
+  { name: 'ties', data: { labels: ['a', 'b', 'c', 'd'], series: s1('v', [2, 2, 2, 2]) } },
+  { name: 'negatives and nulls', data: { labels: ['a', 'b', 'c', 'd'], series: s1('v', [-5, null, 3, 1]) } },
+  { name: 'all zero', data: { labels: ['a', 'b'], series: s1('v', [0, 0]) } },
+  { name: 'long tail', data: { labels: Array.from({ length: 40 }, (_, i) => 'c' + i),
+                               series: s1('v', Array.from({ length: 40 }, (_, i) => 1 / (i + 1))) } },
+];
+for (const f of PARETO) {
+  const main = paretoFigures(f.data);
+  const drawn = shapes.paretoShape(f.data.labels, f.data.series[0].values);
+  ok(`differential pareto (${f.name}): same 80% count and the same leader`,
+     Object.is(main.count80, drawn.count80) && (drawn.labels.length === 0 || main.top === String(drawn.labels[0])),
+     JSON.stringify({ main, drawn: [drawn.count80, drawn.labels[0]] }));
 }
 
 if (!failureCount()) console.log('\nAll caption checks passed.');

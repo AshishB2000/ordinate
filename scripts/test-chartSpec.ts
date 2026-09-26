@@ -52,6 +52,9 @@ const CHART_SCRIPTS = [
   'chartTraits.js',
   'chartPalette.js',
   'chartTypeSpec.js',
+  'chartShapes.js',
+  'chartFamiliesExtra.js',
+  'chartFamiliesPlugins.js',
   'chartValueLabels.js',
   'chartDatasets.js',
   'chartScales.js',
@@ -170,6 +173,13 @@ const DATA = {
   ],
 };
 
+// A calendar heatmap draws DAYS, so it has its own fixture: a year boundary, a
+// null and a gap. On DATA above (region names) it returns null — asserted below.
+const CAL_DATA = {
+  labels: ['2023-12-28', '2023-12-29', '2023-12-31', '2024-01-01', '2024-01-02', '2024-01-05', '2024-01-08'],
+  series: [{ name: 'sum of revenue', values: [120, 340.5, null, 0, 15000, 95, 210] }],
+};
+
 // Three override sets: the defaults every chart is first drawn with, the
 // Customize menu turned all the way up, and the filtered/export shape (hidden
 // series, a period pick, no animation, tooltips off).
@@ -235,6 +245,7 @@ const CHART_IDS = [
   'pie', 'donut', 'scatter', 'gauge', 'combo', 'bubble',
   'treemap', 'heatmap', 'funnel', 'histogram',
   'sankey', 'candlestick', 'boxplot',
+  'waterfall', 'bullet', 'calendar', 'radar', 'pareto',
   'table', 'map_bubble', 'map_choropleth',
 ];
 
@@ -248,7 +259,7 @@ function capture(type: string, variant: string): { text: string; ok: boolean } {
   // A fresh deep copy per case: buildChart writes back onto `overrides`-adjacent
   // state (opts._funnelVals and friends) and sorts `series` in place-ish, and a
   // shared fixture would let case N-1 colour case N.
-  const data = JSON.parse(JSON.stringify(DATA));
+  const data = JSON.parse(JSON.stringify(type === 'calendar' ? CAL_DATA : DATA));
   const overrides = JSON.parse(JSON.stringify(OVERRIDES[variant]));
   const chart = api.buildChart(canvas, data, type, overrides);
   if (!chart || recorded.length !== 1) return { text: '', ok: false };
@@ -402,6 +413,27 @@ const GOLDEN: Record<string, string> = {
   "treemap/custom": 'dd923b5b900019ca',
   "treemap/default": '6ca42388e2a2b681',
   "treemap/filtered": 'd8a949baca22c73f',
+  // ADDED, not regenerated (feat: five chart types): the waterfall, bullet,
+  // calendar, radar and Pareto ids are new, drawn by chartFamiliesExtra.js /
+  // chartFamiliesPlugins.js, which the three family builders hand them to
+  // BEFORE any shared closure is reached — so every one of the 84 hashes above
+  // is untouched, and these 15 are first captures. The calendar's come from
+  // CAL_DATA (dates); the rest from DATA like every other id.
+  "bullet/custom": '5bc0d248a9b8bfbc',
+  "bullet/default": '6c97f54c2959e833',
+  "bullet/filtered": 'a79539bcc34b3448',
+  "calendar/custom": 'e1e20f632b792594',
+  "calendar/default": '4b58d99a353f6cc3',
+  "calendar/filtered": '96fda73d4a6035a6',
+  "pareto/custom": 'e7d631f415e13fdd',
+  "pareto/default": '038ee57d8e57c353',
+  "pareto/filtered": 'bd4d81e4abf3250b',
+  "radar/custom": 'dc40adaf793208de',
+  "radar/default": '35556f15a6c3aeb3',
+  "radar/filtered": 'f84411f7fa2454ec',
+  "waterfall/custom": '7452a0fa8073365a',
+  "waterfall/default": '8a6d36f1e5655b37',
+  "waterfall/filtered": 'ebb1008f0152b931',
 };
 
 // ── Run ────────────────────────────────────────────────────────────────────
@@ -438,7 +470,7 @@ for (const type of CHART_IDS) {
 ok('every chart id x override set captured a config',
    captured === CHART_IDS.length * variants.length,
    captured + ' of ' + CHART_IDS.length * variants.length);
-ok('28 chart ids covered', CHART_IDS.length === 28, String(CHART_IDS.length));
+ok('33 chart ids covered', CHART_IDS.length === 33, String(CHART_IDS.length));
 ok('the golden table has no stale entries',
    Object.keys(GOLDEN).every((k) => k in fresh),
    Object.keys(GOLDEN).filter((k) => !(k in fresh)).join(', '));
@@ -471,6 +503,24 @@ for (const t of ['pie', 'donut']) {
   ok(t + ' still labels its slices', ids.includes('roundLabels'), ids.join(', '));
   ok(t + ' has no gauge centre plugin', !ids.includes('gaugeCenter'), ids.join(', '));
 }
+
+// ── The five newer families ────────────────────────────────────────────────
+// Each carries its own plugins and none of the shared value-label ones, and a
+// calendar over labels that are not dates draws NOTHING rather than a blank grid.
+const want: Record<string, string[]> = {
+  waterfall: ['waterfallConnectors', 'waterfallLabels'],
+  pareto: ['paretoMarker', 'paretoLabels'],
+  bullet: ['bulletBands'],
+  radar: [],
+};
+for (const [t, ids] of Object.entries(want)) {
+  const got = pluginIds(t);
+  ok(t + ' carries exactly its own plugins', got.join() === ids.join(), got.join(', '));
+}
+recorded.length = 0;
+ok('a calendar over non-date labels is not drawn at all',
+   api.buildChart({ __canvas: 'calendar' } as unknown as HTMLCanvasElement,
+                  JSON.parse(JSON.stringify(DATA)), 'calendar', {}) === null && recorded.length === 0);
 
 if (process.env.ORDINATE_CHARTSPEC_EMIT) {
   // Regeneration aid for the ONE case this is legitimate: a deliberate,

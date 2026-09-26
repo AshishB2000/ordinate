@@ -70,18 +70,22 @@ function fitToWorkArea(workArea: Rectangle, preferredWidth: number): Rectangle {
   return { x, y, width, height };
 }
 
-// The hub — the app's main window: history rail + a sample capture conversation.
-// Static placeholder content for now (no persistence, no AI).
-export function createHubWindow(): BrowserWindow {
+// The hub — the app's main window. `query` (a tab's "Open in new window", see
+// src/ipc/windows.ts) is handed to the page as its location.search: which
+// record to boot into, in which project, and that it is a SECONDARY window.
+export function createHubWindow(opts: { query?: Record<string, string> } = {}): BrowserWindow {
   // Size/position against the primary display's WORK AREA, not its full bounds,
   // so the window opens large but stays above the Dock and below the menu bar.
   const display = screen.getPrimaryDisplay();
   const preferredWidth = Math.round(display.workArea.width * 0.9);
   const { x, y, width, height } = fitToWorkArea(display.workArea, Math.min(1180, preferredWidth));
+  // A second window cascades off the first rather than landing exactly on top
+  // of it, where it would read as nothing having happened.
+  const cascade = opts.query ? 32 : 0;
 
   const win = new BrowserWindow({
-    x,
-    y,
+    x: x + cascade,
+    y: y + cascade,
     width,
     height,
     minWidth: 900,
@@ -120,6 +124,6 @@ export function createHubWindow(): BrowserWindow {
     reclamping = false;
   });
 
-  void win.loadFile(path.join(ROOT, 'renderer', 'hub', 'index.html'));
+  void win.loadFile(path.join(ROOT, 'renderer', 'hub', 'index.html'), opts.query ? { query: opts.query } : undefined);
   return win;
 }

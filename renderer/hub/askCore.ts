@@ -35,7 +35,7 @@ function xpEl<T extends HTMLElement = HTMLElement>(id: string): T | null {
 // covers a panel that is not in the DOM yet — but the default that aimed it at
 // an element that cannot exist is gone, and tsc now names any caller that forgets.
 
-function xpAppendBubble(role: string, text: string, provenance: any, containerId: string): void {
+function xpAppendBubble(role: string, text: string, provenance: any, containerId: string, turn?: any): void {
   const list = xpEl(containerId);
   if (!list) return;
   const row = document.createElement('div');
@@ -44,6 +44,11 @@ function xpAppendBubble(role: string, text: string, provenance: any, containerId
   bubble.className = 'xp-bubble';
   bubble.textContent = text;
   row.appendChild(bubble);
+  // An answer turn draws its chart card ABOVE the narration (answerCard.ts).
+  if (role === 'assistant' && turn && turn.answer) {
+    row.classList.add('xp-msg-answer');
+    ansMount(row, bubble, turn);
+  }
 
   // Provenance is a FOOTNOTE — one small muted line, not a row of pills.
   // The pills had the composer chips' radius, fill and size, so they read as
@@ -71,9 +76,10 @@ function xpAppendBubble(role: string, text: string, provenance: any, containerId
 function xpRenderTurns(turns: any[], containerId: string): void {
   const list = xpEl(containerId);
   if (!list) return;
+  ansTeardown(list);
   list.querySelectorAll('.xp-msg').forEach((n) => n.remove());
   if (Array.isArray(turns)) {
-    turns.forEach((t) => xpAppendBubble(t.role, typeof t.text === 'string' ? t.text : '', t.provenance, containerId));
+    turns.forEach((t) => xpAppendBubble(t.role, typeof t.text === 'string' ? t.text : '', t.provenance, containerId, t));
   }
   xpScrollToBottom(containerId);
 }

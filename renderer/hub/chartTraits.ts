@@ -8,7 +8,7 @@
 // and through them the export paths).
 //
 // WHY ITS OWN FILE, not folded into renderResult.ts (which already owns chart ids
-// via VIZ_LABELS = 29, and was the other candidate):
+// via VIZ_LABELS = 34, and was the other candidate):
 //
 //   1. renderResult.ts is 634 lines — already past the 500-line smell line in
 //      .claude/rules/file-size.md. Moving 47 lines INTO it to get chartRender
@@ -62,9 +62,11 @@ const PER_SERIES_DATASET_TYPES = new Set([
 ]);
 
 // Types whose renderers don't draw value labels (gauge prints its own center value;
-// treemap/funnel already print values in place).
+// treemap/funnel already print values in place; a calendar's cells are too small
+// and a radar's points are normalised).
 const NO_VALUE_LABEL_TYPES = new Set([
   'treemap', 'funnel', 'sankey', 'candlestick', 'boxplot', 'gauge',
+  'calendar', 'radar',
 ]);
 
 // Legend on by default for every chart except plugin/synthetic types whose Chart.js
@@ -73,6 +75,8 @@ const NO_VALUE_LABEL_TYPES = new Set([
 const NO_LEGEND_TYPES = new Set([
   'gauge', 'bubble', 'treemap', 'heatmap', 'funnel', 'histogram',
   'sankey', 'candlestick', 'boxplot',
+  // Colour carries the meaning (up/down, bands, a ramp with its own legend).
+  'waterfall', 'bullet', 'calendar',
 ]);
 function legendOnByDefault(type: string, ser: ChartSeriesShape[]): boolean {
   if (NO_LEGEND_TYPES.has(type)) return false;

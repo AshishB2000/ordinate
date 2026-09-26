@@ -13,7 +13,7 @@ interface CmStep { anchor: () => HTMLElement | null; text: () => string }
 let cmCard: HTMLElement | null = null;
 let cmSteps: CmStep[] = [];
 let cmIdx = 0;
-let cmTarget: HTMLElement | null = null;
+let cmAnchorEl: HTMLElement | null = null;
 
 function cmVisible(el: Element | null): el is HTMLElement {
   if (!el) return false;
@@ -57,8 +57,8 @@ const CM_STEPS: CmStep[] = [
 function cmEnd(): void {
   if (cmCard) cmCard.remove();
   cmCard = null;
-  if (cmTarget) cmTarget.classList.remove('cm-target');
-  cmTarget = null;
+  if (cmAnchorEl) cmAnchorEl.classList.remove('cm-target');
+  cmAnchorEl = null;
   cmSteps = [];
   document.removeEventListener('mousedown', cmOnOutside, true);
   window.removeEventListener('resize', cmPlace);
@@ -71,8 +71,8 @@ function cmOnOutside(e: MouseEvent): void {
 
 /** Beside the anchor, on whichever side has room: below, above, then right. */
 function cmPlace(): void {
-  if (!cmCard || !cmTarget) return;
-  const a = cmTarget.getBoundingClientRect();
+  if (!cmCard || !cmAnchorEl) return;
+  const a = cmAnchorEl.getBoundingClientRect();
   const w = cmCard.offsetWidth;
   const h = cmCard.offsetHeight;
   const gap = 10;
@@ -101,9 +101,9 @@ function cmShow(i: number): void {
   while (i < cmSteps.length && !cmSteps[i].anchor()) i++;
   if (i >= cmSteps.length) { cmEnd(); return; }
   cmIdx = i;
-  if (cmTarget) cmTarget.classList.remove('cm-target');
-  cmTarget = cmSteps[i].anchor();
-  if (cmTarget) cmTarget.classList.add('cm-target');
+  if (cmAnchorEl) cmAnchorEl.classList.remove('cm-target');
+  cmAnchorEl = cmSteps[i].anchor();
+  if (cmAnchorEl) cmAnchorEl.classList.add('cm-target');
   if (!cmCard) {
     cmCard = document.createElement('div');
     cmCard.className = 'cm-card';

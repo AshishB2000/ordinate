@@ -123,6 +123,14 @@ async function cpRefresh(): Promise<void> {
     if (cmds.length) groups.push({ label: 'Commands', rows: cmds.map(cpCommandRow) });
   }
 
+  // `#sales` — the tag itself first, then (below) the records that carry it.
+  if (mode === 'all' && q.charAt(0) === '#') {
+    await ctLoadTags();
+    if (seq !== cpSeq) return;
+    const tags = cpTagGroup(q);
+    if (tags) groups.push(tags);
+  }
+
   // Paint the synchronous half at once — the records arrive a round trip later,
   // and a box that shows nothing until then reads as a freeze.
   cpPaint(groups.slice());
@@ -166,7 +174,7 @@ function cpPaint(groups: CpGroup[]): void {
       variant: 'search',
       iconName: 'search',
       title: 'No matches',
-      line: 'Try a shorter word, or > for commands and / for your data.',
+      line: 'Try a shorter word, or > for commands, / for your data and # for tags.',
     });
     none.classList.add('cp-none');
     box.appendChild(none);
@@ -201,6 +209,8 @@ function cpRowEl(r: CpRow, i: number): HTMLElement {
   title.className = 'cp-row-title';
   title.textContent = r.title;
   row.appendChild(title);
+
+  if (r.chips && r.chips.length) row.appendChild(ctTagChips(r.chips, 3));
 
   const meta = document.createElement('span');
   meta.className = 'cp-row-meta';

@@ -25,6 +25,8 @@ interface CpRecord {
   projectName: string;
   meta: string;
   type: string;
+  /** Catalog tags, coloured (src/app/catalogIndex.ts). */
+  tags?: CtTag[];
 }
 
 interface CpRow {
@@ -36,6 +38,8 @@ interface CpRow {
   run: () => void;
   /** Set on a record row — what → and ⌘↵ act on. */
   record?: CpRecord;
+  /** Tag chips shown after the title. */
+  chips?: CtTag[];
 }
 
 interface CpGroup { label: string; rows: CpRow[] }
@@ -59,6 +63,7 @@ function cpRecordRow(r: CpRecord): CpRow {
     meta: r.meta ? `${where} · ${r.meta}` : where,
     icon: CP_KIND_ICON[r.kind] || 'folder',
     record: r,
+    chips: r.tags,
     run: () => { paletteClose(); void paletteOpenRecord(r); },
   };
 }
@@ -71,6 +76,7 @@ const CP_KIND_ICON: Record<string, string> = {
   connection: 'plug',
   metric: 'gauge',
   report: 'file-text',
+  story: 'file-text',
   alert: 'bell',
 };
 
@@ -87,6 +93,7 @@ function cpToRecord(h: any): CpRecord {
     projectName: String(h.projectName || ''),
     meta: String(meta || ''),
     type: String(h.type && h.kind ? h.type : CP_KIND_LABEL[kind] || 'Record'),
+    tags: Array.isArray(h.tags) ? h.tags : undefined,
   };
 }
 
@@ -100,6 +107,20 @@ const CP_KIND_LABEL: Record<string, string> = {
   report: 'Report',
   alert: 'Alert',
 };
+
+/** `#sal` — the project's tags as rows; picking one shows everything carrying it in the Catalog. */
+function cpTagGroup(q: string): CpGroup | null {
+  if (q.charAt(0) !== '#' || !ctTagsCache || ctTagsCache.projectId !== currentProjectId) return null;
+  const want = ctNormTag(q);
+  const rows = ctTagsCache.tags.filter((t) => !want || t.name.indexOf(want) === 0).slice(0, CP_MAX_SUGGEST).map((t) => ({
+    title: 'Everything tagged #' + t.name,
+    meta: `${t.count || 0} tagged · Catalog`,
+    icon: 'filter',
+    chips: [t],
+    run: () => { paletteClose(); ctShowTag(t.name); },
+  }));
+  return rows.length ? { label: 'Tags', rows } : null;
+}
 
 /** The commands that belong to whatever is open, under the record's own name. */
 function cpContextGroup(): CpGroup | null {
@@ -233,6 +254,7 @@ async function paletteOpenRecord(r: CpRecord): Promise<void> {
     await openSavedVisual(r.id);
     return;
   }
+  if (r.kind === 'metric' || r.kind === 'story') { await ctOpenRecord(r.kind, r.id, r.projectId, r.name); return; }
   if (r.kind === 'connection') {
     if (r.projectId && r.projectId !== currentProjectId) await openWorkspace(r.projectId);
     selectSection('connect');

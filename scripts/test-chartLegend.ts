@@ -41,7 +41,7 @@ const CHART_UMD = path.join(__dirname, '..', 'node_modules', 'chart.js', 'dist',
 
 // index.html's dependency order, as in test-chartSpec.ts.
 const CHART_SCRIPTS = [
-  'chartTraits.js', 'chartPalette.js', 'chartTypeSpec.js',
+  'chartTraits.js', 'chartPalette.js', 'chartTypeSpec.js', 'chartShapes.js', 'chartFamiliesExtra.js', 'chartFamiliesPlugins.js',
   'chartValueLabels.js', 'chartDatasets.js', 'chartScales.js', 'chartRender.js',
 ];
 

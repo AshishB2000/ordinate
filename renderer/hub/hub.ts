@@ -84,6 +84,7 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
   initDockHero();         // dockHero.ts — the dock's empty state (observes #dk-messages)
   initHomeAsk();         // homeAsk.ts — Home greeting + ask bar (before selectSection paints it)
   initHomeData();        // homeData.ts — Home "Your data" + saved-visuals strip
+  initTabs();            // tabNav.ts — the tab strip + its commands; BEFORE Home's first paint, because a second window adopts its project here
   selectSection('home'); // workspace.ts — Home is the default section (paints via refreshHome)
   initHome();            // projects.ts
   initDatasets();        // datasets.ts
@@ -96,6 +97,8 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
   initDashboards();      // dashboards.ts
   initAnalyses();        // analyses.ts
   initReportBuilder();   // reportBuilder.ts — the Reports tab beside Dashboards
+  initStoryPage();       // storyPage.ts — the Stories tab and the story page (+ storyList.ts)
+  initStoryPresent();    // storyPresent.ts — present mode's bar
   initAuthoring();       // authoring.ts — the analysis workbench panels
   initAskActivity();     // askActivity.ts — live activity chips for an in-flight ask
   initVersionsPanel();   // versionsPanel.ts — the page-level History buttons

@@ -140,6 +140,12 @@
     </div>
   </div>
 
+  <!-- The tab strip — one tab per open RECORD (Home and the section lists are
+       not tabs). Painted entirely by tabStrip.ts; hidden while there are none,
+       so the content still starts right under the top bar. Hidden while
+       presenting, with the top bar (hub.css). -->
+  <div id="tab-strip" class="hub-tabstrip" role="tablist" aria-label="Open records" hidden></div>
+
   <!-- Hotkey registration failure — shown when globalShortcut.register() returns
        false. It sat inside the capture shell; it is a WINDOW-level condition
        (the global shortcut is dead everywhere, not just on one page), so it now
@@ -731,6 +737,42 @@
                   aria-selected="false" aria-controls="mp-wrap" tabindex="-1">Metrics</button>
           <button class="ds-tab" type="button" role="tab" id="ds-tab-query"
                   aria-selected="false" aria-controls="qt-wrap" tabindex="-1">Query</button>
+          <button class="ds-tab" type="button" role="tab" id="ds-tab-catalog"
+                  aria-selected="false" aria-controls="ct-wrap" tabindex="-1">Catalog</button>
+        </div>
+
+        <!-- The Catalog tab: every record of every kind, with its description,
+             tags, owner, last update and usage (catalogPage.ts). The shared
+             tag bar (catalogUi.ts) mounts itself above the column labels. -->
+        <div id="ct-wrap" role="tabpanel" aria-labelledby="ds-tab-catalog" hidden>
+          <div class="ct-toolbar">
+            <input class="ct-search" id="ct-search" type="search" placeholder="Filter by name, description, owner or #tag" aria-label="Filter the catalog" />
+            <div class="ct-kinds" id="ct-kinds" role="group" aria-label="Record kinds"></div>
+            <span class="viz-count ct-count" id="ct-count" hidden></span>
+          </div>
+          <div class="ws-table ct-table" id="ct-table" hidden>
+            <div class="ws-table-cols ct-cols">
+              <span>Name</span>
+              <span>Tags</span>
+              <span>Owner</span>
+              <span>Updated</span>
+              <span>Used by</span>
+              <span class="ws-col-action">Details</span>
+            </div>
+            <div class="ct-list" id="ct-list"></div>
+            <div class="ct-none" id="ct-none" hidden>
+              <span>Nothing matches these filters.</span>
+              <button class="btn btn-sm btn-ghost" type="button" id="ct-none-clear">Clear filters</button>
+            </div>
+          </div>
+          <div class="ws-empty ct-empty" id="ct-empty" hidden>
+            <span class="ws-empty-icon" aria-hidden="true"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="#i-list"/></svg></span>
+            <h3 class="ws-empty-h">Nothing to catalog yet</h3>
+            <p class="ws-empty-p">Every dataset, visual, dashboard, metric and report in this project is listed here with its description, tags and owner — so anyone can find the right one and know who to ask.</p>
+            <div class="ws-empty-actions">
+              <button class="btn btn-primary" type="button" id="ct-empty-import">Import a dataset</button>
+            </div>
+          </div>
         </div>
 
         <!-- The Metrics tab: the project's NAMED numbers. Same `.ws-table` /
@@ -1033,6 +1075,7 @@
               <div class="ds-explorer-titlerow">
                 <h3 class="ds-explorer-title" id="ds-explorer-title"></h3>
                 <span class="ds-source-badge" id="ds-explorer-source" hidden></span>
+                <span class="ct-head-chips" id="ds-explorer-tags" hidden></span>
               </div>
               <div class="ds-explorer-meta">
                 <span class="ds-fresh" id="ds-explorer-fresh"></span>
@@ -1049,6 +1092,7 @@
               <button class="btn btn-primary btn-sm" type="button" id="ds-act-visual">New visual</button>
               <button class="btn btn-sm" type="button" id="ds-act-dashboard">New dashboard</button>
               <button class="btn btn-sm" type="button" id="ds-act-ask">Ask</button>
+              <button class="btn btn-sm ct-details-btn" type="button" id="ds-act-details"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-info"/></svg><span>Details</span></button>
               <!-- History, Lineage and Move to Trash (dsExplorer.ts dsOpenMoreMenu). -->
               <button class="btn btn-sm ds-act-more" type="button" id="ds-act-more"
                 aria-haspopup="menu" aria-label="More dataset actions" title="More"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-more-horizontal"/></svg></button>
@@ -1073,6 +1117,8 @@
                     aria-selected="false" aria-controls="ds-tabp-quality" tabindex="-1">Quality</button>
             <button class="ds-tab tab" type="button" role="tab" id="ds-tab-insights"
                     aria-selected="false" aria-controls="ds-tabp-insights" tabindex="-1">Insights</button>
+            <button class="ds-tab tab" type="button" role="tab" id="ds-tab-columns"
+                    aria-selected="false" aria-controls="ds-tabp-columns" tabindex="-1">Columns</button>
           </div>
 
           <div class="ds-tab-body">
@@ -1110,6 +1156,11 @@
                finding for the open dataset, grouped by kind with counts. -->
           <div class="ds-tabp" id="ds-tabp-insights" role="tabpanel" aria-labelledby="ds-tab-insights" hidden>
             <div class="ins-tab-body" id="ds-insights-body"></div>
+          </div>
+
+          <!-- The column docs, editable in place (catalogPage.ts ctPaintColumnsTab). -->
+          <div class="ds-tabp" id="ds-tabp-columns" role="tabpanel" aria-labelledby="ds-tab-columns" hidden>
+            <div class="ct-coldoc" id="ct-coldoc"></div>
           </div>
 
           <div class="ds-tabp" id="ds-tabp-prepare" role="tabpanel" aria-labelledby="ds-tab-prepare" hidden>
@@ -1159,8 +1210,14 @@
                   <div class="dsp-ident">
                     <h4 class="dsp-name js-dsp-name"></h4>
                     <span class="dsp-kind js-dsp-kind"></span>
+                    <p class="dsp-doc js-dsp-doc" hidden></p>
                   </div>
+                  <!-- Column details (catalogDetails.ts) — in the head, not the action
+                       stack, so the histogram keeps the body's full height. -->
+                  <span class="dsp-head-btns">
+                  <button class="dsp-x js-dsp-details-btn" type="button" aria-label="Column details — description, display name, sensitivity" title="Column details — description, display name, sensitivity"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-info"/></svg></button>
                   <button class="dsp-x js-dsp-x" type="button" aria-label="Close the column profile"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-x"/></svg></button>
+                  </span>
                 </div>
                 <!-- The body scrolls; the actions below it do not. A ten-bar
                      histogram is taller than the panel, and with everything in
@@ -1246,6 +1303,7 @@
               <label class="viz-field-label" for="viz-dataset-select">Dataset</label>
               <select class="viz-select" id="viz-dataset-select" aria-label="Dataset"></select>
               <button class="btn btn-sm viz-suggest-btn" type="button" id="viz-suggest-btn"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-sparkles"/></svg><span>Suggest chart</span></button>
+              <button class="btn btn-sm ct-details-btn" type="button" id="viz-details-btn"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-info"/></svg><span>Details</span></button>
               <button class="btn btn-sm" type="button" id="viz-history-btn" hidden title="Version history"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-history"/></svg><span>History</span></button>
               <button class="btn btn-primary" type="button" id="viz-save-btn">Save visual</button>
             </div>
@@ -1338,6 +1396,38 @@
                   aria-selected="true" aria-controls="an-table">Dashboards</button>
           <button class="ds-tab" type="button" role="tab" id="rp-tab-reports"
                   aria-selected="false" aria-controls="rp-list-wrap" tabindex="-1">Reports</button>
+          <button class="ds-tab" type="button" role="tab" id="rp-tab-stories"
+                  aria-selected="false" aria-controls="st-list-wrap" tabindex="-1">Stories</button>
+        </div>
+
+        <!-- The Stories tab (storyList.ts). A story is the third way this project
+             publishes: one scrolling document, prose around live charts and
+             metrics. Cards show the title, the first line of prose and how long
+             it is; the toolbar creates one blank or drafts one with the Assistant. -->
+        <div id="st-list-wrap" role="tabpanel" aria-labelledby="rp-tab-stories" hidden>
+          <div class="st-list-bar">
+            <p class="st-list-note">Write it up: headings, prose, and live charts and metrics that stay current.</p>
+            <div class="st-list-actions">
+              <button class="btn" type="button" id="st-draft-btn"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-sparkles"/></svg><span>Draft with the Assistant</span></button>
+              <button class="btn btn-primary" type="button" id="st-new-btn">New story</button>
+            </div>
+          </div>
+          <div class="st-grid" id="st-grid" hidden></div>
+          <div class="ws-empty" id="st-empty" hidden>
+            <div class="ws-empty-art ws-empty-art--doc" aria-hidden="true">
+              <span class="ws-line ws-line--h"></span>
+              <span class="ws-line"></span>
+              <span class="ws-line ws-line--short"></span>
+              <span class="ws-bar ws-bar--2"></span>
+              <span class="ws-bar ws-bar--4"></span>
+            </div>
+            <h3 class="ws-empty-h">No stories yet</h3>
+            <p class="ws-empty-p">A story is a document you read top to bottom — headings and prose around live charts and metrics, which recompute every time it opens. Type / in any empty line to add a chart, a metric, an image or a callout; present it a section at a time, or export it as a PDF.</p>
+            <div class="ws-empty-actions">
+              <button class="btn btn-primary btn-lg" type="button" id="st-empty-new">New story</button>
+              <button class="btn btn-ghost btn-lg" type="button" id="st-empty-draft"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-sparkles"/></svg><span>Draft with the Assistant</span></button>
+            </div>
+          </div>
         </div>
 
         <!-- The Reports tab. One card per report: its cover drawn small, the
@@ -1397,6 +1487,7 @@
             <span class="rb-dirty" id="rp-dirty" hidden>Unsaved changes</span>
           </div>
           <div class="rb-head-actions">
+            <button class="btn btn-sm ct-details-btn" type="button" id="rp-details-btn"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-info"/></svg><span>Details</span></button>
             <button class="btn btn-sm" type="button" id="rp-save">Save</button>
             <button class="btn btn-sm btn-primary" type="button" id="rp-generate">Generate</button>
           </div>
@@ -1479,6 +1570,47 @@
               <p class="rb-note">Ordinate has no background service: a schedule fires while the app is running, and anything that came due while it was closed runs on the next launch.</p>
             </div>
           </aside>
+        </div>
+      </div>
+
+      <!-- THE STORY PAGE (storyPage.ts) — the fourth view of this section. A
+           left outline built from the headings, then one reading column at
+           760px, edited in place: / in an empty line opens the block picker,
+           ⋮⋮ drags a block, ⌘Z undoes through the dashboards' own history. -->
+      <div class="st-page" id="st-page" hidden>
+        <div class="st-head">
+          <button class="btn btn-sm" type="button" id="st-back">← Back</button>
+          <input class="st-name" id="st-name" type="text" aria-label="Story name" autocomplete="off" spellcheck="false"/>
+          <span class="st-status" id="st-status" aria-live="polite"></span>
+          <div class="st-head-actions">
+            <button class="icon-btn" type="button" id="st-undo" aria-label="Undo" title="Undo"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-undo"/></svg></button>
+            <button class="icon-btn" type="button" id="st-redo" aria-label="Redo" title="Redo"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-redo"/></svg></button>
+            <button class="btn btn-sm ct-details-btn ct-details-btn--icon" type="button" id="st-details-btn" aria-label="Details — description, tags, owner" title="Details — description, tags, owner"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-info"/></svg></button>
+            <button class="btn btn-sm" type="button" id="st-export">Export PDF</button>
+            <button class="btn btn-sm btn-primary" type="button" id="st-present">Present</button>
+            <button class="icon-btn" type="button" id="st-more" aria-label="More story actions" aria-haspopup="true"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-more-horizontal"/></svg></button>
+          </div>
+        </div>
+        <div class="st-body">
+          <nav class="st-outline" id="st-outline" aria-label="Outline">
+            <div class="st-outline-h">Outline</div>
+            <ol class="st-outline-list" id="st-outline-list"></ol>
+            <p class="st-outline-empty" id="st-outline-empty">Headings you write appear here. Start a line with # or ##.</p>
+          </nav>
+          <div class="st-scroll" id="st-scroll">
+            <article class="st-doc" id="st-doc"></article>
+          </div>
+        </div>
+      </div>
+
+      <!-- Present mode for a story: one page per heading, full window. -->
+      <div class="st-present" id="st-present-view" hidden>
+        <div class="st-present-stage"><article class="st-present-page" id="st-present-page"></article></div>
+        <div class="st-present-bar">
+          <button class="icon-btn" type="button" id="st-present-prev" aria-label="Previous section"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-chevron-left"/></svg></button>
+          <span class="st-present-count" id="st-present-count"></span>
+          <button class="icon-btn" type="button" id="st-present-next" aria-label="Next section"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+          <button class="btn btn-sm" type="button" id="st-present-exit">Exit</button>
         </div>
       </div>
 
@@ -1643,6 +1775,7 @@
           <button class="btn btn-sm" type="button" id="dash-back-btn"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-chevron-left"/></svg><span>Back</span></button>
           <span class="dash-name" id="dash-name"></span>
           <button class="btn btn-sm dash-edit-only" type="button" id="dash-rename-btn">Rename</button>
+          <button class="btn btn-sm ct-details-btn ct-details-btn--icon" type="button" id="dash-details-btn" aria-label="Details — description, tags, owner" title="Details — description, tags, owner"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-info"/></svg></button>
           <!-- Freshness of the DATA behind this sheet. One element for both
                hosts: analyses and published dashboards share this editor. -->
           <span class="dash-fresh" id="dash-fresh" hidden></span>
@@ -2343,6 +2476,7 @@
         <span><span class="kbd">&gt;</span> commands</span>
         <span><span class="kbd">/</span> your data</span>
         <span><span class="kbd">@</span> columns</span>
+        <span><span class="kbd">#</span> tags</span>
       </div>
     </div>
   </div>
@@ -2735,6 +2869,8 @@
      not exist yet and its position in this list is free — it sits with the
      other foundations because that is what it is. -->
 <script src="tooltip.js"></script>
+<!-- Catalog: shared tag chips, the tag-filter bar and the column-docs cache. -->
+<script src="catalogUi.js"></script>
 <script src="geoMatch.js"></script>
 <!-- Chart scripts, in DEPENDENCY ORDER. chartTraits has no dependencies of its
      own; chartPalette defines CHART_PALETTE + getCSSVar; chartTable reads
@@ -2752,6 +2888,12 @@
      which dispatches the `pivot` chart type to it. -->
 <script src="pivotRender.js"></script>
 <script src="chartTypeSpec.js"></script>
+<!-- Waterfall / bullet / calendar / radar / Pareto: the pure shapes (also
+     require()d by scripts/test-chartShapes.js), then the family module the
+     three builders below hand those five ids to, then what they draw by hand. -->
+<script src="chartShapes.js"></script>
+<script src="chartFamiliesExtra.js"></script>
+<script src="chartFamiliesPlugins.js"></script>
 <script src="chartValueLabels.js"></script>
 <script src="chartDatasets.js"></script>
 <script src="chartScales.js"></script>
@@ -2875,6 +3017,17 @@
 <script src="reportWriters.js"></script>
 <script src="reportBuilder.js"></script>
 <script src="reportList.js"></script>
+<!-- Stories (feat/workflow-depth) — the third tab beside Dashboards and Reports.
+     storyText.js is the pure Markdown subset / outline / page mapping (an IIFE
+     that attaches to window, like geoMatch.js); the rest only define functions,
+     resolved at call time, and are wired by initStoryPage/initStoryPresent in hub.js. -->
+<script src="storyText.js"></script>
+<script src="storyList.js"></script>
+<script src="storyPage.js"></script>
+<script src="storyBlocks.js"></script>
+<script src="storyPickers.js"></script>
+<script src="storyPresent.js"></script>
+<script src="storyPropose.js"></script>
 <script src="authoring.js"></script>
 <!-- authoring.ts was 1341 lines; these five are it, split by job. authoring.js
      stays first — it keeps the module-local state the rest read. -->
@@ -2923,6 +3076,11 @@
      hub.js. -->
 <script src="dockHero.js"></script>
 <script src="dockEdit.js"></script>
+<!-- Answer cards and "Explain" (feat/workflow-depth) — the chart an answer turn
+     carries, drawn above its narration by askCore's xpAppendBubble. Everything it
+     calls (renderVizInArea, dkTurnIntoAnalysis, dkOpenThread …) resolves at call
+     time; it only defines functions and two constants at load. -->
+<script src="answerCard.js"></script>
 <!-- Ask activity chips (feat/ask-activity) — the live "app showing its work"
      region for an in-flight ask, mounted into 'dk-messages' (dock.js). Reads
      xpScrollToBottom (askCore.js); dkSend calls its helpers at ask time;
@@ -2950,6 +3108,9 @@
 <script src="metricPicker.js"></script>
 <script src="metricEditor.js"></script>
 <script src="metricsPage.js"></script>
+<!-- Catalog: the Details popover, then the Catalog tab + Columns tab (wires both). -->
+<script src="catalogDetails.js"></script>
+<script src="catalogPage.js"></script>
 <script src="hubResultMenus.js"></script>
 <!-- The right panel History and Lineage share (sidePanel.ts), then History —
      after every surface whose opener it calls, before the command registry. -->
@@ -2975,6 +3136,16 @@
      they reach into (dashGrid, insights, dsProfile, dock). -->
 <script src="alerts.js"></script>
 <script src="alertsInbox.js"></script>
+<!-- Tabs: open records as tabs under the top bar, split view, a second window.
+     tabModel.js is the pure tab set; tabKinds.js the one table of record kinds;
+     tabNav.js keeps the tabs in step with the screen; tabSplit.js lays out two
+     panes; tabStrip.js is the strip itself. All reached only at call time
+     (hub.js boots them), so they sit after every page they open. -->
+<script src="tabModel.js"></script>
+<script src="tabKinds.js"></script>
+<script src="tabNav.js"></script>
+<script src="tabSplit.js"></script>
+<script src="tabStrip.js"></script>
 <script src="hub.js"></script>
 
 <!-- Phase 5 — the Svelte islands bundle. An IIFE assigning ONE global

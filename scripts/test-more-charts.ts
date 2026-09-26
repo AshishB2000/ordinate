@@ -8,9 +8,12 @@ import { ok, failureCount } from './selfcheck';
 const CHART_SERIES_MIN: Record<string, number> = {
   clustered_column: 2, clustered_bar: 2, stacked_column: 2, stacked_bar: 2,
   pct_stacked_column: 2, pct_stacked_bar: 2, stacked_area: 2, combo: 2,
-  scatter: 2, bubble: 3, heatmap: 2,
+  scatter: 2, bubble: 3, heatmap: 2, radar: 3,
 };
-const CHART_LABELS_MIN: Record<string, number> = { pie: 2, donut: 2, treemap: 2, heatmap: 2, funnel: 3 };
+const CHART_LABELS_MIN: Record<string, number> = {
+  pie: 2, donut: 2, treemap: 2, heatmap: 2, funnel: 3,
+  pareto: 2, waterfall: 2, radar: 2, calendar: 7,
+};
 const MAP_TYPES = new Set(['map_bubble', 'map_choropleth']);
 
 function canRenderType(type: string, numSeries: number, numLabels: number, hasGeo: boolean): boolean {
@@ -47,6 +50,10 @@ ok('scatter message names 2 series', needsText('scatter', 0, 5, false) === 'at l
 ok('pie message names 2 categories', needsText('pie', 3, 1, false) === 'at least 2 categories');
 ok('bubble message names 3 series', needsText('bubble', 1, 1, false) === 'at least 3 numeric series');
 ok('map message names place data', needsText('map_bubble', 5, 5, false) === 'place or region data');
+ok('radar needs 3 measures → 2 cannot render', !canRenderType('radar', 2, 5, false));
+ok('radar message names 3 series', needsText('radar', 1, 5, false) === 'at least 3 numeric series');
+ok('calendar needs a week of days', !canRenderType('calendar', 1, 6, false) && canRenderType('calendar', 1, 7, false));
+ok('waterfall and bullet render from one measure', canRenderType('waterfall', 1, 2, false) && canRenderType('bullet', 1, 1, false));
 
 // The "+ More" three-tier partition (mirrors buildVizPicker.openMorePanel): a type lives
 // in exactly one of Recommended / Selected / Other. Shared by the main view + export dialog.

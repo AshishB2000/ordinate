@@ -81,6 +81,17 @@ const chartMenuEl = (function () {
         </svg>
         Show underlying rows
       </button>
+      <!-- Explain: the app's facts about this chart, narrated in the dock.
+           Same gate as Drill — it needs the dataset and encoding behind it. -->
+      <button class="chart-menu-item" id="cm-explain" type="button" hidden>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"
+          stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          <line x1="8" y1="9" x2="16" y2="9"/>
+          <line x1="8" y1="13" x2="13" y2="13"/>
+        </svg>
+        Explain
+      </button>
     </div>
     <div class="chart-menu-sep"></div>
     <button class="chart-menu-customize-hdr" id="cm-customize-toggle" type="button">
@@ -145,6 +156,10 @@ const chartMenuEl = (function () {
           <option value="currency">Currency ($1,234)</option>
         </select>
       </div>
+      <div class="cm-field" id="cm-target-field" hidden>
+        <label class="cm-label" for="cm-target">Target value</label>
+        <input class="cm-input" id="cm-target" type="number" step="any" placeholder="Second measure, if any" autocomplete="off"/>
+      </div>
       <div class="cm-toggle-row" id="cm-smooth-row">
         <span class="cm-toggle-label">Smooth lines</span>
         <button class="cm-switch" id="cm-smooth" role="switch" aria-checked="true" type="button">
@@ -173,6 +188,7 @@ const cmCopyImg      = document.getElementById('cm-copy-img');
 const cmDownload     = document.getElementById('cm-download');
 const cmCopyData     = document.getElementById('cm-copy-data');
 const cmDrill        = document.getElementById('cm-drill');
+const cmExplain      = document.getElementById('cm-explain');
 const cmCustomToggle = document.getElementById('cm-customize-toggle');
 const cmCustomize    = document.getElementById('cm-customize');
 const cmTitleInput   = document.getElementById('cm-title') as HTMLInputElement;
@@ -186,6 +202,8 @@ const cmYZeroRow     = document.getElementById('cm-y-zero-row');
 const cmSort         = document.getElementById('cm-sort') as HTMLSelectElement;
 const cmSortField    = document.getElementById('cm-sort-field');
 const cmNumFmt       = document.getElementById('cm-numfmt') as HTMLSelectElement;
+const cmTarget       = document.getElementById('cm-target') as HTMLInputElement;
+const cmTargetField  = document.getElementById('cm-target-field');
 const cmSmooth       = document.getElementById('cm-smooth');
 const cmSmoothRow    = document.getElementById('cm-smooth-row');
 const cmAxisSection  = document.getElementById('cm-axis-section');

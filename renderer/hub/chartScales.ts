@@ -61,7 +61,11 @@ function buildChartScales(c: ChartCtx): any {
   });
 
   let scales: any;
-  if (isRound || isTreemap || isSankey) {
+  if (isExtraFamily(c)) {
+    // Waterfall / bullet / calendar / radar / Pareto: chartFamiliesExtra.js,
+    // with these two makers so their axes read like every other chart's.
+    scales = buildExtraScales(c, makeValueAxis, makeCategoryAxis);
+  } else if (isRound || isTreemap || isSankey) {
     scales = {};
   } else if (isCandlestick) {
     // category x (avoids needing a date adapter) + linear value axis
@@ -114,7 +118,8 @@ function buildChartScales(c: ChartCtx): any {
   }
 
   // Y-axis "start at zero" override → the value axis (y for vertical, x for horizontal).
-  if (overrides.yZero !== undefined) {
+  // Not for a calendar: its y is the weekday grid, pinned to -0.5..6.5.
+  if (overrides.yZero !== undefined && !c.isCalendar) {
     const valueAxis = isHoriz ? scales.x : scales.y;
     if (valueAxis) {
       valueAxis.beginAtZero = !!overrides.yZero;

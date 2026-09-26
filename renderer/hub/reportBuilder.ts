@@ -398,6 +398,9 @@ function rbClose(): void {
   dashShow('rp-builder', false);
   dashShow('an-list-view', true);
   void rbRefreshList();
+  // tabNav.ts — the report's tab goes dark with the page (rbOpen reaches the
+  // tabs through closeDashboardEditor's dkSync; closing reaches nothing else).
+  if (typeof tabsSync === 'function') tabsSync();
 }
 
 async function rbSave(): Promise<boolean> {

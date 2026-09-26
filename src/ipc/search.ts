@@ -18,6 +18,8 @@ import * as visuals from '../analysis/visuals';
 import * as analysis from '../analysis/analysis';
 import * as connections from '../connectors/connections';
 import * as projects from '../app/projects';
+import { tagSearch, attachTags } from '../app/catalogIndex';
+import type { TagChip } from '../app/catalogIndex';
 import * as metrics from '../analysis/metrics';
 import * as reportSpec from '../analysis/reportSpec';
 import * as alertStore from '../analysis/alertStore';
@@ -26,7 +28,7 @@ import * as alertStore from '../analysis/alertStore';
 const MAX_RESULTS = 20;
 
 export interface SearchHit {
-  kind: 'dataset' | 'visual' | 'analysis' | 'connection' | 'metric' | 'report' | 'alert';
+  kind: 'dataset' | 'visual' | 'analysis' | 'connection' | 'metric' | 'report' | 'story' | 'alert';
   id: string;
   name: string;
   /** A dim second line: rows, chart type, sheet count — whatever the list already knows. */
@@ -38,6 +40,8 @@ export interface SearchHit {
   projectName: string;
   /** Same text as `sub` — what the row shows under the name. */
   snippet: string;
+  /** Catalog tags, coloured — shown as chips on the row. */
+  tags?: TagChip[];
 }
 
 /** The kind names the app uses on screen. `analysis` is a dashboard to a user. */
@@ -48,6 +52,7 @@ const TYPE_LABEL: Record<SearchHit['kind'], string> = {
   connection: 'Connection',
   metric: 'Metric',
   report: 'Report',
+  story: 'Story',
   alert: 'Alert',
 };
 
@@ -93,8 +98,14 @@ async function search(projectId: string, query: string): Promise<SearchHit[]> {
 
   for (project of await scope(projectId)) {
     if (hits.length >= MAX_RESULTS) break;
-    await searchOne(project.id, q, push);
+    // '#sales' searches TAGS across every record kind (src/app/catalogIndex.ts).
+    if (q.charAt(0) === '#') {
+      for (const h of await tagSearch(project.id, q)) {
+        if (hits.length < MAX_RESULTS) hits.push({ ...h, projectId: project.id, projectName: project.name, snippet: h.sub });
+      }
+    } else await searchOne(project.id, q, push);
   }
+  await attachTags(hits);
   return hits;
 }
 

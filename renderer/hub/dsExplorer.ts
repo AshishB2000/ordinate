@@ -175,6 +175,7 @@ function renderExplorerIdent(d: any): void {
     badge.hidden = !badge.textContent;
   }
 
+  void ctPaintHeaderChips(dsEl('ds-explorer-tags'), 'dataset:' + String((d && d.id) || expId)); // catalog tags
   // Reads from / Used by, and "View query" for a SQL dataset (dsLineage.ts).
   void dsRenderLineage(d);
 

@@ -86,6 +86,11 @@ interface EncodingFormApi {
    * so this cannot loop back into a recompute.
    */
   applyCategoryInfo(info: EncCategoryInfo | null | undefined): void;
+  /**
+   * Put the date grain to `grain` when the category IS a date. Returns true
+   * only when that changed it — the caller recomputes; fires no `change`.
+   */
+  setGrain(grain: string): boolean;
   show(on: boolean): void;
 }
 
@@ -98,7 +103,8 @@ interface EncCategoryInfo {
 }
 
 type EncAgg = 'sum' | 'avg' | 'count' | 'min' | 'max' | 'none';
-interface EncCol { name: string; type: string }
+// `label`/`title`: the catalog's display name and description (catalogUi.ctDocColumns) — display only.
+interface EncCol { name: string; type: string; label?: string; title?: string }
 interface EncMeasure {
   column: string;
   aggregation: EncAgg;
@@ -242,13 +248,14 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     return nums.length ? nums : columns.slice();
   };
 
-  function fill(sel: HTMLSelectElement | null, items: Array<{ value: string; label: string }>, value: string): void {
+  function fill(sel: HTMLSelectElement | null, items: Array<{ value: string; label: string; title?: string }>, value: string): void {
     if (!sel) return;
     sel.innerHTML = '';
     items.forEach((it) => {
       const o = document.createElement('option');
       o.value = it.value;
       o.textContent = it.label;
+      if (it.title) o.title = it.title;
       sel.appendChild(o);
     });
     sel.value = value;
@@ -273,7 +280,8 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     const opt = (c: EncCol): HTMLOptionElement => {
       const o = document.createElement('option');
       o.value = c.name;
-      o.textContent = c.name;
+      o.textContent = c.label || c.name;
+      if (c.title) o.title = c.title;
       return o;
     };
     const dims = columns.filter((c) => c.type !== 'number');
@@ -352,7 +360,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
         const colSel = document.createElement('select');
         colSel.className = 'viz-select viz-value-col';
         colSel.setAttribute('aria-label', 'Measure column');
-        fill(colSel, nums.map((c) => ({ value: c.name, label: c.name })), m.column);
+        fill(colSel, nums.map((c) => ({ value: c.name, label: c.label || c.name, title: c.title })), m.column);
         colSel.addEventListener('change', () => { measures[i].column = colSel.value; opts.onChange(); });
         row.appendChild(colSel);
 
@@ -503,7 +511,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     const colSel = document.createElement('select');
     colSel.className = 'viz-select';
     colSel.setAttribute('aria-label', 'Filter column');
-    fill(colSel, columns.map((c) => ({ value: c.name, label: c.name })), step.column || '');
+    fill(colSel, columns.map((c) => ({ value: c.name, label: c.label || c.name, title: c.title })), step.column || '');
     colSel.addEventListener('change', () => {
       // Retargeting to a column of a different type makes the old operand
       // meaningless (an `in` list of region names on a number column), so the
@@ -580,7 +588,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       const textCols = columns.filter((c) => c.type !== 'number');
       fill(
         serSel,
-        [{ value: '', label: 'None' }].concat(textCols.map((c) => ({ value: c.name, label: c.name }))),
+        [{ value: '', label: 'None' }].concat(textCols.map((c) => ({ value: c.name, label: c.label || c.name, title: c.title }))),
         preset && typeof preset.series === 'string' ? preset.series : '',
       );
 
@@ -708,6 +716,13 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
         if (!grainSel.value) grainSel.value = info.grain;
       }
       setCatNote(info && typeof info.note === 'string' ? info.note : '');
+    },
+
+    setGrain(grain: string): boolean {
+      syncGrain();
+      if (!grainSel || grainSel.hidden || grainSel.value === grain) return false;
+      grainSel.value = grain;
+      return grainSel.value === grain;
     },
 
     showFields(on: boolean): void {

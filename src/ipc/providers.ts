@@ -3,6 +3,7 @@ import * as config from '../app/config';
 import * as execConfig from '../app/execConfig';
 import { testProvider } from '../ai/analyze';
 import * as history from '../app/history';
+import * as hubs from '../windows/hubRegistry';
 
 // Key / provider management IPC — Ollama endpoint, key validate/save/clear,
 // provider + execution-mode activation, BYOK provider config/test/reveal, global
@@ -379,7 +380,7 @@ export function register({ getHubWindow, notifyKeyChanged, entryData, entryThrea
       // The hub had a captures sidebar that main pushed a fresh list into; the
       // Captures tab reads from disk on every paint instead, so one nudge is
       // enough and there is no list to send.
-      if (hubWindow && !hubWindow.isDestroyed()) hubWindow.webContents.send('hub:captures-cleared');
+      hubs.broadcast('hub:captures-cleared'); // every hub window's Captures tab
     }
 
     if (scope === 'history' || scope === 'everything') await wipeHistory();

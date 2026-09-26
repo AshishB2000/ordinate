@@ -427,6 +427,14 @@ declare global {
       reportsDue(nowMs?: number): Promise<any>;
       reportsReveal(projectId: string, id: string): Promise<any>;
       onReportsRunDue(cb: () => void): void;
+      // Catalog (src/ipc/catalog.ts) — descriptions, tags, owners, column docs.
+      catalogGet(projectId: string, ref: string): Promise<any>;
+      catalogSet(projectId: string, ref: string, patch: any): Promise<any>;
+      catalogColumns(projectId: string, datasetId: string): Promise<any>;
+      catalogSetColumn(projectId: string, datasetId: string, column: string, patch: any): Promise<any>;
+      catalogTags(projectId: string): Promise<any>;
+      catalogList(projectId: string): Promise<any>;
+      catalogSensitivity(projectId: string, analysisId: string): Promise<any>;
       // ── Version history (src/ipc/versions.ts) ──
       versionsList(projectId: string, type: string, id: string): Promise<any[]>;
       versionsGet(projectId: string, type: string, id: string, key: string): Promise<any>;
@@ -459,6 +467,18 @@ declare global {
       onAskActivity(cb: (o: { askId: string; step: ActivityStep }) => void): void;
       copilotClear(projectId: string): Promise<any>;
       setCopilotEnabled(enabled: boolean): Promise<any>;
+      // ── Answer cards (src/ipc/answers.ts) ──
+      answerCard(projectId: string, spec: unknown): Promise<any>;
+      answerExplain(projectId: string, target: { visualId?: string; tile?: unknown }): Promise<any>;
+      answerRerun(projectId: string, threadId: string, spec: unknown, label: string): Promise<any>;
+      // ── Stories (src/ipc/stories.ts) ──
+      listStories(projectId: string): Promise<any[]>;
+      getStory(projectId: string, id: string): Promise<any>;
+      createStory(projectId: string, input: { name?: string; blocks?: unknown }): Promise<any>;
+      updateStory(projectId: string, id: string, patch: { name?: string; blocks?: unknown }): Promise<any>;
+      deleteStory(projectId: string, id: string): Promise<any>;
+      draftStory(projectId: string, intent: string, datasetId?: string): Promise<any>;
+      buildStory(projectId: string, plan: unknown): Promise<any>;
       providerLogos: Record<string, { path: string; color: string; title: string }>;
       agentLogos: Record<string, string>;
       connectorLogos: Record<string,
@@ -466,6 +486,8 @@ declare global {
         { src: string; title: string }
       >;
       appVersion: string;
+      // Tabs: open one record in a second hub window (src/ipc/windows.ts).
+      openRecordWindow(kind: string, id: string, projectId: string): Promise<{ ok: boolean; error?: string }>;
     };
 
     // ── Vendor libraries loaded via <script> tags in index.html ────────────
@@ -509,6 +531,20 @@ declare global {
   function makeDropdown(opts?: DropdownOpts): DropdownApi; // customDropdown.js
   function normalizeName(n: string | null | undefined): string; // geoMatch.js
   function matchGeoItem(geoItems: any[], featProps: any): any; // geoMatch.js
+  // storyText.js — the story Markdown subset, outline and page mapping (same IIFE pattern).
+  function mdInline(src: string): Array<{ t: string; text: string; href?: string }>;
+  function mdParse(src: string): any[];
+  function mdPlain(src: string): string;
+  function storyOutline(blocks: any[]): Array<{ blockId: string; level: number; text: string }>;
+  function storyPages(blocks: any[]): Array<{ heading: string; level: number; items: Array<{ block: any; text?: string }> }>;
+  // chartShapes.js — the same IIFE pattern; its result shapes are declared there.
+  function waterfallSteps(labels: any[], series: any[], totals?: string[] | null): WaterfallShape;
+  function paretoShape(labels: any[], values: any[]): ParetoShape;
+  function calendarCells(labels: any[], values: any[]): CalendarShape | null;
+  function calendarBands(weeks: number, availW: number, availH: number, gapRows: number, maxCell?: number):
+    { bands: number; perRow: number; rows: number };
+  function radarShape(labels: any[], series: any[]): RadarShape;
+  function bulletShape(labels: any[], series: any[], target?: number | null): BulletShape;
 
   // PRE-EXISTING BUG (present in the original hub.js): called in the stpTestPerm
   // click handler but defined nowhere, so it throws at runtime. Declared here to

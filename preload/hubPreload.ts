@@ -50,8 +50,7 @@ contextBridge.exposeInMainWorld('hub', {
   // Completion-notification toggles ({ sound?, desktop? }).
   // Fire-and-forget from main after an unattended refresh: { datasetId, ok,
   // error, rowsBefore, rowsAfter, name }. The hub updates that row in place.
-  onDatasetRefreshed: (cb: (o: any) => void) =>
-    ipcRenderer.on('hub:dataset-refreshed', (_e, o) => cb(o)),
+  onDatasetRefreshed: (cb: (o: any) => void) => ipcRenderer.on('hub:dataset-refreshed', (_e, o) => cb(o)),
   setAutoRefreshEnabled: (on: boolean) => ipcRenderer.invoke('autorefresh:set', on),
   setNotifications: (fields: any) => ipcRenderer.invoke('notifications:set', { fields }),
   // Show a benign notification to register the app with the OS when the Desktop
@@ -97,6 +96,10 @@ contextBridge.exposeInMainWorld('hub', {
   // as an id on 'menu:run' and the RENDERER decides what that means.
   buildMenu: (commands: any[]) => ipcRenderer.invoke('menu:build', commands),
   onMenuRun: (cb: (id: string) => void) => ipcRenderer.on('menu:run', (_e, id) => cb(id)),
+  // A tab's "Open in new window": a second hub window booted on one record
+  // (src/ipc/windows.ts). Returns { ok } — main validates every field.
+  openRecordWindow: (kind: string, id: string, projectId: string) =>
+    ipcRenderer.invoke('windows:openRecord', { kind, id, projectId }),
   // Page zoom. webFrame is the platform's own answer, kept per window by
   // Electron, so nothing here has to store or re-apply a scale. `null` resets.
   setZoom: (step: number | null) => {
@@ -230,8 +233,7 @@ contextBridge.exposeInMainWorld('hub', {
   // ── Capture → dataset (Week 13) ──
   // Turn a capture's extractedTable into a review-grid draft (strictly typed,
   // rectangular) WITHOUT saving. Returns { ok, columns, rows, warnings }.
-  captureToDatasetDraft: (extractedTable: any) =>
-    ipcRenderer.invoke('captureDataset:draft', { extractedTable }),
+  captureToDatasetDraft: (extractedTable: any) => ipcRenderer.invoke('captureDataset:draft', { extractedTable }),
   // Persist the reviewed/corrected capture as a dataset, or replace/append an
   // existing capture-dataset (target). cropPath is resolved in MAIN from entryId —
   // never sent from here. Returns { ok, dataset, warnings } | { ok:false, error }.
@@ -248,12 +250,10 @@ contextBridge.exposeInMainWorld('hub', {
   // Delete a dataset; returns { ok: boolean }.
   deleteDataset: (projectId: string, id: string) => ipcRenderer.invoke('dataset:delete', { projectId, id }),
   // Per-column summaries + quality issues for an opened dataset (computed once in main).
-  datasetStats: (projectId: string, datasetId: string) =>
-    ipcRenderer.invoke('dataset:stats', { projectId, datasetId }),
+  datasetStats: (projectId: string, datasetId: string) => ipcRenderer.invoke('dataset:stats', { projectId, datasetId }),
   // Open a dataset WITHOUT its rows — metadata only. The grid fetches the window
   // it draws through datasetPage, so nothing needs the full table clone.
-  getDatasetMeta: (projectId: string, id: string) =>
-    ipcRenderer.invoke('dataset:meta', { projectId, id }),
+  getDatasetMeta: (projectId: string, id: string) => ipcRenderer.invoke('dataset:meta', { projectId, id }),
   // Distinct values of ONE column, computed in main off the Parquet. The
   // dashboard filter picker used to hydrate the whole table to do this itself.
   // `search` is applied IN SQL and `total` comes back with the page, so the
@@ -298,15 +298,13 @@ contextBridge.exposeInMainWorld('hub', {
   saveAlertRule: (projectId: string, rule: any) => ipcRenderer.invoke('alerts:save', { projectId, rule }),
   patchAlertRule: (projectId: string, ruleId: string, patch: any) =>
     ipcRenderer.invoke('alerts:patch', { projectId, ruleId, patch }),
-  deleteAlertRule: (projectId: string, ruleId: string) =>
-    ipcRenderer.invoke('alerts:delete', { projectId, ruleId }),
+  deleteAlertRule: (projectId: string, ruleId: string) => ipcRenderer.invoke('alerts:delete', { projectId, ruleId }),
   // "Would fire / would not fire", with the app-computed numbers behind it.
   testAlertRule: (projectId: string, rule: any) => ipcRenderer.invoke('alerts:test', { projectId, rule }),
   evaluateAlerts: (projectId: string, datasetId?: string) =>
     ipcRenderer.invoke('alerts:evaluate', { projectId, datasetId }),
   // Omit eventId to mark the whole inbox seen.
-  markAlertSeen: (projectId: string, eventId?: string) =>
-    ipcRenderer.invoke('alerts:markSeen', { projectId, eventId }),
+  markAlertSeen: (projectId: string, eventId?: string) => ipcRenderer.invoke('alerts:markSeen', { projectId, eventId }),
   setAlertDigest: (projectId: string, on: boolean) => ipcRenderer.invoke('alerts:setDigest', { projectId, on }),
   // OPTIONAL model narration of one event → { ok, threadId } | { ok:false, reason:'not_ready' }.
   explainAlert: (projectId: string, event: any) => ipcRenderer.invoke('alerts:explain', { projectId, event }),
@@ -409,8 +407,7 @@ contextBridge.exposeInMainWorld('hub', {
   // List a project's saved connections (secret-free public view).
   listConnections: (projectId: string) => ipcRenderer.invoke('connections:list', { projectId }),
   // Global search — NAMES only, across the five things the sidebar's box names.
-  searchWorkspace: (projectId: string, query: string) =>
-    ipcRenderer.invoke('search:query', { projectId, query }),
+  searchWorkspace: (projectId: string, query: string) => ipcRenderer.invoke('search:query', { projectId, query }),
   // Test a connection with the typed secret; persist metadata + secret only on
   // success. `kind` is the connectorId (the two pre-registry names, 'postgres'
   // and 'url', are the ids of the connectors that replaced them, so an
@@ -440,8 +437,7 @@ contextBridge.exposeInMainWorld('hub', {
   // `params` are the `[[name]]` values: [{ name, kind, value }]. Main binds them;
   // nothing here ever splices a value into the SQL.
   sqlSchema: (projectId: string) => ipcRenderer.invoke('sql:schema', { projectId }),
-  sqlRun: (projectId: string, sql: string, params: any[]) =>
-    ipcRenderer.invoke('sql:run', { projectId, sql, params }),
+  sqlRun: (projectId: string, sql: string, params: any[]) => ipcRenderer.invoke('sql:run', { projectId, sql, params }),
   sqlExplain: (projectId: string, sql: string, params: any[]) =>
     ipcRenderer.invoke('sql:explain', { projectId, sql, params }),
   // The whole result at the dataset cap, plus the `sql` origin — for the composer.
@@ -578,8 +574,7 @@ contextBridge.exposeInMainWorld('hub', {
   // real Visuals, sheets become an Analysis. Also NOT an AI call.
   // { ok:true, analysis, visualIds, calculatedFields, dropped, warnings }
   // | { ok:false, error }.
-  buildAnalysisPlan: (projectId: string, plan: any) =>
-    ipcRenderer.invoke('analysis:buildPlan', { projectId, plan }),
+  buildAnalysisPlan: (projectId: string, plan: any) => ipcRenderer.invoke('analysis:buildPlan', { projectId, plan }),
   starterCards: (projectId: string, kind: string, datasetId?: string) =>
     ipcRenderer.invoke('analysis:starterCards', { projectId, kind, datasetId }),
 
@@ -701,6 +696,17 @@ contextBridge.exposeInMainWorld('hub', {
   reportsReveal: (projectId: string, id: string) => ipcRenderer.invoke('reports:reveal', { projectId, id }),
   // Main rings the bell at the end of the refresh tick; the hub does the work.
   onReportsRunDue: (cb: () => void) => ipcRenderer.on('reports:run-due', () => cb()),
+  // ── Catalog (src/ipc/catalog.ts) — descriptions, tags, owners, column docs.
+  // `ref` is `${kind}:${id}`; main validates both and stamps updatedBy itself.
+  catalogGet: (projectId: string, ref: string) => ipcRenderer.invoke('catalog:get', { projectId, ref }),
+  catalogSet: (projectId: string, ref: string, patch: any) => ipcRenderer.invoke('catalog:set', { projectId, ref, patch }),
+  catalogColumns: (projectId: string, datasetId: string) => ipcRenderer.invoke('catalog:columns', { projectId, datasetId }),
+  catalogSetColumn: (projectId: string, datasetId: string, column: string, patch: any) =>
+    ipcRenderer.invoke('catalog:setColumn', { projectId, datasetId, column, patch }),
+  catalogTags: (projectId: string) => ipcRenderer.invoke('catalog:tags', { projectId }),
+  catalogList: (projectId: string) => ipcRenderer.invoke('catalog:list', { projectId }),
+  catalogSensitivity: (projectId: string, analysisId: string) =>
+    ipcRenderer.invoke('catalog:sensitivity', { projectId, analysisId }),
   // ── Version history (src/ipc/versions.ts) ──
   // type is 'dashboard' | 'visual' | 'metric' | 'report' | 'dataset'. A restore
   // is a SAVE of the old content through the record's own store — append-only.
@@ -724,8 +730,7 @@ contextBridge.exposeInMainWorld('hub', {
   trashPurge: (projectId: string, type: string, id: string) =>
     ipcRenderer.invoke('trash:purge', { projectId, type, id }),
   trashEmpty: (projectId: string) => ipcRenderer.invoke('trash:empty', { projectId }),
-  onTrashChanged: (cb: (o: { projectId: string }) => void) =>
-    ipcRenderer.on('trash:changed', (_e, o) => cb(o)),
+  onTrashChanged: (cb: (o: { projectId: string }) => void) => ipcRenderer.on('trash:changed', (_e, o) => cb(o)),
   // ── AI Copilot (Week 11) — per-project, context-aware chat ──
   // Load one conversation's turns (survives reload); returns { ok, turns, threadId }.
   // threadId is optional and defaults to the most recent conversation, so every
@@ -765,6 +770,25 @@ contextBridge.exposeInMainWorld('hub', {
   copilotClear: (projectId: string) => ipcRenderer.invoke('copilot:clear', { projectId }),
   // Flip the hard ON/OFF switch; returns { ok, enabled }.
   setCopilotEnabled: (enabled: boolean) => ipcRenderer.invoke('copilot:setEnabled', { enabled }),
+  // Answer cards (src/ipc/answers.ts): draw one from a stored spec, explain a
+  // chart into a new conversation, re-run a follow-up chip. Main computes all.
+  answerCard: (projectId: string, spec: unknown) => ipcRenderer.invoke('answer:card', { projectId, spec }),
+  answerExplain: (projectId: string, target: { visualId?: string; tile?: unknown }) =>
+    ipcRenderer.invoke('answer:explain', { projectId, ...target }),
+  answerRerun: (projectId: string, threadId: string, spec: unknown, label: string) =>
+    ipcRenderer.invoke('answer:rerun', { projectId, threadId, spec, label }),
+  // Stories (src/ipc/stories.ts) — the scrolling document record, and the
+  // Assistant's story outline (draft → review → build).
+  listStories: (projectId: string) => ipcRenderer.invoke('story:list', { projectId }),
+  getStory: (projectId: string, id: string) => ipcRenderer.invoke('story:get', { projectId, id }),
+  createStory: (projectId: string, input: { name?: string; blocks?: unknown }) =>
+    ipcRenderer.invoke('story:create', { projectId, ...input }),
+  updateStory: (projectId: string, id: string, patch: { name?: string; blocks?: unknown }) =>
+    ipcRenderer.invoke('story:update', { projectId, id, ...patch }),
+  deleteStory: (projectId: string, id: string) => ipcRenderer.invoke('story:delete', { projectId, id }),
+  draftStory: (projectId: string, intent: string, datasetId?: string) =>
+    ipcRenderer.invoke('story:draft', { projectId, intent, datasetId }),
+  buildStory: (projectId: string, plan: unknown) => ipcRenderer.invoke('story:build', { projectId, plan }),
   // Shared map { providerId: { path, color, title } } for real brand icons (no keys).
   providerLogos: PROVIDER_LOGOS,
   // Static map of { agentId: dataUri } for full-color logos (no keys).

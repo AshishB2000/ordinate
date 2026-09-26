@@ -163,6 +163,9 @@ const numOf = (raw: any): number | null => {
 // them. Locals are destructured out of the context under their ORIGINAL names so
 // each plugin body below is the same code it was inside buildChart.
 function buildChartPlugins(c: ChartCtx): any[] {
+  // Waterfall / bullet / calendar / radar / Pareto draw their own marks and
+  // labels: chartFamiliesExtra.js.
+  if (isExtraFamily(c)) return buildExtraPlugins(c);
   const {
     opts, overrides, fmt, valueMode, fontFamily, textColor, titleColor,
     isRound, isGauge, isTreemap, isMatrix, isFunnel, isSankey, isCandlestick, isBoxplot, isHoriz,
