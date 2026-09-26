@@ -362,6 +362,18 @@ export type VizDataReply =
     }
   | { ok: false; error: string; tooLarge?: true };
 
+/** The JS fallback's cost ceiling (below): a reply when it is exceeded, else null. */
+async function overCeiling(projectId: string, datasetId: string, max?: number): Promise<VizDataReply | null> {
+  if (typeof max !== 'number') return null;
+  // Metadata read — one small JSON, no rows, no migration.
+  const meta = await datasets.getDatasetMeta(projectId, datasetId);
+  if (!meta) return { ok: false, error: 'Dataset not found' };
+  if (meta.rowCount > max) {
+    return { ok: false, error: 'Too large to preview without the DuckDB bridge', tooLarge: true };
+  }
+  return null;
+}
+
 /**
  * THE one function that turns (dataset, encoding, filters) into chart data.
  *
@@ -402,6 +414,11 @@ export async function vizDataFor(
   }
 
   // A field or filter from a RELATED dataset, or a map: vizExtras answers instead.
+  // Every map hydrates (no resident path draws one), so the ceiling holds first.
+  if (encoding && encoding.geo) {
+    const over = await overCeiling(projectId, datasetId, opts.maxHydrateRows);
+    if (over) return over;
+  }
   const joined = await authoringVizData(projectId, datasetId, encoding, filters);
   if (joined) return joined;
   // Fast path: an aggregated chart (or a pivot) over a resident (v3) dataset,
@@ -419,14 +436,8 @@ export async function vizDataFor(
     };
   }
 
-  if (typeof opts.maxHydrateRows === 'number') {
-    // Metadata read — one small JSON, no rows, no migration.
-    const meta = await datasets.getDatasetMeta(projectId, datasetId);
-    if (!meta) return { ok: false, error: 'Dataset not found' };
-    if (meta.rowCount > opts.maxHydrateRows) {
-      return { ok: false, error: 'Too large to preview without the DuckDB bridge', tooLarge: true };
-    }
-  }
+  const over = await overCeiling(projectId, datasetId, opts.maxHydrateRows);
+  if (over) return over;
 
   const ds = await datasets.getDataset(projectId, datasetId);
   if (!ds) return { ok: false, error: 'Dataset not found' };
