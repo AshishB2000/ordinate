@@ -49,6 +49,7 @@ function mpMakeRow(m: any): HTMLElement {
   name.textContent = m.name;
   if (m.description) name.title = m.description;
   name.addEventListener('click', () => void mpOpenEditor(m));
+  ctDecorate(row, 'metric', String(m.id), name); // catalog tag chips
 
   const dataset = document.createElement('span');
   dataset.className = 'ws-cell';
@@ -181,6 +182,7 @@ async function refreshMetricsList(seed = true): Promise<void> {
 
   list.innerHTML = '';
   mpMetrics.forEach((m) => list.appendChild(mpMakeRow(m)));
+  void ctAfterPaint(list, list.previousElementSibling as HTMLElement | null); // catalog tag bar + chips
   list.hidden = mpMetrics.length === 0;
   if (empty) empty.hidden = mpMetrics.length > 0;
   mpLoaded = true;

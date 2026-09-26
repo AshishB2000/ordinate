@@ -67,6 +67,7 @@ async function anPaintList(list: HTMLElement, items: any[]): Promise<void> {
   if (typeof vizThumbsReset === 'function') vizThumbsReset();
   list.innerHTML = '';
   items.forEach((a) => list.appendChild(makeAnListItem(a, previews.get(String(a.id)) || [])));
+  void ctAfterPaint(list); // catalog tag bar + chips
 }
 
 /**
@@ -190,6 +191,7 @@ async function refreshAnalysisListKeepEditor(): Promise<void> {
 function makeAnListItem(a: any, previews: any[]): HTMLElement {
   const card = document.createElement('div');
   card.className = 'an-card';
+  card.dataset.recKind = 'analysis'; card.dataset.recId = String(a.id); // ⌘-click → background tab (tabStrip.ts)
 
   // The whole card is ONE button, so a card is a single Tab stop; the ⋯ trigger
   // is a sibling positioned over the preview (nested buttons are invalid HTML).
@@ -216,6 +218,7 @@ function makeAnListItem(a: any, previews: any[]): HTMLElement {
 
   open.appendChild(name);
   open.appendChild(meta);
+  ctDecorate(card, 'analysis', String(a.id), open); // catalog tag chips
 
   // One ⋯ trigger, opening the shared row menu from projects.ts. Rename and
   // Delete live inside it: two glyphs on a card read as content competing with

@@ -18,7 +18,7 @@
 // the empty state is `.ws-empty`. Only `.cap-card-img` is new, and it is the
 // image frame.
 
-type ClTab = 'datasets' | 'captures' | 'metrics' | 'query';
+type ClTab = 'datasets' | 'captures' | 'metrics' | 'query' | 'catalog';
 let clActive: ClTab = 'datasets';
 
 function clEl(id: string): HTMLElement | null {
@@ -49,6 +49,10 @@ const CL_TABS: Array<{ id: ClTab; tab: string; panel: string; sub: string }> = [
   {
     id: 'query', tab: 'ds-tab-query', panel: 'qt-wrap',
     sub: 'Query this project’s datasets with SQL — join, filter and aggregate them, then save the result as a dataset.',
+  },
+  {
+    id: 'catalog', tab: 'ds-tab-catalog', panel: 'ct-wrap',
+    sub: 'Everything in this project — what it is, who owns it, what uses it and whether it is fresh.',
   },
 ];
 
@@ -86,6 +90,7 @@ function clSelectTab(tab: ClTab): void {
   if (tab === 'captures') void refreshCaptureList();
   if (tab === 'metrics') void refreshMetricsList();
   if (tab === 'query') void qtOpen(); // queryTab.ts — wires itself on first open
+  if (tab === 'catalog') void ctRefreshCatalog();
 }
 
 /** Land on the Data page with the Captures tab showing — where "‹ Back" goes. */
@@ -100,6 +105,7 @@ function clMakeCard(c: any): HTMLElement {
   const card = document.createElement('div');
   card.className = 'viz-card cap-card';
   card.dataset.captureId = String(c.id);
+  card.dataset.recKind = 'capture'; card.dataset.recId = String(c.id); // ⌘-click → background tab (tabStrip.ts)
 
   const body = document.createElement('button');
   body.type = 'button';

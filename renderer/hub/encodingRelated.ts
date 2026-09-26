@@ -101,7 +101,7 @@ function encLoadRelated(projectId: string, datasetId: string): Promise<EncRelate
   const key = projectId + '/' + datasetId;
   let p = encRelatedCache.get(key);
   if (!p) {
-    p = window.hub.relatedColumns(projectId, datasetId).then((res: any) => {
+    p = window.hubAuthoring.relatedColumns(projectId, datasetId).then((res: any) => {
       const out: EncRelatedCol[] = [];
       for (const g of (res && res.ok && Array.isArray(res.groups)) ? res.groups : []) {
         for (const c of g.columns || []) {

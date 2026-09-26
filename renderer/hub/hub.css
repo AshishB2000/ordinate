@@ -15794,6 +15794,1175 @@ select.ws-modal-input { height: 38px; }
 .sf-logo-msg { flex-basis: 100%; font-size: var(--t-12); color: var(--error); }
 .sf-logo-msg:empty { display: none; }
 
+/* ── Answer cards (answerCard.ts) ─────────────────────────────────────────────
+   The chart an assistant answer carries, drawn above its narration in the dock.
+   A card on the panel like the proposals above it (surface, hairline, --r-lg),
+   but denser: the headline figures read first, then the 320×180 chart, then the
+   app's caption, the actions and the follow-up chips. */
+.xp-msg-answer { width: 100%; }
+.ans-card {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--sp-12);
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  animation: fadeUp var(--dur-panel) var(--ease-out);
+}
+.ans-card.is-error { border-style: dashed; box-shadow: none; }
+.ans-head { display: flex; flex-direction: column; gap: var(--sp-4); }
+.ans-title {
+  font-size: var(--t-13);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  color: var(--text-strong);
+}
+.ans-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); }
+.ans-meta-ds { font-size: var(--t-11); color: var(--muted); margin-right: var(--sp-4); }
+.ans-filter {
+  font-size: var(--t-11);
+  padding: 1px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+}
+.ans-kpis { display: flex; gap: var(--sp-16); flex-wrap: wrap; }
+.ans-kpi { display: flex; flex-direction: column; min-width: 0; }
+.ans-kpi-value {
+  font-family: var(--font-numeric);
+  font-size: var(--t-20);
+  font-weight: 600;
+  letter-spacing: var(--tr-tighter);
+  line-height: var(--lh-tight);
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+.ans-kpi-label {
+  font-size: var(--t-11);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 320×180 when the dock is wide enough to hold it; in the default 340px dock it
+   narrows to the card and keeps its height. `.cv-canvas-wrap` sizes itself
+   against the VIEWPORT (clamp(300px, 44vh, 480px)) and the wrapper between is an
+   auto-height column, so both are told to fill this box, and the box clips —
+   the same three rules `.dk-plan-grid .an-draft-viz` needs, for the same reason.
+   Without them the plot painted 300px tall straight over the caption. */
+.ans-chart {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  height: 180px;
+  min-height: 0;
+  margin-top: 0;
+  overflow: hidden;
+}
+.ans-chart .cv-chart-wrapper,
+.ans-chart .cv-canvas-wrap { height: 100%; min-height: 0; }
+.ans-skel { height: 180px; max-width: 320px; border-radius: var(--r-md); }
+.ans-caption { font-size: var(--t-12); line-height: var(--lh-body); color: var(--text); }
+.ans-note { font-size: var(--t-11); color: var(--muted); }
+.ans-facts {
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12) var(--sp-8) var(--sp-24);
+  background: var(--inset);
+  border-radius: var(--r-md);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--text);
+}
+.ans-facts li + li { margin-top: var(--sp-4); }
+.ans-table-wrap {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.ans-table { width: 100%; font-size: var(--t-12); }
+.ans-actions { display: flex; flex-wrap: wrap; gap: var(--sp-4); }
+.ans-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  padding-top: var(--sp-8);
+  border-top: 1px solid var(--border-hairline);
+}
+.ans-chip {
+  font: inherit;
+  font-size: var(--t-12);
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-12);
+  border-radius: var(--r-full);
+  border: 1px solid var(--border-2);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.ans-chip:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
+.ans-chip:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
+.ans-chip.is-busy { opacity: 0.6; cursor: progress; }
+
+/* ── Stories (storyList / storyPage / storyBlocks / storyPickers / storyPresent) ──
+   A story is a DOCUMENT: one 760px reading column on the stage, prose set for
+   reading (15px, 1.65 leading), charts as figures with captions, and a left
+   outline built from the headings. The editing chrome — the ⊕ and ⋮ gutter,
+   the / picker — appears only where the pointer is, so the page reads as the
+   finished thing while it is being written. */
+
+/* The list tab */
+.st-list-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-16);
+  margin: var(--sp-16) 0;
+}
+.st-list-note { margin: 0; font-size: var(--t-13); color: var(--muted); }
+.st-list-actions { display: flex; gap: var(--sp-8); flex: none; }
+.st-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--sp-16);
+}
+.st-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.st-card:hover { border-color: var(--border-2); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.st-card:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 2px; }
+.st-card-page {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  height: 96px;
+  padding: var(--sp-16) var(--sp-24) 0;
+  background: linear-gradient(180deg, var(--inset), var(--surface));
+  border-bottom: 1px solid var(--border-hairline);
+}
+.st-card-line { display: block; height: 6px; width: 86%; border-radius: var(--r-full); background: var(--border); }
+.st-card-line--h { height: 9px; width: 52%; background: var(--accent-line); margin-bottom: 3px; }
+.st-card-line--short { width: 58%; }
+.st-card-body { display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-12) var(--sp-16) var(--sp-16); }
+.st-card-title { font-size: var(--t-15); font-weight: 600; letter-spacing: var(--tr-tight); color: var(--text-strong); }
+.st-card-excerpt {
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.st-card-meta { font-size: var(--t-11); color: var(--text-dim); margin-top: var(--sp-4); }
+.st-card-more { position: absolute; top: var(--sp-8); right: var(--sp-8); opacity: 0; transition: opacity var(--dur-fast); }
+.st-card:hover .st-card-more, .st-card-more:focus-visible { opacity: 1; }
+.ws-empty-art--doc {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  width: 64px;
+  padding: var(--sp-8);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  height: 72px;
+}
+.ws-empty-art--doc .ws-line { display: block; height: 4px; width: 100%; border-radius: 2px; background: var(--border-2); }
+.ws-empty-art--doc .ws-line--h { width: 60%; height: 6px; background: var(--accent-line); }
+.ws-empty-art--doc .ws-line--short { width: 70%; }
+.ws-empty-art--doc .ws-bar { display: inline-block; width: 10px; margin-top: 2px; }
+.ws-empty-art--doc .ws-bar--2 { height: 10px; }
+.ws-empty-art--doc .ws-bar--4 { height: 16px; }
+
+/* The page */
+.st-page { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.st-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  padding-bottom: var(--sp-12);
+  border-bottom: 1px solid var(--border);
+}
+.st-name {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: var(--t-15);
+  font-weight: 600;
+  color: var(--text-strong);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  padding: var(--sp-4) var(--sp-8);
+}
+.st-name:hover { border-color: var(--border); }
+.st-name:focus { outline: none; border-color: var(--accent-line); background: var(--surface); }
+.st-status { font-size: var(--t-11); color: var(--text-faint); white-space: nowrap; }
+.st-head-actions { display: flex; align-items: center; gap: var(--sp-8); }
+.st-head-actions .icon-btn:disabled { opacity: 0.35; }
+.st-body { display: flex; flex: 1; min-height: 0; }
+.st-outline {
+  flex: 0 0 216px;
+  padding: var(--sp-24) var(--sp-16) var(--sp-24) var(--sp-8);
+  border-right: 1px solid var(--border-hairline);
+  overflow: auto;
+}
+.st-outline-h {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: var(--sp-8);
+}
+.st-outline-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.st-outline-link {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: var(--t-13);
+  color: var(--text);
+  background: none;
+  border: 0;
+  border-radius: var(--r-sm);
+  padding: 5px var(--sp-8);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.st-outline-link:hover { background: var(--surface-2); color: var(--text-strong); }
+.st-outline-item--h1 .st-outline-link { font-weight: 600; color: var(--text-strong); }
+.st-outline-item--h2 .st-outline-link { padding-left: var(--sp-16); }
+.st-outline-item--h3 .st-outline-link { padding-left: 28px; font-size: var(--t-12); color: var(--muted); }
+.st-outline-empty { margin: 0; font-size: var(--t-12); line-height: var(--lh-body); color: var(--text-dim); }
+.st-scroll { flex: 1; min-width: 0; overflow: auto; }
+.st-doc { max-width: 760px; margin: 0 auto; padding: var(--sp-32) 56px 160px; box-sizing: content-box; }
+
+/* Blocks */
+.st-block { position: relative; margin: 2px 0; border-radius: var(--r-sm); }
+.st-gutter {
+  position: absolute;
+  top: 2px;
+  left: -52px;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.st-block:hover > .st-gutter, .st-gutter:focus-within { opacity: 1; }
+.st-gutter-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.st-gutter-btn:hover { background: var(--surface-2); color: var(--text); }
+.st-handle { cursor: grab; }
+.st-block.is-dragging { opacity: 0.35; }
+.st-block.drop-before { box-shadow: 0 -2px 0 0 var(--accent); }
+.st-block.drop-after { box-shadow: 0 2px 0 0 var(--accent); }
+.st-block.is-flash { animation: stFlash 1.2s var(--ease-out); }
+@keyframes stFlash { from { background: var(--accent-soft); } to { background: transparent; } }
+.st-block-body { min-height: 26px; }
+.is-editable { cursor: text; border-radius: var(--r-sm); }
+.is-editable:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 2px; }
+.st-placeholder { font-size: 15px; line-height: 1.65; color: var(--text-faint); padding: 2px 0; }
+.st-block:not(:hover):not(:last-child) .st-placeholder { color: transparent; }
+.st-text-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 28px;
+  resize: none;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--text);
+  background: var(--inset);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-sm);
+  padding: 4px var(--sp-8);
+}
+.st-text-input:focus { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* Markdown, set for reading */
+.st-md { font-size: 15px; line-height: 1.65; color: var(--text); }
+.st-md > :first-child { margin-top: 0; }
+.st-md > :last-child { margin-bottom: 0; }
+/* A heading that OPENS a block still needs its space above — the block before
+   it ended on margin 0 — except on the page's very first line. */
+.st-md > .st-h2:first-child, .st-md > .st-h3:first-child { margin-top: var(--sp-24); }
+.st-block:first-child .st-md > :first-child { margin-top: 0; }
+.st-md p { margin: 0 0 var(--sp-12); }
+.st-md ul, .st-md ol { margin: 0 0 var(--sp-12); padding-left: var(--sp-24); }
+.st-md li + li { margin-top: 2px; }
+.st-md blockquote {
+  margin: 0 0 var(--sp-12);
+  padding: 2px var(--sp-16);
+  border-left: 3px solid var(--border-2);
+  color: var(--muted);
+}
+.st-md code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+.st-md .st-link { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.st-h { color: var(--text-strong); margin: var(--sp-24) 0 var(--sp-8); }
+.st-h1 { font-size: var(--t-28); line-height: var(--lh-tight); letter-spacing: var(--tr-tighter); font-weight: 700; margin-top: var(--sp-8); }
+.st-h2 { font-size: var(--t-20); line-height: var(--lh-tight); letter-spacing: var(--tr-tighter); font-weight: 650; }
+.st-h3 { font-size: var(--t-15); line-height: var(--lh-snug); letter-spacing: var(--tr-tight); font-weight: 600; }
+
+/* Figures */
+.st-figure {
+  margin: var(--sp-12) 0;
+  padding: var(--sp-12) var(--sp-16) var(--sp-8);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.st-figure.is-missing { border-style: dashed; color: var(--muted); }
+.st-fig-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-12); flex-wrap: wrap; margin-bottom: var(--sp-8); }
+.st-fig-title { font-size: var(--t-13); font-weight: 600; color: var(--text-strong); }
+.st-fig-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); }
+.st-pin {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--t-11);
+  padding: 1px 2px 1px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+}
+.st-pin-x { display: inline-flex; border: 0; background: none; color: inherit; cursor: pointer; padding: 2px; border-radius: var(--r-full); }
+.st-pin-x:hover { background: var(--accent-line); }
+.st-pin-add {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  font: inherit;
+  font-size: var(--t-11);
+  color: var(--muted);
+  background: none;
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-full);
+  padding: 1px var(--sp-8);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-fast);
+}
+.st-figure:hover .st-pin-add, .st-pin-add:focus-visible { opacity: 1; }
+.st-chart { height: 320px; min-height: 0; margin-top: 0; overflow: hidden; }
+.st-chart .cv-chart-wrapper, .st-chart .cv-canvas-wrap { height: 100%; min-height: 0; }
+.st-caption {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  field-sizing: content;
+  min-height: 0;
+  resize: none;
+  overflow: hidden;
+  margin-top: var(--sp-4);
+  font: inherit;
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  padding: var(--sp-4) var(--sp-8);
+}
+.st-caption::placeholder { color: var(--muted); }
+.st-caption:hover { border-color: var(--border); }
+.st-caption:focus { outline: none; border-color: var(--accent-line); background: var(--inset); }
+.st-figure--image { padding: var(--sp-8); }
+.st-img { display: block; max-width: 100%; height: auto; margin: 0 auto; border-radius: var(--r-md); }
+.st-hr { border: 0; border-top: 1px solid var(--border-2); margin: var(--sp-24) 0; }
+
+.st-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--sp-12); margin: var(--sp-12) 0 var(--sp-4); }
+.st-metrics--one { grid-template-columns: minmax(180px, 280px); }
+.st-metric {
+  padding: var(--sp-12) var(--sp-16);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.st-metric-value {
+  font-family: var(--font-numeric);
+  font-size: var(--t-28);
+  font-weight: 650;
+  letter-spacing: var(--tr-tighter);
+  line-height: var(--lh-tight);
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+.st-metric-name { font-size: var(--t-12); color: var(--muted); margin-top: var(--sp-4); }
+
+.st-callout {
+  display: flex;
+  gap: var(--sp-12);
+  margin: var(--sp-12) 0;
+  padding: var(--sp-12) var(--sp-16);
+  border-radius: var(--r-md);
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+}
+.st-callout--success { border-color: var(--ok); background: var(--ok-soft); }
+.st-callout--warning { border-color: var(--warn); background: var(--warn-soft); }
+.st-callout--danger { border-color: var(--error); background: var(--error-soft); }
+.st-callout-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: flex-start;
+  padding: 3px 0 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+.st-callout--success .st-callout-icon { color: var(--ok); }
+.st-callout--warning .st-callout-icon { color: var(--warn); }
+.st-callout--danger .st-callout-icon { color: var(--error); }
+.st-callout-body { flex: 1; min-width: 0; }
+
+/* The / picker and the choosers */
+.st-pop { min-width: 280px; max-width: 340px; max-height: 360px; overflow: auto; }
+.st-picker-h {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: var(--sp-4) var(--sp-8) var(--sp-8);
+}
+.st-picker-row { display: flex; align-items: center; gap: var(--sp-12); height: auto; padding: 6px var(--sp-8); }
+.st-picker-row .ic { flex: none; color: var(--muted); }
+.st-picker-row.is-active { background: var(--accent-soft); }
+.st-picker-row.is-active .ic { color: var(--accent); }
+.st-picker-text { display: flex; flex-direction: column; min-width: 0; text-align: left; }
+.st-picker-label { font-size: var(--t-13); color: var(--text-strong); }
+.st-picker-hint { font-size: var(--t-11); color: var(--muted); }
+.st-picker-none { padding: var(--sp-8); font-size: var(--t-12); color: var(--muted); }
+.st-pinform { display: flex; flex-direction: column; gap: var(--sp-8); padding: var(--sp-8); }
+.st-pinform-field {
+  font: inherit;
+  font-size: var(--t-13);
+  height: var(--ctl-md);
+  padding: 0 var(--sp-8);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+.st-chooser { width: min(460px, 92vw); }
+.st-chooser-list { max-height: 320px; overflow: auto; margin: var(--sp-8) 0; display: flex; flex-direction: column; gap: 2px; }
+.st-chooser-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-12);
+  font: inherit;
+  text-align: left;
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+.st-chooser-row:hover { background: var(--surface-2); }
+.st-chooser-row.is-chosen { border-color: var(--accent-line); background: var(--accent-soft); }
+.st-chooser-label { font-size: var(--t-13); color: var(--text-strong); }
+.st-chooser-sub { font-size: var(--t-11); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-chooser-none { padding: var(--sp-16); text-align: center; font-size: var(--t-12); color: var(--muted); }
+
+/* The Assistant's proposal */
+.st-prop-outline { margin: var(--sp-8) 0; padding-left: var(--sp-16); display: flex; flex-direction: column; gap: var(--sp-12); }
+.st-prop-h { font-size: var(--t-13); font-weight: 600; color: var(--text-strong); margin-bottom: var(--sp-4); }
+
+/* Present mode */
+html.st-presenting .hub-topbar { display: none; }
+.st-present {
+  position: fixed;
+  inset: 0;
+  z-index: 9990;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.st-present-stage { flex: 1; overflow: auto; padding: 56px var(--sp-24) var(--sp-24); }
+.st-present-page { max-width: 880px; margin: 0 auto; animation: fadeUp var(--dur-panel) var(--ease-out); }
+.st-present-h { font-size: 34px; line-height: var(--lh-tight); letter-spacing: var(--tr-tighter); color: var(--text-strong); margin: 0 0 var(--sp-24); }
+.st-present-item { margin-bottom: var(--sp-16); }
+.st-present-item .st-md { font-size: 17px; }
+.st-chart--present { height: 400px; }
+.st-present-caption { font-size: var(--t-13); color: var(--muted); margin: var(--sp-8) 0 0; }
+.st-present-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-12);
+  padding: var(--sp-12);
+  border-top: 1px solid var(--border-hairline);
+  background: var(--surface);
+}
+.st-present-count { font-size: var(--t-12); color: var(--muted); min-width: 56px; text-align: center; font-variant-numeric: tabular-nums; }
+
+/* ── Catalog & docs (catalogUi.ts / catalogDetails.ts / catalogPage.ts) ───────
+   Tag chips, the tag-filter bar every list mounts, the Details popover, the
+   Data page's Catalog tab and the dataset page's Columns tab.
+
+   EIGHT tag hues, each ONE ink token per theme; a chip is that ink on a 12%
+   tint of itself, so the same class reads on a light card and a dark one
+   without a second rule. A tag's colour index is stored in catalog.json and
+   never recomputed — `.tag-c0`…`.tag-c7` are the whole contract. */
+:root {
+  --tag-0: #2563eb;
+  --tag-1: #0f766e;
+  --tag-2: #c2410c;
+  --tag-3: #7c3aed;
+  --tag-4: #be185d;
+  --tag-5: #4d7c0f;
+  --tag-6: #a16207;
+  --tag-7: #475569;
+}
+[data-theme="dark"] {
+  --tag-0: #60a5fa;
+  --tag-1: #2dd4bf;
+  --tag-2: #fb923c;
+  --tag-3: #a78bfa;
+  --tag-4: #f472b6;
+  --tag-5: #a3e635;
+  --tag-6: #facc15;
+  --tag-7: #94a3b8;
+}
+.tag-c0 { --tag-ink: var(--tag-0); }
+.tag-c1 { --tag-ink: var(--tag-1); }
+.tag-c2 { --tag-ink: var(--tag-2); }
+.tag-c3 { --tag-ink: var(--tag-3); }
+.tag-c4 { --tag-ink: var(--tag-4); }
+.tag-c5 { --tag-ink: var(--tag-5); }
+.tag-c6 { --tag-ink: var(--tag-6); }
+.tag-c7 { --tag-ink: var(--tag-7); }
+
+.ct-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-width: 0;
+  overflow: hidden;
+}
+.ct-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--r-full);
+  font-family: var(--font-ui);
+  font-size: var(--t-11);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--tag-ink, var(--muted));
+  background: color-mix(in srgb, var(--tag-ink, var(--muted)) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tag-ink, var(--muted)) 26%, transparent);
+}
+.ct-chip--more { --tag-ink: var(--text-dim); }
+.ct-muted { color: var(--text-dim); }
+
+/* Where a list puts its chips: after the name, never growing the row. */
+.ct-slot { display: inline-flex; flex: 0 1 auto; min-width: 0; }
+.ct-slot:empty { display: none; }
+.viz-card-body > .ct-slot { padding: var(--sp-4) var(--sp-16) 0; }
+.rb-card-body > .ct-slot { display: flex; margin: 0 0 var(--sp-8); }
+.mp-name .ct-slot { margin-left: var(--sp-8); vertical-align: middle; }
+.ct-head-chips { display: inline-flex; flex: none; }
+
+/* The tag-filter bar — one per list, one filter state per project. */
+.ct-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 0 0 var(--sp-4);
+}
+.ws-table > .ct-filter { padding: 0 var(--sp-8); }
+.ct-filter-label {
+  margin-right: 2px;
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.ct-chip--btn {
+  height: 24px;
+  padding: 0 10px;
+  font-size: var(--t-12);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.ct-chip--btn:hover { background: color-mix(in srgb, var(--tag-ink, var(--muted)) 22%, transparent); }
+.ct-chip--btn.is-on {
+  color: var(--surface);
+  background: var(--tag-ink, var(--accent));
+  border-color: var(--tag-ink, var(--accent));
+}
+.ct-chip--btn:focus-visible,
+.ct-filter-clear:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
+.ct-filter-clear {
+  padding: 0 var(--sp-4);
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--t-12);
+  color: var(--accent);
+  cursor: pointer;
+}
+.ct-filter-note { margin-left: auto; font-size: var(--t-12); color: var(--muted); }
+
+/* The Details trigger on each header. */
+.ct-details-btn svg { color: var(--muted); }
+.ct-details-btn--icon { width: var(--ctl-sm); padding: 0; }
+
+/* ── The Details popover. `.chart-menu` gives position, Escape and
+   outside-click; this is the form inside it. Above `.ws-modal-overlay`
+   (100001) because the metric editor opens it from inside a modal. */
+.chart-menu.ct-pop {
+  z-index: 100002;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  width: 340px;
+  min-width: 0;
+  max-width: calc(100vw - 16px);
+  padding: var(--sp-16);
+  background: var(--surface-float);
+  box-shadow: var(--shadow-md);
+}
+.ct-pop-head { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ct-pop-kicker {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.ct-pop-name {
+  font-size: var(--t-15);
+  font-weight: 600;
+  letter-spacing: var(--tr-tight);
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ct-field { display: flex; flex-direction: column; gap: var(--sp-4); }
+.ct-field-label { font-size: var(--t-12); font-weight: 600; color: var(--muted); }
+.ct-input,
+.ct-tagedit {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-ui);
+  font-size: var(--t-13);
+  color: var(--text);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  outline: none;
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.ct-input { padding: 6px var(--sp-8); }
+.ct-input:focus-visible { outline: none; }
+.ct-input--area { min-height: 68px; resize: vertical; line-height: var(--lh-body); }
+.ct-input::placeholder,
+.ct-tag-input::placeholder { color: var(--text-faint); }
+.ct-input:focus,
+.ct-tagedit:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.ct-tagedit {
+  cursor: text;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: var(--ctl-md);
+  padding: 4px 6px;
+}
+.ct-tagedit-chips { display: contents; }
+.ct-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-right: -3px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-full);
+  background: none;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+}
+.ct-chip-x:hover { opacity: 1; background: color-mix(in srgb, var(--tag-ink, var(--muted)) 22%, transparent); }
+.ct-chip-x:focus-visible { opacity: 1; outline: var(--focus-ring-w) solid var(--focus-ring); }
+/* Four classes: it has to outrank the base `input:not(…)×4` field rule, which
+   would otherwise draw a second box inside the tag field. */
+.chart-menu.ct-pop .ct-tagedit input.ct-tag-input {
+  flex: 1 1 90px;
+  min-width: 90px;
+  height: 24px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  box-shadow: none;
+  background: transparent;
+  font-size: var(--t-13);
+  color: var(--text);
+}
+/* In the flow, not floating: a floating list would be clipped by the popover's
+   own scroll box. */
+.ct-sugg {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 2px;
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--border-hairline);
+}
+.ct-sugg-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  font: inherit;
+  font-size: var(--t-12);
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+}
+.ct-sugg-row:hover,
+.ct-sugg-row.is-on { background: var(--surface-2); }
+.ct-sugg-new { font-weight: 600; color: var(--text); }
+.ct-seg {
+  display: flex;
+  overflow: hidden;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.ct-seg-btn {
+  flex: 1;
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-8);
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--t-12);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.ct-seg-btn + .ct-seg-btn { border-left: 1px solid var(--border); }
+.ct-seg-btn:hover { background: var(--surface-2); }
+.ct-seg-btn:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: -2px; }
+.ct-seg-btn.is-on { font-weight: 600; color: var(--accent); background: var(--accent-soft); }
+.ct-seg-btn--personal.is-on { color: var(--warn); background: var(--warn-soft); }
+.ct-seg-btn--financial.is-on { color: var(--error); background: var(--error-soft); }
+.ct-stamp {
+  margin: 0;
+  padding-top: var(--sp-8);
+  border-top: 1px solid var(--border-hairline);
+  font-size: var(--t-12);
+  color: var(--text-dim);
+}
+.ct-me-line { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-8); min-height: var(--ctl-sm); }
+.ct-me-chips { display: inline-flex; min-width: 0; font-size: var(--t-12); }
+.dsp-head-btns { display: inline-flex; flex: none; align-items: center; gap: var(--sp-4); }
+.dsp-doc {
+  display: -webkit-box;
+  margin: var(--sp-4) 0 0;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+
+/* ── The Catalog tab ─────────────────────────────────────────────────────── */
+#ct-wrap { display: flex; flex-direction: column; gap: var(--sp-12); }
+.ct-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-12); }
+.ct-search {
+  width: 320px;
+  max-width: 100%;
+  height: var(--ctl-md);
+  box-sizing: border-box;
+  padding: 0 var(--sp-12);
+  font-family: var(--font-ui);
+  font-size: var(--t-13);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  outline: none;
+}
+.ct-search:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.ct-kinds { display: flex; flex-wrap: wrap; gap: var(--sp-4); }
+.ct-kind-n { margin-left: 6px; font-size: var(--t-11); color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.ct-count { margin-left: auto; }
+.ct-cols,
+.ct-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 2.4fr) minmax(120px, 1.2fr) minmax(90px, 0.8fr) 88px 72px 40px;
+  align-items: center;
+  gap: var(--sp-12);
+}
+.ct-cols span:nth-child(5) { text-align: right; }
+.ct-list { display: flex; flex-direction: column; }
+.ct-row { min-height: 52px; cursor: pointer; }
+.ct-row:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: -2px; }
+.ct-name-cell { display: flex; align-items: center; gap: var(--sp-12); min-width: 0; }
+.ct-kind-ic {
+  --tag-ink: var(--tag-0);
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-md);
+  color: var(--tag-ink);
+  background: color-mix(in srgb, var(--tag-ink) 12%, transparent);
+}
+.ct-kind-ic--visual { --tag-ink: var(--tag-3); }
+.ct-kind-ic--analysis { --tag-ink: var(--tag-1); }
+.ct-kind-ic--metric { --tag-ink: var(--tag-2); }
+.ct-kind-ic--report { --tag-ink: var(--tag-7); }
+.ct-kind-ic--story { --tag-ink: var(--tag-4); }
+.ct-name-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ct-name-top { display: flex; align-items: center; gap: var(--sp-8); min-width: 0; }
+.ct-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.ct-row:hover .ct-name { color: var(--accent); }
+.ct-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-12); color: var(--muted); }
+.ct-stale {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: var(--r-full);
+  font-size: var(--t-11);
+  font-weight: 600;
+  color: var(--warn);
+  background: var(--warn-soft);
+}
+.ct-usage { text-align: right; }
+.ct-row-details { width: var(--ctl-sm); padding: 0; opacity: 0.55; transition: opacity var(--dur-fast) var(--ease-out); }
+.ct-row:hover .ct-row-details,
+.ct-row:focus-within .ct-row-details { opacity: 1; }
+.ct-none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-12);
+  padding: var(--sp-24) 0;
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+
+/* ── The dataset page's Columns tab: docs you edit in place ─────────────── */
+.ds-explorer.tab-columns .ds-grid-pane { display: none; }
+.ct-coldoc { display: flex; flex-direction: column; gap: var(--sp-12); }
+.ct-coldoc-lead { margin: 0; font-size: var(--t-13); color: var(--muted); }
+.ct-coldoc-table .ds-quality-grid td { padding: 3px var(--sp-8); }
+.ct-coldoc-name { white-space: nowrap; }
+.ct-coldoc-cell--description { width: 40%; }
+.ct-coldoc .ct-coldoc-table .ds-quality-grid .ct-cell-input {
+  width: 100%;
+  height: auto;
+  box-sizing: border-box;
+  padding: 5px 6px;
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  outline: none;
+  resize: none;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+textarea.ct-cell-input { min-height: 28px; field-sizing: content; }
+.ct-coldoc .ct-coldoc-table .ds-quality-grid .ct-cell-input:hover { border-color: var(--border); }
+.ct-coldoc .ct-coldoc-table .ds-quality-grid .ct-cell-input:focus {
+  outline: none;
+  background: var(--surface-1);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.ct-cell-input::placeholder { color: var(--text-faint); }
+.ct-cell-select {
+  height: var(--ctl-sm);
+  padding: 0 6px;
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.ct-cell-select[data-sensitivity="personal"] { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
+.ct-cell-select[data-sensitivity="financial"] { color: var(--error); background: var(--error-soft); border-color: transparent; }
+
+/* ── Tabs and split view (tabStrip.ts, tabSplit.ts) ───────────────────────────
+   One tab per open RECORD, in a strip under the top bar. The strip sits on the
+   page plane (--bg) like the sidebar rail, and a tab reads the way a rail row
+   does: hover darkens to --surface-2, the active tab is a --surface-1 card
+   lifted off the ground by its hairline. Nothing here is a new colour.
+
+   --tab-strip-h is the strip's height while it shows, and 0 otherwise, so the
+   two places that SUM the chrome by hand (focus mode's panel height, the
+   overlaid dock's top) take it into account instead of being clipped by it. */
+body { --tab-strip-h: 0px; }
+body.has-tabs { --tab-strip-h: 36px; }
+html.dash-presenting body { --tab-strip-h: 0px; }
+html.dash-presenting .hub-tabstrip { display: none; }
+
+.hub-tabstrip {
+  flex: 0 0 36px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-8);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-hairline);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  user-select: none;
+}
+.hub-tabstrip::-webkit-scrollbar { display: none; }
+
+.tab-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
+  min-width: 96px;
+  max-width: 220px;
+  height: 28px;
+  padding: 0 var(--sp-4) 0 var(--sp-8);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  font-size: var(--t-12);
+  line-height: 1;
+  cursor: default;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.tab-item:hover { background: var(--surface-2); color: var(--text); }
+.tab-item:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+.tab-item > .ic { flex: none; color: var(--text-dim); }
+.tab-item.is-active {
+  background: var(--surface-1);
+  border-color: var(--border-hairline);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-strong);
+  font-weight: 500;
+}
+.tab-item.is-active > .ic { color: var(--accent); }
+/* The OTHER half of a split is on screen too — it reads as open, not focused. */
+.tab-item.is-split:not(.is-active) {
+  background: var(--surface-1);
+  border-color: var(--border-hairline);
+  color: var(--text);
+}
+.tab-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* × — shown on hover and on the active tab. A DIRTY tab shows its dot in the
+   same slot instead, and the × comes back under the pointer (the convention
+   every editor with tabs uses). */
+.tab-close {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.tab-item:hover .tab-close,
+.tab-item:focus-within .tab-close,
+.tab-item.is-active .tab-close,
+.tab-item.is-dirty .tab-close { opacity: 1; }
+.tab-close:hover { background: var(--surface-3); color: var(--text-strong); }
+.tab-dirty {
+  display: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.tab-item.is-active .tab-dirty { background: var(--accent); }
+.tab-item.is-dirty .tab-close .tab-dirty { display: block; }
+.tab-item.is-dirty .tab-close > .ic { display: none; }
+.tab-item.is-dirty .tab-close:hover .tab-dirty { display: none; }
+.tab-item.is-dirty .tab-close:hover > .ic { display: block; }
+
+/* Reorder: the tab in flight fades; an accent bar marks where it will land. */
+.tab-item.is-dragging { opacity: 0.45; }
+.tab-item.drop-before::before,
+.tab-item.drop-after::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+.tab-item.drop-before::before { left: -4px; }
+.tab-item.drop-after::after { right: -4px; }
+.tab-item.is-new { animation: tabIn var(--dur-menu) var(--ease-out); }
+@keyframes tabIn { from { opacity: 0; transform: translateY(3px); } }
+
+/* ── Split view: two panels in the .hub-body row, the divider between ─────────
+   Placed by `order` (tabSplit.ts sets 1 and 3 on the two panes, the divider is
+   2), so the sidebar before them and the dock after them need theirs. */
+.hub-body.tab-split > .app-sidebar { order: 0; }
+.hub-body.tab-split > .dk-scrim,
+.hub-body.tab-split > .dk-panel { order: 4; }
+.hub-body.tab-split > .ws-panel.is-pane {
+  min-width: 0;
+  overflow: hidden;
+  border-top: 2px solid transparent;
+}
+/* Which pane the keyboard, the dock and ⌘W are talking to. */
+.hub-body.tab-split > .ws-panel.is-pane-focus { border-top-color: var(--accent); }
+
+.tab-divider {
+  order: 2;
+  position: relative;
+  flex: 0 0 6px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+.tab-divider::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--border);
+  transition: width var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.tab-divider:hover::before,
+.tab-divider:focus-visible::before,
+body.tab-resizing .tab-divider::before {
+  width: 3px;
+  background: var(--accent);
+}
+body.tab-resizing,
+body.tab-resizing * { cursor: col-resize !important; user-select: none; }
+/* Charts and maps must not eat the pointer mid-drag. */
+body.tab-resizing .ws-panel { pointer-events: none; }
+
+/* The right-edge drop target while a tab is dragged. */
+.tab-drop {
+  position: fixed;
+  z-index: 9000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-8);
+  border: 2px dashed var(--accent-line);
+  border-radius: var(--r-lg);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--t-13);
+  font-weight: 500;
+  animation: fadeUp var(--dur-menu) var(--ease-out);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+.tab-drop.is-over { border-color: var(--accent); }
+.tab-drop > * { pointer-events: none; }
+
+/* The two chrome sums, now including the strip. */
+body.an-focus #ws-analyses { height: calc(100vh - 40px - var(--tab-strip-h)); }
+@media (max-width: 1100px) {
+  .dk-panel,
+  body.dk-open .dk-scrim { top: calc(40px + var(--tab-strip-h)); }
+}
+
+/* The tab's menu reuses .chart-menu rows. Rows without a shortcut must not
+   centre, keyboard focus reads as the hover row (an outline would be clipped by
+   the menu's own scroll box), and a row that cannot apply says so. */
+.tab-menu .chart-menu-item { justify-content: flex-start; }
+.tab-menu .chart-menu-item:focus-visible { outline: none; background: var(--surface-2); }
+.tab-menu .chart-menu-item:disabled { opacity: 0.45; cursor: default; background: none; }
+
 /* ══════════════════════════════════════════════════════════════════════════
    WORKSPACE PANEL (sidePanel.ts) — the right panel History and Lineage open
    in. It IS the column profile's shell: `.ds-profile` for the surface and the

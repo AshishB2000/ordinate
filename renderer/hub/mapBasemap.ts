@@ -37,7 +37,7 @@ function mapAddOfflineLand(map: any, wrap: HTMLElement): void {
 /** A custom boundary set for a choropleth: fetched from the project, `name` set from the join property. */
 async function mapCustomBoundary(geo: any): Promise<any> {
   if (!geo || !geo.boundaryId || !currentProjectId) return null;
-  const res = await window.hub.getBoundary(currentProjectId, geo.boundaryId, geo.property).catch(() => null);
+  const res = await window.hubAuthoring.getBoundary(currentProjectId, geo.boundaryId, geo.property).catch(() => null);
   return res && res.ok ? res.collection : null;
 }
 

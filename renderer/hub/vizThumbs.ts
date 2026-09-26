@@ -163,6 +163,8 @@ function vizThumbTrim(chart: any): void {
     Object.keys(scales).forEach((k) => {
       const s = scales[k];
       if (!s) return;
+      // A radar's rings ARE the chart; only its axis names are too big for a card.
+      if (k === 'r') { s.pointLabels = Object.assign({}, s.pointLabels, { display: false }); return; }
       s.ticks = Object.assign({}, s.ticks, { display: false });
       s.grid = Object.assign({}, s.grid, { display: false, drawOnChartArea: false });
       s.border = Object.assign({}, s.border, { display: false });

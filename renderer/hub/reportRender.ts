@@ -213,6 +213,8 @@ async function reportTile(
   try {
     caption = await window.hub.reportsCaption({
       chartType: type, data, geo: data.geo || null, pivot: data.pivot || null,
+      projectId: ctx.projectId, datasetId: visual.datasetId, // → the catalog's column display names
+      overrides: visual.overrides || null,   // a waterfall's totals, a bullet's target
     });
   } catch (_) { caption = ''; }
   return { cardId: card.id, title: paramSubst(visual.name || '', ctx.params || []), png, caption, grid };
@@ -322,6 +324,8 @@ async function buildReportPages(ctx: ReportContext): Promise<RenderedPage[]> {
           const line = reportFilterLine(ctx);
           if (line) meta.push(line);
         }
+        // "Contains financial data" — main reads the catalog; values are never redacted.
+        try { meta.push(...((await window.hub.catalogSensitivity(ctx.projectId, ctx.analysis.id)).lines || [])); } catch (_) { /* no line */ }
         return {
           kind: 'cover', layout: page.layout,
           title: cover.title || report.name || 'Report',

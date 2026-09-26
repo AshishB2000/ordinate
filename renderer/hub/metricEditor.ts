@@ -289,6 +289,8 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
     });
     dirSel.value = existing && existing.direction ? existing.direction : '';
     box.appendChild(meField('Direction', dirSel, 'Which way is good news, for the surfaces that colour a change.'));
+    // Tags and owner live in the catalog (catalogDetails.ts); the description above stays the metric's own.
+    if (editingId) box.appendChild(ctMetricDetailsRow(editingId, String((existing && existing.name) || '')));
 
     // ── The live preview ─────────────────────────────────────────────────────
     const preview = document.createElement('div');

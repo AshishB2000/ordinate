@@ -292,6 +292,7 @@ const VIZ_LABELS = {
   combo: 'Line + column', bubble: 'Bubble', treemap: 'Treemap', heatmap: 'Heatmap',
   funnel: 'Funnel', histogram: 'Histogram',
   sankey: 'Sankey', candlestick: 'Candlestick', boxplot: 'Box plot',
+  waterfall: 'Waterfall', bullet: 'Bullet', calendar: 'Calendar heatmap', radar: 'Radar', pareto: 'Pareto',
   pivot: 'Pivot table',
   table: 'Table', map_bubble: 'Bubble map', map_choropleth: 'Region map',
 };
@@ -299,7 +300,7 @@ const VIZ_LABELS = {
 // Small monochrome glyph per chart type for the viz chips. currentColor so each icon
 // inherits the chip's state color (muted → accent on hover → white when active).
 //
-// These 29 stay hand-drawn rather than moving into the icons.ts sprite: they
+// These 34 stay hand-drawn rather than moving into the icons.ts sprite: they
 // are a CHART TAXONOMY, one mark per renderable type, not UI actions, and they
 // are generated from this table alongside VIZ_LABELS. What they do take from
 // the sprite is its geometry — 16px at stroke 1.5 with `class="ic"`, so a
@@ -335,6 +336,11 @@ const VIZ_ICONS = {
   sankey: _vi('<rect x="3" y="5" width="2.4" height="6" fill="currentColor"/><rect x="3" y="13" width="2.4" height="6" fill="currentColor"/><rect x="18.6" y="8" width="2.4" height="8" fill="currentColor"/><path d="M5.4 8c6 0 7 4 13 4"/><path d="M5.4 16c6 0 7-4 13-4"/>'),
   candlestick: _vi('<line x1="8" y1="4" x2="8" y2="20"/><rect x="6" y="8" width="4" height="7" fill="currentColor"/><line x1="16" y1="6" x2="16" y2="21"/><rect x="14" y="10" width="4" height="6"/>'),
   boxplot: _vi('<line x1="7" y1="4" x2="7" y2="20"/><rect x="4" y="9" width="6" height="7"/><line x1="4" y1="12.5" x2="10" y2="12.5"/><line x1="16" y1="6" x2="16" y2="20"/><rect x="13" y="10" width="6" height="6"/><line x1="13" y1="13" x2="19" y2="13"/>'),
+  waterfall: _vi('<rect x="3" y="12" width="3.6" height="8" fill="currentColor"/><rect x="8" y="6" width="3.6" height="6" fill="currentColor"/><rect x="13" y="6" width="3.6" height="4"/><rect x="18" y="10" width="3.4" height="10" fill="currentColor"/><path d="M6.6 12H8M11.6 6H13M16.6 10H18"/>'),
+  bullet: _vi('<rect x="3" y="4.5" width="18" height="6" fill="currentColor" opacity="0.3" stroke="none"/><rect x="3" y="6.5" width="11" height="2" fill="currentColor" stroke="none"/><line x1="16.5" y1="3.5" x2="16.5" y2="11.5"/><rect x="3" y="13.5" width="18" height="6" fill="currentColor" opacity="0.3" stroke="none"/><rect x="3" y="15.5" width="15" height="2" fill="currentColor" stroke="none"/><line x1="13" y1="12.5" x2="13" y2="20.5"/>'),
+  calendar: _vi('<rect x="3" y="4" width="3.6" height="3.6" rx="0.6" fill="currentColor" opacity="0.35" stroke="none"/><rect x="3" y="9.2" width="3.6" height="3.6" rx="0.6" fill="currentColor" stroke="none"/><rect x="3" y="14.4" width="3.6" height="3.6" rx="0.6" fill="currentColor" opacity="0.35" stroke="none"/><rect x="8.2" y="4" width="3.6" height="3.6" rx="0.6" fill="currentColor" stroke="none"/><rect x="8.2" y="9.2" width="3.6" height="3.6" rx="0.6" fill="currentColor" opacity="0.35" stroke="none"/><rect x="8.2" y="14.4" width="3.6" height="3.6" rx="0.6" fill="currentColor" stroke="none"/><rect x="13.4" y="4" width="3.6" height="3.6" rx="0.6" fill="currentColor" opacity="0.35" stroke="none"/><rect x="13.4" y="9.2" width="3.6" height="3.6" rx="0.6" fill="currentColor" stroke="none"/><rect x="13.4" y="14.4" width="3.6" height="3.6" rx="0.6" fill="currentColor" opacity="0.35" stroke="none"/><rect x="18.6" y="4" width="3.6" height="3.6" rx="0.6" fill="currentColor" stroke="none"/><rect x="18.6" y="9.2" width="3.6" height="3.6" rx="0.6" fill="currentColor" opacity="0.35" stroke="none"/>'),
+  radar: _vi('<path d="M12 3.5l7.4 4.25v8.5L12 20.5l-7.4-4.25v-8.5z"/><path d="M12 7.5l4.6 3.1-1.4 5.4H9.4l-2.6-5z" fill="currentColor" opacity="0.45"/>'),
+  pareto: _vi('<rect x="4" y="9" width="3.4" height="11" fill="currentColor" stroke="none"/><rect x="8.6" y="13" width="3.4" height="7" fill="currentColor" stroke="none"/><rect x="13.2" y="16" width="3.4" height="4" fill="currentColor" stroke="none"/><rect x="17.8" y="18" width="3.4" height="2" fill="currentColor" stroke="none"/><polyline points="5.7 8 10.3 5.2 14.9 4 19.5 3.4"/>'),
   table: _vi('<rect x="4" y="5" width="16" height="14" rx="1"/><line x1="4" y1="9.5" x2="20" y2="9.5"/><line x1="12" y1="5" x2="12" y2="19"/><line x1="4" y1="14.5" x2="20" y2="14.5"/>'),
   pivot: _vi('<rect x="4" y="5" width="16" height="14" rx="1"/><rect x="4" y="5" width="16" height="4.5" fill="currentColor"/><rect x="4" y="9.5" width="5" height="9.5" fill="currentColor" opacity="0.35"/><line x1="9" y1="5" x2="9" y2="19"/><line x1="14.5" y1="5" x2="14.5" y2="19"/><line x1="4" y1="14.5" x2="20" y2="14.5"/>'),
   map_bubble: _vi('<circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r="1.6" fill="currentColor"/><circle cx="15" cy="14" r="2.2" fill="currentColor"/>'),
@@ -350,9 +356,10 @@ const ALL_CHART_TYPE_IDS = [
   'pie', 'donut', 'scatter', 'gauge', 'combo', 'bubble',
   'treemap', 'heatmap', 'funnel', 'histogram',
   'sankey', 'candlestick', 'boxplot',
+  'waterfall', 'bullet', 'calendar', 'radar', 'pareto',
   // A pivot draws from the SAME `visual:data` reply as every id above it, so it
   // belongs in the one list every picker pools from — even though the thing it
-  // draws is a <table>, like 'table' and unlike the other twenty-five.
+  // draws is a <table>, like 'table' and unlike the other thirty.
   'pivot',
 ];
 
@@ -360,9 +367,9 @@ const ALL_CHART_TYPE_IDS = [
 // data structure decide which chips appear — NOT the AI's visualizations list.
 // Each shape's list is best-first, so the first eligible entry is the default.
 const SHAPE_CHARTS = {
-  time_series:   ['line', 'line_markers', 'area', 'stacked_area', 'column', 'clustered_column', 'combo', 'heatmap', 'pivot', 'table'],
-  part_to_whole: ['pie', 'donut', 'treemap', 'pct_stacked_column', 'pct_stacked_bar', 'stacked_column', 'funnel', 'pivot', 'table'],
-  categorical:   ['column', 'bar', 'clustered_column', 'clustered_bar', 'heatmap', 'pivot', 'table'],
+  time_series:   ['line', 'line_markers', 'area', 'stacked_area', 'column', 'clustered_column', 'combo', 'heatmap', 'calendar', 'pivot', 'table'],
+  part_to_whole: ['pie', 'donut', 'treemap', 'pct_stacked_column', 'pct_stacked_bar', 'stacked_column', 'funnel', 'pareto', 'pivot', 'table'],
+  categorical:   ['column', 'bar', 'clustered_column', 'clustered_bar', 'heatmap', 'pareto', 'waterfall', 'bullet', 'radar', 'pivot', 'table'],
   single_metric: ['gauge', 'table'],
   matrix:        ['heatmap', 'pivot', 'table'],
   unstructured:  ['table'],
@@ -373,6 +380,7 @@ const CHART_SERIES_MIN = {
   clustered_column: 2, clustered_bar: 2, stacked_column: 2, stacked_bar: 2,
   pct_stacked_column: 2, pct_stacked_bar: 2, stacked_area: 2, combo: 2,
   scatter: 2, bubble: 3, heatmap: 2,
+  radar: 3, // three measures is the first polygon; axes are measures
 };
 
 // Maximum series for types that ONLY make sense single-series. A plain column/bar
@@ -381,10 +389,18 @@ const CHART_SERIES_MIN = {
 // same chart and "Column" mislabels a grouped one. With 1 series the clustered_*
 // entries are hidden by CHART_SERIES_MIN, so each chip's name always matches what
 // is drawn: 1 series -> Column/Bar, 2+ series -> Clustered column/Clustered bar.
-const CHART_SERIES_MAX = { column: 1, bar: 1 };
+// The five newer families read a fixed number of series (value + target, the
+// two ends of a bridge, one day's figure, six radar axes), so they are only
+// SUGGESTED where the data has that shape.
+const CHART_SERIES_MAX = { column: 1, bar: 1, pareto: 1, calendar: 1, waterfall: 2, bullet: 2, radar: 6 };
 
 // Minimum labels (categories) a type needs to be meaningful; everything else >= 1.
-const CHART_LABELS_MIN = { pie: 2, donut: 2, treemap: 2, heatmap: 2, funnel: 3 };
+// A radar normalises each axis by its largest value, so ONE category is always
+// a regular polygon — it needs two to compare.
+const CHART_LABELS_MIN = {
+  pie: 2, donut: 2, treemap: 2, heatmap: 2, funnel: 3,
+  pareto: 2, waterfall: 2, radar: 2, calendar: 7,
+};
 
 // Pure: which of a shape's chart ids the actual data can support, best-first.
 function eligibleChartTypes(dataShape, seriesCount, labelCount) {

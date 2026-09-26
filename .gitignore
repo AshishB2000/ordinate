@@ -453,6 +453,58 @@ scripts/**/*.js
 /scripts/test-reportSpec.js
 /scripts/smoke-reports.js
 
+# Workflow depth — answer cards, Explain, follow-up chips. Emitted siblings.
+/src/ai/answerSpec.js
+/src/ai/answerFacts.js
+/src/ipc/answers.js
+/renderer/hub/answerCard.js
+/scripts/test-answerSpec.js
+/scripts/test-answerFacts.js
+/renderer/hub/storyText.js
+/renderer/hub/storyList.js
+/renderer/hub/storyPage.js
+/renderer/hub/storyBlocks.js
+/renderer/hub/storyPickers.js
+/renderer/hub/storyPresent.js
+/renderer/hub/storyPropose.js
+/src/analysis/storyModel.js
+/src/analysis/stories.js
+/src/ipc/stories.js
+/scripts/test-storyModel.js
+/scripts/test-storyText.js
+# Catalog & docs (descriptions, tags, owners, column docs) — emitted siblings.
+/src/app/catalog.js
+/src/app/catalogIndex.js
+/src/ipc/catalog.js
+/renderer/hub/catalogUi.js
+/renderer/hub/catalogDetails.js
+/renderer/hub/catalogPage.js
+/scripts/test-catalog.js
+/scripts/wfCatalog.js
+# Waterfall / bullet / calendar / radar / Pareto — emitted siblings.
+/renderer/hub/chartShapes.js
+/renderer/hub/chartFamiliesExtra.js
+/renderer/hub/chartFamiliesPlugins.js
+/src/analysis/chartFigures.js
+/scripts/test-chartShapes.js
+/scripts/wfCharts.js
+# Tabs and windows — the tab set, its kinds, the strip, split view, the window
+# registry and "Open in new window". Emitted siblings.
+/renderer/hub/tabModel.js
+/renderer/hub/tabKinds.js
+/renderer/hub/tabNav.js
+/renderer/hub/tabSplit.js
+/renderer/hub/tabStrip.js
+/src/windows/hubRegistry.js
+/src/ipc/windows.js
+/scripts/test-tabModel.js
+/scripts/test-hubRegistry.js
+/scripts/wfTabs.js
+# Workflow depth — the one end-to-end smoke and its sections. Emitted siblings.
+/scripts/smoke-workflow.js
+/scripts/wfStub.js
+/scripts/wfAnswers.js
+/scripts/wfStories.js
 # Date intelligence (relative periods, KPI compare, period overlay) — emitted siblings.
 /src/analysis/dateIntel.js
 /src/analysis/periodScope.js

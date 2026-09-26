@@ -56,9 +56,9 @@ import { computeColumnSummariesResident } from '../engine/statsResident';
 
 // ── The CLOSED chart-type vocabulary ───────────────────────────────────────
 //
-// A model WILL invent chart types ("sunburst", "waterfall", "radar"). This set
+// A model WILL invent chart types ("sunburst", "marimekko", "chord"). This set
 // is `renderer/hub/renderResult.ts`'s ALL_CHART_TYPE_IDS ∪ {table, map_bubble,
-// map_choropleth} — the 29 types the app can actually draw. It is restated here
+// map_choropleth} — the 34 types the app can actually draw. It is restated here
 // because a renderer script has no exports and main cannot require it;
 // scripts/test-analysisPlan.ts vm-executes the REAL renderResult.js and asserts
 // the two sets are identical, so a divergence fails loudly rather than silently
@@ -70,6 +70,7 @@ export const CHART_TYPE_IDS: ReadonlySet<string> = new Set([
   'pie', 'donut', 'scatter', 'gauge', 'combo', 'bubble',
   'treemap', 'heatmap', 'funnel', 'histogram',
   'sankey', 'candlestick', 'boxplot', 'pivot',
+  'waterfall', 'bullet', 'calendar', 'radar', 'pareto',
   'table', 'map_bubble', 'map_choropleth',
 ]);
 

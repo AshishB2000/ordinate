@@ -132,6 +132,12 @@ async function dkOfferProposal(
     } catch (_) { /* a proposal is a bonus, never an error */ }
     return;
   }
+  // Its sibling: the same outline-review-build loop, landing as a STORY (storyPropose.ts).
+  if (kind === 'story') {
+    try { await stProposeStory(dkAccumulateIntent(intent || question, threadId), ref && ref.kind === 'dataset' ? ref.id : '', containerId); }
+    catch (_) { /* a proposal is a bonus, never an error */ }
+    return;
+  }
 
   // An EDIT changes the dashboard that is already open, which is exactly what
   // dkContextRef now reports as an 'analysis' context. Anywhere else there is

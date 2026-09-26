@@ -101,17 +101,7 @@ function selectSection(section: string): void {
   currentSection = section;
   const body = wsBodyEl();
   if (body) body.dataset.section = section;
-  // A nav item lights for its own section OR any it lists in data-section-alt.
-  // That is what keeps "Data" (data-section="datasets") highlighted while the
-  // Connect panel (section "connect") is showing: connecting a source is an
-  // action inside the Data area, not a place of its own, so the nav must not go
-  // dark when it opens. Without the alias, changing "Data" to point at datasets
-  // would leave NOTHING highlighted on the Connect section.
-  document.querySelectorAll('.as-nav-item').forEach((item) => {
-    const el = item as HTMLElement;
-    const alt = (el.dataset.sectionAlt || '').split(/\s+/).filter(Boolean);
-    el.classList.toggle('active', el.dataset.section === section || alt.indexOf(section) >= 0);
-  });
+  wsMarkNav(section);
   // Only the matching non-Sources placeholder is shown; Sources uses the
   // existing sidebar+main (handled entirely in CSS off [data-section]).
   document.querySelectorAll('.ws-panel').forEach((panel) => {
@@ -145,6 +135,24 @@ function selectSection(section: string): void {
   // Recompute the AI dock's visibility for the new section (dock.ts) — this is
   // what forces it closed on Explore and re-shows it everywhere else.
   if (typeof dkSync === 'function') dkSync();
+}
+
+// Light the nav item for `section`. Its own function because a split-view pane
+// taking focus (tabSplit.ts) moves the current section WITHOUT selectSection —
+// whose refresh would close the dashboard open in the other pane.
+//
+// A nav item lights for its own section OR any it lists in data-section-alt.
+// That is what keeps "Data" (data-section="datasets") highlighted while the
+// Connect panel (section "connect") is showing: connecting a source is an
+// action inside the Data area, not a place of its own, so the nav must not go
+// dark when it opens. Without the alias, changing "Data" to point at datasets
+// would leave NOTHING highlighted on the Connect section.
+function wsMarkNav(section: string): void {
+  document.querySelectorAll('.as-nav-item').forEach((item) => {
+    const el = item as HTMLElement;
+    const alt = (el.dataset.sectionAlt || '').split(/\s+/).filter(Boolean);
+    el.classList.toggle('active', el.dataset.section === section || alt.indexOf(section) >= 0);
+  });
 }
 
 // Leave `section` for whatever was showing before it, falling back to Home.

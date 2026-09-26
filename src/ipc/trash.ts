@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
-import type { BrowserWindow } from 'electron';
 import * as trash from '../app/trash';
 import * as scheduler from '../app/refreshScheduler';
+import * as hubs from '../windows/hubRegistry';
 
 // Trash IPC — list, restore, delete for good, empty. The deletes that PUT
 // things here are the record types' own `*:delete` handlers, each of which now
@@ -10,11 +10,9 @@ import * as scheduler from '../app/refreshScheduler';
 // `trash:changed` is pushed (send/on) after any change so the sidebar's count
 // badge follows deletes made anywhere — a ⋯ menu, the sample note's Remove
 // button, a purge on the scheduler's tick.
-export function register({ getHubWindow }: { getHubWindow: () => BrowserWindow | null }): void {
-  trash.onChange((projectId) => {
-    const win = getHubWindow();
-    if (win && !win.isDestroyed()) win.webContents.send('trash:changed', { projectId });
-  });
+export function register(): void {
+  // Every hub window carries the badge.
+  trash.onChange((projectId) => hubs.broadcast('trash:changed', { projectId }));
 
   // The purge rides the refresh scheduler's tick, which fires every minute
   // whether or not auto-refresh is on — so "30 days" holds for everyone.

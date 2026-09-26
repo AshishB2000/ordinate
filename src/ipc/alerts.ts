@@ -20,7 +20,6 @@
 // other narration in this app.
 
 import { ipcMain } from 'electron';
-import type { BrowserWindow } from 'electron';
 
 import * as store from '../analysis/alertStore';
 import * as alerts from '../analysis/alerts';
@@ -31,10 +30,9 @@ import * as execConfig from '../app/execConfig';
 import { askCopilot } from '../ai/analyze';
 import { notifyAlert } from '../app/notify';
 import { buildFacts, guardAnswer } from './copilot';
+import * as hubs from '../windows/hubRegistry';
 
 export interface AlertDeps {
-  /** The hub, so a fired alert can update the bell without being asked for. */
-  getHubWindow: () => BrowserWindow | null;
   /** Bring the window forward when the user clicks the OS notification. */
   focusHub: () => void;
 }
@@ -43,11 +41,11 @@ let deps: AlertDeps | null = null;
 
 // ── Delivery ─────────────────────────────────────────────────────────────────
 
-/** Push the unread count (and the events) to the hub. Fire-and-forget. */
+/** Push the unread count (and the events) to every hub window — each has a
+ *  bell. Fire-and-forget. */
 function pushToHub(projectId: string, events: AlertEvent[]): void {
   try {
-    const win = deps && deps.getHubWindow();
-    if (win && !win.isDestroyed()) win.webContents.send('alerts:fired', { projectId, events });
+    hubs.broadcast('alerts:fired', { projectId, events });
   } catch (_) { /* window gone mid-send */ }
 }
 

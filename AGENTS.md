@@ -19,7 +19,7 @@ This file is deliberately a pointer rather than a copy.
 
 A **local-first, open-source personal BI workspace.** Data comes in (files, paste, Excel, Postgres,
 a URL/API, or a screenshot capture) → **prepare** it with a reversible transform pipeline →
-**visualize** across 28 chart & map types → assemble **dashboards** → **share** offline. AI is
+**visualize** across 34 chart, map & table types → assemble **dashboards** → **share** offline. AI is
 optional at every step. MIT.
 
 **Core principle: the app does the math.** Aggregation, statistics, metrics and anomaly detection

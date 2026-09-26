@@ -78,7 +78,7 @@ folder is safe to sync or commit to git.
 3. **Explore** (`datasetStats.ts`): per-column summaries + quality flags (empty-heavy, constant,
    duplicate rows).
 4. **Visualize** (`visuals.ts` + `vizData.ts`): a visual = dataset + encoding + chart type + style;
-   `buildVizData` bridges to the existing `chartRender.buildChart` / `mapRender` (28 chart & map types).
+   `buildVizData` bridges to the existing `chartRender.buildChart` / `mapRender` (34 chart, map & table types).
 5. **Dashboard** (`dashboards.ts`): visual/text/metric cards on a 12-column multi-page grid with
    dashboard-wide cross-filters; metric numbers are computed on the fly (`metricValue.ts`), never stored.
 6. **Share** (`dashboardExport.ts`): self-contained interactive HTML (inlined Chart.js, fully offline),

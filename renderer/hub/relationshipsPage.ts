@@ -151,7 +151,7 @@ async function refreshRelationships(): Promise<void> {
   if (!currentProjectId) return;
   const pid = currentProjectId;
   const [res, list] = await Promise.all([
-    window.hub.listRelationships(pid),
+    window.hubAuthoring.listRelationships(pid),
     window.hub.listDatasets(pid),
   ]);
   if (pid !== currentProjectId) return;
@@ -414,7 +414,7 @@ function relRenderList(): void {
 async function relDelete(r: any): Promise<void> {
   if (!currentProjectId) return;
   if (!window.confirm(`Delete the relationship ${relName(r.from.datasetId)} → ${relName(r.to.datasetId)}? Visuals using its columns will say so instead of drawing.`)) return;
-  const res = await window.hub.deleteRelationship(currentProjectId, r.id);
+  const res = await window.hubAuthoring.deleteRelationship(currentProjectId, r.id);
   encRelatedInvalidate();
   if (res && res.ok) showToast('Relationship deleted', { kind: 'success' });
   await refreshRelationships();

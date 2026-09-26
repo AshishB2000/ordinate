@@ -1,9 +1,8 @@
 // Unattended dataset refresh — the scheduler's wiring. MAIN PROCESS.
 //
 // Moved out of src/main.ts unchanged (that file sits at the 800-line cap).
-// What it needs from main is passed in: the hub window, for the in-place
-// freshness push and the report bell, and whether the hub is focused, for the
-// notifications.
+// Hub windows come from the registry (windows/hubRegistry); main passes in
+// only whether the hub is focused, for the notifications.
 //
 // Ordinate has no daemon: this ticks while the app is RUNNING, and anything
 // that came due while it was closed is simply overdue on the first tick after
@@ -13,17 +12,12 @@
 // it off in Settings takes effect at once instead of at the next restart.
 
 import { app } from 'electron';
-import type { BrowserWindow } from 'electron';
 
 import * as config from './config';
 import { maybeNotify } from './notify';
+import * as hubs from '../windows/hubRegistry';
 
-export function start(deps: { getHubWindow: () => BrowserWindow | null; hubFocused: () => boolean }): void {
-  const { hubFocused } = deps;
-  const send = (channel: string, payload?: unknown): void => {
-    const hub = deps.getHubWindow();
-    if (hub && !hub.isDestroyed()) hub.webContents.send(channel, payload);
-  };
+export function start({ hubFocused }: { hubFocused: () => boolean }): void {
   const scheduler = require('./refreshScheduler');
   scheduler.setEnabledCheck(() => config.get().autoRefresh !== false);
 
@@ -34,9 +28,9 @@ export function start(deps: { getHubWindow: () => BrowserWindow | null; hubFocus
   const BIG_CHANGE = 0.2;
 
   scheduler.onRefreshed((o: any) => {
-    // Always push to the hub: it updates the freshness line in place. send/on,
-    // not invoke/handle — nothing is asked for and no answer is wanted.
-    send('hub:dataset-refreshed', o);
+    // Always push to every hub window: each updates its freshness line in
+    // place. send/on, not invoke/handle — no answer is wanted.
+    hubs.broadcast('hub:dataset-refreshed', o);
     // At most ONE notification per dataset per tick, and only for these two.
     // A success inside the interval is silent by design.
     if (!o.ok) {
@@ -64,7 +58,8 @@ export function start(deps: { getHubWindow: () => BrowserWindow | null; hubFocus
   // Main only rings the bell. The hub renderer owns generation, because the
   // chart engine and the three document libraries live there; it answers by
   // calling `reports:writeScheduled`, which is where the bytes reach disk.
-  scheduler.afterTick(() => send('reports:run-due'));
+  // PRIMARY only: every window would otherwise generate the same file.
+  scheduler.afterTick(() => hubs.send('reports:run-due'));
 
   scheduler.start();
   app.on('before-quit', () => scheduler.stop());

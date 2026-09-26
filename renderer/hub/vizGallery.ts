@@ -7,7 +7,7 @@
 // which keeps the module-local state every function here reads.
 
 // ── The chart-glyph motif ────────────────────────────────────────────────────
-// Dashboards draws CSS bars (.ws-bars). Visuals is about 28 chart TYPES, so its
+// Dashboards draws CSS bars (.ws-bars). Visuals is about 34 chart TYPES, so its
 // motif is a cluster of real chart glyphs instead — still no image asset, still
 // nothing to ship: VIZ_ICONS (renderResult.ts) is already in the bundle.
 //
@@ -170,6 +170,7 @@ async function refreshVisualList(): Promise<void> {
   grid.hidden = items.length === 0;
   if (empty) empty.hidden = items.length > 0;
   items.forEach((v) => grid.appendChild(makeVisualCard(v)));
+  void ctAfterPaint(grid); // catalog tag bar + chips
 
   // Count chip beside the heading — hidden at zero, where the empty state is
   // already saying it.
@@ -200,6 +201,7 @@ function makeVisualCard(v: any): HTMLElement {
   const chartType = (v && v.chartType) ? String(v.chartType) : 'column';
   const card = document.createElement('div');
   card.className = 'viz-card' + (v && v.favorite === true ? ' viz-card--fav' : '');
+  card.dataset.recKind = 'visual'; card.dataset.recId = id; // ⌘-click → background tab (tabStrip.ts)
 
   // The whole card is ONE button, so a card is a single Tab stop. The star and
   // the ⋯ menu are siblings of it (nested buttons are invalid HTML) positioned
@@ -238,6 +240,7 @@ function makeVisualCard(v: any): HTMLElement {
   body.appendChild(name);
   body.appendChild(meta);
   body.addEventListener('click', () => openSavedVisual(id));
+  ctDecorate(card, 'visual', id, body); // catalog tag chips
 
   const star = document.createElement('button');
   star.type = 'button';
@@ -293,6 +296,7 @@ function openVisualCardMenu(anchor: HTMLButtonElement, v: any): void {
       add('Rename', () => handleRenameVisual(id, v && v.name ? String(v.name) : ''));
       add('Duplicate', () => handleDuplicateVisual(id));
       add('Add to dashboard', () => handleAddVisualToAnalysis(id));
+      add('Explain', () => { void ansExplain({ visualId: id }); });
       add('Export', () => handleExportVisual(id));
       add('History', () => void vhOpen('visual', id, v && v.name ? String(v.name) : ''));
       add('Lineage', () => void lnOpen('visual', id, v && v.name ? String(v.name) : ''));

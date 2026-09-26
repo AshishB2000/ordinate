@@ -66,8 +66,12 @@ const ACTION_MARKER_SRC = '@@ACTION';
 export const MAX_INTENT = 400;
 
 /** The whitelist. Anything not on it becomes 'none'. */
-export type SuggestedActionKind = 'dashboard' | 'edit' | 'chart' | 'step' | 'calc' | 'style' | 'none';
-const KIND_LIST = ['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'none'] as const;
+export type SuggestedActionKind = 'dashboard' | 'edit' | 'chart' | 'step' | 'calc' | 'style' | 'answer' | 'story' | 'none';
+const KIND_LIST = ['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'answer', 'story', 'none'] as const;
+
+/** The most JSON an answer's spec may carry. A spec names a dataset, a few
+ *  columns and a few filter values; anything longer is not a spec. */
+export const MAX_SPEC_CHARS = 4000;
 const KINDS: ReadonlySet<string> = new Set(KIND_LIST);
 
 /**
@@ -138,6 +142,11 @@ export interface SuggestedAction {
    *  expands it through DASHBOARD_STYLE_PRESETS, so the model never names a
    *  colour and never writes CSS. */
   preset?: DashboardStylePreset;
+  /** The CHART SPEC behind an 'answer' — present ONLY when `kind === 'answer'`.
+   *  Shape-checked here (a plain object, bounded); every NAME in it is resolved
+   *  against the dataset's real columns by src/ai/answerSpec.ts before anything
+   *  is computed, so it stays loosely typed until then. It never carries a figure. */
+  spec?: Record<string, unknown>;
 }
 
 /** What an absent or unusable action means. Never null — callers switch on
@@ -151,8 +160,9 @@ export const NO_ACTION: SuggestedAction = { kind: 'none', intent: '' };
 const ACTION_PROMPT =
   '\n\nAFTER your answer, output ONE final line, exactly:\n' +
   ACTION_MARKER + ' {"kind":"<kind>","intent":"<intent>"}\n' +
-  'where <kind> is one of: dashboard, edit, chart, step, calc, style, none. Use "dashboard" when the ' +
-  'user is asking to BUILD or CREATE a NEW dashboard, report or overview; "edit" when the FACTS ' +
+  'where <kind> is one of: dashboard, story, edit, chart, step, calc, style, answer, none. Use "dashboard" when the ' +
+  'user is asking to BUILD or CREATE a NEW dashboard, report or overview; "story" when they want a WRITTEN ' +
+  'piece instead — a story, write-up, narrative or brief to be read top to bottom, with charts in it; "edit" when the FACTS ' +
   'show a dashboard is already open and they are asking to CHANGE it — add, remove, move, retype ' +
   'or rename something on it; "chart" when they want a ' +
   'single chart or visualisation; "step" when they want the data cleaned or filtered; "calc" when ' +
@@ -165,6 +175,18 @@ const ACTION_PROMPT =
   'where <preset> is EXACTLY one of: clean, executive, dense, dark. Lowercase, one word, ' +
   'nothing else. Pick the closest of the four; never name a colour, never write CSS, and never ' +
   'invent a preset. If none of the four fits what they asked for, use kind "none" instead. ' +
+  'Use "answer" when the question can be answered with ONE chart of the data in the FACTS ' +
+  '("revenue by region last quarter", "top 5 products by profit", "how did West do vs East"). ' +
+  'For "answer" ONLY, the line carries a spec, all on the same single line:\n' +
+  ACTION_MARKER + ' {"kind":"answer","intent":"<the question, restated>","spec":{"dataset":"<dataset name>",' +
+  '"category":"<column>","measures":[{"column":"<column>","aggregation":"sum|avg|count|min|max"}],' +
+  '"filters":[{"column":"<column>","op":"=","value":"<value>"}],"chartType":"<optional>","top":<optional N>}}\n' +
+  'Name columns EXACTLY as the FACTS list them. A filter is {"column","op","value"} with op one of ' +
+  '= != > < >= <= contains in (for "in", give "values":[…]); for a relative date use ' +
+  '{"column":"<date column>","period":"last_month|last_quarter|last_year"}; for "X vs Y" filter the ' +
+  'category with "in". "top" keeps the N largest. The spec NEVER contains a computed number. ' +
+  'When the kind is "answer", your prose is ONE short sentence saying what the chart shows, with no ' +
+  'figures at all — the app computes and displays them. ' +
   'This line is machine-read and never shown; write nothing after it.';
 
 /** The chat system prompt. Lives here so the answer contract and the action
@@ -212,9 +234,22 @@ export function validateAction(raw: unknown): SuggestedAction {
   // Collapse whitespace before clamping: a model that pads with newlines would
   // otherwise spend the budget on them, and this string goes back into a prompt.
   const intent = intentRaw.replace(/\s+/g, ' ').trim().slice(0, MAX_INTENT);
+
+  // An 'answer' is worth exactly as much as its spec, like a style and its
+  // preset: no spec, or one that is not a plain bounded object, is no answer.
+  if (kind === 'answer') {
+    const spec = o.spec;
+    if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return NO_ACTION;
+    let size = Infinity;
+    try { size = JSON.stringify(spec).length; } catch (_) { /* unserialisable — no spec */ }
+    if (size > MAX_SPEC_CHARS) return NO_ACTION;
+    return { kind, intent, spec: spec as Record<string, unknown> };
+  }
+
   // The returned literal IS the whitelist — every key not named here is dropped.
-  // `preset` is named only on the style branch, so a model cannot smuggle a
-  // restyle in on a 'dashboard' proposal by tacking the field on.
+  // `preset` is named only on the style branch (and `spec` only on the answer
+  // branch above), so a model cannot smuggle a restyle in on a 'dashboard'
+  // proposal by tacking the field on.
   return kind === 'style'
     ? { kind, intent, preset: o.preset as DashboardStylePreset }
     : { kind, intent };

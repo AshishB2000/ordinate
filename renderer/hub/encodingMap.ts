@@ -86,7 +86,7 @@ function encMapMount(root: HTMLElement, geoSel: HTMLSelectElement | null, onChan
   };
   const fillBoundaries = async (select?: string): Promise<void> => {
     if (!currentProjectId) return;
-    const res = await window.hub.listBoundaries(currentProjectId).catch(() => null);
+    const res = await window.hubAuthoring.listBoundaries(currentProjectId).catch(() => null);
     boundaries = res && res.ok ? res.boundaries : [];
     group.innerHTML = '';
     for (const b of boundaries) {
@@ -103,7 +103,7 @@ function encMapMount(root: HTMLElement, geoSel: HTMLSelectElement | null, onChan
     if (geoSel.value === '__import') {
       geoSel.value = last;
       if (!currentProjectId) return;
-      const res = await window.hub.importBoundaries(currentProjectId);
+      const res = await window.hubAuthoring.importBoundaries(currentProjectId);
       if (res && res.ok) {
         showToast(`Imported ${res.boundary.featureCount} regions from ${res.boundary.name}`, { kind: 'success' });
         await fillBoundaries('custom:' + res.boundary.id);

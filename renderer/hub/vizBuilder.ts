@@ -89,12 +89,12 @@ async function onDatasetChange(datasetId: string, preset?: any): Promise<void> {
     return;
   }
   vizDatasetId = String(ds.id || datasetId);
-  const cols = Array.isArray(ds.columns)
+  const cols = await ctDocColumns<EncCol>(vizDatasetId, Array.isArray(ds.columns) // + catalog display names/descriptions
     ? ds.columns.map((c: any) => ({
         name: c && c.name != null ? String(c.name) : '',
         type: c && (c.type === 'number' || c.type === 'date') ? c.type : 'text',
       }))
-    : [];
+    : []);
   ensureVizForm();
   // The form decides the default category, the default measure and the sort
   // order of the options. Restoring a saved visual is the same call with a
@@ -138,6 +138,11 @@ function clearVizArea(): void {
   if (area) area.innerHTML = '';
   const mount = vizEl('viz-switcher-mount');
   if (mount) mount.innerHTML = '';
+  // The chart's Values / ⋯ cluster lives OUTSIDE #viz-area (the stage head's
+  // .cv-controls-slot), so emptying the area left it behind and every reopen
+  // stacked another beside it — twice as many after one Back, and the tab
+  // strip reopens visuals all the time.
+  document.querySelectorAll('.viz-builder-stage .cv-controls-slot').forEach((slot) => { slot.textContent = ''; });
   vizPicker = null;
 }
 
@@ -256,6 +261,13 @@ async function recomputeVisual(): Promise<void> {
         if (type === 'pivot') vizPivotForm!.setColumns(vizForm!.getColumns(), pivotFromEncoding(vizForm!.getEncoding()));
         else vizForm!.setEncoding(encodingFromPivot(vizPivotForm!.getPivot()));
         applyPivotMode(type === 'pivot');
+        void recomputeVisual();
+        return;
+      }
+      // A calendar heatmap is one cell per DAY: an auto-grained date axis
+      // (months, for two years of orders) would leave 24 lonely cells. Ask main
+      // for days — an explicit grain is never capped — and draw that instead.
+      if (type === 'calendar' && vizForm!.setGrain('day')) {
         void recomputeVisual();
         return;
       }

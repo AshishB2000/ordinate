@@ -97,6 +97,23 @@ async function waitForFile(p: string, timeoutMs: number): Promise<number> {
   return fs.existsSync(p) ? fs.statSync(p).size : 0;
 }
 
+/**
+ * The stubbed save panel's paths, read from MAIN. Retried on ONE harness error:
+ * Playwright's "Resulting promise was garbage collected", which a main-process
+ * evaluate can throw while a document writer is busy — a poll that lost a
+ * round, not an app failure. Anything else still throws.
+ */
+async function savePaths(app: any): Promise<string[]> {
+  for (let i = 0; ; i++) {
+    try {
+      return await app.evaluate(() => (global as any).__savePaths);
+    } catch (e) {
+      if (i >= 4 || !/garbage collected/.test(String(e))) throw e;
+      await new Promise((r) => setTimeout(r, 300));
+    }
+  }
+}
+
 async function main(): Promise<void> {
   const app = await _electron.launch({
     args: ['.', '--password-store=basic', '--user-data-dir=' + userData, '--enable-unsafe-swiftshader'],
@@ -210,18 +227,6 @@ async function main(): Promise<void> {
   await win.screenshot({ path: path.join(shotDir, 'reports-tile-page.png') });
 
   // ── Generate all three formats ────────────────────────────────────────────
-  // An app.evaluate that lands while main is mid-task can lose its promise to a
-  // GC inside V8's inspector ("Resulting promise was garbage collected"). That
-  // is a race in the harness, not the app, and it tracks heap layout; this read
-  // is idempotent, so it retries on exactly that error.
-  const savePaths = async (): Promise<string[]> => {
-    for (let i = 0; ; i++) {
-      try { return await app.evaluate(() => (global as any).__savePaths); } catch (e) {
-        if (i >= 3 || !/garbage collected/.test(String(e))) throw e;
-        await new Promise((r) => setTimeout(r, 500));
-      }
-    }
-  };
   const files: Record<string, string> = {};
   for (const format of ['pdf', 'pptx', 'docx']) {
     await win.evaluate(async (f: string) => {
@@ -234,7 +239,7 @@ async function main(): Promise<void> {
     // The 16:9 preview IS the slide's layout — same RenderedPage, same blocks —
     // so this is the closest a headless run can get to a picture of a slide.
     if (format === 'pptx') await win.screenshot({ path: path.join(shotDir, 'reports-pptx-slide-preview.png') });
-    const saved: string[] = await savePaths();
+    const saved: string[] = await savePaths(app);
     // The panel is stubbed, so the destination is known before the write lands.
     const want = saved.length ? saved[saved.length - 1] : '';
     let dest = want;
@@ -242,7 +247,7 @@ async function main(): Promise<void> {
       // First pass for this format: wait for the stub to be called at all.
       for (let i = 0; i < 40 && !dest; i++) {
         await new Promise((r) => setTimeout(r, 500));
-        const s2: string[] = await savePaths();
+        const s2: string[] = await savePaths(app);
         dest = s2.length ? s2[s2.length - 1] : '';
       }
     }
@@ -250,7 +255,7 @@ async function main(): Promise<void> {
     // belonging to THIS format rather than trusting the previous one.
     let sized = 0;
     for (let i = 0; i < 60; i++) {
-      const s2: string[] = await savePaths();
+      const s2: string[] = await savePaths(app);
       const match = s2.filter((p) => p.endsWith('.' + format)).pop();
       if (match) {
         sized = await waitForFile(match, 30_000);

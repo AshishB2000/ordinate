@@ -21,7 +21,7 @@ function renderImageCard(card: any, body: HTMLElement): void {
   box.className = 'img-card img-card--' + (img.fit || 'contain');
   body.appendChild(box);
   if (!currentProjectId) return;
-  void window.hub.readProjectImage(currentProjectId, img.assetId, img.ext).then((res: any) => {
+  void window.hubAuthoring.readProjectImage(currentProjectId, img.assetId, img.ext).then((res: any) => {
     if (!res || !res.ok) {
       box.textContent = 'This image is missing from the project.';
       box.classList.add('is-missing');
@@ -37,7 +37,7 @@ function renderImageCard(card: any, body: HTMLElement): void {
 
 async function handleAddImage(): Promise<void> {
   if (!currentProjectId) return;
-  const res = await window.hub.pickProjectImage(currentProjectId);
+  const res = await window.hubAuthoring.pickProjectImage(currentProjectId);
   if (!res || !res.ok) {
     if (res && res.error) showToast(res.error, { kind: 'error' });
     return;

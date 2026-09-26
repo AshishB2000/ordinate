@@ -74,7 +74,7 @@ const KIND_ADDS: Array<[string, string, () => void | Promise<void>]> = [
 /** What an export shows for a kind here: an image as its picture; layout-only kinds as nothing. */
 async function exportAuthoringCard(card: any, layout: any): Promise<any> {
   if (card.type === 'image' && currentProjectId && card.image) {
-    const res = await window.hub.readProjectImage(currentProjectId, card.image.assetId, card.image.ext).catch(() => null);
+    const res = await window.hubAuthoring.readProjectImage(currentProjectId, card.image.assetId, card.image.ext).catch(() => null);
     return res && res.ok ? { kind: 'image', layout, png: res.dataUrl, title: card.image.alt || '' } : null;
   }
   return ['nav', 'divider', 'container', 'tabs'].includes(card.type) ? null : undefined;

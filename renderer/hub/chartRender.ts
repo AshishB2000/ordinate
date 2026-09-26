@@ -10,6 +10,8 @@
 //   chartPalette.js     — CHART_PALETTE, getCSSVar, the hex/HSL derivation helpers
 //   chartTable.js       — buildDataTable, which renders a <table>, not a chart
 //   chartTypeSpec.js    — chart id → Chart.js type + option flags + traits
+//   chartShapes.js / chartFamiliesExtra.js — waterfall, bullet, calendar, radar
+//                         and Pareto: their pure shapes, then everything they draw
 //   chartValueLabels.js — which points get labelled, and the plugins that draw them
 //   chartDatasets.js    — the per-family Chart.js dataset shapes
 //   chartScales.js      — the per-family axis sets
@@ -214,7 +216,9 @@ function buildChart(
   // `asc` 80, `desc` 340, with the scale moving under it each time. A display
   // control that silently swaps the figure is the one thing this app must never
   // do, so a gauge keeps whichever value its encoding selected.
-  const canSort = (chartType === 'bar' && !isFunnel && !isHistogram) || (isRound && !isGauge);
+  // A waterfall's order IS its story and a Pareto sorts itself, so neither.
+  const canSort = ((chartType === 'bar' && !isFunnel && !isHistogram) || (isRound && !isGauge))
+    && !spec.isWaterfall && !spec.isPareto;
   if (canSort && (overrides.sort === 'asc' || overrides.sort === 'desc')) {
     const totals = labels.map((_: any, i: number) =>
       series.reduce((sum: number, s: ChartSeriesShape) => sum + (typeof s.values[i] === 'number' ? s.values[i] : 0), 0));
@@ -240,7 +244,9 @@ function buildChart(
 
   // Datasets FIRST — they write the per-family state on `opts` that the axes and
   // the inline plugins read back (see the header).
-  const { datasets, chartLabels } = buildChartDatasets(c);
+  const built = buildChartDatasets(c);
+  if (!built) return null;   // nothing drawable (a calendar without dates)
+  const { datasets, chartLabels } = built;
   const scales = buildChartScales(c);
 
   // ── Tooltip ─────────────────────────────────────────────────────────────
@@ -287,6 +293,7 @@ function buildChart(
       return pct != null ? `${fmt(v)} (${pct}% of top)` : fmt(v);
     };
   }
+  if (isExtraFamily(spec)) applyExtraTooltip(c, tooltipConfig);
 
   // Tooltip reach: line/area families default to intersect:true in Chart.js, so the
   // popup only appears on an exact-pixel point hit — which is why bars (fat targets)
@@ -306,7 +313,9 @@ function buildChart(
   // Hide deselected series. Indices align with `series` (both use chartSeries()).
   // Guard skips single-dataset types (pie/scatter/bubble/…) where 1 dataset ≠ N series.
   const hiddenSeries = new Set(Array.isArray(overrides.hiddenSeries) ? overrides.hiddenSeries : []);
-  if (hiddenSeries.size && datasets.length === series.length) {
+  // Not the extra families: a radar's datasets are CATEGORIES, and a matching
+  // count there would hide a polygon by a series index.
+  if (hiddenSeries.size && datasets.length === series.length && !isExtraFamily(spec)) {
     datasets.forEach((ds: any, i: number) => { if (hiddenSeries.has(i)) ds.hidden = true; });
   }
 
@@ -326,6 +335,7 @@ function buildChart(
         indexAxis: opts.indexAxis || 'x',
         ...(interactionConfig ? { interaction: interactionConfig } : {}),
         layout: { padding: { top: overrides.title ? 6 : 10, right: 12, bottom: 4, left: 6 } },
+        ...(isExtraFamily(spec) ? extraChartOptions(c) : {}),
         ...(isGauge ? { cutout: '72%', rotation: 270, circumference: 180 }
            : chartType === 'doughnut' ? { cutout: '62%' } : {}),
         plugins: {

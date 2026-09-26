@@ -202,7 +202,7 @@ async function openRelationshipDialog(): Promise<void> {
     busy.className = 'rel-sug-none';
     busy.textContent = 'Checking which columns match…';
     sug.appendChild(busy);
-    const res = await window.hub.suggestRelationshipKeys(pid, fromDs.sel.value, toDs.sel.value);
+    const res = await window.hubAuthoring.suggestRelationshipKeys(pid, fromDs.sel.value, toDs.sel.value);
     if (my !== seq) return;
     // A pair is worth offering when its values actually meet, or its names
     // clearly agree (a key whose sample happened to miss). 0% strangers are noise.
@@ -226,7 +226,7 @@ async function openRelationshipDialog(): Promise<void> {
   save.addEventListener('click', async () => {
     save.disabled = true;
     err.hidden = true;
-    const res = await window.hub.saveRelationship(pid, {
+    const res = await window.hubAuthoring.saveRelationship(pid, {
       from: { datasetId: fromDs.sel.value, column: fromCol.sel.value },
       to: { datasetId: toDs.sel.value, column: toCol.sel.value },
       cardinality: card.sel.value,

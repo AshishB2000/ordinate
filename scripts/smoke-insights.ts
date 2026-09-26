@@ -206,8 +206,9 @@ async function main(): Promise<void> {
       groups: [...document.querySelectorAll('#ds-insights-body .ins-group-h')].map((h) => (h.textContent || '').trim()),
     };
   });
+  // After Quality — not necessarily LAST: the catalog's Columns tab follows it.
   ok('the dataset page has an Insights tab, after Quality',
-    tab.order.join(' · ') === 'Data · Prepare · Quality · Insights', JSON.stringify(tab.order));
+    tab.order.slice(0, 4).join(' · ') === 'Data · Prepare · Quality · Insights', JSON.stringify(tab.order));
   ok('…which selects and shows its panel', tab.selected === 'true' && tab.panelShown === true);
   ok('…and the panel is actually on screen', tab.onScreen === true);
   ok('…listing at least three cards', tab.cards >= 3, String(tab.cards));

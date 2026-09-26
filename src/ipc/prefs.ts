@@ -12,24 +12,20 @@
 // an export can carry it, all without file access.
 
 import { ipcMain, dialog, app } from 'electron';
-import type { BrowserWindow } from 'electron';
 import * as fs from 'fs';
 
 import * as config from '../app/config';
+import * as hubs from '../windows/hubRegistry';
 import { readLogoDataUrl, removeLogo, saveLogo, LOGO_MAX_BYTES } from '../app/branding';
-
-type Deps = { getHubWindow: () => BrowserWindow | null };
 
 function publicPrefs(): { formats: unknown; branding: unknown } {
   const cfg = config.get();
   return { formats: { ...cfg.formats }, branding: { ...cfg.branding } };
 }
 
-export function register(deps: Deps): void {
-  const push = (): void => {
-    const hub = deps.getHubWindow();
-    if (hub && !hub.isDestroyed()) hub.webContents.send('prefs:changed', publicPrefs());
-  };
+export function register(): void {
+  // Every hub window: each repaints its own figures and accent.
+  const push = (): void => hubs.broadcast('prefs:changed', publicPrefs());
 
   ipcMain.handle('prefs:get', async () => publicPrefs());
 
@@ -53,7 +49,7 @@ export function register(deps: Deps): void {
   /** `scope` is 'workspace' or a dashboard (analysis) id. */
   ipcMain.handle('branding:pickLogo', async (_e, scope: unknown) => {
     const s = typeof scope === 'string' ? scope : 'workspace';
-    const hub = deps.getHubWindow();
+    const hub = hubs.primary();
     const opts = {
       title: 'Choose a logo',
       properties: ['openFile' as const],

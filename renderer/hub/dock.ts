@@ -247,6 +247,9 @@ function dkSync(): void {
     else panel?.focus();
   }
   dkUserOpened = false; // consumed either way — never carries into a later sync
+  // tabNav.ts — every open, close and section switch reaches here, which is
+  // exactly when the tab strip has to catch up with what is on screen.
+  if (typeof tabsSync === 'function') tabsSync();
 }
 
 /**

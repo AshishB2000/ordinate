@@ -11,10 +11,19 @@
 
 // ── the Reports tab ──────────────────────────────────────────────────────────
 
-/** Dashboards | Reports — the same `.ds-tabs` strip the Data page uses. */
+/** Which tab the strip shows — read by storyList.ts's guard on the dashboards list. */
+let rbCurrentTab = 'dashboards';
+
+/** Dashboards | Reports | Stories — the same `.ds-tabs` strip the Data page uses. */
 function rbSelectTab(tab: string): void {
   const isReports = tab === 'reports';
-  const pair: Array<[string, boolean]> = [['rp-tab-dashboards', !isReports], ['rp-tab-reports', isReports]];
+  const isStories = tab === 'stories';
+  rbCurrentTab = isReports || isStories ? tab : 'dashboards';
+  const pair: Array<[string, boolean]> = [
+    ['rp-tab-dashboards', !isReports && !isStories], ['rp-tab-reports', isReports], ['rp-tab-stories', isStories],
+  ];
+  const stories = rbEl('st-list-wrap');
+  if (stories) stories.hidden = !isStories;
   for (const [id, on] of pair) {
     const el = rbEl(id);
     if (!el) continue;
@@ -26,22 +35,24 @@ function rbSelectTab(tab: string): void {
   const reports = rbEl('rp-list-wrap');
   if (reports) reports.hidden = !isReports;
   const head = document.querySelector('.an-list-head-actions') as HTMLElement | null;
-  if (head) head.hidden = isReports;
+  if (head) head.hidden = isReports || isStories;
   // The section header follows the tab — the same swap captureList.ts makes for
   // Datasets/Captures. A "1 dashboard" chip over a list of reports is a header
   // describing the other tab.
   const count = rbEl('an-count');
-  if (count) count.hidden = isReports || !count.textContent;
+  if (count) count.hidden = isReports || isStories || !count.textContent;
   const sub = document.querySelector('#an-list-view .viz-sub') as HTMLElement | null;
   if (sub) {
     sub.textContent = isReports
       ? 'Dashboards as files you can send — PDF, PowerPoint or Word — on demand or on a schedule.'
-      : 'Sheets of charts, metrics and text over your datasets.';
+      : isStories
+        ? 'Documents you read top to bottom — prose around live charts and metrics.'
+        : 'Sheets of charts, metrics and text over your datasets.';
   }
-  if (isReports) {
+  if (isReports || isStories) {
     if (dash) dash.hidden = true;
     if (dashEmpty) dashEmpty.hidden = true;
-    void rbRefreshList();
+    void (isReports ? rbRefreshList() : stRefreshList());
   } else {
     void refreshAnalysisList();
   }
@@ -57,6 +68,7 @@ async function rbRefreshList(): Promise<void> {
   if (!Array.isArray(items)) items = [];
   grid.textContent = '';
   for (const r of items) grid.appendChild(rbCard(r));
+  void ctAfterPaint(grid); // catalog tag bar + chips
   const empty = rbEl('rp-empty');
   if (empty) empty.hidden = items.length > 0;
   grid.hidden = items.length === 0;
@@ -70,6 +82,7 @@ function rbCard(r: any): HTMLElement {
   const card = document.createElement('div');
   card.className = 'rb-card';
   card.dataset.reportId = r.id;
+  card.dataset.recKind = 'report'; card.dataset.recId = String(r.id); // ⌘-click → background tab (tabStrip.ts)
 
   // The "cover thumbnail" is the cover itself, drawn small in CSS: a portrait
   // sheet of paper carrying the mark and the title, at the report's own paper
@@ -104,6 +117,7 @@ function rbCard(r: any): HTMLElement {
   h.className = 'rb-card-name';
   h.textContent = r.name || 'Report';
   body.appendChild(h);
+  ctDecorate(card, 'report', String(r.id), body); // catalog tag chips
 
   const lines: string[] = [];
   lines.push(`${r.pageCount} ${r.pageCount === 1 ? 'page' : 'pages'}`);

@@ -40,6 +40,7 @@ async function refreshDatasetList(): Promise<void> {
   dsMarkEmpty(items.length === 0);
   await dsLoadConnKinds(items);
   items.forEach((d) => list.appendChild(makeSavedItem(d)));
+  void ctAfterPaint(list, list.previousElementSibling as HTMLElement | null); // catalog tag bar + chips
   // "Refresh all" only appears when there is something it could refresh.
   const all = dsEl('ds-refresh-all-btn');
   if (all) all.hidden = !items.some((d) => d && d.originKind);
@@ -221,6 +222,7 @@ const DS_NOT_REFRESHABLE_HINT =
 function makeSavedItem(d: any): HTMLElement {
   const row = document.createElement('div');
   row.className = 'ds-saved-item';
+  row.dataset.recKind = 'dataset'; row.dataset.recId = String(d && d.id ? d.id : ''); // ⌘-click → background tab (tabStrip.ts)
 
   const open = document.createElement('button');
   open.type = 'button';
@@ -360,6 +362,7 @@ function makeSavedItem(d: any): HTMLElement {
   status.className = 'ds-refresh-status';
   status.hidden = true;
   row.dataset.datasetId = String(d.id);
+  ctDecorate(row, 'dataset', String(d.id), open); // catalog tag chips
 
   // Cells, in the order the column labels in index.html declare them.
   row.appendChild(open);

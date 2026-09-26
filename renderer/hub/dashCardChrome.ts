@@ -75,7 +75,7 @@ function dashCardMenuBtn(card: any): HTMLButtonElement {
       (alCardMenuItems(card)
         .concat(mpCardMenuItems(card))
         .concat(pivotMenuItems(btn.closest('.dash-card'), dashCardTitle(card)))
-        .concat(tileActionMenuItems(card)).concat([
+        .concat(tileActionMenuItems(card)).concat(ansCardMenuItems(card)).concat([
         ['Move up', () => nudgeCard(card, 0, -1)],
         ['Move down', () => nudgeCard(card, 0, 1)],
         ['Move left', () => nudgeCard(card, -1, 0)],
