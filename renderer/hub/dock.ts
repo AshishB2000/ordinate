@@ -477,6 +477,8 @@ async function dkSend(): Promise<void> {
   if (!input) return;
   const question = input.value.trim();
   if (!question || !currentProjectId) return;
+  // "filter this to …" on an open dashboard is applied by the app, no model (filterTypeApply.ts).
+  if (typeof ftDockFilter === 'function' && await ftDockFilter(question)) { input.value = ''; return; }
 
   // Context is ALWAYS inferred, never overridden — that's the dock's whole
   // point (see dkContextRef/dkRenderContext above).

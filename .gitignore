@@ -802,3 +802,14 @@ scripts/**/*.js
 /scripts/test-funnelEvents.js
 /scripts/test-engineIpc.js
 /scripts/aeCohorts.js
+
+# Analysis engines — Typed filters (emitted siblings).
+/src/analysis/filterParse.js
+/src/analysis/filterDates.js
+/src/analysis/filterCatalog.js
+/src/ipc/filterParse.js
+/preload/hubFiltersPreload.js
+/renderer/hub/filterType.js
+/renderer/hub/filterTypeApply.js
+/scripts/test-filterParse.js
+/scripts/aeFilters.js

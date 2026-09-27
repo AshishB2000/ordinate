@@ -634,6 +634,7 @@ require("./ipc/scorecards").register(); // scorecards: metrics against targets, 
 require("./ipc/drivers").register(); // key drivers: why a figure changed between two periods
 require("./ipc/scenarios").register(); // scenarios: what-if drivers over the metrics
 require("./ipc/segments").register(); // Find segments: k-means and RFM, off the stored Parquet
+require("./ipc/filterParse").register(); // typed filters: "west technology last quarter" → chips, no model
 require("./ipc/build").register({ headless: !!HEADLESS }); // plans, formatting, themes, SaaS sources, snapshots
 // Week 13 — capture → dataset bridge. resolveCropPath hands the on-disk crop path
 // from main's per-entry state (entryData, then the summaries cache) so a renderer-

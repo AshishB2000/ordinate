@@ -53,6 +53,8 @@
   <link rel="stylesheet" href="segments.css"/>
   <!-- build-css:cohort -->
   <link rel="stylesheet" href="cohort.css"/>
+  <!-- Analysis engines — Typed filters -->
+  <link rel="stylesheet" href="filterType.css"/>
 
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
@@ -3560,6 +3562,12 @@
 <script src="segments.js"></script>
 <script src="segmentsView.js"></script>
 <script src="segmentsRfm.js"></script>
+<!-- Analysis engines — Typed filters: the box at the start of a dashboard's
+     filter bar (filterType.js builds itself into #dash-control-bar at load), then the
+     apply shared with ⌘K's `@` (palette.js) and the dock's "filter this to …"
+     (dock.js). After dashSelection.js, whose selection the chips join. -->
+<script src="filterType.js"></script>
+<script src="filterTypeApply.js"></script>
 
 <script src="hub.js"></script>
 

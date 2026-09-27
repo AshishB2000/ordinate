@@ -44,12 +44,15 @@ function dashTileSteps(cardId: string): any[] {
 }
 
 function dashSelStepLabel(s: any): string {
-  if (Array.isArray(s.values)) return `${s.column}: ${s.values.join(', ')}`;
-  return s.op === '=' ? `${s.column} = ${s.value}` : `${s.column} ${s.op} ${s.value ?? ''}`.trim();
+  // A typed filter (filterTypeApply.ts) can put any filter step here, not only a click's `=`.
+  if (s.op === 'period') return `${s.column}: ${periodValueText(s.period)}`;
+  if (Array.isArray(s.values)) return `${s.column}${s.op === 'not in' ? ' not' : ''}: ${s.values.join(', ')}`;
+  const sign: Record<string, string> = { '!=': '≠', '>=': '≥', '<=': '≤' };
+  return s.op === '=' ? `${s.column} = ${s.value}` : `${s.column} ${sign[s.op] || s.op} ${s.value ?? ''}`.trim();
 }
 
 function dashSelKey(s: any): string {
-  return JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null]);
+  return JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null]);
 }
 
 /** A fresh sheet opened: take a pending navigation's carry, or start clean. */

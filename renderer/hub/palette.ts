@@ -9,7 +9,8 @@
 // same input now opens this, so the chrome keeps its promise and there is ONE
 // answer to "find me a thing" instead of two half-answers.
 //
-// Prefixes: `>` commands only, `/` records only, `@` the open dataset's columns.
+// Prefixes: `>` commands only, `/` records only, `@` the open dataset's columns
+// (and, on an open dashboard, a typed filter: `@west technology`).
 //
 // This file is the BOX — open, close, keyboard, paint — plus the shortcuts
 // sheet, which is the same overlay block reading the same registry. What a row
@@ -98,7 +99,13 @@ async function cpRefresh(): Promise<void> {
   const mode = prefix === '>' ? 'commands' : prefix === '/' ? 'records' : prefix === '@' ? 'columns' : 'all';
   const q = (mode === 'all' ? raw : raw.slice(1)).trim();
 
-  if (mode === 'columns') { cpPaint(cpColumnGroups(q)); return; }
+  if (mode === 'columns') {
+    // With a dashboard open, `@west` is first a typed filter (filterTypeApply.ts).
+    const typed = typeof ftPaletteGroups === 'function' ? await ftPaletteGroups(q) : [];
+    if (seq !== cpSeq) return;
+    cpPaint(typed.concat(cpColumnGroups(q)));
+    return;
+  }
 
   const groups: CpGroup[] = [];
 
