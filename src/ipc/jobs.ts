@@ -54,10 +54,16 @@ export function noteWrittenPath(p: string): void {
   if (written.length > 50) written.shift();
 }
 
-export function register(deps: { hubFocused: () => boolean; focusHub: () => void }) {
-  jobs.configure({ file: path.join(app.getPath('userData'), 'jobs.json') });
-  const interrupted = jobs.restore();
-  if (interrupted.length) console.warn('[jobs]', interrupted.length, 'job(s) were interrupted by the last shutdown');
+export function register(deps: { hubFocused: () => boolean; focusHub: () => void; headless?: boolean }) {
+  // jobs.json belongs to the GUI. A headless run (--cli / --mcp) keeps its
+  // queue in memory and logs finished jobs for the GUI to show
+  // (src/automation/jobLog.ts) — it must never rewrite or "interrupt" the
+  // GUI's running jobs.
+  if (!deps.headless) {
+    jobs.configure({ file: path.join(app.getPath('userData'), 'jobs.json') });
+    const interrupted = jobs.restore();
+    if (interrupted.length) console.warn('[jobs]', interrupted.length, 'job(s) were interrupted by the last shutdown');
+  }
 
   jobs.onChange((snap) => hubs.broadcast('jobs:changed', snap));
   jobs.onFinish((job) => {

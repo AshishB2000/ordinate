@@ -22,6 +22,7 @@
   <link rel="stylesheet" href="privacy.css"/>
 
   <!-- platform-css:automation -->
+  <link rel="stylesheet" href="automation.css"/>
 
   <!-- platform-css:backup -->
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
@@ -2031,6 +2032,7 @@
           <button class="settings-cat" type="button" role="tab" data-cat="notifications">Notifications</button>
           <button class="settings-cat" type="button" role="tab" data-cat="general">General</button>
           <button class="settings-cat" type="button" role="tab" data-cat="privacy">Privacy</button>
+          <button class="settings-cat" type="button" role="tab" data-cat="automation">Automation</button>
           <button class="settings-cat" type="button" role="tab" data-cat="about">About</button>
         </nav>
 
@@ -2324,6 +2326,11 @@
           <!-- Privacy — the CURRENT project's share policy, built by privacySettings.ts. -->
           <section class="settings-pane" data-cat="privacy" hidden>
             <div class="pv-settings" id="stp-privacy"></div>
+          </section>
+
+          <!-- Automation — the local MCP server and the CLI. Built by settingsAutomation.ts. -->
+          <section class="settings-pane" data-cat="automation" hidden>
+            <div id="stp-automation" class="am-pane"></div>
           </section>
 
           <!-- About -->
@@ -3244,6 +3251,8 @@
 <script src="privacySettings.js"></script>
 
 <!-- platform:automation -->
+<script src="settingsAutomation.js"></script>
+<script src="automationReport.js"></script>
 
 <!-- platform:backup -->
 

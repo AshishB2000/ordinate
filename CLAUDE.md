@@ -163,7 +163,9 @@ bridge, worker/sidecar, resident fast paths), `src/data/` (parse, datasets, tran
 anomalies), `src/ai/` (analyze, copilot, models), `src/cli/` (local CLI detection + run),
 `src/app/` (config, projects, history, icons, capture, notifications, jobs), `src/connectors/` (the 35-source registry
 plus the connection store), `src/publish/` (Publish to folder: the site's data, whitelist and pages;
-`renderer/publish/` is the published site's own renderer, inlined into every page). `src/ipc/` → one file per area. `src/windows/` → BrowserWindow
+`renderer/publish/` is the published site's own renderer, inlined into every page), `src/automation/`
+(`--cli` / `--mcp`: one command registry behind the CLI and the local MCP server; `docs/automation.md`
+is generated from it). `src/ipc/` → one file per area. `src/windows/` → BrowserWindow
 factories. `renderer/{hub,overlay}/` → windows.
 `renderer/theme.css` → shared CSS vars. `preload/` → one contextBridge per window.
 `scripts/` → build + `test-*.js` self-checks. `assets/`, `geo/` → icons + GeoJSON.

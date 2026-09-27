@@ -63,6 +63,10 @@ export type Formats = FormatPrefs;
 // back only via getConnectionSecret to run a connection.
 export interface ConnectionSecret { password?: string | null; token?: string | null }
 
+/** Settings → Automation. `http` only matters while `enabled`; the port is loopback-only. */
+export interface AutomationPrefs { enabled: boolean; http: boolean; port: number }
+export const AUTOMATION_PORT = 7719;
+
 interface Config {
   version: number;
   activeProvider: string;
@@ -106,6 +110,8 @@ interface Config {
   // ONE array for all four record types, so a record never carries a starred flag
   // and there are no per-type migrations.
   starred: string[];
+  /** Settings → Automation (src/ipc/automation.ts). The HTTP token is never stored. */
+  automation: AutomationPrefs;
   providers: Record<string, LegacyProviderEntry>;
   byok: ByokBlock;
   // Connection secrets, keyed by connection UUID. Never reaches a renderer.
@@ -208,6 +214,9 @@ const DEFAULTS: Omit<Config, 'providers' | 'byok'> = {
   // Home "Starred" pins, as "type:id" keys. One flat array, one setter — no
   // per-record flag, no migration.
   starred: [],
+  // Automation (MCP) is OFF until the user turns it on; the loopback HTTP
+  // transport is a second, separate opt-in.
+  automation: { enabled: false, http: false, port: AUTOMATION_PORT },
   // Connection secrets (pg passwords / URL tokens), keyed by connection UUID.
   // Plaintext on disk like API keys; stripped from every renderer-facing view.
   connectionSecrets: {},
@@ -247,6 +256,16 @@ function cleanSample(raw: any): SampleIds | null {
     visualIds: Array.isArray(raw.visualIds) ? raw.visualIds.map(id).filter(Boolean).slice(0, 50) : [],
   };
   return s.projectId && s.datasetId ? s : null;
+}
+
+// ponytail: raw disk/IPC JSON — every field is checked before it is kept
+function cleanAutomation(raw: any): AutomationPrefs {
+  const port = Number(raw.port);
+  return {
+    enabled: raw.enabled === true,
+    http: raw.http === true,
+    port: Number.isInteger(port) && port >= 1024 && port <= 65535 ? port : AUTOMATION_PORT,
+  };
 }
 
 const ONBOARDING_STEPS = ['import', 'visual', 'dashboard', 'assistant'];
@@ -297,6 +316,7 @@ function sanitize(input: any): Partial<Config> {
   else if (input.onboarding && typeof input.onboarding === 'object') out.onboarding = cleanOnboarding(input.onboarding);
   // Whitelisted so it survives disk load ({...DEFAULTS, ...sanitize(onDisk)}).
   if (Array.isArray(input.starred)) out.starred = cleanStarred(input.starred);
+  if (input.automation && typeof input.automation === 'object') out.automation = cleanAutomation(input.automation);
   return out;
 }
 

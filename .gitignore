@@ -596,5 +596,10 @@ scripts/**/*.js
 /renderer/hub/privacySettings.js
 
 # Platform depth — automation: CLI and MCP (emitted siblings).
+/src/automation/*.js
+/src/ipc/automation.js
+/preload/hubAutomationPreload.js
+/renderer/hub/settingsAutomation.js
+/renderer/hub/automationReport.js
 
 # Platform depth — backups and sync (emitted siblings).
