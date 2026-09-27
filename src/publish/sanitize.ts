@@ -27,6 +27,10 @@ export const PUBLISHED_CHART_TYPES: ReadonlySet<string> = new Set([
   'waterfall', 'gauge', 'treemap', 'heatmap', 'sankey', 'candlestick', 'boxplot', 'bullet',
   'calendar', 'pivot', 'table', 'map_bubble', 'map_choropleth',
 ]);
+// A cohort's `{labels, series}` IS its retention curve and an event funnel's is
+// its per-step counts, so the page draws them as the chart they already are.
+// Their grids never reach a page: `sanitizePayload` names no key for them.
+const PUBLISHED_AS: ReadonlyMap<string, string> = new Map([['cohort', 'line'], ['event_funnel', 'funnel']]);
 const GEO_LEVELS: ReadonlySet<string> = new Set([
   'country', 'us_state', 'us_county', 'us_city', 'us_zip', 'world_city', 'point', 'custom',
 ]);
@@ -124,7 +128,8 @@ function sanitizeCard(raw: unknown): unknown {
   const variants = arr(o.variants, 5000).map((v) => int(v, 0, Math.max(0, payloads.length - 1), 0));
   const card: Obj = { kind, layout, title, variants, payloads };
   if (kind === 'chart') {
-    card.chartType = PUBLISHED_CHART_TYPES.has(o.chartType as string) ? o.chartType : 'column';
+    card.chartType = PUBLISHED_CHART_TYPES.has(o.chartType as string) ? o.chartType
+      : PUBLISHED_AS.get(o.chartType as string) || 'column';
     card.category = str(o.category, MAX_LABEL);
   }
   return card;

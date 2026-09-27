@@ -43,6 +43,7 @@ import type { ParsedColumn } from '../data/parse';
 import * as parquetStore from '../engine/parquetStore';
 import { OTHER_LABEL } from '../analysis/categoryKey';
 import type { VizEncoding } from '../analysis/visuals';
+import { engineColumns, isEngineEncoding } from '../analysis/engineViz';
 
 export type SensitiveLevel = 'personal' | 'financial';
 export const HIDDEN_BY_POLICY = 'Hidden by the share policy';
@@ -244,6 +245,13 @@ export async function applyToChart<R extends ChartReplyLike>(
     if (!cache.has(id)) cache.set(id, await sensitiveColumns(projectId, id));
     return (cache.get(id) as Map<string, SensitiveLevel>).has(col);
   };
+  // A cohort's row labels and a funnel's step / breakdown labels are VALUES of
+  // their own columns, spread through a grid the masking below does not know —
+  // so any sensitive column behind one hides the tile rather than half-masking it.
+  if (isEngineEncoding(encoding)) {
+    const touched = (await Promise.all(engineColumns(encoding).map((c) => sens(datasetId, c)))).some(Boolean);
+    return touched ? { ok: false, error: HIDDEN_BY_POLICY, hiddenByPolicy: true } : reply;
+  }
   const catS = await sens(encoding.categoryDatasetId, encoding.category);
   const serS = await sens(encoding.seriesDatasetId, encoding.series);
   const rowDims = encoding.pivot ? await Promise.all(encoding.pivot.rows.map((d) => sens(datasetId, d.column))) : [];

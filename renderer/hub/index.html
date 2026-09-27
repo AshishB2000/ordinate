@@ -51,6 +51,8 @@
 
   <!-- engines-css:segments -->
   <link rel="stylesheet" href="segments.css"/>
+  <!-- build-css:cohort -->
+  <link rel="stylesheet" href="cohort.css"/>
 
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
@@ -3143,6 +3145,10 @@
      it builds a <table> and never touches a canvas. Before renderResult.js,
      which dispatches the `pivot` chart type to it. -->
 <script src="pivotRender.js"></script>
+<!-- The cohort heatmap / retention curve and the event funnel: DOM over the grid
+     main computed, like the pivot's. Before renderResult.js, which dispatches the
+     `cohort` and `event_funnel` chart types to it. -->
+<script src="cohortRender.js"></script>
 <script src="chartTypeSpec.js"></script>
 <!-- Waterfall / bullet / calendar / radar / Pareto: the pure shapes (also
      require()d by scripts/test-chartShapes.js), then the family module the
@@ -3245,6 +3251,8 @@
      form by visuals.js and shown instead of its chart fields when the type is
      `pivot`. After encodingForm.js, whose EncCol/EncAgg shapes it shares. -->
 <script src="pivotBuilder.js"></script>
+<!-- The cohort / event-funnel shelves, mounted by visuals.js beside the pivot's. -->
+<script src="cohortBuilder.js"></script>
 <script src="visuals.js"></script>
 <!-- visuals.ts was 1284 lines; these four are it, split by job. visuals.js
      stays first — it keeps the module-local state the rest read. -->

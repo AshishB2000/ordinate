@@ -8,7 +8,7 @@
 // and through them the export paths).
 //
 // WHY ITS OWN FILE, not folded into renderResult.ts (which already owns chart ids
-// via VIZ_LABELS = 34, and was the other candidate):
+// via VIZ_LABELS = 36, and was the other candidate):
 //
 //   1. renderResult.ts is 634 lines — already past the 500-line smell line in
 //      .claude/rules/file-size.md. Moving 47 lines INTO it to get chartRender

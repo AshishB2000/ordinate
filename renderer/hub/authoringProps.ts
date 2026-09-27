@@ -52,10 +52,16 @@ function anScheduleWrite(): void {
 
 /** Said wherever a pivot card is selected — one string, two callers. */
 const AN_PIVOT_NOTE = 'Rows, Columns and Values are edited in the Visuals builder.';
+/** The same note for whichever builder-only shelves the selected card has. */
+function anShelfNote(): string {
+  return !anIsPivot() ? '' : anVisual.chartType === 'pivot' ? AN_PIVOT_NOTE : 'Its cohort / funnel shelves are edited in the Visuals builder.';
+}
 
 /** Is the selected card a pivot? Its shelves live in the Visuals builder. */
 function anIsPivot(): boolean {
-  return !!anVisual && anVisual.chartType === 'pivot' && !!(anVisual.encoding && anVisual.encoding.pivot);
+  const e = anVisual && anVisual.encoding;
+  // A cohort / event funnel is the same case: shelves only the Visuals builder has.
+  return !!e && ((anVisual.chartType === 'pivot' && !!e.pivot) || !!e.cohort || !!e.eventFunnel);
 }
 
 /**
@@ -68,20 +74,22 @@ function anIsPivot(): boolean {
  */
 function anEncodingToWrite(): any {
   const encoding = anForm!.getEncoding();
-  if (anIsPivot()) encoding.pivot = anVisual.encoding.pivot;
+  if (anIsPivot()) {
+    for (const k of ['pivot', 'cohort', 'eventFunnel']) if (anVisual.encoding[k]) encoding[k] = anVisual.encoding[k];
+  }
   return encoding;
 }
 
 async function anWriteVisual(): Promise<void> {
   if (!anVisual || !anForm || !currentProjectId || dashMode !== 'analysis') return;
   const encoding = anEncodingToWrite();
-  if (!encoding.pivot && (!encoding.category || !encoding.values || encoding.values.length === 0)) {
+  if (!anIsPivot() && (!encoding.category || !encoding.values || encoding.values.length === 0)) {
     setAnPropsNote('Pick a category and at least one measure for this visual to draw.');
     return;
   }
   // The pivot hint is sticky: it explains a panel that stays this way, so a
   // later formatting edit must not quietly take it away.
-  setAnPropsNote(anIsPivot() ? AN_PIVOT_NOTE : '');
+  setAnPropsNote(anShelfNote());
   try {
     await window.hub.updateVisual(currentProjectId, String(anVisual.id), {
       name: anVisual.name,

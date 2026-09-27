@@ -10,6 +10,7 @@ import type { VizDataResult } from '../analysis/vizData';
 import * as trace from '../engine/residentTrace';
 // The two resident fast paths `vizDataFor` tries before hydrating a row.
 import { residentPivotData, residentVizData } from './visualsResident';
+import { residentEngineData } from './visualsEngines';
 import { authoringVizData } from './vizExtras';
 import { withPeriodOverlay } from './visualsOverlay';
 import { sampledVizData } from './vizSampleData';
@@ -458,6 +459,8 @@ async function computeVizData(
   }
   const joined = await authoringVizData(projectId, datasetId, encoding, filters);
   if (joined) return joined;
+  const engine = await residentEngineData(projectId, datasetId, encoding, filters); // cohort / event funnel
+  if (engine) return { ok: true, data: engine.data, recommendedShape: engine.recommendedShape, warnings: engine.warnings };
   // Fast path: an aggregated chart (or a pivot) over a resident (v3) dataset,
   // answered without hydrating a single row. Null unless provably identical.
   const fast = encoding && encoding.pivot

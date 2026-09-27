@@ -263,7 +263,7 @@ Save a new visual. Validated exactly as the app validates a chart; writes a reco
 | `project` | string | no | Project id or exact name; `--project` on the CLI. Defaults to the project opened most recently. |
 | `dataset` | string | yes | Dataset id or exact name. |
 | `name` | string | yes | Visual name. |
-| `chartType` | `column` \| `bar` \| `clustered_column` \| `clustered_bar` \| `stacked_column` \| `stacked_bar` \| `pct_stacked_column` \| `pct_stacked_bar` \| `line` \| `line_markers` \| `area` \| `stacked_area` \| `pie` \| `donut` \| `scatter` \| `gauge` \| `combo` \| `bubble` \| `treemap` \| `heatmap` \| `funnel` \| `histogram` \| `sankey` \| `candlestick` \| `boxplot` \| `pivot` \| `waterfall` \| `bullet` \| `calendar` \| `radar` \| `pareto` \| `table` \| `map_bubble` \| `map_choropleth` | yes | One of the app chart types. |
+| `chartType` | `column` \| `bar` \| `clustered_column` \| `clustered_bar` \| `stacked_column` \| `stacked_bar` \| `pct_stacked_column` \| `pct_stacked_bar` \| `line` \| `line_markers` \| `area` \| `stacked_area` \| `pie` \| `donut` \| `scatter` \| `gauge` \| `combo` \| `bubble` \| `treemap` \| `heatmap` \| `funnel` \| `histogram` \| `sankey` \| `candlestick` \| `boxplot` \| `pivot` \| `cohort` \| `event_funnel` \| `waterfall` \| `bullet` \| `calendar` \| `radar` \| `pareto` \| `table` \| `map_bubble` \| `map_choropleth` | yes | One of the app chart types. |
 | `encoding` | object | yes | What to chart: a category column and one or more measures, exactly as a visual stores it. |
 | `filters` | array | no | Row filters applied before aggregation — the same filter steps a visual stores. |
 

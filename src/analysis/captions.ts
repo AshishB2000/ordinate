@@ -20,6 +20,10 @@
 import { formatCompact } from '../app/format';
 import type { ChartData } from './vizData';
 import type { PivotGrid } from './pivotData';
+import { cohortCaption } from './cohortData';
+import type { CohortGrid } from './cohortData';
+import { funnelCaption } from './funnelEvents';
+import type { EventFunnel } from './funnelEvents';
 import { waterfallFigures, paretoFigures } from './chartFigures';
 import { analyticsClauses } from './analytics';
 import type { ResolvedOverlay } from './analytics';
@@ -41,7 +45,7 @@ export function compact(v: number | null | undefined): string {
 
 // ── chart family ─────────────────────────────────────────────────────────────
 //
-// The 34 chart ids collapse to a handful of shapes a sentence can be written
+// The 36 chart ids collapse to a handful of shapes a sentence can be written
 // about, plus `other` for the ones where the honest sentence is a count.
 // Mapping by FAMILY rather than per-id is what keeps this file from growing a
 // branch every time renderResult.ts gains a chart. The five that DO get their
@@ -50,7 +54,7 @@ export function compact(v: number | null | undefined): string {
 // target, who wins which axis, which day peaked.
 export type CaptionFamily =
   | 'bar' | 'line' | 'part' | 'map' | 'point' | 'pivot'
-  | 'waterfall' | 'pareto' | 'bullet' | 'radar' | 'calendar' | 'other';
+  | 'waterfall' | 'pareto' | 'bullet' | 'radar' | 'calendar' | 'cohort' | 'event_funnel' | 'other';
 
 const FAMILY: Record<string, CaptionFamily> = {
   column: 'bar', bar: 'bar',
@@ -64,6 +68,7 @@ const FAMILY: Record<string, CaptionFamily> = {
   map_bubble: 'map', map_choropleth: 'map',
   scatter: 'point', bubble: 'point',
   pivot: 'pivot',
+  cohort: 'cohort', event_funnel: 'event_funnel',
   waterfall: 'waterfall', pareto: 'pareto', bullet: 'bullet', radar: 'radar', calendar: 'calendar',
 };
 
@@ -84,7 +89,7 @@ export interface CaptionInput {
   /** Chart id (`column`, `line`, `map_choropleth`, …). Omitted for a KPI row. */
   chartType?: string;
   /** The `{labels, series}` the renderers consume — charts only. May carry its resolved `analytics`. */
-  data?: (ChartData & { analytics?: ResolvedOverlay[] }) | null;
+  data?: (ChartData & { analytics?: ResolvedOverlay[]; cohort?: CohortGrid; eventFunnel?: EventFunnel }) | null;
   /**
    * The Analytics pane's resolved overlays (./analytics). A trend or a forecast
    * adds its own clause to the sentence; the rest are drawn, not narrated.
@@ -134,6 +139,9 @@ function familyCaption(input: CaptionInput): string {
   // sits — which `{labels, series}` cannot say: a leaf row's label is a joined
   // path and the shape of the thing is the point.
   if (family === 'pivot') return pivotCaption(input.pivot);
+  // A cohort / funnel is read off its own grid, which rides on `data` (./engineViz).
+  if (family === 'cohort') return cohortCaption(input.data && input.data.cohort);
+  if (family === 'event_funnel') return funnelCaption(input.data && input.data.eventFunnel);
   // A map's figures are its RESOLVED regions, which is a shorter list than the
   // chart labels whenever a name failed to match a feature — so the sentence is
   // written off `geo`, and only the measure noun comes from the series.

@@ -788,3 +788,17 @@ scripts/**/*.js
 /scripts/test-segmentsDuck.js
 /scripts/test-rfm.js
 /scripts/aeSegments.js
+
+# Analysis engines — Cohort and funnel (emitted siblings).
+/src/analysis/cohortData.js
+/src/analysis/funnelEvents.js
+/src/analysis/engineViz.js
+/src/engine/cohortResident.js
+/src/engine/funnelResident.js
+/src/ipc/visualsEngines.js
+/renderer/hub/cohortRender.js
+/renderer/hub/cohortBuilder.js
+/scripts/test-cohort.js
+/scripts/test-funnelEvents.js
+/scripts/test-engineIpc.js
+/scripts/aeCohorts.js

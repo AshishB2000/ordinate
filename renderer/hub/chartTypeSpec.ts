@@ -109,6 +109,11 @@ function resolveChartType(type: string): ChartTypeSpec {
     // pivot id (an old override, a hand-edited record) falls back to a bar
     // rather than silently becoming one under the default branch.
     case 'pivot':            chartType = 'bar'; opts.pivot = true; break;
+    // Drawn as DOM by cohortRender.js; these are what buildChart makes of their
+    // `{labels, series}` anywhere else (an export picture, a thumbnail): the
+    // retention curve, and the per-step counts as a funnel.
+    case 'cohort':           chartType = 'line'; break;
+    case 'event_funnel':     chartType = 'bar'; opts.funnel = true; opts.indexAxis = 'y'; opts.stacked = true; break;
     case 'waterfall':        chartType = 'bar'; opts.waterfall = true; break;
     case 'bullet':           chartType = 'bar'; opts.bullet = true; opts.indexAxis = 'y'; break;
     case 'pareto':           chartType = 'bar'; opts.pareto = true; break;

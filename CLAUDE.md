@@ -2,7 +2,7 @@
 
 A **local-first, open-source personal BI workspace.** Bring data in (files, paste, Excel, 35 SQL/HTTP
 sources, URL, or a screenshot capture) → **prepare** it with a reversible pipeline → **visualize**
-across 34 chart, map & table types → assemble **dashboards** → **share** offline. MIT, model-agnostic.
+across 36 chart, map & table types → assemble **dashboards** → **share** offline. MIT, model-agnostic.
 
 **Core principle: the app does the math.** All aggregation, stats, metrics and anomaly detection run
 in pure main-process code; a model only *extracts structure* (a table from a screenshot) or
@@ -91,10 +91,13 @@ prompts unrounded); a leading U+FEFF is lost on every string the bridge returns 
   `sqlGen`/`pipelineDuck` compile the same steps to SQL but are **off by default**
   (`ORDINATE_DUCKDB_PIPELINE=1`): loading the rows costs 100× the query.
 - **Visuals / dashboards** — `vizData.buildVizData` is a pure bridge to the `{labels, series}` that
-  `chartRender`/`mapRender` already consume. Chart ids live in `renderResult.ts` (`VIZ_LABELS` = 34).
+  `chartRender`/`mapRender` already consume. Chart ids live in `renderResult.ts` (`VIZ_LABELS` = 36).
   One of them, `pivot`, is a **`<table>`, not a canvas**: `pivotData`/`pivotResident` compute a
   `PivotGrid` BESIDE the ordinary `{labels, series}`, and its **subtotals are recomputed from the
   source, never folded from the cells above them** — so `avg` and `count` subtotals are right.
+  `cohort` and `event_funnel` follow the same arrangement (`cohortData`/`funnelEvents` JS reference,
+  `cohortResident`/`funnelResident` window-function fast paths, one shared fold each): the grid rides
+  on `data.cohort` / `data.eventFunnel`, and `{labels, series}` is the retention curve / step counts.
   Dashboard metric numbers are computed on the fly, never stored. `dashboardExport.sanitizeBundle`
   is a **security control**: whitelist to labels/numbers/strings/`data:image` only.
 - **Analyses** — the QuickSight-style split (analysis = mutable authoring surface, dashboard =

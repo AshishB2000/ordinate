@@ -208,6 +208,7 @@ export function resolveVizJoin(
   infos: Map<string, DsInfo>,
 ): Result<VizJoin> | null {
   if (!encoding || encoding.pivot || !infos.has(primary)) return null;
+  if (encoding.cohort || encoding.eventFunnel) return null; // their shelves name the primary's own columns
   const nameOf = (id: string): string => infos.get(id)?.name || 'A dataset';
   const needed = new Set<string>();
   const want = (id: string | undefined): string => {

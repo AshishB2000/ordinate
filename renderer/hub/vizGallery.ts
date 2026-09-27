@@ -7,7 +7,7 @@
 // which keeps the module-local state every function here reads.
 
 // ── The chart-glyph motif ────────────────────────────────────────────────────
-// Dashboards draws CSS bars (.ws-bars). Visuals is about 34 chart TYPES, so its
+// Dashboards draws CSS bars (.ws-bars). Visuals is about 36 chart TYPES, so its
 // motif is a cluster of real chart glyphs instead — still no image asset, still
 // nothing to ship: VIZ_ICONS (renderResult.ts) is already in the bundle.
 //
