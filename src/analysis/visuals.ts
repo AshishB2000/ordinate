@@ -22,6 +22,8 @@ import { isDateGrain, sanitizeBins } from './categoryKey';
 import type { DateGrain } from './categoryKey';
 import { sanitizePivot } from './pivotData';
 import type { PivotEncoding } from './pivotData';
+import { sanitizeOverlays } from './analytics';
+import type { Overlay } from './analytics';
 
 export type VizAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max' | 'none';
 
@@ -172,6 +174,13 @@ export interface Visual {
    * migration for one boolean whose absence already means exactly what it should.
    */
   favorite: boolean;
+  /**
+   * The Analytics pane's overlays — reference lines, bands, targets, trends,
+   * moving averages, forecasts, annotations, highlights (./analytics). Their
+   * DEFINITIONS only: every figure is re-resolved on each `visual:data`.
+   * ADDITIVE, like `favorite`: absent means none, so no schema bump.
+   */
+  analytics?: Overlay[];
   createdAt: string;
   updatedAt: string;
   schemaVersion: 2;
@@ -402,10 +411,17 @@ function normalize(data: any, projectId: string): Visual {
     filters: sanitizeFilters(data.filters),
     // Absent (every file written before favourites existed) means false.
     favorite: data.favorite === true,
+    ...withAnalytics(data.analytics),
     createdAt,
     updatedAt: data.updatedAt || createdAt,
     schemaVersion: 2,
   };
+}
+
+/** `{ analytics }` when there are any overlays, else nothing — records stay minimal. */
+function withAnalytics(raw: unknown): { analytics?: Overlay[] } {
+  const list = sanitizeOverlays(raw);
+  return list.length ? { analytics: list } : {};
 }
 
 // No-op stub kept for symmetry with projects.init()/datasets.init(). The per-
@@ -479,7 +495,7 @@ export async function saveVisual(
   projectId: string,
   input: {
     name: string; datasetId: string; chartType: string; encoding: unknown;
-    overrides?: unknown; filters?: unknown; favorite?: unknown;
+    overrides?: unknown; filters?: unknown; favorite?: unknown; analytics?: unknown;
   },
 ): Promise<Visual | null> {
   if (!isValidId(projectId) || !isValidId(input.datasetId)) return null;
@@ -502,6 +518,7 @@ export async function saveVisual(
     overrides: sanitizeOverrides(input.overrides),
     filters: sanitizeFilters(input.filters),
     favorite: input.favorite === true,
+    ...withAnalytics(input.analytics),
     createdAt: now,
     updatedAt: now,
     schemaVersion: 2,
@@ -519,7 +536,7 @@ export async function updateVisual(
   id: string,
   patch: {
     name?: string; chartType?: string; encoding?: unknown; overrides?: unknown;
-    filters?: unknown; favorite?: unknown;
+    filters?: unknown; favorite?: unknown; analytics?: unknown;
   },
 ): Promise<Visual | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
@@ -536,6 +553,10 @@ export async function updateVisual(
     favorite: patch.favorite !== undefined ? patch.favorite === true : existing.favorite,
     updatedAt: new Date().toISOString(),
   };
+  if (patch.analytics !== undefined) {
+    delete updated.analytics;
+    Object.assign(updated, withAnalytics(patch.analytics));
+  }
   await fs.promises.mkdir(visualsDir(projectId), { recursive: true });
   await writeJsonAtomic(visualFilePath(projectId, id), updated);
   return updated;
@@ -566,6 +587,7 @@ export async function duplicateVisual(projectId: string, id: string): Promise<Vi
     // A copy starts unpinned: duplicating a favourite to tweak it should not
     // put two near-identical cards at the top of the gallery.
     favorite: false,
+    ...withAnalytics(source.analytics),
     createdAt: now,
     updatedAt: now,
     schemaVersion: 2,

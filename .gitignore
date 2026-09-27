@@ -612,3 +612,11 @@ scripts/**/*.js
 /preload/hubBackupPreload.js
 /renderer/hub/settingsBackups.js
 /renderer/hub/projectSync.js
+# Analysis power — the Analytics pane (emitted siblings).
+/src/analysis/analytics.js
+/src/analysis/forecast.js
+/src/ipc/visualsAnalytics.js
+/renderer/hub/chartAnnotations.js
+/renderer/hub/analyticsPane.js
+/renderer/hub/analyticsEditors.js
+/scripts/test-analytics.js

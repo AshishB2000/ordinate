@@ -170,9 +170,9 @@ async function pvShareGate(path: PvPath, datasetIds: string[] | null, opts: { no
  * the unshaped call: a missing bridge means the policy cannot be applied, and
  * an export that silently skipped it would be the one leak this exists to stop.
  */
-async function pvVisualData(projectId: string, datasetId: string, encoding: any, filters: any, params: any, share: PvPath): Promise<any> {
+async function pvVisualData(projectId: string, datasetId: string, encoding: any, filters: any, params: any, share: PvPath, analytics?: any): Promise<any> {
   if (!window.hubPrivacy) return { ok: false, error: 'The share policy could not be applied.' };
-  return window.hubPrivacy.visualData(projectId, datasetId, encoding, filters, params, share);
+  return window.hubPrivacy.visualData(projectId, datasetId, encoding, filters, params, share, analytics);
 }
 
 /**

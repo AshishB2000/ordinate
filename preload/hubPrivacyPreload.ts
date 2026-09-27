@@ -21,8 +21,8 @@ if (location.protocol === 'file:' && location.pathname.endsWith('/renderer/hub/i
       ipcRenderer.invoke('privacy:summary', { projectId, path, datasetIds }),
     // `visual:data` for an answer that is about to LEAVE the app: main applies
     // the Share policy for `share` ('export' | 'report' | 'publish') to the reply.
-    visualData: (projectId: string, datasetId: string, encoding: unknown, filters: unknown, params: unknown, share: string) =>
-      ipcRenderer.invoke('visual:data', { projectId, datasetId, encoding, filters, params, share }),
+    visualData: (projectId: string, datasetId: string, encoding: unknown, filters: unknown, params: unknown, share: string, analytics?: unknown) =>
+      ipcRenderer.invoke('visual:data', { projectId, datasetId, encoding, filters, params, share, analytics }),
     shareReply: (projectId: string, datasetId: string, encoding: unknown, reply: unknown, path: string) =>
       ipcRenderer.invoke('privacy:shareReply', { projectId, datasetId, encoding, reply, path }),
   });

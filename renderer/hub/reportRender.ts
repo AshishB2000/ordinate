@@ -182,7 +182,7 @@ async function reportTile(
   // says why, rather than vanishing from the page.
   let res: any;
   try {
-    res = await pvVisualData(ctx.projectId, visual.datasetId, visual.encoding, merged, ctx.params, 'report');
+    res = await pvVisualData(ctx.projectId, visual.datasetId, visual.encoding, merged, ctx.params, 'report', visual.analytics);
   } catch (_) { res = { ok: false }; }
   if (res && res.hiddenByPolicy) {
     return { cardId: card.id, title: paramSubst(visual.name || '', ctx.params || []), png: null, caption: String(res.error), grid: null };

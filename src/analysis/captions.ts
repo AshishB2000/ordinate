@@ -21,6 +21,8 @@ import { formatCompact } from '../app/format';
 import type { ChartData } from './vizData';
 import type { PivotGrid } from './pivotData';
 import { waterfallFigures, paretoFigures } from './chartFigures';
+import { analyticsClauses } from './analytics';
+import type { ResolvedOverlay } from './analytics';
 
 // ── the app's compact number format ──────────────────────────────────────────
 //
@@ -79,8 +81,14 @@ export interface CaptionKpi {
 export interface CaptionInput {
   /** Chart id (`column`, `line`, `map_choropleth`, …). Omitted for a KPI row. */
   chartType?: string;
-  /** The `{labels, series}` the renderers consume — charts only. */
-  data?: ChartData | null;
+  /** The `{labels, series}` the renderers consume — charts only. May carry its resolved `analytics`. */
+  data?: (ChartData & { analytics?: ResolvedOverlay[] }) | null;
+  /**
+   * The Analytics pane's resolved overlays (./analytics). A trend or a forecast
+   * adds its own clause to the sentence; the rest are drawn, not narrated.
+   * Defaults to `data.analytics`, which is where `visual:data` puts them.
+   */
+  analytics?: ResolvedOverlay[] | null;
   /** A map's resolved regions — maps only. */
   geo?: { items: Array<{ name: string; value: number }> } | null;
   /** A KPI row's figures — metric tiles only; presence selects the KPI frame. */
@@ -99,8 +107,22 @@ export interface CaptionInput {
 
 const NOTHING = 'No data to summarize';
 
-/** The one entry point. Never throws, never returns an empty string. */
+/**
+ * The one entry point. Never throws, never returns an empty string.
+ *
+ *   Revenue rose 41% from 2023-01 to 2024-12; trend +8.1K per month (R² 0.62);
+ *   forecast 356.2K by 2025-03, 80% range 301K–411K
+ *
+ * The family's sentence, then a clause per trend / forecast overlay the chart
+ * type draws — both figures app-resolved (./analytics), only put into words here.
+ */
 export function tileCaption(input: CaptionInput): string {
+  const base = familyCaption(input);
+  if (!input || typeof input !== 'object' || base === NOTHING) return base;
+  return base + analyticsClauses(input.analytics || (input.data && input.data.analytics), input.chartType);
+}
+
+function familyCaption(input: CaptionInput): string {
   if (!input || typeof input !== 'object') return NOTHING;
   if (Array.isArray(input.kpis)) return kpiCaption(input.kpis);
 

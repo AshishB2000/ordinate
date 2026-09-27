@@ -219,6 +219,7 @@ function buildChart(
   // A waterfall's order IS its story and a Pareto sorts itself, so neither.
   const canSort = ((chartType === 'bar' && !isFunnel && !isHistogram) || (isRound && !isGauge))
     && !spec.isWaterfall && !spec.isPareto;
+  let sortOrder: number[] | null = null; // chart position → main's index, for the overlays
   if (canSort && (overrides.sort === 'asc' || overrides.sort === 'desc')) {
     const totals = labels.map((_: any, i: number) =>
       series.reduce((sum: number, s: ChartSeriesShape) => sum + (typeof s.values[i] === 'number' ? s.values[i] : 0), 0));
@@ -226,6 +227,22 @@ function buildChart(
       .sort((a: number, b: number) => overrides.sort === 'asc' ? totals[a] - totals[b] : totals[b] - totals[a]);
     labels = order.map((i: number) => labels[i]);
     series = series.map((s: ChartSeriesShape) => Object.assign({}, s, { values: order.map((i: number) => s.values[i]) }));
+    sortOrder = order;
+  }
+
+  // ── Analytics overlays + comment pins (chartAnnotations.js) ───────────────
+  // Resolved in main and carried on `data.analytics`; only the kinds this type
+  // draws (spec.overlayKinds). A forecast needs room PAST the last category, so
+  // the axis grows by its periods and every series is padded with gaps there.
+  const annOverlays = annDrawable(Array.isArray((data as any).analytics) ? (data as any).analytics : [], spec, !!sortOrder);
+  const annPins: AnnCommentPin[] = Array.isArray(overrides.commentPins) ? overrides.commentPins : [];
+  const annBase = { labels: Array.isArray(data.labels) ? data.labels : [], series: Array.isArray(data.series) ? data.series : [] };
+  const annForecast = annOverlays.reduce((best: string[], o: any) =>
+    (o.kind === 'forecast' && o.forecast && o.forecast.labels.length > best.length ? o.forecast.labels : best), []);
+  if (annForecast.length) {
+    labels = labels.concat(asMonthLabels(annForecast));
+    const gap = annForecast.map(() => null);
+    series = series.map((s: ChartSeriesShape) => Object.assign({}, s, { values: s.values.concat(gap) }));
   }
 
   const defaultShowLegend = legendOnByDefault(type, series);
@@ -248,6 +265,15 @@ function buildChart(
   if (!built) return null;   // nothing drawable (a calendar without dates)
   const { datasets, chartLabels } = built;
   const scales = buildChartScales(c);
+  // The value axis must reach every overlay — a target above the tallest bar
+  // would otherwise be drawn off the chart. `suggested*`, so an explicit
+  // min/max (a percent-stacked 0–100) still wins.
+  const annExt = annOverlays.length ? annExtent(annOverlays) : null;
+  const annAxis = scales && scales[isHoriz ? 'x' : 'y'];
+  if (annExt && annAxis) {
+    annAxis.suggestedMin = typeof annAxis.suggestedMin === 'number' ? Math.min(annAxis.suggestedMin, annExt.min) : annExt.min;
+    annAxis.suggestedMax = typeof annAxis.suggestedMax === 'number' ? Math.max(annAxis.suggestedMax, annExt.max) : annExt.max;
+  }
 
   // ── Tooltip ─────────────────────────────────────────────────────────────
   const tooltipConfig: any = {
@@ -308,6 +334,12 @@ function buildChart(
 
   // ── Per-chart inline plugins (chartValueLabels.js) ───────────────────────
   const inlinePlugins = buildChartPlugins(c);
+  if (annWanted(annOverlays, annPins, spec)) {
+    inlinePlugins.push(annotationsPlugin({
+      overlays: annOverlays, pins: annPins, labels: annBase.labels, series: annBase.series,
+      order: sortOrder, pinTarget: overrides.commentPinTarget || null, fmt, fontFamily,
+    }));
+  }
 
   // ── Series filter (period multi-select) ────────────────────────────────────
   // Hide deselected series. Indices align with `series` (both use chartSeries()).

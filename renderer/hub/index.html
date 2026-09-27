@@ -26,6 +26,7 @@
 
   <!-- platform-css:backup -->
   <link rel="stylesheet" href="backup.css"/>
+  <link rel="stylesheet" href="analytics.css"/>
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
        injecting a <style> at render time, which the hub CSP (style-src 'self')
@@ -1347,6 +1348,11 @@
                    in the analysis authoring panel, and two live copies cannot both
                    own #viz-category-select. -->
               <div class="viz-encoding-mount" id="viz-encoding-mount"></div>
+
+              <!-- The Analytics section (analyticsPane.js): reference lines, bands,
+                   targets, trends, moving averages, forecasts, annotations and
+                   highlights over the chart, each with an inline editor. -->
+              <section class="anp" id="viz-analytics-mount" aria-label="Analytics overlays"></section>
 
               <div class="viz-warnings" id="viz-warnings" hidden></div>
             </div>
@@ -2743,10 +2749,10 @@
         <p class="viz-enc-note js-enc-cat-note" hidden></p>
       </div>
 
-      <!-- Analytics: shown only for a DATE category (encodingForm.syncGrain).
+      <!-- Compare (the period overlay): shown only for a DATE category (encodingForm.syncGrain).
            The overlay rides on the encoding because it changes the data. -->
       <div class="viz-build-row viz-analytics-row js-enc-analytics-row" hidden>
-        <label class="viz-field-label" for="viz-overlay-select">Analytics</label>
+        <label class="viz-field-label" for="viz-overlay-select">Compare</label>
         <select class="viz-select js-enc-overlay" id="viz-overlay-select" aria-label="Period overlay">
           <option value="">No period overlay</option>
           <option value="previous_year">Overlay: vs previous year</option>
@@ -2958,6 +2964,9 @@
 <script src="chartFamiliesExtra.js"></script>
 <script src="chartFamiliesPlugins.js"></script>
 <script src="chartValueLabels.js"></script>
+<!-- The Analytics overlays and comment pins, drawn by a hand-written plugin
+     buildChart appends (chartRender.js, below). -->
+<script src="chartAnnotations.js"></script>
 <script src="chartDatasets.js"></script>
 <script src="chartScales.js"></script>
 <script src="chartRender.js"></script>
@@ -3053,6 +3062,10 @@
 <script src="vizGallery.js"></script>
 <script src="vizNew.js"></script>
 <script src="vizBuilder.js"></script>
+<!-- The builder's Analytics section: the list (analyticsPane) and its inline
+     editors. After vizBuilder.js, whose scheduleRecompute every edit calls. -->
+<script src="analyticsPane.js"></script>
+<script src="analyticsEditors.js"></script>
 <script src="dashboards.js"></script>
 <!-- Undo/redo for the editor. After dashboards.js (whose state it snapshots),
      before dashGrid.js (whose markDashDirty files every commit). -->

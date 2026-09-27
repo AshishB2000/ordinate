@@ -194,7 +194,7 @@ function renderSmallMultiples(container, data, type, entry, turnIdx) {
     wrap.appendChild(canvas);
     cell.appendChild(wrap);
     grid.appendChild(cell);
-    const c = buildChart(canvas, Object.assign({}, data, { series: [s] }), type, miniOv);
+    const c = buildChart(canvas, Object.assign({}, data, { series: [s], analytics: null }), type, miniOv);
     if (c) charts.push(c);
   });
 

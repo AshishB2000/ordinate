@@ -295,7 +295,7 @@ async function anRenderSwitcher(): Promise<void> {
   let res: any;
   try {
     res = await window.hub.computeVisualData(
-      currentProjectId, String(anVisual.datasetId), encoding, anForm.getFilters(), dashParamPayload());
+      currentProjectId, String(anVisual.datasetId), encoding, anForm.getFilters(), dashParamPayload(), anVisual.analytics);
   } catch (_) {
     res = null;
   }

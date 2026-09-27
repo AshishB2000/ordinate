@@ -15,6 +15,7 @@ import { auditNumbers } from '../ai/numberAudit';
 import { listInsights } from './insights';
 import * as metrics from '../analysis/metrics';
 import { resolveMetric } from './metrics';
+import { resolveChartOverlays } from './visualsAnalytics';
 import type { FactMetric } from '../ai/copilotFacts';
 import * as history from '../app/history';
 import * as captureDataset from '../data/captureDataset';
@@ -214,7 +215,11 @@ export async function buildFacts(
       );
       emit({ kind: 'compute', label: 'Built chart data' });
       const columnDocs = await catalogColumns(projectId, v.datasetId); // the user's own column notes (catalog)
-      return copilot.visualFacts(v, ds ? ds.name : '(missing dataset)', viz, columnDocs);
+      // The visual's Analytics overlays, resolved under the visual's own filters.
+      const overlays = v.analytics && v.analytics.length
+        ? await resolveChartOverlays(projectId, viz.data, viz.category, v.analytics, v.filters) : [];
+      if (overlays.length) emit({ kind: 'compute', label: 'Resolved ' + plural(overlays.length, 'overlay'), count: overlays.length });
+      return copilot.visualFacts(v, ds ? ds.name : '(missing dataset)', viz, columnDocs, overlays);
     }
   }
 

@@ -36,6 +36,7 @@ async function openVisualBuilder(datasetId?: string): Promise<void> {
   if (typeof dkSync === 'function') dkSync(); // dock.ts — no visual open (yet) to base context on
   vizCurrentChartType = '';
   vizOverrides = {};
+  anpSetOverlays([]); // analyticsPane.ts — a new visual has none
   const nameEl = vizEl('viz-builder-name');
   if (nameEl) nameEl.textContent = 'New visual';
   ensureVizForm();
@@ -62,6 +63,7 @@ function closeVisualBuilder(): void {
   vizDatasetId = '';
   vizCurrentChartType = '';
   vizOverrides = {};
+  anpSetOverlays([]);
   vizPicker = null;
   if (vizForm) vizForm.show(false);
   const sh = vizEl('viz-suggest-hint');
@@ -203,8 +205,8 @@ async function recomputeVisual(): Promise<void> {
     // is computed on a stratified sample (and says so below); Save and every
     // dashboard compute in full through visual:data.
     res = window.hubPlatform && typeof window.hubPlatform.previewVisualData === 'function'
-      ? await window.hubPlatform.previewVisualData(currentProjectId, vizDatasetId, encoding, vizForm!.getFilters())
-      : await window.hub.computeVisualData(currentProjectId, vizDatasetId, encoding, vizForm!.getFilters());
+      ? await window.hubPlatform.previewVisualData(currentProjectId, vizDatasetId, encoding, vizForm!.getFilters(), undefined, vizAnalytics)
+      : await window.hub.computeVisualData(currentProjectId, vizDatasetId, encoding, vizForm!.getFilters(), undefined, vizAnalytics);
   } catch (_) {
     res = { ok: false, error: 'Could not compute the visual.' };
   } finally {
@@ -222,6 +224,7 @@ async function recomputeVisual(): Promise<void> {
   // What main did to the dimension: the date grain it settled on, and the note
   // when it capped a long tail. Only main knows — both need the rows.
   vizForm!.applyCategoryInfo(res.category);
+  anpApplyResolved(data); // the Analytics section's readouts, resolved by main
 
   const area = vizEl('viz-area');
   const mount = vizEl('viz-switcher-mount');
@@ -271,6 +274,7 @@ async function recomputeVisual(): Promise<void> {
     onSelect: (type: string, info: any) => {
       const wasPivot = vizCurrentChartType === 'pivot';
       vizCurrentChartType = type;
+      anpSetChartType(type); // which overlays this type draws
       // Entering or leaving pivot mode changes what the encoding IS, so the
       // panel swaps and the visual is recomputed rather than redrawn from data
       // built for the other shape.
@@ -359,6 +363,7 @@ async function vizOpenRecord(visual: any, id?: string): Promise<void> {
   if (nameEl) nameEl.textContent = String(visual.name || 'Visual');
   vizCurrentChartType = typeof visual.chartType === 'string' ? visual.chartType : '';
   vizOverrides = visual.overrides && typeof visual.overrides === 'object' ? visual.overrides : {};
+  anpSetOverlays(Array.isArray(visual.analytics) ? visual.analytics : []);
   const savedFilters = Array.isArray(visual.filters)
     ? visual.filters.map((f: any) => ({
         type: 'filter',
@@ -401,10 +406,10 @@ async function handleSaveVisual(): Promise<void> {
   try {
     const filters = vizForm!.getFilters();
     if (vizEditingId) {
-      res = await window.hub.updateVisual(currentProjectId, vizEditingId, { name: finalName, chartType, encoding, overrides: vizOverrides, filters });
+      res = await window.hub.updateVisual(currentProjectId, vizEditingId, { name: finalName, chartType, encoding, overrides: vizOverrides, filters, analytics: vizAnalytics });
       res = res && res.ok ? res.visual : res;
     } else {
-      res = await window.hub.saveVisual({ projectId: currentProjectId, datasetId: vizDatasetId, name: finalName, chartType, encoding, overrides: vizOverrides, filters });
+      res = await window.hub.saveVisual({ projectId: currentProjectId, datasetId: vizDatasetId, name: finalName, chartType, encoding, overrides: vizOverrides, filters, analytics: vizAnalytics });
     }
   } catch (_) {
     window.alert('Failed to save the visual.');

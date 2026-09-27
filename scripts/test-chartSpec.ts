@@ -56,6 +56,7 @@ const CHART_SCRIPTS = [
   'chartFamiliesExtra.js',
   'chartFamiliesPlugins.js',
   'chartValueLabels.js',
+  'chartAnnotations.js',
   'chartDatasets.js',
   'chartScales.js',
   'chartRender.js',

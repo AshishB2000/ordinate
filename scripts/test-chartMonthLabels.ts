@@ -27,7 +27,7 @@ const HUB = path.join(__dirname, '..', 'renderer', 'hub');
 // index.html's dependency order, same list test-chartSpec.ts loads.
 const CHART_SCRIPTS = [
   'chartTraits.js', 'chartPalette.js', 'chartTypeSpec.js', 'chartShapes.js', 'chartFamiliesExtra.js', 'chartFamiliesPlugins.js',
-  'chartValueLabels.js', 'chartDatasets.js', 'chartScales.js', 'chartRender.js',
+  'chartValueLabels.js', 'chartAnnotations.js', 'chartDatasets.js', 'chartScales.js', 'chartRender.js',
 ];
 
 // The hub.js formatters, as RUNNABLE STUBS. test-chartSpec.ts restates them

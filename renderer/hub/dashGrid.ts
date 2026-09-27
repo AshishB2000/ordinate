@@ -663,7 +663,7 @@ async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void>
   const merged = mergeDashFilters(effectiveFilters(), visual.filters).concat(dashTileSteps(card.id));
   let res: any;
   try {
-    res = await window.hub.computeVisualData(currentProjectId, visual.datasetId, visual.encoding, merged, dashParamPayload());
+    res = await window.hub.computeVisualData(currentProjectId, visual.datasetId, visual.encoding, merged, dashParamPayload(), visual.analytics);
   } catch (_) {
     res = { ok: false };
   }

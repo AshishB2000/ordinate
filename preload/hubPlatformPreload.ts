@@ -31,8 +31,8 @@ if (location.protocol === 'file:' && location.pathname.endsWith('/renderer/hub/i
       return () => ipcRenderer.removeListener('jobs:rendererCancel', h);
     },
     // The visual builder's preview: `visual:data`, sampled above 250k rows (src/ipc/vizSample.ts).
-    previewVisualData: (projectId: string, datasetId: string, encoding: any, filters?: any, params?: any) =>
-      ipcRenderer.invoke('visual:preview', { projectId, datasetId, encoding, filters, params }),
+    previewVisualData: (projectId: string, datasetId: string, encoding: any, filters?: any, params?: any, analytics?: any) =>
+      ipcRenderer.invoke('visual:preview', { projectId, datasetId, encoding, filters, params, analytics }),
     // Publish to folder (src/ipc/publish.ts).
     publishTargets: (projectId: string) => ipcRenderer.invoke('publish:targets', { projectId }),
     publishConfig: (projectId: string) => ipcRenderer.invoke('publish:config', { projectId }),

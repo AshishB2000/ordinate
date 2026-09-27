@@ -235,8 +235,8 @@ async function stVisualData(block: any, share?: PvPath): Promise<{ visual: any; 
   let res: any = null;
   try {
     res = share
-      ? await pvVisualData(currentProjectId, v.datasetId, v.encoding, filters, undefined, share)
-      : await window.hub.computeVisualData(currentProjectId, v.datasetId, v.encoding, filters);
+      ? await pvVisualData(currentProjectId, v.datasetId, v.encoding, filters, undefined, share, v.analytics)
+      : await window.hub.computeVisualData(currentProjectId, v.datasetId, v.encoding, filters, undefined, v.analytics);
   } catch (_) { res = null; }
   if (res && res.hiddenByPolicy) return { visual: v, data: { labels: [], series: [] }, caption: String(res.error), hidden: String(res.error) };
   const data = res && res.ok !== false && res.data ? res.data : { labels: [], series: [] };

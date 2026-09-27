@@ -45,7 +45,35 @@ interface ChartTypeSpec {
   isCalendar: boolean;
   isRadar: boolean;
   isPareto: boolean;
+  /**
+   * The Analytics-pane overlays this type draws (chartAnnotations.js). Decided
+   * per id below, the five #177 families included explicitly; main keeps a
+   * copy (src/analysis/analytics.ts OVERLAY_ACCEPT) that scripts/test-analytics
+   * checks against this one, id by id.
+   */
+  overlayKinds: string[];
 }
+
+// The overlay sets. ALL: a value axis and an ordered category axis. FLAT: a
+// value axis but no axis a trend or a forecast could run along.
+const OVERLAYS_ALL = ['reference', 'band', 'target', 'trend', 'moving_average', 'forecast', 'annotation', 'highlight'];
+const OVERLAYS_FLAT = ['reference', 'band', 'target', 'annotation', 'highlight'];
+const OVERLAY_KINDS_BY_TYPE: Record<string, string[]> = {
+  column: OVERLAYS_ALL, clustered_column: OVERLAYS_ALL, line: OVERLAYS_ALL, line_markers: OVERLAYS_ALL,
+  area: OVERLAYS_ALL, combo: OVERLAYS_ALL,
+  bar: OVERLAYS_FLAT, clustered_bar: OVERLAYS_FLAT, stacked_column: OVERLAYS_FLAT, stacked_bar: OVERLAYS_FLAT,
+  stacked_area: OVERLAYS_FLAT,
+  pct_stacked_column: ['annotation', 'highlight'], pct_stacked_bar: ['annotation', 'highlight'],
+  histogram: ['reference', 'band', 'annotation', 'highlight'],
+  scatter: ['reference', 'band'], bubble: ['reference', 'band'],
+  candlestick: ['reference', 'band', 'annotation'], boxplot: ['reference', 'band'],
+  // #177: a waterfall's bars are deltas and a Pareto sorts itself (no trend
+  // axis); a bullet draws its own target; a calendar is a matrix and a radar is
+  // radial — neither has a value axis to draw a line across.
+  waterfall: OVERLAYS_FLAT, pareto: OVERLAYS_FLAT,
+  bullet: ['reference', 'band', 'annotation', 'highlight'],
+  calendar: [], radar: [],
+};
 
 function resolveChartType(type: string): ChartTypeSpec {
   let chartType: string, opts: any = {};
@@ -111,5 +139,6 @@ function resolveChartType(type: string): ChartTypeSpec {
     isCalendar:    opts.calendar === true,  // a matrix laid out week × weekday
     isRadar:       chartType === 'radar',   // Chart.js built-in radar
     isPareto:      opts.pareto === true,    // sorted bars + cumulative % line
+    overlayKinds:  OVERLAY_KINDS_BY_TYPE[type] || [],
   };
 }

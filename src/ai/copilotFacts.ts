@@ -18,6 +18,8 @@ import type { Visual } from '../analysis/visuals';
 import type { Page } from '../analysis/dashboards';
 import type { Analysis, AnalysisTile } from '../analysis/analysis';
 import type { VizDataResult } from '../analysis/vizData';
+import { overlayFacts } from '../analysis/analytics';
+import type { ResolvedOverlay } from '../analysis/analytics';
 import { harvestAppNumbers } from './numberAudit';
 import type { LedgerEntry, LedgerUnit } from './numberAudit';
 import type { CopilotFacts } from './copilot';
@@ -275,6 +277,7 @@ export function datasetFacts(
 // numbers). No figure is derived here — viz already did the math.
 export function visualFacts(
   v: Visual, datasetName: string, viz: VizDataResult, columnDocs: Record<string, FactColumnDoc> = {},
+  analytics: ResolvedOverlay[] = [],
 ): CopilotFacts {
   const lines: string[] = [GUARD_LINE, ''];
   lines.push(`Visual: "${v.name}" — a ${v.chartType} chart over dataset "${datasetName}".`);
@@ -313,6 +316,17 @@ export function visualFacts(
   } else {
     lines.push('');
     lines.push('This visual produced no plottable values.');
+  }
+  // The Analytics pane's overlays — every figure app-resolved (analysis/analytics),
+  // and every one of them in the ledger, raw, beside the line that prints it.
+  const overlays = overlayFacts(analytics, v.chartType);
+  if (overlays.length) {
+    lines.push('');
+    lines.push('Analytics overlays on this chart (app-computed):');
+    for (const o of overlays) {
+      lines.push(`- ${o.line}`);
+      for (const f of o.figures) num(ledger, f.label, f.value, 'number', 'analytics');
+    }
   }
   const text = lines.join('\n');
   sealLedger(ledger, text, 'visual');
