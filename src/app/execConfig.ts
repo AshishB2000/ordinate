@@ -390,5 +390,7 @@ export function publicConfig() {
     // separately (branding:logo) — it is a file, not a setting.
     formats: { ...cfg.formats },
     branding: { ...cfg.branding },
+    // Settings → General → Collaboration. No secrets: a name and a folder path.
+    displayName: cfg.displayName || '',
   };
 }

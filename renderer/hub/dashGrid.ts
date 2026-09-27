@@ -691,7 +691,7 @@ async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void>
   const entry: any = {
     id: card.id,
     drill,
-    chartOverrides: { ['v:' + type]: visual.overrides || {} },
+    chartOverrides: { ['v:' + type]: cmtWithPins(visual.overrides, 'card', card.id) }, // COMMENT PIN HOOK
     // On a PUBLISHED card this is a no-op: the snapshot is read-only, and
     // writing back would edit a source visual this card no longer follows —
     // the styling would silently move somewhere else's chart and not this one.

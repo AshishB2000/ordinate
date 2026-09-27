@@ -63,6 +63,7 @@ const ENTRY_RULES: Array<{ re: RegExp; count?: string }> = [
   // The share policy travels. Its sibling privacy/salt.key NEVER does: it is a
   // per-project secret, and "not on this list" is what keeps it home.
   { re: /^privacy\/policy\.json$/ },
+  { re: /^comments\.json$/ }, // comment threads (src/app/comments.ts); target ids remap like any body
 ];
 
 const MAX_ENTRIES = 50_000;

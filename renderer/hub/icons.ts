@@ -132,6 +132,9 @@ const ICONS: Record<string, string> = {
   function:
     '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3M9 11.2h5.7"/>',
   gauge: '<path d="m12 14 4-4M3.34 19a10 10 0 1 1 17.32 0"/>',
+  /* comments (commentDoors.ts / commentPanel.ts) */
+  'message-square': '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/>',
+  'map-pin': '<path d="M20 10c0 5-8 12-8 12s-8-7-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
 
   /* ── platform: jobs, publish, privacy, automation, backups ── */
   activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',

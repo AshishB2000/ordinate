@@ -96,7 +96,7 @@ export function register() {
     const copy = await reportSpec.saveReport(pid, {
       analysisId: src.analysisId, name: src.name + ' copy', format: src.format,
       pages: src.pages, cover: src.cover, paper: src.paper,
-      includeFilters: src.includeFilters, narrative: src.narrative,
+      includeFilters: src.includeFilters, narrative: src.narrative, discussion: src.discussion,
     });
     return copy ? { ok: true, report: copy } : { ok: false, error: 'Could not duplicate.' };
   });

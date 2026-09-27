@@ -27,7 +27,7 @@ import { GRID_COLS } from './dashboards';
 import type { Card, Page } from './dashboards';
 
 export type ReportFormat = 'pdf' | 'pptx' | 'docx';
-export type ReportPageKind = 'cover' | 'summary' | 'sheet' | 'tile' | 'notes' | 'narrative';
+export type ReportPageKind = 'cover' | 'summary' | 'sheet' | 'tile' | 'notes' | 'narrative' | 'discussion';
 export type ReportPageLayout = 'full' | 'half';
 export type ReportCadence = 'off' | 'daily' | 'weekly' | 'monthly';
 export type PaperSize = 'letter' | 'a4';
@@ -91,6 +91,9 @@ export interface Report {
   includeFilters: boolean;
   /** Add a model-written Narrative page. Off by default; needs a model. */
   narrative: boolean;
+  /** Add a final Discussion page: the dashboard's comment threads. Off by
+   *  default — comments are a working conversation, printed only on purpose. */
+  discussion: boolean;
   schedule?: ReportSchedule;
   lastRunAt?: string;
   lastFile?: string;
@@ -118,7 +121,7 @@ export interface ReportSummary {
 // ── defensive whitelisting (never throw — keep known keys, clamp, drop rest) ──
 
 const FORMATS: ReadonlySet<string> = new Set(['pdf', 'pptx', 'docx']);
-const KINDS: ReadonlySet<string> = new Set(['cover', 'summary', 'sheet', 'tile', 'notes', 'narrative']);
+const KINDS: ReadonlySet<string> = new Set(['cover', 'summary', 'sheet', 'tile', 'notes', 'narrative', 'discussion']);
 const CADENCES: ReadonlySet<string> = new Set(['off', 'daily', 'weekly', 'monthly']);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -341,6 +344,7 @@ function normalize(data: any, projectId: string): Report {
     paper: sanitizePaper(data.paper),
     includeFilters: data.includeFilters !== false,
     narrative: data.narrative === true,
+    discussion: data.discussion === true,
     createdAt,
     updatedAt: str(data.updatedAt) || createdAt,
     schemaVersion: 1,
@@ -410,6 +414,7 @@ export interface ReportInput {
   paper?: unknown;
   includeFilters?: unknown;
   narrative?: unknown;
+  discussion?: unknown;
   schedule?: unknown;
 }
 
@@ -444,6 +449,7 @@ export async function updateReport(
     paper: patch.paper !== undefined ? sanitizePaper(patch.paper) : existing.paper,
     includeFilters: patch.includeFilters !== undefined ? patch.includeFilters !== false : existing.includeFilters,
     narrative: patch.narrative !== undefined ? patch.narrative === true : existing.narrative,
+    discussion: patch.discussion !== undefined ? patch.discussion === true : existing.discussion,
     updatedAt: new Date().toISOString(),
   };
   if (patch.schedule !== undefined) {

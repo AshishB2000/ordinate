@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="authoring.css"/>
   <link rel="stylesheet" href="tablecalc.css"/>
   <link rel="stylesheet" href="prepare-power.css"/>
+  <link rel="stylesheet" href="comments.css"/>
   <link rel="stylesheet" href="a11y.css"/>
   <!-- Platform depth: one stylesheet per feature, each after its marker. -->
   <link rel="stylesheet" href="platform.css"/>
@@ -1591,6 +1592,7 @@
             <label class="rb-check"><input type="checkbox" id="rp-set-logo"><span>Show the Ordinate mark</span></label>
             <label class="rb-check"><input type="checkbox" id="rp-set-filters"><span>Print the current filters</span></label>
             <label class="rb-check"><input type="checkbox" id="rp-set-narrative"><span>Add a Narrative page (needs a model)</span></label>
+            <label class="rb-check"><input type="checkbox" id="rp-set-discussion"><span>Include discussion — the dashboard's comments, as a final page</span></label>
 
             <div class="rb-pane-head"><span class="rb-pane-h">Schedule</span></div>
             <label class="rb-field"><span class="rb-field-label">Regenerate</span>
@@ -3232,6 +3234,15 @@
 <script src="versionsPanel.js"></script>
 <script src="trashPage.js"></script>
 <script src="lineagePanel.js"></script>
+<!-- Comments and annotations: the project's threads, the right panel, every door
+     into it (card heads, page heads, ⌘-click on a mark, Home), the report's
+     Discussion page, and Settings → General → Collaboration. After sidePanel.js
+     (the panel shell) and settingsFormats.js (the settings row builders). -->
+<script src="commentStore.js"></script>
+<script src="commentPanel.js"></script>
+<script src="commentDoors.js"></script>
+<script src="reportDiscussion.js"></script>
+<script src="settingsCollab.js"></script>
 <script src="projectSwitcher.js"></script>
 <script src="getStarted.js"></script>
 <script src="coachMarks.js"></script>

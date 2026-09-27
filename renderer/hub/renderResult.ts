@@ -172,7 +172,7 @@ function renderSmallMultiples(container, data, type, entry, turnIdx) {
   // hiddenSeries is handled here (which minis render), title would repeat on each.
   const miniOv = Object.assign({}, overrides);
   delete miniOv.hiddenSeries;
-  delete miniOv.title;
+  delete miniOv.title; delete miniOv.commentPins; // a pin names ONE chart's point, not every mini's
   miniOv._smallMultiple = true;   // per-mini caption already names the period
   // A bottom legend on every small mini repeats the same categories N times and
   // crowds the tiny chart — rely on the on-slice labels instead (unless forced on).

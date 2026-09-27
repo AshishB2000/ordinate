@@ -90,6 +90,8 @@ async function renderRecent(): Promise<void> {
   // paint is never held up by a dataset scan. The section stays hidden until it
   // has something to say.
   if (typeof insRenderHome === 'function') void insRenderHome();
+  // "Recent comments" repaints from this read (commentDoors.ts cmtPaintHome).
+  if (typeof cmtReload === 'function') void cmtReload();
 }
 
 // ── Row rendering ────────────────────────────────────────────────────────────

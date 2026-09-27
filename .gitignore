@@ -651,3 +651,15 @@ scripts/**/*.js
 /scripts/test-powerSteps.js
 /scripts/test-powerStepsDuck.js
 /scripts/pwPrepare.js
+# Comments and annotations (and the sync folder they travel through) — emitted siblings.
+/src/app/commentModel.js
+/src/app/comments.js
+/src/app/syncFolder.js
+/src/ipc/comments.js
+/renderer/hub/commentStore.js
+/renderer/hub/commentPanel.js
+/renderer/hub/commentDoors.js
+/renderer/hub/reportDiscussion.js
+/renderer/hub/settingsCollab.js
+/scripts/test-comments.js
+/scripts/pwComments.js
