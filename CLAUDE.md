@@ -22,7 +22,9 @@ Re-litigate with numbers, not opinion.
 
 - **Storage is Parquet.** A dataset record is metadata-only JSON; the table lives in a sibling
   `<id>.parquet`, plus `<id>.source.parquet` for the immutable prepare source. 500k rows ≈ 0.3 MB.
-  Row cap **1,000,000**. Per-project directories under `userData/projects/<id>/`.
+  Row cap **1,000,000**. Per-project directories under `userData/projects/<id>/` — a project moved
+  to a synced folder (iCloud/Dropbox) is a SYMLINK there (a junction on Windows) guarded by a
+  `lock.json`, so every path builder keeps working; a directory walk must follow links.
 - **DuckDB** (`@duckdb/node-api`, prebuilt N-API, no `electron-rebuild`) behind a **synchronous**
   bridge in `src/engine/duckdb.ts`: DuckDB runs in a worker and the main thread blocks on `Atomics.wait`
   over a growable `SharedArrayBuffer`. `queryAsync`/`execAsync` exist on the same connection for

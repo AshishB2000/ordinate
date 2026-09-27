@@ -5,10 +5,14 @@
 // writer/reader below — no dependency, because a zip is a few fixed-size
 // headers around deflate, and the reader has to be strict anyway.
 //
-// WHAT TRAVELS is a WHITELIST (ENTRY_RULES): project.json, the six record
-// directories, alerts.json and version history. What does not: config.json
-// (keys and connection secrets live there, never in a project), the Trash,
-// the Assistant's conversations (copilot.json), and anything else. Import
+// WHAT TRAVELS is a WHITELIST (ENTRY_RULES): project.json, the record
+// directories (stories and boundaries included), alerts.json, version history,
+// the data model (relationships.json), the catalog, image assets and the share
+// policy. What does not: config.json (keys and connection secrets live there,
+// never in a project), privacy/salt.key (a per-project secret), the Trash, the
+// Assistant's conversations (copilot.json), a synced project's lock.json, and
+// anything else. A backup IS a bundle, so what is left off here is left out of
+// every backup too — a new per-project file needs a rule here. Import
 // REFUSES a bundle holding any entry outside the same whitelist — a bundle is a
 // file from somewhere else, and "skip what we do not recognise" is how a crafted
 // one would smuggle a path in.
@@ -50,6 +54,15 @@ const ENTRY_RULES: Array<{ re: RegExp; count?: string }> = [
   { re: new RegExp(`^reports/${UUID}\\.json$`, 'i'), count: 'reports' },
   { re: new RegExp(`^connections/${UUID}\\.json$`, 'i'), count: 'connections' },
   { re: new RegExp(`^history/(?:dataset|visual|dashboard|metric|report)/${UUID}/${KEY}\\.json$`, 'i'), count: 'versions' },
+  { re: new RegExp(`^stories/${UUID}\\.json$`, 'i'), count: 'stories' },
+  { re: new RegExp(`^boundaries/${UUID}\\.json$`, 'i'), count: 'boundaries' },
+  // Binary (and SVG) images: not `.json`, so import never rewrites their bytes.
+  { re: new RegExp(`^assets/${UUID}\\.(?:png|jpg|svg)$`, 'i'), count: 'assets' },
+  { re: /^relationships\.json$/ },
+  { re: /^catalog\.json$/ },
+  // The share policy travels. Its sibling privacy/salt.key NEVER does: it is a
+  // per-project secret, and "not on this list" is what keeps it home.
+  { re: /^privacy\/policy\.json$/ },
 ];
 
 const MAX_ENTRIES = 50_000;
@@ -228,6 +241,62 @@ export async function readZipAsync(buf: Buffer, onEntry?: (done: number, total: 
   return out;
 }
 
+const MAX_MANIFEST_BYTES = 1024 * 1024;
+
+/**
+ * A bundle's manifest WITHOUT reading the bundle: the zip directory sits at the
+ * end of the file, so this reads the tail, finds manifest.json's entry there,
+ * and reads just those bytes — a backup list stays cheap however large the
+ * projects are. Same guards as readZip (CRC, size cap, format check). Null for
+ * anything that is not a readable Ordinate bundle: truncated, garbage, another
+ * format. The caller skips it; nothing here throws.
+ */
+export async function peekManifest(file: string): Promise<BundleManifest | null> {
+  let fh: fs.promises.FileHandle | null = null;
+  try {
+    fh = await fs.promises.open(file, 'r');
+    const size = (await fh.stat()).size;
+    const tail = Buffer.alloc(Math.min(size, 22 + 65535));
+    await fh.read(tail, 0, tail.length, size - tail.length);
+    let eocd = -1;
+    for (let i = tail.length - 22; i >= 0; i--) if (tail.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
+    if (eocd < 0) return null;
+    const count = tail.readUInt16LE(eocd + 10);
+    const cdSize = tail.readUInt32LE(eocd + 12);
+    const cdOffset = tail.readUInt32LE(eocd + 16);
+    if (cdOffset + cdSize > size || count > MAX_ENTRIES) return null;
+    const cd = Buffer.alloc(cdSize);
+    await fh.read(cd, 0, cdSize, cdOffset);
+    for (let p = 0, n = 0; n < count && p + 46 <= cd.length; n++) {
+      if (cd.readUInt32LE(p) !== 0x02014b50) return null;
+      const nameLen = cd.readUInt16LE(p + 28);
+      const name = cd.toString('utf8', p + 46, p + 46 + nameLen);
+      if (name === 'manifest.json') {
+        const method = cd.readUInt16LE(p + 10);
+        const r = { name, method, crc: cd.readUInt32LE(p + 16), usize: cd.readUInt32LE(p + 24), raw: Buffer.alloc(0) };
+        const csize = cd.readUInt32LE(p + 20);
+        const localOff = cd.readUInt32LE(p + 42);
+        if ((method !== 0 && method !== 8) || r.usize > MAX_MANIFEST_BYTES || csize > MAX_MANIFEST_BYTES) return null;
+        const local = Buffer.alloc(30);
+        await fh.read(local, 0, 30, localOff);
+        if (local.readUInt32LE(0) !== 0x04034b50) return null;
+        r.raw = Buffer.alloc(csize);
+        const start = localOff + 30 + local.readUInt16LE(26) + local.readUInt16LE(28);
+        if ((await fh.read(r.raw, 0, csize, start)).bytesRead !== csize) return null;
+        const data = checked(r, method === 0 ? r.raw : await inflateRawAsync(r.raw, r.usize)).data;
+        const m = JSON.parse(data.toString('utf8'));
+        return m && m.format === BUNDLE_FORMAT && m.formatVersion === BUNDLE_VERSION ? m : null;
+      }
+      p += 46 + nameLen + cd.readUInt16LE(p + 30) + cd.readUInt16LE(p + 32);
+    }
+    return null;
+  } catch (_) {
+    return null;
+  } finally {
+    if (fh) await fh.close().catch(() => { /* already closed */ });
+  }
+}
+
 // ── Export ───────────────────────────────────────────────────────────────────
 
 async function walk(dir: string, rel = ''): Promise<string[]> {
@@ -320,7 +389,8 @@ export interface ImportResult {
   remapped?: number;
 }
 
-export async function importBundle(bytes: Buffer, opts: BundleProgress = {}): Promise<ImportResult> {
+/** `name` replaces the manifest's project name (a restore names its copy). */
+export async function importBundle(bytes: Buffer, opts: BundleProgress & { name?: string } = {}): Promise<ImportResult> {
   let entries: ZipEntry[];
   try {
     entries = await readZipAsync(bytes, (done, total) => {
@@ -379,7 +449,7 @@ export async function importBundle(bytes: Buffer, opts: BundleProgress = {}): Pr
   }
   const swap = (s: string): string => s.replace(UUID_G, (m) => remap.get(m.toLowerCase()) || m);
 
-  const name = String((manifest.project && manifest.project.name) || 'Imported project').trim() || 'Imported project';
+  const name = String(opts.name || (manifest.project && manifest.project.name) || 'Imported project').trim() || 'Imported project';
   const taken = new Set((await projects.listProjects()).map((p) => p.name));
   const created = await projects.createProject(taken.has(name) ? `${name} (imported)` : name);
   const dir = projectDir(created.id);

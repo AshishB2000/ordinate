@@ -20,6 +20,7 @@ import { speedSection } from './pfSpeed';
 import { publishSection } from './pfPublish';
 import { privacySection } from './pfPrivacy';
 import { automationSection } from './pfAutomation';
+import { backupSection } from './pfBackup';
 
 type Section = { name: string; run: (s: Smoke, fx: Fixture) => Promise<unknown> };
 
@@ -28,6 +29,7 @@ const SECTIONS: Section[] = [
   { name: 'publish', run: publishSection },
   { name: 'privacy', run: privacySection },
   { name: 'automation', run: automationSection },
+  { name: 'backup', run: backupSection },
   // platform:sections
 ];
 

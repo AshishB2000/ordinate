@@ -5,6 +5,7 @@ import * as visuals from '../analysis/visuals';
 import * as metrics from '../analysis/metrics';
 import * as reportSpec from '../analysis/reportSpec';
 import * as datasets from '../data/datasets';
+import { safetyBackup } from './backups';
 
 // Version history IPC — list a record's saves, read one, restore one.
 //
@@ -62,6 +63,7 @@ export function register(): void {
       if (!versions.isVersionType(type)) return { ok: false, error: 'Unknown record type.' };
       const v = await versions.get(pid, type, rid, String(key || ''));
       if (!v) return { ok: false, error: 'That version is gone.' };
+      await safetyBackup('before-restore', pid); // a copy of the project first (src/ipc/backups.ts)
       const saved = await writeBack(pid, type, rid, v.record);
       if (!saved) return { ok: false, error: 'The record could not be restored — it may have been deleted.' };
       const meta = await versions.record(pid, type, saved, { restoredFrom: v.savedAt });

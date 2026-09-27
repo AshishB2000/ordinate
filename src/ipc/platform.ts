@@ -33,4 +33,5 @@ export function register(deps: PlatformDeps): void {
   require('./automation').register(deps); // Settings → Automation, the loopback MCP server, headless jobs
 
   // platform:backup
+  require('./backups').register(deps);
 }

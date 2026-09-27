@@ -8,6 +8,8 @@ import * as jobs from '../app/jobs';
 import * as sharePolicy from '../app/sharePolicy';
 import * as config from '../app/config';
 import { projectDir } from '../app/recordKinds';
+import { syncedTarget } from '../app/syncFolder';
+import { safetyBackup } from './backups';
 
 // Projects (workspace shell) IPC — list/create/rename/archive/open, the
 // switcher's overview, and the .ordinate bundle's export and import.
@@ -88,6 +90,7 @@ export function register({ onActive, getHubWindow }: {
       // just the user's project again.
       sample: !!sample && sample.projectId === p.id
         && fs.existsSync(path.join(projectDir(p.id), 'datasets', sample.datasetId + '.json')),
+      syncedTo: syncedTarget(p.id), // the real folder of a project in a sync folder, else null
     })));
   });
 
@@ -146,6 +149,7 @@ export function register({ onActive, getHubWindow }: {
     const { canceled, filePaths } = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
     if (canceled || !filePaths || !filePaths[0]) return { ok: false, canceled: true };
     const file = filePaths[0];
+    await safetyBackup('before-import'); // a copy of the active project first (src/ipc/backups.ts)
     const job = jobs.submit({
       kind: 'bundle',
       label: `Import ${path.basename(file)}`,

@@ -192,7 +192,75 @@ async function main(): Promise<void> {
   ok('a cancelled import rejects (JobCancelled) instead of reporting a bad bundle', importCancelled);
   ok('…and leaves no stray project', (await projects.listProjects()).length === count0);
 
+  await everyProjectFile();
   finish();
+}
+
+// ── 5. every per-project file travels — and the salt never does ──────────────
+// A backup IS a bundle, so a file the whitelist forgets is a file every backup
+// silently loses. Written raw: the bundle is file-level, and these are the
+// shapes the stores write (stories.ts, relationships.ts, catalog.ts,
+// projectAssets.ts, projectBoundaries.ts, the privacy policy).
+async function everyProjectFile(): Promise<void> {
+  const p = await projects.createProject('Everything');
+  const dir = path.join(tmpUserData, 'projects', p.id);
+  const ds = '0b7c2c1e-0f4d-4c59-9d3b-2a8e6f1c0a11';
+  const story = 'a1b2c3d4-0000-4000-8000-000000000001';
+  const png = 'a1b2c3d4-0000-4000-8000-000000000002';
+  const svg = 'a1b2c3d4-0000-4000-8000-000000000003';
+  const geo = 'a1b2c3d4-0000-4000-8000-000000000004';
+  const put = (rel: string, data: string | Buffer): void => {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), data);
+  };
+  // The PNG's bytes spell a record id: if import ever rewrote a binary body,
+  // this is the byte that would change.
+  const pngBytes = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 255]), Buffer.from(story)]);
+  const svgText = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" data-id="${story}"/>`;
+  put(`stories/${story}.json`, JSON.stringify({ id: story, name: 'Q3 story', slides: [{ datasetId: ds }] }));
+  put('relationships.json', JSON.stringify({ relationships: [{ from: { datasetId: ds }, to: { datasetId: ds } }] }));
+  put('catalog.json', JSON.stringify({ tags: ['finance'], entries: { [`dataset:${ds}`]: { tags: ['finance'] } } }));
+  put(`assets/${png}.png`, pngBytes);
+  put(`assets/${svg}.svg`, svgText);
+  put(`boundaries/${geo}.json`, JSON.stringify({ id: geo, name: 'Regions', type: 'FeatureCollection', features: [] }));
+  put('privacy/policy.json', JSON.stringify({ mode: 'hash', columns: {} }));
+  put('privacy/salt.key', 'a-per-project-secret-that-must-stay-home');
+  put('lock.json', JSON.stringify({ app: 'Ordinate', host: 'x' }));
+
+  const out = await bundle.exportProject(p.id);
+  if (!out) throw new Error('export returned nothing');
+  const names = bundle.readZip(out.bytes).map((e) => e.name);
+  for (const want of [`stories/${story}.json`, 'relationships.json', 'catalog.json', `assets/${png}.png`, `assets/${svg}.svg`,
+    `boundaries/${geo}.json`, 'privacy/policy.json']) {
+    ok(`the bundle carries ${want}`, names.includes(want), JSON.stringify(names));
+  }
+  ok('privacy/salt.key NEVER leaves the project folder', !names.some((n) => /salt/.test(n)) && !out.bytes.includes(Buffer.from('a-per-project-secret')));
+  ok('…nor does a synced project\'s lock.json', !names.includes('lock.json'));
+  ok('the manifest counts stories, assets and boundaries',
+    out.manifest.counts.stories === 1 && out.manifest.counts.assets === 2 && out.manifest.counts.boundaries === 1, JSON.stringify(out.manifest.counts));
+
+  // Same machine: the story id collides and is remapped — in names and JSON
+  // bodies — while the image bytes that spell it are left exactly as they were.
+  const res = await bundle.importBundle(out.bytes);
+  ok('a bundle holding all of them imports', res.ok === true, res.error);
+  const ndir = path.join(tmpUserData, 'projects', res.project!.id);
+  const nstory = fs.readdirSync(path.join(ndir, 'stories'))[0];
+  ok('the story came across under a new id', !!nstory && nstory !== `${story}.json`, nstory);
+  ok('relationships.json, catalog.json and the policy came across',
+    ['relationships.json', 'catalog.json', 'privacy/policy.json'].every((f) => fs.existsSync(path.join(ndir, f))));
+  const nassets = fs.readdirSync(path.join(ndir, 'assets')).sort();
+  const npng = nassets.find((n) => n.endsWith('.png'))!;
+  const nsvg = nassets.find((n) => n.endsWith('.svg'))!;
+  ok('a binary asset is byte-for-byte the same, id-shaped bytes and all',
+    Buffer.compare(fs.readFileSync(path.join(ndir, 'assets', npng)), pngBytes) === 0);
+  ok('…and so is an SVG (not .json, so never rewritten)', fs.readFileSync(path.join(ndir, 'assets', nsvg), 'utf8') === svgText);
+  ok('the boundary came across', fs.readdirSync(path.join(ndir, 'boundaries')).length === 1);
+  ok('no salt was created by the import', !fs.existsSync(path.join(ndir, 'privacy', 'salt.key')));
+
+  // A crafted bundle that DOES carry a salt is refused whole, like any stranger.
+  const withSalt = bundle.writeZip([...bundle.readZip(out.bytes), { name: 'privacy/salt.key', data: Buffer.from('x') }]);
+  const refused = await bundle.importBundle(withSalt);
+  ok('a bundle carrying privacy/salt.key is refused', !refused.ok && /refused|does not import/.test(refused.error || ''), refused.error);
 }
 
 main().catch((err) => {

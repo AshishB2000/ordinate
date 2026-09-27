@@ -60,6 +60,8 @@ async function openWorkspace(id: string): Promise<void> {
  * Returns false when main refuses; the caller decides what that means.
  */
 async function adoptProject(id: string): Promise<boolean> {
+  // A synced project another machine has open asks first (projectSync.ts).
+  if (typeof syConfirmOpen === 'function' && !(await syConfirmOpen(id))) return false;
   let project: any = null;
   try {
     project = await window.hub.openProject(id);
@@ -73,6 +75,8 @@ async function adoptProject(id: string): Promise<boolean> {
   const nameEl = document.getElementById('ws-project-name');
   if (nameEl) nameEl.textContent = project.name || 'Untitled project';
   if (typeof pjPaintCurrent === 'function') pjPaintCurrent(project.name || 'Untitled project');
+  // …and holds its lock.json while it is open, if it lives in a sync folder.
+  if (typeof syAdopted === 'function') void syAdopted(project.id);
   // A project can be adopted with no section change (e.g. "+New → Data
   // source"), which dkSync()'s other call sites never see — without this the
   // dock keeps showing the PREVIOUS project's transcript until the next

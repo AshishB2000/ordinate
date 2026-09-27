@@ -603,3 +603,12 @@ scripts/**/*.js
 /renderer/hub/automationReport.js
 
 # Platform depth — backups and sync (emitted siblings).
+/src/app/backupSettings.js
+/src/app/backups.js
+/src/app/syncFolder.js
+/src/app/syncLock.js
+/src/ipc/backups.js
+/src/ipc/syncFolder.js
+/preload/hubBackupPreload.js
+/renderer/hub/settingsBackups.js
+/renderer/hub/projectSync.js

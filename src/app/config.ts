@@ -13,6 +13,8 @@ import type { FormatPrefs } from './format';
 import { BRANDING_DEFAULTS, sanitizeBranding } from './branding';
 import type { Branding } from './branding';
 import type { OnboardingState } from './onboarding';
+import { BACKUP_DEFAULTS, sanitizeBackups } from './backupSettings';
+import type { BackupSettings } from './backupSettings';
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
 export interface LegacyProviderEntry { apiKey?: string | null; endpoint?: string; model: string }
@@ -84,6 +86,8 @@ interface Config {
   formats: Formats;
   /** Accent colour, logo and the default dashboard style — src/app/branding.ts. */
   branding: Branding;
+  /** Where and how often every project is backed up — src/app/backups.ts. */
+  backups: BackupSettings;
   /**
    * The master switch for unattended dataset refresh. ON by default: a schedule
    * a user set is a schedule they want run, and this exists to stop it globally
@@ -203,6 +207,7 @@ const DEFAULTS: Omit<Config, 'providers' | 'byok'> = {
   // the user says otherwise.
   formats: { ...FORMAT_DEFAULTS },
   branding: { ...BRANDING_DEFAULTS },
+  backups: { ...BACKUP_DEFAULTS },
   autoRefresh: true,
   // AI Copilot panel is ON by default — it stays fully optional (execution-gated),
   // but the user can also switch it OFF entirely from the panel's toggle.
@@ -308,6 +313,7 @@ function sanitize(input: any): Partial<Config> {
   }
   if (input.formats && typeof input.formats === 'object') out.formats = sanitizeFormatPrefs(input.formats);
   if (input.branding && typeof input.branding === 'object') out.branding = sanitizeBranding(input.branding);
+  if (input.backups && typeof input.backups === 'object') out.backups = sanitizeBackups(input.backups);
   if (typeof input.copilotEnabled === 'boolean') out.copilotEnabled = input.copilotEnabled;
   if (typeof input.sampleSeeded === 'boolean') out.sampleSeeded = input.sampleSeeded;
   if (input.sample === null) out.sample = null;

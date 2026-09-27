@@ -255,7 +255,11 @@ async function main(): Promise<void> {
   ok('bundle/mask: card is masked in the table that travels', bundled.rows[0][2] === mask.maskToken(salt, '4111111111111111') && rec.columns[2].type === 'text');
   ok('bundle/mask: email travels as its Prepare token', bundled.rows[0][1] === mask.maskToken(salt, 'grace@example.com'));
   ok('bundle/mask: no raw value is anywhere in the bundle', !entries.some((e) => RAW.some((v) => e.data.includes(v))));
-  ok('bundle: nothing under privacy/ travels', !names.some((n) => n.startsWith('privacy/')));
+  // The share POLICY travels (a restored backup keeps its rules); the salt and
+  // the pending-review file never do.
+  ok('bundle: only privacy/policy.json travels — never the salt or the review file',
+    names.filter((n) => n.startsWith('privacy/')).every((n) => n === 'privacy/policy.json')
+    && !names.some((n) => /salt/.test(n)), names.filter((n) => n.startsWith('privacy/')).join(','));
   const imported = await bundle.importBundle(bytes);
   ok('bundle/mask: the shaped bundle still IMPORTS (manifest counts follow)', imported.ok === true, JSON.stringify(imported.error));
   if (imported.ok && imported.project) {

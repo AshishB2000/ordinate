@@ -25,6 +25,7 @@
   <link rel="stylesheet" href="automation.css"/>
 
   <!-- platform-css:backup -->
+  <link rel="stylesheet" href="backup.css"/>
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
        injecting a <style> at render time, which the hub CSP (style-src 'self')
@@ -2282,6 +2283,8 @@
           <section class="settings-pane" data-cat="general" hidden>
             <!-- Locale, numbers, currency, dates, calendar — built by settingsFormats.ts. -->
             <div class="stp-group" id="stp-formats"></div>
+            <!-- Backups: folder, schedule, retention, restore — built by settingsBackups.ts. -->
+            <div class="stp-group" id="stp-backups"></div>
             <div class="stp-subhead"><div class="stp-subhead-t">App</div></div>
             <div class="stp-row">
               <div class="stp-rl">
@@ -3255,6 +3258,8 @@
 <script src="automationReport.js"></script>
 
 <!-- platform:backup -->
+<script src="settingsBackups.js"></script>
+<script src="projectSync.js"></script>
 
 <script src="hub.js"></script>
 
