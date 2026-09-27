@@ -364,7 +364,7 @@ function vhStepWords(s: any): string {
     case 'trim': return s.column ? `Trim ${s.column}` : 'Trim text columns';
     case 'dedupe': return 'Remove duplicate rows';
     case 'group_aggregate': return `Group by ${(s.groupBy || []).join(', ')}`;
-    default: return String(s.type || 'Step');
+    default: return pvMaskSummary(s) || String(s.type || 'Step');
   }
 }
 

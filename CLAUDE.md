@@ -22,7 +22,9 @@ Re-litigate with numbers, not opinion.
 
 - **Storage is Parquet.** A dataset record is metadata-only JSON; the table lives in a sibling
   `<id>.parquet`, plus `<id>.source.parquet` for the immutable prepare source. 500k rows ≈ 0.3 MB.
-  Row cap **1,000,000**. Per-project directories under `userData/projects/<id>/`.
+  Row cap **1,000,000**. Per-project directories under `userData/projects/<id>/` — a project moved
+  to a synced folder (iCloud/Dropbox) is a SYMLINK there (a junction on Windows) guarded by a
+  `lock.json`, so every path builder keeps working; a directory walk must follow links.
 - **DuckDB** (`@duckdb/node-api`, prebuilt N-API, no `electron-rebuild`) behind a **synchronous**
   bridge in `src/engine/duckdb.ts`: DuckDB runs in a worker and the main thread blocks on `Atomics.wait`
   over a growable `SharedArrayBuffer`. `queryAsync`/`execAsync` exist on the same connection for
@@ -161,8 +163,11 @@ renderer-safe views and strip every raw key and secret. `executionReady()` gates
 bridge, worker/sidecar, resident fast paths), `src/data/` (parse, datasets, transforms),
 `src/formula/` (tokenizer/parser/evaluator), `src/analysis/` (analyses, dashboards, visuals,
 anomalies), `src/ai/` (analyze, copilot, models), `src/cli/` (local CLI detection + run),
-`src/app/` (config, projects, history, icons, capture, notifications), `src/connectors/` (the 35-source registry
-plus the connection store). `src/ipc/` → one file per area. `src/windows/` → BrowserWindow
+`src/app/` (config, projects, history, icons, capture, notifications, jobs), `src/connectors/` (the 35-source registry
+plus the connection store), `src/publish/` (Publish to folder: the site's data, whitelist and pages;
+`renderer/publish/` is the published site's own renderer, inlined into every page), `src/automation/`
+(`--cli` / `--mcp`: one command registry behind the CLI and the local MCP server; `docs/automation.md`
+is generated from it). `src/ipc/` → one file per area. `src/windows/` → BrowserWindow
 factories. `renderer/{hub,overlay}/` → windows.
 `renderer/theme.css` → shared CSS vars. `preload/` → one contextBridge per window.
 `scripts/` → build + `test-*.js` self-checks. `assets/`, `geo/` → icons + GeoJSON.

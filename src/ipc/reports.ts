@@ -7,6 +7,7 @@ import * as projects from '../app/projects';
 import { tileCaption } from '../analysis/captions';
 import type { CaptionInput } from '../analysis/captions';
 import { notifyFile } from '../app/notify';
+import { noteWrittenPath } from './jobs';
 import { displayNames } from '../app/catalog';
 import * as versions from '../app/versions';
 import * as trash from '../app/trash';
@@ -161,6 +162,7 @@ export function register() {
     // instead would let a faked-clock run reschedule itself against real time.
     await reportSpec.updateReport(pid, rid, { lastRunAt: when.toISOString(), lastFile: dest });
     const notified = notifyFile(`Report ready — ${path.basename(dest)}`, dest);
+    noteWrittenPath(dest); // a renderer job may name it for the Jobs popover's Reveal
     return { ok: true, dest, notified };
   });
 
@@ -228,6 +230,7 @@ export function register() {
       return { ok: false, error: 'Save failed.' };
     }
     await reportSpec.updateReport(pid, rid, { lastRunAt: new Date().toISOString(), lastFile: filePath });
+    noteWrittenPath(filePath);
     return { ok: true, dest: filePath };
   });
 }

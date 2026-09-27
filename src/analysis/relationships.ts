@@ -18,6 +18,7 @@ import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
 import { isValidId } from '../app/ids';
+import * as queryCache from '../engine/queryCache';
 
 export type Cardinality = 'many_to_one' | 'one_to_one';
 export const CARDINALITIES: readonly Cardinality[] = ['many_to_one', 'one_to_one'];
@@ -107,6 +108,8 @@ async function writeAll(projectId: string, list: Relationship[]): Promise<boolea
     const tmp = file + '.' + randomUUID() + '.tmp';
     await fs.promises.writeFile(tmp, JSON.stringify({ schemaVersion: 1, relationships: list }, null, 2), 'utf8');
     await fs.promises.rename(tmp, file);
+    // A joined chart or KPI read through the old edges; drop the project's answers.
+    queryCache.invalidateProject(projectId);
     return true;
   } catch (err: any) {
     console.error('[relationships] Could not write relationships.json:', err && err.message);

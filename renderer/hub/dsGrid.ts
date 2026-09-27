@@ -205,7 +205,9 @@ async function refreshExplorerPage(retried?: boolean): Promise<void> {
   const seq = ++expPageSeq;
   const wantId = expId;
   const req: DatasetPageReq = {
-    offset: expOffset,
+    // The block holding the first row in view — the virtual grid asks for the
+    // others as it scrolls to them.
+    offset: Math.floor(expOffset / DS_PAGE_ROWS) * DS_PAGE_ROWS,
     limit: DS_PAGE_ROWS,
     search: expSearch.trim(),
     sortColumn: expSortColumnName(),
@@ -223,12 +225,17 @@ async function refreshExplorerPage(retried?: boolean): Promise<void> {
   }
   if (seq !== expPageSeq || wantId !== expId) return; // a newer request already won
 
+  // Whatever came back replaces every row fetched before: the query, or the
+  // data under it (a prepare step), changed. dsVirtual.ts refetches the rest
+  // of the scroll range block by block as the viewport reaches it.
+  dsvReset();
   if (res && res.ok === true) {
     // An EMPTY page is a real answer (search matched nothing, or you paged past
     // the end) — only `ok === true` is trusted, never row-count truthiness.
     expPageRows = Array.isArray(res.rows) ? res.rows : [];
     expTotal = typeof res.total === 'number' ? res.total : expPageRows.length;
     expOffset = typeof res.offset === 'number' ? res.offset : expOffset;
+    dsvPut(expOffset, expPageRows);
     // The table shrank under us (a prepare step dropped rows while you were on a
     // later page) — an offset past the end is a legitimately empty page, but a
     // blank grid is not what the user asked for. Snap to the top, once.
@@ -243,7 +250,11 @@ async function refreshExplorerPage(retried?: boolean): Promise<void> {
     expTotal = all.length;
     if (expOffset >= expTotal) expOffset = 0;
     expPageRows = all.slice(expOffset, expOffset + DS_PAGE_ROWS);
+    dsvPutAll(all);
   }
+  // A new order or a new search starts at the top (toggleSort, the search box
+  // and the rule filter reset expOffset); a data refresh keeps your place.
+  if (expOffset === 0 && scrollHost) scrollHost.scrollTop = 0;
   paintExplorerTable();
   dqPaintBanner();
 }
@@ -253,13 +264,6 @@ async function refreshExplorerPage(retried?: boolean): Promise<void> {
 // left to the fetch so a stale window is never shown between the two.
 function renderExplorerTable(): void {
   void refreshExplorerPage();
-}
-
-function stepExplorerPage(delta: number): void {
-  const next = expOffset + delta * DS_PAGE_ROWS;
-  if (next < 0 || next >= expTotal) return;
-  expOffset = next;
-  renderExplorerTable();
 }
 
 // Draw the window currently in hand. NO filtering, NO sorting, NO IPC — those
@@ -272,10 +276,18 @@ function paintExplorerTable(): void {
   // exists (or, worse, at a different column that slid into it).
   if (dsProfileCol >= expColumns.length) dsCloseProfile();
   skelClear(scroll); // drops the loading skeleton AND the aria-busy with it
-  scroll.innerHTML = '';
-  const table = document.createElement('table');
-  table.className = 'ds-table';
-
+  // The table is VIRTUAL (dsVirtual.ts): only the rows in view exist, between
+  // two spacer rows that hold the scroll height. Rebuilt IN PLACE — replacing
+  // the head and then the body — so the scroll position survives a repaint.
+  let table = scroll.querySelector('table.ds-table') as HTMLTableElement | null;
+  if (!table) {
+    scroll.innerHTML = '';
+    table = document.createElement('table');
+    table.className = 'ds-table is-virtual';
+    table.setAttribute('role', 'grid');
+    scroll.appendChild(table);
+  }
+  table.setAttribute('aria-rowcount', String(expTotal + 1));
   const thead = document.createElement('thead');
   const htr = document.createElement('tr');
   expColumns.forEach((col, c) => {
@@ -283,78 +295,28 @@ function paintExplorerTable(): void {
     htr.appendChild(makeExplorerTh(col, c));
   });
   thead.appendChild(htr);
-  table.appendChild(thead);
-
-  const tbody = document.createElement('tbody');
-  expPageRows.forEach((rowArr) => {
-    const tr = document.createElement('tr');
-    const cells: any[] = Array.isArray(rowArr) ? rowArr : [];
-    expColumns.forEach((_, c) => {
-      if (expHidden.has(c)) return;
-      const td = document.createElement('td');
-      td.className = 'ds-td';
-      const v = cells[c];
-      // A number reads grouped, in the workspace's marks, without float noise
-      // (1565150.4600000004 → 1,565,150.46). Display only — the cell is exact.
-      if (typeof v === 'number' && Number.isFinite(v)) {
-        td.textContent = OrdFormat.formatNumber(v, { maxDecimals: 4 });
-        td.classList.add('ds-td-num');
-      } else td.textContent = v == null ? '' : String(v);
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  });
-  table.appendChild(tbody);
-  scroll.appendChild(table);
-
-  paintExplorerPager();
+  if (table.tHead) table.replaceChild(thead, table.tHead);
+  else table.insertBefore(thead, table.firstChild);
+  dsvWire(scroll);
+  dsvPaintBody();
 }
 
-// Row count + Prev/Next, built into the existing #ds-explorer-note. The grid
-// only ever drew the first 500 rows, so paging is a strict gain: the rows past
-// 500 were previously unreachable. Chose explicit pages over a virtual scroll —
-// same 500-row draw, no scroll-position bookkeeping, no new markup or CSS (this
-// file is the only one that may change). No inline style= anywhere: CSP would
-// silently drop it, so spacing is set through element.style from JS.
+// The row count, and which rows are on screen. Scrolling IS the paging now —
+// the grid used to draw 500 rows behind Prev/Next buttons, and the rows past
+// them were a click away each; now every one is a scroll away.
 function paintExplorerPager(): void {
   const note = dsEl('ds-explorer-note');
   if (!note) return;
-  note.innerHTML = '';
   note.hidden = false;
-
-  const first = expTotal === 0 ? 0 : expOffset + 1;
+  if (expTotal === 0) {
+    note.textContent = '0 rows';
+    return;
+  }
+  const first = expOffset + 1;
   const last = Math.min(expOffset + expPageRows.length, expTotal);
-  const label = document.createElement('span');
-  label.textContent =
-    expTotal > expPageRows.length
-      ? 'Rows ' + first + '–' + last + ' of ' + expTotal
-      : expTotal + (expTotal === 1 ? ' row' : ' rows');
-  note.appendChild(label);
-
-  if (expTotal <= DS_PAGE_ROWS) return; // one page — no controls to show
-
-  // `side` says which end the chevron sits on: iconLabel() only ever leads.
-  const mkPageBtn = (
-    name: string,
-    label: string,
-    side: 'left' | 'right',
-    delta: number,
-    disabled: boolean,
-  ): void => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'btn btn-sm';
-    const span = document.createElement('span');
-    span.textContent = label;
-    if (side === 'left') btn.append(icon(name), span);
-    else btn.append(span, icon(name));
-    btn.disabled = disabled;
-    btn.style.marginLeft = '8px';
-    btn.addEventListener('click', () => stepExplorerPage(delta));
-    note.appendChild(btn);
-  };
-  mkPageBtn('chevron-left', 'Prev', 'left', -1, expOffset <= 0);
-  mkPageBtn('chevron-right', 'Next', 'right', 1, expOffset + DS_PAGE_ROWS >= expTotal);
+  note.textContent = expTotal > expPageRows.length
+    ? 'Rows ' + first.toLocaleString() + '–' + last.toLocaleString() + ' of ' + expTotal.toLocaleString()
+    : expTotal.toLocaleString() + (expTotal === 1 ? ' row' : ' rows');
 }
 
 // Column show/hide menu (checkbox per column).

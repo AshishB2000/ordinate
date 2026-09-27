@@ -151,7 +151,7 @@ declare global {
       // ── Datasets (file-based data sources) ──
       pickAndParseDataset(sheetName?: string, filePath?: string): Promise<any>;
       parsePasteDataset(text: string): Promise<any>;
-      saveDataset(payload: { projectId: string; name: string; sourceKind: string; columns: any[]; rows: any[]; origin?: any }): Promise<any>;
+      saveDataset(payload: { projectId: string; name: string; sourceKind: string; columns: any[]; rows: any[]; origin?: any; stagedId?: string }): Promise<any>;
       refreshDataset(projectId: string, id: string): Promise<any>;
       listDatasets(projectId: string): Promise<any[]>;
       // ── Capture → dataset (Week 13) ──
@@ -235,6 +235,8 @@ declare global {
         steps?: any[];
         sourceKind?: string;
         origin?: any;
+        /** The composer's retyped columns, applied inside the save job. */
+        retype?: any[];
       }): Promise<any>;
       suggestDatasetSteps(projectId: string, datasetId: string): Promise<any>;
       suggestCalcField(projectId: string, datasetId: string): Promise<any>;
@@ -547,7 +549,7 @@ declare global {
   function matchGeoItem(geoItems: any[], featProps: any): any; // geoMatch.js
   // storyText.js — the story Markdown subset, outline and page mapping (same IIFE pattern).
   function mdInline(src: string): Array<{ t: string; text: string; href?: string }>;
-  function mdParse(src: string): any[];
+  function stMdParse(src: string): any[]; // not mdParse — markdown.js owns that global
   function mdPlain(src: string): string;
   function storyOutline(blocks: any[]): Array<{ blockId: string; level: number; text: string }>;
   function storyPages(blocks: any[]): Array<{ heading: string; level: number; items: Array<{ block: any; text?: string }> }>;

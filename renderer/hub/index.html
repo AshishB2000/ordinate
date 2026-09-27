@@ -16,6 +16,16 @@
   <link rel="stylesheet" href="hub.css"/>
   <link rel="stylesheet" href="authoring.css"/>
   <link rel="stylesheet" href="a11y.css"/>
+  <!-- Platform depth: one stylesheet per feature, each after its marker. -->
+  <link rel="stylesheet" href="platform.css"/>
+  <!-- platform-css:privacy -->
+  <link rel="stylesheet" href="privacy.css"/>
+
+  <!-- platform-css:automation -->
+  <link rel="stylesheet" href="automation.css"/>
+
+  <!-- platform-css:backup -->
+  <link rel="stylesheet" href="backup.css"/>
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
        injecting a <style> at render time, which the hub CSP (style-src 'self')
@@ -102,6 +112,15 @@
            (alertsInbox.ts / alerts.ts), the way every other dialog in this hub
            is; only the door lives in markup. The badge is appended by
            aiPaintBell() and is absent, not "0", when nothing is unread. -->
+      <!-- Background jobs — imports, refreshes, exports, publishes, backups.
+           Beside the bell for the same reason the bell is here: a job finishes
+           while you are somewhere else. It spins while anything is running;
+           the popover (jobsPanel.ts) lists running and recent jobs. -->
+      <button id="topbar-jobs" class="icon-btn hub-jobs-btn" type="button"
+        aria-haspopup="dialog" aria-expanded="false"
+        title="Jobs" aria-label="Jobs">
+        <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-activity"/></svg>
+      </button>
       <button id="topbar-alerts" class="icon-btn hub-alerts-btn" type="button"
         aria-haspopup="dialog" aria-expanded="false"
         title="Alerts" aria-label="Alerts">
@@ -1104,6 +1123,10 @@
           <!-- Week 13 — capture provenance: thumbnail + view-original + recapture. -->
           <div class="ds-cap-strip" id="ds-cap-strip" hidden></div>
 
+          <!-- Sensitivity proposals from import or refresh, waiting for the
+               user — never applied until they choose (privacyReview.ts). -->
+          <div class="pv-banner" id="pv-review-banner" role="status" hidden></div>
+
           <!-- ── Three views of one dataset ──────────────────────────────────
                Data, Prepare and Quality were three panels stacked in one
                scroll, each toggled independently — Quality was a strip above
@@ -1226,6 +1249,8 @@
                      one scroll the three actions — the reason the panel exists
                      — sat below the fold. -->
                 <div class="dsp-body">
+                  <!-- A sensitivity proposal, or what exports do with a marked column (privacyReview.ts). -->
+                  <div class="dsp-privacy js-dsp-privacy" hidden></div>
                   <dl class="dsp-facts js-dsp-facts"></dl>
                   <div class="dsp-chart js-dsp-chart"></div>
                 </div>
@@ -1335,6 +1360,9 @@
                      recomputeVisual clears that mount with innerHTML. -->
                 <div class="cv-controls-slot"></div>
               </div>
+              <!-- Shown only when main computed the preview on a sample of a big
+                   table (src/ipc/vizSample.ts); Save and dashboards compute in full. -->
+              <div class="vb-sample-row"><span class="vb-sample-note" id="viz-sample-note" role="status" hidden></span></div>
               <div class="cv-viz-area viz-area" id="viz-area"></div>
             </div>
           </div>
@@ -1387,6 +1415,9 @@
           <div class="an-list-head-actions">
             <button class="btn" type="button" id="an-draft-btn"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-sparkles"/></svg><span>Draft with the Assistant</span></button>
             <button class="btn btn-primary" type="button" id="an-new-btn">Create dashboard</button>
+            <!-- Publish…, Re-publish (publishDialog.ts). -->
+            <button class="icon-btn" type="button" id="an-list-more" aria-haspopup="menu"
+              aria-label="More dashboard actions" title="More"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-more-horizontal"/></svg></button>
           </div>
         </div>
         <!-- Dashboards and Reports are two views of the same work — what this
@@ -2001,6 +2032,8 @@
           <button class="settings-cat" type="button" role="tab" data-cat="appearance">Appearance</button>
           <button class="settings-cat" type="button" role="tab" data-cat="notifications">Notifications</button>
           <button class="settings-cat" type="button" role="tab" data-cat="general">General</button>
+          <button class="settings-cat" type="button" role="tab" data-cat="privacy">Privacy</button>
+          <button class="settings-cat" type="button" role="tab" data-cat="automation">Automation</button>
           <button class="settings-cat" type="button" role="tab" data-cat="about">About</button>
         </nav>
 
@@ -2183,6 +2216,22 @@
                 </button>
               </div>
             </div>
+            <!-- Jobs: ON by default for the same reason as alerts — you started
+                 the import or the publish and walked away; its finish is the
+                 thing you are waiting on. Only fires while this window is NOT
+                 focused (a finish you are looking at needs no notification). -->
+            <div class="stp-row">
+              <div class="stp-rl">
+                <div class="stp-rt">Background jobs</div>
+                <div class="stp-rd">Tell me when an import, refresh, export, publish or backup finishes while I’m in another window.</div>
+              </div>
+              <div class="stp-rr">
+                <button id="stp-notif-jobs" class="stp-switch stp-switch-on" type="button" role="switch"
+                  aria-checked="true" aria-label="Background job notifications">
+                  <span class="stp-switch-thumb"></span>
+                </button>
+              </div>
+            </div>
             <div class="stp-row">
               <div class="stp-rl">
                 <div class="stp-rt">Explain alerts</div>
@@ -2234,6 +2283,8 @@
           <section class="settings-pane" data-cat="general" hidden>
             <!-- Locale, numbers, currency, dates, calendar — built by settingsFormats.ts. -->
             <div class="stp-group" id="stp-formats"></div>
+            <!-- Backups: folder, schedule, retention, restore — built by settingsBackups.ts. -->
+            <div class="stp-group" id="stp-backups"></div>
             <div class="stp-subhead"><div class="stp-subhead-t">App</div></div>
             <div class="stp-row">
               <div class="stp-rl">
@@ -2273,6 +2324,16 @@
               <button class="btn btn-sm btn-danger" type="button" data-delete="everything">Delete everything</button>
             </div>
             <div id="stp-delete-result" class="stp-delete-result" hidden></div>
+          </section>
+
+          <!-- Privacy — the CURRENT project's share policy, built by privacySettings.ts. -->
+          <section class="settings-pane" data-cat="privacy" hidden>
+            <div class="pv-settings" id="stp-privacy"></div>
+          </section>
+
+          <!-- Automation — the local MCP server and the CLI. Built by settingsAutomation.ts. -->
+          <section class="settings-pane" data-cat="automation" hidden>
+            <div id="stp-automation" class="am-pane"></div>
           </section>
 
           <!-- About -->
@@ -2929,6 +2990,7 @@
 <script src="dsImport.js"></script>
 <script src="dsList.js"></script>
 <script src="dsExplorer.js"></script>
+<script src="dsVirtual.js"></script>
 <script src="dsGrid.js"></script>
 <script src="dsProfile.js"></script>
 <!-- Data-quality rules: the editor, then the Rules section + red dots. -->
@@ -3174,6 +3236,31 @@
 <script src="tabNav.js"></script>
 <script src="tabSplit.js"></script>
 <script src="tabStrip.js"></script>
+<!-- Platform depth — background jobs, publishing, privacy, automation and
+     backups. Each block loads after every surface it reaches into and before
+     hub.js boots them; each feature adds its scripts after its own marker. -->
+<script src="jobsPanel.js"></script>
+<!-- platform:publish -->
+<script src="publishDialog.js"></script>
+
+<!-- platform:privacy -->
+<!-- Privacy: the share-policy line + gate every export uses, sensitivity
+     proposals (composer, dataset banner, column profile), the three mask
+     steps' Prepare forms, and Settings → Privacy — in that order, each only
+     reached at call time except privacySettings' observer wiring. -->
+<script src="privacyShare.js"></script>
+<script src="privacyReview.js"></script>
+<script src="prepareMask.js"></script>
+<script src="privacySettings.js"></script>
+
+<!-- platform:automation -->
+<script src="settingsAutomation.js"></script>
+<script src="automationReport.js"></script>
+
+<!-- platform:backup -->
+<script src="settingsBackups.js"></script>
+<script src="projectSync.js"></script>
+
 <script src="hub.js"></script>
 
 <!-- Phase 5 — the Svelte islands bundle. An IIFE assigning ONE global

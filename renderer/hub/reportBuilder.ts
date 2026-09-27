@@ -433,17 +433,32 @@ async function rbSave(): Promise<boolean> {
 async function rbGenerate(): Promise<void> {
   if (!rbReport || !currentProjectId) return;
   if (!(await rbSave())) return;
+  const ctx = rbContext();
+  if (!(await pvShareGate('report', await pvCardDatasetIds(ctx.analysis)))) return;
   showToast('Building report…');
-  const pages = await buildReportPages(rbContext());
-  if (!pages.length) { showToast('Every page is excluded — nothing to generate'); return; }
-  const { base64, ext } = await reportBytes(pages, rbReport);
-  if (!base64) { showToast('Couldn’t build the report'); return; }
-  const res = await window.hub.reportsSaveAs(currentProjectId, rbReport.id, base64, ext);
-  if (res && res.ok) {
-    showToast('Saved: ' + String(res.dest).split(/[\\/]/).pop());
-    void window.hub.reportsReveal(currentProjectId, rbReport.id);
-  } else if (!res || !res.canceled) {
-    showToast((res && res.error) || 'Save failed');
+  const report = rbReport;
+  const projectId = currentProjectId;
+  // A job (jobsPanel.ts rjRun): the Jobs popover shows it building, Cancel stops
+  // it between stages, and Reveal opens the file main wrote.
+  let failed = '';
+  const out = await rjRun('report', `Report · ${report.name || 'Untitled'}`, projectId, async (step) => {
+    await step(0.05, 'Laying out the pages');
+    const pages = await buildReportPages(ctx);
+    if (!pages.length) { failed = 'Every page is excluded — nothing to generate'; return null; }
+    await step(0.6, `Writing ${pages.length} page${pages.length === 1 ? '' : 's'}`);
+    const { base64, ext } = await reportBytes(pages, report);
+    if (!base64) { failed = 'Couldn’t build the report'; return null; }
+    await step(0.9, 'Saving');
+    const res = await window.hub.reportsSaveAs(projectId, report.id, base64, ext);
+    if (res && res.ok) return { path: String(res.dest), message: String(res.dest).split(/[\\/]/).pop() };
+    if (!res || !res.canceled) failed = (res && res.error) || 'Save failed';
+    return null;
+  }).catch((e: any) => { failed = String((e && e.message) || 'Couldn’t build the report'); return null; });
+  if (out && out.path) {
+    showToast('Saved: ' + out.message);
+    void window.hub.reportsReveal(projectId, report.id);
+  } else if (failed) {
+    showToast(failed);
   }
 }
 
@@ -472,16 +487,24 @@ async function reportsRunDue(nowMs?: number): Promise<number> {
       if (!report) continue;
       const analysis = await window.hub.getAnalysis(d.projectId, report.analysisId);
       if (!analysis) continue;
-      const pages = await buildReportPages({
-        projectId: d.projectId, analysis,
-        filters: Array.isArray(analysis.filters) ? analysis.filters : [],
-        report,
-      });
-      if (!pages.length) continue;
-      const { base64 } = await reportBytes(pages, report);
-      if (!base64) continue;
-      const res = await window.hub.reportsWriteScheduled(d.projectId, d.id, base64, nowMs);
-      if (res && res.ok) written++;
+      // A SILENT job: the Jobs popover shows the scheduled run, but main's own
+      // "Report ready" notification (notifyFile) is the one the user gets.
+      const out = await rjRun('report', `Scheduled report · ${report.name || 'Untitled'}`, d.projectId, async (step) => {
+        await step(0.05, 'Laying out the pages');
+        const pages = await buildReportPages({
+          projectId: d.projectId, analysis,
+          filters: Array.isArray(analysis.filters) ? analysis.filters : [],
+          report,
+        });
+        if (!pages.length) return null;
+        await step(0.6, 'Writing the document');
+        const { base64 } = await reportBytes(pages, report);
+        if (!base64) return null;
+        await step(0.9, 'Saving');
+        const res = await window.hub.reportsWriteScheduled(d.projectId, d.id, base64, nowMs);
+        return res && res.ok ? { path: String(res.dest || ''), message: 'Written to the report folder' } : null;
+      }, { silent: true });
+      if (out) written++;
     } catch (e) {
       // One report that cannot be built must not stop the rest, and a schedule
       // that throws every minute is worse than one that quietly skips.

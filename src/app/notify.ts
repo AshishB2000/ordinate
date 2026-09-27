@@ -127,3 +127,26 @@ export function notifyFile(body: string, filePath: string): boolean {
     return false; // a notification must never block the thing it reports on
   }
 }
+
+/**
+ * A background job finished while the window was not focused (src/ipc/jobs.ts
+ * decides the focus half — it owns the window question, like maybeNotify's
+ * caller). Its own switch, `notifications.jobs`, ON by default: the user
+ * started the job and walked away, so its finish is what they are waiting for.
+ *
+ * `onClick` reveals the output when there is one, and otherwise brings the
+ * hub forward. Returns whether a notification was shown. Never throws.
+ */
+export function notifyJob(title: string, body: string, onClick?: () => void): boolean {
+  try {
+    const prefs = config.get().notifications || {};
+    if (prefs.jobs === false) return false;
+    if (!Notification.isSupported || !Notification.isSupported()) return false;
+    const n = new Notification({ title, body, silent: false });
+    if (onClick) n.on('click', () => { try { onClick(); } catch (_) { /* never throw at the OS */ } });
+    n.show();
+    return true;
+  } catch (_) {
+    return false; // a notification must never block the thing it reports on
+  }
+}

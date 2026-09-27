@@ -331,8 +331,10 @@ async function handleExportVisual(id: string): Promise<void> {
 
   let res: any;
   try {
-    res = await window.hub.computeVisualData(
-      currentProjectId, String(visual.datasetId || ''), visual.encoding, visual.filters || []);
+    // The export dialog previews what the file will hold, so it is drawn from
+    // the policy-shaped answer (privacyShare.ts), not the in-app one.
+    res = await pvVisualData(
+      currentProjectId, String(visual.datasetId || ''), visual.encoding, visual.filters || [], undefined, 'export');
   } catch (_) {
     res = null;
   }
@@ -363,6 +365,7 @@ async function handleExportVisual(id: string): Promise<void> {
     analysis: '',
     title: String(visual.name || 'Visual'),
     headlineSegments: [],
+    privacy: { path: 'export', datasetIds: [String(visual.datasetId || '')] },
   });
 }
 

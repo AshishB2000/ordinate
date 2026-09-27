@@ -6,6 +6,8 @@
 // says what is in the project and when it was last opened, and its ⋯ carries
 // Rename, Export project… and Archive; New project and Import project… sit
 // under the list, and archived projects fold away at the bottom with Restore.
+// The sync-folder pieces — the Synced badge, Move to sync folder… / Move back,
+// Open from folder… and the "open somewhere else" check — live in projectSync.ts.
 //
 // SWITCHING IS IN PLACE: adoptProject() makes the project current, whatever
 // record page was open (it belongs to the old project) is closed, and the
@@ -135,6 +137,7 @@ function pjPaint(list: any[]): void {
   };
   act('plus', 'New project', () => void pjNew(), 'pj-new');
   act('upload', 'Import project…', () => void pjImport(), 'pj-import');
+  if (typeof syOpenFromFolder === 'function') act('folder', 'Open from folder…', () => void syOpenFromFolder(), 'pj-open-folder');
   pop.appendChild(actions);
 
   if (archived.length) {
@@ -188,6 +191,8 @@ function pjRow(p: any, liveCount: number): HTMLElement {
   name.className = 'pj-row-name';
   name.textContent = p.name;
   top.appendChild(name);
+  const synced = typeof syBadge === 'function' ? syBadge(p) : null;
+  if (synced) top.appendChild(synced);
   if (p.sample) {
     const badge = document.createElement('span');
     badge.className = 'pj-badge';
@@ -226,6 +231,7 @@ function pjRow(p: any, liveCount: number): HTMLElement {
       };
       item('pencil', 'Rename…', () => void pjRename(p));
       item('package', 'Export project…', () => void pjExport(p));
+      if (typeof syMenuItems === 'function') syMenuItems(p, item);
       // The last open project cannot be archived: there would be nowhere to be.
       item('archive', liveCount > 1 ? 'Archive' : 'Archive (the only project)', liveCount > 1 ? () => void pjArchive(p, true) : null);
     });
@@ -254,6 +260,8 @@ function pjRow(p: any, liveCount: number): HTMLElement {
 async function pjSwitchTo(id: string): Promise<void> {
   pjClose();
   if (id === currentProjectId) return;
+  // Asked BEFORE the open page is closed, so Cancel leaves the user where they were.
+  if (typeof syConfirmOpen === 'function' && !(await syConfirmOpen(id))) return;
   if (dashCurrent && typeof handleBackToList === 'function') await handleBackToList();
   if (typeof vizDatasetId === 'string' && vizDatasetId && typeof closeVisualBuilder === 'function') closeVisualBuilder();
   if (expId) document.getElementById('ds-explorer-close')?.click();
@@ -311,6 +319,10 @@ async function pjArchive(p: any, archived: boolean): Promise<void> {
 
 async function pjExport(p: any): Promise<void> {
   pjClose();
+  // The Share policy's `bundle` action, for THAT project (the summary asks
+  // about every dataset in it). Only the open project can be summarised here —
+  // another project's bundle is still shaped in main, just without the line.
+  if (p.id === currentProjectId && !(await pvShareGate('bundle', null))) return;
   const res = await window.hub.exportProject(p.id);
   if (!res || res.canceled) return;
   if (!res.ok) { showToast(res.error || 'Export failed', { kind: 'error' }); return; }

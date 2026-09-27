@@ -22,6 +22,9 @@ import type { FilterOp } from './filterOps';
 import { FILTER_OPS, LIST_OPS, PERIOD_OP, emptyListWarning, periodSkipWarning } from './filterOps';
 import { sanitizePeriod, resolvePeriodNow, periodDay, daysFromIso } from '../analysis/dateIntel';
 import type { PeriodSpec } from '../analysis/dateIntel';
+import { applyMaskStep, sanitizeMaskStep } from './maskSteps';
+import type { MaskStep, PipelineCtx } from './maskSteps';
+export type { PipelineCtx } from './maskSteps';
 
 // ── Shared shapes ────────────────────────────────────────────────────────────
 
@@ -107,7 +110,8 @@ export type TransformStep =
   | FillEmptyStep
   | TrimStep
   | DropColumnStep
-  | RenameColumnStep;
+  | RenameColumnStep
+  | MaskStep;
 
 export type StepType = TransformStep['type'];
 
@@ -123,6 +127,11 @@ const STEP_TYPES: ReadonlySet<string> = new Set([
   'trim',
   'drop_column',
   'rename_column',
+  // The mask steps (maskSteps.ts). Literal here, not spread from MASK_STEP_TYPES:
+  // the two modules import each other, and this Set is built at load time.
+  'mask_hash',
+  'mask_redact',
+  'mask_generalize',
 ]);
 
 // The three table helpers combine.ts shares. Exported for that, not as an
@@ -193,7 +202,9 @@ function skip(t: TableData, warning: string): StepResult {
 
 // Fold each step left→right over a deep copy of `source`, accumulating warnings.
 // A step referencing a missing column is skipped with a warning (never throws).
-export function applyPipeline(source: TableData, steps: TransformStep[]): ApplyResult {
+// `ctx.salt` is the project's masking key for a mask_hash step (maskSteps.ts);
+// without it that step is skipped, never hashed unsalted.
+export function applyPipeline(source: TableData, steps: TransformStep[], ctx: PipelineCtx = {}): ApplyResult {
   // Phase 1: try the DuckDB path first. It returns null — and we fall through to
   // the fold below — whenever the pipeline is not faithfully expressible in SQL,
   // the bridge is unavailable, or the table is small enough that the round-trip
@@ -208,7 +219,7 @@ export function applyPipeline(source: TableData, steps: TransformStep[]): ApplyR
   for (const step of list) {
     let result: StepResult;
     try {
-      result = dispatch(table, step);
+      result = dispatch(table, step, ctx);
     } catch (e) {
       // Defense in depth: no step should throw, but if one does, skip it.
       const msg = e instanceof Error ? e.message : 'unknown error';
@@ -221,7 +232,7 @@ export function applyPipeline(source: TableData, steps: TransformStep[]): ApplyR
   return { columns: table.columns, rows: table.rows, rowCount: table.rows.length, warnings };
 }
 
-function dispatch(t: TableData, step: TransformStep): StepResult {
+function dispatch(t: TableData, step: TransformStep, ctx: PipelineCtx): StepResult {
   switch (step.type) {
     case 'calculated_field':
       return stepCalculatedField(t, step);
@@ -239,6 +250,10 @@ function dispatch(t: TableData, step: TransformStep): StepResult {
       return stepDropColumn(t, step);
     case 'rename_column':
       return stepRenameColumn(t, step);
+    case 'mask_hash':
+    case 'mask_redact':
+    case 'mask_generalize':
+      return applyMaskStep(t, step, ctx);
     default:
       return skip(t, `Unknown step type "${(step as { type?: string }).type}" skipped`);
   }
@@ -690,6 +705,10 @@ function sanitizeStep(item: unknown): TransformStep | null {
       if (from === undefined || to === undefined) return null;
       return { type, from, to };
     }
+    case 'mask_hash':
+    case 'mask_redact':
+    case 'mask_generalize':
+      return sanitizeMaskStep(o);
     default:
       return null;
   }

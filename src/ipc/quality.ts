@@ -9,6 +9,8 @@
 import { ipcMain } from 'electron';
 import * as quality from '../analysis/qualityRun';
 import { pageFor } from './datasets';
+import { getDatasetMeta } from '../data/datasets';
+import * as jobs from '../app/jobs';
 
 export function register(): void {
   // Rules + the latest run + the 30-run history, in one read of the record.
@@ -39,10 +41,23 @@ export function register(): void {
     }
   });
 
-  // "Run checks" — the hook itself, then the fresh state.
+  // "Run checks" — the hook itself, then the fresh state. A JOB: one at a time
+  // per dataset, and the resident evaluation runs in a compute worker.
   ipcMain.handle('quality:run', async (_e, { projectId, datasetId }: any = {}) => {
     try {
-      await quality.runQualityChecks(projectId, datasetId);
+      const meta = await getDatasetMeta(projectId, datasetId);
+      const job = jobs.submit({
+        kind: 'quality',
+        label: `Quality checks · ${meta ? meta.name : 'dataset'}`,
+        projectId: typeof projectId === 'string' ? projectId : undefined,
+        datasetId: typeof datasetId === 'string' ? datasetId : undefined,
+        run: async (ctx) => {
+          ctx.progress(0.1, `${meta && meta.quality ? meta.quality.rules.length : 0} rule(s)`);
+          return quality.runQualityChecks(projectId, datasetId);
+        },
+        resultOf: (events) => ({ message: events.length ? `${events.length} rule(s) started failing` : 'Checks finished' }),
+      });
+      await job.done;
       const q = await quality.listQuality(projectId, datasetId);
       if (!q) return { ok: false, error: 'Dataset not found' };
       return { ok: true, rules: q.rules, latest: q.latest || null, history: q.history || [] };

@@ -706,7 +706,7 @@ async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void>
   area.className = 'dash-viz-area cv-viz-area';
   body.innerHTML = '';
   body.appendChild(area);
-  setPivotGridOnCard(body.closest('.dash-card'), type === 'pivot' ? data.pivot : null);
+  setPivotGridOnCard(body.closest('.dash-card'), type === 'pivot' ? data.pivot : null, drill);
   // The trailing argument is dataset IDENTITY for the Mosaic engine — the same
   // project/dataset/encoding/filters that produced `data`, so the two engines
   // can never disagree about what this card shows. With the 'scMosaic' flag off

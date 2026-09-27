@@ -64,7 +64,7 @@ async function refreshKeyStatus() {
 // ── Completion notifications (settings + sound) ─────────────────────────────
 // Cached so the completion handlers can decide whether to beep without an async
 // round-trip. Desktop notifications fire in MAIN; the sound plays here.
-let notifPrefs = { sound: false, desktop: false, alerts: true, alertExplain: false };
+let notifPrefs = { sound: false, desktop: false, alerts: true, alertExplain: false, jobs: true };
 const stpNotifSound   = document.getElementById('stp-notif-sound');
 const stpNotifDesktop = document.getElementById('stp-notif-desktop');
 // Alert rules have their own two switches. `alerts` defaults ON (an alert about
@@ -101,11 +101,13 @@ function applyNotifPrefs(n) {
     desktop: !!n.desktop,
     alerts: n.alerts === undefined ? true : !!n.alerts,
     alertExplain: !!n.alertExplain,
+    jobs: n.jobs === undefined ? true : !!n.jobs,
   };
   reflectSwitch(stpNotifSound, notifPrefs.sound);
   reflectSwitch(stpNotifDesktop, notifPrefs.desktop);
   reflectSwitch(stpNotifAlerts, notifPrefs.alerts);
   reflectSwitch(stpNotifExplain, notifPrefs.alertExplain);
+  reflectSwitch(document.getElementById('stp-notif-jobs'), notifPrefs.jobs);
 }
 
 async function setNotif(field, value) {
@@ -136,6 +138,16 @@ if (stpAutoRefresh) {
 // neither needs the OS-registration dance stpNotifDesktop does, because an alert
 // notification goes out whether or not the window is focused and the user has
 // already been through that prompt if they ever enabled Desktop.
+{
+  const jobsSwitch = document.getElementById('stp-notif-jobs');
+  if (jobsSwitch) {
+    jobsSwitch.addEventListener('click', () => {
+      const on = !jobsSwitch.classList.contains('stp-switch-on');
+      reflectSwitch(jobsSwitch, on);
+      void setNotif('jobs', on);
+    });
+  }
+}
 if (stpNotifAlerts) {
   stpNotifAlerts.addEventListener('click', () => {
     const on = !stpNotifAlerts.classList.contains('stp-switch-on');

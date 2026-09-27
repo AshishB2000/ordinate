@@ -145,6 +145,7 @@ async function openSavedDataset(id: string): Promise<void> {
 
   // Week 13 — capture provenance strip (thumbnail + view-original + recapture).
   renderCapStrip(ds);
+  void pvPaintBanner(expId); // privacyReview.ts — "2 columns look sensitive — Review"
 
   dsShow('ds-explorer', true);
   resetPreparePanel(); // prepare.ts — collapse editor/suggest/menu, render steps + combine

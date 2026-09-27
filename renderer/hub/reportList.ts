@@ -176,6 +176,7 @@ async function rbGenerateFromList(id: string): Promise<void> {
   if (!report) { showToast('That report is gone'); return; }
   const analysis = await window.hub.getAnalysis(currentProjectId, report.analysisId);
   if (!analysis) { showToast('The dashboard this report prints has been deleted'); return; }
+  if (!(await pvShareGate('report', await pvCardDatasetIds(analysis)))) return;
   showToast('Building report…');
   const pages = await buildReportPages({
     projectId: currentProjectId, analysis,

@@ -13,6 +13,8 @@ import type { FormatPrefs } from './format';
 import { BRANDING_DEFAULTS, sanitizeBranding } from './branding';
 import type { Branding } from './branding';
 import type { OnboardingState } from './onboarding';
+import { BACKUP_DEFAULTS, sanitizeBackups } from './backupSettings';
+import type { BackupSettings } from './backupSettings';
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
 export interface LegacyProviderEntry { apiKey?: string | null; endpoint?: string; model: string }
@@ -44,7 +46,10 @@ export interface SampleIds { projectId: string; datasetId: string; analysisId: s
 // an analysis you started and are watching; `alerts` is about a rule you wrote
 // for a number you are NOT watching, so a default of off would make the feature
 // quietly do nothing. `alertExplain` is opt-in because it spends a model call.
-interface Notifications { sound: boolean; desktop: boolean; alerts: boolean; alertExplain: boolean }
+// `jobs`: an OS notification when a background job (src/app/jobs.ts) finishes
+// while the window is not focused. ON by default, like `alerts` — the user
+// started the job and walked away, so the finish is the thing they are waiting on.
+interface Notifications { sound: boolean; desktop: boolean; alerts: boolean; alertExplain: boolean; jobs: boolean }
 
 /**
  * Workspace formats — locale, number style, currency, date style, compact
@@ -59,6 +64,10 @@ export type Formats = FormatPrefs;
 // into publicConfig()/publicByok(), NEVER returned to a renderer — main reads it
 // back only via getConnectionSecret to run a connection.
 export interface ConnectionSecret { password?: string | null; token?: string | null }
+
+/** Settings → Automation. `http` only matters while `enabled`; the port is loopback-only. */
+export interface AutomationPrefs { enabled: boolean; http: boolean; port: number }
+export const AUTOMATION_PORT = 7719;
 
 interface Config {
   version: number;
@@ -77,6 +86,8 @@ interface Config {
   formats: Formats;
   /** Accent colour, logo and the default dashboard style — src/app/branding.ts. */
   branding: Branding;
+  /** Where and how often every project is backed up — src/app/backups.ts. */
+  backups: BackupSettings;
   /**
    * The master switch for unattended dataset refresh. ON by default: a schedule
    * a user set is a schedule they want run, and this exists to stop it globally
@@ -103,6 +114,8 @@ interface Config {
   // ONE array for all four record types, so a record never carries a starred flag
   // and there are no per-type migrations.
   starred: string[];
+  /** Settings → Automation (src/ipc/automation.ts). The HTTP token is never stored. */
+  automation: AutomationPrefs;
   providers: Record<string, LegacyProviderEntry>;
   byok: ByokBlock;
   // Connection secrets, keyed by connection UUID. Never reaches a renderer.
@@ -189,11 +202,12 @@ const DEFAULTS: Omit<Config, 'providers' | 'byok'> = {
   // window isn't focused. Best-effort — never block/error the analysis.
   // `alerts`/`alertExplain` are the alert rules' own switches — see the
   // Notifications interface above for why one of them defaults the other way.
-  notifications: { sound: false, desktop: false, alerts: true, alertExplain: false },
+  notifications: { sound: false, desktop: false, alerts: true, alertExplain: false, jobs: true },
   // The system locale, dollars, Monday weeks and calendar-year quarters until
   // the user says otherwise.
   formats: { ...FORMAT_DEFAULTS },
   branding: { ...BRANDING_DEFAULTS },
+  backups: { ...BACKUP_DEFAULTS },
   autoRefresh: true,
   // AI Copilot panel is ON by default — it stays fully optional (execution-gated),
   // but the user can also switch it OFF entirely from the panel's toggle.
@@ -205,6 +219,9 @@ const DEFAULTS: Omit<Config, 'providers' | 'byok'> = {
   // Home "Starred" pins, as "type:id" keys. One flat array, one setter — no
   // per-record flag, no migration.
   starred: [],
+  // Automation (MCP) is OFF until the user turns it on; the loopback HTTP
+  // transport is a second, separate opt-in.
+  automation: { enabled: false, http: false, port: AUTOMATION_PORT },
   // Connection secrets (pg passwords / URL tokens), keyed by connection UUID.
   // Plaintext on disk like API keys; stripped from every renderer-facing view.
   connectionSecrets: {},
@@ -246,6 +263,16 @@ function cleanSample(raw: any): SampleIds | null {
   return s.projectId && s.datasetId ? s : null;
 }
 
+// ponytail: raw disk/IPC JSON — every field is checked before it is kept
+function cleanAutomation(raw: any): AutomationPrefs {
+  const port = Number(raw.port);
+  return {
+    enabled: raw.enabled === true,
+    http: raw.http === true,
+    port: Number.isInteger(port) && port >= 1024 && port <= 65535 ? port : AUTOMATION_PORT,
+  };
+}
+
 const ONBOARDING_STEPS = ['import', 'visual', 'dashboard', 'assistant'];
 // ponytail: raw disk JSON — every field is checked before it is kept
 function cleanOnboarding(raw: any): OnboardingState | null {
@@ -281,10 +308,12 @@ function sanitize(input: any): Partial<Config> {
       // arrive with the feature already switched off.
       alerts: input.notifications.alerts === undefined ? true : Boolean(input.notifications.alerts),
       alertExplain: Boolean(input.notifications.alertExplain),
+      jobs: input.notifications.jobs === undefined ? true : Boolean(input.notifications.jobs),
     };
   }
   if (input.formats && typeof input.formats === 'object') out.formats = sanitizeFormatPrefs(input.formats);
   if (input.branding && typeof input.branding === 'object') out.branding = sanitizeBranding(input.branding);
+  if (input.backups && typeof input.backups === 'object') out.backups = sanitizeBackups(input.backups);
   if (typeof input.copilotEnabled === 'boolean') out.copilotEnabled = input.copilotEnabled;
   if (typeof input.sampleSeeded === 'boolean') out.sampleSeeded = input.sampleSeeded;
   if (input.sample === null) out.sample = null;
@@ -293,6 +322,7 @@ function sanitize(input: any): Partial<Config> {
   else if (input.onboarding && typeof input.onboarding === 'object') out.onboarding = cleanOnboarding(input.onboarding);
   // Whitelisted so it survives disk load ({...DEFAULTS, ...sanitize(onDisk)}).
   if (Array.isArray(input.starred)) out.starred = cleanStarred(input.starred);
+  if (input.automation && typeof input.automation === 'object') out.automation = cleanAutomation(input.automation);
   return out;
 }
 
@@ -468,12 +498,13 @@ export function setAutoRefreshEnabled(on: boolean): { ok: boolean; autoRefresh: 
 
 export function setNotifications(fields: any): { ok: boolean; notifications: Notifications } {
   const cfg = get();
-  const cur = cfg.notifications || { sound: false, desktop: false, alerts: true, alertExplain: false };
+  const cur = cfg.notifications || { sound: false, desktop: false, alerts: true, alertExplain: false, jobs: true };
   const next = { ...cur };
   if (fields && 'sound' in fields)   next.sound = Boolean(fields.sound);
   if (fields && 'desktop' in fields) next.desktop = Boolean(fields.desktop);
   if (fields && 'alerts' in fields)  next.alerts = Boolean(fields.alerts);
   if (fields && 'alertExplain' in fields) next.alertExplain = Boolean(fields.alertExplain);
+  if (fields && 'jobs' in fields) next.jobs = Boolean(fields.jobs);
   cfg.notifications = next;
   persist(cfg);
   return { ok: true, notifications: next };
@@ -504,7 +535,7 @@ export function resetToDefaults(): { ok: boolean } {
   const fresh = { ...DEFAULTS, providers: freshProviders(), byok: freshByok(),
     localCli: { activeId: null, lastDetection: null, models: {} },
     memoryModel: { mode: 'same_as_chat', provider: null, model: '' },
-    modelCache: {}, notifications: { sound: false, desktop: false, alerts: true, alertExplain: false },
+    modelCache: {}, notifications: { sound: false, desktop: false, alerts: true, alertExplain: false, jobs: true },
     connectionSecrets: {} };
   persist(fresh);
   return { ok: true };

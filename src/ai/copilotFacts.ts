@@ -138,7 +138,7 @@ function columnNoteLines(lines: string[], docs: Record<string, FactColumnDoc>, o
     const bits: string[] = [];
     if (d.displayName) bits.push(`called "${d.displayName}"`);
     if (d.description) bits.push(d.description);
-    if (d.sensitivity && d.sensitivity !== 'none') bits.push(`${d.sensitivity} data`);
+    if (d.sensitivity && d.sensitivity !== 'none') bits.push(`${d.sensitivity} data; sample values withheld`);
     if (bits.length) notes.push(`- ${name}: ${bits.join('; ')}`);
   }
   if (!notes.length) return;
@@ -147,9 +147,26 @@ function columnNoteLines(lines: string[], docs: Record<string, FactColumnDoc>, o
   lines.push(...notes);
 }
 
+/** What a withheld value prints as. */
+export const WITHHELD = '(withheld)';
+
+/**
+ * The columns whose VALUES the model is never shown: the ones the user marked
+ * personal or financial. Their statistics (counts, min/max/mean) stay — those
+ * are the app's aggregates, and the number ledger covers them unchanged — but
+ * a sample cell, a most-common value or a chart label drawn from one is
+ * replaced by WITHHELD, and the facts say so.
+ */
+function withheldColumns(docs: Record<string, FactColumnDoc>): Set<string> {
+  return new Set(Object.keys(docs || {}).filter((k) => {
+    const s = docs[k] && docs[k].sensitivity;
+    return s === 'personal' || s === 'financial';
+  }));
+}
+
 // Dataset: columns + types + app-computed stats (min/max/mean/count |
 // distinct/mostCommon) + quality issues + up to N sample rows. This is the
-// generalized twin of ipc/datasets.buildDatasetSummaryText (same shape) with the
+// generalized twin of ai/datasetPrompt.buildDatasetSummaryText (same shape) with the
 // guard line prepended.
 export function datasetFacts(
   ds: Dataset,
@@ -171,6 +188,7 @@ export function datasetFacts(
   const lines: string[] = [GUARD_LINE, ''];
   const ledger: LedgerEntry[] = [];
   const SRC = 'datasetStats';
+  const withheld = withheldColumns(columnDocs);
   lines.push(`Dataset: "${ds.name}" (${ds.rowCount} rows, ${ds.columns.length} columns).`);
   num(ledger, 'row count', ds.rowCount, 'count', 'dataset');
   num(ledger, 'column count', ds.columns.length, 'count', 'dataset');
@@ -191,7 +209,11 @@ export function datasetFacts(
       num(ledger, `${s.name} non-empty`, s.nonEmpty, 'count', SRC);
     } else {
       const parts: string[] = [`${s.distinct ?? 0} distinct`, `${s.nonEmpty} non-empty`];
-      if (s.mostCommon) parts.push(`most common "${s.mostCommon.value}" (${s.mostCommon.count}x)`);
+      if (s.mostCommon) {
+        parts.push(withheld.has(s.name)
+          ? `most common value ${WITHHELD} (${s.mostCommon.count}x)`
+          : `most common "${s.mostCommon.value}" (${s.mostCommon.count}x)`);
+      }
       lines.push(`- ${s.name} (${s.type}): ${parts.join(', ')}`);
       num(ledger, `${s.name} distinct`, s.distinct ?? 0, 'count', SRC);
       num(ledger, `${s.name} non-empty`, s.nonEmpty, 'count', SRC);
@@ -221,11 +243,15 @@ export function datasetFacts(
     lines.push('');
     lines.push(`Sample rows (first ${sample.length}):`);
     num(ledger, 'sample rows shown', sample.length, 'count', 'dataset.sample');
+    const hidden = ds.columns.filter((c) => withheld.has(c.name)).map((c) => c.name);
+    if (hidden.length) lines.push(`(Values of ${hidden.join(', ')} are withheld — marked personal or financial data.)`);
     lines.push(ds.columns.map((c) => c.name).join(' | '));
     sample.forEach((row) => {
       // Harvested from the RENDERED line, not the cells: a text column stores
       // '007' and prints '007', and what the model can cite is what it was shown.
-      const rendered = ds.columns.map((_, c) => (row && row[c] != null ? String(row[c]) : '')).join(' | ');
+      const rendered = ds.columns
+        .map((col, c) => (withheld.has(col.name) ? WITHHELD : row && row[c] != null ? String(row[c]) : ''))
+        .join(' | ');
       lines.push(rendered);
       fromAppText(ledger, 'sample row cell', rendered, 'dataset.sample');
     });
@@ -262,10 +288,18 @@ export function visualFacts(
 
   const ledger: LedgerEntry[] = [];
   const data = viz && viz.data ? viz.data : { labels: [], series: [] };
-  const labels = Array.isArray(data.labels) ? data.labels : [];
-  const series = Array.isArray(data.series) ? data.series : [];
+  // A label drawn from a withheld column is a VALUE of it: the marks keep their
+  // figures (and their ledger entries) but lose their names.
+  const withheld = withheldColumns(columnDocs);
+  const hideCat = withheld.has(v.encoding.category);
+  const hideSer = !!v.encoding.series && withheld.has(v.encoding.series);
+  const labels = (Array.isArray(data.labels) ? data.labels : []).map((l) => (hideCat ? WITHHELD : l));
+  const series = (Array.isArray(data.series) ? data.series : []).map((s) => (hideSer && s.role !== 'overlay' ? { ...s, name: WITHHELD } : s));
   if (labels.length > 0 && series.length > 0) {
     lines.push('');
+    if (hideCat || hideSer) {
+      lines.push(`(Labels from ${[hideCat ? v.encoding.category : '', hideSer ? v.encoding.series : ''].filter(Boolean).join(' and ')} are withheld — marked personal or financial data.)`);
+    }
     lines.push('Computed chart values (app-computed):');
     series.forEach((s) => {
       const pairs = labels

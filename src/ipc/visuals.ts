@@ -2,6 +2,8 @@ import { ipcMain, app, dialog } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as visuals from '../analysis/visuals';
+import * as answerKey from '../data/answerKey';
+import * as queryCache from '../engine/queryCache';
 import * as datasets from '../data/datasets';
 import { buildVizData } from '../analysis/vizData';
 import type { VizDataResult } from '../analysis/vizData';
@@ -10,6 +12,8 @@ import * as trace from '../engine/residentTrace';
 import { residentPivotData, residentVizData } from './visualsResident';
 import { authoringVizData } from './vizExtras';
 import { withPeriodOverlay } from './visualsOverlay';
+import { sampledVizData } from './vizSampleData';
+import type { SampleInfo } from '../analysis/sampling';
 import { paramValues, resolveFilterParams } from '../analysis/params';
 import type { ParamValues } from '../analysis/params';
 import { paramTable } from '../data/paramReplay';
@@ -30,6 +34,8 @@ import type { ColumnSummary } from '../data/datasetStats';
 import { suggestCharts } from '../ai/analyze';
 import * as versions from '../app/versions';
 import * as trash from '../app/trash';
+import { applyToChart, rowShaper } from '../app/sharePolicy';
+import { isSharePath } from '../app/privacyStore';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus
 // `visual:data` which loads a dataset and runs the PURE bridge (src/vizData.ts) to
@@ -323,6 +329,7 @@ async function writeDrillCsv(
   base: PageRequest,
   columns: ParsedColumn[],
   total: number,
+  shapeRow: (r: Cell[]) => Cell[] = (r) => r,
 ): Promise<number> {
   const out = fs.createWriteStream(filePath, { encoding: 'utf8' });
   const write = (s: string): Promise<void> =>
@@ -338,7 +345,7 @@ async function writeDrillCsv(
     for (let offset = 0; offset < total; offset += EXPORT_CHUNK) {
       const res = await pageFor(projectId, datasetId, { ...base, offset, limit: EXPORT_CHUNK }, 'drillExport');
       if (!res.ok || res.rows.length === 0) break;
-      await write(res.rows.map((r) => csvLine(r)).join('\r\n') + '\r\n');
+      await write(res.rows.map((r) => csvLine(shapeRow(r))).join('\r\n') + '\r\n');
       written += res.rows.length;
     }
   } finally {
@@ -359,6 +366,8 @@ export type VizDataReply =
       category?: VizDataResult['category'];
       /** Present when a period overlay was drawn — see ./visualsOverlay. */
       overlay?: { kind: 'previous_year'; caption?: string; pct?: number };
+      /** Present when the BUILDER preview was computed on a sample — see ./vizSampleData. */
+      sample?: SampleInfo & { note: string };
     }
   | { ok: false; error: string; tooLarge?: true };
 
@@ -399,7 +408,28 @@ export async function vizDataFor(
   datasetId: string,
   encoding: VizEncoding,
   filters: FilterStep[],
-  opts: { maxHydrateRows?: number; params?: ParamValues } = {},
+  opts: { maxHydrateRows?: number; params?: ParamValues; sample?: boolean } = {},
+): Promise<VizDataReply> {
+  // The answer cache (engine/queryCache): a dashboard re-open, a type switch in
+  // the builder or a tab coming back asks the same question over unchanged
+  // data. Only successful answers are kept; an error is recomputed every time.
+  const parts = await answerKey.keyParts(projectId, datasetId);
+  if (!parts) return computeVizData(projectId, datasetId, encoding, filters, opts);
+  const op = encoding && encoding.pivot ? 'pivot' : 'aggregate';
+  const key = queryCache.cacheKey(op, parts, {
+    encoding, filters, params: opts.params ?? null, max: opts.maxHydrateRows ?? null, sample: opts.sample === true,
+    ...answerKey.ambient(),
+  });
+  return queryCache.through(op, key, [datasetId, queryCache.projectDep(projectId)],
+    () => computeVizData(projectId, datasetId, encoding, filters, opts), (r) => r.ok);
+}
+
+async function computeVizData(
+  projectId: string,
+  datasetId: string,
+  encoding: VizEncoding,
+  filters: FilterStep[],
+  opts: { maxHydrateRows?: number; params?: ParamValues; sample?: boolean },
 ): Promise<VizDataReply> {
   // A pipeline that references a dashboard parameter answers from the dataset
   // REPLAYED with the query's values bound (data/paramReplay.ts) — the stored
@@ -438,6 +468,13 @@ export async function vizDataFor(
 
   const over = await overCeiling(projectId, datasetId, opts.maxHydrateRows);
   if (over) return over;
+
+  // The builder's preview (`visual:preview`) samples a big table here rather
+  // than hydrate all of it on every edit — and says so on the reply.
+  if (opts.sample) {
+    const sampled = await sampledVizData(projectId, datasetId, encoding, filters);
+    if (sampled) return sampled;
+  }
 
   const ds = await datasets.getDataset(projectId, datasetId);
   if (!ds) return { ok: false, error: 'Dataset not found' };
@@ -500,7 +537,12 @@ export function register() {
   // Load the dataset's DERIVED columns/rows and run the pure bridge. The encoding
   // and filters are untrusted renderer input → sanitized before the math. Visual
   // filters (transforms filter steps) are applied to rows BEFORE aggregation.
-  ipcMain.handle('visual:data', async (_e, { projectId, datasetId, encoding, filters, params }: any = {}) => {
+  //
+  // `share` ('export' | 'report' | 'publish') marks a request whose answer is
+  // about to LEAVE the app: the project's Share policy is applied to the reply
+  // here, after vizDataFor, so a cached answer is shaped on its way out and the
+  // cache never holds a masked one (app/sharePolicy.ts).
+  ipcMain.handle('visual:data', async (_e, { projectId, datasetId, encoding, filters, params, share }: any = {}) => {
     try {
       // Sanitisation FIRST, always — the encoding and the filters are untrusted
       // renderer input, and both paths below consume the sanitized values.
@@ -511,7 +553,10 @@ export function register() {
       const bound = resolveFilterParams(visuals.sanitizeFilters(filters), values);
       const flt = bound.steps;
       const run = (p: string, d: string, e: VizEncoding, f: FilterStep[]) => vizDataFor(p, d, e, f, { params: values });
-      const reply = await withPeriodOverlay(await run(projectId, datasetId, enc, flt), projectId, datasetId, enc, flt, run);
+      const computed = await withPeriodOverlay(await run(projectId, datasetId, enc, flt), projectId, datasetId, enc, flt, run);
+      const reply = isSharePath(share) && share !== 'bundle'
+        ? await applyToChart(projectId, datasetId, enc, computed, share)
+        : computed;
       // A parameter that cannot be made well-typed is a VALIDATION message the
       // tile shows — never a silently empty chart.
       return reply.ok && bound.errors.length
@@ -634,7 +679,10 @@ export function register() {
       });
       if (canceled || !filePath) return { ok: false, canceled: true };
 
-      const written = await writeDrillCsv(filePath, projectId, datasetId, base, meta.columns, total);
+      // The rows LEAVE the app here, so the Share policy shapes them: a
+      // sensitive column is masked or dropped from the header and every row.
+      const shaper = await rowShaper(projectId, datasetId, meta.columns, 'export');
+      const written = await writeDrillCsv(filePath, projectId, datasetId, base, shaper.columns, total, shaper.row);
       return { ok: true, dest: filePath, rows: written };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to export the rows' };

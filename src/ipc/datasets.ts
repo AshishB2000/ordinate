@@ -1,10 +1,9 @@
-import { ipcMain, dialog } from 'electron';
-import * as path from 'path';
-import { parsePaste } from '../data/parse';
+import { ipcMain } from 'electron';
 // One parser and one byte ceiling, shared with the refresh service — see
 // src/fileImport.ts for why they moved out of this file.
-import { parseFile, sourceKindFor } from '../data/fileImport';
-import { refreshDataset } from '../data/datasetRefresh';
+import * as importIpc from './datasetImport';
+import * as importStage from '../data/importStage';
+import { refreshAsJob } from '../data/refreshJob';
 import { refreshDependents } from '../data/datasetDependents';
 import * as datasets from '../data/datasets';
 import * as transforms from '../data/transforms';
@@ -32,6 +31,8 @@ import { medianResident } from '../engine/medianResident';
 // they drift apart.
 import { sanitizeFilters } from '../analysis/visuals';
 import { explainText, suggestSteps, suggestCalcField } from '../ai/analyze';
+import { buildDatasetSummaryText } from '../ai/datasetPrompt';
+import { withheldColumns } from '../app/sharePolicy';
 import { compile } from '../formula/formula';
 import * as trace from '../engine/residentTrace';
 // The data-quality hook — never throws into the handler it rides in.
@@ -48,8 +49,9 @@ import * as trash from '../app/trash';
 // ponytail: MAX_ROWS is the real anti-freeze guard (parse.ts already caps at
 // this while parsing). Re-applied defensively on save in case a renderer sends
 // hand-built rows. The 500-row preview slice is display-only and lives in the
-// renderer, so pickAndParse/parsePaste return the FULL capped ParseResult — one
-// parse, one transfer.
+// renderer. A picked FILE is now parsed in a job and staged in main
+// (./datasetImport.ts) so its rows never cross IPC; pasted text still returns
+// the full capped ParseResult — it is small by construction.
 // Mirrors parse.ts's MAX_ROWS, raised with it (2026-08). Note line 489 also
 // uses this to bound a JOIN's OUTPUT during the build — a join is inherently
 // m×n, so this is the guard that stops two large inputs producing an
@@ -58,63 +60,26 @@ import * as trash from '../app/trash';
 const MAX_ROWS = 1_000_000;
 
 
-// Paths main handed out from the native open dialog. The re-parse (sheet-switch)
-// branch of dataset:pickAndParse accepts a renderer-supplied filePath ONLY if it
-// is in this set — otherwise a compromised/injected renderer could pass any
-// absolute path (e.g. userData/config.json) and read back its contents, exfil-
-// trating stored API keys / connection secrets. Bounds the read to files the
-// user explicitly picked this session.
-const pickedPaths = new Set<string>();
 
 
-// Build a COMPACT, plain-text summary of a dataset for the AI explainer. Every
-// number here is app-computed (datasetStats), embedded as a FACT — the model
-// narrates from these and never recomputes. Kept small (column stats + up to 5
-// sample rows) so it fits comfortably in a single prompt.
+// The compact FACTS block dataset:explain / suggestSteps / suggestCalcField
+// send (ai/datasetPrompt.ts), built ONE way for all three. Fast path: resident
+// stats plus a LIMIT-ed sample read, so a 1M-row dataset is not materialised to
+// quote five rows of it — every piece must succeed or the whole thing falls
+// back, a half-resident prompt is not worth the branch. Sample values of a
+// column marked personal or financial are withheld. null = no such dataset.
 const EXPLAIN_SAMPLE_ROWS = 5;
-// Takes METADATA, not a Dataset: it only ever read name/rowCount/columns plus a
-// 5-row sample, so it never needed the table. `sample` is passed in so the
-// caller can supply it from a bounded read (statsResident.sampleRowsResident)
-// instead of hydrating the whole thing to quote five rows.
-function buildDatasetSummaryText(
-  ds: { name: string; rowCount: number; columns: datasets.Dataset['columns'] },
-  summaries: ColumnSummary[],
-  issues: QualityIssue[],
-  sample: (string | number | null)[][],
-): string {
-  const lines: string[] = [];
-  lines.push(`Dataset: "${ds.name}" (${ds.rowCount} rows, ${ds.columns.length} columns).`);
-  lines.push('');
-  lines.push('Columns and computed statistics:');
-  summaries.forEach((s) => {
-    if (s.type === 'number') {
-      const parts: string[] = [];
-      if (typeof s.min === 'number') parts.push(`min ${s.min}`);
-      if (typeof s.max === 'number') parts.push(`max ${s.max}`);
-      if (typeof s.mean === 'number') parts.push(`mean ${s.mean}`);
-      parts.push(`${s.count ?? 0} numeric values`, `${s.nonEmpty} non-empty`);
-      lines.push(`- ${s.name} (number): ${parts.join(', ')}`);
-    } else {
-      const parts: string[] = [`${s.distinct ?? 0} distinct`, `${s.nonEmpty} non-empty`];
-      if (s.mostCommon) parts.push(`most common "${s.mostCommon.value}" (${s.mostCommon.count}x)`);
-      lines.push(`- ${s.name} (${s.type}): ${parts.join(', ')}`);
-    }
-  });
-  if (issues.length > 0) {
-    lines.push('');
-    lines.push('Data-quality notes:');
-    issues.forEach((i) => lines.push(`- ${i.detail}`));
-  }
-  // `sample` is supplied by the caller — see the note on the signature.
-  if (sample.length > 0) {
-    lines.push('');
-    lines.push(`Sample rows (first ${sample.length}):`);
-    lines.push(ds.columns.map((c) => c.name).join(' | '));
-    sample.forEach((row) => {
-      lines.push(ds.columns.map((_, c) => (row && row[c] != null ? String(row[c]) : '')).join(' | '));
-    });
-  }
-  return lines.join('\n');
+async function promptSummary(projectId: string, datasetId: string): Promise<string | null> {
+  const withheld = await withheldColumns(projectId, datasetId);
+  const fast = await residentPromptFacts(projectId, datasetId);
+  if (fast) return buildDatasetSummaryText(fast.meta, fast.summaries, fast.issues, fast.sample, withheld);
+  const ds = await datasets.getDataset(projectId, datasetId);
+  if (!ds) return null;
+  const summaries = ds.columns.map((col, c) =>
+    computeColumnSummary(col, ds.rows.map((row) => (row ? row[c] ?? null : null))),
+  );
+  const issues = findQualityIssues(ds.columns, ds.rows);
+  return buildDatasetSummaryText(ds, summaries, issues, ds.rows.slice(0, EXPLAIN_SAMPLE_ROWS), withheld);
 }
 
 
@@ -239,81 +204,29 @@ export async function pageFor(
 export function register() {
   compose.setCommitSteps((p, d, st) => commitSteps(p, d, st));
 
-  // Open the native file picker (or, when given { filePath } from a prior pick,
-  // skip the dialog and re-parse that file with a chosen sheetName). Returns the
-  // parsed preview WITHOUT saving.
-  // ponytail: dual behavior (dialog vs re-parse) keeps sheet switching stateless
-  // — the renderer passes back the filePath it already received, no re-picking.
-  ipcMain.handle('dataset:pickAndParse', async (_e, { sheetName, filePath }: any = {}) => {
-    try {
-      let chosenPath: string;
-      if (typeof filePath === 'string' && filePath) {
-        // Re-parse an already-picked file (e.g. sheet switch). Only honor a path
-        // main previously returned from the dialog — never an arbitrary path.
-        if (!pickedPaths.has(filePath)) return { ok: false, error: 'File was not picked in this session' };
-        chosenPath = filePath;
-      } else {
-        const { canceled, filePaths } = await dialog.showOpenDialog({
-          title: 'Import data file',
-          properties: ['openFile'],
-          filters: [
-            { name: 'Data files', extensions: ['csv', 'json', 'xlsx'] },
-            { name: 'CSV', extensions: ['csv'] },
-            { name: 'JSON', extensions: ['json'] },
-            { name: 'Excel', extensions: ['xlsx'] },
-          ],
-        });
-        if (canceled || !filePaths?.length) return { ok: true, canceled: true };
-        chosenPath = filePaths[0];
-        pickedPaths.add(chosenPath); // allow later sheet-switch re-parses of this file
-      }
-
-      const ext = path.extname(chosenPath).toLowerCase();
-      const kind = sourceKindFor(ext);
-      if (!kind) return { ok: false, error: `Unsupported file type: ${ext || '(none)'}` };
-
-      const preview = await parseFile(chosenPath, kind, typeof sheetName === 'string' ? sheetName : undefined);
-      return {
-        ok: true,
-        filePath: chosenPath,
-        fileName: path.basename(chosenPath),
-        sourceKind: kind,
-        preview,
-      };
-    } catch (err: any) {
-      return { ok: false, error: err?.message || 'Failed to read or parse the file' };
-    }
-  });
-
-  // Parse pasted text (JSON / CSV / TSV auto-detect). Returns preview, no disk
-  // write. Non-string/empty text yields a warning-bearing empty result.
-  // ponytail: untrusted renderer payload — any.
-  ipcMain.handle('dataset:parsePaste', async (_e, { text }: any = {}) => {
-    try {
-      if (typeof text !== 'string' || text.trim() === '') {
-        return { ok: true, preview: { columns: [], rows: [], rowCount: 0, warnings: ['Empty file'] } };
-      }
-      return { ok: true, preview: parsePaste(text) };
-    } catch (err: any) {
-      return { ok: false, error: err?.message || 'Failed to parse the pasted text' };
-    }
-  });
+  // Pick + parse a file (a job, parsed in a compute worker, staged in main) and
+  // parse pasted text — ./datasetImport.ts, split out at this file's cap.
+  importIpc.register();
 
   // Persist a dataset under its project. The renderer sends the columns+rows it
   // is holding (the full capped ParseResult, not the display slice).
   // `origin` is untrusted renderer input and is whitelisted by
   // datasets.sanitizeOrigin before it is stored — an unrecognised one is simply
   // dropped, leaving a normal (non-refreshable) snapshot.
-  ipcMain.handle('dataset:save', async (_e, { projectId, name, sourceKind, columns, rows, origin }: any = {}) => {
+  ipcMain.handle('dataset:save', async (_e, { projectId, name, sourceKind, columns, rows, origin, stagedId }: any = {}) => {
     try {
-      const capped: any[] = Array.isArray(rows) ? rows.slice(0, MAX_ROWS) : [];
+      // A staged import (./datasetImport.ts) saves the rows main already holds;
+      // the renderer only ever had the display slice.
+      const stagedTable = importStage.get(stagedId);
+      const capped: any[] = stagedTable ? stagedTable.rows.slice(0, MAX_ROWS) : Array.isArray(rows) ? rows.slice(0, MAX_ROWS) : [];
       const saved = await datasets.saveDataset(projectId, {
         name,
         sourceKind,
-        columns: Array.isArray(columns) ? columns : [],
+        columns: stagedTable ? stagedTable.columns : Array.isArray(columns) ? columns : [],
         rows: capped,
         origin,
       });
+      if (saved && stagedTable) importStage.drop(stagedId);
       if (!saved) return { ok: false, error: 'Invalid project, or the project no longer exists' };
       return saved;
     } catch (err: any) {
@@ -344,9 +257,11 @@ export function register() {
   // kind; the service decides how, and a failure leaves the stored table alone.
   // `warningCount` is returned alongside the list so the renderer can say "6 of
   // 7 · 1 failed" without re-deriving it.
+  // A JOB (src/app/jobs.ts), one at a time per dataset: the fetch is async and
+  // the write goes through the async Parquet path, reporting to the job.
   ipcMain.handle('dataset:refresh', async (_e, { projectId, id }: any = {}) => {
     try {
-      const res = await refreshDataset(projectId, id);
+      const res = await refreshAsJob(projectId, id);
       if (!res.ok) return res;
       // Alert rules are evaluated after EVERY refresh of this dataset, and this
       // handler is the one manual entry point — both the Data row's ↻ and the
@@ -359,9 +274,12 @@ export function register() {
       // SQL datasets built on this one re-run. Not awaited: never rejects, and
       // the refresh the user asked for is done.
       void refreshDependents(projectId, id);
+      // The record without its tables — no caller reads the rows, and a 1M-row
+      // structured clone is seconds of work for nothing.
+      const { rows: _rows, source: _source, ...dataset } = res.dataset as any;
       return {
         ok: true,
-        dataset: res.dataset,
+        dataset,
         warnings: res.warnings,
         warningCount: res.warnings.length,
       };
@@ -552,27 +470,8 @@ export function register() {
   ipcMain.handle('dataset:explain', async (_e, { payload }: any = {}) => {
     try {
       const { projectId, datasetId } = payload || {};
-
-      // Fast path: the same FACTS block, built from resident stats plus a
-      // LIMIT-ed sample read, so a 1M-row dataset is not materialised to quote
-      // five rows of it. Every piece must succeed or the whole thing falls back
-      // — a half-resident prompt is not worth the branch.
-      let summaryText: string | null = null;
-      const fast = await residentPromptFacts(projectId, datasetId);
-      if (fast) {
-        summaryText = buildDatasetSummaryText(fast.meta, fast.summaries, fast.issues, fast.sample);
-      }
-
-      if (summaryText === null) {
-        const ds = await datasets.getDataset(projectId, datasetId);
-        if (!ds) return { ok: false, error: 'Dataset not found' };
-        const summaries = ds.columns.map((col, c) =>
-          computeColumnSummary(col, ds.rows.map((row) => (row ? row[c] ?? null : null))),
-        );
-        const issues = findQualityIssues(ds.columns, ds.rows);
-        summaryText = buildDatasetSummaryText(ds, summaries, issues, ds.rows.slice(0, EXPLAIN_SAMPLE_ROWS));
-      }
-
+      const summaryText = await promptSummary(projectId, datasetId);
+      if (summaryText === null) return { ok: false, error: 'Dataset not found' };
       const res = await explainText(summaryText);
       if (res.ok) return { ok: true, text: res.text };
       if (res.errorType === 'not_ready') return { ok: false, notReady: true };
@@ -716,20 +615,8 @@ export function register() {
   // No model configured → { ok:false, notReady:true } for a gentle hint.
   ipcMain.handle('dataset:suggestSteps', async (_e, { projectId, datasetId }: any = {}) => {
     try {
-      // Fast path: metadata + Parquet-side stats, no table hydrated.
-      let summaryText: string;
-      const fast = await residentPromptFacts(projectId, datasetId);
-      if (fast) {
-        summaryText = buildDatasetSummaryText(fast.meta, fast.summaries, fast.issues, fast.sample);
-      } else {
-        const ds = await datasets.getDataset(projectId, datasetId);
-        if (!ds) return { ok: false, error: 'Dataset not found' };
-        const summaries = ds.columns.map((col, c) =>
-          computeColumnSummary(col, ds.rows.map((row) => (row ? row[c] ?? null : null))),
-        );
-        const issues = findQualityIssues(ds.columns, ds.rows);
-        summaryText = buildDatasetSummaryText(ds, summaries, issues, ds.rows.slice(0, EXPLAIN_SAMPLE_ROWS));
-      }
+      const summaryText = await promptSummary(projectId, datasetId);
+      if (summaryText === null) return { ok: false, error: 'Dataset not found' };
       const res = await suggestSteps(summaryText);
       if (res.ok) return { ok: true, steps: transforms.sanitizeSteps(res.steps) };
       if (res.errorType === 'not_ready') return { ok: false, notReady: true };
@@ -748,20 +635,8 @@ export function register() {
   // → { ok:false, notReady:true } for a gentle hint.
   ipcMain.handle('dataset:suggestCalcField', async (_e, { projectId, datasetId }: any = {}) => {
     try {
-      // Fast path: metadata + Parquet-side stats, no table hydrated.
-      let summaryText: string;
-      const fast = await residentPromptFacts(projectId, datasetId);
-      if (fast) {
-        summaryText = buildDatasetSummaryText(fast.meta, fast.summaries, fast.issues, fast.sample);
-      } else {
-        const ds = await datasets.getDataset(projectId, datasetId);
-        if (!ds) return { ok: false, error: 'Dataset not found' };
-        const summaries = ds.columns.map((col, c) =>
-          computeColumnSummary(col, ds.rows.map((row) => (row ? row[c] ?? null : null))),
-        );
-        const issues = findQualityIssues(ds.columns, ds.rows);
-        summaryText = buildDatasetSummaryText(ds, summaries, issues, ds.rows.slice(0, EXPLAIN_SAMPLE_ROWS));
-      }
+      const summaryText = await promptSummary(projectId, datasetId);
+      if (summaryText === null) return { ok: false, error: 'Dataset not found' };
       const res = await suggestCalcField(summaryText);
       if (!res.ok) {
         if (res.errorType === 'not_ready') return { ok: false, notReady: true };

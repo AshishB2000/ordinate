@@ -92,6 +92,8 @@ function paintGrid(rows: any[][]): void {
     btn.appendChild(caret);
     btn.addEventListener('click', (e) => { e.stopPropagation(); openColPop(String(col.name), th); });
     th.appendChild(btn);
+    const chip = pvComposerChip(String(col.name)); // "Personal?" — privacyReview.ts
+    if (chip) th.appendChild(chip);
     hr.appendChild(th);
   });
 

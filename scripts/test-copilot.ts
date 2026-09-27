@@ -166,6 +166,59 @@ async function main(): Promise<void> {
   ok('visualFacts provenance names the visual + dataset',
     vFacts.provenance.kind === 'visual' && vFacts.provenance.name === 'Pop chart' && vFacts.provenance.datasetName === 'Cities');
 
+  // ── Sensitive columns: values withheld, the statistics' ledger unchanged ──
+  // The user marked `email` personal and `card` financial. The Assistant must
+  // never be shown a value from either — not a sample cell, not the most
+  // common value, not a chart label — and the facts must SAY so. The app's
+  // statistics stay, and so do their ledger entries, byte for byte.
+  const people = await datasets.saveDataset(proj.id, {
+    name: 'People',
+    sourceKind: 'csv',
+    columns: [
+      { name: 'email', type: 'text' as const }, { name: 'card', type: 'text' as const },
+      { name: 'region', type: 'text' as const }, { name: 'spend', type: 'number' as const },
+    ],
+    rows: [
+      ['grace@example.com', '4111111111111111', 'North', 120],
+      ['grace@example.com', '5555555555554444', 'South', 80],
+      ['alan@example.com', '378282246310005', 'North', 100],
+    ],
+  });
+  const pSums = people!.columns.map((col, c) =>
+    datasetStats.computeColumnSummary(col, people!.rows.map((row) => (row ? row[c] ?? null : null))));
+  const docs = { email: { sensitivity: 'personal' }, card: { sensitivity: 'financial' } };
+  const open = copilot.datasetFacts(people!, pSums, [], [], [], {});
+  const guarded = copilot.datasetFacts(people!, pSums, [], [], [], docs);
+  ok('facts (unmarked) quote the sample values — the baseline', open.text.includes('grace@example.com') && open.text.includes('4111111111111111'));
+  ok('facts: no value of a sensitive column is shown', !['grace@example.com', 'alan@example.com', '4111111111111111', '5555555555554444', '378282246310005'].some((v) => guarded.text.includes(v)), guarded.text);
+  ok('facts: the most common value is withheld, its count kept', /email \(text\): 2 distinct, 3 non-empty, most common value \(withheld\) \(2x\)/.test(guarded.text));
+  ok('facts SAY the values are withheld, and why', guarded.text.includes('(Values of email, card are withheld — marked personal or financial data.)')
+    && guarded.text.includes('- email: personal data; sample values withheld'));
+  ok('facts: a column that is not sensitive keeps its values', guarded.text.includes('North') && guarded.text.includes('120'));
+  const statsOf = (l: any[]) => JSON.stringify(l.filter((e) => e.source === 'datasetStats' || e.source === 'dataset').map((e) => [e.label, e.value, e.unit]));
+  ok('ledger: every statistic entry is identical with and without the marks', statsOf(open.ledger) === statsOf(guarded.ledger) && statsOf(guarded.ledger).length > 20);
+  ok('ledger: no digit of a withheld card reaches it', !guarded.ledger.some((e: any) => String(e.value).includes('4111111111111111')));
+  const numberAudit: typeof import('../src/ai/numberAudit') = require('../src/ai/numberAudit');
+  const audit = numberAudit.auditNumbers('Spend ranges from 80 to 120 across 3 rows.', guarded.ledger);
+  ok('the number audit still accepts an answer quoting the app\'s statistics', audit.ok === true, JSON.stringify(audit));
+
+  const vGuarded = copilot.visualFacts(
+    { name: 'Spend by email', chartType: 'column', datasetId: people!.id,
+      encoding: { category: 'email', values: [{ column: 'spend', aggregation: 'sum' as const }] } } as any,
+    'People',
+    { data: { labels: ['grace@example.com', 'alan@example.com'], series: [{ name: 'sum(spend)', values: [200, 100] }] }, recommendedShape: 'categorical', warnings: [] } as any,
+    docs,
+  );
+  ok('visual facts: labels from a sensitive column are withheld, the figures kept',
+    !vGuarded.text.includes('grace@example.com') && vGuarded.text.includes('(withheld)=200') && /Labels from email are withheld/.test(vGuarded.text), vGuarded.text);
+
+  // The explain / suggest prompt (ai/datasetPrompt.ts) follows the same rule.
+  const prompt: typeof import('../src/ai/datasetPrompt') = require('../src/ai/datasetPrompt');
+  const promptText = prompt.buildDatasetSummaryText(people!, pSums, [], people!.rows, new Set(['email', 'card']));
+  ok('explain prompt: sensitive values withheld, the rest intact',
+    !promptText.includes('grace@example.com') && !promptText.includes('4111') && promptText.includes('(withheld)') && promptText.includes('North') && promptText.includes('max 120'), promptText);
+  ok('explain prompt: unchanged when nothing is marked', prompt.buildDatasetSummaryText(people!, pSums, [], people!.rows).includes('grace@example.com'));
+
   // projectFacts fallback — inventory only, no figures.
   const pFacts = copilot.projectFacts('Copilot project', { datasets: ['Cities'], visuals: [], dashboards: [] });
   ok('projectFacts lists the inventory', pFacts.text.includes('Cities') && pFacts.provenance.kind === 'project');

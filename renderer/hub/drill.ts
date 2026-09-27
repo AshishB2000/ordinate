@@ -208,6 +208,8 @@ function openDrillPanel(opts: DrillOpts): void {
   if (title) title.textContent = opts.name && opts.name.trim() ? opts.name : 'Underlying rows';
   const sub = drillQ('.js-drill-sub');
   if (sub) sub.textContent = opts.mark ? 'The rows behind the selected mark' : 'The rows behind this visual';
+  // What "Export these rows" will do to sensitive columns (privacyShare.ts).
+  pvMountShareNote(drillQ('.drill-foot'), 'export', [opts.datasetId]);
 
   drillTrigger = opts.trigger || null;
   drillPrevFocus = document.activeElement as HTMLElement | null;
@@ -433,6 +435,7 @@ async function exportDrillRows(): Promise<void> {
   const btn = drillQ('.js-drill-export') as HTMLButtonElement | null;
   const bridge = (window.hub as any).exportVisualRows;
   if (typeof bridge !== 'function') return;
+  if (!(await pvShareGate('export', [o.datasetId], { noted: true }))) return;
   if (btn) {
     btn.disabled = true;
     btn.textContent = 'Exporting…';

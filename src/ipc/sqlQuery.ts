@@ -16,6 +16,8 @@ import { ipcMain } from 'electron';
 import { isValidId } from '../app/ids';
 import { viewColumns } from '../engine/datasetView';
 import * as sqlDatasets from '../engine/sqlDatasets';
+import * as importStage from '../data/importStage';
+import * as jobs from '../app/jobs';
 
 export async function schemaFor(projectId: unknown) {
   if (!isValidId(projectId)) return { ok: false, error: 'Invalid project id' };
@@ -50,6 +52,32 @@ export function register(): void {
   ipcMain.handle('sql:explain', async (_e, { projectId, sql, params }: any = {}) =>
     sqlDatasets.explainSql(projectId, sql, params));
 
-  ipcMain.handle('sql:prepareSave', async (_e, { projectId, sql, params }: any = {}) =>
-    sqlDatasets.runForDataset(projectId, sql, params));
+  // The full result is read as a JOB (async DuckDB — the query already never
+  // blocked) and STAGED in main (src/data/importStage) like a picked file: the
+  // renderer gets a display slice and a `stagedId`, and the composer's Save
+  // resolves the rows here instead of shipping up to 1M rows both ways.
+  ipcMain.handle('sql:prepareSave', async (_e, { projectId, sql, params }: any = {}) => {
+    const job = jobs.submit({
+      kind: 'sql-save',
+      label: 'Read the query result',
+      projectId: typeof projectId === 'string' ? projectId : undefined,
+      run: async (ctx) => {
+        ctx.progress(0.1, 'Running the query');
+        const res: any = await sqlDatasets.runForDataset(projectId, sql, params);
+        if (!res || res.ok === false) throw new Error((res && res.error) || 'The full result could not be read.');
+        return res;
+      },
+      resultOf: (res: any) => ({ message: `${Number((res.rows || []).length).toLocaleString('en-US')} rows ready to save` }),
+    });
+    try {
+      const res: any = await job.done;
+      const rows = Array.isArray(res.rows) ? res.rows : [];
+      const table = { columns: res.columns || [], rows, rowCount: rows.length, warnings: [] as string[] };
+      const stagedId = importStage.put(table);
+      return { ...res, rows: rows.slice(0, importStage.PREVIEW_ROWS), rowCount: rows.length, stagedId };
+    } catch (err: any) {
+      if (err && err.name === 'JobCancelled') return { ok: false, canceled: true, error: 'Cancelled.' };
+      return { ok: false, error: err?.message || 'The full result could not be read.' };
+    }
+  });
 }

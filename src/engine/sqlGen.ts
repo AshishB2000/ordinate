@@ -530,6 +530,16 @@ export function generateSql(relation: string, columns: SqlColumn[], steps: Trans
         break;
       }
 
+      // A mask step (data/maskSteps.ts) has no SQL form here — no HMAC, and the
+      // salt never leaves main's JS. It must BAIL, not fall to the default
+      // below: the default warns and CONTINUES, and runResidentPipeline (which
+      // is not behind the pipeline flag) would then store the derived table
+      // with the column UNmasked.
+      case 'mask_hash':
+      case 'mask_redact':
+      case 'mask_generalize':
+        return bail('mask steps run in the JS fold');
+
       default:
         warnings.push(`Unknown step type "${(step as { type: string }).type}" skipped`);
         break;

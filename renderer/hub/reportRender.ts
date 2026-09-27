@@ -177,10 +177,16 @@ async function reportTile(
   if (!visual) return null;
   const type = typeof visual.chartType === 'string' && visual.chartType ? visual.chartType : 'column';
   const merged = mergeDashFilters(ctx.filters, visual.filters);
+  // A report LEAVES the app: asked with the share path, so main applies the
+  // Share policy (privacyShare.ts). A tile the policy hides keeps its place and
+  // says why, rather than vanishing from the page.
   let res: any;
   try {
-    res = await window.hub.computeVisualData(ctx.projectId, visual.datasetId, visual.encoding, merged, ctx.params);
+    res = await pvVisualData(ctx.projectId, visual.datasetId, visual.encoding, merged, ctx.params, 'report');
   } catch (_) { res = { ok: false }; }
+  if (res && res.hiddenByPolicy) {
+    return { cardId: card.id, title: paramSubst(visual.name || '', ctx.params || []), png: null, caption: String(res.error), grid: null };
+  }
   if (!res || res.ok === false) return null;
   const data = res.data || { labels: [], series: [] };
 

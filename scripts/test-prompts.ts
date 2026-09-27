@@ -68,9 +68,14 @@ const accepted = [...(dispatchBody ? dispatchBody[0] : '').matchAll(/case '([a-z
 ok('…and it accepts a non-trivial set of step types', accepted.length >= 8, String(accepted.length));
 
 const promptedSteps = [...prompts.SUGGEST_STEPS_SYSTEM_PROMPT.matchAll(/"type": "([a-z_]+)"/g)].map((m) => m[1]);
-ok('the steps prompt names every step type transforms.ts accepts',
-  accepted.every((t) => promptedSteps.includes(t)),
-  'missing: ' + accepted.filter((t) => !promptedSteps.includes(t)).join(', '));
+// The mask steps are withheld from the model ON PURPOSE (see prompts.ts): what
+// is sensitive is the detector's call and the user's, never a model's.
+const MASK_TYPES = ['mask_hash', 'mask_redact', 'mask_generalize'];
+ok('…and it accepts the three mask steps', MASK_TYPES.every((t) => accepted.includes(t)), accepted.join(', '));
+ok('the steps prompt names every step type transforms.ts accepts, except the mask steps',
+  accepted.every((t) => promptedSteps.includes(t) || MASK_TYPES.includes(t)),
+  'missing: ' + accepted.filter((t) => !promptedSteps.includes(t) && !MASK_TYPES.includes(t)).join(', '));
+ok('…and never offers a mask step', !promptedSteps.some((t) => MASK_TYPES.includes(t)), promptedSteps.join(', '));
 ok('…and names no step type it would skip',
   promptedSteps.every((t) => accepted.includes(t)),
   'unknown: ' + promptedSteps.filter((t) => !accepted.includes(t)).join(', '));

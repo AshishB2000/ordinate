@@ -145,10 +145,12 @@ function dashShow(id: string, show: boolean): void {
 
 // A pick-one modal (promptModal only takes text). Mirrors promptModal's overlay
 // + .ws-modal* classes; resolves to the chosen value, or null if cancelled.
+// `extra` sits above the buttons — the export chooser's share-policy line.
 function dashChooseModal(
   title: string,
   options: Array<{ value: string; label: string }>,
   okLabel: string,
+  extra?: HTMLElement,
 ): Promise<string | null> {
   return new Promise((resolve) => {
     let done = false;
@@ -208,6 +210,7 @@ function dashChooseModal(
       empty.textContent = 'Nothing to pick — create one in its section first.';
       box.appendChild(empty);
     }
+    if (extra) box.appendChild(extra);
     box.appendChild(actions);
     overlay.appendChild(box);
     document.body.appendChild(overlay);

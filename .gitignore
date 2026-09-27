@@ -556,3 +556,59 @@ scripts/**/*.js
 /renderer/hub/getStarted.js
 /renderer/hub/coachMarks.js
 /scripts/test-onboarding.js
+
+# Platform depth — jobs and the answer cache (emitted siblings).
+/src/app/jobs.js
+/src/ipc/jobs.js
+/src/ipc/platform.js
+/src/engine/queryCache.js
+/preload/hubPlatformPreload.js
+/renderer/hub/jobsPanel.js
+/src/engine/computeWorker.js
+/src/engine/computePool.js
+/src/data/answerKey.js
+/src/data/importStage.js
+/src/data/refreshJob.js
+/src/ipc/datasetImport.js
+/renderer/hub/dsVirtual.js
+/src/analysis/sampling.js
+/src/engine/sampleResident.js
+/src/ipc/vizSample.js
+/src/ipc/vizSampleData.js
+
+# Platform depth — publish to folder (emitted siblings).
+/src/publish/*.js
+/renderer/hub/publishDialog.js
+/renderer/publish/*.js
+/src/ipc/publish.js
+
+# Platform depth — privacy and sensitivity (emitted siblings).
+/src/data/sensitivity.js
+/src/data/maskSteps.js
+/src/app/privacyStore.js
+/src/app/sharePolicy.js
+/src/ai/datasetPrompt.js
+/src/ipc/privacy.js
+/preload/hubPrivacyPreload.js
+/renderer/hub/privacyShare.js
+/renderer/hub/privacyReview.js
+/renderer/hub/prepareMask.js
+/renderer/hub/privacySettings.js
+
+# Platform depth — automation: CLI and MCP (emitted siblings).
+/src/automation/*.js
+/src/ipc/automation.js
+/preload/hubAutomationPreload.js
+/renderer/hub/settingsAutomation.js
+/renderer/hub/automationReport.js
+
+# Platform depth — backups and sync (emitted siblings).
+/src/app/backupSettings.js
+/src/app/backups.js
+/src/app/syncFolder.js
+/src/app/syncLock.js
+/src/ipc/backups.js
+/src/ipc/syncFolder.js
+/preload/hubBackupPreload.js
+/renderer/hub/settingsBackups.js
+/renderer/hub/projectSync.js

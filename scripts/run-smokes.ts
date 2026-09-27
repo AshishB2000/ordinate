@@ -78,6 +78,9 @@ const SMOKES = [
   // Relationships and joins, tile actions and navigation, the new card kinds,
   // point / custom-boundary maps — end to end on the sample project.
   'smoke-authoring',
+  // Platform depth: jobs + speed on the 1M-row fixture (it prints the measured
+  // table), then publish, privacy, automation and backups on a small one.
+  'smoke-platform',
 ];
 
 const results: { name: string; code: number }[] = [];

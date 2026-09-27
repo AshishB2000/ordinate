@@ -1,5 +1,7 @@
 import { ipcMain } from 'electron';
 import * as dashboards from '../analysis/dashboards';
+import * as answerKey from '../data/answerKey';
+import * as queryCache from '../engine/queryCache';
 import * as datasets from '../data/datasets';
 import * as residentQuery from '../engine/residentQuery';
 import * as trace from '../engine/residentTrace';
@@ -137,6 +139,25 @@ export async function computeCardMetric(
   datasetId: string,
   spec: { column: string; aggregation: MetricAggregation },
   filters: FilterStep[] = [],
+  params?: ParamValues,
+): Promise<{ ok: boolean; value: number | null }> {
+  // The answer cache (engine/queryCache): every KPI on an open dashboard, and
+  // the same KPI again for an alert, a formula metric or a compare. A null
+  // VALUE is a real answer and is kept; ok:false (dataset gone) is not.
+  const parts = await answerKey.keyParts(projectId, datasetId);
+  if (!parts) return computeCardMetricUncached(projectId, datasetId, spec, filters, params);
+  const key = queryCache.cacheKey('metric', parts, {
+    column: spec.column, aggregation: spec.aggregation, filters, params: params ?? null, ...answerKey.ambient(),
+  });
+  return queryCache.through('metric', key, [datasetId, queryCache.projectDep(projectId)],
+    () => computeCardMetricUncached(projectId, datasetId, spec, filters, params), (r) => r.ok);
+}
+
+async function computeCardMetricUncached(
+  projectId: string,
+  datasetId: string,
+  spec: { column: string; aggregation: MetricAggregation },
+  filters: FilterStep[],
   params?: ParamValues,
 ): Promise<{ ok: boolean; value: number | null }> {
   // A pipeline that references a dashboard parameter is replayed with the

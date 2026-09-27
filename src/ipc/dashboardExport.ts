@@ -4,6 +4,7 @@ import * as path from 'path';
 import { buildSelfContainedHtml } from '../analysis/dashboardExport';
 import { getFormatPrefs } from '../app/format';
 import { captureHtmlToPng, captureHtmlToPdf } from '../app/reportCapture';
+import * as jobs from '../app/jobs';
 
 // Dashboard EXPORT + SHARE IPC — MAIN PROCESS.
 //
@@ -44,18 +45,46 @@ function safeName(defaultName: unknown, ext: string, base: string): string {
   return `${base}-${ts}.${ext}`;
 }
 
-async function saveBuffer(
-  buf: Buffer,
+/**
+ * Ask where, THEN produce and write as a job (src/app/jobs.ts). The order
+ * matters: a job that sat in "running" while the user browsed a save panel
+ * would be a progress bar measuring nothing. `produce` does the rendering off
+ * the event loop's critical path (the offscreen capture is async), the write is
+ * temp-then-rename, and the popover's Reveal shows the file.
+ */
+async function exportAsJob(
+  label: string,
   opts: { title: string; defaultName: string; filterName: string; ext: string },
-): Promise<{ ok: boolean; dest?: string; canceled?: boolean }> {
+  produce: () => Promise<Buffer | null>,
+): Promise<{ ok: boolean; dest?: string; canceled?: boolean; error?: string }> {
   const { filePath, canceled } = await dialog.showSaveDialog({
     title: opts.title,
     defaultPath: path.join(app.getPath('downloads'), opts.defaultName),
     filters: [{ name: opts.filterName, extensions: [opts.ext] }],
   });
   if (canceled || !filePath) return { ok: false, canceled: true };
-  await fs.promises.writeFile(filePath, buf);
-  return { ok: true, dest: filePath };
+  const job = jobs.submit({
+    kind: 'export',
+    label,
+    run: async (ctx) => {
+      ctx.progress(0.1, 'Rendering');
+      const buf = await produce();
+      if (!buf) throw new Error('Could not render the dashboard');
+      ctx.checkCancelled();
+      ctx.progress(0.9, 'Writing the file');
+      const tmp = filePath + '.partial';
+      await fs.promises.writeFile(tmp, buf);
+      await fs.promises.rename(tmp, filePath);
+      return filePath;
+    },
+    resultOf: (dest) => ({ path: dest }),
+  });
+  try {
+    return { ok: true, dest: await job.done };
+  } catch (err: any) {
+    if (err instanceof jobs.JobCancelled) return { ok: false, canceled: true };
+    return { ok: false, error: err?.message || 'Export failed' };
+  }
 }
 
 export function register() {
@@ -77,14 +106,13 @@ export function register() {
       } catch (e) {
         console.error('[dashboardExport] could not read the formatter', e);
       }
-      const html = buildSelfContainedHtml(bundle, chartLibJs, { js: formatJs, prefs: getFormatPrefs() });
-      const res = await saveBuffer(Buffer.from(html, 'utf8'), {
+      const name = safeName(defaultName, 'html', 'dashboard');
+      return await exportAsJob(`Export ${name}`, {
         title: 'Export dashboard (HTML)',
-        defaultName: safeName(defaultName, 'html', 'dashboard'),
+        defaultName: name,
         filterName: 'HTML',
         ext: 'html',
-      });
-      return res;
+      }, async () => Buffer.from(buildSelfContainedHtml(bundle, chartLibJs, { js: formatJs, prefs: getFormatPrefs() }), 'utf8'));
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to export the dashboard HTML' };
     }
@@ -94,15 +122,15 @@ export function register() {
   ipcMain.handle('dashboard:exportPng', async (_e, { html, width, defaultName }: any = {}) => {
     try {
       if (typeof html !== 'string' || !html) return { ok: false, error: 'No content to export' };
-      const dataUrl = await captureHtmlToPng(html, width);
-      if (!dataUrl) return { ok: false, error: 'Could not render the dashboard' };
-      const base64 = dataUrl.replace(/^data:image\/[^;]+;base64,/, '');
-      const buf = Buffer.from(base64, 'base64');
-      return await saveBuffer(buf, {
+      const name = safeName(defaultName, 'png', 'dashboard');
+      return await exportAsJob(`Export ${name}`, {
         title: 'Export dashboard (PNG)',
-        defaultName: safeName(defaultName, 'png', 'dashboard'),
+        defaultName: name,
         filterName: 'PNG Image',
         ext: 'png',
+      }, async () => {
+        const dataUrl = await captureHtmlToPng(html, width);
+        return dataUrl ? Buffer.from(dataUrl.replace(/^data:image\/[^;]+;base64,/, ''), 'base64') : null;
       });
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to export the dashboard image' };
@@ -113,14 +141,13 @@ export function register() {
   ipcMain.handle('dashboard:exportPdf', async (_e, { html, width, defaultName }: any = {}) => {
     try {
       if (typeof html !== 'string' || !html) return { ok: false, error: 'No content to export' };
-      const buf = await captureHtmlToPdf(html, width);
-      if (!buf) return { ok: false, error: 'Could not render the dashboard' };
-      return await saveBuffer(buf, {
+      const name = safeName(defaultName, 'pdf', 'dashboard');
+      return await exportAsJob(`Export ${name}`, {
         title: 'Export dashboard (PDF)',
-        defaultName: safeName(defaultName, 'pdf', 'dashboard'),
+        defaultName: name,
         filterName: 'PDF Document',
         ext: 'pdf',
-      });
+      }, () => captureHtmlToPdf(html, width));
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to export the dashboard PDF' };
     }

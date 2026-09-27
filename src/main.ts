@@ -9,11 +9,17 @@ import {
   NativeImage,
   Display,
 } from 'electron';
+import { headlessMode } from './automation/argv';
 
+// Automation: `--cli <command>` / `--mcp` run this binary HEADLESS (no window,
+// hotkey, seed or schedules — the guards below) and must NOT take the lock, or a
+// CLI run while the GUI is open would silently quit. See src/automation/headless.ts.
+const HEADLESS = headlessMode(process.argv);
+if (HEADLESS) require('./automation/headless').start(HEADLESS);
 // Single-instance lock. A second launch would otherwise hold its own processes
 // and steal/contend the global hotkey, so bail out early and let the first
 // instance take over (see the 'second-instance' handler below).
-if (!app.requestSingleInstanceLock()) {
+else if (!app.requestSingleInstanceLock()) {
   app.quit();
   // Top-level `return` is illegal in a TS module; process.exit preserves the
   // original early bail (nothing below runs in a second instance).
@@ -80,8 +86,9 @@ const focusHub = (): void => {
 // Packaged macOS/Linux GUI launches inherit a stripped PATH (no Homebrew, nvm,
 // ~/.local/bin…), which would make Local CLI detection (claude, agy) find nothing.
 // Recover the user's real login-shell PATH BEFORE any detection runs. No-op on
-// Windows and skipped in dev (`npm start` already has the full terminal PATH).
-if (app.isPackaged) {
+// Windows and skipped in dev (`npm start` already has the full terminal PATH),
+// and headless, which runs no local CLI and must not spawn a login shell per call.
+if (app.isPackaged && !HEADLESS) {
   const recovered = resolveUserPath();
   console.log('[userPath] recovered PATH —', recovered.split(':').length, 'dirs');
 }
@@ -559,7 +566,8 @@ require("./ipc/windows").register();
 require("./ipc/insights").register();
 
 // Unattended dataset refresh, and the alert/report hooks that ride its tick.
-require("./app/refreshWiring").start({ hubFocused });
+// Never in a headless run: the GUI owns schedules.
+if (!HEADLESS) require("./app/refreshWiring").start({ hubFocused });
 
 // Reports — the record's CRUD, caption, folder picker and scheduled write.
 require("./ipc/reports").register();
@@ -616,6 +624,9 @@ try {
   }
 } catch (_) { /* connector module absent or registry unreadable — stay lazy */ }
 require("./ipc/authoringDepth").register(); // relationships, project assets, boundaries, places
+// Headless: no timers, and no job notifications — a CLI run's jobs reach the GUI's
+// popover through automation-log.jsonl instead.
+require("./ipc/platform").register({ hubFocused: HEADLESS ? () => true : hubFocused, focusHub, headless: !!HEADLESS }); // jobs, publish, privacy, automation, backups
 // Week 13 — capture → dataset bridge. resolveCropPath hands the on-disk crop path
 // from main's per-entry state (entryData, then the summaries cache) so a renderer-
 // sent path is never trusted; both maps already carry cropPath per entryId.
@@ -631,6 +642,7 @@ require("./ipc/captureDataset").register({
 // ── App lifecycle ─────────────────────────────────────────────────────────
 
 void app.whenReady().then(async () => {
+  if (HEADLESS) return; // headless.ts boots its own run: no hotkey, hub, seed or CLI probe
   config.load();
 
   // Recompute Local CLI availability with the recovered PATH before the user can
@@ -717,5 +729,5 @@ app.on('will-quit', () => {
 
 // On macOS, re-open the hub when the dock icon is clicked.
 app.on('activate', () => {
-  openHub();
+  if (!HEADLESS) openHub();
 });

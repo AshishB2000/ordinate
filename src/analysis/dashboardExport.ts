@@ -145,7 +145,7 @@ function intOr(v: unknown, fallback: number): number {
   return typeof v === 'number' && Number.isFinite(v) ? Math.trunc(v) : fallback;
 }
 
-function sanitizeLayout(raw: unknown): ExportLayout {
+export function sanitizeLayout(raw: unknown): ExportLayout {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   let x = intOr(o.x, 0);
   let y = intOr(o.y, 0);
@@ -172,7 +172,7 @@ function asNumOrNull(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
-function sanitizeChartData(raw: unknown): ExportChartData {
+export function sanitizeChartData(raw: unknown): ExportChartData {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const labels = Array.isArray(o.labels)
     ? o.labels.filter((l): l is string | number => typeof l === 'string' || typeof l === 'number')
@@ -193,7 +193,7 @@ function sanitizeChartData(raw: unknown): ExportChartData {
 // http(s) URL (keeps the file offline) and never arbitrary text. A MapLibre map card
 // arrives here as `nativeImage.toDataURL()` output ("data:image/png;base64,…"), so it
 // passes unchanged — the WebGL migration needed NO loosening of this gate.
-function sanitizePng(v: unknown): string {
+export function sanitizePng(v: unknown): string {
   return typeof v === 'string' && /^data:image\/[a-z0-9.+-]+;base64,/i.test(v) ? v : '';
 }
 
@@ -269,7 +269,7 @@ export function sanitizeBundle(raw: unknown): ExportBundle {
 
 const COLOR_RE = /^(#[0-9a-f]{6}|rgba\(\d{1,3}, \d{1,3}, \d{1,3}, (0|1|0?\.\d{1,4})\))$/i;
 
-function sanitizeBrand(raw: unknown): ExportBundle['brand'] {
+export function sanitizeBrand(raw: unknown): ExportBundle['brand'] {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const r = o.ramp && typeof o.ramp === 'object' ? (o.ramp as Record<string, unknown>) : {};
   const color = (v: unknown): string => (typeof v === 'string' && COLOR_RE.test(v) ? v : '');
@@ -284,7 +284,7 @@ function sanitizeBrand(raw: unknown): ExportBundle['brand'] {
 // `</script>` in any string can't break out) and the U+2028/U+2029 line separators
 // (which are literal newlines inside a JS string). The result is valid JSON AND a valid
 // JS expression.
-function embedJson(obj: unknown): string {
+export function embedJson(obj: unknown): string {
   return JSON.stringify(obj)
     .replace(/</g, '\\u003c')
     .replace(/>/g, '\\u003e')
@@ -370,7 +370,7 @@ const DENSITY_TOKENS: Record<DashboardStyle['density'], string> = {
 // carries a separate `.dash-theme--dark.dash-accent--*` set because the light
 // hues go muddy on #232327 (slate worst of all — #475569 is nearly invisible
 // there, so its whole ramp moves to the light half of the scale).
-interface AccentRamp {
+export interface AccentRamp {
   accent: string;
   accent2: string;
   soft: string;
@@ -395,20 +395,20 @@ const ACCENT_RAMPS: Record<string, AccentRamp> = {
 // `style` is already clamped by sanitizeStyle, so both halves of the key are one
 // of a fixed set of literals and the lookup can never miss.
 // A brand ramp (sanitizeBrand) replaces the named one wholesale.
-function accentRamp(style: DashboardStyle, brand?: ExportBundle['brand']): AccentRamp {
+export function accentRamp(style: DashboardStyle, brand?: ExportBundle['brand']): AccentRamp {
   if (brand && brand.ramp) return brand.ramp;
   return ACCENT_RAMPS[style.theme === 'dark' ? style.accent + '-dark' : style.accent];
 }
 
 // The three class names the exported document carries, in hub.css's own spelling.
-function styleClasses(style: DashboardStyle): string {
+export function styleClasses(style: DashboardStyle): string {
   return `dash-theme--${style.theme} dash-density--${style.density} dash-accent--${style.accent}`;
 }
 
 // Theme + density + accent tokens, then the layout rules that consume them. The
 // rules are token-only — that is what lets one style change repaint the whole
 // document without a second copy of every rule per theme.
-function styleBlock(style: DashboardStyle, brand?: ExportBundle['brand']): string {
+export function styleBlock(style: DashboardStyle, brand?: ExportBundle['brand']): string {
   const ramp = accentRamp(style, brand);
   const chartVars = ramp.chart.map((c, i) => `--chart-${i + 1}: ${c};`).join(' ');
   return `

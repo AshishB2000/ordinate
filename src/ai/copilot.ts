@@ -12,7 +12,7 @@
 //      app-computed numbers (datasetStats / metricValue / vizData outputs) into a
 //      compact FACTS text block + a provenance descriptor. The model only narrates
 //      these figures; it NEVER computes or invents one — the analyze→compute→
-//      display contract, generalized from ipc/datasets.buildDatasetSummaryText.
+//      display contract, generalized from ai/datasetPrompt.buildDatasetSummaryText.
 //
 // DUAL-UUID note (honest read): only `projectId` is ever concatenated into a
 // filesystem path, so only it needs the traversal guard (copied verbatim from

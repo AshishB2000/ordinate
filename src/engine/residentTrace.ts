@@ -43,6 +43,14 @@ export interface OpCounts {
   failed: number;
   /** Detail from the most recent 'failed', for the log line. */
   lastFailure: string | null;
+  /**
+   * Answer-cache lookups (src/engine/queryCache.ts), under the op name
+   * `cache:<op>`. A cache hit never reaches the resident path at all, so it is
+   * counted here rather than as a 'resident' — the ratio of the two is what
+   * says whether a warm dashboard open is actually warm.
+   */
+  hit: number;
+  miss: number;
 }
 
 const counts = new Map<string, OpCounts>();
@@ -51,7 +59,7 @@ const warned = new Set<string>();
 function slot(op: string): OpCounts {
   let c = counts.get(op);
   if (!c) {
-    c = { resident: 0, skipped: 0, failed: 0, lastFailure: null };
+    c = { resident: 0, skipped: 0, failed: 0, lastFailure: null, hit: 0, miss: 0 };
     counts.set(op, c);
   }
   return c;
@@ -76,6 +84,11 @@ export function record(op: string, outcome: Outcome, detail?: string): void {
       (detail ? ` (${detail})` : '') +
       `. Further ${op} failures this session are counted, not logged.`,
   );
+}
+
+/** Record one answer-cache lookup, under `cache:<op>`. Silent either way. */
+export function recordCache(op: string, outcome: 'hit' | 'miss'): void {
+  slot('cache:' + op)[outcome] += 1;
 }
 
 /** Counts so far, by op. A copy — callers cannot mutate the live state. */

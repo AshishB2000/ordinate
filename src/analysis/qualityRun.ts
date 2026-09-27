@@ -22,6 +22,7 @@ import { randomUUID } from 'crypto';
 import * as datasets from '../data/datasets';
 import * as trace from '../engine/residentTrace';
 import { evaluateRulesResident, failingRowSql } from '../engine/qualityResident';
+import * as computePool from '../engine/computePool';
 import type { QualitySource } from '../engine/qualityResident';
 import type { RowFilter } from '../engine/datasetPage';
 import { isValidId } from '../app/ids';
@@ -56,7 +57,11 @@ export async function evaluateRules(
     else allResident = false;
   }
   if (src && allResident) {
-    const fast = evaluateRulesResident(src, rules, refSrc);
+    // In a compute worker when threads are available: the rules' SQL parks
+    // that thread, not the one every window and the hotkey run on.
+    const fast = computePool.available()
+      ? await computePool.run<RuleResult[] | null>('quality', { src, rules, refs: [...refSrc] }).catch(() => null)
+      : evaluateRulesResident(src, rules, refSrc);
     if (fast) {
       trace.record('qualityRules', 'resident');
       return fast;

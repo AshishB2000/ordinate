@@ -96,7 +96,9 @@ export async function listProjects(): Promise<Project[]> {
 
   const projects: Project[] = [];
   for (const dirent of dirents) {
-    if (!dirent.isDirectory()) continue;
+    // A project moved to a sync folder is a LINK here (syncFolder.ts), and a
+    // dirent reports a link as isSymbolicLink(), never isDirectory().
+    if (!dirent.isDirectory() && !dirent.isSymbolicLink()) continue;
     const id = dirent.name;
     try {
       const raw = await fs.promises.readFile(projectFilePath(id), 'utf8');
@@ -233,11 +235,14 @@ export async function renameProject(id: string, name: string): Promise<Project |
   return updated;
 }
 
-// Delete a project's directory (recursive). Returns true on success.
+// Delete a project's directory (recursive). Returns true on success. A synced
+// project is a link to the user's own folder: the LINK goes, never the folder.
 export async function deleteProject(id: string): Promise<boolean> {
   if (!isValidId(id)) return false;
   try {
-    await fs.promises.rm(projectDir(id), { recursive: true, force: true });
+    const st = await fs.promises.lstat(projectDir(id)).catch(() => null);
+    if (st && st.isSymbolicLink()) await fs.promises.unlink(projectDir(id));
+    else await fs.promises.rm(projectDir(id), { recursive: true, force: true });
     return true;
   } catch (_) {
     return false;
