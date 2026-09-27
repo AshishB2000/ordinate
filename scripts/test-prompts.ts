@@ -70,9 +70,11 @@ ok('…and it accepts a non-trivial set of step types', accepted.length >= 8, St
 const promptedSteps = [...prompts.SUGGEST_STEPS_SYSTEM_PROMPT.matchAll(/"type": "([a-z_]+)"/g)].map((m) => m[1]);
 // The mask steps are withheld from the model ON PURPOSE (see prompts.ts): what
 // is sensitive is the detector's call and the user's, never a model's.
-const MASK_TYPES = ['mask_hash', 'mask_redact', 'mask_generalize'];
-ok('…and it accepts the three mask steps', MASK_TYPES.every((t) => accepted.includes(t)), accepted.join(', '));
-ok('the steps prompt names every step type transforms.ts accepts, except the mask steps',
+// So is the segment step (Find segments): it carries a fitted model — centroids
+// and scalings — and a model must never write a computed number.
+const MASK_TYPES = ['mask_hash', 'mask_redact', 'mask_generalize', 'segment'];
+ok('…and it accepts the three mask steps and the segment step', MASK_TYPES.every((t) => accepted.includes(t)), accepted.join(', '));
+ok('the steps prompt names every step type transforms.ts accepts, except the mask and segment steps',
   accepted.every((t) => promptedSteps.includes(t) || MASK_TYPES.includes(t)),
   'missing: ' + accepted.filter((t) => !promptedSteps.includes(t) && !MASK_TYPES.includes(t)).join(', '));
 ok('…and never offers a mask step', !promptedSteps.some((t) => MASK_TYPES.includes(t)), promptedSteps.join(', '));

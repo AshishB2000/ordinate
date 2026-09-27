@@ -95,13 +95,14 @@ function vizSelect(id: string): HTMLSelectElement | null {
 }
 
 // Fill a native <select> with { value, label } options (textContent only).
-function fillSelect(sel: HTMLSelectElement | null, items: Array<{ value: string; label: string }>, value: string): void {
+function fillSelect(sel: HTMLSelectElement | null, items: Array<{ value: string; label: string; title?: string }>, value: string): void {
   if (!sel) return;
   sel.innerHTML = '';
   items.forEach((it) => {
     const opt = document.createElement('option');
     opt.value = it.value;
     opt.textContent = it.label;
+    if (it.title) opt.title = it.title; // a column's catalog description, as in the encoding form
     if (it.value === value) opt.selected = true;
     sel.appendChild(opt);
   });
@@ -173,4 +174,11 @@ function ensureVizForm(): void {
   vizPivotForm = createPivotBuilder(mount, { onChange: () => scheduleRecompute() });
   mount.insertBefore(vizPivotForm.el, vizForm.el);
   vizPivotForm.show(false);
+  // The cohort / event-funnel shelves, mounted the same way (cohortBuilder.ts).
+  vizEngineForm = createEngineBuilder(mount, {
+    onChange: () => scheduleRecompute(),
+    dataset: () => (currentProjectId && vizDatasetId ? { projectId: currentProjectId, datasetId: vizDatasetId } : null),
+  });
+  mount.insertBefore(vizEngineForm.el, vizForm.el);
+  vizEngineForm.show('');
 }

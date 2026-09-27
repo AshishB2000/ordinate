@@ -94,6 +94,10 @@ function renderChartJsInArea(container, data, type, entry, turnIdx, source?) {
     return;
   }
 
+  // Cohort and event funnel: DOM over `data.cohort` / `data.eventFunnel`, which
+  // main computed — the pivot's arrangement (cohortRender.ts).
+  if (type === 'cohort' || type === 'event_funnel') { renderEngineViz(container, data, type, source); return; }
+
   if (type === 'table') {
     const wrap = document.createElement('div');
     wrap.className = 'cv-col-body';
@@ -299,14 +303,14 @@ const VIZ_LABELS = {
   funnel: 'Funnel', histogram: 'Histogram',
   sankey: 'Sankey', candlestick: 'Candlestick', boxplot: 'Box plot',
   waterfall: 'Waterfall', bullet: 'Bullet', calendar: 'Calendar heatmap', radar: 'Radar', pareto: 'Pareto',
-  pivot: 'Pivot table',
+  pivot: 'Pivot table', cohort: 'Cohort', event_funnel: 'Event funnel',
   table: 'Table', map_bubble: 'Bubble map', map_choropleth: 'Region map',
 };
 
 // Small monochrome glyph per chart type for the viz chips. currentColor so each icon
 // inherits the chip's state color (muted → accent on hover → white when active).
 //
-// These 34 stay hand-drawn rather than moving into the icons.ts sprite: they
+// These 36 stay hand-drawn rather than moving into the icons.ts sprite: they
 // are a CHART TAXONOMY, one mark per renderable type, not UI actions, and they
 // are generated from this table alongside VIZ_LABELS. What they do take from
 // the sprite is its geometry — 16px at stroke 1.5 with `class="ic"`, so a
@@ -349,6 +353,8 @@ const VIZ_ICONS = {
   pareto: _vi('<rect x="4" y="9" width="3.4" height="11" fill="currentColor" stroke="none"/><rect x="8.6" y="13" width="3.4" height="7" fill="currentColor" stroke="none"/><rect x="13.2" y="16" width="3.4" height="4" fill="currentColor" stroke="none"/><rect x="17.8" y="18" width="3.4" height="2" fill="currentColor" stroke="none"/><polyline points="5.7 8 10.3 5.2 14.9 4 19.5 3.4"/>'),
   table: _vi('<rect x="4" y="5" width="16" height="14" rx="1"/><line x1="4" y1="9.5" x2="20" y2="9.5"/><line x1="12" y1="5" x2="12" y2="19"/><line x1="4" y1="14.5" x2="20" y2="14.5"/>'),
   pivot: _vi('<rect x="4" y="5" width="16" height="14" rx="1"/><rect x="4" y="5" width="16" height="4.5" fill="currentColor"/><rect x="4" y="9.5" width="5" height="9.5" fill="currentColor" opacity="0.35"/><line x1="9" y1="5" x2="9" y2="19"/><line x1="14.5" y1="5" x2="14.5" y2="19"/><line x1="4" y1="14.5" x2="20" y2="14.5"/>'),
+  cohort: _vi('<path d="M4 4h16v4h-4v4h-4v4H8v4H4z"/><rect x="4" y="4" width="4" height="16" fill="currentColor"/><rect x="8" y="4" width="4" height="12" fill="currentColor" opacity="0.5"/>'),
+  event_funnel: _vi('<rect x="4" y="4" width="16" height="3.5" rx="0.5" fill="currentColor"/><rect x="4" y="10.25" width="11" height="3.5" rx="0.5" fill="currentColor" opacity="0.7"/><rect x="4" y="16.5" width="6" height="3.5" rx="0.5" fill="currentColor" opacity="0.45"/><path d="M20 9.5l-4 2M15 15.75l-4 2"/>'),
   map_bubble: _vi('<circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r="1.6" fill="currentColor"/><circle cx="15" cy="14" r="2.2" fill="currentColor"/>'),
   map_choropleth: _vi('<path d="M9 4 4 6v14l5-2 6 2 5-2V4l-5 2-6-2z"/><path d="M9 4v14M15 6v14"/>'),
 };
@@ -367,6 +373,8 @@ const ALL_CHART_TYPE_IDS = [
   // belongs in the one list every picker pools from — even though the thing it
   // draws is a <table>, like 'table' and unlike the other thirty.
   'pivot',
+  // Their own shelves, like the pivot's; picked from "+ More" (cohortBuilder.ts).
+  'cohort', 'event_funnel',
 ];
 
 // PART 1: CODE-DRIVEN eligibility. dataShape (still returned by the AI) + the real
@@ -446,7 +454,8 @@ function eligibleChartTypes(dataShape, seriesCount, labelCount) {
  * and honouring the author's choice beats renaming it for them.
  */
 function chartCanRender(type, data, hasGeo) {
-  if (type === 'table' || type === 'pivot') return true;
+  // A cohort / event funnel draws its own "pick a column" state when its shelves are empty.
+  if (type === 'table' || type === 'pivot' || type === 'cohort' || type === 'event_funnel') return true;
   if (type === 'map_bubble' || type === 'map_choropleth') return !!hasGeo;
   const d = data || {};
   if (countNumericSeries(d) < (CHART_SERIES_MIN[type] || 1)) return false;

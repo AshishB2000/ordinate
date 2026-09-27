@@ -27,6 +27,7 @@ import { windowProblem, windowType } from '../data/stepsWindow';
 import { genPivot, genSplit, genUnpivot } from './sqlGenReshape';
 import { genConditional, genDedupeKey, genParseDate, genReplace } from './sqlGenClean';
 import { genLookup, genUnion } from './sqlGenCombine';
+import { genSegment } from './sqlGenSegment';
 
 export type Param = string | number | null;
 
@@ -162,6 +163,8 @@ export function genPowerStep(step: TransformStep, ctx: PowerSqlCtx): PowerSqlOut
       return genLookup(step, ctx);
     case 'window':
       return genWindow(step, ctx);
+    case 'segment':
+      return genSegment(step, ctx);
     default:
       return null;
   }

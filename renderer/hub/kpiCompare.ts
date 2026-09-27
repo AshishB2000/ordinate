@@ -93,6 +93,7 @@ async function paintMetricCompare(card: any, body: HTMLElement): Promise<void> {
   vs.className = 'dash-metric-vs';
   vs.textContent = r.label;
   row.insertAdjacentElement('afterend', vs);
+  if (!flat && typeof drvMountKpiWhy === 'function') drvMountKpiWhy(card, vs); // driversEntry.ts — "Why?"
   // The label under the figure repeats the card's title in the common case;
   // with a delta to show, that line is the one the card can spare.
   const label = body.querySelector('.dash-metric-label') as HTMLElement | null;
@@ -193,4 +194,5 @@ function anRenderKpiProps(card: any): void {
   host.appendChild(h);
   anRenderCompareProps(card, host);
   void tcRenderKpiProps(card, host); // "Calculate as" (calcMenu.ts)
+  if (typeof snRenderKpiScenarioProps === 'function') void snRenderKpiScenarioProps(card, host); // what-if (scenarioCard.ts)
 }

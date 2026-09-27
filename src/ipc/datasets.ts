@@ -628,7 +628,7 @@ export function register() {
       const summaryText = await promptSummary(projectId, datasetId);
       if (summaryText === null) return { ok: false, error: 'Dataset not found' };
       const res = await suggestSteps(summaryText);
-      if (res.ok) return { ok: true, steps: transforms.sanitizeSteps(res.steps) };
+      if (res.ok) return { ok: true, steps: transforms.sanitizeSteps(res.steps).filter((st) => st.type !== 'segment') }; // a fitted model is the app's, never a model's
       if (res.errorType === 'not_ready') return { ok: false, notReady: true };
       return { ok: false, error: res.message || 'Could not suggest steps' };
     } catch (err: any) {

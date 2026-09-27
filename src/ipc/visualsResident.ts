@@ -52,7 +52,7 @@ import { FILTER_OPS, LIST_OPS } from '../data/filterOps';
 // `in`/`not in` add a FOURTH warning source to the three enumerated above: an
 // empty value list makes `transforms.stepFilter` skip the step with a warning.
 // Like the other three it is decidable from the step alone, with no rows.
-function filterCannotWarn(f: FilterStep, names: Set<string>): boolean {
+export function filterCannotWarn(f: FilterStep, names: Set<string>): boolean {
   if (!f || f.type !== 'filter' || !names.has(f.column) || !FILTER_OPS.has(f.op)) return false;
   if (LIST_OPS.has(f.op) && (!Array.isArray(f.values) || f.values.length === 0)) return false;
   if (f.op === 'period' && !f.period) return false;
@@ -129,6 +129,8 @@ export async function residentVizData(
     if (!encoding) return null;
     // A pivot is branch (D) and has its own resident path above.
     if (encoding.pivot) return null;
+    // So are the cohort and event-funnel encodings (ipc/visualsEngines).
+    if (encoding.cohort || encoding.eventFunnel) return null;
     // Geo derives its region items from the finished series, and a split or an
     // all-'none' encoding is branch (B)/(C). None are reproducible here.
     if (encoding.geo) return null;

@@ -138,6 +138,13 @@ async function vizThumbRender(tile: HTMLElement): Promise<void> {
     return;
   }
 
+  // A cohort's card shows its triangle, shaded — a curve of sixty lines is a smear at this size.
+  if (chartType === 'cohort' && res.data.cohort) {
+    if (!drawCohortThumb(canvas, res.data.cohort) || !tile.isConnected) { host.remove(); return; }
+    tile.classList.add('viz-card-tile--thumb');
+    return;
+  }
+
   const stored = visual.overrides && typeof visual.overrides === 'object' ? visual.overrides : {};
   const overrides = Object.assign({}, fmtWithScope(stored, { projectId: currentProjectId, encoding: visual.encoding }), {
     noAnimate: true, showLegend: false, showGridlines: false, valueMode: 'off', title: '',

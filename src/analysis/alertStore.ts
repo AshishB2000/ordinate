@@ -36,14 +36,11 @@ import { computeCardMetric } from '../ipc/dashboards';
 import { sanitizeDashboardFilters } from './dashboards';
 import { detectAnomalies } from './anomalies';
 import { detectAnomaliesResident } from '../engine/anomaliesResident';
-import { readDistinctPage, distinctValuesPageJs } from '../engine/datasetPage';
+import { distinctAllJs, distinctAllResident } from '../engine/distinctAll';
 import { periodPlan, orderPeriods } from './insightsAgg';
 import type { FilterStep } from '../data/transforms';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** How many distinct period values are read to find "this period" and "the one before". */
-const PERIOD_SCAN = 2000;
 
 export interface AlertFile {
   rules: AlertRule[];
@@ -303,7 +300,7 @@ export async function metricFor(
  * compare against, and a rule that fired on a dataset's first day would be a
  * lie about a change.
  */
-async function recentPeriods(
+export async function recentPeriods(
   projectId: string,
   datasetId: string,
   column: string,
@@ -316,17 +313,22 @@ async function recentPeriods(
   return { keys: [rolled[rolled.length - 2], rolled[rolled.length - 1]], op: plan.op };
 }
 
-/** Distinct cells of one column — resident first, hydrate-and-fold as the reference. */
+/**
+ * EVERY distinct cell of one column — resident first, hydrate-and-fold as the
+ * reference. Not the picker's capped page: "the latest two periods" must see the
+ * latest dates, and a 200-value first-seen page of two years of days ends in
+ * the first July (engine/distinctAll.ts).
+ */
 async function distinctValues(projectId: string, datasetId: string, column: string): Promise<string[] | null> {
   try {
     const src = await datasets.residentSource(projectId, datasetId);
     if (src) {
-      const fast = readDistinctPage(src, column, { limit: PERIOD_SCAN, search: '' });
-      if (fast) return fast.values;
+      const fast = await distinctAllResident(src, column);
+      if (fast) return fast;
     }
     const ds = await datasets.getDataset(projectId, datasetId);
     if (!ds) return null;
-    return distinctValuesPageJs(ds.columns, ds.rows, column, { limit: PERIOD_SCAN, search: '' }).values;
+    return distinctAllJs(ds.columns, ds.rows, column);
   } catch (_) {
     return null; // a rule that cannot read its period column simply does not fire
   }

@@ -10,6 +10,7 @@ import type { VizDataResult } from '../analysis/vizData';
 import * as trace from '../engine/residentTrace';
 // The two resident fast paths `vizDataFor` tries before hydrating a row.
 import { residentPivotData, residentVizData } from './visualsResident';
+import { residentEngineData } from './visualsEngines';
 import { authoringVizData } from './vizExtras';
 import { withPeriodOverlay } from './visualsOverlay';
 import { sampledVizData } from './vizSampleData';
@@ -40,6 +41,7 @@ import * as trash from '../app/trash';
 import { applyToChart, rowShaper } from '../app/sharePolicy';
 import { isSharePath } from '../app/privacyStore';
 import { withAsOf } from '../data/asOf';
+import { driversVizData } from './drivers';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus
 // `visual:data` which loads a dataset and runs the PURE bridge (src/vizData.ts) to
@@ -435,6 +437,8 @@ async function computeVizData(
   filters: FilterStep[],
   opts: { maxHydrateRows?: number; params?: ParamValues; sample?: boolean },
 ): Promise<VizDataReply> {
+  // A key-drivers waterfall tile is a QUESTION, answered afresh (ipc/drivers.ts).
+  if (encoding && encoding.drivers) return driversVizData(projectId, datasetId, encoding, filters, opts.params);
   // A pipeline that references a dashboard parameter answers from the dataset
   // REPLAYED with the query's values bound (data/paramReplay.ts) — the stored
   // table holds those fields unbound. Everything else is untouched below.
@@ -455,6 +459,8 @@ async function computeVizData(
   }
   const joined = await authoringVizData(projectId, datasetId, encoding, filters);
   if (joined) return joined;
+  const engine = await residentEngineData(projectId, datasetId, encoding, filters); // cohort / event funnel
+  if (engine) return { ok: true, data: engine.data, recommendedShape: engine.recommendedShape, warnings: engine.warnings };
   // Fast path: an aggregated chart (or a pivot) over a resident (v3) dataset,
   // answered without hydrating a single row. Null unless provably identical.
   const fast = encoding && encoding.pivot

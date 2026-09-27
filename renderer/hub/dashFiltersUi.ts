@@ -90,6 +90,8 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
   // at all, so a card showing one would fail that guard and render "—" without
   // ever asking main for the figure it is displaying.
   if (currentProjectId && m.metricId) {
+    // A what-if scenario on the card (scenarioCard.ts) paints its own figure.
+    if (m.scenarioId && typeof snPaintScenarioCard === 'function' && await snPaintScenarioCard(card, body, valEl, labelEl)) return;
     let mr: any;
     try {
       mr = await snapMetricValue(currentProjectId, m.metricId, effectiveFilters(), dashParamPayload()); // snapshotAsOf.ts

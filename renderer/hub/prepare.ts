@@ -87,7 +87,7 @@ function stepSummaryText(step: any): string {
     case 'rename_column':
       return 'Rename ' + step.from + ' → ' + step.to;
     default:
-      return pvMaskSummary(step) || powerStepSummary(step); // prepareMask.ts / prepareCombine.ts
+      return pvMaskSummary(step) || sgStepSummary(step) || powerStepSummary(step); // prepareMask.ts / segments.ts / prepareCombine.ts
   }
 }
 

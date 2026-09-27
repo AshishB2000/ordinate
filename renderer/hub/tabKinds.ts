@@ -140,6 +140,17 @@ const TAB_KINDS: Record<string, TabKind> = {
     resolve: (pid, id) => tkName(window.hubPower.scorecardGet(pid, id)),
     isDirty: () => false,
   },
+  // A what-if scenario page shares the Dashboards section too, like a scorecard.
+  scenario: {
+    icon: 'sliders',
+    label: 'Scenario',
+    section: 'analyses',
+    open: (id) => snOpen(id),
+    close: async () => { await snClose(); return true; },
+    current: () => (snCurrent && tkShown('sn-page') ? { id: snCurrent.id, name: snCurrent.name } : null),
+    resolve: (pid, id) => tkName(window.hubScenarios.get(pid, id)),
+    isDirty: () => !!snCurrent && !!snSaveTimer,
+  },
   // A capture's id is its numeric entry id; tabs carry it as a string.
   capture: {
     icon: 'camera',

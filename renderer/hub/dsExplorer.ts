@@ -381,6 +381,7 @@ function dsOpenMoreMenu(anchor: HTMLElement): void {
     };
     add('lineage', 'Lineage', () => void lnOpen('dataset', id, expName));
     add('history', 'Pipeline history', () => void vhOpen('dataset', id, expName));
+    add('layers', 'Find segments', () => void sgOpen(id, expName)); // segments.ts
     add('trash', 'Move to Trash', () => void handleDeleteDataset(id), true);
   }, () => anchor.setAttribute('aria-expanded', 'false'));
 }

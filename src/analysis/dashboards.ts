@@ -124,6 +124,8 @@ export interface CardMetric {
    * period series (ipc/tableCalc.ts), recomputed on every render, never stored.
    */
   calc?: TableCalc;
+  /** Show the metric under this saved what-if scenario (src/analysis/scenarios.ts). */
+  scenarioId?: string;
 }
 
 /**
@@ -402,6 +404,7 @@ export function sanitizeCard(raw: unknown): Card | null {
   if (compare) metric.compare = compare;
   const calc = sanitizeTableCalc(m.calc);
   if (calc) metric.calc = calc;
+  if (metricId && typeof m.scenarioId === 'string' && UUID_RE.test(m.scenarioId)) metric.scenarioId = m.scenarioId;
   card.metric = metric;
   return card;
 }

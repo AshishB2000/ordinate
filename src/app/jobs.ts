@@ -39,7 +39,7 @@ import { AsyncLocalStorage } from 'async_hooks';
 
 export type JobKind =
   | 'import' | 'refresh' | 'export' | 'report' | 'bundle' | 'sql-save' | 'quality'
-  | 'insights' | 'publish' | 'backup' | 'restore' | 'automation';
+  | 'insights' | 'publish' | 'backup' | 'restore' | 'automation' | 'analysis';
 
 export type JobState = 'queued' | 'running' | 'done' | 'error' | 'cancelled' | 'interrupted';
 
@@ -100,7 +100,7 @@ export const MAX_RUNNING = 3;
 export const MAX_RECENT = 30;
 const KINDS: ReadonlySet<string> = new Set([
   'import', 'refresh', 'export', 'report', 'bundle', 'sql-save', 'quality',
-  'insights', 'publish', 'backup', 'restore', 'automation',
+  'insights', 'publish', 'backup', 'restore', 'automation', 'analysis',
 ]);
 const FINAL: ReadonlySet<JobState> = new Set(['done', 'error', 'cancelled', 'interrupted']);
 

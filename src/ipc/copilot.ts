@@ -20,6 +20,11 @@ import { resolveChartOverlays } from './visualsAnalytics';
 import * as scorecards from '../analysis/scorecards';
 import { computeScorecard } from './scorecards';
 import { scorecardFacts } from '../ai/scorecardFacts';
+import * as drivers from './drivers';
+import { driversFacts } from '../ai/driversFacts';
+import * as scenarios from '../analysis/scenarios';
+import { computeScenario } from '../analysis/scenarioResolve';
+import { scenarioFacts } from '../ai/scenarioFacts';
 import type { FactMetric } from '../ai/copilotFacts';
 import * as history from '../app/history';
 import * as captureDataset from '../data/captureDataset';
@@ -269,6 +274,18 @@ export async function buildFacts(
     }
   }
 
+  // A "Why did this change?" panel: the question it answered, recomputed now
+  // from the token it was asked under (ipc/drivers.ts), so the model narrates
+  // the app's decomposition and never derives one (ai/driversFacts.ts).
+  if (kind === 'drivers' && id) {
+    const asked = drivers.recall(projectId, id);
+    const res = asked ? await drivers.driversFor(projectId, asked.spec, asked.params) : null;
+    if (res && res.ok) {
+      emit({ kind: 'compute', label: 'Explained the change across ' + plural(res.dimensions.length, 'dimension'), count: res.dimensions.length });
+      return driversFacts(res);
+    }
+  }
+
   // An open SCORECARD: every row's figures and status for the period on screen,
   // computed by the same call the page makes — so "what's off track?" is read
   // straight off the app's own verdicts (ai/scorecardFacts.ts).
@@ -282,6 +299,18 @@ export async function buildFacts(
       return scorecardFacts({
         name: res.name, period: res.period, windowLabel: res.window.label, rows: res.rows, groups: res.groups,
       });
+    }
+  }
+
+  // An open SCENARIO: baseline and scenario figures, the drivers in words and the
+  // tornado, computed by the same call the page makes (ai/scenarioFacts.ts).
+  if (kind === 'scenario' && id) {
+    const sc = await scenarios.getScenario(projectId, id);
+    if (sc) {
+      emit({ kind: 'read', label: 'Read ' + sc.name });
+      const res = await computeScenario(projectId, sc);
+      emit({ kind: 'compute', label: 'Recomputed ' + plural(res.metrics.length, 'metric') + ' under ' + plural(res.drivers.length, 'driver'), count: res.metrics.length });
+      return scenarioFacts(res);
     }
   }
 

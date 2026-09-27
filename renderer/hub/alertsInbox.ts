@@ -202,6 +202,10 @@ function aiEventRow(e: any): HTMLElement {
     void openAnalysis(String(e.analysisId));
   }));
   acts.appendChild(aiAction('Explain', () => { void aiExplain(e); }));
+  // What drove it: the rule's latest two periods, decomposed (driversEntry.ts).
+  if (rule && rule.compare !== 'anomaly' && typeof drvWhyFromAlert === 'function') {
+    acts.appendChild(aiAction('Why?', () => { aiClosePopover(); drvWhyFromAlert(String(rule.id)); }));
+  }
   if (rule) acts.appendChild(aiAction('Snooze 24h', () => { void aiSnooze(rule); }));
   if (!e.seen) acts.appendChild(aiAction('Mark seen', async () => {
     try { await window.hub.markAlertSeen(currentProjectId, String(e.id)); } catch (_) { /* repaint tells the truth */ }

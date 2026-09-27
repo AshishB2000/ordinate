@@ -205,6 +205,8 @@ async function reportTile(
     }
   }
 
+  if (!grid) grid = engineReportGrid(type, data, REPORT_GRID_MAX_ROWS); // a cohort / funnel typesets too (cohortRender.ts)
+
   const frame = Object.assign({ themeClasses: reportStyleClasses(ctx.analysis), accentHex: dashSanitizeStyle(ctx.analysis && ctx.analysis.style).accentHex, style: dashSanitizeStyle(ctx.analysis && ctx.analysis.style) }, box);
   let png: string | null = null;
   if (!grid) {

@@ -22,6 +22,12 @@ import { isDateGrain, sanitizeBins } from './categoryKey';
 import type { DateGrain } from './categoryKey';
 import { sanitizePivot } from './pivotData';
 import type { PivotEncoding } from './pivotData';
+import { sanitizeDriversEncoding } from './driverScope';
+import type { DriversEncoding } from './driverScope';
+import { sanitizeCohort } from './cohortData';
+import type { CohortEncoding } from './cohortData';
+import { sanitizeEventFunnel } from './funnelEvents';
+import type { FunnelEncoding } from './funnelEvents';
 import { sanitizeOverlays } from './analytics';
 import type { Overlay } from './analytics';
 import { sanitizeTableCalc } from './tableCalc';
@@ -119,6 +125,10 @@ export interface VizEncoding {
    * "not a pivot" means, so there is no migration.
    */
   pivot?: PivotEncoding;
+  /** A COHORT visual's shelves (analysis/cohortData) — beside the mirrored chart fields, like `pivot`. */
+  cohort?: CohortEncoding;
+  /** An EVENT FUNNEL's shelves (analysis/funnelEvents) — beside the mirrored chart fields, like `pivot`. */
+  eventFunnel?: FunnelEncoding;
   /**
    * OPTIONAL period overlay for a line/column chart on a DATE category:
    * `previous_year` adds the same slice a year earlier as a muted series,
@@ -126,6 +136,8 @@ export interface VizEncoding {
    * which is why it rides on the encoding and not on the styling overrides.
    */
   overlay?: 'previous_year';
+  /** A KEY DRIVERS waterfall tile's question (analysis/driverScope) — recomputed on every render. */
+  drivers?: DriversEncoding;
 }
 
 // Whitelisted chart-styling overrides — the SAME object shape the capture-flow ⋯
@@ -291,6 +303,12 @@ export function sanitizeEncoding(raw: unknown): VizEncoding {
   if (o.overlay === 'previous_year') enc.overlay = 'previous_year';
   const pivot = sanitizePivot(o.pivot);
   if (pivot) enc.pivot = pivot;
+  const drivers = sanitizeDriversEncoding(o.drivers);
+  if (drivers) enc.drivers = drivers;
+  const cohort = sanitizeCohort(o.cohort);
+  if (cohort) enc.cohort = cohort;
+  const eventFunnel = sanitizeEventFunnel(o.eventFunnel);
+  if (eventFunnel) enc.eventFunnel = eventFunnel;
   if (o.geo && typeof o.geo === 'object') {
     const g = o.geo as Record<string, unknown>;
     if (typeof g.level === 'string' && GEO_LEVELS.has(g.level)) {

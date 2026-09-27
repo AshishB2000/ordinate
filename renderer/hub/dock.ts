@@ -125,6 +125,10 @@ function dkToggle(): void {
  * resolved — but only if what it resolves can never outlive its section.
  */
 function dkContextRef(): { kind: string; id: string; label: string; name: string } {
+  // A "Why did this change?" handed to the Assistant is the context until the
+  // user is somewhere else (driversEntry.ts): the facts are its decomposition.
+  const drv = typeof drvDockContext === 'function' ? drvDockContext() : null;
+  if (drv) return drv;
   if (currentSection === 'datasets') {
     if (typeof expId === 'string' && expId) {
       const name = typeof expName === 'string' && expName ? expName : 'open dataset';
@@ -151,6 +155,12 @@ function dkContextRef(): { kind: string; id: string; label: string; name: string
   // is answered from the app's own verdicts.
   if (currentSection === 'analyses' && typeof scCurrent !== 'undefined' && scCurrent) {
     return { kind: 'scorecard', id: scCurrent.id, label: 'scorecard · ' + scCurrent.name, name: scCurrent.name };
+  }
+  // An open SCENARIO: its baseline and scenario figures, drivers and tornado
+  // (buildFacts → ai/scenarioFacts.ts), so "which driver matters most?" is read
+  // off the app's own sensitivity.
+  if (currentSection === 'analyses' && typeof snCurrent !== 'undefined' && snCurrent) {
+    return { kind: 'scenario', id: snCurrent.id, label: 'scenario · ' + snCurrent.name, name: snCurrent.name };
   }
   // An OPEN dashboard is the context; the Dashboards LIST is not. In scope now
   // because an edit delta can only name a tile the model was actually shown.
@@ -467,6 +477,8 @@ async function dkSend(): Promise<void> {
   if (!input) return;
   const question = input.value.trim();
   if (!question || !currentProjectId) return;
+  // "filter this to …" on an open dashboard is applied by the app, no model (filterTypeApply.ts).
+  if (typeof ftDockFilter === 'function' && await ftDockFilter(question)) { input.value = ''; return; }
 
   // Context is ALWAYS inferred, never overridden — that's the dock's whole
   // point (see dkContextRef/dkRenderContext above).

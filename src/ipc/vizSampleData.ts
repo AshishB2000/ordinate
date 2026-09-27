@@ -21,6 +21,9 @@ export async function sampledVizData(
   encoding: VizEncoding,
   filters: FilterStep[],
 ): Promise<VizDataReply | null> {
+  // A cohort or funnel over a sample of EVENTS is not a smaller answer, it is a
+  // wrong one (members lose the events that retain them) — compute it in full.
+  if (encoding && (encoding.cohort || encoding.eventFunnel)) return null;
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   if (!meta || meta.rowCount <= SAMPLE_MIN_ROWS) return null;
   const catName = encoding && typeof encoding.category === 'string' ? encoding.category : '';

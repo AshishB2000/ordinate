@@ -107,6 +107,7 @@ async function onDatasetChange(datasetId: string, preset?: any): Promise<void> {
   // them from the chart fields when the preset has no pivot of its own —
   // which is what makes switching chart type carry the work over.
   vizPivotForm!.setColumns(cols, (preset && preset.pivot) || pivotFromEncoding(preset || {}));
+  if (vizEngineForm) vizEngineForm.setColumns(cols, preset || {}); // cohort / funnel shelves (cohortBuilder.ts)
   applyPivotMode(vizCurrentChartType === 'pivot');
 
   vizForm!.show(true);
@@ -176,8 +177,10 @@ document.addEventListener('themechange', () => {
  */
 function applyPivotMode(on: boolean): void {
   if (!vizForm || !vizPivotForm) return;
-  vizForm.showFields(!on);
+  const engine = engineKind(vizCurrentChartType); // a cohort / funnel swaps in its own shelves the same way
+  vizForm.showFields(!on && !engine);
   vizPivotForm.show(on);
+  if (vizEngineForm) vizEngineForm.show(engine);
 }
 
 /**
@@ -189,6 +192,7 @@ function applyPivotMode(on: boolean): void {
  * the name suggester, and the switch back to a column chart.
  */
 function vizEncodingForType(): any {
+  if (engineKind(vizCurrentChartType) && vizEngineForm) return vizEngineForm.encodingFor(engineKind(vizCurrentChartType));
   if (vizCurrentChartType !== 'pivot') return vizForm!.getEncoding();
   const pivot = vizPivotForm!.getPivot();
   return Object.assign(encodingFromPivot(pivot), { pivot });
@@ -274,14 +278,17 @@ async function recomputeVisual(): Promise<void> {
     initial,
     onSelect: (type: string, info: any) => {
       const wasPivot = vizCurrentChartType === 'pivot';
+      const wasEngine = engineKind(vizCurrentChartType);
       vizCurrentChartType = type;
       anpSetChartType(type); // which overlays this type draws
       // Entering or leaving pivot mode changes what the encoding IS, so the
       // panel swaps and the visual is recomputed rather than redrawn from data
       // built for the other shape.
-      if ((type === 'pivot') !== wasPivot) {
+      if ((type === 'pivot') !== wasPivot || engineKind(type) !== wasEngine) {
+        // Leaving a cohort / funnel hands its mirrored chart fields back to the form.
+        if (wasEngine && vizEngineForm) vizForm!.setEncoding(vizEngineForm.encodingFor(wasEngine));
         if (type === 'pivot') vizPivotForm!.setColumns(vizForm!.getColumns(), pivotFromEncoding(vizForm!.getEncoding()));
-        else vizForm!.setEncoding(encodingFromPivot(vizPivotForm!.getPivot()));
+        else if (wasPivot) vizForm!.setEncoding(encodingFromPivot(vizPivotForm!.getPivot()));
         applyPivotMode(type === 'pivot');
         void recomputeVisual();
         return;
@@ -388,6 +395,9 @@ async function handleSaveVisual(): Promise<void> {
     return;
   }
   const encoding = vizEncodingForType();
+  // A cohort / funnel names what its shelves still need; complete, its mirrored fields pass below.
+  const engineNeeds = vizEngineForm ? vizEngineForm.needs(engineKind(vizCurrentChartType)) : '';
+  if (engineNeeds) { window.alert(engineNeeds); return; }
   if (encoding.pivot) {
     if (!encoding.pivot.rows.length || !encoding.pivot.values.length) {
       window.alert('Pick a row dimension and at least one value before saving.');
@@ -455,6 +465,8 @@ function applySuggestedEncoding(enc: any, chartType: string): void {
 
 function suggestVisualName(encoding: any, chartType: string): string {
   const typeLabel = VIZ_LABELS[chartType] || chartType || 'Chart';
+  const engineName = vizEngineForm ? vizEngineForm.suggestName(engineKind(chartType)) : '';
+  if (engineName) return engineName;
   if (encoding && encoding.pivot) {
     const p = encoding.pivot;
     const value = p.values && p.values[0] ? p.values[0].column : '';

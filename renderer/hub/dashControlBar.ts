@@ -85,7 +85,7 @@ function renderDashControlBar(): void {
   if (openControlPopover) openControlPopover();
   chips.innerHTML = '';
   const cards = dashBarControls();
-  bar.hidden = cards.length === 0;
+  bar.hidden = cards.length === 0 && !bar.querySelector('.ft-box'); // the typed-filter box (filterType.ts) keeps it up
   cards.forEach((card) => chips.appendChild(makeControlChip(card)));
   dashShow('dash-fb-clear', cards.length > 0 && anyControlActive());
 }
