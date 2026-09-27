@@ -48,9 +48,14 @@ async function pushFrom(projectId: string, rootId: string): Promise<void> {
   const list = await datasets.listDatasets(projectId);
   const inputs = new Map<string, string[]>(); // sql dataset → the datasets it reads
   const names = new Map<string, string>();
+  const stepOnly = new Set<string>(); // read another dataset in a union/lookup step, no query to re-run
   for (const d of list) {
     names.set(d.id, d.name);
     if (d.originKind === 'sql') inputs.set(d.id, d.originDeps || []);
+    if (d.stepDeps && d.stepDeps.length) {
+      inputs.set(d.id, [...(inputs.get(d.id) || []), ...d.stepDeps]);
+      if (d.originKind !== 'sql') stepOnly.add(d.id);
+    }
   }
 
   // Everything downstream of the root, breadth-first, depth-limited.
@@ -95,11 +100,19 @@ async function pushFrom(projectId: string, rootId: string): Promise<void> {
           `Not refreshed: "${names.get(brokenInput) || 'an input'}" failed to refresh, so this was left as it was.`);
         continue;
       }
-      const res = await refreshDataset(projectId, id);
+      // A step-only dependent has nothing to re-fetch: re-running its pipeline
+      // (which re-reads the changed dataset) is its refresh.
+      const res = stepOnly.has(id) ? await recomputeSteps(projectId, id) : await refreshDataset(projectId, id);
       if (!res.ok) failed.add(id);
       // Its rows changed, so its OWN quality rules run too (they would on any
       // other refresh). Delivered like a manual refresh's; never throws.
       else await runQualityChecks(projectId, id);
     }
   }
+}
+
+async function recomputeSteps(projectId: string, id: string): Promise<{ ok: boolean }> {
+  const meta = await datasets.getDatasetMeta(projectId, id);
+  const res = meta ? await datasets.updateSteps(projectId, id, meta.steps || []) : null;
+  return { ok: res !== null };
 }

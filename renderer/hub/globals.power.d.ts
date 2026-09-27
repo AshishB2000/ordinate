@@ -11,5 +11,8 @@ interface Window {
     // ── table calculations ──
     kpiCalc(projectId: string, card: any, filters: any, calc: any, params?: any): Promise<any>;
     kpiCalcOptions(projectId: string, card: any): Promise<any>;
+    // ── prepare steps ── (results are the JSON envelopes src/ipc/preparePower.ts documents)
+    previewStep(projectId: string, datasetId: string, index: number, step: any): Promise<any>;
+    stepCounts(projectId: string, datasetId: string): Promise<any>;
   };
 }

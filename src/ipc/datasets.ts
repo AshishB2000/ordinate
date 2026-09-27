@@ -513,7 +513,7 @@ export function register() {
     return {
       ok: true,
       dataset,
-      preview: { columns: output.columns, rows: output.rows, rowCount: output.rowCount, warnings: output.warnings },
+      preview: { columns: output.columns, rows: output.rows, rowCount: output.rowCount, warnings: output.warnings, stepCounts: output.stepCounts },
     };
   }
 

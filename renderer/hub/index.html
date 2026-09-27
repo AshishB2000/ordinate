@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="hub.css"/>
   <link rel="stylesheet" href="authoring.css"/>
   <link rel="stylesheet" href="tablecalc.css"/>
+  <link rel="stylesheet" href="prepare-power.css"/>
   <link rel="stylesheet" href="a11y.css"/>
   <!-- Platform depth: one stylesheet per feature, each after its marker. -->
   <link rel="stylesheet" href="platform.css"/>
@@ -3022,6 +3023,13 @@
 <script src="formulaEditor.js"></script>
 <script src="drill.js"></script>
 <script src="prepare.js"></script>
+<!-- prepare.ts passed 766 lines; the step forms are split by family: the eight
+     original steps' forms (prepareForms.js), then the power steps' (reshape,
+     clean, combine — prepareCombine.js dispatches to the other two). -->
+<script src="prepareForms.js"></script>
+<script src="prepareReshape.js"></script>
+<script src="prepareClean.js"></script>
+<script src="prepareCombine.js"></script>
 <script src="connections.js"></script>
 <!-- connections.ts was 1076 lines; these three are it, split by job.
      connections.js stays first — it keeps the connector contract and the

@@ -13,5 +13,11 @@ if (location.protocol === 'file:' && location.pathname.endsWith('/renderer/hub/i
       ipcRenderer.invoke('tableCalc:kpi', { projectId, card, filters, calc, params }),
     // { ok, dateColumn } — whether the card's dataset has periods to calculate over.
     kpiCalcOptions: (projectId: string, card: any) => ipcRenderer.invoke('tableCalc:kpiOptions', { projectId, card }),
+
+    // ── prepare steps ── (src/ipc/preparePower.ts)
+    previewStep: (projectId: string, datasetId: string, index: number, step: any) =>
+      ipcRenderer.invoke('prepare:stepPreview', { projectId, datasetId, index, step }),
+    stepCounts: (projectId: string, datasetId: string) =>
+      ipcRenderer.invoke('prepare:stepCounts', { projectId, datasetId }),
   });
 }

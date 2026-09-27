@@ -628,3 +628,26 @@ scripts/**/*.js
 /renderer/hub/calcMenu.js
 /scripts/test-tableCalc.js
 /scripts/pwTableCalc.js
+# Prepare power steps (emitted siblings; also covered by the globs above).
+/src/data/stepTypes.js
+/src/data/regexSubset.js
+/src/data/stepsReshape.js
+/src/data/stepsClean.js
+/src/data/stepsCombine.js
+/src/data/stepsWindow.js
+/src/data/stepsSanitize.js
+/src/data/stepsPower.js
+/src/data/stepRefs.js
+/src/engine/sqlGenPower.js
+/src/engine/sqlGenReshape.js
+/src/engine/sqlGenClean.js
+/src/engine/sqlGenCombine.js
+/src/engine/pipelinePower.js
+/src/ipc/preparePower.js
+/renderer/hub/prepareForms.js
+/renderer/hub/prepareReshape.js
+/renderer/hub/prepareClean.js
+/renderer/hub/prepareCombine.js
+/scripts/test-powerSteps.js
+/scripts/test-powerStepsDuck.js
+/scripts/pwPrepare.js
