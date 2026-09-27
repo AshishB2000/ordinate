@@ -17,11 +17,13 @@ import { ok, failureCount } from './selfcheck';
 import { launchSmoke, seedProject, reloadSmoke, finishSmoke } from './smokeFixture';
 import type { Smoke, Fixture } from './smokeFixture';
 import { speedSection } from './pfSpeed';
+import { publishSection } from './pfPublish';
 
 type Section = { name: string; run: (s: Smoke, fx: Fixture) => Promise<unknown> };
 
 /** Sections that run on the small fixture, in order. */
 const SECTIONS: Section[] = [
+  { name: 'publish', run: publishSection },
   // platform:sections
 ];
 

@@ -113,6 +113,16 @@ function initAuthoring(): void {
           if (dashCurrent) void lnOpen('dashboard', String(dashCurrent.id), String(dashCurrent.name || ''));
         });
         menu.appendChild(lin);
+        // Publish this dashboard (with any others) as a static site (publishDialog.ts).
+        const pub = document.createElement('button');
+        pub.type = 'button';
+        pub.className = 'chart-menu-item';
+        pub.textContent = 'Publish…';
+        pub.addEventListener('click', () => {
+          close();
+          if (typeof openPublishDialog === 'function') void openPublishDialog(dashCurrent ? String(dashCurrent.id) : undefined);
+        });
+        menu.appendChild(pub);
       });
     });
   }

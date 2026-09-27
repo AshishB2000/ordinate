@@ -33,6 +33,12 @@ if (location.protocol === 'file:' && location.pathname.endsWith('/renderer/hub/i
     // The visual builder's preview: `visual:data`, sampled above 250k rows (src/ipc/vizSample.ts).
     previewVisualData: (projectId: string, datasetId: string, encoding: any, filters?: any, params?: any) =>
       ipcRenderer.invoke('visual:preview', { projectId, datasetId, encoding, filters, params }),
-    // platform:publish
+    // Publish to folder (src/ipc/publish.ts).
+    publishTargets: (projectId: string) => ipcRenderer.invoke('publish:targets', { projectId }),
+    publishConfig: (projectId: string) => ipcRenderer.invoke('publish:config', { projectId }),
+    publishPickFolder: () => ipcRenderer.invoke('publish:pickFolder'),
+    publishPlan: (config: any) => ipcRenderer.invoke('publish:plan', { config }),
+    publishRun: (config: any) => ipcRenderer.invoke('publish:run', { config }),
+    publishRepublish: (projectId: string, brands?: any) => ipcRenderer.invoke('publish:republish', { projectId, brands }),
   });
 }

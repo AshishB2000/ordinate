@@ -1406,6 +1406,9 @@
           <div class="an-list-head-actions">
             <button class="btn" type="button" id="an-draft-btn"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-sparkles"/></svg><span>Draft with the Assistant</span></button>
             <button class="btn btn-primary" type="button" id="an-new-btn">Create dashboard</button>
+            <!-- Publish…, Re-publish (publishDialog.ts). -->
+            <button class="icon-btn" type="button" id="an-list-more" aria-haspopup="menu"
+              aria-label="More dashboard actions" title="More"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-more-horizontal"/></svg></button>
           </div>
         </div>
         <!-- Dashboards and Reports are two views of the same work — what this
@@ -3215,6 +3218,7 @@
      hub.js boots them; each feature adds its scripts after its own marker. -->
 <script src="jobsPanel.js"></script>
 <!-- platform:publish -->
+<script src="publishDialog.js"></script>
 
 <!-- platform:privacy -->
 

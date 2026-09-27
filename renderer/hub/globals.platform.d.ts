@@ -17,5 +17,11 @@ interface Window {
     finishRendererJob(id: string, outcome: { ok: boolean; error?: string; message?: string; path?: string }): Promise<any>;
     onRendererJobCancel(cb: (id: string) => void): () => void;
     previewVisualData(projectId: string, datasetId: string, encoding: any, filters?: any, params?: any): Promise<any>;
+    publishTargets(projectId: string): Promise<any>;
+    publishConfig(projectId: string): Promise<any>;
+    publishPickFolder(): Promise<any>;
+    publishPlan(config: any): Promise<any>;
+    publishRun(config: any): Promise<any>;
+    publishRepublish(projectId: string, brands?: any): Promise<any>;
   };
 }

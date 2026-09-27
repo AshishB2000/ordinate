@@ -24,6 +24,7 @@ export function register(deps: PlatformDeps): void {
   require('../app/trash').onChange((projectId: string) => require('../engine/queryCache').invalidateProject(projectId));
 
   // platform:publish
+  require('./publish').register(deps); // publish to folder, re-publish, after-refresh schedule
 
   // platform:privacy
 

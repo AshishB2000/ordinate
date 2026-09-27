@@ -161,8 +161,9 @@ renderer-safe views and strip every raw key and secret. `executionReady()` gates
 bridge, worker/sidecar, resident fast paths), `src/data/` (parse, datasets, transforms),
 `src/formula/` (tokenizer/parser/evaluator), `src/analysis/` (analyses, dashboards, visuals,
 anomalies), `src/ai/` (analyze, copilot, models), `src/cli/` (local CLI detection + run),
-`src/app/` (config, projects, history, icons, capture, notifications), `src/connectors/` (the 35-source registry
-plus the connection store). `src/ipc/` → one file per area. `src/windows/` → BrowserWindow
+`src/app/` (config, projects, history, icons, capture, notifications, jobs), `src/connectors/` (the 35-source registry
+plus the connection store), `src/publish/` (Publish to folder: the site's data, whitelist and pages;
+`renderer/publish/` is the published site's own renderer, inlined into every page). `src/ipc/` → one file per area. `src/windows/` → BrowserWindow
 factories. `renderer/{hub,overlay}/` → windows.
 `renderer/theme.css` → shared CSS vars. `preload/` → one contextBridge per window.
 `scripts/` → build + `test-*.js` self-checks. `assets/`, `geo/` → icons + GeoJSON.
