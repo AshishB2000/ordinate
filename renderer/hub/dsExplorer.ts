@@ -142,6 +142,7 @@ async function openSavedDataset(id: string): Promise<void> {
   if (title) title.textContent = expName;
   if (typeof lnPaintUsedIn === 'function') void lnPaintUsedIn(expId); // lineagePanel.ts
   renderExplorerIdent(ds);
+  void itOnOpen(ds); // inputPage.ts — an input table's Data tab is its editable grid
 
   // Week 13 — capture provenance strip (thumbnail + view-original + recapture).
   renderCapStrip(ds);
@@ -381,7 +382,8 @@ function dsOpenMoreMenu(anchor: HTMLElement): void {
     };
     add('activity', 'Statistics', () => void swOpen({ datasetId: id })); // statsPanel.ts
     add('lineage', 'Lineage', () => void lnOpen('dataset', id, expName));
-    add('history', 'Pipeline history', () => void vhOpen('dataset', id, expName));
+    const input = dsEl('ds-explorer')?.classList.contains('is-input');
+    add('history', input ? 'Version history' : 'Pipeline history', () => void vhOpen('dataset', id, expName, input ? 'Table' : undefined));
     add('layers', 'Find segments', () => void sgOpen(id, expName)); // segments.ts
     add('trash', 'Move to Trash', () => void handleDeleteDataset(id), true);
   }, () => anchor.setAttribute('aria-expanded', 'false'));

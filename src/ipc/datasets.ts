@@ -38,6 +38,7 @@ import * as trace from '../engine/residentTrace';
 // The data-quality hook — never throws into the handler it rides in.
 import { runQualityChecks } from '../analysis/qualityRun';
 import * as versions from '../app/versions';
+import { versionRecordOf } from '../data/inputTable/store';
 import * as trash from '../app/trash';
 
 // Datasets (file-based data sources) IPC — pick+parse/paste/save/list/get/delete.
@@ -222,7 +223,7 @@ export async function commitSteps(projectId: string, datasetId: string, steps: u
   void refreshDependents(projectId, datasetId); // the rows SQL datasets read just changed
   const { dataset, output } = res;
   // A pipeline edit is a version of the dataset (src/app/versions.ts).
-  await versions.record(projectId, 'dataset', { id: datasetId, steps: dataset.steps || [] },
+  await versions.record(projectId, 'dataset', versionRecordOf(dataset),
     { before: prior ? { id: datasetId, steps: prior.steps || [], updatedAt: prior.updatedAt } : undefined });
   return {
     ok: true as const,

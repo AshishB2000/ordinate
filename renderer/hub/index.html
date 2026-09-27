@@ -68,6 +68,7 @@
   <link rel="stylesheet" href="geo.css"/>
 
   <!-- r6-css:input -->
+  <link rel="stylesheet" href="input.css"/>
 
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
@@ -3624,6 +3625,17 @@
 <script src="prepareGeo.js"></script>
 
 <!-- r6:input -->
+<!-- Input tables (inputPage.ts). The edit model is SHARED with main — loaded
+     between the two-line shim and its binder exactly as src/app/format.js is
+     (see cjsShim.ts); the grid, its keys, the page and the columns dialog
+     follow in dependency order. -->
+<script src="cjsShim.js"></script>
+<script src="../../src/data/inputTable/edits.js"></script>
+<script src="inputBind.js"></script>
+<script src="inputGrid.js"></script>
+<script src="inputKeys.js"></script>
+<script src="inputPage.js"></script>
+<script src="inputColumns.js"></script>
 
 <script src="hub.js"></script>
 

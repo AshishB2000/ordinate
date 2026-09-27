@@ -90,7 +90,8 @@ function dsFreshnessText(d: any): string {
   // future.
   const every = d && d.autoRefresh && d.autoRefresh.every;
   if (every) return `Refreshes ${every} · last ${when}`;
-  return d && d.originKind ? 'Data as of ' + when : 'Imported ' + when;
+  if (d && d.originKind) return 'Data as of ' + when;
+  return (d && d.sourceKind === 'input' ? 'Edited ' : 'Imported ') + when;
 }
 
 /**
@@ -189,6 +190,7 @@ const DS_SOURCE_LABELS: Record<string, string> = {
   combined: 'Combined',
   capture: 'Screenshot',
   sql: 'SQL',
+  input: 'Input',
 };
 
 /** The camera mark a capture-sourced record carries, wherever it is listed. */

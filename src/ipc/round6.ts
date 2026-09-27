@@ -27,5 +27,6 @@ export function register(deps: Round6Deps): void {
   geoAnalysis.register();
 
   // r6:input
+  require('./input').register();
 
 }

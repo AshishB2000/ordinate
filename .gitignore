@@ -867,3 +867,12 @@ scripts/**/*.js
 /renderer/hub/prepareGeo.js
 
 # r6:input
+/src/data/inputTable/*.js
+/src/engine/lookupResident.js
+/src/ipc/input.js
+/preload/hubInputPreload.js
+/renderer/hub/inputBind.js
+/renderer/hub/inputGrid.js
+/renderer/hub/inputKeys.js
+/renderer/hub/inputPage.js
+/renderer/hub/inputColumns.js

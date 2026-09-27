@@ -326,7 +326,7 @@ function parse2dArray(arr: unknown[][]): ParseResult {
 // leading zeros lost) and a 20-digit id would lose precision past 2^53. Those
 // stay text. Genuine numeric data (12, -3.5, 1.50, 2.4e3) still classifies as
 // number. Number-accuracy is a core promise of the app, so err toward text.
-function isFiniteNumber(s: string): boolean {
+export function isFiniteNumber(s: string): boolean {
   const t = String(s).trim();
   if (t === '') return false;
   // Strict decimal/exponent literal only (blocks hex/octal/Infinity/"1,200"/whitespace-in-middle).
@@ -338,7 +338,7 @@ function isFiniteNumber(s: string): boolean {
   return Number.isFinite(Number(t));
 }
 
-function looksLikeDate(s: string): boolean {
+export function looksLikeDate(s: string): boolean {
   const t = String(s).trim();
   if (t === '') return false;
   if (isFiniteNumber(t)) return false; // a bare integer like "2024" is a number, not a date
