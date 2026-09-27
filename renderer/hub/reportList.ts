@@ -14,16 +14,20 @@
 /** Which tab the strip shows — read by storyList.ts's guard on the dashboards list. */
 let rbCurrentTab = 'dashboards';
 
-/** Dashboards | Reports | Stories — the same `.ds-tabs` strip the Data page uses. */
+/** Dashboards | Reports | Stories | Scorecards — the same `.ds-tabs` strip the Data page uses. */
 function rbSelectTab(tab: string): void {
   const isReports = tab === 'reports';
   const isStories = tab === 'stories';
-  rbCurrentTab = isReports || isStories ? tab : 'dashboards';
+  const isScores = tab === 'scorecards';
+  const other = isReports || isStories || isScores;
+  rbCurrentTab = other ? tab : 'dashboards';
   const pair: Array<[string, boolean]> = [
-    ['rp-tab-dashboards', !isReports && !isStories], ['rp-tab-reports', isReports], ['rp-tab-stories', isStories],
+    ['rp-tab-dashboards', !other], ['rp-tab-reports', isReports], ['rp-tab-stories', isStories], ['rp-tab-scorecards', isScores],
   ];
   const stories = rbEl('st-list-wrap');
   if (stories) stories.hidden = !isStories;
+  const scores = rbEl('sc-list-wrap');
+  if (scores) scores.hidden = !isScores;
   for (const [id, on] of pair) {
     const el = rbEl(id);
     if (!el) continue;
@@ -35,24 +39,26 @@ function rbSelectTab(tab: string): void {
   const reports = rbEl('rp-list-wrap');
   if (reports) reports.hidden = !isReports;
   const head = document.querySelector('.an-list-head-actions') as HTMLElement | null;
-  if (head) head.hidden = isReports || isStories;
+  if (head) head.hidden = other;
   // The section header follows the tab — the same swap captureList.ts makes for
   // Datasets/Captures. A "1 dashboard" chip over a list of reports is a header
   // describing the other tab.
   const count = rbEl('an-count');
-  if (count) count.hidden = isReports || isStories || !count.textContent;
+  if (count) count.hidden = other || !count.textContent;
   const sub = document.querySelector('#an-list-view .viz-sub') as HTMLElement | null;
   if (sub) {
     sub.textContent = isReports
       ? 'Dashboards as files you can send — PDF, PowerPoint or Word — on demand or on a schedule.'
       : isStories
         ? 'Documents you read top to bottom — prose around live charts and metrics.'
-        : 'Sheets of charts, metrics and text over your datasets.';
+        : isScores
+          ? 'Metrics against their targets, one period at a time — on track, at risk or off track.'
+          : 'Sheets of charts, metrics and text over your datasets.';
   }
-  if (isReports || isStories) {
+  if (other) {
     if (dash) dash.hidden = true;
     if (dashEmpty) dashEmpty.hidden = true;
-    void (isReports ? rbRefreshList() : stRefreshList());
+    void (isReports ? rbRefreshList() : isStories ? stRefreshList() : scRefreshList());
   } else {
     void refreshAnalysisList();
   }
@@ -174,7 +180,7 @@ async function rbGenerateFromList(id: string): Promise<void> {
   if (!currentProjectId) return;
   const report = await window.hub.reportsGet(currentProjectId, id);
   if (!report) { showToast('That report is gone'); return; }
-  const analysis = await window.hub.getAnalysis(currentProjectId, report.analysisId);
+  const analysis = await reportAnalysisFor(currentProjectId, report); // a scorecard report has no dashboard
   if (!analysis) { showToast('The dashboard this report prints has been deleted'); return; }
   if (!(await pvShareGate('report', await pvCardDatasetIds(analysis)))) return;
   showToast('Building report…');

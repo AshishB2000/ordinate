@@ -7,6 +7,7 @@
 
 import type { AutoRefresh, Dataset, DatasetOrigin } from './datasets';
 import { qualityFailingCount } from '../analysis/qualityRules';
+import { stepRefIds } from './stepTypes';
 
 export interface DatasetSummary {
   id: string;
@@ -30,6 +31,11 @@ export interface DatasetSummary {
    * lineage line draws and what `datasetDependents` walks (sql edges only).
    */
   originDeps?: string[];
+  /**
+   * The datasets this one's union / lookup steps READ (src/data/stepRefs.ts).
+   * Ids only — what lineage draws and what datasetDependents re-runs it for.
+   */
+  stepDeps?: string[];
   lastRefreshedAt?: string;
   lastRefreshStatus?: 'ok' | 'error';
   lastRefreshError?: string | null;
@@ -68,6 +74,8 @@ export function summarize(ds: Dataset): DatasetSummary {
   if (ds.origin && ds.origin.kind === 'connection') summary.originConnId = ds.origin.connId;
   const parents = originParents(ds.origin);
   if (parents.length) summary.originDeps = [...new Set(parents)];
+  const stepDeps = stepRefIds(ds.steps);
+  if (stepDeps.length) summary.stepDeps = stepDeps;
   if (ds.lastRefreshedAt) summary.lastRefreshedAt = ds.lastRefreshedAt;
   if (ds.lastRefreshStatus) summary.lastRefreshStatus = ds.lastRefreshStatus;
   if (ds.lastRefreshStatus === 'error' && ds.lastRefreshError) summary.lastRefreshError = ds.lastRefreshError;

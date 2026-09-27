@@ -191,4 +191,5 @@ function anRenderKpiProps(card: any): void {
   h.appendChild(t);
   host.appendChild(h);
   anRenderCompareProps(card, host);
+  void tcRenderKpiProps(card, host); // "Calculate as" (calcMenu.ts)
 }

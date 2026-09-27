@@ -612,3 +612,65 @@ scripts/**/*.js
 /preload/hubBackupPreload.js
 /renderer/hub/settingsBackups.js
 /renderer/hub/projectSync.js
+# Analysis power — the Analytics pane (emitted siblings).
+/src/analysis/analytics.js
+/src/analysis/forecast.js
+/src/ipc/visualsAnalytics.js
+/renderer/hub/chartAnnotations.js
+/renderer/hub/analyticsPane.js
+/renderer/hub/analyticsEditors.js
+/scripts/test-analytics.js
+# Table calculations — emitted siblings.
+/src/analysis/tableCalc.js
+/src/analysis/pivotCalc.js
+/src/ipc/tableCalcKpi.js
+/preload/hubPowerPreload.js
+/renderer/hub/calcMenu.js
+/scripts/test-tableCalc.js
+/scripts/pwTableCalc.js
+# Prepare power steps (emitted siblings; also covered by the globs above).
+/src/data/stepTypes.js
+/src/data/regexSubset.js
+/src/data/stepsReshape.js
+/src/data/stepsClean.js
+/src/data/stepsCombine.js
+/src/data/stepsWindow.js
+/src/data/stepsSanitize.js
+/src/data/stepsPower.js
+/src/data/stepRefs.js
+/src/engine/sqlGenPower.js
+/src/engine/sqlGenReshape.js
+/src/engine/sqlGenClean.js
+/src/engine/sqlGenCombine.js
+/src/engine/pipelinePower.js
+/src/ipc/preparePower.js
+/renderer/hub/prepareForms.js
+/renderer/hub/prepareReshape.js
+/renderer/hub/prepareClean.js
+/renderer/hub/prepareCombine.js
+/scripts/test-powerSteps.js
+/scripts/test-powerStepsDuck.js
+/scripts/pwPrepare.js
+# Comments and annotations (and the sync folder they travel through) — emitted siblings.
+/src/app/commentModel.js
+/src/app/comments.js
+/src/app/syncFolder.js
+/src/ipc/comments.js
+/renderer/hub/commentStore.js
+/renderer/hub/commentPanel.js
+/renderer/hub/commentDoors.js
+/renderer/hub/reportDiscussion.js
+/renderer/hub/settingsCollab.js
+/scripts/test-comments.js
+/scripts/pwComments.js
+# Analysis power — Scorecards (emitted siblings).
+/src/analysis/scorecardModel.js
+/src/analysis/scorecards.js
+/src/ipc/scorecards.js
+/src/ai/scorecardFacts.js
+/renderer/hub/scorecardList.js
+/renderer/hub/scorecardPage.js
+/renderer/hub/scorecardDetail.js
+/renderer/hub/scorecardEditor.js
+/renderer/hub/reportScorecard.js
+/scripts/test-scorecards.js

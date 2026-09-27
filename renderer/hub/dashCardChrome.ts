@@ -35,6 +35,8 @@ function makeDashCardEl(card: any): HTMLElement {
 
   // The bell a watched KPI wears, and the "something fired" mark (alerts.ts).
   alAttachCardBell(el, head, card);
+  // Comments on this card: the icon, its open count, the thread (commentDoors.ts).
+  head.appendChild(cmtCardButton(card));
 
   const ctrls = document.createElement('div');
   ctrls.className = 'dash-card-ctrls';

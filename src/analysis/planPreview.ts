@@ -28,6 +28,7 @@ import { loadPlanContext, validatePlan } from './analysisPlan';
 // it here — rather than reimplementing the decision — is what makes the
 // preview/build guarantee structural instead of aspirational.
 import { vizDataFor } from '../ipc/visuals';
+import { withTableCalcs } from './tableCalc';
 
 /**
  * The JS-fallback ceiling for a PREVIEW chart, in rows. See `vizDataFor`: the
@@ -232,9 +233,11 @@ async function previewVisual(
     return base;
   }
 
-  const res = await vizDataFor(projectId, pv.datasetId, encoding, filters, {
+  // Table calculations exactly as `visual:data` applies them (tableCalc.ts), so
+  // the preview and the built chart cannot disagree.
+  const res = withTableCalcs(await vizDataFor(projectId, pv.datasetId, encoding, filters, {
     maxHydrateRows: PREVIEW_MAX_HYDRATE_ROWS,
-  });
+  }), encoding);
   if (!res.ok) {
     base.note = res.tooLarge
       ? 'Too large to preview without the DuckDB bridge — the chart renders normally once built.'

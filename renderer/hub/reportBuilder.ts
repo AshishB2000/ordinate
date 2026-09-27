@@ -57,7 +57,7 @@ function rbContext(report?: any): any {
 
 const RB_KIND_LABEL: Record<string, string> = {
   cover: 'Cover', summary: 'Summary', sheet: 'Sheet', tile: 'Tile',
-  notes: 'Notes', narrative: 'Narrative',
+  notes: 'Notes', narrative: 'Narrative', discussion: 'Discussion', scorecard: 'Scorecard',
 };
 
 /** What the row under the page's kind says — enough to tell two Tile pages
@@ -284,6 +284,7 @@ function rbLoadSettings(): void {
   set('rp-set-orient', (rbReport.paper && rbReport.paper.orientation) || 'portrait');
   check('rp-set-filters', rbReport.includeFilters !== false);
   check('rp-set-narrative', rbReport.narrative === true);
+  check('rp-set-discussion', rbReport.discussion === true);
   const sch = rbReport.schedule || { cadence: 'off', at: '09:00', folder: '' };
   set('rp-set-cadence', sch.cadence);
   set('rp-set-at', sch.at);
@@ -315,6 +316,7 @@ function rbReadSettings(): void {
   rbReport.paper = { size: val('rp-set-paper') || 'letter', orientation: val('rp-set-orient') || 'portrait' };
   rbReport.includeFilters = on('rp-set-filters');
   rbReport.narrative = on('rp-set-narrative');
+  rbReport.discussion = on('rp-set-discussion');
   const cadence = val('rp-set-cadence') || 'off';
   const folderEl = rbEl('rp-set-folder-path');
   const folder = folderEl && folderEl.dataset.path ? folderEl.dataset.path : (rbReport.schedule && rbReport.schedule.folder) || '';
@@ -328,6 +330,11 @@ function rbReadSettings(): void {
     rbReport.pages = rbReport.pages.filter((p: any) => p.kind !== 'narrative');
     if (rbSelected >= rbReport.pages.length) rbSelected = Math.max(0, rbReport.pages.length - 1);
   }
+  // Discussion, the same way — and always the LAST page (reportDiscussion.ts).
+  const discussion = rbReport.pages.find((p: any) => p.kind === 'discussion');
+  rbReport.pages = rbReport.pages.filter((p: any) => p.kind !== 'discussion');
+  if (rbReport.discussion) rbReport.pages.push(discussion || { id: rbUuid(), kind: 'discussion', include: true, layout: 'full' });
+  if (rbSelected >= rbReport.pages.length) rbSelected = Math.max(0, rbReport.pages.length - 1);
 }
 
 /** dashUuid (dashGrid.ts) is the hub's id generator; this is only a guard for
@@ -373,7 +380,7 @@ async function rbOpen(report: any): Promise<void> {
   rbReport = report;
   rbSelected = 0;
   rbDirty = false;
-  rbAnalysis = await window.hub.getAnalysis(currentProjectId as string, report.analysisId);
+  rbAnalysis = await reportAnalysisFor(currentProjectId as string, report); // a scorecard report runs on a stand-in
   if (!rbAnalysis) {
     showToast('The dashboard this report prints has been deleted');
     rbAnalysis = { id: report.analysisId, name: report.name, sheets: [], filters: [], style: {} };
@@ -409,7 +416,7 @@ async function rbSave(): Promise<boolean> {
   const res = await window.hub.reportsUpdate(currentProjectId, rbReport.id, {
     name: rbReport.name, format: rbReport.format, pages: rbReport.pages,
     cover: rbReport.cover, paper: rbReport.paper,
-    includeFilters: rbReport.includeFilters, narrative: rbReport.narrative,
+    includeFilters: rbReport.includeFilters, narrative: rbReport.narrative, discussion: rbReport.discussion,
     schedule: rbReport.schedule,
   });
   if (!res || res.ok === false) { showToast((res && res.error) || 'Could not save'); return false; }
@@ -485,7 +492,7 @@ async function reportsRunDue(nowMs?: number): Promise<number> {
     try {
       const report = await window.hub.reportsGet(d.projectId, d.id);
       if (!report) continue;
-      const analysis = await window.hub.getAnalysis(d.projectId, report.analysisId);
+      const analysis = await reportAnalysisFor(d.projectId, report);
       if (!analysis) continue;
       // A SILENT job: the Jobs popover shows the scheduled run, but main's own
       // "Report ready" notification (notifyFile) is the one the user gets.
@@ -591,7 +598,7 @@ function initReportBuilder(): void {
   // Settings: every control writes the record and repaints. `change` rather
   // than `input` on the text fields keeps the preview off the keystroke path.
   const SETTINGS = ['rp-set-name', 'rp-set-format', 'rp-set-title', 'rp-set-subtitle', 'rp-set-logo',
-    'rp-set-paper', 'rp-set-orient', 'rp-set-filters', 'rp-set-narrative', 'rp-set-cadence', 'rp-set-at'];
+    'rp-set-paper', 'rp-set-orient', 'rp-set-filters', 'rp-set-narrative', 'rp-set-discussion', 'rp-set-cadence', 'rp-set-at'];
   for (const id of SETTINGS) {
     const el = rbInput(id) || rbSelect(id);
     if (!el) continue;

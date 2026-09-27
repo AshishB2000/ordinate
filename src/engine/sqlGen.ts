@@ -43,6 +43,8 @@ import type { FilterOp } from '../data/filterOps';
 import { FILTER_OPS, COMPARE_OPS, LIST_OPS, PERIOD_OP, emptyListWarning, periodSkipWarning } from '../data/filterOps';
 import { resolvePeriodNow } from '../analysis/dateIntel';
 import { sqlPeriodPredicate } from './periodSql';
+import type { PowerSqlOpts } from './sqlGenPower';
+import { genPowerStep } from './sqlGenPower';
 
 // ── Public shapes ────────────────────────────────────────────────────────────
 
@@ -180,7 +182,7 @@ function sqlInPredicate(col: SqlColumn, values: Cell[], negate: boolean, params:
 
 // ── generateSql ──────────────────────────────────────────────────────────────
 
-export function generateSql(relation: string, columns: SqlColumn[], steps: TransformStep[]): GenResult {
+export function generateSql(relation: string, columns: SqlColumn[], steps: TransformStep[], opts: PowerSqlOpts = {}): GenResult {
   let cols: SqlColumn[] = columns.map((c) => ({ ...c }));
   const warnings: string[] = [];
   const params: (string | number | null)[] = [];
@@ -189,6 +191,7 @@ export function generateSql(relation: string, columns: SqlColumn[], steps: Trans
   // output is retyped from the DATA in TS). Any later step that branches on the
   // declared type of one of these is not faithfully expressible → sql: null.
   const retyped = new Set<string>();
+  const powerRetype = new Set<string>(); // the subset a power step typed (sqlGenPower.ts)
   const ctes: string[] = [];
 
   const bail = (reason: string): GenResult => ({
@@ -240,6 +243,10 @@ export function generateSql(relation: string, columns: SqlColumn[], steps: Trans
     if (!step || typeof step !== 'object' || typeof (step as { type?: unknown }).type !== 'string') {
       return bail('malformed step');
     }
+    // The fold typed a power step's derived column over the rows it had THEN; a
+    // later filter/dedupe/group would move that decision, so the fold runs.
+    if ((step.type === 'filter' || step.type === 'dedupe' || step.type === 'group_aggregate')
+      && cols.some((c) => powerRetype.has(c.physical))) return bail('rows change after a column typed from data');
 
     switch (step.type) {
       // ── calculated_field ──────────────────────────────────────────────────
@@ -540,9 +547,18 @@ export function generateSql(relation: string, columns: SqlColumn[], steps: Trans
       case 'mask_generalize':
         return bail('mask steps run in the JS fold');
 
-      default:
-        warnings.push(`Unknown step type "${(step as { type: string }).type}" skipped`);
+      default: {
+        // The ten power steps (sqlGenPower.ts); null = a type nobody knows.
+        const out = genPowerStep(step, { index: i, cols, cur, params, warnings, retype, retyped, powerRetype, newPhys, opts });
+        if (!out) {
+          warnings.push(`Unknown step type "${(step as { type: string }).type}" skipped`);
+          break;
+        }
+        if (out.bail) return bail(out.bail);
+        if (out.body) emit(out.body);
+        if (out.cols) cols = out.cols;
         break;
+      }
     }
   }
 

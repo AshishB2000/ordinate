@@ -182,7 +182,7 @@ async function reportTile(
   // says why, rather than vanishing from the page.
   let res: any;
   try {
-    res = await pvVisualData(ctx.projectId, visual.datasetId, visual.encoding, merged, ctx.params, 'report');
+    res = await pvVisualData(ctx.projectId, visual.datasetId, visual.encoding, merged, ctx.params, 'report', visual.analytics);
   } catch (_) { res = { ok: false }; }
   if (res && res.hiddenByPolicy) {
     return { cardId: card.id, title: paramSubst(visual.name || '', ctx.params || []), png: null, caption: String(res.error), grid: null };
@@ -394,7 +394,7 @@ async function buildReportPages(ctx: ReportContext): Promise<RenderedPage[]> {
         return body ? { kind: 'narrative', layout: page.layout, title: 'Narrative', body } : null;
       }
       default:
-        return null;
+        return page.kind === 'scorecard' ? reportScorecardPage(ctx, page) : reportDiscussionPage(ctx, page); // reportScorecard.ts / reportDiscussion.ts
     }
   }
 }

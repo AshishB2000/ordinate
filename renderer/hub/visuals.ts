@@ -56,7 +56,8 @@ const vizEntry: any = {
 // Chart.js. See the seam in renderResult.ts.
 function renderVizViaEntry(area: HTMLElement, data: any, type: string, source?: any): void {
   vizEntry.id = vizEditingId || 'draft';
-  vizEntry.chartOverrides = { ['v:' + type]: vizOverrides };
+  // COMMENT PIN HOOK — this visual's pinned comments ride to buildChart as overrides.commentPins.
+  vizEntry.chartOverrides = { ['v:' + type]: cmtWithPins(vizOverrides, 'visual', vizEditingId) };
   // The drill context is the SAME identity `source` carries — the project,
   // dataset, encoding and filters this `data` was computed from — so the rows
   // the panel lists are the rows behind the figure on screen, including while

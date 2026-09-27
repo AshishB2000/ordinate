@@ -44,6 +44,8 @@ function lnUsedInText(usedIn: any): string {
     const n = usedIn && usedIn[k];
     if (n) parts.push(`${n} ${n === 1 ? one : many}`);
   };
+  // A dataset built FROM this one (combined, or reading it in a union/lookup step).
+  add('dataset', 'dataset', 'datasets');
   add('visual', 'visual', 'visuals');
   add('dashboard', 'dashboard', 'dashboards');
   add('report', 'report', 'reports');

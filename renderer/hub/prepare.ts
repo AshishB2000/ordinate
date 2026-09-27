@@ -14,6 +14,9 @@ let dsStepEditIndex = -1; // -1 = adding a new step; >=0 = editing that index
 let dsStepEditType = '';
 let dsSuggestedSteps: any[] = []; // AI-proposed steps awaiting user confirmation
 let dsTypeMenuClose: (() => void) | null = null; // openMiniMenu's closer, while the Add-step menu is up
+// Rows into/out of each step, index-aligned with expSteps — counted by main.
+// null = not known yet for this dataset (loadStepCounts fetches it).
+let expStepCounts: any[] | null = null;
 
 const STEP_TYPES: Array<{ type: string; label: string }> = [
   { type: 'calculated_field', label: 'Calculated field' },
@@ -28,66 +31,23 @@ const STEP_TYPES: Array<{ type: string; label: string }> = [
   { type: 'mask_hash', label: 'Mask — hash' },
   { type: 'mask_redact', label: 'Mask — redact' },
   { type: 'mask_generalize', label: 'Mask — generalise' },
+  // The power steps (prepareReshape / prepareClean / prepareCombine).
+  { type: 'split_column', label: 'Split column' },
+  { type: 'replace_values', label: 'Replace values' },
+  { type: 'conditional_column', label: 'Conditional column' },
+  { type: 'parse_date', label: 'Parse dates' },
+  { type: 'dedupe_key', label: 'Keep one row per key' },
+  { type: 'window', label: 'Window (rank, previous, running total)' },
+  { type: 'unpivot', label: 'Unpivot columns to rows' },
+  { type: 'pivot', label: 'Pivot rows to columns' },
+  { type: 'lookup_join', label: 'Look up from another dataset' },
+  { type: 'union', label: 'Append another dataset' },
 ];
 const FILTER_OPS = ['=', '!=', '>', '<', '>=', '<=', 'contains', 'is_empty', 'not_empty', 'in', 'not in'];
 const AGG_FNS = ['sum', 'avg', 'count', 'min', 'max'];
 
 function pEl(id: string): HTMLElement | null {
   return document.getElementById(id);
-}
-
-// ── Small control builders ───────────────────────────────────────────────────
-function textInput(val: string): HTMLInputElement {
-  const i = document.createElement('input');
-  i.type = 'text';
-  i.className = 'ds-step-input';
-  i.value = val;
-  return i;
-}
-
-function selectFrom(vals: string[], selected: string): HTMLSelectElement {
-  const sel = document.createElement('select');
-  sel.className = 'ds-step-select';
-  vals.forEach((v) => {
-    const opt = document.createElement('option');
-    opt.value = v;
-    opt.textContent = v;
-    if (v === selected) opt.selected = true;
-    sel.appendChild(opt);
-  });
-  return sel;
-}
-
-// A column <select> from the CURRENT (derived) columns. includeAll adds a blank
-// "(all …)" option whose empty value means "omit the column" (trim/dedupe).
-function makeColSelect(selected?: string, includeAll?: string): HTMLSelectElement {
-  const sel = document.createElement('select');
-  sel.className = 'ds-step-select';
-  if (includeAll != null) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = includeAll;
-    sel.appendChild(opt);
-  }
-  expColumns.forEach((col) => {
-    const opt = document.createElement('option');
-    opt.value = col.name;
-    opt.textContent = col.name;
-    if (col.name === selected) opt.selected = true;
-    sel.appendChild(opt);
-  });
-  return sel;
-}
-
-function fieldRow(labelText: string, control: HTMLElement): HTMLElement {
-  const row = document.createElement('label');
-  row.className = 'ds-step-field';
-  const span = document.createElement('span');
-  span.className = 'ds-step-field-label';
-  span.textContent = labelText;
-  row.appendChild(span);
-  row.appendChild(control);
-  return row;
 }
 
 // ── Steps list (ordered, editable) ───────────────────────────────────────────
@@ -127,7 +87,7 @@ function stepSummaryText(step: any): string {
     case 'rename_column':
       return 'Rename ' + step.from + ' → ' + step.to;
     default:
-      return pvMaskSummary(step) || 'Unknown step';
+      return pvMaskSummary(step) || powerStepSummary(step); // prepareMask.ts / prepareCombine.ts
   }
 }
 
@@ -166,6 +126,17 @@ function renderStepsList(): void {
     summary.textContent = stepSummaryText(step);
     rowEl.appendChild(summary);
 
+    // "1,250 → 1,180 rows": the rows this step received and handed on — a line
+    // under the summary, so the narrow rail never squeezes the summary itself.
+    const counts = expStepCounts && expStepCounts.length === expSteps.length ? expStepCounts[i] : null;
+    if (counts) {
+      const n = document.createElement('span');
+      n.className = 'ds-step-count';
+      n.textContent = fmtN(counts.before) + ' → ' + fmtN(counts.after) + ' rows';
+      if (counts.before !== counts.after) n.classList.add('is-changed');
+      summary.appendChild(n);
+    }
+
     const actions = document.createElement('div');
     actions.className = 'ds-step-actions';
     actions.appendChild(mkStepBtn('arrow-up', 'Move step up', i === 0, () => moveStep(i, -1)));
@@ -190,6 +161,7 @@ function applyStepResult(res: any): boolean {
   expColumns = normalizeCols(preview.columns);
   expRows = Array.isArray(preview.rows) ? preview.rows : [];
   if (res.dataset && Array.isArray(res.dataset.steps)) expSteps = res.dataset.steps;
+  expStepCounts = Array.isArray(preview.stepCounts) ? preview.stepCounts : null;
   renderPrepareWarnings(Array.isArray(preview.warnings) ? preview.warnings : []);
   renderStepsList();
   renderExplorerTable();
@@ -286,228 +258,6 @@ function closeStepEditor(): void {
     editor.innerHTML = '';
     editor.hidden = true;
   }
-}
-
-// Returns a getter that reads the form and yields a step object (or null if the
-// input is invalid — the getter shows the alert itself).
-function buildStepForm(type: string, body: HTMLElement, existing: any): () => any {
-  switch (type) {
-    case 'filter': {
-      // The column stays a select (that is how a filter is retargeted); the
-      // CONDITION is one button opening the shared type-aware dialog, so this
-      // surface offers exactly what the visual wells and the sheet filter bar
-      // do — one dialog, three call sites.
-      const colSel = makeColSelect(existing ? existing.column : undefined);
-      // `pending` holds what the dialog returned. Seeded from the step being
-      // edited so re-opening the editor and pressing Save is a no-op rather
-      // than a silent reset to `=`.
-      let pending: any[] = existing && existing.op ? [{ ...existing, type: 'filter' }] : [];
-
-      const condBtn = document.createElement('button');
-      condBtn.type = 'button';
-      condBtn.className = 'ds-step-cond';
-      const paintCond = (): void => {
-        condBtn.textContent = pending.length
-          ? pending.map((s) => filterStepSummary(s)).join(' and ')
-          : 'set a condition…';
-      };
-      paintCond();
-      condBtn.addEventListener('click', async () => {
-        const column = colSel.value;
-        if (!column) {
-          window.alert('Pick a column to filter on.');
-          return;
-        }
-        const col = expColumns.find((c) => c.name === column);
-        const steps = await openFilterDialog({
-          projectId: currentProjectId || '',
-          datasetId: expId || '',
-          column,
-          type: col && col.type ? String(col.type) : 'text',
-          existing: pending[0],
-        });
-        if (steps === null) return;
-        pending = steps;
-        paintCond();
-      });
-
-      body.appendChild(fieldRow('Column', colSel));
-      body.appendChild(fieldRow('Condition', condBtn));
-      // Retargeting to another column invalidates the operand — an `in` list of
-      // city names means nothing on a price column.
-      colSel.addEventListener('change', () => { pending = []; paintCond(); });
-
-      return () => {
-        const column = colSel.value;
-        if (!column) {
-          window.alert('Pick a column to filter on.');
-          return null;
-        }
-        if (pending.length === 0) {
-          window.alert('Set a condition for this filter.');
-          return null;
-        }
-        // A min/max range is two steps. Returning the ARRAY lets the caller add
-        // both — safe because every filter is a pure row predicate, so the order
-        // they land in the pipeline cannot change the result.
-        return pending.map((s) => ({ ...s, type, column }));
-      };
-    }
-    case 'group_aggregate': {
-      const groupWrap = document.createElement('div');
-      groupWrap.className = 'ds-step-checks';
-      const groupBoxes: HTMLInputElement[] = [];
-      expColumns.forEach((col) => {
-        const lbl = document.createElement('label');
-        lbl.className = 'ds-step-check';
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.value = col.name;
-        if (existing && Array.isArray(existing.groupBy) && existing.groupBy.indexOf(col.name) >= 0) cb.checked = true;
-        groupBoxes.push(cb);
-        const s = document.createElement('span');
-        s.textContent = col.name;
-        lbl.appendChild(cb);
-        lbl.appendChild(s);
-        groupWrap.appendChild(lbl);
-      });
-      body.appendChild(fieldRow('Group by', groupWrap));
-
-      const aggList = document.createElement('div');
-      aggList.className = 'ds-agg-list';
-      body.appendChild(aggList);
-      const addAgg = (agg?: any) => aggList.appendChild(makeAggRow(agg));
-      if (existing && Array.isArray(existing.aggregations) && existing.aggregations.length) {
-        existing.aggregations.forEach((a: any) => addAgg(a));
-      } else {
-        addAgg();
-      }
-      const addBtn = document.createElement('button');
-      addBtn.type = 'button';
-      addBtn.className = 'btn';
-      addBtn.textContent = '+ Add aggregation';
-      addBtn.addEventListener('click', () => addAgg());
-      body.appendChild(addBtn);
-
-      return () => {
-        const groupBy = groupBoxes.filter((b) => b.checked).map((b) => b.value);
-        if (!groupBy.length) {
-          window.alert('Pick at least one column to group by.');
-          return null;
-        }
-        const aggregations: any[] = [];
-        aggList.querySelectorAll('.ds-agg-row').forEach((r) => {
-          const fn = (r.querySelector('.ds-agg-fn') as HTMLSelectElement).value;
-          const column = (r.querySelector('.ds-agg-col') as HTMLSelectElement).value;
-          const asVal = (r.querySelector('.ds-agg-as') as HTMLInputElement).value.trim();
-          if (column && fn) aggregations.push({ column, fn, as: asVal || fn + '_' + column });
-        });
-        if (!aggregations.length) {
-          window.alert('Add at least one aggregation.');
-          return null;
-        }
-        return { type, groupBy, aggregations };
-      };
-    }
-    case 'dedupe': {
-      const wrap = document.createElement('div');
-      wrap.className = 'ds-step-checks';
-      const boxes: HTMLInputElement[] = [];
-      expColumns.forEach((col) => {
-        const lbl = document.createElement('label');
-        lbl.className = 'ds-step-check';
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.value = col.name;
-        if (existing && Array.isArray(existing.columns) && existing.columns.indexOf(col.name) >= 0) cb.checked = true;
-        boxes.push(cb);
-        const s = document.createElement('span');
-        s.textContent = col.name;
-        lbl.appendChild(cb);
-        lbl.appendChild(s);
-        wrap.appendChild(lbl);
-      });
-      body.appendChild(fieldRow('Key columns (none checked = all columns)', wrap));
-      return () => {
-        const columns = boxes.filter((b) => b.checked).map((b) => b.value);
-        const step: any = { type };
-        if (columns.length) step.columns = columns;
-        return step;
-      };
-    }
-    case 'fill_empty': {
-      const colSel = makeColSelect(existing ? existing.column : undefined);
-      const valIn = textInput(existing && existing.value != null ? String(existing.value) : '');
-      body.appendChild(fieldRow('Column', colSel));
-      body.appendChild(fieldRow('Fill empty cells with', valIn));
-      return () => {
-        if (!colSel.value) {
-          window.alert('Pick a column.');
-          return null;
-        }
-        return { type, column: colSel.value, value: valIn.value };
-      };
-    }
-    case 'trim': {
-      const colSel = makeColSelect(existing ? existing.column : undefined, '(all text columns)');
-      body.appendChild(fieldRow('Column', colSel));
-      return () => {
-        const step: any = { type };
-        if (colSel.value) step.column = colSel.value;
-        return step;
-      };
-    }
-    case 'drop_column': {
-      const colSel = makeColSelect(existing ? existing.column : undefined);
-      body.appendChild(fieldRow('Column', colSel));
-      return () => {
-        if (!colSel.value) {
-          window.alert('Pick a column.');
-          return null;
-        }
-        return { type, column: colSel.value };
-      };
-    }
-    case 'rename_column': {
-      const fromSel = makeColSelect(existing ? existing.from : undefined);
-      const toIn = textInput(existing && existing.to ? String(existing.to) : '');
-      body.appendChild(fieldRow('Rename', fromSel));
-      body.appendChild(fieldRow('To', toIn));
-      return () => {
-        const from = fromSel.value;
-        const to = toIn.value.trim();
-        if (!from || !to) {
-          window.alert('Pick a column and enter a new name.');
-          return null;
-        }
-        return { type, from, to };
-      };
-    }
-    default:
-      return pvBuildMaskForm(type, body, existing) || (() => null);
-  }
-}
-
-function makeAggRow(agg?: any): HTMLElement {
-  const row = document.createElement('div');
-  row.className = 'ds-agg-row';
-  const fnSel = selectFrom(AGG_FNS, agg && agg.fn ? String(agg.fn) : 'sum');
-  fnSel.classList.add('ds-agg-fn');
-  const colSel = makeColSelect(agg ? agg.column : undefined);
-  colSel.classList.add('ds-agg-col');
-  const asIn = textInput(agg && agg.as ? String(agg.as) : '');
-  asIn.classList.add('ds-agg-as');
-  asIn.placeholder = 'output name';
-  const del = document.createElement('button');
-  del.type = 'button';
-  del.className = 'ds-step-btn';
-  iconOnly(del, 'x', 'Remove aggregation');
-  del.addEventListener('click', () => row.remove());
-  row.appendChild(fnSel);
-  row.appendChild(colSel);
-  row.appendChild(asIn);
-  row.appendChild(del);
-  return row;
 }
 
 async function saveStepFromForm(getStep: () => any): Promise<void> {
@@ -700,6 +450,27 @@ function resetPreparePanel(): void {
   const calcOut = pEl('ds-calc-suggest-out');
   if (calcOut) { calcOut.hidden = true; calcOut.innerHTML = ''; }
   renderPrepareWarnings([]);
+  expStepCounts = null;
+  renderStepsList();
+  void loadStepCounts();
+}
+
+// The counts stored with the last recompute (or recomputed once, for a record
+// older than them). Guarded on the dataset still being the open one.
+async function loadStepCounts(): Promise<void> {
+  const id = expId;
+  if (!currentProjectId || !id || !expSteps.length || !window.hubPower) return;
+  let res: any = null;
+  try {
+    res = await window.hubPower.stepCounts(currentProjectId, id);
+  } catch (_) {
+    return;
+  }
+  if (expId !== id || !res || !res.ok || !Array.isArray(res.stepCounts)) return;
+  // A union/lookup summary names the other dataset (prepareCombine.ts ppNames).
+  if (expSteps.some((st) => st && st.datasetId)) await ppListDatasets();
+  if (expId !== id) return;
+  expStepCounts = res.stepCounts;
   renderStepsList();
 }
 

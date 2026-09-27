@@ -14,6 +14,7 @@ interface PdState {
   projectId: string;
   dashboards: Array<{ id: string; name: string; sheets?: number }>;
   stories: Array<{ id: string; name: string }>;
+  scorecards: Array<{ id: string; name: string }>;
   picked: Set<string>;
   outDir: string;
   title: string;
@@ -48,6 +49,7 @@ function pdConfig(st: PdState, brands?: Record<string, { ramp: any }>): any {
     projectId: st.projectId,
     dashboardIds: st.dashboards.filter((d) => st.picked.has(d.id)).map((d) => d.id),
     storyIds: st.stories.filter((s) => st.picked.has(s.id)).map((s) => s.id),
+    scorecardIds: st.scorecards.filter((s) => st.picked.has(s.id)).map((s) => s.id),
     outDir: st.outDir,
     options: { title: st.title || undefined, maxCombos: st.maxCombos, afterRefresh: st.afterRefresh },
     ...(brands ? { brands } : {}),
@@ -78,7 +80,8 @@ async function openPublishDialog(preselect?: string): Promise<void> {
     projectId: currentProjectId,
     dashboards: targets.dashboards || [],
     stories: targets.stories || [],
-    picked: new Set<string>(cfg ? [...cfg.dashboardIds, ...cfg.storyIds] : preselect ? [preselect] : (targets.dashboards || []).slice(0, 1).map((d: any) => d.id)),
+    scorecards: targets.scorecards || [],
+    picked: new Set<string>(cfg ? [...cfg.dashboardIds, ...cfg.storyIds, ...(cfg.scorecardIds || [])] : preselect ? [preselect] : (targets.dashboards || []).slice(0, 1).map((d: any) => d.id)),
     outDir: cfg ? cfg.outDir : '',
     title: cfg && cfg.options.title ? cfg.options.title : '',
     maxCombos: cfg && cfg.options.maxCombos ? cfg.options.maxCombos : 256,
@@ -146,6 +149,7 @@ async function openPublishDialog(preselect?: string): Promise<void> {
   left.appendChild(pdEl('h3', 'pd-col-title', 'What to publish'));
   left.appendChild(pickList('Dashboards', st.dashboards, 'No dashboards in this project yet.', 'layout-dashboard'));
   left.appendChild(pickList('Stories', st.stories, 'No stories in this project yet.', 'file-text'));
+  left.appendChild(pickList('Scorecards', st.scorecards, 'No scorecards in this project yet.', 'target'));
 
   // ── Where and how ──
   right.appendChild(pdEl('h3', 'pd-col-title', 'Where and how'));
@@ -286,7 +290,7 @@ function pdPaintSummary(st: PdState, host: HTMLElement): void {
   for (const pg of p.pages) {
     const li = pdEl('li', 'pd-page');
     li.appendChild(pdEl('span', 'pd-page-name', pg.name));
-    const bits = [pg.kind === 'story' ? 'Story' : pg.combos === 1 ? 'No filter bar' : pg.combos.toLocaleString() + ' combinations'];
+    const bits = [pg.kind === 'story' ? 'Story' : pg.kind === 'scorecard' ? 'Scorecard' : pg.combos === 1 ? 'No filter bar' : pg.combos.toLocaleString() + ' combinations'];
     if (pg.mode === 'single') bits.push('one filter at a time');
     bits.push(pdBytes(pg.bytes));
     li.appendChild(pdEl('span', 'pd-page-meta', bits.join(' · ')));

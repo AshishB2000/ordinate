@@ -462,11 +462,11 @@ contextBridge.exposeInMainWorld('hub', {
   getVisual: (projectId: string, id: string) => ipcRenderer.invoke('visual:get', { projectId, id }),
   // Persist a new visual; returns the saved Visual or { ok:false, error }. Carries
   // optional chart-styling `overrides` and visual-level `filters`.
-  saveVisual: (payload: { projectId: string; datasetId: string; name: string; chartType: string; encoding: any; overrides?: any; filters?: any }) =>
+  saveVisual: (payload: { projectId: string; datasetId: string; name: string; chartType: string; encoding: any; overrides?: any; filters?: any; analytics?: any }) =>
     ipcRenderer.invoke('visual:save', payload),
   // Patch an existing visual's name / chartType / encoding / overrides / filters
   // / favorite (datasetId immutable). Any omitted field keeps its stored value.
-  updateVisual: (projectId: string, id: string, patch: { name?: string; chartType?: string; encoding?: any; overrides?: any; filters?: any; favorite?: boolean }) =>
+  updateVisual: (projectId: string, id: string, patch: { name?: string; chartType?: string; encoding?: any; overrides?: any; filters?: any; favorite?: boolean; analytics?: any }) =>
     ipcRenderer.invoke('visual:update', { projectId, id, ...patch }),
   // Delete a visual; returns { ok: boolean }.
   // To the Trash; `permanent` only for taking back a visual an Assistant edit made.
@@ -484,8 +484,8 @@ contextBridge.exposeInMainWorld('hub', {
   // Optional `filters` (transforms filter steps) are applied BEFORE aggregation.
   // `params`: the open dashboard's parameters at their current values,
   // [{ name, kind, value }] — resolved in main by analysis/params.ts.
-  computeVisualData: (projectId: string, datasetId: string, encoding: any, filters?: any, params?: any) =>
-    ipcRenderer.invoke('visual:data', { projectId, datasetId, encoding, filters, params }),
+  computeVisualData: (projectId: string, datasetId: string, encoding: any, filters?: any, params?: any, analytics?: any) =>
+    ipcRenderer.invoke('visual:data', { projectId, datasetId, encoding, filters, params, analytics }),
   // The ROWS behind one mark of that same chart — same dataset, same filter
   // list, plus an equality filter per clicked axis. Paged/searched/sorted in
   // main against the stored .parquet. Returns

@@ -116,6 +116,9 @@ interface Config {
   starred: string[];
   /** Settings → Automation (src/ipc/automation.ts). The HTTP token is never stored. */
   automation: AutomationPrefs;
+  /** Settings → General: the name on your comments. '' → the OS user name
+   *  (src/app/comments.ts resolves it in main; a renderer never sends one). */
+  displayName: string;
   providers: Record<string, LegacyProviderEntry>;
   byok: ByokBlock;
   // Connection secrets, keyed by connection UUID. Never reaches a renderer.
@@ -222,6 +225,7 @@ const DEFAULTS: Omit<Config, 'providers' | 'byok'> = {
   // Automation (MCP) is OFF until the user turns it on; the loopback HTTP
   // transport is a second, separate opt-in.
   automation: { enabled: false, http: false, port: AUTOMATION_PORT },
+  displayName: '',
   // Connection secrets (pg passwords / URL tokens), keyed by connection UUID.
   // Plaintext on disk like API keys; stripped from every renderer-facing view.
   connectionSecrets: {},
@@ -323,6 +327,7 @@ function sanitize(input: any): Partial<Config> {
   // Whitelisted so it survives disk load ({...DEFAULTS, ...sanitize(onDisk)}).
   if (Array.isArray(input.starred)) out.starred = cleanStarred(input.starred);
   if (input.automation && typeof input.automation === 'object') out.automation = cleanAutomation(input.automation);
+  if (typeof input.displayName === 'string') out.displayName = input.displayName.replace(/\s+/g, ' ').trim().slice(0, 80);
   return out;
 }
 

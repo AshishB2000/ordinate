@@ -52,6 +52,7 @@ const ENTRY_RULES: Array<{ re: RegExp; count?: string }> = [
   { re: new RegExp(`^analyses/${UUID}\\.json$`, 'i'), count: 'dashboards' },
   { re: new RegExp(`^metrics/${UUID}\\.json$`, 'i'), count: 'metrics' },
   { re: new RegExp(`^reports/${UUID}\\.json$`, 'i'), count: 'reports' },
+  { re: new RegExp(`^scorecards/${UUID}\\.json$`, 'i'), count: 'scorecards' },
   { re: new RegExp(`^connections/${UUID}\\.json$`, 'i'), count: 'connections' },
   { re: new RegExp(`^history/(?:dataset|visual|dashboard|metric|report)/${UUID}/${KEY}\\.json$`, 'i'), count: 'versions' },
   { re: new RegExp(`^stories/${UUID}\\.json$`, 'i'), count: 'stories' },
@@ -63,6 +64,7 @@ const ENTRY_RULES: Array<{ re: RegExp; count?: string }> = [
   // The share policy travels. Its sibling privacy/salt.key NEVER does: it is a
   // per-project secret, and "not on this list" is what keeps it home.
   { re: /^privacy\/policy\.json$/ },
+  { re: /^comments\.json$/ }, // comment threads (src/app/comments.ts); target ids remap like any body
 ];
 
 const MAX_ENTRIES = 50_000;

@@ -146,6 +146,12 @@ function dkContextRef(): { kind: string; id: string; label: string; name: string
     const name = (entry && entry.title) || 'this capture';
     return { kind: 'capture', id: String(currentEntryId), label: 'capture · ' + name, name };
   }
+  // An open SCORECARD is the context — its rows, targets and statuses for the
+  // period on screen (buildFacts → ai/scorecardFacts.ts), so "what's off track?"
+  // is answered from the app's own verdicts.
+  if (currentSection === 'analyses' && typeof scCurrent !== 'undefined' && scCurrent) {
+    return { kind: 'scorecard', id: scCurrent.id, label: 'scorecard · ' + scCurrent.name, name: scCurrent.name };
+  }
   // An OPEN dashboard is the context; the Dashboards LIST is not. In scope now
   // because an edit delta can only name a tile the model was actually shown.
   if (currentSection === 'analyses' && dashCurrent && dashCurrent.id) {
@@ -488,7 +494,7 @@ async function dkSend(): Promise<void> {
 
   let res: any = null;
   try {
-    res = await window.hub.copilotAsk(currentProjectId, { kind: ref.kind, id: ref.id }, question, dkThreadId || undefined, askId);
+    res = await window.hub.copilotAsk(currentProjectId, { kind: ref.kind, id: ref.id, ...(ref.kind === 'scorecard' ? { offset: scOffset } : {}) }, question, dkThreadId || undefined, askId);
   } catch (_) {
     res = { ok: false, error: 'Something went wrong. Try again.' };
   }

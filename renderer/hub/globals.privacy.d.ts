@@ -14,7 +14,7 @@ interface Window {
     decide(projectId: string, datasetId: string, column: string, level: string): Promise<any>;
     scan(projectId: string, datasetIds?: string[]): Promise<any>;
     summary(projectId: string, path: string, datasetIds?: string[] | null): Promise<any>;
-    visualData(projectId: string, datasetId: string, encoding: any, filters: any, params: any, share: string): Promise<any>;
+    visualData(projectId: string, datasetId: string, encoding: any, filters: any, params: any, share: string, analytics?: any): Promise<any>;
     shareReply(projectId: string, datasetId: string, encoding: any, reply: any, path: string): Promise<any>;
   };
 }

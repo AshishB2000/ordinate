@@ -579,6 +579,7 @@ require("./ipc/catalog").register();
 
 require("./ipc/metrics").register(); // after dashboards: figures bottom out in computeCardMetric
 require("./ipc/periods").register(); // relative periods: a preset's display, and a KPI card's Compare
+require("./ipc/tableCalcKpi").register(); // a KPI card's "Calculate as", over its period series
 // Alert rules and their inbox. After dashboards deliberately — see ipc/alerts.
 require("./ipc/alerts").register({ focusHub });
 
@@ -627,6 +628,9 @@ require("./ipc/authoringDepth").register(); // relationships, project assets, bo
 // Headless: no timers, and no job notifications — a CLI run's jobs reach the GUI's
 // popover through automation-log.jsonl instead.
 require("./ipc/platform").register({ hubFocused: HEADLESS ? () => true : hubFocused, focusHub, headless: !!HEADLESS }); // jobs, publish, privacy, automation, backups
+require("./ipc/preparePower").register(); // prepare power steps: editor previews + per-step row counts
+require("./ipc/comments").register(); // comment threads, the display name they are signed with, the sync folder
+require("./ipc/scorecards").register(); // scorecards: metrics against targets, one period at a time
 // Week 13 — capture → dataset bridge. resolveCropPath hands the on-disk crop path
 // from main's per-entry state (entryData, then the summaries cache) so a renderer-
 // sent path is never trusted; both maps already carry cropPath per entryId.

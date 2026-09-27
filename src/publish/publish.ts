@@ -29,6 +29,8 @@ import { planDashboard, buildDashboard } from './dashboardData';
 import type { Outgoing, PublishedDashboard } from './dashboardData';
 import { buildStory } from './storyData';
 import type { PublishedStory } from './storyData';
+import { buildScorecard } from './scorecardData';
+import type { PublishedScorecard } from './scorecardData';
 import { geoFor } from './geoData';
 import { sanitizePage } from './sanitize';
 import { pageHtml } from './siteHtml';
@@ -60,6 +62,8 @@ export interface PublishConfig {
   projectId: string;
   dashboardIds: string[];
   storyIds: string[];
+  /** Scorecards (analysis/scorecards.ts), each one page for its latest period. */
+  scorecardIds: string[];
   /** Absolute path of the output folder. */
   outDir: string;
   options: PublishOptions;
@@ -94,7 +98,8 @@ export function sanitizePublishConfig(raw: unknown): PublishConfig | { error: st
   const ids = (v: unknown): string[] => [...new Set((Array.isArray(v) ? v : []).filter(isValidId))].slice(0, MAX_TARGETS);
   const dashboardIds = ids(o.dashboardIds);
   const storyIds = ids(o.storyIds);
-  if (!dashboardIds.length && !storyIds.length) return { error: 'Pick at least one dashboard or story.' };
+  const scorecardIds = ids(o.scorecardIds);
+  if (!dashboardIds.length && !storyIds.length && !scorecardIds.length) return { error: 'Pick at least one dashboard, story or scorecard.' };
   const outDir = typeof o.outDir === 'string' ? o.outDir.trim() : '';
   if (!outDir || !path.isAbsolute(outDir) || outDir.includes('\0')) return { error: 'Choose an output folder.' };
   const resolved = path.resolve(outDir);
@@ -112,7 +117,7 @@ export function sanitizePublishConfig(raw: unknown): PublishConfig | { error: st
     const clean = b && typeof b === 'object' ? sanitizeBrand({ ramp: (b as Record<string, unknown>).ramp }) : {};
     if (clean.ramp) brands[id] = { ramp: clean.ramp };
   }
-  return { projectId: o.projectId as string, dashboardIds, storyIds, outDir: resolved, options, ...(Object.keys(brands).length ? { brands } : {}) };
+  return { projectId: o.projectId as string, dashboardIds, storyIds, scorecardIds, outDir: resolved, options, ...(Object.keys(brands).length ? { brands } : {}) };
 }
 
 /** A logo as a data: URL — the workspace's, or a dashboard's own — or undefined. */
@@ -151,6 +156,7 @@ export async function storeConfig(config: PublishConfig, result?: PublishResult)
   const body = {
     dashboardIds: config.dashboardIds,
     storyIds: config.storyIds,
+    scorecardIds: config.scorecardIds,
     outDir: config.outDir,
     options: config.options,
     ...(config.brands ? { brands: config.brands } : {}),
@@ -209,7 +215,7 @@ export function slugFor(name: string, taken: Set<string>): string {
 // ── Plan ─────────────────────────────────────────────────────────────────────
 
 export interface PlanPage {
-  kind: 'dashboard' | 'story';
+  kind: 'dashboard' | 'story' | 'scorecard';
   id: string;
   name: string;
   combos: number;
@@ -264,6 +270,11 @@ export async function planPublish(config: PublishConfig, outgoing: Outgoing = po
     const bytes = fixed + Buffer.byteLength(JSON.stringify(st)) + Buffer.byteLength(JSON.stringify(geo));
     pages.push({ kind: 'story', id, name: st.name, combos: 1, mode: 'all', bytes, dropped: [] });
   }
+  for (const id of config.scorecardIds || []) {
+    const sc = await buildScorecard(config.projectId, id);
+    if (!sc) continue;
+    pages.push({ kind: 'scorecard', id, name: sc.name, combos: 1, mode: 'all', bytes: fixed + Buffer.byteLength(JSON.stringify(sc)), dropped: [] });
+  }
   const bytes = pages.reduce((n, p) => n + p.bytes, 0) + fixed; // + index.html
   const combos = pages.reduce((n, p) => n + (p.kind === 'dashboard' ? p.combos : 0), 0);
   const tooBig = bytes > maxSiteBytes;
@@ -280,7 +291,7 @@ export async function planPublish(config: PublishConfig, outgoing: Outgoing = po
 
 // ── Build and write ──────────────────────────────────────────────────────────
 
-interface BuiltPage { file: string; kind: 'dashboard' | 'story'; id: string; name: string; html: string; combos: number; mode: string; dropped: unknown[] }
+interface BuiltPage { file: string; kind: 'dashboard' | 'story' | 'scorecard'; id: string; name: string; html: string; combos: number; mode: string; dropped: unknown[] }
 
 async function siteHeader(config: PublishConfig): Promise<{ title: string; logo?: string }> {
   const p = await projects.getProject(config.projectId);
@@ -292,18 +303,20 @@ async function buildPages(config: PublishConfig, ctx: PublishProgress, outgoing?
   const assets = readAssets();
   const head = await siteHeader(config);
   const taken = new Set<string>();
-  const targets: Array<{ kind: 'dashboard' | 'story'; id: string }> = [
+  const targets: Array<{ kind: 'dashboard' | 'story' | 'scorecard'; id: string }> = [
     ...config.dashboardIds.map((id) => ({ kind: 'dashboard' as const, id })),
     ...config.storyIds.map((id) => ({ kind: 'story' as const, id })),
+    ...(config.scorecardIds || []).map((id) => ({ kind: 'scorecard' as const, id })),
   ];
-  const built: Array<{ kind: 'dashboard' | 'story'; id: string; name: string; file: string; data: PublishedDashboard | PublishedStory }> = [];
+  const built: Array<{ kind: 'dashboard' | 'story' | 'scorecard'; id: string; name: string; file: string; data: PublishedDashboard | PublishedStory | PublishedScorecard }> = [];
   for (let i = 0; i < targets.length; i++) {
     const t = targets[i];
     const slice = (f: number, note?: string) => ctx.progress && ctx.progress(0.9 * ((i + f) / targets.length), note);
     const sub = { progress: slice, checkCancelled: ctx.checkCancelled };
     const data = t.kind === 'dashboard'
       ? await buildDashboard(config.projectId, t.id, config.options.maxCombos || DEFAULT_MAX_COMBOS, sub, outgoing)
-      : await buildStory(config.projectId, t.id, sub, outgoing);
+      : t.kind === 'story' ? await buildStory(config.projectId, t.id, sub, outgoing)
+        : await buildScorecard(config.projectId, t.id, sub);
     if (!data) continue; // deleted since it was picked: publish the rest
     built.push({ kind: t.kind, id: t.id, name: data.name, file: slugFor(data.name, taken), data });
   }
@@ -324,7 +337,8 @@ async function buildPages(config: PublishConfig, ctx: PublishProgress, outgoing?
     }
     const raw = b.kind === 'dashboard'
       ? { site, kind: 'dashboard', dashboard: b.data, brand, formats, geo }
-      : { site, kind: 'story', story: b.data, formats, geo };
+      : b.kind === 'story' ? { site, kind: 'story', story: b.data, formats, geo }
+        : { site, kind: 'scorecard', scorecard: b.data, formats, geo };
     const page = sanitizePage(raw);
     const html = pageHtml(page, assets, `${b.name} · ${head.title}`);
     const d = b.kind === 'dashboard' ? (b.data as PublishedDashboard) : null;

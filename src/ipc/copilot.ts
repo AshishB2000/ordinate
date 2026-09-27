@@ -9,12 +9,17 @@ import * as dashboards from '../analysis/dashboards';
 import * as analysis from '../analysis/analysis';
 import { computeColumnSummary, findQualityIssues } from '../data/datasetStats';
 import { buildVizData } from '../analysis/vizData';
+import { withTableCalcs } from '../analysis/tableCalc';
 import { computeMetric } from '../analysis/metricValue';
 import { askCopilot } from '../ai/analyze';
 import { auditNumbers } from '../ai/numberAudit';
 import { listInsights } from './insights';
 import * as metrics from '../analysis/metrics';
 import { resolveMetric } from './metrics';
+import { resolveChartOverlays } from './visualsAnalytics';
+import * as scorecards from '../analysis/scorecards';
+import { computeScorecard } from './scorecards';
+import { scorecardFacts } from '../ai/scorecardFacts';
 import type { FactMetric } from '../ai/copilotFacts';
 import * as history from '../app/history';
 import * as captureDataset from '../data/captureDataset';
@@ -35,7 +40,7 @@ import { assistantColumnDocs as catalogColumns } from '../app/sharePolicy';
 // chat turns, and asks the model (through the EXISTING execution path) only to
 // narrate. No model configured → { ok:false, notReady:true } for a gentle hint.
 
-type ContextRef = { kind?: string; id?: string };
+type ContextRef = { kind?: string; id?: string; offset?: number };
 
 // ── Activity stream (feat/ask-activity) ─────────────────────────────────────
 // This app has NO agent loop and NO model tool-calls: copilot:ask computes facts
@@ -206,15 +211,20 @@ export async function buildFacts(
       emit({ kind: 'read', label: 'Read ' + v.name });
       const ds = await datasets.getDataset(projectId, v.datasetId);
       emit({ kind: 'read', label: 'Read ' + (ds ? ds.name : '(missing dataset)') });
-      const viz = buildVizData(
+      // The calculated figures the chart shows, beside the raw ones (tableCalc.ts).
+      const viz = withTableCalcs({ ok: true, ...buildVizData(
         ds ? ds.columns : [],
         ds ? ds.rows : [],
         v.encoding,
         v.filters,
-      );
+      ) }, v.encoding);
       emit({ kind: 'compute', label: 'Built chart data' });
       const columnDocs = await catalogColumns(projectId, v.datasetId); // the user's own column notes (catalog)
-      return copilot.visualFacts(v, ds ? ds.name : '(missing dataset)', viz, columnDocs);
+      // The visual's Analytics overlays, resolved under the visual's own filters.
+      const overlays = v.analytics && v.analytics.length
+        ? await resolveChartOverlays(projectId, viz.data, viz.category, v.analytics, v.filters) : [];
+      if (overlays.length) emit({ kind: 'compute', label: 'Resolved ' + plural(overlays.length, 'overlay'), count: overlays.length });
+      return copilot.visualFacts(v, ds ? ds.name : '(missing dataset)', viz, columnDocs, overlays);
     }
   }
 
@@ -256,6 +266,22 @@ export async function buildFacts(
         emit({ kind: 'compute', label: 'Resolved ' + plural(defined.length, 'metric'), count: defined.length });
       }
       return copilot.analysisFacts(a, cards, tiles, defined);
+    }
+  }
+
+  // An open SCORECARD: every row's figures and status for the period on screen,
+  // computed by the same call the page makes — so "what's off track?" is read
+  // straight off the app's own verdicts (ai/scorecardFacts.ts).
+  if (kind === 'scorecard' && id) {
+    const sc = await scorecards.getScorecard(projectId, id);
+    if (sc) {
+      emit({ kind: 'read', label: 'Read ' + sc.name });
+      const offset = typeof context.offset === 'number' && Number.isFinite(context.offset) ? context.offset : 0;
+      const res = await computeScorecard(projectId, sc, offset);
+      emit({ kind: 'compute', label: 'Scored ' + plural(res.rows.length, 'metric') + ' for ' + res.window.label, count: res.rows.length });
+      return scorecardFacts({
+        name: res.name, period: res.period, windowLabel: res.window.label, rows: res.rows, groups: res.groups,
+      });
     }
   }
 

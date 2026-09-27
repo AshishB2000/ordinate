@@ -94,9 +94,9 @@ export function register() {
     const src = await reportSpec.getReport(pid, String(id || ''));
     if (!src) return { ok: false, error: 'Report not found.' };
     const copy = await reportSpec.saveReport(pid, {
-      analysisId: src.analysisId, name: src.name + ' copy', format: src.format,
+      analysisId: src.analysisId, scorecardId: src.scorecardId, name: src.name + ' copy', format: src.format,
       pages: src.pages, cover: src.cover, paper: src.paper,
-      includeFilters: src.includeFilters, narrative: src.narrative,
+      includeFilters: src.includeFilters, narrative: src.narrative, discussion: src.discussion,
     });
     return copy ? { ok: true, report: copy } : { ok: false, error: 'Could not duplicate.' };
   });

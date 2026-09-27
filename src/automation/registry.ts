@@ -233,7 +233,7 @@ export const COMMANDS: readonly Command[] = [
   {
     cli: 'publish', readOnly: false, writes: 'files',
     summary: 'Publish dashboards to a static folder from a publish config file (runs as a publish job).',
-    args: { config: { type: 'string', description: 'Path to a publish config JSON: { projectId?, dashboardIds, storyIds, outDir, options }.' } },
+    args: { config: { type: 'string', description: 'Path to a publish config JSON: { projectId?, dashboardIds, storyIds, scorecardIds?, outDir, options }.' } },
     required: ['config'], positional: ['config'],
     run: (a, ctx) => h.publish(ctx, String(a.config)),
   },

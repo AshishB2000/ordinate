@@ -48,7 +48,7 @@ const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'e
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Visuals → New → the sample → "Build it myself". */
-async function openBuilder(win: Win): Promise<boolean> {
+export async function openBuilder(win: Win): Promise<boolean> {
   const { clickExact, clickId } = domDriver(win);
   await clickExact('Visuals');
   await win.waitForTimeout(900);
@@ -70,7 +70,7 @@ async function openBuilder(win: Win): Promise<boolean> {
 }
 
 /** Category + measures, through the form's own selects and buttons. */
-async function setEncoding(win: Win, category: string, measures: string[]): Promise<boolean> {
+export async function setEncoding(win: Win, category: string, measures: string[]): Promise<boolean> {
   const done = await win.evaluate(async (arg: { category: string; measures: string[] }) => {
     const box = document.getElementById('ws-visuals') as HTMLElement;
     const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -98,7 +98,7 @@ async function setEncoding(win: Win, category: string, measures: string[]): Prom
 }
 
 /** The picker the user has: a chip, else "+ More" and the tile. */
-async function pickType(win: Win, label: string): Promise<boolean> {
+export async function pickType(win: Win, label: string): Promise<boolean> {
   const direct = await win.evaluate((l: string) => {
     const chip = [...document.querySelectorAll('#viz-switcher-mount .cv-viz-chip')]
       .find((b) => (b.textContent || '').trim() === l) as HTMLElement | undefined;
@@ -141,7 +141,7 @@ async function readChart(win: Win): Promise<{ w: number; h: number; type: string
   });
 }
 
-async function save(win: Win, name: string): Promise<boolean> {
+export async function save(win: Win, name: string): Promise<boolean> {
   const { clickId, fillPrompt } = domDriver(win);
   if (!(await clickId('viz-save-btn'))) return false;
   await win.waitForTimeout(600);
