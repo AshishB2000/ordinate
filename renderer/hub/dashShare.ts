@@ -427,6 +427,8 @@ async function buildVisualExportCard(
           values: Array.isArray(s.values) ? s.values : [],
         })),
       },
+      // The project's colours, as ramp slots the export's own ramp draws (fmtApply.ts).
+      ...fmtExportSlots(type, visual, data),
     };
   }
   // Everything else (maps / plugin charts / table, and ALL visuals in a capture) → PNG,
@@ -444,7 +446,7 @@ async function buildVisualExportCard(
   try {
     png = dashIsMapType(type)
       ? await captureMapPNG(data, type, frame)
-      : await captureChartPNG(type, data, visual.overrides || {}, frame);
+      : await captureChartPNG(type, data, fmtWithScope(visual.overrides || {}, { projectId: currentProjectId, encoding: visual.encoding }), frame);
   } catch (_) { png = null; }
   if (!png) return { kind: 'broken', layout, reason: 'Chart could not be rendered' };
   return { kind: 'image', layout, png, title };

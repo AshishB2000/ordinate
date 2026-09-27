@@ -18,7 +18,7 @@
 // figure, a display control that silently swaps which figure is displayed is a
 // correctness bug, not a styling one.
 //
-// It was latent: `sortableType` in chartControls.ts excludes `gauge`, so the
+// It was latent: `sortableType` (now in fmtSort.ts) excludes `gauge`, so the
 // Sort field is hidden and the UI cannot set `overrides.sort`. buildChart is
 // called from six places though, and nothing but that hidden field stood between
 // a gauge and a wrong number. These checks make the guard the rule rather than
@@ -48,6 +48,7 @@ const CHART_SCRIPTS = [
 const THEME: Record<string, string> = {
   '--chart-1': '#2563eb', '--chart-2': '#0e7490', '--chart-3': '#14b8a6',
   '--chart-4': '#6366f1', '--chart-5': '#64748b',
+  '--chart-6': '#b45309', '--chart-7': '#be185d', '--chart-8': '#4d7c0f',
   '--muted': '#6b7280', '--border': '#e5e7eb', '--surface': '#ffffff',
   '--text-strong': '#111827', '--font-ui': 'Inter, system-ui, sans-serif',
   '--accent': '#2563eb', '--ok': '#16a34a', '--error': '#dc2626',
@@ -143,13 +144,15 @@ ok('pareto: always descending, even under asc',
 ok('bullet: sorts like a bar', labelsOf('bullet', 'desc').join() === 'South,North,East');
 
 // ── The UI gate that made this latent is still in place ────────────────────
-// `sortableType` in chartControls.ts is why nobody could reach the bug from the
+// `sortableType` in fmtSort.ts is why nobody could reach the bug from the
 // Customize menu. It is a SECOND line of defence, not the fix — but if it ever
 // gained `gauge` while the guard above was absent, the bug would be live. Pin
 // the pair so they cannot drift apart silently.
-const controls = fs.readFileSync(path.join(HUB, 'chartControls.ts'), 'utf8');
+// The Sort control moved from the ⋯ menu's quick fields into the Format panel
+// (fmtSort.ts), and the list moved with it.
+const controls = fs.readFileSync(path.join(HUB, 'fmtSort.ts'), 'utf8');
 const sortable = /const sortableType = \[([^\]]*)\]/.exec(controls);
-ok('chartControls declares a sortableType list', Boolean(sortable));
+ok('fmtSort declares a sortableType list', Boolean(sortable));
 ok('…which does not offer Sort for a gauge',
    Boolean(sortable) && sortable![1].indexOf("'gauge'") < 0, sortable ? sortable[1] : '(none)');
 

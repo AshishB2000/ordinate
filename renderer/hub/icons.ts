@@ -146,6 +146,10 @@ const ICONS: Record<string, string> = {
   'type-date':
     '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18M8 15h3"/>',
   'type-bool': '<rect x="2" y="7" width="20" height="10" rx="5"/><circle cx="8" cy="12" r="2.6"/>',
+
+  /* ── build-depth: format ── */
+  'grip-vertical':
+    '<circle cx="9" cy="5" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="19" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="19" r="1.2" fill="currentColor" stroke="none"/>',
 };
 
 /* The sprite lives in the document ONCE. `.ic-sprite` is `display:none` in

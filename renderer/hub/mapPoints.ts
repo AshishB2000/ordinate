@@ -11,7 +11,7 @@ const PT_SRC = 'cv-points';
 const PT_LAYER = 'cv-points-circles';
 const PT_MAX_COLORS = 8;
 
-function ptColorScale(items: any[], wrap: HTMLElement): { of: (it: any) => string; legend: Array<[string, string]> | null; ramp: [number, number] | null } {
+function ptColorScale(items: any[], wrap: HTMLElement, column?: string): { of: (it: any) => string; legend: Array<[string, string]> | null; ramp: [number, number] | null } {
   const accent = getCSSVar('--accent', wrap) || '#3b82f6';
   const vals = items.map((i) => i.color).filter((c) => c !== undefined && c !== null && c !== '');
   if (!vals.length) return { of: () => accent, legend: null, ramp: null };
@@ -24,13 +24,15 @@ function ptColorScale(items: any[], wrap: HTMLElement): { of: (it: any) => strin
       ramp: [lo, hi],
     };
   }
-  // Categories: the chart palette in first-seen order, the tail as one muted colour.
-  const palette = [1, 2, 3, 4, 5].map((n) => getCSSVar('--chart-' + n, wrap)).filter(Boolean)
-    .concat(['#b45309', '#be185d', '#4d7c0f']);
+  // Categories: the project's colour for each value (fmtColors.ts), else the
+  // chart palette in first-seen order; the tail as one muted colour.
+  const palette = CHART_PALETTE.map((fallback, i) => getCSSVar(`--chart-${i + 1}`, wrap) || fallback);
   const order: string[] = [];
   for (const v of vals) { const k = String(v); if (!order.includes(k)) order.push(k); }
   const muted = getCSSVar('--text-faint', wrap) || '#aeb4bf';
-  const color = new Map(order.slice(0, PT_MAX_COLORS).map((k, i) => [k, palette[i % palette.length]]));
+  const tokens = column && typeof fmtTokensFor === 'function' ? fmtTokensFor(column, order.slice(0, PT_MAX_COLORS)) : null;
+  const color = new Map(order.slice(0, PT_MAX_COLORS).map((k, i) =>
+    [k, tokens && tokens[i] ? fmtHex(tokens[i], palette) : palette[i % palette.length]]));
   const legend: Array<[string, string]> = order.slice(0, PT_MAX_COLORS).map((k) => [k, color.get(k) as string]);
   if (order.length > PT_MAX_COLORS) legend.push([`${order.length - PT_MAX_COLORS} more`, muted]);
   return { of: (it) => color.get(String(it.color)) || (it.color == null ? accent : muted), legend, ramp: null };
@@ -51,7 +53,7 @@ function renderPointMap(map: any, wrap: HTMLElement, container: HTMLElement, geo
   const maxVal = Math.max(...values);
   const MIN_R = 4;
   const MAX_R = 18;
-  const colors = ptColorScale(items, wrap);
+  const colors = ptColorScale(items, wrap, geo.colorColumn);
   const clusterColor = getCSSVar('--accent', wrap) || '#3b82f6';
   let markers: any[] = [];
 

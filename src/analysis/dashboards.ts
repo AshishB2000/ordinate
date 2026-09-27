@@ -249,12 +249,14 @@ export function sanitizeCardVisual(raw: unknown): CardVisual | null {
   if (!o) return null;
   const datasetId = typeof o.datasetId === 'string' ? o.datasetId : '';
   if (!datasetId) return null;
+  const chartType = sanitizeChartType(o.chartType);
+  const encoding = sanitizeEncoding(o.encoding);
   return {
     datasetId,
     name: typeof o.name === 'string' ? o.name : '',
-    chartType: sanitizeChartType(o.chartType),
-    encoding: sanitizeEncoding(o.encoding),
-    overrides: sanitizeOverrides(o.overrides),
+    chartType,
+    encoding,
+    overrides: sanitizeOverrides(o.overrides, { chartType, encoding }),
     filters: sanitizeFilters(o.filters),
   };
 }

@@ -47,6 +47,41 @@ function valueLabelText(v: number): string {
 }
 
 /**
+ * The text of one value label: Format → Data labels' own number format when the
+ * chart has one, else the chart's number format, else the rule above.
+ */
+function valueLabelOf(v: number, overrides: any, fmt: (v: any) => string): string {
+  if (overrides && overrides.labelFormat) return fmtWith(v, overrides.labelFormat);
+  return overrides && overrides.numberFormat ? fmt(v) : valueLabelText(v);
+}
+
+/**
+ * Where a value label sits (Format → Data labels → Position). `outside` — and
+ * absent, which every chart drawn before the option existed is — is the
+ * original placement, byte for byte: above a column's top, right of a bar's
+ * end. `inside` tucks it just within the mark's value end (below a line's
+ * point); `center` puts it at the mark's middle. On a bar the label then sits
+ * ON the fill, which is why `onMark` asks for white ink.
+ */
+function valueLabelAt(
+  el: ChartJsCtx, pos: { x: number; y: number }, isHoriz: boolean, place: string,
+  w: number, h: number, isBar: boolean,
+): { x: number; y: number; bx: number; onMark: boolean } {
+  if (place === 'center') {
+    const cp = el && typeof el.getCenterPoint === 'function' ? el.getCenterPoint() : pos;
+    const y = isHoriz ? cp.y : cp.y + h / 2;
+    return { x: cp.x, y, bx: cp.x - w / 2, onMark: isBar };
+  }
+  if (place === 'inside') {
+    const x = isHoriz && isBar ? pos.x - 6 - w / 2 : pos.x;
+    const y = isHoriz ? pos.y : pos.y + h + (isBar ? 4 : 6);
+    return { x, y, bx: x - w / 2, onMark: isBar };
+  }
+  const x = isHoriz ? pos.x + 8 : pos.x;
+  return { x, y: isHoriz ? pos.y : pos.y - 4, bx: isHoriz ? x : x - w / 2, onMark: false };
+}
+
+/**
  * Does a round-chart slice have room to hold its label?
  *
  * The old rule was `frac >= 0.06` — a share of the TOTAL, which says nothing
@@ -281,11 +316,13 @@ function buildChartPlugins(c: ChartCtx): any[] {
               displayVal = cum;
             }
             const pos = element.tooltipPosition();
-            const formatted = overrides.numberFormat ? fmt(displayVal) : valueLabelText(displayVal);
+            const formatted = valueLabelOf(displayVal, overrides, fmt);
             const w = ctx.measureText(formatted).width;
-            const tx = isHoriz ? pos.x + 8 : pos.x;
-            const ty0 = isHoriz ? pos.y : pos.y - 4;
-            const bx = isHoriz ? tx : tx - w / 2;
+            const at = valueLabelAt(element, pos, isHoriz, overrides.labelPosition, w, h,
+              chart.config.type === 'bar' && dataset.type !== 'line');
+            const tx = at.x;
+            const ty0 = at.y;
+            const bx = at.bx;
             const dedupeKey = formatted + '@' + Math.round(tx);
             if (seen.has(dedupeKey)) return;
             for (const dy of offsets) {
@@ -296,6 +333,9 @@ function buildChartPlugins(c: ChartCtx): any[] {
               placed.push({ x: bx, y: by, w, h });
               seen.add(dedupeKey);
               ctx.textBaseline = isHoriz ? 'middle' : 'bottom';
+              // On a filled bar (inside / centre) white reads in both themes,
+              // as the funnel's stage labels do; off it, the title token.
+              ctx.fillStyle = at.onMark ? '#ffffff' : titleColor;
               ctx.fillText(formatted, tx, ty);
               break;
             }
@@ -344,7 +384,7 @@ function buildChartPlugins(c: ChartCtx): any[] {
           if (!showName && !showVal) return;
           const lines: string[] = [];
           if (showName) lines.push(clip(name));
-          if (showVal) lines.push(overrides.numberFormat ? fmt(val) : valueLabelText(val));
+          if (showVal) lines.push(valueLabelOf(val, overrides, fmt));
           const lh = 12;
           // Measure with each line's OWN font — the name is 600 weight and the
           // value 500, and the widest line is what has to fit.
@@ -391,7 +431,7 @@ function buildChartPlugins(c: ChartCtx): any[] {
           const v = numOf((chart.data.datasets[0].data[k] || {}).v);
           if (v == null) return;
           const pos = el.getCenterPoint ? el.getCenterPoint() : { x: el.x, y: el.y };
-          const formatted = overrides.numberFormat ? fmt(v) : valueLabelText(v);
+          const formatted = valueLabelOf(v, overrides, fmt);
           // Ink picked by cell darkness (the same accent-alpha ramp the cell is filled
           // with) — replaces the old halo stroke, which left a smudge behind the digits.
           const span = (opts._matrixVmax - opts._matrixVmin) || 1;

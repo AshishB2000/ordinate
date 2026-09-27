@@ -8,7 +8,7 @@
 //
 // getCSSVar is the one impure member: it reads a CSS custom property off an
 // element's computed style, which is how every chart picks up the active theme
-// (--chart-1..5, --muted, --border, --surface, --text-strong, --font-ui) instead
+// (--chart-1..8, --muted, --border, --surface, --text-strong, --font-ui) instead
 // of hardcoding colors. It lives here because the palette IS what it is read
 // for, and mapRender.js resolves it at call time too.
 //
@@ -17,7 +17,7 @@
 
 // Fallback series colors, used when a theme token is missing and as the fixed
 // swatch order in the data table.
-const CHART_PALETTE = ['#2563eb', '#0e7490', '#14b8a6', '#6366f1', '#64748b'];
+const CHART_PALETTE = ['#2563eb', '#0e7490', '#14b8a6', '#6366f1', '#64748b', '#b45309', '#be185d', '#4d7c0f'];
 
 // `el` exists because a dashboard style preset (`.dash-theme--dark` and friends)
 // REMAPS these very tokens on a CONTAINER element, not on :root. Resolving from
@@ -104,7 +104,7 @@ function interpolatePalette(base: string[], n: number): string[] {
 // ── The workspace ACCENT → every token it drives ────────────────────────────
 //
 // Settings → Appearance → Branding picks ONE colour. The app needs a dozen from
-// it — the accent, its hover shade, two tints, the focus ring and a five-colour
+// it — the accent, its hover shade, two tints, the focus ring and an eight-colour
 // chart ramp — in BOTH themes, and each has a contrast floor: white text on
 // the accent (a primary button) at 4.5:1, and every chart colour at 3:1
 // against the surface it is drawn on. So the pick is a SEED: its hue is kept,
@@ -170,7 +170,7 @@ function brandTokens(hex: string): { light: Record<string, string>; dark: Record
     '--brand-accent-line': brandRgba(accent, 0.22),
     '--brand-focus': brandRgba(accent, 0.4),
   };
-  paletteFromSeed(accent, 5).forEach((c, i) => {
+  paletteFromSeed(accent, CHART_PALETTE.length).forEach((c, i) => {
     light['--brand-chart-' + (i + 1)] = i === 0 ? accent : brandWalk(c, -1, (h) => brandContrast(h, BRAND_LIGHT_SURFACE) >= 3);
   });
   // Dark: light enough to read on the dark surfaces, still dark enough for
@@ -186,7 +186,7 @@ function brandTokens(hex: string): { light: Record<string, string>; dark: Record
     '--brand-dk-accent-line': brandRgba(dk, 0.32),
     '--brand-dk-focus': brandRgba(dk, 0.4),
   };
-  paletteFromSeed(dk, 5).forEach((c, i) => {
+  paletteFromSeed(dk, CHART_PALETTE.length).forEach((c, i) => {
     dark['--brand-dk-chart-' + (i + 1)] = i === 0 ? dk
       : brandWalk(c, 1, (h) => BRAND_DARK_SURFACES.every((s) => brandContrast(h, s) >= 3));
   });
@@ -206,4 +206,77 @@ function applyBrandTokens(el: HTMLElement, hex: string): void {
   if (!t) return;
   Object.entries(t.light).forEach(([k, v]) => el.style.setProperty(k, v));
   Object.entries(t.dark).forEach(([k, v]) => el.style.setProperty(k, v));
+}
+
+// ── Value palettes: sequential and diverging, from the accent ────────────────
+//
+// A measure can be coloured BY ITS VALUE (Format → Colours): a sequential ramp
+// for "more is darker", a diverging one for "above or below a midpoint". Both
+// are derived from the accent the same way the chart ramp is — its hue kept,
+// its lightness walked — and every step holds the chart-mark floor, 3:1
+// against the surface it is drawn on, in whichever theme that surface is. So
+// the palest step is the one nearest the surface that still reads, and the
+// ramp runs from there to the strongest contrast; nothing fades into the page.
+
+/** Is this surface a dark theme's? (Unknown or empty reads as light.) */
+function rampIsDark(surface: string): boolean {
+  return /^#[0-9a-f]{6}$/i.test(String(surface)) && brandLum(surface) < 0.2;
+}
+
+/** Does `hex` read as a chart mark on the light surface, or on BOTH dark ones? */
+function rampReads(hex: string, dark: boolean): boolean {
+  return dark
+    ? BRAND_DARK_SURFACES.every((s) => brandContrast(hex, s) >= 3)
+    : brandContrast(hex, BRAND_LIGHT_SURFACE) >= 3;
+}
+
+/**
+ * `n` steps of one hue, nearest-the-surface first. Lightness is monotonic in
+ * luminance at a fixed hue and saturation, so once the near end passes the
+ * floor every step beyond it passes too.
+ */
+function rampOfHue(hex: string, n: number, dark: boolean): string[] {
+  const hsl = hexToHsl(hex);
+  if (!hsl || n < 1) return Array.from({ length: Math.max(0, n) }, () => hex);
+  const s = hsl.s < 0.05 ? 0 : Math.max(0.45, hsl.s);
+  const near = brandWalk(hslToHex(hsl.h, s, dark ? 0.2 : 0.9), dark ? 1 : -1, (h) => rampReads(h, dark));
+  const nearL = (hexToHsl(near) as { l: number }).l;
+  const farL = dark ? Math.max(nearL, 0.88) : Math.min(nearL, 0.22);
+  if (n === 1) return [near];
+  return Array.from({ length: n }, (_, i) => (i === 0 ? near : hslToHex(hsl.h, s, nearL + (farL - nearL) * (i / (n - 1)))));
+}
+
+/**
+ * The ramp a value palette draws with, for the surface it is drawn on.
+ * sequential: `n` steps of the accent's hue, low → high.
+ * diverging:  the accent's complement ← a neutral centre → the accent, `n` odd.
+ */
+function valueRamp(kind: string, accent: string, surface: string, n = 7): string[] {
+  const dark = rampIsDark(surface);
+  const seed = /^#[0-9a-f]{6}$/i.test(String(accent)) ? accent.toLowerCase() : CHART_PALETTE[0];
+  if (kind !== 'diverging') return rampOfHue(seed, n, dark);
+  const half = Math.max(1, Math.floor(n / 2));
+  const hsl = hexToHsl(seed) as { h: number; s: number; l: number };
+  const pos = rampOfHue(seed, half + 1, dark);
+  const neg = rampOfHue(hslToHex(hsl.h + 180, hsl.s, hsl.l), half + 1, dark);
+  const mid = rampOfHue('#808080', 1, dark)[0];
+  return neg.slice(1).reverse().concat([mid], pos.slice(1));
+}
+
+/**
+ * Where `v` falls on a ramp over [min, max]. Diverging centres on zero when the
+ * range crosses it, else on the middle of the range.
+ */
+function rampColor(ramp: string[], kind: string, v: number, min: number, max: number): string {
+  const n = ramp.length;
+  if (!n) return '';
+  const clamp = (i: number) => ramp[Math.max(0, Math.min(n - 1, i))];
+  if (kind !== 'diverging') {
+    const t = max > min ? (v - min) / (max - min) : 0.5;
+    return clamp(Math.round(t * (n - 1)));
+  }
+  const half = Math.floor(n / 2);
+  const c = min < 0 && max > 0 ? 0 : (min + max) / 2;
+  if (v >= c) return clamp(half + Math.round((max > c ? (v - c) / (max - c) : 0) * half));
+  return clamp(half - Math.round((c > min ? (c - v) / (c - min) : 0) * half));
 }

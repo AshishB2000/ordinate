@@ -31,6 +31,7 @@
   <link rel="stylesheet" href="plan.css"/>
 
   <!-- build-css:format -->
+  <link rel="stylesheet" href="format.css"/>
 
   <!-- build-css:theme -->
 
@@ -3280,6 +3281,19 @@
 <script src="planEdit.js"></script>
 
 <!-- build:format -->
+<!-- Formatting depth and project colours. The colour rule is a PURE main
+     module shared with the renderer, loaded between the CommonJS shim and its
+     binder exactly as src/app/format.js is (see cjsShim.ts); fmtColors.js
+     binds it and clears the shim's globals again. The rest resolve each other
+     at call time. -->
+<script src="cjsShim.js"></script>
+<script src="../../src/analysis/colorMap.js"></script>
+<script src="fmtColors.js"></script>
+<script src="fmtApply.js"></script>
+<script src="formatPanel.js"></script>
+<script src="fmtSort.js"></script>
+<script src="fmtColorsUi.js"></script>
+<script src="fmtProfile.js"></script>
 
 <!-- build:theme -->
 

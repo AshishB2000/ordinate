@@ -22,6 +22,7 @@ const SECTIONS: Section[] = [
   { name: 'plan', run: (s, fx) => require('./bdPlan').planSection(s, fx) },
 
   // build:format
+  { name: 'format', run: (s, fx) => require('./bdFormat').formatSection(s, fx) },
 
   // build:theme
 

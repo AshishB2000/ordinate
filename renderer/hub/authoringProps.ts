@@ -433,10 +433,9 @@ function anRenderProps(card: any): void {
     return body;
   };
 
-  // Every control below writes a field `chartRender.buildChart` already reads
-  // (overrides.title / showLegend / legendPosition / showValues / showGridlines
-  // / yZero / xAxisLabel / yAxisLabel). Nothing here is a new formatting engine:
-  // the ⋯ Customize menu has driven these same keys since the capture surface.
+  // Every control below writes a field `chartRender.buildChart` already reads.
+  // The legend lives here; axes, data labels, sort and colours are the shared
+  // Format panel (formatPanel.ts), the same one the ⋯ Customize menu carries.
   const ov = (): any => {
     if (!anVisual) return {};
     if (!anVisual.overrides || typeof anVisual.overrides !== 'object') anVisual.overrides = {};
@@ -462,14 +461,6 @@ function anRenderProps(card: any): void {
     wrap.appendChild(t);
     host.appendChild(wrap);
   };
-  const textField = (host: HTMLElement, text: string, key: string): void => {
-    const inp = document.createElement('input');
-    inp.type = 'text';
-    inp.className = 'an-prop-input';
-    inp.value = ov()[key] != null ? String(ov()[key]) : '';
-    inp.addEventListener('input', () => { ov()[key] = inp.value; anScheduleWrite(); });
-    labelled(host, text, inp);
-  };
 
   const display = section('Display settings', true);
   if (card.type === 'control' && card.control) {
@@ -492,23 +483,12 @@ function anRenderProps(card: any): void {
       o.value = v; o.textContent = l;
       legPos.appendChild(o);
     });
-    legPos.value = String(ov().legendPosition || 'top');
+    legPos.value = String(ov().legendPosition || 'bottom');
     legPos.addEventListener('change', () => { ov().legendPosition = legPos.value; anScheduleWrite(); });
     labelled(display, 'Legend position', legPos);
-    // ponytail: no "Show data labels" here. buildChart reads overrides.showValues,
-    // but sanitizeOverrides (src/visuals.ts) does NOT whitelist it — a saved
-    // visual drops the key, so the checkbox would tick and change nothing after a
-    // reload. Add it to that whitelist and this becomes a two-line addition.
-
-    const axes = section('Axes', false);
-    textField(axes, 'X axis label', 'xAxisLabel');
-    textField(axes, 'Y axis label', 'yAxisLabel');
-    check(axes, 'Start Y axis at zero', 'yZero', false);
-    check(axes, 'Show gridlines', 'showGridlines', true);
-    // ponytail: colour, number format and sort are NOT here — they live in the
-    // chart's own ⋯ Customize menu (chartControls.ts), which owns the swatch
-    // grid and the per-series state. Duplicating that here would be a second
-    // editor for one override object. Move them if Customize is retired.
+    // Axes (titles, range, log, format, ticks, gridlines), data labels, sort
+    // and colours: the SAME panel the chart's ⋯ Customize menu carries.
+    fmtRenderAnalysisFormat(host, anVisual, anScheduleWrite);
   } else {
     const k = document.createElement('p');
     k.className = 'an-prop-note an-prop-note--info';

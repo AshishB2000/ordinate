@@ -60,12 +60,12 @@ for (const seed of [...branding.ACCENT_SWATCHES, ...HOSTILE]) {
   const D = t.dark;
   const fails: string[] = [];
   if (contrast(L['--brand-accent'], '#ffffff') < 4.5) fails.push('light accent vs white text');
-  for (let i = 1; i <= 5; i += 1) {
+  for (let i = 1; i <= 8; i += 1) {
     if (contrast(L['--brand-chart-' + i], LIGHT_SURFACE) < 3) fails.push('light chart-' + i);
   }
   for (const s of DARK_SURFACES) {
     if (contrast(D['--brand-dk-accent'], s) < 4) fails.push('dark accent on ' + s);
-    for (let i = 1; i <= 5; i += 1) {
+    for (let i = 1; i <= 8; i += 1) {
       if (contrast(D['--brand-dk-chart-' + i], s) < 3) fails.push('dark chart-' + i + ' on ' + s);
     }
   }
@@ -164,7 +164,7 @@ const st2 = dashboards.sanitizeStyle({ accentHex: 'red', logo: 'http://x' });
 ok('…and drops a colour name and an unknown logo', !('accentHex' in st2) && !('logo' in st2), JSON.stringify(st2));
 
 const ramp = { accent: '#6d28d9', accent2: '#5b21b6', soft: 'rgba(109, 40, 217, 0.08)', line: 'rgba(109, 40, 217, 0.22)',
-  chart: ['#6d28d9', '#0e7490', '#14b8a6', '#6366f1', '#64748b'] };
+  chart: ['#6d28d9', '#0e7490', '#14b8a6', '#6366f1', '#64748b', '#b45309', '#be185d', '#4d7c0f'] };
 const logo = 'data:image/png;base64,' + PNG.toString('base64');
 const kept = dashExport.sanitizeBundle({ name: 'D', pages: [], brand: { ramp, logo, extra: 'x' } });
 ok('sanitizeBundle keeps a valid ramp and logo, nothing else',

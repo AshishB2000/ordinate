@@ -630,6 +630,19 @@ scripts/**/*.js
 /scripts/bdPlan.js
 
 # build:format
+/src/analysis/colorMap.js
+/src/analysis/chartFormat.js
+/src/ipc/format.js
+/preload/hubFormatPreload.js
+/renderer/hub/fmtColors.js
+/renderer/hub/fmtApply.js
+/renderer/hub/formatPanel.js
+/renderer/hub/fmtSort.js
+/renderer/hub/fmtColorsUi.js
+/renderer/hub/fmtProfile.js
+/scripts/test-colorMap.js
+/scripts/test-chartFormat.js
+/scripts/bdFormat.js
 
 # build:theme
 

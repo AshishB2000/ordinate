@@ -24,16 +24,10 @@ function closeChartMenu() {
 function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx, overrideKey) {
   closeChartMenu();
 
-  const isRound = type === 'pie' || type === 'donut';
   const currentOverrides = (entry.chartOverrides && entry.chartOverrides[overrideKey]) || {};
 
   // ── Populate customize fields with current values ────────────────────
-  const defaultShowLegend = legendOnByDefault(type, chartSeries(data));
-
   if (cmTitleInput) cmTitleInput.value = currentOverrides.title || '';
-  if (cmAxisSection) cmAxisSection.hidden = isRound || type === 'radar' || type === 'calendar';
-  if (cmXAxis) cmXAxis.value = currentOverrides.xAxisLabel || '';
-  if (cmYAxis) cmYAxis.value = currentOverrides.yAxisLabel || '';
 
   // Swatches — mark the currently active color
   if (cmSwatches) {
@@ -48,28 +42,19 @@ function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx,
     btn.setAttribute('aria-checked', String(on));
     btn.classList.toggle('cm-switch-on', on);
   }
-  setSwitch(cmShowLegend, currentOverrides.showLegend !== undefined ? currentOverrides.showLegend : defaultShowLegend);
-  setSwitch(cmShowGridlines, currentOverrides.showGridlines !== false);
-
   // Advanced controls — populate current values + show only where they apply.
-  const _ser = chartSeries(data);
+  // Legend, axes (titles, start at zero, gridlines) and Sort live in the
+  // Format panel below (formatPanel.ts).
   const isLineType = ['line', 'area', 'stacked_area', 'line_markers', 'combo'].includes(type);
-  const valueAxisType = !isRound && !['scatter', 'bubble', 'treemap', 'heatmap', 'sankey', 'candlestick', 'boxplot', 'gauge', 'funnel', 'radar', 'calendar'].includes(type);
-  // Not waterfall or pareto: a waterfall's order is its story, a Pareto sorts itself.
-  const sortableType = ['column', 'bar', 'clustered_column', 'clustered_bar', 'stacked_column', 'stacked_bar', 'pct_stacked_column', 'pct_stacked_bar', 'pie', 'donut', 'bullet'].includes(type);
-  const canLegend = isRound || _ser.length > 1;
-  if (cmLegendPos) cmLegendPos.value = currentOverrides.legendPosition || 'bottom';
-  if (cmLegendPosField) cmLegendPosField.hidden = !canLegend;
-  setSwitch(cmYZero, currentOverrides.yZero !== undefined ? currentOverrides.yZero : true);
-  if (cmYZeroRow) cmYZeroRow.hidden = !valueAxisType;
-  if (cmSort) cmSort.value = currentOverrides.sort || 'none';
-  if (cmSortField) cmSortField.hidden = !sortableType;
   if (cmNumFmt) cmNumFmt.value = currentOverrides.numberFormat || 'auto';
   // A bullet's fixed target — used when the chart has no second (target) measure.
   if (cmTarget) cmTarget.value = typeof currentOverrides.bulletTarget === 'number' ? String(currentOverrides.bulletTarget) : '';
   if (cmTargetField) cmTargetField.hidden = type !== 'bullet';
   setSwitch(cmSmooth, currentOverrides.smooth !== false);
   if (cmSmoothRow) cmSmoothRow.hidden = !isLineType;
+
+  // Legend, axes, data labels, sort and colours for THIS chart (formatPanel.ts).
+  fmtMountChartMenu(cmFormatMount, container, data, type, entry, turnIdx, overrideKey);
 
   // Collapse customize panel on fresh open
   if (cmCustomize) cmCustomize.hidden = true;
@@ -203,18 +188,6 @@ function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx,
     persistOverride(entry, overrideKey, merged);
   }
 
-  // ── Customize: axis label inputs (debounced) ─────────────────────────
-  let _axisTimer = null;
-  function onAxisInput() {
-    clearTimeout(_axisTimer);
-    _axisTimer = setTimeout(() => {
-      applyOverride({
-        xAxisLabel: (cmXAxis && cmXAxis.value.trim()) || null,
-        yAxisLabel: (cmYAxis && cmYAxis.value.trim()) || null,
-      });
-    }, 300);
-  }
-
   // ── Customize: reset to default ──────────────────────────────────────
   function onReset() {
     if (!entry.chartOverrides) entry.chartOverrides = {};
@@ -243,19 +216,12 @@ function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx,
   if (cmCustomToggle)  cmCustomToggle.addEventListener('click', onCustomizeToggle, sig);
   if (cmTitleInput)    cmTitleInput.addEventListener('input', onTitleInput, sig);
   if (cmSwatches)      cmSwatches.addEventListener('click', onSwatchClick, sig);
-  if (cmShowLegend)    cmShowLegend.addEventListener('click', () => onToggleSwitch(cmShowLegend, 'showLegend', defaultShowLegend), sig);
-  if (cmLegendPos)     cmLegendPos.addEventListener('change', () => applyOverride({ legendPosition: cmLegendPos.value === 'bottom' ? null : cmLegendPos.value }), sig);
-  if (cmShowGridlines) cmShowGridlines.addEventListener('click', () => onToggleSwitch(cmShowGridlines, 'showGridlines', true), sig);
-  if (cmYZero)         cmYZero.addEventListener('click', () => onToggleSwitch(cmYZero, 'yZero', true), sig);
-  if (cmSort)          cmSort.addEventListener('change', () => applyOverride({ sort: cmSort.value === 'none' ? null : cmSort.value }), sig);
   if (cmNumFmt)        cmNumFmt.addEventListener('change', () => applyOverride({ numberFormat: cmNumFmt.value === 'auto' ? null : cmNumFmt.value }), sig);
   if (cmTarget)        cmTarget.addEventListener('change', () => {
     const n = parseFloat(cmTarget.value);
     applyOverride({ bulletTarget: Number.isFinite(n) ? n : null });
   }, sig);
   if (cmSmooth)        cmSmooth.addEventListener('click', () => onToggleSwitch(cmSmooth, 'smooth', true), sig);
-  if (cmXAxis)         cmXAxis.addEventListener('input', onAxisInput, sig);
-  if (cmYAxis)         cmYAxis.addEventListener('input', onAxisInput, sig);
   if (cmReset)         cmReset.addEventListener('click', onReset, sig);
 
   // Clean up all listeners on menu close
@@ -522,7 +488,7 @@ function addChartControls(chartWrapper, container, canvas, data, type, entry, tu
           const canvas = container.querySelector('canvas');
           if (chart) { try { chart.destroy(); } catch (_) {} }
           const ov = (entry.chartOverrides && entry.chartOverrides[overrideKey]) || {};
-          const rebuilt = canvas && buildChart(canvas, data, type, ov);
+          const rebuilt = canvas && buildChart(canvas, data, type, fmtWithScope(ov, entry.drill));
           if (rebuilt) chartInstances.set(container, rebuilt);
         }
         periodsBtn.classList.toggle('active', hidden.size > 0);
@@ -555,7 +521,7 @@ function addChartControls(chartWrapper, container, canvas, data, type, entry, tu
       if (chart) { try { chart.destroy(); } catch (_) {} }
       const cv = container.querySelector('canvas');
       const ov = (entry.chartOverrides && entry.chartOverrides[overrideKey]) || {};
-      const rebuilt = cv && buildChart(cv, data, type, ov);
+      const rebuilt = cv && buildChart(cv, data, type, fmtWithScope(ov, entry.drill));
       if (rebuilt) chartInstances.set(container, rebuilt);
     });
     box.appendChild(select);

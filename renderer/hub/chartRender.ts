@@ -173,13 +173,7 @@ function buildChart(
   // Read HERE, inside buildChart, and never hoisted: getComputedStyle on a
   // DETACHED element returns '' for every custom property, so a colour read
   // before the canvas is in the document silently falls back to Chart.js's #666.
-  const palette = [
-    getCSSVar('--chart-1', canvas) || CHART_PALETTE[0],
-    getCSSVar('--chart-2', canvas) || CHART_PALETTE[1],
-    getCSSVar('--chart-3', canvas) || CHART_PALETTE[2],
-    getCSSVar('--chart-4', canvas) || CHART_PALETTE[3],
-    getCSSVar('--chart-5', canvas) || CHART_PALETTE[4],
-  ];
+  const palette = CHART_PALETTE.map((fallback, i) => getCSSVar(`--chart-${i + 1}`, canvas) || fallback);
   // Color override seeds a harmonious palette: every series (and pie/donut slice,
   // which uses palette[i % len]) recolors to a distinct hue derived from the pick,
   // with series 1 = the exact chosen color. Single-series → just the chosen color.
@@ -219,11 +213,27 @@ function buildChart(
   // A waterfall's order IS its story and a Pareto sorts itself, so neither.
   const canSort = ((chartType === 'bar' && !isFunnel && !isHistogram) || (isRound && !isGauge))
     && !spec.isWaterfall && !spec.isPareto;
-  if (canSort && (overrides.sort === 'asc' || overrides.sort === 'desc')) {
+  // By label (A→Z / Z→A, numbers in number order) and by hand (`custom`: the
+  // stored `sortOrder` first, every label it does not name after, as it came)
+  // reorder the same set — a sort never adds, drops or changes a figure. Both
+  // read the RAW labels, so a month axis sorts as 2023-01 < 2023-04, not as
+  // the "Apr 2023" < "Jan 2023" its display text would.
+  const byLabel = overrides.sort === 'label_asc' || overrides.sort === 'label_desc';
+  const rawLabels: any[] = Array.isArray(data.labels) ? data.labels : [];
+  if (canSort && (overrides.sort === 'asc' || overrides.sort === 'desc' || byLabel || overrides.sort === 'custom')) {
     const totals = labels.map((_: any, i: number) =>
       series.reduce((sum: number, s: ChartSeriesShape) => sum + (typeof s.values[i] === 'number' ? s.values[i] : 0), 0));
-    const order = labels.map((_: any, i: number) => i)
-      .sort((a: number, b: number) => overrides.sort === 'asc' ? totals[a] - totals[b] : totals[b] - totals[a]);
+    const rank = new Map<string, number>();
+    (Array.isArray(overrides.sortOrder) ? overrides.sortOrder : []).forEach((l: any, k: number) => rank.set(String(l), k));
+    const pos = (i: number) => (rank.has(String(rawLabels[i])) ? rank.get(String(rawLabels[i])) : rank.size + i);
+    const order = labels.map((_: any, i: number) => i).sort((a: number, b: number) => {
+      if (overrides.sort === 'custom') return pos(a) - pos(b);
+      if (byLabel) {
+        const d = String(rawLabels[a]).localeCompare(String(rawLabels[b]), undefined, { numeric: true });
+        return overrides.sort === 'label_asc' ? d : -d;
+      }
+      return overrides.sort === 'asc' ? totals[a] - totals[b] : totals[b] - totals[a];
+    });
     labels = order.map((i: number) => labels[i]);
     series = series.map((s: ChartSeriesShape) => Object.assign({}, s, { values: order.map((i: number) => s.values[i]) }));
   }
@@ -232,6 +242,11 @@ function buildChart(
   const showLegend = overrides.showLegend !== undefined ? overrides.showLegend : defaultShowLegend;
   const showGridlines = overrides.showGridlines !== false; // default on
   const tickFont   = { family: fontFamily, size: 10 };
+
+  // Formatting depth (fmtApply.ts): series colours into the palette, and the
+  // project's colour per category. Guarded — the chart test harnesses load the
+  // family scripts only.
+  const fmtCat = typeof fmtResolve === 'function' ? fmtResolve(labels, series, overrides, palette, type) : null;
 
   // ── The parameter object every family module reads ───────────────────────
   const c: ChartCtx = {
@@ -248,6 +263,7 @@ function buildChart(
   if (!built) return null;   // nothing drawable (a calendar without dates)
   const { datasets, chartLabels } = built;
   const scales = buildChartScales(c);
+  if (typeof fmtApply === 'function') fmtApply(c, datasets, scales, fmtCat, type);
 
   // ── Tooltip ─────────────────────────────────────────────────────────────
   const tooltipConfig: any = {

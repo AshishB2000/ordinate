@@ -465,7 +465,7 @@ export async function importBundle(bytes: Buffer, opts: BundleProgress & { name?
       await fs.promises.writeFile(tmp, data);
       await fs.promises.rename(tmp, target);
     }
-    // Carry the source project's dismissed insights; everything else about the
+    // Carry the source project's dismissed insights and colours; everything else about the
     // project record (id, dates, archive state) belongs to the new one.
     const pj = entries.find((e) => e.name === 'project.json');
     if (pj) {
@@ -474,6 +474,8 @@ export async function importBundle(bytes: Buffer, opts: BundleProgress & { name?
         if (Array.isArray(src.dismissedInsights)) {
           for (const d of src.dismissedInsights.slice(0, 500)) await projects.setInsightDismissed(created.id, String(d), true);
         }
+        // …and its category colours (sanitized on the way in, like any read).
+        if (src.colorMap) await projects.setColorMap(created.id, src.colorMap);
       } catch (_) { /* optional */ }
     }
   } catch (err: any) {

@@ -17,6 +17,7 @@ export function register(deps: BuildDeps): void {
   require('./plan').register(); // Assistant plans: check, run step by step, undo
 
   // build:format
+  require('./format').register();
 
   // build:theme
 

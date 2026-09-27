@@ -27,7 +27,7 @@ function pcFmt(v: number): string {
 function pcRamp(): string[] {
   const cs = getComputedStyle(document.documentElement);
   const out: string[] = [];
-  for (let i = 1; i <= 5; i++) {
+  for (let i = 1; i <= 8; i++) {
     const c = cs.getPropertyValue('--chart-' + i).trim();
     if (c) out.push(c);
   }

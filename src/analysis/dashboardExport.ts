@@ -71,6 +71,14 @@ export interface ExportCard {
   chartType?: string;
   title?: string;
   data?: ExportChartData;
+  /**
+   * The project's colours (renderer/hub/fmtApply.ts), as RAMP SLOTS 0–7 that
+   * the file's own ramp draws: `slots` per label for a chart that colours by
+   * category (a pie's slices), `seriesSlots` per series. Integers only — a
+   * slot indexes PALETTE, so no caller text ever reaches a style.
+   */
+  slots?: number[];
+  seriesSlots?: number[];
   // image
   png?: string;
   // metric
@@ -197,6 +205,16 @@ export function sanitizePng(v: unknown): string {
   return typeof v === 'string' && /^data:image\/[a-z0-9.+-]+;base64,/i.test(v) ? v : '';
 }
 
+/**
+ * A list of ramp slots: integers 0–7, one per label/series, or nothing. One
+ * bad entry drops the whole list — a garbled list is not half-trusted — and
+ * the chart falls back to drawing by position, as every export did before.
+ */
+export function sanitizeSlots(raw: unknown, n: number): number[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > n) return undefined;
+  return raw.every((k) => Number.isInteger(k) && k >= 0 && k < 8) ? (raw as number[]).slice() : undefined;
+}
+
 function sanitizeCard(raw: unknown): ExportCard | null {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
   if (!o) return null;
@@ -207,7 +225,12 @@ function sanitizeCard(raw: unknown): ExportCard | null {
     const data = sanitizeChartData(o.data);
     const chartType =
       typeof o.chartType === 'string' && CORE_CHART_TYPES.has(o.chartType) ? o.chartType : 'bar';
-    return { kind: 'chart', layout, chartType, title: asString(o.title), data };
+    const slots = sanitizeSlots(o.slots, data.labels.length);
+    const seriesSlots = sanitizeSlots(o.seriesSlots, data.series.length);
+    return {
+      kind: 'chart', layout, chartType, title: asString(o.title), data,
+      ...(slots ? { slots } : {}), ...(seriesSlots ? { seriesSlots } : {}),
+    };
   }
   if (kind === 'image') {
     const png = sanitizePng(o.png);
@@ -273,9 +296,9 @@ export function sanitizeBrand(raw: unknown): ExportBundle['brand'] {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const r = o.ramp && typeof o.ramp === 'object' ? (o.ramp as Record<string, unknown>) : {};
   const color = (v: unknown): string => (typeof v === 'string' && COLOR_RE.test(v) ? v : '');
-  const chart = Array.isArray(r.chart) ? r.chart.slice(0, 5).map(color) : [];
+  const chart = Array.isArray(r.chart) ? r.chart.slice(0, 8).map(color) : [];
   const ramp: AccentRamp = { accent: color(r.accent), accent2: color(r.accent2), soft: color(r.soft), line: color(r.line), chart };
-  const whole = chart.length === 5 && chart.every(Boolean) && ramp.accent && ramp.accent2 && ramp.soft && ramp.line;
+  const whole = chart.length === 8 && chart.every(Boolean) && ramp.accent && ramp.accent2 && ramp.soft && ramp.line;
   const logo = sanitizePng(o.logo);
   return { ...(whole ? { ramp } : {}), ...(logo ? { logo } : {}) };
 }
@@ -375,21 +398,21 @@ export interface AccentRamp {
   accent2: string;
   soft: string;
   line: string;
-  chart: string[]; // --chart-1..5, and [0] is --chart-accent
+  chart: string[]; // --chart-1..8, and [0] is --chart-accent
 }
 const ACCENT_RAMPS: Record<string, AccentRamp> = {
   blue: { accent: '#2563eb', accent2: '#1d4fd0', soft: 'rgba(37, 99, 235, 0.08)', line: 'rgba(37, 99, 235, 0.22)',
-    chart: ['#2563eb', '#0e7490', '#14b8a6', '#6366f1', '#64748b'] },
+    chart: ['#2563eb', '#0e7490', '#14b8a6', '#6366f1', '#64748b', '#b45309', '#be185d', '#4d7c0f'] },
   teal: { accent: '#0d9488', accent2: '#0f766e', soft: 'rgba(13, 148, 136, 0.09)', line: 'rgba(13, 148, 136, 0.24)',
-    chart: ['#0d9488', '#0e7490', '#2563eb', '#4f46e5', '#64748b'] },
+    chart: ['#0d9488', '#0e7490', '#2563eb', '#4f46e5', '#64748b', '#b45309', '#be185d', '#4d7c0f'] },
   slate: { accent: '#475569', accent2: '#334155', soft: 'rgba(71, 85, 105, 0.08)', line: 'rgba(71, 85, 105, 0.22)',
-    chart: ['#475569', '#64748b', '#0f766e', '#7e8ba3', '#a1a8b5'] },
+    chart: ['#475569', '#64748b', '#0f766e', '#7e8ba3', '#a1a8b5', '#8b6f47', '#6b5b95', '#5f7f6f'] },
   'blue-dark': { accent: '#3b82f6', accent2: '#2f6fe0', soft: 'rgba(59, 130, 246, 0.16)', line: 'rgba(59, 130, 246, 0.32)',
-    chart: ['#3b82f6', '#22d3ee', '#2dd4bf', '#818cf8', '#94a3b8'] },
+    chart: ['#3b82f6', '#22d3ee', '#2dd4bf', '#818cf8', '#94a3b8', '#fbbf24', '#f472b6', '#a3e635'] },
   'teal-dark': { accent: '#2dd4bf', accent2: '#14b8a6', soft: 'rgba(45, 212, 191, 0.16)', line: 'rgba(45, 212, 191, 0.32)',
-    chart: ['#2dd4bf', '#22d3ee', '#60a5fa', '#818cf8', '#94a3b8'] },
+    chart: ['#2dd4bf', '#22d3ee', '#60a5fa', '#818cf8', '#94a3b8', '#fbbf24', '#f472b6', '#a3e635'] },
   'slate-dark': { accent: '#94a3b8', accent2: '#b6c2d1', soft: 'rgba(148, 163, 184, 0.16)', line: 'rgba(148, 163, 184, 0.32)',
-    chart: ['#94a3b8', '#cbd5e1', '#5eead4', '#a5b4fc', '#78859a'] },
+    chart: ['#94a3b8', '#cbd5e1', '#5eead4', '#a5b4fc', '#78859a', '#b5a07a', '#b8a9d9', '#9fc5a8'] },
 };
 
 // `style` is already clamped by sanitizeStyle, so both halves of the key are one
@@ -519,14 +542,19 @@ function renderScript(style: DashboardStyle, brand?: ExportBundle['brand']): str
     var canvas = document.createElement('canvas'); wrap.appendChild(canvas); cell.appendChild(wrap);
     if (typeof window.Chart !== 'function') { renderBroken(cell, 'Chart engine unavailable'); return; }
     var d = card.data || { labels: [], series: [] };
+    var radial = card.chartType === 'pie' || card.chartType === 'doughnut';
+    // The project's colours: a slot per label (a pie's slices, bars coloured
+    // by category) or per series; by position where there are none.
+    var slot = function (k) { return PALETTE[k % PALETTE.length]; };
+    var perLabel = card.slots ? card.slots.map(slot) : null;
     var datasets = (d.series || []).map(function (s, i) {
-      var c = PALETTE[i % PALETTE.length];
-      return { label: s.label, data: s.values, backgroundColor: c, borderColor: c, borderWidth: 2, fill: false };
+      var c = slot(card.seriesSlots ? card.seriesSlots[i] : i);
+      var bg = perLabel || (radial ? d.labels.map(function (_, j) { return slot(j); }) : c);
+      return { label: s.label, data: s.values, backgroundColor: bg, borderColor: radial ? bg : c, borderWidth: 2, fill: false };
     });
     // The app's formatter, when the file carries it: 5.2M on the axis, the
     // full figure in the tooltip — as in the app.
     var F = typeof OrdFormat === 'object' && OrdFormat ? OrdFormat : null;
-    var radial = card.chartType === 'pie' || card.chartType === 'doughnut';
     var options = { responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: datasets.length > 1 } } };
     if (F) {
