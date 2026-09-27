@@ -9,6 +9,7 @@ import * as dashboards from '../analysis/dashboards';
 import * as analysis from '../analysis/analysis';
 import { computeColumnSummary, findQualityIssues } from '../data/datasetStats';
 import { buildVizData } from '../analysis/vizData';
+import { withTableCalcs } from '../analysis/tableCalc';
 import { computeMetric } from '../analysis/metricValue';
 import { askCopilot } from '../ai/analyze';
 import { auditNumbers } from '../ai/numberAudit';
@@ -207,12 +208,13 @@ export async function buildFacts(
       emit({ kind: 'read', label: 'Read ' + v.name });
       const ds = await datasets.getDataset(projectId, v.datasetId);
       emit({ kind: 'read', label: 'Read ' + (ds ? ds.name : '(missing dataset)') });
-      const viz = buildVizData(
+      // The calculated figures the chart shows, beside the raw ones (tableCalc.ts).
+      const viz = withTableCalcs({ ok: true, ...buildVizData(
         ds ? ds.columns : [],
         ds ? ds.rows : [],
         v.encoding,
         v.filters,
-      );
+      ) }, v.encoding);
       emit({ kind: 'compute', label: 'Built chart data' });
       const columnDocs = await catalogColumns(projectId, v.datasetId); // the user's own column notes (catalog)
       // The visual's Analytics overlays, resolved under the visual's own filters.

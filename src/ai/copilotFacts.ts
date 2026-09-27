@@ -21,6 +21,8 @@ import type { VizDataResult } from '../analysis/vizData';
 import { overlayFacts } from '../analysis/analytics';
 import type { ResolvedOverlay } from '../analysis/analytics';
 import { harvestAppNumbers } from './numberAudit';
+import { CALC_KIND_NAMES, isPercentKind } from '../analysis/tableCalc';
+import type { CalcSeries } from '../analysis/tableCalc';
 import type { LedgerEntry, LedgerUnit } from './numberAudit';
 import type { CopilotFacts } from './copilot';
 
@@ -312,6 +314,7 @@ export function visualFacts(
       // One entry per MARK, labelled the way the chart labels it, so a violation
       // report names the bar the model was looking at.
       labels.forEach((lab, i) => num(ledger, `${s.name} @ ${lab}`, s.values ? s.values[i] : null, 'number', 'vizData'));
+      calcFactLines(lines, ledger, s, labels);
     });
   } else {
     lines.push('');
@@ -341,6 +344,28 @@ export function visualFacts(
       note: 'stats app-computed',
     },
   };
+}
+
+/**
+ * A calculated series (analysis/tableCalc.ts) says what it is and hands over
+ * the figures behind it. Every figure printed is banked — a percent kind also
+ * as a percent, since "24.1%" is how an answer cites 0.241. No example digits
+ * in the prose: `sealLedger` would bank those too.
+ */
+function calcFactLines(
+  lines: string[], ledger: LedgerEntry[], s: CalcSeries | { name: string; values: (number | null)[] }, labels: (string | number)[],
+): void {
+  const c = s as CalcSeries;
+  if (!c.calc || !Array.isArray(c.raw)) return;
+  const raw = c.raw;
+  const pct = isPercentKind(c.calc.kind);
+  lines.push(`  (${s.name} above is shown as ${CALC_KIND_NAMES[c.calc.kind]}${pct ? ', as a fraction of one' : ''}. ` +
+    `The figures before that calculation: ${labels.map((lab, i) => `${lab}=${fmt(raw[i])}`).join(', ')})`);
+  labels.forEach((lab, i) => {
+    num(ledger, `${s.name} before the calculation @ ${lab}`, raw[i], 'number', 'tableCalc');
+    const v = s.values ? s.values[i] : null;
+    if (pct && typeof v === 'number') num(ledger, `${s.name} @ ${lab} as a percent`, v * 100, 'percent', 'tableCalc');
+  });
 }
 
 // The card body for analysisFacts: metric cards (each a single app-computed

@@ -83,6 +83,8 @@ interface PivotChip {
   metricId?: string;
   /** The metric's name, for the chip. Re-read from the record, never persisted. */
   metricName?: string;
+  /** "Calculate as" (calcMenu.ts) — computed in main, per cell, respecting subtotals. */
+  calc?: TcCalc;
 }
 
 function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBuilderApi {
@@ -164,6 +166,7 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
       ? (chip.metricName || aggLabel(chip.aggregation) + ' of ' + chip.column)
       : chip.column;
     row.appendChild(name);
+    if (shelf === 'values') tcBadge(row, chip.calc);
 
     // A date dimension carries its roll-up on the chip, where the chip is —
     // the grain belongs to THAT field, not to the pivot.
@@ -190,7 +193,7 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
     menu.textContent = '⋮';
     menu.addEventListener('click', (e) => {
       e.stopPropagation();
-      openRowMenu(menu, chipMenuItems(shelf, chip, i));
+      openRowMenu(menu, chipMenuItems(shelf, chip, i, menu));
     });
     row.appendChild(menu);
 
@@ -211,8 +214,17 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
   const aggLabel = (a: EncAgg | undefined): string =>
     ENC_AGG_LABELS[(a || 'sum') as EncAgg] || 'Sum';
 
+  /** The pivot as "Calculate as" sees it: row dimensions run down, column ones across. */
+  const pivotCalcContext = (): TcContext => ({
+    surface: 'pivot',
+    dims: shelves.rows.map((c): TcContext['dims'][number] => ({ name: c.column, axis: 'down' }))
+      .concat(shelves.columns.map((c): TcContext['dims'][number] => ({ name: c.column, axis: 'across' }))),
+    yoyOff: shelves.rows.concat(shelves.columns).some((c) => isDate(c.column) && c.grain)
+      ? '' : 'Needs a date dimension rolled up by year, quarter or month',
+  });
+
   function chipMenuItems(
-    shelf: PivotShelf, chip: PivotChip, i: number,
+    shelf: PivotShelf, chip: PivotChip, i: number, anchor?: HTMLElement,
   ): Array<{ label: string; danger?: boolean; onClick: () => void }> {
     const items: Array<{ label: string; danger?: boolean; onClick: () => void }> = [];
     if (shelf === 'values') {
@@ -235,6 +247,8 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
           redraw();
         } });
       });
+      items.push(tcMenuItem(anchor || root, chip.calc, pivotCalcContext,
+        (calc) => { if (calc) chip.calc = calc; else delete chip.calc; redraw(); }));
       PIVOT_SHOW_AS.forEach((s) => {
         items.push({
           label: 'Show as: ' + s.label,
@@ -520,6 +534,7 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
           format: typeof v.format === 'string' ? v.format : undefined,
           showAs: typeof v.showAs === 'string' && v.showAs !== 'value' ? v.showAs : undefined,
           metricId: typeof v.metricId === 'string' ? v.metricId : undefined,
+          calc: v.calc && typeof v.calc === 'object' ? v.calc : undefined,
         }));
 
       // A fresh pivot gets the first dimension and the first measure, so the
@@ -562,6 +577,7 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
           if (c.format) v.format = c.format;
           if (c.showAs) v.showAs = c.showAs;
           if (c.metricId) v.metricId = c.metricId;
+          if (c.calc) v.calc = c.calc;
           return v;
         }),
         totals: { rows: totals.rows, columns: totals.columns, grand: totals.grand },
@@ -607,6 +623,7 @@ function pivotFromEncoding(enc: any): any {
     values: values.slice(0, 4).map((v: any) => ({
       column: v.column,
       aggregation: v.aggregation === 'none' ? 'sum' : v.aggregation,
+      ...(v.calc ? { calc: tcSwapAxis(v.calc) } : {}),
     })),
     totals: { rows: true, columns: true, grand: true },
   };
@@ -618,7 +635,7 @@ function encodingFromPivot(pivot: any): any {
   const values = Array.isArray(pivot && pivot.values) ? pivot.values : [];
   const out: any = {
     category: rows[0] ? rows[0].column : '',
-    values: values.map((v: any) => ({ column: v.column, aggregation: v.aggregation || 'sum' })),
+    values: values.map((v: any) => ({ column: v.column, aggregation: v.aggregation || 'sum', ...(v.calc ? { calc: tcSwapAxis(v.calc) } : {}) })),
   };
   if (cols[0]) out.series = cols[0].column;
   if (rows[0] && rows[0].grain) out.grain = rows[0].grain;

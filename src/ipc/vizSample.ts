@@ -7,6 +7,7 @@ import type { FilterStep } from '../data/transforms';
 import { vizDataFor } from './visuals';
 import { withPeriodOverlay } from './visualsOverlay';
 import { withAnalytics } from './visualsAnalytics';
+import { withTableCalcs } from '../analysis/tableCalc';
 import { sanitizeOverlays } from '../analysis/analytics';
 
 // The visual BUILDER's preview — MAIN PROCESS. Split from ./visuals.ts at its cap.
@@ -25,8 +26,9 @@ export function register(): void {
       const enc = sanitizeEncoding(encoding);
       const values = paramValues(params);
       const bound = resolveFilterParams(visuals.sanitizeFilters(filters), values);
-      const run = (p: string, d: string, e: VizEncoding, f: FilterStep[]) =>
-        vizDataFor(p, d, e, f, { params: values, sample: true });
+      // Table calculations on the aggregated grid, exactly as `visual:data` runs them.
+      const run = async (p: string, d: string, e: VizEncoding, f: FilterStep[]) =>
+        withTableCalcs(await vizDataFor(p, d, e, f, { params: values, sample: true }), e);
       const periods = await withPeriodOverlay(await run(projectId, datasetId, enc, bound.steps), projectId, datasetId, enc, bound.steps, run);
       const reply = await withAnalytics(periods, projectId, sanitizeOverlays(analytics), bound.steps, values);
       return reply.ok && bound.errors.length

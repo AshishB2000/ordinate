@@ -16,6 +16,7 @@ import { sampledVizData } from './vizSampleData';
 import type { SampleInfo } from '../analysis/sampling';
 import { withAnalytics } from './visualsAnalytics';
 import { sanitizeOverlays } from '../analysis/analytics';
+import { withTableCalcs } from '../analysis/tableCalc';
 import { paramValues, resolveFilterParams } from '../analysis/params';
 import type { ParamValues } from '../analysis/params';
 import { paramTable } from '../data/paramReplay';
@@ -554,7 +555,10 @@ export function register() {
       const values = paramValues(params);
       const bound = resolveFilterParams(visuals.sanitizeFilters(filters), values);
       const flt = bound.steps;
-      const run = (p: string, d: string, e: VizEncoding, f: FilterStep[]) => vizDataFor(p, d, e, f, { params: values });
+      // Table calculations run on the aggregated grid, after either path (and
+      // on the overlay's prior slice alike, so both sides mean the same thing).
+      const run = async (p: string, d: string, e: VizEncoding, f: FilterStep[]) =>
+        withTableCalcs(await vizDataFor(p, d, e, f, { params: values }), e);
       const computed = await withPeriodOverlay(await run(projectId, datasetId, enc, flt), projectId, datasetId, enc, flt, run);
       const shaped = isSharePath(share) && share !== 'bundle'
         ? await applyToChart(projectId, datasetId, enc, computed, share)

@@ -579,6 +579,7 @@ require("./ipc/catalog").register();
 
 require("./ipc/metrics").register(); // after dashboards: figures bottom out in computeCardMetric
 require("./ipc/periods").register(); // relative periods: a preset's display, and a KPI card's Compare
+require("./ipc/tableCalcKpi").register(); // a KPI card's "Calculate as", over its period series
 // Alert rules and their inbox. After dashboards deliberately — see ipc/alerts.
 require("./ipc/alerts").register({ focusHub });
 

@@ -50,6 +50,9 @@ interface ChartSeriesShape {
   values: any[];
   /** 'overlay' = a prior period drawn muted beside its own series (visualsOverlay.ts). */
   role?: string;
+  /** A table calculation: `values` calculated, `raw` the figures (analysis/tableCalc.ts). */
+  raw?: any[];
+  calc?: TcCalc;
 }
 
 /**
@@ -162,7 +165,8 @@ function buildChart(
   // Number formatter for display (axis ticks, value labels, tooltips). When the
   // `numberFormat` override is absent, fmt === _fmtVal, so output is byte-identical
   // to before this control existed (the capture flow never sets numberFormat).
-  const fmt = overrides.numberFormat ? (v: any) => fmtWith(v, overrides.numberFormat) : _fmtVal;
+  // A calculated series (table calculations, calcMenu.ts) formats as its kind.
+  const fmt = tcAxisFmt(series, overrides.numberFormat ? (v: any) => fmtWith(v, overrides.numberFormat) : _fmtVal);
 
   // Values menu mode: off | all | max | min | maxmin. Back-compat: legacy showValues:true ⇒ all.
   const valueMode = overrides.valueMode || (overrides.showValues ? 'all' : 'maxmin');
@@ -226,7 +230,8 @@ function buildChart(
     const order = labels.map((_: any, i: number) => i)
       .sort((a: number, b: number) => overrides.sort === 'asc' ? totals[a] - totals[b] : totals[b] - totals[a]);
     labels = order.map((i: number) => labels[i]);
-    series = series.map((s: ChartSeriesShape) => Object.assign({}, s, { values: order.map((i: number) => s.values[i]) }));
+    series = series.map((s: ChartSeriesShape) => Object.assign({}, s, { values: order.map((i: number) => s.values[i]) },
+      Array.isArray(s.raw) ? { raw: order.map((i: number) => s.raw[i]) } : {}));
     sortOrder = order;
   }
 
@@ -242,7 +247,8 @@ function buildChart(
   if (annForecast.length) {
     labels = labels.concat(asMonthLabels(annForecast));
     const gap = annForecast.map(() => null);
-    series = series.map((s: ChartSeriesShape) => Object.assign({}, s, { values: s.values.concat(gap) }));
+    series = series.map((s: ChartSeriesShape) => Object.assign({}, s, { values: s.values.concat(gap) },
+      Array.isArray(s.raw) ? { raw: s.raw.concat(gap) } : {}));
   }
 
   const defaultShowLegend = legendOnByDefault(type, series);
@@ -320,6 +326,9 @@ function buildChart(
     };
   }
   if (isExtraFamily(spec)) applyExtraTooltip(c, tooltipConfig);
+  else if (!isMatrix && !isTreemap && !isFunnel && !isSankey && !isGauge && !isCandlestick && !isBoxplot) {
+    tcTooltip(series, tooltipConfig, fmt);
+  }
 
   // Tooltip reach: line/area families default to intersect:true in Chart.js, so the
   // popup only appears on an exact-pixel point hit — which is why bars (fat targets)

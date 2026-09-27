@@ -38,6 +38,9 @@ interface PivotGridShape {
   rowGroupCount: number;
   colGroupCount: number;
   truncated: boolean;
+  /** Table calculations (analysis/pivotCalc.ts): per value, and the cells before them. */
+  calcs?: Array<TcCalc | null>;
+  rawCells?: (number | null)[][];
 }
 
 interface PivotViewOpts {
@@ -66,8 +69,10 @@ function pivotRowHeight(host: HTMLElement): number {
 }
 
 /** A figure as this grid shows it — the app formatter, or a percentage. */
-function pivotFmt(v: number | null | undefined, showAs: string, format: string): string {
+function pivotFmt(v: number | null | undefined, showAs: string, format: string, calcKind = ''): string {
   if (v == null || typeof v !== 'number' || !Number.isFinite(v)) return '–';
+  // A table calculation formats as its kind (calcMenu.ts); it wins over showAs.
+  if (calcKind) return tcCalcValueText(calcKind, v);
   if (showAs === 'pct_row' || showAs === 'pct_col' || showAs === 'pct_total') {
     return (v * 100).toLocaleString(undefined, { maximumFractionDigits: 1 }) + '%';
   }
@@ -426,7 +431,7 @@ function pivotBodyRow(grid: PivotGridShape, r: number, ctx: BodyRowCtx): HTMLTab
     const v = grid.cells[r][c] ?? null;
     const td = document.createElement('td');
     td.className = 'pivot-cell';
-    td.textContent = pivotFmt(v, grid.showAs[vi], grid.formats[vi]);
+    td.textContent = pivotFmt(v, grid.showAs[vi], grid.formats[vi], tcPivotKind(grid, vi));
     if (kind === 'leaf') paintCell(td, v, ctx.ruleFor.get(vi), ctx.ranges.get(vi));
     attachCellTip(td, grid, r, c, v, rowTotal ? rowTotal[vi] : null);
     tr.appendChild(td);
@@ -459,11 +464,12 @@ function attachCellTip(
     const lines = [
       (grid.rowHeaders[r] || []).filter(Boolean).join(' · ') || '—',
       (grid.colHeaders[c] || []).filter(Boolean).join(' · ') || grid.valueNames[vi] || '',
-      pivotFmt(v, grid.showAs[vi], grid.formats[vi]),
+      // A calculated cell names both figures: "24.1% of total · 1.25M".
+      tcPivotTip(grid, r, c, vi) || pivotFmt(v, grid.showAs[vi], grid.formats[vi]),
     ].filter(Boolean);
     // "of total" only where the cell IS a figure — with a `showAs` in force the
     // cell is already a share, and a share of a share is noise.
-    if (grid.showAs[vi] === 'value' && typeof v === 'number' && typeof rowTotal === 'number' && rowTotal !== 0) {
+    if (!tcPivotKind(grid, vi) && grid.showAs[vi] === 'value' && typeof v === 'number' && typeof rowTotal === 'number' && rowTotal !== 0) {
       lines.push(((v / rowTotal) * 100).toLocaleString(undefined, { maximumFractionDigits: 1 }) + '% of total');
     }
     pivotShowTip(td, lines);
@@ -524,7 +530,8 @@ function pivotToRows(grid: PivotGridShape): string[][] {
     // Indented with spaces so the hierarchy survives a paste into a cell that
     // has no notion of levels.
     const line = ['  '.repeat(Math.max(0, path.length - 1)) + (path[path.length - 1] ?? '')];
-    row.forEach((v, c) => line.push(pivotFmt(v, grid.showAs[pivotValueOf(grid, c)], grid.formats[pivotValueOf(grid, c)])));
+    row.forEach((v, c) => line.push(pivotFmt(v, grid.showAs[pivotValueOf(grid, c)], grid.formats[pivotValueOf(grid, c)],
+      tcPivotKind(grid, pivotValueOf(grid, c)))));
     if (grid.rowTotals) {
       for (let vi = 0; vi < grid.valueCount; vi += 1) {
         line.push(pivotFmt(grid.rowTotals[r][vi], 'value', grid.formats[vi]));

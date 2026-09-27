@@ -24,6 +24,8 @@ import { sanitizePivot } from './pivotData';
 import type { PivotEncoding } from './pivotData';
 import { sanitizeOverlays } from './analytics';
 import type { Overlay } from './analytics';
+import { sanitizeTableCalc } from './tableCalc';
+import type { TableCalc } from './tableCalc';
 
 export type VizAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max' | 'none';
 
@@ -47,6 +49,12 @@ export interface VizMeasure {
    * own dataset — every visual saved before relationships existed.
    */
   datasetId?: string;
+  /**
+   * "Calculate as" — a table calculation over this measure's AGGREGATED
+   * figures (analysis/tableCalc.ts), run after the grid exists. Absent = the
+   * figures as they are, which is every chart saved before this key existed.
+   */
+  calc?: TableCalc;
 }
 
 export interface VizGeo {
@@ -255,6 +263,8 @@ export function sanitizeEncoding(raw: unknown): VizEncoding {
     // metricId, for the same reason: this id reaches a path in the metrics store.
     if (typeof vo.metricId === 'string' && UUID_RE.test(vo.metricId)) measure.metricId = vo.metricId;
     if (typeof vo.datasetId === 'string' && UUID_RE.test(vo.datasetId)) measure.datasetId = vo.datasetId;
+    const calc = sanitizeTableCalc(vo.calc);
+    if (calc) measure.calc = calc;
     values.push(measure);
   }
 
