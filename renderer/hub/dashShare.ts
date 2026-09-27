@@ -413,7 +413,7 @@ async function buildVisualExportCard(
   // Asked WITH the share path: main applies the project's Share policy, so a
   // sensitive label arrives masked, or the tile arrives hidden (privacyShare.ts).
   let res: any;
-  try { res = await pvVisualData(currentProjectId, visual.datasetId, visual.encoding, merged, dashParamPayload(), 'export'); }
+  try { res = await pvVisualData(currentProjectId, visual.datasetId, visual.encoding, merged, dashParamPayload(), 'export', visual.analytics); }
   catch (_) { res = { ok: false }; }
   if (!res || res.ok === false) return { kind: 'broken', layout, reason: res && res.hiddenByPolicy ? res.error : 'Could not draw this visual' };
   const data = res.data || { labels: [], series: [] };

@@ -38,6 +38,8 @@ import { sanitizeSteps } from '../data/transforms';
 import type { FilterStep } from '../data/transforms';
 import { sanitizePeriod, sanitizeCompare } from './dateIntel';
 import type { CompareMode, PeriodPreset } from './dateIntel';
+import { sanitizeTableCalc } from './tableCalc';
+import type { TableCalc } from './tableCalc';
 import { themeModel } from './themeTokens';
 
 // Tile actions and the card kinds beyond these four live in one PURE module
@@ -117,6 +119,11 @@ export interface CardMetric {
    * never stored. `from`/`to` only for `custom`.
    */
   compare?: { mode: CompareMode; from?: string; to?: string };
+  /**
+   * "Calculate as" — the figure as a table calculation over the metric's own
+   * period series (ipc/tableCalc.ts), recomputed on every render, never stored.
+   */
+  calc?: TableCalc;
 }
 
 /**
@@ -393,6 +400,8 @@ export function sanitizeCard(raw: unknown): Card | null {
   }
   const compare = sanitizeCompare(m.compare);
   if (compare) metric.compare = compare;
+  const calc = sanitizeTableCalc(m.calc);
+  if (calc) metric.calc = calc;
   card.metric = metric;
   return card;
 }

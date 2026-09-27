@@ -14,6 +14,9 @@ import { authoringVizData } from './vizExtras';
 import { withPeriodOverlay } from './visualsOverlay';
 import { sampledVizData } from './vizSampleData';
 import type { SampleInfo } from '../analysis/sampling';
+import { withAnalytics } from './visualsAnalytics';
+import { sanitizeOverlays } from '../analysis/analytics';
+import { withTableCalcs } from '../analysis/tableCalc';
 import { paramValues, resolveFilterParams } from '../analysis/params';
 import type { ParamValues } from '../analysis/params';
 import { paramTable } from '../data/paramReplay';
@@ -494,9 +497,9 @@ export function register() {
 
   ipcMain.handle('visual:get', async (_e, { projectId, id }: any = {}) => visuals.getVisual(projectId, id));
 
-  ipcMain.handle('visual:save', async (_e, { projectId, datasetId, name, chartType, encoding, overrides, filters }: any = {}) => {
+  ipcMain.handle('visual:save', async (_e, { projectId, datasetId, name, chartType, encoding, overrides, filters, analytics }: any = {}) => {
     try {
-      const saved = await visuals.saveVisual(projectId, { name, datasetId, chartType, encoding, overrides, filters });
+      const saved = await visuals.saveVisual(projectId, { name, datasetId, chartType, encoding, overrides, filters, analytics });
       if (!saved) return { ok: false, error: 'Invalid project/dataset, or it no longer exists' };
       await versions.record(projectId, 'visual', saved);
       return saved;
@@ -505,10 +508,10 @@ export function register() {
     }
   });
 
-  ipcMain.handle('visual:update', async (_e, { projectId, id, name, chartType, encoding, overrides, filters, favorite }: any = {}) => {
+  ipcMain.handle('visual:update', async (_e, { projectId, id, name, chartType, encoding, overrides, filters, favorite, analytics }: any = {}) => {
     try {
       const before = await visuals.getVisual(projectId, id);
-      const visual = await visuals.updateVisual(projectId, id, { name, chartType, encoding, overrides, filters, favorite });
+      const visual = await visuals.updateVisual(projectId, id, { name, chartType, encoding, overrides, filters, favorite, analytics });
       if (visual) await versions.record(projectId, 'visual', visual, { before });
       return visual ? { ok: true, visual } : { ok: false, error: 'Could not update the visual' };
     } catch (err: any) {
@@ -544,7 +547,7 @@ export function register() {
   // here, after vizDataFor, so a cached answer is shaped on its way out and the
   // cache never holds a masked one (app/sharePolicy.ts).
   // `asOf` (view state, data/asOf.ts): every dataset read as of that time.
-  ipcMain.handle('visual:data', async (_e, { projectId, datasetId, encoding, filters, params, share, asOf }: any = {}) => withAsOf(projectId, asOf, async () => {
+  ipcMain.handle('visual:data', async (_e, { projectId, datasetId, encoding, filters, params, share, analytics, asOf }: any = {}) => withAsOf(projectId, asOf, async () => {
     try {
       // Sanitisation FIRST, always — the encoding and the filters are untrusted
       // renderer input, and both paths below consume the sanitized values.
@@ -554,11 +557,18 @@ export function register() {
       const values = paramValues(params);
       const bound = resolveFilterParams(visuals.sanitizeFilters(filters), values);
       const flt = bound.steps;
-      const run = (p: string, d: string, e: VizEncoding, f: FilterStep[]) => vizDataFor(p, d, e, f, { params: values });
+      // Table calculations run on the aggregated grid, after either path (and
+      // on the overlay's prior slice alike, so both sides mean the same thing).
+      const run = async (p: string, d: string, e: VizEncoding, f: FilterStep[]) =>
+        withTableCalcs(await vizDataFor(p, d, e, f, { params: values }), e);
       const computed = await withPeriodOverlay(await run(projectId, datasetId, enc, flt), projectId, datasetId, enc, flt, run);
-      const reply = isSharePath(share) && share !== 'bundle'
+      const shaped = isSharePath(share) && share !== 'bundle'
         ? await applyToChart(projectId, datasetId, enc, computed, share)
         : computed;
+      // The Analytics pane's overlays, resolved on the finished reply under the
+      // same scope — AFTER the share policy, so an overlay can only name what
+      // the shaped chart still shows.
+      const reply = await withAnalytics(shaped, projectId, sanitizeOverlays(analytics), flt, values);
       // A parameter that cannot be made well-typed is a VALIDATION message the
       // tile shows — never a silently empty chart.
       return reply.ok && bound.errors.length

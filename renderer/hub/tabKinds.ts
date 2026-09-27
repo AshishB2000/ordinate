@@ -129,6 +129,17 @@ const TAB_KINDS: Record<string, TabKind> = {
     // A save waiting on the debounce is an unsaved change.
     isDirty: () => stIsOpen() && !!stSaveTimer,
   },
+  // A scorecard page shares the Dashboards section too, exactly like a story.
+  scorecard: {
+    icon: 'target',
+    label: 'Scorecard',
+    section: 'analyses',
+    open: (id) => scOpen(id),
+    close: async () => { await scClose(); return true; },
+    current: () => (scCurrent && tkShown('sc-page') ? { id: scCurrent.id, name: scCurrent.name } : null),
+    resolve: (pid, id) => tkName(window.hubPower.scorecardGet(pid, id)),
+    isDirty: () => false,
+  },
   // A capture's id is its numeric entry id; tabs carry it as a string.
   capture: {
     icon: 'camera',

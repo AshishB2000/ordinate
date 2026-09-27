@@ -250,7 +250,7 @@ Publish dashboards to a static folder from a publish config file (runs as a publ
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
 | `project` | string | no | Project id or exact name; `--project` on the CLI. Defaults to the project opened most recently. |
-| `config` | string | yes | Path to a publish config JSON: { projectId?, dashboardIds, storyIds, outDir, options }. |
+| `config` | string | yes | Path to a publish config JSON: { projectId?, dashboardIds, storyIds, scorecardIds?, outDir, options }. |
 
 ### create_visual
 

@@ -21,6 +21,7 @@ import {
 import type { CategoryInfo, CivilDate, DateGrain } from './categoryKey';
 import { buildPivotGrid, pivotChartData } from './pivotData';
 import type { PivotGrid } from './pivotData';
+import type { ResolvedOverlay } from './analytics';
 
 // === the buildChart input shape (chartRender.ts). A series is "plottable" when
 // values is a non-empty array; non-numeric cells MUST be null (the renderers test
@@ -45,6 +46,8 @@ export interface VizDataResult {
      * payload it already read.
      */
     pivot?: PivotGrid;
+    /** The Analytics pane's overlays, resolved (./analytics) — only when the visual has some. */
+    analytics?: ResolvedOverlay[];
   };
   recommendedShape: string; // feeds the renderer's eligibleChartTypes()
   warnings: string[];

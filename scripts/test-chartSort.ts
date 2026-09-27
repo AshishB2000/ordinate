@@ -43,7 +43,7 @@ const HUB = path.join(__dirname, '..', 'renderer', 'hub');
 const CHART_UMD = path.join(__dirname, '..', 'node_modules', 'chart.js', 'dist', 'chart.umd.js');
 const CHART_SCRIPTS = [
   'chartTraits.js', 'chartPalette.js', 'chartTypeSpec.js', 'chartShapes.js', 'chartFamiliesExtra.js', 'chartFamiliesPlugins.js',
-  'chartValueLabels.js', 'chartDatasets.js', 'chartScales.js', 'chartRender.js',
+  'chartValueLabels.js', 'chartAnnotations.js', 'chartDatasets.js', 'chartScales.js', 'chartRender.js', 'calcMenu.js',
 ];
 const THEME: Record<string, string> = {
   '--chart-1': '#2563eb', '--chart-2': '#0e7490', '--chart-3': '#14b8a6',

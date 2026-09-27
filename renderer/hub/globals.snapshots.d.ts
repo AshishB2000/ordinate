@@ -13,7 +13,7 @@ interface Window {
     restore(projectId: string, datasetId: string, stamp: string): Promise<any>;
     stamps(projectId: string, datasetIds: string[], metricIds: string[]): Promise<any>;
     metricHistory(projectId: string, metricId: string): Promise<any>;
-    visualData(projectId: string, datasetId: string, encoding: any, filters: any, params: any, asOf: string): Promise<any>;
+    visualData(projectId: string, datasetId: string, encoding: any, filters: any, params: any, asOf: string, analytics?: any): Promise<any>;
     metricValue(projectId: string, id: string, filters: any, params: any, asOf: string): Promise<any>;
     computeMetric(projectId: string, datasetId: string, column: string, aggregation: string, filters: any, params: any, asOf: string): Promise<any>;
     visualRows(projectId: string, datasetId: string, encoding: any, filters: any, mark: any, page: any, params: any, asOf: string): Promise<any>;

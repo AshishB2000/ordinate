@@ -227,7 +227,7 @@ export async function commitSteps(projectId: string, datasetId: string, steps: u
   return {
     ok: true as const,
     dataset,
-    preview: { columns: output.columns, rows: output.rows, rowCount: output.rowCount, warnings: output.warnings },
+    preview: { columns: output.columns, rows: output.rows, rowCount: output.rowCount, warnings: output.warnings, stepCounts: output.stepCounts },
   };
 }
 

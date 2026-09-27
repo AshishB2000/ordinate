@@ -21,6 +21,10 @@ import { formatCompact } from '../app/format';
 import type { ChartData } from './vizData';
 import type { PivotGrid } from './pivotData';
 import { waterfallFigures, paretoFigures } from './chartFigures';
+import { analyticsClauses } from './analytics';
+import type { ResolvedOverlay } from './analytics';
+import { calcLabel } from './tableCalc';
+import type { CalcSeries } from './tableCalc';
 
 // ── the app's compact number format ──────────────────────────────────────────
 //
@@ -79,8 +83,14 @@ export interface CaptionKpi {
 export interface CaptionInput {
   /** Chart id (`column`, `line`, `map_choropleth`, …). Omitted for a KPI row. */
   chartType?: string;
-  /** The `{labels, series}` the renderers consume — charts only. */
-  data?: ChartData | null;
+  /** The `{labels, series}` the renderers consume — charts only. May carry its resolved `analytics`. */
+  data?: (ChartData & { analytics?: ResolvedOverlay[] }) | null;
+  /**
+   * The Analytics pane's resolved overlays (./analytics). A trend or a forecast
+   * adds its own clause to the sentence; the rest are drawn, not narrated.
+   * Defaults to `data.analytics`, which is where `visual:data` puts them.
+   */
+  analytics?: ResolvedOverlay[] | null;
   /** A map's resolved regions — maps only. */
   geo?: { items: Array<{ name: string; value: number }> } | null;
   /** A KPI row's figures — metric tiles only; presence selects the KPI frame. */
@@ -99,8 +109,22 @@ export interface CaptionInput {
 
 const NOTHING = 'No data to summarize';
 
-/** The one entry point. Never throws, never returns an empty string. */
+/**
+ * The one entry point. Never throws, never returns an empty string.
+ *
+ *   Revenue rose 41% from 2023-01 to 2024-12; trend +8.1K per month (R² 0.62);
+ *   forecast 356.2K by 2025-03, 80% range 301K–411K
+ *
+ * The family's sentence, then a clause per trend / forecast overlay the chart
+ * type draws — both figures app-resolved (./analytics), only put into words here.
+ */
 export function tileCaption(input: CaptionInput): string {
+  const base = familyCaption(input);
+  if (!input || typeof input !== 'object' || base === NOTHING) return base;
+  return base + analyticsClauses(input.analytics || (input.data && input.data.analytics), input.chartType);
+}
+
+function familyCaption(input: CaptionInput): string {
   if (!input || typeof input !== 'object') return NOTHING;
   if (Array.isArray(input.kpis)) return kpiCaption(input.kpis);
 
@@ -114,6 +138,8 @@ export function tileCaption(input: CaptionInput): string {
   // chart labels whenever a name failed to match a feature — so the sentence is
   // written off `geo`, and only the measure noun comes from the series.
   if (family === 'map') return leaderCaption(geoPairs(input.geo), measure, true);
+  // A table calculation says both figures: "…at 24.1% of total · 1.25M".
+  if (calcSeriesOf(input.data)) return calcCaption(input.data, family, input.names);
 
   const pairs = chartPairs(input.data);
   const ov = input.overrides || {};
@@ -327,21 +353,26 @@ function pivotCaption(grid: PivotGrid | null | undefined): string {
   const cols = grid.colGroupCount;
   const size = `${rows} ${rows === 1 ? 'row' : 'rows'} × ${cols} ${cols === 1 ? 'column' : 'columns'}`;
 
-  let best: { path: string; v: number } | null = null;
-  for (let r = 0; r < grid.cells.length; r += 1) {
+  // The peak is the largest FIGURE; a calculated value is then shown as both
+  // (tableCalc.ts) — a rank of 1 is not "highest", its figure is.
+  const figures = grid.rawCells || grid.cells;
+  let best: { path: string; v: number; r: number; c: number } | null = null;
+  for (let r = 0; r < figures.length; r += 1) {
     if (grid.rowKinds[r] !== 'leaf') continue;
-    for (let c = 0; c < grid.cells[r].length; c += 1) {
-      const v = grid.cells[r][c];
+    for (let c = 0; c < figures[r].length; c += 1) {
+      const v = figures[r][c];
       if (typeof v !== 'number' || !Number.isFinite(v)) continue;
       if (best && v <= best.v) continue;
       const parts = (grid.rowHeaders[r] || []).concat(grid.colHeaders[c] || []).filter((p) => p !== '');
-      best = { path: parts.join(' · '), v };
+      best = { path: parts.join(' · '), v, r, c };
     }
   }
   if (!best) return `${size}; no figures to compare`;
+  const calc = grid.calcs && grid.valueCount ? grid.calcs[best.c % grid.valueCount] : null;
+  const shown = calc ? calcLabel(calc.kind, grid.cells[best.r][best.c], best.v) : compact(best.v);
   // No measure noun: with more than one value field the cells are not all the
   // same quantity, and the cell path already names which figure this is.
-  return `${size}; ${best.path} is highest at ${compact(best.v)}`;
+  return `${size}; ${best.path} is highest at ${shown}`;
 }
 
 /**
@@ -452,4 +483,42 @@ function calendarCaption(pairs: Pair[], measure: string): string {
   let peak = pairs[0];
   for (const p of pairs) if (p.value > peak.value) peak = p;
   return `${noun} peaked at ${compact(peak.value)} on ${peak.label}, across ${pairs.length} days`;
+}
+
+// ── table calculations ───────────────────────────────────────────────────────
+
+/** The first series carrying a table calculation (analysis/tableCalc.ts), or null. */
+function calcSeriesOf(data: ChartData | null | undefined): CalcSeries | null {
+  const series = (data && Array.isArray(data.series)) ? (data.series as CalcSeries[]) : [];
+  return series.find((s) => s && s.calc && Array.isArray(s.raw)) || null;
+}
+
+/**
+ * A calculated chart names BOTH figures. A time axis reads at its LATEST point
+ * — "Revenue in 2024-12: +8.1% YoY · 412.3K" — anything else at its leader by
+ * the calculated figure (the smallest rank leads): "Technology leads revenue at
+ * 41.2% of total · 3.8M".
+ */
+function calcCaption(data: ChartData | null | undefined, family: CaptionFamily, names?: Record<string, string> | null): string {
+  const s = calcSeriesOf(data);
+  if (!s || !s.calc) return NOTHING;
+  const kind = s.calc.kind;
+  const raw = s.raw || [];
+  const labels = (data && Array.isArray(data.labels)) ? data.labels : [];
+  const noun = measureNoun({ labels, series: [s] }, names);
+  const cells = labels
+    .map((l, i) => ({ label: String(l), v: finite(s.values[i]), raw: finite(raw[i]) }))
+    .filter((c): c is { label: string; v: number; raw: number | null } => c.v !== null);
+  if (!cells.length) return NOTHING;
+  const text = (c: { v: number; raw: number | null }): string => calcLabel(kind, c.v, c.raw);
+  if (family === 'line' || family === 'calendar') {
+    const last = cells[cells.length - 1];
+    return `${sentenceCase(noun)} in ${last.label}: ${text(last)}`;
+  }
+  const rank = kind === 'rank_dense' || kind === 'rank_competition';
+  let top = cells[0];
+  for (const c of cells) if (rank ? c.v < top.v : c.v > top.v) top = c;
+  return cells.length === 1
+    ? `${top.label} is the only category, ${noun} ${text(top)}`
+    : `${top.label} leads ${noun} at ${text(top)}`;
 }

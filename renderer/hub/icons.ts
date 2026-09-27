@@ -103,6 +103,8 @@ const ICONS: Record<string, string> = {
   'chart-line': '<path d="M3 3v18h18M19 9l-5 5-4-4-3 3"/>',
   'chart-area': '<path d="M3 3v18h18M7 15l4-4 3 3 5-6v7Z"/>',
   'chart-pie': '<path d="M21 12A9 9 0 1 1 12 3v9Z"/><path d="M21 12h-9"/>',
+  'trending-up': '<path d="m22 7-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/>',
+  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
   map: '<path d="m9 4-6 2.5v13L9 17l6 3 6-2.5v-13L15 7Z"/><path d="M9 4v13M15 7v13"/>',
   layers: '<path d="m12 2 9 5-9 5-9-5Z"/><path d="m3 12 9 5 9-5M3 17l9 5 9-5"/>',
   folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',
@@ -130,6 +132,9 @@ const ICONS: Record<string, string> = {
   function:
     '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3M9 11.2h5.7"/>',
   gauge: '<path d="m12 14 4-4M3.34 19a10 10 0 1 1 17.32 0"/>',
+  /* comments (commentDoors.ts / commentPanel.ts) */
+  'message-square': '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/>',
+  'map-pin': '<path d="M20 10c0 5-8 12-8 12s-8-7-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
 
   /* ── platform: jobs, publish, privacy, automation, backups ── */
   activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',

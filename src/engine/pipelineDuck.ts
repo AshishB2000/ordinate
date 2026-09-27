@@ -23,6 +23,9 @@ import type { SqlColumn } from './sqlGen';
 import * as duck from './duckdb';
 import * as parquetStore from './parquetStore';
 import * as trace from './residentTrace';
+import type { PipelineContext } from '../data/stepTypes';
+import { isNeed, planPower, refOpts } from './pipelinePower';
+import type { RunSql } from './pipelinePower';
 
 // ── Why this path is OFF by default ─────────────────────────────────────────
 //
@@ -175,8 +178,9 @@ export function runResidentPipeline(
   }
 
   const schema = buildSchema(columns);
-  const gen = generateSql('t', schema, Array.isArray(steps) ? steps : []);
-  if (gen.sql === null) {
+  const list = Array.isArray(steps) ? steps : [];
+  const probe = generateSql('t', schema, list);
+  if (probe.sql === null && !isNeed(probe.unsupported)) {
     // Not a failure: an unexpressible pipeline is the designed exit, and the
     // commonest one (a calculated field) would otherwise warn on every edit.
     trace.record(op, 'skipped');
@@ -190,8 +194,16 @@ export function runResidentPipeline(
     const base =
       `(SELECT file_row_number AS ${ORD}, ${schema.map((c) => `"${c.physical}"`).join(', ')} ` +
       `FROM ${parquetStore.relationSql(parquetPath, { fileRowNumber: true })}) AS t`;
-    const sql = gen.sql.replace(/\bFROM\s+"t"/g, `FROM ${base}`);
-    const out = duck.query(sql, gen.params);
+    const run: RunSql = (sql, params) => duck.query(sql.replace(/\bFROM\s+"t"/g, `FROM ${base}`), params);
+    // Pivot keys and per-step counts are facts about the data (pipelinePower).
+    // No union/lookup relations here: those steps bail to the fold, which has them.
+    const planned = planPower(schema, list, {}, run);
+    if (!planned) {
+      trace.record(op, 'skipped');
+      return null;
+    }
+    const gen = planned.gen;
+    const out = run(gen.sql as string, gen.params);
 
     const outColumns: ParsedColumn[] = gen.columns.map((c) => ({ name: c.name, type: c.type }));
     const rows: Cell[][] = out.map((row) =>
@@ -207,7 +219,7 @@ export function runResidentPipeline(
     }
 
     trace.record(op, 'resident');
-    return { columns: outColumns, rows, rowCount: rows.length, warnings: gen.warnings.slice() };
+    return { columns: outColumns, rows, rowCount: rows.length, warnings: gen.warnings.slice(), stepCounts: planned.counts };
   } catch (e) {
     // Loud but not fatal: a fast path that silently stops firing is ~600x
     // slower and ships green, which is what residentTrace exists to prevent.
@@ -220,6 +232,8 @@ export function runResidentPipeline(
 export interface DuckRunOptions {
   /** Force the DuckDB path regardless of row count (tests + benchmarks). */
   force?: boolean;
+  /** The other datasets union/lookup steps read (transforms.applyPipeline's ctx). */
+  ctx?: PipelineContext;
 }
 
 /**
@@ -242,35 +256,27 @@ export function runOnDuckDb(
   if (source.columns.length === 0) return null;
 
   const schema = buildSchema(source.columns);
-  const gen = generateSql('t', schema, Array.isArray(steps) ? steps : []);
-  if (gen.sql === null) return null;
+  const list = Array.isArray(steps) ? steps : [];
+  const call = seq++;
+  const refs = refOpts(list, opts.ctx, (_id, k) => `sc_ref_${process.pid}_${call}_${k}`);
+  const probe = generateSql('t', schema, list, refs.opts);
+  if (probe.sql === null && !isNeed(probe.unsupported)) return null;
   if (!duck.isAvailable()) return null;
 
-  const relation = `sc_pipe_${process.pid}_${seq++}`;
+  const relation = `sc_pipe_${process.pid}_${call}`;
+  const created: string[] = [];
   try {
-    const cols = schema.map((c) => `"${c.physical}" VARCHAR`).join(', ');
-    duck.exec(`CREATE TABLE "${relation}" ("${ORD}" BIGINT, ${cols});`);
-
-    // Insert via a single prepared statement per row batch. Values are bound,
-    // never interpolated — a cell is data, and this is a trust boundary.
-    const width = schema.length;
-    const placeholders = `(${Array(width + 1).fill('?').join(', ')})`;
-    const BATCH = 500;
-    for (let start = 0; start < source.rows.length; start += BATCH) {
-      const end = Math.min(start + BATCH, source.rows.length);
-      const params: (string | number | null)[] = [];
-      const tuples: string[] = [];
-      for (let r = start; r < end; r++) {
-        const row = source.rows[r] || [];
-        params.push(r);
-        for (let c = 0; c < width; c++) params.push(toStorage(row[c] ?? null));
-        tuples.push(placeholders);
-      }
-      duck.query(`INSERT INTO "${relation}" VALUES ${tuples.join(', ')};`, params);
+    created.push(relation);
+    loadRelation(relation, source);
+    for (const l of refs.loads) {
+      created.push(l.relation);
+      loadRelation(l.relation, (opts.ctx as PipelineContext).tables[l.id]);
     }
-
-    const sql = gen.sql.replace(/\bFROM\s+"t"/g, `FROM "${relation}"`);
-    const out = duck.query(sql, gen.params);
+    const run: RunSql = (sql, params) => duck.query(sql.replace(/\bFROM\s+"t"/g, `FROM "${relation}"`), params);
+    const planned = planPower(schema, list, refs.opts, run);
+    if (!planned) return null;
+    const gen = planned.gen;
+    const out = run(gen.sql as string, gen.params);
 
     const columns: ParsedColumn[] = gen.columns.map((c) => ({ name: c.name, type: c.type }));
     const rows: Cell[][] = out.map((row) =>
@@ -285,17 +291,41 @@ export function runOnDuckDb(
       if (idx >= 0) retype(columns, rows, idx);
     }
 
-    return { columns, rows, rowCount: rows.length, warnings: gen.warnings.slice() };
+    return { columns, rows, rowCount: rows.length, warnings: gen.warnings.slice(), stepCounts: planned.counts };
   } catch {
     // Any failure — bridge death, overflow, malformed SQL — falls back silently.
     // The fold is always correct; this path is only ever an optimisation.
     return null;
   } finally {
-    try {
-      duck.exec(`DROP TABLE IF EXISTS "${relation}";`);
-    } catch {
-      /* the relation is per-call and the connection is in-memory; leaking one
-         on a dying bridge is not worth masking the original failure. */
+    for (const name of created) {
+      try {
+        duck.exec(`DROP TABLE IF EXISTS "${name}";`);
+      } catch {
+        /* the relation is per-call and the connection is in-memory; leaking one
+           on a dying bridge is not worth masking the original failure. */
+      }
     }
+  }
+}
+
+// One all-VARCHAR relation (ORD + c0..cN) holding `table`. Values are bound,
+// never interpolated — a cell is data, and this is a trust boundary.
+function loadRelation(relation: string, table: TableData): void {
+  const width = table.columns.length;
+  const cols = table.columns.map((_, i) => `"${physicalName(i)}" VARCHAR`).join(', ');
+  duck.exec(`CREATE TABLE "${relation}" ("${ORD}" BIGINT${cols ? ', ' + cols : ''});`);
+  const placeholders = `(${Array(width + 1).fill('?').join(', ')})`;
+  const BATCH = 500;
+  for (let start = 0; start < table.rows.length; start += BATCH) {
+    const end = Math.min(start + BATCH, table.rows.length);
+    const params: (string | number | null)[] = [];
+    const tuples: string[] = [];
+    for (let r = start; r < end; r++) {
+      const row = table.rows[r] || [];
+      params.push(r);
+      for (let c = 0; c < width; c++) params.push(toStorage(row[c] ?? null));
+      tuples.push(placeholders);
+    }
+    duck.query(`INSERT INTO "${relation}" VALUES ${tuples.join(', ')};`, params);
   }
 }

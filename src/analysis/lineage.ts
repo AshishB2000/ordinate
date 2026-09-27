@@ -25,6 +25,8 @@
 // metric formula naming itself through another metric) is dropped while
 // ordering, so every edge in the output points left to right.
 
+import { stepRefIds } from '../data/stepTypes';
+
 export type LineageKind =
   | 'source' | 'dataset' | 'prepare' | 'calc' | 'metric' | 'visual' | 'dashboard' | 'report' | 'alert';
 
@@ -168,6 +170,9 @@ export function buildGraph(input: LineageInput): LineageGraph {
     const did = str(d.id);
     const target = 'dataset:' + did;
     if (!nodes.has(target)) continue;
+    // A union / lookup step READS another dataset, so it is built from it — as a
+    // combined dataset is from its parents — and counts in that one's "Used in".
+    for (const ref of stepRefIds(arr(d.steps))) link('dataset:' + ref, target);
     const o: Rec = d.origin || {};
     let sid = '';
     if (o.kind === 'connection') {

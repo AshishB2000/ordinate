@@ -99,6 +99,7 @@ applyEffectiveTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 
   initReportBuilder();   // reportBuilder.ts — the Reports tab beside Dashboards
   initStoryPage();       // storyPage.ts — the Stories tab and the story page (+ storyList.ts)
   initStoryPresent();    // storyPresent.ts — present mode's bar
+  initScorecardList();   // scorecardList.ts — the Scorecards tab and the scorecard page (+ scorecardPage.ts)
   initAuthoring();       // authoring.ts — the analysis workbench panels
   initAskActivity();     // askActivity.ts — live activity chips for an in-flight ask
   initVersionsPanel();   // versionsPanel.ts — the page-level History buttons

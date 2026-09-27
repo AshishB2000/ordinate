@@ -334,7 +334,7 @@ async function handleExportVisual(id: string): Promise<void> {
     // The export dialog previews what the file will hold, so it is drawn from
     // the policy-shaped answer (privacyShare.ts), not the in-app one.
     res = await pvVisualData(
-      currentProjectId, String(visual.datasetId || ''), visual.encoding, visual.filters || [], undefined, 'export');
+      currentProjectId, String(visual.datasetId || ''), visual.encoding, visual.filters || [], undefined, 'export', visual.analytics);
   } catch (_) {
     res = null;
   }

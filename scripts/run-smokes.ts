@@ -81,6 +81,9 @@ const SMOKES = [
   // Platform depth: jobs + speed on the 1M-row fixture (it prints the measured
   // table), then publish, privacy, automation and backups on a small one.
   'smoke-platform',
+  // Analysis power — the Analytics pane, table calculations, the prepare steps,
+  // comments and scorecards, in ONE launch (sections in scripts/pw*.ts).
+  'smoke-power',
   // Build depth: assistant plans, formatting and colours, themes, SaaS sources
   // (against a local HTTP fixture server) and snapshots, in one launch.
   'smoke-build',

@@ -299,16 +299,17 @@ declare global {
         encoding: any;
         overrides?: any;
         filters?: any;
+        analytics?: any;
       }): Promise<any>;
       updateVisual(
         projectId: string,
         id: string,
-        patch: { name?: string; chartType?: string; encoding?: any; overrides?: any; filters?: any; favorite?: boolean },
+        patch: { name?: string; chartType?: string; encoding?: any; overrides?: any; filters?: any; favorite?: boolean; analytics?: any },
       ): Promise<any>;
       deleteVisual(projectId: string, id: string, opts?: { permanent?: boolean }): Promise<{ ok: boolean }>;
       duplicateVisual(projectId: string, id: string): Promise<any>;
       suggestVisual(projectId: string, datasetId: string, intent?: string): Promise<any>;
-      computeVisualData(projectId: string, datasetId: string, encoding: any, filters?: any, params?: any): Promise<any>;
+      computeVisualData(projectId: string, datasetId: string, encoding: any, filters?: any, params?: any, analytics?: any): Promise<any>;
       // The rows behind one mark of that chart — same dataset, same filters,
       // plus an equality filter per clicked axis. Paged/searched/sorted in main.
       // `{ ok:true, available:false, reason }` when the row set cannot be

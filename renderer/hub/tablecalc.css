@@ -1,0 +1,124 @@
+/* Table calculations — the "Calculate as" menu and popover, the chip badge and
+   the KPI figure line (renderer/hub/calcMenu.ts). Its own sheet so concurrent
+   branches never collide on hub.css. Tokens only; no hand-picked colours. */
+
+/* ── The chip badge: "% of total" beside a measure ─────────────────────────── */
+.tc-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  max-width: 11em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 7px;
+  border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: var(--t-11);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+/* A measure row is narrow: the badge takes its own line under the controls
+   rather than squeezing the column select. The zero-height full-width
+   pseudo-item is what forces the wrap; the badge keeps its natural width. */
+.viz-value-row:has(> .tc-badge) { flex-wrap: wrap; row-gap: 4px; }
+.viz-value-row:has(> .tc-badge)::after { content: ''; order: 9; flex-basis: 100%; height: 0; }
+.viz-value-row > .tc-badge { order: 10; }
+
+/* The builder form's "fx" button beside the aggregation select. */
+.tc-chip-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+.tc-chip-btn:hover { background: var(--surface-2); color: var(--text); }
+.tc-chip-btn.is-on { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); color: var(--accent); }
+.tc-chip-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ── The kinds menu ────────────────────────────────────────────────────────── */
+.chart-menu.tc-menu { min-width: 250px; max-width: 300px; }
+.tc-menu-head {
+  padding: var(--sp-4) var(--sp-12) var(--sp-4);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.tc-menu-row { flex-wrap: wrap; row-gap: 0; }
+.tc-menu-row:disabled { cursor: default; color: var(--muted); background: none; }
+.tc-menu-row:disabled:hover { background: none; }
+.tc-menu-why {
+  flex-basis: 100%;
+  padding-left: calc(13px + var(--sp-8));
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+
+/* ── The settings popover: compute along / restart every / N ───────────────── */
+.tc-pop {
+  position: fixed;
+  z-index: 9900;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  width: 264px;
+  padding: var(--sp-12);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: 0 8px 28px -4px rgba(0, 0, 0, 0.18), 0 2px 8px -2px rgba(0, 0, 0, 0.08);
+}
+.tc-pop-title { font-size: var(--t-13); font-weight: 600; color: var(--text-strong); }
+.tc-field { display: flex; flex-direction: column; gap: 3px; }
+.tc-field-label { font-size: var(--t-11); color: var(--muted); }
+.tc-select, .tc-n { width: 100%; min-width: 0; }
+.tc-pop-note { margin: 0; font-size: var(--t-11); line-height: 1.4; color: var(--muted); }
+.tc-pop-actions { display: flex; justify-content: flex-end; gap: var(--sp-8); margin-top: var(--sp-4); }
+
+/* ── KPI cards ─────────────────────────────────────────────────────────────── */
+.dash-metric-calc {
+  flex-shrink: 0; /* the card body is a fixed-height column: never squash the line */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-12);
+  line-height: 1.35;
+  color: var(--muted);
+}
+.dash-metric-calc.is-loading { visibility: hidden; }
+.dash-metric-calc.is-hint { font-size: var(--t-11); font-style: italic; }
+.dash-card--metric .dash-card-body.has-calc { gap: 2px; padding-top: 4px; padding-bottom: 4px; }
+/* Three lines in a two-row card: the figure gives up a step, as it does for Compare. */
+.dash-card--metric .has-calc .dash-metric-value { font-size: 24px; }
+
+.tc-kpi-props { display: flex; flex-direction: column; gap: var(--sp-8); margin-top: var(--sp-8); }
+.tc-kpi-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--t-13);
+  text-align: left;
+  cursor: pointer;
+}
+.tc-kpi-btn:hover { background: var(--surface-2); }
+.tc-kpi-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

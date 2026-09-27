@@ -21,8 +21,8 @@ if (location.protocol === 'file:' && location.pathname.endsWith('/renderer/hub/i
       ipcRenderer.invoke('snapshots:stamps', { projectId, datasetIds, metricIds }),
     metricHistory: (projectId: string, metricId: string) =>
       ipcRenderer.invoke('snapshots:metricHistory', { projectId, metricId }),
-    visualData: (projectId: string, datasetId: string, encoding: any, filters: any, params: any, asOf: string) =>
-      ipcRenderer.invoke('visual:data', { projectId, datasetId, encoding, filters, params, asOf }),
+    visualData: (projectId: string, datasetId: string, encoding: any, filters: any, params: any, asOf: string, analytics?: any) =>
+      ipcRenderer.invoke('visual:data', { projectId, datasetId, encoding, filters, params, asOf, analytics }),
     metricValue: (projectId: string, id: string, filters: any, params: any, asOf: string) =>
       ipcRenderer.invoke('metric:value', { projectId, id, filters, params, asOf }),
     computeMetric: (projectId: string, datasetId: string, column: string, aggregation: string, filters: any, params: any, asOf: string) =>

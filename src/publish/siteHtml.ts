@@ -98,6 +98,20 @@ const SITE_CSS = `
   .pub-callout--success { border-left-color: #059669; }
   .pub-divider { border: 0; border-top: 1px solid var(--border); margin: 24px 0; }
   .pub-figure { margin: 18px 0; } .pub-figure img { max-width: 100%; border-radius: 8px; }
+  .pub-sc-period { margin: -8px 0 12px; color: var(--muted); font-size: 13px; }
+  .pub-sc-summary { display: flex; gap: 16px; margin: 0 0 12px; font-size: 13px; color: var(--text-dim); }
+  .pub-sc-sum { display: inline-flex; align-items: center; gap: 6px; } .pub-sc-sum strong { color: var(--text-strong); }
+  .pub-sc-card { padding: 0; } .pub-sc-table { font-size: 13px; } .pub-sc-table td { padding: 10px 12px; }
+  .pub-sc-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--border-2); }
+  .pub-sc-dot--good { background: #10b981; } .pub-sc-dot--warn { background: #f59e0b; } .pub-sc-dot--off { background: #ef4444; }
+  .pub-sc-name { font-weight: 600; color: var(--text-strong); } .pub-sc-value { font-weight: 700; color: var(--text-strong); }
+  .pub-sc-group td { background: var(--surface-2); font-weight: 600; color: var(--text-strong); font-size: 12px; }
+  .pub-sc-bar { display: inline-block; width: 70px; height: 6px; margin-right: 8px; border-radius: 3px; background: var(--surface-2); vertical-align: middle; overflow: hidden; }
+  .pub-sc-fill { display: block; height: 100%; background: var(--text-faint); }
+  .pub-sc-bar--good .pub-sc-fill { background: #10b981; } .pub-sc-bar--warn .pub-sc-fill { background: #f59e0b; } .pub-sc-bar--off .pub-sc-fill { background: #ef4444; }
+  .pub-sc-tone--good { color: #059669; } .pub-sc-tone--bad { color: #e11d48; }
+  .pub-sc-spark path { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .pub-sc-spark-cell { color: var(--accent); } .pub-sc-dot-c--good { color: #10b981; } .pub-sc-dot-c--warn { color: #f59e0b; } .pub-sc-dot-c--off { color: #ef4444; }
   @media (max-width: 720px) { .pub-grid { grid-template-columns: 1fr; } .pub-card { grid-column: auto !important; grid-row: auto !important; min-height: 260px; } }
 `;
 

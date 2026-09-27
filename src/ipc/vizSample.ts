@@ -6,6 +6,9 @@ import type { VizEncoding } from '../analysis/visuals';
 import type { FilterStep } from '../data/transforms';
 import { vizDataFor } from './visuals';
 import { withPeriodOverlay } from './visualsOverlay';
+import { withAnalytics } from './visualsAnalytics';
+import { withTableCalcs } from '../analysis/tableCalc';
+import { sanitizeOverlays } from '../analysis/analytics';
 
 // The visual BUILDER's preview — MAIN PROCESS. Split from ./visuals.ts at its cap.
 //
@@ -17,15 +20,17 @@ import { withPeriodOverlay } from './visualsOverlay';
 // and compute in full.
 
 export function register(): void {
-  ipcMain.handle('visual:preview', async (_e, { projectId, datasetId, encoding, filters, params }: any = {}) => {
+  ipcMain.handle('visual:preview', async (_e, { projectId, datasetId, encoding, filters, params, analytics }: any = {}) => {
     try {
       // Sanitised exactly as `visual:data` sanitises — this is untrusted input.
       const enc = sanitizeEncoding(encoding);
       const values = paramValues(params);
       const bound = resolveFilterParams(visuals.sanitizeFilters(filters), values);
-      const run = (p: string, d: string, e: VizEncoding, f: FilterStep[]) =>
-        vizDataFor(p, d, e, f, { params: values, sample: true });
-      const reply = await withPeriodOverlay(await run(projectId, datasetId, enc, bound.steps), projectId, datasetId, enc, bound.steps, run);
+      // Table calculations on the aggregated grid, exactly as `visual:data` runs them.
+      const run = async (p: string, d: string, e: VizEncoding, f: FilterStep[]) =>
+        withTableCalcs(await vizDataFor(p, d, e, f, { params: values, sample: true }), e);
+      const periods = await withPeriodOverlay(await run(projectId, datasetId, enc, bound.steps), projectId, datasetId, enc, bound.steps, run);
+      const reply = await withAnalytics(periods, projectId, sanitizeOverlays(analytics), bound.steps, values);
       return reply.ok && bound.errors.length
         ? { ...reply, warnings: reply.warnings.concat(bound.errors), paramErrors: bound.errors }
         : reply;

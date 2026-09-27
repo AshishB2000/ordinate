@@ -105,11 +105,11 @@ function snapSeeDataset(id: string): void {
 }
 
 /** A dashboard card's chart data — `visual:data`, as of the picker's time. */
-function snapVisualData(projectId: string, datasetId: string, encoding: any, filters: any, params: any): Promise<any> {
+function snapVisualData(projectId: string, datasetId: string, encoding: any, filters: any, params: any, analytics?: any): Promise<any> {
   snapSeeDataset(datasetId);
   return snapDashAsOf && window.hubSnapshots
-    ? window.hubSnapshots.visualData(projectId, datasetId, encoding, filters, params, snapDashAsOf)
-    : window.hub.computeVisualData(projectId, datasetId, encoding, filters, params);
+    ? window.hubSnapshots.visualData(projectId, datasetId, encoding, filters, params, snapDashAsOf, analytics)
+    : window.hub.computeVisualData(projectId, datasetId, encoding, filters, params, analytics);
 }
 
 /** A dashboard metric card naming a saved Metric — `metric:value`, as of the picker's time. */
@@ -156,7 +156,7 @@ const snapViz = snapPicker('viz-asof');
  * The builder's chart as of the picker's time, or null on Latest (the builder's
  * own preview path runs). A new dataset puts the picker back on Latest.
  */
-function snapVizData(projectId: string, datasetId: string, encoding: any, filters: any): Promise<any> | null {
+function snapVizData(projectId: string, datasetId: string, encoding: any, filters: any, analytics?: any): Promise<any> | null {
   if (datasetId !== snapVizDataset) {
     snapVizDataset = datasetId;
     snapVizAsOf = null;
@@ -165,7 +165,7 @@ function snapVizData(projectId: string, datasetId: string, encoding: any, filter
     void snapFill(snapViz.wrap, snapViz.sel, datasetId ? [datasetId] : [], []);
   }
   return snapVizAsOf && window.hubSnapshots
-    ? window.hubSnapshots.visualData(projectId, datasetId, encoding, filters, null, snapVizAsOf)
+    ? window.hubSnapshots.visualData(projectId, datasetId, encoding, filters, null, snapVizAsOf, analytics)
     : null;
 }
 

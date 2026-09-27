@@ -118,6 +118,8 @@ interface EncMeasure {
   metricId?: string;
   /** The metric's name, for the pill. Not persisted — re-read from the record. */
   metricName?: string;
+  /** "Calculate as" — a table calculation main runs on the aggregated grid (calcMenu.ts). */
+  calc?: TcCalc;
 }
 
 const ENC_AGGS: EncAgg[] = ['sum', 'avg', 'count', 'min', 'max', 'none'];
@@ -370,9 +372,11 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       valuesList.appendChild(placeholder('Drop a measure here'));
       return;
     }
+    const calcCtx = (): TcContext => tcChartContext(columns, catSel ? catSel.value : '', serSel ? serSel.value : '');
     measures.forEach((m, i) => {
       const row = document.createElement('div');
       row.className = wells ? 'viz-value-row enc-pill' : 'viz-value-row';
+      const setCalc = (c: TcCalc | null): void => { if (c) m.calc = c; else delete m.calc; renderMeasures(); opts.onChange(); };
 
       if (m.metricId) {
         // A measure that IS a metric shows the metric's name, not the column
@@ -402,6 +406,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
         });
         row.appendChild(aggSel);
       }
+      tcBadge(row, m.calc);
 
       if (wells) {
         // The reference puts a ⋮ on each field pill. openRowMenu is the popup
@@ -435,6 +440,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
             label: measures[i].metricId ? 'Change metric…' : 'Use a metric…',
             onClick: () => { void pickMeasureMetric(i, menu); },
           });
+          items.push(tcMenuItem(menu, m.calc, calcCtx, setCalc));
           if (measures.length > 1) {
             items.push({
               label: 'Remove',
@@ -446,6 +452,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
         });
         row.appendChild(menu);
       } else {
+        row.appendChild(tcChipButton(m.calc, calcCtx, setCalc));
         const del = document.createElement('button');
         del.type = 'button';
         del.className = 'viz-value-del';
@@ -634,6 +641,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
           column: v && typeof v.column === 'string' ? v.column : '',
           aggregation: ENC_AGGS.indexOf(v && v.aggregation) >= 0 ? (v.aggregation as EncAgg) : 'sum',
           ...(v && typeof v.metricId === 'string' ? { metricId: v.metricId } : {}),
+          ...(v && v.calc && typeof v.calc === 'object' ? { calc: v.calc } : {}),
         }));
       } else {
         const nums = numberCols();
@@ -693,11 +701,11 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     getEncoding(): any {
       const enc: any = {
         category: catSel ? catSel.value : '',
-        values: measures.filter((m) => m.column).map((m) => (
-          m.metricId
-            ? { column: m.column, aggregation: m.aggregation, metricId: m.metricId }
-            : { column: m.column, aggregation: m.aggregation }
-        )),
+        values: measures.filter((m) => m.column).map((m) => ({
+          column: m.column, aggregation: m.aggregation,
+          ...(m.metricId ? { metricId: m.metricId } : {}),
+          ...(m.calc ? { calc: m.calc } : {}),
+        })),
       };
       const series = serSel ? serSel.value : '';
       if (series) enc.series = series;

@@ -31,6 +31,8 @@ import { summarize } from './datasetSummary';
 import type { DatasetSummary } from './datasetSummary';
 import { sanitizeQuality } from '../analysis/qualityRules';
 import type { DatasetQuality } from '../analysis/qualityRules';
+import type { StepCount } from './stepTypes';
+import { loadStepRefs } from './stepRefs';
 // The record FILE (paths, atomic write, metadata-only writers) moved out at the
 // 800-line cap; the writers are re-exported so `datasets.markRefresh` etc. keep
 // working for every caller.
@@ -74,6 +76,8 @@ export interface Dataset {
   // steps). When steps returns to [], output === source and the dataset reverts.
   source?: TableData;
   steps?: TransformStep[];
+  /** Rows into and out of each step at the last recompute — the step list's counts. */
+  stepCounts?: StepCount[];
   /**
    * Refresh provenance. All OPTIONAL, so every record written before this
    * existed stays valid untouched and simply reads as "not refreshable".
@@ -295,6 +299,8 @@ function normalize(data: any, projectId: string): Dataset {
   };
   // Only carry a `source` when one was persisted (i.e. steps were ever added). A
   // pristine v1/v2 dataset keeps source undefined until its first step.
+  const counts = sanitizeStepCounts(data.stepCounts, steps.length);
+  if (counts) ds.stepCounts = counts;
   if (data.source && typeof data.source === 'object' && Array.isArray(data.source.columns) && Array.isArray(data.source.rows)) {
     ds.source = { columns: data.source.columns, rows: data.source.rows };
   }
@@ -314,6 +320,14 @@ function normalize(data: any, projectId: string): Dataset {
   const quality = sanitizeQuality(data.quality);
   if (quality) ds.quality = quality;
   return ds;
+}
+
+// Stored counts are trusted only when they still line up with the steps.
+function sanitizeStepCounts(raw: unknown, n: number): StepCount[] | undefined {
+  if (!Array.isArray(raw) || raw.length !== n || n === 0) return undefined;
+  const ok = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
+  const out = raw.map((c) => (c && ok(c.before) && ok(c.after) ? { before: c.before, after: c.after } : null));
+  return out.every((c) => c !== null) ? (out as StepCount[]) : undefined;
 }
 
 // No-op stub kept for symmetry with projects.init() (main.ts may call it). The
@@ -512,13 +526,12 @@ export async function saveDataset(
 // step with a warning, and swallowing it would leave the user with a silently
 // shorter pipeline. An out-param rather than a changed return type keeps the two
 // existing callers (capture recapture, connection refresh) untouched.
-//
-// Queued per dataset at CALL time, before any await. A replace is read →
-// derive → keep → write, and two overlapping ones (a folder-watch refresh and
-// a manual one) used to reach persist's lock in whatever order their reads
-// finished — so an older fetch could land last, and a snapshot could keep a
-// table another replace had already superseded. Now the one issued last wins.
-const dataChains = new Map<string, Promise<unknown>>();
+// Overlapping refreshes of ONE dataset run in the order they were ISSUED. The
+// write chain in persist() only orders writes by when they reach it, and a
+// refresh reaches it after several reads whose timing varies with load (the
+// record, the salt, the tables a union / lookup step reads) — so without this
+// an earlier, slower refresh could land last and win.
+const updateChains = new Map<string, Promise<unknown>>();
 
 export function updateDatasetData(
   projectId: string,
@@ -528,13 +541,12 @@ export function updateDatasetData(
   outWarnings?: string[],
   progress: parquetStore.WriteProgress = {},
 ): Promise<Dataset | null> {
-  const key = projectId + '/' + id;
-  const prev = dataChains.get(key) || Promise.resolve();
-  const run = prev.catch(() => { /* the previous replace's failure was its caller's */ })
+  const prev = updateChains.get(id) || Promise.resolve();
+  const run = prev.catch(() => { /* the previous refresh's failure was its caller's */ })
     .then(() => updateDatasetDataNow(projectId, id, data, capture, outWarnings, progress));
-  const tail = run.catch(() => { /* reported to this caller below */ });
-  dataChains.set(key, tail);
-  void tail.then(() => { if (dataChains.get(key) === tail) dataChains.delete(key); });
+  const tail = run.catch(() => { /* reported to this caller */ });
+  updateChains.set(id, tail);
+  void tail.then(() => { if (updateChains.get(id) === tail) updateChains.delete(id); });
   return run;
 }
 
@@ -560,11 +572,12 @@ async function updateDatasetDataNow(
     // the pipeline instead of dropping it or reverting to stale source data.
     const source: TableData = { columns: cols, rows };
     const salt = await saltForSteps(projectId, existing.steps);
-    const output = transforms.applyPipeline(source, existing.steps ?? [], { salt });
+    const ctx = { salt, ...(await loadStepRefs(projectId, id, existing.steps)) };
+    const output = transforms.applyPipeline(source, existing.steps ?? [], ctx);
     if (outWarnings && Array.isArray(output.warnings)) outWarnings.push(...output.warnings);
     updated = {
       ...existing, source, columns: output.columns, rows: output.rows,
-      rowCount: output.rowCount, updatedAt: now,
+      rowCount: output.rowCount, stepCounts: output.stepCounts, updatedAt: now,
     };
   } else {
     updated = { ...existing, columns: cols, rows, rowCount: rows.length, updatedAt: now };
@@ -636,10 +649,10 @@ export async function updateDataset(
   if (existing.source !== undefined) {
     const source: TableData = { columns: newColumns, rows: baseRows };
     const salt = await saltForSteps(projectId, existing.steps);
-    const output = transforms.applyPipeline(source, existing.steps ?? [], { salt });
+    const output = transforms.applyPipeline(source, existing.steps ?? [], { salt, ...(await loadStepRefs(projectId, id, existing.steps)) });
     updated = {
       ...existing, source, columns: output.columns, rows: output.rows,
-      rowCount: output.rowCount, updatedAt: now,
+      rowCount: output.rowCount, stepCounts: output.stepCounts, updatedAt: now,
     };
   } else {
     updated = { ...existing, columns: newColumns, rows: baseRows, rowCount: baseRows.length, updatedAt: now };
@@ -689,10 +702,12 @@ export async function updateSteps(
   // A mask step makes sqlGen bail, so a masked pipeline always takes the fold —
   // the only path that holds the salt.
   const residentReady = existing.source !== undefined && parquetStore.isSupported();
+  // A union/lookup step reads other datasets: the resident path declines those
+  // pipelines, and the fold gets the tables here (src/data/stepRefs.ts).
   const output =
     (residentReady
       ? runResidentPipeline(sourceParquetPath(projectId, id), source.columns, steps)
-      : null) ?? transforms.applyPipeline(source, steps, { salt: await saltForSteps(projectId, steps) });
+      : null) ?? transforms.applyPipeline(source, steps, { salt: await saltForSteps(projectId, steps), ...(await loadStepRefs(projectId, id, steps)) });
 
   const updated: Dataset = {
     ...existing,
@@ -702,6 +717,7 @@ export async function updateSteps(
     columns: output.columns,
     rows: output.rows,
     rowCount: output.rowCount,
+    stepCounts: output.stepCounts,
     updatedAt: new Date().toISOString(),
   };
   await fs.promises.mkdir(datasetsDir(projectId), { recursive: true });

@@ -100,6 +100,7 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
       valEl.textContent = mr.display || '—';
       if (!m.label && mr.name) labelEl.textContent = mr.name;
       paintParamErrors(body, mr.paramErrors);
+      void paintMetricCalc(card, body); // "Calculate as" (calcMenu.ts)
       void paintMetricCompare(card, body);
       return;
     }
@@ -125,6 +126,7 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
   if (r.value == null) { valEl.textContent = '—'; return; }
   // Reuse the shared chart number formatter (auto/plain/thousands/compact/…).
   valEl.textContent = fmtWith(r.value, m.format || 'auto');
+  void paintMetricCalc(card, body); // "Calculate as" (calcMenu.ts)
   void paintMetricCompare(card, body);
 }
 

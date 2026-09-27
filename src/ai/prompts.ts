@@ -55,6 +55,21 @@ export const SUGGEST_STEPS_SYSTEM_PROMPT =
   '  { "type": "trim", "column": "<col optional>" }\n' +
   '  { "type": "drop_column", "column": "<col>" }\n' +
   '  { "type": "rename_column", "from": "<col>", "to": "<new name>" }\n' +
+  '  { "type": "split_column", "column": "<col>", "mode": "delimiter|position|regex", "delimiter": "<text>", ' +
+  '"positions": [<int>], "pattern": "<regex without lookaround or backreferences>", "into": "columns|rows", "count": <2-50> }\n' +
+  '  { "type": "unpivot", "columns": ["<col>"], "attribute": "<new column>", "value": "<new column>" }\n' +
+  '  { "type": "pivot", "key": "<col>", "value": "<col>", "fn": "sum|avg|count|min|max", "groupBy": ["<col>"] }\n' +
+  '  { "type": "parse_date", "column": "<col>", "format": "YYYY-MM-DD|DD/MM/YYYY|MM/DD/YYYY|DD-MMM-YYYY|DD.MM.YYYY|' +
+  'YYYY/MM/DD|YYYYMMDD, optionally followed by \' HH:mm\' or \' HH:mm:ss\'" }\n' +
+  '  { "type": "dedupe_key", "columns": ["<col>"], "keep": "first|last|max|min", "by": "<col, for max|min>" }\n' +
+  '  { "type": "replace_values", "column": "<col>", "mode": "exact|contains|regex", "rules": [{ "from": "<text>", "to": "<text>" }] }\n' +
+  '  { "type": "conditional_column", "name": "<new column>", "rules": [{ "when": { "column": "<col>", ' +
+  '"op": "=|!=|>|<|>=|<=|contains|is_empty|not_empty", "value": <optional> }, "then": "<text>" }], "else": "<text>" }\n' +
+  '  { "type": "window", "fn": "row_number|lag|lead|running_sum|running_avg", "as": "<new column>", "column": "<col>", ' +
+  '"partitionBy": ["<col>"], "orderBy": "<col>" }\n' +
+  '  { "type": "union", "datasetId": "<id>" }\n' +
+  '  { "type": "lookup_join", "datasetId": "<id>", "leftKey": "<col>", "rightKey": "<col>", "columns": ["<col>"] }\n' +
+  'Propose union or lookup_join ONLY when another dataset\'s id is given to you; never invent an id.\n' +
   'Return ONLY the JSON array (use [] if no preparation is warranted).';
 
 // Charts. The chart-type whitelist is interpolated from the one list the

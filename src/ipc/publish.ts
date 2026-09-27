@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as jobs from '../app/jobs';
 import * as analysis from '../analysis/analysis';
 import * as stories from '../analysis/stories';
+import * as scorecards from '../analysis/scorecards';
 import { formatBytes } from '../publish/combos';
 import { sanitizePublishConfig, planPublish, publishSite, getStoredConfig, storeConfig } from '../publish/publish';
 import type { PublishConfig, PublishResult } from '../publish/publish';
@@ -68,11 +69,12 @@ export function register(deps: PlatformDeps): void {
 
   ipcMain.handle('publish:targets', async (_e, { projectId }: any = {}) => {
     try {
-      const [dash, st] = await Promise.all([analysis.listAnalyses(projectId), stories.listStories(projectId)]);
+      const [dash, st, sc] = await Promise.all([analysis.listAnalyses(projectId), stories.listStories(projectId), scorecards.listScorecards(projectId)]);
       return {
         ok: true,
         dashboards: dash.map((d) => ({ id: d.id, name: d.name, sheets: d.sheetCount, updatedAt: d.updatedAt })),
         stories: st.map((s: any) => ({ id: s.id, name: s.name, updatedAt: s.updatedAt })), // any: StorySummary
+        scorecards: sc.map((s) => ({ id: s.id, name: s.name, updatedAt: s.updatedAt })),
       };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not list what can be published.' };

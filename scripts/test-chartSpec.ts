@@ -56,9 +56,10 @@ const CHART_SCRIPTS = [
   'chartFamiliesExtra.js',
   'chartFamiliesPlugins.js',
   'chartValueLabels.js',
+  'chartAnnotations.js',
   'chartDatasets.js',
   'chartScales.js',
-  'chartRender.js',
+  'chartRender.js', 'calcMenu.js',
 ];
 
 // Fixed theme tokens. Real values from the light theme; the point is only that

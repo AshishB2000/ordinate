@@ -39,6 +39,9 @@ import { applyPipeline } from '../data/transforms';
 import type { VizAggregation } from './visuals';
 import { dateBucket, dateBucketLabel, parseDateCell } from './categoryKey';
 import type { DateGrain } from './categoryKey';
+import { applyPivotCalcs, applyShowAs, calcSets } from './pivotCalc';
+import { sanitizeTableCalc } from './tableCalc';
+import type { TableCalc } from './tableCalc';
 
 // ── Encoding ─────────────────────────────────────────────────────────────────
 
@@ -64,6 +67,8 @@ export interface PivotValue {
   showAs?: PivotShowAs;
   /** The saved Metric this value IS. ADDITIVE — nothing here reads it. */
   metricId?: string;
+  /** A table calculation over this value's cells (pivotCalc.ts). Wins over `showAs`. */
+  calc?: TableCalc;
 }
 
 /** Renderer-side cell painting. Carried here so it is saved with the visual. */
@@ -141,6 +146,14 @@ export interface PivotGrid {
   colGroupCount: number;
   /** True when a cap above cut the grid — the UI has to say so. */
   truncated: boolean;
+  /**
+   * Present only when some value carries a table calculation (pivotCalc.ts):
+   * the calc per value field, the cells as FIGURES before any calc (so a
+   * tooltip can say "24.1% of total · 1.25M"), and what was ignored.
+   */
+  calcs?: (TableCalc | null)[];
+  rawCells?: (number | null)[][];
+  calcWarnings?: string[];
 }
 
 // ── Sanitisation ─────────────────────────────────────────────────────────────
@@ -189,6 +202,8 @@ function sanitizeValues(raw: unknown): PivotValue[] {
     if (typeof o.format === 'string' && o.format) val.format = o.format;
     if (typeof o.showAs === 'string' && SHOW_AS.has(o.showAs)) val.showAs = o.showAs as PivotShowAs;
     if (typeof o.metricId === 'string' && UUID_RE.test(o.metricId)) val.metricId = o.metricId;
+    const calc = sanitizeTableCalc(o.calc);
+    if (calc) val.calc = calc;
     out.push(val);
   }
   return out;
@@ -284,6 +299,8 @@ export function pivotSets(enc: PivotEncoding): PivotSet[] {
   if (enc.totals.rows) for (let k = 1; k <= R; k += 1) add(k, 0);
   if (enc.totals.columns) add(0, C);
   if (enc.totals.grand) add(0, 0);
+  // Percent-of-total divides by SOURCE totals, whether or not they are shown.
+  for (const s of calcSets(enc)) add(s.rowDims, s.colDims);
   return out;
 }
 
@@ -652,6 +669,8 @@ export function foldPivotGrid(enc: PivotEncoding, groups: PivotGroups[]): PivotG
     colGroupCount: colPaths.length,
     truncated,
   };
+  // The calc first: it claims its values (their `showAs` becomes 'value').
+  applyPivotCalcs(grid, enc, colPaths, at);
   applyShowAs(grid);
   return grid;
 }
@@ -694,89 +713,6 @@ function colHeadersFor(colPaths: string[][], enc: PivotEncoding, V: number, C: n
   return out;
 }
 
-// ── Show values as ───────────────────────────────────────────────────────────
-//
-// Applied to `cells` in place, AFTER every figure is a real aggregate — a
-// percentage of a subtotal is still a ratio of two app-computed numbers, and a
-// rank is a position among them. Totals are left as figures: "100%" in a Total
-// column says nothing, and a rank of a total is meaningless.
-
-function applyShowAs(grid: PivotGrid): void {
-  const V = grid.valueCount;
-  if (!grid.showAs.some((s) => s !== 'value')) return;
-  const source = grid.cells.map((r) => r.slice());
-  const cols = grid.cells.length ? grid.cells[0].length : 0;
-
-  for (let vi = 0; vi < V; vi += 1) {
-    const mode = grid.showAs[vi];
-    if (mode === 'value') continue;
-    const colsOfValue: number[] = [];
-    for (let c = vi; c < cols; c += V) colsOfValue.push(c);
-
-    if (mode === 'pct_row') {
-      for (let r = 0; r < source.length; r += 1) {
-        const total = sumOf(colsOfValue.map((c) => source[r][c]));
-        for (const c of colsOfValue) grid.cells[r][c] = ratio(source[r][c], total);
-      }
-    } else if (mode === 'pct_col') {
-      for (const c of colsOfValue) {
-        const total = sumOf(leafValues(grid, source, c));
-        for (let r = 0; r < source.length; r += 1) grid.cells[r][c] = ratio(source[r][c], total);
-      }
-    } else if (mode === 'pct_total') {
-      const all: (number | null)[] = [];
-      for (const c of colsOfValue) all.push(...leafValues(grid, source, c));
-      const total = sumOf(all);
-      for (let r = 0; r < source.length; r += 1) {
-        for (const c of colsOfValue) grid.cells[r][c] = ratio(source[r][c], total);
-      }
-    } else if (mode === 'rank') {
-      for (const c of colsOfValue) rankColumn(grid, source, c);
-    }
-  }
-}
-
-/** Only LEAF rows contribute to a column's denominator — a subtotal would double-count. */
-function leafValues(grid: PivotGrid, source: (number | null)[][], c: number): (number | null)[] {
-  const out: (number | null)[] = [];
-  for (let r = 0; r < source.length; r += 1) if (grid.rowKinds[r] === 'leaf') out.push(source[r][c]);
-  return out;
-}
-
-function sumOf(vals: (number | null)[]): number | null {
-  let total = 0;
-  let seen = false;
-  for (const v of vals) if (v !== null) { total += v; seen = true; }
-  return seen ? total : null;
-}
-
-function ratio(v: number | null, total: number | null): number | null {
-  if (v === null || total === null || total === 0) return null;
-  return v / total;
-}
-
-/**
- * Dense competition ranking, 1 = largest, over the LEAF rows of one column.
- * Ties share a rank (the spec's "rank ties"); nulls stay null rather than
- * ranking last, because a missing figure has no position.
- */
-function rankColumn(grid: PivotGrid, source: (number | null)[][], c: number): void {
-  const entries: Array<{ r: number; v: number }> = [];
-  for (let r = 0; r < source.length; r += 1) {
-    if (grid.rowKinds[r] !== 'leaf') { grid.cells[r][c] = null; continue; }
-    const v = source[r][c];
-    if (v === null) { grid.cells[r][c] = null; continue; }
-    entries.push({ r, v });
-  }
-  entries.sort((a, b) => b.v - a.v);
-  let rank = 0;
-  let prev: number | null = null;
-  for (const e of entries) {
-    if (prev === null || e.v !== prev) { rank += 1; prev = e.v; }
-    grid.cells[e.r][c] = rank;
-  }
-}
-
 // ── The `{labels, series}` every other surface already consumes ──────────────
 
 /**
@@ -787,14 +723,17 @@ function rankColumn(grid: PivotGrid, source: (number | null)[][], c: number): vo
  */
 export function pivotChartData(grid: PivotGrid): {
   labels: (string | number)[];
-  series: { name: string; values: (number | null)[] }[];
+  series: { name: string; values: (number | null)[]; raw?: (number | null)[]; calc?: TableCalc }[];
 } {
   const keep: number[] = [];
   grid.rowKinds.forEach((k, i) => { if (k === 'leaf') keep.push(i); });
   const labels = keep.map((i) => grid.rowHeaders[i].join(' · '));
-  const series = grid.colHeaders.map((h, c) => ({
-    name: h.join(' · '),
-    values: keep.map((i) => grid.cells[i][c] ?? null),
-  }));
+  const series = grid.colHeaders.map((h, c) => {
+    const s = { name: h.join(' · '), values: keep.map((i) => grid.cells[i][c] ?? null) };
+    // A calculated value carries its figures too, exactly as a chart series does.
+    const calc = grid.calcs && grid.valueCount ? grid.calcs[c % grid.valueCount] : null;
+    const raw = grid.rawCells;
+    return calc && raw ? { ...s, raw: keep.map((i) => raw[i][c] ?? null), calc } : s;
+  });
   return { labels, series };
 }
