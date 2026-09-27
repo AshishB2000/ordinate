@@ -236,6 +236,7 @@ const CAT_TITLES = {
   appearance: 'Appearance',
   notifications: 'Notifications',
   general: 'General',
+  privacy: 'Privacy', // privacySettings.ts — the current project's share policy
   about: 'About',
 };
 let stpOpener = null;    // element to refocus when the modal closes

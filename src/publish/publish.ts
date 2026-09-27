@@ -33,6 +33,7 @@ import { geoFor } from './geoData';
 import { sanitizePage } from './sanitize';
 import { pageHtml } from './siteHtml';
 import { sanitizeBrand } from '../analysis/dashboardExport';
+import * as sharePolicy from '../app/sharePolicy';
 import { readLogoDataUrl } from '../app/branding';
 import type { SiteAssets } from './siteHtml';
 
@@ -160,6 +161,24 @@ export async function storeConfig(config: PublishConfig, result?: PublishResult)
   await fs.promises.rename(tmp, file);
 }
 
+// ── The share policy ─────────────────────────────────────────────────────────
+
+/**
+ * The project's Share policy on this path, as the builders' Outgoing hook:
+ * labels drawn from a sensitive column become tokens (mask), or the tile is
+ * hidden (drop, or a map, which cannot draw a token); `include` passes through
+ * — the dialog asked first. Applied HERE, inside the engine, so every door
+ * into a publish — the dialog, Re-publish, the after-refresh schedule, the
+ * CLI, MCP — gets it without having to remember to.
+ */
+export function policyOutgoing(projectId: string, sharePath: 'publish' | 'export'): Outgoing {
+  return async (datasetId, encoding, data) => {
+    const r = await sharePolicy.applyToChart(projectId, datasetId, encoding, { ok: true as boolean, data }, sharePath);
+    if (!r.ok || !r.data) return { hidden: (r as { error?: string }).error || sharePolicy.HIDDEN_BY_POLICY };
+    return r.data as typeof data;
+  };
+}
+
 // ── Assets ───────────────────────────────────────────────────────────────────
 
 const ROOT = path.join(__dirname, '..', '..');
@@ -215,7 +234,7 @@ export interface PublishPlan {
  * from each tile's DEFAULT answer times its combinations (an upper bound: the
  * real site stores repeated answers once).
  */
-export async function planPublish(config: PublishConfig, outgoing?: Outgoing): Promise<PublishPlan> {
+export async function planPublish(config: PublishConfig, outgoing: Outgoing = policyOutgoing(config.projectId, 'publish')): Promise<PublishPlan> {
   const assets = readAssets();
   const fixed = Object.values(assets).reduce((n, s) => n + Buffer.byteLength(s), 0) + 8 * 1024;
   const pages: PlanPage[] = [];
@@ -342,7 +361,11 @@ async function previousFiles(outDir: string): Promise<string[]> {
 }
 
 /** Write the static site. Throws on failure (and over the size limit, before writing). */
-export async function publishSite(config: PublishConfig, ctx: PublishProgress = {}, outgoing?: Outgoing): Promise<PublishResult> {
+export async function publishSite(
+  config: PublishConfig,
+  ctx: PublishProgress = {},
+  outgoing: Outgoing = policyOutgoing(config.projectId, 'publish'),
+): Promise<PublishResult> {
   const { pages, index, combos } = await buildPages(config, ctx, outgoing);
   if (ctx.checkCancelled) ctx.checkCancelled();
   if (ctx.progress) ctx.progress(0.92, 'Writing files');
@@ -382,7 +405,12 @@ export async function publishSite(config: PublishConfig, ctx: PublishProgress = 
  * the published site uses, with no filter combinations beyond the default.
  * For `dashboards export --html` and, rendered offscreen, --pdf / --png.
  */
-export async function dashboardPageHtml(projectId: string, dashboardId: string, outgoing?: Outgoing): Promise<string> {
+export async function dashboardPageHtml(
+  projectId: string,
+  dashboardId: string,
+  // An export of one dashboard (the CLI's `dashboards export`) follows the EXPORT path's policy.
+  outgoing: Outgoing = policyOutgoing(projectId, 'export'),
+): Promise<string> {
   const d = await buildDashboard(projectId, dashboardId, 1, {}, outgoing, { defaultOnly: true });
   if (!d) throw new Error('Dashboard not found.');
   const geo = await geoFor(projectId, d.geoLevels, d.boundaryIds);

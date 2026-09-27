@@ -27,6 +27,7 @@ export function register(deps: PlatformDeps): void {
   require('./publish').register(deps); // publish to folder, re-publish, after-refresh schedule
 
   // platform:privacy
+  require('./privacy').register();
 
   // platform:automation
 

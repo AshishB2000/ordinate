@@ -14,6 +14,8 @@ import * as history from '../app/history';
 import { runQualityChecks } from '../analysis/qualityRun';
 import * as importStage from '../data/importStage';
 import * as jobs from '../app/jobs';
+import { detectSensitive } from '../data/sensitivity';
+import { scanDataset } from '../app/privacyStore';
 import type { Cell, TableData } from '../data/transforms';
 
 const MAX_ROWS = 1_000_000;
@@ -133,6 +135,9 @@ async function composePreview({ projectId, base, joins, page }: any = {}) {
       pageRows: PREVIEW_PAGE_ROWS,
       sampled: r.parts.some((p) => p.truncated),
       warnings,
+      // Proposals only — the composer shows each as a chip the user accepts or
+      // dismisses; nothing is marked until they do (data/sensitivity.ts).
+      sensitivity: detectSensitive(res.columns, res.rows),
     };
   } catch (err: any) {
     return { ok: false, error: err?.message || 'Could not build the preview' };
@@ -209,6 +214,7 @@ export async function composeSave(
       }
       progress(0.95, 'Checking data quality');
       await runQualityChecks(projectId, saved.id); // the data-quality hook; never throws
+      await scanDataset(projectId, retyped || withSteps || saved); // sensitivity proposals; never throws
       return { ok: true, dataset: slim(retyped || withSteps || saved), warnings: [] };
     }
 
@@ -262,6 +268,7 @@ export async function composeSave(
     const retyped = await applyRetype(projectId, saved.id, retype);
     progress(0.95, 'Checking data quality');
     await runQualityChecks(projectId, saved.id); // the data-quality hook; never throws
+    await scanDataset(projectId, retyped || withSteps || saved); // sensitivity proposals; never throws
     return { ok: true, dataset: slim(retyped || withSteps || saved), warnings };
   } catch (err: any) {
     return { ok: false, error: err?.message || 'Could not save the dataset' };

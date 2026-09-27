@@ -115,6 +115,7 @@ function openComposer(base: DcTable | null, opts: { name?: string; origin?: any;
   dcOrigin = opts.origin;
   dcSourceKind = opts.sourceKind || '';
   dcCellEdit = dcSourceKind === 'capture' && !!(base && base.ref.inline);
+  pvComposerReset(); // privacyReview.ts — sensitivity chips belong to one import
   const name = dcEl('dc-name') as HTMLInputElement | null;
   if (name) name.value = opts.name || (base ? base.label : '');
 
@@ -494,6 +495,7 @@ async function runPreview(): Promise<void> {
   dcRawCols = res.columns || [];
   dcTotal = Number(res.total || 0);
   dcPageRows = Number(res.pageRows || 100);
+  pvComposerSetProposals(res.sensitivity); // the header chips (privacyReview.ts)
   paintGrid(res.rows || []);
   paintCount();
   paintWarnings(res.warnings || []);
@@ -600,6 +602,14 @@ async function handleComposerSave(): Promise<void> {
   if (!res || !res.ok) {
     window.alert((res && res.error) || 'Failed to save the dataset.');
     return;
+  }
+
+  // The sensitivity chips' answers, against the column names as SAVED.
+  if (res.dataset && res.dataset.id) {
+    await pvComposerCommit(String(res.dataset.id), (raw) => {
+      const m = dcMap.get(raw);
+      return m && m.dropped ? null : (m && m.name) || raw;
+    });
   }
 
   for (const w of (res.warnings || [])) showToast(w);

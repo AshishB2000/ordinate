@@ -406,10 +406,12 @@ async function buildVisualExportCard(
   if (!resolved) return { kind: 'broken', layout, reason: 'Source removed' };
   const visual = resolved.visual;
   const merged = mergeDashFilters(effectiveFilters(), visual.filters);
+  // Asked WITH the share path: main applies the project's Share policy, so a
+  // sensitive label arrives masked, or the tile arrives hidden (privacyShare.ts).
   let res: any;
-  try { res = await window.hub.computeVisualData(currentProjectId, visual.datasetId, visual.encoding, merged, dashParamPayload()); }
+  try { res = await pvVisualData(currentProjectId, visual.datasetId, visual.encoding, merged, dashParamPayload(), 'export'); }
   catch (_) { res = { ok: false }; }
-  if (!res || res.ok === false) return { kind: 'broken', layout, reason: 'Could not draw this visual' };
+  if (!res || res.ok === false) return { kind: 'broken', layout, reason: res && res.hiddenByPolicy ? res.error : 'Could not draw this visual' };
   const data = res.data || { labels: [], series: [] };
   const type = typeof visual.chartType === 'string' && visual.chartType ? visual.chartType : 'column';
   const title = dashSubst(visual.name || '');
@@ -556,9 +558,10 @@ async function handleDashExport(): Promise<void> {
       { value: 'png', label: 'PNG image' },
     ],
     'Export',
+    pvShareNote('export', await pvCardDatasetIds(dashCurrent)),
   );
   if (choice === null) return;
-  await dashExportAs(choice as DashExportFormat);
+  await dashExportAs(choice as DashExportFormat, true);
 }
 
 type DashExportFormat = 'html' | 'pdf' | 'png';
@@ -570,8 +573,11 @@ type DashExportFormat = 'html' | 'pdf' | 'png';
  * (commandDefs.ts) reach the same code the dialog does. A command that built its
  * own bundle would be a second exporter to keep in step with the first.
  */
-async function dashExportAs(choice: DashExportFormat): Promise<void> {
+async function dashExportAs(choice: DashExportFormat, noted = false): Promise<void> {
   if (!dashCurrent) return;
+  // The commands reach here with no dialog, so the gate toasts the policy line
+  // for them; 'include' asks first either way.
+  if (!(await pvShareGate('export', await pvCardDatasetIds(dashCurrent), { noted }))) return;
   const safe = String(dashCurrent.name || 'dashboard').replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'dashboard';
   if (choice === 'html') {
     showToast('Building HTML…');

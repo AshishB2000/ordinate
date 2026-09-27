@@ -221,15 +221,24 @@ function stCaptionField(block: any): HTMLTextAreaElement {
 
 // ── Visual ───────────────────────────────────────────────────────────────────
 
-/** The saved visual + its data under visual AND pinned filters. Shared by the page, present mode and the export. */
-async function stVisualData(block: any): Promise<{ visual: any; data: any; caption: string } | null> {
+/**
+ * The saved visual + its data under visual AND pinned filters. Shared by the
+ * page, present mode and the export — which passes `share` so main applies the
+ * Share policy to what goes into the file (privacyShare.ts).
+ */
+async function stVisualData(block: any, share?: PvPath): Promise<{ visual: any; data: any; caption: string; hidden?: string } | null> {
   if (!currentProjectId) return null;
   let v: any = null;
   try { v = await window.hub.getVisual(currentProjectId, block.visualId); } catch (_) { v = null; }
   if (!v) return null;
   const filters = mergeDashFilters(block.filters || [], v.filters || []);
   let res: any = null;
-  try { res = await window.hub.computeVisualData(currentProjectId, v.datasetId, v.encoding, filters); } catch (_) { res = null; }
+  try {
+    res = share
+      ? await pvVisualData(currentProjectId, v.datasetId, v.encoding, filters, undefined, share)
+      : await window.hub.computeVisualData(currentProjectId, v.datasetId, v.encoding, filters);
+  } catch (_) { res = null; }
+  if (res && res.hiddenByPolicy) return { visual: v, data: { labels: [], series: [] }, caption: String(res.error), hidden: String(res.error) };
   const data = res && res.ok !== false && res.data ? res.data : { labels: [], series: [] };
   let caption = '';
   try {

@@ -433,6 +433,8 @@ async function rbSave(): Promise<boolean> {
 async function rbGenerate(): Promise<void> {
   if (!rbReport || !currentProjectId) return;
   if (!(await rbSave())) return;
+  const ctx = rbContext();
+  if (!(await pvShareGate('report', await pvCardDatasetIds(ctx.analysis)))) return;
   showToast('Building report…');
   const report = rbReport;
   const projectId = currentProjectId;
@@ -441,7 +443,7 @@ async function rbGenerate(): Promise<void> {
   let failed = '';
   const out = await rjRun('report', `Report · ${report.name || 'Untitled'}`, projectId, async (step) => {
     await step(0.05, 'Laying out the pages');
-    const pages = await buildReportPages(rbContext());
+    const pages = await buildReportPages(ctx);
     if (!pages.length) { failed = 'Every page is excluded — nothing to generate'; return null; }
     await step(0.6, `Writing ${pages.length} page${pages.length === 1 ? '' : 's'}`);
     const { base64, ext } = await reportBytes(pages, report);

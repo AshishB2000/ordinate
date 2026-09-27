@@ -17,6 +17,7 @@ import * as projects from '../app/projects';
 import * as parquetStore from '../engine/parquetStore';
 import * as queryCache from '../engine/queryCache';
 import * as jobs from '../app/jobs';
+import { saltForSteps } from '../app/privacyStore';
 import * as transforms from './transforms';
 import { runResidentPipeline } from '../engine/pipelineDuck';
 import type { TableData, TransformStep, ApplyResult } from './transforms';
@@ -521,7 +522,8 @@ export async function updateDatasetData(
     // SOURCE and the derived output is recomputed, so a connection refresh keeps
     // the pipeline instead of dropping it or reverting to stale source data.
     const source: TableData = { columns: cols, rows };
-    const output = transforms.applyPipeline(source, existing.steps ?? []);
+    const salt = await saltForSteps(projectId, existing.steps);
+    const output = transforms.applyPipeline(source, existing.steps ?? [], { salt });
     if (outWarnings && Array.isArray(output.warnings)) outWarnings.push(...output.warnings);
     updated = {
       ...existing, source, columns: output.columns, rows: output.rows,
@@ -595,7 +597,8 @@ export async function updateDataset(
   let updated: Dataset;
   if (existing.source !== undefined) {
     const source: TableData = { columns: newColumns, rows: baseRows };
-    const output = transforms.applyPipeline(source, existing.steps ?? []);
+    const salt = await saltForSteps(projectId, existing.steps);
+    const output = transforms.applyPipeline(source, existing.steps ?? [], { salt });
     updated = {
       ...existing, source, columns: output.columns, rows: output.rows,
       rowCount: output.rowCount, updatedAt: now,
@@ -645,11 +648,13 @@ export async function updateSteps(
   // because persist() rewrites source.parquet from memory and the IPC handler
   // returns the whole dataset (source.rows included) to the renderer. Removing
   // the read means changing both of those contracts — see the PR.
+  // A mask step makes sqlGen bail, so a masked pipeline always takes the fold —
+  // the only path that holds the salt.
   const residentReady = existing.source !== undefined && parquetStore.isSupported();
   const output =
     (residentReady
       ? runResidentPipeline(sourceParquetPath(projectId, id), source.columns, steps)
-      : null) ?? transforms.applyPipeline(source, steps);
+      : null) ?? transforms.applyPipeline(source, steps, { salt: await saltForSteps(projectId, steps) });
 
   const updated: Dataset = {
     ...existing,

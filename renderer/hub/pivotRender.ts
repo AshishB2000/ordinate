@@ -571,28 +571,42 @@ function pivotToCsv(grid: PivotGridShape): string {
  * the pivot is, and dashGrid was at its line cap besides. The tile's only part
  * in it is parking the grid it drew.
  */
-function setPivotGridOnCard(cardEl: Element | null, grid: PivotGridShape | null | undefined): void {
+function setPivotGridOnCard(cardEl: Element | null, grid: PivotGridShape | null | undefined, src?: any): void {
   // Cleared on a non-pivot, so a card whose chart type changed cannot leave a
-  // stale grid behind its menu.
-  if (cardEl) (cardEl as any)._pivotGrid = grid || null;
+  // stale grid behind its menu. `src` (project/dataset/encoding) is what lets
+  // the share policy shape the grid on its way out.
+  if (cardEl) {
+    (cardEl as any)._pivotGrid = grid || null;
+    (cardEl as any)._pivotSrc = grid ? src || null : null;
+  }
 }
 
 /** `[label, run]` pairs for the card's ⋯ menu — empty when the card is not a pivot. */
 function pivotMenuItems(cardEl: Element | null, title: string): Array<[string, () => void]> {
   const grid: PivotGridShape | null = (cardEl && (cardEl as any)._pivotGrid) || null;
   if (!grid) return [];
+  // Both actions put the grid outside the app, so its headers go through the
+  // Share policy first (privacyShare.ts). null = declined or hidden.
+  const shaped = async (): Promise<PivotGridShape | null> => {
+    const out = await pvShareData((cardEl as any)._pivotSrc || null, { labels: [], series: [], pivot: grid }, 'export');
+    return out && out.pivot ? out.pivot : null;
+  };
   return [
-    ['Copy as table', () => {
+    ['Copy as table', async () => {
+      const g = await shaped();
+      if (!g) return;
       try {
-        window.hub.copyText(pivotToTsv(grid));
+        window.hub.copyText(pivotToTsv(g));
         if (typeof showToast === 'function') showToast('Table copied');
       } catch (_) { /* the clipboard is best-effort here, as everywhere else */ }
     }],
-    ['Export CSV', () => {
+    ['Export CSV', async () => {
+      const g = await shaped();
+      if (!g) return;
       const safe = String(title || 'pivot').replace(/[^\w .-]+/g, '_').slice(0, 60) || 'pivot';
       // Through the SAME native save panel as every other export: the user
       // picks the one file, and the app needs no folder entitlement.
-      window.hub.saveCsv(pivotToCsv(grid), safe + '.csv').catch(() => {});
+      window.hub.saveCsv(pivotToCsv(g), safe + '.csv').catch(() => {});
     }],
   ];
 }

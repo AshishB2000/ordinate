@@ -92,6 +92,7 @@ async function dsOpenProfile(c: number): Promise<void> {
   const kind = dsProfileEl('.js-dsp-kind');
   if (kind) kind.textContent = col.type;
   ctPaintProfileDoc(); // catalogDetails.ts — the column's description, when it has one
+  void pvPaintProfile(col.name); // privacyReview.ts — a sensitivity proposal, or what exports do with it
 
   // The facts that need no round trip: they came back with `dataset:stats` when
   // the dataset was opened. Painted FIRST so the panel is never empty while the

@@ -24,6 +24,10 @@ const STEP_TYPES: Array<{ type: string; label: string }> = [
   { type: 'trim', label: 'Trim whitespace' },
   { type: 'drop_column', label: 'Drop column' },
   { type: 'rename_column', label: 'Rename column' },
+  // Forms and summaries in prepareMask.ts.
+  { type: 'mask_hash', label: 'Mask — hash' },
+  { type: 'mask_redact', label: 'Mask — redact' },
+  { type: 'mask_generalize', label: 'Mask — generalise' },
 ];
 const FILTER_OPS = ['=', '!=', '>', '<', '>=', '<=', 'contains', 'is_empty', 'not_empty', 'in', 'not in'];
 const AGG_FNS = ['sum', 'avg', 'count', 'min', 'max'];
@@ -123,7 +127,7 @@ function stepSummaryText(step: any): string {
     case 'rename_column':
       return 'Rename ' + step.from + ' → ' + step.to;
     default:
-      return 'Unknown step';
+      return pvMaskSummary(step) || 'Unknown step';
   }
 }
 
@@ -480,7 +484,7 @@ function buildStepForm(type: string, body: HTMLElement, existing: any): () => an
       };
     }
     default:
-      return () => null;
+      return pvBuildMaskForm(type, body, existing) || (() => null);
   }
 }
 

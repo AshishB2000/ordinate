@@ -35,6 +35,13 @@ export const EXPLAIN_SYSTEM_PROMPT =
 // drifts from that list silently proposes steps that vanish. The model proposes
 // STRUCTURE ONLY, referencing the exact column names given; the app's pure
 // pipeline does every calculation.
+//
+// The three MASK steps (mask_hash / mask_redact / mask_generalize) are
+// deliberately NOT offered. Deciding what is sensitive is the app's detector's
+// job (data/sensitivity.ts) and the user's decision, never the model's — and
+// the model is shown sample values of exactly the columns in question. A mask
+// step a model volunteered anyway would still reach the user as a suggestion
+// they apply or not; it can only ever remove information.
 export const SUGGEST_STEPS_SYSTEM_PROMPT =
   'You propose data-preparation steps for a tabular dataset as ONLY a JSON array — ' +
   'no markdown, no code fences, no prose. NEVER compute or output any data value or ' +

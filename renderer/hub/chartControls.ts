@@ -131,9 +131,12 @@ function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx,
   }
 
   // ── Action: copy data as TSV ─────────────────────────────────────────
-  function onCopyData() {
+  // A copy LEAVES the app, so a dataset-backed chart's labels go through the
+  // Share policy first (privacyShare.ts); a capture's chart has no dataset.
+  async function onCopyData() {
     closeChartMenu();
-    if (window.hub) { window.hub.copyText(dataToTSV(data)); showToast('Data copied to clipboard'); }
+    const shaped = await pvShareData(entry.drill || null, data, 'export');
+    if (shaped && window.hub) { window.hub.copyText(dataToTSV(shaped)); showToast('Data copied to clipboard'); }
   }
 
   // ── Action: show the rows behind this visual ─────────────────────────

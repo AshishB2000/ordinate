@@ -346,7 +346,9 @@ async function exportPng({ title, analysis, headlineSegments, png }: any) {
 // turnIdx let the dialog render a LIVE chart with the real "⋯" cluster and share
 // entry.chartOverrides, so Values/Periods/Customize tweaks here sync back to the on-screen
 // chart. The chart TYPE choice is report-only (it doesn't change the on-screen selection).
-function openExportDialog({ recommended, selectedExtra, current, vizData, entry, turnIdx, hasGeo, analysis, title, headlineSegments }: any): void {
+// `privacy` ({ path, datasetIds }) — present when the chart comes from a
+// dataset: the dialog shows the share-policy line and asks before an 'include'.
+function openExportDialog({ recommended, selectedExtra, current, vizData, entry, turnIdx, hasGeo, analysis, title, headlineSegments, privacy }: any): void {
   closeExportDialog();
   recommended = recommended || [];
   if (!recommended.length) { showToast('No chart to export'); return; }
@@ -448,6 +450,7 @@ function openExportDialog({ recommended, selectedExtra, current, vizData, entry,
     b.className = 'export-fmt-btn';
     b.textContent = lbl;
     b.addEventListener('click', async () => {
+      if (privacy && !(await pvShareGate(privacy.path, privacy.datasetIds, { noted: true }))) return;
       const type = picker.getSelected();
       const isMap = isMapType(type);
       showToast(isMap ? 'Capturing map…' : 'Preparing report…');
@@ -473,6 +476,7 @@ function openExportDialog({ recommended, selectedExtra, current, vizData, entry,
     fmtRow.appendChild(b);
   });
   body.appendChild(fmtRow);
+  if (privacy) pvMountShareNote(body, privacy.path, privacy.datasetIds, null);
 
   // Dismiss: backdrop click + Esc; Tab is trapped within the dialog.
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closeExportDialog(); });

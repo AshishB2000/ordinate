@@ -28,6 +28,7 @@ import { parseFile, sourceKindForPath } from './fileImport';
 import { runConnection } from '../connectors/connectionRun';
 import { refreshConnectionInto } from '../ipc/connections';
 import { runForDataset } from '../engine/sqlDatasets';
+import { scanDataset } from '../app/privacyStore';
 
 /**
  * Row ceiling for a refreshed table. Deliberately the same 1,000,000 the import
@@ -111,6 +112,9 @@ export async function refreshDataset(
 
   // Re-read so the returned record carries the markers just written.
   const fresh = await datasets.getDataset(projectId, id);
+  // A column that newly LOOKS sensitive becomes a pending proposal the dataset
+  // page surfaces — never a silent change. Never throws.
+  await scanDataset(projectId, fresh ?? result.dataset);
   // Deduped: walking a combine tree can surface the same warning once per
   // parent slot, and three identical lines in the UI read as three problems.
   return { ok: true, dataset: fresh ?? result.dataset, warnings: [...new Set(warnings)] };

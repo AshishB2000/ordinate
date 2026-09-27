@@ -311,6 +311,10 @@ async function pjArchive(p: any, archived: boolean): Promise<void> {
 
 async function pjExport(p: any): Promise<void> {
   pjClose();
+  // The Share policy's `bundle` action, for THAT project (the summary asks
+  // about every dataset in it). Only the open project can be summarised here —
+  // another project's bundle is still shaped in main, just without the line.
+  if (p.id === currentProjectId && !(await pvShareGate('bundle', null))) return;
   const res = await window.hub.exportProject(p.id);
   if (!res || res.canceled) return;
   if (!res.ok) { showToast(res.error || 'Export failed', { kind: 'error' }); return; }

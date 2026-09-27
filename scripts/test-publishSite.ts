@@ -262,6 +262,38 @@ async function main(): Promise<void> {
   ok('limit: the plan says so up front, with suggestions', tooBig.tooBig && tooBig.suggestions.length > 0 && tooBig.suggestions.some((s) => /Region/.test(s)), tooBig.suggestions.join(' / '));
   pub.setMaxBytesForTest(0);
 
+  // The Share policy applies INSIDE the engine (feature 3): a column marked
+  // sensitive is masked on the publish path — labels become tokens and the
+  // caption is written from the tokens — or the tile is dropped.
+  const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
+  const privacy: typeof import('../src/app/privacyStore') = require('../src/app/privacyStore');
+  await catalog.setColumn(proj.id, ds!.id, 'sku', { sensitivity: 'personal' } as any); // any: a ColumnPatch literal
+  await pub.publishSite(cfg);
+  const masked = dataBlock(fs.readFileSync(path.join(out, 'renamed-board.html'), 'utf8'));
+  const mcard = masked.dashboard.sheets[0].cards.find((c: any) => c.kind === 'chart');
+  const shownLabels: string[] = mcard.payloads[mcard.variants[0]].labels.map(String);
+  const rawSkus = ['000', '001', '002', '003', '004'];
+  ok('policy: a sensitive category is published as tokens, never its values',
+    shownLabels.length === 5 && shownLabels.every((l) => !rawSkus.includes(l)), shownLabels.join(','));
+  ok('policy: …and the caption names tokens, not the raw values',
+    !rawSkus.some((v) => String(mcard.payloads[mcard.variants[0]].caption).includes(v)), mcard.payloads[mcard.variants[0]].caption);
+  const salt = await privacy.getSalt(proj.id);
+  const siteText = fs.readdirSync(out).map((f) => fs.readFileSync(path.join(out, f), 'utf8')).join('\n');
+  ok('policy: the project salt never reaches a published file', !!salt && !siteText.includes(String(salt)));
+  await privacy.setPolicy(proj.id, { publish: 'drop' });
+  await pub.publishSite(cfg);
+  const dropped = dataBlock(fs.readFileSync(path.join(out, 'renamed-board.html'), 'utf8'));
+  const dcard = dropped.dashboard.sheets[0].cards.find((c: any) => c.kind === 'chart');
+  ok('policy: drop hides the tile, saying why', dcard.payloads.every((p: any) => p.hidden === 'Hidden by the share policy'));
+  await privacy.setPolicy(proj.id, { publish: 'include' });
+  await pub.publishSite(cfg);
+  const included = dataBlock(fs.readFileSync(path.join(out, 'renamed-board.html'), 'utf8'));
+  const icard = included.dashboard.sheets[0].cards.find((c: any) => c.kind === 'chart');
+  ok('policy: include (confirmed in the dialog) publishes the values',
+    icard.payloads[icard.variants[0]].labels.map(String).every((l: string) => rawSkus.includes(l)));
+  await privacy.setPolicy(proj.id, { publish: 'mask' });
+  await catalog.setColumn(proj.id, ds!.id, 'sku', { sensitivity: 'none' } as any); // any: a ColumnPatch literal
+
   const single = await pub.dashboardPageHtml(proj.id, dash!.id);
   const one = dataBlock(single);
   ok('dashboardPageHtml: one self-contained page, default state only', one.kind === 'dashboard' && one.dashboard.keys.length === 1 && /default-src 'none'/.test(single));

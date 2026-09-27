@@ -20,7 +20,9 @@ import * as history from '../app/history';
 import * as captureDataset from '../data/captureDataset';
 import type { LedgerEntry, NumberAudit } from '../ai/numberAudit';
 import * as answers from './answers';
-import { getColumns as catalogColumns } from '../app/catalog';
+// The catalog's column docs, with a sensitivity mark carried across a later
+// rename — so a withheld column stays withheld under its new name.
+import { assistantColumnDocs as catalogColumns } from '../app/sharePolicy';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
 // (request/response). Every handler is wrapped so a throw becomes { ok:false, error }

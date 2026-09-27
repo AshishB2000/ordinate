@@ -19,6 +19,7 @@
   <!-- Platform depth: one stylesheet per feature, each after its marker. -->
   <link rel="stylesheet" href="platform.css"/>
   <!-- platform-css:privacy -->
+  <link rel="stylesheet" href="privacy.css"/>
 
   <!-- platform-css:automation -->
 
@@ -1120,6 +1121,10 @@
           <!-- Week 13 — capture provenance: thumbnail + view-original + recapture. -->
           <div class="ds-cap-strip" id="ds-cap-strip" hidden></div>
 
+          <!-- Sensitivity proposals from import or refresh, waiting for the
+               user — never applied until they choose (privacyReview.ts). -->
+          <div class="pv-banner" id="pv-review-banner" role="status" hidden></div>
+
           <!-- ── Three views of one dataset ──────────────────────────────────
                Data, Prepare and Quality were three panels stacked in one
                scroll, each toggled independently — Quality was a strip above
@@ -1242,6 +1247,8 @@
                      one scroll the three actions — the reason the panel exists
                      — sat below the fold. -->
                 <div class="dsp-body">
+                  <!-- A sensitivity proposal, or what exports do with a marked column (privacyReview.ts). -->
+                  <div class="dsp-privacy js-dsp-privacy" hidden></div>
                   <dl class="dsp-facts js-dsp-facts"></dl>
                   <div class="dsp-chart js-dsp-chart"></div>
                 </div>
@@ -2023,6 +2030,7 @@
           <button class="settings-cat" type="button" role="tab" data-cat="appearance">Appearance</button>
           <button class="settings-cat" type="button" role="tab" data-cat="notifications">Notifications</button>
           <button class="settings-cat" type="button" role="tab" data-cat="general">General</button>
+          <button class="settings-cat" type="button" role="tab" data-cat="privacy">Privacy</button>
           <button class="settings-cat" type="button" role="tab" data-cat="about">About</button>
         </nav>
 
@@ -2311,6 +2319,11 @@
               <button class="btn btn-sm btn-danger" type="button" data-delete="everything">Delete everything</button>
             </div>
             <div id="stp-delete-result" class="stp-delete-result" hidden></div>
+          </section>
+
+          <!-- Privacy — the CURRENT project's share policy, built by privacySettings.ts. -->
+          <section class="settings-pane" data-cat="privacy" hidden>
+            <div class="pv-settings" id="stp-privacy"></div>
           </section>
 
           <!-- About -->
@@ -3221,6 +3234,14 @@
 <script src="publishDialog.js"></script>
 
 <!-- platform:privacy -->
+<!-- Privacy: the share-policy line + gate every export uses, sensitivity
+     proposals (composer, dataset banner, column profile), the three mask
+     steps' Prepare forms, and Settings → Privacy — in that order, each only
+     reached at call time except privacySettings' observer wiring. -->
+<script src="privacyShare.js"></script>
+<script src="privacyReview.js"></script>
+<script src="prepareMask.js"></script>
+<script src="privacySettings.js"></script>
 
 <!-- platform:automation -->
 

@@ -5,6 +5,7 @@ import type { BrowserWindow } from 'electron';
 import * as projects from '../app/projects';
 import * as bundle from '../app/bundle';
 import * as jobs from '../app/jobs';
+import * as sharePolicy from '../app/sharePolicy';
 import * as config from '../app/config';
 import { projectDir } from '../app/recordKinds';
 
@@ -116,8 +117,11 @@ export function register({ onActive, getHubWindow }: {
         });
         if (!out) throw new Error('That project is gone.');
         ctx.checkCancelled();
+        // The Share policy's `bundle` action: sensitive columns masked or dropped,
+        // and their datasets' raw prepare history left behind (app/sharePolicy.ts).
+        const bytes = await sharePolicy.applyToBundle(project.id, out.bytes);
         const tmp = filePath + '.partial';
-        await fs.promises.writeFile(tmp, out.bytes);
+        await fs.promises.writeFile(tmp, bytes);
         await fs.promises.rename(tmp, filePath);
         return { path: filePath, counts: out.manifest.counts };
       },

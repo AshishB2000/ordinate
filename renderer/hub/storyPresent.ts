@@ -146,11 +146,13 @@ async function stReportPages(report: any): Promise<any[]> {
       else if (b.kind === 'metric' || b.kind === 'metrics_row') {
         (await stMetricFigures(b)).forEach((f) => kpis.push({ label: f.name, value: f.display }));
       } else if (b.kind === 'visual') {
-        const got = await stVisualData(b);
+        const got = await stVisualData(b, 'report');
         if (!got) continue;
         let png: string | null = null;
-        try { png = await captureChartPNG(got.visual.chartType || 'column', got.data, got.visual.overrides || {}, frame); } catch (_) { png = null; }
-        pics.push({ title: got.visual.name || '', png, caption: typeof b.caption === 'string' && b.caption.trim() ? b.caption : got.caption });
+        if (!got.hidden) {
+          try { png = await captureChartPNG(got.visual.chartType || 'column', got.data, got.visual.overrides || {}, frame); } catch (_) { png = null; }
+        }
+        pics.push({ title: got.visual.name || '', png, caption: got.hidden || (typeof b.caption === 'string' && b.caption.trim() ? b.caption : got.caption) });
       } else if (b.kind === 'image') {
         pics.push({ title: b.caption || b.alt || '', png: b.src, caption: b.caption || '' });
       }
@@ -167,10 +169,24 @@ async function stReportPages(report: any): Promise<any[]> {
   return out;
 }
 
+/** The datasets the story's visual blocks draw from — what the share policy is asked about. */
+async function stDatasetIds(): Promise<string[]> {
+  const ids = new Set<string>();
+  for (const b of (stStory && Array.isArray(stStory.blocks) ? stStory.blocks : [])) {
+    if (!b || b.kind !== 'visual' || !b.visualId || !currentProjectId) continue;
+    try {
+      const v = await window.hub.getVisual(currentProjectId, b.visualId);
+      if (v && v.datasetId) ids.add(String(v.datasetId));
+    } catch (_) { /* a removed visual exports nothing */ }
+  }
+  return [...ids];
+}
+
 /** Export the open story as ONE report, a page per heading, and save it through the native panel. */
 async function stExportPdf(): Promise<void> {
   if (!stStory) return;
   await stFlush();
+  if (!(await pvShareGate('report', await stDatasetIds()))) return;
   const report = {
     name: stStory.name, format: 'pdf',
     paper: { size: 'letter', orientation: 'portrait' },

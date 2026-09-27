@@ -208,7 +208,10 @@ async function openPublishDialog(preselect?: string): Promise<void> {
   acb.addEventListener('change', () => { st.afterRefresh = acb.checked; });
   arow.append(acb, pdEl('span', '', 'Re-publish after data refreshes'));
   right.appendChild(arow);
-  right.appendChild(pdEl('div', 'pd-share')); // the share-policy line (privacy) paints here
+  // The Share policy on the publish path: "2 sensitive columns will be masked · Change".
+  const share = pdEl('div', 'pd-share');
+  right.appendChild(share);
+  if (typeof pvMountShareNote === 'function') pvMountShareNote(share, 'publish', null, null);
 
   // ── The size, live ──
   const summary = pdEl('section', 'pd-summary');
@@ -317,6 +320,8 @@ function pdBytes(n: number): string {
 }
 
 async function pdPublish(st: PdState): Promise<void> {
+  // Under 'include' the policy asks first; mask/drop is already on the dialog.
+  if (typeof pvShareGate === 'function' && !(await pvShareGate('publish', null, { noted: true }))) return;
   const brands = await pdBrands(st);
   const config = pdConfig(st, brands);
   pdClose();
@@ -338,6 +343,7 @@ async function republishSite(): Promise<void> {
   try { stored = await window.hubPlatform.publishConfig(currentProjectId); } catch (_) { stored = null; }
   const cfg = stored && stored.config;
   if (!cfg) { void openPublishDialog(); return; }
+  if (typeof pvShareGate === 'function' && !(await pvShareGate('publish', null))) return;
   const st = { projectId: currentProjectId, dashboards: cfg.dashboardIds.map((id: string) => ({ id, name: '' })), picked: new Set<string>(cfg.dashboardIds) } as any;
   const brands = await pdBrands(st);
   showToast('Re-publishing — follow it in Jobs.');

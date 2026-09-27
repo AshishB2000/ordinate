@@ -7,7 +7,6 @@ import * as stories from '../analysis/stories';
 import { formatBytes } from '../publish/combos';
 import { sanitizePublishConfig, planPublish, publishSite, getStoredConfig, storeConfig } from '../publish/publish';
 import type { PublishConfig, PublishResult } from '../publish/publish';
-import type { Outgoing } from '../publish/dashboardData';
 import type { PlatformDeps } from './platform';
 
 // Publish to folder — IPC. The dialog's targets, folder picker, size plan and
@@ -20,21 +19,15 @@ import type { PlatformDeps } from './platform';
 // never enough on its own — the same rule the scheduled-report folder keeps.
 
 const picked = new Set<string>();
-/** The share-policy hook (feature 3), set by the privacy area when it registers. */
-let outgoingFor: ((projectId: string) => Outgoing | undefined) | null = null;
-export function setOutgoing(fn: (projectId: string) => Outgoing | undefined): void {
-  outgoingFor = fn;
-}
 
 /** Run a publish as a job; stores the choices on success. */
 export function submitPublish(config: PublishConfig, label?: string): { id: string; done: Promise<PublishResult> } {
-  const outgoing = outgoingFor ? outgoingFor(config.projectId) : undefined;
   const job = jobs.submit<PublishResult>({
     kind: 'publish',
     label: label || `Publish to ${path.basename(config.outDir)}`,
     projectId: config.projectId,
     run: async (ctx) => {
-      const r = await publishSite(config, { progress: ctx.progress, checkCancelled: ctx.checkCancelled }, outgoing);
+      const r = await publishSite(config, { progress: ctx.progress, checkCancelled: ctx.checkCancelled });
       await storeConfig(config, r);
       return r;
     },
@@ -103,7 +96,7 @@ export function register(deps: PlatformDeps): void {
     const clean = sanitizePublishConfig({ ...(config || {}), outDir: (config && config.outDir) || os.tmpdir() });
     if ('error' in clean) return { ok: false, error: clean.error };
     try {
-      return { ok: true, plan: await planPublish(clean, outgoingFor ? outgoingFor(clean.projectId) : undefined) };
+      return { ok: true, plan: await planPublish(clean) };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not size the site.' };
     }
