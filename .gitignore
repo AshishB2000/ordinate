@@ -612,3 +612,28 @@ scripts/**/*.js
 /preload/hubBackupPreload.js
 /renderer/hub/settingsBackups.js
 /renderer/hub/projectSync.js
+
+# Build depth (emitted siblings), one block per feature.
+/src/ipc/build.js
+/scripts/smoke-build.js
+# build:plan
+/src/ai/planSteps.js
+/src/ai/planCheck.js
+/src/ai/planRun.js
+/src/ai/planExec.js
+/src/ipc/plan.js
+/preload/hubPlanPreload.js
+/renderer/hub/planCard.js
+/renderer/hub/planEdit.js
+/scripts/test-planCheck.js
+/scripts/test-planRun.js
+/scripts/bdPlan.js
+
+# build:format
+
+# build:theme
+
+# build:saas
+
+# build:snapshots
+

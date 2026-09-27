@@ -18,7 +18,7 @@ import { safetyBackup } from './backups';
 // updateSteps over the immutable source. The source Parquet is never touched.
 
 // ponytail: restore writes one of five record shapes; each store sanitizes its own
-async function writeBack(projectId: string, type: string, id: string, rec: any): Promise<any> {
+export async function writeBack(projectId: string, type: string, id: string, rec: any): Promise<any> {
   if (type === 'dashboard') {
     return analysis.updateAnalysis(projectId, id, { name: rec.name, sheets: rec.sheets, filters: rec.filters, style: rec.style });
   }

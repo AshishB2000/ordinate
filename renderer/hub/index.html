@@ -26,6 +26,18 @@
 
   <!-- platform-css:backup -->
   <link rel="stylesheet" href="backup.css"/>
+  <!-- Build depth: one stylesheet per feature, each after its marker. -->
+  <!-- build-css:plan -->
+  <link rel="stylesheet" href="plan.css"/>
+
+  <!-- build-css:format -->
+
+  <!-- build-css:theme -->
+
+  <!-- build-css:saas -->
+
+  <!-- build-css:snapshots -->
+
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
        injecting a <style> at render time, which the hub CSP (style-src 'self')
@@ -3260,6 +3272,20 @@
 <!-- platform:backup -->
 <script src="settingsBackups.js"></script>
 <script src="projectSync.js"></script>
+
+<!-- Build depth: one block per feature, each after its marker. -->
+<!-- build:plan -->
+<!-- The Assistant plan card: the card and its run loop, then its Edit mode. -->
+<script src="planCard.js"></script>
+<script src="planEdit.js"></script>
+
+<!-- build:format -->
+
+<!-- build:theme -->
+
+<!-- build:saas -->
+
+<!-- build:snapshots -->
 
 <script src="hub.js"></script>
 

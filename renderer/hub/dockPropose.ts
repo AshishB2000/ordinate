@@ -99,7 +99,8 @@ function dkRemoveProposalCard(card: HTMLElement): void {
 // disk truth — a proposal is never persisted (dismiss, or a new turn, leaves no
 // trace). `containerId` defaults to the dock, the only mount there is.
 function dkClearProposal(containerId = 'dk-messages'): void {
-  document.querySelectorAll('#' + containerId + ' .dk-proposal').forEach((el) => dkRemoveProposalCard(el as HTMLElement));
+  // A plan whose run has started (.pl-live, planCard.ts) outlives the next turn: its Undo must stay reachable.
+  document.querySelectorAll('#' + containerId + ' .dk-proposal:not(.pl-live)').forEach((el) => dkRemoveProposalCard(el as HTMLElement));
 }
 
 // Entry point — called by dkSend() (dock.ts) after a successful answer. Silent
@@ -115,9 +116,15 @@ async function dkOfferProposal(
   containerId = 'dk-messages',
 ): Promise<void> {
   if (!currentProjectId) return;
+  if (typeof plReattach === 'function') plReattach(containerId); // a started plan stays below the newest answer
   const kind = action && typeof action.kind === 'string' ? action.kind : 'none';
   if (kind === 'none') return;
   const intent = action && typeof action.intent === 'string' ? action.intent : '';
+  // A PLAN works at any scope, like a dashboard: its steps name their own datasets (planCard.ts).
+  if (kind === 'plan') {
+    try { await dkOfferPlanProposal(action, threadId, containerId); } catch (_) { /* a proposal is a bonus, never an error */ }
+    return;
+  }
 
   // A DASHBOARD proposal works at any scope: analysis:draft takes the whole
   // project when no dataset is named, which is what "✨ Get started with AI"

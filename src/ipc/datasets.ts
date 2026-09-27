@@ -201,6 +201,36 @@ export async function pageFor(
   return { ok: true, rows: page.rows, total: page.total, offset: page.offset };
 }
 
+// Shared: load the dataset's current (sanitized) steps, or [] for a pristine one.
+async function currentSteps(projectId: string, datasetId: string): Promise<transforms.TransformStep[] | null> {
+  const ds = await datasets.getDataset(projectId, datasetId);
+  if (!ds) return null;
+  return Array.isArray(ds.steps) ? ds.steps.slice() : [];
+}
+
+// Shared: persist a resolved steps array and shape the { ok, dataset, preview }
+// reply. A null result (invalid/missing dataset) → a uniform error.
+// Exposed to datasetCompose.ts so the composer's initial field mapping lands
+// through the SAME path a later edit does — one commit primitive, one cache
+// invalidation, not two — and exported for the Assistant's plan runner
+// (src/ai/planExec.ts), whose prepare steps land through it too.
+export async function commitSteps(projectId: string, datasetId: string, steps: unknown) {
+  const prior = await datasets.getDatasetMeta(projectId, datasetId);
+  const res = await datasets.updateSteps(projectId, datasetId, steps);
+  if (!res) return { ok: false as const, error: 'Dataset not found' };
+  await runQualityChecks(projectId, datasetId);
+  void refreshDependents(projectId, datasetId); // the rows SQL datasets read just changed
+  const { dataset, output } = res;
+  // A pipeline edit is a version of the dataset (src/app/versions.ts).
+  await versions.record(projectId, 'dataset', { id: datasetId, steps: dataset.steps || [] },
+    { before: prior ? { id: datasetId, steps: prior.steps || [], updatedAt: prior.updatedAt } : undefined });
+  return {
+    ok: true as const,
+    dataset,
+    preview: { columns: output.columns, rows: output.rows, rowCount: output.rowCount, warnings: output.warnings },
+  };
+}
+
 export function register() {
   compose.setCommitSteps((p, d, st) => commitSteps(p, d, st));
 
@@ -487,35 +517,6 @@ export function register() {
   // persists. Each returns { ok, dataset, preview } where preview is the derived
   // ApplyResult (the live view of the prepared output, incl. `warnings`). Step
   // addressing is by array INDEX (no per-step id) — the renderer uses list order.
-
-  // Shared: load the dataset's current (sanitized) steps, or [] for a pristine one.
-  async function currentSteps(projectId: string, datasetId: string): Promise<transforms.TransformStep[] | null> {
-    const ds = await datasets.getDataset(projectId, datasetId);
-    if (!ds) return null;
-    return Array.isArray(ds.steps) ? ds.steps.slice() : [];
-  }
-
-  // Shared: persist a resolved steps array and shape the { ok, dataset, preview }
-  // reply. A null result (invalid/missing dataset) → a uniform error.
-  // Exposed to datasetCompose.ts so the composer's initial field mapping lands
-  // through the SAME path a later edit does — one commit primitive, one cache
-  // invalidation, not two.
-  async function commitSteps(projectId: string, datasetId: string, steps: unknown) {
-    const prior = await datasets.getDatasetMeta(projectId, datasetId);
-    const res = await datasets.updateSteps(projectId, datasetId, steps);
-    if (!res) return { ok: false, error: 'Dataset not found' };
-    await runQualityChecks(projectId, datasetId);
-    void refreshDependents(projectId, datasetId); // the rows SQL datasets read just changed
-    const { dataset, output } = res;
-    // A pipeline edit is a version of the dataset (src/app/versions.ts).
-    await versions.record(projectId, 'dataset', { id: datasetId, steps: dataset.steps || [] },
-      { before: prior ? { id: datasetId, steps: prior.steps || [], updatedAt: prior.updatedAt } : undefined });
-    return {
-      ok: true,
-      dataset,
-      preview: { columns: output.columns, rows: output.rows, rowCount: output.rowCount, warnings: output.warnings },
-    };
-  }
 
   ipcMain.handle('dataset:addStep', async (_e, { projectId, datasetId, step }: any = {}) => {
     try {

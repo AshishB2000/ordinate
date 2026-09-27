@@ -52,6 +52,8 @@
 // app-written sentence, chosen here so every caller gets it without asking.
 
 import type { DashboardStylePreset } from '../analysis/dashboards';
+import { PLAN_PROMPT, MAX_PLAN_CHARS, sanitizePlanSteps } from './planSteps';
+import type { PlanStep } from './planSteps';
 
 /** The marker opening the action line. Chosen to be something no prose answer
  *  would produce on its own, and to survive a model that strips markdown. */
@@ -66,8 +68,8 @@ const ACTION_MARKER_SRC = '@@ACTION';
 export const MAX_INTENT = 400;
 
 /** The whitelist. Anything not on it becomes 'none'. */
-export type SuggestedActionKind = 'dashboard' | 'edit' | 'chart' | 'step' | 'calc' | 'style' | 'answer' | 'story' | 'none';
-const KIND_LIST = ['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'answer', 'story', 'none'] as const;
+export type SuggestedActionKind = 'dashboard' | 'edit' | 'chart' | 'step' | 'calc' | 'style' | 'answer' | 'story' | 'plan' | 'none';
+const KIND_LIST = ['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'answer', 'story', 'plan', 'none'] as const;
 
 /** The most JSON an answer's spec may carry. A spec names a dataset, a few
  *  columns and a few filter values; anything longer is not a spec. */
@@ -147,6 +149,12 @@ export interface SuggestedAction {
    *  against the dataset's real columns by src/ai/answerSpec.ts before anything
    *  is computed, so it stays loosely typed until then. It never carries a figure. */
   spec?: Record<string, unknown>;
+  /** The ordered steps behind a 'plan' — present ONLY when `kind === 'plan'`.
+   *  Shape-checked here (src/ai/planSteps.ts); what each step MEANS is checked
+   *  by src/ai/planCheck.ts before the card shows anything. */
+  steps?: PlanStep[];
+  /** How many entries of the model's plan were not steps at all. */
+  droppedSteps?: number;
 }
 
 /** What an absent or unusable action means. Never null — callers switch on
@@ -160,7 +168,7 @@ export const NO_ACTION: SuggestedAction = { kind: 'none', intent: '' };
 const ACTION_PROMPT =
   '\n\nAFTER your answer, output ONE final line, exactly:\n' +
   ACTION_MARKER + ' {"kind":"<kind>","intent":"<intent>"}\n' +
-  'where <kind> is one of: dashboard, story, edit, chart, step, calc, style, answer, none. Use "dashboard" when the ' +
+  'where <kind> is one of: dashboard, story, edit, chart, step, calc, style, answer, plan, none. Use "dashboard" when the ' +
   'user is asking to BUILD or CREATE a NEW dashboard, report or overview; "story" when they want a WRITTEN ' +
   'piece instead — a story, write-up, narrative or brief to be read top to bottom, with charts in it; "edit" when the FACTS ' +
   'show a dashboard is already open and they are asking to CHANGE it — add, remove, move, retype ' +
@@ -186,7 +194,7 @@ const ACTION_PROMPT =
   '{"column":"<date column>","period":"last_month|last_quarter|last_year"}; for "X vs Y" filter the ' +
   'category with "in". "top" keeps the N largest. The spec NEVER contains a computed number. ' +
   'When the kind is "answer", your prose is ONE short sentence saying what the chart shows, with no ' +
-  'figures at all — the app computes and displays them. ' +
+  'figures at all — the app computes and displays them.' + PLAN_PROMPT + ' ' +
   'This line is machine-read and never shown; write nothing after it.';
 
 /** The chat system prompt. Lives here so the answer contract and the action
@@ -244,6 +252,16 @@ export function validateAction(raw: unknown): SuggestedAction {
     try { size = JSON.stringify(spec).length; } catch (_) { /* unserialisable — no spec */ }
     if (size > MAX_SPEC_CHARS) return NO_ACTION;
     return { kind, intent, spec: spec as Record<string, unknown> };
+  }
+
+  // A 'plan' is worth exactly as much as its steps, like an answer and its spec.
+  if (kind === 'plan') {
+    let size = Infinity;
+    try { size = JSON.stringify(o.steps).length; } catch (_) { /* unserialisable — no plan */ }
+    if (size > MAX_PLAN_CHARS) return NO_ACTION;
+    const { steps, dropped } = sanitizePlanSteps(o.steps);
+    if (!steps.length) return NO_ACTION;
+    return dropped ? { kind, intent, steps, droppedSteps: dropped } : { kind, intent, steps };
   }
 
   // The returned literal IS the whitelist — every key not named here is dropped.

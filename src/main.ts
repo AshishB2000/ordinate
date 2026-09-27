@@ -627,6 +627,7 @@ require("./ipc/authoringDepth").register(); // relationships, project assets, bo
 // Headless: no timers, and no job notifications — a CLI run's jobs reach the GUI's
 // popover through automation-log.jsonl instead.
 require("./ipc/platform").register({ hubFocused: HEADLESS ? () => true : hubFocused, focusHub, headless: !!HEADLESS }); // jobs, publish, privacy, automation, backups
+require("./ipc/build").register({ headless: !!HEADLESS }); // plans, formatting, themes, SaaS sources, snapshots
 // Week 13 — capture → dataset bridge. resolveCropPath hands the on-disk crop path
 // from main's per-entry state (entryData, then the summaries cache) so a renderer-
 // sent path is never trusted; both maps already carry cropPath per entryId.
