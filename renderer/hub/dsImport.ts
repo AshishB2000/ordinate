@@ -253,7 +253,10 @@ function handOffToComposer(res: any): void {
       label: dsSuggestedName || 'This import',
       rows: typeof res.rowCount === 'number' ? res.rowCount : (res.rows || []).length,
       kind: dsSourceKind || 'csv',
-      ref: { inline: { name: dsSuggestedName || 'This import', columns: res.columns || [], rows: res.rows || [] } },
+      // A picked file is STAGED in main (src/data/importStage): `rows` is only
+      // the display slice, and the composer's preview and Save resolve the full
+      // table by `stagedId`. Pasted text has no stagedId and ships its rows.
+      ref: { inline: { name: dsSuggestedName || 'This import', columns: res.columns || [], rows: res.rows || [], stagedId: res.stagedId } },
       columns: (res.columns || []).map((c: any) => String(c.name)),
     },
     {
@@ -283,6 +286,7 @@ async function handleSaveDataset(): Promise<void> {
       sourceKind: dsSourceKind || 'csv',
       columns: dsPreview.columns,
       rows: dsPreview.rows,
+      stagedId: typeof dsPreview.stagedId === 'string' ? dsPreview.stagedId : undefined,
       // A file import records WHERE it came from so it can be re-read later.
       // Pasted text gets none — there is nothing to re-fetch. The path came from
       // main's own open dialog, and main re-whitelists it before storing.

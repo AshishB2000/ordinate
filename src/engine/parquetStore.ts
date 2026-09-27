@@ -147,6 +147,77 @@ export function writeTable(filePath: string, columns: ParsedColumn[], rows: Cell
   }
 }
 
+/** Progress (0–1) and a cancel check a background job hands in; both optional. */
+export interface WriteProgress {
+  onProgress?: (fraction: number, note?: string) => void;
+  checkCancelled?: () => void;
+}
+
+/** True when the bridge is up, WITHOUT blocking the event loop to start it. */
+export async function isSupportedAsync(): Promise<boolean> {
+  try {
+    await duck.queryAsync('SELECT 1 AS ok;');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * `writeTable` for a background job: the same file, byte for byte, but the
+ * NDJSON is written in awaited chunks (the event loop turns between them, and
+ * progress/cancel are checked there) and DuckDB's COPY runs on the ASYNC
+ * bridge, so a 1M-row save never parks the main thread. `onProgress` covers
+ * serialising (0–0.8) and the COPY (0.8–1); a cancel leaves no file behind.
+ */
+export async function writeTableAsync(
+  filePath: string,
+  columns: ParsedColumn[],
+  rows: Cell[][],
+  opts: WriteProgress = {},
+): Promise<void> {
+  assertPath(filePath);
+  if (!Array.isArray(columns) || !Array.isArray(rows)) {
+    throw new TypeError('parquetStore.writeTableAsync: columns and rows must be arrays');
+  }
+  if (!(await isSupportedAsync())) {
+    throw new duck.DuckDBError('unavailable', 'parquetStore: DuckDB is not available');
+  }
+  const stem = `${filePath}.${randomUUID()}`;
+  const tmpParquet = `${stem}.tmp`;
+  const tmpJson = `${stem}.ndjson.tmp`;
+  try {
+    let source: string;
+    if (columns.length === 0) {
+      source = emptySourceSql(rows.length);
+    } else if (rows.length === 0) {
+      source = emptyTypedSql(columns.length);
+    } else {
+      const names = physicalNames(columns.length);
+      await writeNdjsonAsync(tmpJson, names, rows, false, opts);
+      const read = readJsonSql(tmpJson, names);
+      try {
+        await duck.queryAsync(`SELECT 1 FROM ${read} LIMIT 1;`);
+      } catch (err) {
+        if (!isMalformedJson(err)) throw err;
+        await writeNdjsonAsync(tmpJson, names, rows, true, opts);
+        await duck.queryAsync(`SELECT 1 FROM ${read} LIMIT 1;`);
+      }
+      source = `SELECT ${names.map((n) => `"${n}"`).join(', ')} FROM ${read}`;
+    }
+    if (opts.checkCancelled) opts.checkCancelled();
+    if (opts.onProgress) opts.onProgress(0.8, 'Writing Parquet');
+    await duck.execAsync(`COPY (${source}) TO '${sqlStr(tmpParquet)}' (FORMAT PARQUET, COMPRESSION ${COMPRESSION});`);
+    await fs.promises.rename(tmpParquet, filePath);
+    if (opts.onProgress) opts.onProgress(1);
+  } catch (err) {
+    unlinkQuiet(tmpParquet);
+    throw err;
+  } finally {
+    unlinkQuiet(tmpJson);
+  }
+}
+
 /**
  * Read a Parquet file back. Returns `null` — never throws — when the file is
  * missing, truncated, not Parquet, or when the bridge is unavailable, so a
@@ -179,23 +250,51 @@ export function readTable(filePath: string, schema?: ParsedColumn[]): ParquetTab
 
     const projection = physical.map((p) => bomSafe(`"${p.replace(/"/g, '""')}"`)).join(', ');
     const out = duck.query(`SELECT ${projection} FROM ${relation};`);
-
-    const width = physical.length;
-    const columns: ParsedColumn[] = physical.map((name, i) => ({
-      name: schema?.[i]?.name ?? name,
-      type: schema?.[i]?.type ?? 'text',
-    }));
-    const rows: Cell[][] = out.map((row) => {
-      const cells: Cell[] = new Array(width);
-      for (let c = 0; c < width; c++) cells[c] = toCell(row[physical[c]] ?? null, columns[c].type);
-      return cells;
-    });
-    return { columns, rows };
+    return decodeTable(physical, out, schema);
   } catch {
     // Missing file, truncated file, non-Parquet bytes, dead bridge — all the
     // same answer: this record has no readable table.
     return null;
   }
+}
+
+/**
+ * `readTable` on the ASYNC bridge: DuckDB scans in its worker while the main
+ * thread keeps turning, then the rows are decoded here exactly as `readTable`
+ * decodes them. Same null-on-any-failure contract.
+ */
+export async function readTableAsync(filePath: string, schema?: ParsedColumn[]): Promise<ParquetTable | null> {
+  try {
+    assertPath(filePath);
+    const relation = relationSql(filePath);
+    const described = await duck.queryAsync(`DESCRIBE SELECT * FROM ${relation};`);
+    const physical = described.map((r) => String(r.column_name ?? ''));
+    if (physical.length === 1 && physical[0] === EMPTY_MARK) {
+      const n = Number((await duck.queryAsync(`SELECT count(*) AS n FROM ${relation};`))[0]?.n ?? 0);
+      const rows: Cell[][] = [];
+      for (let i = 0; i < n; i++) rows.push([]);
+      return { columns: [], rows };
+    }
+    const projection = physical.map((p) => bomSafe(`"${p.replace(/"/g, '""')}"`)).join(', ');
+    const out = await duck.queryAsync(`SELECT ${projection} FROM ${relation};`);
+    return decodeTable(physical, out, schema);
+  } catch {
+    return null;
+  }
+}
+
+function decodeTable(physical: string[], out: Record<string, unknown>[], schema?: ParsedColumn[]): ParquetTable {
+  const width = physical.length;
+  const columns: ParsedColumn[] = physical.map((name, i) => ({
+    name: schema?.[i]?.name ?? name,
+    type: schema?.[i]?.type ?? 'text',
+  }));
+  const rows: Cell[][] = out.map((row) => {
+    const cells: Cell[] = new Array(width);
+    for (let c = 0; c < width; c++) cells[c] = toCell((row[physical[c]] ?? null) as string | number | null, columns[c].type);
+    return cells;
+  });
+  return { columns, rows };
 }
 
 // ── Storage contract (must mirror pipelineDuck.toStorage / toCell) ───────────
@@ -252,20 +351,30 @@ function emptySourceSql(rowCount: number): string {
 // Serialise the rows to a temp NDJSON sibling and hand DuckDB an explicit
 // all-VARCHAR schema. `columns=` is given, so no sniffing happens and a `007`
 // can never be re-typed on the way in.
-function jsonSourceSql(tmpJson: string, width: number, rows: Cell[][]): string {
+function physicalNames(width: number): string[] {
   const names: string[] = [];
   for (let i = 0; i < width; i++) names.push(physicalName(i));
-  const spec = names.map((n) => `'${n}':'VARCHAR'`).join(', ');
-  const select = names.map((n) => `"${n}"`).join(', ');
+  return names;
+}
 
-  if (rows.length === 0) {
-    // read_json cannot read a zero-byte file; project the schema instead.
-    const nulls = names.map((n) => `CAST(NULL AS VARCHAR) AS "${n}"`).join(', ');
-    return `SELECT ${nulls} WHERE 1=0`;
-  }
+// read_json cannot read a zero-byte file; a 0-row table projects the schema.
+function emptyTypedSql(width: number): string {
+  const nulls = physicalNames(width).map((n) => `CAST(NULL AS VARCHAR) AS "${n}"`).join(', ');
+  return `SELECT ${nulls} WHERE 1=0`;
+}
+
+function readJsonSql(tmpJson: string, names: string[]): string {
+  const spec = names.map((n) => `'${n}':'VARCHAR'`).join(', ');
+  return `read_json('${sqlStr(tmpJson)}', format='newline_delimited', columns={${spec}})`;
+}
+
+function jsonSourceSql(tmpJson: string, width: number, rows: Cell[][]): string {
+  const names = physicalNames(width);
+  const select = names.map((n) => `"${n}"`).join(', ');
+  if (rows.length === 0) return emptyTypedSql(width);
 
   writeNdjson(tmpJson, names, rows, false);
-  const read = `read_json('${sqlStr(tmpJson)}', format='newline_delimited', columns={${spec}})`;
+  const read = readJsonSql(tmpJson, names);
   try {
     // Force the parse now (rather than inside the COPY) so a JSON-level failure
     // can be retried on a sanitised file — see wellFormed().
@@ -287,19 +396,12 @@ function isMalformedJson(err: unknown): boolean {
 
 // Chunked so a large table never needs its whole serialised form in memory.
 function writeNdjson(file: string, names: string[], rows: Cell[][], sanitize: boolean): void {
-  const width = names.length;
   const fd = fs.openSync(file, 'w');
   try {
     let buf = '';
     let pending = 0;
     for (let r = 0; r < rows.length; r++) {
-      const row = rows[r] || [];
-      const obj: Record<string, string | null> = {};
-      for (let c = 0; c < width; c++) {
-        const v = toStorage(row[c] ?? null);
-        obj[names[c]] = v !== null && sanitize ? wellFormed(v) : v;
-      }
-      buf += JSON.stringify(obj) + '\n';
+      buf += ndjsonLine(names, rows[r] || [], sanitize);
       if (++pending >= CHUNK_ROWS) {
         fs.writeSync(fd, buf, null, 'utf8');
         buf = '';
@@ -309,6 +411,44 @@ function writeNdjson(file: string, names: string[], rows: Cell[][], sanitize: bo
     if (buf) fs.writeSync(fd, buf, null, 'utf8');
   } finally {
     fs.closeSync(fd);
+  }
+}
+
+/** One NDJSON line per row — the storage encoding both writers share. */
+function ndjsonLine(names: string[], row: Cell[], sanitize: boolean): string {
+  const obj: Record<string, string | null> = {};
+  for (let c = 0; c < names.length; c++) {
+    const v = toStorage(row[c] ?? null);
+    obj[names[c]] = v !== null && sanitize ? wellFormed(v) : v;
+  }
+  return JSON.stringify(obj) + '\n';
+}
+
+// Rows per awaited chunk in the async writer: big enough that the awaits are
+// noise (~2 ms of serialising each), small enough that the UI never notices.
+const ASYNC_CHUNK_ROWS = 16_384;
+
+async function writeNdjsonAsync(
+  file: string,
+  names: string[],
+  rows: Cell[][],
+  sanitize: boolean,
+  opts: WriteProgress,
+): Promise<void> {
+  const fh = await fs.promises.open(file, 'w');
+  try {
+    for (let start = 0; start < rows.length; start += ASYNC_CHUNK_ROWS) {
+      if (opts.checkCancelled) opts.checkCancelled();
+      const end = Math.min(rows.length, start + ASYNC_CHUNK_ROWS);
+      let buf = '';
+      for (let r = start; r < end; r++) buf += ndjsonLine(names, rows[r] || [], sanitize);
+      await fh.write(buf, null, 'utf8');
+      if (opts.onProgress) {
+        opts.onProgress(0.8 * (end / rows.length), `${end.toLocaleString('en-US')} of ${rows.length.toLocaleString('en-US')} rows`);
+      }
+    }
+  } finally {
+    await fh.close();
   }
 }
 

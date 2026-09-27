@@ -6,6 +6,11 @@ import { detectAnomaliesResident } from '../engine/anomaliesResident';
 import { detectInsights, fromAnomaly, jsAgg, rankInsights, residentAgg } from '../analysis/insights';
 import type { Insight } from '../analysis/insights';
 import * as trace from '../engine/residentTrace';
+import * as queryCache from '../engine/queryCache';
+import * as computePool from '../engine/computePool';
+import * as answerKey from '../data/answerKey';
+import * as jobs from '../app/jobs';
+import type { ParsedColumn } from '../data/parse';
 
 // Insights IPC — two channels, both request/response, both wrapped so a throw
 // becomes { ok:false, error }.
@@ -27,74 +32,89 @@ import * as trace from '../engine/residentTrace';
  */
 const MAX_DATASETS = 8;
 
-/**
- * Per-dataset cache, keyed on the dataset's own `updatedAt` — so opening Home
- * twice costs one scan, and a refresh or a prepare step invalidates it by
- * moving the key. Process-lifetime and unbounded by design: one entry per
- * dataset the user actually opened, each a handful of short strings.
- */
-const cache = new Map<string, { key: string; insights: Insight[] }>();
-
 /** Test hook (scripts/test-insights.ts). Not called by product code. */
 export function clearCache(): void {
-  cache.clear();
+  queryCache.clear();
 }
+
+/**
+ * Rows above which a recompute is a JOB (the Jobs popover shows it, it runs in
+ * a compute worker, it can be cancelled). Below it the scan is tens of
+ * milliseconds and a job row per dataset would be noise on Home.
+ */
+const JOB_MIN_ROWS = 100_000;
 
 /**
  * Everything the app found in ONE dataset, ranked and capped. Dismissals are
  * NOT applied here — the cache holds the full set so dismissing one card does
  * not invalidate the scan.
  *
- * Resident fast path first, JS reference as the fallback, for both halves: the
- * three new rules share one aggregator (`insights.Agg`) and the five anomaly
- * kinds keep the pairing `anomalies` / `anomaliesResident` already ships.
+ * Cached in the answer cache (engine/queryCache, op `insights`) on the
+ * dataset's updatedAt + pipeline, so opening Home twice costs one scan and a
+ * refresh or a prepare step invalidates it. Resident first — in a compute
+ * worker, off the main thread — and the JS reference as the fallback.
  * Returns [] for a missing dataset — never throws.
  */
 export async function insightsForDataset(projectId: string, datasetId: string): Promise<Insight[]> {
   try {
     const meta = await datasets.getDatasetMeta(projectId, datasetId);
     if (!meta) return [];
-    const cacheKey = projectId + ':' + datasetId;
-    const hit = cache.get(cacheKey);
-    if (hit && hit.key === meta.updatedAt) return hit.insights;
-
-    let found: Insight[] | null = null;
-    const src = await datasets.residentSource(projectId, datasetId);
-    if (src) {
-      const anomalies = detectAnomaliesResident(src);
-      if (anomalies) {
-        trace.record('insights', 'resident');
-        found = [
-          ...detectInsights(datasetId, src.columns, residentAgg(src)),
-          // `fromAnomaly` returns null for a finding that is true but useless
-          // as a card (a change off a near-zero base) — the anomaly itself is
-          // untouched for the watch and explain paths.
-          ...anomalies.map((a) => fromAnomaly(datasetId, a, src.columns)).filter((i): i is Insight => !!i),
-        ];
-      } else {
-        trace.record('insights', 'failed', `${src.columns.length} column(s)`);
-      }
-    } else {
-      trace.record('insights', 'skipped');
-    }
-
-    if (!found) {
-      const ds = await datasets.getDataset(projectId, datasetId);
-      if (!ds) return [];
-      found = [
-        ...detectInsights(datasetId, ds.columns, jsAgg(ds.columns, ds.rows)),
-        ...detectAnomalies(ds.columns, ds.rows)
-          .map((a) => fromAnomaly(datasetId, a, ds.columns))
-          .filter((i): i is Insight => !!i),
-      ];
-    }
-
-    const ranked = rankInsights(found);
-    cache.set(cacheKey, { key: meta.updatedAt, insights: ranked });
-    return ranked;
+    const parts = await answerKey.keyParts(projectId, datasetId);
+    if (!parts) return [];
+    const key = queryCache.cacheKey('insights', parts, answerKey.ambient());
+    return await queryCache.through('insights', key, [datasetId, queryCache.projectDep(projectId)], async () => {
+      if (meta.rowCount < JOB_MIN_ROWS) return scan(projectId, datasetId);
+      const job = jobs.submit({
+        kind: 'insights',
+        label: `Insights · ${meta.name}`,
+        projectId,
+        datasetId,
+        run: (ctx) => scan(projectId, datasetId, ctx.signal),
+        resultOf: (list) => ({ message: `${list.length} finding${list.length === 1 ? '' : 's'}` }),
+      });
+      return job.done;
+    });
   } catch (_) {
     return [];
   }
+}
+
+async function scan(projectId: string, datasetId: string, signal?: AbortSignal): Promise<Insight[]> {
+  let found: Insight[] | null = null;
+  const src = await datasets.residentSource(projectId, datasetId);
+  if (src) {
+    found = computePool.available()
+      ? await computePool.run<Insight[] | null>('insights', { datasetId, src }, { signal })
+      : residentInline(datasetId, src);
+    trace.record('insights', found ? 'resident' : 'failed', found ? undefined : `${src.columns.length} column(s)`);
+  } else {
+    trace.record('insights', 'skipped');
+  }
+
+  if (!found) {
+    const ds = await datasets.getDataset(projectId, datasetId);
+    if (!ds) return [];
+    found = [
+      ...detectInsights(datasetId, ds.columns, jsAgg(ds.columns, ds.rows)),
+      ...detectAnomalies(ds.columns, ds.rows)
+        .map((a) => fromAnomaly(datasetId, a, ds.columns))
+        .filter((i): i is Insight => !!i),
+    ];
+  }
+  return rankInsights(found);
+}
+
+/** The worker's op, on this thread — for when worker threads are off. */
+function residentInline(datasetId: string, src: { parquetPath: string; columns: ParsedColumn[] }): Insight[] | null {
+  const anomalies = detectAnomaliesResident(src);
+  if (!anomalies) return null;
+  return [
+    ...detectInsights(datasetId, src.columns, residentAgg(src)),
+    // `fromAnomaly` returns null for a finding that is true but useless as a
+    // card (a change off a near-zero base) — the anomaly itself is untouched
+    // for the watch and explain paths.
+    ...anomalies.map((a) => fromAnomaly(datasetId, a, src.columns)).filter((i): i is Insight => !!i),
+  ];
 }
 
 /** The project's dismissed-id set, or an empty one for a missing project. */

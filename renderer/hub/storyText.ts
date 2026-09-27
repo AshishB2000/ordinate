@@ -158,7 +158,9 @@
     module.exports = api;
   } else {
     global.mdInline = mdInline;
-    global.mdParse = mdParse;
+    // NOT window.mdParse: markdown.js (text cards) owns that name, loads later,
+    // and its tokens have no `inl` — a story block would render nothing.
+    global.stMdParse = mdParse;
     global.mdPlain = mdPlain;
     global.storyOutline = storyOutline;
     global.storyPages = storyPages;

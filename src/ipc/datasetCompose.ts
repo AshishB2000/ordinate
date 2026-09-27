@@ -12,6 +12,8 @@ import * as datasets from '../data/datasets';
 import * as combine from '../data/combine';
 import * as history from '../app/history';
 import { runQualityChecks } from '../analysis/qualityRun';
+import * as importStage from '../data/importStage';
+import * as jobs from '../app/jobs';
 import type { Cell, TableData } from '../data/transforms';
 
 const MAX_ROWS = 1_000_000;
@@ -60,6 +62,18 @@ async function resolveRef(projectId: string, ref: TableRef, sample: number | nul
     };
   }
   const inline = ref && (ref.inline as any);
+  // A staged file import (./datasetImport.ts): the full table is already in
+  // main; the renderer only holds its display slice and this id.
+  const stagedTable = inline ? importStage.get(inline.stagedId) : null;
+  if (stagedTable) {
+    const truncated = sample !== null && stagedTable.rows.length > sample;
+    return {
+      table: { columns: stagedTable.columns, rows: truncated ? stagedTable.rows.slice(0, sample as number) : stagedTable.rows },
+      name: typeof inline.name === 'string' && inline.name ? inline.name : 'This import',
+      id: null,
+      truncated,
+    };
+  }
   if (!inline || !Array.isArray(inline.columns) || !Array.isArray(inline.rows)) return null;
   // Untrusted: keep only well-formed {name,type} columns and array rows. A bad
   // payload becomes an empty table, never a throw.
@@ -153,11 +167,18 @@ async function resolveCaptureLink(
  * is no chain at all and the base is simply saved, which is the plain-CSV path
  * and stays exactly as fast as it was before the composer existed.
  */
-export async function composeSave({ projectId, name, base, joins, steps, sourceKind, origin }: any = {}) {
+export async function composeSave(
+  { projectId, name, base, joins, steps, sourceKind, origin, retype }: any = {},
+  ctx: { progress?: (fraction: number, note?: string) => void; checkCancelled?: () => void } = {},
+) {
   try {
     const list = Array.isArray(joins) ? joins : [];
+    const progress = ctx.progress || (() => { /* not a job */ });
+    progress(0.02, 'Reading the tables');
     const r = await resolveChain(projectId, base, list, null);
     if ('error' in r) return { ok: false, error: r.error };
+    // The Parquet write is the bulk of a save: 5–85% of the bar.
+    const writing = { checkCancelled: ctx.checkCancelled, onProgress: (f: number, note?: string) => progress(0.05 + 0.8 * f, note) };
 
     const finalName = (typeof name === 'string' && name.trim()) || r.baseRes.name || 'Dataset';
 
@@ -176,15 +197,19 @@ export async function composeSave({ projectId, name, base, joins, steps, sourceK
         rows: r.baseRes.table.rows.slice(0, MAX_ROWS),
         origin,
         capture: captureLink ?? undefined,
-      });
+      }, writing);
       if (!saved) return { ok: false, error: 'Invalid project, or the project no longer exists' };
+      importStage.drop(base && base.inline && base.inline.stagedId);
+      progress(0.88, 'Applying the column mapping');
       const withSteps = await applyInitialSteps(projectId, saved.id, steps);
+      const retyped = await applyRetype(projectId, saved.id, retype);
       if (captureLink && captureLink.entryId) {
         await history.setDatasetId(captureLink.entryId, saved.id)
           .catch((e: any) => console.error('[history] setDatasetId failed:', e.message));
       }
+      progress(0.95, 'Checking data quality');
       await runQualityChecks(projectId, saved.id); // the data-quality hook; never throws
-      return { ok: true, dataset: withSteps || saved, warnings: [] };
+      return { ok: true, dataset: slim(retyped || withSteps || saved), warnings: [] };
     }
 
     // The chain's base must be a saved dataset for `composed` to be able to name it.
@@ -199,6 +224,7 @@ export async function composeSave({ projectId, name, base, joins, steps, sourceK
         origin,
       });
       if (!savedBase) return { ok: false, error: 'Invalid project, or the project no longer exists' };
+      importStage.drop(base && base.inline && base.inline.stagedId);
       baseId = savedBase.id;
       alsoSaved = savedBase.name;
     }
@@ -228,12 +254,15 @@ export async function composeSave({ projectId, name, base, joins, steps, sourceK
           on: c.on,
         })),
       },
-    });
+    }, writing);
     if (!saved) return { ok: false, error: 'Invalid project, or the project no longer exists' };
     if (alsoSaved) warnings.push(`"${alsoSaved}" was saved too, so this dataset can be refreshed.`);
+    progress(0.88, 'Applying the column mapping');
     const withSteps = await applyInitialSteps(projectId, saved.id, steps);
+    const retyped = await applyRetype(projectId, saved.id, retype);
+    progress(0.95, 'Checking data quality');
     await runQualityChecks(projectId, saved.id); // the data-quality hook; never throws
-    return { ok: true, dataset: withSteps || saved, warnings };
+    return { ok: true, dataset: slim(retyped || withSteps || saved), warnings };
   } catch (err: any) {
     return { ok: false, error: err?.message || 'Could not save the dataset' };
   }
@@ -249,7 +278,52 @@ async function applyInitialSteps(projectId: string, datasetId: string, steps: un
   return res && res.ok && res.dataset ? res.dataset : null;
 }
 
+/**
+ * The composer's column RETYPES, applied inside the save job through the same
+ * column update the explorer's header menu makes (the renderer used to send
+ * them as a second, unjobbed round trip after Save). Null when there are none.
+ */
+async function applyRetype(projectId: string, datasetId: string, retype: unknown) {
+  if (!Array.isArray(retype) || !retype.length) return null;
+  try {
+    return await datasets.updateDataset(projectId, datasetId, { columns: retype });
+  } catch (_) {
+    return null; // the rows are saved; a failed retype leaves the parsed types
+  }
+}
+
+/** The saved dataset WITHOUT its tables — the renderer only reads the id and name. */
+function slim(ds: any): any {
+  if (!ds) return ds;
+  const { rows: _rows, source: _source, ...rest } = ds;
+  return rest;
+}
+
 export function register(): void {
   ipcMain.handle('dataset:composePreview', (_e, payload: any = {}) => composePreview(payload));
-  ipcMain.handle('dataset:composeSave', (_e, payload: any = {}) => composeSave(payload));
+  // Save is a JOB (src/app/jobs.ts): progress in the Jobs popover, Cancel
+  // between chunks of the Parquet write, and the main thread free throughout.
+  ipcMain.handle('dataset:composeSave', async (_e, payload: any = {}) => {
+    const name = (payload && typeof payload.name === 'string' && payload.name.trim()) || 'dataset';
+    const sql = payload && payload.origin && payload.origin.kind === 'sql';
+    const job = jobs.submit({
+      kind: sql ? 'sql-save' : 'import',
+      label: sql ? `Save query as ${name}` : `Import ${name}`,
+      projectId: typeof payload?.projectId === 'string' ? payload.projectId : undefined,
+      run: async (ctx) => {
+        const res: any = await composeSave(payload, { progress: ctx.progress, checkCancelled: ctx.checkCancelled });
+        if (!res || !res.ok) throw new Error((res && res.error) || 'Could not save the dataset');
+        return res;
+      },
+      resultOf: (res: any) => ({
+        message: res.dataset ? `${Number(res.dataset.rowCount || 0).toLocaleString('en-US')} rows saved` : undefined,
+      }),
+    });
+    try {
+      return await job.done;
+    } catch (err: any) {
+      if (err instanceof jobs.JobCancelled || (err && err.name === 'JobCancelled')) return { ok: false, canceled: true, error: 'Cancelled.' };
+      return { ok: false, error: err?.message || 'Could not save the dataset' };
+    }
+  });
 }

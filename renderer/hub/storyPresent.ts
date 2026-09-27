@@ -120,7 +120,7 @@ async function stPresentPaint(): Promise<void> {
 /** A text item's Markdown → the paragraphs a report page prints (lists as bullets). */
 function stPlainParagraphs(src: string): string[] {
   const out: string[] = [];
-  mdParse(src).forEach((n: any) => {
+  stMdParse(src).forEach((n: any) => {
     const plain = (inl: any[]) => inl.map((x: any) => x.text).join('');
     if (n.t === 'ul' || n.t === 'ol') out.push(n.items.map((it: any, i: number) => (n.t === 'ol' ? `${i + 1}. ` : '• ') + plain(it)).join('\n'));
     else if (n.t === 'h') out.push(n.text);

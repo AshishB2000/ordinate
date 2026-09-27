@@ -1,10 +1,9 @@
-import { ipcMain, dialog } from 'electron';
-import * as path from 'path';
-import { parsePaste } from '../data/parse';
+import { ipcMain } from 'electron';
 // One parser and one byte ceiling, shared with the refresh service — see
 // src/fileImport.ts for why they moved out of this file.
-import { parseFile, sourceKindFor } from '../data/fileImport';
-import { refreshDataset } from '../data/datasetRefresh';
+import * as importIpc from './datasetImport';
+import * as importStage from '../data/importStage';
+import { refreshAsJob } from '../data/refreshJob';
 import { refreshDependents } from '../data/datasetDependents';
 import * as datasets from '../data/datasets';
 import * as transforms from '../data/transforms';
@@ -48,8 +47,9 @@ import * as trash from '../app/trash';
 // ponytail: MAX_ROWS is the real anti-freeze guard (parse.ts already caps at
 // this while parsing). Re-applied defensively on save in case a renderer sends
 // hand-built rows. The 500-row preview slice is display-only and lives in the
-// renderer, so pickAndParse/parsePaste return the FULL capped ParseResult — one
-// parse, one transfer.
+// renderer. A picked FILE is now parsed in a job and staged in main
+// (./datasetImport.ts) so its rows never cross IPC; pasted text still returns
+// the full capped ParseResult — it is small by construction.
 // Mirrors parse.ts's MAX_ROWS, raised with it (2026-08). Note line 489 also
 // uses this to bound a JOIN's OUTPUT during the build — a join is inherently
 // m×n, so this is the guard that stops two large inputs producing an
@@ -58,13 +58,6 @@ import * as trash from '../app/trash';
 const MAX_ROWS = 1_000_000;
 
 
-// Paths main handed out from the native open dialog. The re-parse (sheet-switch)
-// branch of dataset:pickAndParse accepts a renderer-supplied filePath ONLY if it
-// is in this set — otherwise a compromised/injected renderer could pass any
-// absolute path (e.g. userData/config.json) and read back its contents, exfil-
-// trating stored API keys / connection secrets. Bounds the read to files the
-// user explicitly picked this session.
-const pickedPaths = new Set<string>();
 
 
 // Build a COMPACT, plain-text summary of a dataset for the AI explainer. Every
@@ -239,81 +232,29 @@ export async function pageFor(
 export function register() {
   compose.setCommitSteps((p, d, st) => commitSteps(p, d, st));
 
-  // Open the native file picker (or, when given { filePath } from a prior pick,
-  // skip the dialog and re-parse that file with a chosen sheetName). Returns the
-  // parsed preview WITHOUT saving.
-  // ponytail: dual behavior (dialog vs re-parse) keeps sheet switching stateless
-  // — the renderer passes back the filePath it already received, no re-picking.
-  ipcMain.handle('dataset:pickAndParse', async (_e, { sheetName, filePath }: any = {}) => {
-    try {
-      let chosenPath: string;
-      if (typeof filePath === 'string' && filePath) {
-        // Re-parse an already-picked file (e.g. sheet switch). Only honor a path
-        // main previously returned from the dialog — never an arbitrary path.
-        if (!pickedPaths.has(filePath)) return { ok: false, error: 'File was not picked in this session' };
-        chosenPath = filePath;
-      } else {
-        const { canceled, filePaths } = await dialog.showOpenDialog({
-          title: 'Import data file',
-          properties: ['openFile'],
-          filters: [
-            { name: 'Data files', extensions: ['csv', 'json', 'xlsx'] },
-            { name: 'CSV', extensions: ['csv'] },
-            { name: 'JSON', extensions: ['json'] },
-            { name: 'Excel', extensions: ['xlsx'] },
-          ],
-        });
-        if (canceled || !filePaths?.length) return { ok: true, canceled: true };
-        chosenPath = filePaths[0];
-        pickedPaths.add(chosenPath); // allow later sheet-switch re-parses of this file
-      }
-
-      const ext = path.extname(chosenPath).toLowerCase();
-      const kind = sourceKindFor(ext);
-      if (!kind) return { ok: false, error: `Unsupported file type: ${ext || '(none)'}` };
-
-      const preview = await parseFile(chosenPath, kind, typeof sheetName === 'string' ? sheetName : undefined);
-      return {
-        ok: true,
-        filePath: chosenPath,
-        fileName: path.basename(chosenPath),
-        sourceKind: kind,
-        preview,
-      };
-    } catch (err: any) {
-      return { ok: false, error: err?.message || 'Failed to read or parse the file' };
-    }
-  });
-
-  // Parse pasted text (JSON / CSV / TSV auto-detect). Returns preview, no disk
-  // write. Non-string/empty text yields a warning-bearing empty result.
-  // ponytail: untrusted renderer payload — any.
-  ipcMain.handle('dataset:parsePaste', async (_e, { text }: any = {}) => {
-    try {
-      if (typeof text !== 'string' || text.trim() === '') {
-        return { ok: true, preview: { columns: [], rows: [], rowCount: 0, warnings: ['Empty file'] } };
-      }
-      return { ok: true, preview: parsePaste(text) };
-    } catch (err: any) {
-      return { ok: false, error: err?.message || 'Failed to parse the pasted text' };
-    }
-  });
+  // Pick + parse a file (a job, parsed in a compute worker, staged in main) and
+  // parse pasted text — ./datasetImport.ts, split out at this file's cap.
+  importIpc.register();
 
   // Persist a dataset under its project. The renderer sends the columns+rows it
   // is holding (the full capped ParseResult, not the display slice).
   // `origin` is untrusted renderer input and is whitelisted by
   // datasets.sanitizeOrigin before it is stored — an unrecognised one is simply
   // dropped, leaving a normal (non-refreshable) snapshot.
-  ipcMain.handle('dataset:save', async (_e, { projectId, name, sourceKind, columns, rows, origin }: any = {}) => {
+  ipcMain.handle('dataset:save', async (_e, { projectId, name, sourceKind, columns, rows, origin, stagedId }: any = {}) => {
     try {
-      const capped: any[] = Array.isArray(rows) ? rows.slice(0, MAX_ROWS) : [];
+      // A staged import (./datasetImport.ts) saves the rows main already holds;
+      // the renderer only ever had the display slice.
+      const stagedTable = importStage.get(stagedId);
+      const capped: any[] = stagedTable ? stagedTable.rows.slice(0, MAX_ROWS) : Array.isArray(rows) ? rows.slice(0, MAX_ROWS) : [];
       const saved = await datasets.saveDataset(projectId, {
         name,
         sourceKind,
-        columns: Array.isArray(columns) ? columns : [],
+        columns: stagedTable ? stagedTable.columns : Array.isArray(columns) ? columns : [],
         rows: capped,
         origin,
       });
+      if (saved && stagedTable) importStage.drop(stagedId);
       if (!saved) return { ok: false, error: 'Invalid project, or the project no longer exists' };
       return saved;
     } catch (err: any) {
@@ -344,9 +285,11 @@ export function register() {
   // kind; the service decides how, and a failure leaves the stored table alone.
   // `warningCount` is returned alongside the list so the renderer can say "6 of
   // 7 · 1 failed" without re-deriving it.
+  // A JOB (src/app/jobs.ts), one at a time per dataset: the fetch is async and
+  // the write goes through the async Parquet path, reporting to the job.
   ipcMain.handle('dataset:refresh', async (_e, { projectId, id }: any = {}) => {
     try {
-      const res = await refreshDataset(projectId, id);
+      const res = await refreshAsJob(projectId, id);
       if (!res.ok) return res;
       // Alert rules are evaluated after EVERY refresh of this dataset, and this
       // handler is the one manual entry point — both the Data row's ↻ and the
@@ -359,9 +302,12 @@ export function register() {
       // SQL datasets built on this one re-run. Not awaited: never rejects, and
       // the refresh the user asked for is done.
       void refreshDependents(projectId, id);
+      // The record without its tables — no caller reads the rows, and a 1M-row
+      // structured clone is seconds of work for nothing.
+      const { rows: _rows, source: _source, ...dataset } = res.dataset as any;
       return {
         ok: true,
-        dataset: res.dataset,
+        dataset,
         warnings: res.warnings,
         warningCount: res.warnings.length,
       };

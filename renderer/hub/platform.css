@@ -1,0 +1,222 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Platform depth — the Jobs button and popover (jobsPanel.ts), publishing,
+   and the builder's sample note. Its own file, like authoring.css and
+   a11y.css, so it does not grow hub.css and concurrent features do not
+   collide in it. Tokens only (renderer/theme.css) — both themes follow.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── The top-bar button ───────────────────────────────────────────────── */
+.hub-jobs-btn { position: relative; }
+.hub-jobs-btn.is-busy { color: var(--accent); }
+/* The spin is on the glyph, not the button, so the hit area stays still. */
+@media (prefers-reduced-motion: no-preference) {
+  .hub-jobs-btn.is-busy .ic { animation: jp-pulse 1.2s ease-in-out infinite; }
+}
+@keyframes jp-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.jp-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  border-radius: var(--r-full);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* ── The popover ──────────────────────────────────────────────────────── */
+.jp-pop {
+  position: fixed;
+  z-index: 100002;
+  width: 400px;
+  max-height: min(64vh, 560px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-float);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.jp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
+  border-bottom: 1px solid var(--border);
+}
+.jp-title {
+  font-family: var(--font-ui);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.jp-link {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
+  color: var(--accent);
+  cursor: pointer;
+}
+.jp-link:hover { text-decoration: underline; }
+.jp-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.jp-list .ws-empty { padding: var(--sp-24) var(--sp-16); }
+.jp-section {
+  padding: var(--sp-8) var(--sp-12) var(--sp-4);
+  font-family: var(--font-ui);
+  font-size: var(--t-11);
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+/* One job: [icon | text + bar | actions]. */
+.jp-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: start;
+  gap: var(--sp-8);
+  padding: var(--sp-12);
+  border-bottom: 1px solid var(--border);
+}
+.jp-row:last-child { border-bottom: 0; }
+.jp-ic {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.jp-row--running .jp-ic { background: var(--accent-soft); color: var(--accent); }
+.jp-row--error .jp-ic,
+.jp-row--interrupted .jp-ic { background: var(--error-soft); color: var(--error); }
+.jp-row--done .jp-ic { background: var(--ok-soft); color: var(--ok); }
+.jp-main { min-width: 0; }
+.jp-name {
+  font-family: var(--font-ui);
+  font-size: var(--t-13);
+  font-weight: 500;
+  color: var(--text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.jp-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin-top: 2px;
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
+  color: var(--muted);
+  min-width: 0;
+}
+.jp-detail {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.jp-state {
+  flex: none;
+  padding: 0 6px;
+  border-radius: var(--r-full);
+  font-size: var(--t-11);
+  font-weight: 600;
+  line-height: 18px;
+  background: var(--surface-3);
+  color: var(--text);
+}
+.jp-state--running { background: var(--accent-soft); color: var(--accent); }
+.jp-state--done { background: var(--ok-soft); color: var(--ok); }
+.jp-state--error,
+.jp-state--interrupted { background: var(--error-soft); color: var(--error); }
+.jp-state--cancelled { background: var(--warn-soft); color: var(--warn); }
+.jp-bar {
+  margin-top: var(--sp-8);
+  height: 4px;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.jp-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 160ms ease-out;
+}
+.jp-bar.is-waiting .jp-bar-fill { background: var(--border-3); }
+.jp-msg {
+  margin-top: var(--sp-4);
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.jp-row--error .jp-msg,
+.jp-row--interrupted .jp-msg { color: var(--error); }
+.jp-acts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.jp-act { white-space: nowrap; }
+.jp-act .ic { margin-right: 4px; }
+
+/* ── Builder sample note (vizBuilder: "Preview computed on 250k of 1M rows") */
+.vb-sample-note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 2px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+}
+.vb-sample-note[hidden] { display: none; }
+.vb-sample-row { display: flex; justify-content: flex-end; min-height: 0; }
+.vb-sample-row:has(.vb-sample-note[hidden]) { display: none; }
+
+/* ── The virtual dataset grid (dsVirtual.ts) ──────────────────────────────
+   --ds-row-h is the ONE source of the row height for the CSS and the
+   scroll arithmetic; a row that could grow would desynchronise the two. */
+#ds-explorer-scroll { --ds-row-h: 28px; }
+.ds-table.is-virtual .ds-td {
+  height: var(--ds-row-h);
+  box-sizing: border-box;
+  line-height: calc(var(--ds-row-h) - 9px);
+}
+.ds-table.is-virtual .ds-vspacer td {
+  padding: 0;
+  border: 0;
+}
+.ds-table.is-virtual .ds-tr-loading .ds-td {
+  background: linear-gradient(90deg, transparent, var(--surface-2), transparent);
+}

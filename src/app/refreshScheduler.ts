@@ -27,7 +27,7 @@
 import * as datasets from '../data/datasets';
 import type { AutoRefreshEvery, DatasetSummary } from '../data/datasets';
 import * as projects from './projects';
-import { refreshDataset } from '../data/datasetRefresh';
+import { refreshAsJob } from '../data/refreshJob';
 import { refreshDependents } from '../data/datasetDependents';
 import type { AlertEvent } from '../analysis/alerts';
 // Imported, not injected like the alert hook: it decides nothing about WHEN and
@@ -212,7 +212,9 @@ export async function tickNow(now = Date.now()): Promise<AutoRefreshOutcome[]> {
       // visible in lastRefreshStatus, which is where the row reads it.
       await datasets.setAutoRefresh(m.projectId, m.id, { lastAutoAt: new Date(now).toISOString() });
       const before = await datasets.getDatasetMeta(m.projectId, m.id);
-      const res = await refreshDataset(m.projectId, m.id);
+      // A job (src/data/refreshJob): a row in the Jobs popover, and queued behind
+      // any ↻ the user clicked on the same dataset rather than racing it.
+      const res = await refreshAsJob(m.projectId, m.id, { scheduled: true });
       const after = await datasets.getDatasetMeta(m.projectId, m.id);
       const outcome: AutoRefreshOutcome = {
         projectId: m.projectId,

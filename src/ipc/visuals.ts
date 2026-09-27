@@ -2,6 +2,8 @@ import { ipcMain, app, dialog } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as visuals from '../analysis/visuals';
+import * as answerKey from '../data/answerKey';
+import * as queryCache from '../engine/queryCache';
 import * as datasets from '../data/datasets';
 import { buildVizData } from '../analysis/vizData';
 import type { VizDataResult } from '../analysis/vizData';
@@ -10,6 +12,8 @@ import * as trace from '../engine/residentTrace';
 import { residentPivotData, residentVizData } from './visualsResident';
 import { authoringVizData } from './vizExtras';
 import { withPeriodOverlay } from './visualsOverlay';
+import { sampledVizData } from './vizSampleData';
+import type { SampleInfo } from '../analysis/sampling';
 import { paramValues, resolveFilterParams } from '../analysis/params';
 import type { ParamValues } from '../analysis/params';
 import { paramTable } from '../data/paramReplay';
@@ -359,6 +363,8 @@ export type VizDataReply =
       category?: VizDataResult['category'];
       /** Present when a period overlay was drawn — see ./visualsOverlay. */
       overlay?: { kind: 'previous_year'; caption?: string; pct?: number };
+      /** Present when the BUILDER preview was computed on a sample — see ./vizSampleData. */
+      sample?: SampleInfo & { note: string };
     }
   | { ok: false; error: string; tooLarge?: true };
 
@@ -399,7 +405,28 @@ export async function vizDataFor(
   datasetId: string,
   encoding: VizEncoding,
   filters: FilterStep[],
-  opts: { maxHydrateRows?: number; params?: ParamValues } = {},
+  opts: { maxHydrateRows?: number; params?: ParamValues; sample?: boolean } = {},
+): Promise<VizDataReply> {
+  // The answer cache (engine/queryCache): a dashboard re-open, a type switch in
+  // the builder or a tab coming back asks the same question over unchanged
+  // data. Only successful answers are kept; an error is recomputed every time.
+  const parts = await answerKey.keyParts(projectId, datasetId);
+  if (!parts) return computeVizData(projectId, datasetId, encoding, filters, opts);
+  const op = encoding && encoding.pivot ? 'pivot' : 'aggregate';
+  const key = queryCache.cacheKey(op, parts, {
+    encoding, filters, params: opts.params ?? null, max: opts.maxHydrateRows ?? null, sample: opts.sample === true,
+    ...answerKey.ambient(),
+  });
+  return queryCache.through(op, key, [datasetId, queryCache.projectDep(projectId)],
+    () => computeVizData(projectId, datasetId, encoding, filters, opts), (r) => r.ok);
+}
+
+async function computeVizData(
+  projectId: string,
+  datasetId: string,
+  encoding: VizEncoding,
+  filters: FilterStep[],
+  opts: { maxHydrateRows?: number; params?: ParamValues; sample?: boolean },
 ): Promise<VizDataReply> {
   // A pipeline that references a dashboard parameter answers from the dataset
   // REPLAYED with the query's values bound (data/paramReplay.ts) — the stored
@@ -438,6 +465,13 @@ export async function vizDataFor(
 
   const over = await overCeiling(projectId, datasetId, opts.maxHydrateRows);
   if (over) return over;
+
+  // The builder's preview (`visual:preview`) samples a big table here rather
+  // than hydrate all of it on every edit — and says so on the reply.
+  if (opts.sample) {
+    const sampled = await sampledVizData(projectId, datasetId, encoding, filters);
+    if (sampled) return sampled;
+  }
 
   const ds = await datasets.getDataset(projectId, datasetId);
   if (!ds) return { ok: false, error: 'Dataset not found' };

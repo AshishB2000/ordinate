@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as path from 'path';
 import { BrowserWindow, screen, nativeTheme, session, Rectangle, TitleBarOverlayOptions } from 'electron';
 
@@ -70,24 +71,33 @@ function fitToWorkArea(workArea: Rectangle, preferredWidth: number): Rectangle {
   return { x, y, width, height };
 }
 
-// The second half of the hub's bridge (preload/hubAuthoringPreload.ts, split at
-// hubPreload's 800-line cap). A window takes ONE preload, so this one runs from
-// the session — registered once, however many hub windows open.
-let authoringPreload = false;
-function registerAuthoringPreload(): void {
-  if (authoringPreload) return;
-  authoringPreload = true;
-  session.defaultSession.registerPreloadScript({
-    type: 'frame',
-    filePath: path.join(ROOT, 'preload', 'hubAuthoringPreload.js'),
-  });
+// The rest of the hub's bridge. hubPreload.ts sits at its 800-line cap, so
+// later bridges are separate files — preload/hub<Area>Preload.ts, e.g.
+// hubAuthoringPreload (relationships, assets, boundaries) and
+// hubPlatformPreload (jobs, publish). A window takes ONE preload, so these run
+// from the session instead, registered once however many hub windows open.
+// They are DISCOVERED by name rather than listed: a new bridge is a new file,
+// and no two features have to edit this one to add theirs. Each checks its own
+// location (the overlay and the offscreen export windows share the session).
+let sessionPreloads = false;
+function registerSessionPreloads(): void {
+  if (sessionPreloads) return;
+  sessionPreloads = true;
+  const dir = path.join(ROOT, 'preload');
+  let names: string[] = [];
+  try {
+    names = fs.readdirSync(dir).filter((n) => /^hub[A-Z][A-Za-z]*Preload\.js$/.test(n)).sort();
+  } catch (_) { /* no preload dir: nothing extra to register */ }
+  for (const n of names) {
+    session.defaultSession.registerPreloadScript({ type: 'frame', filePath: path.join(dir, n) });
+  }
 }
 
 // The hub — the app's main window. `query` (a tab's "Open in new window", see
 // src/ipc/windows.ts) is handed to the page as its location.search: which
 // record to boot into, in which project, and that it is a SECONDARY window.
 export function createHubWindow(opts: { query?: Record<string, string> } = {}): BrowserWindow {
-  registerAuthoringPreload();
+  registerSessionPreloads();
   // Size/position against the primary display's WORK AREA, not its full bounds,
   // so the window opens large but stays above the Dock and below the menu bar.
   const display = screen.getPrimaryDisplay();

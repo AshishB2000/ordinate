@@ -556,3 +556,30 @@ scripts/**/*.js
 /renderer/hub/getStarted.js
 /renderer/hub/coachMarks.js
 /scripts/test-onboarding.js
+
+# Platform depth — jobs and the answer cache (emitted siblings).
+/src/app/jobs.js
+/src/ipc/jobs.js
+/src/ipc/platform.js
+/src/engine/queryCache.js
+/preload/hubPlatformPreload.js
+/renderer/hub/jobsPanel.js
+/src/engine/computeWorker.js
+/src/engine/computePool.js
+/src/data/answerKey.js
+/src/data/importStage.js
+/src/data/refreshJob.js
+/src/ipc/datasetImport.js
+/renderer/hub/dsVirtual.js
+/src/analysis/sampling.js
+/src/engine/sampleResident.js
+/src/ipc/vizSample.js
+/src/ipc/vizSampleData.js
+
+# Platform depth — publish to folder (emitted siblings).
+
+# Platform depth — privacy and sensitivity (emitted siblings).
+
+# Platform depth — automation: CLI and MCP (emitted siblings).
+
+# Platform depth — backups and sync (emitted siblings).

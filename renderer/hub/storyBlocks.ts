@@ -29,7 +29,7 @@ function stInlineDom(parent: HTMLElement, inl: Array<{ t: string; text: string; 
 function stMarkdownDom(src: string): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'st-md';
-  mdParse(src).forEach((n: any) => {
+  stMdParse(src).forEach((n: any) => {
     let el: HTMLElement;
     if (n.t === 'h') {
       el = document.createElement('h' + Math.min(3, n.level));

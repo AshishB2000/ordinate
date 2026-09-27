@@ -133,7 +133,18 @@ function setVizWarnings(warnings: string[]): void {
   box.hidden = !warnings || warnings.length === 0;
 }
 
+/** "Preview computed on 250k of 1M rows" — present only for a sampled preview. */
+function setVizSampleNote(sample: any): void {
+  const note = vizEl('viz-sample-note');
+  if (!note) return;
+  const text = sample && typeof sample.note === 'string' ? sample.note : '';
+  note.textContent = text;
+  note.title = text && sample.by ? `Stratified by ${sample.by}. Saving the visual and every dashboard use all rows.` : text;
+  note.hidden = !text;
+}
+
 function clearVizArea(): void {
+  setVizSampleNote(null);
   const area = vizEl('viz-area');
   if (area) area.innerHTML = '';
   const mount = vizEl('viz-switcher-mount');
@@ -188,7 +199,12 @@ async function recomputeVisual(): Promise<void> {
   if (loadingArea) loadingArea.classList.add('is-loading');
   let res: any;
   try {
-    res = await window.hub.computeVisualData(currentProjectId, vizDatasetId, encoding, vizForm!.getFilters());
+    // The builder PREVIEWS: above 250k rows a chart with no resident fast path
+    // is computed on a stratified sample (and says so below); Save and every
+    // dashboard compute in full through visual:data.
+    res = window.hubPlatform && typeof window.hubPlatform.previewVisualData === 'function'
+      ? await window.hubPlatform.previewVisualData(currentProjectId, vizDatasetId, encoding, vizForm!.getFilters())
+      : await window.hub.computeVisualData(currentProjectId, vizDatasetId, encoding, vizForm!.getFilters());
   } catch (_) {
     res = { ok: false, error: 'Could not compute the visual.' };
   } finally {
@@ -202,6 +218,7 @@ async function recomputeVisual(): Promise<void> {
   }
   const data = res.data || { labels: [], series: [] };
   setVizWarnings(Array.isArray(res.warnings) ? res.warnings : []);
+  setVizSampleNote(res.sample);
   // What main did to the dimension: the date grain it settled on, and the note
   // when it capped a long tail. Only main knows — both need the rows.
   vizForm!.applyCategoryInfo(res.category);

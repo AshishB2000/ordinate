@@ -439,6 +439,7 @@ async function qtSave(): Promise<void> {
   if (statusEl) statusEl.textContent = prevStatus;
   if (label) label.textContent = 'Save as dataset';
   if (btn) btn.disabled = false;
+  if (res && res.canceled) return; // cancelled from the Jobs popover
   if (!res || res.ok === false) {
     qtShowError('The result was not saved', (res && res.error) || 'The full result could not be read.');
     return;
@@ -451,7 +452,14 @@ async function qtSave(): Promise<void> {
   // The composer closes back onto the Datasets tab, where the new dataset is.
   clSelectTab('datasets');
   openComposer(
-    { label: name, rows: rows.length, kind: 'sql', ref: { inline: { name, columns, rows } }, columns: columns.map((c: any) => String(c.name)) },
+    // The full result is staged in main (sql:prepareSave); `rows` is the slice.
+    {
+      label: name,
+      rows: typeof res.rowCount === 'number' ? res.rowCount : rows.length,
+      kind: 'sql',
+      ref: { inline: { name, columns, rows, stagedId: res.stagedId } },
+      columns: columns.map((c: any) => String(c.name)),
+    },
     { name, sourceKind: 'sql', origin: res.origin },
   );
 }

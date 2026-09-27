@@ -44,7 +44,10 @@ export interface SampleIds { projectId: string; datasetId: string; analysisId: s
 // an analysis you started and are watching; `alerts` is about a rule you wrote
 // for a number you are NOT watching, so a default of off would make the feature
 // quietly do nothing. `alertExplain` is opt-in because it spends a model call.
-interface Notifications { sound: boolean; desktop: boolean; alerts: boolean; alertExplain: boolean }
+// `jobs`: an OS notification when a background job (src/app/jobs.ts) finishes
+// while the window is not focused. ON by default, like `alerts` — the user
+// started the job and walked away, so the finish is the thing they are waiting on.
+interface Notifications { sound: boolean; desktop: boolean; alerts: boolean; alertExplain: boolean; jobs: boolean }
 
 /**
  * Workspace formats — locale, number style, currency, date style, compact
@@ -189,7 +192,7 @@ const DEFAULTS: Omit<Config, 'providers' | 'byok'> = {
   // window isn't focused. Best-effort — never block/error the analysis.
   // `alerts`/`alertExplain` are the alert rules' own switches — see the
   // Notifications interface above for why one of them defaults the other way.
-  notifications: { sound: false, desktop: false, alerts: true, alertExplain: false },
+  notifications: { sound: false, desktop: false, alerts: true, alertExplain: false, jobs: true },
   // The system locale, dollars, Monday weeks and calendar-year quarters until
   // the user says otherwise.
   formats: { ...FORMAT_DEFAULTS },
@@ -281,6 +284,7 @@ function sanitize(input: any): Partial<Config> {
       // arrive with the feature already switched off.
       alerts: input.notifications.alerts === undefined ? true : Boolean(input.notifications.alerts),
       alertExplain: Boolean(input.notifications.alertExplain),
+      jobs: input.notifications.jobs === undefined ? true : Boolean(input.notifications.jobs),
     };
   }
   if (input.formats && typeof input.formats === 'object') out.formats = sanitizeFormatPrefs(input.formats);
@@ -468,12 +472,13 @@ export function setAutoRefreshEnabled(on: boolean): { ok: boolean; autoRefresh: 
 
 export function setNotifications(fields: any): { ok: boolean; notifications: Notifications } {
   const cfg = get();
-  const cur = cfg.notifications || { sound: false, desktop: false, alerts: true, alertExplain: false };
+  const cur = cfg.notifications || { sound: false, desktop: false, alerts: true, alertExplain: false, jobs: true };
   const next = { ...cur };
   if (fields && 'sound' in fields)   next.sound = Boolean(fields.sound);
   if (fields && 'desktop' in fields) next.desktop = Boolean(fields.desktop);
   if (fields && 'alerts' in fields)  next.alerts = Boolean(fields.alerts);
   if (fields && 'alertExplain' in fields) next.alertExplain = Boolean(fields.alertExplain);
+  if (fields && 'jobs' in fields) next.jobs = Boolean(fields.jobs);
   cfg.notifications = next;
   persist(cfg);
   return { ok: true, notifications: next };
@@ -504,7 +509,7 @@ export function resetToDefaults(): { ok: boolean } {
   const fresh = { ...DEFAULTS, providers: freshProviders(), byok: freshByok(),
     localCli: { activeId: null, lastDetection: null, models: {} },
     memoryModel: { mode: 'same_as_chat', provider: null, model: '' },
-    modelCache: {}, notifications: { sound: false, desktop: false, alerts: true, alertExplain: false },
+    modelCache: {}, notifications: { sound: false, desktop: false, alerts: true, alertExplain: false, jobs: true },
     connectionSecrets: {} };
   persist(fresh);
   return { ok: true };

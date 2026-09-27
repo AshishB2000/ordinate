@@ -170,6 +170,28 @@ async function main(): Promise<void> {
   const back = bundle.readZip(bundle.writeZip([{ name: 'a.bin', data: blob }, { name: 'b.txt', data: Buffer.from('x'.repeat(10000)) }]));
   ok('writeZip/readZip round-trip bytes exactly', Buffer.compare(back[0].data, blob) === 0 && back[1].data.length === 10000);
 
+  // The async twins (the bundle JOB's path) are byte-identical to the sync ones,
+  // report progress per entry, and a cancel thrown from the hook stops them.
+  const when = new Date('2026-03-04T05:06:07Z');
+  const pair = [{ name: 'a.bin', data: blob }, { name: 'b.txt', data: Buffer.from('x'.repeat(10000)) }];
+  const ticks: number[] = [];
+  const asyncZip = await bundle.writeZipAsync(pair, when, (done) => ticks.push(done));
+  ok('writeZipAsync is byte-identical to writeZip', Buffer.compare(asyncZip, bundle.writeZip(pair, when)) === 0);
+  ok('writeZipAsync reports one tick per entry', ticks.join(',') === '1,2');
+  const asyncBack = await bundle.readZipAsync(asyncZip);
+  ok('readZipAsync reads what readZip reads', asyncBack.length === 2 && Buffer.compare(asyncBack[0].data, blob) === 0);
+  let stopped = false;
+  try {
+    await bundle.writeZipAsync(pair, when, () => { const e = new Error('Cancelled'); e.name = 'JobCancelled'; throw e; });
+  } catch (e: any) { stopped = e && e.name === 'JobCancelled'; }
+  ok('a cancel thrown between entries stops writeZipAsync', stopped);
+  let importCancelled = false;
+  try {
+    await bundle.importBundle(out.bytes, { checkCancelled: () => { const e = new Error('Cancelled'); e.name = 'JobCancelled'; throw e; } });
+  } catch (e: any) { importCancelled = e && e.name === 'JobCancelled'; }
+  ok('a cancelled import rejects (JobCancelled) instead of reporting a bad bundle', importCancelled);
+  ok('…and leaves no stray project', (await projects.listProjects()).length === count0);
+
   finish();
 }
 

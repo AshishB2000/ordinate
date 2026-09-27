@@ -15,6 +15,8 @@ import type { ParsedColumn } from './parse';
 import { coerceValue } from './parse';
 import * as projects from '../app/projects';
 import * as parquetStore from '../engine/parquetStore';
+import * as queryCache from '../engine/queryCache';
+import * as jobs from '../app/jobs';
 import * as transforms from './transforms';
 import { runResidentPipeline } from '../engine/pipelineDuck';
 import type { TableData, TransformStep, ApplyResult } from './transforms';
@@ -158,18 +160,57 @@ function sanitizeCapture(raw: any): { entryId: string | null; cropPath: string |
 // the JSON write fails we are left with a stale parquet and a v2 record that
 // still has its rows, and the next load re-migrates over it. The reverse order
 // would lose the rows outright.
-async function persist(projectId: string, dataset: Dataset): Promise<void> {
+// ONE write at a time per dataset. The Parquet writes are async now (they run
+// on DuckDB's async bridge so a 1M-row save never parks the main thread), and
+// two interleaved persists of the same dataset could otherwise publish one
+// write's .parquet beside the other's JSON — a rowCount describing the wrong
+// table. Chained per id; a failed write does not poison the next one.
+const writeChains = new Map<string, Promise<void>>();
+
+async function persist(projectId: string, dataset: Dataset, progress: parquetStore.WriteProgress = {}): Promise<void> {
+  const prev = writeChains.get(dataset.id) || Promise.resolve();
+  const run = prev.catch(() => { /* the previous write's failure was its caller's */ })
+    .then(() => persistNow(projectId, dataset, progress));
+  const tail = run.catch(() => { /* reported to this caller below */ });
+  writeChains.set(dataset.id, tail);
+  void tail.then(() => { if (writeChains.get(dataset.id) === tail) writeChains.delete(dataset.id); });
+  return run;
+}
+
+async function persistNow(projectId: string, dataset: Dataset, explicit: parquetStore.WriteProgress): Promise<void> {
+  // Inside a background job, a write reports to it (as the last 75% of its
+  // bar — whatever the job did first, a fetch or a parse, is the first part)
+  // and stops on its Cancel, whichever caller several frames up started it.
+  const job = jobs.current();
+  const progress: parquetStore.WriteProgress = explicit.onProgress || explicit.checkCancelled || !job
+    ? explicit
+    : { onProgress: (f, note) => job.progress(0.2 + 0.75 * f, note), checkCancelled: () => job.checkCancelled() };
+  // Every data write passes through here, so this is the one place the answer
+  // cache hears about it (the key's updatedAt would go stale anyway; this also
+  // frees the bytes at once and drops answers that JOINED this dataset).
+  queryCache.invalidateDataset(dataset.id, projectId);
   const file = datasetFilePath(projectId, dataset.id);
-  if (!parquetStore.isSupported()) {
+  if (!(await parquetStore.isSupportedAsync())) {
     await writeJsonAtomic(file, dataset); // v2, rows inline
     return;
   }
-  parquetStore.writeTable(parquetPath(projectId, dataset.id), dataset.columns, dataset.rows);
+  // The derived table is the bulk of a first save; the source (when a pipeline
+  // exists) is written second and reported as the last stretch.
+  const hasSource = Boolean(dataset.source);
+  const share = hasSource ? 0.5 : 1;
+  await parquetStore.writeTableAsync(parquetPath(projectId, dataset.id), dataset.columns, dataset.rows, {
+    checkCancelled: progress.checkCancelled,
+    onProgress: progress.onProgress ? (f, note) => progress.onProgress!(f * share, note) : undefined,
+  });
   if (dataset.source) {
-    parquetStore.writeTable(
+    await parquetStore.writeTableAsync(
       sourceParquetPath(projectId, dataset.id),
       dataset.source.columns,
       dataset.source.rows,
+      {
+        checkCancelled: progress.checkCancelled,
+        onProgress: progress.onProgress ? (f, note) => progress.onProgress!(0.5 + f * 0.5, note) : undefined,
+      },
     );
   }
   // rowCount and columns are written in the SAME operation as the table they
@@ -192,13 +233,15 @@ async function persist(projectId: string, dataset: Dataset): Promise<void> {
 // the caller must then fail VISIBLY rather than silently yielding an empty
 // table, because updateSteps snapshots whatever rows it is handed and an empty
 // snapshot would destroy the dataset.
-function hydrate(projectId: string, data: any): boolean {
+// Async since the jobs work: the scan runs on DuckDB's async bridge, so even a
+// 1M-row hydrate (~1.8 s) no longer parks every window while it reads.
+async function hydrate(projectId: string, data: any): Promise<boolean> {
   if (Array.isArray(data.rows)) return true; // v2, already inline
-  const derived = parquetStore.readTable(parquetPath(projectId, data.id), data.columns);
+  const derived = await parquetStore.readTableAsync(parquetPath(projectId, data.id), data.columns);
   if (!derived) return false;
   data.rows = derived.rows;
   if (data.source && Array.isArray(data.source.columns)) {
-    const src = parquetStore.readTable(
+    const src = await parquetStore.readTableAsync(
       sourceParquetPath(projectId, data.id),
       data.source.columns,
     );
@@ -373,7 +416,7 @@ export async function getDataset(projectId: string, id: string): Promise<Dataset
     const data = JSON.parse(raw);
     if (!isValidDataset(data)) return null;
     const wasInline = Array.isArray(data.rows);
-    if (!hydrate(projectId, data)) return null;
+    if (!(await hydrate(projectId, data))) return null;
     const ds = normalize(data, projectId);
     // Lazy one-way migration: a v2 record read on a machine with a working
     // bridge is rewritten as v3. Deterministic from the same input, and every
@@ -406,6 +449,7 @@ export async function saveDataset(
     capture?: { entryId: string | null; cropPath: string | null };
     origin?: unknown;
   },
+  progress: parquetStore.WriteProgress = {},
 ): Promise<Dataset | null> {
   if (!isValidId(projectId)) return null;
   // Don't orphan a dataset under a bogus-but-UUID-shaped project id.
@@ -442,7 +486,7 @@ export async function saveDataset(
     dataset.lastRefreshError = null;
   }
   await fs.promises.mkdir(datasetsDir(projectId), { recursive: true });
-  await persist(projectId, dataset);
+  await persist(projectId, dataset, progress);
   return dataset;
 }
 
@@ -462,6 +506,7 @@ export async function updateDatasetData(
   data: { columns: ParsedColumn[]; rows: (string | number | null)[][] },
   capture?: { entryId: string | null; cropPath: string | null },
   outWarnings?: string[],
+  progress: parquetStore.WriteProgress = {},
 ): Promise<Dataset | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   const existing = await getDataset(projectId, id);
@@ -490,7 +535,7 @@ export async function updateDatasetData(
   const cap = sanitizeCapture(capture);
   if (cap) updated.capture = cap;
   await fs.promises.mkdir(datasetsDir(projectId), { recursive: true });
-  await persist(projectId, updated);
+  await persist(projectId, updated, progress);
   return updated;
 }
 
@@ -624,6 +669,7 @@ export async function updateSteps(
 // Delete a dataset file. Returns true on success (force → missing is success).
 export async function deleteDataset(projectId: string, id: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
+  queryCache.invalidateDataset(id, projectId);
   try {
     // All three files, or a delete orphans the table data forever: listDatasets
     // filters on `.json`, so an abandoned .parquet is invisible but never

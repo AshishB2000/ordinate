@@ -16,6 +16,13 @@
   <link rel="stylesheet" href="hub.css"/>
   <link rel="stylesheet" href="authoring.css"/>
   <link rel="stylesheet" href="a11y.css"/>
+  <!-- Platform depth: one stylesheet per feature, each after its marker. -->
+  <link rel="stylesheet" href="platform.css"/>
+  <!-- platform-css:privacy -->
+
+  <!-- platform-css:automation -->
+
+  <!-- platform-css:backup -->
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
        injecting a <style> at render time, which the hub CSP (style-src 'self')
@@ -102,6 +109,15 @@
            (alertsInbox.ts / alerts.ts), the way every other dialog in this hub
            is; only the door lives in markup. The badge is appended by
            aiPaintBell() and is absent, not "0", when nothing is unread. -->
+      <!-- Background jobs — imports, refreshes, exports, publishes, backups.
+           Beside the bell for the same reason the bell is here: a job finishes
+           while you are somewhere else. It spins while anything is running;
+           the popover (jobsPanel.ts) lists running and recent jobs. -->
+      <button id="topbar-jobs" class="icon-btn hub-jobs-btn" type="button"
+        aria-haspopup="dialog" aria-expanded="false"
+        title="Jobs" aria-label="Jobs">
+        <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-activity"/></svg>
+      </button>
       <button id="topbar-alerts" class="icon-btn hub-alerts-btn" type="button"
         aria-haspopup="dialog" aria-expanded="false"
         title="Alerts" aria-label="Alerts">
@@ -1335,6 +1351,9 @@
                      recomputeVisual clears that mount with innerHTML. -->
                 <div class="cv-controls-slot"></div>
               </div>
+              <!-- Shown only when main computed the preview on a sample of a big
+                   table (src/ipc/vizSample.ts); Save and dashboards compute in full. -->
+              <div class="vb-sample-row"><span class="vb-sample-note" id="viz-sample-note" role="status" hidden></span></div>
               <div class="cv-viz-area viz-area" id="viz-area"></div>
             </div>
           </div>
@@ -2183,6 +2202,22 @@
                 </button>
               </div>
             </div>
+            <!-- Jobs: ON by default for the same reason as alerts — you started
+                 the import or the publish and walked away; its finish is the
+                 thing you are waiting on. Only fires while this window is NOT
+                 focused (a finish you are looking at needs no notification). -->
+            <div class="stp-row">
+              <div class="stp-rl">
+                <div class="stp-rt">Background jobs</div>
+                <div class="stp-rd">Tell me when an import, refresh, export, publish or backup finishes while I’m in another window.</div>
+              </div>
+              <div class="stp-rr">
+                <button id="stp-notif-jobs" class="stp-switch stp-switch-on" type="button" role="switch"
+                  aria-checked="true" aria-label="Background job notifications">
+                  <span class="stp-switch-thumb"></span>
+                </button>
+              </div>
+            </div>
             <div class="stp-row">
               <div class="stp-rl">
                 <div class="stp-rt">Explain alerts</div>
@@ -2929,6 +2964,7 @@
 <script src="dsImport.js"></script>
 <script src="dsList.js"></script>
 <script src="dsExplorer.js"></script>
+<script src="dsVirtual.js"></script>
 <script src="dsGrid.js"></script>
 <script src="dsProfile.js"></script>
 <!-- Data-quality rules: the editor, then the Rules section + red dots. -->
@@ -3174,6 +3210,18 @@
 <script src="tabNav.js"></script>
 <script src="tabSplit.js"></script>
 <script src="tabStrip.js"></script>
+<!-- Platform depth — background jobs, publishing, privacy, automation and
+     backups. Each block loads after every surface it reaches into and before
+     hub.js boots them; each feature adds its scripts after its own marker. -->
+<script src="jobsPanel.js"></script>
+<!-- platform:publish -->
+
+<!-- platform:privacy -->
+
+<!-- platform:automation -->
+
+<!-- platform:backup -->
+
 <script src="hub.js"></script>
 
 <!-- Phase 5 — the Svelte islands bundle. An IIFE assigning ONE global

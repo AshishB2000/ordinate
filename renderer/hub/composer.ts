@@ -27,7 +27,7 @@ interface DcTable {
   label: string;
   rows: number;
   kind: string;
-  ref: { datasetId?: string; inline?: { name: string; columns: any[]; rows: any[][] } };
+  ref: { datasetId?: string; inline?: { name: string; columns: any[]; rows: any[][]; stagedId?: string } };
   columns: string[];
 }
 
@@ -576,6 +576,10 @@ async function handleComposerSave(): Promise<void> {
   const btn = dcEl('dc-save') as HTMLButtonElement | null;
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
 
+  // Retypes land through the SAME column update the explorer's header menu
+  // makes — now inside the save job (main applies `retype` after the rows),
+  // so a 1M-row import is one job with one progress bar, not two round trips.
+  const changedType = dcRawCols.some((c) => !mapFor(c).dropped && mapFor(c).type !== String(c.type || 'text'));
   let res: any;
   try {
     res = await window.hub.composeSave({
@@ -586,21 +590,16 @@ async function handleComposerSave(): Promise<void> {
       steps: mappingSteps(),
       sourceKind: dcSourceKind || undefined,
       origin: dcOrigin,
+      retype: changedType ? mappedColumns() : undefined,
     });
   } catch (_) {
     res = { ok: false, error: 'Failed to save the dataset.' };
   }
   if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+  if (res && res.canceled) { showToast('Import cancelled.'); return; }
   if (!res || !res.ok) {
     window.alert((res && res.error) || 'Failed to save the dataset.');
     return;
-  }
-
-  // Retypes land through the SAME column update the explorer's header menu makes.
-  const cols = mappedColumns();
-  const changedType = dcRawCols.some((c) => !mapFor(c).dropped && mapFor(c).type !== String(c.type || 'text'));
-  if (changedType && res.dataset && res.dataset.id) {
-    try { await window.hub.updateDataset(currentProjectId, res.dataset.id, cols); } catch (_) { /* the rows are saved */ }
   }
 
   for (const w of (res.warnings || [])) showToast(w);

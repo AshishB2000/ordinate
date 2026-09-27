@@ -12,6 +12,7 @@ import { app } from 'electron';
 import { isValidId } from './ids';
 import { checkBoundaries, MAX_BOUNDARY_BYTES } from '../analysis/geojsonCheck';
 import type { BoundaryCheck } from '../analysis/geojsonCheck';
+import * as queryCache from '../engine/queryCache';
 
 export interface BoundaryMeta {
   id: string;
@@ -42,6 +43,7 @@ export async function importBoundaryText(projectId: string, name: string, text: 
   const tmp = file + '.' + randomUUID() + '.tmp';
   await fs.promises.writeFile(tmp, JSON.stringify({ meta, collection: res.collection }), 'utf8');
   await fs.promises.rename(tmp, file);
+  queryCache.invalidateProject(projectId); // a map may resolve regions through these
   return meta;
 }
 

@@ -4,6 +4,7 @@ import { ipcMain, dialog } from 'electron';
 import type { BrowserWindow } from 'electron';
 import * as projects from '../app/projects';
 import * as bundle from '../app/bundle';
+import * as jobs from '../app/jobs';
 import * as config from '../app/config';
 import { projectDir } from '../app/recordKinds';
 
@@ -101,14 +102,32 @@ export function register({ onActive, getHubWindow }: {
     const win = parent();
     const { canceled, filePath } = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
     if (canceled || !filePath) return { ok: false, canceled: true };
+    // A job (src/app/jobs.ts): the zip is deflated off the main thread, the
+    // popover shows progress, and Cancel stops it between files. The handler
+    // still answers its renderer with the same envelope as before.
+    const job = jobs.submit({
+      kind: 'bundle',
+      label: `Export ${project.name}`,
+      projectId: project.id,
+      run: async (ctx) => {
+        const out = await bundle.exportProject(project.id, {
+          onProgress: (p, note) => ctx.progress(0.95 * p, note),
+          checkCancelled: () => ctx.checkCancelled(),
+        });
+        if (!out) throw new Error('That project is gone.');
+        ctx.checkCancelled();
+        const tmp = filePath + '.partial';
+        await fs.promises.writeFile(tmp, out.bytes);
+        await fs.promises.rename(tmp, filePath);
+        return { path: filePath, counts: out.manifest.counts };
+      },
+      resultOf: (r) => ({ path: r.path }),
+    });
     try {
-      const out = await bundle.exportProject(project.id);
-      if (!out) return { ok: false, error: 'That project is gone.' };
-      const tmp = filePath + '.partial';
-      await fs.promises.writeFile(tmp, out.bytes);
-      await fs.promises.rename(tmp, filePath);
-      return { ok: true, path: filePath, counts: out.manifest.counts };
+      const r = await job.done;
+      return { ok: true, path: r.path, counts: r.counts };
     } catch (err: any) {
+      if (err instanceof jobs.JobCancelled) return { ok: false, canceled: true };
       return { ok: false, error: err?.message || 'Export failed.' };
     }
   });
@@ -122,14 +141,29 @@ export function register({ onActive, getHubWindow }: {
     const win = parent();
     const { canceled, filePaths } = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
     if (canceled || !filePaths || !filePaths[0]) return { ok: false, canceled: true };
+    const file = filePaths[0];
+    const job = jobs.submit({
+      kind: 'bundle',
+      label: `Import ${path.basename(file)}`,
+      run: async (ctx) => {
+        const res = await bundle.importBundle(await fs.promises.readFile(file), {
+          onProgress: (p, note) => ctx.progress(p, note),
+          checkCancelled: () => ctx.checkCancelled(),
+        });
+        if (!res.ok) throw new Error(res.error || 'Import failed.');
+        return res;
+      },
+      resultOf: (r) => ({ message: r.project ? `Imported as “${r.project.name}”` : undefined }),
+    });
     try {
-      const res = await bundle.importBundle(await fs.promises.readFile(filePaths[0]));
-      if (res.ok && res.project) {
+      const res = await job.done;
+      if (res.project) {
         active(res.project.id);
         await projects.touchOpened(res.project.id);
       }
       return res;
     } catch (err: any) {
+      if (err instanceof jobs.JobCancelled) return { ok: false, canceled: true };
       return { ok: false, error: err?.message || 'Import failed.' };
     }
   });

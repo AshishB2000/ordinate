@@ -94,7 +94,11 @@ let hydrations = 0;
   hydrations += 1;
   return (realGetDataset as any)(...args);
 };
-function resetSpy(): void { hydrations = 0; }
+// The answer cache (src/engine/queryCache) would serve a repeat question
+// without reaching EITHER branch; these probes are about which branch
+// computes, so each starts from an empty cache.
+const queryCache: typeof import('../src/engine/queryCache') = require('../src/engine/queryCache');
+function resetSpy(): void { hydrations = 0; queryCache.clear(); }
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 // Deliberately shaped to hit every semantic the metric path has to preserve:
