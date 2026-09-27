@@ -189,6 +189,7 @@ function dashExportMeasure(): DashExportMeasure {
   probe.className = 'export-capture-holder';
   dashExportStyleClasses().forEach((c) => probe.classList.add(c));
   applyBrandTokens(probe, dashCurrentStyle().accentHex || '');
+  if (typeof applyDashTheme === 'function') applyDashTheme(probe, dashCurrentStyle()); // themeApply.ts
 
   const card = document.createElement('div');
   card.className = 'dash-card dash-card--metric';
@@ -360,6 +361,9 @@ async function assembleExportBundle(forCapture: boolean): Promise<any> {
       ramp: brandExportRamp(dashCurrentStyle(), dashExportStyle().theme === 'dark'),
       logo: await dashLogoFor(dashCurrent),
     },
+    // The workspace theme it resolves to, as tokens (themeApply.ts); main
+    // re-validates every one (dashboardExport.sanitizeBundle).
+    theme: typeof dashThemeExport === 'function' ? dashThemeExport(dashCurrentStyle()) : null,
   };
 }
 
@@ -439,7 +443,7 @@ async function buildVisualExportCard(
   // frame — capturePage still does the snapshotting, it just snapshots a holder
   // that now carries the dashboard's own style.
   const frame = Object.assign(
-    { themeClasses: dashExportStyleClasses(), accentHex: dashCurrentStyle().accentHex },
+    { themeClasses: dashExportStyleClasses(), accentHex: dashCurrentStyle().accentHex, style: dashCurrentStyle() },
     dashExportChartBox(measure, layout, !!title),
   );
   let png: string | null = null;

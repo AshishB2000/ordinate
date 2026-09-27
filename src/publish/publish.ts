@@ -36,6 +36,8 @@ import { sanitizeBrand } from '../analysis/dashboardExport';
 import * as sharePolicy from '../app/sharePolicy';
 import { readLogoDataUrl } from '../app/branding';
 import type { SiteAssets } from './siteHtml';
+import { listThemes } from '../app/themeStore';
+import { themeModel } from '../analysis/themeTokens';
 
 export const SITE_FORMAT = 'ordinate-site';
 export const SITE_VERSION = 1;
@@ -312,18 +314,21 @@ async function buildPages(config: PublishConfig, ctx: PublishProgress, outgoing?
   const formats = getFormatPrefs();
   const pages: BuiltPage[] = [];
   let combos = 0;
+  const themes = await listThemes(); // a dashboard's workspace theme travels as tokens (themeStore.ts)
   for (const b of built) {
     const geo = await geoFor(config.projectId, b.data.geoLevels, b.data.boundaryIds);
     // Branding: the dashboard's accent ramp (from the renderer, see PublishConfig
     // .brands) and its logo — its own upload, none, or the workspace's.
     let brand: Record<string, unknown> | undefined;
+    let theme: unknown;
     if (b.kind === 'dashboard') {
-      const style = ((b.data as PublishedDashboard).style || {}) as { logo?: string };
+      const style = ((b.data as PublishedDashboard).style || {}) as { logo?: string; themeId?: string };
       const logo = style.logo === 'none' ? undefined : style.logo === 'custom' ? await logoFor(b.id) : head.logo;
       brand = { ramp: config.brands && config.brands[b.id] ? config.brands[b.id].ramp : undefined, logo };
+      theme = themeModel.resolveTheme(style.themeId, themes.defaultId, themes.themes).theme || undefined;
     }
     const raw = b.kind === 'dashboard'
-      ? { site, kind: 'dashboard', dashboard: b.data, brand, formats, geo }
+      ? { site, kind: 'dashboard', dashboard: b.data, brand, theme, formats, geo }
       : { site, kind: 'story', story: b.data, formats, geo };
     const page = sanitizePage(raw);
     const html = pageHtml(page, assets, `${b.name} · ${head.title}`);

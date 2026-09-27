@@ -1,0 +1,343 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Workspace themes — the tokens a theme adds to a dashboard sheet, the
+   Settings → Appearance → Themes list and editor (themeSettings.ts,
+   themeEditor.ts), and the Style panel's Theme row (themeApply.ts).
+   Its own file so hub.css does not grow and concurrent features do not
+   collide in it. Named theme-editor.css because renderer/theme.css is the
+   app's own token sheet. Tokens only.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── A themed sheet ─────────────────────────────────────────────────────
+   themeApply.applyThemeTokens puts `.dash-themed` and the theme's tokens on
+   the sheet element. The colour tokens need nothing here — every .dash- rule
+   already consumes them. These rules consume the tokens NO preset declares
+   (card border, radius, shadow, header rule, KPI size and label position, the
+   text face), so they exist only under .dash-themed: a sheet without a theme
+   renders exactly as before. (0,2,0) and later than hub.css, so they beat the
+   Executive and compact overrides of the same properties; `#dash-grid
+   .dash-card.is-selected` carries an id and keeps its selection ring. */
+.dash-themed { font-family: var(--font-ui); }
+.dash-themed .dash-card {
+  border-width: var(--dash-card-border-w, 1px);
+  border-radius: var(--dash-card-radius, 12px);
+  box-shadow: var(--dash-card-shadow, none);
+}
+.dash-themed .dash-card-head { border-bottom-width: var(--dash-card-rule, 1px); }
+.dash-themed .dash-metric-value { font-size: var(--dash-kpi-size, var(--t-28)); }
+.dash-themed .dash-card--metric .has-delta .dash-metric-value { font-size: calc(var(--dash-kpi-size, 28px) * 0.86); }
+.dash-themed .dash-metric-label { order: var(--dash-kpi-label, 0); }
+
+/* Off-screen probe a built-in is read from (themeSettings.teBuiltinTokens).
+   In the document, because a detached element computes no custom properties. */
+.te-probe {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 240px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* ── The list ─────────────────────────────────────────────────────────── */
+.te-view[hidden] { display: none; }
+.te-group { margin-top: var(--sp-16); }
+.te-group-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: var(--sp-8);
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--muted);
+}
+.te-count {
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  font-size: var(--t-11);
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+  color: var(--text-dim);
+}
+.te-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+.te-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  padding: var(--sp-8) var(--sp-12);
+}
+.te-row + .te-row { border-top: 1px solid var(--border-hairline); }
+.te-row--confirm { background: var(--error-soft); }
+.te-row-main { flex: 1; min-width: 0; }
+.te-row-name {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.te-row-note {
+  margin-top: 2px;
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.te-row--confirm .te-row-note { white-space: normal; }
+.te-badge {
+  padding: 1px 7px;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  font-size: var(--t-11);
+  font-weight: 600;
+  color: var(--muted);
+}
+#te-user-list .te-badge { background: var(--accent-soft); color: var(--accent); }
+.te-row-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+/* A thumbnail paints with the theme's (or preset's) OWN tokens: the page,
+   one card on it, four bars in the ramp. */
+.te-thumb {
+  flex: none;
+  display: flex;
+  box-sizing: border-box;
+  width: 60px;
+  height: 40px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+}
+.te-thumb-card {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  padding: 4px 5px 3px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+}
+.te-thumb-bar { flex: 1; border-radius: 1px 1px 0 0; }
+
+.te-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-12);
+  padding: var(--sp-16);
+}
+.te-empty-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.te-empty-t { font-size: var(--t-13); font-weight: 600; color: var(--text-strong); }
+.te-empty-d {
+  max-width: 54ch;
+  margin-top: 2px;
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+
+/* ── The editor ───────────────────────────────────────────────────────── */
+/* Controls on the left, the preview in a sticky column on the right, and the
+   name + Save row pinned above both — the settings pane scrolls, so without
+   the pins the preview and Save would leave the screen as you edit. The pane
+   is ~590px wide in a small window; the container query widens the preview
+   when there is room for it. */
+#te-editor-view { container: te-editor / inline-size; }
+.te-editor-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-4) 0 var(--sp-12);
+  border-bottom: 1px solid var(--border-hairline);
+  background: var(--surface-float);
+  /* The pane's own top padding would show content scrolling past above the
+     pinned row; paint over it. */
+  box-shadow: 0 calc(-1 * var(--sp-8)) 0 var(--surface-float);
+}
+.stp-input.te-name { width: 240px; font-weight: 600; }
+.te-spacer { flex: 1; }
+.te-warn-summary {
+  margin-top: var(--sp-12);
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  color: var(--warn);
+}
+.te-warn-summary[hidden] { display: none; }
+.te-editor-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  align-items: start;
+  gap: var(--sp-16);
+  margin-top: var(--sp-8);
+}
+@container te-editor (min-width: 800px) {
+  .te-editor-body { grid-template-columns: minmax(0, 1fr) 300px; }
+  .te-preview-sheet { zoom: 0.392; }
+}
+.te-controls { min-width: 0; display: flex; flex-direction: column; }
+.te-sec { padding: var(--sp-12) 0; border-bottom: 1px solid var(--border-hairline); }
+.te-sec:last-child { border-bottom: 0; }
+.te-sec-h {
+  margin: 0 0 var(--sp-8);
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.te-sec-d {
+  max-width: 62ch;
+  margin: -2px 0 var(--sp-12);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+.te-field { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-8) var(--sp-12); padding: 5px 0; }
+.te-field-l { flex: 0 0 92px; font-size: var(--t-13); color: var(--text); }
+.te-field .stp-seg-opt { padding: var(--sp-4) 10px; }
+.te-field-c { flex: 1; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-8); }
+
+.te-color-grid,
+.te-ramp {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--sp-8) var(--sp-12);
+}
+/* Eight series: name over hex, so two fit side by side in a narrow pane. */
+.te-ramp { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); align-items: start; margin: var(--sp-12) 0 var(--sp-8); }
+.te-ramp .te-color-text { flex-direction: column; align-items: flex-start; gap: 2px; }
+.te-ramp .stp-input.sf-hex.te-hex { width: 84px; height: 26px; }
+.te-color {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.te-color.has-warn { border-color: var(--warn); background: var(--warn-soft); }
+.te-color-top { display: flex; align-items: center; gap: var(--sp-8); }
+.te-color-input {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: none;
+  cursor: pointer;
+}
+.te-color-input::-webkit-color-swatch-wrapper { padding: 2px; }
+.te-color-input::-webkit-color-swatch { border: none; border-radius: 4px; }
+.te-color-input:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 2px; }
+.te-color-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.te-color-name { font-size: var(--t-13); color: var(--text); }
+.stp-input.sf-hex.te-hex { width: 88px; height: 28px; }
+.te-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: var(--t-12);
+  line-height: 1.35;
+  color: var(--warn);
+}
+.te-warn[hidden] { display: none; }
+.te-warn svg { flex: none; }
+.te-range-wrap { flex: 1; display: flex; align-items: center; gap: var(--sp-8); }
+.te-range { flex: 1; max-width: 220px; accent-color: var(--accent); }
+.te-range-val { min-width: 40px; font-size: var(--t-12); font-variant-numeric: tabular-nums; color: var(--muted); }
+.te-font { display: flex; align-items: center; gap: var(--sp-12); }
+.te-font-sample { font-size: var(--t-15); color: var(--text-strong); }
+.btn.te-derive { align-self: flex-start; }
+
+/* The preview: real dashboard markup at 760px, zoomed to the pane. `zoom`
+   (not transform) so the frame's height follows the sheet as density and KPI
+   size change it. */
+.te-preview-pane {
+  position: sticky;
+  top: 60px; /* below the pinned name + Save row */
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.te-preview-label {
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.te-preview {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+.te-preview-sheet {
+  width: 760px;
+  zoom: 0.287; /* 218 / 760 — the 220px column less its border; 0.392 when wide */
+  padding: 20px;
+  box-sizing: border-box;
+  background: var(--bg);
+  color: var(--text);
+}
+.te-preview-sheet .dash-card { background: var(--surface); }
+.te-preview-sheet .dash-card-head { cursor: default; }
+.te-pv-title { margin-bottom: 14px; font-size: 22px; font-weight: 600; color: var(--text-strong); }
+.te-pv-line { display: block; width: 100%; height: 100%; }
+.te-pv-line polyline {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.te-pv-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 5%;
+  height: 100%;
+  padding: 4px 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.te-pv-bar { flex: 1; border-radius: 3px 3px 0 0; }
+.te-preview-note { margin: 0; font-size: var(--t-12); line-height: var(--lh-body); color: var(--muted); }
+
+/* ── The Style panel's Theme row ──────────────────────────────────────── */
+.stp-select.te-style-select { flex: 1; min-width: 0; }
+.te-style-hint { margin: 0; font-size: var(--t-12); line-height: var(--lh-body); color: var(--muted); }

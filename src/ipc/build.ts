@@ -20,6 +20,7 @@ export function register(deps: BuildDeps): void {
   require('./format').register();
 
   // build:theme
+  require('./themes').register();
 
   // build:saas
 

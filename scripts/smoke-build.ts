@@ -25,6 +25,7 @@ const SECTIONS: Section[] = [
   { name: 'format', run: (s, fx) => require('./bdFormat').formatSection(s, fx) },
 
   // build:theme
+  { name: 'theme', run: (s, fx) => require('./bdTheme').themeSection(s, fx) },
 
   // build:saas
 

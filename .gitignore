@@ -645,6 +645,14 @@ scripts/**/*.js
 /scripts/bdFormat.js
 
 # build:theme
+/renderer/hub/themeModel.js
+/renderer/hub/themeApply.js
+/renderer/hub/themeSettings.js
+/renderer/hub/themeEditor.js
+/src/analysis/themeTokens.js
+/src/app/themeStore.js
+/src/ipc/themes.js
+/preload/hubThemesPreload.js
 
 # build:saas
 

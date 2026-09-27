@@ -34,6 +34,7 @@
   <link rel="stylesheet" href="format.css"/>
 
   <!-- build-css:theme -->
+  <link rel="stylesheet" href="theme-editor.css"/>
 
   <!-- build-css:saas -->
 
@@ -3296,6 +3297,13 @@
 <script src="fmtProfile.js"></script>
 
 <!-- build:theme -->
+<!-- themeModel is the pure model main shares (UMD, like cardModel); themeApply
+     holds the cache and puts a theme on a sheet (dashStyle.applyDashStyleTo
+     calls it); themeSettings is the Settings list, themeEditor its editor. -->
+<script src="themeModel.js"></script>
+<script src="themeApply.js"></script>
+<script src="themeSettings.js"></script>
+<script src="themeEditor.js"></script>
 
 <!-- build:saas -->
 

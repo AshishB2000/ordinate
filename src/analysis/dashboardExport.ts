@@ -41,6 +41,8 @@
 import { sanitizeStyle } from './dashboards';
 import { sanitizeFormatPrefs } from '../app/format';
 import type { DashboardStyle } from './dashboards';
+import { themeModel } from './themeTokens';
+import type { ThemeTokens } from './themeTokens';
 
 // The fixed grid column count (kept in sync with .dash-grid in hub.css / dashboards.ts).
 const GRID_COLS = 12;
@@ -131,7 +133,17 @@ export interface ExportBundle {
    * interpolated into the <style> block; the logo passes the PNG gate.
    */
   brand: { ramp?: AccentRamp; logo?: string };
+  /**
+   * The workspace theme the dashboard resolved to, when one applies. Tokens are
+   * whitelisted by themeModel.sanitizeTokens — known names only, each value
+   * validated for its kind (strict hex/rgba colour, bounded px, a font KEY from
+   * a four-family whitelist, a closed enum) — because every one is interpolated
+   * into the <style> block. A hostile value is dropped, never escaped.
+   */
+  theme?: ExportTheme;
 }
+
+export interface ExportTheme { name: string; tokens: ThemeTokens }
 
 // Core Chart.js types that render live from inlined data. Anything else (treemap /
 // sankey / matrix / financial / boxplot / map / table) arrives as a {kind:'image'} PNG,
@@ -287,7 +299,14 @@ export function sanitizeBundle(raw: unknown): ExportBundle {
     // which is what every export looked like before this field existed.
     style: sanitizeStyle(o.style),
     brand: sanitizeBrand(o.brand),
+    ...themeField(o.theme),
   };
+}
+
+function themeField(raw: unknown): { theme?: ExportTheme } {
+  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const tokens = themeModel.sanitizeTokens(o.tokens);
+  return Object.keys(tokens).length ? { theme: { name: asString(o.name).slice(0, 60), tokens } } : {};
 }
 
 const COLOR_RE = /^(#[0-9a-f]{6}|rgba\(\d{1,3}, \d{1,3}, \d{1,3}, (0|1|0?\.\d{1,4})\))$/i;
@@ -423,6 +442,41 @@ export function accentRamp(style: DashboardStyle, brand?: ExportBundle['brand'])
   return ACCENT_RAMPS[style.theme === 'dark' ? style.accent + '-dark' : style.accent];
 }
 
+// A theme's accent and chart colours win over the named/brand ramp, as its
+// inline tokens do over the preset classes on a sheet in the app.
+export function themedRamp(ramp: AccentRamp, theme?: ExportTheme): AccentRamp {
+  const t = theme ? theme.tokens : {};
+  const c = (k: string, v: string): string => (typeof t[k] === 'string' ? String(t[k]) : v);
+  return {
+    accent: c('--accent', ramp.accent), accent2: c('--accent-2', ramp.accent2),
+    soft: c('--accent-soft', ramp.soft), line: c('--accent-line', ramp.line),
+    chart: ramp.chart.map((x, i) => c('--chart-' + (i + 1), x)),
+  };
+}
+
+// The theme's tokens, then the export's own names for what the hub calls
+// --dash-*. `html.dash-themed` is (0,1,1), so it wins over the (0,1,0) preset
+// blocks above it. Values come only from themeCssVars over sanitized tokens.
+export function themeBlock(theme?: ExportTheme): string {
+  if (!theme) return '';
+  const vars = themeModel.themeCssVars(theme.tokens);
+  const v = new Map(vars);
+  const alias: Array<[string, string]> = [['--dash-card-radius', '--card-radius'], ['--dash-card-shadow', '--card-shadow'],
+    ['--dash-kpi-size', '--kpi-size'], ['--dash-gap', '--gap']];
+  const decls = vars.map(([k, x]) => `${k}: ${x};`)
+    .concat(alias.filter(([from]) => v.has(from)).map(([from, to]) => `${to}: ${v.get(from)};`));
+  // The export's row is taller than the hub's (80 against 48 — see
+  // DENSITY_TOKENS); a themed pitch keeps that same ratio.
+  const row = theme.tokens['--dash-row'];
+  if (typeof row === 'number') decls.push(`--row: ${Math.round((row * 80) / 48)}px;`);
+  return `
+    html.dash-themed { ${decls.join(' ')} }
+    html.dash-themed, html.dash-themed body { font-family: var(--font-ui, -apple-system, system-ui, sans-serif); }
+    .dash-themed .dash-card { border-width: var(--dash-card-border-w, 1px); }
+    .dash-themed .dash-card--metric .dash-card-title { order: var(--dash-kpi-label, 0); }
+  `;
+}
+
 // The three class names the exported document carries, in hub.css's own spelling.
 export function styleClasses(style: DashboardStyle): string {
   return `dash-theme--${style.theme} dash-density--${style.density} dash-accent--${style.accent}`;
@@ -431,8 +485,8 @@ export function styleClasses(style: DashboardStyle): string {
 // Theme + density + accent tokens, then the layout rules that consume them. The
 // rules are token-only — that is what lets one style change repaint the whole
 // document without a second copy of every rule per theme.
-export function styleBlock(style: DashboardStyle, brand?: ExportBundle['brand']): string {
-  const ramp = accentRamp(style, brand);
+export function styleBlock(style: DashboardStyle, brand?: ExportBundle['brand'], theme?: ExportTheme): string {
+  const ramp = themedRamp(accentRamp(style, brand), theme);
   const chartVars = ramp.chart.map((c, i) => `--chart-${i + 1}: ${c};`).join(' ');
   return `
     .dash-theme--${style.theme} { ${THEME_TOKENS[style.theme]} }
@@ -476,14 +530,14 @@ export function styleBlock(style: DashboardStyle, brand?: ExportBundle['brand'])
     .dash-broken-badge { font-size: 11px; font-weight: 600; text-transform: uppercase;
       letter-spacing: .04em; color: var(--text-faint); }
     .dash-broken-reason { font-size: 12px; color: var(--text-faint); margin-top: 4px; }
-  `;
+  ` + themeBlock(theme);
 }
 
 // The vanilla render script embedded in the file. It reads `window.__DASHBOARD__`, lays
 // each card on a CSS grid, and draws chart cards with the inlined Chart.js. All text is
 // set via textContent (never innerHTML) so a label/heading can't inject markup.
-function renderScript(style: DashboardStyle, brand?: ExportBundle['brand']): string {
-  const palette = accentRamp(style, brand).chart.map((c) => `'${c}'`).join(',');
+function renderScript(style: DashboardStyle, brand?: ExportBundle['brand'], theme?: ExportTheme): string {
+  const palette = themedRamp(accentRamp(style, brand), theme).chart.map((c) => `'${c}'`).join(',');
   return `
 (function () {
   var D = window.__DASHBOARD__;
@@ -634,19 +688,19 @@ export function buildSelfContainedHtml(bundle: unknown, chartLibJs: string, form
   // export and a white frame around a DARK one. hub.css's own note says these
   // are plain class selectors precisely so the element may be <html>.
   return `<!doctype html>
-<html lang="en" class="${styleClasses(clean.style)}">
+<html lang="en" class="${styleClasses(clean.style)}${clean.theme ? ' dash-themed' : ''}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${titleText || 'Dashboard'}</title>
-<style>${styleBlock(clean.style, clean.brand)}</style>
+<style>${styleBlock(clean.style, clean.brand, clean.theme)}</style>
 </head>
 <body>
 <div id="dash-root" class="dash-root"></div>
 <script>${lib}</script>
 ${fmt}
 <script>window.__DASHBOARD__ = ${embedJson(clean)};</script>
-<script>${renderScript(clean.style, clean.brand)}</script>
+<script>${renderScript(clean.style, clean.brand, clean.theme)}</script>
 </body>
 </html>`;
 }

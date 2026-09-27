@@ -38,6 +38,7 @@ import { sanitizeSteps } from '../data/transforms';
 import type { FilterStep } from '../data/transforms';
 import { sanitizePeriod, sanitizeCompare } from './dateIntel';
 import type { CompareMode, PeriodPreset } from './dateIntel';
+import { themeModel } from './themeTokens';
 
 // Tile actions and the card kinds beyond these four live in one PURE module
 // the renderer loads too (renderer/hub/cardModel.ts, the geoMatch pattern), so
@@ -453,6 +454,10 @@ export interface DashboardStyle {
   /** Which logo this dashboard's surfaces carry. Absent = the workspace's;
    *  'custom' = its own, stored in userData/branding (app/branding.ts). */
   logo?: 'none' | 'custom';
+  /** A workspace theme (src/app/themeStore.ts) over the three axes: a theme's
+   *  UUID, or 'none' to opt out of the workspace default. Absent = follow the
+   *  workspace. An id that no longer resolves falls through, never breaks. */
+  themeId?: string;
   /** The user (or the Assistant on their behalf) picked this, so it is an
    *  override to keep rather than a default to migrate. Absent means defaulted. */
   chosen?: true;
@@ -527,6 +532,7 @@ export function sanitizeStyle(raw: unknown): DashboardStyle {
     ...(typeof o.accentHex === 'string' && /^#[0-9a-f]{6}$/i.test(o.accentHex)
       ? { accentHex: o.accentHex.toLowerCase() } : {}),
     ...(o.logo === 'none' || o.logo === 'custom' ? { logo: o.logo } : {}),
+    ...(themeModel.sanitizeThemeId(o.themeId) ? { themeId: themeModel.sanitizeThemeId(o.themeId) } : {}),
     // Last, so a preset literal and its sanitized copy serialise identically.
     ...(chosen ? { chosen: true as const } : {}),
   };

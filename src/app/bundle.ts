@@ -33,6 +33,7 @@ import { randomUUID } from 'crypto';
 import { app } from 'electron';
 import * as projects from './projects';
 import { projectDir, projectsBase, isValidId } from './recordKinds';
+import { bundleThemesEntry, importBundleThemes } from './themeStore';
 
 export const BUNDLE_FORMAT = 'ordinate-project';
 export const BUNDLE_VERSION = 1;
@@ -63,6 +64,9 @@ const ENTRY_RULES: Array<{ re: RegExp; count?: string }> = [
   // The share policy travels. Its sibling privacy/salt.key NEVER does: it is a
   // per-project secret, and "not on this list" is what keeps it home.
   { re: /^privacy\/policy\.json$/ },
+  // The workspace themes this project's dashboards name (themeStore.ts). Not a
+  // project file: written at export, adopted into the workspace at import.
+  { re: /^themes\.json$/ },
 ];
 
 const MAX_ENTRIES = 50_000;
@@ -341,6 +345,8 @@ export async function exportProject(
     if (opts.onProgress) opts.onProgress(0.3 * ((i + 1) / files.length), 'Reading files');
     if (rule.count) counts[rule.count] = (counts[rule.count] || 0) + 1;
   }
+  const themes = await bundleThemesEntry(entries);
+  if (themes) entries.push(themes);
   const alerts = entries.find((e) => e.name === 'alerts.json');
   if (alerts) {
     try { counts.alerts = (JSON.parse(alerts.data.toString('utf8')).rules || []).length; } catch (_) { counts.alerts = 0; }
@@ -455,7 +461,7 @@ export async function importBundle(bytes: Buffer, opts: BundleProgress & { name?
   const dir = projectDir(created.id);
   try {
     for (const e of entries) {
-      if (e.name === 'manifest.json' || e.name === 'project.json') continue; // the new project has its own
+      if (e.name === 'manifest.json' || e.name === 'project.json' || e.name === 'themes.json') continue; // the new project has its own; themes are workspace records
       const rel = swap(e.name);
       if (!ruleFor(rel)) throw new Error('A remapped name left the whitelist.'); // cannot happen; guard anyway
       const target = path.join(dir, ...rel.split('/'));
@@ -478,6 +484,7 @@ export async function importBundle(bytes: Buffer, opts: BundleProgress & { name?
         if (src.colorMap) await projects.setColorMap(created.id, src.colorMap);
       } catch (_) { /* optional */ }
     }
+    await importBundleThemes(entries, swap).catch(() => 0); // a theme costs the look, never the import
   } catch (err: any) {
     await projects.deleteProject(created.id);
     return { ok: false, error: err?.message || 'The bundle could not be written.' };
