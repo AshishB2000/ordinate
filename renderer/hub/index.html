@@ -49,6 +49,9 @@
   <!-- build-css:snapshots -->
   <link rel="stylesheet" href="snapshots.css"/>
 
+  <!-- engines-css:segments -->
+  <link rel="stylesheet" href="segments.css"/>
+
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
        injecting a <style> at render time, which the hub CSP (style-src 'self')
@@ -3541,6 +3544,14 @@
 <script src="snapshots.js"></script>
 <script src="snapshotDiffView.js"></script>
 <script src="snapshotAsOf.js"></script>
+
+<!-- engines:segments -->
+<!-- Find segments: the page shell + column picker (segments.js, built into the
+     workspace at first open), its k-means results (segmentsView.js) and the
+     RFM tab (segmentsRfm.js). They resolve each other at call time. -->
+<script src="segments.js"></script>
+<script src="segmentsView.js"></script>
+<script src="segmentsRfm.js"></script>
 
 <script src="hub.js"></script>
 

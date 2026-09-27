@@ -771,3 +771,20 @@ scripts/**/*.js
 /renderer/hub/scenarioCard.js
 /scripts/test-scenarios.js
 /scripts/aeScenarios.js
+
+# Analysis engines — Segmentation (emitted siblings).
+/src/analysis/segmentMath.js
+/src/analysis/segmentModel.js
+/src/analysis/rfm.js
+/src/data/stepsSegment.js
+/src/engine/sqlGenSegment.js
+/src/engine/segmentResident.js
+/src/ipc/segments.js
+/preload/hubSegmentsPreload.js
+/renderer/hub/segments.js
+/renderer/hub/segmentsView.js
+/renderer/hub/segmentsRfm.js
+/scripts/test-segments.js
+/scripts/test-segmentsDuck.js
+/scripts/test-rfm.js
+/scripts/aeSegments.js

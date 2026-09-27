@@ -30,6 +30,8 @@ import type { QualityRule } from '../analysis/qualityRules';
 import { parseFile } from '../data/fileImport';
 import type { FileSourceKind } from '../data/fileImport';
 import type { ParsedColumn } from '../data/parse';
+import { fitResident, rfmCustomersResident } from './segmentResident';
+import type { RfmSpec } from '../analysis/rfm';
 
 type Progress = (fraction: number, note?: string) => void;
 
@@ -50,6 +52,16 @@ const OPS: Record<string, (args: any, progress: Progress) => Promise<unknown>> =
   /** Quality rules off Parquet; null = the resident path declined. */
   async quality(args: { src: QualitySource; rules: QualityRule[]; refs: Array<[string, QualitySource | null]> }) {
     return evaluateRulesResident(args.src, args.rules, new Map(args.refs));
+  },
+
+  /** Find segments off the Parquet (src/ipc/segments.ts); null = the resident path declined. */
+  async segmentFit(args: { src: Src; features: string[] }, progress: Progress) {
+    return fitResident(args.src, args.features, progress);
+  },
+
+  /** RFM's per-customer aggregates off the Parquet; null = the resident path declined. */
+  async rfm(args: { src: Src; spec: RfmSpec }) {
+    return rfmCustomersResident(args.src, args.spec);
   },
 
   /** Read and parse a data file (csv/json/xlsx) — the import's CPU half. */

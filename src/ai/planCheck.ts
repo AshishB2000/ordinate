@@ -186,6 +186,7 @@ export function checkStep(step: PlanStep, ctx: PlanCtx, index: number): { check:
         return fail(t ? `"${t}" is not a prepare step Ordinate knows, or it is missing a field.` : 'The step has no type.');
       }
       const s = clean[0];
+      if (s.type === 'segment') return fail('A segment step carries a fitted model — make it with Find segments.');
       if (s.type === 'calculated_field') {
         if (!s.name) return fail('The calculated field has no name.');
         const compiled = compile(s.expression);

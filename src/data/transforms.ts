@@ -26,6 +26,8 @@ import { applyMaskStep, sanitizeMaskStep } from './maskSteps';
 import type { MaskStep, PipelineCtx as MaskCtx } from './maskSteps';
 import type { PipelineContext, PowerStep, StepCount } from './stepsPower';
 import { POWER_STEP_TYPES, applyPowerStep, conditionalAsCalc, sanitizePowerStep } from './stepsPower';
+import type { SegmentStep } from './stepsSegment';
+import { applySegmentStep, sanitizeSegmentStep } from './stepsSegment';
 
 /**
  * What a pipeline may be handed beyond its source: the project's masking key
@@ -127,7 +129,8 @@ export type TransformStep =
   | DropColumnStep
   | RenameColumnStep
   | MaskStep
-  | PowerStep;
+  | PowerStep
+  | SegmentStep;
 
 export type StepType = TransformStep['type'];
 
@@ -149,6 +152,7 @@ const STEP_TYPES: ReadonlySet<string> = new Set([
   'mask_redact',
   'mask_generalize',
   ...POWER_STEP_TYPES,
+  'segment', // Find segments' fitted model (stepsSegment.ts)
 ]);
 
 // The three table helpers combine.ts shares. Exported for that, not as an
@@ -281,6 +285,8 @@ function dispatch(t: TableData, step: TransformStep, ctx: PipelineCtx): StepResu
       const calc = conditionalAsCalc(t.columns, step);
       return typeof calc === 'string' ? skip(t, calc) : stepCalculatedField(t, calc);
     }
+    case 'segment':
+      return applySegmentStep(t, step);
     default:
       return skip(t, `Unknown step type "${(step as { type?: string }).type}" skipped`);
   }
@@ -657,6 +663,7 @@ function sanitizeStep(item: unknown): TransformStep | null {
   const type = o.type;
   if (typeof type !== 'string' || !STEP_TYPES.has(type)) return null;
   if (POWER_STEP_TYPES.has(type)) return sanitizePowerStep(o);
+  if (type === 'segment') return sanitizeSegmentStep(o);
 
   switch (type) {
     case 'calculated_field': {

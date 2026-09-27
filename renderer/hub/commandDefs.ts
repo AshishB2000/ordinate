@@ -175,6 +175,9 @@ function registerAppCommands(): void {
   registerCommand({ id: 'data.refresh', title: 'Refresh this dataset', group: 'Data', icon: 'refresh', when: cmdDatasetOpen, run: () => { void handleRefreshDataset(expId, null, null); } });
   registerCommand({ id: 'data.history', title: 'Pipeline history', group: 'Data', icon: 'history', when: cmdDatasetOpen, run: () => { void vhOpen('dataset', expId, expName); } });
   registerCommand({ id: 'data.lineage', title: 'Show lineage', group: 'Data', icon: 'lineage', when: cmdDatasetOpen, run: () => { void lnOpen('dataset', expId, expName); } });
+  // Find segments (segments.ts) — the same page the dataset's ⋯ menu opens.
+  registerCommand({ id: 'data.segments', title: 'Find segments in this dataset', group: 'Data', icon: 'layers', when: cmdDatasetOpen, run: () => { void sgOpen(expId, expName); } });
+  registerCommand({ id: 'data.rfm', title: 'Score customers (RFM)', group: 'Data', icon: 'user', when: cmdDatasetOpen, run: () => { void sgOpen(expId, expName, 'rfm'); } });
 
   // ── Visual ─────────────────────────────────────────────────────────────────
   registerCommand({
