@@ -26,5 +26,6 @@ export function register(deps: BuildDeps): void {
   require('./saas').register(deps);
 
   // build:snapshots
+  require('./snapshots').register(deps);
 
 }

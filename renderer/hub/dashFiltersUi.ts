@@ -92,7 +92,7 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
   if (currentProjectId && m.metricId) {
     let mr: any;
     try {
-      mr = await window.hub.metricValue(currentProjectId, m.metricId, effectiveFilters(), dashParamPayload());
+      mr = await snapMetricValue(currentProjectId, m.metricId, effectiveFilters(), dashParamPayload()); // snapshotAsOf.ts
     } catch (_) {
       mr = null;
     }
@@ -103,6 +103,8 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
       void paintMetricCompare(card, body);
       return;
     }
+    // "No data as of <time>" is the answer, not a reason to fall through to the column.
+    if (mr && mr.asOfMissing) { dashCardMissing(body, mr.error, true); return; }
   }
 
   if (!currentProjectId || !m.datasetId || !m.column || !m.aggregation) { valEl.textContent = '—'; return; }
@@ -111,7 +113,7 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
     // Dashboard-wide filters + every control's live selection (effectiveFilters,
     // dashboards.ts) are applied over the dataset in MAIN before the number is
     // computed (still 100% app-computed; the renderer never does the math).
-    r = await window.hub.computeMetric(
+    r = await snapComputeMetric( // snapshotAsOf.ts — the "As of" picker
       currentProjectId, m.datasetId, m.column, m.aggregation,
       effectiveFilters(), dashParamPayload(),
     );

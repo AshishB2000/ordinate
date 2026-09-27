@@ -665,4 +665,15 @@ scripts/**/*.js
 /renderer/hub/saas.js
 
 # build:snapshots
+/src/data/snapshotNames.js
+/src/data/snapshots.js
+/src/data/snapshotDiffJs.js
+/src/data/snapshotRestore.js
+/src/data/asOf.js
+/src/engine/snapshotDiff.js
+/src/ipc/snapshots.js
+/preload/hubSnapshotsPreload.js
+/renderer/hub/snapshots.js
+/renderer/hub/snapshotDiffView.js
+/renderer/hub/snapshotAsOf.js
 

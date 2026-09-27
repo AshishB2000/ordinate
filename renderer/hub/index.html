@@ -40,6 +40,7 @@
   <link rel="stylesheet" href="saas.css"/>
 
   <!-- build-css:snapshots -->
+  <link rel="stylesheet" href="snapshots.css"/>
 
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
@@ -3310,6 +3311,13 @@
 <script src="saas.js"></script>
 
 <!-- build:snapshots -->
+<!-- Data snapshots: the dataset page's Snapshots tab (snapshots.js, built into
+     the tab strip at load), its compare panel (snapshotDiffView.js, uses
+     snapEl/snapWhen), then the "As of" pickers and the metric history
+     (snapshotAsOf.js), whose wrappers dashGrid/dashFiltersUi/vizBuilder call. -->
+<script src="snapshots.js"></script>
+<script src="snapshotDiffView.js"></script>
+<script src="snapshotAsOf.js"></script>
 
 <script src="hub.js"></script>
 

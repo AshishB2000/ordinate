@@ -31,6 +31,7 @@ const SECTIONS: Section[] = [
   { name: 'saas', run: (s, fx) => require('./bdSaas').saasSection(s, fx) },
 
   // build:snapshots
+  { name: 'snapshots', run: (s, fx) => require('./bdSnapshots').snapshotsSection(s, fx) },
 
 ];
 

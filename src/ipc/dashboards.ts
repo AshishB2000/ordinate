@@ -13,6 +13,7 @@ import { joinedMetricFor } from './relationships';
 import { paramValues, resolveFilterParams } from '../analysis/params';
 import type { ParamValues } from '../analysis/params';
 import { paramTable } from '../data/paramReplay';
+import { withAsOf } from '../data/asOf';
 
 // Dashboards IPC — list/get/save/update/delete a Dashboard, plus `dashboard:metric`
 // which loads a dataset and runs the PURE src/metricValue.ts helper to produce the
@@ -231,7 +232,8 @@ export function register() {
   // still runs FIRST and unchanged — it is the security control that keeps
   // untrusted renderer input to filter-only steps, not a formatter, and BOTH
   // paths consume its output. The response shape is byte-identical either way.
-  ipcMain.handle('dashboard:metric', async (_e, { projectId, datasetId, column, aggregation, filters, params }: any = {}) => {
+  // `asOf` (view state, data/asOf.ts): the dataset read as of that time.
+  ipcMain.handle('dashboard:metric', async (_e, { projectId, datasetId, column, aggregation, filters, params, asOf }: any = {}) => withAsOf(projectId, asOf, async () => {
     try {
       // Parameters resolve FIRST — `[[threshold]]` becomes the number it names —
       // so both paths below see ordinary, typed filter steps.
@@ -244,5 +246,5 @@ export function register() {
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute the metric' };
     }
-  });
+  }));
 }

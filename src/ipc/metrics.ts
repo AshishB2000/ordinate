@@ -44,6 +44,7 @@ import type { FilterStep } from '../data/transforms';
 import { relatedColumnNames } from './relationships';
 import * as versions from '../app/versions';
 import * as trash from '../app/trash';
+import { withAsOf } from '../data/asOf';
 
 /** How many distinct values of a breakout column are read before rolling up. */
 const SERIES_SCAN = 2000;
@@ -426,7 +427,8 @@ export function register() {
     return done.ok ? { ok: true } : { ok: false, error: 'Could not delete the metric' };
   });
 
-  ipcMain.handle('metric:value', async (_e, { projectId, id, filters, params }: any = {}) => {
+  // `asOf` (view state, data/asOf.ts): every dataset read as of that time.
+  ipcMain.handle('metric:value', async (_e, { projectId, id, filters, params, asOf }: any = {}) => withAsOf(projectId, asOf, async () => {
     try {
       const values = paramValues(params);
       const bound = resolveFilterParams(sanitizeDashboardFilters(filters), values);
@@ -436,7 +438,7 @@ export function register() {
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute the metric' };
     }
-  });
+  }));
 
   /**
    * The editor's live preview: a figure for a definition that has NOT been

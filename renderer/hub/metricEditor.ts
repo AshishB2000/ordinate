@@ -303,6 +303,7 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
     preview.appendChild(prevVal);
     preview.appendChild(prevText);
     box.appendChild(preview);
+    if (editingId) box.appendChild(snapMetricHistory(editingId)); // snapshotAsOf.ts — the value across snapshots
 
     const err = document.createElement('p');
     err.className = 'me-error';

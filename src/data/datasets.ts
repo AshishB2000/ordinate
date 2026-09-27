@@ -38,6 +38,10 @@ import {
   datasetsDir, datasetFilePath, parquetPath, sourceParquetPath, writeJsonAtomic, sanitizeAutoRefresh,
 } from './datasetRecord';
 export { markRefresh, setAutoRefresh, writeQuality } from './datasetRecord';
+// Data snapshots: the refresh hook (keep the table being replaced) and the
+// as-of hooks (read a dataset as it was) — each one line at its call site.
+import { keepAround, removeAll as removeSnapshots } from './snapshots';
+import * as asOf from './asOf';
 export type { DatasetOrigin } from './datasetOrigin';
 export type { DatasetSummary } from './datasetSummary';
 export { sanitizeOrigin };
@@ -169,6 +173,7 @@ function sanitizeCapture(raw: any): { entryId: string | null; cropPath: string |
 const writeChains = new Map<string, Promise<void>>();
 
 async function persist(projectId: string, dataset: Dataset, progress: parquetStore.WriteProgress = {}): Promise<void> {
+  asOf.assertWritable(); // an as-of read must never write its past rows back as the present
   const prev = writeChains.get(dataset.id) || Promise.resolve();
   const run = prev.catch(() => { /* the previous write's failure was its caller's */ })
     .then(() => persistNow(projectId, dataset, progress));
@@ -370,6 +375,8 @@ export type DatasetMeta = Omit<Dataset, 'rows' | 'source'> & {
 
 export async function getDatasetMeta(projectId: string, id: string): Promise<DatasetMeta | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
+  const past = await asOf.metaHook(projectId, id); // inside an as-of read: the snapshot's
+  if (past !== undefined) return past;
   try {
     const raw = await fs.promises.readFile(datasetFilePath(projectId, id), 'utf8');
     const data = JSON.parse(raw);
@@ -404,6 +411,8 @@ export async function residentSource(
   projectId: string,
   id: string,
 ): Promise<{ parquetPath: string; columns: ParsedColumn[] } | null> {
+  const past = await asOf.residentHook(projectId, id); // inside an as-of read: the snapshot's file
+  if (past !== undefined) return past;
   if (!parquetStore.isSupported()) return null;
   const meta = await getDatasetMeta(projectId, id);
   if (!meta || !meta.resident) return null;
@@ -412,6 +421,8 @@ export async function residentSource(
 
 export async function getDataset(projectId: string, id: string): Promise<Dataset | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
+  const past = await asOf.datasetHook(projectId, id); // inside an as-of read: the snapshot's rows
+  if (past !== undefined) return past;
   try {
     const raw = await fs.promises.readFile(datasetFilePath(projectId, id), 'utf8');
     const data = JSON.parse(raw);
@@ -501,13 +512,39 @@ export async function saveDataset(
 // step with a warning, and swallowing it would leave the user with a silently
 // shorter pipeline. An out-param rather than a changed return type keeps the two
 // existing callers (capture recapture, connection refresh) untouched.
-export async function updateDatasetData(
+//
+// Queued per dataset at CALL time, before any await. A replace is read →
+// derive → keep → write, and two overlapping ones (a folder-watch refresh and
+// a manual one) used to reach persist's lock in whatever order their reads
+// finished — so an older fetch could land last, and a snapshot could keep a
+// table another replace had already superseded. Now the one issued last wins.
+const dataChains = new Map<string, Promise<unknown>>();
+
+export function updateDatasetData(
   projectId: string,
   id: string,
   data: { columns: ParsedColumn[]; rows: (string | number | null)[][] },
   capture?: { entryId: string | null; cropPath: string | null },
   outWarnings?: string[],
   progress: parquetStore.WriteProgress = {},
+): Promise<Dataset | null> {
+  const key = projectId + '/' + id;
+  const prev = dataChains.get(key) || Promise.resolve();
+  const run = prev.catch(() => { /* the previous replace's failure was its caller's */ })
+    .then(() => updateDatasetDataNow(projectId, id, data, capture, outWarnings, progress));
+  const tail = run.catch(() => { /* reported to this caller below */ });
+  dataChains.set(key, tail);
+  void tail.then(() => { if (dataChains.get(key) === tail) dataChains.delete(key); });
+  return run;
+}
+
+async function updateDatasetDataNow(
+  projectId: string,
+  id: string,
+  data: { columns: ParsedColumn[]; rows: (string | number | null)[][] },
+  capture: { entryId: string | null; cropPath: string | null } | undefined,
+  outWarnings: string[] | undefined,
+  progress: parquetStore.WriteProgress,
 ): Promise<Dataset | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   const existing = await getDataset(projectId, id);
@@ -537,7 +574,8 @@ export async function updateDatasetData(
   const cap = sanitizeCapture(capture);
   if (cap) updated.capture = cap;
   await fs.promises.mkdir(datasetsDir(projectId), { recursive: true });
-  await persist(projectId, updated, progress);
+  // The one place a refresh replaces the table: keep the table it replaces.
+  await keepAround(projectId, existing, () => persist(projectId, updated, progress));
   return updated;
 }
 
@@ -682,6 +720,7 @@ export async function deleteDataset(projectId: string, id: string): Promise<bool
     await fs.promises.rm(datasetFilePath(projectId, id), { force: true });
     await fs.promises.rm(parquetPath(projectId, id), { force: true });
     await fs.promises.rm(sourceParquetPath(projectId, id), { force: true });
+    await removeSnapshots(projectId, id);
     return true;
   } catch (_) {
     return false;

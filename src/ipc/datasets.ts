@@ -231,6 +231,25 @@ export async function commitSteps(projectId: string, datasetId: string, steps: u
   };
 }
 
+/**
+ * What follows every data replace the user asked for — a refresh, and a
+ * snapshot restore (src/ipc/snapshots.ts), which goes through the same path.
+ *
+ * Alert rules are evaluated after EVERY refresh of this dataset, and the
+ * handlers are the manual entry points — both the Data row's ↻ and the
+ * dashboard card's come through `dataset:refresh`, so the hook belongs at the
+ * join rather than duplicated at each button. Awaited so the renderer's bell
+ * is already right by the time the refresh reports done; a failure inside is
+ * swallowed by the evaluator and can never fail the refresh.
+ */
+export async function afterRefresh(projectId: string, id: string): Promise<void> {
+  await require('./alerts').evaluateAndDeliver(projectId, id);
+  await runQualityChecks(projectId, id);
+  // SQL datasets built on this one re-run. Not awaited: never rejects, and
+  // the refresh the user asked for is done.
+  void refreshDependents(projectId, id);
+}
+
 export function register() {
   compose.setCommitSteps((p, d, st) => commitSteps(p, d, st));
 
@@ -293,17 +312,7 @@ export function register() {
     try {
       const res = await refreshAsJob(projectId, id);
       if (!res.ok) return res;
-      // Alert rules are evaluated after EVERY refresh of this dataset, and this
-      // handler is the one manual entry point — both the Data row's ↻ and the
-      // dashboard card's come through here, so the hook belongs at the join
-      // rather than duplicated at each button. Awaited so the renderer's bell
-      // is already right by the time the refresh reports done; a failure inside
-      // is swallowed by the evaluator and can never fail the refresh.
-      await require('./alerts').evaluateAndDeliver(projectId, id);
-      await runQualityChecks(projectId, id);
-      // SQL datasets built on this one re-run. Not awaited: never rejects, and
-      // the refresh the user asked for is done.
-      void refreshDependents(projectId, id);
+      await afterRefresh(projectId, id);
       // The record without its tables — no caller reads the rows, and a 1M-row
       // structured clone is seconds of work for nothing.
       const { rows: _rows, source: _source, ...dataset } = res.dataset as any;

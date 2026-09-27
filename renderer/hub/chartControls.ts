@@ -141,6 +141,7 @@ function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx,
       filters: d.filters,
       mark: null,
       trigger: anchorBtn,
+      asOf: d.asOf, // snapshotAsOf.ts — the rows as of the card's time
     });
   }
 
