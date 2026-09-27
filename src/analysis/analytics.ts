@@ -245,6 +245,7 @@ export const OVERLAY_ACCEPT: Readonly<Record<string, readonly OverlayKind[]>> = 
   waterfall: FLAT, pareto: FLAT,
   bullet: ['reference', 'band', 'annotation', 'highlight'],
   calendar: [], radar: [],
+  word_cloud: [], // no axes to draw an overlay against
 };
 
 export function overlayAccepted(chartType: string | null | undefined, kind: OverlayKind): boolean {

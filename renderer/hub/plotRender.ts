@@ -105,6 +105,8 @@ const MOSAIC_FALLBACK_TYPES: ReadonlySet<string> = new Set([
   'pivot', 'table', 'map_bubble', 'map_choropleth',
   // DOM over main's own grid (cohortRender.ts) — nothing for vgplot to query.
   'cohort', 'event_funnel',
+  // A spiral layout of words — no vgplot mark places text that way.
+  'word_cloud',
 ]);
 
 /** True when `type` has a vgplot mapping at all (the encoding still has to fit). */

@@ -1,0 +1,15 @@
+Text analytics data bundled with Ordinate (read by src/analysis/text/, main process only).
+
+vader-lexicon.json
+  The VADER sentiment lexicon (vaderSentiment 3.3.2) by C.J. Hutto, converted from
+  vaderSentiment/vader_lexicon.txt in https://github.com/cjhutto/vaderSentiment
+  (master, fetched 2026-09-27). Only the first two columns are kept: the token and
+  its mean valence. MIT licence: VADER-LICENSE.txt.
+
+  Hutto, C.J. & Gilbert, E.E. (2014). VADER: A Parsimonious Rule-based Model for
+  Sentiment Analysis of Social Media Text. ICWSM-14.
+
+stopwords-en.json, stopwords-es.json, stopwords-fr.json, stopwords-de.json
+  The Snowball project's stop word lists (https://snowballstem.org/algorithms/
+  <language>/stop.txt), comments stripped, NFC-normalised and lower-cased, in the
+  list's own order. BSD 3-Clause licence: SNOWBALL-LICENSE.txt.

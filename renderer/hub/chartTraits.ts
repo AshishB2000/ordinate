@@ -67,6 +67,7 @@ const PER_SERIES_DATASET_TYPES = new Set([
 const NO_VALUE_LABEL_TYPES = new Set([
   'treemap', 'funnel', 'sankey', 'candlestick', 'boxplot', 'gauge',
   'calendar', 'radar',
+  'word_cloud', // the word IS the label; its figure is in the tooltip
 ]);
 
 // Legend on by default for every chart except plugin/synthetic types whose Chart.js
@@ -77,6 +78,7 @@ const NO_LEGEND_TYPES = new Set([
   'sankey', 'candlestick', 'boxplot',
   // Colour carries the meaning (up/down, bands, a ramp with its own legend).
   'waterfall', 'bullet', 'calendar',
+  'word_cloud',
 ]);
 function legendOnByDefault(type: string, ser: ChartSeriesShape[]): boolean {
   if (NO_LEGEND_TYPES.has(type)) return false;

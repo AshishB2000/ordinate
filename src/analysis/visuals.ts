@@ -352,6 +352,7 @@ export const SUGGESTABLE_CHART_TYPES: readonly string[] = [
   'treemap', 'heatmap', 'funnel', 'histogram',
   'sankey', 'candlestick', 'boxplot',
   'waterfall', 'bullet', 'calendar', 'radar', 'pareto',
+  'word_cloud',
 ];
 
 // Allowed enum sets for the clamped override fields.

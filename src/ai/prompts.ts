@@ -69,6 +69,11 @@ export const SUGGEST_STEPS_SYSTEM_PROMPT =
   '"partitionBy": ["<col>"], "orderBy": "<col>" }\n' +
   '  { "type": "union", "datasetId": "<id>" }\n' +
   '  { "type": "lookup_join", "datasetId": "<id>", "leftKey": "<col>", "rightKey": "<col>", "columns": ["<col>"] }\n' +
+  '  { "type": "text_terms", "column": "<text col>", "lang": "en|es|fr|de", "minN": <1-3>, "maxN": <1-3>, "top": <1-1000>, ' +
+  '"by": "<col optional>", "rank": "count|tfidf (tfidf needs by)" }\n' +
+  '  { "type": "text_sentiment", "column": "<text col>", "as": "<new column optional>" }\n' +
+  '  { "type": "keyword_rules", "column": "<text col>", "as": "<new column optional>", "rules": [{ "pattern": "<text>", ' +
+  '"match": "contains|word|regex", "category": "<text>" }], "otherwise": "<text>" }\n' +
   'Propose union or lookup_join ONLY when another dataset\'s id is given to you; never invent an id.\n' +
   'Return ONLY the JSON array (use [] if no preparation is warranted).';
 

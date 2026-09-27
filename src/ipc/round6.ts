@@ -19,6 +19,7 @@ export function register(deps: Round6Deps): void {
   require('./stats').register(); // the statistics workbench (src/ipc/stats.ts)
 
   // r6:text
+  (require('./text') as typeof import('./text')).register();
 
   // r6:geo
 

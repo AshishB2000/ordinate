@@ -1,0 +1,244 @@
+/* Text analytics — the column profile's Text section (textProfile.ts), the
+   text steps' editors and previews (textSteps.ts) and the word cloud's tooltip
+   (wordCloudRender.ts). Its own sheet, linked under the r6-css:text marker.
+   Tokens only: every colour and size comes from theme.css, so both themes hold. */
+
+/* ── The profile's Text section ─────────────────────────────────────────── */
+.tx-dsp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--sp-12) 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.tx-dsp.is-busy { opacity: 0.55; }
+.tx-dsp .dsp-head,
+.tx-dsp .dsp-note { margin: 0; }
+.tx-dsp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-8);
+}
+.tx-lang {
+  max-width: 60%;
+  padding: 2px var(--sp-4);
+  font: inherit;
+  font-size: var(--t-11);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+}
+.tx-lang:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
+.tx-dsp .dsp-bar-row.tx-term-row { grid-template-columns: 104px 1fr auto; }
+.tx-dsp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+.tx-error { color: var(--text); } /* the words say it failed; --error at 11px misses AA on surface-2 */
+.tx-muted {
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+
+/* The average, big, coloured by its own sign — then the spread under it. */
+.tx-senti-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-8);
+}
+.tx-senti-num {
+  font-size: var(--t-20);
+  font-weight: 600;
+  letter-spacing: var(--tr-tighter);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+.tx-senti-num.is-pos { color: var(--ok); }
+.tx-senti-num.is-neg { color: var(--error); }
+
+/* ── The sentiment spread (profile and step preview share it) ───────────── */
+.tx-senti {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.tx-senti-bar {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  overflow: hidden;
+  border-radius: var(--r-full);
+  background: var(--border);
+}
+.tx-senti-seg {
+  flex: 0 0 auto;
+  flex-basis: 0;
+  min-width: 3px;
+}
+.tx-senti-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--sp-8);
+  font-size: var(--t-11);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.tx-senti-key {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.tx-senti-key::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--border-3);
+}
+.tx-senti-seg.is-neg2, .tx-senti-key.is-neg2::before { background: var(--error); }
+.tx-senti-seg.is-neg, .tx-senti-key.is-neg::before { background: color-mix(in srgb, var(--error) 55%, var(--surface)); }
+.tx-senti-seg.is-neu, .tx-senti-key.is-neu::before { background: var(--border-3); }
+.tx-senti-seg.is-pos, .tx-senti-key.is-pos::before { background: color-mix(in srgb, var(--ok) 55%, var(--surface)); }
+.tx-senti-seg.is-pos2, .tx-senti-key.is-pos2::before { background: var(--ok); }
+/* In the step preview the three bands are the strong colours. */
+.tx-preview .tx-senti-seg.is-neg, .tx-preview .tx-senti-key.is-neg::before { background: var(--error); }
+.tx-preview .tx-senti-seg.is-pos, .tx-preview .tx-senti-key.is-pos::before { background: var(--ok); }
+
+/* ── The text steps' editors ────────────────────────────────────────────── */
+.tx-check {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  font-size: var(--t-12);
+  color: var(--text);
+}
+/* A rule is a card: its number (precedence, a counter — it follows a move),
+   then "If text [contains] [refund] Aa" over "→ [Billing] ↑ ✕". */
+.tx-rules { counter-reset: tx-rule; }
+.tx-rule {
+  counter-increment: tx-rule;
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: var(--sp-4) var(--sp-8);
+  padding: var(--sp-8);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.tx-rule::before {
+  content: counter(tx-rule);
+  grid-row: 1 / span 2;
+  align-self: start;
+  margin-top: 6px;
+  font-size: var(--t-11);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  text-align: center;
+}
+.tx-rule-line {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.tx-rule-line .pp-arrow { flex: none; min-width: 34px; }
+.tx-rule .tx-pat,
+.tx-rule .tx-cat {
+  flex: 1 1 80px;
+  min-width: 0;
+}
+.tx-rule .tx-match { flex: 0 1 auto; min-width: 0; }
+.tx-case-lbl {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--t-12);
+  color: var(--muted);
+  cursor: pointer;
+}
+.tx-case-lbl input { margin: 0; }
+.tx-dsp-actions .btn { flex: 1 1 auto; justify-content: center; }
+.pp-preview .dsp-bar-row { grid-template-columns: minmax(84px, 128px) 1fr auto; }
+.tx-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.tx-chip {
+  padding: 2px var(--sp-8);
+  font: inherit;
+  font-size: var(--t-12);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-full);
+  cursor: pointer;
+}
+.tx-chip:hover { border-color: var(--accent-line); background: var(--accent-soft); }
+.tx-chip:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
+
+/* The previews: main's figures, laid out. */
+.tx-preview { gap: var(--sp-8); }
+.tx-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+}
+.tx-table th,
+.tx-table td {
+  padding: 2px var(--sp-4);
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.tx-table th {
+  font-weight: 600;
+  color: var(--muted);
+}
+.tx-table td.is-num { text-align: right; }
+.tx-example {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: baseline;
+  color: var(--text);
+}
+.tx-score {
+  flex: none;
+  min-width: 64px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.pp-preview .dsp-bar-fill.is-default { background: var(--border-3); }
+
+/* ── The word cloud ─────────────────────────────────────────────────────── */
+canvas.wc-hot { cursor: pointer; }
+.wc-tip {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 260px;
+  padding: var(--sp-4) var(--sp-8);
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: var(--surface-float, var(--surface));
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-md);
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.wc-tip strong { color: var(--text-strong); }

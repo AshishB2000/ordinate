@@ -839,6 +839,17 @@ scripts/**/*.js
 /renderer/hub/statsTile.js
 
 # r6:text
+/src/analysis/text/*.js
+/src/data/textStepTypes.js
+/src/data/stepsText.js
+/src/engine/textSampleResident.js
+/src/ipc/text.js
+/preload/hubTextPreload.js
+/renderer/hub/wordCloudLayout.js
+/renderer/hub/wordCloudRender.js
+/renderer/hub/textSteps.js
+/renderer/hub/textPreviews.js
+/renderer/hub/textProfile.js
 
 # r6:geo
 

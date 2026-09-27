@@ -42,6 +42,10 @@ const STEP_TYPES: Array<{ type: string; label: string }> = [
   { type: 'pivot', label: 'Pivot rows to columns' },
   { type: 'lookup_join', label: 'Look up from another dataset' },
   { type: 'union', label: 'Append another dataset' },
+  // The text family (textSteps.ts).
+  { type: 'text_terms', label: 'Text — count terms' },
+  { type: 'text_sentiment', label: 'Text — sentiment score' },
+  { type: 'keyword_rules', label: 'Text — tag with keyword rules' },
 ];
 const FILTER_OPS = ['=', '!=', '>', '<', '>=', '<=', 'contains', 'is_empty', 'not_empty', 'in', 'not in'];
 const AGG_FNS = ['sum', 'avg', 'count', 'min', 'max'];
@@ -87,7 +91,8 @@ function stepSummaryText(step: any): string {
     case 'rename_column':
       return 'Rename ' + step.from + ' → ' + step.to;
     default:
-      return pvMaskSummary(step) || sgStepSummary(step) || powerStepSummary(step); // prepareMask.ts / segments.ts / prepareCombine.ts
+      return pvMaskSummary(step) || sgStepSummary(step) || txStepSummary(step) // prepareMask / segments / textSteps
+        || powerStepSummary(step); // prepareCombine.ts
   }
 }
 
@@ -270,7 +275,11 @@ async function saveStepFromForm(getStep: () => any): Promise<void> {
   if (steps.length === 0) return;
 
   let res: any;
-  if (dsStepEditIndex >= 0) {
+  if (TX_STEP_TYPES.has(steps[0].type)) {
+    // textSteps.ts: a job on a big table; Cancel there leaves the editor open.
+    res = await txCommitStep(dsStepEditIndex, steps[0]);
+    if (res && res.cancelled) return;
+  } else if (dsStepEditIndex >= 0) {
     res = await window.hub.updateDatasetStep(currentProjectId, expId, dsStepEditIndex, steps[0]);
   } else {
     res = await window.hub.addDatasetStep(currentProjectId, expId, steps[0]);

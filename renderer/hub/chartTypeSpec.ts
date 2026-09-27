@@ -45,6 +45,8 @@ interface ChartTypeSpec {
   isCalendar: boolean;
   isRadar: boolean;
   isPareto: boolean;
+  /** A word cloud, drawn by wordCloudRender.js on the same canvas — no Chart.js type. */
+  isWordCloud: boolean;
   /**
    * The Analytics-pane overlays this type draws (chartAnnotations.js). Decided
    * per id below, the five #177 families included explicitly; main keeps a
@@ -73,6 +75,7 @@ const OVERLAY_KINDS_BY_TYPE: Record<string, string[]> = {
   waterfall: OVERLAYS_FLAT, pareto: OVERLAYS_FLAT,
   bullet: ['reference', 'band', 'annotation', 'highlight'],
   calendar: [], radar: [],
+  word_cloud: [], // no axes: a word's place in the cloud is layout, not a value
 };
 
 function resolveChartType(type: string): ChartTypeSpec {
@@ -119,6 +122,7 @@ function resolveChartType(type: string): ChartTypeSpec {
     case 'pareto':           chartType = 'bar'; opts.pareto = true; break;
     case 'calendar':         chartType = 'matrix'; opts.calendar = true; break;
     case 'radar':            chartType = 'radar'; break;
+    case 'word_cloud':       chartType = 'word_cloud'; opts.wordCloud = true; break;
     default:                 chartType = 'bar';  break;
   }
 
@@ -144,6 +148,7 @@ function resolveChartType(type: string): ChartTypeSpec {
     isCalendar:    opts.calendar === true,  // a matrix laid out week × weekday
     isRadar:       chartType === 'radar',   // Chart.js built-in radar
     isPareto:      opts.pareto === true,    // sorted bars + cumulative % line
+    isWordCloud:   opts.wordCloud === true, // wordCloudRender.js, not Chart.js
     overlayKinds:  OVERLAY_KINDS_BY_TYPE[type] || [],
   };
 }

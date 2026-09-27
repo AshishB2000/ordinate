@@ -305,6 +305,7 @@ const VIZ_LABELS = {
   waterfall: 'Waterfall', bullet: 'Bullet', calendar: 'Calendar heatmap', radar: 'Radar', pareto: 'Pareto',
   pivot: 'Pivot table', cohort: 'Cohort', event_funnel: 'Event funnel',
   table: 'Table', map_bubble: 'Bubble map', map_choropleth: 'Region map',
+  word_cloud: 'Word cloud',
 };
 
 // Small monochrome glyph per chart type for the viz chips. currentColor so each icon
@@ -357,6 +358,7 @@ const VIZ_ICONS = {
   event_funnel: _vi('<rect x="4" y="4" width="16" height="3.5" rx="0.5" fill="currentColor"/><rect x="4" y="10.25" width="11" height="3.5" rx="0.5" fill="currentColor" opacity="0.7"/><rect x="4" y="16.5" width="6" height="3.5" rx="0.5" fill="currentColor" opacity="0.45"/><path d="M20 9.5l-4 2M15 15.75l-4 2"/>'),
   map_bubble: _vi('<circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r="1.6" fill="currentColor"/><circle cx="15" cy="14" r="2.2" fill="currentColor"/>'),
   map_choropleth: _vi('<path d="M9 4 4 6v14l5-2 6 2 5-2V4l-5 2-6-2z"/><path d="M9 4v14M15 6v14"/>'),
+  word_cloud: _vi('<path d="M6 11h9" stroke-width="2.6"/><path d="M4 15.5h5M11.5 15.5h8"/><path d="M8 7h6M16.5 7h3M7 19.5h4M13.5 19.5h4.5" stroke-width="1.2"/><path d="M17 11h2.5" stroke-width="1.8"/>'),
 };
 
 // VERIFY/TEST ONLY: every wired chart type, ordered for a sensible click-through.
@@ -375,6 +377,7 @@ const ALL_CHART_TYPE_IDS = [
   'pivot',
   // Their own shelves, like the pivot's; picked from "+ More" (cohortBuilder.ts).
   'cohort', 'event_funnel',
+  'word_cloud',
 ];
 
 // PART 1: CODE-DRIVEN eligibility. dataShape (still returned by the AI) + the real
@@ -383,7 +386,7 @@ const ALL_CHART_TYPE_IDS = [
 const SHAPE_CHARTS = {
   time_series:   ['line', 'line_markers', 'area', 'stacked_area', 'column', 'clustered_column', 'combo', 'heatmap', 'calendar', 'pivot', 'table'],
   part_to_whole: ['pie', 'donut', 'treemap', 'pct_stacked_column', 'pct_stacked_bar', 'stacked_column', 'funnel', 'pareto', 'pivot', 'table'],
-  categorical:   ['column', 'bar', 'clustered_column', 'clustered_bar', 'heatmap', 'pareto', 'waterfall', 'bullet', 'radar', 'pivot', 'table'],
+  categorical:   ['column', 'bar', 'clustered_column', 'clustered_bar', 'heatmap', 'pareto', 'waterfall', 'bullet', 'radar', 'pivot', 'table', 'word_cloud'],
   single_metric: ['gauge', 'table'],
   matrix:        ['heatmap', 'pivot', 'table'],
   unstructured:  ['table'],
@@ -406,7 +409,8 @@ const CHART_SERIES_MIN = {
 // The five newer families read a fixed number of series (value + target, the
 // two ends of a bridge, one day's figure, six radar axes), so they are only
 // SUGGESTED where the data has that shape.
-const CHART_SERIES_MAX = { column: 1, bar: 1, pareto: 1, calendar: 1, waterfall: 2, bullet: 2, radar: 6 };
+// A word cloud reads a size measure and, optionally, a colour (sentiment) one.
+const CHART_SERIES_MAX = { column: 1, bar: 1, pareto: 1, calendar: 1, waterfall: 2, bullet: 2, radar: 6, word_cloud: 2 };
 
 // Minimum labels (categories) a type needs to be meaningful; everything else >= 1.
 // A radar normalises each axis by its largest value, so ONE category is always
@@ -414,6 +418,7 @@ const CHART_SERIES_MAX = { column: 1, bar: 1, pareto: 1, calendar: 1, waterfall:
 const CHART_LABELS_MIN = {
   pie: 2, donut: 2, treemap: 2, heatmap: 2, funnel: 3,
   pareto: 2, waterfall: 2, radar: 2, calendar: 7,
+  word_cloud: 3,
 };
 
 // Pure: which of a shape's chart ids the actual data can support, best-first.

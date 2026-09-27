@@ -62,6 +62,7 @@
   <link rel="stylesheet" href="stats.css"/>
 
   <!-- r6-css:text -->
+  <link rel="stylesheet" href="text.css"/>
 
   <!-- r6-css:geo -->
 
@@ -3602,6 +3603,16 @@
 <script src="statsTile.js"></script>
 
 <!-- r6:text -->
+<!-- Text analytics: the word cloud's pure layout (wordCloudLayout.js, an IIFE
+     like chartShapes.js) before the chart that draws it (wordCloudRender.js,
+     reached from buildChart); the text Prepare steps (textSteps.js, hooked
+     from prepare/prepareForms) and their previews (textPreviews.js), then the
+     profile's Text section (textProfile.js, uses TX_LANGS/txSentimentBar/txOpenStep). -->
+<script src="wordCloudLayout.js"></script>
+<script src="wordCloudRender.js"></script>
+<script src="textSteps.js"></script>
+<script src="textPreviews.js"></script>
+<script src="textProfile.js"></script>
 
 <!-- r6:geo -->
 
