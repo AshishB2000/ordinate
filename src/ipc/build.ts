@@ -23,6 +23,7 @@ export function register(deps: BuildDeps): void {
   require('./themes').register();
 
   // build:saas
+  require('./saas').register(deps);
 
   // build:snapshots
 

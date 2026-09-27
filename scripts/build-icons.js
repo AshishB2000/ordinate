@@ -28,7 +28,7 @@ const OUT = path.join(__dirname, '..', 'assets', 'provider-icons.json');
 // output file is handled by its own try/catch.
 let PROVIDER_SI, CONNECTOR_SI;
 try {
-  ({ PROVIDER_SI, CONNECTOR_SI } = require('../src/icons'));
+  ({ PROVIDER_SI, CONNECTOR_SI } = require('../src/app/icons'));
 } catch (err) {
   console.error('Could not load src/icons.js — run `npm run build:ts` first.');
   console.error(String((err && err.message) || err));

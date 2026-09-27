@@ -1,5 +1,5 @@
 // The persistent shell around the workspace: the Visuals empty state, the
-// Connect page's 35 source tiles, Home's shortcut rail and the Capture
+// Connect page's 41 source tiles, Home's shortcut rail and the Capture
 // workspace the rail opens.
 //
 // Split out of smoke-app.ts (see that file's banner). These are the surfaces a
@@ -205,7 +205,7 @@ async function main(): Promise<void> {
       logosDecorative: tiles.every((tile) => tile.querySelector('.conn-logo')?.getAttribute('aria-hidden') === 'true'),
     };
   });
-  ok('all 35 connector tiles have a logo block', logoPicker.count === 35 && logoPicker.everyTileHasLogo, JSON.stringify(logoPicker));
+  ok('all 41 connector tiles have a logo block', logoPicker.count === 41 && logoPicker.everyTileHasLogo, JSON.stringify(logoPicker));
   ok('Redshift uses the supplied image and PostgreSQL uses a bundled glyph',
     logoPicker.redshiftIsImage && logoPicker.postgresIsSvg, JSON.stringify(logoPicker));
   ok('all catalog sources use real marks instead of normal fallback badges',

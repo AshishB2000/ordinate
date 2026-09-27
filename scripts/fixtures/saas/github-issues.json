@@ -1,0 +1,63 @@
+[
+  {
+    "url": "https://api.github.com/repos/octo/demo/issues/42",
+    "html_url": "https://github.com/octo/demo/issues/42",
+    "id": 2233445566,
+    "node_id": "I_kwDOAbc123",
+    "number": 42,
+    "title": "Chart legend overlaps the axis",
+    "user": { "login": "mona", "id": 583231, "type": "User", "site_admin": false },
+    "labels": [
+      { "id": 111, "name": "bug", "color": "d73a4a", "default": true },
+      { "id": 222, "name": "ui", "color": "0e8a16", "default": false }
+    ],
+    "state": "open",
+    "state_reason": null,
+    "locked": false,
+    "assignee": { "login": "hubot", "id": 1 },
+    "assignees": [{ "login": "hubot", "id": 1 }, { "login": "mona", "id": 583231 }],
+    "milestone": { "id": 7, "number": 3, "title": "v1.2", "state": "open" },
+    "comments": 5,
+    "created_at": "2024-03-05T10:15:00Z",
+    "updated_at": "2024-03-06T08:00:00Z",
+    "closed_at": null,
+    "author_association": "MEMBER",
+    "reactions": { "total_count": 2, "+1": 2 },
+    "body": "Steps to reproduce…"
+  },
+  {
+    "url": "https://api.github.com/repos/octo/demo/issues/41",
+    "html_url": "https://github.com/octo/demo/pull/41",
+    "id": 2233445500,
+    "number": 41,
+    "title": "Fix legend overlap",
+    "user": { "login": "hubot", "id": 1 },
+    "labels": [],
+    "state": "closed",
+    "state_reason": null,
+    "assignees": [],
+    "milestone": null,
+    "comments": 1,
+    "created_at": "2024-03-04T09:00:00Z",
+    "updated_at": "2024-03-04T12:00:00Z",
+    "closed_at": "2024-03-04T12:00:00Z",
+    "pull_request": { "url": "https://api.github.com/repos/octo/demo/pulls/41", "merged_at": "2024-03-04T12:00:00Z" }
+  },
+  {
+    "url": "https://api.github.com/repos/octo/demo/issues/40",
+    "html_url": "https://github.com/octo/demo/issues/40",
+    "id": 2233440000,
+    "number": 40,
+    "title": "Export drops the title",
+    "user": { "login": "octocat", "id": 2 },
+    "labels": [{ "id": 111, "name": "bug" }],
+    "state": "closed",
+    "state_reason": "completed",
+    "assignees": [],
+    "milestone": null,
+    "comments": 0,
+    "created_at": "2024-02-28T16:40:00Z",
+    "updated_at": "2024-03-01T10:00:00Z",
+    "closed_at": "2024-03-01T10:00:00Z"
+  }
+]

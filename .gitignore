@@ -655,6 +655,14 @@ scripts/**/*.js
 /preload/hubThemesPreload.js
 
 # build:saas
+/src/connectors/saas.js
+/src/connectors/saasApis.js
+/src/connectors/saasHttp.js
+/src/connectors/saasMap.js
+/src/connectors/folderWatch.js
+/src/ipc/saas.js
+/preload/hubSaasPreload.js
+/renderer/hub/saas.js
 
 # build:snapshots
 

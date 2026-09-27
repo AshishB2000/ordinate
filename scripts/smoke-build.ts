@@ -28,6 +28,7 @@ const SECTIONS: Section[] = [
   { name: 'theme', run: (s, fx) => require('./bdTheme').themeSection(s, fx) },
 
   // build:saas
+  { name: 'saas', run: (s, fx) => require('./bdSaas').saasSection(s, fx) },
 
   // build:snapshots
 

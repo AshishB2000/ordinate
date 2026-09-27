@@ -31,6 +31,8 @@ function cwRenderDetails(): void {
     const fields = (cwDef && cwDef.fields) || [];
     for (const f of fields) {
       if (f.secret) continue;
+      // BUILD HOOK (saas): a folder's "Watch this folder" is a live toggle (saas.ts).
+      if (f.key === 'watch' && typeof saasWatchRow === 'function') { kv.appendChild(saasWatchRow(f)); continue; }
       const raw = values[f.key];
       if (raw === undefined || raw === null || raw === '') continue;
       const dt = document.createElement('dt');

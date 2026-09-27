@@ -683,13 +683,11 @@ function folderConnector(spec: {
         placeholder: '/Users/you/data',
         help: spec.help,
       },
-      {
-        key: 'recursive',
-        label: 'Include subfolders',
-        type: 'checkbox',
-        default: false,
-        help: 'Nested files are named by their path relative to the folder.',
-      },
+      { key: 'recursive', label: 'Include subfolders', type: 'checkbox', default: false,
+        help: 'Nested files are named by their path relative to the folder.' },
+      // Read by folderWatch.ts, not here: a watched folder refreshes its datasets.
+      { key: 'watch', label: 'Watch this folder', type: 'checkbox', default: false,
+        help: 'Refresh the datasets imported from here when a file is added or changed. Only while the app is open.' },
     ],
 
     async listTables(ctx: ConnectorContext): Promise<ConnectorTables | ConnectorError> {
