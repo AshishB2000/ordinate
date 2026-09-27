@@ -31,7 +31,7 @@ let jpPopover: HTMLElement | null = null;
 const JP_KIND_ICON: Record<string, string> = {
   import: 'upload', refresh: 'refresh', export: 'download', report: 'file-text', bundle: 'package',
   'sql-save': 'code', quality: 'circle-check', insights: 'sparkles', publish: 'globe',
-  backup: 'hard-drive', restore: 'rotate-ccw', automation: 'terminal',
+  backup: 'hard-drive', restore: 'rotate-ccw', automation: 'terminal', analysis: 'activity',
 };
 
 const JP_STATE_WORD: Record<string, string> = {

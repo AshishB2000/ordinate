@@ -125,6 +125,10 @@ function dkToggle(): void {
  * resolved — but only if what it resolves can never outlive its section.
  */
 function dkContextRef(): { kind: string; id: string; label: string; name: string } {
+  // A "Why did this change?" handed to the Assistant is the context until the
+  // user is somewhere else (driversEntry.ts): the facts are its decomposition.
+  const drv = typeof drvDockContext === 'function' ? drvDockContext() : null;
+  if (drv) return drv;
   if (currentSection === 'datasets') {
     if (typeof expId === 'string' && expId) {
       const name = typeof expName === 'string' && expName ? expName : 'open dataset';

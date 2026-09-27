@@ -22,6 +22,8 @@ import { isDateGrain, sanitizeBins } from './categoryKey';
 import type { DateGrain } from './categoryKey';
 import { sanitizePivot } from './pivotData';
 import type { PivotEncoding } from './pivotData';
+import { sanitizeDriversEncoding } from './driverScope';
+import type { DriversEncoding } from './driverScope';
 import { sanitizeOverlays } from './analytics';
 import type { Overlay } from './analytics';
 import { sanitizeTableCalc } from './tableCalc';
@@ -126,6 +128,8 @@ export interface VizEncoding {
    * which is why it rides on the encoding and not on the styling overrides.
    */
   overlay?: 'previous_year';
+  /** A KEY DRIVERS waterfall tile's question (analysis/driverScope) — recomputed on every render. */
+  drivers?: DriversEncoding;
 }
 
 // Whitelisted chart-styling overrides — the SAME object shape the capture-flow ⋯
@@ -291,6 +295,8 @@ export function sanitizeEncoding(raw: unknown): VizEncoding {
   if (o.overlay === 'previous_year') enc.overlay = 'previous_year';
   const pivot = sanitizePivot(o.pivot);
   if (pivot) enc.pivot = pivot;
+  const drivers = sanitizeDriversEncoding(o.drivers);
+  if (drivers) enc.drivers = drivers;
   if (o.geo && typeof o.geo === 'object') {
     const g = o.geo as Record<string, unknown>;
     if (typeof g.level === 'string' && GEO_LEVELS.has(g.level)) {

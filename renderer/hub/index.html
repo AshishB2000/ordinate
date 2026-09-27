@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="prepare-power.css"/>
   <link rel="stylesheet" href="comments.css"/>
   <link rel="stylesheet" href="scorecards.css"/>
+  <link rel="stylesheet" href="drivers.css"/>
   <link rel="stylesheet" href="a11y.css"/>
   <!-- Platform depth: one stylesheet per feature, each after its marker. -->
   <link rel="stylesheet" href="platform.css"/>
@@ -3218,6 +3219,11 @@
 <script src="scorecardPage.js"></script>
 <script src="scorecardDetail.js"></script>
 <script src="scorecardEditor.js"></script>
+<!-- Key drivers — "Why did this change?" (a KPI's Compare, a line-chart point,
+     an alert event). Function definitions only; kpiCompare, drill, alertsInbox
+     and dock call in at run time. The panel first: the entry file uses it. -->
+<script src="driversPanel.js"></script>
+<script src="driversEntry.js"></script>
 <script src="authoring.js"></script>
 <!-- authoring.ts was 1341 lines; these five are it, split by job. authoring.js
      stays first — it keeps the module-local state the rest read. -->

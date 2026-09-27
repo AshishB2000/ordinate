@@ -739,3 +739,19 @@ scripts/**/*.js
 /renderer/hub/snapshotDiffView.js
 /renderer/hub/snapshotAsOf.js
 
+
+# Analysis engines — Key drivers (emitted siblings).
+/src/analysis/driverShape.js
+/src/analysis/driverScope.js
+/src/analysis/drivers.js
+/src/analysis/driversJs.js
+/src/engine/driversResident.js
+/src/ipc/drivers.js
+/src/ai/driversFacts.js
+/preload/hubDriversPreload.js
+/renderer/hub/driversPanel.js
+/renderer/hub/driversEntry.js
+/scripts/test-drivers.js
+/scripts/test-driversResident.js
+/scripts/aeDrivers.js
+/src/engine/distinctAll.js

@@ -20,6 +20,8 @@ import { resolveChartOverlays } from './visualsAnalytics';
 import * as scorecards from '../analysis/scorecards';
 import { computeScorecard } from './scorecards';
 import { scorecardFacts } from '../ai/scorecardFacts';
+import * as drivers from './drivers';
+import { driversFacts } from '../ai/driversFacts';
 import type { FactMetric } from '../ai/copilotFacts';
 import * as history from '../app/history';
 import * as captureDataset from '../data/captureDataset';
@@ -266,6 +268,18 @@ export async function buildFacts(
         emit({ kind: 'compute', label: 'Resolved ' + plural(defined.length, 'metric'), count: defined.length });
       }
       return copilot.analysisFacts(a, cards, tiles, defined);
+    }
+  }
+
+  // A "Why did this change?" panel: the question it answered, recomputed now
+  // from the token it was asked under (ipc/drivers.ts), so the model narrates
+  // the app's decomposition and never derives one (ai/driversFacts.ts).
+  if (kind === 'drivers' && id) {
+    const asked = drivers.recall(projectId, id);
+    const res = asked ? await drivers.driversFor(projectId, asked.spec, asked.params) : null;
+    if (res && res.ok) {
+      emit({ kind: 'compute', label: 'Explained the change across ' + plural(res.dimensions.length, 'dimension'), count: res.dimensions.length });
+      return driversFacts(res);
     }
   }
 

@@ -42,6 +42,8 @@ interface DrillOpts {
   trigger?: HTMLElement | null;
   /** View state: the rows as of this time (snapshotAsOf.ts), or Latest when absent. */
   asOf?: string | null;
+  /** A line-chart point on a date axis: its bucket and the one before (driversEntry.ts). */
+  why?: { label: string; prev: string; grain: string; params?: any[] } | null;
 }
 
 /**
@@ -81,6 +83,7 @@ function wireDrillClick(area: HTMLElement, ctx: DrillOpts): void {
       mark: { category: mark.category, series: hasSplit ? mark.series : undefined },
       trigger: area,
       asOf: live.asOf,
+      why:live.asOf || typeof drvPointWhy !== 'function' ? null : drvPointWhy(area, mark, live),
     });
   });
 }
@@ -213,6 +216,7 @@ function openDrillPanel(opts: DrillOpts): void {
   if (sub) sub.textContent = opts.mark ? 'The rows behind the selected mark' : 'The rows behind this visual';
   // What "Export these rows" will do to sensitive columns (privacyShare.ts).
   pvMountShareNote(drillQ('.drill-foot'), 'export', [opts.datasetId]);
+  if (typeof drvMountDrillWhy === 'function') drvMountDrillWhy(drillQ('.drill-head'), opts); // "Why did this change?"
 
   drillTrigger = opts.trigger || null;
   drillPrevFocus = document.activeElement as HTMLElement | null;
