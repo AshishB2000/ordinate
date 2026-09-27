@@ -663,3 +663,14 @@ scripts/**/*.js
 /renderer/hub/settingsCollab.js
 /scripts/test-comments.js
 /scripts/pwComments.js
+# Analysis power — Scorecards (emitted siblings).
+/src/analysis/scorecardModel.js
+/src/analysis/scorecards.js
+/src/ipc/scorecards.js
+/src/ai/scorecardFacts.js
+/renderer/hub/scorecardList.js
+/renderer/hub/scorecardPage.js
+/renderer/hub/scorecardDetail.js
+/renderer/hub/scorecardEditor.js
+/renderer/hub/reportScorecard.js
+/scripts/test-scorecards.js

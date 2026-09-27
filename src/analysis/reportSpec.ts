@@ -27,7 +27,7 @@ import { GRID_COLS } from './dashboards';
 import type { Card, Page } from './dashboards';
 
 export type ReportFormat = 'pdf' | 'pptx' | 'docx';
-export type ReportPageKind = 'cover' | 'summary' | 'sheet' | 'tile' | 'notes' | 'narrative' | 'discussion';
+export type ReportPageKind = 'cover' | 'summary' | 'sheet' | 'tile' | 'notes' | 'narrative' | 'discussion' | 'scorecard';
 export type ReportPageLayout = 'full' | 'half';
 export type ReportCadence = 'off' | 'daily' | 'weekly' | 'monthly';
 export type PaperSize = 'letter' | 'a4';
@@ -43,6 +43,8 @@ export interface ReportPage {
   cardId?: string;
   /** Author prose — `notes` pages. */
   notes?: string;
+  /** The scorecard this page prints — `scorecard` pages (analysis/scorecards.ts). */
+  scorecardId?: string;
   /**
    * The author's replacement for the app's sentence. ABSENT means "use the
    * app's", which is why it is optional rather than seeded with the computed
@@ -81,6 +83,11 @@ export interface Report {
   projectId: string;
   /** The dashboard this report prints. Dangling → the report opens empty. */
   analysisId: string;
+  /**
+   * A report made FROM a scorecard prints that scorecard and has no dashboard
+   * (`analysisId` is ''). Absent on every dashboard report — no migration.
+   */
+  scorecardId?: string;
   name: string;
   format: ReportFormat;
   pages: ReportPage[];
@@ -121,7 +128,7 @@ export interface ReportSummary {
 // ── defensive whitelisting (never throw — keep known keys, clamp, drop rest) ──
 
 const FORMATS: ReadonlySet<string> = new Set(['pdf', 'pptx', 'docx']);
-const KINDS: ReadonlySet<string> = new Set(['cover', 'summary', 'sheet', 'tile', 'notes', 'narrative', 'discussion']);
+const KINDS: ReadonlySet<string> = new Set(['cover', 'summary', 'sheet', 'tile', 'notes', 'narrative', 'discussion', 'scorecard']);
 const CADENCES: ReadonlySet<string> = new Set(['off', 'daily', 'weekly', 'monthly']);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -187,6 +194,11 @@ export function sanitizePage(raw: unknown): ReportPage | null {
   // record, the same rule a dashboard card's visualId follows.
   if (page.kind === 'tile' && isValidId(o.cardId)) page.cardId = o.cardId;
   if (page.kind === 'notes') page.notes = str(o.notes);
+  // A scorecard page names its scorecard by UUID; one naming nothing is dropped.
+  if (page.kind === 'scorecard') {
+    if (!isValidId(o.scorecardId)) return null;
+    page.scorecardId = o.scorecardId;
+  }
   const caption = str(o.caption);
   if (caption) page.caption = caption;
   return page;
@@ -351,6 +363,7 @@ function normalize(data: any, projectId: string): Report {
   };
   const schedule = sanitizeSchedule(data.schedule);
   if (schedule) r.schedule = schedule;
+  if (isValidId(data.scorecardId)) r.scorecardId = data.scorecardId;
   if (str(data.lastRunAt)) r.lastRunAt = str(data.lastRunAt);
   if (str(data.lastFile)) r.lastFile = str(data.lastFile);
   return r;
@@ -407,6 +420,7 @@ export async function getReport(projectId: string, id: string): Promise<Report |
 
 export interface ReportInput {
   analysisId?: unknown;
+  scorecardId?: unknown;
   name?: unknown;
   format?: unknown;
   pages?: unknown;

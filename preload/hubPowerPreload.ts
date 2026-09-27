@@ -33,5 +33,19 @@ if (location.protocol === 'file:' && location.pathname.endsWith('/renderer/hub/i
       ipcRenderer.invoke('comment:deleteReply', { projectId, id, replyId }),
     onCommentsChanged: (cb: (o: { projectId: string }) => void) => ipcRenderer.on('comments:changed', (_e, o) => cb(o)),
     setDisplayName: (name: string) => ipcRenderer.invoke('profile:setDisplayName', name),
+
+    // ── scorecards ── (src/ipc/scorecards.ts)
+    scorecardList: (projectId: string) => ipcRenderer.invoke('scorecard:list', { projectId }),
+    scorecardGet: (projectId: string, id: string) => ipcRenderer.invoke('scorecard:get', { projectId, id }),
+    scorecardCreate: (projectId: string, input: any) => ipcRenderer.invoke('scorecard:create', { projectId, ...input }),
+    scorecardUpdate: (projectId: string, id: string, patch: any) => ipcRenderer.invoke('scorecard:update', { projectId, id, patch }),
+    scorecardDuplicate: (projectId: string, id: string) => ipcRenderer.invoke('scorecard:duplicate', { projectId, id }),
+    scorecardDelete: (projectId: string, id: string) => ipcRenderer.invoke('scorecard:delete', { projectId, id }),
+    // Every row's figures for the period `offset` steps back — all computed in main.
+    scorecardCompute: (projectId: string, id: string, offset: number) => ipcRenderer.invoke('scorecard:compute', { projectId, id, offset }),
+    scorecardDetail: (projectId: string, id: string, metricId: string, offset: number) =>
+      ipcRenderer.invoke('scorecard:detail', { projectId, id, metricId, offset }),
+    scorecardSnapshot: (projectId: string, id: string, offset?: number) => ipcRenderer.invoke('scorecard:snapshot', { projectId, id, offset }),
+    scorecardCreateReport: (projectId: string, id: string) => ipcRenderer.invoke('scorecard:createReport', { projectId, id }),
   });
 }

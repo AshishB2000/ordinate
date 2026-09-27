@@ -394,7 +394,7 @@ async function buildReportPages(ctx: ReportContext): Promise<RenderedPage[]> {
         return body ? { kind: 'narrative', layout: page.layout, title: 'Narrative', body } : null;
       }
       default:
-        return reportDiscussionPage(ctx, page); // 'discussion' (reportDiscussion.ts); null for any other kind
+        return page.kind === 'scorecard' ? reportScorecardPage(ctx, page) : reportDiscussionPage(ctx, page); // reportScorecard.ts / reportDiscussion.ts
     }
   }
 }

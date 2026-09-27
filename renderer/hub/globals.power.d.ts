@@ -25,5 +25,16 @@ interface Window {
     deleteCommentReply(projectId: string, id: string, replyId: string): Promise<any>;
     onCommentsChanged(cb: (o: { projectId: string }) => void): void;
     setDisplayName(name: string): Promise<any>;
+    // ── scorecards ── (src/ipc/scorecards.ts)
+    scorecardList(projectId: string): Promise<any>;
+    scorecardGet(projectId: string, id: string): Promise<any>;
+    scorecardCreate(projectId: string, input: any): Promise<any>;
+    scorecardUpdate(projectId: string, id: string, patch: any): Promise<any>;
+    scorecardDuplicate(projectId: string, id: string): Promise<any>;
+    scorecardDelete(projectId: string, id: string): Promise<any>;
+    scorecardCompute(projectId: string, id: string, offset: number): Promise<any>;
+    scorecardDetail(projectId: string, id: string, metricId: string, offset: number): Promise<any>;
+    scorecardSnapshot(projectId: string, id: string, offset?: number): Promise<any>;
+    scorecardCreateReport(projectId: string, id: string): Promise<any>;
   };
 }

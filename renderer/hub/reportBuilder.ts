@@ -57,7 +57,7 @@ function rbContext(report?: any): any {
 
 const RB_KIND_LABEL: Record<string, string> = {
   cover: 'Cover', summary: 'Summary', sheet: 'Sheet', tile: 'Tile',
-  notes: 'Notes', narrative: 'Narrative', discussion: 'Discussion',
+  notes: 'Notes', narrative: 'Narrative', discussion: 'Discussion', scorecard: 'Scorecard',
 };
 
 /** What the row under the page's kind says — enough to tell two Tile pages
@@ -380,7 +380,7 @@ async function rbOpen(report: any): Promise<void> {
   rbReport = report;
   rbSelected = 0;
   rbDirty = false;
-  rbAnalysis = await window.hub.getAnalysis(currentProjectId as string, report.analysisId);
+  rbAnalysis = await reportAnalysisFor(currentProjectId as string, report); // a scorecard report runs on a stand-in
   if (!rbAnalysis) {
     showToast('The dashboard this report prints has been deleted');
     rbAnalysis = { id: report.analysisId, name: report.name, sheets: [], filters: [], style: {} };
@@ -492,7 +492,7 @@ async function reportsRunDue(nowMs?: number): Promise<number> {
     try {
       const report = await window.hub.reportsGet(d.projectId, d.id);
       if (!report) continue;
-      const analysis = await window.hub.getAnalysis(d.projectId, report.analysisId);
+      const analysis = await reportAnalysisFor(d.projectId, report);
       if (!analysis) continue;
       // A SILENT job: the Jobs popover shows the scheduled run, but main's own
       // "Report ready" notification (notifyFile) is the one the user gets.

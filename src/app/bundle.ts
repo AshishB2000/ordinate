@@ -52,6 +52,7 @@ const ENTRY_RULES: Array<{ re: RegExp; count?: string }> = [
   { re: new RegExp(`^analyses/${UUID}\\.json$`, 'i'), count: 'dashboards' },
   { re: new RegExp(`^metrics/${UUID}\\.json$`, 'i'), count: 'metrics' },
   { re: new RegExp(`^reports/${UUID}\\.json$`, 'i'), count: 'reports' },
+  { re: new RegExp(`^scorecards/${UUID}\\.json$`, 'i'), count: 'scorecards' },
   { re: new RegExp(`^connections/${UUID}\\.json$`, 'i'), count: 'connections' },
   { re: new RegExp(`^history/(?:dataset|visual|dashboard|metric|report)/${UUID}/${KEY}\\.json$`, 'i'), count: 'versions' },
   { re: new RegExp(`^stories/${UUID}\\.json$`, 'i'), count: 'stories' },

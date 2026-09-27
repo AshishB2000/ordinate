@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="tablecalc.css"/>
   <link rel="stylesheet" href="prepare-power.css"/>
   <link rel="stylesheet" href="comments.css"/>
+  <link rel="stylesheet" href="scorecards.css"/>
   <link rel="stylesheet" href="a11y.css"/>
   <!-- Platform depth: one stylesheet per feature, each after its marker. -->
   <link rel="stylesheet" href="platform.css"/>
@@ -1440,6 +1441,33 @@
                   aria-selected="false" aria-controls="rp-list-wrap" tabindex="-1">Reports</button>
           <button class="ds-tab" type="button" role="tab" id="rp-tab-stories"
                   aria-selected="false" aria-controls="st-list-wrap" tabindex="-1">Stories</button>
+          <button class="ds-tab" type="button" role="tab" id="rp-tab-scorecards"
+                  aria-selected="false" aria-controls="sc-list-wrap" tabindex="-1">Scorecards</button>
+        </div>
+
+        <!-- The Scorecards tab (scorecardList.ts). A scorecard reads the project's
+             metrics one period at a time against their targets — green, amber or
+             red — with the change on last period and a twelve-period trend. -->
+        <div id="sc-list-wrap" role="tabpanel" aria-labelledby="rp-tab-scorecards" hidden>
+          <div class="sc-list-bar">
+            <p class="sc-list-note">Your metrics against their targets, a period at a time — who owns what, and what is off track.</p>
+            <div class="sc-list-actions">
+              <button class="btn btn-primary" type="button" id="sc-new-btn">New scorecard</button>
+            </div>
+          </div>
+          <div class="sc-grid" id="sc-grid" hidden></div>
+          <div class="ws-empty" id="sc-empty" hidden>
+            <div class="ws-empty-art ws-empty-art--score" aria-hidden="true">
+              <span class="sc-dot sc-dot--good"></span><span class="ws-bar ws-bar--4"></span>
+              <span class="sc-dot sc-dot--warn"></span><span class="ws-bar ws-bar--3"></span>
+              <span class="sc-dot sc-dot--off"></span><span class="ws-bar ws-bar--2"></span>
+            </div>
+            <h3 class="ws-empty-h">No scorecards yet</h3>
+            <p class="ws-empty-p">A scorecard lists the numbers that matter, each with a target and an owner. Every period the app scores them — on track, at risk or off track — shows the change on the period before and a twelve-period trend, and rolls each group up. Step back through history with the period picker; nothing is stored but the targets.</p>
+            <div class="ws-empty-actions">
+              <button class="btn btn-primary btn-lg" type="button" id="sc-empty-new">New scorecard</button>
+            </div>
+          </div>
         </div>
 
         <!-- The Stories tab (storyList.ts). A story is the third way this project
@@ -1620,6 +1648,47 @@
            left outline built from the headings, then one reading column at
            760px, edited in place: / in an empty line opens the block picker,
            ⋮⋮ drags a block, ⌘Z undoes through the dashboards' own history. -->
+      <!-- An open scorecard (scorecardPage.ts): the period picker, then one row per
+           metric, grouped; clicking a row opens its detail at the side
+           (scorecardDetail.ts). Every figure is computed in main. -->
+      <div class="sc-page" id="sc-page" hidden>
+        <div class="sc-head">
+          <button class="btn btn-sm" type="button" id="sc-back"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-arrow-left"/></svg><span>Back</span></button>
+          <input class="sc-name" id="sc-name" type="text" aria-label="Scorecard name" autocomplete="off" spellcheck="false"/>
+          <div class="sc-period" role="group" aria-label="Period">
+            <button class="icon-btn" type="button" id="sc-period-prev" aria-label="Previous period" title="Previous period"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-chevron-left"/></svg></button>
+            <div class="sc-period-text">
+              <span class="sc-period-label" id="sc-period-label" aria-live="polite"></span>
+              <span class="sc-period-range" id="sc-period-range"></span>
+            </div>
+            <button class="icon-btn" type="button" id="sc-period-next" aria-label="Next period" title="Next period"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+          </div>
+          <select class="viz-select sc-period-select" id="sc-period-select" aria-label="Scorecard cadence">
+            <option value="week">Weekly</option>
+            <option value="month">Monthly</option>
+            <option value="quarter">Quarterly</option>
+            <option value="year">Yearly</option>
+          </select>
+          <div class="sc-head-actions">
+            <button class="btn btn-sm" type="button" id="sc-edit"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-pencil"/></svg><span>Metrics &amp; targets</span></button>
+            <button class="icon-btn" type="button" id="sc-more" aria-label="More scorecard actions" aria-haspopup="true"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-more-horizontal"/></svg></button>
+          </div>
+        </div>
+        <div class="sc-summary" id="sc-summary" aria-label="Status summary"></div>
+        <div class="sc-main">
+          <div class="sc-body" id="sc-body">
+            <div class="sc-table" id="sc-table" role="table" aria-label="Scorecard"></div>
+          </div>
+          <aside class="sc-detail" id="sc-detail" hidden aria-label="Metric detail">
+            <div class="sc-detail-head">
+              <h3 class="sc-detail-title" id="sc-detail-title"></h3>
+              <button class="icon-btn" type="button" id="sc-detail-close" aria-label="Close detail" title="Close"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-x"/></svg></button>
+            </div>
+            <div class="sc-detail-body" id="sc-detail-body"></div>
+          </aside>
+        </div>
+      </div>
+
       <div class="st-page" id="st-page" hidden>
         <div class="st-head">
           <button class="btn btn-sm" type="button" id="st-back">← Back</button>
@@ -3111,6 +3180,9 @@
 <script src="reportWriters.js"></script>
 <script src="reportBuilder.js"></script>
 <script src="reportList.js"></script>
+<!-- A report's scorecard page, and the stand-in a scorecard report runs on.
+     After reportRender.js (whose RenderedPage it returns). -->
+<script src="reportScorecard.js"></script>
 <!-- Stories (feat/workflow-depth) — the third tab beside Dashboards and Reports.
      storyText.js is the pure Markdown subset / outline / page mapping (an IIFE
      that attaches to window, like geoMatch.js); the rest only define functions,
@@ -3122,6 +3194,14 @@
 <script src="storyPickers.js"></script>
 <script src="storyPresent.js"></script>
 <script src="storyPropose.js"></script>
+<!-- Scorecards — the fourth tab beside Dashboards, Reports and Stories. They
+     only define functions; what they call (aiSparkline in alertsInbox.js, the
+     metric picker, openAlertDialog) resolves at call time, and
+     initScorecardList in hub.js wires them. -->
+<script src="scorecardList.js"></script>
+<script src="scorecardPage.js"></script>
+<script src="scorecardDetail.js"></script>
+<script src="scorecardEditor.js"></script>
 <script src="authoring.js"></script>
 <!-- authoring.ts was 1341 lines; these five are it, split by job. authoring.js
      stays first — it keeps the module-local state the rest read. -->

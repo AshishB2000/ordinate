@@ -46,12 +46,13 @@ const int = (v: unknown, lo: number, hi: number, dflt: number): number =>
   typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi ? v : dflt;
 const arr = (v: unknown, max: number): unknown[] => (Array.isArray(v) ? v.slice(0, max) : []);
 
-export interface SiteNavItem { file: string; kind: 'dashboard' | 'story'; name: string }
+export interface SiteNavItem { file: string; kind: 'dashboard' | 'story' | 'scorecard'; name: string }
 
 function sanitizeNav(raw: unknown): SiteNavItem[] {
   return arr(raw, 200).map((r) => {
     const o = obj(r);
-    return { file: FILE_RE.test(str(o.file)) ? str(o.file) : '', kind: o.kind === 'story' ? 'story' : 'dashboard', name: str(o.name, MAX_LABEL) } as SiteNavItem;
+    const kind = o.kind === 'story' || o.kind === 'scorecard' ? o.kind : 'dashboard';
+    return { file: FILE_RE.test(str(o.file)) ? str(o.file) : '', kind, name: str(o.name, MAX_LABEL) } as SiteNavItem;
   }).filter((n) => n.file);
 }
 
@@ -202,9 +203,36 @@ export function sanitizeBoundary(raw: unknown): unknown {
   return { features };
 }
 
+const SCORE_STATUS: ReadonlySet<string> = new Set(['good', 'warn', 'off', 'none']);
+const SCORE_TONE: ReadonlySet<string> = new Set(['good', 'bad', 'flat', 'neutral']);
+
+/** A scorecard page: display strings, finite numbers and closed enums only. */
+function sanitizeScorecard(raw: unknown): Obj {
+  const o = obj(raw);
+  const w = obj(o.window);
+  return {
+    name: str(o.name, MAX_LABEL) || 'Scorecard',
+    period: ['week', 'month', 'quarter', 'year'].includes(str(o.period)) ? str(o.period) : 'month',
+    window: { label: str(w.label, 80), from: str(w.from, 10), to: str(w.to, 10) },
+    rows: arr(o.rows, 60).map((r) => {
+      const x = obj(r);
+      return {
+        name: str(x.name, MAX_LABEL), display: str(x.display, 80), targetDisplay: str(x.targetDisplay, 80),
+        attainment: num(x.attainment), status: SCORE_STATUS.has(str(x.status)) ? str(x.status) : 'none',
+        deltaDisplay: str(x.deltaDisplay, 80), pct: num(x.pct), tone: SCORE_TONE.has(str(x.tone)) ? str(x.tone) : 'flat',
+        spark: arr(x.spark, 24).map(num), owner: str(x.owner, 80), group: str(x.group, 80),
+      };
+    }),
+    groups: arr(o.groups, 60).map((g) => {
+      const x = obj(g);
+      return { group: str(x.group, 80), onTrack: int(x.onTrack, 0, 60, 0), scored: int(x.scored, 0, 60, 0), total: int(x.total, 0, 60, 0) };
+    }),
+  };
+}
+
 /**
  * One published page. `site` is the nav and the site-wide text; exactly one of
- * `dashboard` / `story` is the page itself.
+ * `dashboard` / `story` / `scorecard` is the page itself.
  */
 export function sanitizePage(raw: unknown): Obj {
   const o = obj(raw);
@@ -229,6 +257,9 @@ export function sanitizePage(raw: unknown): Obj {
     const s = obj(o.story);
     out.kind = 'story';
     out.story = { name: str(s.name, MAX_LABEL) || 'Story', blocks: arr(s.blocks, 400).map(sanitizeBlock).filter(Boolean) };
+  } else if (o.kind === 'scorecard') {
+    out.kind = 'scorecard';
+    out.scorecard = sanitizeScorecard(o.scorecard);
   } else if (o.kind === 'index') {
     out.kind = 'index';
   } else {
