@@ -194,4 +194,5 @@ function anRenderKpiProps(card: any): void {
   host.appendChild(h);
   anRenderCompareProps(card, host);
   void tcRenderKpiProps(card, host); // "Calculate as" (calcMenu.ts)
+  if (typeof snRenderKpiScenarioProps === 'function') void snRenderKpiScenarioProps(card, host); // what-if (scenarioCard.ts)
 }

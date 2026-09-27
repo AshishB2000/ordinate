@@ -632,6 +632,7 @@ require("./ipc/preparePower").register(); // prepare power steps: editor preview
 require("./ipc/comments").register(); // comment threads, the display name they are signed with, the sync folder
 require("./ipc/scorecards").register(); // scorecards: metrics against targets, one period at a time
 require("./ipc/drivers").register(); // key drivers: why a figure changed between two periods
+require("./ipc/scenarios").register(); // scenarios: what-if drivers over the metrics
 require("./ipc/build").register({ headless: !!HEADLESS }); // plans, formatting, themes, SaaS sources, snapshots
 // Week 13 — capture → dataset bridge. resolveCropPath hands the on-disk crop path
 // from main's per-entry state (entryData, then the summaries cache) so a renderer-

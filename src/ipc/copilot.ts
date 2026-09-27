@@ -22,6 +22,9 @@ import { computeScorecard } from './scorecards';
 import { scorecardFacts } from '../ai/scorecardFacts';
 import * as drivers from './drivers';
 import { driversFacts } from '../ai/driversFacts';
+import * as scenarios from '../analysis/scenarios';
+import { computeScenario } from '../analysis/scenarioResolve';
+import { scenarioFacts } from '../ai/scenarioFacts';
 import type { FactMetric } from '../ai/copilotFacts';
 import * as history from '../app/history';
 import * as captureDataset from '../data/captureDataset';
@@ -296,6 +299,18 @@ export async function buildFacts(
       return scorecardFacts({
         name: res.name, period: res.period, windowLabel: res.window.label, rows: res.rows, groups: res.groups,
       });
+    }
+  }
+
+  // An open SCENARIO: baseline and scenario figures, the drivers in words and the
+  // tornado, computed by the same call the page makes (ai/scenarioFacts.ts).
+  if (kind === 'scenario' && id) {
+    const sc = await scenarios.getScenario(projectId, id);
+    if (sc) {
+      emit({ kind: 'read', label: 'Read ' + sc.name });
+      const res = await computeScenario(projectId, sc);
+      emit({ kind: 'compute', label: 'Recomputed ' + plural(res.metrics.length, 'metric') + ' under ' + plural(res.drivers.length, 'driver'), count: res.metrics.length });
+      return scenarioFacts(res);
     }
   }
 

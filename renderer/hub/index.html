@@ -20,6 +20,7 @@
   <link rel="stylesheet" href="comments.css"/>
   <link rel="stylesheet" href="scorecards.css"/>
   <link rel="stylesheet" href="drivers.css"/>
+  <link rel="stylesheet" href="scenarios.css"/>
   <link rel="stylesheet" href="a11y.css"/>
   <!-- Platform depth: one stylesheet per feature, each after its marker. -->
   <link rel="stylesheet" href="platform.css"/>
@@ -1460,6 +1461,8 @@
                   aria-selected="false" aria-controls="st-list-wrap" tabindex="-1">Stories</button>
           <button class="ds-tab" type="button" role="tab" id="rp-tab-scorecards"
                   aria-selected="false" aria-controls="sc-list-wrap" tabindex="-1">Scorecards</button>
+          <button class="ds-tab" type="button" role="tab" id="rp-tab-scenarios"
+                  aria-selected="false" aria-controls="sn-list-wrap" tabindex="-1">Scenarios</button>
         </div>
 
         <!-- The Scorecards tab (scorecardList.ts). A scorecard reads the project's
@@ -1483,6 +1486,37 @@
             <p class="ws-empty-p">A scorecard lists the numbers that matter, each with a target and an owner. Every period the app scores them — on track, at risk or off track — shows the change on the period before and a twelve-period trend, and rolls each group up. Step back through history with the period picker; nothing is stored but the targets.</p>
             <div class="ws-empty-actions">
               <button class="btn btn-primary btn-lg" type="button" id="sc-empty-new">New scorecard</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- The Scenarios tab (scenarioList.ts). A scenario is a what-if over the
+             project's metrics: drivers move their inputs — a column's values or a
+             metric's result — and every figure is recomputed beside its baseline. -->
+        <div id="sn-list-wrap" role="tabpanel" aria-labelledby="rp-tab-scenarios" hidden>
+          <div class="sn-list-bar">
+            <p class="sn-list-note">Drivers move a metric’s inputs, never the stored data. Open one to tune it, or compare up to four side by side.</p>
+            <div class="sn-list-actions">
+              <button class="btn" type="button" id="sn-compare-btn"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-columns"/></svg><span>Compare</span></button>
+              <button class="btn btn-primary" type="button" id="sn-new-btn">New scenario</button>
+            </div>
+          </div>
+          <div class="sn-grid" id="sn-grid" hidden></div>
+          <div class="ws-empty sn-empty" id="sn-empty" hidden>
+            <div class="sn-card-art sn-empty-art" aria-hidden="true">
+              <div class="sn-art-row"><span class="sn-art-bar sn-art-bar--low sn-w-38"></span><span class="sn-art-bar sn-art-bar--high sn-w-44"></span></div>
+              <div class="sn-art-row"><span class="sn-art-bar sn-art-bar--low sn-w-26"></span><span class="sn-art-bar sn-art-bar--high sn-w-30"></span></div>
+              <div class="sn-art-row"><span class="sn-art-bar sn-art-bar--low sn-w-16"></span><span class="sn-art-bar sn-art-bar--high sn-w-12"></span></div>
+            </div>
+            <h3 class="ws-empty-h">No scenarios yet</h3>
+            <p class="ws-empty-p">A scenario asks “what if?” of your metrics. Add drivers — a price up five percent, one region’s volume down three, a discount set to zero — and every metric is recomputed beside its baseline, with a chart of which driver moves it most. The stored data never changes.</p>
+            <ul class="sn-empty-examples" aria-label="Example drivers">
+              <li class="sn-chip">unit_price +5%</li>
+              <li class="sn-chip">units in West −3%</li>
+              <li class="sn-chip">discount = 0</li>
+            </ul>
+            <div class="ws-empty-actions">
+              <button class="btn btn-primary btn-lg" type="button" id="sn-empty-new">New scenario</button>
             </div>
           </div>
         </div>
@@ -1704,6 +1738,66 @@
             <div class="sc-detail-body" id="sc-detail-body"></div>
           </aside>
         </div>
+      </div>
+
+      <!-- An open SCENARIO (scenarioPage.ts): its metrics and drivers on the left
+           (scenarioDrivers.ts), each metric's scenario value beside its baseline
+           and the sensitivity tornado on the right. Every figure is computed in main. -->
+      <div class="sn-page" id="sn-page" hidden>
+        <div class="sn-head">
+          <button class="btn btn-sm" type="button" id="sn-back"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-arrow-left"/></svg><span>Back</span></button>
+          <input class="sn-name" id="sn-name" type="text" aria-label="Scenario name" autocomplete="off" spellcheck="false"/>
+          <span class="sn-status" id="sn-status" aria-live="polite"></span>
+          <div class="sn-head-actions">
+            <button class="btn btn-sm" type="button" id="sn-compare-open"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-columns"/></svg><span>Compare</span></button>
+            <button class="icon-btn" type="button" id="sn-more" aria-label="More scenario actions" aria-haspopup="true"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-more-horizontal"/></svg></button>
+          </div>
+        </div>
+        <div class="sn-main">
+          <aside class="sn-side" aria-label="Scenario setup">
+            <section class="sn-sec" aria-labelledby="sn-metrics-h">
+              <div class="sn-sec-head">
+                <h3 class="sn-sec-h" id="sn-metrics-h">Metrics</h3>
+                <button class="btn btn-sm" type="button" id="sn-add-metric" aria-haspopup="true"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-plus"/></svg><span>Metric</span></button>
+              </div>
+              <div class="sn-metric-chips" id="sn-metric-chips"></div>
+            </section>
+            <section class="sn-sec sn-sec--drivers" aria-labelledby="sn-drivers-h">
+              <div class="sn-sec-head">
+                <h3 class="sn-sec-h" id="sn-drivers-h">Drivers <span class="sn-count" id="sn-driver-count"></span></h3>
+                <span class="sn-sec-note">Applied top to bottom</span>
+              </div>
+              <div class="sn-drivers" id="sn-drivers"></div>
+              <div class="sn-add" id="sn-add"></div>
+            </section>
+          </aside>
+          <div class="sn-results" id="sn-results">
+            <div class="sn-kpis" id="sn-kpis" aria-label="Scenario results" role="group"></div>
+            <section class="sn-tornado" aria-labelledby="sn-tornado-h">
+              <div class="sn-tornado-head">
+                <div class="sn-tornado-titles">
+                  <h3 class="sn-sec-h" id="sn-tornado-h">Sensitivity</h3>
+                  <p class="sn-tornado-sub" id="sn-tornado-sub"></p>
+                </div>
+                <select class="viz-select" id="sn-tornado-metric" aria-label="Sensitivity of which metric"></select>
+              </div>
+              <div class="sn-tornado-body" id="sn-tornado-body"></div>
+            </section>
+            <ul class="sn-notes" id="sn-notes" hidden></ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- COMPARE SCENARIOS (scenarioCompare.ts): the baseline and up to four
+           scenarios as columns, one row per metric. -->
+      <div class="sn-cmp" id="sn-compare" hidden>
+        <div class="sn-head">
+          <button class="btn btn-sm" type="button" id="sn-cmp-back"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-arrow-left"/></svg><span>Back</span></button>
+          <h2 class="sn-cmp-title">Compare scenarios</h2>
+          <span class="sn-cmp-count" id="sn-cmp-count" aria-live="polite"></span>
+        </div>
+        <div class="sn-cmp-pick" id="sn-cmp-pick" role="group" aria-label="Scenarios to compare"></div>
+        <div class="sn-cmp-body" id="sn-cmp-body"></div>
       </div>
 
       <div class="st-page" id="st-page" hidden>
@@ -3224,6 +3318,14 @@
      and dock call in at run time. The panel first: the entry file uses it. -->
 <script src="driversPanel.js"></script>
 <script src="driversEntry.js"></script>
+<!-- Scenarios — the fifth tab: what-ifs over the metrics. They only define
+     functions; initScenarioList in hub.js wires them. scenarioCard.js is the
+     dashboard KPI card's side (dashFiltersUi / kpiCompare call it). -->
+<script src="scenarioList.js"></script>
+<script src="scenarioPage.js"></script>
+<script src="scenarioDrivers.js"></script>
+<script src="scenarioCompare.js"></script>
+<script src="scenarioCard.js"></script>
 <script src="authoring.js"></script>
 <!-- authoring.ts was 1341 lines; these five are it, split by job. authoring.js
      stays first — it keeps the module-local state the rest read. -->

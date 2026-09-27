@@ -14,20 +14,24 @@
 /** Which tab the strip shows — read by storyList.ts's guard on the dashboards list. */
 let rbCurrentTab = 'dashboards';
 
-/** Dashboards | Reports | Stories | Scorecards — the same `.ds-tabs` strip the Data page uses. */
+/** Dashboards | Reports | Stories | Scorecards | Scenarios — the same `.ds-tabs` strip the Data page uses. */
 function rbSelectTab(tab: string): void {
   const isReports = tab === 'reports';
   const isStories = tab === 'stories';
   const isScores = tab === 'scorecards';
-  const other = isReports || isStories || isScores;
+  const isScen = tab === 'scenarios';
+  const other = isReports || isStories || isScores || isScen;
   rbCurrentTab = other ? tab : 'dashboards';
   const pair: Array<[string, boolean]> = [
     ['rp-tab-dashboards', !other], ['rp-tab-reports', isReports], ['rp-tab-stories', isStories], ['rp-tab-scorecards', isScores],
+    ['rp-tab-scenarios', isScen],
   ];
   const stories = rbEl('st-list-wrap');
   if (stories) stories.hidden = !isStories;
   const scores = rbEl('sc-list-wrap');
   if (scores) scores.hidden = !isScores;
+  const scen = rbEl('sn-list-wrap');
+  if (scen) scen.hidden = !isScen;
   for (const [id, on] of pair) {
     const el = rbEl(id);
     if (!el) continue;
@@ -53,12 +57,14 @@ function rbSelectTab(tab: string): void {
         ? 'Documents you read top to bottom — prose around live charts and metrics.'
         : isScores
           ? 'Metrics against their targets, one period at a time — on track, at risk or off track.'
-          : 'Sheets of charts, metrics and text over your datasets.';
+          : isScen
+            ? 'What-ifs over your metrics — move a price, a region\'s volume or a discount, and see every figure follow.'
+            : 'Sheets of charts, metrics and text over your datasets.';
   }
   if (other) {
     if (dash) dash.hidden = true;
     if (dashEmpty) dashEmpty.hidden = true;
-    void (isReports ? rbRefreshList() : isStories ? stRefreshList() : scRefreshList());
+    void (isReports ? rbRefreshList() : isStories ? stRefreshList() : isScen ? snRefreshList() : scRefreshList());
   } else {
     void refreshAnalysisList();
   }

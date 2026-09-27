@@ -156,6 +156,12 @@ function dkContextRef(): { kind: string; id: string; label: string; name: string
   if (currentSection === 'analyses' && typeof scCurrent !== 'undefined' && scCurrent) {
     return { kind: 'scorecard', id: scCurrent.id, label: 'scorecard · ' + scCurrent.name, name: scCurrent.name };
   }
+  // An open SCENARIO: its baseline and scenario figures, drivers and tornado
+  // (buildFacts → ai/scenarioFacts.ts), so "which driver matters most?" is read
+  // off the app's own sensitivity.
+  if (currentSection === 'analyses' && typeof snCurrent !== 'undefined' && snCurrent) {
+    return { kind: 'scenario', id: snCurrent.id, label: 'scenario · ' + snCurrent.name, name: snCurrent.name };
+  }
   // An OPEN dashboard is the context; the Dashboards LIST is not. In scope now
   // because an edit delta can only name a tile the model was actually shown.
   if (currentSection === 'analyses' && dashCurrent && dashCurrent.id) {

@@ -739,7 +739,6 @@ scripts/**/*.js
 /renderer/hub/snapshotDiffView.js
 /renderer/hub/snapshotAsOf.js
 
-
 # Analysis engines — Key drivers (emitted siblings).
 /src/analysis/driverShape.js
 /src/analysis/driverScope.js
@@ -755,3 +754,20 @@ scripts/**/*.js
 /scripts/test-driversResident.js
 /scripts/aeDrivers.js
 /src/engine/distinctAll.js
+
+# Analysis engines — Scenarios (emitted siblings).
+/src/analysis/scenarioModel.js
+/src/analysis/scenarios.js
+/src/analysis/scenarioInputs.js
+/src/analysis/scenarioResolve.js
+/src/engine/scenarioResident.js
+/src/ipc/scenarios.js
+/src/ai/scenarioFacts.js
+/preload/hubScenariosPreload.js
+/renderer/hub/scenarioList.js
+/renderer/hub/scenarioPage.js
+/renderer/hub/scenarioDrivers.js
+/renderer/hub/scenarioCompare.js
+/renderer/hub/scenarioCard.js
+/scripts/test-scenarios.js
+/scripts/aeScenarios.js
