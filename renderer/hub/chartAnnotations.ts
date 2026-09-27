@@ -449,6 +449,8 @@ function annotationsPlugin(cfg: AnnConfig): any {
 
   return {
     id: 'ordAnnotations',
+    /** What this chart was handed — read by the smoke to prove pins arrived. */
+    config: cfg,
     afterInit(chart: ChartJsCtx) { attach(chart); },
     beforeDatasetsDraw(chart: ChartJsCtx) { drawUnder(chart); },
     afterDatasetsDraw(chart: ChartJsCtx) { drawOver(chart); },
