@@ -813,3 +813,4 @@ scripts/**/*.js
 /renderer/hub/filterTypeApply.js
 /scripts/test-filterParse.js
 /scripts/aeFilters.js
+/scripts/smoke-engines.js

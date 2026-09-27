@@ -87,6 +87,9 @@ const SMOKES = [
   // Build depth: assistant plans, formatting and colours, themes, SaaS sources
   // (against a local HTTP fixture server) and snapshots, in one launch.
   'smoke-build',
+  // Analysis engines — key drivers, scenarios, segments, cohorts and funnels,
+  // typed filters, in ONE launch (sections in scripts/ae*.ts).
+  'smoke-engines',
 ];
 
 const results: { name: string; code: number }[] = [];
