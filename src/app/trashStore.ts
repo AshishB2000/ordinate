@@ -19,6 +19,7 @@ import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { projectDir, isValidId, isRecordType } from './recordKinds';
 import type { RecordType } from './recordKinds';
+import { snapshotFiles } from '../data/snapshotNames';
 
 export interface TrashEntry {
   type: RecordType;
@@ -43,6 +44,13 @@ export function entryPath(projectId: string, type: RecordType, id: string): stri
 /** A dataset's table files, as siblings of its trash entry. */
 export function parquetNames(id: string): string[] {
   return [id + '.parquet', id + '.source.parquet'];
+}
+
+/** The table files plus its snapshots (strictly matched) found in `dir` — what travels with a dataset. */
+export async function datasetFiles(dir: string, id: string): Promise<string[]> {
+  let names: string[] = [];
+  try { names = await fs.promises.readdir(dir); } catch (_) { /* no dir: just the tables */ }
+  return parquetNames(id).concat(snapshotFiles(id, names));
 }
 
 async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
@@ -91,7 +99,7 @@ export async function removeEntry(projectId: string, type: RecordType, id: strin
   if (!file) return;
   await fs.promises.rm(file, { force: true });
   if (type === 'dataset') {
-    for (const n of parquetNames(id)) await fs.promises.rm(path.join(path.dirname(file), n), { force: true });
+    for (const n of await datasetFiles(path.dirname(file), id)) await fs.promises.rm(path.join(path.dirname(file), n), { force: true });
   }
 }
 

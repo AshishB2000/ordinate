@@ -20,6 +20,8 @@
 //      caller and a connector MUST apply both. An unbounded query against a
 //      warehouse is how a local-first app becomes someone's surprise bill.
 
+import type { ColumnType } from '../data/parse';
+
 /** One input on the connection form. Rendered generically by the renderer. */
 export interface ConnectorField {
   /** Stored on the connection record (or in secrets when `secret` is true). */
@@ -49,6 +51,14 @@ export interface ConnectorColumn {
   /** The SOURCE's type name, verbatim. Mapping to Ordinate's ColumnType is the
    *  caller's job — a connector must not guess, because `007` stays text. */
   type: string;
+  /**
+   * Set ONLY when the source's own schema says what the column is (an API that
+   * documents a field as a number, a date, or text) — never guessed from values.
+   * The dispatch keeps it instead of re-detecting, so a text field holding
+   * "12345" stays text and an integer amount stays a number. SQL drivers leave
+   * it unset and keep the CSV-identical detection.
+   */
+  columnType?: ColumnType;
 }
 
 export interface ConnectorRows {
@@ -113,11 +123,19 @@ export interface ConnectorDef {
    *  'duckdb'. Sources sharing a wire protocol share an implementation. */
   family: string;
   /** Grouping in the picker UI. */
-  category: 'Databases' | 'Cloud warehouses' | 'Query engines' | 'Files & local';
+  category: 'Databases' | 'Cloud warehouses' | 'Query engines' | 'Files & local' | 'Apps & SaaS';
   /** Always true. See rule 1 above. */
   readOnly: true;
   /** One factual line for the picker tile. */
   blurb?: string;
+  /**
+   * The ONLY hosts this connector may contact, for a source whose host is fixed
+   * (a SaaS API). `*.example.com` matches any subdomain. Declared so the network
+   * allowlist is explicit and shown on the form; the request code refuses any
+   * URL — including a redirect — whose host is not on it. Absent for a source
+   * whose host the user types (a database, a query engine).
+   */
+  hosts?: readonly string[];
   fields: ConnectorField[];
   listTables(ctx: ConnectorContext): Promise<ConnectorTables | ConnectorError>;
   run(ctx: ConnectorContext, sql: string): Promise<ConnectorRows | ConnectorError>;

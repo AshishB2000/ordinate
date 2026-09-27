@@ -27,13 +27,15 @@
 // rendered under. Omitting the field is the report path, which genuinely wants
 // the app theme and the fixed holder box. `width`/`height` are LOGICAL pixels:
 // capturing at the destination box is what stops a chart being letterboxed.
-interface CaptureFrame { themeClasses?: string[]; accentHex?: string; width?: number; height?: number }
+interface CaptureFrame { themeClasses?: string[]; accentHex?: string; style?: any; width?: number; height?: number }
 
 /** Put a frame's theme classes on a capture holder. No frame → the app theme. */
 function applyCaptureFrame(holder: HTMLElement, frame?: CaptureFrame): void {
   if (!frame || !Array.isArray(frame.themeClasses)) return;
   frame.themeClasses.forEach((c) => { if (c) holder.classList.add(c); });
   if (frame.accentHex) applyBrandTokens(holder, frame.accentHex);
+  // The dashboard's workspace theme (themeApply.ts), over the preset classes.
+  if (frame.style && typeof applyDashTheme === 'function') applyDashTheme(holder, frame.style);
 }
 
 // ── Report export (stage 1: chart→PNG + dialog; file generation is next stage) ──

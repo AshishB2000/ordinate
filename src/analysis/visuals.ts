@@ -26,6 +26,8 @@ import { sanitizeOverlays } from './analytics';
 import type { Overlay } from './analytics';
 import { sanitizeTableCalc } from './tableCalc';
 import type { TableCalc } from './tableCalc';
+import { sanitizeFormat, NUMBER_FORMAT_IDS, SORT_MODE_IDS } from './chartFormat';
+import type { FormatOverrides, FormatContext, SortMode } from './chartFormat';
 
 export type VizAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max' | 'none';
 
@@ -130,7 +132,7 @@ export interface VizEncoding {
 // Customize menu produces and chartRender.buildChart consumes. Stored verbatim on a
 // Visual so a saved chart re-renders with its styling. All fields OPTIONAL: an
 // absent field means "use the buildChart default" (identical to Week 7).
-export interface VizOverrides {
+export interface VizOverrides extends FormatOverrides {
   title?: string | null;
   color?: string | null;
   legendPosition?: 'bottom' | 'top' | 'left' | 'right';
@@ -139,7 +141,7 @@ export interface VizOverrides {
   xAxisLabel?: string | null;
   yAxisLabel?: string | null;
   yZero?: boolean;
-  sort?: 'none' | 'asc' | 'desc';
+  sort?: SortMode;
   smooth?: boolean;
   valueMode?: 'off' | 'all' | 'maxmin' | 'max' | 'min';
   hiddenSeries?: number[];
@@ -336,16 +338,20 @@ export const SUGGESTABLE_CHART_TYPES: readonly string[] = [
 
 // Allowed enum sets for the clamped override fields.
 const LEGEND_POSITIONS: ReadonlySet<string> = new Set(['bottom', 'top', 'left', 'right']);
-const SORT_MODES: ReadonlySet<string> = new Set(['none', 'asc', 'desc']);
+const SORT_MODES: ReadonlySet<string> = new Set(SORT_MODE_IDS);
 const VALUE_MODES: ReadonlySet<string> = new Set(['off', 'all', 'maxmin', 'max', 'min']);
-const NUMBER_FORMATS: ReadonlySet<string> = new Set(['auto', 'plain', 'thousands', 'compact', 'percent', 'currency']);
+const NUMBER_FORMATS: ReadonlySet<string> = new Set(NUMBER_FORMAT_IDS);
 
 // Whitelist untrusted (renderer/stored) chart overrides into a well-formed
 // VizOverrides: keep ONLY known keys, clamp each enum to its allowed set, coerce
 // booleans/numbers, drop everything else. Mirrors sanitizeEncoding's "never throw,
 // whitelist" discipline. An empty/invalid input → {} (buildChart defaults). Only
 // keys actually present are emitted, so overrides stay minimal.
-export function sanitizeOverrides(raw: unknown): VizOverrides {
+//
+// `ctx` — the visual's chart type and encoding — is what the formatting-depth
+// keys are clamped against (chartFormat.ts). Without it a dual axis is dropped
+// rather than trusted.
+export function sanitizeOverrides(raw: unknown, ctx?: FormatContext): VizOverrides {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const out: VizOverrides = {};
 
@@ -390,6 +396,8 @@ export function sanitizeOverrides(raw: unknown): VizOverrides {
       .slice(0, 200);
   }
 
+  // Formatting depth: axes, dual axis, labels, custom sort, colours (chartFormat.ts).
+  Object.assign(out, sanitizeFormat(o, ctx));
   return out;
 }
 
@@ -409,15 +417,17 @@ function isValidVisual(data: any): boolean {
 // sanitizes the stored encoding on load).
 function normalize(data: any, projectId: string): Visual {
   const createdAt = data.createdAt || new Date().toISOString();
+  const chartType = sanitizeChartType(data.chartType);
+  const encoding = sanitizeEncoding(data.encoding);
   return {
     id: String(data.id),
     projectId,
     name: typeof data.name === 'string' && data.name.trim() ? data.name : 'Untitled visual',
     datasetId: String(data.datasetId),
-    chartType: sanitizeChartType(data.chartType),
-    encoding: sanitizeEncoding(data.encoding),
+    chartType,
+    encoding,
     // v1 files carry no overrides/filters → {} / [] (behaves exactly as Week 7).
-    overrides: sanitizeOverrides(data.overrides),
+    overrides: sanitizeOverrides(data.overrides, { chartType, encoding }),
     filters: sanitizeFilters(data.filters),
     // Absent (every file written before favourites existed) means false.
     favorite: data.favorite === true,
@@ -525,7 +535,9 @@ export async function saveVisual(
     datasetId: input.datasetId,
     chartType: sanitizeChartType(input.chartType),
     encoding: sanitizeEncoding(input.encoding),
-    overrides: sanitizeOverrides(input.overrides),
+    overrides: sanitizeOverrides(input.overrides, {
+      chartType: sanitizeChartType(input.chartType), encoding: sanitizeEncoding(input.encoding),
+    }),
     filters: sanitizeFilters(input.filters),
     favorite: input.favorite === true,
     ...withAnalytics(input.analytics),
@@ -553,12 +565,16 @@ export async function updateVisual(
   const existing = await getVisual(projectId, id);
   if (!existing) return null;
 
+  const chartType = patch.chartType !== undefined ? sanitizeChartType(patch.chartType) : existing.chartType;
+  const encoding = patch.encoding !== undefined ? sanitizeEncoding(patch.encoding) : existing.encoding;
   const updated: Visual = {
     ...existing,
     name: typeof patch.name === 'string' && patch.name.trim() ? patch.name.trim() : existing.name,
-    chartType: patch.chartType !== undefined ? sanitizeChartType(patch.chartType) : existing.chartType,
-    encoding: patch.encoding !== undefined ? sanitizeEncoding(patch.encoding) : existing.encoding,
-    overrides: patch.overrides !== undefined ? sanitizeOverrides(patch.overrides) : existing.overrides,
+    chartType,
+    encoding,
+    // Re-clamped even when only the type or encoding changed: a dual axis that
+    // was valid on a combo is not valid on the pie it just became.
+    overrides: sanitizeOverrides(patch.overrides !== undefined ? patch.overrides : existing.overrides, { chartType, encoding }),
     filters: patch.filters !== undefined ? sanitizeFilters(patch.filters) : existing.filters,
     favorite: patch.favorite !== undefined ? patch.favorite === true : existing.favorite,
     updatedAt: new Date().toISOString(),

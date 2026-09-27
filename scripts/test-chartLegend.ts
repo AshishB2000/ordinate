@@ -48,6 +48,7 @@ const CHART_SCRIPTS = [
 const THEME: Record<string, string> = {
   '--chart-1': '#2563eb', '--chart-2': '#0e7490', '--chart-3': '#14b8a6',
   '--chart-4': '#6366f1', '--chart-5': '#64748b',
+  '--chart-6': '#b45309', '--chart-7': '#be185d', '--chart-8': '#4d7c0f',
   '--muted': '#6b7280', '--border': '#e5e7eb', '--surface': '#ffffff',
   '--text-strong': '#111827', '--font-ui': 'Inter, system-ui, sans-serif',
   '--accent': '#2563eb', '--ok': '#16a34a', '--error': '#dc2626',

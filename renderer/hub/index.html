@@ -31,6 +31,22 @@
   <!-- platform-css:backup -->
   <link rel="stylesheet" href="backup.css"/>
   <link rel="stylesheet" href="analytics.css"/>
+  <!-- Build depth: one stylesheet per feature, each after its marker. -->
+  <!-- build-css:plan -->
+  <link rel="stylesheet" href="plan.css"/>
+
+  <!-- build-css:format -->
+  <link rel="stylesheet" href="format.css"/>
+
+  <!-- build-css:theme -->
+  <link rel="stylesheet" href="theme-editor.css"/>
+
+  <!-- build-css:saas -->
+  <link rel="stylesheet" href="saas.css"/>
+
+  <!-- build-css:snapshots -->
+  <link rel="stylesheet" href="snapshots.css"/>
+
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
        injecting a <style> at render time, which the hub CSP (style-src 'self')
@@ -3375,6 +3391,48 @@
 <!-- platform:backup -->
 <script src="settingsBackups.js"></script>
 <script src="projectSync.js"></script>
+
+<!-- Build depth: one block per feature, each after its marker. -->
+<!-- build:plan -->
+<!-- The Assistant plan card: the card and its run loop, then its Edit mode. -->
+<script src="planCard.js"></script>
+<script src="planEdit.js"></script>
+
+<!-- build:format -->
+<!-- Formatting depth and project colours. The colour rule is a PURE main
+     module shared with the renderer, loaded between the CommonJS shim and its
+     binder exactly as src/app/format.js is (see cjsShim.ts); fmtColors.js
+     binds it and clears the shim's globals again. The rest resolve each other
+     at call time. -->
+<script src="cjsShim.js"></script>
+<script src="../../src/analysis/colorMap.js"></script>
+<script src="fmtColors.js"></script>
+<script src="fmtApply.js"></script>
+<script src="formatPanel.js"></script>
+<script src="fmtSort.js"></script>
+<script src="fmtColorsUi.js"></script>
+<script src="fmtProfile.js"></script>
+
+<!-- build:theme -->
+<!-- themeModel is the pure model main shares (UMD, like cardModel); themeApply
+     holds the cache and puts a theme on a sheet (dashStyle.applyDashStyleTo
+     calls it); themeSettings is the Settings list, themeEditor its editor. -->
+<script src="themeModel.js"></script>
+<script src="themeApply.js"></script>
+<script src="themeSettings.js"></script>
+<script src="themeEditor.js"></script>
+
+<!-- build:saas -->
+<script src="saas.js"></script>
+
+<!-- build:snapshots -->
+<!-- Data snapshots: the dataset page's Snapshots tab (snapshots.js, built into
+     the tab strip at load), its compare panel (snapshotDiffView.js, uses
+     snapEl/snapWhen), then the "As of" pickers and the metric history
+     (snapshotAsOf.js), whose wrappers dashGrid/dashFiltersUi/vizBuilder call. -->
+<script src="snapshots.js"></script>
+<script src="snapshotDiffView.js"></script>
+<script src="snapshotAsOf.js"></script>
 
 <script src="hub.js"></script>
 

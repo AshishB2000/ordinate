@@ -139,7 +139,7 @@ async function vizThumbRender(tile: HTMLElement): Promise<void> {
   }
 
   const stored = visual.overrides && typeof visual.overrides === 'object' ? visual.overrides : {};
-  const overrides = Object.assign({}, stored, {
+  const overrides = Object.assign({}, fmtWithScope(stored, { projectId: currentProjectId, encoding: visual.encoding }), {
     noAnimate: true, showLegend: false, showGridlines: false, valueMode: 'off', title: '',
   });
   const chart = buildChart(canvas, res.data, chartType, overrides);

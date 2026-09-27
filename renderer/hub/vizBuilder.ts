@@ -204,7 +204,8 @@ async function recomputeVisual(): Promise<void> {
     // The builder PREVIEWS: above 250k rows a chart with no resident fast path
     // is computed on a stratified sample (and says so below); Save and every
     // dashboard compute in full through visual:data.
-    res = window.hubPlatform && typeof window.hubPlatform.previewVisualData === 'function'
+    const asOfRes = snapVizData(currentProjectId, vizDatasetId, encoding, vizForm!.getFilters(), vizAnalytics); // snapshotAsOf.ts — "As of"
+    res = asOfRes ? await asOfRes : window.hubPlatform && typeof window.hubPlatform.previewVisualData === 'function'
       ? await window.hubPlatform.previewVisualData(currentProjectId, vizDatasetId, encoding, vizForm!.getFilters(), undefined, vizAnalytics)
       : await window.hub.computeVisualData(currentProjectId, vizDatasetId, encoding, vizForm!.getFilters(), undefined, vizAnalytics);
   } catch (_) {

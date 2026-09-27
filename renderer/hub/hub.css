@@ -8982,6 +8982,9 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   --chart-3: #14b8a6;
   --chart-4: #6366f1;
   --chart-5: #64748b;
+  --chart-6: #b45309;
+  --chart-7: #be185d;
+  --chart-8: #4d7c0f;
   --chart-accent: #2563eb;
 
   --error: #e11d48;
@@ -9035,6 +9038,9 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   --chart-3: #0f766e;
   --chart-4: #7e8ba3;
   --chart-5: #a1a8b5;
+  --chart-6: #8b6f47;
+  --chart-7: #6b5b95;
+  --chart-8: #5f7f6f;
   --chart-accent: #475569;
 
   --error: #b3123c;
@@ -9106,6 +9112,9 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   --chart-3: #2dd4bf;
   --chart-4: #818cf8;
   --chart-5: #94a3b8;
+  --chart-6: #fbbf24;
+  --chart-7: #f472b6;
+  --chart-8: #a3e635;
   --chart-accent: #3b82f6;
 
   --error: #f87171;
@@ -9174,6 +9183,9 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   --chart-3: var(--brand-chart-3, #14b8a6);
   --chart-4: var(--brand-chart-4, #6366f1);
   --chart-5: var(--brand-chart-5, #64748b);
+  --chart-6: var(--brand-chart-6, #b45309);
+  --chart-7: var(--brand-chart-7, #be185d);
+  --chart-8: var(--brand-chart-8, #4d7c0f);
 }
 
 .dash-accent--teal {
@@ -9187,6 +9199,9 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   --chart-3: #2563eb;
   --chart-4: #4f46e5;
   --chart-5: #64748b;
+  --chart-6: #b45309;
+  --chart-7: #be185d;
+  --chart-8: #4d7c0f;
 }
 
 /* Slate — the muted one, and what the Executive preset pairs with. */
@@ -9201,6 +9216,9 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   --chart-3: #0f766e;
   --chart-4: #7e8ba3;
   --chart-5: #a1a8b5;
+  --chart-6: #8b6f47;
+  --chart-7: #6b5b95;
+  --chart-8: #5f7f6f;
 }
 
 /* Dark + accent. These are (0,2,0), so they beat both the theme block and the
@@ -9219,6 +9237,9 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   --chart-3: var(--brand-dk-chart-3, #2dd4bf);
   --chart-4: var(--brand-dk-chart-4, #818cf8);
   --chart-5: var(--brand-dk-chart-5, #94a3b8);
+  --chart-6: var(--brand-dk-chart-6, #fbbf24);
+  --chart-7: var(--brand-dk-chart-7, #f472b6);
+  --chart-8: var(--brand-dk-chart-8, #a3e635);
 }
 
 .dash-theme--dark.dash-accent--teal {
@@ -9232,6 +9253,9 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   --chart-3: #60a5fa;
   --chart-4: #818cf8;
   --chart-5: #94a3b8;
+  --chart-6: #fbbf24;
+  --chart-7: #f472b6;
+  --chart-8: #a3e635;
 }
 
 /* Slate on dark is the corner case: #475569 is invisible against #232327, so the
@@ -9247,6 +9271,9 @@ body.an-dragging .an-wells .viz-build-row[data-well] select.viz-select {
   --chart-3: #5eead4;
   --chart-4: #a5b4fc;
   --chart-5: #78859a;
+  --chart-6: #b5a07a;
+  --chart-7: #b8a9d9;
+  --chart-8: #9fc5a8;
 }
 
 /* ── Connect data (connected sources: Postgres + URL/API JSON) ── */

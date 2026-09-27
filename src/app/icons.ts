@@ -45,6 +45,12 @@ export const CONNECTOR_SI: Record<string, string> = {
   'duckdb-file': 'siDuckdb',
   'parquet-folder': 'siApacheparquet',
   url: 'siJson',
+  'google-sheets': 'siGooglesheets',
+  airtable: 'siAirtable',
+  notion: 'siNotion',
+  stripe: 'siStripe',
+  github: 'siGithub',
+  hubspot: 'siHubspot',
 };
 
 // Relative luminance (WCAG) of a 6-hex color, 0 (black) … 1 (white).

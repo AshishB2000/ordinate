@@ -205,7 +205,7 @@ async function reportTile(
     }
   }
 
-  const frame = Object.assign({ themeClasses: reportStyleClasses(ctx.analysis), accentHex: dashSanitizeStyle(ctx.analysis && ctx.analysis.style).accentHex }, box);
+  const frame = Object.assign({ themeClasses: reportStyleClasses(ctx.analysis), accentHex: dashSanitizeStyle(ctx.analysis && ctx.analysis.style).accentHex, style: dashSanitizeStyle(ctx.analysis && ctx.analysis.style) }, box);
   let png: string | null = null;
   if (!grid) {
     try {

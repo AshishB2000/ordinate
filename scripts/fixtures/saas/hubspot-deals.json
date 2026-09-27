@@ -1,0 +1,38 @@
+{
+  "results": [
+    {
+      "id": "12345678901",
+      "properties": {
+        "amount": "1500.00",
+        "closedate": "2024-04-30T00:00:00Z",
+        "createdate": "2024-03-01T09:12:00.000Z",
+        "dealname": "Acme renewal",
+        "dealstage": "contractsent",
+        "hs_lastmodifieddate": "2024-03-02T10:00:00.000Z",
+        "hs_object_id": "12345678901",
+        "hubspot_owner_id": "71234",
+        "pipeline": "default"
+      },
+      "createdAt": "2024-03-01T09:12:00.000Z",
+      "updatedAt": "2024-03-02T10:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "12345678902",
+      "properties": {
+        "amount": null,
+        "closedate": null,
+        "createdate": "2024-03-03T15:00:00.000Z",
+        "dealname": "Globex pilot",
+        "dealstage": "appointmentscheduled",
+        "hs_lastmodifieddate": "2024-03-03T15:00:00.000Z",
+        "hs_object_id": "12345678902",
+        "hubspot_owner_id": "71235",
+        "pipeline": "default"
+      },
+      "createdAt": "2024-03-03T15:00:00.000Z",
+      "updatedAt": "2024-03-03T15:00:00.000Z",
+      "archived": false
+    }
+  ]
+}

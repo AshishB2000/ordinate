@@ -241,7 +241,7 @@ export function sanitizePage(raw: unknown): Obj {
   for (const [k, v] of Object.entries(obj(o.geo)).slice(0, 12)) {
     if (/^[a-z_]{2,20}$|^custom:[0-9a-f-]{36}$/i.test(k)) geo[k] = sanitizeBoundary(v);
   }
-  const brand = sanitizeBundle({ brand: o.brand, pages: [] }).brand;
+  const { brand, theme } = sanitizeBundle({ brand: o.brand, theme: o.theme, pages: [] });
   const out: Obj = {
     site: {
       title: str(site.title, MAX_LABEL) || 'Published dashboards',
@@ -251,6 +251,7 @@ export function sanitizePage(raw: unknown): Obj {
     },
     formats: sanitizeFormatPrefs(o.formats),
     brand,
+    ...(theme ? { theme } : {}),
     geo,
   };
   if (o.kind === 'story') {

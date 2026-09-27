@@ -1,0 +1,49 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "ch_3MmlLrLkdIwHu7ix0snN0B15",
+      "object": "charge",
+      "amount": 1099,
+      "amount_captured": 1099,
+      "amount_refunded": 0,
+      "currency": "usd",
+      "created": 1709633700,
+      "customer": "cus_NffrFeUfNV2Hib",
+      "description": "Pro plan",
+      "livemode": false,
+      "paid": true,
+      "refunded": false,
+      "status": "succeeded",
+      "billing_details": {
+        "address": { "city": "San Francisco", "country": "US", "line1": null, "postal_code": "94107" },
+        "email": "ada@example.com",
+        "name": "Ada L."
+      },
+      "metadata": { "order_id": "123456" },
+      "payment_method_details": { "card": { "brand": "visa", "last4": "4242", "exp_month": 8 }, "type": "card" },
+      "refunds": { "object": "list", "data": [], "has_more": false, "total_count": 0, "url": "/v1/charges/ch_3MmlLrLkdIwHu7ix0snN0B15/refunds" }
+    },
+    {
+      "id": "ch_3MmlLrLkdIwHu7ix0snN0B16",
+      "object": "charge",
+      "amount": 2500,
+      "amount_captured": 2500,
+      "amount_refunded": 500,
+      "currency": "eur",
+      "created": 1709547300,
+      "customer": null,
+      "description": null,
+      "livemode": false,
+      "paid": true,
+      "refunded": false,
+      "status": "succeeded",
+      "billing_details": { "address": { "city": "Berlin", "country": "DE", "line1": null, "postal_code": "10115" }, "email": null, "name": "Grace H." },
+      "metadata": { "order_id": "654321" },
+      "payment_method_details": { "card": { "brand": "mastercard", "last4": "4444", "exp_month": 1 }, "type": "card" },
+      "refunds": { "object": "list", "data": [{ "id": "re_1", "amount": 500 }], "has_more": false, "total_count": 1, "url": "/v1/charges/ch_3MmlLrLkdIwHu7ix0snN0B16/refunds" }
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/charges"
+}

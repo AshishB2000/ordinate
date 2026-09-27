@@ -1,0 +1,249 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Data snapshots — the dataset page's Snapshots tab (snapshots.ts), its
+   compare panel (snapshotDiffView.ts), the "As of" pickers and the metric
+   history (snapshotAsOf.ts). Its own file so it does not grow hub.css and
+   concurrent features do not collide in it. Tokens only (renderer/theme.css)
+   — both themes follow.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* The tab is a list, not a view of the grid — the grid steps aside, as it
+   does for Quality and Columns. */
+.ds-explorer.tab-snapshots .ds-grid-pane { display: none; }
+
+.snap-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  min-width: 0;
+}
+
+/* ── Head: what this is, and how many to keep ───────────────────────────── */
+.snap-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-16);
+  flex-wrap: wrap;
+}
+.snap-h {
+  margin: 0;
+  font-size: var(--t-15);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.snap-sub {
+  margin: 2px 0 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.snap-keep,
+.snap-diff-key {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.snap-keep-select,
+.snap-asof-select {
+  padding: var(--sp-4) var(--sp-8);
+  font-family: var(--font-ui);
+  font-size: var(--t-13);
+  color: var(--text-strong);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  max-width: 280px;
+}
+.snap-keep-select:hover,
+.snap-asof-select:hover { border-color: var(--accent); }
+.snap-keep-select:focus-visible,
+.snap-asof-select:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+/* ── Not eligible ───────────────────────────────────────────────────────── */
+.snap-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-12);
+  padding: var(--sp-12) var(--sp-16);
+  background: var(--warn-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text);
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+}
+.snap-notice .ic { flex: none; margin-top: 2px; color: var(--warn); }
+.snap-notice strong { color: var(--text-strong); font-weight: 600; }
+.snap-empty { padding: var(--sp-32) var(--sp-24); }
+.snap-empty .ws-empty-p { max-width: 460px; }
+
+/* ── The list ───────────────────────────────────────────────────────────── */
+.snap-table,
+.snap-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-13);
+}
+.snap-table th,
+.snap-grid th {
+  text-align: left;
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: var(--sp-8) var(--sp-12);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.snap-table td,
+.snap-grid td {
+  padding: var(--sp-8) var(--sp-12);
+  border-bottom: 1px solid var(--border-hairline);
+  color: var(--text);
+  vertical-align: middle;
+}
+.snap-table td:nth-child(2),
+.snap-table td:nth-child(3) { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.snap-row.is-current td { background: var(--surface-2); }
+.snap-row.is-open td { background: var(--accent-soft); }
+.snap-when { color: var(--text-strong); font-weight: 500; margin-right: var(--sp-8); }
+.snap-ago { color: var(--muted); font-size: var(--t-12); }
+.snap-tag {
+  display: inline-block;
+  padding: 1px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--t-11);
+  font-weight: 600;
+}
+.snap-delta { color: var(--muted); }
+.snap-delta.is-up { color: var(--ok); }
+.snap-delta.is-down { color: var(--error); }
+.snap-actions { text-align: right; white-space: nowrap; }
+.snap-actions .btn { display: inline-flex; align-items: center; vertical-align: middle; }
+.snap-actions .btn + .btn { margin-left: var(--sp-8); }
+
+/* ── Compare ────────────────────────────────────────────────────────────── */
+.snap-diff:empty { display: none; }
+.snap-diff {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-16);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.snap-diff-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  flex-wrap: wrap;
+}
+.snap-diff-h {
+  margin: 0;
+  margin-right: auto;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.snap-diff-out {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+.snap-sum { display: flex; flex-wrap: wrap; gap: var(--sp-8); }
+.snap-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  padding: var(--sp-4) var(--sp-12);
+  border-radius: var(--r-full);
+  font-size: var(--t-12);
+  color: var(--text);
+  background: var(--surface-2);
+}
+.snap-chip b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.snap-chip-added { background: var(--ok-soft); color: var(--ok); }
+.snap-chip-removed { background: var(--error-soft); color: var(--error); }
+.snap-chip-changed { background: var(--warn-soft); color: var(--warn); }
+.snap-note,
+.snap-more,
+.snap-same,
+.snap-loading,
+.snap-mh-note {
+  margin: 0;
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+.snap-error { margin: 0; font-size: var(--t-13); color: var(--error); }
+.snap-sec { display: flex; flex-direction: column; gap: var(--sp-8); }
+.snap-sec-h {
+  margin: 0;
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.snap-scroll {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+}
+.snap-grid th { position: sticky; top: 0; background: var(--surface-1); }
+.snap-grid td { white-space: nowrap; }
+.snap-key { color: var(--text-strong); font-weight: 500; }
+.snap-before .snap-val { color: var(--error); text-decoration: line-through; text-decoration-thickness: 1px; }
+.snap-after .snap-val { color: var(--ok); }
+.snap-null { color: var(--text-faint); font-style: italic; }
+
+/* ── The "As of" pickers (dashboard head, builder head) ─────────────────── */
+.snap-asof {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.snap-asof[hidden] { display: none; }
+.snap-asof-label { white-space: nowrap; }
+/* "Data as of 10:27 PM" describes the LATEST data; under a past time the picker
+   is the one true statement of what the sheet shows. */
+.dash-editor.is-asof #dash-fresh { display: none; }
+.snap-asof.is-on .snap-asof-select {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── A metric across its snapshots (the metric editor) ──────────────────── */
+.snap-mh {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin-top: var(--sp-8);
+}
+.snap-mh-h {
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.snap-mh-chart {
+  position: relative;
+  height: 160px;
+  min-height: 0;
+  overflow: hidden;
+}
+.snap-mh-chart .cv-chart-wrapper,
+.snap-mh-chart .cv-canvas-wrap { height: 100%; min-height: 0; }

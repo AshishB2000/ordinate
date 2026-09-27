@@ -131,7 +131,7 @@ function scriptSafe(js: string): string {
 export function pageHtml(page: Record<string, any>, assets: SiteAssets, title: string): string { // any: a sanitizePage result
   const style: DashboardStyle = sanitizeStyle(page.dashboard && page.dashboard.style);
   const resolved: DashboardStyle = { ...style, theme: style.theme === 'auto' ? 'clean' : style.theme };
-  const css = styleBlock(resolved, page.brand) + SITE_CSS;
+  const css = styleBlock(resolved, page.brand, page.theme) + SITE_CSS;
   const scripts = [
     assets.chartJs,
     'var module = { exports: {} }; var exports = module.exports;',
@@ -152,7 +152,7 @@ export function pageHtml(page: Record<string, any>, assets: SiteAssets, title: s
   ].join('; ');
   const safeTitle = String(title || 'Published').replace(/[<>&"]/g, '');
   return `<!doctype html>
-<html lang="en" class="${styleClasses(resolved)}">
+<html lang="en" class="${styleClasses(resolved)}${page.theme ? ' dash-themed' : ''}">
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="${csp}">

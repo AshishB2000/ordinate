@@ -34,6 +34,7 @@ function kpiPct(pct: number): string {
 async function paintMetricCompare(card: any, body: HTMLElement): Promise<void> {
   const m = card && card.metric;
   if (!m || !m.compare || !m.compare.mode || !currentProjectId) return;
+  if (snapDashAsOf) return; // under "As of" a delta would compare a past figure with today's periods
   const row = document.createElement('div');
   row.className = 'dash-metric-delta is-loading';
   row.textContent = ' ';

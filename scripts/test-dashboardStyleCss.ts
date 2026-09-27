@@ -270,6 +270,25 @@ if (grid) {
      /grid-template-columns:\s*repeat\(12,\s*1fr\)/.test(grid.body), grid.body);
 }
 
+// ── the workspace-theme token list IS this set ───────────────────────────────
+
+// A workspace theme (Settings → Appearance → Themes) may override exactly the
+// tokens the preset blocks declare, validated against ONE list exported from
+// renderer/hub/themeModel.ts. Set equality in both directions: a token added
+// to a preset block and not to the list is a colour no theme can set; one in
+// the list and in no block is a name a theme sets and nothing reads.
+{
+  const themeModel = require('../renderer/hub/themeModel') as { AXIS_TOKENS: string[] };
+  const declared = new Set<string>(themeUnion);
+  for (const name of DENSITIES) (propsOf(section, '.dash-density--' + name) ?? new Set<string>()).forEach((n) => declared.add(n));
+  const list = new Set(themeModel.AXIS_TOKENS);
+  ok('themeModel.AXIS_TOKENS has no duplicates', list.size === themeModel.AXIS_TOKENS.length);
+  ok('every token a theme or density block declares is in themeModel.AXIS_TOKENS',
+     missing(declared, list).length === 0, `missing from the list: ${missing(declared, list).join(', ')}`);
+  ok('every token in themeModel.AXIS_TOKENS is declared by a theme or density block',
+     missing(list, declared).length === 0, `declared nowhere: ${missing(list, declared).join(', ')}`);
+}
+
 // ── no dangling var() inside the new section ─────────────────────────────────
 
 // test-cssVars.ts checks this repo-wide, but it accepts a definition ANYWHERE.

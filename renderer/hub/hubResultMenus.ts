@@ -110,41 +110,6 @@ const chartMenuEl = (function () {
         <label class="cm-label">Color</label>
         <div class="cm-swatches" id="cm-swatches"></div>
       </div>
-      <div class="cm-toggle-row">
-        <span class="cm-toggle-label">Show legend</span>
-        <button class="cm-switch" id="cm-show-legend" role="switch" aria-checked="false" type="button">
-          <span class="cm-switch-thumb"></span>
-        </button>
-      </div>
-      <div class="cm-field" id="cm-legend-pos-field">
-        <label class="cm-label" for="cm-legend-pos">Legend position</label>
-        <select class="cm-input cm-select" id="cm-legend-pos">
-          <option value="bottom">Bottom</option>
-          <option value="top">Top</option>
-          <option value="left">Left</option>
-          <option value="right">Right</option>
-        </select>
-      </div>
-      <div class="cm-toggle-row">
-        <span class="cm-toggle-label">Gridlines</span>
-        <button class="cm-switch" id="cm-show-gridlines" role="switch" aria-checked="true" type="button">
-          <span class="cm-switch-thumb"></span>
-        </button>
-      </div>
-      <div class="cm-toggle-row" id="cm-y-zero-row">
-        <span class="cm-toggle-label">Y-axis starts at zero</span>
-        <button class="cm-switch" id="cm-y-zero" role="switch" aria-checked="true" type="button">
-          <span class="cm-switch-thumb"></span>
-        </button>
-      </div>
-      <div class="cm-field" id="cm-sort-field">
-        <label class="cm-label" for="cm-sort">Sort by value</label>
-        <select class="cm-input cm-select" id="cm-sort">
-          <option value="none">None</option>
-          <option value="desc">High → Low</option>
-          <option value="asc">Low → High</option>
-        </select>
-      </div>
       <div class="cm-field" id="cm-numfmt-field">
         <label class="cm-label" for="cm-numfmt">Number format</label>
         <select class="cm-input cm-select" id="cm-numfmt">
@@ -166,16 +131,10 @@ const chartMenuEl = (function () {
           <span class="cm-switch-thumb"></span>
         </button>
       </div>
-      <div id="cm-axis-section">
-        <div class="cm-field">
-          <label class="cm-label" for="cm-x-axis">X axis label</label>
-          <input class="cm-input" id="cm-x-axis" type="text" placeholder="X axis" autocomplete="off"/>
-        </div>
-        <div class="cm-field">
-          <label class="cm-label" for="cm-y-axis">Y axis label</label>
-          <input class="cm-input" id="cm-y-axis" type="text" placeholder="Y axis" autocomplete="off"/>
-        </div>
-      </div>
+      <!-- Legend, axes (titles, range, scale, gridlines), data labels, sort
+           and colours: formatPanel.ts renders them here for the chart the
+           menu is open on. -->
+      <div class="fmt-panel" id="cm-format-mount"></div>
       <button class="cm-reset" id="cm-reset" type="button">Reset to default</button>
     </div>
   `;
@@ -193,22 +152,12 @@ const cmCustomToggle = document.getElementById('cm-customize-toggle');
 const cmCustomize    = document.getElementById('cm-customize');
 const cmTitleInput   = document.getElementById('cm-title') as HTMLInputElement;
 const cmSwatches     = document.getElementById('cm-swatches');
-const cmShowLegend   = document.getElementById('cm-show-legend');
-const cmLegendPos    = document.getElementById('cm-legend-pos') as HTMLSelectElement;
-const cmLegendPosField = document.getElementById('cm-legend-pos-field');
-const cmShowGridlines = document.getElementById('cm-show-gridlines');
-const cmYZero        = document.getElementById('cm-y-zero');
-const cmYZeroRow     = document.getElementById('cm-y-zero-row');
-const cmSort         = document.getElementById('cm-sort') as HTMLSelectElement;
-const cmSortField    = document.getElementById('cm-sort-field');
+const cmFormatMount  = document.getElementById('cm-format-mount');
 const cmNumFmt       = document.getElementById('cm-numfmt') as HTMLSelectElement;
 const cmTarget       = document.getElementById('cm-target') as HTMLInputElement;
 const cmTargetField  = document.getElementById('cm-target-field');
 const cmSmooth       = document.getElementById('cm-smooth');
 const cmSmoothRow    = document.getElementById('cm-smooth-row');
-const cmAxisSection  = document.getElementById('cm-axis-section');
-const cmXAxis        = document.getElementById('cm-x-axis') as HTMLInputElement;
-const cmYAxis        = document.getElementById('cm-y-axis') as HTMLInputElement;
 const cmReset        = document.getElementById('cm-reset');
 
 // Build swatches once

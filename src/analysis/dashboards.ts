@@ -40,6 +40,7 @@ import { sanitizePeriod, sanitizeCompare } from './dateIntel';
 import type { CompareMode, PeriodPreset } from './dateIntel';
 import { sanitizeTableCalc } from './tableCalc';
 import type { TableCalc } from './tableCalc';
+import { themeModel } from './themeTokens';
 
 // Tile actions and the card kinds beyond these four live in one PURE module
 // the renderer loads too (renderer/hub/cardModel.ts, the geoMatch pattern), so
@@ -256,12 +257,14 @@ export function sanitizeCardVisual(raw: unknown): CardVisual | null {
   if (!o) return null;
   const datasetId = typeof o.datasetId === 'string' ? o.datasetId : '';
   if (!datasetId) return null;
+  const chartType = sanitizeChartType(o.chartType);
+  const encoding = sanitizeEncoding(o.encoding);
   return {
     datasetId,
     name: typeof o.name === 'string' ? o.name : '',
-    chartType: sanitizeChartType(o.chartType),
-    encoding: sanitizeEncoding(o.encoding),
-    overrides: sanitizeOverrides(o.overrides),
+    chartType,
+    encoding,
+    overrides: sanitizeOverrides(o.overrides, { chartType, encoding }),
     filters: sanitizeFilters(o.filters),
   };
 }
@@ -460,6 +463,10 @@ export interface DashboardStyle {
   /** Which logo this dashboard's surfaces carry. Absent = the workspace's;
    *  'custom' = its own, stored in userData/branding (app/branding.ts). */
   logo?: 'none' | 'custom';
+  /** A workspace theme (src/app/themeStore.ts) over the three axes: a theme's
+   *  UUID, or 'none' to opt out of the workspace default. Absent = follow the
+   *  workspace. An id that no longer resolves falls through, never breaks. */
+  themeId?: string;
   /** The user (or the Assistant on their behalf) picked this, so it is an
    *  override to keep rather than a default to migrate. Absent means defaulted. */
   chosen?: true;
@@ -534,6 +541,7 @@ export function sanitizeStyle(raw: unknown): DashboardStyle {
     ...(typeof o.accentHex === 'string' && /^#[0-9a-f]{6}$/i.test(o.accentHex)
       ? { accentHex: o.accentHex.toLowerCase() } : {}),
     ...(o.logo === 'none' || o.logo === 'custom' ? { logo: o.logo } : {}),
+    ...(themeModel.sanitizeThemeId(o.themeId) ? { themeId: themeModel.sanitizeThemeId(o.themeId) } : {}),
     // Last, so a preset literal and its sanitized copy serialise identically.
     ...(chosen ? { chosen: true as const } : {}),
   };

@@ -13,7 +13,7 @@
 // through safeError(), so a driver string carrying a DSN or a password is
 // redacted before it can reach a renderer.
 
-import { finalizeTable, ParseResult } from '../data/parse';
+import { coerceValue, finalizeTable, ParseResult } from '../data/parse';
 import { getConnector } from './index';
 import { safeError } from './types';
 import type {
@@ -162,22 +162,35 @@ function cellToString(v: unknown): string {
   return String(v);
 }
 
-// The source's own column types are deliberately DISCARDED here: parse.ts's
+// The source's own column TYPE NAMES are deliberately DISCARDED here: parse.ts's
 // detector is what decides whether `007` is a number, and it must decide the same
 // way for a database column as for a CSV column, or the same data would type
 // differently depending on where it came from.
+//
+// The one exception is `columnType`, which a connector sets only when the
+// source's own schema DECLARES the column (a SaaS API field documented as a
+// number, a date or text). That is not a guess, so it wins: a text property
+// holding "12345" stays text. Cells are re-coerced from their original strings,
+// through the same coerceValue a retype uses, so nothing is lost on the way.
 function toParseResult(
   columns: ConnectorColumn[],
   rows: (string | number | boolean | null)[][],
   truncated: boolean,
-  rowLimit: number,
 ): ParseResult {
   const header = (columns || []).map((c) => String(c?.name ?? ''));
   const body = (rows || []).map((row) => (row || []).map(cellToString));
   const result = finalizeTable(header, body);
+  (columns || []).forEach((c, i) => {
+    const t = c?.columnType;
+    if ((t !== 'text' && t !== 'number' && t !== 'date') || !result.columns[i] || result.columns[i].type === t) return;
+    result.columns[i].type = t;
+    result.rows.forEach((row, r) => { row[i] = coerceValue(body[r]?.[i] ?? '', t); });
+  });
   if (truncated) {
+    // The count actually kept — a connector may stop below the caller's row
+    // limit (a SaaS source's page cap), and naming the limit would be wrong.
     result.warnings = result.warnings.concat(
-      `Result truncated at ${rowLimit.toLocaleString('en-US')} rows.`,
+      `Result truncated at ${result.rows.length.toLocaleString('en-US')} rows.`,
     );
   }
   return result;
@@ -232,7 +245,7 @@ export async function runConnection(
     const rows = (res.rows || []).slice(0, ctx.rowLimit); // trust, then verify
     return {
       ok: true,
-      result: toParseResult(res.columns || [], rows, truncated, ctx.rowLimit),
+      result: toParseResult(res.columns || [], rows, truncated),
       truncated,
     };
   } catch (err: unknown) {

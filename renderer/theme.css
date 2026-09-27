@@ -5,7 +5,7 @@
 
    The seven semantic tokens the app contract guarantees are:
      --bg --surface --text --muted --border --accent --error
-   plus the chart palette --chart-1..--chart-5.
+   plus the chart palette --chart-1..--chart-8.
    The remaining tokens (surface-2, text-strong, etc.) are supporting shades
    derived to stay consistent with those, so components never hardcode colors.
    Fonts use system stacks (no remote fetch — the app is local-first).
@@ -21,6 +21,9 @@
   --chart-3: var(--brand-chart-3, #14b8a6);  /* teal-500     */
   --chart-4: var(--brand-chart-4, #6366f1);  /* indigo-500   */
   --chart-5: var(--brand-chart-5, #64748b);  /* slate-500    */
+  --chart-6: var(--brand-chart-6, #b45309);  /* amber-700    */
+  --chart-7: var(--brand-chart-7, #be185d);  /* pink-700     */
+  --chart-8: var(--brand-chart-8, #4d7c0f);  /* lime-700     */
   --chart-accent: var(--brand-accent, #2563eb);
 
   /* type + shape */
@@ -225,6 +228,9 @@
   --chart-3: var(--brand-dk-chart-3, #2dd4bf);  /* teal-400    */
   --chart-4: var(--brand-dk-chart-4, #818cf8);  /* indigo-400  */
   --chart-5: var(--brand-dk-chart-5, #94a3b8);  /* slate-400   */
+  --chart-6: var(--brand-dk-chart-6, #fbbf24);  /* amber-400   */
+  --chart-7: var(--brand-dk-chart-7, #f472b6);  /* pink-400    */
+  --chart-8: var(--brand-dk-chart-8, #a3e635);  /* lime-400    */
   --chart-accent: var(--brand-dk-accent, #3b82f6);
 
   --error: #f87171;

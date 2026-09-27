@@ -67,6 +67,7 @@ function connCoerceCatalog(raw: unknown): ConnDef[] {
       fields,
       // Absent → true. See ConnDef.browsable.
       browsable: d.browsable !== false,
+      hosts: Array.isArray(d.hosts) ? d.hosts.filter((h) => typeof h === 'string') : undefined,
     });
   }
   return out;
@@ -282,7 +283,7 @@ function connSelectConnector(d: ConnDef, values?: Record<string, unknown>): void
   const name = connEl('conn-chosen-name');
   if (name) name.textContent = d.label;
   const blurb = connEl('conn-chosen-blurb');
-  if (blurb) blurb.textContent = d.blurb || '';
+  if (blurb) blurb.textContent = (d.blurb || '') + (d.hosts && d.hosts.length ? ' Connects only to ' + d.hosts.join(', ') + '.' : '');
 
   connRenderFields(d, values);
   connShow('conn-picker', false);

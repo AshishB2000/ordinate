@@ -674,3 +674,68 @@ scripts/**/*.js
 /renderer/hub/scorecardEditor.js
 /renderer/hub/reportScorecard.js
 /scripts/test-scorecards.js
+
+# Build depth (emitted siblings), one block per feature.
+/src/ipc/build.js
+/scripts/smoke-build.js
+# build:plan
+/src/ai/planSteps.js
+/src/ai/planCheck.js
+/src/ai/planRun.js
+/src/ai/planExec.js
+/src/ipc/plan.js
+/preload/hubPlanPreload.js
+/renderer/hub/planCard.js
+/renderer/hub/planEdit.js
+/scripts/test-planCheck.js
+/scripts/test-planRun.js
+/scripts/bdPlan.js
+
+# build:format
+/src/analysis/colorMap.js
+/src/analysis/chartFormat.js
+/src/ipc/format.js
+/preload/hubFormatPreload.js
+/renderer/hub/fmtColors.js
+/renderer/hub/fmtApply.js
+/renderer/hub/formatPanel.js
+/renderer/hub/fmtSort.js
+/renderer/hub/fmtColorsUi.js
+/renderer/hub/fmtProfile.js
+/scripts/test-colorMap.js
+/scripts/test-chartFormat.js
+/scripts/bdFormat.js
+
+# build:theme
+/renderer/hub/themeModel.js
+/renderer/hub/themeApply.js
+/renderer/hub/themeSettings.js
+/renderer/hub/themeEditor.js
+/src/analysis/themeTokens.js
+/src/app/themeStore.js
+/src/ipc/themes.js
+/preload/hubThemesPreload.js
+
+# build:saas
+/src/connectors/saas.js
+/src/connectors/saasApis.js
+/src/connectors/saasHttp.js
+/src/connectors/saasMap.js
+/src/connectors/folderWatch.js
+/src/ipc/saas.js
+/preload/hubSaasPreload.js
+/renderer/hub/saas.js
+
+# build:snapshots
+/src/data/snapshotNames.js
+/src/data/snapshots.js
+/src/data/snapshotDiffJs.js
+/src/data/snapshotRestore.js
+/src/data/asOf.js
+/src/engine/snapshotDiff.js
+/src/ipc/snapshots.js
+/preload/hubSnapshotsPreload.js
+/renderer/hub/snapshots.js
+/renderer/hub/snapshotDiffView.js
+/renderer/hub/snapshotAsOf.js
+

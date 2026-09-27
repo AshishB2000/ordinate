@@ -59,6 +59,8 @@ function dashSanitizeStyle(raw: any): any {
     accent: DASH_ACCENTS.indexOf(o.accent) >= 0 ? o.accent : DASH_STYLE_DEFAULT.accent,
     ...(typeof o.accentHex === 'string' && /^#[0-9a-f]{6}$/i.test(o.accentHex) ? { accentHex: o.accentHex.toLowerCase() } : {}),
     ...(o.logo === 'none' || o.logo === 'custom' ? { logo: o.logo } : {}),
+    // A workspace theme (themeApply.ts) — a theme's id or 'none', never free text.
+    ...(typeof themeModel !== 'undefined' && themeModel.sanitizeThemeId(o.themeId) ? { themeId: themeModel.sanitizeThemeId(o.themeId) } : {}),
     ...(chosen ? { chosen: true } : {}),
   };
 }
@@ -81,6 +83,7 @@ function applyDashStyleTo(el: HTMLElement | null, style: any): void {
     .forEach((c: string) => el.classList.remove(c));
   dashStyleClassList(style).forEach((c) => el.classList.add(c));
   applyBrandTokens(el, dashSanitizeStyle(style).accentHex || '');
+  if (typeof applyDashTheme === 'function') applyDashTheme(el, dashSanitizeStyle(style)); // themeApply.ts
 }
 
 /** The style of the open dashboard, always a valid triple. */
@@ -241,8 +244,9 @@ function applyDashStylePreset(preset: string): boolean {
   if (!dashCurrent || !next) return false;
   // A preset is theme/density/accent; the dashboard's own accent and logo stay.
   const cur = dashCurrentStyle();
-  setDashStyle({ ...next, accentHex: cur.accentHex, logo: cur.logo }, true);
-  showToast('Style: ' + DASH_STYLE_LABELS[preset]);
+  setDashStyle({ ...next, accentHex: cur.accentHex, logo: cur.logo, themeId: cur.themeId }, true);
+  const theme = typeof dashThemeResolve === 'function' ? dashThemeResolve(dashCurrentStyle()).theme : null; // themeApply.ts
+  showToast('Style: ' + DASH_STYLE_LABELS[preset] + (theme ? ' · ' + theme.name : ''));
   return true;
 }
 
@@ -371,7 +375,7 @@ function handleDashStyle(): void {
   if (!dashCurrent) return;
   const before = dashCurrentStyle();
   let picked = dashPresetOf(before) || 'clean';
-  const brand = { accentHex: before.accentHex || '', logo: before.logo || '' };
+  const brand = { accentHex: before.accentHex || '', logo: before.logo || '', themeId: before.themeId || '' };
   const preview = (): void => setDashStyle({ ...DASH_STYLE_PRESETS[picked], ...brand }, false);
 
   const overlay = document.createElement('div');
@@ -426,6 +430,7 @@ function handleDashStyle(): void {
   box.appendChild(sub);
   box.appendChild(strip);
   box.appendChild(brandControls);
+  if (typeof buildDashThemeField === 'function') box.appendChild(buildDashThemeField(brand, preview)); // themeApply.ts
   box.appendChild(actions);
   overlay.appendChild(box);
   document.body.appendChild(overlay);

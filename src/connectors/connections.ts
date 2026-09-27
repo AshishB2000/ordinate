@@ -404,6 +404,26 @@ export function publicConnection(c: Connection): PublicConnection {
   return out;
 }
 
+// ── Change notifications ─────────────────────────────────────────────────────
+// Every write — create, update, delete — is announced, so something that
+// mirrors a connection's settings (the folder watcher, src/connectors/
+// folderWatch.ts) follows the record instead of polling it. A listener that
+// throws is skipped; it can never fail the write that already happened.
+type ChangeListener = (projectId: string, id: string, conn: Connection | null) => void;
+const changeListeners = new Set<ChangeListener>();
+
+/** Hear about every connection write. `conn` is null for a delete. */
+export function onConnectionChange(fn: ChangeListener): () => void {
+  changeListeners.add(fn);
+  return () => changeListeners.delete(fn);
+}
+
+function emitChange(projectId: string, id: string, conn: Connection | null): void {
+  for (const fn of changeListeners) {
+    try { fn(projectId, id, conn); } catch (_) { /* a listener must not fail a write */ }
+  }
+}
+
 // No-op stub kept for symmetry with datasets.init()/projects.init(). The
 // per-project connections/ dir is created lazily on first saveConnection.
 export async function init(): Promise<void> {
@@ -511,6 +531,7 @@ export async function saveConnection(
 
   await fs.promises.mkdir(connectionsDir(projectId), { recursive: true });
   await writeJsonAtomic(connectionFilePath(projectId, id), c);
+  emitChange(projectId, id, c);
   return c;
 }
 
@@ -560,6 +581,7 @@ export async function updateConnection(
 
   await fs.promises.mkdir(connectionsDir(projectId), { recursive: true });
   await writeJsonAtomic(connectionFilePath(projectId, id), next);
+  emitChange(projectId, id, next);
   return next;
 }
 
@@ -626,6 +648,7 @@ export async function deleteConnection(projectId: string, id: string): Promise<b
   if (!isValidId(projectId) || !isValidId(id)) return false;
   try {
     await fs.promises.rm(connectionFilePath(projectId, id), { force: true });
+    emitChange(projectId, id, null);
     return true;
   } catch (_) {
     return false;

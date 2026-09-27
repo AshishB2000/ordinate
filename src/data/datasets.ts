@@ -40,6 +40,10 @@ import {
   datasetsDir, datasetFilePath, parquetPath, sourceParquetPath, writeJsonAtomic, sanitizeAutoRefresh,
 } from './datasetRecord';
 export { markRefresh, setAutoRefresh, writeQuality } from './datasetRecord';
+// Data snapshots: the refresh hook (keep the table being replaced) and the
+// as-of hooks (read a dataset as it was) — each one line at its call site.
+import { keepAround, removeAll as removeSnapshots } from './snapshots';
+import * as asOf from './asOf';
 export type { DatasetOrigin } from './datasetOrigin';
 export type { DatasetSummary } from './datasetSummary';
 export { sanitizeOrigin };
@@ -173,6 +177,7 @@ function sanitizeCapture(raw: any): { entryId: string | null; cropPath: string |
 const writeChains = new Map<string, Promise<void>>();
 
 async function persist(projectId: string, dataset: Dataset, progress: parquetStore.WriteProgress = {}): Promise<void> {
+  asOf.assertWritable(); // an as-of read must never write its past rows back as the present
   const prev = writeChains.get(dataset.id) || Promise.resolve();
   const run = prev.catch(() => { /* the previous write's failure was its caller's */ })
     .then(() => persistNow(projectId, dataset, progress));
@@ -384,6 +389,8 @@ export type DatasetMeta = Omit<Dataset, 'rows' | 'source'> & {
 
 export async function getDatasetMeta(projectId: string, id: string): Promise<DatasetMeta | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
+  const past = await asOf.metaHook(projectId, id); // inside an as-of read: the snapshot's
+  if (past !== undefined) return past;
   try {
     const raw = await fs.promises.readFile(datasetFilePath(projectId, id), 'utf8');
     const data = JSON.parse(raw);
@@ -418,6 +425,8 @@ export async function residentSource(
   projectId: string,
   id: string,
 ): Promise<{ parquetPath: string; columns: ParsedColumn[] } | null> {
+  const past = await asOf.residentHook(projectId, id); // inside an as-of read: the snapshot's file
+  if (past !== undefined) return past;
   if (!parquetStore.isSupported()) return null;
   const meta = await getDatasetMeta(projectId, id);
   if (!meta || !meta.resident) return null;
@@ -426,6 +435,8 @@ export async function residentSource(
 
 export async function getDataset(projectId: string, id: string): Promise<Dataset | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
+  const past = await asOf.datasetHook(projectId, id); // inside an as-of read: the snapshot's rows
+  if (past !== undefined) return past;
   try {
     const raw = await fs.promises.readFile(datasetFilePath(projectId, id), 'utf8');
     const data = JSON.parse(raw);
@@ -576,7 +587,8 @@ async function updateDatasetDataNow(
   const cap = sanitizeCapture(capture);
   if (cap) updated.capture = cap;
   await fs.promises.mkdir(datasetsDir(projectId), { recursive: true });
-  await persist(projectId, updated, progress);
+  // The one place a refresh replaces the table: keep the table it replaces.
+  await keepAround(projectId, existing, () => persist(projectId, updated, progress));
   return updated;
 }
 
@@ -724,6 +736,7 @@ export async function deleteDataset(projectId: string, id: string): Promise<bool
     await fs.promises.rm(datasetFilePath(projectId, id), { force: true });
     await fs.promises.rm(parquetPath(projectId, id), { force: true });
     await fs.promises.rm(sourceParquetPath(projectId, id), { force: true });
+    await removeSnapshots(projectId, id);
     return true;
   } catch (_) {
     return false;

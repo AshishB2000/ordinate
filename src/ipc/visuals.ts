@@ -39,6 +39,7 @@ import * as versions from '../app/versions';
 import * as trash from '../app/trash';
 import { applyToChart, rowShaper } from '../app/sharePolicy';
 import { isSharePath } from '../app/privacyStore';
+import { withAsOf } from '../data/asOf';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus
 // `visual:data` which loads a dataset and runs the PURE bridge (src/vizData.ts) to
@@ -545,7 +546,8 @@ export function register() {
   // about to LEAVE the app: the project's Share policy is applied to the reply
   // here, after vizDataFor, so a cached answer is shaped on its way out and the
   // cache never holds a masked one (app/sharePolicy.ts).
-  ipcMain.handle('visual:data', async (_e, { projectId, datasetId, encoding, filters, params, share, analytics }: any = {}) => {
+  // `asOf` (view state, data/asOf.ts): every dataset read as of that time.
+  ipcMain.handle('visual:data', async (_e, { projectId, datasetId, encoding, filters, params, share, analytics, asOf }: any = {}) => withAsOf(projectId, asOf, async () => {
     try {
       // Sanitisation FIRST, always — the encoding and the filters are untrusted
       // renderer input, and both paths below consume the sanitized values.
@@ -575,7 +577,7 @@ export function register() {
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute the visual data' };
     }
-  });
+  }));
 
   // ── The rows behind one mark (drill-down) ────────────────────────────────
   //
@@ -589,7 +591,7 @@ export function register() {
   //
   // Returns the resolved filter list so the panel can render it as chips, or
   // `available: false` + a reason when the row set cannot be derived faithfully.
-  ipcMain.handle('visual:rows', async (_e, { projectId, datasetId, encoding, filters, mark, page, params }: any = {}) => {
+  ipcMain.handle('visual:rows', async (_e, { projectId, datasetId, encoding, filters, mark, page, params, asOf }: any = {}) => withAsOf(projectId, asOf, async () => {
     try {
       // Untrusted renderer input, sanitized before anything reads it — the same
       // two whitelists `visual:data` runs, and the same parameter resolution,
@@ -628,7 +630,7 @@ export function register() {
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to read the underlying rows' };
     }
-  });
+  }));
 
   // ── The drilled rows as a CSV file ───────────────────────────────────────
   //
@@ -640,7 +642,7 @@ export function register() {
   // file is the grid: same filters, same search, same order. A refusal here is
   // the same refusal the panel got, and the panel disables the button on one
   // anyway — this is the second lock, not the first.
-  ipcMain.handle('visual:rowsExport', async (_e, { projectId, datasetId, encoding, filters, mark, page, name, params }: any = {}) => {
+  ipcMain.handle('visual:rowsExport', async (_e, { projectId, datasetId, encoding, filters, mark, page, name, params, asOf }: any = {}) => withAsOf(projectId, asOf, async () => {
     try {
       const enc = sanitizeEncoding(encoding);
       const flt = resolveFilterParams(visuals.sanitizeFilters(filters), paramValues(params)).steps;
@@ -697,7 +699,7 @@ export function register() {
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to export the rows' };
     }
-  });
+  }));
 
   // OPTIONAL AI chart suggestion. Builds the SAME compact column summary (app-
   // computed stats as facts), asks the model to propose STRUCTURE ONLY (an

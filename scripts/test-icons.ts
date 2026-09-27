@@ -39,10 +39,10 @@ ok('mapped PostgreSQL resolves to a bundled path',
 ok('Amazon Redshift resolves to the supplied local PNG',
   typeof logos['amazon-redshift']?.src === 'string' &&
   logos['amazon-redshift'].src.startsWith('data:image/png;base64,'));
-ok('catalog exposes exactly 35 unique connector ids',
-  catalogIds.length === 35 && new Set(catalogIds).size === 35,
+ok('catalog exposes exactly 41 unique connector ids',
+  catalogIds.length === 41 && new Set(catalogIds).size === 41,
   JSON.stringify(catalogIds));
-ok('all 35 catalog connectors resolve to real marks',
+ok('all 41 catalog connectors resolve to real marks',
   missing.length === 0,
   JSON.stringify(missing));
 ok('connector logos are structured-clone safe', (() => {

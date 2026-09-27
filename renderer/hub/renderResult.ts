@@ -65,11 +65,15 @@ async function resortPivot(container, source, sort, entry, turnIdx) {
 // Mosaic seam, minus the teardown its caller already performed.
 function renderChartJsInArea(container, data, type, entry, turnIdx, source?) {
   container.innerHTML = '';
+  // Which columns this chart's labels and series are, for the project's colour
+  // map (fmtColors.ts). The identity rides on `source`, or on the entry's drill
+  // context when a Customize re-render passes no source.
+  const colorSrc = source || (entry && entry.drill) || null;
 
   // Grouped share/magnitude charts (pie, donut, gauge, treemap, funnel, histogram)
   // can't stack series into one chart — render one mini per period instead.
   if (entry && chartIsSmallMultiple(type, chartSeries(data).length)) {
-    renderSmallMultiples(container, data, type, entry, turnIdx);
+    renderSmallMultiples(container, data, type, entry, turnIdx, colorSrc);
     return;
   }
 
@@ -95,7 +99,9 @@ function renderChartJsInArea(container, data, type, entry, turnIdx, source?) {
     wrap.className = 'cv-col-body';
     const table = document.createElement('table');
     table.className = 'cv-data-table';
-    buildDataTable(table, data);
+    const tableKey = entry ? `${turnIdx}:${type}` : null;
+    const tableOv = (entry && entry.chartOverrides && tableKey && entry.chartOverrides[tableKey]) || {};
+    buildDataTable(table, data, fmtWithScope(tableOv, colorSrc));
     wrap.appendChild(table);
     container.appendChild(wrap);
     return;
@@ -124,7 +130,7 @@ function renderChartJsInArea(container, data, type, entry, turnIdx, source?) {
 
   const overrideKey = entry ? `${turnIdx}:${type}` : null;
   const overrides = (entry && entry.chartOverrides && overrideKey && entry.chartOverrides[overrideKey]) || {};
-  const chart = buildChart(canvas, data, type, overrides);
+  const chart = buildChart(canvas, data, type, fmtWithScope(overrides, colorSrc));
   if (chart) {
     chartInstances.set(container, chart);
     if (entry && overrideKey) {
@@ -155,7 +161,7 @@ function controlsSlotFor(container) {
 // Render a grouped share/magnitude chart as small multiples: one mini chart per
 // period (series), side by side. Each mini is buildChart() fed a single-series
 // slice of the data, so it reuses every renderer + Values/Customize override.
-function renderSmallMultiples(container, data, type, entry, turnIdx) {
+function renderSmallMultiples(container, data, type, entry, turnIdx, colorSrc?) {
   const series = chartSeries(data);
   const overrideKey = `${turnIdx}:${type}`;
   const overrides = (entry.chartOverrides && entry.chartOverrides[overrideKey]) || {};
@@ -170,7 +176,7 @@ function renderSmallMultiples(container, data, type, entry, turnIdx) {
 
   // Per-mini overrides drop series-level keys that don't apply to a 1-series slice:
   // hiddenSeries is handled here (which minis render), title would repeat on each.
-  const miniOv = Object.assign({}, overrides);
+  const miniOv = Object.assign({}, fmtWithScope(overrides, colorSrc));
   delete miniOv.hiddenSeries;
   delete miniOv.title; delete miniOv.commentPins; // a pin names ONE chart's point, not every mini's
   miniOv._smallMultiple = true;   // per-mini caption already names the period

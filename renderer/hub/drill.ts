@@ -40,6 +40,8 @@ interface DrillOpts {
   mark?: { category?: any; series?: any } | null;
   /** The control that opened the panel; gets aria-expanded and the focus back. */
   trigger?: HTMLElement | null;
+  /** View state: the rows as of this time (snapshotAsOf.ts), or Latest when absent. */
+  asOf?: string | null;
 }
 
 /**
@@ -78,6 +80,7 @@ function wireDrillClick(area: HTMLElement, ctx: DrillOpts): void {
       filters: live.filters,
       mark: { category: mark.category, series: hasSplit ? mark.series : undefined },
       trigger: area,
+      asOf: live.asOf,
     });
   });
 }
@@ -247,7 +250,7 @@ async function drillFetch(): Promise<void> {
   if (!drillOpts) return;
   const seq = ++drillSeq;
   const o = drillOpts;
-  const bridge = (window.hub as any).visualRows;
+  const bridge = o.asOf && window.hubSnapshots ? window.hubSnapshots.visualRows : (window.hub as any).visualRows;
   let res: any = null;
   if (typeof bridge === 'function') {
     try {
@@ -257,7 +260,7 @@ async function drillFetch(): Promise<void> {
         search: drillSearch.trim(),
         sortColumn: drillSortCol,
         sortDir: drillSortDir,
-      }, o.params);
+      }, o.params, o.asOf);
     } catch (_) {
       res = null;
     }
@@ -433,7 +436,7 @@ async function exportDrillRows(): Promise<void> {
   if (!drillOpts || drillReason !== '' || drillTotal === 0) return;
   const o = drillOpts;
   const btn = drillQ('.js-drill-export') as HTMLButtonElement | null;
-  const bridge = (window.hub as any).exportVisualRows;
+  const bridge = o.asOf && window.hubSnapshots ? window.hubSnapshots.exportVisualRows : (window.hub as any).exportVisualRows;
   if (typeof bridge !== 'function') return;
   if (!(await pvShareGate('export', [o.datasetId], { noted: true }))) return;
   if (btn) {
@@ -446,7 +449,7 @@ async function exportDrillRows(): Promise<void> {
       search: drillSearch.trim(),
       sortColumn: drillSortCol,
       sortDir: drillSortDir,
-    }, o.name || '', o.params);
+    }, o.name || '', o.params, o.asOf);
   } catch (_) {
     res = null;
   }

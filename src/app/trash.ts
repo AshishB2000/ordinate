@@ -92,7 +92,7 @@ async function moveToTrash(projectId: string, type: FileRecordType, id: string, 
   if (!(await store.stash(projectId, type, id, rec, { deletedWith }))) return null;
   if (type === 'dataset') {
     const dir = store.trashDir(projectId, 'dataset');
-    for (const n of store.parquetNames(id)) await move(path.join(path.dirname(file), n), path.join(dir, n));
+    for (const n of await store.datasetFiles(path.dirname(file), id)) await move(path.join(path.dirname(file), n), path.join(dir, n));
   }
   await fs.promises.rm(file, { force: true });
   return typeof rec.name === 'string' ? rec.name : '';
@@ -142,7 +142,7 @@ async function moveBack(projectId: string, type: RecordType, id: string): Promis
   await fs.promises.mkdir(path.dirname(file), { recursive: true });
   if (type === 'dataset') {
     const dir = store.trashDir(projectId, 'dataset');
-    for (const n of store.parquetNames(id)) await move(path.join(dir, n), path.join(path.dirname(file), n));
+    for (const n of await store.datasetFiles(dir, id)) await move(path.join(dir, n), path.join(path.dirname(file), n));
   }
   const tmp = file + '.' + randomUUID() + '.tmp';
   await fs.promises.writeFile(tmp, JSON.stringify(live, null, 2), 'utf8');

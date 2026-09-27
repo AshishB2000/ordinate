@@ -295,6 +295,32 @@ const DS_JSON = /^datasets\/([0-9a-f-]{36})\.json$/i;
  * still a complete, openable dataset on the other side. The manifest's counts
  * follow what was removed, or import would refuse the bundle.
  */
+/**
+ * The project's colour map (analysis/colorMap.ts) is keyed by category VALUES,
+ * so a column marked in ANY of the bundle's datasets leaves without its
+ * colours — the other side deals them again the first time it draws. Every
+ * marked column, masked in Prepare or not: a withheld entry is simpler to
+ * reason about than a token that happens to be harmless.
+ */
+async function dropMarkedColors(projectId: string, entries: ZipEntry[]): Promise<boolean> {
+  const pj = entries.find((x) => x.name === 'project.json');
+  if (!pj) return false;
+  let rec: Record<string, unknown>;
+  try { rec = JSON.parse(pj.data.toString('utf8')); } catch (_) { return false; }
+  const map = rec && rec.colorMap && typeof rec.colorMap === 'object' ? (rec.colorMap as Record<string, unknown>) : null;
+  if (!map) return false;
+  const marked = new Set<string>();
+  for (const e of entries) {
+    const m = DS_JSON.exec(e.name);
+    if (m) (await withheldColumns(projectId, m[1])).forEach((c) => marked.add(c));
+  }
+  const drop = Object.keys(map).filter((c) => marked.has(c));
+  if (!drop.length) return false;
+  drop.forEach((c) => { delete map[c]; });
+  pj.data = Buffer.from(JSON.stringify(rec, null, 2), 'utf8');
+  return true;
+}
+
 export async function applyToBundle(projectId: string, bytes: Buffer): Promise<Buffer> {
   const action = (await store.getPolicy(projectId)).bundle;
   if (action === 'include') return bytes;
@@ -342,6 +368,7 @@ export async function applyToBundle(projectId: string, bytes: Buffer): Promise<B
   } finally {
     await fs.promises.rm(scratch, { recursive: true, force: true });
   }
+  if (await dropMarkedColors(projectId, entries)) changed = true;
   if (!changed) return bytes;
   const manifest = entries.find((x) => x.name === 'manifest.json');
   if (manifest) {

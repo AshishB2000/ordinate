@@ -84,6 +84,9 @@ const SMOKES = [
   // Analysis power — the Analytics pane, table calculations, the prepare steps,
   // comments and scorecards, in ONE launch (sections in scripts/pw*.ts).
   'smoke-power',
+  // Build depth: assistant plans, formatting and colours, themes, SaaS sources
+  // (against a local HTTP fixture server) and snapshots, in one launch.
+  'smoke-build',
 ];
 
 const results: { name: string; code: number }[] = [];

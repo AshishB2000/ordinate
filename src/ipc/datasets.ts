@@ -201,6 +201,55 @@ export async function pageFor(
   return { ok: true, rows: page.rows, total: page.total, offset: page.offset };
 }
 
+// Shared: load the dataset's current (sanitized) steps, or [] for a pristine one.
+async function currentSteps(projectId: string, datasetId: string): Promise<transforms.TransformStep[] | null> {
+  const ds = await datasets.getDataset(projectId, datasetId);
+  if (!ds) return null;
+  return Array.isArray(ds.steps) ? ds.steps.slice() : [];
+}
+
+// Shared: persist a resolved steps array and shape the { ok, dataset, preview }
+// reply. A null result (invalid/missing dataset) → a uniform error.
+// Exposed to datasetCompose.ts so the composer's initial field mapping lands
+// through the SAME path a later edit does — one commit primitive, one cache
+// invalidation, not two — and exported for the Assistant's plan runner
+// (src/ai/planExec.ts), whose prepare steps land through it too.
+export async function commitSteps(projectId: string, datasetId: string, steps: unknown) {
+  const prior = await datasets.getDatasetMeta(projectId, datasetId);
+  const res = await datasets.updateSteps(projectId, datasetId, steps);
+  if (!res) return { ok: false as const, error: 'Dataset not found' };
+  await runQualityChecks(projectId, datasetId);
+  void refreshDependents(projectId, datasetId); // the rows SQL datasets read just changed
+  const { dataset, output } = res;
+  // A pipeline edit is a version of the dataset (src/app/versions.ts).
+  await versions.record(projectId, 'dataset', { id: datasetId, steps: dataset.steps || [] },
+    { before: prior ? { id: datasetId, steps: prior.steps || [], updatedAt: prior.updatedAt } : undefined });
+  return {
+    ok: true as const,
+    dataset,
+    preview: { columns: output.columns, rows: output.rows, rowCount: output.rowCount, warnings: output.warnings, stepCounts: output.stepCounts },
+  };
+}
+
+/**
+ * What follows every data replace the user asked for — a refresh, and a
+ * snapshot restore (src/ipc/snapshots.ts), which goes through the same path.
+ *
+ * Alert rules are evaluated after EVERY refresh of this dataset, and the
+ * handlers are the manual entry points — both the Data row's ↻ and the
+ * dashboard card's come through `dataset:refresh`, so the hook belongs at the
+ * join rather than duplicated at each button. Awaited so the renderer's bell
+ * is already right by the time the refresh reports done; a failure inside is
+ * swallowed by the evaluator and can never fail the refresh.
+ */
+export async function afterRefresh(projectId: string, id: string): Promise<void> {
+  await require('./alerts').evaluateAndDeliver(projectId, id);
+  await runQualityChecks(projectId, id);
+  // SQL datasets built on this one re-run. Not awaited: never rejects, and
+  // the refresh the user asked for is done.
+  void refreshDependents(projectId, id);
+}
+
 export function register() {
   compose.setCommitSteps((p, d, st) => commitSteps(p, d, st));
 
@@ -263,17 +312,7 @@ export function register() {
     try {
       const res = await refreshAsJob(projectId, id);
       if (!res.ok) return res;
-      // Alert rules are evaluated after EVERY refresh of this dataset, and this
-      // handler is the one manual entry point — both the Data row's ↻ and the
-      // dashboard card's come through here, so the hook belongs at the join
-      // rather than duplicated at each button. Awaited so the renderer's bell
-      // is already right by the time the refresh reports done; a failure inside
-      // is swallowed by the evaluator and can never fail the refresh.
-      await require('./alerts').evaluateAndDeliver(projectId, id);
-      await runQualityChecks(projectId, id);
-      // SQL datasets built on this one re-run. Not awaited: never rejects, and
-      // the refresh the user asked for is done.
-      void refreshDependents(projectId, id);
+      await afterRefresh(projectId, id);
       // The record without its tables — no caller reads the rows, and a 1M-row
       // structured clone is seconds of work for nothing.
       const { rows: _rows, source: _source, ...dataset } = res.dataset as any;
@@ -487,35 +526,6 @@ export function register() {
   // persists. Each returns { ok, dataset, preview } where preview is the derived
   // ApplyResult (the live view of the prepared output, incl. `warnings`). Step
   // addressing is by array INDEX (no per-step id) — the renderer uses list order.
-
-  // Shared: load the dataset's current (sanitized) steps, or [] for a pristine one.
-  async function currentSteps(projectId: string, datasetId: string): Promise<transforms.TransformStep[] | null> {
-    const ds = await datasets.getDataset(projectId, datasetId);
-    if (!ds) return null;
-    return Array.isArray(ds.steps) ? ds.steps.slice() : [];
-  }
-
-  // Shared: persist a resolved steps array and shape the { ok, dataset, preview }
-  // reply. A null result (invalid/missing dataset) → a uniform error.
-  // Exposed to datasetCompose.ts so the composer's initial field mapping lands
-  // through the SAME path a later edit does — one commit primitive, one cache
-  // invalidation, not two.
-  async function commitSteps(projectId: string, datasetId: string, steps: unknown) {
-    const prior = await datasets.getDatasetMeta(projectId, datasetId);
-    const res = await datasets.updateSteps(projectId, datasetId, steps);
-    if (!res) return { ok: false, error: 'Dataset not found' };
-    await runQualityChecks(projectId, datasetId);
-    void refreshDependents(projectId, datasetId); // the rows SQL datasets read just changed
-    const { dataset, output } = res;
-    // A pipeline edit is a version of the dataset (src/app/versions.ts).
-    await versions.record(projectId, 'dataset', { id: datasetId, steps: dataset.steps || [] },
-      { before: prior ? { id: datasetId, steps: prior.steps || [], updatedAt: prior.updatedAt } : undefined });
-    return {
-      ok: true,
-      dataset,
-      preview: { columns: output.columns, rows: output.rows, rowCount: output.rowCount, warnings: output.warnings, stepCounts: output.stepCounts },
-    };
-  }
 
   ipcMain.handle('dataset:addStep', async (_e, { projectId, datasetId, step }: any = {}) => {
     try {

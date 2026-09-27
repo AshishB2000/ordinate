@@ -663,7 +663,7 @@ async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void>
   const merged = mergeDashFilters(effectiveFilters(), visual.filters).concat(dashTileSteps(card.id));
   let res: any;
   try {
-    res = await window.hub.computeVisualData(currentProjectId, visual.datasetId, visual.encoding, merged, dashParamPayload(), visual.analytics);
+    res = await snapVisualData(currentProjectId, visual.datasetId, visual.encoding, merged, dashParamPayload(), visual.analytics); // snapshotAsOf.ts — the "As of" picker
   } catch (_) {
     res = { ok: false };
   }
@@ -687,6 +687,7 @@ async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void>
     encoding: visual.encoding,
     filters: merged,
     params: dashParamPayload(),
+    asOf: snapDashAsOf, // the rows behind the figure, as of the same time (snapshotAsOf.ts)
   };
   const entry: any = {
     id: card.id,

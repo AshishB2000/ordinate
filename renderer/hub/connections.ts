@@ -58,11 +58,13 @@ interface ConnDef {
    * says so, which is a better failure than a feature silently missing.
    */
   browsable?: boolean;
+  /** A SaaS source's fixed hosts, shown on its form. */
+  hosts?: string[];
 }
 
 // Fixed display order; anything with an unrecognised category is appended under
 // its own heading rather than dropped.
-const CONN_CATEGORY_ORDER = ['Databases', 'Cloud warehouses', 'Query engines', 'Files & local'];
+const CONN_CATEGORY_ORDER = ['Databases', 'Cloud warehouses', 'Query engines', 'Files & local', 'Apps & SaaS'];
 
 // What main has always supported, in main's own field keys. Used only when the
 // catalog channel is unavailable.

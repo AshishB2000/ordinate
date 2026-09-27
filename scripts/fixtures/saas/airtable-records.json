@@ -1,0 +1,30 @@
+{
+  "records": [
+    {
+      "id": "rec560UJdUtocSouk",
+      "createdTime": "2024-01-10T08:00:00.000Z",
+      "fields": {
+        "Name": "Ada",
+        "Zip": "94107",
+        "Visits": 12,
+        "Done": true,
+        "Tags": ["vip", "west"],
+        "Owner": { "id": "usrABC", "email": "ada@example.com", "name": "Ada L." },
+        "Due": "2024-03-01",
+        "Attachments": [{ "id": "att1", "url": "https://dl.airtable.com/x.png", "filename": "x.png", "size": 1024 }]
+      }
+    },
+    {
+      "id": "rec3lbPRG4aVqkeOQ",
+      "createdTime": "2024-01-11T09:30:00.000Z",
+      "fields": {
+        "Name": "Grace",
+        "Zip": "10001",
+        "Visits": 3.5,
+        "Tags": ["east"],
+        "Due": "2024-03-15"
+      }
+    }
+  ],
+  "offset": "itrXYZ/rec3lbPRG4aVqkeOQ"
+}

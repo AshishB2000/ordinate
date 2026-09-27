@@ -119,6 +119,7 @@ async function dsOpenProfile(c: number): Promise<void> {
 
   dsPaintProfileFacts(c, extra);
   dsPaintProfileChart(col, dist);
+  void fmtPaintProfileColors(col); // fmtProfile.ts — the project's colour for each value
 }
 
 /**

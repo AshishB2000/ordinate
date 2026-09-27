@@ -14,6 +14,7 @@ import * as datasets from './datasets';
 import { pipelineHash } from '../engine/queryCache';
 import type { KeyParts } from '../engine/queryCache';
 import { todayIso, getCalendar } from '../analysis/dateIntel';
+import { asOfIso } from './asOf';
 
 export async function keyParts(projectId: string, datasetId: string): Promise<KeyParts | null> {
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
@@ -21,6 +22,10 @@ export async function keyParts(projectId: string, datasetId: string): Promise<Ke
   return { datasetId, updatedAt: meta.updatedAt, pipelineHash: pipelineHash(meta.steps) };
 }
 
-export function ambient(): { day: string; cal: unknown } {
-  return { day: todayIso(), cal: getCalendar() };
+export function ambient(): { day: string; cal: unknown; asOf?: string } {
+  // `asOf`: inside an as-of read (src/data/asOf.ts) the answer is about a past
+  // time, and a join may have read a snapshot of a dataset the key does not
+  // name — so the time is part of the key. Absent (dropped by stableStringify)
+  // for every ordinary read, which keeps their keys exactly as they were.
+  return { day: todayIso(), cal: getCalendar(), asOf: asOfIso() };
 }

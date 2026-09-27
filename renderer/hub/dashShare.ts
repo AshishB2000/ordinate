@@ -189,6 +189,7 @@ function dashExportMeasure(): DashExportMeasure {
   probe.className = 'export-capture-holder';
   dashExportStyleClasses().forEach((c) => probe.classList.add(c));
   applyBrandTokens(probe, dashCurrentStyle().accentHex || '');
+  if (typeof applyDashTheme === 'function') applyDashTheme(probe, dashCurrentStyle()); // themeApply.ts
 
   const card = document.createElement('div');
   card.className = 'dash-card dash-card--metric';
@@ -360,6 +361,9 @@ async function assembleExportBundle(forCapture: boolean): Promise<any> {
       ramp: brandExportRamp(dashCurrentStyle(), dashExportStyle().theme === 'dark'),
       logo: await dashLogoFor(dashCurrent),
     },
+    // The workspace theme it resolves to, as tokens (themeApply.ts); main
+    // re-validates every one (dashboardExport.sanitizeBundle).
+    theme: typeof dashThemeExport === 'function' ? dashThemeExport(dashCurrentStyle()) : null,
   };
 }
 
@@ -427,6 +431,8 @@ async function buildVisualExportCard(
           values: Array.isArray(s.values) ? s.values : [],
         })),
       },
+      // The project's colours, as ramp slots the export's own ramp draws (fmtApply.ts).
+      ...fmtExportSlots(type, visual, data),
     };
   }
   // Everything else (maps / plugin charts / table, and ALL visuals in a capture) → PNG,
@@ -437,14 +443,14 @@ async function buildVisualExportCard(
   // frame — capturePage still does the snapshotting, it just snapshots a holder
   // that now carries the dashboard's own style.
   const frame = Object.assign(
-    { themeClasses: dashExportStyleClasses(), accentHex: dashCurrentStyle().accentHex },
+    { themeClasses: dashExportStyleClasses(), accentHex: dashCurrentStyle().accentHex, style: dashCurrentStyle() },
     dashExportChartBox(measure, layout, !!title),
   );
   let png: string | null = null;
   try {
     png = dashIsMapType(type)
       ? await captureMapPNG(data, type, frame)
-      : await captureChartPNG(type, data, visual.overrides || {}, frame);
+      : await captureChartPNG(type, data, fmtWithScope(visual.overrides || {}, { projectId: currentProjectId, encoding: visual.encoding }), frame);
   } catch (_) { png = null; }
   if (!png) return { kind: 'broken', layout, reason: 'Chart could not be rendered' };
   return { kind: 'image', layout, png, title };

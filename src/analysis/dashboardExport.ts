@@ -41,6 +41,8 @@
 import { sanitizeStyle } from './dashboards';
 import { sanitizeFormatPrefs } from '../app/format';
 import type { DashboardStyle } from './dashboards';
+import { themeModel } from './themeTokens';
+import type { ThemeTokens } from './themeTokens';
 
 // The fixed grid column count (kept in sync with .dash-grid in hub.css / dashboards.ts).
 const GRID_COLS = 12;
@@ -71,6 +73,14 @@ export interface ExportCard {
   chartType?: string;
   title?: string;
   data?: ExportChartData;
+  /**
+   * The project's colours (renderer/hub/fmtApply.ts), as RAMP SLOTS 0–7 that
+   * the file's own ramp draws: `slots` per label for a chart that colours by
+   * category (a pie's slices), `seriesSlots` per series. Integers only — a
+   * slot indexes PALETTE, so no caller text ever reaches a style.
+   */
+  slots?: number[];
+  seriesSlots?: number[];
   // image
   png?: string;
   // metric
@@ -123,7 +133,17 @@ export interface ExportBundle {
    * interpolated into the <style> block; the logo passes the PNG gate.
    */
   brand: { ramp?: AccentRamp; logo?: string };
+  /**
+   * The workspace theme the dashboard resolved to, when one applies. Tokens are
+   * whitelisted by themeModel.sanitizeTokens — known names only, each value
+   * validated for its kind (strict hex/rgba colour, bounded px, a font KEY from
+   * a four-family whitelist, a closed enum) — because every one is interpolated
+   * into the <style> block. A hostile value is dropped, never escaped.
+   */
+  theme?: ExportTheme;
 }
+
+export interface ExportTheme { name: string; tokens: ThemeTokens }
 
 // Core Chart.js types that render live from inlined data. Anything else (treemap /
 // sankey / matrix / financial / boxplot / map / table) arrives as a {kind:'image'} PNG,
@@ -197,6 +217,16 @@ export function sanitizePng(v: unknown): string {
   return typeof v === 'string' && /^data:image\/[a-z0-9.+-]+;base64,/i.test(v) ? v : '';
 }
 
+/**
+ * A list of ramp slots: integers 0–7, one per label/series, or nothing. One
+ * bad entry drops the whole list — a garbled list is not half-trusted — and
+ * the chart falls back to drawing by position, as every export did before.
+ */
+export function sanitizeSlots(raw: unknown, n: number): number[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > n) return undefined;
+  return raw.every((k) => Number.isInteger(k) && k >= 0 && k < 8) ? (raw as number[]).slice() : undefined;
+}
+
 function sanitizeCard(raw: unknown): ExportCard | null {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
   if (!o) return null;
@@ -207,7 +237,12 @@ function sanitizeCard(raw: unknown): ExportCard | null {
     const data = sanitizeChartData(o.data);
     const chartType =
       typeof o.chartType === 'string' && CORE_CHART_TYPES.has(o.chartType) ? o.chartType : 'bar';
-    return { kind: 'chart', layout, chartType, title: asString(o.title), data };
+    const slots = sanitizeSlots(o.slots, data.labels.length);
+    const seriesSlots = sanitizeSlots(o.seriesSlots, data.series.length);
+    return {
+      kind: 'chart', layout, chartType, title: asString(o.title), data,
+      ...(slots ? { slots } : {}), ...(seriesSlots ? { seriesSlots } : {}),
+    };
   }
   if (kind === 'image') {
     const png = sanitizePng(o.png);
@@ -264,7 +299,14 @@ export function sanitizeBundle(raw: unknown): ExportBundle {
     // which is what every export looked like before this field existed.
     style: sanitizeStyle(o.style),
     brand: sanitizeBrand(o.brand),
+    ...themeField(o.theme),
   };
+}
+
+function themeField(raw: unknown): { theme?: ExportTheme } {
+  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const tokens = themeModel.sanitizeTokens(o.tokens);
+  return Object.keys(tokens).length ? { theme: { name: asString(o.name).slice(0, 60), tokens } } : {};
 }
 
 const COLOR_RE = /^(#[0-9a-f]{6}|rgba\(\d{1,3}, \d{1,3}, \d{1,3}, (0|1|0?\.\d{1,4})\))$/i;
@@ -273,9 +315,9 @@ export function sanitizeBrand(raw: unknown): ExportBundle['brand'] {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const r = o.ramp && typeof o.ramp === 'object' ? (o.ramp as Record<string, unknown>) : {};
   const color = (v: unknown): string => (typeof v === 'string' && COLOR_RE.test(v) ? v : '');
-  const chart = Array.isArray(r.chart) ? r.chart.slice(0, 5).map(color) : [];
+  const chart = Array.isArray(r.chart) ? r.chart.slice(0, 8).map(color) : [];
   const ramp: AccentRamp = { accent: color(r.accent), accent2: color(r.accent2), soft: color(r.soft), line: color(r.line), chart };
-  const whole = chart.length === 5 && chart.every(Boolean) && ramp.accent && ramp.accent2 && ramp.soft && ramp.line;
+  const whole = chart.length === 8 && chart.every(Boolean) && ramp.accent && ramp.accent2 && ramp.soft && ramp.line;
   const logo = sanitizePng(o.logo);
   return { ...(whole ? { ramp } : {}), ...(logo ? { logo } : {}) };
 }
@@ -375,21 +417,21 @@ export interface AccentRamp {
   accent2: string;
   soft: string;
   line: string;
-  chart: string[]; // --chart-1..5, and [0] is --chart-accent
+  chart: string[]; // --chart-1..8, and [0] is --chart-accent
 }
 const ACCENT_RAMPS: Record<string, AccentRamp> = {
   blue: { accent: '#2563eb', accent2: '#1d4fd0', soft: 'rgba(37, 99, 235, 0.08)', line: 'rgba(37, 99, 235, 0.22)',
-    chart: ['#2563eb', '#0e7490', '#14b8a6', '#6366f1', '#64748b'] },
+    chart: ['#2563eb', '#0e7490', '#14b8a6', '#6366f1', '#64748b', '#b45309', '#be185d', '#4d7c0f'] },
   teal: { accent: '#0d9488', accent2: '#0f766e', soft: 'rgba(13, 148, 136, 0.09)', line: 'rgba(13, 148, 136, 0.24)',
-    chart: ['#0d9488', '#0e7490', '#2563eb', '#4f46e5', '#64748b'] },
+    chart: ['#0d9488', '#0e7490', '#2563eb', '#4f46e5', '#64748b', '#b45309', '#be185d', '#4d7c0f'] },
   slate: { accent: '#475569', accent2: '#334155', soft: 'rgba(71, 85, 105, 0.08)', line: 'rgba(71, 85, 105, 0.22)',
-    chart: ['#475569', '#64748b', '#0f766e', '#7e8ba3', '#a1a8b5'] },
+    chart: ['#475569', '#64748b', '#0f766e', '#7e8ba3', '#a1a8b5', '#8b6f47', '#6b5b95', '#5f7f6f'] },
   'blue-dark': { accent: '#3b82f6', accent2: '#2f6fe0', soft: 'rgba(59, 130, 246, 0.16)', line: 'rgba(59, 130, 246, 0.32)',
-    chart: ['#3b82f6', '#22d3ee', '#2dd4bf', '#818cf8', '#94a3b8'] },
+    chart: ['#3b82f6', '#22d3ee', '#2dd4bf', '#818cf8', '#94a3b8', '#fbbf24', '#f472b6', '#a3e635'] },
   'teal-dark': { accent: '#2dd4bf', accent2: '#14b8a6', soft: 'rgba(45, 212, 191, 0.16)', line: 'rgba(45, 212, 191, 0.32)',
-    chart: ['#2dd4bf', '#22d3ee', '#60a5fa', '#818cf8', '#94a3b8'] },
+    chart: ['#2dd4bf', '#22d3ee', '#60a5fa', '#818cf8', '#94a3b8', '#fbbf24', '#f472b6', '#a3e635'] },
   'slate-dark': { accent: '#94a3b8', accent2: '#b6c2d1', soft: 'rgba(148, 163, 184, 0.16)', line: 'rgba(148, 163, 184, 0.32)',
-    chart: ['#94a3b8', '#cbd5e1', '#5eead4', '#a5b4fc', '#78859a'] },
+    chart: ['#94a3b8', '#cbd5e1', '#5eead4', '#a5b4fc', '#78859a', '#b5a07a', '#b8a9d9', '#9fc5a8'] },
 };
 
 // `style` is already clamped by sanitizeStyle, so both halves of the key are one
@@ -400,6 +442,41 @@ export function accentRamp(style: DashboardStyle, brand?: ExportBundle['brand'])
   return ACCENT_RAMPS[style.theme === 'dark' ? style.accent + '-dark' : style.accent];
 }
 
+// A theme's accent and chart colours win over the named/brand ramp, as its
+// inline tokens do over the preset classes on a sheet in the app.
+export function themedRamp(ramp: AccentRamp, theme?: ExportTheme): AccentRamp {
+  const t = theme ? theme.tokens : {};
+  const c = (k: string, v: string): string => (typeof t[k] === 'string' ? String(t[k]) : v);
+  return {
+    accent: c('--accent', ramp.accent), accent2: c('--accent-2', ramp.accent2),
+    soft: c('--accent-soft', ramp.soft), line: c('--accent-line', ramp.line),
+    chart: ramp.chart.map((x, i) => c('--chart-' + (i + 1), x)),
+  };
+}
+
+// The theme's tokens, then the export's own names for what the hub calls
+// --dash-*. `html.dash-themed` is (0,1,1), so it wins over the (0,1,0) preset
+// blocks above it. Values come only from themeCssVars over sanitized tokens.
+export function themeBlock(theme?: ExportTheme): string {
+  if (!theme) return '';
+  const vars = themeModel.themeCssVars(theme.tokens);
+  const v = new Map(vars);
+  const alias: Array<[string, string]> = [['--dash-card-radius', '--card-radius'], ['--dash-card-shadow', '--card-shadow'],
+    ['--dash-kpi-size', '--kpi-size'], ['--dash-gap', '--gap']];
+  const decls = vars.map(([k, x]) => `${k}: ${x};`)
+    .concat(alias.filter(([from]) => v.has(from)).map(([from, to]) => `${to}: ${v.get(from)};`));
+  // The export's row is taller than the hub's (80 against 48 — see
+  // DENSITY_TOKENS); a themed pitch keeps that same ratio.
+  const row = theme.tokens['--dash-row'];
+  if (typeof row === 'number') decls.push(`--row: ${Math.round((row * 80) / 48)}px;`);
+  return `
+    html.dash-themed { ${decls.join(' ')} }
+    html.dash-themed, html.dash-themed body { font-family: var(--font-ui, -apple-system, system-ui, sans-serif); }
+    .dash-themed .dash-card { border-width: var(--dash-card-border-w, 1px); }
+    .dash-themed .dash-card--metric .dash-card-title { order: var(--dash-kpi-label, 0); }
+  `;
+}
+
 // The three class names the exported document carries, in hub.css's own spelling.
 export function styleClasses(style: DashboardStyle): string {
   return `dash-theme--${style.theme} dash-density--${style.density} dash-accent--${style.accent}`;
@@ -408,8 +485,8 @@ export function styleClasses(style: DashboardStyle): string {
 // Theme + density + accent tokens, then the layout rules that consume them. The
 // rules are token-only — that is what lets one style change repaint the whole
 // document without a second copy of every rule per theme.
-export function styleBlock(style: DashboardStyle, brand?: ExportBundle['brand']): string {
-  const ramp = accentRamp(style, brand);
+export function styleBlock(style: DashboardStyle, brand?: ExportBundle['brand'], theme?: ExportTheme): string {
+  const ramp = themedRamp(accentRamp(style, brand), theme);
   const chartVars = ramp.chart.map((c, i) => `--chart-${i + 1}: ${c};`).join(' ');
   return `
     .dash-theme--${style.theme} { ${THEME_TOKENS[style.theme]} }
@@ -453,14 +530,14 @@ export function styleBlock(style: DashboardStyle, brand?: ExportBundle['brand'])
     .dash-broken-badge { font-size: 11px; font-weight: 600; text-transform: uppercase;
       letter-spacing: .04em; color: var(--text-faint); }
     .dash-broken-reason { font-size: 12px; color: var(--text-faint); margin-top: 4px; }
-  `;
+  ` + themeBlock(theme);
 }
 
 // The vanilla render script embedded in the file. It reads `window.__DASHBOARD__`, lays
 // each card on a CSS grid, and draws chart cards with the inlined Chart.js. All text is
 // set via textContent (never innerHTML) so a label/heading can't inject markup.
-function renderScript(style: DashboardStyle, brand?: ExportBundle['brand']): string {
-  const palette = accentRamp(style, brand).chart.map((c) => `'${c}'`).join(',');
+function renderScript(style: DashboardStyle, brand?: ExportBundle['brand'], theme?: ExportTheme): string {
+  const palette = themedRamp(accentRamp(style, brand), theme).chart.map((c) => `'${c}'`).join(',');
   return `
 (function () {
   var D = window.__DASHBOARD__;
@@ -519,14 +596,19 @@ function renderScript(style: DashboardStyle, brand?: ExportBundle['brand']): str
     var canvas = document.createElement('canvas'); wrap.appendChild(canvas); cell.appendChild(wrap);
     if (typeof window.Chart !== 'function') { renderBroken(cell, 'Chart engine unavailable'); return; }
     var d = card.data || { labels: [], series: [] };
+    var radial = card.chartType === 'pie' || card.chartType === 'doughnut';
+    // The project's colours: a slot per label (a pie's slices, bars coloured
+    // by category) or per series; by position where there are none.
+    var slot = function (k) { return PALETTE[k % PALETTE.length]; };
+    var perLabel = card.slots ? card.slots.map(slot) : null;
     var datasets = (d.series || []).map(function (s, i) {
-      var c = PALETTE[i % PALETTE.length];
-      return { label: s.label, data: s.values, backgroundColor: c, borderColor: c, borderWidth: 2, fill: false };
+      var c = slot(card.seriesSlots ? card.seriesSlots[i] : i);
+      var bg = perLabel || (radial ? d.labels.map(function (_, j) { return slot(j); }) : c);
+      return { label: s.label, data: s.values, backgroundColor: bg, borderColor: radial ? bg : c, borderWidth: 2, fill: false };
     });
     // The app's formatter, when the file carries it: 5.2M on the axis, the
     // full figure in the tooltip — as in the app.
     var F = typeof OrdFormat === 'object' && OrdFormat ? OrdFormat : null;
-    var radial = card.chartType === 'pie' || card.chartType === 'doughnut';
     var options = { responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: datasets.length > 1 } } };
     if (F) {
@@ -606,19 +688,19 @@ export function buildSelfContainedHtml(bundle: unknown, chartLibJs: string, form
   // export and a white frame around a DARK one. hub.css's own note says these
   // are plain class selectors precisely so the element may be <html>.
   return `<!doctype html>
-<html lang="en" class="${styleClasses(clean.style)}">
+<html lang="en" class="${styleClasses(clean.style)}${clean.theme ? ' dash-themed' : ''}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${titleText || 'Dashboard'}</title>
-<style>${styleBlock(clean.style, clean.brand)}</style>
+<style>${styleBlock(clean.style, clean.brand, clean.theme)}</style>
 </head>
 <body>
 <div id="dash-root" class="dash-root"></div>
 <script>${lib}</script>
 ${fmt}
 <script>window.__DASHBOARD__ = ${embedJson(clean)};</script>
-<script>${renderScript(clean.style, clean.brand)}</script>
+<script>${renderScript(clean.style, clean.brand, clean.theme)}</script>
 </body>
 </html>`;
 }

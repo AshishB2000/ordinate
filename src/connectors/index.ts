@@ -30,11 +30,12 @@ const FAMILY_MODULES: readonly string[] = [
   './http',     // ClickHouse, Databricks SQL, Trino, Presto, Elasticsearch, OpenSearch, Druid
   './local',    // DuckDB file, SQLite file, Parquet folder, CSV folder, MotherDuck
   './url',      // the original URL/API JSON source
+  './saas',     // Google Sheets, Airtable, Notion, Stripe, GitHub, HubSpot
 ];
 
 // Picker grouping order. Anything with an unrecognised category sorts last —
 // it is still reachable, just not ahead of the known groups.
-const CATEGORY_ORDER: readonly string[] = ['Databases', 'Cloud warehouses', 'Query engines', 'Files & local'];
+const CATEGORY_ORDER: readonly string[] = ['Databases', 'Cloud warehouses', 'Query engines', 'Files & local', 'Apps & SaaS'];
 const KNOWN_CATEGORIES: ReadonlySet<string> = new Set(CATEGORY_ORDER);
 const FIELD_TYPES: ReadonlySet<string> = new Set(['text', 'number', 'password', 'select', 'checkbox']);
 
@@ -193,6 +194,9 @@ export interface CatalogEntry {
    *  inferred from `family`: gating the run UI on family is what cost seven
    *  HTTP connectors their table picker once already. */
   browsable: boolean;
+  /** The fixed hosts a SaaS source may contact — shown on its form. Absent
+   *  when the user supplies the host. */
+  hosts?: string[];
 }
 
 // Rebuilt field-by-field, never spread. A ConnectorDef holds two live functions
@@ -236,6 +240,7 @@ export function connectorCatalog(): CatalogEntry[] {
       browsable: typeof d.describeTable === 'function',
     };
     if (typeof d.blurb === 'string') entry.blurb = d.blurb;
+    if (Array.isArray(d.hosts)) entry.hosts = d.hosts.filter((h) => typeof h === 'string');
     return entry;
   });
 }

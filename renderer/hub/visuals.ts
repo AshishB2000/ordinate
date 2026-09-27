@@ -65,7 +65,7 @@ function renderVizViaEntry(area: HTMLElement, data: any, type: string, source?: 
   // "Show underlying rows" item.
   // A draft has no stored name yet, so the panel gets the same descriptive
   // label the Save prompt would suggest ("price by region").
-  vizEntry.drill = source ? { name: suggestVisualName(source.encoding || {}, type), ...source } : null;
+  vizEntry.drill = source ? { name: suggestVisualName(source.encoding || {}, type), ...source, asOf: snapVizAsOf } : null; // snapshotAsOf.ts
   renderVizInArea(area, data, type, vizEntry, 'v', source);
   if (source) wireDrillClick(area, vizEntry.drill);
 }

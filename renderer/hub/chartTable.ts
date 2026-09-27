@@ -13,11 +13,13 @@
 // in it — so a label containing markup renders as text rather than HTML. The one
 // innerHTML is the constant '' that clears the table.
 
-function buildDataTable(table: HTMLTableElement, data: ChartDataShape): void {
+// `overrides` (optional) carries the visual's series colours and its colour
+// scope, so a swatch is the colour the series has in every chart (fmtApply.ts).
+function buildDataTable(table: HTMLTableElement, data: ChartDataShape, overrides?: any): void {
   const labels = Array.isArray(data.labels) ? data.labels : [];
   const series: ChartSeriesShape[] = Array.isArray(data.series) ? data.series : [];
   table.innerHTML = '';
-  // Swatches must match the chart, so read the SAME --chart-1..5 buildChart reads
+  // Swatches must match the chart, so read the SAME --chart-1..8 buildChart reads
   // rather than the raw CHART_PALETTE hexes, which ignore the theme entirely — the
   // swatches already drift from the chart's colours today. Scoped to this table
   // because a dashboard style preset remaps those tokens on a CONTAINER class, not
@@ -27,6 +29,7 @@ function buildDataTable(table: HTMLTableElement, data: ChartDataShape): void {
     const tok = '--chart-' + (i + 1);
     return getCSSVar(tok, table) || getCSSVar(tok) || fallback;
   });
+  if (overrides && typeof fmtSeriesPalette === 'function') fmtSeriesPalette(series, overrides, palette);
   const thead = document.createElement('thead');
   const headerRow = document.createElement('tr');
   const thLabel = document.createElement('th');

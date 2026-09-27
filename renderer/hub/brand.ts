@@ -93,7 +93,7 @@ function brandExportRamp(style: any, dark: boolean): any {
   const v = dark ? t.dark : t.light;
   return {
     accent: v[p + 'accent'], accent2: v[p + 'accent-2'], soft: v[p + 'accent-soft'], line: v[p + 'accent-line'],
-    chart: [1, 2, 3, 4, 5].map((i) => v[p + 'chart-' + i]),
+    chart: CHART_PALETTE.map((_c, i) => v[p + 'chart-' + (i + 1)]),
   };
 }
 

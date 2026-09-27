@@ -40,8 +40,8 @@ const connectionRun: typeof import('../src/connectors/connectionRun') = require(
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 
 
-const CATEGORIES = new Set(['Databases', 'Cloud warehouses', 'Query engines', 'Files & local']);
-const FAMILIES = new Set(['postgres', 'mysql', 'mssql', 'oracle', 'http', 'duckdb']);
+const CATEGORIES = new Set(['Databases', 'Cloud warehouses', 'Query engines', 'Files & local', 'Apps & SaaS']);
+const FAMILIES = new Set(['postgres', 'mysql', 'mssql', 'oracle', 'http', 'duckdb', 'saas']);
 const FIELD_TYPES = new Set(['text', 'number', 'password', 'select', 'checkbox']);
 const SECRET_PW = 'sup3r-s3cret-pw';
 
@@ -105,7 +105,7 @@ async function main(): Promise<void> {
   ok('every select field has options', selectWithoutOptions.length === 0, selectWithoutOptions.join(', '));
 
   // Categories are grouped, not interleaved — the picker renders in list order.
-  const order = ['Databases', 'Cloud warehouses', 'Query engines', 'Files & local'];
+  const order = ['Databases', 'Cloud warehouses', 'Query engines', 'Files & local', 'Apps & SaaS'];
   const seenCats: string[] = [];
   for (const c of all) if (seenCats[seenCats.length - 1] !== c.category) seenCats.push(c.category);
   ok('listConnectors() groups categories (no interleaving)',
@@ -125,11 +125,13 @@ async function main(): Promise<void> {
   const catalog = registry.connectorCatalog();
   ok('connectorCatalog() covers every connector', catalog.length === all.length);
 
+  // `hosts` is the eighth, and only on a SaaS source: the fixed hosts it may
+  // contact, which the form shows. Like `browsable`, a fact, never a value.
   // `browsable` is the seventh: a BOOLEAN derived from whether the connector
   // implements describeTable, so the workbench knows whether to show a schema
   // tree. It is a capability flag, never a value — the same discipline as a
   // field's `secret` flag, which travels while the secret never does.
-  const CATALOG_KEYS = new Set(['id', 'label', 'family', 'category', 'blurb', 'fields', 'browsable']);
+  const CATALOG_KEYS = new Set(['id', 'label', 'family', 'category', 'blurb', 'fields', 'browsable', 'hosts']);
   const FIELD_KEYS = new Set(['key', 'label', 'type', 'required', 'placeholder', 'default', 'options', 'secret', 'help']);
   let extraKeys: string[] = [];
   let functionsFound: string[] = [];
@@ -151,7 +153,7 @@ async function main(): Promise<void> {
   }
   scanForFunctions(catalog, 'catalog');
 
-  ok('connectorCatalog() exposes ONLY the seven documented keys', extraKeys.length === 0, extraKeys.join(', '));
+  ok('connectorCatalog() exposes ONLY the eight documented keys', extraKeys.length === 0, extraKeys.join(', '));
   // The flag has to be a BOOLEAN on every entry: `undefined` on a browsable
   // source would read as "not browsable" in the renderer's `!== false` test and
   // silently hide a schema tree that works.

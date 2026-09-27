@@ -236,6 +236,11 @@ async function main(): Promise<void> {
 
   // ── 3d. Bundles ───────────────────────────────────────────────────────────
   await versions.record(pid, 'dataset', { id: did, steps: [{ type: 'mask_hash', column: 'email' }] });
+  // Colours keyed by raw values of marked columns, and of an unmarked one — as
+  // charts over them would have dealt (analysis/colorMap.ts).
+  await projects.setColorMap(pid, {
+    card: { '4111111111111111': 'chart-1' }, email: { 'grace@example.com': 'chart-2' }, region: { North: 'chart-3' },
+  });
   const raw = await bundle.exportProject(pid);
   const rawNames = bundle.readZip(raw!.bytes).map((e) => e.name);
   ok('fixture: a raw export carries the source Parquet and a dataset version', rawNames.includes(`datasets/${did}.source.parquet`) && rawNames.some((n) => n.startsWith(`history/dataset/${did}/`)));
@@ -255,6 +260,9 @@ async function main(): Promise<void> {
   ok('bundle/mask: card is masked in the table that travels', bundled.rows[0][2] === mask.maskToken(salt, '4111111111111111') && rec.columns[2].type === 'text');
   ok('bundle/mask: email travels as its Prepare token', bundled.rows[0][1] === mask.maskToken(salt, 'grace@example.com'));
   ok('bundle/mask: no raw value is anywhere in the bundle', !entries.some((e) => RAW.some((v) => e.data.includes(v))));
+  const pjColors = JSON.parse(entries.find((e) => e.name === 'project.json')!.data.toString('utf8')).colorMap;
+  ok('bundle/mask: the colour map leaves marked columns behind, keeps the rest',
+    !!pjColors && pjColors.region && pjColors.region.North === 'chart-3' && !pjColors.card && !pjColors.email, JSON.stringify(pjColors));
   // The share POLICY travels (a restored backup keeps its rules); the salt and
   // the pending-review file never do.
   ok('bundle: only privacy/policy.json travels — never the salt or the review file',
@@ -266,6 +274,9 @@ async function main(): Promise<void> {
     const list = await datasets.listDatasets(imported.project.id);
     const back = await datasets.getDataset(imported.project.id, list[0].id);
     ok('bundle/mask: the imported dataset opens, masked', !!back && back.rows[0][2] === mask.maskToken(salt, '4111111111111111') && back.rows.length === 4);
+    const importedColors = (await projects.getProject(imported.project.id))!.colorMap;
+    ok('bundle: the imported project keeps the colours that travelled',
+      JSON.stringify(importedColors) === JSON.stringify({ region: { North: 'chart-3' } }), JSON.stringify(importedColors));
   }
   await store.setPolicy(pid, { bundle: 'drop' });
   savePath = path.join(outDir, 'project-drop.ordinate');

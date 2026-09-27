@@ -9,6 +9,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
+import { sanitizeColorMap } from '../analysis/colorMap';
+import type { ColorMap } from '../analysis/colorMap';
 
 export interface Project {
   id: string;
@@ -33,6 +35,13 @@ export interface Project {
   /** When it was last switched to — the switcher's "opened 2h ago", and which
    *  project a launch adopts. Not `updatedAt`: opening changes nothing. */
   lastOpenedAt?: string;
+  /**
+   * Project-wide category colours: column → value → ramp slot ('chart-3').
+   * The first time a value is drawn it is dealt a slot (analysis/colorMap.ts),
+   * and every chart, legend, map and export in the project reads it from here.
+   * OPTIONAL and sanitized on every read, like the lists above.
+   */
+  colorMap?: ColorMap;
 }
 
 /** Enough for every card on every dataset in a project, several times over. */
@@ -130,7 +139,31 @@ function normalize(data: any): Project {
     dismissedInsights: sanitizeDismissed(data.dismissedInsights),
     ...(typeof data.archivedAt === 'string' && data.archivedAt ? { archivedAt: data.archivedAt } : {}),
     ...(typeof data.lastOpenedAt === 'string' && data.lastOpenedAt ? { lastOpenedAt: data.lastOpenedAt } : {}),
+    ...colorMapField(data.colorMap),
   };
+}
+
+function colorMapField(raw: unknown): { colorMap?: ColorMap } {
+  const colorMap = sanitizeColorMap(raw);
+  return Object.keys(colorMap).length ? { colorMap } : {};
+}
+
+/**
+ * Replace the project's colour map (sanitized; an empty map removes the key).
+ * Like the insight list, a VIEW preference over the whole project, so
+ * `updatedAt` — and Recent's order — stays put. Returns the stored map, or
+ * null for a missing project. Callers that read-modify-write serialize
+ * themselves (src/ipc/format.ts).
+ */
+export async function setColorMap(id: string, map: unknown): Promise<ColorMap | null> {
+  if (!isValidId(id)) return null;
+  const existing = await getProject(id);
+  if (!existing) return null;
+  const next: Project = { ...existing };
+  delete next.colorMap;
+  Object.assign(next, colorMapField(map));
+  await writeJsonAtomic(projectFilePath(id), next);
+  return next.colorMap || sanitizeColorMap(null);
 }
 
 /** Archive or un-archive. Like the insight list, NOT an edit of the project's

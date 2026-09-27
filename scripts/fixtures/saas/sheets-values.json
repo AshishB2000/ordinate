@@ -1,0 +1,10 @@
+{
+  "range": "Sheet1!A1:D1001",
+  "majorDimension": "ROWS",
+  "values": [
+    ["Region", "Zip", "Sales", "Day", "Won"],
+    ["East", "10001", 1200.5, "1/5/2024", true],
+    ["West", "94107", 980, "1/6/2024"],
+    ["North", "", 45, "1/7/2024", false]
+  ]
+}
