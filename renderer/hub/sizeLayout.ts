@@ -100,7 +100,7 @@
   function spanClass(card: any, size: string): string {
     if (size === 'phone') return card.type === 'metric' ? 'pair' : 'full';
     if (card.type === 'metric') return 'quarter';
-    if (card.type === 'visual' || card.type === 'text' || card.type === 'image') return num(ly(card).w, 12) <= 6 ? 'half' : 'full';
+    if (card.type === 'visual' || card.type === 'stats' || card.type === 'text' || card.type === 'image') return num(ly(card).w, 12) <= 6 ? 'half' : 'full';
     return 'full';
   }
 
@@ -108,7 +108,7 @@
   function kindHeight(card: any, size: string): number {
     switch (card.type) {
       case 'metric': return 2;
-      case 'visual': return 6;
+      case 'visual': case 'stats': return 6;
       case 'image': return 4;
       case 'divider': case 'container': case 'tabs': return 1;
       case 'nav': return size === 'phone' ? 2 : 1;

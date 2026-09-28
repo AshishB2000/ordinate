@@ -1,0 +1,51 @@
+{
+  "_about": "Worked examples from R's own documentation and datasets. 'r' is what R prints (to its printed precision); 'exact' is the same quantity recomputed independently in exact rational arithmetic (sums of squares, ranks, counts) with p-values from closed forms or 20-point Gauss-Legendre integration of the density — the full-precision value the 1e-6 checks use. The two agree to R's printed digits.",
+  "sleep": {
+    "_source": "R datasets::sleep; t.test(extra ~ group, data = sleep) and wilcox.test(extra ~ group, data = sleep, exact = FALSE)",
+    "group1": [0.7, -1.6, -0.2, -1.2, -0.1, 3.4, 3.7, 0.8, 0.0, 2.0],
+    "group2": [1.9, 0.8, 1.1, 0.1, -0.1, 4.4, 5.5, 1.6, 4.6, 3.4],
+    "r": { "t": -1.8608, "df": 17.776, "p": 0.07939, "ciLow": -3.3654832, "ciHigh": 0.2054832, "W": 25.5, "wilcoxP": 0.06933 },
+    "exact": { "t": -1.860813467486853, "df": 17.77647351617849, "p": 0.07939414018735828, "ciLow": -3.3654832307117117, "ciHigh": 0.2054832307117116, "u": 25.5, "z": -1.8162790619136817, "wilcoxP": 0.06932757543362662 }
+  },
+  "plantGrowth": {
+    "_source": "R datasets::PlantGrowth; summary(lm(weight ~ group)), anova(), kruskal.test(weight ~ group)",
+    "ctrl": [4.17, 5.58, 5.18, 6.11, 4.50, 4.61, 5.17, 4.53, 5.33, 5.14],
+    "trt1": [4.81, 4.17, 4.41, 3.59, 5.87, 3.83, 6.03, 4.89, 4.32, 4.69],
+    "trt2": [6.31, 5.12, 5.54, 5.50, 5.37, 5.29, 4.92, 6.15, 5.80, 5.26],
+    "r": {
+      "beta": [5.0320, -0.3710, 0.4940], "se": [0.1971, 0.2788, 0.2788], "t": [25.527, -1.331, 1.772], "p": [null, 0.1944, 0.0877],
+      "sigma": 0.6234, "r2": 0.2641, "adjR2": 0.2096, "f": 4.846, "fP": 0.01591, "kruskalH": 7.9882, "kruskalP": 0.01842
+    },
+    "exact": {
+      "beta": [5.032, -0.371, 0.494], "se": [0.19712836577365672, 0.27878160840554955, 0.27878160840554955],
+      "t": [25.52651405722987, -1.3307908011646823, 1.7719963767529732], "p": [1.9365746460679004e-20, 0.1943878800543005, 0.08768167506268318],
+      "ciLow": [4.627526003441724, -0.9430126115599631, -0.07801261155996309], "ciHigh": [5.436473996558276, 0.20101261155996308, 1.066012611559963],
+      "r2": 0.26414829683211966, "adjR2": 0.2096407632641285, "f": 4.846087862380136, "fP": 0.0159099583256229, "sigma": 0.6233746272715356,
+      "ssBetween": 3.76634, "ssWithin": 10.49209, "kruskalH": 7.988228749443703, "kruskalP": 0.018423755731472084
+    }
+  },
+  "hollander": {
+    "_source": "R ?kruskal.test example (Hollander & Wolfe 1973, p. 116): kruskal.test(list(x, y, z))",
+    "x": [2.9, 3.0, 2.5, 2.6, 3.2], "y": [3.8, 2.7, 4.0, 2.4], "z": [2.8, 3.4, 3.7, 2.2, 2.0],
+    "r": { "h": 0.77143, "p": 0.68 },
+    "exact": { "h": 0.7714285714285715, "p": 0.6799647735788938 }
+  },
+  "party": {
+    "_source": "R ?chisq.test example (Agresti 2007, p. 39): chisq.test(M) on gender x party",
+    "table": [[762, 327, 468], [484, 239, 477]],
+    "r": { "chi2": 30.07, "df": 2, "p": 2.954e-07 },
+    "exact": { "chi2": 30.070149095754672, "p": 2.953589183211757e-07, "cramerV": 0.10443580235646777 }
+  },
+  "corTest": {
+    "_source": "R ?cor.test example (Hollander & Wolfe 1973, p. 187): cor.test(x, y)",
+    "x": [44.4, 45.9, 41.9, 53.3, 44.7, 44.1, 50.7, 45.2, 60.1],
+    "y": [2.6, 3.1, 2.5, 5.0, 3.6, 4.0, 5.2, 2.8, 3.8],
+    "r": { "r": 0.5711816, "t": 1.8411, "df": 7, "p": 0.1082, "rho": 0.6 },
+    "exact": { "r": 0.5711815575638287, "t": 1.841082638115338, "p": 0.10817305434949376, "rho": 0.6, "rhoP": 0.08762282904140267 }
+  },
+  "shapiroWilk1965": {
+    "_source": "Shapiro & Wilk (1965), Biometrika 52, the weights of 11 men; the paper reports W = 0.79 (two decimals)",
+    "x": [148, 154, 158, 160, 161, 162, 166, 170, 182, 195, 236],
+    "paper": { "w": 0.79 }
+  }
+}

@@ -41,6 +41,8 @@ import type { CompareMode, PeriodPreset } from './dateIntel';
 import { sanitizeTableCalc } from './tableCalc';
 import type { TableCalc } from './tableCalc';
 import { themeModel } from './themeTokens';
+import { sanitizeStatsSpec } from './stats/spec';
+import type { StatsSpec } from './stats/spec';
 
 // Tile actions and the card kinds beyond these four live in one PURE module
 // the renderer loads too (renderer/hub/cardModel.ts, the geoMatch pattern), so
@@ -72,7 +74,7 @@ export const sizeLayout = require('../../renderer/hub/sizeLayout') as {
   publishCells: (cards: Card[], layouts: PageLayouts | undefined) => Record<string, Partial<Record<'tablet' | 'phone', SizeCell | { hidden: true }>>>;
 };
 
-export type CardType = 'visual' | 'text' | 'metric' | 'control' | 'nav' | 'image' | 'divider' | 'container' | 'tabs';
+export type CardType = 'visual' | 'text' | 'metric' | 'control' | 'nav' | 'image' | 'divider' | 'container' | 'tabs' | 'stats';
 export type CardAction = 'delete-sample';
 export type MetricAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';
 /**
@@ -202,6 +204,8 @@ export interface Card {
   divider?: any; // type 'divider'
   container?: any; // type 'container' — title, background, padding, collapsible
   tabs?: any; // type 'tabs' — the named tabs
+  /** type 'stats' — the analysis SPEC only (analysis/stats/spec.ts); figures are recomputed on every render. */
+  stats?: StatsSpec;
   /** The container / tabs card this card sits in, and which tab. Cards stay a flat list. */
   parentId?: string;
   tabId?: string;
@@ -223,7 +227,7 @@ function isValidId(id: unknown): id is string {
   return typeof id === 'string' && UUID_RE.test(id);
 }
 
-const CARD_TYPES: ReadonlySet<string> = new Set(['visual', 'text', 'metric', 'control', ...cardModel.EXTRA_TYPES]);
+const CARD_TYPES: ReadonlySet<string> = new Set(['visual', 'text', 'metric', 'control', ...cardModel.EXTRA_TYPES, 'stats']);
 /** Exported so analysisPlan's metric validation clamps against THIS set rather
  *  than a fourth copy of it — dashboardDelta.ts already restates one, and it
  *  says so apologetically. One whitelist, one place to widen it. */
@@ -342,6 +346,15 @@ export function sanitizeCard(raw: unknown): Card | null {
   const card: Card = { id, type, layout };
   if (!cardModel.sanitizeExtras(o, card)) return null;
   if (cardModel.EXTRA_TYPES.includes(type)) return card;
+
+  if (type === 'stats') {
+    // A statistics tile stores its SPEC, whitelisted field by field; a card
+    // with no valid spec has nothing to compute and is dropped.
+    const stats = sanitizeStatsSpec(o.stats);
+    if (!stats) return null;
+    card.stats = stats;
+    return card;
+  }
 
   if (type === 'visual') {
     // TWO-SHAPED (v3): a visual card is meaningful with a valid `visualId`

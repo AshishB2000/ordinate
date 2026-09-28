@@ -16,6 +16,7 @@ export function register(deps: Round6Deps): void {
   // r6:layouts
 
   // r6:stats
+  require('./stats').register(); // the statistics workbench (src/ipc/stats.ts)
 
   // r6:text
 

@@ -16,6 +16,7 @@ function renderAuthoringCard(card: any, body: HTMLElement): boolean {
     divider: renderDividerCard,
     container: renderContainerCard,
     tabs: renderTabsCard,
+    stats: renderStatsCard, // statsTile.ts — a statistics result, recomputed per render
   };
   const fn = draw[card.type];
   if (!fn) return false;
@@ -29,6 +30,7 @@ function cardKindTitle(card: any): string {
   if (card.type === 'image') return (card.image && card.image.alt) || 'Image';
   if (card.type === 'divider') return 'Divider';
   if (card.type === 'container' || card.type === 'tabs') return groupTitle(card);
+  if (card.type === 'stats') return swTileTitle(card);
   return 'Text';
 }
 

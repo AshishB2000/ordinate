@@ -379,6 +379,7 @@ function dsOpenMoreMenu(anchor: HTMLElement): void {
       b.addEventListener('click', () => { close(); run(); });
       el.appendChild(b);
     };
+    add('activity', 'Statistics', () => void swOpen({ datasetId: id })); // statsPanel.ts
     add('lineage', 'Lineage', () => void lnOpen('dataset', id, expName));
     add('history', 'Pipeline history', () => void vhOpen('dataset', id, expName));
     add('layers', 'Find segments', () => void sgOpen(id, expName)); // segments.ts

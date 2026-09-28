@@ -825,6 +825,18 @@ scripts/**/*.js
 /renderer/hub/layoutFilters.js
 
 # r6:stats
+/src/analysis/stats/*.js
+/src/engine/statsVectors.js
+/src/engine/statsJob.js
+/src/ipc/stats.js
+/src/ai/statsFacts.js
+/preload/hubStatsPreload.js
+/renderer/hub/statsPanel.js
+/renderer/hub/statsControls.js
+/renderer/hub/statsCharts.js
+/renderer/hub/statsViews.js
+/renderer/hub/statsViewsGroups.js
+/renderer/hub/statsTile.js
 
 # r6:text
 

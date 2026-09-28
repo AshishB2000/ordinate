@@ -59,6 +59,7 @@
   <link rel="stylesheet" href="layouts.css"/>
 
   <!-- r6-css:stats -->
+  <link rel="stylesheet" href="stats.css"/>
 
   <!-- r6-css:text -->
 
@@ -3589,6 +3590,16 @@
 <script src="layoutFilters.js"></script>
 
 <!-- r6:stats -->
+<!-- The statistics workbench: the panel shell (registers its palette command
+     at load, so it follows commands.js), its settings column, its Chart.js
+     plots, the two result-view files, then the dashboard tile + export + the
+     scatter ⋯ hook, which cardKinds/dashShare/chartControls call at run time. -->
+<script src="statsPanel.js"></script>
+<script src="statsControls.js"></script>
+<script src="statsCharts.js"></script>
+<script src="statsViews.js"></script>
+<script src="statsViewsGroups.js"></script>
+<script src="statsTile.js"></script>
 
 <!-- r6:text -->
 

@@ -214,6 +214,7 @@ function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx,
       void ansExplain({ tile: { datasetId: d.datasetId, encoding: d.encoding, filters: d.filters, chartType: type, name: d.name } });
     }, sig);
   }
+  if (typeof swWireChartMenu === 'function') swWireChartMenu(entry, type, sig); // statsTile.ts — "Statistics…" on a scatter
   if (cmCustomToggle)  cmCustomToggle.addEventListener('click', onCustomizeToggle, sig);
   if (cmTitleInput)    cmTitleInput.addEventListener('input', onTitleInput, sig);
   if (cmSwatches)      cmSwatches.addEventListener('click', onSwatchClick, sig);

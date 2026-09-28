@@ -32,6 +32,8 @@ import type { FileSourceKind } from '../data/fileImport';
 import type { ParsedColumn } from '../data/parse';
 import { fitResident, rfmCustomersResident } from './segmentResident';
 import type { RfmSpec } from '../analysis/rfm';
+import { runStatsOnSource } from './statsJob';
+import type { StatsRunArgs } from './statsJob';
 
 type Progress = (fraction: number, note?: string) => void;
 
@@ -70,6 +72,12 @@ const OPS: Record<string, (args: any, progress: Progress) => Promise<unknown>> =
     const out = await parseFile(args.filePath, args.kind, args.sheetName);
     progress(1, `${out.rowCount.toLocaleString('en-US')} rows read`);
     return out;
+  },
+
+  /** A statistics workbench run off Parquet (src/ipc/stats.ts); null = the resident read declined. */
+  async stats(args: StatsRunArgs, progress: Progress) {
+    progress(0.1, 'Reading the columns');
+    return runStatsOnSource(args);
   },
 
   /** Test hook: burn CPU for `ms`, reporting progress — proves cancel and off-thread. */

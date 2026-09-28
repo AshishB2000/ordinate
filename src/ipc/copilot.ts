@@ -25,6 +25,7 @@ import { driversFacts } from '../ai/driversFacts';
 import * as scenarios from '../analysis/scenarios';
 import { computeScenario } from '../analysis/scenarioResolve';
 import { scenarioFacts } from '../ai/scenarioFacts';
+import { statsPanelFacts, withStatsTiles } from './stats';
 import type { FactMetric } from '../ai/copilotFacts';
 import * as history from '../app/history';
 import * as captureDataset from '../data/captureDataset';
@@ -45,7 +46,9 @@ import { assistantColumnDocs as catalogColumns } from '../app/sharePolicy';
 // chat turns, and asks the model (through the EXISTING execution path) only to
 // narrate. No model configured → { ok:false, notReady:true } for a gentle hint.
 
-type ContextRef = { kind?: string; id?: string; offset?: number };
+// `stats`: the open Statistics panel's analysis SPEC (never figures) — main
+// recomputes it and hands the model the result as facts (src/ai/statsFacts.ts).
+type ContextRef = { kind?: string; id?: string; offset?: number; stats?: unknown };
 
 // ── Activity stream (feat/ask-activity) ─────────────────────────────────────
 // This app has NO agent loop and NO model tool-calls: copilot:ask computes facts
@@ -270,7 +273,18 @@ export async function buildFacts(
       if (defined.length) {
         emit({ kind: 'compute', label: 'Resolved ' + plural(defined.length, 'metric'), count: defined.length });
       }
-      return copilot.analysisFacts(a, cards, tiles, defined);
+      // Statistics tiles (src/ipc/stats.ts): their results, recomputed, as facts.
+      return withStatsTiles(projectId, a.sheets, copilot.analysisFacts(a, cards, tiles, defined));
+    }
+  }
+
+  // The open STATISTICS panel: its analysis, recomputed from the spec the dock
+  // sent, as the app's own figures and sentences (ai/statsFacts.ts).
+  if (kind === 'stats' && context.stats) {
+    const facts = await statsPanelFacts(projectId, context.stats);
+    if (facts) {
+      emit({ kind: 'compute', label: 'Ran the statistics on ' + facts.provenance.name });
+      return facts;
     }
   }
 

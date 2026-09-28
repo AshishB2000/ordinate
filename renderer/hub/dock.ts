@@ -129,6 +129,10 @@ function dkContextRef(): { kind: string; id: string; label: string; name: string
   // user is somewhere else (driversEntry.ts): the facts are its decomposition.
   const drv = typeof drvDockContext === 'function' ? drvDockContext() : null;
   if (drv) return drv;
+  // The open Statistics panel covers the section, so it is the context: main
+  // recomputes its spec as facts (statsPanel.ts → ai/statsFacts.ts).
+  const sw = typeof swAssistantRef === 'function' ? swAssistantRef() : null;
+  if (sw) return sw;
   if (currentSection === 'datasets') {
     if (typeof expId === 'string' && expId) {
       const name = typeof expName === 'string' && expName ? expName : 'open dataset';
@@ -506,7 +510,7 @@ async function dkSend(): Promise<void> {
 
   let res: any = null;
   try {
-    res = await window.hub.copilotAsk(currentProjectId, { kind: ref.kind, id: ref.id, ...(ref.kind === 'scorecard' ? { offset: scOffset } : {}) }, question, dkThreadId || undefined, askId);
+    res = await window.hub.copilotAsk(currentProjectId, { kind: ref.kind, id: ref.id, ...(ref.kind === 'scorecard' ? { offset: scOffset } : {}), ...(ref.kind === 'stats' ? { stats: swAssistantSpec() } : {}) }, question, dkThreadId || undefined, askId);
   } catch (_) {
     res = { ok: false, error: 'Something went wrong. Try again.' };
   }

@@ -32,6 +32,8 @@ import type { FilterStep } from '../data/transforms';
 import { vizDataFor } from '../ipc/visuals';
 import { computeCardMetric } from '../ipc/dashboards';
 import { resolveMetric } from '../ipc/metrics';
+import { computeStatsTile } from '../ipc/stats';
+import { statsTitle } from '../analysis/stats/present';
 import { planCombos, parseKey, MAX_OPTIONS_PER_CONTROL } from './combos';
 import type { ComboPlan, ControlDomain } from './combos';
 
@@ -356,6 +358,29 @@ export async function buildDashboard(
           if (ctx.progress) ctx.progress(done / total, `${done.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} tile answers`);
         }
         cards.push({ ...base, kind: 'metric', title });
+        continue;
+      }
+      if (card.type === 'stats' && card.stats) {
+        // A statistics tile (src/ipc/stats.ts), recomputed per combination and
+        // published as a chart or a numbers-only table — through the share policy.
+        let chartType = card.stats.view === 'chart' ? '' : 'table';
+        for (const scope of scopes) {
+          if (ctx.checkCancelled) ctx.checkCancelled();
+          const bound = resolveFilterParams(scope.filters, scope.params);
+          const r = await computeStatsTile(projectId, card.stats, bound.steps, 'publish');
+          let payload: Record<string, unknown>;
+          if (r.ok) {
+            const d = card.stats.view === 'chart' ? r.tile.chart.data : r.tile.numeric;
+            if (!chartType) chartType = r.tile.chart.chartType;
+            payload = { labels: d.labels, series: d.series.map((s) => ({ label: s.name, values: s.values })), caption: r.tile.sentence || r.tile.subtitle };
+          } else {
+            payload = 'hiddenByPolicy' in r ? { hidden: r.error } : { error: r.error };
+          }
+          base.variants.push(intern(store, payload));
+          done++;
+          if (ctx.progress) ctx.progress(done / total, `${done.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} tile answers`);
+        }
+        cards.push({ ...base, kind: 'chart', title: statsTitle(card.stats), chartType: chartType || 'column' });
         continue;
       }
       // Image, nav, divider, container and tabs cards carry no figures; a

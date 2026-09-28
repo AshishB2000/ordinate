@@ -339,6 +339,7 @@ async function assembleExportBundle(forCapture: boolean): Promise<any> {
         cards.push(built);
         continue;
       }
+      if (card.type === 'stats') { cards.push(await swExportCard(card, layout, forCapture, measure)); continue; } // statsTile.ts
       // cardKinds.ts: an image exports as its picture; layout-only kinds as nothing.
       const extra = await exportAuthoringCard(card, layout);
       if (extra !== undefined) { if (extra) cards.push(extra); continue; }
