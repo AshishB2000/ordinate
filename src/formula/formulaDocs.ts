@@ -139,6 +139,11 @@ const RAW: Record<string, Entry> = {
   ifnull: l('ifnull(value, fallback)', 'The value, or the fallback when it is null.', 'ifnull([discount], 0)'),
   isnull: l('isnull(value)', 'True when the value is null.', 'isnull([shipped_at])'),
   coalesce: l('coalesce(a, b, …)', 'The first argument that is not null.', 'coalesce([nickname], [first_name], "friend")'),
+
+  // ── Geo (r6:geo) ───────────────────────────────────────────────────────────
+  distance_km: n('distance_km(lat1, lon1, lat2, lon2)',
+    'The great-circle distance in kilometres between two latitude/longitude points (haversine, mean Earth radius 6,371.0088 km). Null unless all four are coordinates.',
+    'distance_km([store_lat], [store_lng], 30.2672, -97.7431)'),
 };
 
 /** The catalog, keyed exactly as `FUNCTIONS` is. */

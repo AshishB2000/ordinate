@@ -74,6 +74,8 @@ export const SUGGEST_STEPS_SYSTEM_PROMPT =
   '  { "type": "text_sentiment", "column": "<text col>", "as": "<new column optional>" }\n' +
   '  { "type": "keyword_rules", "column": "<text col>", "as": "<new column optional>", "rules": [{ "pattern": "<text>", ' +
   '"match": "contains|word|regex", "category": "<text>" }], "otherwise": "<text>" }\n' +
+  '  { "type": "spatial_join", "lat": "<latitude col>", "lng": "<longitude col>", "boundary": "us_state|country|us_county", ' +
+  '"as": "<new column, e.g. region>", "unmatched": "" }\n' +
   'Propose union or lookup_join ONLY when another dataset\'s id is given to you; never invent an id.\n' +
   'Return ONLY the JSON array (use [] if no preparation is warranted).';
 

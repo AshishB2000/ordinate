@@ -10,7 +10,7 @@
 **A local-first, open-source personal BI workspace.**
 
 Bring data in — files, paste, Excel, **35 SQL &amp; HTTP sources**, a URL, or a screenshot.<br/>
-**Prepare** it with a reversible pipeline. **Visualize** it across **37 chart, map &amp; table types**.<br/>
+**Prepare** it with a reversible pipeline. **Visualize** it across **39 chart, map &amp; table types**.<br/>
 Assemble **dashboards**. **Share** them offline.
 
 <sub>Local-first · model-agnostic · MIT. Your data stays on your machine, and **every number is computed by the app.**</sub>
@@ -61,7 +61,7 @@ AI is available at every step, is **completely optional**, and even when it is o
 |:--:|---|---|
 | 📥 | **Bring in** | CSV / JSON / Excel files, pasted tables (TSV/CSV/JSON auto-sniffed), **35 read-only SQL &amp; HTTP sources**, an https JSON API, local DuckDB / Parquet / CSV folders, or a **screenshot** of anything on screen. |
 | 🧹 | **Prepare** | A reversible, ordered pipeline: calculated fields, filters, group &amp; aggregate, dedupe, fill, trim, rename, drop, combine. Remove any step and the result recomputes from the original source. |
-| 📊 | **Visualize** | **37 chart, map &amp; table types** — 31 charts, a pivot table, cohort and event-funnel analyses, 2 maps, and a table view — with per-shape eligibility so you see the ones that actually fit. |
+| 📊 | **Visualize** | **39 chart, map &amp; table types** — 31 charts, a pivot table, cohort and event-funnel analyses, 4 maps, and a table view — with per-shape eligibility so you see the ones that actually fit. |
 | 🗂️ | **Assemble** | Multi-page dashboards on a 12-column grid: visual cards, computed metric cards, text, and filter controls that cross-filter every card, including across datasets. |
 | 📤 | **Share** | Self-contained offline HTML, PNG or PDF; a single result to PDF, Word or PowerPoint; or commit the project's plain-JSON folder to git. |
 
@@ -145,7 +145,7 @@ Plus the sources that need no connection at all:
 
 ## Visualizations
 
-**37 types** in total — **31 charts, a pivot table, cohort and event-funnel analyses, 2 maps and a table view.** Ordinate picks one that fits your data and you can switch from the `⋯` menu. Grouped data supports Values/Periods toggles and small multiples where they fit.
+**39 types** in total — **31 charts, a pivot table, cohort and event-funnel analyses, 4 maps and a table view.** Ordinate picks one that fits your data and you can switch from the `⋯` menu. Grouped data supports Values/Periods toggles and small multiples where they fit.
 
 | Group | Types |
 |---|---|
@@ -157,7 +157,7 @@ Plus the sources that need no connection at all:
 | **Flow &amp; finance** | Sankey · Candlestick |
 | **Text** | Word cloud |
 | **Single value / tabular** | Gauge · Pivot table · Table |
-| **Maps** | Region map (choropleth) · Bubble map |
+| **Maps** | Region map (choropleth) · Bubble map · Hexbin density map · Flow map |
 
 Charts render with **Chart.js 4** (plus the treemap, sankey, matrix, financial and boxplot plugins, and hand-written plugins for waterfall connectors, bullet bands, the calendar grid and the Pareto 80% marker). Maps render with **MapLibre GL** over OpenStreetMap tiles, at country, US state, US county, US city and US ZIP levels. Chart eligibility is filtered per data shape, so you normally see the subset that fits rather than all 30 at once.
 

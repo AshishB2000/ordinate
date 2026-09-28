@@ -30,11 +30,15 @@ export type FilterOp =
   | 'not_empty'
   | 'in'
   | 'not in'
-  | 'period';
+  | 'period'
+  | 'within_km';
 
 /** Every operator a `FilterStep` may carry. An op outside this set is SKIPPED with a warning. */
 export const FILTER_OPS: ReadonlySet<string> = new Set<FilterOp>([
   '=', '!=', '>', '<', '>=', '<=', 'contains', 'is_empty', 'not_empty', 'in', 'not in', 'period',
+  // r6:geo — reads `radius` (src/analysis/geo/radius.ts): the longitude column,
+  // a centre and a distance. `column` is the latitude.
+  'within_km',
 ]);
 
 /** Ordering/equality operators, which read the scalar `value` and branch on the DECLARED column type. */

@@ -10,6 +10,7 @@ import { applyPivot, applySplit, applyUnpivot, skipped } from './stepsReshape';
 import { applyDedupeKey, applyParseDate, applyReplace } from './stepsClean';
 import { applyLookup, applyUnion } from './stepsCombine';
 import { applyWindow } from './stepsWindow';
+import { applySpatialJoin } from '../analysis/geo/spatialJoin';
 
 export { POWER_STEP_TYPES } from './stepTypes';
 export type { PipelineContext, PowerStep, StepCount } from './stepTypes';
@@ -36,6 +37,8 @@ export function applyPowerStep(t: TableData, step: PowerStep, ctx?: PipelineCont
       return applyLookup(t, step, ctx);
     case 'window':
       return applyWindow(t, step);
+    case 'spatial_join':
+      return applySpatialJoin(t, step, ctx); // r6:geo
     default:
       return skipped(t, `Unknown step type "${step.type}" skipped`);
   }

@@ -14,6 +14,7 @@ import type { VizEncoding } from '../analysis/visuals';
 import { buildVizData } from '../analysis/vizData';
 import { decorateGeoReply, pointItems } from '../analysis/mapData';
 import { joinedVizDataFor } from './relationships';
+import { geoVizReply } from './geoViz';
 
 // ponytail: every reply below is the visual:data envelope (VizDataReply in ipc/visuals.ts), or null
 async function pointMapReply(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[]): Promise<any> {
@@ -40,6 +41,8 @@ export async function authoringVizData(
 ): Promise<any> {
   const geo = encoding && encoding.geo;
   if (geo && geo.level === 'point') return pointMapReply(projectId, datasetId, encoding, filters);
+  const density = await geoVizReply(projectId, datasetId, encoding, filters); // r6:geo — hexbin / flow
+  if (density) return density;
   const joined = await joinedVizDataFor(projectId, datasetId, encoding, filters);
   if (!geo) return joined;
   if (joined) return decorateGeoReply(joined, encoding);

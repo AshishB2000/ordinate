@@ -165,6 +165,8 @@ export function genPowerStep(step: TransformStep, ctx: PowerSqlCtx): PowerSqlOut
       return genWindow(step, ctx);
     case 'segment':
       return genSegment(step, ctx);
+    case 'spatial_join':
+      return { bail: 'spatial_join runs in the JS fold (point in polygon)' }; // r6:geo
     default:
       return null;
   }

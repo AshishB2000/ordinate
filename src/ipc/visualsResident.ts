@@ -56,6 +56,7 @@ export function filterCannotWarn(f: FilterStep, names: Set<string>): boolean {
   if (!f || f.type !== 'filter' || !names.has(f.column) || !FILTER_OPS.has(f.op)) return false;
   if (LIST_OPS.has(f.op) && (!Array.isArray(f.values) || f.values.length === 0)) return false;
   if (f.op === 'period' && !f.period) return false;
+  if (f.op === 'within_km' && !(f.radius && names.has(f.radius.lngColumn))) return false; // r6:geo
   return true;
 }
 

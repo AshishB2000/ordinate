@@ -31,6 +31,8 @@ import { applySegmentStep, sanitizeSegmentStep } from './stepsSegment';
 import type { TextStep } from './textStepTypes';
 import { TEXT_STEP_TYPES, sanitizeTextStep } from './textStepTypes';
 import { applyTextStep } from './stepsText';
+import { RADIUS_OP, sanitizeRadius, withinKm } from '../analysis/geo/radius';
+import type { RadiusSpec } from '../analysis/geo/radius';
 
 /**
  * What a pipeline may be handed beyond its source: the project's masking key
@@ -41,7 +43,7 @@ export type PipelineCtx = MaskCtx & Partial<PipelineContext>;
 
 /** The power steps' half of the context — only when tables were loaded. */
 function powerCtx(ctx: PipelineCtx): PipelineContext | undefined {
-  return ctx.tables ? { tables: ctx.tables, errors: ctx.errors } : undefined;
+  return ctx.tables ? { tables: ctx.tables, errors: ctx.errors, boundaries: ctx.boundaries } : undefined;
 }
 
 // ── Shared shapes ────────────────────────────────────────────────────────────
@@ -93,6 +95,8 @@ export interface FilterStep {
   values?: Cell[];
   /** The relative range for op `period` — the PRESET, resolved when evaluated. */
   period?: PeriodSpec;
+  /** op `within_km`: the longitude column, a centre and a distance (analysis/geo/radius.ts). */
+  radius?: RadiusSpec;
 }
 export interface GroupAggregateStep {
   type: 'group_aggregate';
@@ -285,6 +289,7 @@ function dispatch(t: TableData, step: TransformStep, ctx: PipelineCtx): StepResu
       return applyMaskStep(t, step, ctx);
     case 'split_column': case 'unpivot': case 'pivot': case 'parse_date': case 'dedupe_key':
     case 'replace_values': case 'union': case 'lookup_join': case 'window':
+    case 'spatial_join':
       return applyPowerStep(t, step, powerCtx(ctx));
     case 'conditional_column': {
       const calc = conditionalAsCalc(t.columns, step);
@@ -362,6 +367,14 @@ function stepFilter(t: TableData, s: FilterStep): StepResult {
       })
       .map((row) => row.slice());
     return { table: { columns, rows }, warnings: [] };
+  }
+
+  if (s.op === RADIUS_OP) {
+    const gi = s.radius ? colIndex(t.columns, s.radius.lngColumn) : -1;
+    if (!s.radius) return skip(t, `Filter skipped: "${s.column}" has no radius to filter on`);
+    if (gi < 0) return skip(t, `Filter skipped: unknown column "${s.radius.lngColumn}"`);
+    const r = s.radius;
+    return { table: { columns, rows: t.rows.filter((row) => withinKm(row[ci], row[gi], r)).map((row) => row.slice()) }, warnings: [] };
   }
 
   // `in` / `not in` are handled before the scalar operators because they read a
@@ -698,6 +711,11 @@ function sanitizeStep(item: unknown): TransformStep | null {
         const period = sanitizePeriod(o.period);
         if (!period) return null;
         step.period = period;
+      }
+      if (op === RADIUS_OP) {
+        const radius = sanitizeRadius(o.radius);
+        if (!radius) return null;
+        step.radius = radius;
       }
       return step;
     }

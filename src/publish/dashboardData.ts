@@ -36,6 +36,7 @@ import { computeStatsTile } from '../ipc/stats';
 import { statsTitle } from '../analysis/stats/present';
 import { planCombos, parseKey, MAX_OPTIONS_PER_CONTROL } from './combos';
 import type { ComboPlan, ControlDomain } from './combos';
+import { sanitizeRadiusValue } from '../analysis/geo/radius';
 
 export interface PublishedControl {
   id: string;
@@ -185,6 +186,16 @@ async function controlSpec(projectId: string, card: Card, a: analysis.Analysis):
       card, control,
       domain: { id, label, options: ['All time', ...opts.map((o) => o.label)], defaultIndex },
       states: [null, ...opts.map((o) => o.state)],
+    };
+  }
+  if (control.kind === 'radius') {
+    // r6:geo — a published page has no place table to type into, so the menu is
+    // the author's saved radius and "Anywhere".
+    const def = sanitizeRadiusValue(control.default);
+    return {
+      card, control,
+      domain: { id, label, options: def ? ['Anywhere', def.value] : ['Anywhere'], defaultIndex: def ? 1 : 0 },
+      states: def ? [null, def] : [null],
     };
   }
   // parameter: the parameter's own list, or just its current value.
@@ -402,8 +413,9 @@ export async function buildDashboard(
     controls: specs.map((s, i) => ({
       id: s.card.id,
       label: plan.domains[i].label,
-      kind: s.control.kind,
-      column: s.control.column,
+      // A radius publishes as a menu of its author's radius and "Anywhere" (below).
+      kind: s.control.kind === 'radius' ? 'dropdown' : s.control.kind,
+      column: s.control.kind === 'radius' ? '' : s.control.column,
       options: plan.domains[i].options,
       defaultIndex: plan.domains[i].defaultIndex,
     })),

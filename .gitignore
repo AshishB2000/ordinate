@@ -852,5 +852,18 @@ scripts/**/*.js
 /renderer/hub/textProfile.js
 
 # r6:geo
+/src/analysis/geo/*.js
+/src/engine/geoSql.js
+/src/engine/geoResident.js
+/src/data/spatialRefs.js
+/src/ipc/geoViz.js
+/src/ipc/geoAnalysis.js
+/preload/hubGeoPreload.js
+/renderer/hub/mapKinds.js
+/renderer/hub/mapHexbin.js
+/renderer/hub/mapFlow.js
+/renderer/hub/mapGeoThumb.js
+/renderer/hub/geoRadius.js
+/renderer/hub/prepareGeo.js
 
 # r6:input

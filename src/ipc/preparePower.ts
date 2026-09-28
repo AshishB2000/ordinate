@@ -16,7 +16,7 @@ import { lookupStats, unionPlan } from '../data/stepsCombine';
 import { parseDatePreview } from '../data/stepsClean';
 
 /** The table a step at `index` would receive (index < 0 or past the end: after every step). */
-async function inputAt(projectId: string, datasetId: string, index: number, extra: TransformStep): Promise<{
+export async function inputAt(projectId: string, datasetId: string, index: number, extra: TransformStep): Promise<{
   input: TableData; ctx: PipelineContext;
 } | null> {
   const ds = await datasets.getDataset(projectId, datasetId);

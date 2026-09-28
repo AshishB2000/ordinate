@@ -279,6 +279,8 @@ export function generateSql(relation: string, columns: SqlColumn[], steps: Trans
         const col = cols[ci];
         const op: FilterOp = step.op;
         let where: string;
+        // r6:geo — a radius needs a second column and trig; the fold runs it.
+        if (op === 'within_km') return bail('within_km runs in the JS fold');
 
         if (op === 'is_empty') {
           where = sqlEmpty(col.physical);

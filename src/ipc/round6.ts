@@ -2,6 +2,8 @@
 // from ONE line in src/main.ts (which sits near its 800-line cap). Each area is
 // its own src/ipc/*.ts with its own register(); this file only calls them.
 
+import * as geoAnalysis from './geoAnalysis'; // r6:geo
+
 export interface Round6Deps {
   /**
    * True in a headless run (`--cli` / `--mcp`): register handlers, but start
@@ -22,6 +24,7 @@ export function register(deps: Round6Deps): void {
   (require('./text') as typeof import('./text')).register();
 
   // r6:geo
+  geoAnalysis.register();
 
   // r6:input
 

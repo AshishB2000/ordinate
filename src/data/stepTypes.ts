@@ -19,6 +19,7 @@
 //     every rule rewrites the result of the one before, in order.
 
 import type { AggFn, TableData } from './transforms';
+import type { BoundaryIndex } from '../analysis/geo/pip';
 
 export const POWER_STEP_TYPES: ReadonlySet<string> = new Set([
   'split_column',
@@ -31,6 +32,7 @@ export const POWER_STEP_TYPES: ReadonlySet<string> = new Set([
   'union',
   'lookup_join',
   'window',
+  'spatial_join', // r6:geo
 ]);
 
 /** Split one column by a delimiter, fixed positions or a regex; into N columns or into rows. */
@@ -142,6 +144,27 @@ export interface WindowStep {
   desc?: boolean;
 }
 
+/**
+ * r6:geo — assign each point to the region containing it (point in polygon
+ * over a bounding-box index, src/analysis/geo/pip.ts), writing the region's
+ * name into a new text column. Boundaries are the bundled US states /
+ * countries / US counties, or a project's own imported set by id, named by
+ * one of its properties. Loaded by main before the fold (stepRefs.ts).
+ */
+export interface SpatialJoinStep {
+  type: 'spatial_join';
+  lat: string;
+  lng: string;
+  boundary: 'us_state' | 'country' | 'us_county' | 'custom';
+  /** `custom`: the project boundary set and the property that names a region. */
+  boundaryId?: string;
+  property?: string;
+  /** The new column — `region` unless named. */
+  as: string;
+  /** What a point in no region (or with no usable coordinates) gets — '' unless set. */
+  unmatched: string;
+}
+
 export type PowerStep =
   | SplitColumnStep
   | UnpivotStep
@@ -152,7 +175,8 @@ export type PowerStep =
   | ConditionalColumnStep
   | UnionStep
   | LookupJoinStep
-  | WindowStep;
+  | WindowStep
+  | SpatialJoinStep;
 
 /**
  * What a pure fold needs from OUTSIDE its own table: the other datasets a
@@ -163,6 +187,11 @@ export type PowerStep =
 export interface PipelineContext {
   tables: Record<string, TableData>;
   errors?: Record<string, string>;
+  /**
+   * r6:geo — the boundary sets spatial_join steps read, indexed, keyed by
+   * `spatialKey(step)`; a string is why that set could not be loaded.
+   */
+  boundaries?: Record<string, BoundaryIndex | string>;
 }
 
 /** Rows into and out of one step, index-aligned with the step list. */

@@ -22,6 +22,7 @@ async function handleAddControl(): Promise<void> {
   // A parameter has a dialog of its own: it filters no column, so none of the
   // dataset/column/preview fields above apply to it.
   if (control.kind === 'parameter') { void addParameterControl(); return; }
+  if (control.kind === 'radius') { void addRadiusControl(datasets); return; } // geoRadius.ts (r6:geo)
   // ZEROED, and ignored on read. A control is a chip in the filter bar
   // (dashControlBar.ts), not a tile, so there is no cell for it to occupy —
   // and this used to be `dashFindSlot(dashCards(), 3, 1)`, which on a full
@@ -44,6 +45,7 @@ const CONTROL_KINDS_UI: Array<{ kind: string; label: string; hint: string }> = [
   { kind: 'multi', label: 'Multi-select', hint: 'Pick several values' },
   { kind: 'date_range', label: 'Date range', hint: 'Relative or fixed dates' },
   { kind: 'parameter', label: 'Parameter', hint: 'A value you slide or type' },
+  { kind: 'radius', label: 'Radius', hint: 'Within a distance of a place' }, // r6:geo
 ];
 const CONTROL_KIND_LABELS: Record<string, string> = Object.fromEntries(
   CONTROL_KINDS_UI.map((k) => [k.kind, k.label]),
@@ -123,6 +125,7 @@ function openControlDialog(
       b.addEventListener('click', () => {
         if (kind === k.kind) return;
         if (k.kind === 'parameter') { close({ kind: 'parameter', datasetId: '', column: '', label: '' }); return; }
+        if (k.kind === 'radius') { close({ kind: 'radius', datasetId: '', column: '', label: '' }); return; } // its own dialog
         kind = k.kind;
         paintKind();
         renderColumns(); // column order depends on kind (date-first for date_range)

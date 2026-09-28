@@ -54,8 +54,8 @@ const VIZ_LABELS: Record<string, string> = result.VIZ_LABELS;
 // The whole reason coverage is spelled out as two explicit sets rather than one
 // set plus "everything else": a chart type added to the picker without a Mosaic
 // decision must fail HERE, not quietly render on Chart.js forever.
-const everyType = ALL_CHART_TYPE_IDS.concat(['table', 'map_bubble', 'map_choropleth']);
-ok('the id list under test is the real one', everyType.length === 37, `${everyType.length} types`);
+const everyType = ALL_CHART_TYPE_IDS.concat(['table', 'map_bubble', 'map_choropleth', 'map_hexbin', 'map_flow']);
+ok('the id list under test is the real one', everyType.length === 39, `${everyType.length} types`);
 
 for (const type of everyType) {
   const inMosaic = MOSAIC_CHART_TYPES.has(type);

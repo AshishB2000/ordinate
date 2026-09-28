@@ -21,6 +21,7 @@
 import type { FilterStep } from '../data/transforms';
 import { sanitizePeriod } from './dateIntel';
 import type { CardControl, ControlValue } from './dashboards';
+import { radiusControlSteps } from './geo/radius';
 
 // Byte-for-byte identity of a filter step: same column, op, and operand
 // (null-normalized). `values` is part of the identity, not just `value` — an
@@ -31,7 +32,7 @@ import type { CardControl, ControlValue } from './dashboards';
 // step, which is cheap to keep and wrong to guess at.
 function stepKey(s: FilterStep): string {
   // `period` too: two different relative ranges on one column are two filters.
-  return JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null]);
+  return JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null, s.radius ?? null]);
 }
 
 // Merge dashboard-wide filters with a card's own filters into ONE ordered list:
@@ -101,11 +102,13 @@ export function toggleCrossFilter(
 // that reads as "the control is broken", not "no rows match" — so it degrades
 // to [] exactly like `emptyListWarning`'s empty `in`/`not in` list does above.
 export function controlSteps(
-  control: Pick<CardControl, 'kind' | 'column'>,
+  control: Pick<CardControl, 'kind' | 'column' | 'lngColumn'>,
   state: ControlValue | null | undefined,
 ): FilterStep[] {
   if (!state) return [];
   const { column } = control;
+  // r6:geo — a centre and a distance over two columns (./geo/radius).
+  if (control.kind === 'radius') return radiusControlSteps(column, control.lngColumn, state);
 
   if (control.kind === 'dropdown' && 'value' in state) {
     const { value } = state;

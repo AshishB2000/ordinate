@@ -72,6 +72,8 @@ const FAMILY: Record<string, CaptionFamily> = {
   cohort: 'cohort', event_funnel: 'event_funnel',
   waterfall: 'waterfall', pareto: 'pareto', bullet: 'bullet', radar: 'radar', calendar: 'calendar',
   word_cloud: 'cloud',
+  // r6:geo — their `geo.items` are the summary hexagons / the drawn routes, by value.
+  map_hexbin: 'map', map_flow: 'map',
 };
 
 export function captionFamily(chartType: string | null | undefined): CaptionFamily {

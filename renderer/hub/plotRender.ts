@@ -102,7 +102,7 @@ const MOSAIC_FALLBACK_TYPES: ReadonlySet<string> = new Set([
   // 'pivot' for the same reason as 'table': it is a <table>, and rendering one
   // through vgplot would mean `vg.table()`, whose per-instance CSS violates the
   // hub's style-src on every update.
-  'pivot', 'table', 'map_bubble', 'map_choropleth',
+  'pivot', 'table', 'map_bubble', 'map_choropleth', 'map_hexbin', 'map_flow',
   // DOM over main's own grid (cohortRender.ts) — nothing for vgplot to query.
   'cohort', 'event_funnel',
   // A spiral layout of words — no vgplot mark places text that way.

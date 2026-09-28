@@ -80,6 +80,7 @@ const SITE_CSS = `
   .pub-land { fill: var(--surface-2); stroke: var(--border-2); stroke-width: .5; }
   .pub-region { fill: var(--accent); stroke: var(--surface); stroke-width: .5; }
   .pub-point { fill: var(--accent); fill-opacity: .55; stroke: var(--surface); stroke-width: 1; }
+  .pub-flow { fill: none; stroke: var(--accent); stroke-opacity: .6; stroke-linecap: round; }
   .pub-index { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
   .pub-index-card { display: flex; flex-direction: column; gap: 6px; padding: 18px; border-radius: var(--card-radius);
     background: var(--surface); border: 1px solid var(--border); text-decoration: none; color: var(--text-strong); }

@@ -111,7 +111,7 @@ function renderChartJsInArea(container, data, type, entry, turnIdx, source?) {
     return;
   }
 
-  if (type === 'map_bubble' || type === 'map_choropleth') {
+  if (isMapChartType(type)) { // mapKinds.ts
     renderMapInArea(container, data, type);
     return;
   }
@@ -306,6 +306,7 @@ const VIZ_LABELS = {
   pivot: 'Pivot table', cohort: 'Cohort', event_funnel: 'Event funnel',
   table: 'Table', map_bubble: 'Bubble map', map_choropleth: 'Region map',
   word_cloud: 'Word cloud',
+  map_hexbin: 'Hexbin map', map_flow: 'Flow map',
 };
 
 // Small monochrome glyph per chart type for the viz chips. currentColor so each icon
@@ -359,6 +360,8 @@ const VIZ_ICONS = {
   map_bubble: _vi('<circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r="1.6" fill="currentColor"/><circle cx="15" cy="14" r="2.2" fill="currentColor"/>'),
   map_choropleth: _vi('<path d="M9 4 4 6v14l5-2 6 2 5-2V4l-5 2-6-2z"/><path d="M9 4v14M15 6v14"/>'),
   word_cloud: _vi('<path d="M6 11h9" stroke-width="2.6"/><path d="M4 15.5h5M11.5 15.5h8"/><path d="M8 7h6M16.5 7h3M7 19.5h4M13.5 19.5h4.5" stroke-width="1.2"/><path d="M17 11h2.5" stroke-width="1.8"/>'),
+  map_hexbin: _vi('<path d="M7.5 3.5 11 5.5v4L7.5 11.5 4 9.5v-4z" fill="currentColor"/><path d="M16.5 3.5 20 5.5v4l-3.5 2L13 9.5v-4z"/><path d="M12 11.5l3.5 2v4L12 19.5l-3.5-2v-4z" fill="currentColor" opacity="0.5"/>'),
+  map_flow: _vi('<circle cx="5" cy="17" r="2" fill="currentColor"/><circle cx="19" cy="7" r="2" fill="currentColor"/><path d="M6.5 15.5C9 8 14 6 17.2 6.6"/><path d="M6.8 18.2C11 19 16 15.5 18.2 9"/>'),
 };
 
 // VERIFY/TEST ONLY: every wired chart type, ordered for a sensible click-through.
@@ -461,7 +464,7 @@ function eligibleChartTypes(dataShape, seriesCount, labelCount) {
 function chartCanRender(type, data, hasGeo) {
   // A cohort / event funnel draws its own "pick a column" state when its shelves are empty.
   if (type === 'table' || type === 'pivot' || type === 'cohort' || type === 'event_funnel') return true;
-  if (type === 'map_bubble' || type === 'map_choropleth') return !!hasGeo;
+  if (isMapChartType(type)) return !!hasGeo && geoMapFits(type, (data && data.geo) || {});
   const d = data || {};
   if (countNumericSeries(d) < (CHART_SERIES_MIN[type] || 1)) return false;
   if (((d.labels || []).length) < (CHART_LABELS_MIN[type] || 1)) return false;
@@ -496,7 +499,7 @@ function buildVizPicker(opts) {
   const selectedOthers = new Set(opts.initialSelected || []); // non-suited types pulled into "Selected"
   const numSeries = countNumericSeries(data);
   const numLabels = (data.labels || []).length;
-  const isMapType = (t) => t === 'map_bubble' || t === 'map_choropleth';
+  const isMapType = isMapChartType;
   const fallbackType = recommended[0] || opts.initial;
   let selectedType = opts.initial;
   let morePanel = null;
@@ -512,7 +515,7 @@ function buildVizPicker(opts) {
   function needsText(type) {
     const parts = [];
     const ns = CHART_SERIES_MIN[type] || 1, nl = CHART_LABELS_MIN[type] || 1;
-    if (isMapType(type) && !hasGeo) parts.push('place or region data');
+    if (isMapType(type) && !chartCanRender(type, data, hasGeo)) parts.push(geoNeedsText(type, hasGeo));
     if (numSeries < ns) parts.push(`at least ${ns} numeric series`);
     if (numLabels < nl) parts.push(`at least ${nl} categories`);
     return parts.join(' and ') || 'different data';
@@ -707,7 +710,7 @@ function renderTurnResult(result, activeVizType, entry, turnIdx) {
       // The chip row + "+ More" three-tier picker (shared with the export dialog).
       const picker = buildVizPicker({
         recommended: vizList.map(v => v.type),
-        pool: ALL_CHART_TYPE_IDS.concat(['table', 'map_bubble', 'map_choropleth']),
+        pool: ALL_CHART_TYPE_IDS.concat(['table'], MAP_CHART_TYPES),
         data, hasGeo, initial: currentType,
         onPersist: (type) => {
           if (!entry) return;

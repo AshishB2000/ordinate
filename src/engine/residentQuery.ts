@@ -109,6 +109,7 @@ import { bomSafe, catKeyExpr, catLabel, dateBucketSql, phys, sqlCanonicalDate, s
 import type { ResidentCatKey } from './residentCategory';
 import * as duck from './duckdb';
 import { sqlPeriodPredicate } from './periodSql';
+import { sqlRadiusPredicate } from './geoSql';
 import { resolvePeriodNow } from '../analysis/dateIntel';
 
 export type { ResidentCatKey } from './residentCategory';
@@ -617,6 +618,7 @@ export function filterPredicate(cols: ParsedColumn[], s: FilterStep, params: duc
   const p = phys(ci);
   const op: FilterOp = s.op;
 
+  if (op === 'within_km') return sqlRadiusPredicate(cols, ci, s, params); // r6:geo — ./geoSql
   if (op === 'is_empty') return sqlEmpty(p);
   if (op === 'not_empty') return `NOT ${sqlEmpty(p)}`;
   if (op === 'period') {

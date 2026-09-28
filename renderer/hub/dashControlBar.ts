@@ -123,6 +123,8 @@ function makeControlChip(card: any): HTMLElement {
     renderMultiControl(card, wrap);
   } else if (control.kind === 'date_range') {
     renderDateRangeControl(card, wrap);
+  } else if (control.kind === 'radius') {
+    renderRadiusControl(card, wrap); // geoRadius.ts (r6:geo)
   } else {
     renderDropdownControl(card, wrap);
   }
@@ -200,6 +202,7 @@ async function handleEditControl(card: any): Promise<void> {
     datasets = [];
   }
   if (!Array.isArray(datasets)) datasets = [];
+  if (card.control.kind === 'radius') { await editRadiusControl(card, datasets); return; } // geoRadius.ts
   const next = await openControlDialog(datasets, card.control);
   if (!next) return;
   card.control = next;

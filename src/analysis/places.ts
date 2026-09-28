@@ -95,11 +95,27 @@ export function zip3Of(v: unknown): string | null {
 
 /** One value → a point, or null. */
 export function matchPlace(value: unknown, level: PlaceLevel): PlacePoint | null {
+  const hit = findPlace(value, level);
+  return hit ? { lat: hit.lat, lng: hit.lng } : null;
+}
+
+/** State name → its two-letter code ("Texas" → "TX"), else the name. */
+function stateCode(state: string): string {
+  const code = Object.keys(US_STATE_CODES).find((k) => US_STATE_CODES[k] === state);
+  return code || state;
+}
+
+/**
+ * One value → a point AND the place it matched, named the way a person would
+ * check it ("Austin, TX", "Travis County, TX", "Paris, FR", "ZIP 787xx") — the
+ * radius control shows this before it filters anything (r6:geo).
+ */
+export function findPlace(value: unknown, level: PlaceLevel): (PlacePoint & { label: string }) | null {
   if (!loadPlaces() || !table || !index) return null;
   if (level === 'us_zip') {
     const z = zip3Of(value);
     const i = z === null ? undefined : index.zip.get(z);
-    return i === undefined ? null : { lat: table.zip3[i][1], lng: table.zip3[i][2] };
+    return i === undefined ? null : { lat: table.zip3[i][1], lng: table.zip3[i][2], label: `ZIP ${table.zip3[i][0]}xx` };
   }
   const raw = String(value == null ? '' : value);
   const comma = raw.lastIndexOf(',');
@@ -114,7 +130,9 @@ export function matchPlace(value: unknown, level: PlaceLevel): PlacePoint | null
   if (level === 'us_county') {
     const ids = index.county.get(normPlace(name).replace(COUNTY_TAIL, '')) || [];
     const hit = ids.find((i) => !wantState || normPlace(table!.counties[i][1]) === wantState);
-    return hit === undefined ? null : { lat: table.counties[hit][3], lng: table.counties[hit][4] };
+    if (hit === undefined) return null;
+    const c = table.counties[hit];
+    return { lat: c[3], lng: c[4], label: `${c[0]}, ${stateCode(c[1])}` };
   }
   const ids = index.city.get(normPlace(name)) || [];
   const hit = ids.find((i) => {
@@ -124,7 +142,26 @@ export function matchPlace(value: unknown, level: PlaceLevel): PlacePoint | null
     const admin = normPlace(c[1]);
     return (wantState !== null && admin === wantState) || admin === wantRegion || normPlace(c[2]) === wantRegion;
   });
-  return hit === undefined ? null : { lat: table.cities[hit][3], lng: table.cities[hit][4] };
+  if (hit === undefined) return null;
+  const c = table.cities[hit];
+  return { lat: c[3], lng: c[4], label: `${c[0]}, ${c[2] === 'US' ? stateCode(c[1]) : c[2]}` };
+}
+
+/**
+ * Free text typed into a radius control → the best place: a ZIP when it looks
+ * like one, a county when it says so, else a US city, a world city, a county.
+ */
+export function resolvePlace(text: unknown): (PlacePoint & { label: string; level: PlaceLevel }) | null {
+  const raw = String(text == null ? '' : text).trim();
+  if (!raw || raw.length > 200) return null;
+  const order: PlaceLevel[] = /^\d{5}(-\d{4})?$/.test(raw) ? ['us_zip']
+    : /\b(county|parish|borough)\b/i.test(raw) ? ['us_county', 'us_city', 'world_city']
+      : ['us_city', 'world_city', 'us_county'];
+  for (const level of order) {
+    const hit = findPlace(raw, level);
+    if (hit) return { ...hit, level };
+  }
+  return null;
 }
 
 /** Many values: the matched points by value, and what did not match (counted, first `list` named). */

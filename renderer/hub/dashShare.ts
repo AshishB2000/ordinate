@@ -107,7 +107,7 @@ const DASH_EXPORT_LIVE_TYPES: Record<string, string> = {
   column: 'bar', line: 'line', line_markers: 'line', area: 'line',
   pie: 'pie', donut: 'doughnut', scatter: 'scatter', bubble: 'bubble',
 };
-function dashIsMapType(t: string): boolean { return t === 'map_bubble' || t === 'map_choropleth'; }
+function dashIsMapType(t: string): boolean { return isMapChartType(t); } // mapKinds.ts
 
 // ── ONE theme for the whole export ───────────────────────────────────────────
 //

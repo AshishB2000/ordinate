@@ -34,7 +34,7 @@ const HUB = path.join(__dirname, '..', 'renderer', 'hub');
 const sandbox: any = { window: {}, document: {}, console };
 sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
-for (const f of ['chartTraits.js', 'renderResult.js']) {
+for (const f of ['chartTraits.js', 'mapKinds.js', 'renderResult.js']) {
   vm.runInContext(fs.readFileSync(path.join(HUB, f), 'utf8'), sandbox, { filename: f });
 }
 
@@ -80,6 +80,15 @@ ok('a map needs geo, and says so', chartCanRender('map_choropleth', CATEGORICAL,
    && chartCanRender('map_choropleth', CATEGORICAL, true) === true);
 ok('…both map types', chartCanRender('map_bubble', CATEGORICAL, false) === false
    && chartCanRender('map_bubble', CATEGORICAL, true) === true);
+// r6:geo — a density or route reply fits only its own map, and those maps nothing else.
+const HEX = { labels: [], series: [], geo: { level: 'hexbin', hex: { levels: [] }, items: [] } };
+const FLOW = { labels: [], series: [], geo: { level: 'flow', flow: { flows: [] }, items: [] } };
+ok('a hexbin map draws a hexbin reply and nothing else', chartCanRender('map_hexbin', HEX, true) === true
+   && chartCanRender('map_hexbin', FLOW, true) === false && chartCanRender('map_hexbin', CATEGORICAL, true) === false);
+ok('a flow map draws a flow reply and nothing else', chartCanRender('map_flow', FLOW, true) === true
+   && chartCanRender('map_flow', HEX, true) === false && chartCanRender('map_flow', CATEGORICAL, true) === false);
+ok('a region or bubble map cannot draw density or routes', chartCanRender('map_choropleth', HEX, true) === false
+   && chartCanRender('map_bubble', FLOW, true) === false);
 
 // ── A series of nothing but nulls is not a series ──────────────────────────
 // countNumericSeries filters on "carries at least one number", so a column that

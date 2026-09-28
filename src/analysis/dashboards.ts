@@ -43,6 +43,8 @@ import type { TableCalc } from './tableCalc';
 import { themeModel } from './themeTokens';
 import { sanitizeStatsSpec } from './stats/spec';
 import type { StatsSpec } from './stats/spec';
+import { sanitizeRadiusValue } from './geo/radius';
+import type { RadiusValue } from './geo/radius';
 
 // Tile actions and the card kinds beyond these four live in one PURE module
 // the renderer loads too (renderer/hub/cardModel.ts, the geoMatch pattern), so
@@ -82,7 +84,7 @@ export type MetricAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';
  * reader's handle on one of the dashboard's `parameters` (analysis/params.ts),
  * which filters, formulas and titles reference by name.
  */
-export type ControlKind = 'dropdown' | 'multi' | 'date_range' | 'parameter';
+export type ControlKind = 'dropdown' | 'multi' | 'date_range' | 'parameter' | 'radius';
 
 /**
  * The shape of a control's current (or author-set default) selection — one
@@ -95,7 +97,8 @@ export type ControlValue =
   | { value: string } // dropdown
   | { values: string[] } // multi
   | { from?: string; to?: string } // date_range: two fixed ISO dates…
-  | { preset: PeriodPreset; n?: number }; // …or a RELATIVE period, resolved at query time
+  | { preset: PeriodPreset; n?: number } // …or a RELATIVE period, resolved at query time
+  | RadiusValue; // radius (r6:geo) — a centre and a distance, see ./geo/radius
 
 export interface CardControl {
   kind: ControlKind;
@@ -106,6 +109,8 @@ export interface CardControl {
   /** `parameter` only: which of the dashboard's parameters this control moves.
    *  Its default is the parameter's own `value`, not `default` above. */
   paramId?: string;
+  /** `radius` only: the longitude column; `column` is the latitude. */
+  lngColumn?: string;
 }
 
 // The fixed column count the renderer's CSS grid uses (kept in sync with the
@@ -232,7 +237,7 @@ const CARD_TYPES: ReadonlySet<string> = new Set(['visual', 'text', 'metric', 'co
  *  than a fourth copy of it — dashboardDelta.ts already restates one, and it
  *  says so apologetically. One whitelist, one place to widen it. */
 export const METRIC_AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
-const CONTROL_KINDS: ReadonlySet<string> = new Set(['dropdown', 'multi', 'date_range', 'parameter']);
+const CONTROL_KINDS: ReadonlySet<string> = new Set(['dropdown', 'multi', 'date_range', 'parameter', 'radius']);
 const METRIC_FORMATS: ReadonlySet<string> = new Set([
   'auto',
   'plain',
@@ -317,6 +322,7 @@ function sanitizeControlDefault(kind: ControlKind, raw: unknown): ControlValue |
     if (!Array.isArray(o.values)) return undefined;
     return { values: o.values.filter((v): v is string => typeof v === 'string') };
   }
+  if (kind === 'radius') return sanitizeRadiusValue(o);
   // date_range — a relative preset wins over dates when both are present.
   if (typeof o.preset === 'string' && o.preset !== 'custom') {
     const p = sanitizePeriod(o);
@@ -407,6 +413,11 @@ export function sanitizeCard(raw: unknown): Card | null {
       datasetId: c.datasetId,
       column,
     };
+    // A radius reads TWO columns; without the longitude it filters nothing.
+    if (kind === 'radius') {
+      if (typeof c.lngColumn !== 'string' || !c.lngColumn) return null;
+      control.lngColumn = c.lngColumn;
+    }
     const def = sanitizeControlDefault(kind, c.default);
     if (def) control.default = def;
     card.control = control;

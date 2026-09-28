@@ -16,6 +16,7 @@ import type {
 import { MAX_RULES, MAX_SPLIT_PARTS, MAX_WINDOW_OFFSET, POWER_STEP_TYPES } from './stepTypes';
 import { checkRegex } from './regexSubset';
 import { isDateFormat } from './stepsClean';
+import { checkSpatialJoin } from '../analysis/geo/spatialJoin';
 
 const AGG: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
 const RULE_OPS: ReadonlySet<string> = new Set(['=', '!=', '>', '<', '>=', '<=', 'contains', 'is_empty', 'not_empty']);
@@ -196,6 +197,8 @@ export function checkPowerStep(o: Raw): PowerStep | string {
       if (o.desc === true) step.desc = true;
       return step;
     }
+    case 'spatial_join':
+      return checkSpatialJoin(o); // r6:geo
     default:
       return `unknown step type "${type}"`;
   }

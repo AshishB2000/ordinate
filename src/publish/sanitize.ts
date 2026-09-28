@@ -26,6 +26,7 @@ export const PUBLISHED_CHART_TYPES: ReadonlySet<string> = new Set([
   'pie', 'donut', 'scatter', 'bubble', 'radar', 'combo', 'histogram', 'funnel', 'pareto',
   'waterfall', 'gauge', 'treemap', 'heatmap', 'sankey', 'candlestick', 'boxplot', 'bullet',
   'calendar', 'pivot', 'table', 'map_bubble', 'map_choropleth',
+  'map_hexbin', 'map_flow', // r6:geo
 ]);
 // A cohort's `{labels, series}` IS its retention curve and an event funnel's is
 // its per-step counts, so the page draws them as the chart they already are.
@@ -33,7 +34,11 @@ export const PUBLISHED_CHART_TYPES: ReadonlySet<string> = new Set([
 const PUBLISHED_AS: ReadonlyMap<string, string> = new Map([['cohort', 'line'], ['event_funnel', 'funnel']]);
 const GEO_LEVELS: ReadonlySet<string> = new Set([
   'country', 'us_state', 'us_county', 'us_city', 'us_zip', 'world_city', 'point', 'custom',
+  'hexbin', 'flow', // r6:geo
 ]);
+const GEO_AGGS: ReadonlySet<string> = new Set(['count', 'sum', 'avg']);
+/** A published hexbin is a still picture: ONE level, the finest that stays legible. */
+const PUBLISHED_HEXES = 1500;
 const CONTROL_KINDS: ReadonlySet<string> = new Set(['dropdown', 'multi', 'date_range', 'parameter']);
 const TONES: ReadonlySet<string> = new Set(['info', 'success', 'warning', 'danger']);
 const ROW_KINDS: ReadonlySet<string> = new Set(['leaf', 'subtotal']);
@@ -94,7 +99,45 @@ function sanitizeGeo(raw: unknown): unknown {
     else if (num(i.color) !== null) out.color = num(i.color);
     return out;
   });
-  return { level, items, points: o.points === true };
+  const out: Obj = { level, items, points: o.points === true };
+  if (o.hex) out.hex = sanitizeHex(o.hex);
+  if (o.flow) out.flow = sanitizeFlow(o.flow);
+  return out;
+}
+
+const nums = (v: unknown, max: number): number[] => arr(v, max).map((x) => num(x) ?? 0);
+const count = (v: unknown): number => int(v, 0, 1_000_000_000, 0);
+
+// r6:geo — hexagons: finite numbers and a label only; one level (above).
+function sanitizeHex(raw: unknown): unknown {
+  const o = obj(raw);
+  const levels = arr(o.levels, 16).map(obj);
+  const level = [...levels].reverse().find((l) => arr(l.hexes, PUBLISHED_HEXES + 1).length <= PUBLISHED_HEXES) || levels[0];
+  const hexes = level ? arr(level.hexes, PUBLISHED_HEXES).map((h) => {
+    const x = obj(h);
+    return { value: num(x.value), n: count(x.n), lat: num(x.lat) ?? 0, lng: num(x.lng) ?? 0, ring: nums(x.ring, 12) };
+  }) : [];
+  return {
+    agg: GEO_AGGS.has(o.agg as string) ? o.agg : 'count', label: str(o.label, MAX_LABEL),
+    points: count(o.points), skipped: count(o.skipped),
+    levels: level ? [{ res: int(level.res, 0, 15, 0), zoom: int(level.zoom, 0, 30, 0), hexes }] : [],
+  };
+}
+
+// r6:geo — routes: names, figures and the arc's coordinates; never a row.
+function sanitizeFlow(raw: unknown): unknown {
+  const o = obj(raw);
+  const flows = arr(o.flows, 500).map((f) => {
+    const x = obj(f);
+    return {
+      name: str(x.name, MAX_LABEL), from: str(x.from, MAX_LABEL), to: str(x.to, MAX_LABEL), value: num(x.value), n: count(x.n),
+      o: nums(x.o, 2), d: nums(x.d, 2), path: nums(x.path, 64),
+    };
+  });
+  return {
+    agg: GEO_AGGS.has(o.agg as string) ? o.agg : 'count', label: str(o.label, MAX_LABEL),
+    points: count(o.points), skipped: count(o.skipped), routes: count(o.routes), cap: count(o.cap), flows,
+  };
 }
 
 /** One tile answer: a chart, a metric, or a said-so error. */
