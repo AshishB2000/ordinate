@@ -17,7 +17,7 @@
 
 import { createHash } from 'crypto';
 import { styleBlock, styleClasses, embedJson } from '../analysis/dashboardExport';
-import { sanitizeStyle } from '../analysis/dashboards';
+import { sanitizeStyle, sizeLayout } from '../analysis/dashboards';
 import type { DashboardStyle } from '../analysis/dashboards';
 
 /** The app's own scripts, read off disk by the caller (./publish.ts). */
@@ -112,8 +112,48 @@ const SITE_CSS = `
   .pub-sc-tone--good { color: #059669; } .pub-sc-tone--bad { color: #e11d48; }
   .pub-sc-spark path { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
   .pub-sc-spark-cell { color: var(--accent); } .pub-sc-dot-c--good { color: #10b981; } .pub-sc-dot-c--warn { color: #f59e0b; } .pub-sc-dot-c--off { color: #ef4444; }
-  @media (max-width: 720px) { .pub-grid { grid-template-columns: 1fr; } .pub-card { grid-column: auto !important; grid-row: auto !important; min-height: 260px; } }
 `;
+
+/** `.pub-root`'s side padding, twice: a page's grid is this much narrower than its window. */
+const PAGE_PAD_X = 40;
+
+/**
+ * The three layouts, switched by CSS alone. Every tile carries all three cells
+ * as custom properties (renderer/publish/publishClient.ts); a breakpoint only
+ * changes which pair `grid-column` / `grid-row` read and how many tracks the
+ * grid has. The thresholds are the hub's own — sizeLayout.BREAKPOINTS, which
+ * measure the DASHBOARD's width — moved out by the page padding, since a media
+ * query can only see the window. A cell a page lacks falls back to a full row.
+ */
+export function sizeCss(): string {
+  const bp = sizeLayout.BREAKPOINTS;
+  const cols = sizeLayout.COLS;
+  const phoneMax = bp.phone + PAGE_PAD_X - 1;
+  const tabletMax = bp.tablet + PAGE_PAD_X - 1;
+  return `
+  .pub-grid > .pub-card { grid-column: var(--pc-d-col, auto); grid-row: var(--pc-d-row, auto); }
+  .pub-filters-open, .pub-filters-done { display: none; }
+  @media (min-width: ${phoneMax + 1}px) and (max-width: ${tabletMax}px) {
+    .pub-grid { grid-template-columns: repeat(${cols.tablet}, minmax(0, 1fr)); }
+    .pub-grid > .pub-card { grid-column: var(--pc-t-col, 1 / -1); grid-row: var(--pc-t-row, auto); }
+    .pub-grid > .pub-hide-t { display: none; }
+  }
+  @media (max-width: ${phoneMax}px) {
+    .pub-grid { grid-template-columns: repeat(${cols.phone}, minmax(0, 1fr)); }
+    .pub-grid > .pub-card { grid-column: var(--pc-p-col, 1 / -1); grid-row: var(--pc-p-row, auto); }
+    .pub-grid > .pub-hide-p { display: none; }
+    .pub-filters-open { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; font-weight: 600;
+      padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border-2); background: var(--surface);
+      color: var(--text-strong); cursor: pointer; }
+    .pub-filters { display: none; }
+    .pub-filters.is-open { display: flex; flex-direction: column; align-items: stretch; position: fixed; left: 0; right: 0; bottom: 0;
+      z-index: 5; margin: 0; max-height: 75vh; overflow-y: auto; border-radius: 16px 16px 0 0; box-shadow: 0 -12px 32px rgba(0,0,0,.25); }
+    .pub-filters.is-open .pub-filter { min-width: 0; }
+    .pub-filters.is-open .pub-filters-done { display: inline-flex; justify-content: center; font: inherit; font-size: 14px; font-weight: 600;
+      padding: 10px; border-radius: 8px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
+  }
+`;
+}
 
 function sha256(text: string): string {
   return "'sha256-" + createHash('sha256').update(text, 'utf8').digest('base64') + "'";
@@ -131,7 +171,7 @@ function scriptSafe(js: string): string {
 export function pageHtml(page: Record<string, any>, assets: SiteAssets, title: string): string { // any: a sanitizePage result
   const style: DashboardStyle = sanitizeStyle(page.dashboard && page.dashboard.style);
   const resolved: DashboardStyle = { ...style, theme: style.theme === 'auto' ? 'clean' : style.theme };
-  const css = styleBlock(resolved, page.brand, page.theme) + SITE_CSS;
+  const css = styleBlock(resolved, page.brand, page.theme) + SITE_CSS + sizeCss();
   const scripts = [
     assets.chartJs,
     'var module = { exports: {} }; var exports = module.exports;',

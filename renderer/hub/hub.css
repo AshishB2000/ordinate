@@ -10816,13 +10816,9 @@ body.an-grabbing { user-select: none; cursor: grabbing; }
 .an-workbench.is-active #dash-grid .dash-card:hover .dash-card-head::before,
 .an-workbench.is-active #dash-grid .dash-card.is-selected .dash-card-head::before { opacity: 1; }
 
-/* Narrow window: one tile per row. A card's span is written inline by
-   applyDashCardStyle (it is stored geometry, not a look), so overriding it needs
-   !important — the one place in this sheet where that is not a smell. The stored
-   x/w are untouched; widen the window and the layout comes back exactly. */
-@media (max-width: 900px) {
-  #dash-grid .dash-card { grid-column: 1 / -1 !important; }
-}
+/* A narrow window used to force one tile per row here, with !important. The
+   dashboard's own tablet and phone layouts (layouts.css, layoutSizes.ts) now
+   own narrow panes, and pick them by the pane's width rather than the window's. */
 
 .an-ghost {
   border: 2px dashed var(--accent);

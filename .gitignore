@@ -814,3 +814,20 @@ scripts/**/*.js
 /scripts/test-filterParse.js
 /scripts/aeFilters.js
 /scripts/smoke-engines.js
+
+# r6 (depth round 6)
+/src/ipc/round6.js
+
+# r6:layouts
+/renderer/hub/sizeLayout.js
+/renderer/hub/layoutSizes.js
+/renderer/hub/layoutEdit.js
+/renderer/hub/layoutFilters.js
+
+# r6:stats
+
+# r6:text
+
+# r6:geo
+
+# r6:input

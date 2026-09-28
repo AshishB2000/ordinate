@@ -50,6 +50,28 @@ const cardModel = require('../../renderer/hub/cardModel') as {
   sanitizeExtras: (o: Record<string, unknown>, card: Card) => boolean;
 };
 
+/** One tile on an EDITED tablet or phone layout (renderer/hub/sizeLayout.ts). */
+export interface SizeItem { id: string; hidden?: true; h?: number }
+export interface SizeLayout { items: SizeItem[] }
+/** Only the sizes someone EDITED; a missing size is derived from desktop. */
+export interface PageLayouts { tablet?: SizeLayout; phone?: SizeLayout }
+export interface SizeCell { x: number; y: number; w: number; h: number }
+
+// Layouts for every size, the same way: one pure module the hub loads too, so
+// the whitelist below and the derivation the editor draws are the same code.
+export const sizeLayout = require('../../renderer/hub/sizeLayout') as {
+  SMALL_SIZES: Array<'tablet' | 'phone'>;
+  BREAKPOINTS: { phone: number; tablet: number };
+  COLS: Record<'desktop' | 'tablet' | 'phone', number>;
+  pickSize: (width: number) => 'desktop' | 'tablet' | 'phone';
+  presentSize: (width: number) => 'desktop' | 'tablet';
+  sanitizeLayouts: (raw: unknown, cards: Card[]) => PageLayouts | undefined;
+  resolve: (cards: Card[], stored: SizeLayout | undefined, size: string, viewHidden?: Set<string>) => {
+    size: string; cols: number; edited: boolean; items: Array<SizeCell & { id: string }>; hidden: string[]; rows: number;
+  };
+  publishCells: (cards: Card[], layouts: PageLayouts | undefined) => Record<string, Partial<Record<'tablet' | 'phone', SizeCell | { hidden: true }>>>;
+};
+
 export type CardType = 'visual' | 'text' | 'metric' | 'control' | 'nav' | 'image' | 'divider' | 'container' | 'tabs';
 export type CardAction = 'delete-sample';
 export type MetricAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';
@@ -189,6 +211,8 @@ export interface Page {
   id: string;
   name: string;
   cards: Card[];
+  /** Edited tablet / phone layouts. Absent = both derived from the cards' desktop grid. */
+  layouts?: PageLayouts;
 }
 
 // Ids arrive from the renderer over IPC. Validate the SHAPE before either id ever
@@ -421,12 +445,16 @@ export function sanitizeCards(raw: unknown): Card[] {
 }
 
 // Whitelist one page: a UUID id (regenerated if missing/invalid), a non-empty
-// name (defaulted), and sanitized cards.
+// name (defaulted), sanitized cards, and any edited tablet/phone layouts.
 export function sanitizePage(raw: unknown): Page {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const id = isValidId(o.id) ? o.id : randomUUID();
   const name = typeof o.name === 'string' && o.name.trim() ? o.name.trim() : 'Page 1';
-  return { id, name, cards: sanitizeCards(o.cards) };
+  const cards = sanitizeCards(o.cards);
+  // Against the SANITIZED cards: a card whose id was regenerated above, or that
+  // was dropped, takes its layout entries with it.
+  const layouts = sizeLayout.sanitizeLayouts(o.layouts, cards);
+  return layouts ? { id, name, cards, layouts } : { id, name, cards };
 }
 
 // Whitelist the pages array. A dashboard always has ≥1 page — an empty/invalid

@@ -19,7 +19,8 @@ import { sanitizeEncoding } from '../analysis/visuals';
 import type { Visual, VizEncoding } from '../analysis/visuals';
 import type { VizDataResult } from '../analysis/vizData';
 import { mergeDashboardFilters, controlSteps } from '../analysis/dashboardFilters';
-import type { Card, CardControl, ControlValue } from '../analysis/dashboards';
+import { sizeLayout } from '../analysis/dashboards';
+import type { Card, CardControl, ControlValue, SizeCell } from '../analysis/dashboards';
 import { paramValues, resolveFilterParams, substituteText, paramDisplay } from '../analysis/params';
 import type { ParamValues } from '../analysis/params';
 import { describePeriod, getCalendar } from '../analysis/dateIntel';
@@ -48,6 +49,9 @@ export interface PublishedCard {
   id: string;
   kind: 'chart' | 'metric' | 'text' | 'broken';
   layout: { x: number; y: number; w: number; h: number };
+  /** The card's cell on the tablet and phone grids (or hidden there) — the
+   *  page's CSS breakpoints switch between these and `layout`. */
+  sizes?: Partial<Record<'tablet' | 'phone', SizeCell | { hidden: true }>>;
   title: string;
   /** The app's chart id (column, line, pie, pivot, table, map_choropleth…). */
   chartType?: string;
@@ -358,6 +362,11 @@ export async function buildDashboard(
       // published page draws the figures and the text, and leaves the chrome.
       done += plan.keys.length;
     }
+    // Tablet and phone, laid out over exactly the tiles this page draws — the
+    // same derivation (and the same edited layouts) the hub shows.
+    const drawn = new Set(cards.map((c) => c.id));
+    const cells = sizeLayout.publishCells(sheet.cards.filter((c) => c && drawn.has(c.id)), sheet.layouts);
+    for (const c of cards) if (cells[c.id]) c.sizes = cells[c.id];
     sheets.push({ name: sheet.name || 'Sheet', cards });
   }
 

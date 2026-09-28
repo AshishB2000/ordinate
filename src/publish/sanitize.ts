@@ -116,17 +116,34 @@ export function sanitizePayload(raw: unknown): unknown {
   return out;
 }
 
+/**
+ * A tile's tablet and phone cells: grid coordinates (clamped like `layout`) or
+ * `{hidden: true}`, nothing else. A size that is missing falls back, in the
+ * page's CSS, to a full-width row.
+ */
+function sanitizeSizes(raw: unknown): Obj {
+  const o = obj(raw);
+  const out: Obj = {};
+  for (const size of ['tablet', 'phone']) {
+    if (!(size in o)) continue;
+    const cell = obj(o[size]);
+    out[size] = cell.hidden === true ? { hidden: true } : sanitizeLayout(cell);
+  }
+  return out;
+}
+
 function sanitizeCard(raw: unknown): unknown {
   const o = obj(raw);
   const kind = o.kind;
   const layout = sanitizeLayout(o.layout);
+  const sizes = sanitizeSizes(o.sizes);
   const title = str(o.title, MAX_LABEL);
-  if (kind === 'text') return { kind, layout, title, heading: str(o.heading, MAX_LABEL), text: str(o.text) };
-  if (kind === 'broken') return { kind, layout, title, reason: str(o.reason, MAX_LABEL) || 'Source removed' };
+  if (kind === 'text') return { kind, layout, sizes, title, heading: str(o.heading, MAX_LABEL), text: str(o.text) };
+  if (kind === 'broken') return { kind, layout, sizes, title, reason: str(o.reason, MAX_LABEL) || 'Source removed' };
   if (kind !== 'chart' && kind !== 'metric') return null;
   const payloads = arr(o.payloads, 5000).map(sanitizePayload);
   const variants = arr(o.variants, 5000).map((v) => int(v, 0, Math.max(0, payloads.length - 1), 0));
-  const card: Obj = { kind, layout, title, variants, payloads };
+  const card: Obj = { kind, layout, sizes, title, variants, payloads };
   if (kind === 'chart') {
     card.chartType = PUBLISHED_CHART_TYPES.has(o.chartType as string) ? o.chartType
       : PUBLISHED_AS.get(o.chartType as string) || 'column';

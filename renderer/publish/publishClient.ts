@@ -233,8 +233,19 @@ function pcChartBody(card: { chartType: string; category?: string }, payload: an
 
 function pcCard(card: any, combo: number, page: any, onPick: (column: string, label: string) => void, top = 0): HTMLElement {
   const el = pcEl('section', 'pub-card pub-card--' + card.kind);
-  el.style.gridColumn = `${card.layout.x + 1} / span ${card.layout.w}`;
-  el.style.gridRow = `${card.layout.y - top + 1} / span ${card.layout.h}`;
+  // All three sizes' cells as custom properties; the page's CSS breakpoints
+  // pick which pair `grid-column` / `grid-row` read (src/publish/siteHtml.ts).
+  // Properties, not `style.gridColumn`: an inline placement would outrank the
+  // media queries. No layout decision is made in script.
+  el.style.setProperty('--pc-d-col', `${card.layout.x + 1} / span ${card.layout.w}`);
+  el.style.setProperty('--pc-d-row', `${card.layout.y - top + 1} / span ${card.layout.h}`);
+  for (const [size, tag] of [['tablet', 't'], ['phone', 'p']]) {
+    const cell = card.sizes && card.sizes[size];
+    if (!cell) continue;
+    if (cell.hidden) { el.classList.add('pub-hide-' + tag); continue; }
+    el.style.setProperty(`--pc-${tag}-col`, `${cell.x + 1} / span ${cell.w}`);
+    el.style.setProperty(`--pc-${tag}-row`, `${cell.y + 1} / span ${cell.h}`);
+  }
   if (card.kind === 'text') {
     if (card.heading) el.appendChild(pcEl('h3', 'pub-text-h', card.heading));
     for (const para of String(card.text || '').split(/\n{2,}/)) if (para.trim()) el.appendChild(pcEl('p', 'pub-text-p', para));
@@ -297,6 +308,27 @@ function pcDashboard(page: any, root: HTMLElement): void {
     bar.appendChild(lab);
   });
   if (d.controls.length) {
+    // On a phone the bar folds into one "Filters (N)" button that opens it as
+    // a sheet. Which of the two shows is the stylesheet's call; this only
+    // toggles the sheet open and shut.
+    bar.id = 'pub-filters';
+    const open = pcEl('button', 'pub-filters-open', `Filters (${d.controls.length})`) as HTMLButtonElement;
+    open.type = 'button';
+    open.setAttribute('aria-controls', 'pub-filters');
+    open.setAttribute('aria-expanded', 'false');
+    const done = pcEl('button', 'pub-filters-done', 'Done') as HTMLButtonElement;
+    done.type = 'button';
+    const setOpen = (on: boolean): void => {
+      bar.classList.toggle('is-open', on);
+      open.setAttribute('aria-expanded', String(on));
+      if (on) (bar.querySelector('select') as HTMLElement | null)?.focus();
+      else open.focus();
+    };
+    open.addEventListener('click', () => setOpen(!bar.classList.contains('is-open')));
+    done.addEventListener('click', () => setOpen(false));
+    bar.addEventListener('keydown', (e) => { if (e.key === 'Escape' && bar.classList.contains('is-open')) setOpen(false); });
+    bar.appendChild(done);
+    root.appendChild(open);
     root.appendChild(bar);
     if (d.mode === 'single') root.appendChild(pcEl('p', 'pub-hint', 'This published copy changes one filter at a time.'));
   }

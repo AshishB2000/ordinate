@@ -19,6 +19,7 @@ const KIND_TITLE: Record<string, string> = {
   bundle: 'Bundle ready', 'sql-save': 'Query saved', quality: 'Quality run finished',
   insights: 'Insights ready', publish: 'Site published', backup: 'Backup written',
   restore: 'Restore finished', automation: 'Automation finished', analysis: 'Analysis finished',
+  compute: 'Computation finished',
 };
 
 /**

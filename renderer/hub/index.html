@@ -55,6 +55,16 @@
   <link rel="stylesheet" href="cohort.css"/>
   <!-- Analysis engines — Typed filters -->
   <link rel="stylesheet" href="filterType.css"/>
+  <!-- r6-css:layouts -->
+  <link rel="stylesheet" href="layouts.css"/>
+
+  <!-- r6-css:stats -->
+
+  <!-- r6-css:text -->
+
+  <!-- r6-css:geo -->
+
+  <!-- r6-css:input -->
 
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
@@ -3568,6 +3578,23 @@
      (dock.js). After dashSelection.js, whose selection the chips join. -->
 <script src="filterType.js"></script>
 <script src="filterTypeApply.js"></script>
+<!-- r6:layouts -->
+<!-- Layouts for every size: sizeLayout is the pure model main shares (UMD, like
+     cardModel); layoutSizes picks the size and draws it (dashGrid's
+     renderDashGrid calls lyGridTiles / lyAfterGrid), layoutEdit edits a tablet or
+     phone layout, layoutFilters folds the filter bar into a sheet on phone. -->
+<script src="sizeLayout.js"></script>
+<script src="layoutSizes.js"></script>
+<script src="layoutEdit.js"></script>
+<script src="layoutFilters.js"></script>
+
+<!-- r6:stats -->
+
+<!-- r6:text -->
+
+<!-- r6:geo -->
+
+<!-- r6:input -->
 
 <script src="hub.js"></script>
 

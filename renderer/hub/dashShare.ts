@@ -47,6 +47,8 @@ function fitDashPresentRows(): void {
     const l = (c && c.layout) || {};
     rows = Math.max(rows, (Number(l.y) || 0) + Math.max(1, Number(l.h) || 1));
   }
+  // A small window presents the tablet layout, which has rows of its own (layoutSizes.ts).
+  rows = lyPresentRows() ?? rows;
   if (rows <= 0) return;
   // Measured against the EDITOR, not the window. #dash-editor is its own scroll
   // box inside a flex column, so sizing to window.innerHeight overshoots by

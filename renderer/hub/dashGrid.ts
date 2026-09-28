@@ -304,7 +304,8 @@ function renderDashGrid(): void {
   if (dashParams().length) renderDashFilterBar();
   // Append every card element first (so each body has layout size), then kick
   // off the async body render into each — charts size to their grid cell.
-  tiles.forEach((card: any) => {
+  // On a tablet / phone layout, only that size's cards, in its order (layoutSizes.ts).
+  lyGridTiles(tiles).forEach((card: any) => {
     const el = makeDashCardEl(card);
     grid.appendChild(el);
     const body = el.querySelector('.dash-card-body') as HTMLElement | null;
@@ -317,6 +318,7 @@ function renderDashGrid(): void {
   // selection ring and drop a selection whose card no longer exists.
   anSyncWorkbench();
   authoringAfterGrid(); // layoutKinds.ts — groups under their children, the active tab, folds
+  lyAfterGrid(); // layoutSizes.ts — a tablet / phone layout's cells, last, so they win
   // Which datasets the sheet reads can change with any card edit, so the
   // freshness line is derived from the cards on every grid render.
   refreshDashFreshness();
