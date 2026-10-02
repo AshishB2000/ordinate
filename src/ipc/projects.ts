@@ -148,31 +148,40 @@ export function register({ onActive, getHubWindow }: {
     const win = parent();
     const { canceled, filePaths } = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
     if (canceled || !filePaths || !filePaths[0]) return { ok: false, canceled: true };
-    const file = filePaths[0];
-    await safetyBackup('before-import'); // a copy of the active project first (src/ipc/backups.ts)
-    const job = jobs.submit({
-      kind: 'bundle',
-      label: `Import ${path.basename(file)}`,
-      run: async (ctx) => {
-        const res = await bundle.importBundle(await fs.promises.readFile(file), {
-          onProgress: (p, note) => ctx.progress(p, note),
-          checkCancelled: () => ctx.checkCancelled(),
-        });
-        if (!res.ok) throw new Error(res.error || 'Import failed.');
-        return res;
-      },
-      resultOf: (r) => ({ message: r.project ? `Imported as “${r.project.name}”` : undefined }),
-    });
-    try {
-      const res = await job.done;
-      if (res.project) {
-        active(res.project.id);
-        await projects.touchOpened(res.project.id);
-      }
-      return res;
-    } catch (err: any) {
-      if (err instanceof jobs.JobCancelled) return { ok: false, canceled: true };
-      return { ok: false, error: err?.message || 'Import failed.' };
-    }
+    return importBundleFile(filePaths[0], active);
   });
+}
+
+/**
+ * Import one `.ordinate` file as a new project, as a job, and make it active.
+ * Shared by the Import dialog above and a bundle dropped on the window
+ * (src/app/dropImport.ts). The path is main's own: from the native dialog, or
+ * from a real dropped File in the preload.
+ */
+export async function importBundleFile(file: string, active: (id: unknown) => void): Promise<any> {
+  await safetyBackup('before-import'); // a copy of the active project first (src/ipc/backups.ts)
+  const job = jobs.submit({
+    kind: 'bundle',
+    label: `Import ${path.basename(file)}`,
+    run: async (ctx) => {
+      const res = await bundle.importBundle(await fs.promises.readFile(file), {
+        onProgress: (p, note) => ctx.progress(p, note),
+        checkCancelled: () => ctx.checkCancelled(),
+      });
+      if (!res.ok) throw new Error(res.error || 'Import failed.');
+      return res;
+    },
+    resultOf: (r) => ({ message: r.project ? `Imported as “${r.project.name}”` : undefined }),
+  });
+  try {
+    const res = await job.done;
+    if (res.project) {
+      active(res.project.id);
+      await projects.touchOpened(res.project.id);
+    }
+    return res;
+  } catch (err: any) {
+    if (err instanceof jobs.JobCancelled) return { ok: false, canceled: true };
+    return { ok: false, error: err?.message || 'Import failed.' };
+  }
 }

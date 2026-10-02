@@ -191,6 +191,7 @@ const DS_SOURCE_LABELS: Record<string, string> = {
   capture: 'Screenshot',
   sql: 'SQL',
   input: 'Input',
+  parquet: 'Parquet',
 };
 
 /** The camera mark a capture-sourced record carries, wherever it is listed. */
@@ -225,6 +226,7 @@ function makeSavedItem(d: any): HTMLElement {
   const row = document.createElement('div');
   row.className = 'ds-saved-item';
   row.dataset.recKind = 'dataset'; row.dataset.recId = String(d && d.id ? d.id : ''); // ⌘-click → background tab (tabStrip.ts)
+  row.draggable = true; // drag out of the app as a CSV (dndOut.ts)
 
   const open = document.createElement('button');
   open.type = 'button';

@@ -958,3 +958,15 @@ scripts/**/*.js
 /scripts/test-incrementalMerge.js
 /scripts/test-incrementalRefresh.js
 /scripts/r10Incremental.js
+
+# r10:dragdrop
+/src/data/sniff.js
+/src/app/dropImport.js
+/src/app/dragOut.js
+/src/ipc/dragDrop.js
+/preload/hubDropPreload.js
+/renderer/hub/dndIn.js
+/renderer/hub/dndOut.js
+/scripts/r10DragDrop.js
+/scripts/test-sniff.js
+/scripts/test-dragOut.js

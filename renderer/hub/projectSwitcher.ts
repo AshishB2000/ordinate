@@ -329,9 +329,10 @@ async function pjExport(p: any): Promise<void> {
   showToast(`Exported “${p.name}” to ${String(res.path).split(/[\\/]/).pop()}`, { kind: 'success' });
 }
 
-async function pjImport(): Promise<void> {
+// `given` is a bundle already imported elsewhere (a dropped .ordinate, dndIn.ts).
+async function pjImport(given?: any): Promise<void> {
   pjClose();
-  const res = await window.hub.importProject();
+  const res = given || await window.hub.importProject();
   if (!res || res.canceled) return;
   if (!res.ok) { showToast(res.error || 'That bundle could not be imported', { kind: 'error' }); return; }
   const c = res.counts || {};

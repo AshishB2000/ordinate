@@ -17904,3 +17904,80 @@ body.ws-side-push .app-sidebar { display: none; }
 .inc-log-row.is-full .inc-mode { color: var(--accent); }
 .inc-run-how { font-size: var(--t-11); color: var(--muted); }
 .inc-mark { font-family: var(--font-mono); font-size: var(--t-11); white-space: nowrap; }
+
+/* ── Drag and drop ── */
+/* One full-window overlay for files dragged in (dndIn.ts). It never takes the
+   pointer, so the element under the drag stays the event target and a map's
+   settings can say "Add boundaries to this map". */
+.dnd-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-24);
+  border: 2px dashed var(--accent-line);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  pointer-events: none;
+  animation: fadeUp var(--dur-menu) var(--ease-out);
+}
+.dnd-overlay[hidden] { display: none; }
+.dnd-overlay.is-zone { background: color-mix(in srgb, var(--bg) 40%, transparent); }
+.dnd-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-8);
+  max-width: 420px;
+  padding: var(--sp-24) var(--sp-32);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+.dnd-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.dnd-title {
+  font-size: var(--t-15);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tr-tight);
+  color: var(--text-strong);
+}
+.dnd-sub { font-size: var(--t-12); line-height: var(--lh-body); color: var(--muted); }
+
+/* The grip that drags a chart out as a PNG (dndOut.ts), on the hovered chart's corner. */
+.dnd-grip {
+  position: fixed;
+  z-index: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ctl-sm);
+  height: var(--ctl-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  color: var(--muted);
+  cursor: grab;
+}
+.dnd-grip[hidden] { display: none; }
+.dnd-grip:hover { color: var(--text); background: var(--surface-2); }
+.dnd-grip:active { cursor: grabbing; }
+
+/* A visual card in flight: dashboard tabs say they take it, the one under it lights up. */
+body.dnd-visual-drag .tab-item[data-key^="analysis:"] { box-shadow: inset 0 0 0 1px var(--accent-line); }
+.tab-item.dnd-target-over { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+#dash-grid.dnd-target-over { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: var(--r-lg); }
