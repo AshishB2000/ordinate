@@ -31,7 +31,8 @@
     "smoke": "npm run build && node scripts/run-smokes.js",
     "shoot:design": "npm run build:ts && node scripts/shoot-design.js",
     "build:icons": "node scripts/build-icons.js",
-    "build:appicon": "electron scripts/build-appicon.js"
+    "build:appicon": "electron scripts/build-appicon.js",
+    "server": "npm run build:ts && node src/server/main.js"
   },
   "license": "MIT",
   "devDependencies": {
@@ -58,6 +59,7 @@
     "chartjs-chart-treemap": "^3.1.0",
     "docx": "^9.7.1",
     "exceljs": "^4.4.0",
+    "fastify": "^5.12.5",
     "maplibre-gl": "^4.7.1",
     "mysql2": "^3.23.2",
     "oracledb": "^7.0.1",

@@ -1023,3 +1023,9 @@ scripts/**/*.js
 /scripts/i18n-extract.js
 /scripts/test-i18n.js
 /scripts/i18nNode.js
+
+# web/t0.1-server
+/src/server/env.js
+/src/server/app.js
+/src/server/main.js
+/scripts/test-server-boot.js
