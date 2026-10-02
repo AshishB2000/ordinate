@@ -198,6 +198,8 @@ function buildChart(
   const spec = resolveChartType(type);
   const { chartType, opts, isRound, isMatrix, isTreemap, isFunnel, isSankey,
           isGauge, isCandlestick, isBoxplot, isHistogram, isHoriz } = spec;
+  // A word cloud is not a Chart.js chart: wordCloudRender.js draws it on this canvas.
+  if (spec.isWordCloud) return buildWordCloud(canvas, labels, series, overrides, { palette, fmt, textColor, titleColor, fontFamily, surfColor });
 
   // ── Sort by value (bar/column families + pie/donut) ───────────────────────
   // Reorders categories by their total across series; line/area/funnel/histogram

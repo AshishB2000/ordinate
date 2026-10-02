@@ -29,6 +29,7 @@ import { analyticsClauses } from './analytics';
 import type { ResolvedOverlay } from './analytics';
 import { calcLabel } from './tableCalc';
 import type { CalcSeries } from './tableCalc';
+import { CATEGORY_CAP, OTHER_LABEL } from './categoryKey';
 
 // ── the app's compact number format ──────────────────────────────────────────
 //
@@ -54,7 +55,7 @@ export function compact(v: number | null | undefined): string {
 // target, who wins which axis, which day peaked.
 export type CaptionFamily =
   | 'bar' | 'line' | 'part' | 'map' | 'point' | 'pivot'
-  | 'waterfall' | 'pareto' | 'bullet' | 'radar' | 'calendar' | 'cohort' | 'event_funnel' | 'other';
+  | 'waterfall' | 'pareto' | 'bullet' | 'radar' | 'calendar' | 'cohort' | 'event_funnel' | 'cloud' | 'other';
 
 const FAMILY: Record<string, CaptionFamily> = {
   column: 'bar', bar: 'bar',
@@ -70,6 +71,9 @@ const FAMILY: Record<string, CaptionFamily> = {
   pivot: 'pivot',
   cohort: 'cohort', event_funnel: 'event_funnel',
   waterfall: 'waterfall', pareto: 'pareto', bullet: 'bullet', radar: 'radar', calendar: 'calendar',
+  word_cloud: 'cloud',
+  // r6:geo — their `geo.items` are the summary hexagons / the drawn routes, by value.
+  map_hexbin: 'map', map_flow: 'map',
 };
 
 export function captionFamily(chartType: string | null | undefined): CaptionFamily {
@@ -161,6 +165,7 @@ function familyCaption(input: CaptionInput): string {
     case 'bullet': return bulletCaption(input.data, ov.bulletTarget, measure, pairs);
     case 'radar': return radarCaption(input.data);
     case 'calendar': return calendarCaption(pairs, measure);
+    case 'cloud': return cloudCaption(input.data, input.names);
     default: return genericCaption(pairs, measure);
   }
 }
@@ -337,6 +342,28 @@ function pointCaption(data: ChartData | null | undefined, measure: string): stri
   const n = values.length;
   if (lo === hi) return `${n} ${n === 1 ? 'point' : 'points'}, ${measure} ${compact(lo)} throughout`;
   return `${n} ${n === 1 ? 'point' : 'points'}, ${measure} from ${compact(lo)} to ${compact(hi)}`;
+}
+
+/**
+ * A word cloud — "“service” is the biggest of 48 words, count 1.2K, 1.8× “staff”".
+ *
+ * Only the FIRST measure sizes the words; a second one colours them (sentiment),
+ * so the sentence reads the first alone — chartPairs would add the two up.
+ */
+function cloudCaption(data: ChartData | null | undefined, names?: Record<string, string> | null): string {
+  const series = data && Array.isArray(data.series) ? data.series : [];
+  if (!data || !series[0]) return NOTHING;
+  const sized = { labels: data.labels, series: [series[0]] };
+  // The folded tail past CATEGORY_CAP is not a word — the cloud does not draw it either.
+  const folded = Array.isArray(data.labels) && data.labels.length > CATEGORY_CAP;
+  const pairs = chartPairs(sized).filter((p) => p.value > 0 && !(folded && p.label === OTHER_LABEL))
+    .sort((a, b) => b.value - a.value || (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
+  if (!pairs.length) return NOTHING;
+  const [top, second] = pairs;
+  const lead = `“${top.label}” is the biggest of ${pairs.length} words, ${measureNoun(sized, names)} ${compact(top.value)}`;
+  const ratio = second && second.value < top.value ? `, ${(top.value / second.value).toFixed(1)}× “${second.label}”` : '';
+  const tone = series[1] ? measureNoun({ labels: data.labels, series: [series[1]] }, names) : '';
+  return lead + ratio + (tone ? `; coloured by ${tone}` : '');
 }
 
 /** Gauge / sankey / boxplot / table — the honest sentence is a count. */

@@ -29,8 +29,10 @@ const CONTENT_KEYS: Record<DiffType, string[]> = {
   metric: ['name', 'definition', 'filters', 'format', 'description', 'direction'],
   report: ['name', 'analysisId', 'format', 'pages', 'cover', 'paper', 'includeFilters', 'narrative', 'schedule'],
   // A dataset's version is its PREPARE PIPELINE. The table is data, not a
-  // definition — restoring a version never touches the source Parquet.
-  dataset: ['steps'],
+  // definition — restoring a version never touches the source Parquet. The one
+  // exception is an INPUT table (src/data/inputTable/), whose data is authored
+  // here: its version also carries `table`, and a restore puts it back.
+  dataset: ['steps', 'table'],
 };
 
 /** The versioned fields of a record, in a fixed key order. Absent keys stay
@@ -234,6 +236,33 @@ function diffDataset(a: Rec, b: Rec, parts: string[]): void {
   else if (addOther.length) parts.push(`added ${plural(addOther.length, 'step')}`);
   else if (remOther.length) parts.push(`removed ${plural(remOther.length, 'step')}`);
   if (!addedSteps.length && !removedSteps.length && !same(sa, sb)) parts.push('reordered steps');
+  if (a.table && b.table) diffTable(a.table, b.table, parts);
+}
+
+/** An input table's cells: columns, then rows added or removed, else cells edited. */
+function diffTable(a: Rec, b: Rec, parts: string[]): void {
+  const ca = arr(a.columns);
+  const cb = arr(b.columns);
+  listChange(ca, cb, 'column', parts);
+  // A column added, removed or renamed reshapes every row; the column clause says it.
+  if (!same(ca.map((c) => c && c.name), cb.map((c) => c && c.name))) return;
+  const ra = arr(a.rows);
+  const rb = arr(b.rows);
+  if (ra.length !== rb.length) {
+    const added = extra(ra, rb);
+    const removed = extra(rb, ra);
+    if (added && removed) parts.push(`changed ${plural(Math.max(added, removed), 'row')}`);
+    else if (added) parts.push(`added ${plural(added, 'row')}`);
+    else if (removed) parts.push(`removed ${plural(removed, 'row')}`);
+    return;
+  }
+  let cells = 0;
+  ra.forEach((row, r) => {
+    const x = arr(row);
+    const y = arr(rb[r]);
+    for (let c = 0; c < Math.max(x.length, y.length); c++) if (!same(x[c] ?? null, y[c] ?? null)) cells++;
+  });
+  if (cells) parts.push(`edited ${plural(cells, 'cell')}`);
 }
 
 const DIFFERS: Record<DiffType, (a: Rec, b: Rec, parts: string[]) => void> = {
@@ -253,7 +282,8 @@ const MAX_PARTS = 3;
  */
 export function summarize(type: DiffType, prev: unknown, next: unknown): string {
   if (prev === null || prev === undefined) {
-    return type === 'dataset' ? 'First saved pipeline' : 'First saved version';
+    if (type === 'dataset') return contentOf(type, next).table ? 'Created the table' : 'First saved pipeline';
+    return 'First saved version';
   }
   const parts: string[] = [];
   DIFFERS[type](contentOf(type, prev), contentOf(type, next), parts);

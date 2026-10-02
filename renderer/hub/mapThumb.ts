@@ -117,6 +117,7 @@ function _mapThumbTrace(ctx: any, rings: any[], project: (lng: number, lat: numb
 // broken card is worse than a plain one.
 async function drawMapThumb(canvas: HTMLCanvasElement, data: any, chartType: string): Promise<boolean> {
   const geo = data && data.geo;
+  if (geo && (geo.hex || geo.flow)) return drawGeoThumb(canvas, geo); // mapGeoThumb.ts (r6:geo)
   if (!geo || !Array.isArray(geo.items) || geo.items.length === 0) return false;
   const loaded = await mapThumbGeo(String(geo.level || ''));
   if (!loaded || !canvas.isConnected) return false;

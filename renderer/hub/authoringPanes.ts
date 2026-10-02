@@ -312,8 +312,7 @@ async function anRenderSwitcher(): Promise<void> {
     const catCol = anColumns.find((c) => c.name === encoding.category);
     shape = catCol && catCol.type === 'date' ? 'time_series' : 'categorical';
   }
-  const recommended = eligibleChartTypes(shape, countNumericSeries(data), (data.labels || []).length);
-  if (data.geo) recommended.push('map_choropleth'); // maps after charts, never first
+  const recommended = withGeoChartType(eligibleChartTypes(shape, countNumericSeries(data), (data.labels || []).length), data.geo); // maps after charts (mapKinds.ts)
   // The gallery marks the SAME app-computed set, so the two surfaces can never
   // disagree about what fits this data.
   anRecommended = recommended.slice();
@@ -354,7 +353,7 @@ async function anRenderSwitcher(): Promise<void> {
   // "+ More" keeps the full three-tier panel — Recommended / Selected / Other.
   anPicker = buildVizPicker({
     recommended,
-    pool: ALL_CHART_TYPE_IDS.concat(['table', 'map_bubble', 'map_choropleth']),
+    pool: ALL_CHART_TYPE_IDS.concat(['table'], MAP_CHART_TYPES),
     data,
     hasGeo: !!data.geo,
     initial,
@@ -387,7 +386,7 @@ async function anRenderSwitcher(): Promise<void> {
 let anRecommended: string[] = [];
 
 function anGalleryPool(): string[] {
-  const pool = ALL_CHART_TYPE_IDS.concat(['table', 'map_bubble', 'map_choropleth']);
+  const pool = ALL_CHART_TYPE_IDS.concat(['table'], MAP_CHART_TYPES);
   const rec = pool.filter((t) => anRecommended.indexOf(t) >= 0);
   return rec.concat(pool.filter((t) => anRecommended.indexOf(t) < 0));
 }

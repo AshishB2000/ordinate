@@ -79,6 +79,7 @@ export interface LineageInput {
 const SOURCE_WORD: Record<string, string> = {
   csv: 'CSV file', xlsx: 'Excel file', json: 'JSON file', paste: 'Pasted data',
   capture: 'Screenshot', postgres: 'Database', url: 'Web address', combined: 'Combined datasets',
+  input: 'Input table',
 };
 
 const arr = (v: unknown): any[] => (Array.isArray(v) ? v : []);
@@ -203,7 +204,7 @@ export function buildGraph(input: LineageInput): LineageGraph {
     } else {
       sid = add({
         id: 'source:import:' + did, kind: 'source',
-        name: SOURCE_WORD[str(d.sourceKind)] || 'Import', sub: 'Imported',
+        name: SOURCE_WORD[str(d.sourceKind)] || 'Import', sub: d.sourceKind === 'input' ? 'Typed in Ordinate' : 'Imported',
       });
     }
     link(sid, target);

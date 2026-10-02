@@ -72,6 +72,7 @@ export const CHART_TYPE_IDS: ReadonlySet<string> = new Set([
   'sankey', 'candlestick', 'boxplot', 'pivot', 'cohort', 'event_funnel',
   'waterfall', 'bullet', 'calendar', 'radar', 'pareto',
   'table', 'map_bubble', 'map_choropleth',
+  'word_cloud',
 ]);
 
 /** Aggregations that need a `number` column. `count` is the only one that does

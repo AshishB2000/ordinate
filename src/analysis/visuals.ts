@@ -71,9 +71,18 @@ export interface VizGeo {
    * `us_city` / `us_zip`) places values through the offline place table
    * (analysis/places.ts); `custom` is a project-imported boundary set.
    */
-  level: 'country' | 'us_state' | 'us_county' | 'us_city' | 'us_zip' | 'world_city' | 'point' | 'custom';
+  level: 'country' | 'us_state' | 'us_county' | 'us_city' | 'us_zip' | 'world_city' | 'point' | 'custom' | 'hexbin' | 'flow';
   lat?: string;
   lon?: string;
+  /**
+   * `flow` (r6:geo): the DESTINATION coordinates (`lat`/`lon` are the origin),
+   * and optional columns naming each end. `hexbin` reads `lat`/`lon` only.
+   * Both take their measure from `values[0]` — count, sum or average.
+   */
+  lat2?: string;
+  lon2?: string;
+  from?: string;
+  to?: string;
   /** Colour points by this column (text → categories, number → a ramp). */
   color?: string;
   /** `custom`: the imported boundary set, and the feature property joined to the category. */
@@ -243,6 +252,7 @@ function visualFilePath(projectId: string, id: string): string {
 const AGG_FNS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max', 'none']);
 const GEO_LEVELS: ReadonlySet<string> = new Set([
   'country', 'us_state', 'us_county', 'us_city', 'us_zip', 'world_city', 'point', 'custom',
+  'hexbin', 'flow', // r6:geo
 ]);
 
 // Atomic JSON write: temp sibling then rename (atomic on same fs). Copied from
@@ -313,7 +323,7 @@ export function sanitizeEncoding(raw: unknown): VizEncoding {
     const g = o.geo as Record<string, unknown>;
     if (typeof g.level === 'string' && GEO_LEVELS.has(g.level)) {
       const geo: VizGeo = { level: g.level as VizGeo['level'] };
-      for (const k of ['lat', 'lon', 'color', 'property'] as const) {
+      for (const k of ['lat', 'lon', 'color', 'property', 'lat2', 'lon2', 'from', 'to'] as const) {
         const v = g[k];
         if (typeof v === 'string' && v) geo[k] = v;
       }
@@ -352,6 +362,7 @@ export const SUGGESTABLE_CHART_TYPES: readonly string[] = [
   'treemap', 'heatmap', 'funnel', 'histogram',
   'sankey', 'candlestick', 'boxplot',
   'waterfall', 'bullet', 'calendar', 'radar', 'pareto',
+  'word_cloud',
 ];
 
 // Allowed enum sets for the clamped override fields.

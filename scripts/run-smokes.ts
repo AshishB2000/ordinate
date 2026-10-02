@@ -90,6 +90,9 @@ const SMOKES = [
   // Analysis engines — key drivers, scenarios, segments, cohorts and funnels,
   // typed filters, in ONE launch (sections in scripts/ae*.ts).
   'smoke-engines',
+  // Depth round 6: layouts for every size, statistics, text analytics,
+  // geospatial analysis and input tables, in one launch (sections in scripts/r6*.ts).
+  'smoke-round6',
 ];
 
 const results: { name: string; code: number }[] = [];

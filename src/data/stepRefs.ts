@@ -15,6 +15,7 @@ import * as datasets from './datasets';
 import type { PipelineContext } from './stepTypes';
 import { stepRefIds } from './stepTypes';
 import { originParents } from './datasetSummary';
+import { loadSpatialRefs } from './spatialRefs';
 
 /** How far the cycle walk follows references before it calls the chain a loop. */
 const MAX_DEPTH = 16;
@@ -56,5 +57,7 @@ export async function loadStepRefs(projectId: string, selfId: string, steps: unk
     }
     ctx.tables[id] = { columns: ds.columns, rows: ds.rows };
   }
+  const boundaries = await loadSpatialRefs(projectId, steps); // r6:geo — spatial_join's regions
+  if (boundaries) ctx.boundaries = boundaries;
   return ctx;
 }

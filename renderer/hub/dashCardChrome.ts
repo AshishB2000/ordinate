@@ -77,7 +77,8 @@ function dashCardMenuBtn(card: any): HTMLButtonElement {
       (alCardMenuItems(card)
         .concat(mpCardMenuItems(card))
         .concat(pivotMenuItems(btn.closest('.dash-card'), dashCardTitle(card)))
-        .concat(tileActionMenuItems(card)).concat(ansCardMenuItems(card)).concat([
+        // On a tablet / phone layout, that size's own moves (layoutEdit.ts).
+        .concat(tileActionMenuItems(card)).concat(ansCardMenuItems(card)).concat(lyMenuItems(card) || [
         ['Move up', () => nudgeCard(card, 0, -1)],
         ['Move down', () => nudgeCard(card, 0, 1)],
         ['Move left', () => nudgeCard(card, -1, 0)],

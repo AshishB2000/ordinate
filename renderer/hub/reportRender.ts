@@ -211,7 +211,7 @@ async function reportTile(
   let png: string | null = null;
   if (!grid) {
     try {
-      png = (type === 'map_bubble' || type === 'map_choropleth')
+      png = isMapChartType(type) // mapKinds.ts
         ? await captureMapPNG(data, type, frame)
         : await captureChartPNG(type, data, visual.overrides || {}, frame);
     } catch (_) { png = null; }

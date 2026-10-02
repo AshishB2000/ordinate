@@ -19,7 +19,8 @@ import { sanitizeEncoding } from '../analysis/visuals';
 import type { Visual, VizEncoding } from '../analysis/visuals';
 import type { VizDataResult } from '../analysis/vizData';
 import { mergeDashboardFilters, controlSteps } from '../analysis/dashboardFilters';
-import type { Card, CardControl, ControlValue } from '../analysis/dashboards';
+import { sizeLayout } from '../analysis/dashboards';
+import type { Card, CardControl, ControlValue, SizeCell } from '../analysis/dashboards';
 import { paramValues, resolveFilterParams, substituteText, paramDisplay } from '../analysis/params';
 import type { ParamValues } from '../analysis/params';
 import { describePeriod, getCalendar } from '../analysis/dateIntel';
@@ -31,8 +32,11 @@ import type { FilterStep } from '../data/transforms';
 import { vizDataFor } from '../ipc/visuals';
 import { computeCardMetric } from '../ipc/dashboards';
 import { resolveMetric } from '../ipc/metrics';
+import { computeStatsTile } from '../ipc/stats';
+import { statsTitle } from '../analysis/stats/present';
 import { planCombos, parseKey, MAX_OPTIONS_PER_CONTROL } from './combos';
 import type { ComboPlan, ControlDomain } from './combos';
+import { sanitizeRadiusValue } from '../analysis/geo/radius';
 
 export interface PublishedControl {
   id: string;
@@ -48,6 +52,9 @@ export interface PublishedCard {
   id: string;
   kind: 'chart' | 'metric' | 'text' | 'broken';
   layout: { x: number; y: number; w: number; h: number };
+  /** The card's cell on the tablet and phone grids (or hidden there) — the
+   *  page's CSS breakpoints switch between these and `layout`. */
+  sizes?: Partial<Record<'tablet' | 'phone', SizeCell | { hidden: true }>>;
   title: string;
   /** The app's chart id (column, line, pie, pivot, table, map_choropleth…). */
   chartType?: string;
@@ -179,6 +186,16 @@ async function controlSpec(projectId: string, card: Card, a: analysis.Analysis):
       card, control,
       domain: { id, label, options: ['All time', ...opts.map((o) => o.label)], defaultIndex },
       states: [null, ...opts.map((o) => o.state)],
+    };
+  }
+  if (control.kind === 'radius') {
+    // r6:geo — a published page has no place table to type into, so the menu is
+    // the author's saved radius and "Anywhere".
+    const def = sanitizeRadiusValue(control.default);
+    return {
+      card, control,
+      domain: { id, label, options: def ? ['Anywhere', def.value] : ['Anywhere'], defaultIndex: def ? 1 : 0 },
+      states: def ? [null, def] : [null],
     };
   }
   // parameter: the parameter's own list, or just its current value.
@@ -354,10 +371,38 @@ export async function buildDashboard(
         cards.push({ ...base, kind: 'metric', title });
         continue;
       }
+      if (card.type === 'stats' && card.stats) {
+        // A statistics tile (src/ipc/stats.ts), recomputed per combination and
+        // published as a chart or a numbers-only table — through the share policy.
+        let chartType = card.stats.view === 'chart' ? '' : 'table';
+        for (const scope of scopes) {
+          if (ctx.checkCancelled) ctx.checkCancelled();
+          const bound = resolveFilterParams(scope.filters, scope.params);
+          const r = await computeStatsTile(projectId, card.stats, bound.steps, 'publish');
+          let payload: Record<string, unknown>;
+          if (r.ok) {
+            const d = card.stats.view === 'chart' ? r.tile.chart.data : r.tile.numeric;
+            if (!chartType) chartType = r.tile.chart.chartType;
+            payload = { labels: d.labels, series: d.series.map((s) => ({ label: s.name, values: s.values })), caption: r.tile.sentence || r.tile.subtitle };
+          } else {
+            payload = 'hiddenByPolicy' in r ? { hidden: r.error } : { error: r.error };
+          }
+          base.variants.push(intern(store, payload));
+          done++;
+          if (ctx.progress) ctx.progress(done / total, `${done.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} tile answers`);
+        }
+        cards.push({ ...base, kind: 'chart', title: statsTitle(card.stats), chartType: chartType || 'column' });
+        continue;
+      }
       // Image, nav, divider, container and tabs cards carry no figures; a
       // published page draws the figures and the text, and leaves the chrome.
       done += plan.keys.length;
     }
+    // Tablet and phone, laid out over exactly the tiles this page draws — the
+    // same derivation (and the same edited layouts) the hub shows.
+    const drawn = new Set(cards.map((c) => c.id));
+    const cells = sizeLayout.publishCells(sheet.cards.filter((c) => c && drawn.has(c.id)), sheet.layouts);
+    for (const c of cards) if (cells[c.id]) c.sizes = cells[c.id];
     sheets.push({ name: sheet.name || 'Sheet', cards });
   }
 
@@ -368,8 +413,9 @@ export async function buildDashboard(
     controls: specs.map((s, i) => ({
       id: s.card.id,
       label: plan.domains[i].label,
-      kind: s.control.kind,
-      column: s.control.column,
+      // A radius publishes as a menu of its author's radius and "Anywhere" (below).
+      kind: s.control.kind === 'radius' ? 'dropdown' : s.control.kind,
+      column: s.control.kind === 'radius' ? '' : s.control.column,
       options: plan.domains[i].options,
       defaultIndex: plan.domains[i].defaultIndex,
     })),

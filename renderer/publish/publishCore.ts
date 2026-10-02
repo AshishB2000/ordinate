@@ -41,7 +41,7 @@ const PK_TABLE_TYPES = ['treemap', 'heatmap', 'sankey', 'candlestick', 'boxplot'
 
 function pkRenderKind(chartType: string): 'chart' | 'table' | 'pivot' | 'map' | 'gauge' {
   if (chartType === 'pivot') return 'pivot';
-  if (chartType === 'map_choropleth' || chartType === 'map_bubble') return 'map';
+  if (chartType === 'map_choropleth' || chartType === 'map_bubble' || chartType === 'map_hexbin' || chartType === 'map_flow') return 'map';
   if (chartType === 'gauge') return 'gauge';
   if (PK_TABLE_TYPES.indexOf(chartType) >= 0) return 'table';
   return 'chart';

@@ -5,6 +5,7 @@ import * as visuals from '../analysis/visuals';
 import * as metrics from '../analysis/metrics';
 import * as reportSpec from '../analysis/reportSpec';
 import * as datasets from '../data/datasets';
+import * as inputStore from '../data/inputTable/store';
 import { safetyBackup } from './backups';
 
 // Version history IPC — list a record's saves, read one, restore one.
@@ -43,6 +44,11 @@ export async function writeBack(projectId: string, type: string, id: string, rec
     });
   }
   if (type === 'dataset') {
+    // An input table's version carries its table too (src/data/inputTable/store.ts).
+    if (rec.table) {
+      const ds = await inputStore.replaceInputTable(projectId, id, rec.table, Array.isArray(rec.steps) ? rec.steps : []);
+      return ds ? inputStore.versionRecordOf(ds) : null;
+    }
     const res = await datasets.updateSteps(projectId, id, Array.isArray(rec.steps) ? rec.steps : []);
     return res ? { id, steps: res.dataset.steps || [] } : null;
   }

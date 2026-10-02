@@ -279,6 +279,8 @@ export function generateSql(relation: string, columns: SqlColumn[], steps: Trans
         const col = cols[ci];
         const op: FilterOp = step.op;
         let where: string;
+        // r6:geo — a radius needs a second column and trig; the fold runs it.
+        if (op === 'within_km') return bail('within_km runs in the JS fold');
 
         if (op === 'is_empty') {
           where = sqlEmpty(col.physical);
@@ -546,6 +548,12 @@ export function generateSql(relation: string, columns: SqlColumn[], steps: Trans
       case 'mask_redact':
       case 'mask_generalize':
         return bail('mask steps run in the JS fold');
+
+      // The text steps (data/stepsText.ts): a tokenizer and VADER have no SQL
+      // form. BAIL for the same reason as the mask steps — the default would
+      // warn and continue, storing the table WITHOUT the step's column.
+      case 'text_terms': case 'text_sentiment': case 'keyword_rules':
+        return bail('text steps run in the JS fold');
 
       default: {
         // The ten power steps (sqlGenPower.ts); null = a type nobody knows.

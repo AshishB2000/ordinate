@@ -111,7 +111,7 @@ function renderChartJsInArea(container, data, type, entry, turnIdx, source?) {
     return;
   }
 
-  if (type === 'map_bubble' || type === 'map_choropleth') {
+  if (isMapChartType(type)) { // mapKinds.ts
     renderMapInArea(container, data, type);
     return;
   }
@@ -305,6 +305,8 @@ const VIZ_LABELS = {
   waterfall: 'Waterfall', bullet: 'Bullet', calendar: 'Calendar heatmap', radar: 'Radar', pareto: 'Pareto',
   pivot: 'Pivot table', cohort: 'Cohort', event_funnel: 'Event funnel',
   table: 'Table', map_bubble: 'Bubble map', map_choropleth: 'Region map',
+  word_cloud: 'Word cloud',
+  map_hexbin: 'Hexbin map', map_flow: 'Flow map',
 };
 
 // Small monochrome glyph per chart type for the viz chips. currentColor so each icon
@@ -357,6 +359,9 @@ const VIZ_ICONS = {
   event_funnel: _vi('<rect x="4" y="4" width="16" height="3.5" rx="0.5" fill="currentColor"/><rect x="4" y="10.25" width="11" height="3.5" rx="0.5" fill="currentColor" opacity="0.7"/><rect x="4" y="16.5" width="6" height="3.5" rx="0.5" fill="currentColor" opacity="0.45"/><path d="M20 9.5l-4 2M15 15.75l-4 2"/>'),
   map_bubble: _vi('<circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r="1.6" fill="currentColor"/><circle cx="15" cy="14" r="2.2" fill="currentColor"/>'),
   map_choropleth: _vi('<path d="M9 4 4 6v14l5-2 6 2 5-2V4l-5 2-6-2z"/><path d="M9 4v14M15 6v14"/>'),
+  word_cloud: _vi('<path d="M6 11h9" stroke-width="2.6"/><path d="M4 15.5h5M11.5 15.5h8"/><path d="M8 7h6M16.5 7h3M7 19.5h4M13.5 19.5h4.5" stroke-width="1.2"/><path d="M17 11h2.5" stroke-width="1.8"/>'),
+  map_hexbin: _vi('<path d="M7.5 3.5 11 5.5v4L7.5 11.5 4 9.5v-4z" fill="currentColor"/><path d="M16.5 3.5 20 5.5v4l-3.5 2L13 9.5v-4z"/><path d="M12 11.5l3.5 2v4L12 19.5l-3.5-2v-4z" fill="currentColor" opacity="0.5"/>'),
+  map_flow: _vi('<circle cx="5" cy="17" r="2" fill="currentColor"/><circle cx="19" cy="7" r="2" fill="currentColor"/><path d="M6.5 15.5C9 8 14 6 17.2 6.6"/><path d="M6.8 18.2C11 19 16 15.5 18.2 9"/>'),
 };
 
 // VERIFY/TEST ONLY: every wired chart type, ordered for a sensible click-through.
@@ -375,6 +380,7 @@ const ALL_CHART_TYPE_IDS = [
   'pivot',
   // Their own shelves, like the pivot's; picked from "+ More" (cohortBuilder.ts).
   'cohort', 'event_funnel',
+  'word_cloud',
 ];
 
 // PART 1: CODE-DRIVEN eligibility. dataShape (still returned by the AI) + the real
@@ -383,7 +389,7 @@ const ALL_CHART_TYPE_IDS = [
 const SHAPE_CHARTS = {
   time_series:   ['line', 'line_markers', 'area', 'stacked_area', 'column', 'clustered_column', 'combo', 'heatmap', 'calendar', 'pivot', 'table'],
   part_to_whole: ['pie', 'donut', 'treemap', 'pct_stacked_column', 'pct_stacked_bar', 'stacked_column', 'funnel', 'pareto', 'pivot', 'table'],
-  categorical:   ['column', 'bar', 'clustered_column', 'clustered_bar', 'heatmap', 'pareto', 'waterfall', 'bullet', 'radar', 'pivot', 'table'],
+  categorical:   ['column', 'bar', 'clustered_column', 'clustered_bar', 'heatmap', 'pareto', 'waterfall', 'bullet', 'radar', 'pivot', 'table', 'word_cloud'],
   single_metric: ['gauge', 'table'],
   matrix:        ['heatmap', 'pivot', 'table'],
   unstructured:  ['table'],
@@ -406,7 +412,8 @@ const CHART_SERIES_MIN = {
 // The five newer families read a fixed number of series (value + target, the
 // two ends of a bridge, one day's figure, six radar axes), so they are only
 // SUGGESTED where the data has that shape.
-const CHART_SERIES_MAX = { column: 1, bar: 1, pareto: 1, calendar: 1, waterfall: 2, bullet: 2, radar: 6 };
+// A word cloud reads a size measure and, optionally, a colour (sentiment) one.
+const CHART_SERIES_MAX = { column: 1, bar: 1, pareto: 1, calendar: 1, waterfall: 2, bullet: 2, radar: 6, word_cloud: 2 };
 
 // Minimum labels (categories) a type needs to be meaningful; everything else >= 1.
 // A radar normalises each axis by its largest value, so ONE category is always
@@ -414,6 +421,7 @@ const CHART_SERIES_MAX = { column: 1, bar: 1, pareto: 1, calendar: 1, waterfall:
 const CHART_LABELS_MIN = {
   pie: 2, donut: 2, treemap: 2, heatmap: 2, funnel: 3,
   pareto: 2, waterfall: 2, radar: 2, calendar: 7,
+  word_cloud: 3,
 };
 
 // Pure: which of a shape's chart ids the actual data can support, best-first.
@@ -456,7 +464,7 @@ function eligibleChartTypes(dataShape, seriesCount, labelCount) {
 function chartCanRender(type, data, hasGeo) {
   // A cohort / event funnel draws its own "pick a column" state when its shelves are empty.
   if (type === 'table' || type === 'pivot' || type === 'cohort' || type === 'event_funnel') return true;
-  if (type === 'map_bubble' || type === 'map_choropleth') return !!hasGeo;
+  if (isMapChartType(type)) return !!hasGeo && geoMapFits(type, (data && data.geo) || {});
   const d = data || {};
   if (countNumericSeries(d) < (CHART_SERIES_MIN[type] || 1)) return false;
   if (((d.labels || []).length) < (CHART_LABELS_MIN[type] || 1)) return false;
@@ -491,7 +499,7 @@ function buildVizPicker(opts) {
   const selectedOthers = new Set(opts.initialSelected || []); // non-suited types pulled into "Selected"
   const numSeries = countNumericSeries(data);
   const numLabels = (data.labels || []).length;
-  const isMapType = (t) => t === 'map_bubble' || t === 'map_choropleth';
+  const isMapType = isMapChartType;
   const fallbackType = recommended[0] || opts.initial;
   let selectedType = opts.initial;
   let morePanel = null;
@@ -507,7 +515,7 @@ function buildVizPicker(opts) {
   function needsText(type) {
     const parts = [];
     const ns = CHART_SERIES_MIN[type] || 1, nl = CHART_LABELS_MIN[type] || 1;
-    if (isMapType(type) && !hasGeo) parts.push('place or region data');
+    if (isMapType(type) && !chartCanRender(type, data, hasGeo)) parts.push(geoNeedsText(type, hasGeo));
     if (numSeries < ns) parts.push(`at least ${ns} numeric series`);
     if (numLabels < nl) parts.push(`at least ${nl} categories`);
     return parts.join(' and ') || 'different data';
@@ -702,7 +710,7 @@ function renderTurnResult(result, activeVizType, entry, turnIdx) {
       // The chip row + "+ More" three-tier picker (shared with the export dialog).
       const picker = buildVizPicker({
         recommended: vizList.map(v => v.type),
-        pool: ALL_CHART_TYPE_IDS.concat(['table', 'map_bubble', 'map_choropleth']),
+        pool: ALL_CHART_TYPE_IDS.concat(['table'], MAP_CHART_TYPES),
         data, hasGeo, initial: currentType,
         onPersist: (type) => {
           if (!entry) return;

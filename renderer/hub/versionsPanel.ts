@@ -31,10 +31,11 @@ interface VhState {
 }
 let vhState: VhState | null = null;
 
-/** Open the History panel for one record of the active project. */
-async function vhOpen(type: string, id: string, name?: string): Promise<void> {
+/** Open the History panel for one record of the active project. `word` names
+ *  the record where its type's word does not — an input table is a 'Table'. */
+async function vhOpen(type: string, id: string, name?: string, word0?: string): Promise<void> {
   if (!currentProjectId || !id || !VH_TYPE_WORD[type]) return;
-  const word = VH_TYPE_WORD[type];
+  const word = word0 || VH_TYPE_WORD[type];
   const panel = spOpen({
     kind: 'history',
     title: name || word,
@@ -332,6 +333,7 @@ function vhPreviewInPanel(rec: any, v: any): void {
       ? `${rec.schedule.cadence} at ${rec.schedule.at}` : 'Off');
   } else if (st.type === 'dataset') {
     const steps = Array.isArray(rec.steps) ? rec.steps : [];
+    if (rec.table) { vhPreviewTable(box, facts, add, rec.table, steps.length); return; }
     add('Steps', steps.length ? String(steps.length) : 'None — the source as imported');
     box.appendChild(facts);
     const ol = document.createElement('ol');
@@ -346,6 +348,42 @@ function vhPreviewInPanel(rec: any, v: any): void {
     return;
   }
   box.appendChild(facts);
+  box.hidden = false;
+}
+
+/** An input table's version: its size, and its first rows as they were. */
+function vhPreviewTable(box: HTMLElement, facts: HTMLElement, add: (k: string, v: string) => void, table: any, steps: number): void {
+  const cols: any[] = Array.isArray(table.columns) ? table.columns : [];
+  const rows: any[][] = Array.isArray(table.rows) ? table.rows : [];
+  add('Rows', rows.length.toLocaleString('en-US'));
+  add('Columns', cols.map((c) => String(c && c.name)).join(', '));
+  if (steps) add('Prepare steps', String(steps));
+  box.appendChild(facts);
+  const t = document.createElement('table');
+  t.className = 'vh-table';
+  const hr = document.createElement('tr');
+  for (const c of cols) {
+    const th = document.createElement('th');
+    th.textContent = String(c && c.name);
+    hr.appendChild(th);
+  }
+  t.appendChild(hr);
+  for (const r of rows.slice(0, 8)) {
+    const tr = document.createElement('tr');
+    cols.forEach((_c, i) => {
+      const td = document.createElement('td');
+      td.textContent = r && r[i] != null ? String(r[i]) : '';
+      tr.appendChild(td);
+    });
+    t.appendChild(tr);
+  }
+  if (rows.length) box.appendChild(t);
+  if (rows.length > 8) {
+    const more = document.createElement('p');
+    more.className = 'dsp-note';
+    more.textContent = `…and ${(rows.length - 8).toLocaleString('en-US')} more rows`;
+    box.appendChild(more);
+  }
   box.hidden = false;
 }
 

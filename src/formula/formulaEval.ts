@@ -9,6 +9,7 @@
 // the only edits to the moved code are the `export` keywords.
 
 import type { FValue } from './formula';
+import { haversineKm, validCoord } from '../analysis/geo/haversine';
 
 // ── Evaluation helpers ───────────────────────────────────────────────────────
 
@@ -556,6 +557,16 @@ export const FUNCTIONS: Record<string, (args: FValue[]) => FValue> = {
   coalesce: (a) => {
     for (const v of a) if (v !== null && v !== undefined) return v;
     return null;
+  },
+
+  // ── Geo (r6:geo) ──────────────────────────────────────────────────────────
+  // Great-circle km, the one haversine (analysis/geo/haversine.ts). Null unless
+  // all four arguments are numbers that are coordinates — never a distance to
+  // a guessed point.
+  distance_km: (a) => {
+    const [la1, lo1, la2, lo2] = [a[0], a[1], a[2], a[3]].map(num);
+    if (!validCoord(la1, lo1) || !validCoord(la2, lo2)) return null;
+    return haversineKm(la1 as number, lo1 as number, la2 as number, lo2 as number);
   },
 };
 

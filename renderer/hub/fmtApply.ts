@@ -26,7 +26,7 @@ type FmtRole = 'value' | 'category' | null;
 /** Which physical axis carries values on this chart type, and whether a right axis is offered. */
 function fmtAxisRoles(type: string): { x: FmtRole; y: FmtRole; y2: boolean } {
   const s = resolveChartType(type);
-  if (s.isRound || s.isGauge || s.isTreemap || s.isSankey || s.isRadar || s.isCalendar || s.isPivot) {
+  if (s.isRound || s.isGauge || s.isTreemap || s.isSankey || s.isRadar || s.isCalendar || s.isPivot || s.isWordCloud) {
     return { x: null, y: null, y2: false };
   }
   if (s.isMatrix) return { x: 'category', y: 'category', y2: false };
@@ -39,7 +39,7 @@ function fmtAxisRoles(type: string): { x: FmtRole; y: FmtRole; y2: boolean } {
 /** Does this chart paint one colour per CATEGORY (so the project's map applies to its labels)? */
 function fmtColorsByCategory(type: string, series: ChartSeriesShape[], overrides: any): boolean {
   const s = resolveChartType(type);
-  if ((s.isRound && !s.isGauge) || s.isTreemap || s.isFunnel || s.isSankey) return true;
+  if ((s.isRound && !s.isGauge) || s.isTreemap || s.isFunnel || s.isSankey || s.isWordCloud) return true;
   const one = series.filter((x) => x.role !== 'overlay').length === 1;
   return !!(overrides && overrides.colorByCategory) && one && s.chartType === 'bar'
     && !s.isHistogram && !s.isWaterfall && !s.isBullet && !s.isPareto && !s.opts.combo;

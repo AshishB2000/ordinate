@@ -41,6 +41,10 @@ import type { CompareMode, PeriodPreset } from './dateIntel';
 import { sanitizeTableCalc } from './tableCalc';
 import type { TableCalc } from './tableCalc';
 import { themeModel } from './themeTokens';
+import { sanitizeStatsSpec } from './stats/spec';
+import type { StatsSpec } from './stats/spec';
+import { sanitizeRadiusValue } from './geo/radius';
+import type { RadiusValue } from './geo/radius';
 
 // Tile actions and the card kinds beyond these four live in one PURE module
 // the renderer loads too (renderer/hub/cardModel.ts, the geoMatch pattern), so
@@ -50,7 +54,29 @@ const cardModel = require('../../renderer/hub/cardModel') as {
   sanitizeExtras: (o: Record<string, unknown>, card: Card) => boolean;
 };
 
-export type CardType = 'visual' | 'text' | 'metric' | 'control' | 'nav' | 'image' | 'divider' | 'container' | 'tabs';
+/** One tile on an EDITED tablet or phone layout (renderer/hub/sizeLayout.ts). */
+export interface SizeItem { id: string; hidden?: true; h?: number }
+export interface SizeLayout { items: SizeItem[] }
+/** Only the sizes someone EDITED; a missing size is derived from desktop. */
+export interface PageLayouts { tablet?: SizeLayout; phone?: SizeLayout }
+export interface SizeCell { x: number; y: number; w: number; h: number }
+
+// Layouts for every size, the same way: one pure module the hub loads too, so
+// the whitelist below and the derivation the editor draws are the same code.
+export const sizeLayout = require('../../renderer/hub/sizeLayout') as {
+  SMALL_SIZES: Array<'tablet' | 'phone'>;
+  BREAKPOINTS: { phone: number; tablet: number };
+  COLS: Record<'desktop' | 'tablet' | 'phone', number>;
+  pickSize: (width: number) => 'desktop' | 'tablet' | 'phone';
+  presentSize: (width: number) => 'desktop' | 'tablet';
+  sanitizeLayouts: (raw: unknown, cards: Card[]) => PageLayouts | undefined;
+  resolve: (cards: Card[], stored: SizeLayout | undefined, size: string, viewHidden?: Set<string>) => {
+    size: string; cols: number; edited: boolean; items: Array<SizeCell & { id: string }>; hidden: string[]; rows: number;
+  };
+  publishCells: (cards: Card[], layouts: PageLayouts | undefined) => Record<string, Partial<Record<'tablet' | 'phone', SizeCell | { hidden: true }>>>;
+};
+
+export type CardType = 'visual' | 'text' | 'metric' | 'control' | 'nav' | 'image' | 'divider' | 'container' | 'tabs' | 'stats';
 export type CardAction = 'delete-sample';
 export type MetricAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';
 /**
@@ -58,7 +84,7 @@ export type MetricAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';
  * reader's handle on one of the dashboard's `parameters` (analysis/params.ts),
  * which filters, formulas and titles reference by name.
  */
-export type ControlKind = 'dropdown' | 'multi' | 'date_range' | 'parameter';
+export type ControlKind = 'dropdown' | 'multi' | 'date_range' | 'parameter' | 'radius';
 
 /**
  * The shape of a control's current (or author-set default) selection — one
@@ -71,7 +97,8 @@ export type ControlValue =
   | { value: string } // dropdown
   | { values: string[] } // multi
   | { from?: string; to?: string } // date_range: two fixed ISO dates…
-  | { preset: PeriodPreset; n?: number }; // …or a RELATIVE period, resolved at query time
+  | { preset: PeriodPreset; n?: number } // …or a RELATIVE period, resolved at query time
+  | RadiusValue; // radius (r6:geo) — a centre and a distance, see ./geo/radius
 
 export interface CardControl {
   kind: ControlKind;
@@ -82,6 +109,8 @@ export interface CardControl {
   /** `parameter` only: which of the dashboard's parameters this control moves.
    *  Its default is the parameter's own `value`, not `default` above. */
   paramId?: string;
+  /** `radius` only: the longitude column; `column` is the latitude. */
+  lngColumn?: string;
 }
 
 // The fixed column count the renderer's CSS grid uses (kept in sync with the
@@ -180,6 +209,8 @@ export interface Card {
   divider?: any; // type 'divider'
   container?: any; // type 'container' — title, background, padding, collapsible
   tabs?: any; // type 'tabs' — the named tabs
+  /** type 'stats' — the analysis SPEC only (analysis/stats/spec.ts); figures are recomputed on every render. */
+  stats?: StatsSpec;
   /** The container / tabs card this card sits in, and which tab. Cards stay a flat list. */
   parentId?: string;
   tabId?: string;
@@ -189,6 +220,8 @@ export interface Page {
   id: string;
   name: string;
   cards: Card[];
+  /** Edited tablet / phone layouts. Absent = both derived from the cards' desktop grid. */
+  layouts?: PageLayouts;
 }
 
 // Ids arrive from the renderer over IPC. Validate the SHAPE before either id ever
@@ -199,12 +232,12 @@ function isValidId(id: unknown): id is string {
   return typeof id === 'string' && UUID_RE.test(id);
 }
 
-const CARD_TYPES: ReadonlySet<string> = new Set(['visual', 'text', 'metric', 'control', ...cardModel.EXTRA_TYPES]);
+const CARD_TYPES: ReadonlySet<string> = new Set(['visual', 'text', 'metric', 'control', ...cardModel.EXTRA_TYPES, 'stats']);
 /** Exported so analysisPlan's metric validation clamps against THIS set rather
  *  than a fourth copy of it — dashboardDelta.ts already restates one, and it
  *  says so apologetically. One whitelist, one place to widen it. */
 export const METRIC_AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
-const CONTROL_KINDS: ReadonlySet<string> = new Set(['dropdown', 'multi', 'date_range', 'parameter']);
+const CONTROL_KINDS: ReadonlySet<string> = new Set(['dropdown', 'multi', 'date_range', 'parameter', 'radius']);
 const METRIC_FORMATS: ReadonlySet<string> = new Set([
   'auto',
   'plain',
@@ -289,6 +322,7 @@ function sanitizeControlDefault(kind: ControlKind, raw: unknown): ControlValue |
     if (!Array.isArray(o.values)) return undefined;
     return { values: o.values.filter((v): v is string => typeof v === 'string') };
   }
+  if (kind === 'radius') return sanitizeRadiusValue(o);
   // date_range — a relative preset wins over dates when both are present.
   if (typeof o.preset === 'string' && o.preset !== 'custom') {
     const p = sanitizePeriod(o);
@@ -318,6 +352,15 @@ export function sanitizeCard(raw: unknown): Card | null {
   const card: Card = { id, type, layout };
   if (!cardModel.sanitizeExtras(o, card)) return null;
   if (cardModel.EXTRA_TYPES.includes(type)) return card;
+
+  if (type === 'stats') {
+    // A statistics tile stores its SPEC, whitelisted field by field; a card
+    // with no valid spec has nothing to compute and is dropped.
+    const stats = sanitizeStatsSpec(o.stats);
+    if (!stats) return null;
+    card.stats = stats;
+    return card;
+  }
 
   if (type === 'visual') {
     // TWO-SHAPED (v3): a visual card is meaningful with a valid `visualId`
@@ -370,6 +413,11 @@ export function sanitizeCard(raw: unknown): Card | null {
       datasetId: c.datasetId,
       column,
     };
+    // A radius reads TWO columns; without the longitude it filters nothing.
+    if (kind === 'radius') {
+      if (typeof c.lngColumn !== 'string' || !c.lngColumn) return null;
+      control.lngColumn = c.lngColumn;
+    }
     const def = sanitizeControlDefault(kind, c.default);
     if (def) control.default = def;
     card.control = control;
@@ -421,12 +469,16 @@ export function sanitizeCards(raw: unknown): Card[] {
 }
 
 // Whitelist one page: a UUID id (regenerated if missing/invalid), a non-empty
-// name (defaulted), and sanitized cards.
+// name (defaulted), sanitized cards, and any edited tablet/phone layouts.
 export function sanitizePage(raw: unknown): Page {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const id = isValidId(o.id) ? o.id : randomUUID();
   const name = typeof o.name === 'string' && o.name.trim() ? o.name.trim() : 'Page 1';
-  return { id, name, cards: sanitizeCards(o.cards) };
+  const cards = sanitizeCards(o.cards);
+  // Against the SANITIZED cards: a card whose id was regenerated above, or that
+  // was dropped, takes its layout entries with it.
+  const layouts = sizeLayout.sanitizeLayouts(o.layouts, cards);
+  return layouts ? { id, name, cards, layouts } : { id, name, cards };
 }
 
 // Whitelist the pages array. A dashboard always has ≥1 page — an empty/invalid

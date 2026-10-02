@@ -200,8 +200,9 @@ function registerAppCommands(): void {
   registerCommand({ id: 'dash.addControl', title: 'Add a control', group: 'Dashboard', icon: 'sliders', when: cmdDashboardOpen, run: () => handleAddControl() });
   // ONE history, two editors: ⌘Z walks the open story's stack when a story is
   // open (storyPage.ts keeps it in dashHistory's own structure), else the dashboard's.
-  registerCommand({ id: 'dash.undo', title: 'Undo', group: 'Dashboard', icon: 'undo', keys: 'mod+z', when: () => cmdDashboardOpen() || stIsOpen(), run: () => (stIsOpen() ? stUndo() : dashUndo()) });
-  registerCommand({ id: 'dash.redo', title: 'Redo', group: 'Dashboard', icon: 'redo', keys: ['mod+shift+z', 'mod+y'], when: () => cmdDashboardOpen() || stIsOpen(), run: () => (stIsOpen() ? stRedo() : dashRedo()) });
+  // One undo binding: a dashboard, a story, or an input table's grid (inputPage.ts).
+  registerCommand({ id: 'dash.undo', title: 'Undo', group: 'Dashboard', icon: 'undo', keys: 'mod+z', when: () => cmdDashboardOpen() || stIsOpen() || itIsActive(), run: () => (itIsActive() ? itUndo() : stIsOpen() ? stUndo() : dashUndo()) });
+  registerCommand({ id: 'dash.redo', title: 'Redo', group: 'Dashboard', icon: 'redo', keys: ['mod+shift+z', 'mod+y'], when: () => cmdDashboardOpen() || stIsOpen() || itIsActive(), run: () => (itIsActive() ? itRedo() : stIsOpen() ? stRedo() : dashRedo()) });
   registerCommand({ id: 'story.present', title: 'Present this story', group: 'Dashboard', icon: 'maximize', when: stIsOpen, run: () => { void stEnterPresent(); } });
   registerCommand({ id: 'story.exportPdf', title: 'Export this story as PDF', group: 'Dashboard', icon: 'download', when: stIsOpen, run: () => { void stExportPdf(); } });
   registerCommand({ id: 'story.new', title: 'New story', group: 'Create', icon: 'file-text', when: () => !!currentProjectId, run: () => { void stNewStory(); } });

@@ -237,6 +237,7 @@ function buildPowerStepForm(type: string, body: HTMLElement, existing: any): () 
     case 'conditional_column': return buildConditionalForm(body, existing);
     case 'lookup_join': return buildLookupForm(body, existing);
     case 'union': return buildUnionForm(body, existing);
+    case 'spatial_join': return buildSpatialJoinForm(body, existing); // prepareGeo.ts (r6:geo)
     default: return () => null;
   }
 }
@@ -247,7 +248,7 @@ function powerStepSummary(step: any): string {
     return 'Look up ' + (step.columns || []).join(', ') + ' by ' + step.leftKey + ' = ' + step.rightKey + ppDatasetName(step.datasetId);
   }
   if (step.type === 'union') return 'Append the rows of' + ppDatasetName(step.datasetId);
-  return reshapeStepSummary(step) || cleanStepSummary(step) || 'Unknown step';
+  return reshapeStepSummary(step) || cleanStepSummary(step) || geoStepSummary(step) || 'Unknown step';
 }
 
 /** ' "Products"' — the name from the last dataset list, when there is one. */

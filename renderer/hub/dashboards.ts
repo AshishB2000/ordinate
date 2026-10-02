@@ -77,6 +77,7 @@ let dashDragId: string | null = null;    // id of the card being dragged (native
 // rather than a loaded copy. Kept tiny + local on purpose.
 function controlStepsRenderer(control: any, state: any): any[] {
   if (!control || !state) return [];
+  if (control.kind === 'radius') return radiusStepsRenderer(control, state); // geoRadius.ts (r6:geo)
   const column = control.column;
   if (control.kind === 'dropdown' && 'value' in state) {
     const value = state.value;

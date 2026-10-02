@@ -55,6 +55,20 @@
   <link rel="stylesheet" href="cohort.css"/>
   <!-- Analysis engines — Typed filters -->
   <link rel="stylesheet" href="filterType.css"/>
+  <!-- r6-css:layouts -->
+  <link rel="stylesheet" href="layouts.css"/>
+
+  <!-- r6-css:stats -->
+  <link rel="stylesheet" href="stats.css"/>
+
+  <!-- r6-css:text -->
+  <link rel="stylesheet" href="text.css"/>
+
+  <!-- r6-css:geo -->
+  <link rel="stylesheet" href="geo.css"/>
+
+  <!-- r6-css:input -->
+  <link rel="stylesheet" href="input.css"/>
 
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
@@ -3568,6 +3582,60 @@
      (dock.js). After dashSelection.js, whose selection the chips join. -->
 <script src="filterType.js"></script>
 <script src="filterTypeApply.js"></script>
+<!-- r6:layouts -->
+<!-- Layouts for every size: sizeLayout is the pure model main shares (UMD, like
+     cardModel); layoutSizes picks the size and draws it (dashGrid's
+     renderDashGrid calls lyGridTiles / lyAfterGrid), layoutEdit edits a tablet or
+     phone layout, layoutFilters folds the filter bar into a sheet on phone. -->
+<script src="sizeLayout.js"></script>
+<script src="layoutSizes.js"></script>
+<script src="layoutEdit.js"></script>
+<script src="layoutFilters.js"></script>
+
+<!-- r6:stats -->
+<!-- The statistics workbench: the panel shell (registers its palette command
+     at load, so it follows commands.js), its settings column, its Chart.js
+     plots, the two result-view files, then the dashboard tile + export + the
+     scatter ⋯ hook, which cardKinds/dashShare/chartControls call at run time. -->
+<script src="statsPanel.js"></script>
+<script src="statsControls.js"></script>
+<script src="statsCharts.js"></script>
+<script src="statsViews.js"></script>
+<script src="statsViewsGroups.js"></script>
+<script src="statsTile.js"></script>
+
+<!-- r6:text -->
+<!-- Text analytics: the word cloud's pure layout (wordCloudLayout.js, an IIFE
+     like chartShapes.js) before the chart that draws it (wordCloudRender.js,
+     reached from buildChart); the text Prepare steps (textSteps.js, hooked
+     from prepare/prepareForms) and their previews (textPreviews.js), then the
+     profile's Text section (textProfile.js, uses TX_LANGS/txSentimentBar/txOpenStep). -->
+<script src="wordCloudLayout.js"></script>
+<script src="wordCloudRender.js"></script>
+<script src="textSteps.js"></script>
+<script src="textPreviews.js"></script>
+<script src="textProfile.js"></script>
+
+<!-- r6:geo -->
+<script src="mapKinds.js"></script>
+<script src="mapHexbin.js"></script>
+<script src="mapFlow.js"></script>
+<script src="mapGeoThumb.js"></script>
+<script src="geoRadius.js"></script>
+<script src="prepareGeo.js"></script>
+
+<!-- r6:input -->
+<!-- Input tables (inputPage.ts). The edit model is SHARED with main — loaded
+     between the two-line shim and its binder exactly as src/app/format.js is
+     (see cjsShim.ts); the grid, its keys, the page and the columns dialog
+     follow in dependency order. -->
+<script src="cjsShim.js"></script>
+<script src="../../src/data/inputTable/edits.js"></script>
+<script src="inputBind.js"></script>
+<script src="inputGrid.js"></script>
+<script src="inputKeys.js"></script>
+<script src="inputPage.js"></script>
+<script src="inputColumns.js"></script>
 
 <script src="hub.js"></script>
 

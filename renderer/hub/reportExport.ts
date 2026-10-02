@@ -354,7 +354,7 @@ function openExportDialog({ recommended, selectedExtra, current, vizData, entry,
   closeExportDialog();
   recommended = recommended || [];
   if (!recommended.length) { showToast('No chart to export'); return; }
-  const isMapType = (t: string) => t === 'map_bubble' || t === 'map_choropleth';
+  const isMapType = isMapChartType; // mapKinds.ts
   const overridesFor = (t: string) => (entry && entry.chartOverrides && entry.chartOverrides[`${turnIdx}:${t}`]) || {};
 
   const overlay = document.createElement('div');
@@ -430,7 +430,7 @@ function openExportDialog({ recommended, selectedExtra, current, vizData, entry,
   const picker: any = buildVizPicker({
     recommended,
     // Charts + maps (maps capture via capturePage); the raw table can't be a report image.
-    pool: ALL_CHART_TYPE_IDS.concat(['map_bubble', 'map_choropleth']),
+    pool: ALL_CHART_TYPE_IDS.concat(MAP_CHART_TYPES),
     data: vizData, hasGeo: !!hasGeo,
     initial: (recommended.indexOf(current) !== -1 || (selectedExtra || []).indexOf(current) !== -1) ? current : recommended[0],
     initialSelected: selectedExtra || [],

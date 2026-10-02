@@ -33,6 +33,8 @@ import { sanitizeQuality } from '../analysis/qualityRules';
 import type { DatasetQuality } from '../analysis/qualityRules';
 import type { StepCount } from './stepTypes';
 import { loadStepRefs } from './stepRefs';
+import { sanitizeInputBlock } from './inputTable/columns';
+import type { InputBlock } from './inputTable/columns';
 // The record FILE (paths, atomic write, metadata-only writers) moved out at the
 // 800-line cap; the writers are re-exported so `datasets.markRefresh` etc. keep
 // working for every caller.
@@ -52,7 +54,7 @@ export interface Dataset {
   id: string;
   projectId: string;
   name: string;
-  sourceKind: 'csv' | 'json' | 'paste' | 'xlsx' | 'postgres' | 'url' | 'combined' | 'capture' | 'sql';
+  sourceKind: 'csv' | 'json' | 'paste' | 'xlsx' | 'postgres' | 'url' | 'combined' | 'capture' | 'sql' | 'input';
   columns: ParsedColumn[];
   rows: (string | number | null)[][];
   rowCount: number;
@@ -109,6 +111,8 @@ export interface Dataset {
    * Written ONLY through `writeQuality` — metadata-only, never bumps updatedAt.
    */
   quality?: DatasetQuality;
+  /** An input table's typed-but-refused cells (src/data/inputTable/columns.ts). */
+  input?: InputBlock;
 }
 
 export interface AutoRefresh {
@@ -130,7 +134,7 @@ export interface AutoRefresh {
 
 export type AutoRefreshEvery = 'hourly' | 'daily' | 'weekly';
 
-const SOURCE_KINDS: ReadonlySet<string> = new Set(['csv', 'json', 'paste', 'xlsx', 'postgres', 'url', 'combined', 'capture', 'sql']);
+const SOURCE_KINDS: ReadonlySet<string> = new Set(['csv', 'json', 'paste', 'xlsx', 'postgres', 'url', 'combined', 'capture', 'sql', 'input']);
 
 // Coerce an untrusted `capture` link (from a stored file OR a save/recapture IPC
 // payload) into the stored shape, or undefined if there is nothing usable. Accepts
@@ -176,7 +180,9 @@ function sanitizeCapture(raw: any): { entryId: string | null; cropPath: string |
 // table. Chained per id; a failed write does not poison the next one.
 const writeChains = new Map<string, Promise<void>>();
 
-async function persist(projectId: string, dataset: Dataset, progress: parquetStore.WriteProgress = {}): Promise<void> {
+// Exported for the input-table store (inputTable/store.ts): an edit replaces the
+// base table like a refresh does, but keeps no snapshot — its history is versions.
+export async function persist(projectId: string, dataset: Dataset, progress: parquetStore.WriteProgress = {}): Promise<void> {
   asOf.assertWritable(); // an as-of read must never write its past rows back as the present
   const prev = writeChains.get(dataset.id) || Promise.resolve();
   const run = prev.catch(() => { /* the previous write's failure was its caller's */ })
@@ -319,6 +325,8 @@ function normalize(data: any, projectId: string): Dataset {
   // Re-sanitized on every load, like origin: a hand-edited rule cannot reach SQL.
   const quality = sanitizeQuality(data.quality);
   if (quality) ds.quality = quality;
+  const input = kind === 'input' ? sanitizeInputBlock(data.input) : undefined;
+  if (input) ds.input = input;
   return ds;
 }
 
@@ -626,7 +634,7 @@ export async function updateDataset(
     const name = typeof next.name === 'string' && next.name.trim() ? next.name.trim() : old.name;
     const type: ParsedColumn['type'] =
       next.type === 'text' || next.type === 'number' || next.type === 'date' ? next.type : old.type;
-    return { name, type };
+    return { ...old, name, type }; // keeps an input table's required/lookup
   });
 
   // Re-coerce only the columns whose type actually changed (cheap; a pure rename

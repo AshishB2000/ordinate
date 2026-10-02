@@ -814,3 +814,65 @@ scripts/**/*.js
 /scripts/test-filterParse.js
 /scripts/aeFilters.js
 /scripts/smoke-engines.js
+
+# r6 (depth round 6)
+/src/ipc/round6.js
+
+# r6:layouts
+/renderer/hub/sizeLayout.js
+/renderer/hub/layoutSizes.js
+/renderer/hub/layoutEdit.js
+/renderer/hub/layoutFilters.js
+
+# r6:stats
+/src/analysis/stats/*.js
+/src/engine/statsVectors.js
+/src/engine/statsJob.js
+/src/ipc/stats.js
+/src/ai/statsFacts.js
+/preload/hubStatsPreload.js
+/renderer/hub/statsPanel.js
+/renderer/hub/statsControls.js
+/renderer/hub/statsCharts.js
+/renderer/hub/statsViews.js
+/renderer/hub/statsViewsGroups.js
+/renderer/hub/statsTile.js
+
+# r6:text
+/src/analysis/text/*.js
+/src/data/textStepTypes.js
+/src/data/stepsText.js
+/src/engine/textSampleResident.js
+/src/ipc/text.js
+/preload/hubTextPreload.js
+/renderer/hub/wordCloudLayout.js
+/renderer/hub/wordCloudRender.js
+/renderer/hub/textSteps.js
+/renderer/hub/textPreviews.js
+/renderer/hub/textProfile.js
+
+# r6:geo
+/src/analysis/geo/*.js
+/src/engine/geoSql.js
+/src/engine/geoResident.js
+/src/data/spatialRefs.js
+/src/ipc/geoViz.js
+/src/ipc/geoAnalysis.js
+/preload/hubGeoPreload.js
+/renderer/hub/mapKinds.js
+/renderer/hub/mapHexbin.js
+/renderer/hub/mapFlow.js
+/renderer/hub/mapGeoThumb.js
+/renderer/hub/geoRadius.js
+/renderer/hub/prepareGeo.js
+
+# r6:input
+/src/data/inputTable/*.js
+/src/engine/lookupResident.js
+/src/ipc/input.js
+/preload/hubInputPreload.js
+/renderer/hub/inputBind.js
+/renderer/hub/inputGrid.js
+/renderer/hub/inputKeys.js
+/renderer/hub/inputPage.js
+/renderer/hub/inputColumns.js

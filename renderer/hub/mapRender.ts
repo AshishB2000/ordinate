@@ -361,7 +361,8 @@ async function renderMapInArea(container: HTMLElement, data: any, type: string):
     return;
   }
   const geo = data && data.geo;
-  if (!geo || !Array.isArray(geo.items) || geo.items.length === 0) {
+  // Density and routes say for themselves why they have nothing (mapHexbin.ts / mapFlow.ts).
+  if (!geo || !Array.isArray(geo.items) || (geo.items.length === 0 && !geo.hex && !geo.flow)) {
     container.innerHTML = '<div class="cv-chart-fallback">No geographic data available for this map.</div>';
     return;
   }
@@ -411,6 +412,8 @@ async function renderMapInArea(container: HTMLElement, data: any, type: string):
   try { map.resize(); } catch (_) {}
   if (basemap === 'none') mapAddOfflineLand(map, wrap);
   if (geo.points) { renderPointMap(map, wrap, container, geo, data); return; } // mapPoints.ts
+  if (geo.hex) { renderHexbinMap(map, wrap, geo, data); return; } // mapHexbin.ts (r6:geo)
+  if (geo.flow) { renderFlowMap(map, wrap, geo, data); return; } // mapFlow.ts (r6:geo)
 
   // Time-series maps: derive per-period region values from data.labels + data.series
   // (one series per period for a time_series shape), so the map can step through years.

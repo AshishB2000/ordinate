@@ -97,9 +97,10 @@ async function main(): Promise<void> {
       dropdownOn: !!box?.querySelector('.dc-kind-tile[data-kind="dropdown"].is-on'),
     };
   });
-  // A fourth tile, Parameter, opens its own dialog (smoke-depth.ts drives it).
-  ok('the dialog offers the three filter kinds and Parameter, dropdown selected by default',
-     dcOpen.open && JSON.stringify(dcOpen.tiles) === JSON.stringify(['dropdown', 'multi', 'date_range', 'parameter'])
+  // A fourth tile, Parameter, opens its own dialog (smoke-depth.ts drives it); so
+  // does a fifth, Radius (scripts/r6Geo.ts).
+  ok('the dialog offers the three filter kinds, Parameter and Radius, dropdown selected by default',
+     dcOpen.open && JSON.stringify(dcOpen.tiles) === JSON.stringify(['dropdown', 'multi', 'date_range', 'parameter', 'radius'])
        && dcOpen.dropdownOn, JSON.stringify(dcOpen));
 
   // Pick the 'Sales' dataset — every kind's preview reads its columns.

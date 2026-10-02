@@ -346,8 +346,7 @@ async function handleExportVisual(id: string): Promise<void> {
 
   // The saved type FIRST so the dialog opens on what the user saved, then the
   // rest of what this data can actually support.
-  const eligible = eligibleChartTypes(res.recommendedShape, countNumericSeries(data), (data.labels || []).length);
-  if (data.geo) eligible.push('map_choropleth');
+  const eligible = withGeoChartType(eligibleChartTypes(res.recommendedShape, countNumericSeries(data), (data.labels || []).length), data.geo);
   const saved = String(visual.chartType || '');
   const recommended = saved ? [saved].concat(eligible.filter((t) => t !== saved)) : eligible;
 

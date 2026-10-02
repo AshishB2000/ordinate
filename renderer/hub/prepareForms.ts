@@ -256,7 +256,8 @@ function buildStepForm(type: string, body: HTMLElement, existing: any): () => an
       };
     }
     default:
-      return pvBuildMaskForm(type, body, existing) || sgBuildStepForm(type, body, existing) || buildPowerStepForm(type, body, existing); // prepareMask.ts / segments.ts / prepareCombine.ts
+      return pvBuildMaskForm(type, body, existing) || sgBuildStepForm(type, body, existing) // prepareMask / segments
+        || txBuildStepForm(type, body, existing) || buildPowerStepForm(type, body, existing); // textSteps / prepareCombine
   }
 }
 

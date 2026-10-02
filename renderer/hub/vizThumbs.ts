@@ -25,7 +25,7 @@
 // hooks alive until GC. No leaks across repeated section switches.
 
 const VIZ_THUMB_SKIP = new Set(['table']);
-const VIZ_THUMB_MAPS = new Set(['map_bubble', 'map_choropleth']);
+const VIZ_THUMB_MAPS = new Set(['map_bubble', 'map_choropleth', 'map_hexbin', 'map_flow']);
 const VIZ_THUMB_CONCURRENCY = 3;
 
 let vizThumbObserver: IntersectionObserver | null = null;

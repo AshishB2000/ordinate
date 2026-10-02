@@ -47,6 +47,8 @@ function fitDashPresentRows(): void {
     const l = (c && c.layout) || {};
     rows = Math.max(rows, (Number(l.y) || 0) + Math.max(1, Number(l.h) || 1));
   }
+  // A small window presents the tablet layout, which has rows of its own (layoutSizes.ts).
+  rows = lyPresentRows() ?? rows;
   if (rows <= 0) return;
   // Measured against the EDITOR, not the window. #dash-editor is its own scroll
   // box inside a flex column, so sizing to window.innerHeight overshoots by
@@ -105,7 +107,7 @@ const DASH_EXPORT_LIVE_TYPES: Record<string, string> = {
   column: 'bar', line: 'line', line_markers: 'line', area: 'line',
   pie: 'pie', donut: 'doughnut', scatter: 'scatter', bubble: 'bubble',
 };
-function dashIsMapType(t: string): boolean { return t === 'map_bubble' || t === 'map_choropleth'; }
+function dashIsMapType(t: string): boolean { return isMapChartType(t); } // mapKinds.ts
 
 // ── ONE theme for the whole export ───────────────────────────────────────────
 //
@@ -337,6 +339,7 @@ async function assembleExportBundle(forCapture: boolean): Promise<any> {
         cards.push(built);
         continue;
       }
+      if (card.type === 'stats') { cards.push(await swExportCard(card, layout, forCapture, measure)); continue; } // statsTile.ts
       // cardKinds.ts: an image exports as its picture; layout-only kinds as nothing.
       const extra = await exportAuthoringCard(card, layout);
       if (extra !== undefined) { if (extra) cards.push(extra); continue; }
