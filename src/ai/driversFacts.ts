@@ -77,6 +77,12 @@ export function driversFacts(r: DriversResult): CopilotFacts {
     lines.push('');
     lines.push(`The app's own summary: ${r.caption}`);
   }
+  if (r.events && r.events.length) {
+    // r8:events — matched by DATE from the project's Events list, not inferred.
+    lines.push('');
+    lines.push(`Project events during ${r.periods.a} (from the Events list, matched by date — a coincidence in time, not a proven cause):`);
+    for (const e of r.events) lines.push(`- "${e.title}" (${e.kind}, ${e.when})`);
+  }
 
   const text = lines.join('\n');
   // Backstop, as in copilotFacts.sealLedger: a digit in a member NAME or a

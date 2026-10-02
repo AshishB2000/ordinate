@@ -901,6 +901,17 @@ scripts/**/*.js
 /renderer/hub/pipelinesDetail.js
 
 # r8:events
+/renderer/hub/chartEvents.js
+/renderer/hub/eventsPage.js
+/renderer/hub/eventsEditor.js
+/preload/hubEventsPreload.js
+/src/analysis/events.js
+/src/analysis/eventStore.js
+/src/analysis/holidays.js
+/src/ipc/events.js
+/scripts/r8Events.js
+/scripts/test-events.js
+/scripts/test-eventsHolidays.js
 
 # r8:summary
 

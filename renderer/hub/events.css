@@ -1,0 +1,140 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Events — the Data page's Events tab (eventsPage.ts), its editor dialog
+   (eventsEditor.ts) and the kind colours the chart markers share
+   (chartEvents.ts reads the same tokens). Its own file so it does not grow
+   hub.css and concurrent features do not collide in it.
+
+   Structure is borrowed: `.ws-table` / `.ws-row` / `.ws-empty`, the catalog's
+   `.home-pill` filter row, the Format panel's `.cm-switch`, `.ws-modal` with
+   the metric editor's `.me-field`. What follows is this table's grid, the
+   side cards and the dialog's layout. Tokens only — both themes follow. Kind
+   colour rides on the MARK (a glyph per kind), never on text: tinted type on a
+   tint falls short of WCAG AA.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ev-actions-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin-bottom: var(--sp-12);
+}
+.ev-count:empty { display: none; }
+.ev-msg {
+  margin-left: auto;
+  font-size: var(--t-12);
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ev-msg--bad { color: var(--text-strong); }
+.ev-msg--bad::before { content: '●'; color: var(--error); margin-right: 6px; }
+
+/* Table on the left, the calendars and the CSV format in a column on the
+   right; one column below a laptop-narrow window. */
+.ev-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: var(--sp-16);
+  align-items: start;
+}
+
+.ev-kinds { margin-bottom: var(--sp-4); }
+
+/* Event · Kind · When · Applies to · Action. Event takes the slack; When is
+   two lines (the dates, then "38 days · drawn as a band"). */
+.ev-cols,
+.ev-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 2fr) 88px minmax(150px, 1.2fr) minmax(100px, 1fr) 72px;
+  align-items: center;
+  gap: var(--sp-12);
+  min-height: 52px;
+}
+.ev-cols { min-height: 0; }
+.ev-list { display: flex; flex-direction: column; }
+
+.ev-name { display: flex; align-items: center; gap: var(--sp-8); min-width: 0; }
+.ev-mark { flex: none; }
+.ev-k-launch { color: var(--accent); }
+.ev-k-campaign { color: var(--warn); }
+.ev-k-incident { color: var(--error); }
+.ev-k-holiday { color: var(--ok); }
+.ev-k-other { color: var(--text-dim); }
+
+.ev-chip {
+  justify-self: start;
+  font-size: var(--t-11);
+  font-weight: 500;
+  color: var(--muted);
+  background: var(--surface-2);
+  border-radius: var(--r-full);
+  padding: 2px var(--sp-8);
+  white-space: nowrap;
+}
+
+.ev-when { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ev-when-main {
+  font-size: var(--t-12);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ev-when-sub { font-size: var(--t-11); color: var(--text-dim); }
+
+/* ── The side column ── */
+.ev-side { display: flex; flex-direction: column; gap: var(--sp-12); }
+.ev-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--sp-16);
+}
+.ev-card-h { margin: 0; font-size: var(--t-13); font-weight: 600; color: var(--text-strong); }
+.ev-card-p { margin: 0; font-size: var(--t-12); line-height: 1.5; color: var(--muted); }
+.ev-card-p b { color: var(--text); font-weight: 600; }
+.ev-cals { display: flex; flex-direction: column; margin-top: var(--sp-4); }
+.ev-cal { padding: 6px 0; border-top: 1px solid var(--border); gap: var(--sp-8); }
+.ev-cal-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ev-cal-name { font-size: var(--t-12); font-weight: 500; color: var(--text); }
+.ev-cal-sub { font-size: var(--t-11); color: var(--text-dim); }
+.ev-sample {
+  margin: 0;
+  padding: var(--sp-8);
+  background: var(--surface-2);
+  border-radius: var(--r-md);
+  font-family: var(--font-mono);
+  font-size: var(--t-11);
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* ── The editor dialog ── */
+.ev-modal { width: min(560px, calc(100vw - 48px)); }
+.ev-modal-sub { margin: 0 0 var(--sp-12); font-size: var(--t-12); line-height: 1.5; color: var(--muted); }
+.ev-kind-pick { display: flex; flex-wrap: wrap; gap: var(--sp-4); }
+.ev-kind-opt { gap: 6px; }
+.ev-dates,
+.ev-where {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-12);
+}
+.ev-where { gap: var(--sp-8); }
+.ev-dates .me-field { margin-bottom: 0; }
+.ev-dates { margin-bottom: var(--sp-12); }
+
+/* Below a wide window the cards move under the table, side by side. Last in
+   the file so it outranks the base rules above. */
+@media (max-width: 1320px) {
+  .ev-layout { grid-template-columns: minmax(0, 1fr); }
+  .ev-side { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); align-items: start; }
+}

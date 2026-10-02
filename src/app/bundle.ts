@@ -47,6 +47,7 @@ const ENTRY_RULES: Array<{ re: RegExp; count?: string }> = [
   { re: /^manifest\.json$/ },
   { re: /^project\.json$/ },
   { re: /^alerts\.json$/ },
+  { re: /^events\.json$/ }, // r8:events — the project's Events list
   { re: new RegExp(`^datasets/${UUID}\\.json$`, 'i'), count: 'datasets' },
   { re: new RegExp(`^datasets/${UUID}(?:\\.source)?\\.parquet$`, 'i'), count: 'parquet' },
   { re: new RegExp(`^visuals/${UUID}\\.json$`, 'i'), count: 'visuals' },

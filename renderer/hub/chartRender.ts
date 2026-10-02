@@ -367,6 +367,9 @@ function buildChart(
       order: sortOrder, pinTarget: overrides.commentPinTarget || null, fmt, fontFamily,
     }));
   }
+  // r8:events — the project's events on a date axis (chartEvents.js), unless this visual hides them.
+  const evMarks = typeof evDrawable === 'function' ? evDrawable(data, spec, !!sortOrder, overrides) : [];
+  if (evMarks.length) inlinePlugins.push(eventsPlugin({ events: evMarks, fontFamily, isStatic: !!overrides.devicePixelRatio }));
 
   // ── Series filter (period multi-select) ────────────────────────────────────
   // Hide deselected series. Indices align with `series` (both use chartSeries()).

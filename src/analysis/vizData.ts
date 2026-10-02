@@ -22,6 +22,7 @@ import type { CategoryInfo, CivilDate, DateGrain } from './categoryKey';
 import { buildPivotGrid, pivotChartData } from './pivotData';
 import type { PivotGrid } from './pivotData';
 import type { ResolvedOverlay } from './analytics';
+import type { EventMark } from './events';
 import { engineVizData } from './engineViz';
 import type { CohortGrid } from './cohortData';
 import type { EventFunnel } from './funnelEvents';
@@ -57,6 +58,8 @@ export interface VizDataResult {
     analytics?: ResolvedOverlay[];
     /** Small multiples (./facets): one panel per facet value, beside a flattened `{labels, series}`. */
     facets?: FacetGrid;
+    /** The project's events on a date axis (./events), when any land on it. r8:events */
+    events?: EventMark[];
   };
   recommendedShape: string; // feeds the renderer's eligibleChartTypes()
   warnings: string[];

@@ -19,6 +19,7 @@ export function register(deps: Round8Deps): void {
   require('./pipelines').register(deps); // the Data page's Pipelines tab: one DAG, run, schedule, history
 
   // r8:events
+  (require('./events') as typeof import('./events')).register();
 
   // r8:summary
 

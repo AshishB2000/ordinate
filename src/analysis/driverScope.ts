@@ -61,6 +61,8 @@ export interface PeriodScopes {
   bLabel: string;
   /** The date column the periods are cut on — what an alert would watch. */
   column: string;
+  /** Period A's dates, when known — what events are matched against (./events). r8:events */
+  aRange?: DateRange;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -241,6 +243,7 @@ export function periodScopes(spec: DriversSpec, columns: ParsedColumn[]): Period
       aLabel: rangeLabel(ra),
       bLabel: rangeLabel(rb),
       column: c.column,
+      aRange: ra,
     };
   }
   if (c.mode === 'latest') return { reason: 'The latest periods are read from the data.' };
@@ -254,6 +257,7 @@ export function periodScopes(spec: DriversSpec, columns: ParsedColumn[]): Period
     aLabel: moved.range.from || moved.range.to ? rangeLabel(moved.range) : 'Now',
     bLabel: rangeLabel(moved.prior) || describeCompare(c.mode),
     column: moved.column,
+    aRange: moved.range,
   };
 }
 

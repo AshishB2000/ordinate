@@ -191,6 +191,8 @@ export interface VizOverrides extends FormatOverrides {
   bulletTarget?: number;
   /** Waterfall: categories drawn as totals, beyond those LABELLED "Total"/"Subtotal"/"Grand total". */
   waterfallTotals?: string[];
+  /** Project events on a date axis (analysis/events). Absent = shown; only `false` hides them. r8:events */
+  showEvents?: boolean;
 }
 
 export interface Visual {
@@ -417,6 +419,7 @@ export function sanitizeOverrides(raw: unknown, ctx?: FormatContext): VizOverrid
   if ('smooth' in o) out.smooth = Boolean(o.smooth);
   if ('crossFilter' in o) out.crossFilter = Boolean(o.crossFilter);
   if ('showTooltips' in o) out.showTooltips = Boolean(o.showTooltips);
+  if (o.showEvents === false) out.showEvents = false; // r8:events — absent = on
 
   // Numeric fields — finite numbers only.
   if (Array.isArray(o.hiddenSeries)) {

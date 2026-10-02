@@ -18,7 +18,7 @@
 // the empty state is `.ws-empty`. Only `.cap-card-img` is new, and it is the
 // image frame.
 
-type ClTab = 'datasets' | 'captures' | 'metrics' | 'query' | 'catalog' | 'pipelines';
+type ClTab = 'datasets' | 'captures' | 'metrics' | 'query' | 'catalog' | 'pipelines' | 'events';
 let clActive: ClTab = 'datasets';
 
 function clEl(id: string): HTMLElement | null {
@@ -57,6 +57,10 @@ const CL_TABS: Array<{ id: ClTab; tab: string; panel: string; sub: string }> = [
   {
     id: 'pipelines', tab: 'ds-tab-pipelines', panel: 'pq-wrap',
     sub: 'Everything that runs on a schedule or after another step, as one pipeline — run it, schedule it and read every run.',
+  },
+  {
+    id: 'events', tab: 'ds-tab-events', panel: 'ev-wrap', // r8:events — eventsPage.ts wires the click
+    sub: 'Launches, campaigns, incidents and holidays. Every chart with a date axis marks them, and findings name the one a change landed in.',
   },
 ];
 

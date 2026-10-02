@@ -156,7 +156,28 @@ export function sanitizePayload(raw: unknown): unknown {
   if (o.pivot) out.pivot = sanitizePivot(o.pivot);
   if (o.geo) out.geo = sanitizeGeo(o.geo);
   if (typeof o.hidden === 'string') out.hidden = str(o.hidden, MAX_LABEL);
+  if (Array.isArray(o.events)) out.events = sanitizeEventMarks(o.events, data.labels.length);
   return out;
+}
+
+const EVENT_KINDS: ReadonlySet<string> = new Set(['launch', 'campaign', 'incident', 'holiday', 'other']);
+
+/**
+ * r8:events — a chart's event markers: a closed-enum kind, two strings and two
+ * label indices inside the chart. Nothing else of an event (its id, its scope,
+ * the datasets and filters it names) reaches a page.
+ */
+function sanitizeEventMarks(raw: unknown[], labelCount: number): Obj[] {
+  if (!labelCount) return [];
+  return arr(raw, 200).map((r) => {
+    const o = obj(r);
+    const from = int(o.from, 0, Math.max(0, labelCount - 1), -1);
+    const to = int(o.to, 0, Math.max(0, labelCount - 1), -1);
+    return {
+      kind: EVENT_KINDS.has(o.kind as string) ? o.kind : 'other',
+      title: str(o.title, MAX_LABEL), when: str(o.when, 120), from, to: Math.max(from, to), range: o.range === true,
+    };
+  }).filter((e) => (e.from as number) >= 0 && e.title);
 }
 
 /**

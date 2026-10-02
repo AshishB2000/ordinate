@@ -11,6 +11,8 @@ import * as computePool from '../engine/computePool';
 import * as answerKey from '../data/answerKey';
 import * as jobs from '../app/jobs';
 import type { ParsedColumn } from '../data/parse';
+import { attributeInsights } from '../analysis/events'; // r8:events
+import { projectEvents } from '../analysis/eventStore';
 
 // Insights IPC — two channels, both request/response, both wrapped so a throw
 // becomes { ok:false, error }.
@@ -62,7 +64,10 @@ export async function insightsForDataset(projectId: string, datasetId: string): 
     const parts = await answerKey.keyParts(projectId, datasetId);
     if (!parts) return [];
     const key = queryCache.cacheKey('insights', parts, answerKey.ambient());
-    return await queryCache.through('insights', key, [datasetId, queryCache.projectDep(projectId)], async () => {
+    // The project's events are matched AFTER the cache, on a copy: an event
+    // edit must not wait for the data to change to be named. r8:events
+    const named = (list: Insight[]): Promise<Insight[]> => projectEvents(projectId).then((evs) => attributeInsights(list, evs));
+    return await named(await queryCache.through('insights', key, [datasetId, queryCache.projectDep(projectId)], async () => {
       if (meta.rowCount < JOB_MIN_ROWS) return scan(projectId, datasetId);
       const job = jobs.submit({
         kind: 'insights',
@@ -73,7 +78,7 @@ export async function insightsForDataset(projectId: string, datasetId: string): 
         resultOf: (list) => ({ message: `${list.length} finding${list.length === 1 ? '' : 's'}` }),
       });
       return job.done;
-    });
+    }));
   } catch (_) {
     return [];
   }

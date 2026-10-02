@@ -16,6 +16,7 @@ import { withPeriodOverlay } from './visualsOverlay';
 import { sampledVizData } from './vizSampleData';
 import type { SampleInfo } from '../analysis/sampling';
 import { withAnalytics } from './visualsAnalytics';
+import { withEvents } from './events'; // r8:events
 import { sanitizeOverlays } from '../analysis/analytics';
 import { withTableCalcs } from '../analysis/tableCalc';
 import { paramValues, resolveFilterParams } from '../analysis/params';
@@ -579,7 +580,7 @@ export function register() {
       // The Analytics pane's overlays, resolved on the finished reply under the
       // same scope — AFTER the share policy, so an overlay can only name what
       // the shaped chart still shows.
-      const reply = await withAnalytics(shaped, projectId, sanitizeOverlays(analytics), flt, values);
+      const reply = await withEvents(await withAnalytics(shaped, projectId, sanitizeOverlays(analytics), flt, values), projectId, datasetId, flt); // r8:events
       // A parameter that cannot be made well-typed is a VALIDATION message the
       // tile shows — never a silently empty chart.
       return reply.ok && bound.errors.length
