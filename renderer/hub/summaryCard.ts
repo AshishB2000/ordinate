@@ -16,7 +16,7 @@ const SUM_ICONS: Record<string, string> = {
   kpi: 'trending-up', driver: 'chart-bar', insight: 'sparkles', quality: 'shield', alert: 'bell',
 };
 const SUM_KIND_LABEL: Record<string, string> = {
-  kpi: 'Headline', driver: 'Largest contributor', insight: 'Insight', quality: 'Data quality', alert: 'Alert',
+  kpi: t('summaryCard.headline'), driver: t('summaryCard.largest_contributor'), insight: t('insights.insight'), quality: t('summaryCard.data_quality'), alert: t('common.alert'),
 };
 /** A summary card's grid footprint: the full width, room for five sentences. */
 const SUM_LAYOUT = { x: 0, y: 0, w: 12, h: 4 };
@@ -55,12 +55,12 @@ function sumJump(cardId: string): void {
 }
 
 function sumStamp(at: string): string {
-  const t = new Date(at);
-  const time = Number.isNaN(t.getTime()) ? '' : t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const tv = new Date(at);
+  const time = Number.isNaN(tv.getTime()) ? '' : tv.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const asOf = typeof snapDashAsOf === 'string' && snapDashAsOf
-    ? ' · data as of ' + new Date(snapDashAsOf).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+    ? t('summaryCard.data_as_of') + new Date(snapDashAsOf).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
     : '';
-  return 'Updated ' + time + asOf;
+  return t('summaryCard.updated', { time, asOf });
 }
 
 function sumList(sentences: any[]): HTMLElement {
@@ -78,7 +78,7 @@ function sumList(sentences: any[]): HTMLElement {
     text.textContent = s.text;
     if (s.cardId) {
       (text as HTMLButtonElement).type = 'button';
-      text.title = 'Show the ' + (SUM_KIND_LABEL[s.kind] || 'source').toLowerCase() + ' tile';
+      text.title = t('summaryCard.show_the_tile', { p0: (SUM_KIND_LABEL[s.kind] || 'source').toLowerCase() });
       text.addEventListener('click', () => sumJump(String(s.cardId)));
     }
     li.append(ic, text);
@@ -93,12 +93,12 @@ async function renderSummaryCard(card: any, body: HTMLElement): Promise<void> {
   try {
     res = await window.hubSummary.compute(sumRequest());
   } catch (_) {
-    res = { ok: false, error: 'Could not summarise this dashboard.' };
+    res = { ok: false, error: t('summaryCard.could_not_summarise_this_dashboard') };
   } finally {
     skelClear(body);
   }
   if (!body.isConnected) return; // the grid re-rendered while this was in flight
-  if (!res || !res.ok) { dashCardMissing(body, (res && res.error) || 'Could not summarise this dashboard.', false); return; }
+  if (!res || !res.ok) { dashCardMissing(body, (res && res.error) || t('summaryCard.could_not_summarise_this_dashboard'), false); return; }
   sumPaint(card, body, res);
 }
 
@@ -110,8 +110,8 @@ function sumPaint(card: any, body: HTMLElement, res: any): void {
   const sentences: any[] = res.sentences || [];
   if (!sentences.length) {
     box.appendChild(makeEmptyState({
-      variant: 'summary', iconName: 'sparkles', title: 'Nothing to summarise yet',
-      line: 'Add a KPI card or a chart. This card then says what moved, what drove it, and what needs a look.',
+      variant: 'summary', iconName: 'sparkles', title: t('summaryCard.nothing_to_summarise_yet'),
+      line: t('summaryCard.add_a_kpi_card_or_a'),
     }));
     return;
   }
@@ -132,27 +132,27 @@ function sumPaint(card: any, body: HTMLElement, res: any): void {
   foot.className = 'sum-foot';
   const stamp = document.createElement('span');
   stamp.className = 'sum-stamp tnum';
-  stamp.textContent = sumStamp(res.computedAt) + (rewritten ? ' · rewritten by the Assistant from these facts' : '');
+  stamp.textContent = sumStamp(res.computedAt) + (rewritten ? t('summaryCard.rewritten_by_the_assistant_from_these') : '');
   foot.appendChild(stamp);
   if (rewritten) {
     const back = document.createElement('button');
     back.type = 'button';
     back.className = 'btn btn-ghost btn-sm sum-btn';
-    iconLabel(back, 'list', 'Show the sentences', 14);
+    iconLabel(back, 'list', t('summaryCard.show_the_sentences'), 14);
     back.addEventListener('click', () => { sumProse.delete(card.id); sumPaint(card, body, res); });
     foot.appendChild(back);
   } else if (res.canRewrite) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn btn-ghost btn-sm sum-btn sum-rewrite';
-    iconLabel(btn, 'sparkles', 'Rewrite', 14);
-    btn.title = 'Narrate these facts as prose. The Assistant may only restate the figures above.';
+    iconLabel(btn, 'sparkles', t('summaryCard.rewrite'), 14);
+    btn.title = t('summaryCard.narrate_these_facts_as_prose_the');
     btn.addEventListener('click', () => void sumRewrite(card, body, res, key, btn));
     foot.appendChild(btn);
   } else {
     const note = document.createElement('span');
     note.className = 'sum-note';
-    note.textContent = 'Rewrite needs a model';
+    note.textContent = t('summaryCard.rewrite_needs_a_model');
     note.title = res.rewriteReason || '';
     foot.appendChild(note);
   }
@@ -162,12 +162,12 @@ function sumPaint(card: any, body: HTMLElement, res: any): void {
 async function sumRewrite(card: any, body: HTMLElement, res: any, key: string, btn: HTMLButtonElement): Promise<void> {
   btn.disabled = true;
   btn.classList.add('is-busy');
-  iconLabel(btn, 'loader', 'Rewriting…', 14);
+  iconLabel(btn, 'loader', t('summaryCard.rewriting'), 14);
   let out: any;
   try { out = await window.hubSummary.rewrite(sumRequest()); } catch (_) { out = null; }
   if (!body.isConnected) return;
   if (!out || !out.ok) {
-    showToast((out && out.error) || 'Could not rewrite the summary. The app’s sentences stay.');
+    showToast((out && out.error) || t('summaryCard.could_not_rewrite_the_summary_the'));
     sumPaint(card, body, res);
     return;
   }
@@ -179,8 +179,8 @@ async function sumRewrite(card: any, body: HTMLElement, res: any, key: string, b
 async function sumExportCard(layout: any): Promise<any> {
   let res: any;
   try { res = await window.hubSummary.compute(sumRequest({ asOf: null, outbound: true })); } catch (_) { res = null; }
-  if (!res || !res.ok) return { kind: 'broken', layout, reason: (res && res.error) || 'Could not summarise this dashboard' };
-  return { kind: 'text', layout, heading: 'Summary', text: (res.sentences || []).map((s: any) => s.text).join('\n\n') };
+  if (!res || !res.ok) return { kind: 'broken', layout, reason: (res && res.error) || t('summaryCard.could_not_summarise_this_dashboard_2') };
+  return { kind: 'text', layout, heading: t('common.summary'), text: (res.sentences || []).map((s: any) => s.text).join('\n\n') };
 }
 
 /**
@@ -208,9 +208,9 @@ function sumAddToTop(): void {
   const page = dashCurrentPage();
   if (!page) return;
   if (!Array.isArray(page.cards)) page.cards = [];
-  if (page.cards.some((c: any) => c && c.type === 'summary')) { showToast('This sheet already has a Summary'); return; }
+  if (page.cards.some((c: any) => c && c.type === 'summary')) { showToast(t('summaryCard.this_sheet_already_has_a_summary')); return; }
   for (const c of page.cards) if (c && c.type !== 'control' && c.layout) c.layout.y = (c.layout.y || 0) + SUM_LAYOUT.h;
   page.cards.unshift({ id: dashUuid(), type: 'summary', layout: { ...SUM_LAYOUT } });
-  markDashDirty('Add summary');
+  markDashDirty(t('summaryCard.add_summary'));
   renderDashGrid();
 }

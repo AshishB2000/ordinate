@@ -32,7 +32,7 @@ function cardKindTitle(card: any): string {
   if (card.type === 'divider') return t('common.divider');
   if (card.type === 'container' || card.type === 'tabs') return groupTitle(card);
   if (card.type === 'stats') return swTileTitle(card);
-  if (card.type === 'summary') return 'Summary';
+  if (card.type === 'summary') return t('common.summary');
   return t('common.text');
 }
 
@@ -73,7 +73,7 @@ const KIND_ADDS: Array<[string, string, () => void | Promise<void>]> = [
   [t('common.container'), 'layout-dashboard', () => handleAddGroup('container')],
   [t('common.tabs'), 'columns', () => handleAddGroup('tabs')],
   [t('common.navigation'), 'arrow-right', handleAddNav],
-  ['Summary', 'sparkles', () => sumAddToTop()], // summaryCard.ts (loads later)
+  [t('common.summary'), 'sparkles', () => sumAddToTop()], // summaryCard.ts (loads later)
 ];
 
 /** What an export shows for a kind here: an image as its picture; layout-only kinds as nothing. */

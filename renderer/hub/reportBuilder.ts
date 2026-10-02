@@ -468,7 +468,7 @@ async function rbGenerate(): Promise<void> {
     // file manager over the app (on Linux, xdg-open may start a browser).
     showToast(t('reportBuilder.saved', { message: out.message }), {
       kind: 'success',
-      action: { label: 'Show in folder', onClick: () => { void window.hub.reportsReveal(projectId, report.id); } },
+      action: { label: t('reportBuilder.show_in_folder'), onClick: () => { void window.hub.reportsReveal(projectId, report.id); } },
     });
   } else if (failed) {
     showToast(failed);

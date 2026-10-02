@@ -827,9 +827,9 @@
           <button class="ds-tab" type="button" role="tab" id="ds-tab-catalog"
                   aria-selected="false" aria-controls="ct-wrap" tabindex="-1" data-i18n="html.catalog">Catalog</button>
           <button class="ds-tab" type="button" role="tab" id="ds-tab-pipelines"
-                  aria-selected="false" aria-controls="pq-wrap" tabindex="-1">Pipelines</button>
+                  aria-selected="false" aria-controls="pq-wrap" tabindex="-1" data-i18n="html.pipelines">Pipelines</button>
           <button class="ds-tab" type="button" role="tab" id="ds-tab-events"
-                  aria-selected="false" aria-controls="ev-wrap" tabindex="-1">Events</button>
+                  aria-selected="false" aria-controls="ev-wrap" tabindex="-1" data-i18n="html.events">Events</button>
         </div>
 
         <!-- r8:pipelines — the Pipelines tab: one DAG of everything that runs,
@@ -876,42 +876,42 @@
              holiday calendars and the CSV format. events.css lays it out. -->
         <div id="ev-wrap" class="ev" role="tabpanel" aria-labelledby="ds-tab-events" hidden>
           <div class="ds-head-actions ev-actions-row">
-            <button class="btn btn-primary" type="button" id="ev-new"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-plus"/></svg><span>New event</span></button>
-            <button class="btn btn-ghost" type="button" id="ev-import"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-upload"/></svg><span>Import CSV</span></button>
+            <button class="btn btn-primary" type="button" id="ev-new"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-plus"/></svg><span data-i18n="common.new_event">New event</span></button>
+            <button class="btn btn-ghost" type="button" id="ev-import"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-upload"/></svg><span data-i18n="html.import_csv">Import CSV</span></button>
             <input type="file" id="ev-file" accept=".csv,text/csv" hidden />
             <span class="viz-count ev-count" id="ev-count"></span>
             <span class="ev-msg" id="ev-msg" role="status" aria-live="polite"></span>
           </div>
           <div class="ev-layout">
             <div class="ws-table ev-table">
-              <div class="ct-kinds ev-kinds" id="ev-kinds" role="group" aria-label="Event kinds" hidden></div>
+              <div class="ct-kinds ev-kinds" id="ev-kinds" role="group" aria-label="Event kinds" hidden data-i18n-aria-label="html.event_kinds"></div>
               <div class="ws-table-cols ev-cols" id="ev-cols" hidden>
-                <span>Event</span>
-                <span>Kind</span>
-                <span>When</span>
-                <span>Applies to</span>
-                <span class="ws-col-action">Action</span>
+                <span data-i18n="common.event">Event</span>
+                <span data-i18n="common.kind">Kind</span>
+                <span data-i18n="common.when">When</span>
+                <span data-i18n="common.applies_to">Applies to</span>
+                <span class="ws-col-action" data-i18n="common.action">Action</span>
               </div>
               <div class="ev-list" id="ev-list"></div>
               <div class="ws-empty ev-empty" id="ev-empty" hidden>
                 <span class="ws-empty-icon" aria-hidden="true"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="#i-calendar"/></svg></span>
-                <h3 class="ws-empty-h">No events yet</h3>
-                <p class="ws-empty-p">Add a launch, a campaign or an outage and every chart with a date axis marks it — a line for a day, a band for a range. When a figure changes during one, Insights and Key drivers say so.</p>
+                <h3 class="ws-empty-h" data-i18n="html.no_events_yet">No events yet</h3>
+                <p class="ws-empty-p" data-i18n="html.add_a_launch_a_campaign_or">Add a launch, a campaign or an outage and every chart with a date axis marks it — a line for a day, a band for a range. When a figure changes during one, Insights and Key drivers say so.</p>
                 <div class="ws-empty-actions">
-                  <button class="btn btn-primary" type="button" id="ev-empty-new">New event</button>
-                  <button class="btn btn-ghost" type="button" id="ev-empty-import">Import CSV</button>
+                  <button class="btn btn-primary" type="button" id="ev-empty-new" data-i18n="common.new_event">New event</button>
+                  <button class="btn btn-ghost" type="button" id="ev-empty-import" data-i18n="html.import_csv">Import CSV</button>
                 </div>
               </div>
             </div>
-            <aside class="ev-side" aria-label="Calendars and import">
+            <aside class="ev-side" aria-label="Calendars and import" data-i18n-aria-label="html.calendars_and_import">
               <section class="ev-card">
-                <h3 class="ev-card-h">Holiday calendars</h3>
-                <p class="ev-card-p">Public holidays, 2015 to 2035, bundled with the app. Switch one on and its holidays mark every date axis in this project.</p>
+                <h3 class="ev-card-h" data-i18n="html.holiday_calendars">Holiday calendars</h3>
+                <p class="ev-card-p" data-i18n="html.public_holidays_2015_to_2035_bundled">Public holidays, 2015 to 2035, bundled with the app. Switch one on and its holidays mark every date axis in this project.</p>
                 <div class="ev-cals" id="ev-cals"></div>
               </section>
               <section class="ev-card">
-                <h3 class="ev-card-h">Importing a CSV</h3>
-                <p class="ev-card-p">One row per event. <b>date</b> and <b>title</b> are required; <b>end</b> makes it a range and <b>kind</b> is launch, campaign, incident, holiday or other.</p>
+                <h3 class="ev-card-h" data-i18n="html.importing_a_csv">Importing a CSV</h3>
+                <p class="ev-card-p"><span data-i18n="html.one_row_per_event">One row per event.</span> <b data-i18n="html.date">date</b> <span data-i18n="html.and">and</span> <b data-i18n="html.title">title</b> <span data-i18n="html.are_required">are required;</span> <b data-i18n="html.end">end</b> <span data-i18n="html.makes_it_a_range_and">makes it a range and</span> <b data-i18n="html.kind">kind</b> <span data-i18n="html.is_launch_campaign_incident_holiday_or">is launch, campaign, incident, holiday or other.</span></p>
                 <pre class="ev-sample">date,end,title,kind
 2024-11-25,2024-12-31,Holiday campaign,campaign
 2024-03-04,,v2 launch,launch</pre>

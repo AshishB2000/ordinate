@@ -32,8 +32,8 @@ async function dsrPaletteGroup(q: string): Promise<CpGroup | null> {
   try { res = await window.hubDataSearch.query(currentProjectId || '', term, dashId); } catch (_) { res = null; }
   if (!res || !res.ok || !Array.isArray(res.hits) || !res.hits.length) return null;
   const partial = Array.isArray(res.partial) && res.partial.length
-    ? ` · ${res.partial.length} ${res.partial.length === 1 ? 'dataset' : 'datasets'} partly searched` : '';
-  return { label: 'Data' + partial, rows: res.hits.map((h: any) => dsrHitRow(h, !currentProjectId)) };
+    ? t('dataSearch.partly_searched', { partialCount: res.partial.length }) : '';
+  return { label: t('dataSearch.data', { partial }), rows: res.hits.map((h: any) => dsrHitRow(h, !currentProjectId)) };
 }
 
 /** While the values are being searched: a quiet line under what is already painted. */
@@ -45,11 +45,11 @@ function dsrPaintPending(): void {
   if (none) none.remove();
   const label = document.createElement('div');
   label.className = 'cp-group dsr-pending';
-  label.textContent = 'Data';
+  label.textContent = t('common.data');
   const line = document.createElement('div');
   line.className = 'dsr-pending-line dsr-pending';
   line.appendChild(icon('loader', 14));
-  line.appendChild(document.createTextNode('Searching values inside your datasets…'));
+  line.appendChild(document.createTextNode(t('dataSearch.searching_values_inside_your_datasets')));
   box.append(label, line);
 }
 
@@ -60,21 +60,21 @@ function dsrRowsLabel(n: number): string {
 function dsrHitRow(h: any, showProject: boolean): CpRow {
   const where = `${h.datasetName} / ${h.column}` + (showProject && h.projectName ? ` · ${h.projectName}` : '');
   const actions: CpRow[] = [{
-    title: 'Open filtered to it',
-    meta: `${h.datasetName} where ${h.column} is ${h.value}`,
+    title: t('dataSearch.open_filtered_to_it'),
+    meta: t('dataSearch.where_is', { datasetName: h.datasetName, column: h.column, value: h.value }),
     icon: 'table',
     run: () => { paletteClose(); void dsrOpenFiltered(h); },
   }];
   if (h.onDashboard && typeof ftDashboardOpen === 'function' && ftDashboardOpen()) {
     actions.push({
-      title: 'Filter this dashboard',
-      meta: `${dashCurrent.name || 'The open dashboard'} · ${h.column} = ${h.value}`,
+      title: t('dataSearch.filter_this_dashboard'),
+      meta: `${dashCurrent.name || t('paletteRows.the_open_dashboard')} · ${h.column} = ${h.value}`,
       icon: 'filter',
       run: () => { paletteClose(); dsrFilterDashboard(h); },
     });
   }
   actions.push({
-    title: 'Profile the column',
+    title: t('dataSearch.profile_the_column'),
     meta: `${h.column} in ${h.datasetName}`,
     icon: 'chart-bar',
     run: () => { paletteClose(); void dsrProfile(h); },
@@ -121,7 +121,7 @@ function dsrFilterDashboard(h: any): void {
 async function dsrProfile(h: any): Promise<void> {
   if (!(await dsrOpenDataset(h))) return;
   const i = expColumns.findIndex((c) => c.name === h.column);
-  if (i < 0) { showToast(`${h.column} is no longer in ${h.datasetName}.`); return; }
+  if (i < 0) { showToast(t('dataSearch.is_no_longer_in', { column: h.column, datasetName: h.datasetName })); return; }
   if (dsProfileCol !== i) await dsOpenProfile(i);
 }
 
@@ -159,11 +159,11 @@ function dsrPaintBanner(): void {
   col.textContent = dsrGridFilter.column;
   const val = document.createElement('strong');
   val.textContent = dsrGridFilter.value;
-  text.append(`Showing ${dsrRowsLabel(expTotal)} where `, col, ' is ', val);
+  text.append(t('dataSearch.showing_where', { expTotal: dsrRowsLabel(expTotal) }), col, t('dataSearch.is'), val);
   const clear = document.createElement('button');
   clear.type = 'button';
   clear.className = 'dq-banner-clear';
-  iconLabel(clear, 'x', 'Clear');
+  iconLabel(clear, 'x', t('common.clear'));
   clear.addEventListener('click', () => {
     dsrGridFilter = null;
     expOffset = 0;

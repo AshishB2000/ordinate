@@ -56,11 +56,11 @@ const CL_TABS: Array<{ id: ClTab; tab: string; panel: string; sub: string }> = [
   },
   {
     id: 'pipelines', tab: 'ds-tab-pipelines', panel: 'pq-wrap',
-    sub: 'Everything that runs on a schedule or after another step, as one pipeline — run it, schedule it and read every run.',
+    sub: t('captureList.everything_that_runs_on_a_schedule'),
   },
   {
     id: 'events', tab: 'ds-tab-events', panel: 'ev-wrap', // r8:events — eventsPage.ts wires the click
-    sub: 'Launches, campaigns, incidents and holidays. Every chart with a date axis marks them, and findings name the one a change landed in.',
+    sub: t('captureList.launches_campaigns_incidents_and'),
   },
 ];
 

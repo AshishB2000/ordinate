@@ -14,23 +14,23 @@ function evEdit(existing: any): Promise<void> {
     let done = false;
     let a11y: { onTabKey: (e: KeyboardEvent) => void; release: () => void } | null = null;
     const draft: any = existing ? JSON.parse(JSON.stringify(existing)) : { kind: 'launch' };
-    const title = existing ? 'Edit event' : 'New event';
+    const title = existing ? t('eventsEditor.edit_event') : t('common.new_event');
 
     const overlay = evMk('div', 'ws-modal-overlay');
     const box = evMk('div', 'ws-modal ev-modal');
     box.appendChild(evMk('div', 'ws-modal-title', title));
-    box.appendChild(evMk('p', 'ev-modal-sub', 'Charts with a date axis mark it at their own grain — a day, week, month, quarter or year — and findings that change during it name it.'));
+    box.appendChild(evMk('p', 'ev-modal-sub', t('eventsEditor.charts_with_a_date_axis_mark')));
 
     const name = evMk<HTMLInputElement>('input', 'ws-modal-input ev-in-title');
     name.type = 'text';
     name.maxLength = 200;
-    name.placeholder = 'e.g. Holiday campaign';
+    name.placeholder = t('eventsEditor.e_g_holiday_campaign');
     name.value = draft.title || '';
-    box.appendChild(meField('Title', name));
+    box.appendChild(meField(t('common.title'), name));
 
     const kinds = evMk('div', 'ev-kind-pick');
     kinds.setAttribute('role', 'radiogroup');
-    kinds.setAttribute('aria-label', 'Kind');
+    kinds.setAttribute('aria-label', t('common.kind'));
     const paintKinds = (): void => {
       kinds.textContent = '';
       EV_KINDS.forEach(([k, label]) => {
@@ -45,7 +45,7 @@ function evEdit(existing: any): Promise<void> {
       });
     };
     paintKinds();
-    box.appendChild(meField('Kind', kinds));
+    box.appendChild(meField(t('common.kind'), kinds));
 
     const dates = evMk('div', 'ev-dates');
     const start = evMk<HTMLInputElement>('input', 'ws-modal-input ev-in-date');
@@ -54,29 +54,29 @@ function evEdit(existing: any): Promise<void> {
     const end = evMk<HTMLInputElement>('input', 'ws-modal-input ev-in-end');
     end.type = 'date';
     end.value = draft.end || '';
-    dates.append(meField('Starts', start), meField('Ends', end, 'Leave empty for a single day.'));
+    dates.append(meField(t('eventsEditor.starts'), start), meField(t('eventsEditor.ends'), end, t('eventsEditor.leave_empty_for_a_single_day')));
     box.appendChild(dates);
 
     const ds = evMk<HTMLSelectElement>('select', 'ws-modal-input ev-in-dataset');
-    ds.appendChild(new Option('Every dataset', ''));
+    ds.appendChild(new Option(t('eventsEditor.every_dataset'), ''));
     evState.datasets.forEach((d) => ds.appendChild(new Option(String(d.name), String(d.id))));
     const scope = draft.scope || {};
     ds.value = Array.isArray(scope.datasetIds) && scope.datasetIds[0] ? scope.datasetIds[0] : '';
-    box.appendChild(meField('Applies to', ds));
+    box.appendChild(meField(t('common.applies_to'), ds));
 
     const where = evMk('div', 'ev-where');
     const col = evMk<HTMLSelectElement>('select', 'ws-modal-input ev-in-col');
     const val = evMk<HTMLInputElement>('input', 'ws-modal-input ev-in-val');
     val.type = 'text';
-    val.placeholder = 'Value, e.g. West';
+    val.placeholder = t('eventsEditor.value_e_g_west');
     const f0 = Array.isArray(scope.filters) && scope.filters[0] ? scope.filters[0] : null;
     val.value = f0 ? (f0.values || []).join(', ') : '';
     where.append(col, val);
-    const whereField = meField('Only where', where, 'Optional. A chart filtered to a different value of this column does not show it.');
+    const whereField = meField(t('eventsEditor.only_where'), where, t('eventsEditor.optional_a_chart_filtered_to_a'));
     box.appendChild(whereField);
     const loadColumns = async (): Promise<void> => {
       col.textContent = '';
-      col.appendChild(new Option('Any column', ''));
+      col.appendChild(new Option(t('eventsEditor.any_column'), ''));
       let meta: any = null;
       try { meta = ds.value && currentProjectId ? await window.hub.getDatasetMeta(currentProjectId, ds.value) : null; } catch (_) { meta = null; }
       const cols: any[] = meta && Array.isArray(meta.columns) ? meta.columns : [];
@@ -93,9 +93,9 @@ function evEdit(existing: any): Promise<void> {
     box.appendChild(err);
 
     const actions = evMk('div', 'ws-modal-actions');
-    const cancel = evMk<HTMLButtonElement>('button', 'btn btn-ghost', 'Cancel');
+    const cancel = evMk<HTMLButtonElement>('button', 'btn btn-ghost', t('common.cancel'));
     cancel.type = 'button';
-    const save = evMk<HTMLButtonElement>('button', 'btn btn-primary ev-save', existing ? 'Save event' : 'Add event');
+    const save = evMk<HTMLButtonElement>('button', 'btn btn-primary ev-save', existing ? t('eventsEditor.save_event') : t('eventsEditor.add_event'));
     save.type = 'button';
     actions.append(cancel, save);
     box.appendChild(actions);
@@ -122,13 +122,13 @@ function evEdit(existing: any): Promise<void> {
       if (ds.value) sc.datasetIds = [ds.value];
       if (col.value && values.length) sc.filters = [{ type: 'filter', column: col.value, op: 'in', values }];
       if (sc.datasetIds || sc.filters) ev.scope = sc;
-      if (!ev.title || !ev.date) { err.textContent = 'An event needs a title and a start date.'; err.hidden = false; return; }
+      if (!ev.title || !ev.date) { err.textContent = t('eventsEditor.an_event_needs_a_title_and'); err.hidden = false; return; }
       save.disabled = true;
       let res: any = null;
-      try { res = await window.hubEvents.save(currentProjectId, ev); } catch (e: any) { res = { ok: false, error: (e && e.message) || 'Could not save' }; }
+      try { res = await window.hubEvents.save(currentProjectId, ev); } catch (e: any) { res = { ok: false, error: (e && e.message) || t('common.could_not_save') }; }
       save.disabled = false;
-      if (!res || !res.ok) { err.textContent = (res && res.error) || 'Could not save the event.'; err.hidden = false; return; }
-      evFlash(existing ? `Saved "${res.event.title}".` : `Added "${res.event.title}" — every date axis it falls on now marks it.`);
+      if (!res || !res.ok) { err.textContent = (res && res.error) || t('eventsEditor.could_not_save_the_event'); err.hidden = false; return; }
+      evFlash(existing ? t('eventsEditor.saved', { title: res.event.title }) : t('eventsEditor.added_every_date_axis_it_falls', { title: res.event.title }));
       finish();
       await evRefresh();
     });

@@ -17,10 +17,10 @@ let pqCronOpen = false;
 let pqLive: Record<string, string> = {};
 
 const PQ_PRESETS: Array<[string, string]> = [
-  ['Hourly', '0 * * * *'],
-  ['Daily 06:00', '0 6 * * *'],
-  ['Weekdays 07:00', '0 7 * * 1-5'],
-  ['Mondays 09:00', '0 9 * * 1'],
+  [t('pipelinesPage.hourly'), '0 * * * *'],
+  [t('pipelinesPage.daily_06_00'), '0 6 * * *'],
+  [t('pipelinesPage.weekdays_07_00'), '0 7 * * 1-5'],
+  [t('pipelinesPage.mondays_09_00'), '0 9 * * 1'],
 ];
 
 function pqEl(tag: string, cls?: string, text?: string): HTMLElement {
@@ -45,7 +45,7 @@ function pqRel(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = Date.parse(iso) - Date.now();
   const a = Math.abs(d);
-  if (a < 60_000) return d > 0 ? 'in under a minute' : 'just now';
+  if (a < 60_000) return d > 0 ? t('pipelinesPage.in_under_a_minute') : t('common.just_now');
   const [n, u] = a < 3_600_000 ? [Math.round(a / 60_000), 'min'] : a < 86_400_000 ? [Math.round(a / 3_600_000), 'h'] : [Math.round(a / 86_400_000), a < 2 * 86_400_000 ? 'day' : 'days'];
   return d > 0 ? `in ${n} ${u}` : `${n} ${u} ago`;
 }
@@ -57,7 +57,7 @@ function pqAbs(iso: string): string {
 function pqDur(ms: number | undefined): string {
   if (typeof ms !== 'number') return '';
   if (ms < 60_000) return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`;
-  return `${Math.floor(ms / 60_000)} min ${Math.round((ms % 60_000) / 1000)} s`;
+  return t('pipelinesPage.min_s', { p0: Math.floor(ms / 60_000), p1: Math.round((ms % 60_000) / 1000) });
 }
 
 async function pqLoad(): Promise<void> {
@@ -77,7 +77,7 @@ async function pqOpen(): Promise<void> {
   const wrap = document.getElementById('pq-wrap');
   if (wrap && !pqView) {
     wrap.textContent = '';
-    wrap.appendChild(pqEl('p', 'dsp-note', 'Reading the pipeline…'));
+    wrap.appendChild(pqEl('p', 'dsp-note', t('pipelinesPage.reading_the_pipeline')));
   }
   await pqLoad();
 }
@@ -89,11 +89,11 @@ function pqRender(): void {
   wrap.textContent = '';
   const v = pqView;
   if (!v) {
-    wrap.appendChild(makeEmptyState({ variant: 'page', iconName: 'alert', title: 'Could not read the pipeline', line: 'Something went wrong reading this project’s records. Try again in a moment.', actionLabel: 'Try again', onAction: () => void pqLoad() }));
+    wrap.appendChild(makeEmptyState({ variant: 'page', iconName: 'alert', title: t('pipelinesPage.could_not_read_the_pipeline'), line: t('pipelinesPage.something_went_wrong_reading_this'), actionLabel: t('inputPage.try_again'), onAction: () => void pqLoad() }));
     return;
   }
   if (!v.ok) {
-    const box = makeEmptyState({ variant: 'page', iconName: 'lineage', title: 'This pipeline has a loop', line: `${v.error} Nothing runs until one of them stops reading the other.` });
+    const box = makeEmptyState({ variant: 'page', iconName: 'lineage', title: t('pipelinesPage.this_pipeline_has_a_loop'), line: t('pipelinesPage.nothing_runs_until_one_of_them', { error: v.error }) });
     const chain = pqEl('p', 'pq-cycle', (v.cycle || []).join('  →  ') + (v.cycle && v.cycle.length ? '  →  ' + v.cycle[0] : ''));
     box.appendChild(chain);
     wrap.appendChild(box);
@@ -120,31 +120,31 @@ function pqHead(v: any): HTMLElement {
   mark.appendChild(icon('calendar', 16));
   const txt = pqEl('div', 'pq-sched-text');
   const s = v.schedule;
-  txt.appendChild(pqEl('span', 'pq-label', 'Pipeline schedule'));
-  txt.appendChild(pqEl('strong', 'pq-sched-main', s ? s.text + (s.paused ? ' · paused' : '') : 'Not scheduled'));
+  txt.appendChild(pqEl('span', 'pq-label', t('pipelinesPage.pipeline_schedule')));
+  txt.appendChild(pqEl('strong', 'pq-sched-main', s ? s.text + (s.paused ? t('pipelinesPage.paused') : '') : t('pipelinesPage.not_scheduled')));
   txt.appendChild(pqEl('span', 'pq-sched-sub', s
-    ? (s.paused ? `Times in ${s.tz}. Paused — nothing runs on this schedule until you resume it.` : `Times in ${s.tz} · next run ${s.nextRunAt ? pqAbs(s.nextRunAt) + ' (' + pqRel(s.nextRunAt) + ')' : 'never'}`)
-    : 'Run every step on one schedule, in order. Each step’s own schedule still applies.'));
+    ? (s.paused ? t('pipelinesPage.times_in_paused_nothing_runs_on', { tz: s.tz }) : t('pipelinesPage.times_in_next_run', { tz: s.tz, p1: s.nextRunAt ? pqAbs(s.nextRunAt) + ' (' + pqRel(s.nextRunAt) + ')' : 'never' }))
+    : t('pipelinesPage.run_every_step_on_one_schedule')));
   sched.append(mark, txt);
   const sActs = pqEl('div', 'pq-sched-acts');
-  sActs.appendChild(pqBtn(s ? 'Edit' : 'Set a schedule', 'btn-sm btn-ghost', () => { pqCronOpen = !pqCronOpen; pqRender(); }));
-  if (s) sActs.appendChild(pqBtn(s.paused ? 'Resume' : 'Pause', 'btn-sm btn-ghost', () => void pqSetSchedule({ paused: !s.paused })));
+  sActs.appendChild(pqBtn(s ? t('common.edit_2') : t('pipelinesPage.set_a_schedule'), 'btn-sm btn-ghost', () => { pqCronOpen = !pqCronOpen; pqRender(); }));
+  if (s) sActs.appendChild(pqBtn(s.paused ? t('common.resume') : t('common.pause'), 'btn-sm btn-ghost', () => void pqSetSchedule({ paused: !s.paused })));
   sched.appendChild(sActs);
 
   const retry = pqEl('label', 'pq-field');
-  retry.appendChild(pqEl('span', 'pq-label', 'On failure'));
+  retry.appendChild(pqEl('span', 'pq-label', t('pipelinesPage.on_failure')));
   const rSel = document.createElement('select');
   rSel.className = 'pq-select';
   rSel.id = 'pq-retries';
-  ['Stop — no retries', 'Retry once', 'Retry twice', 'Retry 3 times'].forEach((t, i) => rSel.appendChild(new Option(t, String(i))));
+  [t('pipelinesPage.stop_no_retries'), t('pipelinesPage.retry_once'), t('pipelinesPage.retry_twice'), t('pipelinesPage.retry_3_times')].forEach((t, i) => rSel.appendChild(new Option(t, String(i))));
   rSel.value = String(v.policy.retries);
   const bSel = document.createElement('select');
   bSel.className = 'pq-select';
   bSel.id = 'pq-backoff';
-  bSel.setAttribute('aria-label', 'First wait before a retry');
-  [[10_000, 'after 10 s'], [30_000, 'after 30 s'], [60_000, 'after 1 min'], [300_000, 'after 5 min']].forEach(([ms, t]) => bSel.appendChild(new Option(t + ', doubling', String(ms))));
+  bSel.setAttribute('aria-label', t('pipelinesPage.first_wait_before_a_retry'));
+  [[10_000, t('pipelinesPage.after_10_s')], [30_000, t('pipelinesPage.after_30_s')], [60_000, t('pipelinesPage.after_1_min')], [300_000, t('pipelinesPage.after_5_min')]].forEach(([ms, lbl]) => bSel.appendChild(new Option(t('pipelinesPage.doubling', { t: lbl }), String(ms))));
   if (![...bSel.options].some((o) => o.value === String(v.policy.backoffMs))) {
-    bSel.appendChild(new Option(`after ${Math.round(v.policy.backoffMs / 1000)} s, doubling`, String(v.policy.backoffMs)));
+    bSel.appendChild(new Option(t('pipelinesPage.after_s_doubling', { p0: Math.round(v.policy.backoffMs / 1000) }), String(v.policy.backoffMs)));
   }
   bSel.value = String(v.policy.backoffMs);
   bSel.disabled = v.policy.retries === 0;
@@ -155,7 +155,7 @@ function pqHead(v: any): HTMLElement {
   pickers.append(rSel, bSel);
   retry.appendChild(pickers);
 
-  const run = pqBtn(pqRunning ? 'Running…' : 'Run all', 'btn-primary', () => void pqRun(), 'play');
+  const run = pqBtn(pqRunning ? t('common.running') : t('common.run_all'), 'btn-primary', () => void pqRun(), 'play');
   run.id = 'pq-run-all';
   run.disabled = pqRunning || !v.nodes.length;
 
@@ -173,11 +173,11 @@ function pqHead(v: any): HTMLElement {
     c.appendChild(pqEl('span', '', text));
     stats.appendChild(c);
   };
-  chip('layers', `${nodes.length} ${nodes.length === 1 ? 'step' : 'steps'} in ${new Set(nodes.map((n) => n.stage)).size} stages`);
-  chip('calendar', scheduled ? `${scheduled} on their own schedule` : 'No step has its own schedule');
-  if (failed) chip('alert', `${failed} failed or blocked last time`, 'is-bad');
-  else if (lastRuns.length) chip('circle-check', 'Everything ran cleanly last time', 'is-good');
-  chip('history', lastRuns.length ? `Last activity ${pqRel(lastRuns[lastRuns.length - 1])}` : 'Never run');
+  chip('layers', t('pipelinesPage.in_stages', { nodesCount: nodes.length, p2: new Set(nodes.map((n) => n.stage)).size }));
+  chip('calendar', scheduled ? t('pipelinesPage.on_their_own_schedule', { scheduled }) : t('pipelinesPage.no_step_has_its_own_schedule'));
+  if (failed) chip('alert', t('pipelinesPage.failed_or_blocked_last_time', { failed }), 'is-bad');
+  else if (lastRuns.length) chip('circle-check', t('pipelinesPage.everything_ran_cleanly_last_time'), 'is-good');
+  chip('history', lastRuns.length ? t('pipelinesPage.last_activity', { p0: pqRel(lastRuns[lastRuns.length - 1]) }) : t('common.never_run'));
   const wrap = pqEl('div', 'pq-headwrap');
   wrap.appendChild(head);
   if (nodes.length) wrap.appendChild(stats); // an empty pipeline has no numbers to tell
@@ -194,8 +194,8 @@ function pqCronEditor(v: any): HTMLElement {
   input.className = 'pq-input pq-cron-input';
   input.id = 'pq-cron-input';
   input.spellcheck = false;
-  input.placeholder = 'minute hour day month weekday — e.g. 0 6 * * *';
-  input.setAttribute('aria-label', 'Schedule, as five cron fields');
+  input.placeholder = t('pipelinesPage.minute_hour_day_month_weekday_e');
+  input.setAttribute('aria-label', t('pipelinesPage.schedule_as_five_cron_fields'));
   input.value = s ? s.cron : '0 6 * * *';
   const presets = pqEl('div', 'pq-presets');
   for (const [label, expr] of PQ_PRESETS) {
@@ -207,25 +207,25 @@ function pqCronEditor(v: any): HTMLElement {
   row.append(input, presets);
   const out = pqEl('div', 'pq-cron-preview');
   out.setAttribute('aria-live', 'polite');
-  const save = pqBtn('Save schedule', 'btn-sm btn-primary', () => void pqSetSchedule({ cron: input.value, tz }).then((ok) => { if (ok) { pqCronOpen = false; void pqLoad(); } }));
+  const save = pqBtn(t('pipelinesPage.save_schedule'), 'btn-sm btn-primary', () => void pqSetSchedule({ cron: input.value, tz }).then((ok) => { if (ok) { pqCronOpen = false; void pqLoad(); } }));
   save.id = 'pq-cron-save';
   const paint = async (): Promise<void> => {
     const p = await window.hubPipelines.preview(input.value, tz).catch(() => null);
     out.textContent = '';
     if (!p || !p.ok) {
-      out.appendChild(pqEl('span', 'pq-cron-bad', 'Five fields: minute (0–59), hour (0–23), day (1–31), month (1–12), weekday (0–6, Sunday is 0).'));
+      out.appendChild(pqEl('span', 'pq-cron-bad', t('pipelinesPage.five_fields_minute_0_59_hour')));
       save.disabled = true;
       return;
     }
     save.disabled = false;
     out.appendChild(pqEl('strong', '', p.text));
-    out.appendChild(pqEl('span', '', ` · times in ${tz} · next: ` + p.next.map(pqAbs).join(', ')));
+    out.appendChild(pqEl('span', '', t('pipelinesPage.times_in_next', { tz, p1: p.next.map(pqAbs).join(', ') })));
   };
   input.addEventListener('input', () => void paint());
   const acts = pqEl('div', 'pq-cron-acts');
   acts.appendChild(save);
-  if (s) acts.appendChild(pqBtn('Remove schedule', 'btn-sm btn-ghost', () => void pqSetSchedule({ cron: null }).then(() => { pqCronOpen = false; void pqLoad(); })));
-  acts.appendChild(pqBtn('Cancel', 'btn-sm btn-ghost', () => { pqCronOpen = false; pqRender(); }));
+  if (s) acts.appendChild(pqBtn(t('pipelinesPage.remove_schedule'), 'btn-sm btn-ghost', () => void pqSetSchedule({ cron: null }).then(() => { pqCronOpen = false; void pqLoad(); })));
+  acts.appendChild(pqBtn(t('common.cancel'), 'btn-sm btn-ghost', () => { pqCronOpen = false; pqRender(); }));
   box.append(row, out, acts);
   void paint();
   return box;
@@ -243,9 +243,9 @@ function pqEmpty(v: any): HTMLElement {
     cols.appendChild(col);
   }
   const msg = makeEmptyState({
-    variant: 'page', iconName: 'lineage', title: 'Nothing runs on its own yet',
-    line: 'Connect a database or a folder, or import a file you can refresh. Its refreshes, the SQL datasets built on it, quality checks, alerts, reports and publishes will line up here as one pipeline you can schedule, run and watch.',
-    actionLabel: 'Connect data', onAction: () => { clSelectTab('datasets'); (document.getElementById('ds-connect-open') as HTMLElement | null)?.click(); },
+    variant: 'page', iconName: 'lineage', title: t('pipelinesPage.nothing_runs_on_its_own_yet'),
+    line: t('pipelinesPage.connect_a_database_or_a_folder'),
+    actionLabel: t('common.connect_data'), onAction: () => { clSelectTab('datasets'); (document.getElementById('ds-connect-open') as HTMLElement | null)?.click(); },
   });
   msg.classList.add('pq-empty-msg');
   box.append(cols, msg);
@@ -255,7 +255,7 @@ function pqEmpty(v: any): HTMLElement {
 async function pqSetSchedule(patch: { cron?: string | null; tz?: string; paused?: boolean }): Promise<boolean> {
   if (!currentProjectId) return false;
   const r = await window.hubPipelines.setSchedule(currentProjectId, patch).catch(() => null);
-  if (!r || !r.ok) { showToast((r && r.error) || 'Could not save the schedule.', { kind: 'error' }); return false; }
+  if (!r || !r.ok) { showToast((r && r.error) || t('common.could_not_save_the_schedule'), { kind: 'error' }); return false; }
   if (patch.paused !== undefined) await pqLoad();
   return true;
 }
@@ -263,7 +263,7 @@ async function pqSetSchedule(patch: { cron?: string | null; tz?: string; paused?
 async function pqSavePolicy(retries: number, backoffMs: number): Promise<void> {
   if (!currentProjectId) return;
   const r = await window.hubPipelines.setPolicy(currentProjectId, { retries, backoffMs }).catch(() => null);
-  if (!r || !r.ok) showToast('Could not save the retry policy.', { kind: 'error' });
+  if (!r || !r.ok) showToast(t('pipelinesPage.could_not_save_the_retry_policy'), { kind: 'error' });
   await pqLoad();
 }
 
@@ -277,13 +277,13 @@ async function pqRun(nodeId?: string): Promise<void> {
   try { r = await window.hubPipelines.run(pid, nodeId); } catch (_) { r = null; }
   pqRunning = false;
   pqLive = {};
-  if (!r || !r.ok) showToast((r && r.error) || 'The pipeline could not run.', { kind: 'error' });
+  if (!r || !r.ok) showToast((r && r.error) || t('pipelinesPage.the_pipeline_could_not_run'), { kind: 'error' });
   else {
     const failed = r.outcomes.filter((o: any) => o.status === 'failed').length;
     const blocked = r.outcomes.filter((o: any) => o.status === 'blocked').length;
     showToast(failed
-      ? `${failed} ${failed === 1 ? 'step' : 'steps'} failed${blocked ? `, ${blocked} stopped after ${failed === 1 ? 'it' : 'them'}` : ''}. An alert was raised.`
-      : `Pipeline ran — ${r.outcomes.length} ${r.outcomes.length === 1 ? 'step' : 'steps'} done.`, { kind: failed ? 'error' : 'success' });
+      ? t('pipelinesPage.failed_an_alert_was_raised', { failed, p2: blocked ? t('pipelinesPage.stopped_after', { blocked, failed }) : '' })
+      : t('pipelinesPage.pipeline_ran_done', { outcomesCount: r.outcomes.length }), { kind: failed ? 'error' : 'success' });
   }
   if (pid === currentProjectId) await pqLoad();
 }

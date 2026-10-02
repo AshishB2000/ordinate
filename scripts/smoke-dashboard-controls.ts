@@ -570,8 +570,9 @@ async function main(): Promise<void> {
     };
   });
   ok('the ⋯ row menu opens', rowMenu.opened);
-  ok('…with Open / Rename / History / Lineage / Delete inside it',
-     JSON.stringify(rowMenu.items) === JSON.stringify(['Open', 'Rename', 'History', 'Lineage', 'Delete']),
+  // "Save as template…" since round 7 (#185) saves any dashboard as a reusable template.
+  ok('…with Open / Rename / History / Lineage / Save as template… / Delete inside it',
+     JSON.stringify(rowMenu.items) === JSON.stringify(['Open', 'Rename', 'History', 'Lineage', 'Save as template…', 'Delete']),
      JSON.stringify(rowMenu.items));
   ok('…Delete marked as the destructive one', !!rowMenu.danger);
   ok('…painted fully on screen and anchored to its button',
