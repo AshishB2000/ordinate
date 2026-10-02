@@ -25,7 +25,7 @@ function dndIsFileDrag(e: DragEvent): boolean {
 
 function dndProjectName(): string {
   const el = document.getElementById('ws-project-name');
-  return (el && el.textContent ? el.textContent.trim() : '') || 'this project';
+  return (el && el.textContent ? el.textContent.trim() : '') || t('dndIn.this_project');
 }
 
 function dndZoneOf(target: EventTarget | null): HTMLElement | null {
@@ -40,16 +40,16 @@ function dndZoneOf(target: EventTarget | null): HTMLElement | null {
 function dndDescribe(e: DragEvent): { title: string; sub: string; icon: string } {
   const items = Array.from(e.dataTransfer ? e.dataTransfer.items || [] : []).filter((i) => i.kind === 'file');
   const n = items.length || 1;
-  const files = n === 1 ? '1 file' : n + ' files';
-  if (dndZoneOf(e.target)) return { title: 'Add boundaries to this map', sub: 'A GeoJSON file of regions, joined on one of its properties', icon: 'map' };
+  const files = n === 1 ? t('dndIn.1_file') : n + ' files';
+  if (dndZoneOf(e.target)) return { title: t('dndIn.add_boundaries_to_this_map'), sub: t('dndIn.a_geojson_file_of_regions_joined'), icon: 'map' };
   if (items.length && items.every((i) => /^image\//.test(i.type))) {
-    return { title: 'Images cannot be imported', sub: 'Paste a screenshot on Home or Data to capture its table', icon: 'camera' };
+    return { title: t('dndIn.images_cannot_be_imported'), sub: t('dndIn.paste_a_screenshot_on_home_or'), icon: 'camera' };
   }
-  if (!currentProjectId) return { title: 'Open ' + files + ' in Ordinate', sub: 'A .ordinate bundle opens as a new project — open a project to import data', icon: 'package' };
+  if (!currentProjectId) return { title: t('dndIn.open_in_ordinate', { files }), sub: t('dndIn.a_ordinate_bundle_opens_as_a'), icon: 'package' };
   const sub = items.some((i) => !i.type)
-    ? 'CSV, Excel, JSON and Parquet become datasets · a .ordinate bundle becomes a project'
-    : 'Each file becomes a dataset — they import side by side in Jobs';
-  return { title: 'Import ' + files + ' into ' + dndProjectName(), sub, icon: 'upload' };
+    ? t('dndIn.csv_excel_json_and_parquet_become')
+    : t('dndIn.each_file_becomes_a_dataset_they');
+  return { title: t('dndIn.import_into', { files, p1: dndProjectName() }), sub, icon: 'upload' };
 }
 
 function dndShow(e: DragEvent): void {
@@ -72,26 +72,26 @@ function dndHide(): void {
 /** Hand dropped files to main and report every outcome. */
 async function dndDropFiles(files: File[], zone: HTMLElement | null): Promise<void> {
   if (!files.length) return;
-  showToast(files.length === 1 ? 'Reading ' + files[0].name + '…' : 'Importing ' + files.length + ' files…');
+  showToast(files.length === 1 ? t('dndIn.reading', { p0: files[0].name }) : t('dndIn.importing_files', { filesCount: files.length }));
   let res: any = null;
   try { res = await window.hubDrop.dropFiles(files, currentProjectId); } catch (_) { res = null; }
-  if (!res || !res.ok) { showToast((res && res.error) || 'Those files could not be read.', { kind: 'error' }); return; }
+  if (!res || !res.ok) { showToast((res && res.error) || t('dndIn.those_files_could_not_be_read'), { kind: 'error' }); return; }
   const results: any[] = res.results || [];
-  for (const r of results) if (!r.ok) showToast(r.error || r.name + ' could not be imported.', { kind: 'error' });
-  if (res.skipped) showToast(res.skipped + ' more files were left out — drop up to 20 at a time.', { kind: 'error' });
+  for (const r of results) if (!r.ok) showToast(r.error || t('dndIn.could_not_be_imported', { name: r.name }), { kind: 'error' });
+  if (res.skipped) showToast(t('dndIn.more_files_were_left_out_drop', { skipped: res.skipped }), { kind: 'error' });
 
   const data = results.filter((r) => r.ok && r.datasetId);
   if (data.length === 1) {
     const d = data[0];
-    showToast('Imported ' + d.name + ' — ' + Number(d.rowCount || 0).toLocaleString() + ' rows', {
+    showToast(t('dndIn.imported_rows', { name: d.name, p1: Number(d.rowCount || 0).toLocaleString() }), {
       kind: 'success',
-      action: { label: 'Open', onClick: () => { selectSection('datasets'); void openSavedDataset(d.datasetId); } },
+      action: { label: t('common.open'), onClick: () => { selectSection('datasets'); void openSavedDataset(d.datasetId); } },
     });
-  } else if (data.length > 1) showToast('Imported ' + data.length + ' datasets', { kind: 'success' });
+  } else if (data.length > 1) showToast(t('dndIn.imported_datasets', { dataCount: data.length }), { kind: 'success' });
   if (data.length && currentSection === 'datasets') await refreshDatasetList();
 
   for (const r of results.filter((x) => x.ok && x.boundary)) {
-    showToast('Added ' + r.boundary.featureCount + ' regions from ' + r.boundary.name, { kind: 'success' });
+    showToast(t('dndIn.added_regions_from', { featureCount: r.boundary.featureCount, name: r.boundary.name }), { kind: 'success' });
     if (zone) zone.dispatchEvent(new CustomEvent('ordinate:boundaries-added', { detail: r.boundary }));
   }
   const bundle = results.find((r) => r.ok && r.project);
@@ -115,20 +115,20 @@ function dndLooksTabular(text: string): boolean {
 async function dndPasteImage(): Promise<void> {
   let res: any = null;
   try { res = await window.hubDrop.pasteImage(); } catch (_) { res = null; }
-  if (!res || !res.ok) { showToast((res && res.error) || 'That image could not be captured.', { kind: 'error' }); return; }
+  if (!res || !res.ok) { showToast((res && res.error) || t('dndIn.that_image_could_not_be_captured'), { kind: 'error' }); return; }
   // Without a model the capture flow opens Settings → Execution, and main did.
-  if (res.notReady) showToast('Capturing a screenshot needs a model — choose one in Settings.');
+  if (res.notReady) showToast(t('dndIn.capturing_a_screenshot_needs_a_model'));
 }
 
 async function dndPasteTable(text: string): Promise<void> {
   let res: any = null;
   try { res = await window.hub.parsePasteDataset(text); } catch (_) { res = null; }
   if (!res || !res.ok || !res.preview || !(res.preview.columns || []).length) {
-    showToast((res && res.error) || 'The pasted text is not a table.', { kind: 'error' });
+    showToast((res && res.error) || t('dndIn.the_pasted_text_is_not_a'), { kind: 'error' });
     return;
   }
   dsSourceKind = 'paste';
-  dsSuggestedName = 'Pasted data';
+  dsSuggestedName = t('dsImport.pasted_data');
   dsFilePath = '';
   handOffToComposer(res.preview);
 }

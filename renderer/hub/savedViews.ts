@@ -92,7 +92,7 @@ function svApply(view: any): void {
   svApplyState(view.state);
   svActive = view.id;
   svRepaint();
-  showToast('Showing “' + view.name + '”');
+  showToast(t('savedViews.showing', { name: view.name }));
 }
 
 /**
@@ -137,7 +137,7 @@ async function svEdit(op: any): Promise<any> {
   let res: any = null;
   try { res = await window.hubViews.edit(currentProjectId, dashCurrent.id, op); } catch (_) { res = null; }
   if (!res || !res.ok) {
-    showToast((res && res.error) || 'Could not save the view', { kind: 'error' });
+    showToast((res && res.error) || t('savedViews.could_not_save_the_view'), { kind: 'error' });
     return null;
   }
   dashCurrent.views = res.views;
@@ -147,32 +147,32 @@ async function svEdit(op: any): Promise<any> {
 }
 
 async function svSaveNew(): Promise<void> {
-  const name = await promptModal('Save current view', '', 'Save view');
+  const name = await promptModal(t('savedViews.save_current_view'), '', t('savedViews.save_view'));
   if (name === null) return;
   const res = await svEdit({ op: 'create', name, state: svCapture() });
   if (!res) return;
   svActive = res.viewId;
   svPaintButton();
-  showToast('Saved view “' + name.trim() + '”', { kind: 'success' });
+  showToast(t('savedViews.saved_view', { p0: name.trim() }), { kind: 'success' });
 }
 
 async function svRename(view: any): Promise<void> {
-  const name = await promptModal('Rename view', view.name, 'Rename');
+  const name = await promptModal(t('savedViews.rename_view'), view.name, t('common.rename'));
   if (name === null || name.trim() === view.name) return;
-  if (await svEdit({ op: 'rename', viewId: view.id, name })) showToast('Renamed to “' + name.trim() + '”');
+  if (await svEdit({ op: 'rename', viewId: view.id, name })) showToast(t('savedViews.renamed_to', { p0: name.trim() }));
 }
 
 async function svUpdate(view: any): Promise<void> {
   if (!(await svEdit({ op: 'update', viewId: view.id, state: svCapture() }))) return;
   svActive = view.id;
   svPaintButton();
-  showToast('Updated “' + view.name + '” to what is on screen', { kind: 'success' });
+  showToast(t('savedViews.updated_to_what_is_on_screen', { name: view.name }), { kind: 'success' });
 }
 
 async function svToggleDefault(view: any): Promise<void> {
   const on = dashCurrent.defaultViewId !== view.id;
   if (!(await svEdit({ op: 'default', viewId: on ? view.id : '' }))) return;
-  showToast(on ? '“' + view.name + '” opens by default' : 'No default view — the dashboard opens as authored');
+  showToast(on ? t('savedViews.opens_by_default', { name: view.name }) : t('savedViews.no_default_view_the_dashboard_opens'));
 }
 
 async function svDelete(view: any): Promise<void> {
@@ -180,9 +180,9 @@ async function svDelete(view: any): Promise<void> {
   if (!(await svEdit({ op: 'delete', viewId: view.id }))) return;
   if (svActive === view.id) svActive = '';
   svPaintButton();
-  showToast('Deleted view “' + view.name + '”', {
+  showToast(t('savedViews.deleted_view', { name: view.name }), {
     action: {
-      label: 'Undo',
+      label: t('common.undo'),
       onClick: async () => {
         const res = await svEdit({ op: 'create', name: view.name, state: view.state });
         if (res && wasDefault) await svEdit({ op: 'default', viewId: res.viewId });
@@ -192,8 +192,8 @@ async function svDelete(view: any): Promise<void> {
 }
 
 function svCopyLink(view: any): void {
-  window.hub.copyText(`ordinate://dashboard/${dashCurrent.id}?view=${view.id}`);
-  showToast('Link copied — it opens this dashboard on “' + view.name + '”');
+  window.hub.copyText(t('savedViews.ordinate_dashboard_view', { id: dashCurrent.id, id2: view.id }));
+  showToast(t('savedViews.link_copied_it_opens_this_dashboard', { name: view.name }));
 }
 
 // ── The header button and its menu ───────────────────────────────────────────
@@ -224,7 +224,7 @@ function svOpenMenu(anchor: HTMLElement): void {
     const views = svViews();
     const head = document.createElement('div');
     head.className = 'sv-head';
-    head.textContent = 'Saved views';
+    head.textContent = t('common.saved_views');
     if (views.length) {
       const n = document.createElement('span');
       n.className = 'sv-count';
@@ -238,7 +238,7 @@ function svOpenMenu(anchor: HTMLElement): void {
       empty.className = 'sv-empty';
       empty.appendChild(icon('layers', 20));
       const p = document.createElement('p');
-      p.textContent = 'No saved views yet — save the current filters, page and selection as a view.';
+      p.textContent = t('savedViews.no_saved_views_yet_save_the');
       empty.appendChild(p);
       menu.appendChild(empty);
     }
@@ -260,17 +260,17 @@ function svOpenMenu(anchor: HTMLElement): void {
       if (isDefault) {
         const badge = document.createElement('span');
         badge.className = 'sv-badge';
-        badge.textContent = 'Default';
+        badge.textContent = t('common.default');
         main.appendChild(badge);
       }
       main.addEventListener('click', () => { close(); svApply(v); });
       const acts = document.createElement('span');
       acts.className = 'sv-acts';
       acts.append(
-        svActButton(isDefault ? 'star-filled' : 'star', isDefault ? 'Stop opening on this view' : 'Open the dashboard on this view', later(svToggleDefault, v), isDefault ? 'is-on' : ''),
-        svActButton('refresh', 'Update with what is on screen', later(svUpdate, v)),
-        svActButton('pencil', 'Rename', later(svRename, v)),
-        svActButton('link', 'Copy link', later(svCopyLink, v)),
+        svActButton(isDefault ? 'star-filled' : 'star', isDefault ? t('savedViews.stop_opening_on_this_view') : t('savedViews.open_the_dashboard_on_this_view'), later(svToggleDefault, v), isDefault ? 'is-on' : ''),
+        svActButton('refresh', t('savedViews.update_with_what_is_on_screen'), later(svUpdate, v)),
+        svActButton('pencil', t('common.rename'), later(svRename, v)),
+        svActButton('link', t('savedViews.copy_link'), later(svCopyLink, v)),
         svActButton('trash', 'Delete', later(svDelete, v), 'sv-act--rm'),
       );
       row.append(main, acts);
@@ -285,9 +285,9 @@ function svOpenMenu(anchor: HTMLElement): void {
     save.className = 'chart-menu-item sv-save';
     save.id = 'sv-save-btn';
     save.appendChild(icon('plus', 16));
-    const t = document.createElement('span');
-    t.textContent = 'Save current view…';
-    save.appendChild(t);
+    const tv = document.createElement('span');
+    tv.textContent = t('savedViews.save_current_view_2');
+    save.appendChild(tv);
     save.addEventListener('click', () => { close(); void svSaveNew(); });
     menu.appendChild(save);
   });
@@ -306,9 +306,9 @@ function svFillReportViews(sel: HTMLSelectElement | null, analysis: any, viewId:
     o.textContent = label;
     sel.appendChild(o);
   };
-  add('', 'As saved — no view');
+  add('', t('common.as_saved_no_view'));
   for (const v of views) add(v.id, v.name);
-  if (views.length > 1) add('all', 'Every view — one section each');
+  if (views.length > 1) add('all', t('savedViews.every_view_one_section_each'));
   sel.value = views.some((v: any) => v.id === viewId) || (viewId === 'all' && views.length > 1) ? viewId : '';
   sel.disabled = views.length === 0;
 }

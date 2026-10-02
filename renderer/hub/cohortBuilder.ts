@@ -111,10 +111,10 @@ function createEngineBuilder(host: HTMLElement, opts: { onChange: () => void; da
 
   const cPanel = document.createElement('div');
   cPanel.className = 'eb-panel';
-  const cEntity = select('eb-c-entity', 'Cohort entity column', (v) => { cohort.entity = v; });
-  const cDate = select('eb-c-date', 'Cohort event date column', (v) => { cohort.date = v; });
-  const cValue = select('eb-c-value', 'Cohort value column', (v) => { cohort.value = v; if (!v) cohort.show = 'retention'; syncCohort(); });
-  const cGrain = segmented('Cohort grain', [['week', 'Week'], ['month', calMonthWord()], ['quarter', 'Quarter']],
+  const cEntity = select('eb-c-entity', t('cohortBuilder.cohort_entity_column'), (v) => { cohort.entity = v; });
+  const cDate = select('eb-c-date', t('cohortBuilder.cohort_event_date_column'), (v) => { cohort.date = v; });
+  const cValue = select('eb-c-value', t('cohortBuilder.cohort_value_column'), (v) => { cohort.value = v; if (!v) cohort.show = 'retention'; syncCohort(); });
+  const cGrain = segmented(t('cohortBuilder.cohort_grain'), [['week', t('common.week')], ['month', calMonthWord()], ['quarter', t('common.quarter')]],
     () => cohort.grain, (v) => { cohort.grain = v; });
   const cShow = segmented(t('cohortBuilder.cohort_figure'), [['retention', t('cohortBuilder.retention')], ['value', t('cohortBuilder.cumulative_value')]],
     () => cohort.show, (v) => { cohort.show = v; });

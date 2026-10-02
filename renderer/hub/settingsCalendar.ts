@@ -12,7 +12,7 @@
 // the preview line is main's answer (`calendar:today`), never computed here.
 
 const CAL_TYPES: Array<[string, string]> = [
-  ['gregorian', 'Gregorian'], ['445', 'Retail 4-4-5'], ['454', 'Retail 4-5-4'], ['544', 'Retail 5-4-4'], ['iso', 'ISO week-year'],
+  ['gregorian', t('settingsCalendar.gregorian')], ['445', t('settingsCalendar.retail_4_4_5')], ['454', t('settingsCalendar.retail_4_5_4')], ['544', t('settingsCalendar.retail_5_4_4')], ['iso', t('settingsCalendar.iso_week_year')],
 ];
 
 /** True when the workspace runs a week calendar (retail or ISO). */
@@ -23,22 +23,22 @@ function calIsWeekCal(): boolean {
 
 /** What a "month" grain is called: a week calendar's months are its periods. */
 function calMonthWord(): string {
-  return calIsWeekCal() ? 'Period' : 'Month';
+  return calIsWeekCal() ? t('html.period') : t('common.month');
 }
 
 let calPreviewSeq = 0;
 
 function buildCalendarGroup(host: HTMLElement): void {
   const head = sfEl('div', 'stp-subhead');
-  head.appendChild(sfEl('div', 'stp-subhead-t', 'Calendar'));
+  head.appendChild(sfEl('div', 'stp-subhead-t', t('settingsCalendar.calendar')));
   head.appendChild(sfEl('div', 'stp-subhead-d',
-    'How weeks, periods, quarters and years are cut — on date axes, relative filters, comparisons, cohorts and scorecards.'));
+    t('settingsCalendar.how_weeks_periods_quarters_and_years')));
   host.appendChild(head);
 
-  host.appendChild(sfRow('Calendar', 'Retail calendars run Sunday–Saturday weeks in 4-4-5, 4-5-4 or 5-4-4 periods; ISO weeks run Monday–Sunday.',
+  host.appendChild(sfRow(t('settingsCalendar.calendar'), t('settingsCalendar.retail_calendars_run_sunday_saturday'),
     sfSelect('stp-cal-type', CAL_TYPES, (v) => sfSetFormats({ calendarType: v }))));
-  const yearEnd = sfRow('Year ends on', 'A 53rd week joins the last period when the rule needs it.',
-    sfSeg('stp-cal-yearend', [['nearest', 'Saturday nearest Jan 31'], ['last', 'Last Saturday of January']],
+  const yearEnd = sfRow(t('settingsCalendar.year_ends_on'), t('settingsCalendar.a_53rd_week_joins_the_last'),
+    sfSeg('stp-cal-yearend', [['nearest', t('settingsCalendar.saturday_nearest_jan_31')], ['last', t('settingsCalendar.last_saturday_of_january')]],
       (v) => sfSetFormats({ yearEnd: v })));
   yearEnd.id = 'stp-cal-yearend-row';
   host.appendChild(yearEnd);
@@ -87,8 +87,8 @@ function paintCalendarGroup(): void {
   void window.hub.calendarToday().then((r: any) => {
     if (seq !== calPreviewSeq || !r || !r.ok) return;
     pv.innerHTML = '';
-    if (r.label) pv.appendChild(calPreviewCell('Today is', r.label));
-    if (r.weeks) pv.appendChild(calPreviewCell('This year', r.weeks + '-week year'));
-    pv.appendChild(calPreviewCell(weekCal && type === 'iso' ? 'ISO year' : 'Fiscal year', OrdFormat.formatDateRange(r.from, r.to)));
+    if (r.label) pv.appendChild(calPreviewCell(t('settingsCalendar.today_is'), r.label));
+    if (r.weeks) pv.appendChild(calPreviewCell(t('anNewTemplates.this_year'), t('settingsCalendar.week_year', { weeks: r.weeks })));
+    pv.appendChild(calPreviewCell(weekCal && type === 'iso' ? t('settingsCalendar.iso_year') : t('settingsCalendar.fiscal_year'), OrdFormat.formatDateRange(r.from, r.to)));
   });
 }

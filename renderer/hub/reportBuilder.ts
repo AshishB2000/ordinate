@@ -450,11 +450,11 @@ async function rbGenerate(): Promise<void> {
   // A job (jobsPanel.ts rjRun): the Jobs popover shows it building, Cancel stops
   // it between stages, and Reveal opens the file main wrote.
   let failed = '';
-  const out = await rjRun('report', `Report · ${report.name || 'Untitled'}`, projectId, async (step) => {
-    await step(0.05, 'Laying out the pages');
+  const out = await rjRun('report', t('reportBuilder.report', { p0: report.name || t('common.untitled') }), projectId, async (step) => {
+    await step(0.05, t('reportBuilder.laying_out_the_pages'));
     const pages = await svReportPages(ctx);
-    if (!pages.length) { failed = 'Every page is excluded — nothing to generate'; return null; }
-    await step(0.6, `Writing ${pages.length} page${pages.length === 1 ? '' : 's'}`);
+    if (!pages.length) { failed = t('common.every_page_is_excluded_nothing_to'); return null; }
+    await step(0.6, t('reportBuilder.writing', { pagesCount: pages.length }));
     const { base64, ext } = await reportBytes(pages, report);
     if (!base64) { failed = t('common.couldn_t_build_the_report'); return null; }
     await step(0.9, t('reportBuilder.saving'));
@@ -502,8 +502,8 @@ async function reportsRunDue(nowMs?: number): Promise<number> {
       if (!analysis) continue;
       // A SILENT job: the Jobs popover shows the scheduled run, but main's own
       // "Report ready" notification (notifyFile) is the one the user gets.
-      const out = await rjRun('report', `Scheduled report · ${report.name || 'Untitled'}`, d.projectId, async (step) => {
-        await step(0.05, 'Laying out the pages');
+      const out = await rjRun('report', t('reportBuilder.scheduled_report', { p0: report.name || t('common.untitled') }), d.projectId, async (step) => {
+        await step(0.05, t('reportBuilder.laying_out_the_pages'));
         const pages = await svReportPages({
           projectId: d.projectId, analysis,
           filters: Array.isArray(analysis.filters) ? analysis.filters : [],

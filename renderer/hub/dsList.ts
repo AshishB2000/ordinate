@@ -190,9 +190,9 @@ const DS_SOURCE_LABELS: Record<string, string> = {
   combined: t('dsList.combined'),
   capture: t('common.screenshot'),
   sql: 'SQL',
-  input: 'Input',
-  parquet: 'Parquet',
-  notebook: 'Notebook', // r7:notebooks — a notebook cell's result (nbActions.ts)
+  input: t('dsList.input'),
+  parquet: t('dsList.parquet'),
+  notebook: t('dsList.notebook'), // r7:notebooks — a notebook cell's result (nbActions.ts)
 };
 
 /** The camera mark a capture-sourced record carries, wherever it is listed. */

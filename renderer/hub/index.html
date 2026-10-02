@@ -1766,10 +1766,10 @@
                   <option value="landscape" data-i18n="html.landscape">Landscape</option>
                 </select></label>
             </div>
-            <p class="rb-note" id="rp-paper-note" hidden>A deck is always 16:9 — paper settings don't apply.</p>
+            <p class="rb-note" id="rp-paper-note" hidden data-i18n="html.a_deck_is_always_16_9">A deck is always 16:9 — paper settings don't apply.</p>
             <!-- r10:views — print the dashboard as one of its saved views, or once per view. -->
-            <label class="rb-field"><span class="rb-field-label">Saved view</span>
-              <select class="rb-input" id="rp-set-view"><option value="">As saved — no view</option></select></label>
+            <label class="rb-field"><span class="rb-field-label" data-i18n="html.saved_view">Saved view</span>
+              <select class="rb-input" id="rp-set-view"><option value="" data-i18n="common.as_saved_no_view">As saved — no view</option></select></label>
 
             <div class="rb-pane-head"><span class="rb-pane-h" data-i18n="common.cover">Cover</span></div>
             <label class="rb-field"><span class="rb-field-label" data-i18n="common.title">Title</span>
@@ -2110,9 +2110,9 @@
           <!-- Freshness of the DATA behind this sheet. One element for both
                hosts: analyses and published dashboards share this editor. -->
           <span class="dash-fresh" id="dash-fresh" hidden></span>
-          <button class="btn btn-sm" type="button" id="dash-refresh-data" hidden><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-refresh"/></svg><span>Refresh data</span></button>
+          <button class="btn btn-sm" type="button" id="dash-refresh-data" hidden><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-refresh"/></svg><span data-i18n="common.refresh_data">Refresh data</span></button>
           <!-- r10:views — saved views (savedViews.ts). Not dash-edit-only: a view is a reader's state. -->
-          <button class="btn btn-sm dash-views-btn" type="button" id="dash-views-btn" aria-haspopup="menu" title="Saved views"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-layers"/></svg><span>Views</span><span class="dash-views-name" id="dash-views-name" hidden></span></button>
+          <button class="btn btn-sm dash-views-btn" type="button" id="dash-views-btn" aria-haspopup="menu" title="Saved views" data-i18n-title="common.saved_views"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-layers"/></svg><span data-i18n="html.views">Views</span><span class="dash-views-name" id="dash-views-name" hidden></span></button>
           <span class="dash-head-spacer"></span>
           <div class="dash-head-zone dash-head-zone--add">
             <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-visual"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-plus"/></svg><span data-i18n="html.visual">Visual</span></button>

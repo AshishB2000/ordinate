@@ -14,10 +14,10 @@ let fxPendingCols: any[] = [];
 let fxSettingsSeq = 0;
 
 const FX_ROLES: Array<[string, string, RegExp]> = [
-  ['date', 'Date', /date|day|as.?of|on$/i],
-  ['from', 'From', /^from|base|source/i],
-  ['to', 'To', /^to$|^to[ _]|quote|target|counter/i],
-  ['rate', 'Rate', /rate|fx|price|value/i],
+  ['date', t('common.date'), /date|day|as.?of|on$/i],
+  ['from', t('common.from'), /^from|base|source/i],
+  ['to', t('common.to'), /^to$|^to[ _]|quote|target|counter/i],
+  ['rate', t('fxSettings.rate'), /rate|fx|price|value/i],
 ];
 
 /** Each role's best-guess column: by name, then by type. */
@@ -76,13 +76,13 @@ async function fxPaintSettings(): Promise<void> {
   if (!host) return;
   const seq = ++fxSettingsSeq;
   const head = sfEl('div', 'stp-subhead');
-  head.appendChild(sfEl('div', 'stp-subhead-t', 'Currency'));
+  head.appendChild(sfEl('div', 'stp-subhead-t', t('common.currency')));
   head.appendChild(sfEl('div', 'stp-subhead-d',
-    'Money columns convert to one currency at each row\'s date, on every metric and chart in this project. Declare a column\'s currency from its profile on the Data page.'));
+    t('fxSettings.money_columns_convert_to_one_currency')));
   if (!currentProjectId || !fxState) {
     host.innerHTML = '';
     host.appendChild(head);
-    host.appendChild(sfEl('p', 'fx-empty', 'Open a project to set its currency.'));
+    host.appendChild(sfEl('p', 'fx-empty', t('fxSettings.open_a_project_to_set_its')));
     return;
   }
   try {
@@ -94,20 +94,20 @@ async function fxPaintSettings(): Promise<void> {
   host.appendChild(head);
   const s = fxState.settings;
 
-  const targets: Array<[string, string]> = [['', 'Workspace currency (' + fxState.workspaceCurrency + ')']];
+  const targets: Array<[string, string]> = [['', t('fxSettings.workspace_currency', { workspaceCurrency: fxState.workspaceCurrency })]];
   (fxState.codes || []).forEach((c: string) => targets.push([c, c + ' — ' + OrdFormat.currencySymbol(c)]));
-  const tSel = fxSelect(targets, s.target || '', 'Target currency', async (v) => {
+  const tSel = fxSelect(targets, s.target || '', t('fxSettings.target_currency'), async (v) => {
     fxTake(await window.hubFx.set(currentProjectId as string, { target: v || null }));
   });
   tSel.id = 'stp-fx-target';
-  host.appendChild(sfRow('Target currency', 'What every converted figure is shown in. A dashboard can pick its own from its header.', tSel));
+  host.appendChild(sfRow(t('fxSettings.target_currency'), t('fxSettings.what_every_converted_figure_is_shown'), tSel));
 
   const srcId = fxPending ? fxPending.datasetId : (s.source ? s.source.datasetId : '');
-  const sources: Array<[string, string]> = [['', 'Sample rates (built in)']];
+  const sources: Array<[string, string]> = [['', t('fxSettings.sample_rates_built_in')]];
   fxDatasets.forEach((d: any) => sources.push([d.id, d.name]));
-  const sSel = fxSelect(sources, srcId, 'Exchange rates', (v) => { void fxPickSource(v); });
+  const sSel = fxSelect(sources, srcId, t('fxSettings.exchange_rates'), (v) => { void fxPickSource(v); });
   sSel.id = 'stp-fx-source';
-  host.appendChild(sfRow('Exchange rates', 'A table of date, from-currency, to-currency and rate — an input table, a CSV or a connection. The nearest earlier rate applies; a missing pair goes via USD.', sSel));
+  host.appendChild(sfRow(t('fxSettings.exchange_rates'), t('fxSettings.a_table_of_date_from_currency'), sSel));
 
   if (srcId) {
     const map = fxPending ? fxPending.map : { date: s.source.date, from: s.source.from, to: s.source.to, rate: s.source.rate };
@@ -115,7 +115,7 @@ async function fxPaintSettings(): Promise<void> {
     const names: string[] = cols.length ? cols.map((c: any) => c.name) : Object.values(map) as string[];
     const grid = sfEl('div', 'fx-map');
     for (const [role, label] of FX_ROLES) {
-      const opts: Array<[string, string]> = [['', 'Choose…']].concat(names.map((n) => [n, n] as [string, string])) as Array<[string, string]>;
+      const opts: Array<[string, string]> = [['', t('common.choose')]].concat(names.map((n) => [n, n] as [string, string])) as Array<[string, string]>;
       const sel = fxSelect(opts, map[role as keyof typeof map] || '', label + ' column', (v) => {
         fxPending = fxPending || { datasetId: srcId, map: { ...map } };
         fxPending.map[role] = v;
@@ -128,7 +128,7 @@ async function fxPaintSettings(): Promise<void> {
       l.appendChild(sel);
       grid.appendChild(l);
     }
-    const row = sfRow('Columns', fxPending ? 'Pick the column for each — saved once all four are set.' : 'Which column holds what.', grid);
+    const row = sfRow(t('common.columns'), fxPending ? t('fxSettings.pick_the_column_for_each_saved') : t('fxSettings.which_column_holds_what'), grid);
     host.appendChild(row);
   }
 
@@ -137,7 +137,7 @@ async function fxPaintSettings(): Promise<void> {
     box.id = 'stp-fx-sample';
     box.appendChild(sfEl('span', 'fx-chip fx-chip-sample', fxState.sample.label));
     box.appendChild(sfEl('p', 'fx-sample-note',
-      fxState.sample.note + ' Covers ' + fxState.sample.currencies.join(', ') + ', ' + fxState.sample.from + ' to ' + fxState.sample.to + '.'));
+      t('fxSettings.covers_to', { note: fxState.sample.note, p1: fxState.sample.currencies.join(', '), from: fxState.sample.from, to: fxState.sample.to })));
     host.appendChild(box);
   }
 }

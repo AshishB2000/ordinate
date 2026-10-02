@@ -100,12 +100,12 @@ function fxPaintTileNote(body: HTMLElement, fx: any): void {
     const w = fxEl('span', 'fx-chip fx-chip-warn');
     w.appendChild(icon('alert', 12));
     w.appendChild(fxEl('span', '', fx.warning));
-    w.title = 'These rows are left out of the figure. Add the missing rate to the rate table to include them.';
+    w.title = t('fxUi.these_rows_are_left_out_of');
     note.appendChild(w);
   }
   if (fx.sample) {
-    const s = fxEl('span', 'fx-chip fx-chip-sample', 'Sample rates, not live');
-    s.title = 'Converted to ' + fx.target + ' with the bundled illustrative rates. Settings → General → Currency sets a real rate table.';
+    const s = fxEl('span', 'fx-chip fx-chip-sample', t('fxUi.sample_rates_not_live'));
+    s.title = t('fxUi.converted_to_with_the_bundled', { target: fx.target });
     note.appendChild(s);
   }
   body.appendChild(note);
@@ -123,10 +123,10 @@ const fxDash = (() => {
   const wrap = fxEl<HTMLLabelElement>('label', 'fx-dash');
   wrap.id = 'fx-dash-wrap';
   wrap.hidden = true;
-  wrap.appendChild(fxEl('span', 'fx-dash-label', 'Currency'));
+  wrap.appendChild(fxEl('span', 'fx-dash-label', t('common.currency')));
   const sel = fxEl<HTMLSelectElement>('select', 'fx-select');
   sel.id = 'fx-dash-currency';
-  sel.setAttribute('aria-label', 'This dashboard\'s currency');
+  sel.setAttribute('aria-label', t('fxUi.this_dashboard_s_currency'));
   wrap.appendChild(sel);
   sel.addEventListener('change', async () => {
     if (!currentProjectId || !dashCurrent || !window.hubFx) return;
@@ -142,7 +142,7 @@ function fxPaintDashPicker(): void {
   if (wrap.hidden || !fxState) return;
   const proj = fxState.settings.target || fxState.workspaceCurrency;
   sel.innerHTML = '';
-  const opts: Array<[string, string]> = [['', 'Project (' + proj + ')']];
+  const opts: Array<[string, string]> = [['', t('fxUi.project', { proj })]];
   (fxState.codes || []).forEach((c: string) => opts.push([c, c + ' — ' + OrdFormat.currencySymbol(c)]));
   for (const [v, t] of opts) {
     const o = fxEl<HTMLOptionElement>('option', '', t);
@@ -174,7 +174,7 @@ function fxProfileSection(): HTMLElement | null {
   let sec = body.querySelector('.fx-dsp') as HTMLElement | null;
   if (!sec) {
     sec = fxEl('section', 'fx-dsp');
-    sec.setAttribute('aria-label', 'Currency');
+    sec.setAttribute('aria-label', t('common.currency'));
     const facts = body.querySelector('.js-dsp-facts');
     if (facts) facts.after(sec);
     else body.appendChild(sec);
@@ -196,7 +196,7 @@ async function fxPaintProfile(col: any): Promise<void> {
   const decl = ((fxState.settings.columns || {})[datasetId] || {})[column] || null;
   const target = fxState.target;
 
-  sec.appendChild(fxEl('p', 'dsp-head', 'Currency'));
+  sec.appendChild(fxEl('p', 'dsp-head', t('common.currency')));
   const save = async (next: any): Promise<void> => {
     fxTake(await window.hubFx.column(currentProjectId as string, datasetId, column, next));
     if (seq === fxProfileSeq) void fxPaintProfile(col);
@@ -214,20 +214,20 @@ async function fxPaintProfile(col: any): Promise<void> {
   const textCols = expColumns.filter((c: any) => c.type === 'text').map((c: any) => [c.name, c.name] as [string, string]);
   const dateCols = expColumns.filter((c: any) => c.type === 'date').map((c: any) => c.name as string);
 
-  row('Money in', fxSelect([['', 'Not money'], ['fixed', 'One currency'], ['column', 'A currency per row']], kind, 'Currency of this column', (v) => {
+  row(t('fxUi.money_in'), fxSelect([['', t('fxUi.not_money')], ['fixed', t('fxUi.one_currency')], ['column', t('fxUi.a_currency_per_row')]], kind, t('fxUi.currency_of_this_column'), (v) => {
     if (!v) void save(null);
     else if (v === 'fixed') void save({ kind: 'fixed', code: (decl && decl.code) || target });
     else if (textCols.length) void save({ kind: 'column', column: textCols[0][0] });
-    else { showToast('A currency per row needs a text column of codes like EUR or USD.'); void fxPaintProfile(col); }
+    else { showToast(t('fxUi.a_currency_per_row_needs_a')); void fxPaintProfile(col); }
   }));
   if (decl && decl.kind === 'fixed') {
-    row('Currency', fxSelect(codes, decl.code, 'The column\'s currency', (v) => void save({ ...decl, code: v })));
+    row(t('common.currency'), fxSelect(codes, decl.code, t('fxUi.the_column_s_currency'), (v) => void save({ ...decl, code: v })));
   } else if (decl && decl.kind === 'column') {
-    row('Codes in', fxSelect(textCols, decl.column, 'The column holding each row\'s currency', (v) => void save({ ...decl, column: v })));
+    row(t('fxUi.codes_in'), fxSelect(textCols, decl.column, t('fxUi.the_column_holding_each_row_s'), (v) => void save({ ...decl, column: v })));
   }
   if (decl && dateCols.length) {
-    const auto: [string, string] = ['', 'Auto — ' + dateCols[0]];
-    row('Rate on', fxSelect([auto].concat(dateCols.map((d) => [d, d] as [string, string])), decl.date || '', 'The date that picks the rate', (v) => {
+    const auto: [string, string] = ['', t('fxUi.auto', { p0: dateCols[0] })];
+    row(t('fxUi.rate_on'), fxSelect([auto].concat(dateCols.map((d) => [d, d] as [string, string])), decl.date || '', t('fxUi.the_date_that_picks_the_rate'), (v) => {
       const next = { ...decl };
       if (v) next.date = v;
       else delete next.date;
@@ -237,24 +237,23 @@ async function fxPaintProfile(col: any): Promise<void> {
   sec.appendChild(grid);
 
   if (!decl) {
-    sec.appendChild(fxEl('p', 'dsp-note', 'Declare a currency and every metric and chart over this column converts to ' + target + ' at each row\'s date.'));
+    sec.appendChild(fxEl('p', 'dsp-note', t('fxUi.declare_a_currency_and_every_metric', { target })));
     return;
   }
-  if (!dateCols.length) sec.appendChild(fxEl('p', 'dsp-note', 'No date column — every row converts at the latest rate.'));
+  if (!dateCols.length) sec.appendChild(fxEl('p', 'dsp-note', t('fxUi.no_date_column_every_row_converts')));
   const status = fxEl('div', 'fx-dsp-status');
-  status.appendChild(fxEl('span', 'dsp-note', 'Checking rates…'));
+  status.appendChild(fxEl('span', 'dsp-note', t('fxUi.checking_rates')));
   sec.appendChild(status);
   let cov: any = null;
   try { cov = await window.hubFx.coverage(currentProjectId as string, datasetId, column); } catch (_) { cov = null; }
   if (seq !== fxProfileSeq) return;
   status.innerHTML = '';
   if (!cov || !cov.ok || !cov.fx) {
-    status.appendChild(fxEl('span', 'dsp-note', 'The conversion could not be checked.'));
+    status.appendChild(fxEl('span', 'dsp-note', t('fxUi.the_conversion_could_not_be_checked')));
     return;
   }
   const line = fxEl('p', 'dsp-note fx-dsp-total');
-  line.textContent = 'Converts to ' + cov.fx.target + ' — total ' + (cov.value == null ? '—' : OrdFormat.formatCurrency(cov.value, { compact: true }))
-    + (cov.fx.missing ? '' : ', every row has a rate.');
+  line.textContent = t('fxUi.converts_to_total', { target: cov.fx.target, p1: (cov.value == null ? '—' : OrdFormat.formatCurrency(cov.value, { compact: true })), p2: !!(cov.fx.missing) });
   status.appendChild(line);
   fxPaintTileNote(status, cov.fx);
 }

@@ -68,25 +68,25 @@ function periodLabel(spec: any): string {
   const month = ppWeekCal() ? 'period' : 'month';
   const n = Math.max(1, Math.floor(Number(spec.n) || 1));
   switch (spec.preset) {
-    case 'today': return 'Today';
-    case 'yesterday': return 'Yesterday';
-    case 'this_week': return 'This week';
-    case 'last_week': return 'Last week';
-    case 'this_month': return 'This ' + month;
-    case 'last_month': return 'Last ' + month;
-    case 'this_quarter': return 'This ' + fiscal + 'quarter';
-    case 'last_quarter': return 'Last ' + fiscal + 'quarter';
-    case 'this_year': return 'This ' + fiscal + 'year';
-    case 'last_year': return 'Last ' + fiscal + 'year';
-    case 'ytd': return fiscal ? 'Fiscal year to date' : 'Year to date';
-    case 'qtd': return fiscal ? 'Fiscal quarter to date' : 'Quarter to date';
+    case 'today': return t('common.today');
+    case 'yesterday': return t('common.yesterday');
+    case 'this_week': return t('periodPicker.this_week');
+    case 'last_week': return t('periodPicker.last_week');
+    case 'this_month': return t('periodPicker.this', { month });
+    case 'last_month': return t('periodPicker.last_3', { month });
+    case 'this_quarter': return t('periodPicker.this_quarter', { fiscal });
+    case 'last_quarter': return t('periodPicker.last_quarter', { fiscal });
+    case 'this_year': return t('periodPicker.this_year', { fiscal });
+    case 'last_year': return t('periodPicker.last_year', { fiscal });
+    case 'ytd': return fiscal ? t('periodPicker.fiscal_year_to_date') : t('periodPicker.year_to_date');
+    case 'qtd': return fiscal ? t('periodPicker.fiscal_quarter_to_date') : t('periodPicker.quarter_to_date');
     case 'custom': {
       if (spec.from && spec.to) return spec.from + ' to ' + spec.to;
       return spec.from ? t('periodPicker.from', { from: spec.from }) : t('periodPicker.until', { to: spec.to });
     }
     default: {
       const u = PP_UNITS.find((x) => x.preset === spec.preset);
-      if (!u) return 'Custom range';
+      if (!u) return t('periodPicker.custom_range');
       const word = spec.preset === 'last_n_months' ? month + (n === 1 ? '' : 's') : n === 1 ? u.one : u.many;
       const pre = spec.preset === 'last_n_quarters' || spec.preset === 'last_n_years' ? fiscal : '';
       return t('periodPicker.last', { n, pre, word });
