@@ -15,4 +15,5 @@ export function register(deps: Round7Deps): void {
   require('./userTemplates').register(); // Save as template, the gallery's "Yours" (src/ipc/userTemplates.ts)
   // r7:motion
   // r7:i18n
+  require('./i18n').register(); // interface languages: the boot catalog and Settings → Language (src/ipc/i18n.ts)
 }

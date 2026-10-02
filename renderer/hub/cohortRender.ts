@@ -64,10 +64,10 @@ function engEmpty(container: HTMLElement, type: string, needs: string): void {
   glyph.innerHTML = VIZ_ICONS[type] || ''; // trusted static SVG (renderResult.ts), never user input
   box.appendChild(glyph);
   box.appendChild(engEl('p', 'eng-empty-title', needs || (type === 'cohort'
-    ? 'Build a cohort from a dataset in Visuals.' : 'Build an event funnel from a dataset in Visuals.')));
+    ? t('cohortRender.build_a_cohort_from_a_dataset') : t('cohortRender.build_an_event_funnel_from_a'))));
   box.appendChild(engEl('p', 'eng-empty-hint', type === 'cohort'
-    ? 'Members are grouped by the period of their first event; each column shows who came back.'
-    : 'Entities move through the steps in order, each inside the conversion window.'));
+    ? t('cohortRender.members_are_grouped_by_the_period')
+    : t('cohortRender.entities_move_through_the_steps_in')));
   container.appendChild(box);
 }
 
@@ -76,7 +76,7 @@ function renderEngineViz(container: HTMLElement, data: any, type: string, source
   container.innerHTML = '';
   if (type === 'cohort') {
     const g: CohortGridShape | null = data && data.cohort;
-    if (!g || g.needs || !g.cohorts.length) { engEmpty(container, type, g ? g.needs || 'No events to group yet.' : ''); return; }
+    if (!g || g.needs || !g.cohorts.length) { engEmpty(container, type, g ? g.needs || t('cohortRender.no_events_to_group_yet') : ''); return; }
     renderCohortView(container, g, data, source);
     return;
   }
@@ -97,9 +97,9 @@ function engHead(meta: string, actions: HTMLElement[]): HTMLElement {
 }
 
 function engCsvButton(type: string, data: any, source: any): HTMLButtonElement {
-  const b = engEl('button', 'btn btn-sm eng-csv', 'Export CSV');
+  const b = engEl('button', 'btn btn-sm eng-csv', t('common.export_csv'));
   b.type = 'button';
-  b.setAttribute('aria-label', type === 'cohort' ? 'Export the cohort table as CSV' : 'Export the funnel as CSV');
+  b.setAttribute('aria-label', type === 'cohort' ? t('cohortRender.export_the_cohort_table_as_csv') : t('cohortRender.export_the_funnel_as_csv'));
   b.addEventListener('click', () => { void engExportCsv(type, data, source); });
   return b;
 }
@@ -125,7 +125,7 @@ function engineRows(type: string, data: any, raw: boolean): string[][] | null {
     const g: CohortGridShape | null = data && data.cohort;
     if (!g || g.needs || !g.cohorts.length) return null;
     const fmt = (v: number | null): string => (v == null ? '' : raw ? String(v) : g.show === 'value' ? engNum(v) : engPct(v));
-    const head = ['Cohort', 'Members'];
+    const head = [t('common.cohort'), t('cohortRender.members')];
     for (let k = 0; k < g.periods; k += 1) head.push(`${g.periodNoun} ${k}`);
     const out = [head];
     g.cohorts.forEach((c, i) => out.push([c, String(g.sizes[i])].concat(g.cells[i].map(fmt))));
@@ -136,7 +136,7 @@ function engineRows(type: string, data: any, raw: boolean): string[][] | null {
     const f: EventFunnelShape | null = data && data.eventFunnel;
     if (!f || f.needs) return null;
     const pct = (v: number | null): string => (v == null ? '' : raw ? String(v) : engPct(v));
-    const out = [['Step', 'Entities', '% of first step', '% of previous step', 'Median time from previous']];
+    const out = [[t('common.step'), t('cohortRender.entities'), t('cohortRender.of_first_step'), t('cohortRender.of_previous_step'), t('cohortRender.median_time_from_previous')]];
     f.steps.forEach((s, k) => out.push([s, String(f.counts[k]), pct(f.pctOfFirst[k]), k ? pct(f.pctOfPrev[k]) : '',
       k ? (raw ? (f.medianMs[k] == null ? '' : String(f.medianMs[k])) : engDuration(f.medianMs[k])) : '']));
     if (raw && f.breakdown) {
@@ -201,8 +201,8 @@ function renderCohortView(container: HTMLElement, g: CohortGridShape, data: any,
   const body = engEl('div', 'ch-body');
   const seg = engEl('div', 'eng-seg');
   seg.setAttribute('role', 'group');
-  seg.setAttribute('aria-label', 'Cohort view');
-  const views: Array<[string, boolean]> = [['Table', false], ['Retention curve', true]];
+  seg.setAttribute('aria-label', t('cohortRender.cohort_view'));
+  const views: Array<[string, boolean]> = [[t('common.table'), false], [t('common.retention_curve'), true]];
   const btns = views.map(([label, isCurve]) => {
     const b = engEl('button', 'eng-seg-btn', label);
     b.type = 'button';
@@ -211,12 +211,11 @@ function renderCohortView(container: HTMLElement, g: CohortGridShape, data: any,
     return b;
   });
   const members = g.sizes.reduce((a, b) => a + b, 0);
-  const meta = `${g.cohorts.length} ${g.cohorts.length === 1 ? 'cohort' : 'cohorts'} · ${_fmtVal(members)} members · ` +
-    `${g.show === 'value' ? g.valueName : 'retention'} by ${g.periodNoun.toLowerCase()}`;
+  const meta = t('cohortRender.members_by', { cohortsCount: g.cohorts.length, members: _fmtVal(members), p3: g.show === 'value' ? g.valueName : 'retention', p4: g.periodNoun.toLowerCase() });
   wrap.appendChild(engHead(meta, [seg, engCsvButton('cohort', data, source)]));
   const notes: string[] = [];
-  if (g.truncated) notes.push(`Showing the latest ${g.cohorts.length} cohorts and first ${g.periods} ${g.periodNoun.toLowerCase()}s.`);
-  if (g.excluded) notes.push(`${_fmtVal(g.excluded)} ${g.excluded === 1 ? 'row' : 'rows'} without an entity or a readable date left out.`);
+  if (g.truncated) notes.push(t('cohortRender.showing_the_latest_cohorts_and_first', { cohortsCount: g.cohorts.length, periods: g.periods, p2: g.periodNoun.toLowerCase() }));
+  if (g.excluded) notes.push(t('cohortRender.without_an_entity_or_a_readable', { excluded: _fmtVal(g.excluded), excluded2: g.excluded }));
   if (notes.length) wrap.appendChild(engEl('p', 'eng-note', notes.join(' ')));
   wrap.appendChild(body);
   container.appendChild(wrap);
@@ -236,11 +235,11 @@ function cohortTable(host: HTMLElement, g: CohortGridShape): void {
   const scroll = engEl('div', 'ch-scroll');
   scroll.tabIndex = 0;
   scroll.setAttribute('role', 'region');
-  scroll.setAttribute('aria-label', 'Cohort table');
+  scroll.setAttribute('aria-label', t('cohortRender.cohort_table'));
   const table = engEl('table', 'ch-table');
   const thead = engEl('thead');
   const hr = engEl('tr');
-  [['Cohort', 'ch-corner ch-label'], ['Members', 'ch-corner ch-size']].forEach(([t, c]) => {
+  [[t('common.cohort'), 'ch-corner ch-label'], [t('cohortRender.members'), 'ch-corner ch-size']].forEach(([t, c]) => {
     const th = engEl('th', c, t);
     th.scope = 'col';
     hr.appendChild(th);
@@ -271,7 +270,7 @@ function cohortTable(host: HTMLElement, g: CohortGridShape): void {
       const td = engEl('td', 'ch-cell');
       if (v == null) { td.classList.add('is-blank'); tr.appendChild(td); return; }
       td.textContent = text(v);
-      td.title = `${label} cohort (${_fmtVal(g.sizes[i])} members) · ${g.periodNoun} ${k}: ${text(v)}`;
+      td.title = t('cohortRender.cohort_members', { label, p1: _fmtVal(g.sizes[i]), periodNoun: g.periodNoun, k, v: text(v) });
       if (k === 0 && g.show !== 'value') td.classList.add('is-base');
       else if (ramp && max > 0) engShade(td, v / max, ramp);
       tr.appendChild(td);
@@ -283,7 +282,7 @@ function cohortTable(host: HTMLElement, g: CohortGridShape): void {
   const fr = engEl('tr', 'ch-avg');
   const fth = engEl('th', 'ch-label', 'Average');
   fth.scope = 'row';
-  fth.title = 'Weighted by cohort size, over the cohorts that have reached each period';
+  fth.title = t('cohortRender.weighted_by_cohort_size_over_the');
   fr.appendChild(fth);
   fr.appendChild(engEl('td', 'ch-size', _fmtVal(g.sizes.reduce((a, b) => a + b, 0))));
   g.average.forEach((v) => fr.appendChild(engEl('td', 'ch-cell', v == null ? '' : text(v))));
@@ -297,15 +296,15 @@ function cohortTable(host: HTMLElement, g: CohortGridShape): void {
 function cohortCurve(host: HTMLElement, container: HTMLElement, data: any, g: CohortGridShape): void {
   const wrap = engEl('div', 'cv-canvas-wrap ch-curve');
   const canvas = engEl('canvas');
-  canvas.setAttribute('aria-label', `Retention curve: ${g.cohorts.length} cohorts and their average`);
+  canvas.setAttribute('aria-label', t('cohortRender.retention_curve_cohorts_and_their', { cohortsCount: g.cohorts.length }));
   wrap.appendChild(canvas);
   host.appendChild(wrap);
   const chart = buildChart(canvas, { labels: data.labels, series: data.series }, 'line', {
     valueMode: 'off', showLegend: g.cohorts.length <= 12, noAnimate: true, smooth: false,
     numberFormat: g.show === 'value' ? undefined : 'plain',
-    yAxisLabel: g.show === 'value' ? g.valueName : 'Retained %', xAxisLabel: `${g.periodNoun}s since first event`,
+    yAxisLabel: g.show === 'value' ? g.valueName : t('cohortRender.retained'), xAxisLabel: t('cohortRender.s_since_first_event', { periodNoun: g.periodNoun }),
   });
-  if (!chart) { wrap.remove(); engEmpty(host, 'cohort', 'Nothing to draw yet.'); return; }
+  if (!chart) { wrap.remove(); engEmpty(host, 'cohort', t('cohortRender.nothing_to_draw_yet')); return; }
   const strong = getCSSVar('--text-strong', host) || getCSSVar('--text', host);
   (chart.data.datasets || []).forEach((ds: any) => {
     const avg = ds.label === 'Average';
@@ -358,11 +357,11 @@ function drawCohortThumb(canvas: HTMLCanvasElement, g: CohortGridShape): boolean
 
 function renderFunnelView(container: HTMLElement, f: EventFunnelShape, data: any, source: any): void {
   const wrap = engEl('div', 'eng-wrap ef-wrap');
-  const meta = `${_fmtVal(f.counts[0] || 0)} entered · strict order · within ${engWindow(f.window)} of the first step`;
+  const meta = t('cohortRender.entered_strict_order_within_of_the', { p0: _fmtVal(f.counts[0] || 0), window: engWindow(f.window) });
   wrap.appendChild(engHead(meta, [engCsvButton('event_funnel', data, source)]));
   if (f.excluded) {
     wrap.appendChild(engEl('p', 'eng-note',
-      `${_fmtVal(f.excluded)} ${f.excluded === 1 ? 'row' : 'rows'} without an entity or a readable timestamp left out.`));
+      t('cohortRender.without_an_entity_or_a_readable_2', { excluded: _fmtVal(f.excluded), excluded2: f.excluded })));
   }
   const scroll = engEl('div', 'ef-scroll');
   const list = engEl('ol', 'ef-steps');
@@ -380,12 +379,11 @@ function renderFunnelView(container: HTMLElement, f: EventFunnelShape, data: any
     li.appendChild(track);
     const figs = engEl('div', 'ef-figs');
     figs.appendChild(engEl('span', 'ef-count', _fmtVal(f.counts[k])));
-    figs.appendChild(engEl('span', 'ef-rate', k ? `${engPct(f.pctOfFirst[k])} of first` : 'entered'));
-    if (k) figs.appendChild(engEl('span', 'ef-rate', `${engPct(f.pctOfPrev[k])} of previous`));
-    if (k) figs.appendChild(engEl('span', 'ef-time', `median ${engDuration(f.medianMs[k])} after step ${k}`));
+    figs.appendChild(engEl('span', 'ef-rate', k ? t('cohortRender.of_first', { p0: engPct(f.pctOfFirst[k]) }) : 'entered'));
+    if (k) figs.appendChild(engEl('span', 'ef-rate', t('cohortRender.of_previous', { p0: engPct(f.pctOfPrev[k]) })));
+    if (k) figs.appendChild(engEl('span', 'ef-time', t('cohortRender.median_after_step', { p0: engDuration(f.medianMs[k]), k })));
     li.appendChild(figs);
-    li.setAttribute('aria-label', `Step ${k + 1}, ${step}: ${f.counts[k]} entities` +
-      (k ? `, ${engPct(f.pctOfFirst[k])} of the first step, ${engPct(f.pctOfPrev[k])} of the previous, median ${engDuration(f.medianMs[k])}` : ''));
+    li.setAttribute('aria-label', t('cohortRender.step_entities', { p0: k + 1, step, p2: f.counts[k], p3: (k ? t('cohortRender.of_the_first_step_of_the', { p0: engPct(f.pctOfFirst[k]), p1: engPct(f.pctOfPrev[k]), p2: engDuration(f.medianMs[k]) }) : '') }));
     list.appendChild(li);
   });
   scroll.appendChild(list);
@@ -397,7 +395,7 @@ function renderFunnelView(container: HTMLElement, f: EventFunnelShape, data: any
 function funnelBreakdown(f: EventFunnelShape): HTMLElement {
   const bd = f.breakdown!;
   const box = engEl('div', 'ef-breakdown');
-  box.appendChild(engEl('h4', 'ef-bd-title', `By ${bd.column}` + (bd.truncated ? ` — top ${bd.groups.length}` : '')));
+  box.appendChild(engEl('h4', 'ef-bd-title', t('cohortRender.by', { column: bd.column, p1: (bd.truncated ? t('cohortRender.top', { groupsCount: bd.groups.length }) : '') })));
   const table = engEl('table', 'ef-bd-table');
   const hr = engEl('tr');
   const corner = engEl('th', 'ef-bd-label', bd.column);

@@ -74,7 +74,7 @@ async function openPublishDialog(preselect?: string): Promise<void> {
       window.hubPlatform.publishConfig(currentProjectId),
     ]);
   } catch (_) { targets = null; }
-  if (!targets || !targets.ok) { showToast((targets && targets.error) || 'Could not open Publish.'); return; }
+  if (!targets || !targets.ok) { showToast((targets && targets.error) || t('publishDialog.could_not_open_publish')); return; }
   const cfg = stored && stored.config ? stored.config : null;
   const st: PdState = {
     projectId: currentProjectId,
@@ -100,8 +100,8 @@ async function openPublishDialog(preselect?: string): Promise<void> {
   ic.appendChild(icon('globe', 20));
   head.appendChild(ic);
   const ht = pdEl('div', 'pd-head-text');
-  ht.appendChild(pdEl('h2', 'pd-title', 'Publish to folder'));
-  ht.appendChild(pdEl('p', 'pd-sub', 'A static site anyone can open: every figure computed now, the filter bar working offline, no server and no network.'));
+  ht.appendChild(pdEl('h2', 'pd-title', t('publishDialog.publish_to_folder')));
+  ht.appendChild(pdEl('p', 'pd-sub', t('publishDialog.a_static_site_anyone_can_open')));
   head.appendChild(ht);
   box.appendChild(head);
 
@@ -117,13 +117,13 @@ async function openPublishDialog(preselect?: string): Promise<void> {
     const gh = pdEl('div', 'pd-group-head');
     gh.appendChild(pdEl('span', 'pd-group-title', title));
     if (items.length > 1) {
-      const all = pdEl('button', 'pd-link', 'Select all') as HTMLButtonElement;
+      const all = pdEl('button', 'pd-link', t('publishDialog.select_all')) as HTMLButtonElement;
       all.type = 'button';
       all.addEventListener('click', () => {
         const every = items.every((i) => st.picked.has(i.id));
         for (const i of items) { if (every) st.picked.delete(i.id); else st.picked.add(i.id); }
         sec.querySelectorAll('input[type=checkbox]').forEach((c) => { (c as HTMLInputElement).checked = !every; });
-        all.textContent = every ? 'Select all' : 'Select none';
+        all.textContent = every ? t('publishDialog.select_all') : t('publishDialog.select_none');
         pdReplan(st, box);
       });
       gh.appendChild(all);
@@ -146,20 +146,20 @@ async function openPublishDialog(preselect?: string): Promise<void> {
     }
     return sec;
   };
-  left.appendChild(pdEl('h3', 'pd-col-title', 'What to publish'));
-  left.appendChild(pickList('Dashboards', st.dashboards, 'No dashboards in this project yet.', 'layout-dashboard'));
-  left.appendChild(pickList('Stories', st.stories, 'No stories in this project yet.', 'file-text'));
-  left.appendChild(pickList('Scorecards', st.scorecards, 'No scorecards in this project yet.', 'target'));
+  left.appendChild(pdEl('h3', 'pd-col-title', t('publishDialog.what_to_publish')));
+  left.appendChild(pickList(t('common.dashboards'), st.dashboards, t('publishDialog.no_dashboards_in_this_project_yet'), 'layout-dashboard'));
+  left.appendChild(pickList(t('common.stories'), st.stories, t('publishDialog.no_stories_in_this_project_yet'), 'file-text'));
+  left.appendChild(pickList(t('common.scorecards'), st.scorecards, t('publishDialog.no_scorecards_in_this_project_yet'), 'target'));
 
   // ── Where and how ──
-  right.appendChild(pdEl('h3', 'pd-col-title', 'Where and how'));
+  right.appendChild(pdEl('h3', 'pd-col-title', t('publishDialog.where_and_how')));
   const folder = pdEl('div', 'pd-field');
-  folder.appendChild(pdEl('span', 'pd-label', 'Output folder'));
+  folder.appendChild(pdEl('span', 'pd-label', t('publishDialog.output_folder')));
   const frow = pdEl('div', 'pd-folder');
-  const fpath = pdEl('span', 'pd-folder-path', st.outDir ? pdShortPath(st.outDir) : 'No folder chosen');
+  const fpath = pdEl('span', 'pd-folder-path', st.outDir ? pdShortPath(st.outDir) : t('common.no_folder_chosen'));
   if (st.outDir) fpath.title = st.outDir;
   fpath.classList.toggle('is-empty', !st.outDir);
-  const choose = pdEl('button', 'btn btn-sm', st.outDir ? 'Change…' : 'Choose…') as HTMLButtonElement;
+  const choose = pdEl('button', 'btn btn-sm', st.outDir ? t('publishDialog.change') : t('common.choose')) as HTMLButtonElement;
   choose.type = 'button';
   choose.id = 'pd-choose';
   choose.addEventListener('click', async () => {
@@ -170,39 +170,39 @@ async function openPublishDialog(preselect?: string): Promise<void> {
     fpath.textContent = pdShortPath(r.path);
     fpath.title = r.path;
     fpath.classList.remove('is-empty');
-    choose.textContent = 'Change…';
+    choose.textContent = t('publishDialog.change');
     pdReplan(st, box);
   });
   frow.append(fpath, choose);
   folder.appendChild(frow);
-  folder.appendChild(pdEl('span', 'pd-help', 'index.html, one page per dashboard or story, and manifest.json. Only files a previous publish wrote are ever replaced.'));
+  folder.appendChild(pdEl('span', 'pd-help', t('publishDialog.index_html_one_page_per_dashboard')));
   right.appendChild(folder);
 
   const tfield = pdEl('label', 'pd-field');
-  tfield.appendChild(pdEl('span', 'pd-label', 'Site title'));
+  tfield.appendChild(pdEl('span', 'pd-label', t('publishDialog.site_title')));
   const tin = document.createElement('input');
   tin.type = 'text';
   tin.className = 'pd-input';
-  tin.placeholder = 'The project’s name';
+  tin.placeholder = t('publishDialog.the_project_s_name');
   tin.value = st.title;
   tin.addEventListener('input', () => { st.title = tin.value.trim(); });
   tfield.appendChild(tin);
   right.appendChild(tfield);
 
   const cfield = pdEl('label', 'pd-field');
-  cfield.appendChild(pdEl('span', 'pd-label', 'Filter bar combinations'));
+  cfield.appendChild(pdEl('span', 'pd-label', t('publishDialog.filter_bar_combinations')));
   const csel = document.createElement('select');
   csel.className = 'pd-input';
   for (const n of [32, 64, 128, 256, 512, 1024]) {
     const o = document.createElement('option');
     o.value = String(n);
-    o.textContent = 'Up to ' + n.toLocaleString() + ' per dashboard';
+    o.textContent = t('publishDialog.up_to_per_dashboard', { p0: n.toLocaleString() });
     csel.appendChild(o);
   }
   csel.value = String(st.maxCombos);
   csel.addEventListener('change', () => { st.maxCombos = Number(csel.value); pdReplan(st, box); });
   cfield.appendChild(csel);
-  cfield.appendChild(pdEl('span', 'pd-help', 'Each state of the filter bar is computed now and shipped with the page. Past the limit, the page changes one filter at a time.'));
+  cfield.appendChild(pdEl('span', 'pd-help', t('publishDialog.each_state_of_the_filter_bar')));
   right.appendChild(cfield);
 
   const arow = pdEl('label', 'pd-check');
@@ -210,7 +210,7 @@ async function openPublishDialog(preselect?: string): Promise<void> {
   acb.type = 'checkbox';
   acb.checked = st.afterRefresh;
   acb.addEventListener('change', () => { st.afterRefresh = acb.checked; });
-  arow.append(acb, pdEl('span', '', 'Re-publish after data refreshes'));
+  arow.append(acb, pdEl('span', '', t('publishDialog.re_publish_after_data_refreshes')));
   right.appendChild(arow);
   // The Share policy on the publish path: "2 sensitive columns will be masked · Change".
   const share = pdEl('div', 'pd-share');
@@ -223,17 +223,17 @@ async function openPublishDialog(preselect?: string): Promise<void> {
   box.appendChild(summary);
 
   const foot = pdEl('div', 'pd-foot');
-  const cancel = pdEl('button', 'btn', 'Cancel') as HTMLButtonElement;
+  const cancel = pdEl('button', 'btn', t('common.cancel')) as HTMLButtonElement;
   cancel.type = 'button';
   cancel.addEventListener('click', pdClose);
-  const go = pdEl('button', 'btn btn-primary', 'Publish') as HTMLButtonElement;
+  const go = pdEl('button', 'btn btn-primary', t('common.publish_2')) as HTMLButtonElement;
   go.type = 'button';
   go.id = 'pd-publish';
   go.addEventListener('click', () => { void pdPublish(st); });
   foot.append(cancel, go);
   box.appendChild(foot);
 
-  const a11y = makeModalAccessible(box, 'Publish to folder', choose);
+  const a11y = makeModalAccessible(box, t('publishDialog.publish_to_folder'), choose);
   pdOverlay.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.stopPropagation(); pdClose(); a11y.release(); }
     else a11y.onTabKey(e);
@@ -251,7 +251,7 @@ function pdReplan(st: PdState, box: HTMLElement): void {
   go.disabled = true;
   if (!any) {
     summary.textContent = '';
-    summary.appendChild(pdEl('p', 'pd-summary-line is-muted', 'Pick at least one dashboard or story.'));
+    summary.appendChild(pdEl('p', 'pd-summary-line is-muted', t('publishDialog.pick_at_least_one_dashboard_or')));
     return;
   }
   summary.classList.add('is-loading');
@@ -264,21 +264,21 @@ function pdReplan(st: PdState, box: HTMLElement): void {
     st.plan = res && res.ok ? res.plan : null;
     pdPaintSummary(st, summary);
     go.disabled = !st.plan || st.plan.tooBig || !st.outDir;
-    go.title = !st.outDir ? 'Choose an output folder first' : '';
+    go.title = !st.outDir ? t('publishDialog.choose_an_output_folder_first') : '';
   }, 250);
 }
 
 function pdPaintSummary(st: PdState, host: HTMLElement): void {
   host.textContent = '';
   const p = st.plan;
-  if (!p) { host.appendChild(pdEl('p', 'pd-summary-line is-error', 'Could not size the site.')); return; }
+  if (!p) { host.appendChild(pdEl('p', 'pd-summary-line is-error', t('publishDialog.could_not_size_the_site'))); return; }
   host.classList.toggle('is-over', !!p.tooBig);
   const line = pdEl('p', 'pd-summary-line', p.summary);
   line.id = 'pd-summary-line';
   host.appendChild(line);
   const meter = pdEl('div', 'pd-meter');
   meter.setAttribute('role', 'meter');
-  meter.setAttribute('aria-label', 'Size against the 50 MB limit');
+  meter.setAttribute('aria-label', t('publishDialog.size_against_the_50_mb_limit'));
   meter.setAttribute('aria-valuemin', '0');
   meter.setAttribute('aria-valuemax', String(p.maxBytes));
   meter.setAttribute('aria-valuenow', String(p.bytes));
@@ -290,18 +290,18 @@ function pdPaintSummary(st: PdState, host: HTMLElement): void {
   for (const pg of p.pages) {
     const li = pdEl('li', 'pd-page');
     li.appendChild(pdEl('span', 'pd-page-name', pg.name));
-    const bits = [pg.kind === 'story' ? 'Story' : pg.kind === 'scorecard' ? 'Scorecard' : pg.combos === 1 ? 'No filter bar' : pg.combos.toLocaleString() + ' combinations'];
-    if (pg.mode === 'single') bits.push('one filter at a time');
+    const bits = [pg.kind === 'story' ? t('common.story') : pg.kind === 'scorecard' ? t('common.scorecard') : pg.combos === 1 ? t('publishDialog.no_filter_bar') : pg.combos.toLocaleString() + ' combinations'];
+    if (pg.mode === 'single') bits.push(t('publishDialog.one_filter_at_a_time'));
     bits.push(pdBytes(pg.bytes));
     li.appendChild(pdEl('span', 'pd-page-meta', bits.join(' · ')));
     list.appendChild(li);
     for (const d of pg.dropped || []) {
-      list.appendChild(pdEl('li', 'pd-page-note', `“${d.control}” keeps its first options; ${d.options.length} more are left out.`));
+      list.appendChild(pdEl('li', 'pd-page-note', t('publishDialog.keeps_its_first_options_more_are', { control: d.control, optionsCount: d.options.length })));
     }
   }
   host.appendChild(list);
   if (p.tooBig) {
-    host.appendChild(pdEl('p', 'pd-over', `Over the ${pdBytes(p.maxBytes)} limit. To fit, drop one of:`));
+    host.appendChild(pdEl('p', 'pd-over', t('publishDialog.over_the_limit_to_fit_drop', { maxBytes: pdBytes(p.maxBytes) })));
     const sug = pdEl('ul', 'pd-suggest');
     for (const s of p.suggestions || []) sug.appendChild(pdEl('li', '', s));
     host.appendChild(sug);
@@ -329,14 +329,14 @@ async function pdPublish(st: PdState): Promise<void> {
   const brands = await pdBrands(st);
   const config = pdConfig(st, brands);
   pdClose();
-  showToast('Publishing — follow it in Jobs.');
+  showToast(t('publishDialog.publishing_follow_it_in_jobs'));
   let res: any = null;
   try { res = await window.hubPlatform.publishRun(config); } catch (_) { res = null; }
   if (res && res.canceled) return;
-  if (!res || !res.ok) { showToast((res && res.error) || 'Publishing failed.', { kind: 'error' }); return; }
+  if (!res || !res.ok) { showToast((res && res.error) || t('publishDialog.publishing_failed'), { kind: 'error' }); return; }
   const r = res.result;
-  showToast(`Published ${r.files.length} files · ${pdBytes(r.bytes)}`, res.jobId
-    ? { kind: 'success', action: { label: 'Reveal', onClick: () => { void window.hubPlatform.revealJob(res.jobId); } } }
+  showToast(t('publishDialog.published_files', { filesCount: r.files.length, bytes: pdBytes(r.bytes) }), res.jobId
+    ? { kind: 'success', action: { label: t('common.reveal'), onClick: () => { void window.hubPlatform.revealJob(res.jobId); } } }
     : { kind: 'success' });
 }
 
@@ -350,12 +350,12 @@ async function republishSite(): Promise<void> {
   if (typeof pvShareGate === 'function' && !(await pvShareGate('publish', null))) return;
   const st = { projectId: currentProjectId, dashboards: cfg.dashboardIds.map((id: string) => ({ id, name: '' })), picked: new Set<string>(cfg.dashboardIds) } as any;
   const brands = await pdBrands(st);
-  showToast('Re-publishing — follow it in Jobs.');
+  showToast(t('publishDialog.re_publishing_follow_it_in_jobs'));
   let res: any = null;
   try { res = await window.hubPlatform.publishRepublish(currentProjectId, brands); } catch (_) { res = null; }
   if (res && res.canceled) return;
-  if (!res || !res.ok) { showToast((res && res.error) || 'Publishing failed.', { kind: 'error' }); return; }
-  showToast(`Re-published ${res.result.files.length} files · ${pdBytes(res.result.bytes)}`, { kind: 'success' });
+  if (!res || !res.ok) { showToast((res && res.error) || t('publishDialog.publishing_failed'), { kind: 'error' }); return; }
+  showToast(t('publishDialog.re_published_files', { filesCount: res.result.files.length, bytes: pdBytes(res.result.bytes) }), { kind: 'success' });
 }
 
 /** The Dashboards header's ⋯ menu: Publish…, and Re-publish once there is something to redo. */
@@ -364,7 +364,7 @@ async function openDashboardsMoreMenu(btn: HTMLElement): Promise<void> {
   try { stored = currentProjectId ? await window.hubPlatform.publishConfig(currentProjectId) : null; } catch (_) { stored = null; }
   const cfg = stored && stored.config;
   openMiniMenu(btn, (el: HTMLElement, close: () => void) => {
-    const pub = miniMenuRow('Publish…');
+    const pub = miniMenuRow(t('common.publish'));
     pub.addEventListener('click', () => { close(); void openPublishDialog(); });
     el.appendChild(pub);
     if (cfg) {

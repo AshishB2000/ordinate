@@ -79,16 +79,16 @@ const swXY = (x: number[], y: number[]): Array<{ x: number; y: number }> => x.ma
 /** The pair's points and its least-squares line, across the observed x range. */
 function swScatterFit(host: HTMLElement, pair: any): any {
   const canvas = swChartFrame(host, `${pair.y} against ${pair.x}`,
-    pair.shown < pair.n ? `${pair.shown.toLocaleString('en-US')} of ${pair.n.toLocaleString('en-US')} points shown, evenly thinned` : `${pair.n.toLocaleString('en-US')} points`, true);
+    pair.shown < pair.n ? t('statsCharts.of_points_shown_evenly_thinned', { p0: pair.shown.toLocaleString('en-US'), p1: pair.n.toLocaleString('en-US') }) : `${pair.n.toLocaleString('en-US')} points`, true);
   const th = swTheme(canvas);
   const xs: number[] = pair.points.x;
-  const datasets: any[] = [{ type: 'scatter', label: 'Rows', data: swXY(xs, pair.points.y), backgroundColor: th.c1, pointRadius: 2.5, pointHoverRadius: 4 }];
+  const datasets: any[] = [{ type: 'scatter', label: t('common.rows'), data: swXY(xs, pair.points.y), backgroundColor: th.c1, pointRadius: 2.5, pointHoverRadius: 4 }];
   if (pair.fit && xs.length) {
     let lo = Infinity;
     let hi = -Infinity;
     for (const v of xs) { if (v < lo) lo = v; if (v > hi) hi = v; }
     datasets.push({
-      type: 'line', label: 'Fit', data: [{ x: lo, y: pair.fit.intercept + pair.fit.slope * lo }, { x: hi, y: pair.fit.intercept + pair.fit.slope * hi }],
+      type: 'line', label: t('common.fit'), data: [{ x: lo, y: pair.fit.intercept + pair.fit.slope * lo }, { x: hi, y: pair.fit.intercept + pair.fit.slope * hi }],
       borderColor: th.line, borderWidth: 2, pointRadius: 0, fill: false,
     });
   }
@@ -96,7 +96,7 @@ function swScatterFit(host: HTMLElement, pair: any): any {
 }
 
 function swResidualPlot(host: HTMLElement, fitted: number[], residual: number[]): any {
-  const canvas = swChartFrame(host, 'Residuals vs fitted', 'A shapeless band around zero is what a good fit looks like');
+  const canvas = swChartFrame(host, t('statsCharts.residuals_vs_fitted'), t('statsCharts.a_shapeless_band_around_zero_is'));
   const th = swTheme(canvas);
   let lo = Infinity;
   let hi = -Infinity;
@@ -105,16 +105,16 @@ function swResidualPlot(host: HTMLElement, fitted: number[], residual: number[])
     type: 'scatter',
     data: {
       datasets: [
-        { type: 'scatter', label: 'Residual', data: swXY(fitted, residual), backgroundColor: th.c1, pointRadius: 2 },
-        { type: 'line', label: 'Zero', data: [{ x: lo, y: 0 }, { x: hi, y: 0 }], borderColor: th.line, borderWidth: 1.5, borderDash: [5, 4], pointRadius: 0 },
+        { type: 'scatter', label: t('statsCharts.residual'), data: swXY(fitted, residual), backgroundColor: th.c1, pointRadius: 2 },
+        { type: 'line', label: t('statsCharts.zero'), data: [{ x: lo, y: 0 }, { x: hi, y: 0 }], borderColor: th.line, borderWidth: 1.5, borderDash: [5, 4], pointRadius: 0 },
       ],
     },
-    options: { scales: swAxes(th, 'Fitted value', 'Residual', true), plugins: { legend: { display: false } } },
+    options: { scales: swAxes(th, t('statsCharts.fitted_value'), t('statsCharts.residual'), true), plugins: { legend: { display: false } } },
   });
 }
 
 function swQQPlot(host: HTMLElement, theoretical: number[], sample: number[]): any {
-  const canvas = swChartFrame(host, 'Normal Q-Q', 'Standardised residuals against normal quantiles');
+  const canvas = swChartFrame(host, t('statsCharts.normal_q_q'), t('statsCharts.standardised_residuals_against_normal'));
   const th = swTheme(canvas);
   const lo = theoretical.length ? Math.min(theoretical[0], sample[0]) : -3;
   const hi = theoretical.length ? Math.max(theoretical[theoretical.length - 1], sample[sample.length - 1]) : 3;
@@ -122,39 +122,39 @@ function swQQPlot(host: HTMLElement, theoretical: number[], sample: number[]): a
     type: 'scatter',
     data: {
       datasets: [
-        { type: 'scatter', label: 'Residual', data: swXY(theoretical, sample), backgroundColor: th.c2, pointRadius: 2 },
-        { type: 'line', label: 'Normal', data: [{ x: lo, y: lo }, { x: hi, y: hi }], borderColor: th.line, borderWidth: 1.5, pointRadius: 0 },
+        { type: 'scatter', label: t('statsCharts.residual'), data: swXY(theoretical, sample), backgroundColor: th.c2, pointRadius: 2 },
+        { type: 'line', label: t('statsCharts.normal'), data: [{ x: lo, y: lo }, { x: hi, y: hi }], borderColor: th.line, borderWidth: 1.5, pointRadius: 0 },
       ],
     },
-    options: { scales: swAxes(th, 'Theoretical quantile', 'Sample quantile', true), plugins: { legend: { display: false } } },
+    options: { scales: swAxes(th, t('statsCharts.theoretical_quantile'), t('statsCharts.sample_quantile'), true), plugins: { legend: { display: false } } },
   });
 }
 
 function swHistogram(host: HTMLElement, column: string, h: any): any {
-  const canvas = swChartFrame(host, `Distribution of ${column}`, 'Bars are counts; the line is a normal curve with the same mean and SD', true);
+  const canvas = swChartFrame(host, t('common.distribution_of', { column }), t('statsCharts.bars_are_counts_the_line_is'), true);
   const th = swTheme(canvas);
   return swMake(canvas, {
     type: 'bar',
     data: {
       labels: h.labels,
       datasets: [
-        { type: 'bar', label: 'Count', data: h.counts, backgroundColor: th.c1, borderRadius: 3, barPercentage: 0.96, categoryPercentage: 0.96, order: 2 },
-        { type: 'line', label: 'Normal curve', data: h.normal, borderColor: th.line, borderWidth: 2, pointRadius: 0, tension: 0.35, order: 1 },
+        { type: 'bar', label: t('common.count'), data: h.counts, backgroundColor: th.c1, borderRadius: 3, barPercentage: 0.96, categoryPercentage: 0.96, order: 2 },
+        { type: 'line', label: t('statsCharts.normal_curve'), data: h.normal, borderColor: th.line, borderWidth: 2, pointRadius: 0, tension: 0.35, order: 1 },
       ],
     },
     options: {
-      scales: swAxes(th, column, 'Count', false),
+      scales: swAxes(th, column, t('common.count'), false),
       plugins: { legend: { display: true, labels: { color: th.muted, boxWidth: 12, font: { size: 11 } } } },
     },
   });
 }
 
 function swMeansBar(host: HTMLElement, outcome: string, groups: any[]): any {
-  const canvas = swChartFrame(host, `Average ${outcome} by group`, '');
+  const canvas = swChartFrame(host, t('statsCharts.average_by_group', { outcome }), '');
   const th = swTheme(canvas);
   return swMake(canvas, {
     type: 'bar',
-    data: { labels: groups.map((g) => g.label), datasets: [{ label: `Mean ${outcome}`, data: groups.map((g) => g.mean), backgroundColor: th.c1, borderRadius: 4, maxBarThickness: 56 }] },
-    options: { scales: swAxes(th, '', `Mean ${outcome}`, false), plugins: { legend: { display: false } } },
+    data: { labels: groups.map((g) => g.label), datasets: [{ label: t('statsCharts.mean', { outcome }), data: groups.map((g) => g.mean), backgroundColor: th.c1, borderRadius: 4, maxBarThickness: 56 }] },
+    options: { scales: swAxes(th, '', t('statsCharts.mean', { outcome }), false), plugins: { legend: { display: false } } },
   });
 }

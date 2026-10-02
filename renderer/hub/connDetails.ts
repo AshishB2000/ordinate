@@ -38,7 +38,7 @@ function cwRenderDetails(): void {
       const dt = document.createElement('dt');
       dt.textContent = f.label;
       const dd = document.createElement('dd');
-      dd.textContent = typeof raw === 'boolean' ? (raw ? 'Yes' : 'No') : String(raw);
+      dd.textContent = typeof raw === 'boolean' ? (raw ? t('connDetails.yes') : t('connDetails.no')) : String(raw);
       dd.title = dd.textContent;
       kv.appendChild(dt);
       kv.appendChild(dd);
@@ -77,7 +77,7 @@ async function cwTestConnection(): Promise<void> {
   try {
     res = await window.hub.listConnectionTables(currentProjectId, String(cwConn.id));
   } catch (_) {
-    res = { ok: false, error: 'Could not reach the connection.' };
+    res = { ok: false, error: t('common.could_not_reach_the_connection') };
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -89,7 +89,7 @@ async function cwTestConnection(): Promise<void> {
       .filter((t: any) => t.name);
     cwRenderTree();
   } else {
-    cwPaintStatus('error', (res && res.error) || 'Could not reach the connection.');
+    cwPaintStatus('error', (res && res.error) || t('common.could_not_reach_the_connection'));
   }
 }
 
@@ -119,8 +119,8 @@ function cwDatasetRow(d: any): HTMLElement {
   const name = document.createElement('button');
   name.type = 'button';
   name.className = 'cw-ds-name';
-  name.textContent = String(d.name || 'Dataset');
-  name.title = 'Open this dataset';
+  name.textContent = String(d.name || t('common.dataset'));
+  name.title = t('connDetails.open_this_dataset');
   name.addEventListener('click', () => {
     if (typeof selectSection === 'function') selectSection('datasets');
     if (typeof openSavedDataset === 'function') openSavedDataset(String(d.id));
@@ -130,7 +130,7 @@ function cwDatasetRow(d: any): HTMLElement {
   const refresh = document.createElement('button');
   refresh.type = 'button';
   refresh.className = 'btn btn-sm cw-ds-refresh';
-  refresh.textContent = 'Refresh now';
+  refresh.textContent = t('connDetails.refresh_now');
   refresh.addEventListener('click', () => { void cwRefreshDataset(d, refresh); });
   top.appendChild(refresh);
   row.appendChild(top);
@@ -142,7 +142,7 @@ function cwDatasetRow(d: any): HTMLElement {
     row.classList.add('is-error');
     // The reason, on hover — a red state with no cause is one dataset-open away
     // from an answer the row already has.
-    meta.title = String(d.lastRefreshError || 'The last refresh failed.');
+    meta.title = String(d.lastRefreshError || t('common.the_last_refresh_failed'));
   }
   row.appendChild(meta);
 
@@ -166,8 +166,8 @@ function cwDatasetFreshness(d: any): string {
   const stamp = (d && d.lastRefreshedAt) || (d && d.updatedAt);
   const rows = typeof d?.rowCount === 'number' ? d.rowCount.toLocaleString('en-US') + ' rows' : '';
   const when = every
-    ? `Refreshes ${every} · last ${formatSidebarTime(stamp)}`
-    : `Data as of ${formatSidebarTime(stamp)}`;
+    ? t('connDetails.refreshes_last', { every, stamp: formatSidebarTime(stamp) })
+    : t('connDetails.data_as_of', { stamp: formatSidebarTime(stamp) });
   return rows ? `${when} · ${rows}` : when;
 }
 
@@ -175,17 +175,17 @@ async function cwRefreshDataset(d: any, btn: HTMLButtonElement): Promise<void> {
   if (!currentProjectId || !d || !d.id) return;
   btn.disabled = true;
   const was = btn.textContent;
-  btn.textContent = 'Refreshing…';
+  btn.textContent = t('common.refreshing');
   let res: any;
   try {
     res = await window.hub.refreshDataset(currentProjectId, String(d.id));
   } catch (_) {
-    res = { ok: false, error: 'Could not refresh that dataset.' };
+    res = { ok: false, error: t('connDetails.could_not_refresh_that_dataset') };
   }
   btn.disabled = false;
   btn.textContent = was;
   if (!res || res.ok === false) {
-    showToast((res && res.error) || 'Could not refresh that dataset.');
+    showToast((res && res.error) || t('connDetails.could_not_refresh_that_dataset'));
   }
   await cwLoadDatasets();
   if (typeof refreshDatasetList === 'function') await refreshDatasetList();

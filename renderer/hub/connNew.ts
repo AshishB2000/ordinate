@@ -62,7 +62,7 @@ function connCoerceCatalog(raw: unknown): ConnDef[] {
       id: d.id,
       label: d.label,
       family: typeof d.family === 'string' ? d.family : '',
-      category: typeof d.category === 'string' && d.category ? d.category : 'Other',
+      category: typeof d.category === 'string' && d.category ? d.category : t('common.other'),
       blurb: typeof d.blurb === 'string' ? d.blurb : undefined,
       fields,
       // Absent → true. See ConnDef.browsable.
@@ -283,7 +283,7 @@ function connSelectConnector(d: ConnDef, values?: Record<string, unknown>): void
   const name = connEl('conn-chosen-name');
   if (name) name.textContent = d.label;
   const blurb = connEl('conn-chosen-blurb');
-  if (blurb) blurb.textContent = (d.blurb || '') + (d.hosts && d.hosts.length ? ' Connects only to ' + d.hosts.join(', ') + '.' : '');
+  if (blurb) blurb.textContent = (d.blurb || '') + (d.hosts && d.hosts.length ? t('connNew.connects_only_to', { p0: d.hosts.join(', ') }) : '');
 
   connRenderFields(d, values);
   connShow('conn-picker', false);
@@ -441,12 +441,12 @@ function connCollectValues(d: ConnDef): ConnCollected {
 async function handleConnTestAndSave(): Promise<void> {
   connSetError('');
   if (!currentProjectId) {
-    connSetError('Open a project first.');
+    connSetError(t('common.open_a_project_first'));
     return;
   }
   const def = connSelected;
   if (!def) {
-    connSetError('Pick a data source first.');
+    connSetError(t('connNew.pick_a_data_source_first'));
     return;
   }
 
@@ -454,8 +454,8 @@ async function handleConnTestAndSave(): Promise<void> {
   if (collected.missing.length > 0) {
     connSetError(
       collected.missing.length === 1
-        ? collected.missing[0] + ' is required.'
-        : 'These fields are required: ' + collected.missing.join(', ') + '.',
+        ? t('connNew.is_required', { p0: collected.missing[0] })
+        : t('connNew.these_fields_are_required', { p0: collected.missing.join(', ') }),
     );
     if (collected.firstMissingEl) collected.firstMissingEl.focus();
     return;
@@ -474,13 +474,13 @@ async function handleConnTestAndSave(): Promise<void> {
     // to what this form has always sent.
     res = await window.hub.testAndSaveConnection(currentProjectId, def.id, config, collected.secret);
   } catch (_) {
-    res = { ok: false, error: 'Could not reach the connection.' };
+    res = { ok: false, error: t('common.could_not_reach_the_connection') };
   } finally {
     if (btn) btn.disabled = false;
   }
 
   if (!res || res.ok === false) {
-    connSetError((res && res.error) || 'Could not connect.');
+    connSetError((res && res.error) || t('connNew.could_not_connect'));
     return;
   }
   // Success: clear the whole form (secrets included — they are write-only) and

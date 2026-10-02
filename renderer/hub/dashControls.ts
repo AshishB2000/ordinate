@@ -121,10 +121,10 @@ function renderDropdownControl(card: any, wrap: HTMLElement): void {
 
   const sel = document.createElement('select');
   sel.className = 'dash-ctrl-select';
-  sel.setAttribute('aria-label', control.label || 'Filter');
+  sel.setAttribute('aria-label', control.label || t('common.filter'));
   const all = document.createElement('option');
   all.value = '';
-  all.textContent = 'All';
+  all.textContent = t('common.all');
   sel.appendChild(all);
   // The current/default value shows as selected text immediately, even before
   // the real option list loads — never a blank "All" while a real selection
@@ -175,7 +175,7 @@ function renderDropdownControl(card: any, wrap: HTMLElement): void {
       // set against a value since removed from the data) — the placeholder
       // <option> added at render time already covers that; nothing more to do.
       sel.value = cur.value || '';
-      if (total > values.length) note.textContent = 'Showing ' + values.length + ' of ' + total + '.';
+      if (total > values.length) note.textContent = t('dashControls.showing_of', { valuesCount: values.length, total });
     })();
   }
   sel.addEventListener('focus', loadOptions);
@@ -207,7 +207,7 @@ function renderMultiControl(card: any, wrap: HTMLElement): void {
   function paintChip(): void {
     const cur = controlCurrentValue(card);
     const n = Array.isArray(cur.values) ? cur.values.length : 0;
-    chip.textContent = n > 0 ? n + ' selected' : 'All';
+    chip.textContent = n > 0 ? n + ' selected' : t('common.all');
   }
   paintChip();
 
@@ -225,13 +225,13 @@ function openMultiControlPopover(card: any, anchor: HTMLElement): void {
   const pop = document.createElement('div');
   pop.className = 'dash-ctrl-popover';
   pop.setAttribute('role', 'dialog');
-  pop.setAttribute('aria-label', (control.label || 'Filter') + ' values');
+  pop.setAttribute('aria-label', (control.label || t('common.filter')) + t('dashControls.values'));
 
   const search = document.createElement('input');
   search.type = 'text';
   search.className = 'ws-modal-input fd-search';
-  search.placeholder = 'Search values…';
-  search.setAttribute('aria-label', 'Search values');
+  search.placeholder = t('common.search_values');
+  search.setAttribute('aria-label', t('common.search_values_2'));
   pop.appendChild(search);
 
   const bulk = document.createElement('div');
@@ -239,11 +239,11 @@ function openMultiControlPopover(card: any, anchor: HTMLElement): void {
   const allBtn = document.createElement('button');
   allBtn.type = 'button';
   allBtn.className = 'fd-link';
-  allBtn.textContent = 'Select all shown';
+  allBtn.textContent = t('common.select_all_shown');
   const noneBtn = document.createElement('button');
   noneBtn.type = 'button';
   noneBtn.className = 'fd-link';
-  noneBtn.textContent = 'Clear selection';
+  noneBtn.textContent = t('common.clear_selection');
   bulk.appendChild(allBtn);
   bulk.appendChild(noneBtn);
   pop.appendChild(bulk);
@@ -261,11 +261,11 @@ function openMultiControlPopover(card: any, anchor: HTMLElement): void {
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
   cancelBtn.className = 'btn btn-sm';
-  cancelBtn.textContent = 'Cancel';
+  cancelBtn.textContent = t('common.cancel');
   const applyBtn = document.createElement('button');
   applyBtn.type = 'button';
   applyBtn.className = 'btn btn-primary btn-sm';
-  applyBtn.textContent = 'Apply';
+  applyBtn.textContent = t('common.apply');
   actions.appendChild(cancelBtn);
   actions.appendChild(applyBtn);
   pop.appendChild(actions);
@@ -277,14 +277,14 @@ function openMultiControlPopover(card: any, anchor: HTMLElement): void {
 
   function paintNote(): void {
     const parts: string[] = [];
-    if (lastTotal > lastShown) parts.push('Showing ' + lastShown + ' of ' + lastTotal + ' — search to narrow.');
+    if (lastTotal > lastShown) parts.push(t('dashControls.showing_of_search_to_narrow', { lastShown, lastTotal }));
     if (selected.size > 0) parts.push(selected.size + ' selected.');
     note.textContent = parts.join(' ');
   }
 
   async function loadValues(): Promise<void> {
     const mySeq = ++seq;
-    list.textContent = 'Loading…';
+    list.textContent = t('common.loading');
     let res: any = null;
     try {
       res = await window.hub.datasetDistinct(currentProjectId as string, control.datasetId, control.column, 200, search.value);
@@ -299,7 +299,7 @@ function openMultiControlPopover(card: any, anchor: HTMLElement): void {
     if (values.length === 0) {
       const empty = document.createElement('p');
       empty.className = 'fd-empty';
-      empty.textContent = search.value ? 'No values match that search.' : 'This column has no values to filter on.';
+      empty.textContent = search.value ? t('common.no_values_match_that_search') : t('common.this_column_has_no_values_to');
       list.appendChild(empty);
     }
     values.forEach((v) => {
@@ -413,7 +413,7 @@ function renderDateRangeControl(card: any, wrap: HTMLElement): void {
   chip.appendChild(txt);
   wrap.appendChild(chip);
   chip.addEventListener('click', () => {
-    openPeriodPopover(chip, controlCurrentValue(card), control.label || 'Filter', (v) => {
+    openPeriodPopover(chip, controlCurrentValue(card), control.label || t('common.filter'), (v) => {
       if (v) controlState.set(card.id, v);
       else controlState.delete(card.id);
       renderDashGrid();

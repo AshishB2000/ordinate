@@ -41,11 +41,11 @@ async function nbRunCell(id: string): Promise<boolean> {
   try {
     res = await window.hubNotebooks.run(pid, doc.id, id, runId);
   } catch (_) {
-    res = { ok: false, error: 'The cell could not be run.' };
+    res = { ok: false, error: t('nbRun.the_cell_could_not_be_run') };
   }
   if (nbDoc !== doc) return false;
   nbRunning.delete(id);
-  if (!res) res = { ok: false, error: 'The cell could not be run.' };
+  if (!res) res = { ok: false, error: t('nbRun.the_cell_could_not_be_run') };
   if (!res.cancelled) res.exec = ++nbExecSeq;
   nbResults.set(id, res);
   nbRenderResult(id);
@@ -68,7 +68,7 @@ async function nbRunFrom(id: string | null): Promise<void> {
   if (start < 0) return;
   nbBatchRunning = true;
   const btn = nbEl<HTMLButtonElement>('nb-run-all');
-  if (btn) { btn.disabled = true; iconLabel(btn, 'loader', 'Running…'); }
+  if (btn) { btn.disabled = true; iconLabel(btn, 'loader', t('common.running')); }
   const doc = nbDoc;
   try {
     for (const c of doc.cells.slice(start)) {
@@ -77,14 +77,14 @@ async function nbRunFrom(id: string | null): Promise<void> {
       const ok = await nbRunCell(c.id);
       if (!ok) {
         const r = nbResults.get(c.id);
-        if (r && !r.cancelled) showToast(`Stopped at ${nbCellName(c.id)} — it did not run.`, { kind: 'error' });
+        if (r && !r.cancelled) showToast(t('nbRun.stopped_at_it_did_not_run', { id: nbCellName(c.id) }), { kind: 'error' });
         nbFocusCell(c.id, true, true);
         return;
       }
     }
   } finally {
     nbBatchRunning = false;
-    if (btn) { btn.disabled = false; iconLabel(btn, 'play', 'Run all'); }
+    if (btn) { btn.disabled = false; iconLabel(btn, 'play', t('common.run_all')); }
   }
 }
 
@@ -101,8 +101,8 @@ function nbCancel(id: string): void {
 
 function nbStatusText(r: NbResult, kind: string): string {
   const n = Number(r.rowCount) || 0;
-  const rows = r.truncated ? `${n.toLocaleString('en-US')}+ rows` : `${n.toLocaleString('en-US')} ${n === 1 ? 'row' : 'rows'}`;
-  return `${kind === 'chart' ? 'Charted ' : ''}${rows} · ${Number(r.elapsedMs) || 0} ms`;
+  const rows = r.truncated ? t('common.rows_2', { p0: n.toLocaleString('en-US') }) : `${n.toLocaleString('en-US')} ${n === 1 ? 'row' : 'rows'}`;
+  return t('nbRun.ms', { p0: !!(kind === 'chart'), rows, p2: Number(r.elapsedMs) || 0 });
 }
 
 function nbRenderResult(id: string): void {
@@ -120,11 +120,11 @@ function nbRenderResult(id: string): void {
     bar.className = 'nb-out-bar is-running';
     const st = document.createElement('span');
     st.className = 'nb-status';
-    st.append(icon('loader', 14), Object.assign(document.createElement('span'), { textContent: 'Running…' }));
+    st.append(icon('loader', 14), Object.assign(document.createElement('span'), { textContent: t('common.running') }));
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'btn btn-sm btn-ghost nb-cancel';
-    iconLabel(cancel, 'x', 'Cancel');
+    iconLabel(cancel, 'x', t('common.cancel'));
     cancel.addEventListener('click', () => nbCancel(id));
     bar.append(st, cancel);
     out.appendChild(bar);
@@ -135,7 +135,7 @@ function nbRenderResult(id: string): void {
   if (r.cancelled) {
     const p = document.createElement('p');
     p.className = 'nb-out-note';
-    p.textContent = 'Cancelled — run it again to see a result.';
+    p.textContent = t('nbRun.cancelled_run_it_again_to_see');
     out.appendChild(p);
     return;
   }
@@ -149,8 +149,8 @@ function nbRenderResult(id: string): void {
     const body = document.createElement('div');
     body.className = 'qt-error-body';
     body.append(
-      Object.assign(document.createElement('p'), { className: 'qt-error-h', textContent: 'The cell did not run' }),
-      Object.assign(document.createElement('p'), { className: 'qt-error-msg', textContent: r.error || 'It failed.' }),
+      Object.assign(document.createElement('p'), { className: 'qt-error-h', textContent: t('nbRun.the_cell_did_not_run') }),
+      Object.assign(document.createElement('p'), { className: 'qt-error-msg', textContent: r.error || t('nbRun.it_failed') }),
     );
     box.append(ic, body);
     out.appendChild(box);
@@ -167,8 +167,8 @@ function nbRenderResult(id: string): void {
   const cols = (r.columns || []).length;
   note.textContent = [
     c.kind !== 'chart' ? `${cols} ${cols === 1 ? 'column' : 'columns'}` : '',
-    r.truncated ? 'showing the first 500 — Save as dataset keeps them all' : '',
-    r.cached ? 'from cache' : '',
+    r.truncated ? t('nbRun.showing_the_first_500_save_as') : '',
+    r.cached ? t('nbRun.from_cache') : '',
   ].filter(Boolean).join(' · ');
   const gap = document.createElement('span');
   gap.className = 'nb-cell-gap';
@@ -177,14 +177,14 @@ function nbRenderResult(id: string): void {
     const pin = document.createElement('button');
     pin.type = 'button';
     pin.className = 'btn btn-sm nb-pin';
-    iconLabel(pin, 'layout-dashboard', 'Pin to dashboard');
+    iconLabel(pin, 'layout-dashboard', t('common.pin_to_dashboard'));
     pin.addEventListener('click', () => { void nbPinChart(id); });
     bar.appendChild(pin);
   } else {
     const save = document.createElement('button');
     save.type = 'button';
     save.className = 'btn btn-sm nb-save';
-    iconLabel(save, 'database', 'Save as dataset');
+    iconLabel(save, 'database', t('common.save_as_dataset'));
     save.disabled = cols === 0;
     save.addEventListener('click', () => { void nbSaveAsDataset(id); });
     bar.appendChild(save);
@@ -205,7 +205,7 @@ function nbRenderResult(id: string): void {
     if (chart) nbChartInstances.set(id, chart);
     else {
       wrap.remove();
-      out.appendChild(Object.assign(document.createElement('p'), { className: 'nb-out-note', textContent: 'Nothing to draw — the chart has no values.' }));
+      out.appendChild(Object.assign(document.createElement('p'), { className: 'nb-out-note', textContent: t('nbRun.nothing_to_draw_the_chart_has') }));
     }
   } else if (c.kind !== 'chart') {
     const grid = document.createElement('div');

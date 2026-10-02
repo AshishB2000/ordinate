@@ -41,14 +41,14 @@ function lodDimContext(
   const items = columns
     .filter((c) => String(c.name).toLowerCase().indexOf(frag) >= 0)
     .slice(0, 12)
-    .map((c) => ({ label: String(c.name), insert: '[' + c.name + ']', sub: 'dimension · ' + c.type }));
+    .map((c) => ({ label: String(c.name), insert: '[' + c.name + ']', sub: t('lodUi.dimension', { type: c.type }) }));
   return items.length ? { items, from: before.length - part.trimStart().length } : null;
 }
 
 /** A preview column that holds an LOD's value rather than a dataset column. */
 function lodPreviewHeader(th: HTMLElement, text: string): void {
   th.classList.add('fx-lod-col');
-  th.title = text + '\nComputed over the whole table, not just these rows.';
+  th.title = t('lodUi.computed_over_the_whole_table_not', { text });
 }
 
 function lodPreviewNote(text: string): HTMLElement {
@@ -75,7 +75,7 @@ function lodContextToggle(initial: boolean): { el: HTMLElement; on: () => boolea
   const label = document.createElement('div');
   label.className = 'lod-ctx-label';
   label.id = 'lod-ctx-label';
-  label.textContent = 'Apply before LOD';
+  label.textContent = t('lodUi.apply_before_lod');
   const hint = document.createElement('div');
   hint.className = 'lod-ctx-hint';
   text.appendChild(label);
@@ -93,8 +93,8 @@ function lodContextToggle(initial: boolean): { el: HTMLElement; on: () => boolea
     sw.setAttribute('aria-checked', on ? 'true' : 'false');
     row.classList.toggle('is-on', on);
     hint.textContent = on
-      ? 'Context filter: runs first, so FIXED, INCLUDE and EXCLUDE expressions only see the rows it keeps.'
-      : 'Runs after LOD expressions, so a FIXED value — a region’s total — still counts every row.';
+      ? t('lodUi.context_filter_runs_first_so_fixed')
+      : t('lodUi.runs_after_lod_expressions_so_a');
   };
   sw.addEventListener('click', () => { on = !on; paint(); });
   row.appendChild(text);
@@ -119,7 +119,7 @@ function lodContextTag(step: any): HTMLElement | null {
   if (!step || step.context !== true) return null;
   const tag = document.createElement('span');
   tag.className = 'lod-ctx-tag';
-  tag.textContent = 'context';
-  tag.title = 'Applied before LOD expressions';
+  tag.textContent = t('lodUi.context');
+  tag.title = t('lodUi.applied_before_lod_expressions');
   return tag;
 }

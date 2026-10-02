@@ -35,6 +35,7 @@ import { ok, finish } from './selfcheck';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vm from 'vm';
+import { withT } from './i18nNode';
 
 const HUB = path.join(__dirname, '..', 'renderer', 'hub');
 const CHART_UMD = path.join(__dirname, '..', 'node_modules', 'chart.js', 'dist', 'chart.umd.js');
@@ -75,7 +76,7 @@ sandbox.document = { documentElement: {}, createElement: () => ({ style: {}, get
 sandbox.requestAnimationFrame = (f: Function) => f;
 sandbox.cancelAnimationFrame = () => {};
 sandbox.getComputedStyle = () => ({ getPropertyValue: (n: string) => THEME[n] || '' });
-vm.createContext(sandbox);
+vm.createContext(withT(sandbox));
 
 // Real Chart.js — this is what makes `Chart.overrides.doughnut` real.
 vm.runInContext(fs.readFileSync(CHART_UMD, 'utf8'), sandbox, { filename: 'chart.umd.js' });

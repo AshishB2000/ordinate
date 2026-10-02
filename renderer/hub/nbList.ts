@@ -14,7 +14,7 @@
 // The list is the Stories card grid (`.st-card*` — a notebook is a document
 // too), with a preview strip drawn from the notebook's own cell kinds.
 
-const NB_SUB = 'SQL, formulas, charts and notes in one page — each SQL cell is a table the cells below can query.';
+const NB_SUB = t('nbList.sql_formulas_charts_and_notes_in');
 let nbListSeq = 0;
 
 function nbEl<T extends HTMLElement = HTMLElement>(id: string): T | null {
@@ -27,8 +27,8 @@ function nbKindIcon(kind: string): string {
 }
 
 function nbKindLabel(kind: string): string {
-  return kind === 'sql' ? 'SQL' : kind === 'formula' ? 'Formula' : kind === 'chart' ? 'Chart'
-    : kind === 'param' ? 'Parameter' : 'Text';
+  return kind === 'sql' ? 'SQL' : kind === 'formula' ? t('common.formula') : kind === 'chart' ? 'Chart'
+    : kind === 'param' ? t('common.parameter') : t('common.text');
 }
 
 /** The empty state's picture: a small page of three cells — a query, its result, a chart. */
@@ -86,7 +86,7 @@ function initNotebooksTab(): void {
   tab.setAttribute('aria-selected', 'false');
   tab.setAttribute('aria-controls', 'nb-wrap');
   tab.tabIndex = -1;
-  tab.textContent = 'Notebooks';
+  tab.textContent = t('common.notebooks');
   query.after(tab);
 
   const panel = document.createElement('div');
@@ -106,7 +106,7 @@ function initNotebooksTab(): void {
   add.type = 'button';
   add.className = 'btn btn-primary';
   add.id = 'nb-new';
-  iconLabel(add, 'plus', 'New notebook');
+  iconLabel(add, 'plus', t('nbList.new_notebook'));
   add.addEventListener('click', () => { void nbNew(); });
   const count = document.createElement('span');
   count.className = 'viz-count';
@@ -116,7 +116,7 @@ function initNotebooksTab(): void {
   grid.className = 'st-grid nb-grid';
   grid.id = 'nb-grid';
   grid.setAttribute('role', 'list');
-  grid.setAttribute('aria-label', 'Notebooks');
+  grid.setAttribute('aria-label', t('common.notebooks'));
   const empty = document.createElement('div');
   empty.id = 'nb-empty';
   empty.className = 'nb-empty';
@@ -124,18 +124,18 @@ function initNotebooksTab(): void {
   const es = makeEmptyState({
     variant: 'notebooks',
     iconName: 'file-text',
-    title: 'No notebooks yet',
-    line: 'A notebook is one page of SQL, formulas, charts and notes, run top to bottom. Each SQL cell becomes a table the cells below it can query.',
-    actionLabel: 'New notebook',
+    title: t('nbList.no_notebooks_yet'),
+    line: t('nbList.a_notebook_is_one_page_of'),
+    actionLabel: t('nbList.new_notebook'),
     onAction: () => { void nbNew(); },
   });
   es.querySelector('.ws-empty-icon')?.replaceWith(nbEmptyArt());
   const facts = document.createElement('ul');
   facts.className = 'nb-empty-facts';
   for (const [ic, text] of [
-    ['code', 'Query a cell above by its name — cell_2, or its title'],
-    ['sliders', 'A parameter feeds every cell that reads [[it]]'],
-    ['refresh', 'An edit marks every cell it affects as stale'],
+    ['code', t('nbList.query_a_cell_above_by_its')],
+    ['sliders', t('nbList.a_parameter_feeds_every_cell_that')],
+    ['refresh', t('nbList.an_edit_marks_every_cell_it')],
   ]) {
     const li = document.createElement('li');
     li.append(icon(ic, 16), Object.assign(document.createElement('span'), { textContent: text }));
@@ -198,7 +198,7 @@ async function nbRefreshList(): Promise<void> {
   const bar = document.querySelector('#nb-list-view .nb-list-bar') as HTMLElement | null;
   if (bar) bar.hidden = items.length === 0;
   const count = nbEl('nb-count');
-  if (count) count.textContent = items.length === 1 ? '1 notebook' : `${items.length} notebooks`;
+  if (count) count.textContent = items.length === 1 ? t('nbList.1_notebook') : `${items.length} notebooks`;
 }
 
 /** "3 SQL · 1 chart · 2 notes" — what a notebook holds, most telling kinds first. */
@@ -242,21 +242,21 @@ function nbCard(n: any): HTMLElement {
   body.className = 'st-card-body';
   const title = document.createElement('div');
   title.className = 'st-card-title';
-  title.textContent = String(n.name || 'Untitled notebook');
+  title.textContent = String(n.name || t('common.untitled_notebook'));
   const ex = document.createElement('div');
   ex.className = 'st-card-excerpt';
-  ex.textContent = n.excerpt ? String(n.excerpt) : nbKindsLine(n.kinds) || 'Empty notebook';
+  ex.textContent = n.excerpt ? String(n.excerpt) : nbKindsLine(n.kinds) || t('nbList.empty_notebook');
   const meta = document.createElement('div');
   meta.className = 'st-card-meta';
   const c = Number(n.cellCount) || 0;
-  meta.textContent = `${c} ${c === 1 ? 'cell' : 'cells'}${n.excerpt && nbKindsLine(n.kinds) ? ' · ' + nbKindsLine(n.kinds) : ''} · ${formatSidebarTime(n.updatedAt)}`;
+  meta.textContent = t('nbList.text', { c, p2: n.excerpt && nbKindsLine(n.kinds) ? ' · ' + nbKindsLine(n.kinds) : '', updatedAt: formatSidebarTime(n.updatedAt) });
   body.append(title, ex, meta);
   card.appendChild(body);
 
   const more = document.createElement('button');
   more.type = 'button';
   more.className = 'icon-btn st-card-more';
-  iconOnly(more, 'more-horizontal', 'Notebook actions');
+  iconOnly(more, 'more-horizontal', t('common.notebook_actions'));
   more.addEventListener('click', (e) => {
     e.stopPropagation();
     openMiniMenu(more, (menu: HTMLElement, close: () => void) => {
@@ -268,8 +268,8 @@ function nbCard(n: any): HTMLElement {
         b.addEventListener('click', () => { close(); run(); });
         menu.appendChild(b);
       };
-      item('Open', () => { void nbOpenById(String(n.id)); });
-      item('Rename', () => { void nbRenameFromList(n); });
+      item(t('common.open'), () => { void nbOpenById(String(n.id)); });
+      item(t('common.rename'), () => { void nbRenameFromList(n); });
       item('Delete', () => { void nbDeleteNotebook(String(n.id), String(n.name || '')); });
     });
   });
@@ -285,22 +285,22 @@ function nbCard(n: any): HTMLElement {
 
 async function nbNew(): Promise<void> {
   if (!currentProjectId) return;
-  const name = await promptModal('Name the notebook', 'Untitled notebook', 'Create');
+  const name = await promptModal(t('nbList.name_the_notebook'), t('common.untitled_notebook'), t('common.create'));
   if (name === null) return;
   let res: any = null;
   try {
-    res = await window.hubNotebooks.create(currentProjectId, name.trim() || 'Untitled notebook');
+    res = await window.hubNotebooks.create(currentProjectId, name.trim() || t('common.untitled_notebook'));
   } catch (_) {
     res = null;
   }
-  if (!res || !res.ok) { showToast((res && res.error) || 'Could not create the notebook.'); return; }
+  if (!res || !res.ok) { showToast((res && res.error) || t('nbList.could_not_create_the_notebook')); return; }
   nbShowNotebook(res.notebook, res.graph);
   nbFocusCell(res.notebook.cells.length ? res.notebook.cells[res.notebook.cells.length - 1].id : '');
 }
 
 async function nbRenameFromList(n: any): Promise<void> {
   if (!currentProjectId) return;
-  const name = await promptModal('Rename notebook', String(n.name || ''), 'Rename');
+  const name = await promptModal(t('nbList.rename_notebook'), String(n.name || ''), t('common.rename'));
   if (!name || !name.trim()) return;
   const got = await window.hubNotebooks.get(currentProjectId, String(n.id));
   if (got && got.ok) await window.hubNotebooks.save(currentProjectId, String(n.id), name.trim(), got.notebook.cells);
@@ -309,7 +309,7 @@ async function nbRenameFromList(n: any): Promise<void> {
 
 async function nbDeleteNotebook(id: string, name: string): Promise<void> {
   if (!currentProjectId) return;
-  if (!window.confirm(`Delete “${name || 'this notebook'}”? Datasets and visuals saved from it are kept, and stop refreshing.`)) return;
+  if (!window.confirm(t('nbList.delete_datasets_and_visuals_saved_from', { p0: name || t('nbList.this_notebook') }))) return;
   if (nbDoc && nbDoc.id === id) { nbDiscard(); }
   await window.hubNotebooks.remove(currentProjectId, id);
   await nbShowList();
@@ -333,7 +333,7 @@ async function nbOpenById(id: string, cellId?: string): Promise<void> {
   } catch (_) {
     res = null;
   }
-  if (!res || !res.ok) { showToast('That notebook could not be opened.'); await nbShowList(); return; }
+  if (!res || !res.ok) { showToast(t('nbList.that_notebook_could_not_be_opened')); await nbShowList(); return; }
   nbShowNotebook(res.notebook, res.graph);
   if (cellId) nbFocusCell(cellId, true);
 }

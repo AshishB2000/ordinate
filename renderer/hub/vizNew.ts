@@ -132,7 +132,7 @@ async function openNewVisualModal(opts: VizNewOpts = {}): Promise<VizNewChoice |
       showStep(3);
       regenBtn.disabled = true;
       optionsHost.innerHTML = '';
-      statusEl.textContent = 'Thinking…';
+      statusEl.textContent = t('common.thinking');
 
       let res: any;
       try {
@@ -149,10 +149,10 @@ async function openNewVisualModal(opts: VizNewOpts = {}): Promise<VizNewChoice |
       }
       const options = res && res.ok && Array.isArray(res.options) ? res.options : [];
       if (!options.length) {
-        statusEl.textContent = (res && res.error) || 'Could not suggest a chart.';
+        statusEl.textContent = (res && res.error) || t('vizNew.could_not_suggest_a_chart');
         return;
       }
-      statusEl.textContent = 'Pick one to open it in the builder. Nothing is saved until you save it.';
+      statusEl.textContent = t('vizNew.pick_one_to_open_it_in');
       // Draw them concurrently: each is a resident query of a few ms, and a
       // serial loop would make three of them feel like one slow one.
       await Promise.all(options.map((o: any) => renderOption(o)));
@@ -165,11 +165,11 @@ async function openNewVisualModal(opts: VizNewOpts = {}): Promise<VizNewChoice |
       art.className = 'vn-option-art';
       const why = document.createElement('p');
       why.className = 'vn-option-why';
-      why.textContent = String(option.why || '') || 'Suggested chart';
+      why.textContent = String(option.why || '') || t('common.suggested_chart');
       const use = document.createElement('button');
       use.type = 'button';
       use.className = 'btn btn-sm';
-      use.textContent = 'Use this chart';
+      use.textContent = t('vizNew.use_this_chart');
       use.disabled = true; // until it provably draws
       card.appendChild(art);
       card.appendChild(why);
@@ -192,7 +192,7 @@ async function openNewVisualModal(opts: VizNewOpts = {}): Promise<VizNewChoice |
         card.classList.add('is-broken');
         const note = document.createElement('span');
         note.className = 'vn-option-note';
-        note.textContent = "Couldn't draw this one";
+        note.textContent = t('vizNew.couldn_t_draw_this_one');
         art.appendChild(note);
         return;
       }
@@ -219,12 +219,12 @@ async function openNewVisualModal(opts: VizNewOpts = {}): Promise<VizNewChoice |
       row.setAttribute('aria-checked', 'false');
       const nm = document.createElement('span');
       nm.className = 'vn-row-name';
-      nm.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
+      nm.textContent = d && d.name ? String(d.name) : t('common.untitled_dataset');
       const meta = document.createElement('span');
       meta.className = 'vn-row-meta';
       const rows = typeof d.rowCount === 'number' ? d.rowCount.toLocaleString() : '—';
       const cols = typeof d.columnCount === 'number' ? String(d.columnCount) : '—';
-      meta.textContent = rows + ' rows × ' + cols + ' columns';
+      meta.textContent = t('vizNew.rows_columns', { rows, cols });
       row.appendChild(nm);
       row.appendChild(meta);
       row.addEventListener('click', () => {
@@ -280,7 +280,7 @@ async function openNewVisualModal(opts: VizNewOpts = {}): Promise<VizNewChoice |
     document.addEventListener('keydown', onKey, true);
 
     document.body.appendChild(overlay);
-    a11y = makeModalAccessible(box, 'New visual', null);
+    a11y = makeModalAccessible(box, t('common.new_visual'), null);
     // The builder already knows its dataset, so it skips straight to asking.
     if (opts.startAtSuggest && selectedId) runSuggest();
     else showStep(selectedId ? 2 : 1);
@@ -295,7 +295,7 @@ async function handleNewVisual(opts: VizNewOpts = {}): Promise<void> {
   // on a fresh install there are no projects and nothing on screen can make one.
   // Resolve (or create) one the same way the Home "+ New" entries do.
   if (!currentProjectId && !(await resolveProjectId())) {
-    showToast('Could not create a workspace to save this in.');
+    showToast(t('vizNew.could_not_create_a_workspace_to'));
     return;
   }
   const choice = await openNewVisualModal(opts);

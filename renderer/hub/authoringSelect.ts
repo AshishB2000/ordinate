@@ -58,8 +58,8 @@ async function anSelectCard(cardId: string | null): Promise<void> {
     anVisual = null;
     anColumns = [];
     anShowEncoding(false, card
-      ? (card.type === 'metric' ? 'A KPI card — its figure is set when it is added. Compare it with another period here.' : 'That card has no fields to edit.')
-      : 'Select a visual card to see its fields.');
+      ? (card.type === 'metric' ? t('authoringSelect.a_kpi_card_its_figure_is') : t('authoringSelect.that_card_has_no_fields_to'))
+      : t('common.select_a_visual_card_to_see'));
     return;
   }
 
@@ -71,7 +71,7 @@ async function anSelectCard(cardId: string | null): Promise<void> {
   }
   if (!visual) {
     anVisual = null;
-    anShowEncoding(false, 'That visual could not be loaded.');
+    anShowEncoding(false, t('common.that_visual_could_not_be_loaded'));
     return;
   }
   // The click may have moved on while the two awaits ran; a stale bind would
@@ -87,7 +87,7 @@ async function anSelectCard(cardId: string | null): Promise<void> {
   }
   if (anSelectedCardId !== cardId) return;
   anDataset = meta
-    ? { name: String(meta.name || 'Dataset'), kind: String(meta.sourceKind || 'data') }
+    ? { name: String(meta.name || t('common.dataset')), kind: String(meta.sourceKind || 'data') }
     : null;
   anColumns = meta && Array.isArray(meta.columns)
     ? meta.columns.map((c: any) => ({
@@ -126,7 +126,7 @@ function anShowEncoding(on: boolean, hint: string): void {
   if (inner) inner.hidden = !on;
   if (propsHint) {
     propsHint.hidden = on;
-    propsHint.textContent = hint || 'Select a visual card to edit it.';
+    propsHint.textContent = hint || t('common.select_a_visual_card_to_edit');
   }
   if (fields) fields.hidden = !on;
   const search = anEl('an-field-search');
@@ -240,7 +240,7 @@ function anEndGesture(): void {
   authoringAfterGesture(g.card, g.mode, l.x - g.x0, l.y - g.y0);
   // ONE commit for the whole gesture: anMoveGesture only moves a ghost, so the
   // record is not touched until the pointer comes up, right here.
-  markDashDirty(g.mode === 'move' ? 'Move card' : 'Resize card');
+  markDashDirty(g.mode === 'move' ? t('common.move_card') : t('common.resize_card'));
 }
 
 /**
@@ -277,8 +277,8 @@ function anWireCards(): void {
       const gear = document.createElement('button');
       gear.type = 'button';
       gear.className = 'an-card-props';
-      gear.title = 'Properties';
-      gear.setAttribute('aria-label', 'Card properties');
+      gear.title = t('common.properties');
+      gear.setAttribute('aria-label', t('authoringSelect.card_properties'));
       // Sliders, not a cogwheel: a circle ringed by radial ticks is the
       // universal BRIGHTNESS glyph and read as one on the sheet. This is the
       // same mark the old props rail button used, so the vocabulary is unchanged.

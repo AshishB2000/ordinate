@@ -53,11 +53,11 @@ function swChecks(sec: HTMLElement, name: string, items: Array<{ value: string; 
   const all = document.createElement('button');
   all.type = 'button';
   all.className = 'sw-link';
-  all.textContent = 'All';
+  all.textContent = t('common.all');
   const none = document.createElement('button');
   none.type = 'button';
   none.className = 'sw-link';
-  none.textContent = 'None';
+  none.textContent = t('common.none');
   bar.append(count, all, none);
   const list = document.createElement('div');
   list.className = 'sw-checks';
@@ -132,51 +132,51 @@ function swPaintControls(): void {
   if (!spec) return;
   const num = swNumeric();
   const all = swState.columns.map((c: any) => c.name as string);
-  const typeTag = (c: string): string => (swState.columns.find((x: any) => x.name === c)?.type === 'number' ? 'Number' : 'Category');
+  const typeTag = (c: string): string => (swState.columns.find((x: any) => x.name === c)?.type === 'number' ? t('common.number') : t('common.category'));
   const set = (patch: any): void => { Object.assign(spec, patch); swSchedule(); };
 
   if (tab === 'correlation') {
-    const sec = swCtlSection(host, 'Columns', 'Numeric columns — pick 2 to 12.');
-    if (!num.length) swNone(sec, 'This dataset has no number columns.');
-    else swChecks(sec, 'Columns to correlate', num.map((c) => ({ value: c, label: c })), spec.columns, (v) => set({ columns: v.slice(0, 12) }));
-    const m = swCtlSection(host, 'Method', 'Spearman ranks the values first — robust to outliers and curved trends.');
-    m.appendChild(swSeg('Correlation method', [['pearson', 'Pearson'], ['spearman', 'Spearman']], spec.method, (v) => set({ method: v })));
+    const sec = swCtlSection(host, t('common.columns'), t('statsControls.numeric_columns_pick_2_to_12'));
+    if (!num.length) swNone(sec, t('statsControls.this_dataset_has_no_number_columns'));
+    else swChecks(sec, t('statsControls.columns_to_correlate'), num.map((c) => ({ value: c, label: c })), spec.columns, (v) => set({ columns: v.slice(0, 12) }));
+    const m = swCtlSection(host, t('common.method'), t('statsControls.spearman_ranks_the_values_first_robust'));
+    m.appendChild(swSeg(t('statsControls.correlation_method'), [['pearson', t('statsControls.pearson')], ['spearman', t('statsControls.spearman')]], spec.method, (v) => set({ method: v })));
   } else if (tab === 'regression') {
-    const t = swCtlSection(host, 'Target', 'The number the model predicts.', 'sw-target');
-    if (!num.length) swNone(t, 'This dataset has no number columns.');
-    else t.appendChild(swSelect('sw-target', num.map((c) => [c, c]), spec.target, (v) => {
+    const tv = swCtlSection(host, t('common.target'), t('statsControls.the_number_the_model_predicts'), 'sw-target');
+    if (!num.length) swNone(tv, t('statsControls.this_dataset_has_no_number_columns'));
+    else tv.appendChild(swSelect('sw-target', num.map((c) => [c, c]), spec.target, (v) => {
       set({ target: v, predictors: spec.predictors.filter((p: string) => p !== v) });
       swPaintControls();
     }));
-    const p = swCtlSection(host, 'Predictors', 'Categories are one-hot encoded against their largest group.');
-    swChecks(p, 'Predictors', all.filter((c: string) => c !== spec.target).map((c: string) => ({ value: c, label: c, tag: typeTag(c) })), spec.predictors, (v) => set({ predictors: v }));
+    const p = swCtlSection(host, t('statsControls.predictors'), t('statsControls.categories_are_one_hot_encoded_against'));
+    swChecks(p, t('statsControls.predictors'), all.filter((c: string) => c !== spec.target).map((c: string) => ({ value: c, label: c, tag: typeTag(c) })), spec.predictors, (v) => set({ predictors: v }));
   } else if (tab === 'groups') {
-    const g = swCtlSection(host, 'Group by', 'The column whose values form the groups.', 'sw-group');
+    const g = swCtlSection(host, t('common.group_by'), t('statsControls.the_column_whose_values_form_the'), 'sw-group');
     g.appendChild(swSelect('sw-group', all.map((c: string) => [c, c]), spec.group, (v) => {
       set({ group: v, levels: [], success: undefined, outcome: spec.outcome === v ? '' : spec.outcome });
       swPaintControls();
-    }, 'Choose a column'));
-    const o = swCtlSection(host, 'Outcome', 'A number compares averages; a category compares shares.', 'sw-outcome');
+    }, t('statsControls.choose_a_column')));
+    const o = swCtlSection(host, t('statsControls.outcome'), t('statsControls.a_number_compares_averages_a_category'), 'sw-outcome');
     o.appendChild(swSelect('sw-outcome', all.filter((c: string) => c !== spec.group).map((c: string) => [c, `${c} · ${typeTag(c).toLowerCase()}`]), spec.outcome, (v) => {
       set({ outcome: v, success: undefined });
       swPaintControls();
-    }, 'Choose a column'));
+    }, t('statsControls.choose_a_column')));
     const reply = swState.replies.groups;
     const r = reply && reply.ok && reply.result && reply.result.ok ? reply.result : null;
-    const lv = swCtlSection(host, 'Groups', 'Two groups get a t-test; three or more, an ANOVA.');
+    const lv = swCtlSection(host, t('common.groups'), t('statsControls.two_groups_get_a_t_test'));
     if (r && r.group === spec.group && Array.isArray(r.available) && r.available.length) {
       const chosen = spec.levels && spec.levels.length ? spec.levels : r.groups.map((x: any) => x.label);
-      swChecks(lv, 'Groups to compare', r.available.map((a: any) => ({ value: a.level, label: a.level, tag: a.n.toLocaleString('en-US') })), chosen, (v) => set({ levels: v }));
+      swChecks(lv, t('statsControls.groups_to_compare'), r.available.map((a: any) => ({ value: a.level, label: a.level, tag: a.n.toLocaleString('en-US') })), chosen, (v) => set({ levels: v }));
     } else {
-      swNone(lv, 'Run once to list this column’s groups; up to 20 are compared.');
+      swNone(lv, t('statsControls.run_once_to_list_this_column'));
     }
     if (r && r.prop && r.table) {
-      const s = swCtlSection(host, 'Counts as success', 'The outcome value whose share is compared.', 'sw-success');
+      const s = swCtlSection(host, t('statsControls.counts_as_success'), t('statsControls.the_outcome_value_whose_share_is'), 'sw-success');
       s.appendChild(swSelect('sw-success', r.table.cols.map((c: string) => [c, c]), r.prop.success, (v) => set({ success: v })));
     }
   } else {
-    const c = swCtlSection(host, 'Column', 'A number column.', 'sw-dist-col');
-    if (!num.length) swNone(c, 'This dataset has no number columns.');
+    const c = swCtlSection(host, t('common.column'), t('statsControls.a_number_column'), 'sw-dist-col');
+    if (!num.length) swNone(c, t('statsControls.this_dataset_has_no_number_columns'));
     else c.appendChild(swSelect('sw-dist-col', num.map((x) => [x, x]), spec.columns[0] || '', (v) => set({ columns: [v] })));
   }
 
@@ -186,13 +186,13 @@ function swPaintControls(): void {
   run.type = 'button';
   run.className = 'btn btn-primary sw-run';
   run.id = 'sw-run';
-  iconLabel(run, 'play', 'Run analysis');
+  iconLabel(run, 'play', t('common.run_analysis'));
   run.addEventListener('click', () => { void swRun(); });
   const note = document.createElement('p');
   note.className = 'sw-ctl-hint';
   note.textContent = swState.rowCount > SW_AUTO_MAX_ROWS
-    ? 'A large dataset: the run goes to the background as a job.'
-    : 'Re-runs as you change the settings.';
+    ? t('statsControls.a_large_dataset_the_run_goes')
+    : t('statsControls.re_runs_as_you_change_the');
   foot.append(run, note);
   host.appendChild(foot);
 }

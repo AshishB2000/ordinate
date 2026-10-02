@@ -13,6 +13,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
+import { withT } from './i18nNode';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -336,7 +337,7 @@ function testDisplay(): void {
 
   // The renderer's mirror, run in a sandbox on the same shared formatter.
   const src = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'hub', 'calcMenu.js'), 'utf8');
-  const ctx = vm.createContext({ OrdFormat: format, window: {}, document: {} });
+  const ctx = vm.createContext(withT({ OrdFormat: format, window: {}, document: {} }));
   const mirror = vm.runInContext(src + '\n;({ tcCalcLabel, tcCalcParts });', ctx) as {
     tcCalcLabel: (k: string, v: unknown, r?: unknown) => string;
     tcCalcParts: (k: string, v: unknown, r?: unknown) => { value: string; suffix: string; raw: string };

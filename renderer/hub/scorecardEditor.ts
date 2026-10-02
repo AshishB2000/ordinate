@@ -68,13 +68,13 @@ async function scEditRows(): Promise<void> {
   box.className = 'ws-modal sc-editor';
   box.setAttribute('role', 'dialog');
   box.setAttribute('aria-modal', 'true');
-  box.setAttribute('aria-label', 'Edit scorecard metrics');
+  box.setAttribute('aria-label', t('scorecardEditor.edit_scorecard_metrics'));
   const title = document.createElement('div');
   title.className = 'ws-modal-title';
-  title.textContent = 'Metrics, targets and owners';
+  title.textContent = t('scorecardEditor.metrics_targets_and_owners');
   const sub = document.createElement('p');
   sub.className = 'sc-ed-sub';
-  sub.textContent = 'Thresholds are percent of target. Leave them blank for the defaults: on track at 100%, at risk from 90% (or, for a metric where down is good, up to 110%).';
+  sub.textContent = t('scorecardEditor.thresholds_are_percent_of_target_leave');
   const list = document.createElement('div');
   list.className = 'sc-ed-list';
   const groupsId = 'sc-ed-groups-' + Date.now();
@@ -92,14 +92,14 @@ async function scEditRows(): Promise<void> {
     if (!rows.length) {
       const p = document.createElement('p');
       p.className = 'sc-ed-empty';
-      p.textContent = 'No metrics yet. Add the numbers you want to track.';
+      p.textContent = t('scorecardEditor.no_metrics_yet_add_the_numbers');
       list.appendChild(p);
     }
     const head = document.createElement('div');
     head.className = 'sc-ed-row sc-ed-row--head';
-    for (const t of ['Metric', 'Target', 'Owner', 'Group', 'Good %', 'Warn %', '']) {
+    for (const tv of [t('common.metric'), t('common.target'), t('common.owner'), t('common.group'), t('scorecardEditor.good'), t('scorecardEditor.warn'), '']) {
       const c = document.createElement('span');
-      c.textContent = t;
+      c.textContent = tv;
       head.appendChild(c);
     }
     if (rows.length) list.appendChild(head);
@@ -111,10 +111,10 @@ async function scEditRows(): Promise<void> {
       name.className = 'sc-ed-metric';
       const nm = document.createElement('span');
       nm.className = 'sc-ed-metric-name';
-      nm.textContent = m ? String(m.name) : 'Missing metric';
+      nm.textContent = m ? String(m.name) : t('common.missing_metric');
       const dir = document.createElement('span');
       dir.className = 'sc-ed-metric-dir';
-      dir.textContent = m && m.direction === 'down_good' ? 'down is good' : m && m.direction === 'up_good' ? 'up is good' : '';
+      dir.textContent = m && m.direction === 'down_good' ? t('scorecardEditor.down_is_good') : m && m.direction === 'up_good' ? t('scorecardEditor.up_is_good') : '';
       name.append(nm, dir);
       row.appendChild(name);
 
@@ -122,8 +122,8 @@ async function scEditRows(): Promise<void> {
       tgt.className = 'sc-ed-target';
       const mode = document.createElement('select');
       mode.className = 'viz-select sc-ed-mode';
-      mode.setAttribute('aria-label', 'Target type for ' + (m ? m.name : 'metric'));
-      for (const [v, l] of [['none', 'None'], ['number', 'Number'], ['metric', 'Metric…']]) {
+      mode.setAttribute('aria-label', t('scorecardEditor.target_type_for', { p0: (m ? m.name : 'metric') }));
+      for (const [v, l] of [['none', t('common.none')], ['number', t('common.number')], ['metric', t('common.metric_2')]]) {
         const o = document.createElement('option');
         o.value = v;
         o.textContent = l;
@@ -138,34 +138,34 @@ async function scEditRows(): Promise<void> {
         render();
       });
       tgt.appendChild(mode);
-      if (r.targetMode === 'number') tgt.appendChild(scInput(r.target, 'e.g. 250000', (v) => { r.target = v; }, 'Target value', 'number'));
+      if (r.targetMode === 'number') tgt.appendChild(scInput(r.target, 'e.g. 250000', (v) => { r.target = v; }, t('scorecardEditor.target_value'), 'number'));
       if (r.targetMode === 'metric') {
         const chip = document.createElement('span');
         chip.className = 'sc-chip';
         const tm = byId.get(r.targetMetric);
-        chip.textContent = tm ? String(tm.name) : 'Missing metric';
+        chip.textContent = tm ? String(tm.name) : t('common.missing_metric');
         tgt.appendChild(chip);
       }
       row.appendChild(tgt);
-      const owner = scInput(r.owner, 'Owner', (v) => { r.owner = v; }, 'Owner');
-      const group = scInput(r.group, 'Group', (v) => { r.group = v; }, 'Group');
+      const owner = scInput(r.owner, t('common.owner'), (v) => { r.owner = v; }, t('common.owner'));
+      const group = scInput(r.group, t('common.group'), (v) => { r.group = v; }, t('common.group'));
       group.setAttribute('list', groupsId);
       const down = m && m.direction === 'down_good';
       row.append(owner, group,
-        scInput(r.good, '100', (v) => { r.good = v; }, 'Good threshold, percent of target', 'number'),
-        scInput(r.warn, down ? '110' : '90', (v) => { r.warn = v; }, 'Warning threshold, percent of target', 'number'));
+        scInput(r.good, '100', (v) => { r.good = v; }, t('scorecardEditor.good_threshold_percent_of_target'), 'number'),
+        scInput(r.warn, down ? '110' : '90', (v) => { r.warn = v; }, t('scorecardEditor.warning_threshold_percent_of_target'), 'number'));
       const acts = document.createElement('div');
       acts.className = 'sc-ed-acts';
       const up = document.createElement('button');
       up.type = 'button';
       up.className = 'icon-btn';
-      iconOnly(up, 'arrow-up', 'Move up');
+      iconOnly(up, 'arrow-up', t('common.move_up'));
       up.disabled = i === 0;
       up.addEventListener('click', () => { const t = rows[i - 1]; rows[i - 1] = rows[i]; rows[i] = t; render(); });
       const del = document.createElement('button');
       del.type = 'button';
       del.className = 'icon-btn';
-      iconOnly(del, 'x', 'Remove ' + (m ? m.name : 'row'));
+      iconOnly(del, 'x', t('common.remove_2', { p0: (m ? m.name : 'row') }));
       del.addEventListener('click', () => { rows.splice(i, 1); render(); });
       acts.append(up, del);
       row.appendChild(acts);
@@ -176,7 +176,7 @@ async function scEditRows(): Promise<void> {
   const add = document.createElement('button');
   add.type = 'button';
   add.className = 'btn btn-sm sc-ed-add';
-  add.append(icon('plus', 16), Object.assign(document.createElement('span'), { textContent: 'Add metric' }));
+  add.append(icon('plus', 16), Object.assign(document.createElement('span'), { textContent: t('scorecardEditor.add_metric') }));
   add.addEventListener('click', async () => {
     const picked = await openMetricPicker(add, {});
     if (!picked || picked.kind !== 'metric' || !picked.metric) return;
@@ -190,11 +190,11 @@ async function scEditRows(): Promise<void> {
   const cancel = document.createElement('button');
   cancel.type = 'button';
   cancel.className = 'btn';
-  cancel.textContent = 'Cancel';
+  cancel.textContent = t('common.cancel');
   const save = document.createElement('button');
   save.type = 'button';
   save.className = 'btn btn-primary';
-  save.textContent = 'Save';
+  save.textContent = t('common.save');
   actions.append(cancel, save);
 
   const close = (): void => { overlay.remove(); document.removeEventListener('keydown', onKey, true); };
@@ -204,7 +204,7 @@ async function scEditRows(): Promise<void> {
   save.addEventListener('click', async () => {
     const out = rows.map(scFromEditRow);
     const res = await window.hubPower.scorecardUpdate(currentProjectId as string, cur.id, { rows: out });
-    if (!res || res.ok === false) { showToast('Could not save the scorecard.'); return; }
+    if (!res || res.ok === false) { showToast(t('scorecardEditor.could_not_save_the_scorecard')); return; }
     if (scCurrent && scCurrent.id === cur.id) scCurrent.rows = res.scorecard.rows;
     close();
     await scCompute();

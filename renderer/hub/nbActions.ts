@@ -22,19 +22,19 @@ async function nbSaveAsDataset(id: string): Promise<void> {
   const pid = nbDocProject;
   await nbFlush();
   const btn = nbCellEl(id)?.querySelector('.nb-save') as HTMLButtonElement | null;
-  if (btn) { btn.disabled = true; iconLabel(btn, 'loader', 'Reading every row…'); }
+  if (btn) { btn.disabled = true; iconLabel(btn, 'loader', t('nbActions.reading_every_row')); }
   let res: any = null;
   try {
     res = await window.hubNotebooks.prepareSave(pid, doc.id, id);
   } catch (_) {
-    res = { ok: false, error: 'The result could not be read.' };
+    res = { ok: false, error: t('nbActions.the_result_could_not_be_read') };
   }
-  if (btn) { btn.disabled = false; iconLabel(btn, 'database', 'Save as dataset'); }
+  if (btn) { btn.disabled = false; iconLabel(btn, 'database', t('common.save_as_dataset')); }
   if (res && res.canceled) return;
-  if (!res || !res.ok) { showToast((res && res.error) || 'The result could not be read.', { kind: 'error' }); return; }
+  if (!res || !res.ok) { showToast((res && res.error) || t('nbActions.the_result_could_not_be_read'), { kind: 'error' }); return; }
   const columns: any[] = Array.isArray(res.columns) ? res.columns : [];
   const rows: any[] = Array.isArray(res.rows) ? res.rows : [];
-  const name = String(res.name || 'Notebook result');
+  const name = String(res.name || t('nbActions.notebook_result'));
   // The composer lives on the Datasets tab and closes back onto it; the
   // notebook stays open behind the Notebooks tab, results and all.
   clSelectTab('datasets');
@@ -58,20 +58,20 @@ async function nbPinChart(id: string): Promise<void> {
   const analysis = await dashPickForAdd();
   if (!analysis) return;
   const btn = nbCellEl(id)?.querySelector('.nb-pin') as HTMLButtonElement | null;
-  if (btn) { btn.disabled = true; iconLabel(btn, 'loader', 'Pinning…'); }
+  if (btn) { btn.disabled = true; iconLabel(btn, 'loader', t('nbActions.pinning')); }
   let res: any = null;
   try {
     res = await window.hubNotebooks.pinVisual(pid, doc.id, id);
   } catch (_) {
-    res = { ok: false, error: 'The chart could not be pinned.' };
+    res = { ok: false, error: t('nbActions.the_chart_could_not_be_pinned') };
   }
-  if (btn) { btn.disabled = false; iconLabel(btn, 'layout-dashboard', 'Pin to dashboard'); }
-  if (!res || !res.ok) { showToast((res && res.error) || 'The chart could not be pinned.', { kind: 'error' }); return; }
+  if (btn) { btn.disabled = false; iconLabel(btn, 'layout-dashboard', t('common.pin_to_dashboard')); }
+  if (!res || !res.ok) { showToast((res && res.error) || t('nbActions.the_chart_could_not_be_pinned'), { kind: 'error' }); return; }
   if (!(await dashAppendVisualCard(analysis, String(res.visualId)))) return;
-  const where = analysis.name ? String(analysis.name) : 'the dashboard';
+  const where = analysis.name ? String(analysis.name) : t('common.the_dashboard');
   showToast(res.datasetCreated
-    ? `Pinned to ${where}. Its data is saved as a dataset that refreshes with this notebook.`
-    : `Pinned to ${where}.`);
+    ? t('nbActions.pinned_to_its_data_is_saved', { where })
+    : t('nbActions.pinned_to', { where }));
 }
 
 async function nbExportMarkdown(): Promise<void> {
@@ -95,9 +95,9 @@ async function nbExportMarkdown(): Promise<void> {
   try {
     res = await window.hubNotebooks.exportMarkdown(pid, doc.id, charts);
   } catch (_) {
-    res = { ok: false, error: 'The export failed.' };
+    res = { ok: false, error: t('nbActions.the_export_failed') };
   }
   if (res && res.canceled) return;
-  if (!res || !res.ok) { showToast((res && res.error) || 'The export failed.', { kind: 'error' }); return; }
-  showToast('Exported to ' + String(res.dest).split(/[\\/]/).pop());
+  if (!res || !res.ok) { showToast((res && res.error) || t('nbActions.the_export_failed'), { kind: 'error' }); return; }
+  showToast(t('nbActions.exported_to', { p0: String(res.dest).split(/[\\/]/).pop() }));
 }

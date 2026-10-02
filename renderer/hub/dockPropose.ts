@@ -212,13 +212,12 @@ function dkMkBtn(label: string, primary: boolean, cb: () => void): HTMLButtonEle
 // dashboard is open, because there would be nothing to restyle.
 function dkOfferStyleProposal(preset: any, containerId = 'dk-messages'): void {
   if (!dashCurrent) return;
-  const { card, actions } = dkProposalCard('Restyle this dashboard');
+  const { card, actions } = dkProposalCard(t('dockPropose.restyle_this_dashboard'));
   let picked = preset && DASH_STYLE_PRESETS[preset] ? String(preset) : (dashPresetOf(dashCurrentStyle()) || 'clean');
 
   const why = document.createElement('div');
   why.className = 'ai-interp-body';
-  why.textContent = 'A style changes how ' + String(dashCurrent.name || 'this dashboard') +
-    ' looks. It never moves a card or changes a number.';
+  why.textContent = t('dockPropose.a_style_changes_how_looks_it', { p0: String(dashCurrent.name || t('common.this_dashboard')) });
   card.appendChild(why);
 
   // Preselected to what the Assistant picked, but the four are all here: the
@@ -227,11 +226,11 @@ function dkOfferStyleProposal(preset: any, containerId = 'dk-messages'): void {
     picked = name;
   }));
 
-  actions.appendChild(dkMkBtn('Apply style', true, () => {
+  actions.appendChild(dkMkBtn(t('dockPropose.apply_style'), true, () => {
     applyDashStylePreset(picked);
     dkRemoveProposalCard(card);
   }));
-  actions.appendChild(dkMkBtn('Dismiss', false, () => dkRemoveProposalCard(card)));
+  actions.appendChild(dkMkBtn(t('common.dismiss'), false, () => dkRemoveProposalCard(card)));
   // Every other proposal kind appends its action row; this one built the row,
   // filled it, and dropped it on the floor — so "make it dark" rendered four
   // preset thumbnails and NO way to apply any of them. A card the user cannot
@@ -253,14 +252,14 @@ async function dkOfferStepProposal(datasetId: string, containerId = 'dk-messages
 }
 
 function dkRenderStepCard(datasetId: string, step: any, containerId = 'dk-messages'): void {
-  const { card, actions } = dkProposalCard('Suggested step — review before it changes the pipeline');
+  const { card, actions } = dkProposalCard(t('dockPropose.suggested_step_review_before_it_changes'));
   const body = document.createElement('div');
   body.className = 'ai-interp-body';
   body.textContent = stepSummaryText(step); // reused verbatim (prepare.ts) — no second summariser
   card.appendChild(body);
 
-  const dismiss = dkMkBtn('Dismiss', false, () => dkRemoveProposalCard(card));
-  const apply = dkMkBtn('Apply', true, () => {
+  const dismiss = dkMkBtn(t('common.dismiss'), false, () => dkRemoveProposalCard(card));
+  const apply = dkMkBtn(t('common.apply'), true, () => {
     void (async () => {
       if (!currentProjectId) return;
       apply.disabled = true;
@@ -270,12 +269,12 @@ function dkRenderStepCard(datasetId: string, step: any, containerId = 'dk-messag
         // APPEND one step. Never setDatasetSteps — that replaces the whole pipeline.
         res = await window.hub.addDatasetStep(currentProjectId, datasetId, step);
       } catch (_) {
-        res = { ok: false, error: 'Could not add the step.' };
+        res = { ok: false, error: t('dockPropose.could_not_add_the_step') };
       }
       if (!res || res.ok === false) {
         apply.disabled = false;
         dismiss.disabled = false;
-        body.textContent = (res && res.error) || 'Could not add the step.';
+        body.textContent = (res && res.error) || t('dockPropose.could_not_add_the_step');
         return;
       }
       // The mutation above already landed regardless of what's on screen — this
@@ -293,8 +292,8 @@ function dkRenderStepCard(datasetId: string, step: any, containerId = 'dk-messag
       const note = document.createElement('div');
       note.className = 'ai-interp-hint';
       note.textContent = stepCount
-        ? 'Added as step ' + stepCount + '. Remove it in Prepare to undo.'
-        : 'Added. Remove it in Prepare to undo.';
+        ? t('dockPropose.added_as_step_remove_it_in', { stepCount })
+        : t('dockPropose.added_remove_it_in_prepare_to');
       card.appendChild(note);
     })();
   });
@@ -318,7 +317,7 @@ async function dkOfferCalcFieldProposal(datasetId: string, containerId = 'dk-mes
 
 function dkRenderCalcFieldCard(datasetId: string, res: any, containerId = 'dk-messages'): void {
   const step = { type: 'calculated_field', name: res.name, expression: res.expression };
-  const { card, actions } = dkProposalCard('Suggested calculated field — review before it’s added');
+  const { card, actions } = dkProposalCard(t('dockPropose.suggested_calculated_field_review_before'));
   const body = document.createElement('div');
   body.className = 'ai-interp-body';
   body.textContent = stepSummaryText(step); // same summariser as the step card
@@ -330,11 +329,11 @@ function dkRenderCalcFieldCard(datasetId: string, res: any, containerId = 'dk-me
     card.appendChild(warn);
   }
 
-  const dismiss = dkMkBtn('Dismiss', false, () => dkRemoveProposalCard(card));
+  const dismiss = dkMkBtn(t('common.dismiss'), false, () => dkRemoveProposalCard(card));
   // Apply does NOT apply — it opens the SAME step editor prepare.ts's own
   // "Suggest a calculated field" uses, prefilled, so the user reviews the
   // formula and clicks the editor's own Save. This never calls addDatasetStep.
-  const apply = dkMkBtn('Apply', true, () => {
+  const apply = dkMkBtn(t('common.apply'), true, () => {
     void (async () => {
       if (!currentProjectId) return;
       apply.disabled = true;
@@ -411,11 +410,11 @@ function dkPlanMiniCards(res: any): any[] {
 // The proposal card. Title, one line of rationale, the previewed tiles, and
 // everything the app REFUSED — then two ways forward and a way out.
 function dkRenderPlanCard(res: any, containerId = 'dk-messages'): void {
-  const { card, actions } = dkProposalCard('Suggested dashboard');
+  const { card, actions } = dkProposalCard(t('dockPropose.suggested_dashboard'));
 
   const name = document.createElement('div');
   name.className = 'dk-plan-name';
-  name.textContent = res && res.name ? String(res.name) : 'Assistant dashboard';
+  name.textContent = res && res.name ? String(res.name) : t('common.assistant_dashboard');
   card.appendChild(name);
 
   if (res && typeof res.rationale === 'string' && res.rationale.trim()) {
@@ -488,7 +487,7 @@ function dkRenderPlanCard(res: any, containerId = 'dk-messages'): void {
   // two surfaces cannot drift into one of them quietly hiding it.
   if (typeof anDraftAppendDropped === 'function') anDraftAppendDropped(card, res && res.dropped);
 
-  const build = dkMkBtn('Build dashboard', true, () => {
+  const build = dkMkBtn(t('dockPropose.build_dashboard'), true, () => {
     void (async () => {
       if (!currentProjectId) return;
       build.disabled = true;
@@ -508,7 +507,7 @@ function dkRenderPlanCard(res: any, containerId = 'dk-messages'): void {
         setDashStyle(DASH_STYLE_PRESETS[planStyle], true);
       } catch (_) {
         build.disabled = false;
-        showToast('Could not build that dashboard.');
+        showToast(t('dockPropose.could_not_build_that_dashboard'));
         return;
       }
       // Built and navigated to. The plan is finished with, so a later question
@@ -521,7 +520,7 @@ function dkRenderPlanCard(res: any, containerId = 'dk-messages'): void {
 
   // "Adjust…" hands the accumulated intent back to the composer so the user can
   // edit the words that produced this, rather than having to remember them.
-  const adjust = dkMkBtn('Adjust…', false, () => {
+  const adjust = dkMkBtn(t('dockPropose.adjust'), false, () => {
     const input = document.getElementById('dk-input') as HTMLTextAreaElement | null;
     if (input) {
       input.value = dkPlanIntent || (res && res.name ? String(res.name) : '');
@@ -531,7 +530,7 @@ function dkRenderPlanCard(res: any, containerId = 'dk-messages'): void {
   });
   actions.appendChild(adjust);
 
-  const dismiss = dkMkBtn('Dismiss', false, () => {
+  const dismiss = dkMkBtn(t('common.dismiss'), false, () => {
     dkResetPlanIntent();
     dkRemoveProposalCard(card);
   });
@@ -580,7 +579,7 @@ async function dkOfferChartProposal(datasetId: string, question: string, contain
 function dkAnalysisSheets(visualId: string): any[] {
   return [{
     id: dashUuid(),
-    name: 'Sheet 1',
+    name: t('common.sheet_1'),
     cards: [{ id: dashUuid(), type: 'visual', visualId: String(visualId), layout: { x: 0, y: 0, w: 6, h: 6 } }],
   }];
 }
@@ -635,7 +634,7 @@ async function dkTurnIntoAnalysis(
 }
 
 function dkRenderChartCard(datasetId: string, question: string, option: any, data: any, type: string, containerId = 'dk-messages'): void {
-  const { card, actions } = dkProposalCard('Suggested chart');
+  const { card, actions } = dkProposalCard(t('common.suggested_chart'));
   if (option.why) {
     const why = document.createElement('div');
     why.className = 'ai-interp-body';
@@ -667,7 +666,7 @@ function dkRenderChartCard(datasetId: string, question: string, option: any, dat
   // app's encoding-derived name as the fallback for an empty question. This is
   // xpVisualName's exact rule (exploreChart.ts, now retired), reused so the
   // saved visual and the analysis share one honest, user-derived title.
-  const name = truncate(question.trim(), 60) || (typeof suggestVisualName === 'function' ? suggestVisualName(option.encoding, type) : 'Untitled visual');
+  const name = truncate(question.trim(), 60) || (typeof suggestVisualName === 'function' ? suggestVisualName(option.encoding, type) : t('common.untitled_visual'));
 
   const finish = (msg: string): void => {
     actions.remove();
@@ -675,7 +674,7 @@ function dkRenderChartCard(datasetId: string, question: string, option: any, dat
     dkRemoveProposalCard(card);
   };
 
-  const save = dkMkBtn('Save as visual', true, () => {
+  const save = dkMkBtn(t('common.save_as_visual'), true, () => {
     void (async () => {
       if (!currentProjectId) return;
       save.disabled = true;
@@ -690,10 +689,10 @@ function dkRenderChartCard(datasetId: string, question: string, option: any, dat
       }
       if (!res || res.ok === false || !res.id) {
         save.disabled = false;
-        showToast('Could not save the visual.');
+        showToast(t('common.could_not_save_the_visual'));
         return;
       }
-      finish('Saved as visual — find it in Visuals.');
+      finish(t('common.saved_as_visual_find_it_in'));
     })();
   });
   actions.appendChild(save);
@@ -708,7 +707,7 @@ function dkRenderChartCard(datasetId: string, question: string, option: any, dat
   // is always available and gives the chart a saved home either way.
   const page = typeof dashCurrentPage === 'function' ? dashCurrentPage() : null;
   if (page && !dashReadOnly) {
-    const addBtn = dkMkBtn('Add to dashboard', false, () => {
+    const addBtn = dkMkBtn(t('common.add_to_dashboard'), false, () => {
       void (async () => {
         if (!currentProjectId) return;
         addBtn.disabled = true;
@@ -723,11 +722,11 @@ function dkRenderChartCard(datasetId: string, question: string, option: any, dat
         }
         if (!res || res.ok === false || !res.id) {
           addBtn.disabled = false;
-          showToast('Could not add to the dashboard.');
+          showToast(t('dockPropose.could_not_add_to_the_dashboard'));
           return;
         }
         pushCard({ id: dashUuid(), type: 'visual', visualId: String(res.id), layout: { ...dashFindSlot(dashCards(), 6, 6), w: 6, h: 6 } });
-        finish('Added to the dashboard.');
+        finish(t('common.added_to_the_dashboard'));
       })();
     });
     actions.appendChild(addBtn);
@@ -740,7 +739,7 @@ function dkRenderChartCard(datasetId: string, question: string, option: any, dat
   // from. On success we navigate away, so there is nothing to finish() — the
   // card leaves with the section change; on failure we re-enable and toast,
   // matching the two buttons above (the answer itself still stands).
-  const analyse = dkMkBtn('Turn into dashboard', false, () => {
+  const analyse = dkMkBtn(t('dockPropose.turn_into_dashboard'), false, () => {
     void (async () => {
       if (!currentProjectId) return;
       analyse.disabled = true;
@@ -752,7 +751,7 @@ function dkRenderChartCard(datasetId: string, question: string, option: any, dat
       }
       if (!done) {
         analyse.disabled = false;
-        showToast('Could not turn that into a dashboard.');
+        showToast(t('dockPropose.could_not_turn_that_into_a'));
         return;
       }
       // Navigated to the new analysis — tear the card down so no leaked chart
@@ -763,7 +762,7 @@ function dkRenderChartCard(datasetId: string, question: string, option: any, dat
   });
   actions.appendChild(analyse);
 
-  const dismiss = dkMkBtn('Dismiss', false, () => dkRemoveProposalCard(card));
+  const dismiss = dkMkBtn(t('common.dismiss'), false, () => dkRemoveProposalCard(card));
   actions.appendChild(dismiss);
   card.appendChild(actions);
   dkAppendProposal(card, containerId);

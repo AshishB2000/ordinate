@@ -24,7 +24,7 @@ function saasWatchRow(field: { key: string; label: string }): DocumentFragment {
   box.checked = !!(cwConn && cwConn.values && cwConn.values.watch === true);
   const state = document.createElement('span');
   const paint = (): void => {
-    state.textContent = box.checked ? 'On — file changes refresh its datasets' : 'Off';
+    state.textContent = box.checked ? t('saas.on_file_changes_refresh_its_datasets') : t('common.off');
   };
   paint();
   box.addEventListener('change', () => { void saasSetWatch(box, paint); });
@@ -42,12 +42,12 @@ async function saasSetWatch(box: HTMLInputElement, paint: () => void): Promise<v
   try {
     res = await window.hubSaas.setFolderWatch(currentProjectId, String(cwConn.id), want);
   } catch (_) {
-    res = { ok: false, error: 'Could not change the folder watch.' };
+    res = { ok: false, error: t('saas.could_not_change_the_folder_watch') };
   }
   box.disabled = false;
   if (!res || res.ok === false) {
     box.checked = !want;
-    showToast((res && res.error) || 'Could not change the folder watch.');
+    showToast((res && res.error) || t('saas.could_not_change_the_folder_watch'));
   } else if (cwConn && res.connection) {
     cwConn.values = res.connection.values;
   }

@@ -54,19 +54,19 @@ function drvEnsureRoot(): HTMLElement {
   const head = drvEl('header', 'drv-head');
   const eyebrow = drvEl('div', 'drv-eyebrow');
   eyebrow.appendChild(icon('activity', 16));
-  eyebrow.appendChild(document.createTextNode('Why did this change?'));
+  eyebrow.appendChild(document.createTextNode(t('common.why_did_this_change')));
   const row = drvEl('div', 'drv-head-row');
-  const title = drvEl('h2', 'drv-title', 'Explaining the change…');
+  const title = drvEl('h2', 'drv-title', t('driversPanel.explaining_the_change'));
   title.id = 'drv-title';
   const x = document.createElement('button');
   x.type = 'button';
   x.className = 'drv-x';
-  x.setAttribute('aria-label', 'Close');
+  x.setAttribute('aria-label', t('common.close'));
   x.appendChild(icon('x', 16));
   x.addEventListener('click', () => closeDriversPanel());
   row.append(title, x);
   head.append(eyebrow, row, drvEl('div', 'drv-periods'), drvEl('nav', 'drv-crumbs'));
-  head.querySelector('.drv-crumbs')!.setAttribute('aria-label', 'Breakdown path');
+  head.querySelector('.drv-crumbs')!.setAttribute('aria-label', t('driversPanel.breakdown_path'));
 
   const body = drvEl('div', 'drv-body');
   const dims = drvEl('div', 'drv-dims');
@@ -76,11 +76,11 @@ function drvEnsureRoot(): HTMLElement {
   const foot = drvEl('footer', 'drv-foot');
   const note = drvEl('span', 'drv-foot-note');
   note.appendChild(icon('shield', 16));
-  note.appendChild(document.createTextNode('Every figure is computed by Ordinate from your data.'));
+  note.appendChild(document.createTextNode(t('driversPanel.every_figure_is_computed_by_ordinate')));
   const acts = drvEl('div', 'drv-actions');
-  const tile = drvButton('Add as tile', 'btn drv-act-tile', 'layout-dashboard');
-  const ask = drvButton('Ask the Assistant', 'btn drv-act-ask', 'sparkles');
-  const alert = drvButton('Alert me…', 'btn drv-act-alert', 'bell');
+  const tile = drvButton(t('driversPanel.add_as_tile'), 'btn drv-act-tile', 'layout-dashboard');
+  const ask = drvButton(t('common.ask_the_assistant'), 'btn drv-act-ask', 'sparkles');
+  const alert = drvButton(t('common.alert_me'), 'btn drv-act-alert', 'bell');
   tile.addEventListener('click', () => { void drvAddTile(); });
   ask.addEventListener('click', () => { void drvAsk(); });
   alert.addEventListener('click', () => { void drvAlertMe(); });
@@ -141,11 +141,11 @@ async function drvRun(call: () => Promise<any>, params?: any): Promise<void> {
   try {
     res = await call();
   } catch (_) {
-    res = { ok: false, error: 'Could not explain the change.' };
+    res = { ok: false, error: t('driversPanel.could_not_explain_the_change') };
   }
   if (seq !== drvSeq) return;
   if (!res || res.ok !== true) {
-    drvPaintError((res && res.error) || 'Could not explain the change.');
+    drvPaintError((res && res.error) || t('driversPanel.could_not_explain_the_change'));
     return;
   }
   drvRes = res;
@@ -172,7 +172,7 @@ function drvPaintLoading(): void {
   if (!dims || !main) return;
   dims.textContent = '';
   main.textContent = '';
-  dims.appendChild(drvEl('div', 'drv-sec-h', 'Dimensions'));
+  dims.appendChild(drvEl('div', 'drv-sec-h', t('driversPanel.dimensions')));
   for (let i = 0; i < 4; i += 1) dims.appendChild(drvEl('div', 'drv-skel drv-skel--dim'));
   main.appendChild(drvEl('div', 'drv-skel drv-skel--caption'));
   for (let i = 0; i < 7; i += 1) main.appendChild(drvEl('div', 'drv-skel drv-skel--bar'));
@@ -182,14 +182,14 @@ function drvPaintLoading(): void {
 
 function drvPaintError(msg: string): void {
   const title = drvQ('#drv-title');
-  if (title && !drvRes) title.textContent = 'Nothing to explain yet';
+  if (title && !drvRes) title.textContent = t('driversPanel.nothing_to_explain_yet');
   const dims = drvQ('.drv-dims');
   const main = drvQ('.drv-main');
   if (!dims || !main) return;
   dims.textContent = '';
   main.textContent = '';
   main.removeAttribute('aria-busy');
-  main.appendChild(drvEmpty('calendar', 'This change cannot be explained', msg));
+  main.appendChild(drvEmpty('calendar', t('driversPanel.this_change_cannot_be_explained'), msg));
   drvSetActions(false);
 }
 
@@ -210,7 +210,7 @@ function drvSetActions(on: boolean): void {
   if (ask) ask.disabled = !on || !r;
   if (alert) {
     alert.disabled = !on || !r || !r.alert;
-    alert.title = r && !r.alert ? 'Alerts watch a column total — this metric is a formula.' : '';
+    alert.title = r && !r.alert ? t('driversPanel.alerts_watch_a_column_total_this') : '';
   }
 }
 
@@ -271,7 +271,7 @@ function drvPaintCrumbs(): void {
     b.addEventListener('click', () => drvAskAgain({ path: r.path.slice(0, depth).map((p: any) => ({ column: p.column, value: p.value })) }));
     nav.appendChild(b);
   };
-  crumb('All ' + r.metric.name, 0, false);
+  crumb(t('driversPanel.all', { name: r.metric.name }), 0, false);
   r.path.forEach((p: any, i: number) => {
     const sep = drvEl('span', 'drv-crumb-sep');
     sep.appendChild(icon('chevron-right', 16));
@@ -285,16 +285,16 @@ function drvPaintDims(): void {
   const r = drvRes;
   if (!host || !r) return;
   host.textContent = '';
-  const h = drvEl('div', 'drv-sec-h', 'Dimensions');
-  h.appendChild(drvEl('span', 'drv-sec-sub', 'ranked by explained variance'));
+  const h = drvEl('div', 'drv-sec-h', t('driversPanel.dimensions'));
+  h.appendChild(drvEl('span', 'drv-sec-sub', t('driversPanel.ranked_by_explained_variance')));
   host.appendChild(h);
   if (!r.dimensions.length) {
-    host.appendChild(drvEl('p', 'drv-dims-none', 'No dimension here has between 2 and 200 values.'));
+    host.appendChild(drvEl('p', 'drv-dims-none', t('driversPanel.no_dimension_here_has_between_2')));
     return;
   }
   const list = drvEl('div', 'drv-dim-list');
   list.setAttribute('role', 'group');
-  list.setAttribute('aria-label', 'Break the change down by');
+  list.setAttribute('aria-label', t('driversPanel.break_the_change_down_by'));
   const selected = r.selected ? r.selected.column : '';
   for (const d of r.dimensions) {
     const b = document.createElement('button');
@@ -302,14 +302,14 @@ function drvPaintDims(): void {
     b.className = 'drv-dim' + (d.column === selected ? ' is-on' : '');
     b.setAttribute('aria-pressed', String(d.column === selected));
     const pct = Math.round(d.explained * 100);
-    b.setAttribute('aria-label', `${d.column}: explains ${pct}% of the change`);
+    b.setAttribute('aria-label', t('driversPanel.explains_of_the_change', { column: d.column, pct }));
     const top = drvEl('div', 'drv-dim-top');
     top.append(drvEl('span', 'drv-dim-name', d.column), drvEl('span', 'drv-dim-pct tnum', pct + '%'));
     const track = drvEl('div', 'drv-dim-track');
     const fill = drvEl('div', 'drv-dim-fill');
     fill.style.width = Math.max(2, pct) + '%';
     track.appendChild(fill);
-    const sub = drvEl('div', 'drv-dim-sub', d.memberCount + ' members' + (d.lead ? ' · led by ' + d.lead : ''));
+    const sub = drvEl('div', 'drv-dim-sub', d.memberCount + ' members' + (d.lead ? t('driversPanel.led_by', { lead: d.lead }) : ''));
     b.append(top, track, sub);
     b.addEventListener('click', () => { if (d.column !== selected) drvAskAgain({ dimension: d.column }); });
     list.appendChild(b);
@@ -331,18 +331,18 @@ function drvPaintMain(): void {
     host.appendChild(cap);
   }
   if (!r.selected) {
-    host.appendChild(drvEmpty('info', 'No breakdown for this change', r.unavailable || 'Nothing in these periods to break down.'));
+    host.appendChild(drvEmpty('info', t('driversPanel.no_breakdown_for_this_change'), r.unavailable || t('driversPanel.nothing_in_these_periods_to_break')));
     return;
   }
   const s = r.selected;
   const drillable = r.dimensions.length > 1 && r.path.length < 4;
-  const h = drvEl('div', 'drv-sec-h', 'Contributors by ' + s.column);
-  h.appendChild(drvEl('span', 'drv-sec-sub', drillable ? 'select a member to break it down further' : 'largest moves first'));
+  const h = drvEl('div', 'drv-sec-h', t('driversPanel.contributors_by', { column: s.column }));
+  h.appendChild(drvEl('span', 'drv-sec-sub', drillable ? t('driversPanel.select_a_member_to_break_it') : t('driversPanel.largest_moves_first')));
   host.appendChild(h);
   host.appendChild(drvWaterfall(s, drillable, r.metric.kind === 'ratio'));
   if (r.metric.kind === 'ratio') {
     host.appendChild(drvEl('p', 'drv-ratio-note',
-      'A ratio moves two ways: a member\'s MIX effect is its weight growing or shrinking, its RATE effect is its own ratio moving. Mix + rate = its contribution.'));
+      t('driversPanel.a_ratio_moves_two_ways_a')));
   }
 }
 
@@ -353,9 +353,9 @@ function drvPaintMain(): void {
  */
 function drvShareText(st: any, offsetting: boolean): string | undefined {
   if (st.share === null || st.share === undefined) return undefined;
-  if (offsetting || Math.abs(st.share) > 200) return Math.round(st.moveShare) + '% of all movement';
+  if (offsetting || Math.abs(st.share) > 200) return t('driversPanel.of_all_movement', { moveShare: Math.round(st.moveShare) });
   const pct = Math.round(st.share);
-  return (pct < 0 ? '−' + Math.abs(pct) : String(pct)) + '% of the change';
+  return (pct < 0 ? '−' + Math.abs(pct) : String(pct)) + t('driversPanel.of_the_change');
 }
 
 /** Horizontal waterfall rows. Totals from the axis start; steps float at the running level. */
@@ -366,11 +366,11 @@ function drvWaterfall(s: any, drillable: boolean, ratio: boolean): HTMLElement {
   let run = w.start;
   for (const st of w.steps) {
     rows.push({ label: st.label, from: run, to: run + st.delta, text: st.deltaText, kind: 'step', step: st,
-      sub: ratio && st.mixText !== undefined ? `Mix ${st.mixText} · Rate ${st.rateText}` : drvShareText(st, s.offsetting) });
+      sub: ratio && st.mixText !== undefined ? t('driversPanel.mix_rate', { mixText: st.mixText, rateText: st.rateText }) : drvShareText(st, s.offsetting) });
     run += st.delta;
   }
   if (w.other.count > 0) {
-    rows.push({ label: `Other (${w.other.count})`, from: run, to: run + w.other.delta, text: w.other.deltaText, kind: 'other' });
+    rows.push({ label: t('driversPanel.other', { count: w.other.count }), from: run, to: run + w.other.delta, text: w.other.deltaText, kind: 'other' });
     run += w.other.delta;
   }
   rows.push({ label: drvRes.periods.a, from: 0, to: w.end, text: w.endText, kind: 'total' });
@@ -391,7 +391,7 @@ function drvWaterfall(s: any, drillable: boolean, ratio: boolean): HTMLElement {
 
   const box = drvEl('div', 'drv-wf');
   box.setAttribute('role', 'list');
-  box.setAttribute('aria-label', 'Waterfall of contributors');
+  box.setAttribute('aria-label', t('driversPanel.waterfall_of_contributors'));
   for (const x of rows) {
     const clickable = drillable && x.kind === 'step';
     const row = clickable ? document.createElement('button') : drvEl('div');
@@ -411,7 +411,7 @@ function drvWaterfall(s: any, drillable: boolean, ratio: boolean): HTMLElement {
     const val = drvEl('div', 'drv-wf-val tnum ' + (x.kind === 'total' ? '' : drvTone(x.to - x.from)), x.text);
     row.append(lab, track, val);
     if (clickable) {
-      row.setAttribute('aria-label', `${x.label}: ${x.text}. Break it down further.`);
+      row.setAttribute('aria-label', t('driversPanel.break_it_down_further', { label: x.label, text: x.text }));
       row.addEventListener('click', () => {
         const path = (drvRes.path || []).map((p: any) => ({ column: p.column, value: p.value }));
         drvAskAgain({ path: path.concat([{ column: s.column, value: x.step.key }]) });

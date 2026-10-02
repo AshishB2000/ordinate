@@ -56,8 +56,8 @@ function rbContext(report?: any): any {
 // ── page list ────────────────────────────────────────────────────────────────
 
 const RB_KIND_LABEL: Record<string, string> = {
-  cover: 'Cover', summary: 'Summary', sheet: 'Sheet', tile: 'Tile',
-  notes: 'Notes', narrative: 'Narrative', discussion: 'Discussion', scorecard: 'Scorecard',
+  cover: t('common.cover'), summary: t('common.summary'), sheet: t('common.sheet'), tile: t('common.tile'),
+  notes: t('common.notes'), narrative: t('common.narrative'), discussion: t('common.discussion'), scorecard: t('common.scorecard'),
 };
 
 /** What the row under the page's kind says — enough to tell two Tile pages
@@ -65,13 +65,13 @@ const RB_KIND_LABEL: Record<string, string> = {
 function rbPageSubtitle(page: any): string {
   if (page.kind === 'sheet') {
     const s = (rbAnalysis.sheets || [])[Number(page.sheetIdx) || 0];
-    return s ? (s.name || 'Sheet') : 'Missing sheet';
+    return s ? (s.name || t('common.sheet')) : t('reportBuilder.missing_sheet');
   }
   if (page.kind === 'tile') {
     const card = rbFindCard(page.cardId);
-    return card ? (rbCardName(card) || 'Tile') : 'No longer on the dashboard';
+    return card ? (rbCardName(card) || t('common.tile')) : t('reportBuilder.no_longer_on_the_dashboard');
   }
-  if (page.kind === 'notes') return (page.notes || '').slice(0, 40) || 'Empty';
+  if (page.kind === 'notes') return (page.notes || '').slice(0, 40) || t('common.empty');
   return '';
 }
 
@@ -131,7 +131,7 @@ function rbRenderPageList(): void {
     inc.type = 'checkbox';
     inc.className = 'rb-page-inc';
     inc.checked = page.include !== false;
-    inc.setAttribute('aria-label', 'Include this page');
+    inc.setAttribute('aria-label', t('reportBuilder.include_this_page'));
     inc.addEventListener('change', () => {
       page.include = inc.checked;
       rbMarkDirty();
@@ -162,8 +162,8 @@ function rbRenderPageList(): void {
       del.type = 'button';
       del.className = 'rb-page-del';
       del.textContent = '×';
-      del.title = 'Remove this page';
-      del.setAttribute('aria-label', 'Remove this page');
+      del.title = t('reportBuilder.remove_this_page');
+      del.setAttribute('aria-label', t('reportBuilder.remove_this_page'));
       del.addEventListener('click', () => {
         rbReport.pages.splice(i, 1);
         if (rbSelected >= rbReport.pages.length) rbSelected = Math.max(0, rbReport.pages.length - 1);
@@ -290,7 +290,7 @@ function rbLoadSettings(): void {
   set('rp-set-cadence', sch.cadence);
   set('rp-set-at', sch.at);
   const folder = rbEl('rp-set-folder-path');
-  if (folder) folder.textContent = sch.folder || 'No folder chosen';
+  if (folder) folder.textContent = sch.folder || t('common.no_folder_chosen');
   rbSyncSettingsVisibility();
 }
 
@@ -348,7 +348,7 @@ function rbUuid(): string {
 function rbMarkDirty(): void {
   rbDirty = true;
   const save = rbEl('rp-save');
-  if (save) save.textContent = 'Save';
+  if (save) save.textContent = t('common.save');
   const badge = rbEl('rp-dirty');
   if (badge) badge.hidden = false;
 }
@@ -359,13 +359,13 @@ function rbMarkDirty(): void {
  *  dashboard (main builds the page list from its sheets) and opens the builder. */
 async function rbCreateForOpenDashboard(): Promise<void> {
   if (!currentProjectId || !dashCurrent || !dashCurrent.id) {
-    window.alert('Open a dashboard first.');
+    window.alert(t('reportBuilder.open_a_dashboard_first'));
     return;
   }
   if (dashDirty) await persistDashboard(); // print what is on disk, not a stale copy
-  showToast('Creating report…');
+  showToast(t('reportBuilder.creating_report'));
   const res = await window.hub.reportsCreate(currentProjectId, dashCurrent.id);
-  if (!res || res.ok === false) { showToast((res && res.error) || 'Could not create the report'); return; }
+  if (!res || res.ok === false) { showToast((res && res.error) || t('reportBuilder.could_not_create_the_report')); return; }
   await rbOpen(res.report);
 }
 
@@ -373,7 +373,7 @@ async function rbCreateForOpenDashboard(): Promise<void> {
 async function rbOpenReportById(id: string): Promise<void> {
   if (!currentProjectId) return;
   const report = await window.hub.reportsGet(currentProjectId, id);
-  if (!report) { showToast('That report is gone'); return; }
+  if (!report) { showToast(t('common.that_report_is_gone')); return; }
   if (typeof selectSection === 'function') selectSection('analyses');
   await rbOpen(report);
 }
@@ -384,7 +384,7 @@ async function rbOpen(report: any): Promise<void> {
   rbDirty = false;
   rbAnalysis = await reportAnalysisFor(currentProjectId as string, report); // a scorecard report runs on a stand-in
   if (!rbAnalysis) {
-    showToast('The dashboard this report prints has been deleted');
+    showToast(t('common.the_dashboard_this_report_prints_has'));
     rbAnalysis = { id: report.analysisId, name: report.name, sheets: [], filters: [], style: {} };
   }
   closeDashboardEditor();
@@ -421,7 +421,7 @@ async function rbSave(): Promise<boolean> {
     includeFilters: rbReport.includeFilters, narrative: rbReport.narrative, discussion: rbReport.discussion,
     schedule: rbReport.schedule, viewId: rbReport.viewId || '',
   });
-  if (!res || res.ok === false) { showToast((res && res.error) || 'Could not save'); return false; }
+  if (!res || res.ok === false) { showToast((res && res.error) || t('common.could_not_save')); return false; }
   // Take main's clamped copy back: the record on disk is the sanitized one, and
   // keeping the unsanitized in-memory copy is how the two quietly diverge.
   rbReport = res.report;
@@ -444,7 +444,7 @@ async function rbGenerate(): Promise<void> {
   if (!(await rbSave())) return;
   const ctx = rbContext();
   if (!(await pvShareGate('report', await pvCardDatasetIds(ctx.analysis)))) return;
-  showToast('Building report…');
+  showToast(t('common.building_report'));
   const report = rbReport;
   const projectId = currentProjectId;
   // A job (jobsPanel.ts rjRun): the Jobs popover shows it building, Cancel stops
@@ -456,17 +456,17 @@ async function rbGenerate(): Promise<void> {
     if (!pages.length) { failed = 'Every page is excluded — nothing to generate'; return null; }
     await step(0.6, `Writing ${pages.length} page${pages.length === 1 ? '' : 's'}`);
     const { base64, ext } = await reportBytes(pages, report);
-    if (!base64) { failed = 'Couldn’t build the report'; return null; }
-    await step(0.9, 'Saving');
+    if (!base64) { failed = t('common.couldn_t_build_the_report'); return null; }
+    await step(0.9, t('reportBuilder.saving'));
     const res = await window.hub.reportsSaveAs(projectId, report.id, base64, ext);
     if (res && res.ok) return { path: String(res.dest), message: String(res.dest).split(/[\\/]/).pop() };
-    if (!res || !res.canceled) failed = (res && res.error) || 'Save failed';
+    if (!res || !res.canceled) failed = (res && res.error) || t('common.save_failed');
     return null;
-  }).catch((e: any) => { failed = String((e && e.message) || 'Couldn’t build the report'); return null; });
+  }).catch((e: any) => { failed = String((e && e.message) || t('common.couldn_t_build_the_report')); return null; });
   if (out && out.path) {
     // Offered, never done for them: a reveal the user did not ask for pops a
     // file manager over the app (on Linux, xdg-open may start a browser).
-    showToast('Saved: ' + out.message, {
+    showToast(t('reportBuilder.saved', { message: out.message }), {
       kind: 'success',
       action: { label: 'Show in folder', onClick: () => { void window.hub.reportsReveal(projectId, report.id); } },
     });
@@ -510,12 +510,12 @@ async function reportsRunDue(nowMs?: number): Promise<number> {
           report,
         });
         if (!pages.length) return null;
-        await step(0.6, 'Writing the document');
+        await step(0.6, t('reportBuilder.writing_the_document'));
         const { base64 } = await reportBytes(pages, report);
         if (!base64) return null;
-        await step(0.9, 'Saving');
+        await step(0.9, t('reportBuilder.saving'));
         const res = await window.hub.reportsWriteScheduled(d.projectId, d.id, base64, nowMs);
-        return res && res.ok ? { path: String(res.dest || ''), message: 'Written to the report folder' } : null;
+        return res && res.ok ? { path: String(res.dest || ''), message: t('reportBuilder.written_to_the_report_folder') } : null;
       }, { silent: true });
       if (out) written++;
     } catch (e) {
@@ -539,12 +539,12 @@ function initReportBuilder(): void {
   const back = rbEl('rp-back');
   if (back) {
     back.addEventListener('click', async () => {
-      if (rbDirty && !window.confirm('Discard unsaved changes to this report?')) return;
+      if (rbDirty && !window.confirm(t('common.discard_unsaved_changes_to_this_report'))) return;
       rbClose();
     });
   }
   const save = rbEl('rp-save');
-  if (save) save.addEventListener('click', async () => { if (await rbSave()) showToast('Report saved'); });
+  if (save) save.addEventListener('click', async () => { if (await rbSave()) showToast(t('reportBuilder.report_saved')); });
   const gen = rbEl('rp-generate');
   if (gen) gen.addEventListener('click', () => void rbGenerate());
 
@@ -642,13 +642,13 @@ function rbPickTile(anchor: HTMLElement): void {
   for (const sheet of (rbAnalysis.sheets || [])) {
     for (const card of (sheet.cards || [])) if (card && card.type === 'visual') cards.push(card);
   }
-  if (!cards.length) { showToast('This dashboard has no charts yet'); return; }
+  if (!cards.length) { showToast(t('reportBuilder.this_dashboard_has_no_charts_yet')); return; }
   openMiniMenu(anchor, (menu: HTMLElement, close: () => void) => {
     cards.forEach((card, i) => {
       const row = document.createElement('button');
       row.type = 'button';
       row.className = 'chart-menu-item';
-      row.textContent = rbCardName(card) === 'Chart' ? 'Chart ' + (i + 1) : rbCardName(card);
+      row.textContent = rbCardName(card) === 'Chart' ? t('reportBuilder.chart', { p0: (i + 1) }) : rbCardName(card);
       row.addEventListener('click', () => {
         close();
         rbReport.pages.push({ id: rbUuid(), kind: 'tile', cardId: card.id, include: true, layout: 'full' });

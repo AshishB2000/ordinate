@@ -63,7 +63,7 @@ function snCard(s: any): HTMLElement {
   card.className = 'sn-card';
   card.tabIndex = 0;
   card.setAttribute('role', 'button');
-  card.setAttribute('aria-label', 'Open scenario ' + String(s.name || ''));
+  card.setAttribute('aria-label', t('scenarioList.open_scenario', { p0: String(s.name || '') }));
   card.dataset.scenarioId = String(s.id);
   card.dataset.recKind = 'scenario';
   card.dataset.recId = String(s.id);
@@ -73,12 +73,12 @@ function snCard(s: any): HTMLElement {
   body.className = 'sn-card-body';
   const title = document.createElement('div');
   title.className = 'sn-card-title';
-  title.textContent = String(s.name || 'Untitled scenario');
+  title.textContent = String(s.name || t('scenarioList.untitled_scenario'));
   const meta = document.createElement('div');
   meta.className = 'sn-card-meta';
   const d = Number(s.driverCount) || 0;
   const m = Number(s.metricCount) || 0;
-  meta.textContent = `${d} driver${d === 1 ? '' : 's'} · ${m} metric${m === 1 ? '' : 's'} · ${formatSidebarTime(s.updatedAt)}`;
+  meta.textContent = t('scenarioList.text', { d, m, updatedAt: formatSidebarTime(s.updatedAt) });
   body.append(title, meta);
   const names: string[] = Array.isArray(s.driverNames) ? s.driverNames : [];
   const chips = document.createElement('div');
@@ -98,7 +98,7 @@ function snCard(s: any): HTMLElement {
   if (!names.length) {
     const none = document.createElement('span');
     none.className = 'sn-card-none';
-    none.textContent = 'No drivers yet — the baseline';
+    none.textContent = t('scenarioList.no_drivers_yet_the_baseline');
     chips.appendChild(none);
   }
   body.appendChild(chips);
@@ -107,7 +107,7 @@ function snCard(s: any): HTMLElement {
   const more = document.createElement('button');
   more.type = 'button';
   more.className = 'icon-btn sn-card-more';
-  iconOnly(more, 'more-horizontal', 'Scenario actions');
+  iconOnly(more, 'more-horizontal', t('scenarioList.scenario_actions'));
   more.addEventListener('click', (e) => {
     e.stopPropagation();
     openMiniMenu(more, (menu: HTMLElement, close: () => void) => {
@@ -119,9 +119,9 @@ function snCard(s: any): HTMLElement {
         b.addEventListener('click', () => { close(); run(); });
         menu.appendChild(b);
       };
-      add('Open', () => { void snOpen(String(s.id)); });
-      add('Compare…', () => { void snOpenCompare([String(s.id)]); });
-      add('Duplicate', () => { void snDuplicate(String(s.id)); });
+      add(t('common.open'), () => { void snOpen(String(s.id)); });
+      add(t('scenarioList.compare'), () => { void snOpenCompare([String(s.id)]); });
+      add(t('common.duplicate'), () => { void snDuplicate(String(s.id)); });
       add('Delete', () => { void snDelete(s); });
     });
   });
@@ -143,7 +143,7 @@ function snCard(s: any): HTMLElement {
  */
 async function snNew(): Promise<void> {
   if (!currentProjectId) return;
-  const name = await promptModal('Name the scenario', 'Price +5%', 'Create');
+  const name = await promptModal(t('scenarioList.name_the_scenario'), t('scenarioList.price_5'), t('common.create'));
   if (name === null) return;
   let list: any[] = [];
   try { const r = await window.hub.listMetrics(currentProjectId); list = r && Array.isArray(r.metrics) ? r.metrics : []; } catch (_) { list = []; }
@@ -153,24 +153,24 @@ async function snNew(): Promise<void> {
     .slice(0, 4).map((m: any) => String(m.id));
   let res: any = null;
   try {
-    res = await window.hubScenarios.create(currentProjectId, { name: name.trim() || 'Untitled scenario', baseMetricIds, drivers: [] });
+    res = await window.hubScenarios.create(currentProjectId, { name: name.trim() || t('scenarioList.untitled_scenario'), baseMetricIds, drivers: [] });
   } catch (_) {
     res = null;
   }
-  if (!res || res.ok === false || !res.scenario) { showToast('Could not create the scenario.'); return; }
+  if (!res || res.ok === false || !res.scenario) { showToast(t('scenarioList.could_not_create_the_scenario')); return; }
   await snOpen(String(res.scenario.id));
 }
 
 async function snDuplicate(id: string): Promise<void> {
   if (!currentProjectId) return;
   const res = await window.hubScenarios.duplicate(currentProjectId, id);
-  if (!res || res.ok === false) { showToast('Could not duplicate the scenario.'); return; }
+  if (!res || res.ok === false) { showToast(t('scenarioList.could_not_duplicate_the_scenario')); return; }
   void snRefreshList();
 }
 
 async function snDelete(s: any): Promise<void> {
   if (!currentProjectId) return;
-  if (!window.confirm(`Delete “${s.name}”? The metrics and data it reads are not changed.`)) return;
+  if (!window.confirm(t('scenarioList.delete_the_metrics_and_data_it', { name: s.name }))) return;
   await window.hubScenarios.remove(currentProjectId, String(s.id));
   if (snCurrent && snCurrent.id === s.id) await snClose();
   void snRefreshList();

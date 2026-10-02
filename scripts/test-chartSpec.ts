@@ -42,6 +42,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vm from 'vm';
 import * as crypto from 'crypto';
+import { withT } from './i18nNode';
 
 const HUB = path.join(__dirname, '..', 'renderer', 'hub');
 
@@ -147,7 +148,7 @@ function makeSandbox(): Record<string, any> {
   sandbox.getComputedStyle = () => ({
     getPropertyValue: (name: string) => THEME[name] || '',
   });
-  vm.createContext(sandbox);
+  vm.createContext(withT(sandbox));
   return sandbox;
 }
 
@@ -315,6 +316,13 @@ function capture(type: string, variant: string): { text: string; ok: boolean } {
   // half-step. Verified confined BEFORE regenerating: putting the old animation
   // object back and dropping `transitions` from each fresh dump reproduces all
   // 99 old hashes exactly, so nothing else in any config moved.
+  // REGENERATED again, deliberately, for interface languages (feat/round-7,
+  // i18n): 9 of 99 moved — funnel ×2, bullet ×2, calendar ×2 and pareto ×3, the
+  // configs whose serialised callbacks print a word — because those literals are now `t('key')` calls with
+  // the identical English value. Verified confined BEFORE regenerating: with
+  // ORDINATE_CHARTSPEC_DUMP before and after scripts/i18n-extract.js, all 11
+  // differing lines across the 99 dumps are a string literal replaced by a t()
+  // call, and nothing else in any config moved.
 const GOLDEN: Record<string, string> = {
   // Regenerated ONCE when the serialiser stopped hashing whole-line comments
   // (see ser() above), and REGENERATED AGAIN on the merge with develop, which had
@@ -378,8 +386,8 @@ const GOLDEN: Record<string, string> = {
   "donut/custom": '9f0e1b039855bc92',
   "donut/default": '976a74d6ccf5e736',
   "donut/filtered": '14f854a6100f880d',
-  "funnel/custom": 'bd3b24a2f81147a0',
-  "funnel/default": '4012c25b88a631d0',
+  "funnel/custom": '46c070f0202afad2',
+  "funnel/default": '9218da70b5341993',
   "funnel/filtered": '183a66ccd73aab4f',
   "gauge/custom": 'd8343b25ff7bb6b3',
   "gauge/default": 'e5a77accd5c80410',
@@ -438,15 +446,15 @@ const GOLDEN: Record<string, string> = {
   // BEFORE any shared closure is reached — so every one of the 84 hashes above
   // is untouched, and these 15 are first captures. The calendar's come from
   // CAL_DATA (dates); the rest from DATA like every other id.
-  "bullet/custom": '8ad31fb78a82c88b',
-  "bullet/default": 'ea39af6fae5daaaf',
+  "bullet/custom": '7d43b61bb41944db',
+  "bullet/default": 'a913c8aef9dfb87a',
   "bullet/filtered": '5e88b7ff8f3d4344',
-  "calendar/custom": 'dc66bcca11a4f347',
-  "calendar/default": 'aae90b7f45586da2',
+  "calendar/custom": '8274a8e85dae8d70',
+  "calendar/default": 'c19ad93bd4c9090e',
   "calendar/filtered": 'd89036dbbbce771d',
-  "pareto/custom": '733254262435cf18',
-  "pareto/default": '35cd4cd91a6b20e5',
-  "pareto/filtered": '7682619f4f68a932',
+  "pareto/custom": 'cc4db64cd274595e',
+  "pareto/default": '46c8e92e23c215d7',
+  "pareto/filtered": '2245e338fe64c6ee',
   "radar/custom": '41ecb578be5c6ef6',
   "radar/default": '9d9d9d13a00c4eb3',
   "radar/filtered": 'fa73a9c0962dff5c',

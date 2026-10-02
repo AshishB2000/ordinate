@@ -126,7 +126,7 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
   } catch (_) {
     r = { ok: false };
   }
-  if (!r || r.ok === false) { dashCardMissing(body, (r && r.error) || 'Source removed', true); return; }
+  if (!r || r.ok === false) { dashCardMissing(body, (r && r.error) || t('common.source_removed'), true); return; }
   paintParamErrors(body, r.paramErrors);
   if (r.value == null) { valEl.textContent = '—'; return; }
   // Reuse the shared chart number formatter (auto/plain/thousands/compact/…).
@@ -153,7 +153,7 @@ function renderTextCard(card: any, body: HTMLElement): void {
   if (!card.heading && !card.text) {
     const p = document.createElement('p');
     p.className = 'dash-card-p';
-    p.textContent = '(empty text card)';
+    p.textContent = t('dashFiltersUi.empty_text_card');
     body.appendChild(p);
   }
   // The bundled sample's note card carries a real Remove, because the note
@@ -167,7 +167,7 @@ function dashSampleDeleteBtn(): HTMLElement {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'btn btn-sm dash-sample-delete';
-  btn.textContent = 'Remove the sample data';
+  btn.textContent = t('dashFiltersUi.remove_the_sample_data');
   btn.addEventListener('click', () => { void handleDeleteSampleProject(); });
   return btn;
 }
@@ -222,19 +222,17 @@ async function handleDeleteSampleProject(): Promise<void> {
       .map((v: any) => String(v.id));
   } catch (_) { visualIds = []; }
 
-  const name = (dashCurrent && dashCurrent.name) || 'this dashboard';
+  const name = (dashCurrent && dashCurrent.name) || t('common.this_dashboard');
   if (!window.confirm(
-    'Remove the sample data?\n\nThis moves ' + name + ', its ' + visualIds.length
-    + ' chart(s) and the sample dataset to the Trash, where they stay for 30 days. '
-    + 'The project and anything else in it stay.')) return;
+    t('dashFiltersUi.remove_the_sample_data_this_moves', { name, visualIdsCount: visualIds.length }))) return;
 
   // Dashboard first: it is the only one of the three the user is looking at, so
   // a failure part-way leaves the least confusing state (a dashboard whose cards
   // report a missing source is worse than a dataset with nothing drawn on it).
   try {
     const res = await window.hub.deleteAnalysis(String(pid), analysisId);
-    if (!res || res.ok === false) { showToast('Could not remove the sample data.'); return; }
-  } catch (_) { showToast('Could not remove the sample data.'); return; }
+    if (!res || res.ok === false) { showToast(t('dashFiltersUi.could_not_remove_the_sample_data')); return; }
+  } catch (_) { showToast(t('dashFiltersUi.could_not_remove_the_sample_data')); return; }
   // The dataset's own delete takes its visuals along (deletedWith), which is
   // what lets one Restore bring the sample's charts back with it.
   for (const did of datasetIds) {
@@ -243,7 +241,7 @@ async function handleDeleteSampleProject(): Promise<void> {
   closeDashboardEditor();
   selectSection('home');
   if (typeof refreshHome === 'function') void refreshHome();
-  showToast('Sample data moved to Trash', { action: { label: 'Open Trash', onClick: () => selectSection('trash') } });
+  showToast(t('dashFiltersUi.sample_data_moved_to_trash'), { action: { label: t('dashFiltersUi.open_trash'), onClick: () => selectSection('trash') } });
 }
 
 // A card whose source (visual / dataset) is gone. `broken` marks it with a clear badge
@@ -263,7 +261,7 @@ function dashCardMissing(body: HTMLElement, msg: string, broken?: boolean): void
   if (head && !head.querySelector('.dash-card-broken-badge')) {
     const badge = document.createElement('span');
     badge.className = 'dash-card-broken-badge';
-    badge.textContent = 'Source removed';
+    badge.textContent = t('common.source_removed');
     // Sit the badge right after the title so it reads before the controls.
     const title = head.querySelector('.dash-card-title');
     if (title && title.nextSibling) head.insertBefore(badge, title.nextSibling);
@@ -303,16 +301,16 @@ function mergeDashFilters(dashFilters: any, cardFilters: any): any[] {
 // value input.
 const DASH_FILTER_OPS: Array<{ value: string; label: string }> = [
   { value: '=', label: 'equals' },
-  { value: '!=', label: 'not equals' },
-  { value: '>', label: 'greater than' },
-  { value: '<', label: 'less than' },
-  { value: '>=', label: 'at least' },
-  { value: '<=', label: 'at most' },
+  { value: '!=', label: t('dashFiltersUi.not_equals') },
+  { value: '>', label: t('common.greater_than') },
+  { value: '<', label: t('common.less_than') },
+  { value: '>=', label: t('common.at_least') },
+  { value: '<=', label: t('common.at_most') },
   { value: 'contains', label: 'contains' },
-  { value: 'is_empty', label: 'is empty' },
-  { value: 'not_empty', label: 'is not empty' },
-  { value: 'in', label: 'is any of' },
-  { value: 'not in', label: 'is none of' },
+  { value: 'is_empty', label: t('common.is_empty') },
+  { value: 'not_empty', label: t('common.is_not_empty') },
+  { value: 'in', label: t('common.is_any_of') },
+  { value: 'not in', label: t('common.is_none_of') },
 ];
 const DASH_VALUELESS_OPS = new Set(['is_empty', 'not_empty']);
 
@@ -354,12 +352,12 @@ function renderDashFilterBar(): void {
     txt.type = 'button';
     txt.className = 'dash-filter-chip-txt';
     txt.textContent = dashFilterLabel(step);
-    txt.setAttribute('aria-label', 'Edit filter: ' + dashFilterLabel(step));
+    txt.setAttribute('aria-label', t('dashFiltersUi.edit_filter', { step: dashFilterLabel(step) }));
     txt.addEventListener('click', () => { void handleEditDashFilter(i); });
     const x = document.createElement('button');
     x.type = 'button';
     x.className = 'dash-filter-chip-x';
-    x.setAttribute('aria-label', 'Remove filter');
+    x.setAttribute('aria-label', t('common.remove_filter'));
     x.textContent = '×';
     x.addEventListener('click', () => removeDashFilterAt(i));
     chip.appendChild(txt);
@@ -371,7 +369,7 @@ function renderDashFilterBar(): void {
   if (list.length === 0) {
     const none = document.createElement('span');
     none.className = 'dash-filter-none';
-    none.textContent = 'None';
+    none.textContent = t('common.none');
     chips.appendChild(none);
   }
   dashShow('dash-clear-filters', list.length > 0);
@@ -379,7 +377,7 @@ function renderDashFilterBar(): void {
 
 // Any filter change re-renders every card with the merged filters, then debounce-saves.
 function afterDashFilterChange(): void {
-  markDashDirty('Change filters');
+  markDashDirty(t('dashFiltersUi.change_filters'));
   renderDashFilterBar();
   renderDashGrid();
 }
@@ -414,14 +412,14 @@ function upsertDashFilter(step: any): void {
 async function pickDatasetAndColumn(
   columnFilter?: (c: any) => boolean,
 ): Promise<{ ds: any; column: string } | null> {
-  if (!currentProjectId) { window.alert('Open a project first.'); return null; }
+  if (!currentProjectId) { window.alert(t('common.open_a_project_first')); return null; }
   let datasets: any[] = [];
   try { datasets = await window.hub.listDatasets(currentProjectId); } catch (_) { datasets = []; }
   if (!Array.isArray(datasets)) datasets = [];
   const dsId = await dashChooseModal(
-    'Filter — pick a dataset',
-    datasets.map((d) => ({ value: String(d.id), label: d && d.name ? String(d.name) : 'Untitled dataset' })),
-    'Next',
+    t('dashFiltersUi.filter_pick_a_dataset'),
+    datasets.map((d) => ({ value: String(d.id), label: d && d.name ? String(d.name) : t('common.untitled_dataset') })),
+    t('common.next'),
   );
   if (dsId === null) return null;
   let ds: any = null;
@@ -429,9 +427,9 @@ async function pickDatasetAndColumn(
   let cols = ds && Array.isArray(ds.columns) ? ds.columns : [];
   if (columnFilter) cols = cols.filter(columnFilter);
   const column = await dashChooseModal(
-    'Filter — pick a column',
+    t('dashFiltersUi.filter_pick_a_column'),
     cols.map((c: any) => ({ value: String(c.name), label: String(c.name) + (c.type ? ' (' + c.type + ')' : '') })),
-    'Next',
+    t('common.next'),
   );
   if (column === null) return null;
   return { ds, column };
@@ -536,7 +534,7 @@ async function handleDashCategory(): Promise<void> {
   const picked = await pickDatasetAndColumn();
   if (!picked) return;
   const opts = await distinctColumnOptions(String(picked.ds && picked.ds.id ? picked.ds.id : ""), picked.column);
-  const value = await dashChooseModal('Category — pick a value', opts, 'Apply');
+  const value = await dashChooseModal(t('dashFiltersUi.category_pick_a_value'), opts, t('common.apply'));
   if (value === null) return;
   upsertDashFilter({ type: 'filter', column: picked.column, op: '=', value });
 }
@@ -547,7 +545,7 @@ async function handleDashPeriod(): Promise<void> {
   const picked = await pickDatasetAndColumn((c) => c && c.type === 'date');
   if (!picked) return;
   const opts = await distinctColumnOptions(String(picked.ds && picked.ds.id ? picked.ds.id : ""), picked.column);
-  const value = await dashChooseModal('Period — pick a value', opts, 'Apply');
+  const value = await dashChooseModal(t('dashFiltersUi.period_pick_a_value'), opts, t('common.apply'));
   if (value === null) return;
   upsertDashFilter({ type: 'filter', column: picked.column, op: '=', value });
 }

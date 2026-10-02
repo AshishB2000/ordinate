@@ -47,7 +47,7 @@ function snapRows(n: number): string {
   const after = document.getElementById('ds-tab-columns');
   const afterPanel = document.getElementById('ds-tabp-columns');
   if (!after || !afterPanel || document.getElementById('ds-tab-snapshots')) return;
-  const tab = snapEl<HTMLButtonElement>('button', 'ds-tab tab', 'Snapshots');
+  const tab = snapEl<HTMLButtonElement>('button', 'ds-tab tab', t('snapshots.snapshots'));
   tab.type = 'button';
   tab.id = 'ds-tab-snapshots';
   tab.setAttribute('role', 'tab');
@@ -74,12 +74,12 @@ function snapRows(n: number): string {
 
 function snapKeepSelect(keep: number, datasetId: string): HTMLElement {
   const label = snapEl<HTMLLabelElement>('label', 'snap-keep');
-  label.appendChild(document.createTextNode('Keep '));
+  label.appendChild(document.createTextNode(t('snapshots.keep')));
   const sel = snapEl<HTMLSelectElement>('select', 'snap-keep-select');
   sel.id = 'snap-keep';
   const choices = SNAP_KEEP_CHOICES.includes(keep) ? SNAP_KEEP_CHOICES : SNAP_KEEP_CHOICES.concat([keep]).sort((a, b) => a - b);
   for (const n of choices) {
-    const o = snapEl<HTMLOptionElement>('option', '', n === 0 ? 'none (off)' : `the last ${n}`);
+    const o = snapEl<HTMLOptionElement>('option', '', n === 0 ? t('snapshots.none_off') : t('snapshots.the_last', { n }));
     o.value = String(n);
     sel.appendChild(o);
   }
@@ -88,9 +88,9 @@ function snapKeepSelect(keep: number, datasetId: string): HTMLElement {
     let r: any = null;
     try { r = await window.hubSnapshots.setKeep(currentProjectId, datasetId, Number(sel.value)); } catch (_) { r = null; }
     if (!r || r.ok === false) {
-      showToast((r && r.error) || 'Could not change how many snapshots are kept.', { kind: 'error' });
+      showToast((r && r.error) || t('snapshots.could_not_change_how_many_snapshots'), { kind: 'error' });
     } else if (r.removed) {
-      showToast(`Removed ${r.removed} older snapshot${r.removed === 1 ? '' : 's'}.`, { kind: 'info' });
+      showToast(t('snapshots.removed_older', { removed: r.removed }), { kind: 'info' });
     }
     await snapPaintTab();
   });
@@ -102,10 +102,10 @@ function snapNotice(res: any): HTMLElement {
   const box = snapEl('div', 'snap-notice');
   box.appendChild(icon('calendar', 16));
   const text = snapEl('div', 'snap-notice-text');
-  text.appendChild(snapEl('strong', '', 'Only datasets with a schedule or a connection keep snapshots.'));
+  text.appendChild(snapEl('strong', '', t('snapshots.only_datasets_with_a_schedule_or')));
   text.appendChild(snapEl('span', '', res.refreshable
-    ? ' Turn on Auto-refresh above to keep a copy each time this dataset refreshes.'
-    : ' This dataset has no source to refresh from, so it never changes on its own.'));
+    ? t('snapshots.turn_on_auto_refresh_above_to')
+    : t('snapshots.this_dataset_has_no_source_to')));
   box.appendChild(text);
   return box;
 }
@@ -116,17 +116,17 @@ function snapEmpty(keep: number): HTMLElement {
   art.setAttribute('aria-hidden', 'true');
   art.appendChild(icon('history', 20));
   box.appendChild(art);
-  box.appendChild(snapEl('h4', 'ws-empty-h', 'Snapshots start with the next refresh'));
+  box.appendChild(snapEl('h4', 'ws-empty-h', t('snapshots.snapshots_start_with_the_next_refresh')));
   box.appendChild(snapEl('p', 'ws-empty-p', keep > 0
-    ? `When a refresh replaces this table, the table it replaces is kept here — the last ${keep}, oldest dropped first. Compare any of them with now, or restore one.`
-    : 'Keeping is off for this dataset. Choose how many to keep above to start.'));
+    ? t('snapshots.when_a_refresh_replaces_this_table', { keep })
+    : t('snapshots.keeping_is_off_for_this_dataset')));
   return box;
 }
 
 function snapTable(res: any, datasetId: string): HTMLElement {
   const table = snapEl<HTMLTableElement>('table', 'snap-table');
   const head = table.createTHead().insertRow();
-  for (const h of ['Data as of', 'Rows', 'vs now', '']) head.appendChild(snapEl('th', '', h));
+  for (const h of [t('common.data_as_of'), t('common.rows'), t('snapshots.vs_now'), '']) head.appendChild(snapEl('th', '', h));
   const body = table.createTBody();
   const labels = snapWhenAll([res.current.at].concat(res.items.map((s: any) => s.at)));
 
@@ -134,7 +134,7 @@ function snapTable(res: any, datasetId: string): HTMLElement {
   cur.className = 'snap-row is-current';
   const when = cur.insertCell();
   when.appendChild(snapEl('span', 'snap-when', labels[0]));
-  when.appendChild(snapEl('span', 'snap-tag', 'Current'));
+  when.appendChild(snapEl('span', 'snap-tag', t('common.current')));
   cur.insertCell().textContent = snapRows(res.current.rowCount);
   cur.insertCell().textContent = '—';
   cur.insertCell();
@@ -150,15 +150,15 @@ function snapTable(res: any, datasetId: string): HTMLElement {
     const d = res.current.rowCount - s.rowCount;
     const delta = tr.insertCell();
     delta.className = 'snap-delta' + (d > 0 ? ' is-up' : d < 0 ? ' is-down' : '');
-    delta.textContent = d === 0 ? 'same rows' : `${d > 0 ? '+' : '−'}${Math.abs(d).toLocaleString('en-US')} since`;
+    delta.textContent = d === 0 ? t('snapshots.same_rows') : t('snapshots.since', { p0: !!(d > 0), p1: Math.abs(d).toLocaleString('en-US') });
     const act = tr.insertCell();
     act.className = 'snap-actions';
-    const cmp = snapEl<HTMLButtonElement>('button', 'btn btn-sm js-snap-compare', 'Compare');
+    const cmp = snapEl<HTMLButtonElement>('button', 'btn btn-sm js-snap-compare', t('common.compare'));
     cmp.type = 'button';
     cmp.addEventListener('click', () => void snapOpenDiff(datasetId, s, res.current));
     const rst = snapEl<HTMLButtonElement>('button', 'btn btn-sm js-snap-restore');
     rst.type = 'button';
-    iconLabel(rst, 'rotate-ccw', 'Restore…');
+    iconLabel(rst, 'rotate-ccw', t('snapshots.restore'));
     rst.addEventListener('click', () => void snapRestore(datasetId, s));
     act.append(cmp, rst);
   });
@@ -176,15 +176,15 @@ async function snapPaintTab(): Promise<void> {
   if (seq !== snapPaintSeq || expId !== id) return; // another paint or another dataset won
   host.innerHTML = '';
   if (!res || res.ok === false) {
-    host.appendChild(snapEl('p', 'snap-error', (res && res.error) || 'Could not read the snapshots.'));
+    host.appendChild(snapEl('p', 'snap-error', (res && res.error) || t('snapshots.could_not_read_the_snapshots')));
     return;
   }
   const head = snapEl('div', 'snap-head');
   const ident = snapEl('div', 'snap-ident');
-  ident.appendChild(snapEl('h4', 'snap-h', 'Snapshots'));
+  ident.appendChild(snapEl('h4', 'snap-h', t('snapshots.snapshots')));
   ident.appendChild(snapEl('p', 'snap-sub', res.items.length
-    ? `${res.items.length} kept · each is the table as it was before a refresh replaced it`
-    : 'A copy of the table, kept each time a refresh replaces it'));
+    ? t('snapshots.kept_each_is_the_table_as', { itemsCount: res.items.length })
+    : t('snapshots.a_copy_of_the_table_kept')));
   head.appendChild(ident);
   if (res.eligible || res.items.length) head.appendChild(snapKeepSelect(res.keep, id));
   host.appendChild(head);
@@ -200,21 +200,21 @@ async function snapPaintTab(): Promise<void> {
 async function snapRestore(datasetId: string, s: any): Promise<void> {
   const ok = await syAsk({
     icon: 'rotate-ccw', tone: 'warn',
-    title: 'Restore this snapshot?',
+    title: t('snapshots.restore_this_snapshot'),
     body: [
-      `The data goes back to how it was on ${snapWhen(s.at)} — ${snapRows(s.rowCount)}. Charts and dashboards on this dataset follow.`,
-      'The data as it is now is kept as a snapshot first, so you can come back to it.',
+      t('snapshots.the_data_goes_back_to_how', { at: snapWhen(s.at), rowCount: snapRows(s.rowCount) }),
+      t('snapshots.the_data_as_it_is_now'),
     ],
-    ok: 'Restore',
+    ok: t('common.restore'),
   });
   if (!ok) return;
   let r: any = null;
   try { r = await window.hubSnapshots.restore(currentProjectId, datasetId, s.stamp); } catch (_) { r = null; }
   if (!r || r.ok === false) {
-    showToast((r && r.error) || 'Could not restore the snapshot.', { kind: 'error' });
+    showToast((r && r.error) || t('snapshots.could_not_restore_the_snapshot'), { kind: 'error' });
     return;
   }
-  showToast(`Restored the data as of ${snapWhen(s.at)}.`, { kind: 'success' });
+  showToast(t('snapshots.restored_the_data_as_of', { at: snapWhen(s.at) }), { kind: 'success' });
   await refreshDatasetList();
   if (expId === datasetId) {
     await openSavedDataset(datasetId);

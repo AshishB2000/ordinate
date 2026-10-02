@@ -31,6 +31,7 @@ import { ok, finish } from './selfcheck';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vm from 'vm';
+import { withT } from './i18nNode';
 
 const SRC = fs.readFileSync(
   path.join(__dirname, '..', 'renderer', 'hub', 'commands.js'), 'utf8');
@@ -49,7 +50,7 @@ function load(platform: string): any {
     },
   };
   sandbox.globalThis = sandbox;
-  vm.createContext(sandbox);
+  vm.createContext(withT(sandbox));
   vm.runInContext(SRC, sandbox, { filename: 'commands.js' });
   return sandbox;
 }

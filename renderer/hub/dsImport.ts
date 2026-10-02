@@ -129,7 +129,7 @@ function renderPreview(res: any, showSave: boolean): void {
     const size = rowCount.toLocaleString() + ' row' + (rowCount === 1 ? '' : 's')
       + ' × ' + columns.length + ' column' + (columns.length === 1 ? '' : 's');
     note.textContent = rowCount > DS_PREVIEW_ROWS
-      ? size + ' · showing the first ' + DS_PREVIEW_ROWS
+      ? t('dsImport.showing_the_first', { size, DS_PREVIEW_ROWS })
       : size;
     note.hidden = false;
   }
@@ -151,7 +151,7 @@ async function handleImportFile(): Promise<void> {
   }
   if (!res || res.canceled) return;
   if (!res.ok) {
-    window.alert(res.error || 'Could not read that file.');
+    window.alert(res.error || t('dsImport.could_not_read_that_file'));
     return;
   }
   dsSourceKind = String(res.sourceKind || 'csv');
@@ -200,11 +200,11 @@ async function handleParsePaste(): Promise<void> {
     return;
   }
   if (!res || !res.ok) {
-    window.alert((res && res.error) || 'Could not parse the pasted text.');
+    window.alert((res && res.error) || t('dsImport.could_not_parse_the_pasted_text'));
     return;
   }
   dsSourceKind = 'paste';
-  dsSuggestedName = 'Pasted data';
+  dsSuggestedName = t('dsImport.pasted_data');
   dsFilePath = '';
   handOffToComposer(res.preview);
 }
@@ -250,13 +250,13 @@ function handOffToComposer(res: any): void {
   if (typeof dxCloseDialog === 'function') dxCloseDialog('ds-import-modal');
   openComposer(
     {
-      label: dsSuggestedName || 'This import',
+      label: dsSuggestedName || t('common.this_import'),
       rows: typeof res.rowCount === 'number' ? res.rowCount : (res.rows || []).length,
       kind: dsSourceKind || 'csv',
       // A picked file is STAGED in main (src/data/importStage): `rows` is only
       // the display slice, and the composer's preview and Save resolve the full
       // table by `stagedId`. Pasted text has no stagedId and ships its rows.
-      ref: { inline: { name: dsSuggestedName || 'This import', columns: res.columns || [], rows: res.rows || [], stagedId: res.stagedId } },
+      ref: { inline: { name: dsSuggestedName || t('common.this_import'), columns: res.columns || [], rows: res.rows || [], stagedId: res.stagedId } },
       columns: (res.columns || []).map((c: any) => String(c.name)),
     },
     {
@@ -272,12 +272,12 @@ function handOffToComposer(res: any): void {
 // ── Save ─────────────────────────────────────────────────────────────────────
 async function handleSaveDataset(): Promise<void> {
   if (!currentProjectId) {
-    window.alert('Open a project first.');
+    window.alert(t('common.open_a_project_first'));
     return;
   }
   if (!dsPreview || !Array.isArray(dsPreview.columns) || dsPreview.columns.length === 0) return;
   const nameInput = dsEl('ds-name-input') as HTMLInputElement | null;
-  const name = (nameInput && nameInput.value.trim()) || dsSuggestedName || 'Untitled dataset';
+  const name = (nameInput && nameInput.value.trim()) || dsSuggestedName || t('common.untitled_dataset');
   let res: any;
   try {
     res = await window.hub.saveDataset({
@@ -293,11 +293,11 @@ async function handleSaveDataset(): Promise<void> {
       origin: dsFilePath ? { kind: 'file', path: dsFilePath, sheetName: dsChosenSheet() } : undefined,
     });
   } catch (_) {
-    window.alert('Failed to save the dataset.');
+    window.alert(t('common.failed_to_save_the_dataset'));
     return;
   }
   if (res && res.ok === false) {
-    window.alert(res.error || 'Failed to save the dataset.');
+    window.alert(res.error || t('common.failed_to_save_the_dataset'));
     return;
   }
   clearPreview();

@@ -192,20 +192,20 @@ async function stExportPdf(): Promise<void> {
     paper: { size: 'letter', orientation: 'portrait' },
     cover: { title: stStory.name },
   };
-  showToast('Building the PDF…');
+  showToast(t('storyPresent.building_the_pdf'));
   let base64 = '';
   try {
     base64 = (await reportBytes(await stReportPages(report), report)).base64;
   } catch (e) {
     console.error('[story] export failed', e);
   }
-  if (!base64) { showToast('Couldn’t build the PDF.'); return; }
+  if (!base64) { showToast(t('storyPresent.couldn_t_build_the_pdf')); return; }
   try {
     const res = await window.hub.savePdf(base64, reportFilename(stStory.name, 'pdf'));
-    if (res && res.ok) showToast(`Saved: ${String(res.dest).split(/[\\/]/).pop()}`);
-    else if (!res || !res.canceled) showToast('Save failed');
+    if (res && res.ok) showToast(t('common.saved_3', { p0: String(res.dest).split(/[\\/]/).pop() }));
+    else if (!res || !res.canceled) showToast(t('common.save_failed'));
   } catch (_) {
-    showToast('Save failed');
+    showToast(t('common.save_failed'));
   }
 }
 

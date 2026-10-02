@@ -55,17 +55,17 @@ function sgPaintResults(): void {
   }
   const r = sgResult;
   if (!r) {
-    host.appendChild(sgEmpty('layers', 'Group rows that are alike',
-      'Pick the columns that describe a row — spend, discount, units — and Find segments groups the rows that are alike, names each group after what sets it apart and plots them. Save the grouping as a column and it becomes an ordinary dimension for charts, filters and pivots.'));
+    host.appendChild(sgEmpty('layers', t('segmentsView.group_rows_that_are_alike'),
+      t('segmentsView.pick_the_columns_that_describe_a')));
     return;
   }
   const best = r.silhouettes.find((s: any) => s.k === r.k);
   const kpis = sgEl('div', 'sg-kpis');
   kpis.append(
     sgKpi(String(r.k), 'segments'),
-    sgKpi(best ? best.score.toFixed(2) : '—', 'silhouette score'),
-    sgKpi(sgFmt(r.fitted), r.fitted < r.complete ? `rows fitted, of ${sgFmt(r.complete)}` : 'rows fitted'),
-    sgKpi(sgFmt(r.empty), r.empty === 1 ? 'row without a segment' : 'rows without a segment'),
+    sgKpi(best ? best.score.toFixed(2) : '—', t('segmentsView.silhouette_score')),
+    sgKpi(sgFmt(r.fitted), r.fitted < r.complete ? t('segmentsView.rows_fitted_of', { complete: sgFmt(r.complete) }) : t('segmentsView.rows_fitted')),
+    sgKpi(sgFmt(r.empty), r.empty === 1 ? t('segmentsView.row_without_a_segment') : t('segmentsView.rows_without_a_segment')),
   );
   // Sizes and the k choice stacked on the left, the map on the right, so
   // neither column trails off into empty space; the wide tables go full width.
@@ -78,11 +78,11 @@ function sgPaintResults(): void {
 }
 
 function sgSizesCard(r: any): HTMLElement {
-  const card = sgCard('sg-sizes', 'Segment sizes', 'Every row, assigned to its nearest segment. Names come from the two columns that set each segment apart most.');
+  const card = sgCard('sg-sizes', t('segmentsView.segment_sizes'), t('segmentsView.every_row_assigned_to_its_nearest'));
   const list = sgEl('ol', 'sg-size-list');
   const total = Math.max(1, r.total);
   const rows: Array<{ name: string; n: number; i: number }> = r.names.map((name: string, i: number) => ({ name, n: r.sizes[i], i }));
-  if (r.empty) rows.push({ name: 'No segment — a value is missing', n: r.empty, i: -1 });
+  if (r.empty) rows.push({ name: t('segmentsView.no_segment_a_value_is_missing'), n: r.empty, i: -1 });
   for (const row of rows) {
     const li = sgEl('li', 'sg-size' + (row.i < 0 ? ' is-empty' : ''));
     li.dataset.segment = row.i < 0 ? '' : String(row.i);
@@ -105,13 +105,13 @@ function sgSizesCard(r: any): HTMLElement {
 
 function sgScatterCard(r: any): HTMLElement {
   const [v1, v2] = r.pca.variance;
-  const card = sgCard('sg-map', 'Where the segments sit',
-    `Each dot is a row, placed on the two directions that spread the rows most (principal components: ${sgPct(v1)} and ${sgPct(v2)} of the variation).`);
+  const card = sgCard('sg-map', t('segmentsView.where_the_segments_sit'),
+    t('segmentsView.each_dot_is_a_row_placed', { v1: sgPct(v1), v2: sgPct(v2) }));
   const wrap = sgEl('div', 'sg-scatter');
   const canvas = sgEl<HTMLCanvasElement>('canvas', 'sg-scatter-canvas');
   canvas.id = 'sg-scatter';
   canvas.setAttribute('role', 'img');
-  canvas.setAttribute('aria-label', `Scatter of ${sgFmt(r.pca.points.length)} rows on the first two principal components, coloured by segment`);
+  canvas.setAttribute('aria-label', t('segmentsView.scatter_of_rows_on_the_first', { pointsCount: sgFmt(r.pca.points.length) }));
   wrap.appendChild(canvas);
   card.appendChild(wrap);
   return card;
@@ -153,7 +153,7 @@ function sgDrawScatter(r: any): void {
           legend: { position: 'bottom', labels: { color: muted, font, boxWidth: 8, boxHeight: 8, usePointStyle: true, pointStyle: 'circle', padding: 12 } },
           tooltip: { callbacks: { label: (ctx: any) => ctx.dataset.label } },
         },
-        scales: { x: axis(`PC1 · ${sgPct(r.pca.variance[0])}`), y: axis(`PC2 · ${sgPct(r.pca.variance[1])}`) },
+        scales: { x: axis(t('segmentsView.pc1', { p0: sgPct(r.pca.variance[0]) })), y: axis(t('segmentsView.pc2', { p0: sgPct(r.pca.variance[1]) })) },
       },
     });
   } catch (_) {
@@ -174,9 +174,9 @@ function sgDevCell(mean: number | null, dev: number | null): HTMLElement {
     bar.style.width = `${(Math.min(Math.abs(dev), 2) / 2) * 50}%`;
     track.appendChild(bar);
     const mag = Math.abs(dev).toFixed(1);
-    const sd = mag === '0.0' ? '0.0 SD' : `${dev >= 0 ? '+' : '−'}${mag} SD`;
+    const sd = mag === '0.0' ? t('segmentsView.0_0_sd') : t('segmentsView.sd', { p0: !!(dev >= 0), mag });
     wrap.appendChild(sgEl('span', 'sg-dev-sd' + (Math.abs(dev) >= 0.25 ? ' is-strong' : ''), sd));
-    td.title = `${sd} from the overall mean`;
+    td.title = t('segmentsView.from_the_overall_mean', { sd });
   }
   wrap.insertBefore(track, wrap.children[1] || null);
   td.appendChild(wrap);
@@ -184,20 +184,20 @@ function sgDevCell(mean: number | null, dev: number | null): HTMLElement {
 }
 
 function sgProfileCard(r: any): HTMLElement {
-  const card = sgCard('sg-profile', 'Profile',
-    'Each column’s mean in each segment against the overall mean. Bars show how far off overall it sits, in standard deviations (capped at ±2).');
+  const card = sgCard('sg-profile', t('segmentsView.profile'),
+    t('segmentsView.each_column_s_mean_in_each'));
   const scroll = sgEl('div', 'sg-table-scroll');
-  const t = sgEl<HTMLTableElement>('table', 'sg-table');
-  const hr = t.createTHead().insertRow();
-  hr.appendChild(sgEl<HTMLTableCellElement>('th', '', 'Column'));
-  hr.appendChild(sgEl<HTMLTableCellElement>('th', 'sg-num', 'Overall'));
+  const tv = sgEl<HTMLTableElement>('table', 'sg-table');
+  const hr = tv.createTHead().insertRow();
+  hr.appendChild(sgEl<HTMLTableCellElement>('th', '', t('common.column')));
+  hr.appendChild(sgEl<HTMLTableCellElement>('th', 'sg-num', t('segmentsView.overall')));
   r.names.forEach((n: string, i: number) => {
     const th = sgEl<HTMLTableCellElement>('th', 'sg-seg-th');
     th.scope = 'col';
     th.append(sgSwatch(i), sgEl('span', '', n));
     hr.appendChild(th);
   });
-  const body = t.createTBody();
+  const body = tv.createTBody();
   r.features.forEach((f: string, j: number) => {
     const tr = body.insertRow();
     const th = sgEl<HTMLTableCellElement>('th', 'sg-feat', f);
@@ -206,14 +206,14 @@ function sgProfileCard(r: any): HTMLElement {
     tr.appendChild(sgEl('td', 'sg-num', sgVal(r.profile.overall[j])));
     r.names.forEach((_: string, i: number) => tr.appendChild(sgDevCell(r.profile.segments[i][j], r.profile.deviation[i][j])));
   });
-  scroll.appendChild(t);
+  scroll.appendChild(tv);
   card.appendChild(scroll);
   return card;
 }
 
 function sgKCard(r: any): HTMLElement {
-  const card = sgCard('sg-k', 'How many segments',
-    'The silhouette score says how much closer each row is to its own segment than to the next one, from −1 to 1. The highest wins; a tie goes to fewer segments.');
+  const card = sgCard('sg-k', t('segmentsView.how_many_segments'),
+    t('segmentsView.the_silhouette_score_says_how_much'));
   const list = sgEl('ul', 'sg-k-list');
   const top = Math.max(0.0001, ...r.silhouettes.map((s: any) => s.score));
   for (const s of r.silhouettes) {
@@ -231,17 +231,17 @@ function sgKCard(r: any): HTMLElement {
 }
 
 function sgSaveCard(r: any): HTMLElement {
-  const card = sgCard('sg-save', 'Save as a column',
-    `Adds a Prepare step that stores this model — each column’s mean and spread and the ${r.k} centroids — and assigns every row on each refresh. The column is text, so it works as a dimension in any chart, filter or pivot.`);
+  const card = sgCard('sg-save', t('segmentsView.save_as_a_column'),
+    t('segmentsView.adds_a_prepare_step_that_stores', { k: r.k }));
   const row = sgEl('div', 'sg-save-row');
   const label = sgEl<HTMLLabelElement>('label', 'sg-field');
   label.htmlFor = 'sg-col-name';
-  label.textContent = 'Column name';
+  label.textContent = t('segmentsView.column_name');
   const input = sgEl<HTMLInputElement>('input', 'sg-col-name');
   input.id = 'sg-col-name';
   input.type = 'text';
   input.value = r.step.column;
-  const save = sgButton('btn btn-primary', 'check', 'Save as column', () => void sgSaveColumn());
+  const save = sgButton('btn btn-primary', 'check', t('segmentsView.save_as_column'), () => void sgSaveColumn());
   save.id = 'sg-save';
   row.append(label, input, save);
   const status = sgEl('p', 'sg-save-status');
@@ -261,7 +261,7 @@ async function sgSaveColumn(): Promise<void> {
   status.textContent = '';
   status.className = 'sg-save-status';
   if (!column) {
-    status.textContent = 'Name the column first.';
+    status.textContent = t('segmentsView.name_the_column_first');
     status.classList.add('is-error');
     return;
   }
@@ -271,19 +271,19 @@ async function sgSaveColumn(): Promise<void> {
   try {
     res = await window.hubSegments.saveColumn(info.projectId, info.datasetId, { ...sgResult.step, column });
   } catch (err) {
-    res = { ok: false, error: err instanceof Error ? err.message : 'Could not save the column' };
+    res = { ok: false, error: err instanceof Error ? err.message : t('segmentsView.could_not_save_the_column') };
   }
   if (!res || !res.ok) {
     if (save) save.disabled = false;
-    status.textContent = (res && res.error) || 'Could not save the column.';
+    status.textContent = (res && res.error) || t('segmentsView.could_not_save_the_column_2');
     status.classList.add('is-error');
     return;
   }
   if (input) input.disabled = true;
   status.classList.add('is-ok');
-  status.append(icon('circle-check', 16), sgEl('span', '', `Saved — “${res.column}” is now a column of ${info.name}, step ${res.steps} in Prepare.`));
-  status.appendChild(sgButton('btn btn-sm', 'sliders', 'Open in Prepare', () => void sgOpenPrepare(info.datasetId)));
-  showToast(`Added the “${res.column}” column to ${info.name}`, { kind: 'success' });
+  status.append(icon('circle-check', 16), sgEl('span', '', t('segmentsView.saved_is_now_a_column_of', { column: res.column, name: info.name, steps: res.steps })));
+  status.appendChild(sgButton('btn btn-sm', 'sliders', t('segmentsView.open_in_prepare'), () => void sgOpenPrepare(info.datasetId)));
+  showToast(t('segmentsView.added_the_column_to', { column: res.column, name: info.name }), { kind: 'success' });
 }
 
 async function sgOpenPrepare(datasetId: string): Promise<void> {

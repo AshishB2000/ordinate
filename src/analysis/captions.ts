@@ -32,6 +32,7 @@ import type { CalcSeries } from './tableCalc';
 import { CATEGORY_CAP, OTHER_LABEL } from './categoryKey';
 import { facetCaption } from './facetCaption';
 import type { FacetGrid } from './facets';
+import { t } from '../app/i18n';
 
 // ── the app's compact number format ──────────────────────────────────────────
 //
@@ -118,7 +119,10 @@ export interface CaptionInput {
   overrides?: { waterfallTotals?: string[]; bulletTarget?: number } | null;
 }
 
-const NOTHING = 'No data to summarize';
+/** Read at call time, not import time: the words follow Settings → Language. */
+function nothing(): string {
+  return t('captions.no_data_to_summarize');
+}
 
 /**
  * The one entry point. Never throws, never returns an empty string.
@@ -131,12 +135,12 @@ const NOTHING = 'No data to summarize';
  */
 export function tileCaption(input: CaptionInput): string {
   const base = familyCaption(input);
-  if (!input || typeof input !== 'object' || base === NOTHING) return base;
+  if (!input || typeof input !== 'object' || base === nothing()) return base;
   return base + analyticsClauses(input.analytics || (input.data && input.data.analytics), input.chartType);
 }
 
 function familyCaption(input: CaptionInput): string {
-  if (!input || typeof input !== 'object') return NOTHING;
+  if (!input || typeof input !== 'object') return nothing();
   if (Array.isArray(input.kpis)) return kpiCaption(input.kpis);
 
   const family = captionFamily(input.chartType);
@@ -219,7 +223,7 @@ function geoPairs(geo: CaptionInput['geo']): Pair[] {
  */
 function measureNoun(data: ChartData | null | undefined, names?: Record<string, string> | null): string {
   const series = (data && Array.isArray(data.series)) ? data.series : [];
-  if (series.length !== 1) return series.length > 1 ? 'the total' : 'value';
+  if (series.length !== 1) return series.length > 1 ? t('captions.the_total') : 'value';
   const name = String((series[0] && series[0].name) || '').trim();
   const m = /^(?:sum|avg|min|max|count) of (.+)$/.exec(name);
   const column = (m ? m[1] : name) || 'value';
@@ -250,25 +254,25 @@ function countWord(n: number): string {
  * gets its own frame rather than a "1.0×" that reads as a rounding artefact.
  */
 function leaderCaption(pairs: Pair[], measure: string, isMap: boolean): string {
-  if (!pairs.length) return NOTHING;
+  if (!pairs.length) return nothing();
   const sorted = pairs.slice().sort((a, b) => b.value - a.value);
   const top = sorted[0];
   const noun = measure;
 
   if (sorted.length === 1) {
-    return `${top.label} is the only ${isMap ? 'region' : 'category'}, ${noun} ${compact(top.value)}`;
+    return t('captions.is_the_only', { label: top.label, p1: !!(isMap), noun, value: compact(top.value) });
   }
 
   const tied = sorted.filter((p) => p.value === top.value);
   if (tied.length > 1) {
-    const at = `for the lead in ${noun} at ${compact(top.value)}`;
+    const at = t('captions.for_the_lead_in_at', { noun, value: compact(top.value) });
     return tied.length === 2
-      ? `${tied[0].label} and ${tied[1].label} tie ${at}`
-      : `${countWord(tied.length)} ${isMap ? 'regions' : 'categories'} tie ${at}`;
+      ? t('captions.and_tie', { p0: tied[0].label, p1: tied[1].label, at })
+      : t('captions.tie', { tiedCount: countWord(tied.length), p1: !!(isMap), at });
   }
 
   const second = sorted[1];
-  const lead = `${top.label} leads ${noun} at ${compact(top.value)}`;
+  const lead = t('captions.leads_at', { label: top.label, noun, value: compact(top.value) });
   if (second.value <= 0) return lead;
   const ratio = top.value / second.value;
   if (!Number.isFinite(ratio)) return lead;
@@ -285,31 +289,31 @@ function leaderCaption(pairs: Pair[], measure: string, isMap: boolean): string {
  * percentage, so the percentage is dropped rather than printed as Infinity.
  */
 function lineCaption(pairs: Pair[], measure: string): string {
-  if (!pairs.length) return NOTHING;
+  if (!pairs.length) return nothing();
   const noun = sentenceCase(measure);
-  if (pairs.length === 1) return `${noun} was ${compact(pairs[0].value)} in ${pairs[0].label}`;
+  if (pairs.length === 1) return t('captions.was_in', { noun, p1: compact(pairs[0].value), p2: pairs[0].label });
 
   const first = pairs[0];
   const last = pairs[pairs.length - 1];
-  const span = `from ${first.label} to ${last.label}`;
+  const span = t('captions.from_to', { label: first.label, label2: last.label });
 
   let head: string;
   const delta = last.value - first.value;
   const pct = first.value === 0 ? null : Math.round((delta / Math.abs(first.value)) * 100);
   if (pct === null) {
     head = delta === 0
-      ? `${noun} held steady ${span}`
-      : `${noun} ${delta > 0 ? 'rose' : 'fell'} to ${compact(last.value)} ${span}`;
+      ? t('captions.held_steady', { noun, span })
+      : t('captions.to', { noun, p1: !!(delta > 0), value: compact(last.value), span });
   } else if (pct === 0) {
-    head = `${noun} held steady ${span}`;
+    head = t('captions.held_steady', { noun, span });
   } else {
-    head = `${noun} ${pct > 0 ? 'rose' : 'fell'} ${Math.abs(pct)}% ${span}`;
+    head = t('captions.text', { noun, p1: !!(pct > 0), pct: Math.abs(pct), span });
   }
 
   let peakIdx = 0;
   for (let i = 1; i < pairs.length; i++) if (pairs[i].value > pairs[peakIdx].value) peakIdx = i;
   if (peakIdx === 0 || peakIdx === pairs.length - 1) return head;
-  return `${head}, peaking at ${compact(pairs[peakIdx].value)} in ${pairs[peakIdx].label}`;
+  return t('captions.peaking_at_in', { head, p1: compact(pairs[peakIdx].value), p2: pairs[peakIdx].label });
 }
 
 /**
@@ -322,13 +326,13 @@ function lineCaption(pairs: Pair[], measure: string): string {
  * frame, which only ever compares.
  */
 function partCaption(pairs: Pair[], measure: string): string {
-  if (!pairs.length) return NOTHING;
+  if (!pairs.length) return nothing();
   const total = pairs.reduce((a, p) => a + p.value, 0);
   if (total <= 0) return leaderCaption(pairs, measure, false);
   const top = pairs.slice().sort((a, b) => b.value - a.value)[0];
   const share = Math.round((top.value / total) * 100);
   const n = pairs.length;
-  return `${sentenceCase(countWord(n))} ${n === 1 ? 'category' : 'categories'}; ${top.label} is ${share}%`;
+  return t('captions.is', { p0: sentenceCase(countWord(n)), n, label: top.label, share });
 }
 
 /** Scatter / bubble — a cloud has no leader, so it gets its count and range. */
@@ -340,12 +344,12 @@ function pointCaption(data: ChartData | null | undefined, measure: string): stri
       if (typeof v === 'number' && Number.isFinite(v)) values.push(v);
     }
   }
-  if (!values.length) return NOTHING;
+  if (!values.length) return nothing();
   const lo = Math.min(...values);
   const hi = Math.max(...values);
   const n = values.length;
-  if (lo === hi) return `${n} ${n === 1 ? 'point' : 'points'}, ${measure} ${compact(lo)} throughout`;
-  return `${n} ${n === 1 ? 'point' : 'points'}, ${measure} from ${compact(lo)} to ${compact(hi)}`;
+  if (lo === hi) return t('captions.throughout', { n, measure, lo: compact(lo) });
+  return t('captions.from_to_2', { n, measure, lo: compact(lo), hi: compact(hi) });
 }
 
 /**
@@ -356,26 +360,26 @@ function pointCaption(data: ChartData | null | undefined, measure: string): stri
  */
 function cloudCaption(data: ChartData | null | undefined, names?: Record<string, string> | null): string {
   const series = data && Array.isArray(data.series) ? data.series : [];
-  if (!data || !series[0]) return NOTHING;
+  if (!data || !series[0]) return nothing();
   const sized = { labels: data.labels, series: [series[0]] };
   // The folded tail past CATEGORY_CAP is not a word — the cloud does not draw it either.
   const folded = Array.isArray(data.labels) && data.labels.length > CATEGORY_CAP;
   const pairs = chartPairs(sized).filter((p) => p.value > 0 && !(folded && p.label === OTHER_LABEL))
     .sort((a, b) => b.value - a.value || (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
-  if (!pairs.length) return NOTHING;
+  if (!pairs.length) return nothing();
   const [top, second] = pairs;
-  const lead = `“${top.label}” is the biggest of ${pairs.length} words, ${measureNoun(sized, names)} ${compact(top.value)}`;
+  const lead = t('captions.is_the_biggest_of_words', { label: top.label, pairsCount: pairs.length, p2: measureNoun(sized, names), value: compact(top.value) });
   const ratio = second && second.value < top.value ? `, ${(top.value / second.value).toFixed(1)}× “${second.label}”` : '';
   const tone = series[1] ? measureNoun({ labels: data.labels, series: [series[1]] }, names) : '';
-  return lead + ratio + (tone ? `; coloured by ${tone}` : '');
+  return lead + ratio + (tone ? t('captions.coloured_by', { tone }) : '');
 }
 
 /** Gauge / sankey / boxplot / table — the honest sentence is a count. */
 function genericCaption(pairs: Pair[], measure: string): string {
-  if (!pairs.length) return NOTHING;
+  if (!pairs.length) return nothing();
   if (pairs.length === 1) return `${sentenceCase(measure)} is ${compact(pairs[0].value)}`;
   const total = pairs.reduce((a, p) => a + p.value, 0);
-  return `${sentenceCase(measure)} across ${pairs.length} categories, totalling ${compact(total)}`;
+  return t('captions.across_categories_totalling', { measure: sentenceCase(measure), pairsCount: pairs.length, total: compact(total) });
 }
 
 /**
@@ -387,10 +391,10 @@ function genericCaption(pairs: Pair[], measure: string): string {
  * than its own children by construction and would win every time.
  */
 function pivotCaption(grid: PivotGrid | null | undefined): string {
-  if (!grid || !Array.isArray(grid.cells) || grid.rowGroupCount === 0) return NOTHING;
+  if (!grid || !Array.isArray(grid.cells) || grid.rowGroupCount === 0) return nothing();
   const rows = grid.rowGroupCount;
   const cols = grid.colGroupCount;
-  const size = `${rows} ${rows === 1 ? 'row' : 'rows'} × ${cols} ${cols === 1 ? 'column' : 'columns'}`;
+  const size = t('captions.text_2', { rows, cols });
 
   // The peak is the largest FIGURE; a calculated value is then shown as both
   // (tableCalc.ts) — a rank of 1 is not "highest", its figure is.
@@ -406,12 +410,12 @@ function pivotCaption(grid: PivotGrid | null | undefined): string {
       best = { path: parts.join(' · '), v, r, c };
     }
   }
-  if (!best) return `${size}; no figures to compare`;
+  if (!best) return t('captions.no_figures_to_compare', { size });
   const calc = grid.calcs && grid.valueCount ? grid.calcs[best.c % grid.valueCount] : null;
   const shown = calc ? calcLabel(calc.kind, grid.cells[best.r][best.c], best.v) : compact(best.v);
   // No measure noun: with more than one value field the cells are not all the
   // same quantity, and the cell path already names which figure this is.
-  return `${size}; ${best.path} is highest at ${shown}`;
+  return t('captions.is_highest_at', { size, path: best.path, shown });
 }
 
 /**
@@ -425,7 +429,7 @@ function kpiCaption(kpis: CaptionKpi[]): string {
   const parts = kpis
     .filter((k) => k && typeof k.label === 'string')
     .map((k) => `${k.label} ${k.value == null ? '—' : compact(k.value)}`);
-  return parts.length ? parts.join(' · ') : 'No metrics on this sheet';
+  return parts.length ? parts.join(' · ') : t('captions.no_metrics_on_this_sheet');
 }
 
 // ── waterfall · Pareto · bullet · radar · calendar ───────────────────────────
@@ -444,20 +448,20 @@ function waterfallCaption(
   let big = f.steps[0];
   for (const s of f.steps) if (Math.abs(s.value) > Math.abs(big.value)) big = s;
   const n = f.steps.length;
-  const head = `${sentenceCase(countWord(n))} ${n === 1 ? 'step takes' : 'steps take'} ${measure} from ${compact(f.from)} to ${compact(f.to)}`;
-  const at = `${big.label} at ${big.value > 0 ? '+' : ''}${compact(big.value)}`;
-  return n === 1 ? `${head}: ${at}` : `${head}; the largest is ${at}`;
+  const head = t('captions.from_to_3', { p0: sentenceCase(countWord(n)), n, measure, from: compact(f.from), to: compact(f.to) });
+  const at = t('captions.at', { label: big.label, p1: !!(big.value > 0), value: compact(big.value) });
+  return n === 1 ? `${head}: ${at}` : t('captions.the_largest_is', { head, at });
 }
 
 /** "Three categories make 80% of revenue" */
 function paretoCaption(data: ChartData | null | undefined, measure: string, pairs: Pair[]): string {
   const p = paretoFigures(data);
   if (!p.count80) return leaderCaption(pairs, measure, false);
-  if (p.count80 === 1) return `${p.top} alone makes 80% of ${measure}`;
+  if (p.count80 === 1) return t('captions.alone_makes_80_of', { top: p.top, measure });
   if (p.count80 >= p.positives) {
-    return `It takes ${p.positives === 2 ? 'both' : 'all ' + countWord(p.positives)} categories to make 80% of ${measure}`;
+    return t('captions.it_takes_categories_to_make_80', { p0: p.positives === 2 ? 'both' : 'all ' + countWord(p.positives), measure });
   }
-  return `${sentenceCase(countWord(p.count80))} categories make 80% of ${measure}`;
+  return t('captions.categories_make_80_of', { p0: sentenceCase(countWord(p.count80)), measure });
 }
 
 /** "Two of three categories reach target; Technology leads at 128%" */
@@ -474,15 +478,15 @@ function bulletCaption(
   // No usable target: say what the bars say, about the MEASURE (not measure + target).
   if (!rows.length) return leaderCaption(s1 ? chartPairs({ labels, series: [series[0]] }) : pairs, measure, false);
   const pct = (r: { v: number; t: number }): number => Math.round((r.v / r.t) * 100);
-  if (rows.length === 1) return `${rows[0].label} is at ${pct(rows[0])}% of its ${compact(rows[0].t)} target`;
+  if (rows.length === 1) return t('captions.is_at_of_its_target', { p0: rows[0].label, p1: pct(rows[0]), p2: compact(rows[0].t) });
   let best = rows[0];
   for (const r of rows) if (r.v / r.t > best.v / best.t) best = r;
   const n = rows.length;
   const met = rows.filter((r) => r.v >= r.t).length;
-  const head = met === n ? (n === 2 ? 'Both categories reach target' : `All ${countWord(n)} categories reach target`)
-    : met === 0 ? (n === 2 ? 'Neither category reaches target' : `None of ${countWord(n)} categories reach target`)
-    : `${sentenceCase(countWord(met))} of ${countWord(n)} categories ${met === 1 ? 'reaches' : 'reach'} target`;
-  return `${head}; ${best.label} ${met === 0 ? 'is closest' : 'leads'} at ${pct(best)}%`;
+  const head = met === n ? (n === 2 ? t('captions.both_categories_reach_target') : t('captions.all_categories_reach_target', { n: countWord(n) }))
+    : met === 0 ? (n === 2 ? t('captions.neither_category_reaches_target') : t('captions.none_of_categories_reach_target', { n: countWord(n) }))
+    : t('captions.of_categories_target', { p0: sentenceCase(countWord(met)), n: countWord(n), met });
+  return t('captions.at_2', { head, label: best.label, p2: !!(met === 0), best: pct(best) });
 }
 
 /**
@@ -493,9 +497,9 @@ function radarCaption(data: ChartData | null | undefined): string {
   const labels = ((data && Array.isArray(data.labels)) ? data.labels : []).slice(0, 8);
   const axes = ((data && Array.isArray(data.series)) ? data.series : []).slice(0, 6);
   if (axes.length < 2) return leaderCaption(chartPairs(data), measureNoun(data), false);
-  if (!labels.length) return NOTHING;
+  if (!labels.length) return nothing();
   const m = axes.length;
-  if (labels.length === 1) return `${labels[0]} is the only category, across ${countWord(m)} measures`;
+  if (labels.length === 1) return t('captions.is_the_only_category_across_measures', { p0: labels[0], m: countWord(m) });
   const wins = labels.map(() => 0);
   for (const s of axes) {
     let bi = -1;
@@ -508,20 +512,20 @@ function radarCaption(data: ChartData | null | undefined): string {
   }
   let lead = 0;
   wins.forEach((w, i) => { if (w > wins[lead]) lead = i; });
-  if (!wins[lead]) return NOTHING;
+  if (!wins[lead]) return nothing();
   return wins[lead] === m
-    ? `${labels[lead]} leads on all ${countWord(m)} measures`
-    : `${labels[lead]} leads on ${countWord(wins[lead])} of ${countWord(m)} measures`;
+    ? t('captions.leads_on_all_measures', { p0: labels[lead], m: countWord(m) })
+    : t('captions.leads_on_of_measures', { p0: labels[lead], p1: countWord(wins[lead]), m: countWord(m) });
 }
 
 /** "Revenue peaked at 12.3K on 2024-11-29, across 731 days" */
 function calendarCaption(pairs: Pair[], measure: string): string {
-  if (!pairs.length) return NOTHING;
+  if (!pairs.length) return nothing();
   const noun = sentenceCase(measure);
-  if (pairs.length === 1) return `${noun} was ${compact(pairs[0].value)} on ${pairs[0].label}`;
+  if (pairs.length === 1) return t('captions.was_on', { noun, p1: compact(pairs[0].value), p2: pairs[0].label });
   let peak = pairs[0];
   for (const p of pairs) if (p.value > peak.value) peak = p;
-  return `${noun} peaked at ${compact(peak.value)} on ${peak.label}, across ${pairs.length} days`;
+  return t('captions.peaked_at_on_across_days', { noun, value: compact(peak.value), label: peak.label, pairsCount: pairs.length });
 }
 
 // ── table calculations ───────────────────────────────────────────────────────
@@ -540,7 +544,7 @@ function calcSeriesOf(data: ChartData | null | undefined): CalcSeries | null {
  */
 function calcCaption(data: ChartData | null | undefined, family: CaptionFamily, names?: Record<string, string> | null): string {
   const s = calcSeriesOf(data);
-  if (!s || !s.calc) return NOTHING;
+  if (!s || !s.calc) return nothing();
   const kind = s.calc.kind;
   const raw = s.raw || [];
   const labels = (data && Array.isArray(data.labels)) ? data.labels : [];
@@ -548,16 +552,16 @@ function calcCaption(data: ChartData | null | undefined, family: CaptionFamily, 
   const cells = labels
     .map((l, i) => ({ label: String(l), v: finite(s.values[i]), raw: finite(raw[i]) }))
     .filter((c): c is { label: string; v: number; raw: number | null } => c.v !== null);
-  if (!cells.length) return NOTHING;
+  if (!cells.length) return nothing();
   const text = (c: { v: number; raw: number | null }): string => calcLabel(kind, c.v, c.raw);
   if (family === 'line' || family === 'calendar') {
     const last = cells[cells.length - 1];
-    return `${sentenceCase(noun)} in ${last.label}: ${text(last)}`;
+    return t('captions.in', { noun: sentenceCase(noun), label: last.label, last: text(last) });
   }
   const rank = kind === 'rank_dense' || kind === 'rank_competition';
   let top = cells[0];
   for (const c of cells) if (rank ? c.v < top.v : c.v > top.v) top = c;
   return cells.length === 1
-    ? `${top.label} is the only category, ${noun} ${text(top)}`
-    : `${top.label} leads ${noun} at ${text(top)}`;
+    ? t('captions.is_the_only_category', { label: top.label, noun, top: text(top) })
+    : t('captions.leads_at_2', { label: top.label, noun, top: text(top) });
 }

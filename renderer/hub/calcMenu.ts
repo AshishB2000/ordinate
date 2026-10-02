@@ -35,24 +35,24 @@ interface TcContext {
 }
 
 const TC_KINDS: Array<{ kind: string; label: string; badge: string }> = [
-  { kind: 'running_total', label: 'Running total', badge: 'Running total' },
-  { kind: 'pct_of_total', label: 'Percent of total', badge: '% of total' },
-  { kind: 'diff', label: 'Difference from previous', badge: 'Diff' },
-  { kind: 'pct_diff', label: 'Percent difference from previous', badge: '% diff' },
-  { kind: 'rank_dense', label: 'Rank (dense)', badge: 'Rank' },
-  { kind: 'rank_competition', label: 'Rank (competition)', badge: 'Rank' },
-  { kind: 'percentile', label: 'Percentile', badge: 'Percentile' },
-  { kind: 'moving_avg', label: 'Moving average', badge: 'Moving avg' },
-  { kind: 'moving_sum', label: 'Moving sum', badge: 'Moving sum' },
-  { kind: 'yoy', label: 'Year over year', badge: 'YoY' },
-  { kind: 'index', label: 'Index to first period', badge: 'Index' },
+  { kind: 'running_total', label: t('calcMenu.running_total'), badge: t('calcMenu.running_total') },
+  { kind: 'pct_of_total', label: t('calcMenu.percent_of_total'), badge: t('common.of_total') },
+  { kind: 'diff', label: t('calcMenu.difference_from_previous'), badge: t('calcMenu.diff') },
+  { kind: 'pct_diff', label: t('calcMenu.percent_difference_from_previous'), badge: t('calcMenu.diff_2') },
+  { kind: 'rank_dense', label: t('calcMenu.rank_dense'), badge: t('common.rank') },
+  { kind: 'rank_competition', label: t('calcMenu.rank_competition'), badge: t('common.rank') },
+  { kind: 'percentile', label: t('common.percentile'), badge: t('common.percentile') },
+  { kind: 'moving_avg', label: t('common.moving_average'), badge: t('calcMenu.moving_avg') },
+  { kind: 'moving_sum', label: t('calcMenu.moving_sum'), badge: t('calcMenu.moving_sum') },
+  { kind: 'yoy', label: t('calcMenu.year_over_year'), badge: 'YoY' },
+  { kind: 'index', label: t('calcMenu.index_to_first_period'), badge: t('calcMenu.index') },
 ];
 const TC_PERCENT = new Set(['pct_of_total', 'pct_diff', 'percentile', 'yoy']);
 const TC_MOVING = new Set(['moving_avg', 'moving_sum']);
 const TC_SUFFIX: Record<string, string> = {
-  running_total: ' running total', pct_of_total: ' of total', diff: ' vs previous', pct_diff: ' vs previous',
-  rank_dense: '', rank_competition: '', percentile: ' percentile', moving_avg: ' moving avg',
-  moving_sum: ' moving sum', yoy: ' YoY', index: ' index',
+  running_total: t('calcMenu.running_total_2'), pct_of_total: t('calcMenu.of_total'), diff: t('calcMenu.vs_previous'), pct_diff: t('calcMenu.vs_previous'),
+  rank_dense: '', rank_competition: '', percentile: ' percentile', moving_avg: t('calcMenu.moving_avg_2'),
+  moving_sum: t('calcMenu.moving_sum_2'), yoy: ' YoY', index: ' index',
 };
 
 const tcKindInfo = (kind: string) => TC_KINDS.find((k) => k.kind === kind) || null;
@@ -90,7 +90,7 @@ function tcBadge(host: HTMLElement, calc: TcCalc | undefined | null): void {
   const b = document.createElement('span');
   b.className = 'tc-badge';
   b.textContent = info.badge + (TC_MOVING.has(info.kind) ? ' ' + (calc.window || 3) : '');
-  b.title = 'Calculated as ' + info.label.toLowerCase();
+  b.title = t('calcMenu.calculated_as', { p0: info.label.toLowerCase() });
   host.appendChild(b);
 }
 
@@ -167,9 +167,9 @@ function tcOpenCalcMenu(anchor: HTMLElement, current: TcCalc | undefined | null,
     menu.classList.add('tc-menu');
     const head = document.createElement('div');
     head.className = 'tc-menu-head';
-    head.textContent = 'Calculate as';
+    head.textContent = t('calcMenu.calculate_as');
     menu.appendChild(head);
-    const none = miniMenuRow('None');
+    const none = miniMenuRow(t('common.none'));
     setRowCheck(none, !current);
     none.addEventListener('click', () => { close(); onPick(null); });
     menu.appendChild(none);
@@ -210,7 +210,7 @@ function tcOpenCalcConfig(anchor: HTMLElement, kind: string, current: TcCalc | n
   const pop = document.createElement('div');
   pop.className = 'tc-pop';
   pop.setAttribute('role', 'dialog');
-  pop.setAttribute('aria-label', (info ? info.label : 'Table calculation') + ' settings');
+  pop.setAttribute('aria-label', (info ? info.label : t('calcMenu.table_calculation')) + t('calcMenu.settings'));
   const title = document.createElement('div');
   title.className = 'tc-pop-title';
   title.textContent = info ? info.label : kind;
@@ -240,19 +240,19 @@ function tcOpenCalcConfig(anchor: HTMLElement, kind: string, current: TcCalc | n
   if (ctx.surface !== 'kpi') {
     const cur = current ? current.along : ctx.surface === 'pivot' ? 'down' : 'across';
     const curVal = typeof cur === 'object' ? 'dim:' + cur.dimension : cur;
-    const alongOpts: Array<[string, string]> = [['across', 'Table across'], ['down', 'Table down']];
-    ctx.dims.forEach((d) => alongOpts.push(['dim:' + d.name, 'Along ' + d.name]));
+    const alongOpts: Array<[string, string]> = [['across', t('calcMenu.table_across')], ['down', t('calcMenu.table_down')]];
+    ctx.dims.forEach((d) => alongOpts.push(['dim:' + d.name, t('calcMenu.along', { name: d.name })]));
     alongSel = select(alongOpts, curVal);
-    field('Compute along', alongSel, 'js-tc-along');
+    field(t('calcMenu.compute_along'), alongSel, 'js-tc-along');
     if (ctx.surface === 'pivot') {
-      const restartOpts: Array<[string, string]> = [['', 'None']];
+      const restartOpts: Array<[string, string]> = [['', t('common.none')]];
       ctx.dims.forEach((d) => restartOpts.push([d.name, d.name]));
       restartSel = select(restartOpts, current && current.restart ? current.restart : '');
-      field('Restart every', restartSel, 'js-tc-restart');
+      field(t('calcMenu.restart_every'), restartSel, 'js-tc-restart');
     } else {
       const note = document.createElement('p');
       note.className = 'tc-pop-note';
-      note.textContent = 'Restarting needs a second dimension in the same direction — pivots have one.';
+      note.textContent = t('calcMenu.restarting_needs_a_second_dimension_in');
       pop.appendChild(note);
     }
   }
@@ -265,7 +265,7 @@ function tcOpenCalcConfig(anchor: HTMLElement, kind: string, current: TcCalc | n
     nInput.step = '1';
     nInput.className = 'viz-select tc-n';
     nInput.value = String(current && current.window ? current.window : 3);
-    field(ctx.surface === 'kpi' ? 'Over the last N periods' : 'Over the last N cells', nInput, 'js-tc-n');
+    field(ctx.surface === 'kpi' ? t('calcMenu.over_the_last_n_periods') : t('calcMenu.over_the_last_n_cells'), nInput, 'js-tc-n');
   }
 
   const actions = document.createElement('div');
@@ -273,11 +273,11 @@ function tcOpenCalcConfig(anchor: HTMLElement, kind: string, current: TcCalc | n
   const cancel = document.createElement('button');
   cancel.type = 'button';
   cancel.className = 'btn btn-sm btn-ghost';
-  cancel.textContent = 'Cancel';
+  cancel.textContent = t('common.cancel');
   const apply = document.createElement('button');
   apply.type = 'button';
   apply.className = 'btn btn-sm btn-primary js-tc-apply';
-  apply.textContent = 'Apply';
+  apply.textContent = t('common.apply');
   actions.appendChild(cancel);
   actions.appendChild(apply);
   pop.appendChild(actions);
@@ -322,7 +322,7 @@ function tcOpenCalcConfig(anchor: HTMLElement, kind: string, current: TcCalc | n
 function tcMenuItem(anchor: HTMLElement, current: TcCalc | undefined | null, ctx: () => TcContext, onPick: (calc: TcCalc | null) => void): { label: string; onClick: () => void } {
   const info = current ? tcKindInfo(current.kind) : null;
   return {
-    label: 'Calculate as…' + (info ? '  (' + info.badge + ')' : ''),
+    label: t('calcMenu.calculate_as_2', { p0: (info ? '  (' + info.badge + ')' : '') }),
     // After the row menu has closed, so the two popovers never overlap.
     onClick: () => { setTimeout(() => tcOpenCalcMenu(anchor, current, ctx(), onPick), 0); },
   };
@@ -344,7 +344,7 @@ function tcChartContext(columns: Array<{ name: string; type: string }>, category
   if (category) dims.push({ name: category, axis: 'across' });
   if (split) dims.push({ name: split, axis: 'down' });
   const cat = (columns || []).find((c) => c.name === category);
-  return { surface: 'chart', dims, yoyOff: cat && cat.type === 'date' ? '' : 'Needs a date category' };
+  return { surface: 'chart', dims, yoyOff: cat && cat.type === 'date' ? '' : t('calcMenu.needs_a_date_category') };
 }
 
 /**
@@ -356,8 +356,8 @@ function tcChipButton(current: TcCalc | undefined | null, ctx: () => TcContext, 
   b.type = 'button';
   b.className = 'tc-chip-btn js-tc-calc' + (current ? ' is-on' : '');
   b.setAttribute('aria-haspopup', 'menu');
-  b.setAttribute('aria-label', 'Calculate as');
-  b.title = 'Calculate as…';
+  b.setAttribute('aria-label', t('calcMenu.calculate_as'));
+  b.title = t('calcMenu.calculate_as_3');
   b.appendChild(icon('function', 14));
   b.addEventListener('click', (e) => { e.stopPropagation(); tcOpenCalcMenu(b, current, ctx(), onPick); });
   return b;
@@ -366,9 +366,9 @@ function tcChipButton(current: TcCalc | undefined | null, ctx: () => TcContext, 
 // ── KPI cards ────────────────────────────────────────────────────────────────
 
 const TC_KPI_REASONS: Record<string, string> = {
-  no_date_column: 'Needs a date column to form periods',
-  no_periods: 'No periods to calculate over',
-  not_a_date_axis: 'The periods are not dates, so there is no year before',
+  no_date_column: t('calcMenu.needs_a_date_column_to_form'),
+  no_periods: t('calcMenu.no_periods_to_calculate_over'),
+  not_a_date_axis: t('calcMenu.the_periods_are_not_dates_so'),
 };
 
 /**
@@ -400,13 +400,13 @@ async function paintMetricCalc(card: any, body: HTMLElement): Promise<void> {
   if (!r || r.ok === false) { line.remove(); return; }
   if (r.reason) {
     line.classList.add('is-hint');
-    line.textContent = TC_KPI_REASONS[r.reason] || 'Cannot calculate this here';
+    line.textContent = TC_KPI_REASONS[r.reason] || t('calcMenu.cannot_calculate_this_here');
     return;
   }
   if (valEl) valEl.textContent = r.text;
   line.textContent = r.line;
   const info = tcKindInfo(r.kind);
-  line.title = (info ? info.label : 'Calculated') + (r.period ? ', for ' + r.period : '');
+  line.title = (info ? info.label : t('calcMenu.calculated')) + (r.period ? t('calcMenu.for', { period: r.period }) : '');
   body.classList.add('has-calc');
   // The label under the figure repeats the card's title in the common case;
   // with a calc line to show, that is the line the card can spare (as Compare does).
@@ -424,9 +424,9 @@ async function tcRenderKpiProps(card: any, host: HTMLElement): Promise<void> {
   const h = document.createElement('div');
   h.className = 'an-kpi-props-h';
   h.appendChild(icon('function', 14));
-  const t = document.createElement('span');
-  t.textContent = 'Calculate as';
-  h.appendChild(t);
+  const tv = document.createElement('span');
+  tv.textContent = t('calcMenu.calculate_as');
+  h.appendChild(tv);
   sec.appendChild(h);
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -434,13 +434,13 @@ async function tcRenderKpiProps(card: any, host: HTMLElement): Promise<void> {
   btn.setAttribute('aria-haspopup', 'menu');
   const info = m.calc ? tcKindInfo(m.calc.kind) : null;
   const btnText = document.createElement('span');
-  btnText.textContent = info ? info.label + (TC_MOVING.has(info.kind) ? ' (' + (m.calc.window || 3) + ')' : '') : 'None';
+  btnText.textContent = info ? info.label + (TC_MOVING.has(info.kind) ? ' (' + (m.calc.window || 3) + ')' : '') : t('common.none');
   btn.appendChild(btnText);
   btn.appendChild(icon('chevron-down', 12));
   sec.appendChild(btn);
   const note = document.createElement('p');
   note.className = 'an-prop-note an-prop-note--info';
-  note.textContent = 'Shows the figure as a calculation over its periods — the latest against the ones before it — or as a share of the unfiltered total.';
+  note.textContent = t('calcMenu.shows_the_figure_as_a_calculation');
   sec.appendChild(note);
   host.appendChild(sec);
 
@@ -449,11 +449,11 @@ async function tcRenderKpiProps(card: any, host: HTMLElement): Promise<void> {
     const r = await window.hubPower.kpiCalcOptions(currentProjectId, { metricId: m.metricId, datasetId: m.datasetId, column: m.column, aggregation: m.aggregation });
     dateColumn = r && r.ok ? r.dateColumn : null;
   } catch (_) { dateColumn = null; }
-  const ctx: TcContext = { surface: 'kpi', dims: [], periodsOff: dateColumn ? '' : 'Needs a date column to form periods' };
+  const ctx: TcContext = { surface: 'kpi', dims: [], periodsOff: dateColumn ? '' : t('calcMenu.needs_a_date_column_to_form') };
   btn.addEventListener('click', () => tcOpenCalcMenu(btn, m.calc, ctx, (calc) => {
     if (calc) m.calc = calc;
     else delete m.calc;
-    markDashDirty('Calculate as');
+    markDashDirty(t('calcMenu.calculate_as'));
     renderDashGrid();
     anPaintSelection();
     anRenderKpiProps(card);

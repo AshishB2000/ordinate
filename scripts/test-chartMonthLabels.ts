@@ -21,6 +21,7 @@ import { ok, failureCount, finish } from './selfcheck';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vm from 'vm';
+import { withT } from './i18nNode';
 
 const HUB = path.join(__dirname, '..', 'renderer', 'hub');
 
@@ -51,7 +52,7 @@ sandbox.ChartBoxPlot = undefined;
 sandbox.matchMedia = () => ({ matches: false });
 sandbox.document = { documentElement: {} };
 sandbox.getComputedStyle = () => ({ getPropertyValue: () => '' });
-vm.createContext(sandbox);
+vm.createContext(withT(sandbox));
 
 const source = PRELUDE + '\n' + CHART_SCRIPTS
   .map((f) => '\n// ==== ' + f + ' ====\n' + fs.readFileSync(path.join(HUB, f), 'utf8'))

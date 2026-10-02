@@ -42,7 +42,7 @@ function fmtColorRow(
   sw.className = 'fmt-swatch' + (token ? '' : ' is-auto');
   sw.dataset.fmtKey = 'color:' + label;
   if (token) sw.style.background = fmtHex(token, palette);
-  sw.setAttribute('aria-label', 'Colour of ' + name + (token ? ': colour ' + (OrdColorMap.slotIndex(token) + 1) : ': not set'));
+  sw.setAttribute('aria-label', t('fmtColorsUi.colour_of', { name, p1: (token ? t('fmtColorsUi.colour', { p0: (OrdColorMap.slotIndex(token) + 1) }) : t('fmtColorsUi.not_set')) }));
   sw.setAttribute('aria-expanded', 'false');
   const text = document.createElement('span');
   text.className = 'fmt-color-name';
@@ -53,21 +53,21 @@ function fmtColorRow(
   const picker = document.createElement('div');
   picker.className = 'fmt-slots';
   picker.hidden = true;
-  OrdColorMap.COLOR_TOKENS.forEach((t, i) => {
+  OrdColorMap.COLOR_TOKENS.forEach((tv, i) => {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'cm-swatch' + (t === token ? ' cm-swatch-active' : '');
-    b.dataset.token = t;
+    b.className = 'cm-swatch' + (tv === token ? ' cm-swatch-active' : '');
+    b.dataset.token = tv;
     b.style.setProperty('--sw-color', palette[i % palette.length]);
-    b.setAttribute('aria-label', 'Colour ' + (i + 1));
-    b.addEventListener('click', (e) => { e.stopPropagation(); onPick(t); });
+    b.setAttribute('aria-label', t('fmtColorsUi.colour_2', { p0: (i + 1) }));
+    b.addEventListener('click', (e) => { e.stopPropagation(); onPick(tv); });
     picker.appendChild(b);
   });
   const auto = document.createElement('button');
   auto.type = 'button';
   auto.className = 'fmt-slot-auto';
-  auto.textContent = 'Auto';
-  auto.title = 'Forget this colour — it is dealt again when next drawn';
+  auto.textContent = t('common.auto');
+  auto.title = t('fmtColorsUi.forget_this_colour_it_is_dealt');
   auto.addEventListener('click', (e) => { e.stopPropagation(); onPick(null); });
   picker.appendChild(auto);
 
@@ -86,9 +86,9 @@ function fmtColorRow(
 function fmtProjectColorList(body: HTMLElement, ctx: FmtPanelCtx, column: string, values: any[]): void {
   const head = document.createElement('div');
   head.className = 'fmt-sub';
-  head.textContent = '“' + column + '” colours';
+  head.textContent = t('fmtColorsUi.colours', { column });
   body.appendChild(head);
-  fmtNote(body, 'Shared by every chart in this project.');
+  fmtNote(body, t('fmtColorsUi.shared_by_every_chart_in_this'));
   const palette = fmtPanelPalette(ctx.ov(), ctx.colorEl() || body);
   const list = document.createElement('div');
   list.className = 'fmt-color-list';
@@ -98,7 +98,7 @@ function fmtProjectColorList(body: HTMLElement, ctx: FmtPanelCtx, column: string
   }));
   body.appendChild(list);
   if (values.length > shown.length) {
-    fmtNote(body, (values.length - shown.length) + ' more — every value is in the column’s profile, under Data.');
+    fmtNote(body, t('fmtColorsUi.more_every_value_is_in_the', { p0: (values.length - shown.length) }));
   }
   const actions = document.createElement('div');
   actions.className = 'fmt-actions';
@@ -111,8 +111,8 @@ function fmtProjectColorList(body: HTMLElement, ctx: FmtPanelCtx, column: string
     b.addEventListener('click', () => { void run().then((ok) => { if (ok) ctx.repaint(); }); });
     actions.appendChild(b);
   };
-  btn('Apply palette', 'Deal the palette out again, in this chart’s order', () => fmtApplyPalette(column, values));
-  btn('Reset', 'Forget these colours — each value is dealt one when next drawn', () => fmtResetColors(column));
+  btn(t('common.apply_palette'), t('fmtColorsUi.deal_the_palette_out_again_in'), () => fmtApplyPalette(column, values));
+  btn(t('common.reset'), t('fmtColorsUi.forget_these_colours_each_value_is'), () => fmtResetColors(column));
   body.appendChild(actions);
 }
 
@@ -127,13 +127,13 @@ function fmtColoursSection(host: HTMLElement, ctx: FmtPanelCtx): void {
   if (type === 'table' || type.indexOf('map_') === 0 || type === 'pivot') return;
   const ov = ctx.ov();
   const series = chartSeries(ctx.data || {}).filter((s) => s.role !== 'overlay');
-  const body = fmtSection(host, 'Colours');
-  if (!ctx.data) { fmtNote(body, 'Reading the chart…'); return; }
+  const body = fmtSection(host, t('common.colours'));
+  if (!ctx.data) { fmtNote(body, t('fmtColorsUi.reading_the_chart')); return; }
   const scope = ctx.scope;
   const s = resolveChartType(type);
 
   if (fmtCanColorByCategory(type, ctx.data)) {
-    fmtSwitch(body, 'colorByCategory', 'Colour bars by category', !!ov.colorByCategory,
+    fmtSwitch(body, 'colorByCategory', t('fmtColorsUi.colour_bars_by_category'), !!ov.colorByCategory,
       (on) => ctx.patch({ colorByCategory: on || null }));
   }
 
@@ -141,7 +141,7 @@ function fmtColoursSection(host: HTMLElement, ctx: FmtPanelCtx): void {
   const labels = Array.isArray(ctx.data.labels) ? ctx.data.labels : [];
   if (fmtColorsByCategory(type, series, ov)) {
     if (scope && scope.category) fmtProjectColorList(body, ctx, scope.category, labels);
-    else fmtNote(body, 'Save this chart as a visual to give its categories project colours.');
+    else fmtNote(body, t('fmtColorsUi.save_this_chart_as_a_visual'));
   }
   // …and the series, when they are a split column's values.
   const perSeries = PER_SERIES_DATASET_TYPES.has(type);
@@ -151,7 +151,7 @@ function fmtColoursSection(host: HTMLElement, ctx: FmtPanelCtx): void {
     // Measure series: this visual's own colours.
     const head = document.createElement('div');
     head.className = 'fmt-sub';
-    head.textContent = series.length > 1 ? 'Series colours' : 'Series colour';
+    head.textContent = series.length > 1 ? t('fmtColorsUi.series_colours') : t('fmtColorsUi.series_colour');
     body.appendChild(head);
     const palette = fmtPanelPalette(ov, ctx.colorEl() || body);
     const list = document.createElement('div');
@@ -169,14 +169,14 @@ function fmtColoursSection(host: HTMLElement, ctx: FmtPanelCtx): void {
   }
 
   // Value palettes: a bar family's measures, or a heatmap's one measure.
-  const valueKinds: Array<[string, string]> = [['', 'Categorical'], ['sequential', 'Sequential'], ['diverging', 'Diverging']];
+  const valueKinds: Array<[string, string]> = [['', t('fmtColorsUi.categorical')], ['sequential', t('fmtColorsUi.sequential')], ['diverging', t('fmtColorsUi.diverging')]];
   const barLike = s.chartType === 'bar' && !s.isFunnel && !s.isHistogram && !s.isWaterfall && !s.isBullet && !s.isPareto;
   const targets = s.isMatrix ? ctx.measures.slice(0, 1)
     : barLike && !(scope && scope.series) ? series.map((x) => String(x.name || '')) : [];
   if (!targets.length) return;
   const head = document.createElement('div');
   head.className = 'fmt-sub';
-  head.textContent = 'Colour by value';
+  head.textContent = t('fmtColorsUi.colour_by_value');
   body.appendChild(head);
   const mp = ov.measurePalettes || {};
   const accent = getCSSVar('--accent', ctx.colorEl() || body) || CHART_PALETTE[0];

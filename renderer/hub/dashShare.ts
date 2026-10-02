@@ -290,7 +290,7 @@ function formatControlSummaryPart(card: any): string {
     // Cap the summary at 5 named values — a multi-select with dozens picked
     // would otherwise blow the header out to an unreadable single line.
     value = vals.length > 5
-      ? vals.slice(0, 5).join(', ') + ', and ' + (vals.length - 5) + ' more'
+      ? t('dashShare.and_more', { p0: vals.slice(0, 5).join(', '), p1: (vals.length - 5) })
       : vals.join(', ');
   } else if (control.kind === 'date_range') {
     value = ppIsRelative(cur) || cur.from || cur.to ? periodValueText(cur) : '';
@@ -298,7 +298,7 @@ function formatControlSummaryPart(card: any): string {
     value = cur.value || '';
   }
   if (!value) return '';
-  return (control.label || 'Filter') + ' = ' + value;
+  return (control.label || t('common.filter')) + ' = ' + value;
 }
 
 // Build the serializable export bundle. `forCapture` forces EVERY visual to a PNG image
@@ -343,17 +343,17 @@ async function assembleExportBundle(forCapture: boolean): Promise<any> {
       // cardKinds.ts: an image exports as its picture; layout-only kinds as nothing.
       const extra = await exportAuthoringCard(card, layout);
       if (extra !== undefined) { if (extra) cards.push(extra); continue; }
-      cards.push({ kind: 'broken', layout, reason: 'Unknown card' });
+      cards.push({ kind: 'broken', layout, reason: t('dashShare.unknown_card') });
     }
-    pages.push({ name: page.name || 'Page', cards });
+    pages.push({ name: page.name || t('common.page'), cards });
   }
   return {
-    name: (dashCurrent && dashCurrent.name) || 'Dashboard',
+    name: (dashCurrent && dashCurrent.name) || t('common.dashboard'),
     pages,
     // One muted line under the title, prefixed so a reader knows the figures
     // below are a SLICE — "Filtered: region = West · Quarter = Q3". Empty when
     // nothing is filtering, which is the honest thing to print in that case.
-    controlsSummary: controlParts.length ? 'Filtered: ' + controlParts.join(' · ') : '',
+    controlsSummary: controlParts.length ? t('common.filtered', { p0: controlParts.join(' · ') }) : '',
     // A shared snapshot has to LOOK like what the author saw, so the style
     // travels with the bundle. Main re-clamps it (dashboardExport.sanitizeBundle)
     // — this is a closed enum on both sides, never free-form CSS.
@@ -388,7 +388,7 @@ async function buildMetricExportCard(card: any, layout: any): Promise<any> {
     }
   }
   if (!currentProjectId || !m.datasetId || !m.column || !m.aggregation) {
-    return { kind: 'broken', layout, reason: 'Metric not configured' };
+    return { kind: 'broken', layout, reason: t('dashShare.metric_not_configured') };
   }
   let r: any;
   try {
@@ -397,7 +397,7 @@ async function buildMetricExportCard(card: any, layout: any): Promise<any> {
       effectiveFilters(), dashParamPayload(),
     );
   } catch (_) { r = { ok: false }; }
-  if (!r || r.ok === false) return { kind: 'broken', layout, reason: 'Source removed' };
+  if (!r || r.ok === false) return { kind: 'broken', layout, reason: t('common.source_removed') };
   const value = r.value == null ? null : fmtWith(r.value, m.format || 'auto');
   return { kind: 'metric', layout, label, subLabel, value, format: m.format || 'auto' };
 }
@@ -405,12 +405,12 @@ async function buildMetricExportCard(card: any, layout: any): Promise<any> {
 async function buildVisualExportCard(
   card: any, layout: any, forCapture: boolean, measure: DashExportMeasure,
 ): Promise<any> {
-  if (!currentProjectId || (!card.visualId && !card.visual)) return { kind: 'broken', layout, reason: 'No visual selected' };
+  if (!currentProjectId || (!card.visualId && !card.visual)) return { kind: 'broken', layout, reason: t('dashShare.no_visual_selected') };
   // Same two-shaped resolution as renderVisualCard: an inline publish-time
   // snapshot wins, so an export of a published dashboard carries the frozen
   // definition — and still exports fine after the source visual is deleted.
   const resolved = await resolveCardVisual(card);
-  if (!resolved) return { kind: 'broken', layout, reason: 'Source removed' };
+  if (!resolved) return { kind: 'broken', layout, reason: t('common.source_removed') };
   const visual = resolved.visual;
   const merged = mergeDashFilters(effectiveFilters(), visual.filters);
   // Asked WITH the share path: main applies the project's Share policy, so a
@@ -418,7 +418,7 @@ async function buildVisualExportCard(
   let res: any;
   try { res = await pvVisualData(currentProjectId, visual.datasetId, visual.encoding, merged, dashParamPayload(), 'export', visual.analytics); }
   catch (_) { res = { ok: false }; }
-  if (!res || res.ok === false) return { kind: 'broken', layout, reason: res && res.hiddenByPolicy ? res.error : 'Could not draw this visual' };
+  if (!res || res.ok === false) return { kind: 'broken', layout, reason: res && res.hiddenByPolicy ? res.error : t('dashShare.could_not_draw_this_visual') };
   const data = res.data || { labels: [], series: [] };
   const type = typeof visual.chartType === 'string' && visual.chartType ? visual.chartType : 'column';
   const title = dashSubst(visual.name || '');
@@ -455,7 +455,7 @@ async function buildVisualExportCard(
       ? await captureMapPNG(data, type, frame)
       : await captureChartPNG(type, data, fmtWithScope(visual.overrides || {}, { projectId: currentProjectId, encoding: visual.encoding }), frame);
   } catch (_) { png = null; }
-  if (!png) return { kind: 'broken', layout, reason: 'Chart could not be rendered' };
+  if (!png) return { kind: 'broken', layout, reason: t('dashShare.chart_could_not_be_rendered') };
   return { kind: 'image', layout, png, title };
 }
 
@@ -484,7 +484,7 @@ function buildDashCaptureHtml(bundle: any): string {
     body += '<div class="d-grid">';
     (page.cards || []).forEach((card: any) => {
       const L = card.layout || { x: 0, y: 0, w: 6, h: 4 };
-      const cell = `grid-column:${(L.x || 0) + 1} / span ${L.w || 1};grid-row:${(L.y || 0) + 1} / span ${L.h || 1};`;
+      const cell = t('dashShare.grid_column_span_grid_row_span', { p0: (L.x || 0) + 1, p1: L.w || 1, p2: (L.y || 0) + 1, p3: L.h || 1 });
       // Every card type wears the same head strip the app gives it — the "what
       // is this" line lives THERE, never doubled into the body (the rule
       // dashCardTitle states in dashGrid.ts).
@@ -503,7 +503,7 @@ function buildDashCaptureHtml(bundle: any): string {
         if (card.text) inner = `<p class="d-tb">${esc(card.text)}</p>`;
       } else {
         kind = 'broken';
-        inner = `<div class="d-bk">Unavailable</div><div class="d-bkr">${esc(card.reason || 'Source removed')}</div>`;
+        inner = `<div class="d-bk">Unavailable</div><div class="d-bkr">${esc(card.reason || t('common.source_removed'))}</div>`;
       }
       const head = headText ? `<div class="d-head">${esc(headText)}</div>` : '';
       body += `<div class="d-card d-card--${esc(kind)}" style="${cell}">`
@@ -560,13 +560,13 @@ function buildDashCaptureHtml(bundle: any): string {
 async function handleDashExport(): Promise<void> {
   if (!dashCurrent) return;
   const choice = await dashChooseModal(
-    'Export dashboard',
+    t('dashShare.export_dashboard'),
     [
-      { value: 'html', label: 'Interactive HTML (charts export as images)' },
-      { value: 'pdf', label: 'PDF document' },
-      { value: 'png', label: 'PNG image' },
+      { value: 'html', label: t('dashShare.interactive_html_charts_export_as_images') },
+      { value: 'pdf', label: t('common.pdf_document') },
+      { value: 'png', label: t('dashShare.png_image') },
     ],
-    'Export',
+    t('common.export_2'),
     pvShareNote('export', await pvCardDatasetIds(dashCurrent)),
   );
   if (choice === null) return;
@@ -589,16 +589,16 @@ async function dashExportAs(choice: DashExportFormat, noted = false): Promise<vo
   if (!(await pvShareGate('export', await pvCardDatasetIds(dashCurrent), { noted }))) return;
   const safe = String(dashCurrent.name || 'dashboard').replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'dashboard';
   if (choice === 'html') {
-    showToast('Building HTML…');
+    showToast(t('dashShare.building_html'));
     try {
       const bundle = await assembleExportBundle(false);
       const res = await window.hub.exportDashboardHtml(bundle, safe + '.html');
       reportExportResult(res, 'HTML');
-    } catch (e) { showToast('Export failed'); }
+    } catch (e) { showToast(t('common.export_failed')); }
     return;
   }
   // PDF / PNG: build the offscreen one-pager (all visuals as PNGs), then capture in MAIN.
-  showToast(choice === 'pdf' ? 'Building PDF…' : 'Building image…');
+  showToast(choice === 'pdf' ? t('dashShare.building_pdf') : t('dashShare.building_image'));
   try {
     const bundle = await assembleExportBundle(true);
     const html = buildDashCaptureHtml(bundle);
@@ -606,41 +606,41 @@ async function dashExportAs(choice: DashExportFormat, noted = false): Promise<vo
       ? await window.hub.exportDashboardPdf(html, 1160, safe + '.pdf')
       : await window.hub.exportDashboardPng(html, 1160, safe + '.png');
     reportExportResult(res, choice === 'pdf' ? 'PDF' : 'PNG');
-  } catch (e) { showToast('Export failed'); }
+  } catch (e) { showToast(t('common.export_failed')); }
 }
 
 function reportExportResult(res: any, kind: string): void {
-  if (res && res.ok) showToast(kind + ' saved');
+  if (res && res.ok) showToast(kind + t('dashShare.saved'));
   else if (res && res.canceled) { /* user cancelled the save panel — no toast */ }
-  else showToast((res && res.error) || (kind + ' export failed'));
+  else showToast((res && res.error) || (t('dashShare.export_failed', { kind })));
 }
 
 // ── Share (reveal the git-shareable, secret-free project folder) ──────────────
 function handleDashShare(): void {
-  if (!currentProjectId) { window.alert('Open a project first.'); return; }
+  if (!currentProjectId) { window.alert(t('common.open_a_project_first')); return; }
   const overlay = document.createElement('div');
   overlay.className = 'ws-modal-overlay';
   const box = document.createElement('div');
   box.className = 'ws-modal dash-share-modal';
   const h = document.createElement('div');
   h.className = 'ws-modal-title';
-  h.textContent = 'Share this project';
+  h.textContent = t('dashShare.share_this_project');
   const p1 = document.createElement('p');
   p1.className = 'dash-share-note';
-  p1.textContent = 'The project folder holds your datasets, visuals, and dashboards as plain text (JSON) — it is the shareable, git-able artifact. Commit it to a repo and others can open the exact same workspace.';
+  p1.textContent = t('dashShare.the_project_folder_holds_your_datasets');
   const p2 = document.createElement('p');
   p2.className = 'dash-share-note dash-share-note--safe';
-  p2.textContent = 'Connection secrets and API keys are NOT in this folder. They stay in a separate, gitignored config file and never leave your machine — so sharing the folder never leaks a secret.';
+  p2.textContent = t('dashShare.connection_secrets_and_api_keys_are');
   const actions = document.createElement('div');
   actions.className = 'ws-modal-actions';
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'btn';
-  close.textContent = 'Close';
+  close.textContent = t('common.close');
   const reveal = document.createElement('button');
   reveal.type = 'button';
   reveal.className = 'btn btn-primary';
-  reveal.textContent = 'Reveal folder';
+  reveal.textContent = t('dashShare.reveal_folder');
   let done = false;
   function shut(): void {
     if (done) return; done = true;
@@ -654,8 +654,8 @@ function handleDashShare(): void {
   reveal.addEventListener('click', async () => {
     try {
       const res = await window.hub.revealProjectFolder(currentProjectId as string);
-      if (!res || res.ok === false) showToast((res && res.error) || 'Could not reveal the folder');
-    } catch (_) { showToast('Could not reveal the folder'); }
+      if (!res || res.ok === false) showToast((res && res.error) || t('dashShare.could_not_reveal_the_folder'));
+    } catch (_) { showToast(t('dashShare.could_not_reveal_the_folder')); }
     shut();
   });
   actions.appendChild(close);

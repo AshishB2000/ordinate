@@ -108,7 +108,7 @@ function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx,
     closeChartMenu();
     const dataUrl = await imageUrl();
     if (!dataUrl) return;
-    if (window.hub) { window.hub.copyImage(dataUrl); showToast('Chart copied to clipboard'); }
+    if (window.hub) { window.hub.copyImage(dataUrl); showToast(t('chartControls.chart_copied_to_clipboard')); }
   }
 
   // ── Action: download chart PNG ───────────────────────────────────────
@@ -119,7 +119,7 @@ function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx,
     const result = await window.hub.saveImage(dataUrl);
     if (result && result.ok) {
       const name = result.dest ? result.dest.split('/').pop() : 'chart.png';
-      showToast(`Saved: ${name}`);
+      showToast(t('common.saved_2', { name }));
     }
   }
 
@@ -129,7 +129,7 @@ function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx,
   async function onCopyData() {
     closeChartMenu();
     const shaped = await pvShareData(entry.drill || null, data, 'export');
-    if (shaped && window.hub) { window.hub.copyText(dataToTSV(shaped)); showToast('Data copied to clipboard'); }
+    if (shaped && window.hub) { window.hub.copyText(dataToTSV(shaped)); showToast(t('common.data_copied_to_clipboard')); }
   }
 
   // ── Action: show the rows behind this visual ─────────────────────────
@@ -308,7 +308,7 @@ function patchOverride(entry, overrideKey, partial) {
 function dataToTSV(data) {
   const labels = Array.isArray(data.labels) ? data.labels : [];
   const series = Array.isArray(data.series) ? data.series : [];
-  const header = ['Label', ...series.map(s => s.name || '')].join('\t');
+  const header = [t('common.label'), ...series.map(s => s.name || '')].join('\t');
   const rows = labels.map((label, i) =>
     [label, ...series.map(s => (s.values && s.values[i] != null) ? s.values[i] : '')].join('\t'));
   return [header, ...rows].join('\n');
@@ -385,7 +385,7 @@ function setRowCheck(rowBtn, on) {
 }
 
 const VALUE_MODES = [
-  ['off', 'Off'], ['all', 'All'], ['maxmin', 'Max & min'], ['max', 'Max'], ['min', 'Min'],
+  ['off', t('common.off')], ['all', t('common.all')], ['maxmin', t('chartControls.max_min')], ['max', t('common.max')], ['min', t('common.min')],
 ];
 
 // Single-select Values menu. onPick(mode) fires once, then the menu closes.
@@ -414,7 +414,7 @@ function openPeriodsMenu(anchorBtn, names, hidden, onCommit) {
       setRowCheck(allRow, hidden.size === 0);
       names.forEach((_, i) => setRowCheck(rows[i], !hidden.has(i)));
     };
-    const allRow = miniMenuRow('All');
+    const allRow = miniMenuRow(t('common.all'));
     allRow.addEventListener('click', (e) => {
       e.stopPropagation();
       if (hidden.size === 0) return;
@@ -425,7 +425,7 @@ function openPeriodsMenu(anchorBtn, names, hidden, onCommit) {
     sep.className = 'chart-menu-sep';
     sec.appendChild(sep);
     names.forEach((name, i) => {
-      const row = miniMenuRow(name || ('Series ' + (i + 1)));
+      const row = miniMenuRow(name || (t('common.series_2', { p0: (i + 1) })));
       rows[i] = row;
       row.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -461,8 +461,8 @@ function addChartControls(chartWrapper, container, canvas, data, type, entry, tu
     const valuesBtn = document.createElement('button');
     valuesBtn.type = 'button';
     valuesBtn.className = 'cv-values-btn' + (valueMode !== 'off' ? ' active' : '');
-    cvLabelCaret(valuesBtn, 'Values');
-    valuesBtn.setAttribute('aria-label', 'Value labels');
+    cvLabelCaret(valuesBtn, t('common.values'));
+    valuesBtn.setAttribute('aria-label', t('common.value_labels'));
     valuesBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       openValuesMenu(valuesBtn, valueMode, (mode) => {
@@ -482,7 +482,7 @@ function addChartControls(chartWrapper, container, canvas, data, type, entry, tu
     const periodsBtn = document.createElement('button');
     periodsBtn.type = 'button';
     periodsBtn.className = 'cv-periods-btn' + (hidden.size ? ' active' : '');
-    cvLabelCaret(periodsBtn, data.dataShape === 'time_series' ? 'Periods' : 'Series');
+    cvLabelCaret(periodsBtn, data.dataShape === 'time_series' ? t('common.periods') : t('common.series'));
     periodsBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       openPeriodsMenu(periodsBtn, series.map(s => s.name), hidden, () => {
@@ -518,14 +518,14 @@ function addChartControls(chartWrapper, container, canvas, data, type, entry, tu
     box.className = 'cv-map-period';                 // reuse the map period dropdown styling
     const select = document.createElement('select');
     select.className = 'cv-map-period-select';
-    select.setAttribute('aria-label', 'Select period');
+    select.setAttribute('aria-label', t('common.select_period'));
     const curIdx = Number.isInteger(overrides.periodIdx)
       ? Math.max(0, Math.min(overrides.periodIdx, series.length - 1))
       : series.length - 1;
     series.forEach((s, i) => {
       const opt = document.createElement('option');
       opt.value = String(i);
-      opt.textContent = s.name || ('Period ' + (i + 1));
+      opt.textContent = s.name || (t('common.period', { p0: (i + 1) }));
       if (i === curIdx) opt.selected = true;
       select.appendChild(opt);
     });
@@ -546,7 +546,7 @@ function addChartControls(chartWrapper, container, canvas, data, type, entry, tu
   const menuBtn = document.createElement('button');
   menuBtn.className = 'cv-chart-menu-btn';
   menuBtn.type = 'button';
-  iconOnly(menuBtn, 'more-horizontal', 'Chart options');
+  iconOnly(menuBtn, 'more-horizontal', t('chartControls.chart_options'));
   menuBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     openChartMenu(menuBtn, container, canvas, data, type, entry, turnIdx, overrideKey);

@@ -57,11 +57,11 @@ let haUserName: string | null = null;
 // page's xpGreetingText (5/12/17/22); with no name there is nobody to greet, so
 // "Welcome back" stands.
 function haGreetingText(name: string, hour: number): string {
-  if (!name) return 'Welcome back';
-  if (hour >= 5 && hour < 12) return 'Good morning, ' + name;
-  if (hour >= 12 && hour < 17) return 'Good afternoon, ' + name;
-  if (hour >= 17 && hour < 22) return 'Good evening, ' + name;
-  return 'Good to see you, ' + name; // late night — "Good night" reads as a goodbye
+  if (!name) return t('common.welcome_back');
+  if (hour >= 5 && hour < 12) return t('homeAsk.good_morning', { name });
+  if (hour >= 12 && hour < 17) return t('homeAsk.good_afternoon', { name });
+  if (hour >= 17 && hour < 22) return t('homeAsk.good_evening', { name });
+  return t('homeAsk.good_to_see_you', { name }); // late night — "Good night" reads as a goodbye
 }
 
 // Plural helper: "1 dataset" / "0 datasets".
@@ -85,14 +85,14 @@ async function haPaintGreeting(proj: { id: string; name: string }): Promise<void
   // "{project} · N datasets · M dashboards [· K captures]" — dataset:list,
   // analysis:list and history:list carry summaries only; "analysis" records ARE
   // the user-facing dashboards.
-  if (!proj.id) { sub.textContent = 'No project yet — bring some data in to begin.'; return; }
+  if (!proj.id) { sub.textContent = t('homeAsk.no_project_yet_bring_some_data'); return; }
   let dsN = 0;
   let dbN = 0;
   let capN = 0;
   try { const d = await window.hub.listDatasets(proj.id); dsN = Array.isArray(d) ? d.length : 0; } catch (_) { /* 0 */ }
   try { const a = await window.hub.listAnalyses(proj.id); dbN = Array.isArray(a) ? a.length : 0; } catch (_) { /* 0 */ }
   try { const c = await window.hub.listCaptures(proj.id); capN = Array.isArray(c) ? c.length : 0; } catch (_) { /* 0 */ }
-  const parts = [proj.name || 'Workspace', haPlural(dsN, 'dataset'), haPlural(dbN, 'dashboard')];
+  const parts = [proj.name || t('common.workspace'), haPlural(dsN, 'dataset'), haPlural(dbN, 'dashboard')];
   // Only when there ARE any: datasets and dashboards are what every project is
   // made of, so "0 datasets" is a state worth naming. Captures are optional —
   // a project that has never taken one should not be told it has none.
@@ -109,10 +109,11 @@ async function haPaintGreeting(proj: { id: string; name: string }): Promise<void
 // each surface renders its own button wired to its own input. A second generator
 // would be two voices for one idea, and the sample-project special cases below
 // would only ever be fixed in one of them.
+// i18n-skip: a dataset NAME, matched against the sample project's (scripts/test-sampleProject.ts)
 const HA_SAMPLE_DATASET = 'Retail orders';
 const HA_SAMPLE_PROMPTS = [
-  'Which region had the worst month?',
-  'Revenue by category this year',
+  t('homeAsk.which_region_had_the_worst_month'),
+  t('homeAsk.revenue_by_category_this_year'),
 ];
 
 /** The bundled sample, and nothing else the user has brought in yet. */
@@ -159,9 +160,9 @@ async function haSuggestPrompts(pid: string, preferred?: string): Promise<string
   const lead = (preferred || '').trim();
   if (lead) names = [lead].concat(names.filter((n) => n !== lead));
 
-  const prompts: string[] = ['What stands out in ' + names[0] + '?'];
-  if (names.length > 1) prompts.push('How do ' + names[0] + ' and ' + names[1] + ' compare?');
-  prompts.push('Summarise ' + names[0] + ' in plain terms');
+  const prompts: string[] = [t('homeAsk.what_stands_out_in', { p0: names[0] })];
+  if (names.length > 1) prompts.push(t('homeAsk.how_do_and_compare', { p0: names[0], p1: names[1] }));
+  prompts.push(t('homeAsk.summarise_in_plain_terms', { p0: names[0] }));
   return prompts.slice(0, 3);
 }
 

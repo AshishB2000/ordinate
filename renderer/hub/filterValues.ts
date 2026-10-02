@@ -44,16 +44,16 @@ function isValuelessFilterOp(op: string | null | undefined): boolean {
 /** Human labels for every operator, shared by all three filter surfaces. */
 const FILTER_OP_LABELS: Record<string, string> = {
   '=': 'equals',
-  '!=': 'does not equal',
-  '>': 'greater than',
-  '<': 'less than',
-  '>=': 'at least',
-  '<=': 'at most',
+  '!=': t('common.does_not_equal'),
+  '>': t('common.greater_than'),
+  '<': t('common.less_than'),
+  '>=': t('common.at_least'),
+  '<=': t('common.at_most'),
   contains: 'contains',
-  is_empty: 'is empty',
-  not_empty: 'is not empty',
-  in: 'is any of',
-  'not in': 'is none of',
+  is_empty: t('common.is_empty'),
+  not_empty: t('common.is_not_empty'),
+  in: t('common.is_any_of'),
+  'not in': t('common.is_none_of'),
 };
 
 /**
@@ -74,7 +74,7 @@ function filterStepSummary(step: any): string {
   if (isValuelessFilterOp(op)) return label;
   if (isListFilterOp(op)) {
     const vals: unknown[] = Array.isArray(step.values) ? step.values : [];
-    if (vals.length === 0) return label + ' — no values yet';
+    if (vals.length === 0) return t('filterValues.no_values_yet', { label });
     if (vals.length > 3) return `${label} ${formatFilterValues(vals.slice(0, 3))} +${vals.length - 3}`;
     return `${label} ${formatFilterValues(vals)}`;
   }

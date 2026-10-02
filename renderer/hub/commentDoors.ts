@@ -38,9 +38,9 @@ function cmtPaintCount(b: HTMLElement, open: number, total: number): void {
   if (n) n.textContent = open ? String(open) : '';
   b.classList.toggle('is-empty', total === 0);
   b.classList.toggle('has-open', open > 0);
-  const label = 'Comments (' + open + ')';
+  const label = t('commentDoors.comments', { open });
   b.setAttribute('aria-label', label);
-  b.title = open ? open + (open === 1 ? ' open comment' : ' open comments') : total ? 'Comments — all resolved' : 'Comment on this';
+  b.title = open ? t('commentDoors.text', { open }) : total ? t('commentDoors.comments_all_resolved') : t('commentDoors.comment_on_this');
 }
 
 /** A page-head Comments button, inserted before `beforeId`. */
@@ -52,7 +52,7 @@ function cmtHeadButton(id: string, beforeId: string, onClick: () => void): HTMLB
   b.id = id;
   b.className = 'btn btn-sm cmt-head-btn';
   b.appendChild(icon('message-square', 16));
-  b.appendChild(Object.assign(document.createElement('span'), { className: 'cmt-head-label', textContent: 'Comments' }));
+  b.appendChild(Object.assign(document.createElement('span'), { className: 'cmt-head-label', textContent: t('commentDoors.comments_2') }));
   b.appendChild(Object.assign(document.createElement('span'), { className: 'cmt-count tnum' }));
   b.addEventListener('click', onClick);
   before.parentElement.insertBefore(b, before);
@@ -120,7 +120,7 @@ function cmtOnChartClick(e: MouseEvent): void {
   const point: { label: string; series?: string } = { label: String(mark.category) };
   if (mark.series) point.series = String(mark.series);
   if (card) { openCommentThread('card', String(card.dataset.cardId || ''), undefined, { point }); return; }
-  if (!vizEditingId) { showToast('Save this visual first — then ⌘-click a mark to comment on it'); return; }
+  if (!vizEditingId) { showToast(t('commentDoors.save_this_visual_first_then_click')); return; }
   openCommentThread('visual', vizEditingId, undefined, { point });
 }
 
@@ -136,7 +136,7 @@ function cmtPaintHome(): void {
     sec = document.createElement('section');
     sec.id = 'home-comments';
     sec.className = 'home-sec home-comments';
-    sec.setAttribute('aria-label', 'Recent comments');
+    sec.setAttribute('aria-label', t('commentDoors.recent_comments'));
     // Above "What stands out": a question waiting on someone outranks a finding.
     anchor.parentElement.insertBefore(sec, anchor);
   }
@@ -148,7 +148,7 @@ function cmtPaintHome(): void {
   head.className = 'home-sec-head';
   const h = document.createElement('h2');
   h.className = 'home-sec-h';
-  h.textContent = 'Recent comments';
+  h.textContent = t('commentDoors.recent_comments');
   h.appendChild(Object.assign(document.createElement('span'), { className: 'home-sec-count', textContent: open.length + ' open' }));
   head.appendChild(h);
   const row = document.createElement('div');
@@ -173,7 +173,7 @@ function cmtHomeCard(c: any): HTMLElement {
   const top = document.createElement('span');
   top.className = 'cmt-home-top';
   top.append(cmtAvatar(c.author || '?', true),
-    Object.assign(document.createElement('span'), { className: 'cmt-author', textContent: c.author || 'Someone' }),
+    Object.assign(document.createElement('span'), { className: 'cmt-author', textContent: c.author || t('common.someone') }),
     cmtWhen(cmtLastAt(c)));
   const snippet = Object.assign(document.createElement('span'), { className: 'cmt-home-snippet', textContent: cmtPlain(c.body) });
   const on = document.createElement('span');
@@ -184,28 +184,28 @@ function cmtHomeCard(c: any): HTMLElement {
   const replies = c.replies ? c.replies.length : 0;
   if (replies) on.appendChild(Object.assign(document.createElement('span'), { className: 'cmt-home-replies', textContent: replies + (replies === 1 ? ' reply' : ' replies') }));
   b.append(top, snippet, on);
-  b.setAttribute('aria-label', (c.author || 'Someone') + ' on ' + name + ': ' + cmtPlain(c.body).slice(0, 120));
+  b.setAttribute('aria-label', (c.author || t('common.someone')) + t('commentDoors.on') + name + ': ' + cmtPlain(c.body).slice(0, 120));
   b.addEventListener('click', () => void cmtGoTo(c));
   return b;
 }
 
 /** Open the record a thread is on, then the thread. */
 async function cmtGoTo(c: any): Promise<void> {
-  const t = c.target;
-  if (t.kind === 'dataset') { selectSection('datasets'); await openSavedDataset(t.id); }
-  else if (t.kind === 'visual') { selectSection('visuals'); await openSavedVisual(t.id); }
-  else if (t.kind === 'story') await stOpen(t.id);
+  const tv = c.target;
+  if (tv.kind === 'dataset') { selectSection('datasets'); await openSavedDataset(tv.id); }
+  else if (tv.kind === 'visual') { selectSection('visuals'); await openSavedVisual(tv.id); }
+  else if (tv.kind === 'story') await stOpen(tv.id);
   else {
-    const info = cmtTargets[cmtKey(t.kind, t.id)];
-    const aid = t.kind === 'analysis' ? t.id : info && info.analysisId;
-    if (!aid) { showToast('That card is no longer on a dashboard'); return; }
+    const info = cmtTargets[cmtKey(tv.kind, tv.id)];
+    const aid = tv.kind === 'analysis' ? tv.id : info && info.analysisId;
+    if (!aid) { showToast(t('commentDoors.that_card_is_no_longer_on')); return; }
     selectSection('analyses');
     await openAnalysis(aid);
-    if (t.kind === 'analysis') { cmtOpenDashboardThreads(c.id); return; }
+    if (tv.kind === 'analysis') { cmtOpenDashboardThreads(c.id); return; }
     cmtJumpToTarget(c);
     return;
   }
-  openCommentThread(t.kind, t.id, c.id);
+  openCommentThread(tv.kind, tv.id, c.id);
 }
 
 // ── boot ─────────────────────────────────────────────────────────────────────

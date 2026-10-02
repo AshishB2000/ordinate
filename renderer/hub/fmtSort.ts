@@ -25,7 +25,7 @@ function fmtOrderList(body: HTMLElement, ctx: FmtPanelCtx): void {
   const commit = (next: string[]) => ctx.patch({ sort: 'custom', sortOrder: next });
   const list = document.createElement('ol');
   list.className = 'fmt-order';
-  list.setAttribute('aria-label', 'Custom order — drag, or Alt+Up/Down on a focused row');
+  list.setAttribute('aria-label', t('fmtSort.custom_order_drag_or_alt_up'));
   let dragFrom = -1;
   order.forEach((label, i) => {
     const li = fmtKeyed(document.createElement('li'), 'order:' + label);
@@ -76,17 +76,17 @@ function fmtOrderList(body: HTMLElement, ctx: FmtPanelCtx): void {
 function fmtSortSection(host: HTMLElement, ctx: FmtPanelCtx): void {
   if (sortableType.indexOf(ctx.type) < 0) return;
   const ov = ctx.ov();
-  const body = fmtSection(host, 'Sort');
+  const body = fmtSection(host, t('common.sort'));
   const labels = (ctx.data && Array.isArray(ctx.data.labels)) ? ctx.data.labels : [];
-  fmtField(body, 'Order', fmtSelect('sort', [
-    ['none', 'As the data comes'], ['desc', 'Value: high → low'], ['asc', 'Value: low → high'],
-    ['label_asc', 'Label: A → Z'], ['label_desc', 'Label: Z → A'], ['custom', 'Custom order'],
+  fmtField(body, t('fmtSort.order'), fmtSelect('sort', [
+    ['none', t('fmtSort.as_the_data_comes')], ['desc', t('fmtSort.value_high_low')], ['asc', t('fmtSort.value_low_high')],
+    ['label_asc', t('fmtSort.label_a_z')], ['label_desc', t('fmtSort.label_z_a')], ['custom', t('fmtSort.custom_order')],
   ], ov.sort || 'none', (v) => {
     if (v === 'custom') ctx.patch({ sort: 'custom', sortOrder: fmtCustomOrder(labels, ov.sortOrder) });
     else ctx.patch({ sort: v === 'none' ? null : v });
   }));
   if (ov.sort !== 'custom') return;
-  if (!labels.length) { fmtNote(body, 'Reading the categories…'); return; }
-  fmtNote(body, 'Drag to reorder. Categories not in the list follow in their own order.');
+  if (!labels.length) { fmtNote(body, t('fmtSort.reading_the_categories')); return; }
+  fmtNote(body, t('fmtSort.drag_to_reorder_categories_not_in'));
   fmtOrderList(body, ctx);
 }

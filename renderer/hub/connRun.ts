@@ -94,7 +94,7 @@ function makeConnCard(c: any, datasetCount: number): HTMLElement {
   // Redshift connection does not read "Postgres". Unknown ids show verbatim.
   const kindId = c && typeof c.kind === 'string' ? c.kind : '';
   const def = connDefById(kindId);
-  const label = def ? def.label : kindId === 'url' ? 'URL' : kindId || 'Connection';
+  const label = def ? def.label : kindId === 'url' ? 'URL' : kindId || t('common.connection');
 
   card.appendChild(connMakeLogoFor(kindId, label));
 
@@ -105,7 +105,7 @@ function makeConnCard(c: any, datasetCount: number): HTMLElement {
   top.className = 'conn-card-top';
   const name = document.createElement('span');
   name.className = 'conn-card-name';
-  name.textContent = c && c.name ? String(c.name) : 'Untitled connection';
+  name.textContent = c && c.name ? String(c.name) : t('common.untitled_connection');
   top.appendChild(name);
 
   // The health dot is the LAST TEST's verdict, not a live probe — a card list
@@ -115,10 +115,10 @@ function makeConnCard(c: any, datasetCount: number): HTMLElement {
   dot.className = 'conn-dot conn-dot-' + (status === 'ok' ? 'ok' : status === 'error' ? 'error' : 'untested');
   dot.setAttribute('role', 'img');
   dot.title = status === 'ok'
-    ? 'Last test succeeded'
+    ? t('connRun.last_test_succeeded')
     : status === 'error'
-      ? 'Last test failed: ' + String((c && c.lastError) || 'unknown error')
-      : 'Not tested yet';
+      ? t('connRun.last_test_failed', { p0: String((c && c.lastError) || t('connRun.unknown_error')) })
+      : t('connRun.not_tested_yet');
   dot.setAttribute('aria-label', dot.title);
   top.appendChild(dot);
   body.appendChild(top);
@@ -132,11 +132,11 @@ function makeConnCard(c: any, datasetCount: number): HTMLElement {
 
   const meta = document.createElement('span');
   meta.className = 'conn-card-meta';
-  const used = c && c.lastRefreshedAt ? 'used ' + formatSidebarTime(c.lastRefreshedAt) : 'never used';
-  const nDatasets = datasetCount === 1 ? '1 dataset' : datasetCount + ' datasets';
+  const used = c && c.lastRefreshedAt ? 'used ' + formatSidebarTime(c.lastRefreshedAt) : t('connRun.never_used');
+  const nDatasets = datasetCount === 1 ? t('connRun.1_dataset') : datasetCount + ' datasets';
   const nQueries = Array.isArray(c && c.queries) ? c.queries.length : 0;
   meta.textContent = nQueries
-    ? `${nDatasets} · ${nQueries === 1 ? '1 saved query' : nQueries + ' saved queries'} · ${used}`
+    ? `${nDatasets} · ${nQueries === 1 ? t('connRun.1_saved_query') : t('connRun.saved_queries', { nQueries })} · ${used}`
     : `${nDatasets} · ${used}`;
   body.appendChild(meta);
 
@@ -147,7 +147,7 @@ function makeConnCard(c: any, datasetCount: number): HTMLElement {
   const delBtn = document.createElement('button');
   delBtn.type = 'button';
   delBtn.className = 'conn-del';
-  iconOnly(delBtn, 'trash', 'Delete connection');
+  iconOnly(delBtn, 'trash', t('connRun.delete_connection'));
   // The card is itself a <button>; without this the delete opens the workbench
   // on its way past. Same rule as dsList.ts's row actions.
   delBtn.addEventListener('click', (e) => {
@@ -165,7 +165,7 @@ function makeConnCard(c: any, datasetCount: number): HTMLElement {
 
 async function handleConnDelete(c: any): Promise<void> {
   if (!currentProjectId || !c || !c.id) return;
-  if (!window.confirm('Delete this connection? Datasets already imported from it are not removed.')) return;
+  if (!window.confirm(t('connRun.delete_this_connection_datasets_already'))) return;
   try {
     await window.hub.deleteConnection(currentProjectId, String(c.id));
   } catch (_) {

@@ -27,13 +27,13 @@ function renderAuthoringCard(card: any, body: HTMLElement): boolean {
 
 /** The head title when a card has no heading of its own. */
 function cardKindTitle(card: any): string {
-  if (card.type === 'nav') return 'Navigation';
-  if (card.type === 'image') return (card.image && card.image.alt) || 'Image';
-  if (card.type === 'divider') return 'Divider';
+  if (card.type === 'nav') return t('common.navigation');
+  if (card.type === 'image') return (card.image && card.image.alt) || t('common.image');
+  if (card.type === 'divider') return t('common.divider');
   if (card.type === 'container' || card.type === 'tabs') return groupTitle(card);
   if (card.type === 'stats') return swTileTitle(card);
   if (card.type === 'summary') return 'Summary';
-  return 'Text';
+  return t('common.text');
 }
 
 // Properties for a kind with no encoding. The Build/Format/Interactions tabs
@@ -68,11 +68,11 @@ function renderKindProps(card: any): void {
 // The editor head's add row holds four buttons; the new kinds share a fifth,
 // "More", whose menu lists them.
 const KIND_ADDS: Array<[string, string, () => void | Promise<void>]> = [
-  ['Image', 'camera', handleAddImage],
-  ['Divider', 'minus', handleAddDivider],
-  ['Container', 'layout-dashboard', () => handleAddGroup('container')],
-  ['Tabs', 'columns', () => handleAddGroup('tabs')],
-  ['Navigation', 'arrow-right', handleAddNav],
+  [t('common.image'), 'camera', handleAddImage],
+  [t('common.divider'), 'minus', handleAddDivider],
+  [t('common.container'), 'layout-dashboard', () => handleAddGroup('container')],
+  [t('common.tabs'), 'columns', () => handleAddGroup('tabs')],
+  [t('common.navigation'), 'arrow-right', handleAddNav],
   ['Summary', 'sparkles', () => sumAddToTop()], // summaryCard.ts (loads later)
 ];
 
@@ -97,7 +97,7 @@ function initCardKinds(): void {
   more.appendChild(icon('plus'));
   // "More" beside the four add buttons; "Add" once a narrow head folds them in
   // here (authoring.css, the dash-head container query).
-  for (const [cls, text] of [['dash-more-wide', 'More'], ['dash-more-tight', 'Add']]) {
+  for (const [cls, text] of [['dash-more-wide', t('common.more')], ['dash-more-tight', t('common.add')]]) {
     const t = document.createElement('span');
     t.className = cls;
     t.textContent = text;

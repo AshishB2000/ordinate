@@ -33,14 +33,14 @@ const DASH_STYLE_PRESETS: Record<string, any> = {
   dark: { theme: 'dark', density: 'comfortable', accent: 'blue', chosen: true },
 };
 const DASH_STYLE_LABELS: Record<string, string> = {
-  auto: 'Auto', clean: 'Light', executive: 'Executive', dense: 'Dense', dark: 'Dark',
+  auto: t('common.auto'), clean: t('common.light'), executive: t('common.executive'), dense: t('common.dense'), dark: t('common.dark'),
 };
 const DASH_STYLE_NOTES: Record<string, string> = {
-  auto: 'Follows the app — light or dark with your Appearance setting.',
-  clean: 'Always light, whatever the app is set to.',
-  executive: 'Muted palette, serif figures, more presence.',
-  dense: 'Tighter grid and smaller type — more on screen.',
-  dark: 'Always dark, whatever the app is set to.',
+  auto: t('dashStyle.follows_the_app_light_or_dark'),
+  clean: t('dashStyle.always_light_whatever_the_app_is'),
+  executive: t('dashStyle.muted_palette_serif_figures_more'),
+  dense: t('dashStyle.tighter_grid_and_smaller_type_more'),
+  dark: t('dashStyle.always_dark_whatever_the_app_is'),
 };
 
 // Renderer-side clamp. Main sanitizes too (src/analysis/dashboards.ts) and its
@@ -179,7 +179,7 @@ function buildDashStyleStrip(cards: DashMiniCard[], current: any, onPick: (p: st
   const strip = document.createElement('div');
   strip.className = 'dash-style-strip';
   strip.setAttribute('role', 'radiogroup');
-  strip.setAttribute('aria-label', 'Dashboard style');
+  strip.setAttribute('aria-label', t('dashStyle.dashboard_style'));
   const selected = dashPresetOf(current);
   DASH_STYLE_PRESET_ORDER.forEach((name) => {
     const tile = document.createElement('button');
@@ -236,7 +236,7 @@ function setDashStyle(style: any, persist: boolean): void {
   dashCurrent.style = dashSanitizeStyle({ ...style, chosen: true });
   syncDashStyle();
   renderDashGrid();
-  if (persist) { markDashDirty('Change style'); scheduleDashSave(); }
+  if (persist) { markDashDirty(t('dashStyle.change_style')); scheduleDashSave(); }
 }
 
 function applyDashStylePreset(preset: string): boolean {
@@ -246,7 +246,7 @@ function applyDashStylePreset(preset: string): boolean {
   const cur = dashCurrentStyle();
   setDashStyle({ ...next, accentHex: cur.accentHex, logo: cur.logo, themeId: cur.themeId }, true);
   const theme = typeof dashThemeResolve === 'function' ? dashThemeResolve(dashCurrentStyle()).theme : null; // themeApply.ts
-  showToast('Style: ' + DASH_STYLE_LABELS[preset] + (theme ? ' · ' + theme.name : ''));
+  showToast(t('dashStyle.style', { p0: DASH_STYLE_LABELS[preset], p1: (theme ? ' · ' + theme.name : '') }));
   return true;
 }
 
@@ -271,18 +271,18 @@ function buildDashBrandControls(state: { accentHex: string; logo: string }, onCh
   const swatches = document.createElement('div');
   swatches.className = 'sf-swatches';
   swatches.setAttribute('role', 'radiogroup');
-  swatches.setAttribute('aria-label', 'Dashboard accent');
+  swatches.setAttribute('aria-label', t('dashStyle.dashboard_accent'));
   const hexIn = document.createElement('input');
   hexIn.className = 'stp-input sf-hex';
   hexIn.type = 'text';
   hexIn.spellcheck = false;
-  hexIn.placeholder = 'Workspace';
-  hexIn.setAttribute('aria-label', 'Dashboard accent as hex');
+  hexIn.placeholder = t('common.workspace');
+  hexIn.setAttribute('aria-label', t('dashStyle.dashboard_accent_as_hex'));
 
   const logoSeg = document.createElement('div');
   logoSeg.className = 'stp-seg';
   logoSeg.setAttribute('role', 'radiogroup');
-  logoSeg.setAttribute('aria-label', 'Dashboard logo');
+  logoSeg.setAttribute('aria-label', t('dashStyle.dashboard_logo'));
   const frame = document.createElement('div');
   frame.className = 'sf-logo-frame dash-style-logo';
   const msg = document.createElement('div');
@@ -307,11 +307,11 @@ function buildDashBrandControls(state: { accentHex: string; logo: string }, onCh
       img.src = url;
       img.alt = '';
       frame.appendChild(img);
-    } else frame.textContent = state.logo === 'none' ? 'No logo' : 'Ordinate';
+    } else frame.textContent = state.logo === 'none' ? t('common.no_logo') : t('common.ordinate');
   };
   const change = (): void => { void paint(); onChange(); };
 
-  const options: Array<[string, string]> = [['', 'Workspace accent']];
+  const options: Array<[string, string]> = [['', t('dashStyle.workspace_accent')]];
   options.concat(SF_SWATCHES).forEach(([hex, name]) => {
     const b = document.createElement('button');
     b.type = 'button';
@@ -331,7 +331,7 @@ function buildDashBrandControls(state: { accentHex: string; logo: string }, onCh
     if (hex !== null || v === '') { state.accentHex = hex || ''; change(); }
   });
 
-  ([['workspace', 'Workspace'], ['none', 'None'], ['custom', 'Custom…']] as Array<[string, string]>).forEach(([v, label]) => {
+  ([['workspace', t('common.workspace')], ['none', t('common.none')], ['custom', t('common.custom')]] as Array<[string, string]>).forEach(([v, label]) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'stp-seg-opt';
@@ -344,7 +344,7 @@ function buildDashBrandControls(state: { accentHex: string; logo: string }, onCh
         if (!dashCurrent) return;
         const res = await window.hub.pickLogo(String(dashCurrent.id));
         if (!res || !res.ok) {
-          if (res && !res.canceled) msg.textContent = res.error || 'That logo could not be used.';
+          if (res && !res.canceled) msg.textContent = res.error || t('common.that_logo_could_not_be_used');
           return;
         }
       }
@@ -357,11 +357,11 @@ function buildDashBrandControls(state: { accentHex: string; logo: string }, onCh
   const accentBox = document.createElement('div');
   accentBox.className = 'sf-accent';
   accentBox.append(swatches, hexIn);
-  field('Accent', accentBox);
+  field(t('common.accent'), accentBox);
   const logoBox = document.createElement('div');
   logoBox.className = 'sf-logo';
   logoBox.append(logoSeg, frame);
-  field('Logo', logoBox);
+  field(t('common.logo'), logoBox);
   wrap.appendChild(msg);
   void paint();
   return wrap;
@@ -383,10 +383,10 @@ function handleDashStyle(): void {
   const box = document.createElement('div');
   box.className = 'ws-modal dash-style-modal';
   const h = document.createElement('h3');
-  h.textContent = 'Dashboard style';
+  h.textContent = t('dashStyle.dashboard_style');
   const sub = document.createElement('p');
   sub.className = 'dash-style-sub';
-  sub.textContent = 'Applies to this dashboard only, and travels with it when you share.';
+  sub.textContent = t('dashStyle.applies_to_this_dashboard_only_and');
   const strip = buildDashStyleStrip(dashMiniCardsFromCurrent(), before, (name) => {
     picked = name;
     preview(); // preview, not a write
@@ -398,11 +398,11 @@ function handleDashStyle(): void {
   const cancel = document.createElement('button');
   cancel.type = 'button';
   cancel.className = 'btn';
-  cancel.textContent = 'Cancel';
+  cancel.textContent = t('common.cancel');
   const apply = document.createElement('button');
   apply.type = 'button';
   apply.className = 'btn btn-primary';
-  apply.textContent = 'Apply';
+  apply.textContent = t('common.apply');
 
   let done = false;
   let a11y: { onTabKey: (e: KeyboardEvent) => void; release: () => void } | null = null;
@@ -434,5 +434,5 @@ function handleDashStyle(): void {
   box.appendChild(actions);
   overlay.appendChild(box);
   document.body.appendChild(overlay);
-  a11y = makeModalAccessible(box, 'Dashboard style', apply);
+  a11y = makeModalAccessible(box, t('dashStyle.dashboard_style'), apply);
 }

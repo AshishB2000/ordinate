@@ -123,16 +123,16 @@ async function cpRefresh(): Promise<void> {
     if (mode !== 'commands') {
       const recent = await cpRecent();
       if (seq !== cpSeq) return;
-      if (recent.length) groups.push({ label: 'Recent', rows: recent.map(cpRecordRow) });
+      if (recent.length) groups.push({ label: t('common.recent'), rows: recent.map(cpRecordRow) });
     }
-    groups.push({ label: 'Commands', rows: searchCommands('').slice(0, CP_MAX_COMMANDS).map(cpCommandRow) });
+    groups.push({ label: t('palette.commands'), rows: searchCommands('').slice(0, CP_MAX_COMMANDS).map(cpCommandRow) });
     cpPaint(groups);
     return;
   }
 
   if (mode !== 'records') {
     const cmds = searchCommands(q).slice(0, CP_MAX_COMMANDS);
-    if (cmds.length) groups.push({ label: 'Commands', rows: cmds.map(cpCommandRow) });
+    if (cmds.length) groups.push({ label: t('palette.commands'), rows: cmds.map(cpCommandRow) });
   }
 
   // `#sales` — the tag itself first, then (below) the records that carry it.
@@ -153,7 +153,7 @@ async function cpRefresh(): Promise<void> {
     const data = mode === 'all' && typeof dsrPaletteGroup === 'function' ? dsrPaletteGroup(q) : null;
     const hits = await cpSearchRecords(q);
     if (seq !== cpSeq) return;
-    if (hits.length) groups.push({ label: 'Results', rows: hits.map(cpRecordRow) });
+    if (hits.length) groups.push({ label: t('common.results'), rows: hits.map(cpRecordRow) });
     cpPaint(groups);
     if (!data) return;
     dsrPaintPending();
@@ -194,8 +194,8 @@ function cpPaint(groups: CpGroup[]): void {
     const none = makeEmptyState({
       variant: 'search',
       iconName: 'search',
-      title: 'No matches',
-      line: 'Try a shorter word, or > for commands, / for your data and # for tags.',
+      title: t('palette.no_matches'),
+      line: t('palette.try_a_shorter_word_or_for'),
     });
     none.classList.add('cp-none');
     box.appendChild(none);
@@ -266,7 +266,7 @@ function cpRowEl(r: CpRow, i: number): HTMLElement {
     const more = document.createElement('span');
     more.className = 'cp-row-more';
     more.textContent = '→';
-    more.title = 'More actions';
+    more.title = t('common.more_actions');
     row.appendChild(more);
   }
 
@@ -405,7 +405,7 @@ function cpPaintSheet(query: string): void {
   if (!printed) {
     const none = document.createElement('div');
     none.className = 'cp-sheet-none';
-    none.textContent = 'No command matches that.';
+    none.textContent = t('palette.no_command_matches_that');
     body.appendChild(none);
   }
 }

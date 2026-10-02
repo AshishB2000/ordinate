@@ -35,7 +35,7 @@ let lyObserver: ResizeObserver | null = null;
 const LY_ICON: Record<string, string> = { desktop: 'monitor', tablet: 'tablet', phone: 'smartphone' };
 
 function lyLabel(size: string): string {
-  return sizeLayout.LABELS[size] || 'Desktop';
+  return sizeLayout.LABELS[size] || t('layoutSizes.desktop');
 }
 
 /**
@@ -179,10 +179,10 @@ function lyAllHidden(): HTMLElement {
   box.appendChild(icon('eye-off', 20));
   const h = document.createElement('p');
   h.className = 'ly-empty-h';
-  h.textContent = 'Every card is hidden on ' + lyLabel(lyShown).toLowerCase();
+  h.textContent = t('layoutSizes.every_card_is_hidden_on', { p0: lyLabel(lyShown).toLowerCase() });
   const p = document.createElement('p');
   p.className = 'ly-empty-p';
-  p.textContent = 'Show one from the list below, or reset this size to the derived layout.';
+  p.textContent = t('layoutSizes.show_one_from_the_list_below');
   box.append(h, p);
   return box;
 }
@@ -215,9 +215,9 @@ function lySetSize(size: string): void {
 }
 
 const LY_WHAT: Record<string, string> = {
-  desktop: 'the 12-column grid',
-  tablet: '8 columns',
-  phone: 'one column, KPIs two-up',
+  desktop: t('layoutSizes.the_12_column_grid'),
+  tablet: t('layoutSizes.8_columns'),
+  phone: t('layoutSizes.one_column_kpis_two_up'),
 };
 
 /**
@@ -240,7 +240,7 @@ function lyHeadEl(): HTMLElement | null {
   sw.id = 'ly-switch';
   sw.className = 'seg ly-switch';
   sw.setAttribute('role', 'group');
-  sw.setAttribute('aria-label', 'Layout size');
+  sw.setAttribute('aria-label', t('layoutSizes.layout_size'));
   for (const size of sizeLayout.SIZES) {
     const b = document.createElement('button');
     b.type = 'button';
@@ -273,7 +273,7 @@ function lySizeMenu(anchor: HTMLElement): void {
       row.type = 'button';
       row.className = 'chart-menu-item ly-size-item';
       row.appendChild(icon(size === lyShown ? 'check' : LY_ICON[size], 14));
-      row.append(lyLabel(size) + (size !== 'desktop' && lyEdited(page, size) ? ' · edited' : ''));
+      row.append(lyLabel(size) + (size !== 'desktop' && lyEdited(page, size) ? t('layoutSizes.edited') : ''));
       row.addEventListener('click', () => { close(); lySetSize(size); });
       menu.appendChild(row);
     }
@@ -293,17 +293,17 @@ function lyPaintHead(): void {
     b.setAttribute('aria-pressed', String(on));
     const dot = b.querySelector('.ly-seg-dot') as HTMLElement | null;
     if (dot) dot.hidden = !edited;
-    const state = size === 'desktop' ? '' : edited ? ', edited' : ', derived';
-    b.setAttribute('aria-label', lyLabel(size) + ' layout' + state);
+    const state = size === 'desktop' ? '' : edited ? t('layoutSizes.edited_2') : t('layoutSizes.derived');
+    b.setAttribute('aria-label', lyLabel(size) + t('layoutSizes.layout') + state);
     b.title = lyLabel(size) + ' — ' + LY_WHAT[size] + (size === 'desktop' ? '' : edited ? ' (edited)' : ' (derived)')
-      + (on && auto ? ' · picked for this pane\'s width' : '');
+      + (on && auto ? t('layoutSizes.picked_for_this_pane_s_width') : '');
   });
   const compact = document.getElementById('ly-size-btn');
   if (compact) {
     compact.textContent = '';
     compact.append(icon(LY_ICON[lyShown]), icon('chevron-down', 14));
-    compact.setAttribute('aria-label', 'Layout size: ' + lyLabel(lyShown));
-    compact.title = 'Layout size: ' + lyLabel(lyShown);
+    compact.setAttribute('aria-label', t('layoutSizes.layout_size_2', { lyShown: lyLabel(lyShown) }));
+    compact.title = t('layoutSizes.layout_size_2', { lyShown: lyLabel(lyShown) });
   }
 }
 
@@ -337,12 +337,11 @@ function lyPaintNote(): void {
   const name = lyLabel(size).toLowerCase();
   const b = document.createElement('strong');
   if (lyFramed()) {
-    b.textContent = lyLabel(size) + ' preview · ' + sizeLayout.FRAME_WIDTH[size] + 'px. ';
-    text.append(b, 'Drag a card by its header to reorder it, drag its bottom edge to change its height, or hide it on ' + name + '. Desktop is unchanged.');
+    b.textContent = t('layoutSizes.preview_px', { size: lyLabel(size), p1: sizeLayout.FRAME_WIDTH[size] });
+    text.append(b, t('layoutSizes.drag_a_card_by_its_header', { name }));
   } else {
-    b.textContent = 'Showing the ' + name + ' layout. ';
-    text.append(b, 'This pane is narrower than ' + (size === 'phone' ? sizeLayout.BREAKPOINTS.phone : sizeLayout.BREAKPOINTS.tablet)
-      + 'px, so edits here change the ' + name + ' layout only.');
+    b.textContent = t('layoutSizes.showing_the_layout', { name });
+    text.append(b, t('layoutSizes.this_pane_is_narrower_than_px', { p0: (size === 'phone' ? sizeLayout.BREAKPOINTS.phone : sizeLayout.BREAKPOINTS.tablet), name }));
   }
   note.appendChild(text);
   const acts = document.createElement('span');
@@ -351,17 +350,17 @@ function lyPaintNote(): void {
   const state = document.createElement('span');
   state.id = 'ly-state';
   state.className = 'ly-state' + (edited ? ' is-edited' : '');
-  state.textContent = edited ? 'Edited' : 'Derived';
+  state.textContent = edited ? t('layoutSizes.edited_3') : t('layoutSizes.derived_2');
   state.title = edited
-    ? 'This page has a ' + name + ' layout of its own.'
-    : 'Laid out from the desktop grid. Your first change here keeps a ' + name + ' layout of its own.';
+    ? t('layoutSizes.this_page_has_a_layout_of', { name })
+    : t('layoutSizes.laid_out_from_the_desktop_grid', { name });
   acts.appendChild(state);
   if (edited && !dashReadOnly) {
     const reset = document.createElement('button');
     reset.type = 'button';
     reset.id = 'ly-reset';
     reset.className = 'btn btn-sm dash-edit-only ly-note-btn';
-    iconLabel(reset, 'rotate-ccw', 'Reset to derived');
+    iconLabel(reset, 'rotate-ccw', t('layoutSizes.reset_to_derived'));
     reset.addEventListener('click', () => lyReset()); // layoutEdit.ts
     acts.appendChild(reset);
   }
@@ -369,7 +368,7 @@ function lyPaintNote(): void {
     const desk = document.createElement('button');
     desk.type = 'button';
     desk.className = 'btn btn-sm ly-note-btn';
-    iconLabel(desk, 'monitor', 'Edit desktop layout');
+    iconLabel(desk, 'monitor', t('layoutSizes.edit_desktop_layout'));
     desk.addEventListener('click', () => lySetSize('desktop'));
     acts.appendChild(desk);
   }
@@ -397,19 +396,19 @@ function lyPaintTray(): void {
   if (tray.hidden) return;
   tray.innerHTML = '';
   const name = lyLabel(lyShown).toLowerCase();
-  tray.setAttribute('aria-label', 'Cards hidden on ' + name);
+  tray.setAttribute('aria-label', t('layoutSizes.cards_hidden_on', { name }));
   const head = document.createElement('div');
   head.className = 'ly-tray-head';
   head.appendChild(icon('eye-off'));
   const title = document.createElement('span');
   title.className = 'ly-tray-title';
-  title.textContent = 'Hidden on ' + name;
+  title.textContent = t('layoutSizes.hidden_on', { name });
   const count = document.createElement('span');
   count.className = 'ly-tray-count';
   count.textContent = String(hidden.length);
   const hint = document.createElement('span');
   hint.className = 'ly-tray-hint';
-  hint.textContent = 'Still on desktop' + (lyShown === 'phone' ? ' and tablet' : ' and phone') + ' unless hidden there too.';
+  hint.textContent = t('layoutSizes.still_on_desktop_unless_hidden_there', { p0: !!(lyShown === 'phone') });
   head.append(title, count, hint);
   tray.appendChild(head);
   const list = document.createElement('div');
@@ -432,8 +431,8 @@ function lyPaintTray(): void {
     const show = document.createElement('button');
     show.type = 'button';
     show.className = 'btn btn-sm dash-edit-only ly-tray-show';
-    iconLabel(show, 'eye', 'Show');
-    show.setAttribute('aria-label', 'Show ' + dashCardTitle(card) + ' on ' + name);
+    iconLabel(show, 'eye', t('common.show'));
+    show.setAttribute('aria-label', t('layoutSizes.show_on', { card: dashCardTitle(card), name }));
     show.addEventListener('click', () => lyHide(id, false)); // layoutEdit.ts
     chip.appendChild(show);
     list.appendChild(chip);

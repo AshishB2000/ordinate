@@ -28,8 +28,8 @@ function renderFlowMap(map: any, wrap: HTMLElement, geo: any, data: any): void {
   wrap.classList.add('geo-map');
   if (!flows.length) {
     geoMapEmpty(wrap, flow.skipped
-      ? `None of the ${flow.skipped.toLocaleString()} rows has an origin and a destination the map can place.`
-      : 'No routes to draw.');
+      ? t('mapFlow.none_of_the_rows_has_an', { p0: flow.skipped.toLocaleString() })
+      : t('mapFlow.no_routes_to_draw'));
     return;
   }
   const accent = getCSSVar('--accent', wrap) || '#3b82f6';
@@ -72,11 +72,11 @@ function renderFlowMap(map: any, wrap: HTMLElement, geo: any, data: any): void {
     },
   });
   _attachHoverPopup(map, FLOW_LINE, (p) => {
-    const v = p.__val === null || p.__val === undefined || p.__val === 'null' ? 'no data' : _fmtVal(Number(p.__val));
+    const v = p.__val === null || p.__val === undefined || p.__val === 'null' ? t('common.no_data') : _fmtVal(Number(p.__val));
     return `<strong>${_escGeo(p.__name)}</strong><br>${_escGeo(flow.label)}: ${_escGeo(v)}`
       + `<br><span class="cv-map-tt-muted">${Number(p.__n).toLocaleString()} row${Number(p.__n) === 1 ? '' : 's'}</span>`;
   });
-  _attachHoverPopup(map, FLOW_END, (p) => `<strong>${_escGeo(p.__name)}</strong><br><span class="cv-map-tt-muted">${p.__kind === 'origin' ? 'Origin' : 'Destination'}</span>`);
+  _attachHoverPopup(map, FLOW_END, (p) => `<strong>${_escGeo(p.__name)}</strong><br><span class="cv-map-tt-muted">${p.__kind === 'origin' ? t('mapFlow.origin') : t('mapFlow.destination')}</span>`);
 
   let bbox: BBox | null = null;
   for (const f of flows) bbox = _extendBBox(_extendBBox(bbox, [f.o[0], f.o[1], f.o[0], f.o[1]]), [f.d[0], f.d[1], f.d[0], f.d[1]]);
@@ -85,10 +85,10 @@ function renderFlowMap(map: any, wrap: HTMLElement, geo: any, data: any): void {
   flowLegend(wrap, flow.label, max, accent);
   const notes = geoMapNotes(wrap);
   notes.info.textContent = flow.routes > flows.length
-    ? `Showing the top ${flows.length.toLocaleString()} of ${flow.routes.toLocaleString()} routes by ${flow.label.toLowerCase()}`
-    : `${flows.length.toLocaleString()} route${flows.length === 1 ? '' : 's'} · ${flow.points.toLocaleString()} rows`;
+    ? t('mapFlow.showing_the_top_of_routes_by', { p0: flows.length.toLocaleString(), p1: flow.routes.toLocaleString(), p2: flow.label.toLowerCase() })
+    : t('mapFlow.rows', { p0: flows.length.toLocaleString(), flowsCount: flows.length, p2: flow.points.toLocaleString() });
   if (flow.skipped) {
-    notes.warn.textContent = `${flow.skipped.toLocaleString()} rows had no usable origin or destination`;
+    notes.warn.textContent = t('mapFlow.rows_had_no_usable_origin_or', { p0: flow.skipped.toLocaleString() });
     notes.warn.hidden = false;
   }
   // Read by the smoke and by the map's accessible description.
@@ -108,7 +108,7 @@ function flowLegend(wrap: HTMLElement, label: string, max: number, color: string
   title.className = 'cv-map-legend-title';
   title.textContent = label;
   leg.appendChild(title);
-  const rows: Array<[number, string]> = max > 0 ? [[FLOW_W_MIN, 'low'], [FLOW_W_MAX, _fmtVal(max)]] : [[FLOW_W_MIN, 'each route']];
+  const rows: Array<[number, string]> = max > 0 ? [[FLOW_W_MIN, 'low'], [FLOW_W_MAX, _fmtVal(max)]] : [[FLOW_W_MIN, t('mapFlow.each_route')]];
   for (const [w, text] of rows) {
     const row = document.createElement('div');
     row.className = 'cv-map-legend-row';

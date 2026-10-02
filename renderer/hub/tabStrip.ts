@@ -20,9 +20,9 @@ function tabStripEl(): HTMLElement | null {
   return document.getElementById('tab-strip');
 }
 
-function tabDisplayName(t: TabRec): string {
-  const k = tabKindOf(t);
-  return t.name || (k ? 'Untitled ' + k.label.toLowerCase() : 'Untitled');
+function tabDisplayName(tv: TabRec): string {
+  const k = tabKindOf(tv);
+  return tv.name || (k ? t('tabStrip.untitled', { p0: k.label.toLowerCase() }) : t('common.untitled'));
 }
 
 function tabDirty(t: TabRec | null): boolean {
@@ -37,17 +37,17 @@ function tabFlash(key: string): void {
   window.setTimeout(() => { if (tabFlashKey === key) tabFlashKey = null; }, 400);
 }
 
-function tabMakeItem(t: TabRec, i: number): HTMLElement {
+function tabMakeItem(tv: TabRec, i: number): HTMLElement {
   const s = tabState;
-  const key = tabKeyOf(t);
-  const k = tabKindOf(t);
-  const name = tabDisplayName(t);
+  const key = tabKeyOf(tv);
+  const k = tabKindOf(tv);
+  const name = tabDisplayName(tv);
   const active = s.active === key;
   const el = document.createElement('div');
   el.className = 'tab-item';
   el.classList.toggle('is-active', active);
   el.classList.toggle('is-split', !!s.split && (s.split.left === key || s.split.right === key));
-  el.classList.toggle('is-dirty', tabDirty(t));
+  el.classList.toggle('is-dirty', tabDirty(tv));
   el.classList.toggle('is-new', key === tabFlashKey);
   el.dataset.key = key;
   el.dataset.index = String(i);
@@ -65,8 +65,8 @@ function tabMakeItem(t: TabRec, i: number): HTMLElement {
   close.type = 'button';
   close.className = 'tab-close';
   close.tabIndex = -1;
-  close.setAttribute('aria-label', 'Close ' + name);
-  close.title = active ? tooltipFor('tab.close', 'Close') : 'Close';
+  close.setAttribute('aria-label', t('tabStrip.close', { name }));
+  close.title = active ? tooltipFor('tab.close', t('common.close')) : t('common.close');
   close.appendChild(icon('x', 16));
   const dot = document.createElement('span');
   dot.className = 'tab-dirty';
@@ -150,12 +150,12 @@ function tabOpenMenu(el: HTMLElement): void {
       menu.appendChild(d);
     };
     const mine = s.active === key;
-    row('Close', 'x', () => tabCloseKey(key).then(() => undefined), mine ? 'mod+w' : undefined);
-    row('Close others', 'minus', () => tabCloseOthersKey(key), undefined, s.tabs.length < 2);
+    row(t('common.close'), 'x', () => tabCloseKey(key).then(() => undefined), mine ? 'mod+w' : undefined);
+    row(t('tabStrip.close_others'), 'minus', () => tabCloseOthersKey(key), undefined, s.tabs.length < 2);
     sep();
-    if (inSplit) row('Close split view', 'columns', () => tabSplitCommand(), 'mod+\\');
-    else row('Split right', 'columns', () => tabSplitWith(key), mine ? 'mod+\\' : undefined, s.tabs.length < 2);
-    row('Open in new window', 'external-link', () => tabToNewWindow(key));
+    if (inSplit) row(t('tabStrip.close_split_view'), 'columns', () => tabSplitCommand(), 'mod+\\');
+    else row(t('tabStrip.split_right'), 'columns', () => tabSplitWith(key), mine ? 'mod+\\' : undefined, s.tabs.length < 2);
+    row(t('tabStrip.open_in_new_window'), 'external-link', () => tabToNewWindow(key));
     // ↑/↓ walk the rows; Escape is openMiniMenu's own.
     menu.addEventListener('keydown', (e: KeyboardEvent) => {
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;

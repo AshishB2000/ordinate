@@ -33,11 +33,11 @@ function nbSqlPlaceholder(id: string): string {
     const i = nbDoc.cells.findIndex((c) => c.id === id);
     for (let j = i - 1; j >= 0; j -= 1) {
       const info = nbInfo(nbDoc.cells[j].id);
-      if (info && info.view) return `select *\nfrom ${info.view}`;
+      if (info && info.view) return t('nbEditor.select_from', { view: info.view });
     }
   }
   const d = nbSchema.datasets.find((x) => x.queryable);
-  return d ? `select *\nfrom ${d.slug}\nlimit 100` : 'select …';
+  return d ? t('common.select_from_limit_100', { slug: d.slug }) : t('nbEditor.select');
 }
 
 function nbAutoGrow(el: HTMLTextAreaElement): void {
@@ -61,10 +61,10 @@ function nbSqlCompletions(id: string, prefix: string, afterDot: boolean): Array<
     const info = nbInfo(c.id);
     const r = nbResults.get(c.id);
     if (!info || !info.view) continue;
-    if (!afterDot) take(info.view, info.view, 'cell above');
+    if (!afterDot) take(info.view, info.view, t('nbEditor.cell_above'));
     for (const col of (r && r.ok && r.columns) || []) take(col.name, qeIdent(col.name), `${col.type} · ${info.view}`);
   }
-  if (!afterDot) for (const d of nbSchema.datasets) take(d.slug, d.slug, 'dataset · ' + d.name);
+  if (!afterDot) for (const d of nbSchema.datasets) take(d.slug, d.slug, t('common.dataset_2', { name: d.name }));
   for (const d of nbSchema.datasets) for (const c of d.columns || []) take(c.name, qeIdent(c.name), `${c.type} · ${d.name}`);
   if (!afterDot) for (const k of CW_KEYWORDS) take(k.toUpperCase(), k.toUpperCase(), 'keyword');
   return out.slice(0, CW_AC_MAX);
@@ -83,7 +83,7 @@ function nbSqlEditor(c: NbCellDoc): HTMLElement {
   input.spellcheck = false;
   input.autocomplete = 'off';
   input.setAttribute('autocapitalize', 'off');
-  input.setAttribute('aria-label', 'SQL over this project’s datasets and the cells above');
+  input.setAttribute('aria-label', t('nbEditor.sql_over_this_project_s_datasets'));
   input.dataset.tabIndents = '1';
   input.value = c.sql || '';
   input.placeholder = nbSqlPlaceholder(c.id);
@@ -92,7 +92,7 @@ function nbSqlEditor(c: NbCellDoc): HTMLElement {
   pop.className = 'cw-ac';
   pop.hidden = true;
   pop.setAttribute('role', 'listbox');
-  pop.setAttribute('aria-label', 'Completions');
+  pop.setAttribute('aria-label', t('common.completions'));
   box.append(wrap, pop);
 
   let items: Array<{ label: string; insert: string; sub: string }> = [];

@@ -56,16 +56,16 @@ function stCard(s: any): HTMLElement {
   body.className = 'st-card-body';
   const title = document.createElement('div');
   title.className = 'st-card-title';
-  title.textContent = String(s.name || 'Untitled story');
+  title.textContent = String(s.name || t('common.untitled_story'));
   body.appendChild(title);
   const ex = document.createElement('div');
   ex.className = 'st-card-excerpt';
-  ex.textContent = s.excerpt ? String(s.excerpt) : 'No prose yet.';
+  ex.textContent = s.excerpt ? String(s.excerpt) : t('storyList.no_prose_yet');
   body.appendChild(ex);
   const meta = document.createElement('div');
   meta.className = 'st-card-meta';
   const n = Number(s.blockCount) || 0;
-  meta.textContent = `${n} block${n === 1 ? '' : 's'} · ${formatSidebarTime(s.updatedAt)}`;
+  meta.textContent = t('storyList.text', { n, updatedAt: formatSidebarTime(s.updatedAt) });
   body.appendChild(meta);
   card.appendChild(body);
   ctDecorate(card, 'story', String(s.id), body); // catalog tag chips
@@ -73,7 +73,7 @@ function stCard(s: any): HTMLElement {
   const more = document.createElement('button');
   more.type = 'button';
   more.className = 'icon-btn st-card-more';
-  iconOnly(more, 'more-horizontal', 'Story actions');
+  iconOnly(more, 'more-horizontal', t('storyList.story_actions'));
   more.addEventListener('click', (e) => {
     e.stopPropagation();
     openMiniMenu(more, (menu: HTMLElement, close: () => void) => {
@@ -85,8 +85,8 @@ function stCard(s: any): HTMLElement {
         b.addEventListener('click', () => { close(); run(); });
         menu.appendChild(b);
       };
-      add('Open', () => { void stOpen(String(s.id)); });
-      add('Rename', () => { void stRenameFromList(s); });
+      add(t('common.open'), () => { void stOpen(String(s.id)); });
+      add(t('common.rename'), () => { void stRenameFromList(s); });
       add('Delete', () => { void stDeleteFromList(s); });
     });
   });
@@ -100,21 +100,21 @@ function stCard(s: any): HTMLElement {
 
 async function stNewStory(): Promise<void> {
   if (!currentProjectId) return;
-  const name = await promptModal('Name the story', 'Untitled story', 'Create');
+  const name = await promptModal(t('storyList.name_the_story'), t('common.untitled_story'), t('common.create'));
   if (name === null) return;
   let s: any = null;
   try {
-    s = await window.hub.createStory(currentProjectId, { name: name.trim() || 'Untitled story' });
+    s = await window.hub.createStory(currentProjectId, { name: name.trim() || t('common.untitled_story') });
   } catch (_) {
     s = null;
   }
-  if (!s || s.ok === false || !s.id) { showToast('Could not create the story.'); return; }
+  if (!s || s.ok === false || !s.id) { showToast(t('storyList.could_not_create_the_story')); return; }
   await stOpen(String(s.id), { focusEnd: true });
 }
 
 async function stRenameFromList(s: any): Promise<void> {
   if (!currentProjectId) return;
-  const name = await promptModal('Rename story', String(s.name || ''), 'Rename');
+  const name = await promptModal(t('storyList.rename_story'), String(s.name || ''), t('common.rename'));
   if (!name || !name.trim()) return;
   await window.hub.updateStory(currentProjectId, String(s.id), { name: name.trim() });
   void stRefreshList();
@@ -122,14 +122,14 @@ async function stRenameFromList(s: any): Promise<void> {
 
 async function stDeleteFromList(s: any): Promise<void> {
   if (!currentProjectId) return;
-  if (!window.confirm(`Delete “${s.name}”? The charts and metrics it shows are not deleted.`)) return;
+  if (!window.confirm(t('common.delete_the_charts_and_metrics_it', { name: s.name }))) return;
   await window.hub.deleteStory(currentProjectId, String(s.id));
   void stRefreshList();
 }
 
 /** "Draft with the Assistant" from the list: ask what it is about, then the same proposal the dock's story action shows. */
 async function stDraftFromList(): Promise<void> {
-  const intent = await promptModal('What should the story be about?', '', 'Draft');
+  const intent = await promptModal(t('storyList.what_should_the_story_be_about'), '', t('storyList.draft'));
   if (!intent || !intent.trim()) return;
   dkSetOpen(true);
   await dkRefresh();

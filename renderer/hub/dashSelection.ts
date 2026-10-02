@@ -109,7 +109,7 @@ async function dashNavigate(target: { analysisId: string; page?: string }, carry
     return;
   }
   const page = dashCurrentPage();
-  const crumb = opts.back ? null : { fromId: dashCurrent.id, fromName: String(dashCurrent.name || 'Dashboard'), fromPage: page && page.id };
+  const crumb = opts.back ? null : { fromId: dashCurrent.id, fromName: String(dashCurrent.name || t('common.dashboard')), fromPage: page && page.id };
   if (dashSaveTimer !== null) { window.clearTimeout(dashSaveTimer); dashSaveTimer = null; }
   if (dashDirty) await persistDashboard();
   dashPendingNav = { carry: carry.slice(), crumb, page: target.page };
@@ -132,7 +132,7 @@ function dashSelStrip(): HTMLElement | null {
   strip.id = 'dash-sel-strip';
   strip.className = 'dash-sel-strip';
   strip.setAttribute('role', 'region');
-  strip.setAttribute('aria-label', 'Selection');
+  strip.setAttribute('aria-label', t('dashSelection.selection'));
   strip.hidden = true;
   anchor.before(strip);
   return strip;
@@ -166,30 +166,30 @@ function renderDashSelStrip(): void {
   if (dashCrumb) {
     const crumb = document.createElement('nav');
     crumb.className = 'dash-crumb';
-    crumb.setAttribute('aria-label', 'Breadcrumb');
+    crumb.setAttribute('aria-label', t('dashSelection.breadcrumb'));
     const back = document.createElement('button');
     back.type = 'button';
     back.className = 'btn btn-sm dash-crumb-back';
     back.appendChild(icon('arrow-left', 14));
     const bt = document.createElement('span');
-    bt.textContent = 'Back';
+    bt.textContent = t('common.back');
     back.appendChild(bt);
-    back.setAttribute('aria-label', 'Back to ' + dashCrumb.fromName);
+    back.setAttribute('aria-label', t('common.back_to', { fromName: dashCrumb.fromName }));
     back.addEventListener('click', dashNavBack);
     const from = document.createElement('span');
     from.className = 'dash-crumb-from';
-    from.textContent = 'From ' + dashCrumb.fromName;
+    from.textContent = t('dashSelection.from', { fromName: dashCrumb.fromName });
     crumb.append(back, from);
     strip.appendChild(crumb);
   }
   if (dashSel.length || narrowed.length) {
     const label = document.createElement('span');
     label.className = 'dash-toolbar-label';
-    label.textContent = 'Selection';
+    label.textContent = t('dashSelection.selection');
     strip.appendChild(label);
   }
   dashSel.forEach((s) => {
-    strip.appendChild(dashSelChip(dashSelStepLabel(s), 'Remove selection ' + dashSelStepLabel(s), () => dashSelToggle(s)));
+    strip.appendChild(dashSelChip(dashSelStepLabel(s), t('dashSelection.remove_selection', { s: dashSelStepLabel(s) }), () => dashSelToggle(s)));
   });
   // One chip per distinct narrowing, naming how many tiles it narrows.
   const groups = new Map<string, { steps: any[]; tiles: string[] }>();
@@ -200,14 +200,14 @@ function renderDashSelStrip(): void {
     groups.set(k, g);
   }
   for (const g of groups.values()) {
-    const text = g.steps.map(dashSelStepLabel).join(', ') + ` · ${g.tiles.length} tile${g.tiles.length === 1 ? '' : 's'}`;
-    strip.appendChild(dashSelChip(text, 'Stop narrowing those tiles', () => dashNarrowTiles(g.tiles, []), 'dash-sel-chip--narrow'));
+    const text = t('dashSelection.text', { p0: g.steps.map(dashSelStepLabel).join(', '), tilesCount: g.tiles.length });
+    strip.appendChild(dashSelChip(text, t('dashSelection.stop_narrowing_those_tiles'), () => dashNarrowTiles(g.tiles, []), 'dash-sel-chip--narrow'));
   }
   if (dashSel.length + narrowed.length > 1) {
     const clear = document.createElement('button');
     clear.type = 'button';
     clear.className = 'btn btn-sm dash-sel-clear';
-    clear.textContent = 'Clear selection';
+    clear.textContent = t('common.clear_selection');
     clear.addEventListener('click', () => {
       dashSel = [];
       dashTileSel = new Map();

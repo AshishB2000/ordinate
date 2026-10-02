@@ -11,9 +11,9 @@
 // every row is the one prepare edit that can take a while.
 
 const SJ_BUNDLED_HINTS: Record<string, string> = {
-  us_state: '50 states, DC and Puerto Rico',
-  country: 'Every country, by name',
-  us_county: '3,221 counties, named with their state',
+  us_state: t('prepareGeo.50_states_dc_and_puerto_rico'),
+  country: t('prepareGeo.every_country_by_name'),
+  us_county: t('prepareGeo.3_221_counties_named_with_their'),
 };
 
 function buildSpatialJoinForm(body: HTMLElement, existing: any): () => any {
@@ -31,19 +31,19 @@ function buildSpatialJoinForm(body: HTMLElement, existing: any): () => any {
   const propHost = document.createElement('div');
   let propSel = makeNameSelect([], '');
   propHost.appendChild(propSel);
-  const propRow = fieldRow('Region name property', propHost);
+  const propRow = fieldRow(t('prepareGeo.region_name_property'), propHost);
   const preview = makePreviewBox();
   let seq = 0;
 
   const sources = document.createElement('div');
   sources.className = 'sj-sources';
   sources.setAttribute('role', 'radiogroup');
-  sources.setAttribute('aria-label', 'Boundaries');
+  sources.setAttribute('aria-label', t('prepareGeo.boundaries'));
   const sourceRow = document.createElement('div');
   sourceRow.className = 'ds-step-field';
   const sourceLabel = document.createElement('span');
   sourceLabel.className = 'ds-step-field-label';
-  sourceLabel.textContent = 'Boundaries';
+  sourceLabel.textContent = t('prepareGeo.boundaries');
   sourceRow.append(sourceLabel, sources);
 
   const read = (): any => {
@@ -54,11 +54,11 @@ function buildSpatialJoinForm(body: HTMLElement, existing: any): () => any {
   const refresh = async (): Promise<void> => {
     if (!latSel.value || !lngSel.value || (boundary === 'custom' && (!boundaryId || !propSel.value))) return setPreview(preview, []);
     const mine = ++seq;
-    setPreview(preview, ['Counting…']);
+    setPreview(preview, [t('prepareGeo.counting')]);
     let res: any = null;
     try { res = await window.hubGeo.spatialPreview(currentProjectId || '', expId || '', dsStepEditIndex, read()); } catch (_) { res = null; }
     if (mine !== seq) return;
-    if (!res || !res.ok) return setPreview(preview, [(res && res.error) || 'Could not preview.'], true);
+    if (!res || !res.ok) return setPreview(preview, [(res && res.error) || t('common.could_not_preview')], true);
     paintSpatialPreview(preview, res.stats);
   };
   const paintProps = (): void => {
@@ -98,11 +98,11 @@ function buildSpatialJoinForm(body: HTMLElement, existing: any): () => any {
   const paintSources = (): void => {
     sources.innerHTML = '';
     for (const id of ['us_state', 'country', 'us_county']) {
-      const label = id === 'us_state' ? 'US states' : id === 'country' ? 'Countries' : 'US counties';
+      const label = id === 'us_state' ? t('common.us_states') : id === 'country' ? t('common.countries') : t('common.us_counties');
       sources.appendChild(tile(id, label, SJ_BUNDLED_HINTS[id], () => boundary === id, () => { boundary = id; }));
     }
     for (const b of custom) {
-      sources.appendChild(tile('custom:' + b.id, b.name, `${Number(b.featureCount).toLocaleString('en-US')} regions · your boundaries`,
+      sources.appendChild(tile('custom:' + b.id, b.name, t('prepareGeo.regions_your_boundaries', { p0: Number(b.featureCount).toLocaleString('en-US') }),
         () => boundary === 'custom' && boundaryId === b.id, () => { boundary = 'custom'; boundaryId = b.id; }));
     }
     paintTiles();
@@ -124,22 +124,22 @@ function buildSpatialJoinForm(body: HTMLElement, existing: any): () => any {
 
   const grid = document.createElement('div');
   grid.className = 'sj-grid';
-  grid.append(fieldRow('Latitude', latSel), fieldRow('Longitude', lngSel), fieldRow('New column', asIn), fieldRow('Points in no region get', unmatchedIn));
+  grid.append(fieldRow(t('common.latitude'), latSel), fieldRow(t('common.longitude'), lngSel), fieldRow(t('common.new_column'), asIn), fieldRow(t('prepareGeo.points_in_no_region_get'), unmatchedIn));
   body.appendChild(sourceRow);
   body.appendChild(propRow);
   body.appendChild(grid);
   if (nums.length < 2) {
     const hint = document.createElement('div');
     hint.className = 'ds-step-hint';
-    hint.textContent = 'This step needs two number columns — a latitude and a longitude.';
+    hint.textContent = t('prepareGeo.this_step_needs_two_number_columns');
     body.appendChild(hint);
   }
   body.appendChild(preview);
   return () => {
     const step = read();
-    if (!step.lat || !step.lng) { window.alert('Pick the latitude and longitude columns.'); return null; }
-    if (step.lat === step.lng) { window.alert('Latitude and longitude must be two different columns.'); return null; }
-    if (boundary === 'custom' && (!step.boundaryId || !step.property)) { window.alert('Pick the boundary set and the property that names each region.'); return null; }
+    if (!step.lat || !step.lng) { window.alert(t('prepareGeo.pick_the_latitude_and_longitude_columns')); return null; }
+    if (step.lat === step.lng) { window.alert(t('prepareGeo.latitude_and_longitude_must_be_two')); return null; }
+    if (boundary === 'custom' && (!step.boundaryId || !step.property)) { window.alert(t('prepareGeo.pick_the_boundary_set_and_the')); return null; }
     return step;
   };
 }
@@ -149,11 +149,11 @@ function paintSpatialPreview(box: HTMLElement, s: any): void {
   box.innerHTML = '';
   const pct = s.total ? Math.round((s.matched / s.total) * 1000) / 10 : 0;
   const head = document.createElement('div');
-  head.textContent = `${fmtN(s.matched)} of ${fmtN(s.total)} points matched · ${fmtN(s.regions)} region${s.regions === 1 ? '' : 's'}`;
+  head.textContent = t('prepareGeo.of_points_matched', { matched: fmtN(s.matched), total: fmtN(s.total), regions: fmtN(s.regions), regions2: s.regions });
   const meter = document.createElement('div');
   meter.className = 'sj-meter';
   meter.setAttribute('role', 'img');
-  meter.setAttribute('aria-label', pct + '% of points matched');
+  meter.setAttribute('aria-label', t('prepareGeo.of_points_matched_2', { pct }));
   const fill = document.createElement('div');
   fill.className = 'sj-meter-fill';
   fill.style.width = pct + '%';
@@ -172,8 +172,8 @@ function paintSpatialPreview(box: HTMLElement, s: any): void {
   }
   const outside = s.total - s.matched - s.noCoords;
   const notes: string[] = [];
-  if (s.noCoords) notes.push(`${fmtN(s.noCoords)} row${s.noCoords === 1 ? '' : 's'} with no usable coordinates`);
-  if (outside > 0) notes.push(`${fmtN(outside)} outside every region`);
+  if (s.noCoords) notes.push(t('prepareGeo.with_no_usable_coordinates', { noCoords: fmtN(s.noCoords), noCoords2: s.noCoords }));
+  if (outside > 0) notes.push(t('prepareGeo.outside_every_region', { outside: fmtN(outside) }));
   if (notes.length) {
     const n = document.createElement('div');
     n.textContent = notes.join(' · ');
@@ -186,6 +186,6 @@ function paintSpatialPreview(box: HTMLElement, s: any): void {
 /** prepareCombine.powerStepSummary's spatial_join line. */
 function geoStepSummary(step: any): string {
   if (!step || step.type !== 'spatial_join') return '';
-  const set = step.boundary === 'us_state' ? 'US states' : step.boundary === 'country' ? 'countries' : step.boundary === 'us_county' ? 'US counties' : 'your boundaries';
-  return `Assign ${step.as || 'region'} from ${step.lat}, ${step.lng} by ${set}`;
+  const set = step.boundary === 'us_state' ? t('common.us_states') : step.boundary === 'country' ? 'countries' : step.boundary === 'us_county' ? t('common.us_counties') : t('prepareGeo.your_boundaries');
+  return t('prepareGeo.assign_from_by', { p0: step.as || 'region', lat: step.lat, lng: step.lng, set });
 }

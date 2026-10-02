@@ -81,11 +81,11 @@ function itRowsWord(n: number): string {
   if (!panel || document.getElementById('it-host')) return;
   const host = itMk('section', 'it-host');
   host.id = 'it-host';
-  host.setAttribute('aria-label', 'Input table editor');
+  host.setAttribute('aria-label', t('inputPage.input_table_editor'));
 
   const bar = itMk('div', 'it-bar');
   bar.setAttribute('role', 'toolbar');
-  bar.setAttribute('aria-label', 'Table actions');
+  bar.setAttribute('aria-label', t('inputPage.table_actions'));
   const btn = (id: string, ic: string, label: string, cls = 'btn btn-sm'): HTMLButtonElement => {
     const b = itMk<HTMLButtonElement>('button', cls);
     b.type = 'button';
@@ -100,13 +100,13 @@ function itRowsWord(n: number): string {
     iconOnly(b, ic, label);
     return b;
   };
-  const addRow = btn('it-add-row', 'plus', 'Row');
-  addRow.title = 'Add a row at the end';
-  const delRows = btn('it-del-rows', 'trash', 'Delete rows', 'btn btn-sm btn-ghost');
-  const undo = iconBtn('it-undo', 'undo', 'Undo');
-  const redo = iconBtn('it-redo', 'redo', 'Redo');
-  const editCols = btn('it-edit-cols', 'columns', 'Edit columns', 'btn btn-sm btn-ghost');
-  const hist = btn('it-history', 'history', 'History', 'btn btn-sm btn-ghost');
+  const addRow = btn('it-add-row', 'plus', t('common.row'));
+  addRow.title = t('inputPage.add_a_row_at_the_end');
+  const delRows = btn('it-del-rows', 'trash', t('inputPage.delete_rows'), 'btn btn-sm btn-ghost');
+  const undo = iconBtn('it-undo', 'undo', t('common.undo'));
+  const redo = iconBtn('it-redo', 'redo', t('common.redo'));
+  const editCols = btn('it-edit-cols', 'columns', t('common.edit_columns'), 'btn btn-sm btn-ghost');
+  const hist = btn('it-history', 'history', t('common.history'), 'btn btn-sm btn-ghost');
   const sep = (): HTMLElement => { const s = itMk('span', 'it-sep'); s.setAttribute('aria-hidden', 'true'); return s; };
   const status = itMk('span', 'it-status');
   status.id = 'it-status';
@@ -148,8 +148,8 @@ function itRowsWord(n: number): string {
   const art = itMk('span', 'ws-empty-icon');
   art.setAttribute('aria-hidden', 'true');
   art.appendChild(icon('table', 20));
-  empty.append(art, itMk('h4', 'it-empty-h', 'No rows yet'),
-    itMk('p', 'it-empty-p', 'Type into the first row, or copy rows from Excel, Numbers or Google Sheets and press ⌘V here. Up to 10,000 rows.'));
+  empty.append(art, itMk('h4', 'it-empty-h', t('inputPage.no_rows_yet')),
+    itMk('p', 'it-empty-p', t('inputPage.type_into_the_first_row_or')));
 
   const keys = itMk('p', 'it-keys');
   const hint = (k: string, what: string): void => {
@@ -159,9 +159,9 @@ function itRowsWord(n: number): string {
   };
   hint('Enter', 'down');
   hint('Tab', 'right');
-  hint('F2', 'edit in place');
-  hint('⌘D', 'fill down');
-  hint('⌘C ⌘V', 'copy and paste');
+  hint('F2', t('inputPage.edit_in_place'));
+  hint('⌘D', t('inputPage.fill_down'));
+  hint('⌘C ⌘V', t('inputPage.copy_and_paste'));
   hint('Delete', 'clear');
   hint('⌘Z', 'undo');
 
@@ -221,7 +221,7 @@ async function itOnOpen(ds: any): Promise<void> {
   if (seq !== itOpenSeq) return;
   if (!view || !view.ok) {
     if (explorer) explorer.classList.remove('is-input');
-    showToast((view && view.error) || 'This input table could not be opened.', { kind: 'error' });
+    showToast((view && view.error) || t('inputPage.this_input_table_could_not_be'), { kind: 'error' });
     return;
   }
   itS = {
@@ -233,7 +233,7 @@ async function itOnOpen(ds: any): Promise<void> {
   };
   itAdopt(view, true);
   const grid = itEl('it-grid');
-  if (grid) grid.setAttribute('aria-label', `${itS.name} — editable table`);
+  if (grid) grid.setAttribute('aria-label', t('inputPage.editable_table', { name: itS.name }));
   itRender();
   itPaintBar();
 }
@@ -295,7 +295,7 @@ function itStep(dir: 'undo' | 'redo'): void {
   if (!e) return;
   const b = dir === 'undo' ? e.inverse : e.forward;
   const res = OrdInputEdits.applyBatch(s.rows, b, s.columns.length, s.cap);
-  if (!res) { showToast('That step no longer fits the table.', { kind: 'error' }); return; }
+  if (!res) { showToast(t('inputPage.that_step_no_longer_fits_the'), { kind: 'error' }); return; }
   s.rows = res.rows;
   // An undo of a batch still waiting to be saved simply drops it from the queue.
   const other = dir === 'undo' ? e.forward : e.inverse;
@@ -304,7 +304,7 @@ function itStep(dir: 'undo' | 'redo'): void {
   const last = s.rows.length;
   if (s.sel.r1 > last) s.sel = { r0: last, c0: s.sel.c1, r1: last, c1: s.sel.c1 };
   itAfterChange();
-  showToast((dir === 'undo' ? 'Undid: ' : 'Redid: ') + e.label);
+  showToast((dir === 'undo' ? t('common.undid') : t('common.redid')) + e.label);
   // The grid keeps focus, so the save still happens on blur.
   itFocusGrid();
 }
@@ -323,7 +323,7 @@ function itAddRow(): void {
   if (!s) return;
   const at = s.rows.length;
   if (!itCommit(OrdInputEdits.insertRowsBatch(at, 1, at, s.cap), { r0: at, c0: 0, r1: at, c1: 0 })) {
-    showToast(`An input table holds up to ${s.cap.toLocaleString('en-US')} rows.`, { kind: 'error' });
+    showToast(t('inputPage.an_input_table_holds_up_to', { p0: s.cap.toLocaleString('en-US') }), { kind: 'error' });
     return;
   }
   itScrollToActive();
@@ -385,7 +385,7 @@ async function itSaveNow(): Promise<void> {
   s.saving = false;
   if (!res || !res.ok) {
     s.pending.unshift(...batches); // nothing was written: keep them, and say so
-    s.error = (res && res.error) || 'The table could not be saved';
+    s.error = (res && res.error) || t('inputPage.the_table_could_not_be_saved');
     itPaintBar();
     return;
   }
@@ -414,14 +414,14 @@ function itPaintBar(): void {
   const labels = OrdInputEdits.histLabels(s.hist);
   const undo = itEl<HTMLButtonElement>('it-undo');
   const redo = itEl<HTMLButtonElement>('it-redo');
-  if (undo) { undo.disabled = !labels.undo; undo.title = labels.undo ? 'Undo: ' + labels.undo : 'Nothing to undo'; }
-  if (redo) { redo.disabled = !labels.redo; redo.title = labels.redo ? 'Redo: ' + labels.redo : 'Nothing to redo'; }
+  if (undo) { undo.disabled = !labels.undo; undo.title = labels.undo ? t('inputPage.undo', { undo: labels.undo }) : t('common.nothing_to_undo'); }
+  if (redo) { redo.disabled = !labels.redo; redo.title = labels.redo ? t('inputPage.redo', { redo: labels.redo }) : t('common.nothing_to_redo'); }
   const del = itEl<HTMLButtonElement>('it-del-rows');
   if (del) {
     const a = Math.min(s.sel.r0, s.sel.r1);
     const b = Math.min(Math.max(s.sel.r0, s.sel.r1), s.rows.length - 1);
     del.disabled = b < a;
-    iconLabel(del, 'trash', b > a ? `Delete ${b - a + 1} rows` : 'Delete row');
+    iconLabel(del, 'trash', b > a ? t('inputPage.delete_rows_2', { p0: b - a + 1 }) : t('inputPage.delete_row'));
   }
   const add = itEl<HTMLButtonElement>('it-add-row');
   if (add) add.disabled = s.rows.length >= s.cap;
@@ -433,21 +433,21 @@ function itPaintBar(): void {
     if (s.error) {
       status.classList.add('is-error');
       status.appendChild(icon('alert', 14));
-      status.appendChild(document.createTextNode(' Not saved — ' + s.error + ' '));
-      const retry = itMk<HTMLButtonElement>('button', 'it-link', 'Try again');
+      status.appendChild(document.createTextNode(t('inputPage.not_saved', { error: s.error })));
+      const retry = itMk<HTMLButtonElement>('button', 'it-link', t('inputPage.try_again'));
       retry.type = 'button';
       retry.addEventListener('click', () => { void itFlush(); });
       status.appendChild(retry);
     } else if (s.saving) {
       status.classList.add('is-busy');
-      status.textContent = 'Saving…';
+      status.textContent = t('common.saving');
     } else if (s.pending.length) {
       status.classList.add('is-dirty');
-      status.textContent = 'Unsaved — saves when you leave the table';
+      status.textContent = t('inputPage.unsaved_saves_when_you_leave_the');
     } else {
       status.classList.add('is-saved');
       status.appendChild(icon('check', 14));
-      status.appendChild(document.createTextNode(' Saved · ' + itRowsWord(s.rows.length)));
+      status.appendChild(document.createTextNode(t('inputPage.saved', { rowsCount: itRowsWord(s.rows.length) })));
     }
   }
   const attn = itEl<HTMLButtonElement>('it-attn');
@@ -458,17 +458,17 @@ function itPaintBar(): void {
     attn.textContent = '';
     if (n) {
       attn.appendChild(icon('alert', 14));
-      attn.appendChild(document.createTextNode(` ${n.toLocaleString('en-US')} ${n === 1 ? 'cell needs' : 'cells need'} attention`));
-      attn.title = 'Go to the next one';
+      attn.appendChild(document.createTextNode(t('inputPage.attention', { p0: n.toLocaleString('en-US'), n })));
+      attn.title = t('inputPage.go_to_the_next_one');
     }
   }
   const count = itEl('it-count');
-  if (count) count.textContent = `${s.rows.length.toLocaleString('en-US')} of ${s.cap.toLocaleString('en-US')} rows`;
+  if (count) count.textContent = t('inputPage.of_rows', { p0: s.rows.length.toLocaleString('en-US'), p1: s.cap.toLocaleString('en-US') });
   const notes = itEl('it-notes');
   if (notes) {
     notes.textContent = '';
     const lines = s.notes.slice();
-    if (s.steps) lines.push(`${s.steps} prepare ${s.steps === 1 ? 'step runs' : 'steps run'} on this table — Prepare shows the result.`);
+    if (s.steps) lines.push(t('inputPage.prepare_on_this_table_prepare_shows', { steps: s.steps }));
     for (const line of lines) notes.appendChild(itMk('p', '', line));
     notes.hidden = lines.length === 0;
   }

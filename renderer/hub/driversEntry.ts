@@ -41,9 +41,9 @@ function drvMountKpiWhy(card: any, vs: HTMLElement): void {
   const b = document.createElement('button');
   b.type = 'button';
   b.className = 'dash-metric-why';
-  b.textContent = 'Why?';
-  b.setAttribute('aria-label', 'Why did this change?');
-  b.title = 'Break the change down by what drove it';
+  b.textContent = t('common.why');
+  b.setAttribute('aria-label', t('common.why_did_this_change'));
+  b.title = t('driversEntry.break_the_change_down_by_what');
   b.addEventListener('click', (e) => {
     e.stopPropagation();
     const pid = currentProjectId;
@@ -125,14 +125,14 @@ function drvMountDrillWhy(head: HTMLElement | null, opts: any): void {
     b.type = 'button';
     b.className = 'btn btn-primary btn-sm drill-why';
     b.appendChild(icon('activity', 16));
-    b.appendChild(document.createTextNode('Why did this change?'));
+    b.appendChild(document.createTextNode(t('common.why_did_this_change')));
     head.appendChild(b);
   }
   const why = opts && opts.why;
   b.hidden = !why;
   b.onclick = null;
   if (!why) return;
-  b.title = `Break the change from ${why.prev} to ${why.label} down by what drove it`;
+  b.title = t('driversEntry.break_the_change_from_to_down', { prev: why.prev, label: why.label });
   b.onclick = () => {
     const enc = opts.encoding;
     const v = enc.values[0];
@@ -166,21 +166,21 @@ function drvWhyFromAlert(ruleId: string): void {
 async function drvAddTile(): Promise<void> {
   const r = drvRes;
   if (!r || !r.selected || !drvReq || !currentProjectId) return;
-  const name = `Why ${r.metric.name} changed, by ${r.selected.column}`;
+  const name = t('driversEntry.why_changed_by', { name: r.metric.name, column: r.selected.column });
   let res: any;
   try {
     res = await window.hubDrivers.addTile(currentProjectId, { ...drvReq, dimension: r.selected.column }, name);
   } catch (_) {
     res = null;
   }
-  if (!res || !res.ok) { showToast((res && res.error) || 'Could not add the tile.'); return; }
+  if (!res || !res.ok) { showToast((res && res.error) || t('driversEntry.could_not_add_the_tile')); return; }
   const onSheet = currentSection === 'analyses' && dashCurrent && !dashReadOnly && typeof pushCard === 'function';
   if (onSheet) {
     pushCard({ id: dashUuid(), type: 'visual', visualId: res.visual.id, layout: { ...dashFindSlot(dashCards(), 6, 6), w: 6, h: 6 } });
     closeDriversPanel();
-    showToast('Added a waterfall tile — it recomputes whenever the sheet does.');
+    showToast(t('driversEntry.added_a_waterfall_tile_it_recomputes'));
   } else {
-    showToast(`Saved “${name}” to Visuals.`);
+    showToast(t('driversEntry.saved_to_visuals', { name }));
   }
 }
 
@@ -195,7 +195,7 @@ async function drvAsk(): Promise<void> {
   };
   closeDriversPanel();
   const verb = typeof r.totals.delta === 'number' && r.totals.delta < 0 ? 'fall' : 'rise';
-  if (typeof dkAsk === 'function') await dkAsk(`Why did ${r.metric.name} ${verb} from ${r.periods.b} to ${r.periods.a}?`);
+  if (typeof dkAsk === 'function') await dkAsk(t('driversEntry.why_did_from_to', { name: r.metric.name, verb, b: r.periods.b, a: r.periods.a }));
 }
 
 /**
@@ -210,7 +210,7 @@ function drvDockContext(): { kind: string; id: string; label: string; name: stri
     drvPinned = null;
     return null;
   }
-  return { kind: 'drivers', id: p.token, label: 'why · ' + p.name, name: p.name };
+  return { kind: 'drivers', id: p.token, label: t('driversEntry.why', { name: p.name }), name: p.name };
 }
 
 async function drvAlertMe(): Promise<void> {

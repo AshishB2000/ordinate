@@ -12,7 +12,7 @@ function navCurrent(it: any): boolean {
 
 function navRun(card: any, it: any): void {
   if (card.nav && card.nav.style === 'back' && dashCrumb) { dashNavBack(); return; }
-  if (!it.target) { showToast('This button has no dashboard to open yet.', { kind: 'info' }); return; }
+  if (!it.target) { showToast(t('navCard.this_button_has_no_dashboard_to'), { kind: 'info' }); return; }
   const carry = it.carry ? [{ type: 'filter', column: it.carry.column, op: '=', value: it.carry.value }] : [];
   void dashNavigate(it.target, carry);
 }
@@ -22,14 +22,14 @@ function renderNavCard(card: any, body: HTMLElement): void {
   const nav = card.nav || { style: 'buttons', items: [] };
   const box = document.createElement('nav');
   box.className = 'nav-card nav-card--' + nav.style;
-  box.setAttribute('aria-label', card.heading || 'Dashboard navigation');
+  box.setAttribute('aria-label', card.heading || t('navCard.dashboard_navigation'));
   const items: any[] = nav.style === 'back'
-    ? [nav.items[0] || { label: 'Back to overview' }]
+    ? [nav.items[0] || { label: t('navCard.back_to_overview') }]
     : nav.items;
   if (!items.length) {
     const p = document.createElement('p');
     p.className = 'dash-card-p';
-    p.textContent = 'No buttons yet — add them in Properties.';
+    p.textContent = t('navCard.no_buttons_yet_add_them_in');
     box.appendChild(p);
   }
   items.forEach((it) => {
@@ -38,14 +38,14 @@ function renderNavCard(card: any, body: HTMLElement): void {
     b.className = nav.style === 'tabs' ? 'nav-card-tab' : 'btn btn-sm nav-card-btn';
     const ic = nav.style === 'back' ? 'arrow-left' : it.icon;
     if (ic) b.appendChild(icon(ic, 14));
-    const t = document.createElement('span');
-    t.textContent = nav.style === 'back' && dashCrumb && !it.target ? 'Back to ' + dashCrumb.fromName : it.label || 'Open';
-    b.appendChild(t);
+    const tv = document.createElement('span');
+    tv.textContent = nav.style === 'back' && dashCrumb && !it.target ? t('common.back_to', { fromName: dashCrumb.fromName }) : it.label || t('common.open');
+    b.appendChild(tv);
     if (navCurrent(it)) {
       b.setAttribute('aria-current', 'page');
       b.classList.add('is-current');
     }
-    if (it.carry) b.title = `Opens with ${it.carry.column} = ${it.carry.value}`;
+    if (it.carry) b.title = t('navCard.opens_with', { column: it.carry.column, value: it.carry.value });
     b.addEventListener('click', (e) => {
       e.stopPropagation();
       navRun(card, it);
@@ -86,13 +86,13 @@ async function renderNavProps(card: any, host: HTMLElement): Promise<void> {
     host.innerHTML = '';
     const nav = live().nav || { style: 'buttons', items: [] };
     const warnings = cardModel.validateNav(nav, { analyses: refs.analyses });
-    host.appendChild(aeSelect('Style', [['buttons', 'Buttons'], ['tabs', 'Tabs'], ['back', 'Back to overview']], nav.style,
-      (v) => write(Object.assign({}, nav, { style: v }), 'Change navigation style')));
+    host.appendChild(aeSelect(t('common.style_2'), [['buttons', t('navCard.buttons')], ['tabs', t('common.tabs')], ['back', t('navCard.back_to_overview')]], nav.style,
+      (v) => write(Object.assign({}, nav, { style: v }), t('navCard.change_navigation_style'))));
     const items: any[] = nav.style === 'back' ? nav.items.slice(0, 1) : nav.items;
     if (nav.style === 'back') {
       const p = document.createElement('p');
       p.className = 'an-prop-note an-prop-note--info';
-      p.textContent = 'Goes back to the dashboard a reader came from; with nobody to go back to, it opens the overview chosen below.';
+      p.textContent = t('navCard.goes_back_to_the_dashboard_a');
       host.appendChild(p);
     }
     items.forEach((it, i) => {
@@ -101,32 +101,32 @@ async function renderNavProps(card: any, host: HTMLElement): Promise<void> {
       const set = (patch: any): void => {
         const next = nav.items.slice();
         next[i] = Object.assign({}, it, patch);
-        write(Object.assign({}, nav, { items: next }), 'Edit navigation');
+        write(Object.assign({}, nav, { items: next }), t('navCard.edit_navigation'));
       };
       const head = document.createElement('div');
       head.className = 'ae-row-head';
       const title = document.createElement('span');
       title.className = 'ae-label';
-      title.textContent = nav.style === 'back' ? 'Overview' : `Button ${i + 1}`;
+      title.textContent = nav.style === 'back' ? t('navCard.overview') : t('navCard.button', { p0: i + 1 });
       head.appendChild(title);
       if (nav.style !== 'back') {
         const del = document.createElement('button');
         del.type = 'button';
         del.className = 'btn btn-sm ae-del';
-        iconOnly(del, 'trash', `Remove button ${i + 1}`);
-        del.addEventListener('click', () => write(Object.assign({}, nav, { items: nav.items.filter((_: any, k: number) => k !== i) }), 'Remove button'));
+        iconOnly(del, 'trash', t('navCard.remove_button', { p0: i + 1 }));
+        del.addEventListener('click', () => write(Object.assign({}, nav, { items: nav.items.filter((_: any, k: number) => k !== i) }), t('navCard.remove_button_2')));
         head.appendChild(del);
       }
       row.appendChild(head);
-      row.appendChild(aeInput('Label', it.label || '', 'Open', '', (v) => set({ label: v })));
+      row.appendChild(aeInput(t('common.label'), it.label || '', t('common.open'), '', (v) => set({ label: v })));
       if (nav.style !== 'back') {
-        const icons: Array<[string, string]> = [['', 'No icon']].concat(cardModel.NAV_ICONS.map((n: string) => [n, n.replace(/-/g, ' ')])) as Array<[string, string]>;
-        row.appendChild(aeSelect('Icon', icons, it.icon || '', (v) => set({ icon: v || undefined })));
+        const icons: Array<[string, string]> = [['', t('navCard.no_icon')]].concat(cardModel.NAV_ICONS.map((n: string) => [n, n.replace(/-/g, ' ')])) as Array<[string, string]>;
+        row.appendChild(aeSelect(t('navCard.icon'), icons, it.icon || '', (v) => set({ icon: v || undefined })));
       }
       aeTargetFields(refs, it.target, (t) => set({ target: t })).forEach((el) => row.appendChild(el));
       if (nav.style !== 'back') {
-        row.appendChild(aeInput('Carry filter', it.carry ? `${it.carry.column} = ${it.carry.value}` : '', 'region = West',
-          'Optional: opens the dashboard with this selection.', (v) => {
+        row.appendChild(aeInput(t('navCard.carry_filter'), it.carry ? `${it.carry.column} = ${it.carry.value}` : '', t('navCard.region_west'),
+          t('navCard.optional_opens_the_dashboard_with_this'), (v) => {
             const m = /^\s*([^=]+?)\s*=\s*(.+?)\s*$/.exec(v);
             set({ carry: m ? { column: m[1], value: m[2] } : undefined });
           }));
@@ -140,10 +140,10 @@ async function renderNavProps(card: any, host: HTMLElement): Promise<void> {
       add.type = 'button';
       add.className = 'btn btn-sm ae-add';
       add.appendChild(icon('plus'));
-      const t = document.createElement('span');
-      t.textContent = 'Add button';
-      add.appendChild(t);
-      add.addEventListener('click', () => write(Object.assign({}, nav, { items: nav.items.concat([{ label: 'Open' }]) }), 'Add button'));
+      const tv = document.createElement('span');
+      tv.textContent = t('navCard.add_button');
+      add.appendChild(tv);
+      add.addEventListener('click', () => write(Object.assign({}, nav, { items: nav.items.concat([{ label: t('common.open') }]) }), t('navCard.add_button')));
       host.appendChild(add);
     }
   };

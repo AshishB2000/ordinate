@@ -81,13 +81,13 @@ function buildStepForm(type: string, body: HTMLElement, existing: any): () => an
       const paintCond = (): void => {
         condBtn.textContent = pending.length
           ? pending.map((s) => filterStepSummary(s)).join(' and ')
-          : 'set a condition…';
+          : t('common.set_a_condition');
       };
       paintCond();
       condBtn.addEventListener('click', async () => {
         const column = colSel.value;
         if (!column) {
-          window.alert('Pick a column to filter on.');
+          window.alert(t('prepareForms.pick_a_column_to_filter_on'));
           return;
         }
         const col = expColumns.find((c) => c.name === column);
@@ -103,8 +103,8 @@ function buildStepForm(type: string, body: HTMLElement, existing: any): () => an
         paintCond();
       });
 
-      body.appendChild(fieldRow('Column', colSel));
-      body.appendChild(fieldRow('Condition', condBtn));
+      body.appendChild(fieldRow(t('common.column'), colSel));
+      body.appendChild(fieldRow(t('common.condition'), condBtn));
       // Retargeting to another column invalidates the operand — an `in` list of
       // city names means nothing on a price column.
       colSel.addEventListener('change', () => { pending = []; paintCond(); });
@@ -112,11 +112,11 @@ function buildStepForm(type: string, body: HTMLElement, existing: any): () => an
       return () => {
         const column = colSel.value;
         if (!column) {
-          window.alert('Pick a column to filter on.');
+          window.alert(t('prepareForms.pick_a_column_to_filter_on'));
           return null;
         }
         if (pending.length === 0) {
-          window.alert('Set a condition for this filter.');
+          window.alert(t('prepareForms.set_a_condition_for_this_filter'));
           return null;
         }
         // A min/max range is two steps. Returning the ARRAY lets the caller add
@@ -143,7 +143,7 @@ function buildStepForm(type: string, body: HTMLElement, existing: any): () => an
         lbl.appendChild(s);
         groupWrap.appendChild(lbl);
       });
-      body.appendChild(fieldRow('Group by', groupWrap));
+      body.appendChild(fieldRow(t('common.group_by'), groupWrap));
 
       const aggList = document.createElement('div');
       aggList.className = 'ds-agg-list';
@@ -157,14 +157,14 @@ function buildStepForm(type: string, body: HTMLElement, existing: any): () => an
       const addBtn = document.createElement('button');
       addBtn.type = 'button';
       addBtn.className = 'btn';
-      addBtn.textContent = '+ Add aggregation';
+      addBtn.textContent = t('prepareForms.add_aggregation');
       addBtn.addEventListener('click', () => addAgg());
       body.appendChild(addBtn);
 
       return () => {
         const groupBy = groupBoxes.filter((b) => b.checked).map((b) => b.value);
         if (!groupBy.length) {
-          window.alert('Pick at least one column to group by.');
+          window.alert(t('prepareForms.pick_at_least_one_column_to'));
           return null;
         }
         const aggregations: any[] = [];
@@ -175,7 +175,7 @@ function buildStepForm(type: string, body: HTMLElement, existing: any): () => an
           if (column && fn) aggregations.push({ column, fn, as: asVal || fn + '_' + column });
         });
         if (!aggregations.length) {
-          window.alert('Add at least one aggregation.');
+          window.alert(t('prepareForms.add_at_least_one_aggregation'));
           return null;
         }
         return { type, groupBy, aggregations };
@@ -199,7 +199,7 @@ function buildStepForm(type: string, body: HTMLElement, existing: any): () => an
         lbl.appendChild(s);
         wrap.appendChild(lbl);
       });
-      body.appendChild(fieldRow('Key columns (none checked = all columns)', wrap));
+      body.appendChild(fieldRow(t('prepareForms.key_columns_none_checked_all_columns'), wrap));
       return () => {
         const columns = boxes.filter((b) => b.checked).map((b) => b.value);
         const step: any = { type };
@@ -210,19 +210,19 @@ function buildStepForm(type: string, body: HTMLElement, existing: any): () => an
     case 'fill_empty': {
       const colSel = makeColSelect(existing ? existing.column : undefined);
       const valIn = textInput(existing && existing.value != null ? String(existing.value) : '');
-      body.appendChild(fieldRow('Column', colSel));
-      body.appendChild(fieldRow('Fill empty cells with', valIn));
+      body.appendChild(fieldRow(t('common.column'), colSel));
+      body.appendChild(fieldRow(t('prepareForms.fill_empty_cells_with'), valIn));
       return () => {
         if (!colSel.value) {
-          window.alert('Pick a column.');
+          window.alert(t('common.pick_a_column'));
           return null;
         }
         return { type, column: colSel.value, value: valIn.value };
       };
     }
     case 'trim': {
-      const colSel = makeColSelect(existing ? existing.column : undefined, '(all text columns)');
-      body.appendChild(fieldRow('Column', colSel));
+      const colSel = makeColSelect(existing ? existing.column : undefined, t('prepareForms.all_text_columns'));
+      body.appendChild(fieldRow(t('common.column'), colSel));
       return () => {
         const step: any = { type };
         if (colSel.value) step.column = colSel.value;
@@ -231,10 +231,10 @@ function buildStepForm(type: string, body: HTMLElement, existing: any): () => an
     }
     case 'drop_column': {
       const colSel = makeColSelect(existing ? existing.column : undefined);
-      body.appendChild(fieldRow('Column', colSel));
+      body.appendChild(fieldRow(t('common.column'), colSel));
       return () => {
         if (!colSel.value) {
-          window.alert('Pick a column.');
+          window.alert(t('common.pick_a_column'));
           return null;
         }
         return { type, column: colSel.value };
@@ -243,13 +243,13 @@ function buildStepForm(type: string, body: HTMLElement, existing: any): () => an
     case 'rename_column': {
       const fromSel = makeColSelect(existing ? existing.from : undefined);
       const toIn = textInput(existing && existing.to ? String(existing.to) : '');
-      body.appendChild(fieldRow('Rename', fromSel));
-      body.appendChild(fieldRow('To', toIn));
+      body.appendChild(fieldRow(t('common.rename'), fromSel));
+      body.appendChild(fieldRow(t('common.to'), toIn));
       return () => {
         const from = fromSel.value;
         const to = toIn.value.trim();
         if (!from || !to) {
-          window.alert('Pick a column and enter a new name.');
+          window.alert(t('prepareForms.pick_a_column_and_enter_a'));
           return null;
         }
         return { type, from, to };
@@ -270,11 +270,11 @@ function makeAggRow(agg?: any): HTMLElement {
   colSel.classList.add('ds-agg-col');
   const asIn = textInput(agg && agg.as ? String(agg.as) : '');
   asIn.classList.add('ds-agg-as');
-  asIn.placeholder = 'output name';
+  asIn.placeholder = t('prepareForms.output_name');
   const del = document.createElement('button');
   del.type = 'button';
   del.className = 'ds-step-btn';
-  iconOnly(del, 'x', 'Remove aggregation');
+  iconOnly(del, 'x', t('prepareForms.remove_aggregation'));
   del.addEventListener('click', () => row.remove());
   row.appendChild(fnSel);
   row.appendChild(colSel);
@@ -359,5 +359,5 @@ function fmtN(n: any): string {
 
 /** The "Rows: 1,250 → 1,180" line every preview starts with. */
 function rowsLine(res: any): string {
-  return 'Rows: ' + fmtN(res.before) + ' → ' + fmtN(res.after);
+  return t('prepareForms.rows', { before: fmtN(res.before), after: fmtN(res.after) });
 }

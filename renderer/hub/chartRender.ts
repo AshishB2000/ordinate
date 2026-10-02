@@ -205,7 +205,7 @@ function buildChart(
   const gridColor  = getCSSVar('--border', canvas);
   const surfColor  = getCSSVar('--surface', canvas);
   const titleColor = getCSSVar('--text-strong', canvas);
-  const fontFamily = getCSSVar('--font-ui', canvas) || 'system-ui, sans-serif';
+  const fontFamily = getCSSVar('--font-ui', canvas) || t('chartRender.system_ui_sans_serif');
 
   // ── Chart type resolution (chartTypeSpec.js) ────────────────────────────
   const spec = resolveChartType(type);
@@ -353,7 +353,7 @@ function buildChart(
       const v = opts._funnelVals[item.dataIndex];
       const top = opts._funnelVals[0] || 0;
       const pct = top ? Math.round((v / top) * 100) : null;
-      return pct != null ? `${fmt(v)} (${pct}% of top)` : fmt(v);
+      return pct != null ? t('chartRender.of_top', { v: fmt(v), pct }) : fmt(v);
     };
   }
   if (isExtraFamily(spec)) applyExtraTooltip(c, tooltipConfig);

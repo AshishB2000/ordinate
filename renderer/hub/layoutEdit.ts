@@ -67,18 +67,18 @@ function lyStep(id: string, dir: number): void {
   const j = i + dir;
   if (i < 0 || j < 0 || j >= vis.length) return;
   const draft = lyDraft();
-  if (draft && sizeLayout.moveItem(draft, id, vis[j], dir > 0)) lyCommit(draft, 'Reorder card', true);
+  if (draft && sizeLayout.moveItem(draft, id, vis[j], dir > 0)) lyCommit(draft, t('layoutEdit.reorder_card'), true);
 }
 
 function lyNudgeHeight(id: string, dh: number): void {
   const it = lyPlaced && lyPlaced.items.find((i: any) => i.id === id);
   const draft = it ? lyDraft() : null;
-  if (draft && sizeLayout.setHeight(draft, id, it.h + dh)) lyCommit(draft, 'Change height', true);
+  if (draft && sizeLayout.setHeight(draft, id, it.h + dh)) lyCommit(draft, t('layoutEdit.change_height'), true);
 }
 
 function lyHide(id: string, on: boolean): void {
   const draft = lyDraft();
-  if (draft && sizeLayout.setHidden(draft, id, on)) lyCommit(draft, on ? 'Hide card' : 'Show card', false);
+  if (draft && sizeLayout.setHidden(draft, id, on)) lyCommit(draft, on ? t('layoutEdit.hide_card') : t('layoutEdit.show_card'), false);
 }
 
 function lyReset(): void {
@@ -86,14 +86,12 @@ function lyReset(): void {
   const size = lyShown;
   if (!page || size === 'desktop' || dashReadOnly || !lyEdited(page, size)) return;
   const name = lyLabel(size).toLowerCase();
-  if (!window.confirm('Reset the ' + name + ' layout of this page to derived?\n\n'
-    + 'Its order, hidden cards and heights are discarded, and the ' + name
-    + ' layout follows the desktop grid again. Desktop is unchanged.')) return;
+  if (!window.confirm(t('layoutEdit.reset_the_layout_of_this_page', { name }))) return;
   const next = Object.assign({}, page.layouts);
   delete next[size];
   if (Object.keys(next).length) page.layouts = next;
   else delete page.layouts;
-  markDashDirty('Reset ' + name + ' layout');
+  markDashDirty(t('layoutEdit.reset_layout', { name }));
   renderDashGrid();
 }
 
@@ -102,12 +100,12 @@ function lyMenuItems(card: any): Array<[string, () => void]> | null {
   if (lyShown === 'desktop' || !lyPlaced) return null;
   const name = lyLabel(lyShown).toLowerCase();
   return [
-    ['Move earlier', () => lyStep(card.id, -1)],
-    ['Move later', () => lyStep(card.id, 1)],
-    ['Taller', () => lyNudgeHeight(card.id, 1)],
-    ['Shorter', () => lyNudgeHeight(card.id, -1)],
-    ['Hide on ' + name, () => lyHide(card.id, true)],
-    ['Remove', () => removeCard(card)],
+    [t('layoutEdit.move_earlier'), () => lyStep(card.id, -1)],
+    [t('layoutEdit.move_later'), () => lyStep(card.id, 1)],
+    [t('common.taller'), () => lyNudgeHeight(card.id, 1)],
+    [t('common.shorter'), () => lyNudgeHeight(card.id, -1)],
+    [t('layoutEdit.hide_on', { name }), () => lyHide(card.id, true)],
+    [t('common.remove'), () => removeCard(card)],
   ];
 }
 
@@ -125,7 +123,7 @@ function lyWireCards(grid: HTMLElement): void {
     const ctrls = el.querySelector('.dash-card-ctrls');
     if (ctrls) {
       const id = el.dataset.cardId || '';
-      const hide = dashCtrlBtn('eye-off', 'Hide on ' + lyLabel(lyShown).toLowerCase(), () => lyHide(id, true));
+      const hide = dashCtrlBtn('eye-off', t('layoutEdit.hide_on_2', { p0: lyLabel(lyShown).toLowerCase() }), () => lyHide(id, true));
       hide.classList.add('ly-hide-btn');
       ctrls.insertBefore(hide, ctrls.firstChild);
     }
@@ -227,10 +225,10 @@ function lyOnUp(): void {
   const draft = lyDraft();
   if (!draft) return;
   if (d.mode === 'height') {
-    if (d.h !== d.it.h && sizeLayout.setHeight(draft, d.id, d.h)) lyCommit(draft, 'Change height', true);
+    if (d.h !== d.it.h && sizeLayout.setHeight(draft, d.id, d.h)) lyCommit(draft, t('layoutEdit.change_height'), true);
     return;
   }
-  if (d.target && sizeLayout.moveItem(draft, d.id, d.target, d.after)) lyCommit(draft, 'Reorder card', true);
+  if (d.target && sizeLayout.moveItem(draft, d.id, d.target, d.after)) lyCommit(draft, t('layoutEdit.reorder_card'), true);
 }
 
 /** Arrows reorder, shift+up/down change the height — the keyboard path for both gestures. */

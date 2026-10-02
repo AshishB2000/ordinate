@@ -6,7 +6,7 @@
 // Classic global-scope renderer <script>: no import/export. Main does the file
 // work (src/ipc/syncFolder.ts); every path shown here came from main.
 
-const SY_HERE = /Mac/i.test(navigator.platform) ? 'this Mac' : 'this computer';
+const SY_HERE = /Mac/i.test(navigator.platform) ? t('projectSync.this_mac') : t('projectSync.this_computer');
 
 function syEl<T extends HTMLElement>(tag: string, cls?: string, text?: string): T {
   const e = document.createElement(tag) as T;
@@ -34,7 +34,7 @@ function syAsk(opts: { icon: string; tone?: 'warn'; title: string; body: string[
     for (const line of opts.body) box.appendChild(syEl('p', 'sy-modal-p', line));
     if (opts.meta) box.appendChild(syEl('div', 'sy-modal-meta', opts.meta));
     const actions = syEl('div', 'ws-modal-actions');
-    const no = syEl<HTMLButtonElement>('button', 'btn', opts.cancel || 'Cancel');
+    const no = syEl<HTMLButtonElement>('button', 'btn', opts.cancel || t('common.cancel'));
     const yes = syEl<HTMLButtonElement>('button', 'btn btn-primary', opts.ok);
     no.type = 'button';
     yes.type = 'button';
@@ -75,15 +75,15 @@ async function syConfirmOpen(id: string): Promise<boolean> {
   if (!st || !st.synced || st.state !== 'held') return true;
   const since = st.openedAt ? new Date(st.openedAt) : null;
   const time = since ? since.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-    + (since.toDateString() === new Date().toDateString() ? '' : ' on ' + since.toLocaleDateString([], { month: 'short', day: 'numeric' })) : 'a moment ago';
+    + (since.toDateString() === new Date().toDateString() ? '' : ' on ' + since.toLocaleDateString([], { month: 'short', day: 'numeric' })) : t('projectSync.a_moment_ago');
   const there = SY_HERE.replace('this', 'that');
   const ok = await syAsk({
     icon: 'cloud', tone: 'warn',
-    title: st.name ? `“${st.name}” is open somewhere else` : 'This project is open somewhere else',
-    body: [`Open on ${st.host} since ${time}. Editing here too can create conflicting copies.`,
-      `Close it there first if you can. If ${there} is off or asleep, its lock expires within 5 minutes and this warning goes away.`],
-    meta: `Last seen ${jpAgo(st.heartbeatAt)} · ${syShort(st.target)}`,
-    ok: 'Open anyway',
+    title: st.name ? t('projectSync.is_open_somewhere_else', { name: st.name }) : t('projectSync.this_project_is_open_somewhere_else'),
+    body: [t('projectSync.open_on_since_editing_here_too', { host: st.host, time }),
+      t('projectSync.close_it_there_first_if_you', { there })],
+    meta: t('projectSync.last_seen', { heartbeatAt: jpAgo(st.heartbeatAt), target: syShort(st.target) }),
+    ok: t('projectSync.open_anyway'),
   });
   if (ok) await window.hubBackup.syncTake(id);
   return ok;
@@ -97,21 +97,21 @@ async function syAdopted(id: string): Promise<void> {
   for (const k of ['conflict', 'lost', 'offline']) syBannerClear(k);
   if (!r || !r.synced || id !== currentProjectId) return;
   if (!r.available) {
-    syBanner('offline', 'alert', 'This project’s sync folder is not available',
-      `Ordinate cannot reach ${syShort(r.target)}. Check that iCloud Drive or Dropbox is running, then open the project again.`, []);
+    syBanner('offline', 'alert', t('projectSync.this_project_s_sync_folder_is'),
+      t('projectSync.ordinate_cannot_reach_check_that_icloud', { target: syShort(r.target) }), []);
     return;
   }
   if (r.tookOver) {
-    showToast(`Opened here — ${r.tookOver.host} last had it open ${jpAgo(r.tookOver.heartbeatAt)}, so its lock had expired.`, { kind: 'info' });
+    showToast(t('projectSync.opened_here_last_had_it_open', { host: r.tookOver.host, heartbeatAt: jpAgo(r.tookOver.heartbeatAt) }), { kind: 'info' });
   }
   if (r.restart) syRestartNotice();
   if (r.conflicts && r.conflicts.length) syConflictBanner(id, r.conflicts);
 }
 
 function syRestartNotice(): void {
-  syBanner('restart', 'info', 'Restart Ordinate to finish',
-    'The data engine only reads the folders it was started with. Tables in this project come back after a restart.',
-    [{ label: 'Restart now', primary: true, run: () => void window.hubBackup.relaunch() }]);
+  syBanner('restart', 'info', t('projectSync.restart_ordinate_to_finish'),
+    t('projectSync.the_data_engine_only_reads_the'),
+    [{ label: t('projectSync.restart_now'), primary: true, run: () => void window.hubBackup.relaunch() }]);
 }
 
 // ── Banners ──────────────────────────────────────────────────────────────────
@@ -148,7 +148,7 @@ function syBanner(kind: string, ic: string, title: string, text: string, actions
   }
   const x = syEl<HTMLButtonElement>('button', 'btn btn-sm btn-ghost sy-banner-x');
   x.type = 'button';
-  iconOnly(x, 'x', 'Dismiss');
+  iconOnly(x, 'x', t('common.dismiss'));
   x.addEventListener('click', () => b.remove());
   acts.appendChild(x);
   b.append(art, body, acts);
@@ -161,20 +161,20 @@ function syConflictBanner(id: string, files: string[]): void {
   for (const rel of files.slice(0, 6)) {
     const li = syEl('li', 'sy-file');
     li.appendChild(syEl('span', 'sy-file-name', rel));
-    const reveal = syEl<HTMLButtonElement>('button', 'sy-link', 'Reveal');
+    const reveal = syEl<HTMLButtonElement>('button', 'sy-link', t('common.reveal'));
     reveal.type = 'button';
     reveal.addEventListener('click', () => void window.hubBackup.revealConflict(id, rel));
     li.appendChild(reveal);
     list.appendChild(li);
   }
-  if (files.length > 6) list.appendChild(syEl('li', 'sy-file sy-file-more', `and ${files.length - 6} more`));
+  if (files.length > 6) list.appendChild(syEl('li', 'sy-file sy-file-more', t('projectSync.and_more', { p0: files.length - 6 })));
   list.hidden = true;
   const b = syBanner('conflict', 'alert',
-    `${files.length} conflicting ${files.length === 1 ? 'copy' : 'copies'} in this project`,
-    'Your sync service kept both versions when two machines saved at once. Compare them, keep the one you want, and delete the other.',
+    t('projectSync.conflicting_in_this_project', { filesCount: files.length }),
+    t('projectSync.your_sync_service_kept_both_versions'),
     [
-      { label: 'Details', run: () => { list.hidden = !list.hidden; } },
-      { label: 'Reveal', primary: true, run: () => void window.hubBackup.revealConflict(id, files[0]) },
+      { label: t('common.details'), run: () => { list.hidden = !list.hidden; } },
+      { label: t('common.reveal'), primary: true, run: () => void window.hubBackup.revealConflict(id, files[0]) },
     ], list);
   b.classList.add('is-warn');
 }
@@ -186,34 +186,34 @@ function syBadge(p: any): HTMLElement | null {
   if (!p.syncedTo) return null;
   const b = syEl('span', 'pj-badge sy-badge');
   b.appendChild(icon('cloud', 11));
-  b.appendChild(document.createTextNode('Synced'));
-  b.title = 'In ' + p.syncedTo;
+  b.appendChild(document.createTextNode(t('projectSync.synced')));
+  b.title = t('projectSync.in', { syncedTo: p.syncedTo });
   return b;
 }
 
 /** The row menu's sync items, added through the switcher's own `item` builder. */
 function syMenuItems(p: any, item: (ic: string, label: string, run: (() => void) | null) => void): void {
   if (p.syncedTo) {
-    item('folder', 'Show sync folder', () => void window.hubBackup.revealSyncFolder(p.id));
-    item('hard-drive', `Move back to ${SY_HERE}`, () => void syMoveBack(p));
+    item('folder', t('projectSync.show_sync_folder'), () => void window.hubBackup.revealSyncFolder(p.id));
+    item('hard-drive', t('projectSync.move_back_to', { SY_HERE }), () => void syMoveBack(p));
   } else {
-    item('cloud', 'Move to sync folder…', () => void syMoveTo(p));
+    item('cloud', t('projectSync.move_to_sync_folder'), () => void syMoveTo(p));
   }
 }
 
 async function syMoveTo(p: any): Promise<void> {
   pjClose();
   const go = await syAsk({
-    icon: 'cloud', title: `Move “${p.name}” to a sync folder`,
-    body: ['Pick a folder that iCloud Drive or Dropbox keeps in sync. The project moves into it, and Ordinate on another machine can open it with Open from folder….',
-      'Edit it on one machine at a time: Ordinate warns when it is already open somewhere else.'],
-    ok: 'Choose folder…',
+    icon: 'cloud', title: t('projectSync.move_to_a_sync_folder', { name: p.name }),
+    body: [t('projectSync.pick_a_folder_that_icloud_drive'),
+      t('projectSync.edit_it_on_one_machine_at')],
+    ok: t('projectSync.choose_folder'),
   });
   if (!go) return;
   const r = await window.hubBackup.moveToSyncFolder(p.id);
   if (!r || r.canceled) return;
-  if (!r.ok) { showToast(r.error || 'The project could not be moved', { kind: 'error' }); return; }
-  showToast(`Moved “${p.name}” to ${syShort(r.target)}`, { kind: 'success', action: { label: 'Show', onClick: () => void window.hubBackup.revealSyncFolder(p.id) } });
+  if (!r.ok) { showToast(r.error || t('projectSync.the_project_could_not_be_moved'), { kind: 'error' }); return; }
+  showToast(t('projectSync.moved_to', { name: p.name, target: syShort(r.target) }), { kind: 'success', action: { label: t('common.show'), onClick: () => void window.hubBackup.revealSyncFolder(p.id) } });
   if (r.restart) syRestartNotice();
   if (p.id === currentProjectId) void syAdopted(p.id);
 }
@@ -221,34 +221,34 @@ async function syMoveTo(p: any): Promise<void> {
 async function syMoveBack(p: any): Promise<void> {
   pjClose();
   const go = await syAsk({
-    icon: 'hard-drive', title: `Move “${p.name}” back to ${SY_HERE}`,
-    body: [`Ordinate copies it into its own storage on ${SY_HERE}, then moves the folder in ${syShort(p.syncedTo)} to the Trash.`,
-      'Other machines that open it from that folder will no longer see it.'],
-    ok: 'Move back',
+    icon: 'hard-drive', title: t('projectSync.move_back_to_2', { name: p.name, SY_HERE }),
+    body: [t('projectSync.ordinate_copies_it_into_its_own', { SY_HERE, syncedTo: syShort(p.syncedTo) }),
+      t('projectSync.other_machines_that_open_it_from')],
+    ok: t('projectSync.move_back'),
   });
   if (!go) return;
   const r = await window.hubBackup.moveBack(p.id);
-  if (!r || !r.ok) { showToast((r && r.error) || 'The project could not be moved back', { kind: 'error' }); return; }
+  if (!r || !r.ok) { showToast((r && r.error) || t('projectSync.the_project_could_not_be_moved_2'), { kind: 'error' }); return; }
   syBannerClear('conflict');
   syBannerClear('lost');
-  showToast(r.leftBehind ? `“${p.name}” is back on ${SY_HERE}. The synced folder could not be moved to the Trash — delete it yourself.`
-    : `“${p.name}” is back on ${SY_HERE}`, { kind: 'success' });
+  showToast(r.leftBehind ? t('projectSync.is_back_on_the_synced_folder', { name: p.name, SY_HERE })
+    : t('projectSync.is_back_on', { name: p.name, SY_HERE }), { kind: 'success' });
 }
 
 async function syOpenFromFolder(): Promise<void> {
   pjClose();
   const r = await window.hubBackup.openFromFolder();
   if (!r || r.canceled) return;
-  if (!r.ok || !r.project) { showToast(r.error || 'That folder could not be opened', { kind: 'error' }); return; }
+  if (!r.ok || !r.project) { showToast(r.error || t('projectSync.that_folder_could_not_be_opened'), { kind: 'error' }); return; }
   await pjSwitchTo(String(r.project.id));
-  showToast(`Opened “${r.project.name}” from ${syShort(r.target)}`, { kind: 'success' });
+  showToast(t('projectSync.opened_from', { name: r.project.name, target: syShort(r.target) }), { kind: 'success' });
 }
 
 (function initProjectSync(): void {
   if (!window.hubBackup) return;
   window.hubBackup.onLockLost((info) => {
     if (!info || info.projectId !== currentProjectId) return;
-    syBanner('lost', 'cloud', `Also opened on ${info.host}`,
-      'Changes saved on both machines can turn into conflicting copies. Close the project on one of them.', []).classList.add('is-warn');
+    syBanner('lost', 'cloud', t('projectSync.also_opened_on', { host: info.host }),
+      t('projectSync.changes_saved_on_both_machines_can'), []).classList.add('is-warn');
   });
 })();

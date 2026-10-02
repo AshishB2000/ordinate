@@ -27,7 +27,7 @@ async function snLoadSetup(): Promise<void> {
 
 function snMetricName(id: string): string {
   const m = snMetricsAll.find((x) => String(x.id) === id);
-  return m ? String(m.name) : 'Missing metric';
+  return m ? String(m.name) : t('common.missing_metric');
 }
 
 // ── metrics ──────────────────────────────────────────────────────────────────
@@ -45,7 +45,7 @@ function snRenderMetricChips(): void {
     const x = document.createElement('button');
     x.type = 'button';
     x.className = 'sn-mchip-x';
-    iconOnly(x, 'x', 'Remove ' + snMetricName(id), 12);
+    iconOnly(x, 'x', t('scenarioDrivers.remove', { id: snMetricName(id) }), 12);
     x.addEventListener('click', () => {
       if (!snCurrent) return;
       snCurrent.baseMetricIds = snCurrent.baseMetricIds.filter((m) => m !== id);
@@ -57,7 +57,7 @@ function snRenderMetricChips(): void {
   if (!snCurrent.baseMetricIds.length) {
     const p = document.createElement('p');
     p.className = 'sn-side-empty';
-    p.textContent = 'No metrics yet — add the ones you want to see move.';
+    p.textContent = t('scenarioDrivers.no_metrics_yet_add_the_ones');
     box.appendChild(p);
   }
 }
@@ -70,7 +70,7 @@ function snAddMetricMenu(anchor: HTMLElement): void {
     if (!left.length || cur.baseMetricIds.length >= 12) {
       const p = document.createElement('div');
       p.className = 'sn-menu-note';
-      p.textContent = left.length ? 'Twelve metrics is the most a scenario shows.' : 'Every metric in this project is already here.';
+      p.textContent = left.length ? t('scenarioDrivers.twelve_metrics_is_the_most_a') : t('scenarioDrivers.every_metric_in_this_project_is');
       menu.appendChild(p);
       return;
     }
@@ -150,9 +150,9 @@ function snDriverRow(d: any, i: number): HTMLElement {
     [list[at], list[to]] = [list[to], list[at]];
     snChanged();
   };
-  btn('chevron-up', `Apply driver ${i + 1} earlier`, () => move(-1)).classList.add('sn-drv-up');
-  btn('chevron-down', `Apply driver ${i + 1} later`, () => move(1)).classList.add('sn-drv-down');
-  btn('trash', `Remove driver ${i + 1}`, () => {
+  btn('chevron-up', t('scenarioDrivers.apply_driver_earlier', { p0: i + 1 }), () => move(-1)).classList.add('sn-drv-up');
+  btn('chevron-down', t('scenarioDrivers.apply_driver_later', { p0: i + 1 }), () => move(1)).classList.add('sn-drv-down');
+  btn('trash', t('scenarioDrivers.remove_driver', { p0: i + 1 }), () => {
     snCurrent!.drivers.splice(Number(row.dataset.index), 1);
     snChanged();
   });
@@ -165,11 +165,11 @@ function snDriverRow(d: any, i: number): HTMLElement {
   ctl.className = 'sn-drv-ctl';
   const kind = document.createElement('select');
   kind.className = 'sn-drv-kind';
-  kind.setAttribute('aria-label', `Driver ${i + 1}: change by a percent or set a value`);
-  for (const [v, t] of [['pct', 'Change by'], ['abs', 'Set to']]) {
+  kind.setAttribute('aria-label', t('scenarioDrivers.driver_change_by_a_percent_or', { p0: i + 1 }));
+  for (const [v, tv] of [['pct', t('scenarioDrivers.change_by')], ['abs', t('scenarioDrivers.set_to')]]) {
     const o = document.createElement('option');
     o.value = v;
-    o.textContent = t;
+    o.textContent = tv;
     kind.appendChild(o);
   }
   kind.value = d.kind;
@@ -184,13 +184,13 @@ function snDriverRow(d: any, i: number): HTMLElement {
   num.type = 'number';
   num.step = 'any';
   num.className = 'sn-drv-num tnum';
-  num.setAttribute('aria-label', d.kind === 'pct' ? `Driver ${i + 1} percent change` : `Driver ${i + 1} value`);
+  num.setAttribute('aria-label', d.kind === 'pct' ? t('scenarioDrivers.driver_percent_change', { p0: i + 1 }) : t('scenarioDrivers.driver_value', { p0: i + 1 }));
   if (d.kind === 'pct') {
     const range = document.createElement('input');
     range.type = 'range';
     range.step = '0.5';
     range.className = 'sn-drv-range';
-    range.setAttribute('aria-label', `Driver ${i + 1} percent change slider`);
+    range.setAttribute('aria-label', t('scenarioDrivers.driver_percent_change_slider', { p0: i + 1 }));
     range.addEventListener('input', () => {
       snCurrent!.drivers[Number(row.dataset.index)].value = Number(range.value);
       num.value = range.value;
@@ -217,13 +217,13 @@ function snDriverRow(d: any, i: number): HTMLElement {
   const pl = document.createElement('label');
   pl.className = 'sn-drv-param';
   const pt = document.createElement('span');
-  pt.textContent = 'On a dashboard, follow parameter';
+  pt.textContent = t('scenarioDrivers.on_a_dashboard_follow_parameter');
   const param = document.createElement('input');
   param.type = 'text';
   param.className = 'sn-drv-param-in';
   param.placeholder = 'none';
   param.spellcheck = false;
-  param.setAttribute('aria-label', `Driver ${i + 1}: dashboard number parameter it follows`);
+  param.setAttribute('aria-label', t('scenarioDrivers.driver_dashboard_number_parameter_it', { p0: i + 1 }));
   param.addEventListener('change', () => {
     const cur = snCurrent!.drivers[Number(row.dataset.index)];
     const v = param.value.trim();
@@ -233,7 +233,7 @@ function snDriverRow(d: any, i: number): HTMLElement {
   pl.append(pt, param);
   const hint = document.createElement('span');
   hint.className = 'sn-drv-hint';
-  hint.append(icon('alert', 12), document.createTextNode(' Changes none of these metrics'));
+  hint.append(icon('alert', 12), document.createTextNode(t('scenarioDrivers.changes_none_of_these_metrics')));
   foot.append(pl, hint);
 
   row.append(head, target, ctl, foot);
@@ -246,7 +246,7 @@ function snSyncDriverRow(row: HTMLElement, d: any, i: number): void {
   const info = snDriverInfo(i);
   const set = (sel: string, text: string): void => { const el = row.querySelector(sel); if (el) el.textContent = text; };
   set('.sn-drv-n', String(i + 1));
-  set('.sn-drv-label', info ? info.label : d.name || 'New driver');
+  set('.sn-drv-label', info ? info.label : d.name || t('scenarioDrivers.new_driver'));
   set('.sn-drv-target', info ? info.targetText : '');
   const up = row.querySelector<HTMLButtonElement>('.sn-drv-up');
   if (up) up.disabled = i === 0;
@@ -273,9 +273,9 @@ function snDriversEmpty(): HTMLElement {
   box.className = 'sn-drivers-empty';
   const h = document.createElement('p');
   h.className = 'sn-drivers-empty-h';
-  h.textContent = 'No drivers yet — every figure is its baseline';
+  h.textContent = t('scenarioDrivers.no_drivers_yet_every_figure_is');
   const p = document.createElement('p');
-  p.textContent = 'A driver moves one input: a column\'s values (every row, or only some rows) or a metric\'s result. The stored data never changes.';
+  p.textContent = t('scenarioDrivers.a_driver_moves_one_input_a');
   box.append(h, p);
   const ideas: Array<{ text: string; driver: any }> = [];
   const cols = snTargets && Array.isArray(snTargets.columns) ? snTargets.columns : [];
@@ -291,7 +291,7 @@ function snDriversEmpty(): HTMLElement {
       b.type = 'button';
       b.className = 'ws-empty-chip sn-idea';
       b.textContent = idea.text;
-      b.setAttribute('aria-label', 'Add the driver ' + idea.text);
+      b.setAttribute('aria-label', t('scenarioDrivers.add_the_driver', { text: idea.text }));
       b.addEventListener('click', () => {
         if (!snCurrent) return;
         snCurrent.drivers.push({ name: idea.text, ...idea.driver });
@@ -340,7 +340,7 @@ function snRenderAdd(): void {
     b.type = 'button';
     b.className = 'sn-add-btn';
     b.id = 'sn-add-open';
-    b.append(icon('plus', 14), document.createTextNode(' Add driver'));
+    b.append(icon('plus', 14), document.createTextNode(t('scenarioDrivers.add_driver')));
     b.addEventListener('click', () => { snAddOpen = true; snAdd = { ...SN_ADD_DEFAULT }; snRenderAdd(); });
     host.appendChild(b);
     return;
@@ -352,13 +352,13 @@ function snRenderAdd(): void {
   const form = document.createElement('div');
   form.className = 'sn-add-form';
   form.setAttribute('role', 'group');
-  form.setAttribute('aria-label', 'New driver');
+  form.setAttribute('aria-label', t('scenarioDrivers.new_driver'));
 
   const seg = document.createElement('div');
   seg.className = 'sn-seg';
   seg.setAttribute('role', 'group');
-  seg.setAttribute('aria-label', 'What the driver moves');
-  for (const [mode, text] of [['column', 'A column'], ['metric', 'A metric']]) {
+  seg.setAttribute('aria-label', t('scenarioDrivers.what_the_driver_moves'));
+  for (const [mode, text] of [['column', t('scenarioDrivers.a_column')], ['metric', t('scenarioDrivers.a_metric')]]) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'sn-seg-btn';
@@ -373,32 +373,32 @@ function snRenderAdd(): void {
     if (!cols.length) {
       const p = document.createElement('p');
       p.className = 'sn-side-empty';
-      p.textContent = 'These metrics aggregate no column a driver can move. Add a sum, average, min or max metric.';
+      p.textContent = t('scenarioDrivers.these_metrics_aggregate_no_column_a');
       form.appendChild(p);
     } else {
-      form.appendChild(snField('Column', snSelect('Column the driver moves',
-        cols.map((c) => [c.datasetId + '|' + c.column, `${c.column} — in ${c.metrics.join(', ')}`] as [string, string]),
+      form.appendChild(snField(t('common.column'), snSelect(t('scenarioDrivers.column_the_driver_moves'),
+        cols.map((c) => [c.datasetId + '|' + c.column, t('scenarioDrivers.in', { column: c.column, p1: c.metrics.join(', ') })] as [string, string]),
         snAdd.column, (v) => { snAdd.column = v; snAdd.fcol = ''; snAdd.fval = ''; snRenderAdd(); })));
       const dsId = snAdd.column.split('|')[0];
       const ds = (snTargets.datasets || []).find((x: any) => x.id === dsId);
-      const fcols: Array<[string, string]> = [['', 'All rows']].concat(
+      const fcols: Array<[string, string]> = [['', t('scenarioDrivers.all_rows')]].concat(
         (ds ? ds.columns : []).filter((c: any) => c.type !== 'number').map((c: any) => [c.name, c.name] as [string, string])) as Array<[string, string]>;
-      form.appendChild(snField('Only rows where', snSelect('Only rows where this column', fcols, snAdd.fcol, (v) => { snAdd.fcol = v; snAdd.fval = ''; snRenderAdd(); })));
+      form.appendChild(snField(t('scenarioDrivers.only_rows_where'), snSelect(t('scenarioDrivers.only_rows_where_this_column'), fcols, snAdd.fcol, (v) => { snAdd.fcol = v; snAdd.fval = ''; snRenderAdd(); })));
       if (snAdd.fcol) {
-        const val = snSelect('has this value', [['', 'Loading…']], '', (v) => { snAdd.fval = v; });
+        const val = snSelect(t('scenarioDrivers.has_this_value'), [['', t('common.loading')]], '', (v) => { snAdd.fval = v; });
         val.disabled = true;
         form.appendChild(snField('is', val));
         void snFillValues(val, dsId, snAdd.fcol);
       }
     }
   } else {
-    form.appendChild(snField('Metric', snSelect('Metric the driver moves', ms.map((m) => [m.id, m.name] as [string, string]),
+    form.appendChild(snField(t('common.metric'), snSelect(t('scenarioDrivers.metric_the_driver_moves'), ms.map((m) => [m.id, m.name] as [string, string]),
       snAdd.metricId, (v) => { snAdd.metricId = v; })));
   }
 
   const line = document.createElement('div');
   line.className = 'sn-add-line';
-  line.appendChild(snField('Change', snSelect('Change by a percent or set a value', [['pct', 'By %'], ['abs', 'Set to']], snAdd.kind, (v) => {
+  line.appendChild(snField(t('common.change'), snSelect(t('scenarioDrivers.change_by_a_percent_or_set'), [['pct', t('scenarioDrivers.by')], ['abs', t('scenarioDrivers.set_to')]], snAdd.kind, (v) => {
     snAdd.kind = v;
     snAdd.value = v === 'pct' ? '5' : '0';
     snRenderAdd();
@@ -410,7 +410,7 @@ function snRenderAdd(): void {
   value.id = 'sn-add-value';
   value.value = snAdd.value;
   value.addEventListener('input', () => { snAdd.value = value.value; });
-  line.appendChild(snField(snAdd.kind === 'pct' ? 'Percent' : 'Value', value));
+  line.appendChild(snField(snAdd.kind === 'pct' ? t('common.percent') : t('common.value'), value));
   form.appendChild(line);
 
   const acts = document.createElement('div');
@@ -418,13 +418,13 @@ function snRenderAdd(): void {
   const cancel = document.createElement('button');
   cancel.type = 'button';
   cancel.className = 'btn btn-sm';
-  cancel.textContent = 'Cancel';
+  cancel.textContent = t('common.cancel');
   cancel.addEventListener('click', () => { snAddOpen = false; snRenderAdd(); });
   const add = document.createElement('button');
   add.type = 'button';
   add.className = 'btn btn-sm btn-primary';
   add.id = 'sn-add-confirm';
-  add.textContent = 'Add driver';
+  add.textContent = t('scenarioDrivers.add_driver_2');
   add.addEventListener('click', () => snConfirmAdd());
   acts.append(cancel, add);
   form.appendChild(acts);
@@ -453,7 +453,7 @@ async function snFillValues(sel: HTMLSelectElement, datasetId: string, column: s
 function snConfirmAdd(): void {
   if (!snCurrent) return;
   const v = Number(snAdd.value);
-  if (snAdd.value.trim() === '' || !Number.isFinite(v)) { showToast('Give the driver a number.'); return; }
+  if (snAdd.value.trim() === '' || !Number.isFinite(v)) { showToast(t('scenarioDrivers.give_the_driver_a_number')); return; }
   let target: any;
   if (snAdd.mode === 'metric') {
     if (!snAdd.metricId) return;

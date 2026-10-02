@@ -98,10 +98,10 @@ async function renderRecent(): Promise<void> {
 
 const HOME_TYPE_LABEL: Record<string, string> = {
   dataset: 'Dataset',
-  analysis: 'Dashboard',
-  dashboard: 'Dashboard',
-  capture: 'Capture',
-  report: 'Report',
+  analysis: t('common.dashboard'),
+  dashboard: t('common.dashboard'),
+  capture: t('common.capture'),
+  report: t('common.report'),
 };
 
 // One inline SVG path per record type. Inline, not an icon library: no new
@@ -198,7 +198,7 @@ function makeRecentRow(it: any): HTMLElement {
 
   const name = document.createElement('span');
   name.className = 'home-row-name';
-  name.textContent = it.name || 'Untitled';
+  name.textContent = it.name || t('common.untitled');
   if (it.type === 'dataset') {
     const dq = dqDot(it.meta && it.meta.qualityFailing); // dsRules.ts — a failing quality rule
     if (dq) name.prepend(dq);
@@ -212,7 +212,7 @@ function makeRecentRow(it: any): HTMLElement {
   meta.className = 'home-row-meta';
   const kind = document.createElement('span');
   kind.className = 'home-row-kind';
-  kind.textContent = HOME_TYPE_LABEL[row.dataset.type] || 'Record';
+  kind.textContent = HOME_TYPE_LABEL[row.dataset.type] || t('common.record');
   meta.appendChild(kind);
 
   const size = homeMetaText(it);
@@ -239,7 +239,7 @@ function makeRecentRow(it: any): HTMLElement {
   star.className = 'home-row-star' + (on ? ' is-on' : '');
   star.setAttribute('role', 'button');
   star.setAttribute('tabindex', '0');
-  star.setAttribute('aria-label', on ? 'Unstar' : 'Star');
+  star.setAttribute('aria-label', on ? t('homePage.unstar') : t('common.star'));
   star.setAttribute('aria-pressed', on ? 'true' : 'false');
   setIcon(star, on ? 'star-filled' : 'star');
   star.addEventListener('click', (e) => {
@@ -259,7 +259,7 @@ function makeRecentRow(it: any): HTMLElement {
   // because the separators between the meta spans are CSS ::before content
   // (correctly not announced) and flex gaps are not whitespace. An explicit
   // label is what makes it read as a sentence instead of a run-on.
-  const parts = [it.name || 'Untitled', HOME_TYPE_LABEL[row.dataset.type] || 'Record'];
+  const parts = [it.name || t('common.untitled'), HOME_TYPE_LABEL[row.dataset.type] || t('common.record')];
   if (size) parts.push(size);
   if (it.projectName) parts.push('in ' + it.projectName);
   parts.push(time.textContent || '');
@@ -309,8 +309,8 @@ function paintHome(): void {
         makeEmptyState({
           variant: 'starred',
           iconName: 'star',
-          title: 'Nothing pinned yet',
-          line: 'Star a dataset or dashboard and it stays here, across every project.',
+          title: t('homePage.nothing_pinned_yet'),
+          line: t('homePage.star_a_dataset_or_dashboard_and'),
         }),
       );
   }
@@ -326,15 +326,15 @@ function paintHome(): void {
         makeEmptyState({
           variant: 'recent',
           iconName: 'list',   // no clock in the sprite; the section IS a list
-          title: 'Your work will collect here',
+          title: t('homePage.your_work_will_collect_here'),
           line: recentAllProjects
-            ? 'Every dataset and dashboard you open shows up in this list — newest first, across all projects.'
-            : 'Every dataset and dashboard in this project shows up here, newest first. “All projects” shows the rest.',
-          actionLabel: 'Bring in some data',
+            ? t('homePage.every_dataset_and_dashboard_you_open')
+            : t('homePage.every_dataset_and_dashboard_in_this'),
+          actionLabel: t('homePage.bring_in_some_data'),
           // The same door the quick-start row opens, so the empty state ends in
           // the action it is describing rather than in advice.
           onAction: () => { if (typeof startFromSource === 'function') startFromSource('file'); },
-          ghostLabel: 'Browse sources',
+          ghostLabel: t('homePage.browse_sources'),
           onGhost: () => { if (typeof startFromSource === 'function') startFromSource('catalog'); },
         }),
       );
@@ -347,7 +347,7 @@ function paintHome(): void {
   if (showall) {
     const more = rest.length > RECENT_COLLAPSED;
     showall.hidden = !more;
-    showall.textContent = recentExpanded ? 'Show less' : 'Show all ' + rest.length + ' →';
+    showall.textContent = recentExpanded ? t('homePage.show_less') : t('homePage.show_all', { restCount: rest.length });
   }
 }
 

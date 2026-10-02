@@ -36,11 +36,11 @@ function openAnalysisFrom(a: any): void {
   dashReadOnly = false;
   mountDashEditor('an-editor-host');
   if (!Array.isArray(a.sheets) || a.sheets.length === 0) {
-    a.sheets = [{ id: dashUuid(), name: 'Sheet 1', cards: [] }];
+    a.sheets = [{ id: dashUuid(), name: t('common.sheet_1'), cards: [] }];
   }
   a.pages = a.sheets; // alias, NOT a copy — one array, two names
   dashShow('an-list-view', false);
-  openEditorWith(a, a && a.name ? a.name : 'Untitled dashboard');
+  openEditorWith(a, a && a.name ? a.name : t('common.untitled_dashboard'));
   if (typeof cmMaybeStart === 'function') void cmMaybeStart(String(a.id)); // coachMarks.ts — the sample's one-time tour
 }
 
@@ -54,7 +54,7 @@ function openEditorWith(rec: any, title: string): void {
   dashPageIdx = 0;
   dashDirty = false;
   if (!Array.isArray(dashCurrent.pages) || dashCurrent.pages.length === 0) {
-    dashCurrent.pages = [{ id: dashUuid(), name: 'Page 1', cards: [] }];
+    dashCurrent.pages = [{ id: dashUuid(), name: t('dashGrid.page_1'), cards: [] }];
   }
   // Week 10: dashboard-wide filters (a v1 dashboard has none → []).
   if (!Array.isArray(dashCurrent.filters)) dashCurrent.filters = [];
@@ -181,7 +181,7 @@ function markDashDirty(label?: string, coalesce?: boolean): void {
   // would quietly overwrite a snapshot, so it is stopped at the source too.
   if (dashReadOnly) return;
   dashDirty = true;
-  dashHistCommit(label || 'Change', coalesce);
+  dashHistCommit(label || t('common.change'), coalesce);
   scheduleDashSave();
 }
 
@@ -194,7 +194,7 @@ function renderDashPages(): void {
     const tab = document.createElement('button');
     tab.type = 'button';
     tab.className = 'dash-page-tab seg-opt' + (i === dashPageIdx ? ' active' : '');
-    tab.textContent = p && p.name ? String(p.name) : 'Page ' + (i + 1);
+    tab.textContent = p && p.name ? String(p.name) : t('common.page_2', { p0: (i + 1) });
     tab.addEventListener('click', () => { dashPageIdx = i; renderDashPages(); renderDashGrid(); });
     tab.addEventListener('dblclick', () => handleRenamePage(i));
     strip.appendChild(tab);
@@ -203,7 +203,7 @@ function renderDashPages(): void {
   const ren = document.createElement('button');
   ren.type = 'button';
   ren.className = 'dash-page-ctrl';
-  iconOnly(ren, 'pencil', 'Rename page');
+  iconOnly(ren, 'pencil', t('dashGrid.rename_page'));
   ren.addEventListener('click', () => handleRenamePage(dashPageIdx));
   strip.appendChild(ren);
 
@@ -211,7 +211,7 @@ function renderDashPages(): void {
     const del = document.createElement('button');
     del.type = 'button';
     del.className = 'dash-page-ctrl';
-    iconOnly(del, 'x', 'Remove page');
+    iconOnly(del, 'x', t('dashGrid.remove_page'));
     del.addEventListener('click', () => handleRemovePage(dashPageIdx));
     strip.appendChild(del);
   }
@@ -219,7 +219,7 @@ function renderDashPages(): void {
   const add = document.createElement('button');
   add.type = 'button';
   add.className = 'dash-page-add';
-  iconLabel(add, 'plus', 'Page');
+  iconLabel(add, 'plus', t('common.page'));
   add.addEventListener('click', () => handleAddPage());
   strip.appendChild(add);
 }
@@ -227,28 +227,28 @@ function renderDashPages(): void {
 function handleAddPage(): void {
   if (!dashCurrent) return;
   const n = (dashCurrent.pages || []).length + 1;
-  dashCurrent.pages.push({ id: dashUuid(), name: 'Page ' + n, cards: [] });
+  dashCurrent.pages.push({ id: dashUuid(), name: t('dashGrid.page', { n }), cards: [] });
   dashPageIdx = dashCurrent.pages.length - 1;
-  markDashDirty('Add page');
+  markDashDirty(t('dashGrid.add_page'));
   renderDashPages();
   renderDashGrid();
 }
 
 async function handleRenamePage(i: number): Promise<void> {
   if (!dashCurrent || !dashCurrent.pages[i]) return;
-  const name = await promptModal('Rename page', dashCurrent.pages[i].name || 'Page ' + (i + 1), 'Save');
+  const name = await promptModal(t('dashGrid.rename_page'), dashCurrent.pages[i].name || t('common.page_2', { p0: (i + 1) }), t('common.save'));
   if (name === null) return;
   dashCurrent.pages[i].name = name.trim() || dashCurrent.pages[i].name;
-  markDashDirty('Rename page');
+  markDashDirty(t('dashGrid.rename_page'));
   renderDashPages();
 }
 
 function handleRemovePage(i: number): void {
   if (!dashCurrent || dashCurrent.pages.length <= 1) return;
-  if (!window.confirm('Remove this page and its cards?')) return;
+  if (!window.confirm(t('dashGrid.remove_this_page_and_its_cards'))) return;
   dashCurrent.pages.splice(i, 1);
   if (dashPageIdx >= dashCurrent.pages.length) dashPageIdx = dashCurrent.pages.length - 1;
-  markDashDirty('Remove page');
+  markDashDirty(t('dashGrid.remove_page'));
   renderDashPages();
   renderDashGrid();
 }
@@ -405,12 +405,11 @@ async function refreshDashFreshness(): Promise<void> {
   // "· filtered" whenever a control is narrowing the figures below. Without it
   // the header states a data time over numbers that are a subset, with nothing
   // on screen saying so once the chips scroll out of view.
-  label.textContent = 'Data as of ' + formatSidebarTime(new Date(oldest).toISOString())
-    + (anyControlActive() ? ' · filtered' : '');
+  label.textContent = t('dashGrid.data_as_of', { p0: formatSidebarTime(new Date(oldest).toISOString()), p1: !!(anyControlActive()) });
   // Say WHY it is the oldest, so a header that disagrees with a single dataset's
   // own line is explicable rather than a bug report.
   label.title = ids.length > 1
-    ? 'The oldest of the ' + ids.length + ' datasets this sheet reads.'
+    ? t('dashGrid.the_oldest_of_the_datasets_this', { idsCount: ids.length })
     : '';
   btn.hidden = !anyRefreshable;
   dqPaintDashFlag(label, ids, byId); // dsRules.ts — "· Data quality: N rules failing"
@@ -422,7 +421,7 @@ async function handleDashRefreshData(): Promise<void> {
   const btn = dashEl('dash-refresh-data') as HTMLButtonElement | null;
   if (btn) {
     btn.disabled = true;
-    iconLabel(btn, 'refresh', 'Refreshing…');
+    iconLabel(btn, 'refresh', t('common.refreshing'));
   }
   const ids = await dashSheetDatasetIds();
   let okCount = 0;
@@ -439,11 +438,11 @@ async function handleDashRefreshData(): Promise<void> {
   }
   if (btn) {
     btn.disabled = false;
-    iconLabel(btn, 'refresh', 'Refresh data');
+    iconLabel(btn, 'refresh', t('common.refresh_data'));
   }
   const failed = ids.length - okCount;
   if (typeof showToast === 'function') {
-    showToast('Refreshed ' + okCount + ' of ' + ids.length + (failed > 0 ? ' · ' + failed + ' failed' : ''));
+    showToast(t('dashGrid.refreshed_of', { okCount, idsCount: ids.length, p2: (failed > 0 ? ' · ' + failed + ' failed' : '') }));
   }
   // Every figure is recomputed from stored data on render, so re-rendering IS
   // the propagation — there is nothing else downstream to update.
@@ -559,7 +558,7 @@ function nudgeCard(card: any, dx: number, dy: number): void {
   l.y = Math.max(0, (l.y || 0) + dy);
   reapplyCardStyle(card);
   authoringAfterGesture(card, 'move', l.x - x0, l.y - y0);
-  markDashDirty('Move card');
+  markDashDirty(t('common.move_card'));
 }
 
 function resizeCard(card: any, dw: number, dh: number): void {
@@ -569,7 +568,7 @@ function resizeCard(card: any, dw: number, dh: number): void {
   l.h = clampInt((l.h || 1) + dh, 1, 100000, l.h);
   reapplyCardStyle(card);
   authoringAfterGesture(card, 'resize', 0, 0);
-  markDashDirty('Resize card');
+  markDashDirty(t('common.resize_card'));
 }
 
 function removeCard(card: any): void {
@@ -578,7 +577,7 @@ function removeCard(card: any): void {
   const i = page.cards.findIndex((c: any) => c && c.id === card.id);
   if (i >= 0) page.cards.splice(i, 1);
   authoringAfterRemove(card.id); // gridArrange.ts — a group's children stay, ungrouped
-  markDashDirty('Remove card');
+  markDashDirty(t('common.remove_card'));
   renderDashGrid();
 }
 
@@ -598,7 +597,7 @@ function onDashGridDrop(e: DragEvent, grid: HTMLElement): void {
   card.layout.x = nx;
   card.layout.y = ny;
   reapplyCardStyle(card);
-  markDashDirty('Move card');
+  markDashDirty(t('common.move_card'));
 }
 
 // ── Card body renderers ─────────────────────────────────────────────────────
@@ -649,9 +648,9 @@ async function renderVisualCard(card: any, body: HTMLElement): Promise<void> {
 }
 
 async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void> {
-  if (!currentProjectId || (!card.visualId && !card.visual)) { dashCardMissing(body, 'No visual selected.'); return; }
+  if (!currentProjectId || (!card.visualId && !card.visual)) { dashCardMissing(body, t('dashGrid.no_visual_selected')); return; }
   const resolved = await resolveCardVisual(card);
-  if (!resolved) { dashCardMissing(body, 'This visual was deleted.', true); return; }
+  if (!resolved) { dashCardMissing(body, t('dashGrid.this_visual_was_deleted'), true); return; }
   const visual = resolved.visual;
   // Name the card after the visual it draws. dashCardTitle() runs when the head
   // is built, before this resolve, so it can only guess; this is where the name
@@ -671,7 +670,7 @@ async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void>
   } catch (_) {
     res = { ok: false };
   }
-  if (!res || res.ok === false) { dashCardMissing(body, (res && res.error) || 'Could not draw this visual.', true); return; }
+  if (!res || res.ok === false) { dashCardMissing(body, (res && res.error) || t('dashGrid.could_not_draw_this_visual'), true); return; }
 
   const data = res.data || { labels: [], series: [] };
   const type = typeof visual.chartType === 'string' && visual.chartType ? visual.chartType : 'column';

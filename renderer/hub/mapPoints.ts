@@ -43,7 +43,7 @@ function renderPointMap(map: any, wrap: HTMLElement, container: HTMLElement, geo
   if (!items.length) {
     const fb = document.createElement('div');
     fb.className = 'cv-chart-fallback';
-    fb.textContent = 'None of these values could be placed on the map.';
+    fb.textContent = t('mapPoints.none_of_these_values_could_be');
     wrap.appendChild(fb);
     if (geo.unmatched) ptUnmatched(wrap, geo.unmatched);
     return;
@@ -71,7 +71,7 @@ function renderPointMap(map: any, wrap: HTMLElement, container: HTMLElement, geo
         el.type = 'button';
         el.className = 'cv-map-cluster';
         el.textContent = _fmtVal(c.count);
-        el.setAttribute('aria-label', `${c.count.toLocaleString()} points — zoom in`);
+        el.setAttribute('aria-label', t('mapPoints.points_zoom_in', { p0: c.count.toLocaleString() }));
         el.style.width = el.style.height = r * 2 + 'px';
         el.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -79,16 +79,16 @@ function renderPointMap(map: any, wrap: HTMLElement, container: HTMLElement, geo
         });
         markers.push(new (_mlgl().Marker)({ element: el, anchor: 'center' }).setLngLat([c.lng, c.lat]).addTo(map));
         // After the Marker: its constructor stamps a generic "Map marker" label over ours.
-        el.setAttribute('aria-label', `${c.count.toLocaleString()} points — zoom in`);
+        el.setAttribute('aria-label', t('mapPoints.points_zoom_in', { p0: c.count.toLocaleString() }));
         return { type: 'Feature', geometry: { type: 'Point', coordinates: [c.lng, c.lat] }, properties: { __r: 0, __c: clusterColor } };
       }
       const it = items[c.index];
-      const t = maxVal > minVal ? (it.value - minVal) / (maxVal - minVal) : 0.5;
+      const tv = maxVal > minVal ? (it.value - minVal) / (maxVal - minVal) : 0.5;
       return {
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [it.lng, it.lat] },
         properties: {
-          __r: MIN_R + Math.max(0, Math.min(1, t)) * (MAX_R - MIN_R),
+          __r: MIN_R + Math.max(0, Math.min(1, tv)) * (MAX_R - MIN_R),
           __c: colors.of(it),
           __name: it.name,
           __val: it.value,
@@ -134,9 +134,9 @@ function renderPointMap(map: any, wrap: HTMLElement, container: HTMLElement, geo
   map.on('zoomend', draw);
 
   if (maxVal > minVal) _addBubbleLegend(wrap, minVal, maxVal, clusterColor, MIN_R, MAX_R);
-  if (colors.legend) ptLegend(wrap, geo.colorColumn || 'Colour', colors.legend);
+  if (colors.legend) ptLegend(wrap, geo.colorColumn || t('common.colour'), colors.legend);
   if (geo.unmatched && geo.unmatched.count) ptUnmatched(wrap, geo.unmatched);
-  else if (geo.skipped) _addUnmatchedNote(wrap, [`${geo.skipped.toLocaleString()} rows with no usable coordinates`]);
+  else if (geo.skipped) _addUnmatchedNote(wrap, [t('mapPoints.rows_with_no_usable_coordinates', { p0: geo.skipped.toLocaleString() })]);
   const controls = document.createElement('div');
   controls.className = 'cv-graph-controls';
   wrap.appendChild(controls);
@@ -173,10 +173,10 @@ function ptLegend(wrap: HTMLElement, title: string, rows: Array<[string, string]
 
 /** "Couldn't place 3: Atlantis, Gotham, …" — counted AND listed. */
 function ptUnmatched(wrap: HTMLElement, u: { count: number; values: string[] }): void {
-  const more = u.count > u.values.length ? `, and ${u.count - u.values.length} more` : '';
+  const more = u.count > u.values.length ? t('common.and_more', { p0: u.count - u.values.length }) : '';
   const note = document.createElement('div');
   note.className = 'cv-map-unmatched';
-  note.textContent = `Couldn't place ${u.count}: ${u.values.join(', ')}${more}`;
+  note.textContent = t('mapPoints.couldn_t_place', { count: u.count, p1: u.values.join(', '), more });
   note.title = note.textContent;
   wrap.appendChild(note);
 }

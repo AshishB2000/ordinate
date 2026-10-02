@@ -28,8 +28,8 @@ const AN_TPL_THUMB_H = 92;
 const AN_TPL_FIXTURE = {
   labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
   series: [
-    { name: 'This year', values: [38, 52, 46, 67, 74, 88] },
-    { name: 'Last year', values: [30, 34, 41, 45, 52, 58] },
+    { name: t('anNewTemplates.this_year'), values: [38, 52, 46, 67, 74, 88] },
+    { name: t('anNewTemplates.last_year'), values: [30, 34, 41, 45, 52, 58] },
   ],
 };
 
@@ -104,7 +104,7 @@ function anTplThumbUrl(chartType: string): string {
 /** "Needs: date, revenue, category" — the REQUIRED roles, lower-cased. */
 function anTplNeedsLine(tpl: any): string {
   const req = (tpl.roles || []).filter((r: any) => r.required).map((r: any) => String(r.label).toLowerCase());
-  return req.length ? 'Needs: ' + req.join(', ') : '';
+  return req.length ? t('anNewTemplates.needs', { p0: req.join(', ') }) : '';
 }
 
 /**
@@ -191,7 +191,7 @@ function anTplMapPane(): AnTplMapApi {
   previewWrap.className = 'an-tpl-preview';
   const previewH = document.createElement('span');
   previewH.className = 'an-tpl-preview-h';
-  previewH.textContent = 'Preview';
+  previewH.textContent = t('common.preview');
   const kpis = document.createElement('div');
   kpis.className = 'an-tpl-kpis';
   previewWrap.appendChild(previewH);
@@ -240,16 +240,16 @@ function anTplMapPane(): AnTplMapApi {
       if (!role.required) {
         const opt = document.createElement('span');
         opt.className = 'an-wiz-optional';
-        opt.textContent = 'Optional';
+        opt.textContent = t('common.optional');
         label.appendChild(opt);
       }
       const sel = document.createElement('select');
       sel.className = 'ws-modal-input an-tpl-select';
-      sel.setAttribute('aria-label', String(role.label) + ' column');
+      sel.setAttribute('aria-label', String(role.label) + t('anNewTemplates.column'));
       if (!role.required) {
         const skip = document.createElement('option');
         skip.value = AN_TPL_SKIP;
-        skip.textContent = 'Skip';
+        skip.textContent = t('common.skip');
         sel.appendChild(skip);
       }
       for (const c of tpl.columns || []) {
@@ -283,11 +283,11 @@ function anTplMapPane(): AnTplMapApi {
         const conf = auto ? String(match.confidence) : sel.value ? 'chosen' : 'none';
         dot.className = 'an-tpl-dot is-' + conf;
         dot.title =
-          conf === 'high' ? 'Matched confidently'
-          : conf === 'medium' ? 'Best match — worth a look'
-          : conf === 'low' ? 'A guess — check this one'
-          : conf === 'chosen' ? 'You chose this column'
-          : 'Not mapped';
+          conf === 'high' ? t('anNewTemplates.matched_confidently')
+          : conf === 'medium' ? t('anNewTemplates.best_match_worth_a_look')
+          : conf === 'low' ? t('anNewTemplates.a_guess_check_this_one')
+          : conf === 'chosen' ? t('anNewTemplates.you_chose_this_column')
+          : t('anNewTemplates.not_mapped');
       };
       sel.addEventListener('change', () => {
         picks[role.id] = sel.value;
@@ -333,7 +333,7 @@ function anTplMapPane(): AnTplMapApi {
     if (mine !== seq) return;
     if (!res || res.ok === false || !res.plan) {
       lastPlan = null;
-      summary.textContent = (res && res.error) || 'This mapping cannot be built.';
+      summary.textContent = (res && res.error) || t('anNewTemplates.this_mapping_cannot_be_built');
       kpis.innerHTML = '';
       return;
     }
@@ -348,8 +348,7 @@ function anTplMapPane(): AnTplMapApi {
     if (!maxTiles) maxTiles = tiles;
     const skipped = Math.max(0, maxTiles - tiles);
     summary.textContent =
-      `${mapped} of ${total} mapped · ${tiles} tile${tiles === 1 ? '' : 's'} will be built`
-      + (skipped ? ` · ${skipped} skipped` : '');
+      t('anNewTemplates.of_mapped_will_be_built', { mapped, total, tiles, p4: (skipped ? t('anNewTemplates.skipped', { skipped }) : '') });
     const metrics = (shown && shown.sheets && shown.sheets[0] && shown.sheets[0].metrics) || [];
     await paintKpis(metrics, mine);
   }
@@ -365,15 +364,14 @@ function anTplMapPane(): AnTplMapApi {
     if (mine !== seq) return;
     if (!res || !res.ok) {
       lastPlan = null;
-      summary.textContent = (res && res.error) || 'This mapping cannot be built.';
+      summary.textContent = (res && res.error) || t('anNewTemplates.this_mapping_cannot_be_built');
       summary.title = '';
       kpis.innerHTML = '';
       return;
     }
     lastPlan = { user: true };
     const skipped = Math.max(0, res.total - res.tiles);
-    summary.textContent = `${mapped} of ${total} mapped · ${res.tiles} tile${res.tiles === 1 ? '' : 's'} will be built`
-      + (skipped ? ` · ${skipped} skipped` : '');
+    summary.textContent = t('anNewTemplates.of_mapped_will_be_built', { mapped, total, tiles: res.tiles, p4: (skipped ? t('anNewTemplates.skipped', { skipped }) : '') });
     summary.title = (res.dropped || []).join('\n');
     await paintKpis(res.kpis || [], mine);
   }
@@ -420,7 +418,7 @@ function anTplMapPane(): AnTplMapApi {
       lastPlan = null;
       maxTiles = 0;
       seq += 1;
-      summary.textContent = 'Reading your data…';
+      summary.textContent = t('anNewTemplates.reading_your_data');
       summary.title = '';
       kpis.innerHTML = '';
       renderRows();

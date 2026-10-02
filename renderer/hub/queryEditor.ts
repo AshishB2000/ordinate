@@ -112,7 +112,7 @@ function qeCompletions(prefix: string, afterDot: boolean): { label: string; inse
   for (const d of first) for (const c of d.columns) take(c.name, qeIdent(c.name), `${c.type} · ${d.name}`);
   if (!afterDot) {
     for (const d of qtSchema) {
-      take(d.slug, d.slug, 'dataset · ' + d.name);
+      take(d.slug, d.slug, t('common.dataset_2', { name: d.name }));
       // The exact name only when it is a DIFFERENT identifier from the slug.
       if (d.alias && qtFold(d.alias) !== d.slug) take(d.alias, qeIdent(d.alias), 'dataset');
     }
@@ -244,7 +244,7 @@ function initQueryEditor(): void {
   const hint = document.createElement('span');
   hint.id = 'qt-sql-keys';
   hint.className = 'sr-only';
-  hint.textContent = 'Tab indents. Press Escape, then Tab, to leave the editor.';
+  hint.textContent = t('queryEditor.tab_indents_press_escape_then_tab');
   input.after(hint);
   input.setAttribute('aria-describedby', hint.id);
   input.dataset.tabIndents = '1';

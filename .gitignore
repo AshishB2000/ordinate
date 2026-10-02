@@ -987,7 +987,6 @@ scripts/**/*.js
 /renderer/hub/nbActions.js
 
 # r7:lod
-/src/ipc/round7.js
 /src/formula/lod.js
 /src/formula/didYouMean.js
 /src/analysis/lodQuery.js
@@ -996,7 +995,6 @@ scripts/**/*.js
 /renderer/hub/lodUi.js
 
 # r7:templates
-/src/ipc/round7.js
 /src/ipc/userTemplates.js
 /src/analysis/userTemplate.js
 /src/analysis/userTemplateRefs.js
@@ -1012,3 +1010,16 @@ scripts/**/*.js
 /renderer/hub/motion.js
 /renderer/hub/kpiTicker.js
 /renderer/hub/linkedHover.js
+
+# r7:i18n
+/src/app/i18nCore.js
+/src/app/i18n.js
+/src/ipc/i18n.js
+/preload/hubLanguagePreload.js
+/renderer/hub/i18n.js
+/renderer/hub/settingsLanguage.js
+/scripts/i18nLex.js
+/scripts/i18nDetect.js
+/scripts/i18n-extract.js
+/scripts/test-i18n.js
+/scripts/i18nNode.js

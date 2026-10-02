@@ -32,8 +32,8 @@ const CM_STEPS: CmStep[] = [
       return cmVisible(rail) ? rail : null;
     },
     text: () => (document.getElementById('dash-control-bar') as HTMLElement | null)?.hidden === false
-      ? 'Filter every tile at once from this bar — the whole sheet follows your pick.'
-      : 'Filters live here: add a control and every tile on the sheet follows it.',
+      ? t('coachMarks.filter_every_tile_at_once_from')
+      : t('coachMarks.filters_live_here_add_a_control'),
   },
   {
     anchor: () => {
@@ -43,14 +43,14 @@ const CM_STEPS: CmStep[] = [
       }
       return null;
     },
-    text: () => 'The menu on each tile holds what you can do with it — open the visual, resize it, or take it off the sheet.',
+    text: () => t('coachMarks.the_menu_on_each_tile_holds'),
   },
   {
     anchor: () => {
       const b = document.getElementById('side-ai-btn');
       return cmVisible(b) ? b : null;
     },
-    text: () => 'Ask the Assistant about this dashboard in plain words. It works on whatever you are looking at.',
+    text: () => t('coachMarks.ask_the_assistant_about_this_dashboard'),
   },
 ];
 
@@ -114,11 +114,11 @@ function cmShow(i: number): void {
   cmCard.textContent = '';
   const step = document.createElement('span');
   step.className = 'cm-step';
-  step.textContent = `Tip ${i + 1} of ${cmSteps.length}`;
+  step.textContent = t('coachMarks.tip_of', { p0: i + 1, cmStepsCount: cmSteps.length });
   const p = document.createElement('p');
   p.className = 'cm-text';
   p.textContent = cmSteps[i].text();
-  cmCard.setAttribute('aria-label', p.textContent || 'Tip');
+  cmCard.setAttribute('aria-label', p.textContent || t('coachMarks.tip'));
   const row = document.createElement('div');
   row.className = 'cm-actions';
   const last = i === cmSteps.length - 1;
@@ -126,14 +126,14 @@ function cmShow(i: number): void {
     const skip = document.createElement('button');
     skip.type = 'button';
     skip.className = 'btn btn-sm btn-ghost cm-skip';
-    skip.textContent = 'Skip';
+    skip.textContent = t('common.skip');
     skip.addEventListener('click', () => cmEnd());
     row.appendChild(skip);
   }
   const next = document.createElement('button');
   next.type = 'button';
   next.className = 'btn btn-sm btn-primary cm-next';
-  next.textContent = last ? 'Got it' : 'Next';
+  next.textContent = last ? t('coachMarks.got_it') : t('common.next');
   next.addEventListener('click', () => { if (last) cmEnd(); else cmShow(cmIdx + 1); });
   row.appendChild(next);
   cmCard.append(step, p, row);

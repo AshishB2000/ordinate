@@ -105,7 +105,7 @@ function buildExtraPlugins(c: ChartCtx): any[] {
           ctx.beginPath(); ctx.arc(pt.x, pt.y, 5.5, 0, Math.PI * 2); ctx.stroke();
           if (chart.width >= EXTRA_FULL_MIN_W) {
             const right = pt.x > a.left + a.width * 0.7;
-            text(ctx, `80% · ${p.count80} of ${p.labels.length}`, pt.x + (right ? -9 : 9), pt.y - 8,
+            text(ctx, t('chartFamiliesPlugins.80_of', { count80: p.count80, labelsCount: p.labels.length }), pt.x + (right ? -9 : 9), pt.y - 8,
                  right ? 'right' : 'left', 'bottom');
           }
         }

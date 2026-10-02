@@ -66,9 +66,9 @@ function teUniqueName(base: string): string {
 }
 
 async function teDuplicate(name: string, tokens: any): Promise<void> {
-  const res = await window.hubThemes.save({ name: teUniqueName('Copy of ' + name), tokens });
-  if (!res || !res.ok) showToast((res && res.error) || 'The theme could not be saved.');
-  else showToast('Duplicated as “' + res.theme.name + '”');
+  const res = await window.hubThemes.save({ name: teUniqueName(t('themeSettings.copy_of', { name })), tokens });
+  if (!res || !res.ok) showToast((res && res.error) || t('common.the_theme_could_not_be_saved'));
+  else showToast(t('themeSettings.duplicated_as', { name: res.theme.name }));
 }
 
 // ── One row ──────────────────────────────────────────────────────────────────
@@ -117,38 +117,38 @@ function teSummary(tokens: any): string {
   const parts = [font('--font-ui')];
   if (tokens['--font-numeric'] && tokens['--font-numeric'] !== tokens['--font-ui']) parts.push(font('--font-numeric') + ' figures');
   const n = themeModel.themeWarnings(tokens).length;
-  parts.push(n ? n + ' contrast warning' + (n === 1 ? '' : 's') : 'contrast OK');
+  parts.push(n ? t('themeSettings.contrast', { n }) : t('themeSettings.contrast_ok'));
   return parts.join(' · ');
 }
 
-function teUserRow(t: any): HTMLElement {
-  if (teConfirmId === t.id) {
+function teUserRow(tv: any): HTMLElement {
+  if (teConfirmId === tv.id) {
     const row = sfEl('div', 'te-row te-row--confirm');
-    row.dataset.key = t.id;
+    row.dataset.key = tv.id;
     row.setAttribute('role', 'alert');
     const msg = sfEl('div', 'te-row-main');
-    msg.append(sfEl('div', 'te-row-name', 'Delete “' + t.name + '”?'),
-      sfEl('div', 'te-row-note', 'Dashboards that use it fall back to the workspace default, then to their own style.'));
+    msg.append(sfEl('div', 'te-row-name', t('themeSettings.delete', { name: tv.name })),
+      sfEl('div', 'te-row-note', t('themeSettings.dashboards_that_use_it_fall_back')));
     const actions = sfEl('div', 'te-row-actions');
     actions.append(
-      teButton('Cancel', 'te-cancel-delete', () => { teConfirmId = ''; paintThemesSection(); }),
+      teButton(t('common.cancel'), 'te-cancel-delete', () => { teConfirmId = ''; paintThemesSection(); }),
       teButton('Delete', 'btn-danger te-confirm-delete', async () => {
         teConfirmId = '';
-        const res = await window.hubThemes.remove(t.id);
-        if (!res || !res.ok) { showToast('That theme could not be deleted.'); paintThemesSection(); }
+        const res = await window.hubThemes.remove(tv.id);
+        if (!res || !res.ok) { showToast(t('themeSettings.that_theme_could_not_be_deleted')); paintThemesSection(); }
       }, 'trash'),
     );
     row.append(msg, actions);
     return row;
   }
   return teRow({
-    key: t.id, name: t.name, note: teSummary(t.tokens),
-    badge: t.id === wsThemes.defaultId ? 'Workspace default' : '',
-    thumb: teThumb((el) => applyThemeTokens(el, t.tokens)),
+    key: tv.id, name: tv.name, note: teSummary(tv.tokens),
+    badge: tv.id === wsThemes.defaultId ? t('themeSettings.workspace_default') : '',
+    thumb: teThumb((el) => applyThemeTokens(el, tv.tokens)),
     actions: [
-      teButton('Edit', 'te-edit', () => openThemeEditor(t), 'pencil'),
-      teButton('Duplicate', 'btn-ghost te-duplicate', () => { void teDuplicate(t.name, t.tokens); }, 'copy'),
-      teButton('Delete', 'btn-ghost te-delete', () => { teConfirmId = t.id; paintThemesSection(); }, 'trash'),
+      teButton(t('common.edit_2'), 'te-edit', () => openThemeEditor(tv), 'pencil'),
+      teButton(t('common.duplicate'), 'btn-ghost te-duplicate', () => { void teDuplicate(tv.name, tv.tokens); }, 'copy'),
+      teButton('Delete', 'btn-ghost te-delete', () => { teConfirmId = tv.id; paintThemesSection(); }, 'trash'),
     ],
   });
 }
@@ -158,21 +158,21 @@ function teUserRow(t: any): HTMLElement {
 function buildThemesSection(host: HTMLElement): void {
   host.innerHTML = '';
   const head = sfEl('div', 'stp-subhead');
-  head.appendChild(sfEl('div', 'stp-subhead-t', 'Themes'));
+  head.appendChild(sfEl('div', 'stp-subhead-t', t('common.themes')));
   head.appendChild(sfEl('div', 'stp-subhead-d',
-    'Colours, fonts and card style for dashboards. Apply one to a dashboard from its Style panel, or make it the workspace default. Exports and reports carry it.'));
+    t('themeSettings.colours_fonts_and_card_style_for')));
   host.appendChild(head);
 
   const list = sfEl('div', 'te-view');
   list.id = 'te-list-view';
   const def = sfEl<HTMLSelectElement>('select', 'stp-select');
   def.id = 'te-default';
-  def.setAttribute('aria-label', 'Workspace theme');
+  def.setAttribute('aria-label', t('themeSettings.workspace_theme'));
   def.addEventListener('change', async () => {
     const res = await window.hubThemes.setDefault(def.value);
-    if (!res || !res.ok) { showToast('That theme could not be made the default.'); paintThemesSection(); }
+    if (!res || !res.ok) { showToast(t('themeSettings.that_theme_could_not_be_made')); paintThemesSection(); }
   });
-  list.appendChild(sfRow('Workspace theme', 'Every dashboard wears it unless its own Style panel picks another.', def));
+  list.appendChild(sfRow(t('themeSettings.workspace_theme'), t('themeSettings.every_dashboard_wears_it_unless_its'), def));
 
   const group = (id: string, title: string): HTMLElement => {
     const g = sfEl('div', 'te-group');
@@ -187,7 +187,7 @@ function buildThemesSection(host: HTMLElement): void {
     return l;
   };
   // Yours first: they are what this section is for; the built-ins are where one starts.
-  group('te-user-list', 'Your themes');
+  group('te-user-list', t('themeSettings.your_themes'));
   group('te-builtin-list', 'Built-in');
   host.appendChild(list);
 
@@ -201,7 +201,7 @@ function paintThemesSection(): void {
   const def = document.getElementById('te-default') as HTMLSelectElement | null;
   if (def) {
     def.innerHTML = '';
-    const opts: Array<[string, string]> = [['', 'None — each dashboard’s own style']];
+    const opts: Array<[string, string]> = [['', t('themeSettings.none_each_dashboard_s_own_style')]];
     wsThemes.themes.forEach((t) => opts.push([t.id, t.name]));
     opts.forEach(([v, text]) => {
       const o = document.createElement('option');
@@ -219,7 +219,7 @@ function paintThemesSection(): void {
     TE_BUILTINS.forEach((p) => builtins.appendChild(teRow({
       key: p, name: DASH_STYLE_LABELS[p], note: DASH_STYLE_NOTES[p], badge: 'Read-only',
       thumb: teThumb((el) => dashStyleClassList(DASH_STYLE_PRESETS[p]).forEach((c) => el.classList.add(c))),
-      actions: [teButton('Duplicate', 'te-duplicate', () => { void teDuplicate(DASH_STYLE_LABELS[p], teBuiltinTokens(p)); }, 'copy')],
+      actions: [teButton(t('common.duplicate'), 'te-duplicate', () => { void teDuplicate(DASH_STYLE_LABELS[p], teBuiltinTokens(p)); }, 'copy')],
     })));
     const c = document.getElementById('te-builtin-list-count');
     if (c) c.textContent = String(TE_BUILTINS.length);
@@ -235,8 +235,8 @@ function paintThemesSection(): void {
     const ic = sfEl('span', 'te-empty-icon');
     ic.appendChild(icon('layers', 20));
     const text = sfEl('div', 'te-empty-body');
-    text.append(sfEl('div', 'te-empty-t', 'No themes of your own yet'),
-      sfEl('div', 'te-empty-d', 'Duplicate a built-in below to start one — its palette, chart colours, fonts, cards and density are all yours to change.'));
+    text.append(sfEl('div', 'te-empty-t', t('themeSettings.no_themes_of_your_own_yet')),
+      sfEl('div', 'te-empty-d', t('themeSettings.duplicate_a_built_in_below_to')));
     empty.append(ic, text);
     users.appendChild(empty);
     return;

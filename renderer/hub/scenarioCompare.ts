@@ -50,7 +50,7 @@ function snRenderPicker(): void {
     b.className = 'sn-cmp-chip';
     b.setAttribute('aria-pressed', String(on));
     b.disabled = !on && full;
-    if (b.disabled) b.title = 'Four scenarios at a time';
+    if (b.disabled) b.title = t('scenarioCompare.four_scenarios_at_a_time');
     b.append(icon(on ? 'check' : 'plus', 12), document.createTextNode(' ' + String(s.name)));
     b.addEventListener('click', () => {
       snCmpPicked = on ? snCmpPicked.filter((x) => x !== id) : snCmpPicked.concat([id]);
@@ -60,7 +60,7 @@ function snRenderPicker(): void {
     box.appendChild(b);
   }
   const note = snEl('sn-cmp-count');
-  if (note) note.textContent = `${snCmpPicked.length} of ${SN_CMP_MAX} picked`;
+  if (note) note.textContent = t('scenarioCompare.of_picked', { snCmpPickedCount: snCmpPicked.length, SN_CMP_MAX });
 }
 
 function snCmpEmpty(title: string, text: string, withNew: boolean): HTMLElement {
@@ -80,7 +80,7 @@ function snCmpEmpty(title: string, text: string, withNew: boolean): HTMLElement 
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'btn btn-primary';
-    b.textContent = 'New scenario';
+    b.textContent = t('common.new_scenario');
     b.addEventListener('click', () => { snCloseCompare(); void snNew(); });
     acts.appendChild(b);
     e.appendChild(acts);
@@ -102,12 +102,12 @@ async function snRenderCompare(): Promise<void> {
   const my = ++snCmpSeq;
   if (!snListCache.length) {
     body.textContent = '';
-    body.appendChild(snCmpEmpty('Nothing to compare yet', 'Save a scenario or two — a price rise, a volume dip — and see them here side by side with the baseline.', true));
+    body.appendChild(snCmpEmpty(t('scenarioCompare.nothing_to_compare_yet'), t('scenarioCompare.save_a_scenario_or_two_a'), true));
     return;
   }
   if (!snCmpPicked.length) {
     body.textContent = '';
-    body.appendChild(snCmpEmpty('Pick scenarios to compare', `Choose up to ${SN_CMP_MAX} above. Each becomes a column beside the baseline.`, false));
+    body.appendChild(snCmpEmpty(t('scenarioCompare.pick_scenarios_to_compare'), t('scenarioCompare.choose_up_to_above_each_becomes', { SN_CMP_MAX }), false));
     return;
   }
   body.classList.add('is-loading');
@@ -119,28 +119,28 @@ async function snRenderCompare(): Promise<void> {
   if (!res || res.ok === false) {
     const p = document.createElement('p');
     p.className = 'sn-error';
-    p.textContent = (res && res.error) || 'Could not compare the scenarios.';
+    p.textContent = (res && res.error) || t('scenarioCompare.could_not_compare_the_scenarios');
     body.appendChild(p);
     return;
   }
   const table = document.createElement('div');
   table.className = 'sn-cmp-table';
   table.setAttribute('role', 'table');
-  table.setAttribute('aria-label', 'Baseline and scenarios, side by side');
+  table.setAttribute('aria-label', t('scenarioCompare.baseline_and_scenarios_side_by_side'));
   const cols = `minmax(150px, 1.1fr) repeat(${res.scenarios.length + 1}, minmax(150px, 1fr))`;
 
   const head = document.createElement('div');
   head.className = 'sn-cmp-row sn-cmp-row--head';
   head.setAttribute('role', 'row');
   head.style.gridTemplateColumns = cols;
-  head.appendChild(snCell('columnheader', 'sn-cmp-corner', 'Metric'));
+  head.appendChild(snCell('columnheader', 'sn-cmp-corner', t('common.metric')));
   const base = snCell('columnheader', 'sn-cmp-colhead sn-cmp-colhead--base');
   const bt = document.createElement('span');
   bt.className = 'sn-cmp-colname';
-  bt.textContent = 'Baseline';
+  bt.textContent = t('scenarioCompare.baseline');
   const bs = document.createElement('span');
   bs.className = 'sn-cmp-colsub';
-  bs.textContent = 'The data as stored';
+  bs.textContent = t('scenarioCompare.the_data_as_stored');
   base.append(bt, bs);
   head.appendChild(base);
   for (const s of res.scenarios) {
@@ -149,7 +149,7 @@ async function snRenderCompare(): Promise<void> {
     name.type = 'button';
     name.className = 'sn-cmp-colname sn-cmp-open';
     name.textContent = s.name;
-    name.title = 'Open ' + s.name;
+    name.title = t('scenarioCompare.open', { name: s.name });
     name.addEventListener('click', () => { snCloseCompare(); void snOpen(s.id); });
     const chips = document.createElement('span');
     chips.className = 'sn-cmp-drivers';
@@ -168,7 +168,7 @@ async function snRenderCompare(): Promise<void> {
     if (!(s.drivers || []).length) {
       const c = document.createElement('span');
       c.className = 'sn-cmp-colsub';
-      c.textContent = 'No drivers';
+      c.textContent = t('scenarioCompare.no_drivers');
       chips.appendChild(c);
     }
     h.append(name, chips);
@@ -181,7 +181,7 @@ async function snRenderCompare(): Promise<void> {
     row.className = 'sn-cmp-row' + (r.missing ? ' is-missing' : '');
     row.setAttribute('role', 'row');
     row.style.gridTemplateColumns = cols;
-    row.appendChild(snCell('rowheader', 'sn-cmp-metric', r.missing ? 'Missing metric' : r.name));
+    row.appendChild(snCell('rowheader', 'sn-cmp-metric', r.missing ? t('common.missing_metric') : r.name));
     row.appendChild(snCell('cell', 'sn-cmp-val sn-cmp-val--base tnum', r.baselineDisplay || '—'));
     // The best column of a row — only when the metric says which way is good,
     // among ≥ 2, and only an outright winner: a tie is nobody's best.
@@ -202,12 +202,12 @@ async function snRenderCompare(): Promise<void> {
       const d = document.createElement('span');
       const tone = c.delta === null || c.delta === 0 ? 'flat' : c.tone;
       d.className = 'sn-cmp-delta tnum is-' + tone;
-      d.textContent = c.delta === null ? '' : c.delta === 0 ? 'No change' : c.deltaDisplay + (typeof c.pct === 'number' ? ' (' + kpiPct(c.pct) + ')' : '');
+      d.textContent = c.delta === null ? '' : c.delta === 0 ? t('common.no_change') : c.deltaDisplay + (typeof c.pct === 'number' ? ' (' + kpiPct(c.pct) + ')' : '');
       cell.append(v, d);
       if (i === best) {
         const tag = document.createElement('span');
         tag.className = 'sn-cmp-best';
-        tag.textContent = 'Best';
+        tag.textContent = t('scenarioCompare.best');
         cell.appendChild(tag);
       }
       row.appendChild(cell);

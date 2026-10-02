@@ -123,7 +123,7 @@ function makeExplorerTh(col: ExpCol, c: number): HTMLElement {
   nameBtn.type = 'button';
   nameBtn.className = 'ds-th-name';
   nameBtn.textContent = col.name;
-  nameBtn.title = ctColumnTitle(expId, col.name, 'Profile this column', paintExplorerTable); // + its catalog description
+  nameBtn.title = ctColumnTitle(expId, col.name, t('dsGrid.profile_this_column'), paintExplorerTable); // + its catalog description
   nameBtn.setAttribute('aria-expanded', String(dsProfileCol === c));
   nameBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -134,7 +134,7 @@ function makeExplorerTh(col: ExpCol, c: number): HTMLElement {
   const sortBtn = document.createElement('button');
   sortBtn.type = 'button';
   sortBtn.className = 'ds-th-sort';
-  sortBtn.setAttribute('aria-label', 'Sort by ' + (col.name || 'this column'));
+  sortBtn.setAttribute('aria-label', t('dsGrid.sort_by', { p0: (col.name || t('common.this_column')) }));
   const arrow = document.createElement('span');
   arrow.className = 'ds-th-arrow';
   // An unsorted column keeps a dimmed up-chevron, so the control is discoverable
@@ -149,7 +149,7 @@ function makeExplorerTh(col: ExpCol, c: number): HTMLElement {
   const edit = document.createElement('button');
   edit.type = 'button';
   edit.className = 'ds-th-edit';
-  iconOnly(edit, 'pencil', 'Rename column');
+  iconOnly(edit, 'pencil', t('common.rename_column'));
   edit.addEventListener('click', (e) => {
     e.stopPropagation();
     handleRenameColumn(c);
@@ -158,7 +158,7 @@ function makeExplorerTh(col: ExpCol, c: number): HTMLElement {
 
   const sel = document.createElement('select');
   sel.className = 'ds-th-retype';
-  sel.setAttribute('aria-label', 'Column type');
+  sel.setAttribute('aria-label', t('dsGrid.column_type'));
   ['text', 'number', 'date'].forEach((t) => {
     const opt = document.createElement('option');
     opt.value = t;
@@ -310,13 +310,13 @@ function paintExplorerPager(): void {
   if (!note) return;
   note.hidden = false;
   if (expTotal === 0) {
-    note.textContent = '0 rows';
+    note.textContent = t('dsGrid.0_rows');
     return;
   }
   const first = expOffset + 1;
   const last = Math.min(expOffset + expPageRows.length, expTotal);
   note.textContent = expTotal > expPageRows.length
-    ? 'Rows ' + first.toLocaleString() + '–' + last.toLocaleString() + ' of ' + expTotal.toLocaleString()
+    ? t('common.rows_of', { p0: first.toLocaleString(), p1: last.toLocaleString(), p2: expTotal.toLocaleString() })
     : expTotal.toLocaleString() + (expTotal === 1 ? ' row' : ' rows');
 }
 
@@ -337,7 +337,7 @@ function renderColsMenu(): void {
       paintExplorerTable(); // pure display — the window in hand is unchanged
     });
     const span = document.createElement('span');
-    span.textContent = col.name || 'Column ' + (c + 1);
+    span.textContent = col.name || t('common.column_2', { p0: (c + 1) });
     item.appendChild(cb);
     item.appendChild(span);
     menu.appendChild(item);
@@ -352,11 +352,11 @@ async function persistColumns(newCols: ExpCol[]): Promise<void> {
   try {
     res = await window.hub.updateDataset(currentProjectId, expId, newCols);
   } catch (_) {
-    window.alert('Failed to update the dataset.');
+    window.alert(t('common.failed_to_update_the_dataset'));
     return;
   }
   if (!res || res.ok === false) {
-    window.alert((res && res.error) || 'Failed to update the dataset.');
+    window.alert((res && res.error) || t('common.failed_to_update_the_dataset'));
     return;
   }
   const ds = res.dataset || {};
@@ -369,7 +369,7 @@ async function persistColumns(newCols: ExpCol[]): Promise<void> {
 
 async function handleRenameColumn(c: number): Promise<void> {
   const current = expColumns[c] ? expColumns[c].name : '';
-  const name = await promptModal('Rename column', current, 'Save'); // projects.ts
+  const name = await promptModal(t('common.rename_column'), current, t('common.save')); // projects.ts
   if (name === null) return;
   const trimmed = name.trim();
   if (!trimmed || trimmed === current) return;

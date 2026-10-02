@@ -26,6 +26,7 @@ import { ok, failureCount, finish } from './selfcheck';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vm from 'vm';
+import { withT } from './i18nNode';
 
 // Renderer files are classic global-scope scripts with no exports, so the module
 // is evaluated in a vm sandbox and the symbol read back off it — the pattern
@@ -33,7 +34,7 @@ import * as vm from 'vm';
 const HUB = path.join(__dirname, '..', 'renderer', 'hub');
 const sandbox: any = { window: {}, document: {}, console };
 sandbox.globalThis = sandbox;
-vm.createContext(sandbox);
+vm.createContext(withT(sandbox));
 for (const f of ['chartTraits.js', 'mapKinds.js', 'renderResult.js']) {
   vm.runInContext(fs.readFileSync(path.join(HUB, f), 'utf8'), sandbox, { filename: f });
 }

@@ -10,19 +10,19 @@
 // (`scorecard:snapshot` → src/ipc/scorecards.ts), read for the REPORT's project:
 // a scheduled run prints reports of projects nobody has open.
 
-const RS_STATUS: Record<string, string> = { good: 'On track', warn: 'At risk', off: 'Off track', none: 'No target' };
+const RS_STATUS: Record<string, string> = { good: t('common.on_track'), warn: t('common.at_risk'), off: t('common.off_track'), none: t('common.no_target') };
 
 async function reportScorecardPage(ctx: ReportContext, page: any): Promise<RenderedPage | null> {
   if (!page || page.kind !== 'scorecard' || !page.scorecardId) return null;
   let sc: any = null;
   try { sc = await window.hubPower.scorecardSnapshot(ctx.projectId, String(page.scorecardId)); } catch (_) { sc = null; }
   if (!sc || sc.ok === false) {
-    return { kind: 'scorecard', layout: page.layout, title: 'Scorecard', body: 'This scorecard is no longer in the project.' };
+    return { kind: 'scorecard', layout: page.layout, title: t('common.scorecard'), body: t('reportScorecard.this_scorecard_is_no_longer_in') };
   }
   const counts: Record<string, number> = { good: 0, warn: 0, off: 0, none: 0 };
   for (const r of sc.rows) counts[r.status] = (counts[r.status] || 0) + 1;
   const summary = ['good', 'warn', 'off'].map((k) => `${counts[k]} ${RS_STATUS[k].toLowerCase()}`).join(' · ')
-    + (counts.none ? ` · ${counts.none} without a target` : '');
+    + (counts.none ? t('reportScorecard.without_a_target', { none: counts.none }) : '');
   const body: string[][] = [];
   const grouped = sc.rows.some((r: any) => r.group);
   for (const r of sc.rows) {
@@ -32,19 +32,19 @@ async function reportScorecardPage(ctx: ReportContext, page: any): Promise<Rende
       typeof r.attainment === 'number' ? Math.round(r.attainment) + '%' : '—',
       RS_STATUS[r.status] || '', change, r.owner || '',
     ];
-    if (grouped) row.unshift(r.group || 'Other');
+    if (grouped) row.unshift(r.group || t('common.other'));
     body.push(row);
   }
-  const head = ['Metric', sc.window ? sc.window.label : 'Value', 'Target', 'Attainment', 'Status', 'vs previous', 'Owner'];
-  if (grouped) head.unshift('Group');
+  const head = [t('common.metric'), sc.window ? sc.window.label : t('common.value'), t('common.target'), t('common.attainment'), t('common.status'), t('common.vs_previous'), t('common.owner')];
+  if (grouped) head.unshift(t('common.group'));
   return {
     kind: 'scorecard',
     layout: page.layout,
-    title: sc.name || 'Scorecard',
+    title: sc.name || t('common.scorecard'),
     subtitle: sc.window ? `${sc.window.label} · ${sc.window.from} – ${sc.window.to}` : '',
     caption: page.caption || summary,
     grid: body.length ? { head: [head], body } : null,
-    body: body.length ? undefined : 'No metrics on this scorecard.',
+    body: body.length ? undefined : t('reportScorecard.no_metrics_on_this_scorecard'),
   };
 }
 

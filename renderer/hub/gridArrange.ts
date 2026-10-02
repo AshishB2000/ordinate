@@ -47,7 +47,7 @@ function renderArrangeBar(): void {
     bar.id = 'an-arrange';
     bar.className = 'an-arrange';
     bar.setAttribute('role', 'toolbar');
-    bar.setAttribute('aria-label', 'Arrange selected cards');
+    bar.setAttribute('aria-label', t('gridArrange.arrange_selected_cards'));
     grid.before(bar);
   }
   const n = arrangeLive().length;
@@ -56,7 +56,7 @@ function renderArrangeBar(): void {
   bar.innerHTML = '';
   const count = document.createElement('span');
   count.className = 'an-arrange-count';
-  count.textContent = `${n} cards selected`;
+  count.textContent = t('gridArrange.cards_selected', { n });
   bar.appendChild(count);
   const group = (label: string, items: Array<[string, string, () => void, boolean?]>): void => {
     const g = document.createElement('span');
@@ -82,33 +82,33 @@ function renderArrangeBar(): void {
   const align = (mode: string): void => {
     const cs = arrangeLive();
     cardModel.alignLayouts(cs.map((c) => c.layout), mode);
-    arrangeCommit(cs, 'Align cards');
+    arrangeCommit(cs, t('gridArrange.align_cards'));
   };
   const spread = (axis: 'x' | 'y'): void => {
     const cs = arrangeLive();
     cardModel.distributeLayouts(cs.map((c) => c.layout), axis);
-    arrangeCommit(cs, 'Distribute cards');
+    arrangeCommit(cs, t('gridArrange.distribute_cards'));
   };
-  group('Align', [
-    ['Left', 'Align left edges', () => align('left')],
-    ['Centre', 'Align centres', () => align('center')],
-    ['Right', 'Align right edges', () => align('right')],
-    ['Top', 'Align top edges', () => align('top')],
-    ['Middle', 'Align middles', () => align('middle')],
-    ['Bottom', 'Align bottom edges', () => align('bottom')],
+  group(t('gridArrange.align'), [
+    [t('common.left'), t('gridArrange.align_left_edges'), () => align('left')],
+    [t('common.centre'), t('gridArrange.align_centres'), () => align('center')],
+    [t('common.right'), t('gridArrange.align_right_edges'), () => align('right')],
+    [t('common.top'), t('gridArrange.align_top_edges'), () => align('top')],
+    [t('gridArrange.middle'), t('gridArrange.align_middles'), () => align('middle')],
+    [t('common.bottom'), t('gridArrange.align_bottom_edges'), () => align('bottom')],
   ]);
-  group('Distribute', [
-    ['Across', 'Equal gaps left to right', () => spread('x'), n < 3],
-    ['Down', 'Equal gaps top to bottom', () => spread('y'), n < 3],
+  group(t('gridArrange.distribute'), [
+    [t('gridArrange.across'), t('gridArrange.equal_gaps_left_to_right'), () => spread('x'), n < 3],
+    [t('common.down'), t('gridArrange.equal_gaps_top_to_bottom'), () => spread('y'), n < 3],
   ]);
-  group('Group', [
-    ['Container', 'Put the selected cards in a container', () => handleAddGroup('container')],
-    ['Tabs', 'Put the selected cards in the first tab of a new tabs card', () => handleAddGroup('tabs')],
+  group(t('common.group'), [
+    [t('common.container'), t('gridArrange.put_the_selected_cards_in_a'), () => handleAddGroup('container')],
+    [t('common.tabs'), t('gridArrange.put_the_selected_cards_in_the'), () => handleAddGroup('tabs')],
   ]);
   const clear = document.createElement('button');
   clear.type = 'button';
   clear.className = 'btn btn-sm btn-ghost';
-  clear.textContent = 'Done';
+  clear.textContent = t('common.done');
   clear.addEventListener('click', anMultiClear);
   bar.appendChild(clear);
 }

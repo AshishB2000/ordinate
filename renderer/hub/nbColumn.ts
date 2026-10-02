@@ -11,7 +11,7 @@ function nbAddBar(at: number, last: boolean): HTMLElement {
   const bar = document.createElement('div');
   bar.className = 'nb-add' + (last ? ' is-last' : '');
   bar.setAttribute('role', 'group');
-  bar.setAttribute('aria-label', last ? 'Add a cell' : `Add a cell at position ${at + 1}`);
+  bar.setAttribute('aria-label', last ? t('nbColumn.add_a_cell') : t('nbColumn.add_a_cell_at_position', { p0: at + 1 }));
   const line = document.createElement('span');
   line.className = 'nb-add-line';
   line.setAttribute('aria-hidden', 'true');
@@ -23,7 +23,7 @@ function nbAddBar(at: number, last: boolean): HTMLElement {
     b.className = 'nb-add-btn';
     b.dataset.kind = k;
     b.append(icon(nbKindIcon(k), 14), Object.assign(document.createElement('span'), { textContent: nbKindLabel(k) }));
-    b.title = `Add a ${nbKindLabel(k).toLowerCase()} cell here`;
+    b.title = t('nbColumn.add_a_cell_here', { p0: nbKindLabel(k).toLowerCase() });
     b.addEventListener('click', () => nbAddCell(k, at));
     bar.appendChild(b);
   }
@@ -81,7 +81,7 @@ function nbDuplicateCell(id: string): void {
   if (i < 0) return;
   const copy: NbCellDoc = JSON.parse(JSON.stringify(nbDoc.cells[i]));
   copy.id = nbUuid();
-  if (copy.title) copy.title += ' copy';
+  if (copy.title) copy.title += t('nbColumn.copy');
   nbDoc.cells.splice(i + 1, 0, copy);
   nbTouch(true);
   nbFocusCell(copy.id, true);

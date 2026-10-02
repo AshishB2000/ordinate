@@ -23,10 +23,10 @@ let dqLoadSeq = 0;
 
 type DqStatus = 'pass' | 'fail' | 'warn' | 'pending';
 const DQ_STATUS: Record<DqStatus, { label: string; icon: string; rank: number }> = {
-  fail: { label: 'Fail', icon: 'x', rank: 0 },
-  warn: { label: 'Warn', icon: 'alert', rank: 1 },
-  pending: { label: 'Not run', icon: 'minus', rank: 2 },
-  pass: { label: 'Pass', icon: 'check', rank: 3 },
+  fail: { label: t('common.fail'), icon: 'x', rank: 0 },
+  warn: { label: t('common.warn'), icon: 'alert', rank: 1 },
+  pending: { label: t('dsRules.not_run'), icon: 'minus', rank: 2 },
+  pass: { label: t('dsRules.pass'), icon: 'check', rank: 3 },
 };
 
 function dqResult(ruleId: string): any {
@@ -60,7 +60,7 @@ async function dqRenderRules(): Promise<void> {
     res = null;
   }
   if (seq !== dqLoadSeq || want !== expId) return; // a newer open already won
-  dqNames = new Map((Array.isArray(list) ? list : []).map((d: any) => [String(d.id), d.name ? String(d.name) : 'Untitled dataset']));
+  dqNames = new Map((Array.isArray(list) ? list : []).map((d: any) => [String(d.id), d.name ? String(d.name) : t('common.untitled_dataset')]));
   dqState = { datasetId: want, rules: [], latest: null, history: [] };
   dqApply(res && res.ok ? res : null);
 }
@@ -96,7 +96,7 @@ function dqPaint(): void {
   titles.className = 'dq-titles';
   const h = document.createElement('h4');
   h.className = 'dq-title';
-  h.textContent = 'Rules';
+  h.textContent = t('dsRules.rules');
   const sub = document.createElement('p');
   sub.className = 'dq-sub';
   const part = (text: string, cls?: string): void => {
@@ -105,7 +105,7 @@ function dqPaint(): void {
     s.textContent = text;
     sub.appendChild(s);
   };
-  if (!rules.length) part('Checks that run on every save and refresh');
+  if (!rules.length) part(t('dsRules.checks_that_run_on_every_save'));
   else {
     part(rules.length + (rules.length === 1 ? ' rule' : ' rules'));
     part(failing + ' failing', failing ? 'dq-sub-bad' : 'dq-sub-good');
@@ -118,14 +118,14 @@ function dqPaint(): void {
     const run = document.createElement('button');
     run.type = 'button';
     run.className = 'btn btn-sm';
-    iconLabel(run, 'refresh', 'Run checks');
+    iconLabel(run, 'refresh', t('dsRules.run_checks'));
     run.addEventListener('click', () => { void dqRun(run); });
     acts.appendChild(run);
   }
   const add = document.createElement('button');
   add.type = 'button';
   add.className = 'btn btn-primary btn-sm';
-  iconLabel(add, 'plus', 'Add rule');
+  iconLabel(add, 'plus', t('common.add_rule'));
   add.addEventListener('click', () => { void dqEdit(null); });
   acts.appendChild(add);
   head.append(titles, acts);
@@ -138,11 +138,11 @@ function dqPaint(): void {
   const table = document.createElement('div');
   table.className = 'dq-list';
   table.setAttribute('role', 'table');
-  table.setAttribute('aria-label', 'Data quality rules');
+  table.setAttribute('aria-label', t('common.data_quality_rules'));
   const hr = document.createElement('div');
   hr.className = 'dq-row dq-row-head';
   hr.setAttribute('role', 'row');
-  ['Status', 'Rule', 'Severity', 'Failing', 'Last 30 runs', ''].forEach((t) => {
+  [t('common.status'), t('common.rule'), t('common.severity'), t('dsRules.failing'), t('dsRules.last_30_runs'), ''].forEach((t) => {
     const c = document.createElement('span');
     c.setAttribute('role', 'columnheader');
     c.textContent = t;
@@ -195,12 +195,12 @@ function dqRow(rule: any): HTMLElement {
 
   const sev = document.createElement('span');
   sev.className = 'dq-sev is-' + (rule.severity === 'warn' ? 'warn' : 'fail');
-  sev.textContent = rule.severity === 'warn' ? 'Warn' : 'Fail';
+  sev.textContent = rule.severity === 'warn' ? t('common.warn') : t('common.fail');
   cell('dq-c-sev').appendChild(sev);
 
   const count = cell('dq-c-count tnum');
   if (!result || result.error || result.passed) count.textContent = '—';
-  else count.textContent = rule.kind === 'row_count' ? 'Out of range' : dqRows(Number(result.failing) || 0);
+  else count.textContent = rule.kind === 'row_count' ? t('dsRules.out_of_range') : dqRows(Number(result.failing) || 0);
 
   const spark = cell('dq-c-spark dq-spark is-' + st);
   const points = (dqState ? dqState.history : [])
@@ -209,11 +209,11 @@ function dqRow(rule: any): HTMLElement {
   const svg = aiSparkline(points);
   if (svg) {
     spark.appendChild(svg);
-    spark.title = `Failing rows over the last ${points.length} runs`;
+    spark.title = t('dsRules.failing_rows_over_the_last_runs', { pointsCount: points.length });
   } else {
     const none = document.createElement('span');
     none.className = 'dq-spark-none';
-    none.textContent = points.length ? 'One run' : 'No runs yet';
+    none.textContent = points.length ? t('dsRules.one_run') : t('dsRules.no_runs_yet');
     spark.appendChild(none);
   }
 
@@ -222,14 +222,14 @@ function dqRow(rule: any): HTMLElement {
     const show = document.createElement('button');
     show.type = 'button';
     show.className = 'btn btn-ghost btn-sm dq-show';
-    iconLabel(show, 'filter', 'Show failing rows');
+    iconLabel(show, 'filter', t('dsRules.show_failing_rows'));
     show.addEventListener('click', () => dqShowFailingRows(rule));
     acts.appendChild(show);
   }
   const more = document.createElement('button');
   more.type = 'button';
   more.className = 'dq-more';
-  iconOnly(more, 'more-horizontal', 'Rule actions');
+  iconOnly(more, 'more-horizontal', t('dsRules.rule_actions'));
   more.setAttribute('aria-haspopup', 'menu');
   more.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -243,8 +243,8 @@ function dqRow(rule: any): HTMLElement {
         b.addEventListener('click', () => { close(); run(); });
         el.appendChild(b);
       };
-      item('Edit rule', () => { void dqEdit(rule); });
-      item('Delete rule', () => { void dqDelete(rule); }, true);
+      item(t('common.edit_rule'), () => { void dqEdit(rule); });
+      item(t('dsRules.delete_rule'), () => { void dqDelete(rule); }, true);
     });
   });
   acts.appendChild(more);
@@ -277,9 +277,9 @@ function dqEmpty(): HTMLElement {
   const box = makeEmptyState({
     variant: 'rules',
     iconName: 'check',
-    title: 'No rules yet',
-    line: 'Rules check this dataset on every save, refresh and pipeline change — and flag it the moment one breaks.',
-    actionLabel: 'Add rule',
+    title: t('dsRules.no_rules_yet'),
+    line: t('dsRules.rules_check_this_dataset_on_every'),
+    actionLabel: t('common.add_rule'),
     onAction: () => { void dqEdit(null); },
   });
   const sugg = dqSuggestions();
@@ -288,7 +288,7 @@ function dqEmpty(): HTMLElement {
   wrap.className = 'dq-suggest';
   const label = document.createElement('span');
   label.className = 'dq-suggest-label';
-  label.textContent = 'Suggested from this data';
+  label.textContent = t('dsRules.suggested_from_this_data');
   wrap.appendChild(label);
   sugg.forEach((rule) => {
     const chip = document.createElement('button');
@@ -304,7 +304,7 @@ function dqEmpty(): HTMLElement {
       if (res && res.ok) await dqAfterChange(res.quality);
       else {
         chip.disabled = false;
-        showToast((res && res.error) || 'Could not add that rule.');
+        showToast((res && res.error) || t('dsRules.could_not_add_that_rule'));
       }
     });
     wrap.appendChild(chip);
@@ -326,20 +326,20 @@ async function dqEdit(rule: any): Promise<void> {
 async function dqRun(btn: HTMLButtonElement): Promise<void> {
   if (!currentProjectId || !expId) return;
   btn.disabled = true;
-  iconLabel(btn, 'refresh', 'Checking…');
+  iconLabel(btn, 'refresh', t('common.checking'));
   let res: any;
   try { res = await window.hub.runQualityChecks(currentProjectId, expId); } catch (_) { res = null; }
-  if (!res || res.ok === false) showToast((res && res.error) || 'Could not run the checks.');
+  if (!res || res.ok === false) showToast((res && res.error) || t('dsRules.could_not_run_the_checks'));
   await dqAfterChange(res && res.ok ? res : null);
 }
 
 async function dqDelete(rule: any): Promise<void> {
   if (!currentProjectId || !expId) return;
-  if (!window.confirm(`Delete the rule “${dqRuleWords(rule, dqNames)}”?`)) return;
+  if (!window.confirm(t('dsRules.delete_the_rule', { p0: dqRuleWords(rule, dqNames) }))) return;
   let res: any;
   try { res = await window.hub.deleteQualityRule(currentProjectId, expId, String(rule.id)); } catch (_) { res = null; }
   if (!res || !res.ok) {
-    showToast('Could not delete that rule.');
+    showToast(t('common.could_not_delete_that_rule'));
     return;
   }
   if (dqGridRule && dqGridRule.id === rule.id) dqClearGridRule();
@@ -387,14 +387,14 @@ function dqPaintBanner(): void {
   const text = document.createElement('span');
   text.className = 'dq-banner-text';
   const lead = document.createElement('span');
-  lead.textContent = `Showing ${dqRows(expTotal)} failing: `;
+  lead.textContent = t('dsRules.showing_failing', { expTotal: dqRows(expTotal) });
   const words = document.createElement('strong');
   words.textContent = dqGridRule.words;
   text.append(lead, words);
   const clear = document.createElement('button');
   clear.type = 'button';
   clear.className = 'dq-banner-clear';
-  iconLabel(clear, 'x', 'Clear');
+  iconLabel(clear, 'x', t('common.clear'));
   clear.addEventListener('click', () => dqClearGridRule());
   banner.append(icon('filter', 14), text, clear);
 }
@@ -407,7 +407,7 @@ function dqDot(n: any): HTMLElement | null {
   if (!count) return null;
   const dot = document.createElement('span');
   dot.className = 'dq-dot';
-  const label = `Data quality: ${count} ${count === 1 ? 'rule' : 'rules'} failing`;
+  const label = t('dsRules.data_quality_failing', { count });
   dot.setAttribute('role', 'img');
   dot.setAttribute('aria-label', label);
   dot.title = label;
@@ -431,13 +431,13 @@ function dqPaintDashFlag(label: HTMLElement, ids: string[], byId: Map<string, an
   const bad = ids.map((id) => byId.get(id)).filter((d) => d && typeof d.qualityFailing === 'number' && d.qualityFailing > 0);
   if (!bad.length) return;
   const total = bad.reduce((s, d) => s + d.qualityFailing, 0);
-  const text = `Data quality: ${total} ${total === 1 ? 'rule' : 'rules'} failing`;
+  const text = t('dsRules.data_quality_failing_2', { total });
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'dq-dash-flag';
   btn.title = bad.length > 1
-    ? `${text} across ${bad.length} datasets — opens ${bad[0].name}’s Quality tab`
-    : `Open ${bad[0].name}’s Quality tab`;
+    ? t('dsRules.across_datasets_opens_s_quality_tab', { text, badCount: bad.length, p2: bad[0].name })
+    : t('dsRules.open_s_quality_tab', { p0: bad[0].name });
   const dot = document.createElement('span');
   dot.className = 'dq-dot';
   dot.setAttribute('aria-hidden', 'true');

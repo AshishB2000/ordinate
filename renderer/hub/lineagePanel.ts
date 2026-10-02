@@ -16,19 +16,19 @@ const LN_HEAD = 30;
 const LN_NS = 'http://www.w3.org/2000/svg';
 
 const LN_KIND: Record<string, { word: string; plural: string; icon: string }> = {
-  source: { word: 'Source', plural: 'Sources', icon: 'file-text' },
-  dataset: { word: 'Dataset', plural: 'Datasets', icon: 'database' },
-  prepare: { word: 'Prepare', plural: 'Prepare', icon: 'sliders' },
-  calc: { word: 'Calculated field', plural: 'Calculated fields', icon: 'function' },
-  metric: { word: 'Metric', plural: 'Metrics', icon: 'gauge' },
-  visual: { word: 'Visual', plural: 'Visuals', icon: 'chart-bar' },
-  dashboard: { word: 'Dashboard', plural: 'Dashboards', icon: 'layout-dashboard' },
-  report: { word: 'Report', plural: 'Reports', icon: 'file-text' },
-  alert: { word: 'Alert', plural: 'Alerts', icon: 'bell' },
+  source: { word: t('common.source'), plural: t('common.sources'), icon: 'file-text' },
+  dataset: { word: t('common.dataset'), plural: t('common.datasets'), icon: 'database' },
+  prepare: { word: t('common.prepare'), plural: t('common.prepare'), icon: 'sliders' },
+  calc: { word: t('common.calculated_field'), plural: t('lineagePanel.calculated_fields'), icon: 'function' },
+  metric: { word: t('common.metric'), plural: t('common.metrics'), icon: 'gauge' },
+  visual: { word: 'Visual', plural: t('common.visuals'), icon: 'chart-bar' },
+  dashboard: { word: t('common.dashboard'), plural: t('common.dashboards'), icon: 'layout-dashboard' },
+  report: { word: t('common.report'), plural: t('common.reports'), icon: 'file-text' },
+  alert: { word: t('common.alert'), plural: t('common.alerts'), icon: 'bell' },
 };
 
 const LN_TYPE_WORD: Record<string, string> = {
-  dataset: 'Dataset', visual: 'Visual', dashboard: 'Dashboard', metric: 'Metric', report: 'Report', alert: 'Alert',
+  dataset: 'Dataset', visual: 'Visual', dashboard: t('common.dashboard'), metric: t('common.metric'), report: t('common.report'), alert: t('common.alert'),
 };
 
 function lnSvg(tag: string, attrs: Record<string, string | number>): SVGElement {
@@ -50,7 +50,7 @@ function lnUsedInText(usedIn: any): string {
   add('dashboard', 'dashboard', 'dashboards');
   add('report', 'report', 'reports');
   add('alert', 'alert', 'alerts');
-  return parts.length ? 'Used in ' + parts.join(' · ') : '';
+  return parts.length ? t('lineagePanel.used_in', { p0: parts.join(' · ') }) : '';
 }
 
 async function lnOpen(type: string, id: string, name?: string): Promise<void> {
@@ -58,12 +58,12 @@ async function lnOpen(type: string, id: string, name?: string): Promise<void> {
   const panel = spOpen({
     kind: 'lineage', wide: true,
     title: name || LN_TYPE_WORD[type],
-    sub: 'Lineage · ' + LN_TYPE_WORD[type],
+    sub: t('lineagePanel.lineage', { p0: LN_TYPE_WORD[type] }),
   });
   panel.el.dataset.recordId = id;
   const loading = document.createElement('p');
   loading.className = 'dsp-note';
-  loading.textContent = 'Tracing what this is built from…';
+  loading.textContent = t('lineagePanel.tracing_what_this_is_built_from');
   panel.body.appendChild(loading);
   let g: any = null;
   try { g = await window.hub.lineageGet(currentProjectId, type, id); } catch (_) { g = null; }
@@ -71,8 +71,8 @@ async function lnOpen(type: string, id: string, name?: string): Promise<void> {
   panel.body.textContent = '';
   if (!g || !Array.isArray(g.nodes) || !g.nodes.length) {
     panel.body.appendChild(makeEmptyState({
-      variant: 'starred', iconName: 'lineage', title: 'Nothing to trace',
-      line: 'This record could not be found in the project.',
+      variant: 'starred', iconName: 'lineage', title: t('lineagePanel.nothing_to_trace'),
+      line: t('lineagePanel.this_record_could_not_be_found'),
     }));
     return;
   }
@@ -94,7 +94,7 @@ async function lnOpen(type: string, id: string, name?: string): Promise<void> {
   if (g.nodes.length === 1) {
     const note = document.createElement('p');
     note.className = 'dsp-note ln-alone';
-    note.textContent = 'Nothing is built from this yet, and it reads from nothing else in the project.';
+    note.textContent = t('lineagePanel.nothing_is_built_from_this_yet');
     panel.body.appendChild(note);
   }
 }
@@ -107,8 +107,8 @@ function lnSummary(g: any): HTMLElement {
   const upstream = g.nodes.filter((n: any) => n.col < (focusNode ? focusNode.col : 0)).length;
   const used = lnUsedInText(g.usedIn);
   const chips: Array<[string, string]> = [];
-  chips.push(['lineage', upstream ? `Built from ${upstream} ${upstream === 1 ? 'record' : 'records'}` : 'Built from nothing else here']);
-  chips.push(['chart-bar', used || 'Not used by anything yet']);
+  chips.push(['lineage', upstream ? t('lineagePanel.built_from', { upstream }) : t('lineagePanel.built_from_nothing_else_here')]);
+  chips.push(['chart-bar', used || t('lineagePanel.not_used_by_anything_yet')]);
   for (const [ic, text] of chips) {
     const c = document.createElement('span');
     c.className = 'ln-chip';
@@ -120,7 +120,7 @@ function lnSummary(g: any): HTMLElement {
   }
   const hint = document.createElement('span');
   hint.className = 'ln-hint';
-  hint.textContent = 'Hover to follow a path · click to open';
+  hint.textContent = t('lineagePanel.hover_to_follow_a_path_click');
   strip.appendChild(hint);
   return strip;
 }
@@ -150,7 +150,7 @@ function lnDraw(g: any): SVGSVGElement {
   const W = LN_PAD * 2 + cols * LN_W + (cols - 1) * LN_COL_GAP;
   const H = LN_HEAD + LN_PAD * 2 + rows * LN_H + (rows - 1) * LN_ROW_GAP;
   const svg = lnSvg('svg', { class: 'ln-svg', width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'img' }) as SVGSVGElement;
-  svg.setAttribute('aria-label', 'Lineage graph');
+  svg.setAttribute('aria-label', t('lineagePanel.lineage_graph'));
   const x = (c: number): number => LN_PAD + c * (LN_W + LN_COL_GAP);
   const y = (r: number): number => LN_HEAD + LN_PAD + r * (LN_H + LN_ROW_GAP);
 
@@ -297,7 +297,7 @@ async function lnPaintUsedIn(datasetId: string): Promise<void> {
   try { g = await window.hub.lineageGet(currentProjectId, 'dataset', datasetId); } catch (_) { g = null; }
   if (expId !== datasetId || !g) return;
   const label = el.querySelector('span');
-  if (label) label.textContent = lnUsedInText(g.usedIn) || 'Not used yet';
+  if (label) label.textContent = lnUsedInText(g.usedIn) || t('common.not_used_yet');
   el.hidden = false;
 }
 

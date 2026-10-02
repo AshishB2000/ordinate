@@ -19,7 +19,7 @@
 const nbMdEditing = new Set<string>();
 
 const NB_CHART_TYPES = ['column', 'bar', 'stacked_column', 'line', 'area', 'pie', 'donut', 'scatter', 'treemap', 'funnel', 'waterfall', 'radar'];
-const NB_AGGS: Array<[string, string]> = [['sum', 'Sum'], ['avg', 'Average'], ['count', 'Count'], ['min', 'Min'], ['max', 'Max'], ['none', 'No aggregation']];
+const NB_AGGS: Array<[string, string]> = [['sum', t('common.sum')], ['avg', 'Average'], ['count', t('common.count')], ['min', t('common.min')], ['max', t('common.max')], ['none', t('nbCells.no_aggregation')]];
 
 function nbBuildEditor(c: NbCellDoc): HTMLElement {
   if (c.kind === 'sql') return nbSqlEditor(c);
@@ -83,13 +83,13 @@ function nbFormulaEditor(c: NbCellDoc): HTMLElement {
   const col = document.createElement('input');
   col.className = 'conn-input nb-fx-col';
   col.value = c.column || 'value';
-  col.setAttribute('aria-label', 'New column name');
+  col.setAttribute('aria-label', t('common.new_column_name'));
   col.spellcheck = false;
   const expr = document.createElement('input');
   expr.className = 'conn-input nb-fx-expr';
   expr.value = c.expression || '';
   expr.placeholder = '[amount] * 1.2';
-  expr.setAttribute('aria-label', 'Formula');
+  expr.setAttribute('aria-label', t('common.formula'));
   expr.spellcheck = false;
   const bracket = (t: string): HTMLElement => Object.assign(document.createElement('span'), { className: 'nb-fx-punct', textContent: t });
   row.append(bracket('['), col, bracket(']'), bracket('='), expr);
@@ -105,16 +105,16 @@ function nbFormulaEditor(c: NbCellDoc): HTMLElement {
   cols.className = 'nb-fx-cols';
   const lead = document.createElement('span');
   lead.className = 'nb-fx-lead';
-  if (!inputId) lead.textContent = 'A formula adds one column to the result of the SQL or formula cell above it.';
-  else if (!res || !res.ok) lead.textContent = `Reads ${nbCellName(inputId)} — run it to list its columns.`;
-  else lead.textContent = `Reads ${nbCellName(inputId)}:`;
+  if (!inputId) lead.textContent = t('nbCells.a_formula_adds_one_column_to');
+  else if (!res || !res.ok) lead.textContent = t('nbCells.reads_run_it_to_list_its', { inputId: nbCellName(inputId) });
+  else lead.textContent = t('nbCells.reads', { inputId: nbCellName(inputId) });
   cols.appendChild(lead);
   for (const k of (res && res.ok && res.columns) || []) {
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'nb-fx-chip';
     chip.textContent = k.name;
-    chip.title = `Insert [${k.name}] (${k.type})`;
+    chip.title = t('nbCells.insert', { name: k.name, type: k.type });
     chip.addEventListener('click', () => {
       const at = expr.selectionStart ?? expr.value.length;
       const ins = `[${k.name}]`;
@@ -153,19 +153,19 @@ function nbChartEditor(c: NbCellDoc): HTMLElement {
   };
 
   const sources = nbSourceOptions(c.id);
-  const src = nbSelect([['', sources.length ? 'Choose a cell…' : 'No SQL cell above'], ...sources], c.sourceCellId || '', 'Chart the result of',
+  const src = nbSelect([['', sources.length ? t('nbCells.choose_a_cell') : t('nbCells.no_sql_cell_above')], ...sources], c.sourceCellId || '', t('nbCells.chart_the_result_of'),
     (v) => set(() => { c.sourceCellId = v; }, true));
   src.classList.add('nb-chart-source');
-  const types = nbSelect(NB_CHART_TYPES.map((t) => [t, (VIZ_LABELS as any)[t] || t] as [string, string]), c.chartType || 'column', 'Chart type',
+  const types = nbSelect(NB_CHART_TYPES.map((t) => [t, (VIZ_LABELS as any)[t] || t] as [string, string]), c.chartType || 'column', t('common.chart_type'),
     (v) => set(() => { c.chartType = v; }));
-  box.append(nbField('Chart', src), nbField('As', types));
+  box.append(nbField('Chart', src), nbField(t('nbCells.as'), types));
 
   const res = c.sourceCellId ? nbResults.get(c.sourceCellId) : null;
   const columns: Array<{ name: string; type: string }> = res && res.ok && res.columns ? res.columns : [];
   if (!columns.length) {
     const hint = document.createElement('p');
     hint.className = 'nb-chart-hint';
-    hint.textContent = c.sourceCellId ? `Run ${nbCellName(c.sourceCellId)} to choose its columns.` : 'Pick the SQL or formula cell whose result this charts.';
+    hint.textContent = c.sourceCellId ? t('nbCells.run_to_choose_its_columns', { sourceCellId: nbCellName(c.sourceCellId) }) : t('nbCells.pick_the_sql_or_formula_cell');
     box.appendChild(hint);
     return box;
   }
@@ -183,10 +183,10 @@ function nbChartEditor(c: NbCellDoc): HTMLElement {
   const colOpts = columns.map((k) => [k.name, k.name] as [string, string]);
   const m = enc.values[0];
   box.append(
-    nbField('Category', nbSelect(colOpts, enc.category, 'Category', (v) => set(() => { enc.category = v; }))),
-    nbField('Measure', nbSelect(colOpts, m.column, 'Measure column', (v) => set(() => { enc.values[0] = { ...enc.values[0], column: v }; }))),
-    nbField('Of', nbSelect(NB_AGGS, m.aggregation || 'sum', 'Aggregation', (v) => set(() => { enc.values[0] = { ...enc.values[0], aggregation: v }; }))),
-    nbField('Split by', nbSelect([['', 'None'], ...colOpts], enc.series || '', 'Split by',
+    nbField(t('common.category'), nbSelect(colOpts, enc.category, t('common.category'), (v) => set(() => { enc.category = v; }))),
+    nbField(t('common.measure'), nbSelect(colOpts, m.column, t('common.measure_column'), (v) => set(() => { enc.values[0] = { ...enc.values[0], column: v }; }))),
+    nbField(t('nbCells.of'), nbSelect(NB_AGGS, m.aggregation || 'sum', t('common.aggregation'), (v) => set(() => { enc.values[0] = { ...enc.values[0], aggregation: v }; }))),
+    nbField(t('common.split_by'), nbSelect([['', t('common.none')], ...colOpts], enc.series || '', t('common.split_by'),
       (v) => set(() => { if (v) enc.series = v; else delete enc.series; }))),
   );
   for (const s of box.querySelectorAll('select')) s.addEventListener('keydown', (e) => nbEditorKey(e as KeyboardEvent, c.id));
@@ -214,7 +214,7 @@ function nbSyncEditors(): void {
 
 function nbParamReaders(c: NbCellDoc): string {
   const n = nbGraph ? nbGraph.cells.filter((x) => x.deps.includes(c.id)).length : 0;
-  return n ? `Read by ${n} ${n === 1 ? 'cell' : 'cells'}` : `Not read yet — write [[${c.name || 'name'}]] in a cell below`;
+  return n ? t('nbCells.read_by', { n }) : t('nbCells.not_read_yet_write_in_a', { p0: c.name || 'name' });
 }
 
 // ── Markdown ─────────────────────────────────────────────────────────────────
@@ -226,8 +226,8 @@ function nbMarkdownEditor(c: NbCellDoc): HTMLElement {
     const ta = document.createElement('textarea');
     ta.className = 'conn-input nb-md-input';
     ta.value = c.text || '';
-    ta.placeholder = '# A heading\nWhat this notebook answers, and how to read it. **Bold**, *italic*, `code`, lists and links.';
-    ta.setAttribute('aria-label', 'Note, in Markdown');
+    ta.placeholder = t('nbCells.a_heading_what_this_notebook_answers');
+    ta.setAttribute('aria-label', t('nbCells.note_in_markdown'));
     ta.addEventListener('input', () => { c.text = ta.value; nbAutoGrow(ta); nbTouch(); });
     ta.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && (e.shiftKey || e.metaKey || e.ctrlKey)) {
@@ -248,7 +248,7 @@ function nbMarkdownEditor(c: NbCellDoc): HTMLElement {
   view.className = 'nb-md-view md-card';
   view.tabIndex = 0;
   view.setAttribute('role', 'button');
-  view.setAttribute('aria-label', 'Note — press Enter to edit');
+  view.setAttribute('aria-label', t('nbCells.note_press_enter_to_edit'));
   view.appendChild(mdRender(mdParse(c.text || ''), document, {
     // Never a navigation of the hub window: main's shell-safe open, http(s) only.
     link: (a: HTMLAnchorElement, href: string) => {
@@ -284,7 +284,7 @@ function nbParamEditor(c: NbCellDoc): HTMLElement {
   const name = document.createElement('input');
   name.className = 'conn-input nb-param-name';
   name.value = c.name || '';
-  name.setAttribute('aria-label', 'Parameter name');
+  name.setAttribute('aria-label', t('nbCells.parameter_name'));
   name.spellcheck = false;
   name.addEventListener('input', () => { c.name = name.value.trim(); nbTouch(); });
   const ref = document.createElement('span');
@@ -293,10 +293,10 @@ function nbParamEditor(c: NbCellDoc): HTMLElement {
 
   const value = document.createElement('input');
   value.className = 'conn-input nb-param-value';
-  value.setAttribute('aria-label', 'Value');
-  const setType = (t: string): void => {
-    value.type = t === 'number' ? 'number' : t === 'date' ? 'date' : 'text';
-    value.placeholder = t === 'number' ? '2000' : t === 'date' ? 'YYYY-MM-DD' : 'West';
+  value.setAttribute('aria-label', t('common.value'));
+  const setType = (tv: string): void => {
+    value.type = tv === 'number' ? 'number' : tv === 'date' ? 'date' : 'text';
+    value.placeholder = tv === 'number' ? '2000' : tv === 'date' ? 'YYYY-MM-DD' : t('nbCells.west');
   };
   setType(c.type || 'number');
   value.value = c.value === null || c.value === undefined ? '' : String(c.value);
@@ -307,7 +307,7 @@ function nbParamEditor(c: NbCellDoc): HTMLElement {
     return v;
   };
   value.addEventListener('input', () => { c.value = read(); nbTouch(); });
-  const type = nbSelect([['number', 'Number'], ['text', 'Text'], ['date', 'Date']], c.type || 'number', 'Type', (t) => {
+  const type = nbSelect([['number', t('common.number')], ['text', t('common.text')], ['date', t('common.date')]], c.type || 'number', t('common.type'), (t) => {
     c.type = t as NbCellDoc['type'];
     setType(t);
     c.value = read();
@@ -318,6 +318,6 @@ function nbParamEditor(c: NbCellDoc): HTMLElement {
   const readers = document.createElement('span');
   readers.className = 'nb-param-readers';
   readers.textContent = nbParamReaders(c);
-  box.append(ref, nbField('Type', type, 'nb-field--inline'), nbField('Value', value, 'nb-field--inline nb-field--grow'), readers);
+  box.append(ref, nbField(t('common.type'), type, 'nb-field--inline'), nbField(t('common.value'), value, 'nb-field--inline nb-field--grow'), readers);
   return box;
 }

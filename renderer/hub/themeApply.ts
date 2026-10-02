@@ -76,15 +76,15 @@ function buildDashThemeField(state: { themeId: string }, onChange: () => void): 
   row.className = 'dash-style-field';
   const label = document.createElement('label');
   label.className = 'dash-style-label';
-  label.textContent = 'Theme';
+  label.textContent = t('common.theme');
   label.htmlFor = 'dash-style-theme';
   const sel = document.createElement('select');
   sel.className = 'stp-select te-style-select';
   sel.id = 'dash-style-theme';
   const def = wsThemeById(wsThemes.defaultId);
   const opts: Array<[string, string]> = [
-    ['', def ? 'Workspace default — ' + def.name : 'Workspace default (none set)'],
-    ['none', 'None — the style above only'],
+    ['', def ? t('themeApply.workspace_default', { name: def.name }) : t('themeApply.workspace_default_none_set')],
+    ['none', t('themeApply.none_the_style_above_only')],
   ];
   wsThemes.themes.forEach((t) => opts.push([t.id, t.name]));
   opts.forEach(([v, text]) => {
@@ -102,8 +102,8 @@ function buildDashThemeField(state: { themeId: string }, onChange: () => void): 
   const hint = document.createElement('p');
   hint.className = 'te-style-hint';
   hint.textContent = wsThemes.themes.length
-    ? 'A theme sets colours, fonts and card style over the style above.'
-    : 'No themes yet — make one in Settings → Appearance → Themes.';
+    ? t('themeApply.a_theme_sets_colours_fonts_and')
+    : t('themeApply.no_themes_yet_make_one_in');
   wrap.appendChild(hint);
   return wrap;
 }

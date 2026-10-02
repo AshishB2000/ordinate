@@ -116,7 +116,7 @@ function createEngineBuilder(host: HTMLElement, opts: { onChange: () => void; da
   const cValue = select('eb-c-value', 'Cohort value column', (v) => { cohort.value = v; if (!v) cohort.show = 'retention'; syncCohort(); });
   const cGrain = segmented('Cohort grain', [['week', 'Week'], ['month', calMonthWord()], ['quarter', 'Quarter']],
     () => cohort.grain, (v) => { cohort.grain = v; });
-  const cShow = segmented('Cohort figure', [['retention', 'Retention %'], ['value', 'Cumulative value']],
+  const cShow = segmented(t('cohortBuilder.cohort_figure'), [['retention', t('cohortBuilder.retention')], ['value', t('cohortBuilder.cumulative_value')]],
     () => cohort.show, (v) => { cohort.show = v; });
   const curveLabel = document.createElement('label');
   curveLabel.className = 'eb-check';
@@ -124,24 +124,24 @@ function createEngineBuilder(host: HTMLElement, opts: { onChange: () => void; da
   cCurve.type = 'checkbox';
   cCurve.addEventListener('change', () => { cohort.curve = cCurve.checked; opts.onChange(); });
   curveLabel.appendChild(cCurve);
-  curveLabel.appendChild(document.createTextNode('Show as a line per cohort, plus the average'));
+  curveLabel.appendChild(document.createTextNode(t('cohortBuilder.show_as_a_line_per_cohort')));
   cPanel.append(
-    row('Entity', cEntity, 'eb-c-entity'), row('Event date', cDate, 'eb-c-date'), row('Value', cValue, 'eb-c-value'),
-    row('Grain', cGrain.el), row('Show', cShow.el), row('Retention curve', curveLabel),
+    row(t('cohortBuilder.entity'), cEntity, 'eb-c-entity'), row(t('cohortBuilder.event_date'), cDate, 'eb-c-date'), row(t('common.value'), cValue, 'eb-c-value'),
+    row(t('cohortBuilder.grain'), cGrain.el), row(t('common.show'), cShow.el), row(t('common.retention_curve'), curveLabel),
   );
   const cHint = document.createElement('p');
   cHint.className = 'viz-enc-note eb-hint';
-  cHint.textContent = 'A member\'s cohort is the period of their first event. Weeks start on your workspace\'s first day of week.';
+  cHint.textContent = t('cohortBuilder.a_member_s_cohort_is_the');
   cPanel.appendChild(cHint);
 
   function syncCohort(): void {
-    fill(cEntity, entityPool(), cohort.entity, 'Pick a column…');
-    fill(cDate, by((c) => c.type === 'date'), cohort.date, 'Pick a date column…');
-    fill(cValue, by((c) => c.type === 'number'), cohort.value, 'None — retention only');
+    fill(cEntity, entityPool(), cohort.entity, t('cohortBuilder.pick_a_column'));
+    fill(cDate, by((c) => c.type === 'date'), cohort.date, t('cohortBuilder.pick_a_date_column'));
+    fill(cValue, by((c) => c.type === 'number'), cohort.value, t('cohortBuilder.none_retention_only'));
     cGrain.sync();
     const valueBtn = cShow.btns[1];
     valueBtn.disabled = !cohort.value;
-    valueBtn.title = cohort.value ? '' : 'Pick a value column first';
+    valueBtn.title = cohort.value ? '' : t('cohortBuilder.pick_a_value_column_first');
     cShow.sync();
     cCurve.checked = cohort.curve;
   }
@@ -150,10 +150,10 @@ function createEngineBuilder(host: HTMLElement, opts: { onChange: () => void; da
 
   const fPanel = document.createElement('div');
   fPanel.className = 'eb-panel';
-  const fEntity = select('eb-f-entity', 'Funnel entity column', (v) => { funnel.entity = v; });
-  const fEvent = select('eb-f-event', 'Funnel event-name column', (v) => { funnel.event = v; funnel.steps = []; renderSteps(); });
-  const fTime = select('eb-f-time', 'Funnel timestamp column', (v) => { funnel.time = v; });
-  const fBreak = select('eb-f-breakdown', 'Funnel breakdown column', (v) => { funnel.breakdown = v; });
+  const fEntity = select('eb-f-entity', t('cohortBuilder.funnel_entity_column'), (v) => { funnel.entity = v; });
+  const fEvent = select('eb-f-event', t('cohortBuilder.funnel_event_name_column'), (v) => { funnel.event = v; funnel.steps = []; renderSteps(); });
+  const fTime = select('eb-f-time', t('cohortBuilder.funnel_timestamp_column'), (v) => { funnel.time = v; });
+  const fBreak = select('eb-f-breakdown', t('cohortBuilder.funnel_breakdown_column'), (v) => { funnel.breakdown = v; });
   const stepBox = document.createElement('div');
   stepBox.className = 'eb-steps';
   const stepList = document.createElement('ol');
@@ -161,7 +161,7 @@ function createEngineBuilder(host: HTMLElement, opts: { onChange: () => void; da
   const addStep = document.createElement('button');
   addStep.type = 'button';
   addStep.className = 'btn btn-sm eb-add';
-  addStep.textContent = '+ Add step';
+  addStep.textContent = t('cohortBuilder.add_step');
   addStep.setAttribute('aria-haspopup', 'menu');
   addStep.addEventListener('click', (e) => { e.stopPropagation(); void pickStep(); });
   stepBox.append(stepList, addStep);
@@ -174,23 +174,23 @@ function createEngineBuilder(host: HTMLElement, opts: { onChange: () => void; da
   winN.step = 'any';
   winN.id = 'eb-f-window';
   winN.className = 'viz-select eb-window-n';
-  winN.setAttribute('aria-label', 'Conversion window length');
+  winN.setAttribute('aria-label', t('cohortBuilder.conversion_window_length'));
   winN.addEventListener('change', () => {
     const n = Number(winN.value);
     funnel.window.n = Number.isFinite(n) && n > 0 ? n : 7;
     winN.value = String(funnel.window.n);
     opts.onChange();
   });
-  const winUnit = select('eb-f-unit', 'Conversion window unit', (v) => { funnel.window.unit = v === 'hours' ? 'hours' : 'days'; });
+  const winUnit = select('eb-f-unit', t('cohortBuilder.conversion_window_unit'), (v) => { funnel.window.unit = v === 'hours' ? 'hours' : 'days'; });
   fillSelect(winUnit, [{ value: 'hours', label: 'hours' }, { value: 'days', label: 'days' }], 'days');
   winBox.append(winN, winUnit);
   fPanel.append(
-    row('Entity', fEntity, 'eb-f-entity'), row('Event name', fEvent, 'eb-f-event'), row('Timestamp', fTime, 'eb-f-time'),
-    row('Steps', stepBox), row('Window', winBox, 'eb-f-window'), row('Breakdown', fBreak, 'eb-f-breakdown'),
+    row(t('cohortBuilder.entity'), fEntity, 'eb-f-entity'), row(t('cohortBuilder.event_name'), fEvent, 'eb-f-event'), row(t('cohortBuilder.timestamp'), fTime, 'eb-f-time'),
+    row(t('common.steps'), stepBox), row(t('common.window'), winBox, 'eb-f-window'), row(t('cohortBuilder.breakdown'), fBreak, 'eb-f-breakdown'),
   );
   const fHint = document.createElement('p');
   fHint.className = 'viz-enc-note eb-hint';
-  fHint.textContent = 'Strict order: each step counts only after the one before it, within the window of the first step.';
+  fHint.textContent = t('cohortBuilder.strict_order_each_step_counts_only');
   fPanel.appendChild(fHint);
 
   function renderSteps(): void {
@@ -198,7 +198,7 @@ function createEngineBuilder(host: HTMLElement, opts: { onChange: () => void; da
     if (!funnel.steps.length) {
       const ph = document.createElement('li');
       ph.className = 'enc-empty eb-step-empty';
-      ph.textContent = funnel.event ? 'Add at least two steps, in the order they happen' : 'Pick the event-name column first';
+      ph.textContent = funnel.event ? t('cohortBuilder.add_at_least_two_steps_in') : t('cohortBuilder.pick_the_event_name_column_first');
       stepList.appendChild(ph);
     }
     funnel.steps.forEach((step, i) => {
@@ -222,13 +222,13 @@ function createEngineBuilder(host: HTMLElement, opts: { onChange: () => void; da
         li.appendChild(b);
       };
       const swap = (a: number, b: number): void => { [funnel.steps[a], funnel.steps[b]] = [funnel.steps[b], funnel.steps[a]]; };
-      btn('↑', `Move ${step} earlier`, i === 0, () => swap(i, i - 1));
-      btn('↓', `Move ${step} later`, i === funnel.steps.length - 1, () => swap(i, i + 1));
-      btn('×', `Remove step ${step}`, false, () => { funnel.steps.splice(i, 1); });
+      btn('↑', t('cohortBuilder.move_earlier', { step }), i === 0, () => swap(i, i - 1));
+      btn('↓', t('cohortBuilder.move_later', { step }), i === funnel.steps.length - 1, () => swap(i, i + 1));
+      btn('×', t('cohortBuilder.remove_step', { step }), false, () => { funnel.steps.splice(i, 1); });
       stepList.appendChild(li);
     });
     addStep.disabled = !funnel.event || funnel.steps.length >= 8;
-    addStep.title = funnel.steps.length >= 8 ? 'A funnel has at most eight steps' : '';
+    addStep.title = funnel.steps.length >= 8 ? t('cohortBuilder.a_funnel_has_at_most_eight') : '';
   }
 
   async function pickStep(): Promise<void> {
@@ -242,14 +242,14 @@ function createEngineBuilder(host: HTMLElement, opts: { onChange: () => void; da
     const free = values.filter((v) => v !== '' && funnel.steps.indexOf(v) < 0);
     openRowMenu(addStep, free.length
       ? free.slice(0, 60).map((v) => ({ label: v, onClick: () => { funnel.steps.push(v); renderSteps(); opts.onChange(); } }))
-      : [{ label: values.length ? 'Every value is already a step' : 'No values in this column', onClick: () => { /* informational */ } }]);
+      : [{ label: values.length ? t('cohortBuilder.every_value_is_already_a_step') : t('cohortBuilder.no_values_in_this_column'), onClick: () => { /* informational */ } }]);
   }
 
   function syncFunnel(): void {
-    fill(fEntity, entityPool(), funnel.entity, 'Pick a column…');
-    fill(fEvent, by((c) => c.type === 'text'), funnel.event, 'Pick a column…');
-    fill(fTime, by((c) => c.type === 'date'), funnel.time, 'Pick a timestamp column…');
-    fill(fBreak, by((c) => c.type !== 'date' && c.name !== funnel.entity), funnel.breakdown, 'None');
+    fill(fEntity, entityPool(), funnel.entity, t('cohortBuilder.pick_a_column'));
+    fill(fEvent, by((c) => c.type === 'text'), funnel.event, t('cohortBuilder.pick_a_column'));
+    fill(fTime, by((c) => c.type === 'date'), funnel.time, t('cohortBuilder.pick_a_timestamp_column'));
+    fill(fBreak, by((c) => c.type !== 'date' && c.name !== funnel.entity), funnel.breakdown, t('common.none'));
     winN.value = String(funnel.window.n);
     winUnit.value = funnel.window.unit;
     renderSteps();
@@ -302,19 +302,19 @@ function createEngineBuilder(host: HTMLElement, opts: { onChange: () => void; da
     },
     needs(kind: EngineKind): string {
       if (kind === 'cohort') {
-        if (!cohort.entity || !cohort.date) return 'Pick an entity and an event date before saving.';
-        if (cohort.show === 'value' && !cohort.value) return 'Pick a value column, or show retention.';
+        if (!cohort.entity || !cohort.date) return t('cohortBuilder.pick_an_entity_and_an_event');
+        if (cohort.show === 'value' && !cohort.value) return t('cohortBuilder.pick_a_value_column_or_show');
       }
       if (kind === 'event_funnel') {
-        if (!funnel.entity || !funnel.event || !funnel.time) return 'Pick an entity, an event-name column and a timestamp before saving.';
-        if (funnel.steps.length < 2) return 'Add at least two steps before saving.';
+        if (!funnel.entity || !funnel.event || !funnel.time) return t('cohortBuilder.pick_an_entity_an_event_name');
+        if (funnel.steps.length < 2) return t('cohortBuilder.add_at_least_two_steps_before');
       }
       return '';
     },
     suggestName(kind: EngineKind): string {
       const grain = cohort.grain === 'week' ? 'weekly' : cohort.grain === 'quarter' ? 'quarterly' : 'monthly';
-      if (kind === 'cohort') return cohort.show === 'value' ? `${cohort.value} per ${cohort.entity}, ${grain} cohorts` : `${cohort.entity} retention, ${grain} cohorts`;
-      if (kind === 'event_funnel' && funnel.steps.length) return `${funnel.steps[0]} → ${funnel.steps[funnel.steps.length - 1]} funnel`;
+      if (kind === 'cohort') return cohort.show === 'value' ? t('cohortBuilder.per_cohorts', { value: cohort.value, entity: cohort.entity, grain }) : t('cohortBuilder.retention_cohorts', { entity: cohort.entity, grain });
+      if (kind === 'event_funnel' && funnel.steps.length) return t('cohortBuilder.funnel', { p0: funnel.steps[0], p1: funnel.steps[funnel.steps.length - 1] });
       return '';
     },
   };

@@ -102,10 +102,10 @@ function byokCard(prov) {
   head.appendChild(icon);
   const main = lcMakeEl('span', 'ex-cli-main');
   main.appendChild(lcMakeEl('span', 'ex-cli-name', BYOK_DISPLAY[prov] || prov));
-  main.appendChild(lcMakeEl('span', 'ex-cli-vendor', connected ? 'Connected' : 'Not connected'));
+  main.appendChild(lcMakeEl('span', 'ex-cli-vendor', connected ? t('common.connected') : t('common.not_connected')));
   head.appendChild(main);
   const ha = lcMakeEl('span', 'ex-cli-actions');
-  if (isActive) ha.appendChild(lcMakeEl('span', 'ex-byok-active-tag', 'Active'));
+  if (isActive) ha.appendChild(lcMakeEl('span', 'ex-byok-active-tag', t('common.active')));
   // Decorative disclosure caret — hub.css rotates it 90° when the card opens,
   // which turns the right-chevron into a down-chevron just as the glyph did.
   const caret = lcMakeEl('span', 'ex-collapse-caret ex-byok-caret');
@@ -166,7 +166,7 @@ function buildByokBody(body, prov, d, connected, isActive) {
   const keyInput = lcMakeEl('input', 'sp-key-input');
   keyInput.autocomplete = 'off';
   keyInput.spellcheck = false;
-  const showBtn = lcMakeEl('button', 'btn btn-sm btn-ghost', 'Show');
+  const showBtn = lcMakeEl('button', 'btn btn-sm btn-ghost', t('common.show'));
   showBtn.type = 'button';
   let revealedKey = '';  // the saved key once revealed, so we don't re-save it unchanged
 
@@ -176,7 +176,7 @@ function buildByokBody(body, prov, d, connected, isActive) {
     keyInput.type = 'password';
     keyInput.dataset.masked = '1';
     keyInput.placeholder = '';
-    showBtn.textContent = 'Show';
+    showBtn.textContent = t('common.show');
     revealedKey = '';
   }
   // Empty, ready for a new key.
@@ -184,8 +184,8 @@ function buildByokBody(body, prov, d, connected, isActive) {
     delete keyInput.dataset.masked;
     keyInput.value = '';
     keyInput.type = 'password';
-    keyInput.placeholder = d.hasKey ? 'Paste a new API key to replace' : 'Paste your API key';
-    showBtn.textContent = 'Show';
+    keyInput.placeholder = d.hasKey ? t('settingsPanels.paste_a_new_api_key_to') : t('settingsPanels.paste_your_api_key');
+    showBtn.textContent = t('common.show');
     revealedKey = '';
   }
 
@@ -198,7 +198,7 @@ function buildByokBody(body, prov, d, connected, isActive) {
         delete keyInput.dataset.masked;
         keyInput.value = k; revealedKey = k;
         keyInput.type = 'text';
-        showBtn.textContent = 'Hide';
+        showBtn.textContent = t('common.hide');
       }
       return;
     }
@@ -207,7 +207,7 @@ function buildByokBody(body, prov, d, connected, isActive) {
     // Otherwise just toggle visibility of whatever the user is typing.
     const toText = keyInput.type === 'password';
     keyInput.type = toText ? 'text' : 'password';
-    showBtn.textContent = toText ? 'Hide' : 'Show';
+    showBtn.textContent = toText ? t('common.hide') : t('common.show');
   });
 
   // Clicking into a masked field clears the dots so a new key can be typed; leaving
@@ -229,7 +229,7 @@ function buildByokBody(body, prov, d, connected, isActive) {
 
   keyField.appendChild(keyInput);
   keyField.appendChild(showBtn);
-  body.appendChild(byokFieldRow(byokLabel('API key', EX_KEY_PAGES[prov] ? 'Get key ↗' : '', EX_KEY_PAGES[prov]), keyField));
+  body.appendChild(byokFieldRow(byokLabel(t('settingsPanels.api_key'), EX_KEY_PAGES[prov] ? t('settingsPanels.get_key') : '', EX_KEY_PAGES[prov]), keyField));
 
   // Base URL — shown for every provider, pre-filled with the provider default so
   // it works out of the box but can be pointed at a proxy / self-hosted endpoint.
@@ -244,14 +244,14 @@ function buildByokBody(body, prov, d, connected, isActive) {
     urlInput.value = v;                       // normalize cleared field back to default
     byokSave(prov, { baseUrl: v });
   });
-  body.appendChild(byokFieldRow(byokLabel('Base URL'), urlInput));
+  body.appendChild(byokFieldRow(byokLabel(t('settingsPanels.base_url')), urlInput));
 
   // Max tokens
   const mtInput = lcMakeEl('input', 'sp-key-input ex-narrow');
   mtInput.type = 'number'; mtInput.min = '1'; mtInput.placeholder = '4096';
   mtInput.value = d.maxTokens || '';
   mtInput.addEventListener('change', () => byokSave(prov, { maxTokens: mtInput.value.trim() }));
-  body.appendChild(byokFieldRow(byokLabel('Max tokens'), mtInput));
+  body.appendChild(byokFieldRow(byokLabel(t('settingsPanels.max_tokens')), mtInput));
 
   // Model. Gateway/custom can't auto-list an arbitrary endpoint's models, so the
   // user types the exact model id (e.g. openai/gpt-4o-mini, or an OpenRouter id like
@@ -262,23 +262,23 @@ function buildByokBody(body, prov, d, connected, isActive) {
     modelInput.type = 'text';
     modelInput.spellcheck = false;
     modelInput.setAttribute('autocomplete', 'off');
-    modelInput.placeholder = 'e.g. openai/gpt-4o-mini';
+    modelInput.placeholder = t('settingsPanels.e_g_openai_gpt_4o_mini');
     modelInput.value = (exByokStatus[prov] || {}).model || '';
     modelInput.addEventListener('change', () => byokSave(prov, { model: modelInput.value.trim() }));
-    body.appendChild(byokFieldRow(byokLabel('Model'), modelInput));
+    body.appendChild(byokFieldRow(byokLabel(t('common.model')), modelInput));
     modelSel = modelInput;
   } else {
     modelSel = makeDropdown({
       className: 'exec-model-dd ex-byok-model',
-      ariaLabel: 'Model',
+      ariaLabel: t('common.model'),
       onChange: (v) => byokSave(prov, { model: v }),
     });
-    body.appendChild(byokFieldRow(byokLabel('Model'), modelSel.el));
+    body.appendChild(byokFieldRow(byokLabel(t('common.model')), modelSel.el));
   }
 
   // Test + result (+ Set as active for connected, non-active providers)
   const testRow = lcMakeEl('div', 'ex-byok-field ex-byok-testrow');
-  const testBtn = lcMakeEl('button', 'btn btn-sm', 'Test');
+  const testBtn = lcMakeEl('button', 'btn btn-sm', t('common.test'));
   testBtn.type = 'button';
   const testRes = lcMakeEl('span', 'ex-test-result');
   testRes.setAttribute('aria-live', 'polite');
@@ -286,7 +286,7 @@ function buildByokBody(body, prov, d, connected, isActive) {
   testRow.appendChild(testBtn);
   testRow.appendChild(testRes);
   if (connected && !isActive) {
-    const actBtn = lcMakeEl('button', 'btn btn-sm ex-byok-setactive', 'Set as active');
+    const actBtn = lcMakeEl('button', 'btn btn-sm ex-byok-setactive', t('settingsPanels.set_as_active'));
     actBtn.type = 'button';
     actBtn.addEventListener('click', async () => {
       if (!window.hub || typeof window.hub.activateByokProvider !== 'function') return;
@@ -307,7 +307,7 @@ function byokFillCardModels(body, prov) {
   const saved = (exByokStatus[prov] || {}).model || '';
   const build = (list) => {
     const seen = new Set();
-    const rows = [{ value: '', label: 'Default' }];
+    const rows = [{ value: '', label: t('common.default') }];
     (list || []).forEach(m => { if (m.id && !seen.has(m.id)) { seen.add(m.id); rows.push({ value: m.id, label: m.label || m.id }); } });
     if (saved && !seen.has(saved)) rows.push({ value: saved, label: saved });
     return rows;
@@ -358,27 +358,27 @@ async function byokTest(prov, btn, res, keyInput, urlInput, mtInput, modelSel) {
   if (pending.apiKey && keyInput) keyInput.value = '';
 
   btn.disabled = true;
-  res.textContent = 'Testing…';
+  res.textContent = t('settingsPanels.testing');
   res.className = 'ex-test-result';
   try {
     const r = await window.hub.testByokProvider(prov);
     if (r && r.ok) {
-      exTestResult(res, 'check', 'Connected');
+      exTestResult(res, 'check', t('common.connected'));
       res.className = 'ex-test-result ex-test-ok';
       exByokExpanded.add(prov);   // keep the card open as it promotes upward
       await byokRefresh();        // re-fetch verified state → moves into "connected"
     } else {
-      const map = { auth: 'Key rejected', network: 'Network error', rate_limit: 'Rate limited', provider: 'Endpoint error', bad_reply: 'Unexpected reply' };
+      const map = { auth: t('settingsPanels.key_rejected'), network: t('settingsPanels.network_error'), rate_limit: t('settingsPanels.rate_limited'), provider: t('settingsPanels.endpoint_error'), bad_reply: t('settingsPanels.unexpected_reply') };
       // Prefer the SPECIFIC cause: detail carries "<provider> · <status> · <body>"
       // (e.g. "Gateway · 404 · model not found"); then a custom message; then the
       // generic label. Full text on hover since the result line clamps.
-      const label = (r && r.detail) || (r && r.message) || (r && map[r.errorType]) || 'Failed';
+      const label = (r && r.detail) || (r && r.message) || (r && map[r.errorType]) || t('common.failed');
       exTestResult(res, 'x', label);
       res.title = label;
       res.className = 'ex-test-result ex-test-err';
     }
   } catch (_) {
-    exTestResult(res, 'x', 'Failed');
+    exTestResult(res, 'x', t('common.failed'));
     res.className = 'ex-test-result ex-test-err';
   } finally {
     btn.disabled = false;
@@ -471,7 +471,7 @@ function lcInstalledRow(cli) {
 
   const main = lcMakeEl('span', 'ex-cli-main');
   const nameRow = lcMakeEl('span', 'ex-cli-name', cli.displayName);
-  const ver = lcMakeEl('span', 'ex-cli-ver', cli.version ? ('v' + cli.version) : 'version unknown');
+  const ver = lcMakeEl('span', 'ex-cli-ver', cli.version ? ('v' + cli.version) : t('settingsPanels.version_unknown'));
   nameRow.appendChild(ver);
   main.appendChild(nameRow);
   main.appendChild(lcMakeEl('span', 'ex-cli-vendor', cli.vendor));
@@ -485,14 +485,14 @@ function lcInstalledRow(cli) {
   // static lists) support model selection; other CLIs use whatever they're
   // configured for.
   const modelRow = lcMakeEl('span', 'ex-cli-model');
-  modelRow.appendChild(lcMakeEl('span', 'ex-cli-model-lbl', 'Model'));
+  modelRow.appendChild(lcMakeEl('span', 'ex-cli-model-lbl', t('common.model')));
   if (MODEL_LIST_CLIS.includes(cli.id)) {
     const saved = (lcModels || {})[cli.id] || '';
     const sel = makeDropdown({
       className: 'dd-sm ex-cli-model-dd',
       listClassName: 'dd-list-sm',
-      ariaLabel: 'Model',
-      placeholder: 'Default',
+      ariaLabel: t('common.model'),
+      placeholder: t('common.default'),
       onChange: (v) => {
         if (window.hub && typeof window.hub.saveCliModel === 'function') {
           window.hub.saveCliModel(cli.id, v).catch(() => {});
@@ -501,21 +501,21 @@ function lcInstalledRow(cli) {
       },
     });
     sel.el.addEventListener('click', (e) => e.stopPropagation()); // the row is a button; don't row-select
-    const skel = [{ value: '', label: 'Default' }];
+    const skel = [{ value: '', label: t('common.default') }];
     if (saved) skel.push({ value: saved, label: saved });
     sel.setOptions(skel, saved);
     if (window.hub && typeof window.hub.listCliModels === 'function') {
       window.hub.listCliModels(cli.id).then((res) => {
         const models = (res && res.ok && res.models) || [];
         if (!models.length) return;
-        const opts = [{ value: '', label: 'Default' }].concat(models.map(m => ({ value: m, label: m })));
+        const opts = [{ value: '', label: t('common.default') }].concat(models.map(m => ({ value: m, label: m })));
         if (saved && !models.includes(saved)) opts.push({ value: saved, label: saved });
         sel.setOptions(opts, saved);
       }).catch(() => {});
     }
     modelRow.appendChild(sel.el);
   } else {
-    modelRow.appendChild(lcMakeEl('span', 'ex-cli-model-val', 'Default (CLI config)'));
+    modelRow.appendChild(lcMakeEl('span', 'ex-cli-model-val', t('common.default_cli_config')));
   }
   main.appendChild(modelRow);
   row.appendChild(main);
@@ -524,13 +524,13 @@ function lcInstalledRow(cli) {
   // "Use" is the affordance the row always had but never showed — the whole row
   // is the button, so this needs no handler of its own: the click bubbles to it.
   // CSS swaps it for the green "Ready" tag on the row that is picked.
-  const use = lcMakeEl('button', 'btn btn-sm ex-cli-use', 'Use');
+  const use = lcMakeEl('button', 'btn btn-sm ex-cli-use', t('common.use'));
   use.type = 'button';
   actions.appendChild(use);
-  actions.appendChild(lcMakeEl('span', 'ex-cli-selected-tag', 'Ready'));
+  actions.appendChild(lcMakeEl('span', 'ex-cli-selected-tag', t('settingsPanels.ready')));
   // Per-CLI connectivity test — only CLIs with a working run adapter.
   if (RUNNABLE_LOCAL.includes(cli.id)) {
-    const test = lcMakeEl('button', 'btn btn-sm ex-cli-test', 'Test');
+    const test = lcMakeEl('button', 'btn btn-sm ex-cli-test', t('common.test'));
     test.type = 'button';
     // The result lives in `main` (full-width column), NOT in the narrow actions
     // row, so a long error wraps/clamps within the card instead of overflowing.
@@ -546,17 +546,17 @@ function lcInstalledRow(cli) {
       e.stopPropagation(); // don't trigger row-select
       if (!window.hub || typeof window.hub.testLocalCli !== 'function') return;
       test.disabled = true;
-      setRes('Testing…', '');
+      setRes(t('settingsPanels.testing'), '');
       try {
         const r = await window.hub.testLocalCli(cli.id);
         if (r && r.ok) {
-          setRes('Connected', 'ex-test-ok');
+          setRes(t('common.connected'), 'ex-test-ok');
         } else {
-          const msg = (r && r.message) || 'Test failed.';
+          const msg = (r && r.message) || t('settingsPanels.test_failed');
           setRes(msg, 'ex-test-err', msg);
         }
       } catch (_) {
-        setRes('Test failed.', 'ex-test-err');
+        setRes(t('settingsPanels.test_failed'), 'ex-test-err');
       } finally {
         test.disabled = false;
       }
@@ -594,13 +594,13 @@ function lcAvailRow(cli) {
   const note = lcMakeEl('span', 'ex-cli-note');
   if (cli.status === 'retired') {
     // Retired CLI: honest copy, never probed or run, no install action.
-    note.textContent = cli.retiredNote || 'Retired — no longer available.';
+    note.textContent = cli.retiredNote || t('settingsPanels.retired_no_longer_available');
   } else if (cli.installOnly || !cli.binaryName) {
-    note.textContent = 'Install to use this CLI with Ordinate.';
+    note.textContent = t('settingsPanels.install_to_use_this_cli_with');
   } else {
     const code = lcMakeEl('code', null, cli.binaryName);
     note.appendChild(code);
-    note.appendChild(document.createTextNode(' was not found on this Mac'));
+    note.appendChild(document.createTextNode(t('settingsPanels.was_not_found_on_this_mac')));
   }
   main.appendChild(note);
   row.appendChild(main);
@@ -613,8 +613,8 @@ function lcAvailRow(cli) {
   if (cli.binaryName && !cli.installOnly) {
     const refresh = lcMakeEl('button', 'ex-cli-refresh');
     refresh.type = 'button';
-    refresh.title = 'Re-check ' + cli.displayName;
-    refresh.setAttribute('aria-label', 'Re-check ' + cli.displayName);
+    refresh.title = t('settingsPanels.re_check') + cli.displayName;
+    refresh.setAttribute('aria-label', t('settingsPanels.re_check') + cli.displayName);
     refresh.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 0 1 3.51 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     refresh.addEventListener('click', async () => {
       if (!window.hub || typeof window.hub.detectOneCli !== 'function') return;
@@ -626,7 +626,7 @@ function lcAvailRow(cli) {
     });
     actions.appendChild(refresh);
   }
-  const install = lcMakeEl('button', 'btn btn-sm ex-cli-install', 'Install');
+  const install = lcMakeEl('button', 'btn btn-sm ex-cli-install', t('settingsPanels.install'));
   install.type = 'button';
   install.addEventListener('click', () => {
     if (cli.installUrl && window.hub && typeof window.hub.openExternal === 'function') {

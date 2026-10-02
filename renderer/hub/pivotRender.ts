@@ -192,7 +192,7 @@ function renderPivotTable(
   if (!grid || !Array.isArray(grid.cells)) {
     const m = document.createElement('div');
     m.className = 'cv-chart-fallback';
-    m.textContent = 'Pick a row dimension and at least one value to build a pivot.';
+    m.textContent = t('pivotRender.pick_a_row_dimension_and_at');
     container.appendChild(m);
     return;
   }
@@ -207,8 +207,7 @@ function renderPivotTable(
     const note = document.createElement('div');
     note.className = 'pivot-note';
     note.textContent =
-      `Showing the first ${grid.rowGroupCount.toLocaleString()} row groups and ` +
-      `${grid.colGroupCount.toLocaleString()} column groups — narrow the pivot with a filter or Top N to see the rest.`;
+      t('pivotRender.showing_the_first_row_groups_and', { p0: grid.rowGroupCount.toLocaleString(), p1: grid.colGroupCount.toLocaleString() });
     wrap.appendChild(note);
   }
 
@@ -356,7 +355,7 @@ function pivotHead(grid: PivotGridShape, opts: PivotViewOpts, interactive: boole
       th.className = 'pivot-col-head pivot-total-head';
       th.rowSpan = depth;
       if (grid.valueCount > 1) th.colSpan = grid.valueCount;
-      th.textContent = 'Total';
+      th.textContent = t('common.total');
       tr.appendChild(th);
     }
     thead.appendChild(tr);
@@ -381,7 +380,7 @@ function pivotSortButton(label: string, dir: 'asc' | 'desc' | null, onClick: () 
   arrow.setAttribute('aria-hidden', 'true');
   b.appendChild(arrow);
   b.setAttribute('aria-label',
-    'Sort by ' + (label || 'label') + (dir === 'asc' ? ', ascending' : dir === 'desc' ? ', descending' : ''));
+    t('pivotRender.sort_by', { p0: (label || 'label'), p1: (dir === 'asc' ? t('pivotRender.ascending') : dir === 'desc' ? t('pivotRender.descending') : '') }));
   b.addEventListener('click', onClick);
   return b;
 }
@@ -412,7 +411,7 @@ function pivotBodyRow(grid: PivotGridShape, r: number, ctx: BodyRowCtx): HTMLTab
     btn.className = 'pivot-collapse';
     const closed = ctx.collapsed.has(key);
     btn.setAttribute('aria-expanded', String(!closed));
-    btn.setAttribute('aria-label', (closed ? 'Expand ' : 'Collapse ') + own);
+    btn.setAttribute('aria-label', (closed ? t('common.expand') : t('common.collapse')) + own);
     const caret = icon('chevron-down', 12);
     caret.classList.add('pivot-caret');
     if (closed) caret.classList.add('is-closed');
@@ -470,7 +469,7 @@ function attachCellTip(
     // "of total" only where the cell IS a figure — with a `showAs` in force the
     // cell is already a share, and a share of a share is noise.
     if (!tcPivotKind(grid, vi) && grid.showAs[vi] === 'value' && typeof v === 'number' && typeof rowTotal === 'number' && rowTotal !== 0) {
-      lines.push(((v / rowTotal) * 100).toLocaleString(undefined, { maximumFractionDigits: 1 }) + '% of total');
+      lines.push(t('pivotRender.of_total', { p0: ((v / rowTotal) * 100).toLocaleString(undefined, { maximumFractionDigits: 1 }) }));
     }
     pivotShowTip(td, lines);
   });
@@ -485,7 +484,7 @@ function pivotFoot(grid: PivotGridShape): HTMLTableSectionElement | null {
   tr.className = 'pivot-row pivot-grand';
   const th = document.createElement('th');
   th.className = 'pivot-row-head';
-  th.textContent = 'Total';
+  th.textContent = t('common.total');
   tr.appendChild(th);
   for (let c = 0; c < grid.colHeaders.length; c += 1) {
     const td = document.createElement('td');
@@ -522,7 +521,7 @@ function pivotToRows(grid: PivotGridShape): string[][] {
   for (let level = 0; level < depth; level += 1) {
     const head = [''];
     for (const h of grid.colHeaders) head.push(h[level] ?? '');
-    if (grid.rowTotals) for (let vi = 0; vi < grid.valueCount; vi += 1) head.push(level === 0 ? 'Total' : '');
+    if (grid.rowTotals) for (let vi = 0; vi < grid.valueCount; vi += 1) head.push(level === 0 ? t('common.total') : '');
     out.push(head);
   }
   grid.cells.forEach((row, r) => {
@@ -540,7 +539,7 @@ function pivotToRows(grid: PivotGridShape): string[][] {
     out.push(line);
   });
   if (grid.colTotals || grid.grand) {
-    const line = ['Total'];
+    const line = [t('common.total')];
     for (let c = 0; c < grid.colHeaders.length; c += 1) {
       line.push(grid.colTotals ? pivotFmt(grid.colTotals[c], 'value', grid.formats[pivotValueOf(grid, c)]) : '');
     }
@@ -599,15 +598,15 @@ function pivotMenuItems(cardEl: Element | null, title: string): Array<[string, (
     return out && out.pivot ? out.pivot : null;
   };
   return [
-    ['Copy as table', async () => {
+    [t('pivotRender.copy_as_table'), async () => {
       const g = await shaped();
       if (!g) return;
       try {
         window.hub.copyText(pivotToTsv(g));
-        if (typeof showToast === 'function') showToast('Table copied');
+        if (typeof showToast === 'function') showToast(t('pivotRender.table_copied'));
       } catch (_) { /* the clipboard is best-effort here, as everywhere else */ }
     }],
-    ['Export CSV', async () => {
+    [t('common.export_csv'), async () => {
       const g = await shaped();
       if (!g) return;
       const safe = String(title || 'pivot').replace(/[^\w .-]+/g, '_').slice(0, 60) || 'pivot';

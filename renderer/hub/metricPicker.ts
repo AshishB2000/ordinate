@@ -87,8 +87,8 @@ function openMetricPicker(anchorBtn: HTMLElement, opts: MetricPickerOpts = {}): 
       const search = document.createElement('input');
       search.type = 'search';
       search.className = 'mpk-search';
-      search.placeholder = 'Search metrics';
-      search.setAttribute('aria-label', 'Search metrics');
+      search.placeholder = t('metricPicker.search_metrics');
+      search.setAttribute('aria-label', t('metricPicker.search_metrics'));
       menu.appendChild(search);
 
       const rows = document.createElement('div');
@@ -97,14 +97,14 @@ function openMetricPicker(anchorBtn: HTMLElement, opts: MetricPickerOpts = {}): 
 
       const empty = document.createElement('div');
       empty.className = 'mpk-empty';
-      empty.textContent = 'Loading…';
+      empty.textContent = t('common.loading');
       rows.appendChild(empty);
 
       const customRow = (): HTMLElement => {
         const b = document.createElement('button');
         b.type = 'button';
         b.className = 'chart-menu-item mpk-custom';
-        b.textContent = 'Custom…';
+        b.textContent = t('common.custom');
         b.addEventListener('click', () => { picked = { kind: 'custom' }; close(); });
         return b;
       };
@@ -166,8 +166,8 @@ function openMetricPicker(anchorBtn: HTMLElement, opts: MetricPickerOpts = {}): 
             const none = document.createElement('div');
             none.className = 'mpk-empty';
             none.textContent = all.length
-              ? 'No metric matches that.'
-              : 'No metrics in this project yet. Data → Metrics defines one.';
+              ? t('metricPicker.no_metric_matches_that')
+              : t('metricPicker.no_metrics_in_this_project_yet');
             rows.appendChild(none);
           } else {
             shown.forEach((m: any) => rows.appendChild(makeRow(m)));

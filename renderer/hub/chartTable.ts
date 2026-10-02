@@ -33,7 +33,7 @@ function buildDataTable(table: HTMLTableElement, data: ChartDataShape, overrides
   const thead = document.createElement('thead');
   const headerRow = document.createElement('tr');
   const thLabel = document.createElement('th');
-  thLabel.textContent = 'Label';
+  thLabel.textContent = t('common.label');
   headerRow.appendChild(thLabel);
   series.forEach((s: ChartSeriesShape, si: number) => {
     const th = document.createElement('th');

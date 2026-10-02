@@ -44,7 +44,7 @@ function initAnalyses(): void {
   const emptyDraft = dashEl('an-empty-draft');
   if (emptyDraft) {
     emptyDraft.addEventListener('click', () => {
-      if (typeof dkAsk === 'function') void dkAsk('Build me a dashboard from my data');
+      if (typeof dkAsk === 'function') void dkAsk(t('analyses.build_me_a_dashboard_from_my'));
     });
   }
 }

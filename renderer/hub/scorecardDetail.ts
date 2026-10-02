@@ -64,10 +64,10 @@ async function scOpenDetail(metricId: string): Promise<void> {
   body.textContent = '';
   const title = scEl('sc-detail-title');
   if (!res || res.ok === false) {
-    if (title) title.textContent = 'Metric';
+    if (title) title.textContent = t('common.metric');
     const p = document.createElement('p');
     p.className = 'sc-error';
-    p.textContent = (res && res.error) || 'Could not load this metric.';
+    p.textContent = (res && res.error) || t('scorecardDetail.could_not_load_this_metric');
     body.appendChild(p);
     return;
   }
@@ -78,10 +78,10 @@ async function scOpenDetail(metricId: string): Promise<void> {
 
   const figs = document.createElement('div');
   figs.className = 'sc-figs';
-  figs.appendChild(scFigure(res.window ? res.window.label : 'Value', res.display || '—', 'sc-fig--lead'));
-  figs.appendChild(scFigure('Target', res.targetDisplay || 'None set'));
-  figs.appendChild(scFigure('Attainment', typeof res.attainment === 'number' ? Math.round(res.attainment) + '%' : '—'));
-  figs.appendChild(scFigure('Status', res.statusWord ? res.statusWord.charAt(0).toUpperCase() + res.statusWord.slice(1) : '—', 'sc-fig--' + res.status));
+  figs.appendChild(scFigure(res.window ? res.window.label : t('common.value'), res.display || '—', 'sc-fig--lead'));
+  figs.appendChild(scFigure(t('common.target'), res.targetDisplay || t('scorecardDetail.none_set')));
+  figs.appendChild(scFigure(t('common.attainment'), typeof res.attainment === 'number' ? Math.round(res.attainment) + '%' : '—'));
+  figs.appendChild(scFigure(t('common.status'), res.statusWord ? res.statusWord.charAt(0).toUpperCase() + res.statusWord.slice(1) : '—', 'sc-fig--' + res.status));
   body.appendChild(figs);
   const def = document.createElement('p');
   def.className = 'sc-detail-def';
@@ -92,13 +92,13 @@ async function scOpenDetail(metricId: string): Promise<void> {
   const series = res.series || { labels: [], series: [] };
   const lineHead = document.createElement('div');
   lineHead.className = 'sc-detail-sub';
-  lineHead.textContent = res.dateColumn ? `Last ${series.labels.length} periods, by ${res.dateColumn}` : 'No date column — no history to draw';
+  lineHead.textContent = res.dateColumn ? t('scorecardDetail.last_periods_by', { labelsCount: series.labels.length, dateColumn: res.dateColumn }) : t('scorecardDetail.no_date_column_no_history_to');
   body.appendChild(lineHead);
   if (series.labels.length) {
     const wrap = document.createElement('div');
     wrap.className = 'sc-detail-chart';
     const canvas = document.createElement('canvas');
-    canvas.setAttribute('aria-label', `${res.metric.name} over time, with its target and a forecast`);
+    canvas.setAttribute('aria-label', t('scorecardDetail.over_time_with_its_target_and', { name: res.metric.name }));
     wrap.appendChild(canvas);
     body.appendChild(wrap);
     const chart = buildChart(canvas, series, 'line', { showLegend: false, valueMode: 'off' });
@@ -107,7 +107,7 @@ async function scOpenDetail(metricId: string): Promise<void> {
     if (fc) {
       const note = document.createElement('p');
       note.className = 'sc-detail-note';
-      note.textContent = 'Forecast ' + fc.text + (fc.forecast && fc.forecast.season ? ` · season of ${fc.forecast.season} detected` : '');
+      note.textContent = t('scorecardDetail.forecast', { text: fc.text, p1: (fc.forecast && fc.forecast.season ? t('scorecardDetail.season_of_detected', { season: fc.forecast.season }) : '') });
       body.appendChild(note);
     }
   }
@@ -116,7 +116,7 @@ async function scOpenDetail(metricId: string): Promise<void> {
   if (res.breakdown && res.breakdown.labels.length) {
     const h = document.createElement('div');
     h.className = 'sc-detail-sub';
-    h.textContent = `${res.window ? res.window.label : 'This period'} by ${res.breakdown.dimension}`;
+    h.textContent = `${res.window ? res.window.label : t('scorecardDetail.this_period')} by ${res.breakdown.dimension}`;
     body.appendChild(h);
     const wrap = document.createElement('div');
     wrap.className = 'sc-detail-chart sc-detail-chart--bars';
@@ -135,7 +135,7 @@ async function scOpenDetail(metricId: string): Promise<void> {
   const alertBtn = document.createElement('button');
   alertBtn.type = 'button';
   alertBtn.className = 'btn btn-primary';
-  alertBtn.append(icon('bell', 16), Object.assign(document.createElement('span'), { textContent: 'Alert me…' }));
+  alertBtn.append(icon('bell', 16), Object.assign(document.createElement('span'), { textContent: t('common.alert_me') }));
   alertBtn.addEventListener('click', () => { void scAlertMe(res.metric); });
   actions.appendChild(alertBtn);
   body.appendChild(actions);
@@ -145,10 +145,10 @@ async function scOpenDetail(metricId: string): Promise<void> {
 async function scAlertMe(m: any): Promise<void> {
   const def = (m && m.definition) || {};
   if (typeof def.formula === 'string') {
-    showToast('Alerts watch a column rolled up by an aggregation — a formula metric cannot be one yet.');
+    showToast(t('common.alerts_watch_a_column_rolled_up'));
     return;
   }
-  if (!def.column) { showToast('This metric has no column to watch.'); return; }
+  if (!def.column) { showToast(t('common.this_metric_has_no_column_to')); return; }
   const rule = await openAlertDialog({
     datasetId: String(m.datasetId),
     column: String(def.column),
@@ -164,7 +164,7 @@ async function scCreateReport(id: string): Promise<void> {
   if (!currentProjectId) return;
   let res: any = null;
   try { res = await window.hubPower.scorecardCreateReport(currentProjectId, id); } catch (_) { res = null; }
-  if (!res || res.ok === false || !res.report) { showToast('Could not create the report.'); return; }
+  if (!res || res.ok === false || !res.report) { showToast(t('scorecardDetail.could_not_create_the_report')); return; }
   await scClose();
   await rbOpenReportById(String(res.report.id));
 }

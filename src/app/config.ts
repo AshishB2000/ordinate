@@ -15,6 +15,7 @@ import type { Branding } from './branding';
 import type { OnboardingState } from './onboarding';
 import { BACKUP_DEFAULTS, sanitizeBackups } from './backupSettings';
 import type { BackupSettings } from './backupSettings';
+import { isLanguage, setLanguage } from './i18n';
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
 export interface LegacyProviderEntry { apiKey?: string | null; endpoint?: string; model: string }
@@ -119,6 +120,8 @@ interface Config {
   /** Settings → General: the name on your comments. '' → the OS user name
    *  (src/app/comments.ts resolves it in main; a renderer never sends one). */
   displayName: string;
+  /** Settings → General → Language: a code from src/app/i18n.ts, 'en' by default. */
+  language: string;
   providers: Record<string, LegacyProviderEntry>;
   byok: ByokBlock;
   // Connection secrets, keyed by connection UUID. Never reaches a renderer.
@@ -226,6 +229,7 @@ const DEFAULTS: Omit<Config, 'providers' | 'byok'> = {
   // transport is a second, separate opt-in.
   automation: { enabled: false, http: false, port: AUTOMATION_PORT },
   displayName: '',
+  language: 'en',
   // Connection secrets (pg passwords / URL tokens), keyed by connection UUID.
   // Plaintext on disk like API keys; stripped from every renderer-facing view.
   connectionSecrets: {},
@@ -328,6 +332,7 @@ function sanitize(input: any): Partial<Config> {
   if (Array.isArray(input.starred)) out.starred = cleanStarred(input.starred);
   if (input.automation && typeof input.automation === 'object') out.automation = cleanAutomation(input.automation);
   if (typeof input.displayName === 'string') out.displayName = input.displayName.replace(/\s+/g, ' ').trim().slice(0, 80);
+  if (isLanguage(input.language)) out.language = input.language;
   return out;
 }
 
@@ -425,6 +430,7 @@ export function persist(cfg: Config): void {
   // lag the ones on disk.
   setCalendar(cfg.formats);
   setFormatPrefs(cfg.formats);
+  setLanguage(cfg.language);
   // Atomic write (temp sibling → rename), mirroring the BI stores. config.json
   // holds every plaintext API key + connection secret; a crash / full disk mid-
   // write must never leave it truncated (which load() would then read as {} and
@@ -463,6 +469,7 @@ export function load(): Config {
   cache = migrate(merged);
   setCalendar(cache.formats);
   setFormatPrefs(cache.formats);
+  setLanguage(cache.language);
   return cache;
 }
 

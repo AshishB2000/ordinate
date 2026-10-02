@@ -145,7 +145,7 @@ function openFormulaEditor(opts: FormulaEditorOpts): Promise<void> {
 
     const title = document.createElement('div');
     title.className = 'ws-modal-title';
-    title.textContent = editingName ? 'Edit calculated field' : 'New calculated field';
+    title.textContent = editingName ? t('formulaEditor.edit_calculated_field') : t('formulaEditor.new_calculated_field');
     box.appendChild(title);
 
     if (existing.note) {
@@ -161,8 +161,8 @@ function openFormulaEditor(opts: FormulaEditorOpts): Promise<void> {
     const search = document.createElement('input');
     search.type = 'search';
     search.className = 'ws-modal-input fx-search';
-    search.placeholder = 'Search columns & functions';
-    search.setAttribute('aria-label', 'Search columns and functions');
+    search.placeholder = t('formulaEditor.search_columns_functions');
+    search.setAttribute('aria-label', t('formulaEditor.search_columns_and_functions'));
     side.appendChild(search);
     const sideList = fxRow('fx-side-list', side);
 
@@ -171,9 +171,9 @@ function openFormulaEditor(opts: FormulaEditorOpts): Promise<void> {
     const nameIn = document.createElement('input');
     nameIn.type = 'text';
     nameIn.className = 'ws-modal-input fx-name';
-    nameIn.placeholder = 'New column name';
+    nameIn.placeholder = t('common.new_column_name');
     nameIn.value = editingName;
-    nameIn.setAttribute('aria-label', 'New column name');
+    nameIn.setAttribute('aria-label', t('common.new_column_name'));
     nameRow.appendChild(nameIn);
     const badge = document.createElement('span');
     badge.className = 'fx-badge';
@@ -189,7 +189,7 @@ function openFormulaEditor(opts: FormulaEditorOpts): Promise<void> {
     input.className = 'fx-input';
     input.spellcheck = false;
     input.value = String(existing.expression || '');
-    input.setAttribute('aria-label', 'Expression');
+    input.setAttribute('aria-label', t('formulaEditor.expression'));
     wrap.appendChild(input);
 
     const pop = fxRow('fx-pop', main);
@@ -202,12 +202,12 @@ function openFormulaEditor(opts: FormulaEditorOpts): Promise<void> {
     const actions = fxRow('ws-modal-actions fx-actions', box);
     const hint = document.createElement('span');
     hint.className = 'fx-hint';
-    hint.textContent = '⌘↵ to save';
+    hint.textContent = t('formulaEditor.to_save');
     actions.appendChild(hint);
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'btn';
-    cancel.textContent = 'Cancel';
+    cancel.textContent = t('common.cancel');
     actions.appendChild(cancel);
     // The Save button carries its own reason for being disabled, and so does the
     // span around it: a DISABLED button fires no pointer events, so its `title`
@@ -217,7 +217,7 @@ function openFormulaEditor(opts: FormulaEditorOpts): Promise<void> {
     const save = document.createElement('button');
     save.type = 'button';
     save.className = 'btn btn-primary';
-    save.textContent = 'Save';
+    save.textContent = t('common.save');
     saveWrap.appendChild(save);
     actions.appendChild(saveWrap);
 
@@ -272,7 +272,7 @@ function openFormulaEditor(opts: FormulaEditorOpts): Promise<void> {
 
       const cols = columns.filter((c) => !q || String(c.name).toLowerCase().indexOf(q) >= 0);
       if (cols.length) {
-        group('Columns');
+        group(t('common.columns'));
         cols.forEach((c) => {
           const glyph = c.type === 'number' ? '#' : c.type === 'date' ? '⏱' : 'A';
           item(glyph + '  ' + c.name, c.type + ' column', '[' + c.name + ']', 0, 'fx-item-col');
@@ -285,7 +285,7 @@ function openFormulaEditor(opts: FormulaEditorOpts): Promise<void> {
       docs.forEach((d) => {
         if (d.category !== cat) {
           cat = d.category;
-          group(cat === 'lod' ? 'Level of detail' : cat.charAt(0).toUpperCase() + cat.slice(1));
+          group(cat === 'lod' ? t('formulaEditor.level_of_detail') : cat.charAt(0).toUpperCase() + cat.slice(1));
         }
         if (d.insert) item(d.signature, d.summary + '\n' + d.example, d.insert, lodCaretBack(d), 'fx-item-fn fx-item-lod');
         else item(d.signature, d.summary, d.name + '(', 0, 'fx-item-fn');
@@ -293,7 +293,7 @@ function openFormulaEditor(opts: FormulaEditorOpts): Promise<void> {
       if (!cols.length && !docs.length) {
         const none = document.createElement('div');
         none.className = 'fx-side-empty';
-        none.textContent = 'Nothing matches “' + search.value.trim() + '”.';
+        none.textContent = t('formulaEditor.nothing_matches', { p0: search.value.trim() });
         sideList.appendChild(none);
       }
     };
@@ -384,9 +384,9 @@ function openFormulaEditor(opts: FormulaEditorOpts): Promise<void> {
     // ── Check → paint ────────────────────────────────────────────────────────
     const nameProblem = (): string => {
       const n = nameIn.value.trim();
-      if (!n) return 'Give the new column a name.';
+      if (!n) return t('formulaEditor.give_the_new_column_a_name');
       const clash = columns.some((c) => String(c.name) === n) && n !== editingName;
-      return clash ? '“' + n + '” is already a column in this dataset.' : '';
+      return clash ? t('formulaEditor.is_already_a_column_in_this', { n }) : '';
     };
 
     const paint = (): void => {
@@ -409,7 +409,7 @@ function openFormulaEditor(opts: FormulaEditorOpts): Promise<void> {
       if (last && last.ok) {
         (last.unknownRefs || []).forEach((u: any) => {
           say(
-            '[' + u.name + '] is not a column.' + (u.didYouMean ? ' Did you mean [' + u.didYouMean + ']?' : ''),
+            t('formulaEditor.is_not_a_column', { name: u.name, p1: (u.didYouMean ? t('formulaEditor.did_you_mean', { didYouMean: u.didYouMean }) : '') }),
             'fx-msg-err',
           );
         });
@@ -448,7 +448,7 @@ function openFormulaEditor(opts: FormulaEditorOpts): Promise<void> {
         });
         const rth = document.createElement('th');
         rth.className = 'fx-res' + (typeof first.result === 'number' ? ' fx-num' : '');
-        rth.textContent = nameIn.value.trim() || 'Result';
+        rth.textContent = nameIn.value.trim() || t('formulaEditor.result');
         hr.appendChild(rth);
         thead.appendChild(hr);
         table.appendChild(thead);
@@ -471,17 +471,17 @@ function openFormulaEditor(opts: FormulaEditorOpts): Promise<void> {
       } else if (last && last.ok) {
         const none = document.createElement('div');
         none.className = 'fx-side-empty';
-        none.textContent = 'This dataset has no rows to preview.';
+        none.textContent = t('formulaEditor.this_dataset_has_no_rows_to');
         preview.appendChild(none);
       }
 
       // Save gate — one reason, shown on hover of the button AND its wrapper.
       const reason = !src.trim()
-        ? 'Write an expression first.'
+        ? t('formulaEditor.write_an_expression_first')
         : last && !last.ok
           ? String(last.error)
           : !last
-            ? 'Checking…'
+            ? t('common.checking')
             : np;
       save.disabled = !!reason;
       saveWrap.title = reason;
@@ -500,7 +500,7 @@ function openFormulaEditor(opts: FormulaEditorOpts): Promise<void> {
       try {
         res = await window.hub.checkFormula(opts.projectId, opts.datasetId, src);
       } catch (_) {
-        res = { tokens: [], ok: false, error: 'Could not check the formula.' };
+        res = { tokens: [], ok: false, error: t('formulaEditor.could_not_check_the_formula') };
       }
       // A slower earlier check must never overwrite a newer one — otherwise a
       // fast typist watches the panel flip back to a stale error.

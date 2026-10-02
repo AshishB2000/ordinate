@@ -175,7 +175,7 @@ function drillEnsureRoot(): HTMLElement | null {
 /** Every focusable control currently inside the panel, in DOM order. */
 function drillFocusables(): HTMLElement[] {
   if (!drillRoot) return [];
-  const sel = 'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  const sel = t('drill.button_not_disabled_input_not_disabled');
   return Array.from(drillRoot.querySelectorAll(sel)).filter(
     (el) => (el as HTMLElement).offsetParent !== null,
   ) as HTMLElement[];
@@ -212,9 +212,9 @@ function openDrillPanel(opts: DrillOpts): void {
   if (search) search.value = '';
 
   const title = drillQ('#drill-title');
-  if (title) title.textContent = opts.name && opts.name.trim() ? opts.name : 'Underlying rows';
+  if (title) title.textContent = opts.name && opts.name.trim() ? opts.name : t('common.underlying_rows');
   const sub = drillQ('.js-drill-sub');
-  if (sub) sub.textContent = opts.mark ? 'The rows behind the selected mark' : 'The rows behind this visual';
+  if (sub) sub.textContent = opts.mark ? t('drill.the_rows_behind_the_selected_mark') : t('drill.the_rows_behind_this_visual');
   // What "Export these rows" will do to sensitive columns (privacyShare.ts).
   pvMountShareNote(drillQ('.drill-foot'), 'export', [opts.datasetId]);
   if (typeof drvMountDrillWhy === 'function') drvMountDrillWhy(drillQ('.drill-head'), opts); // "Why did this change?"
@@ -273,12 +273,12 @@ async function drillFetch(): Promise<void> {
   if (seq !== drillSeq) return; // a newer request already won
 
   if (!res || res.ok !== true) {
-    drillReason = (res && res.error) || 'Could not read the underlying rows.';
+    drillReason = (res && res.error) || t('drill.could_not_read_the_underlying_rows');
     drillRows = [];
     drillTotal = 0;
   } else if (res.available === false) {
     // The honest answer. No grid, no approximate set — just why.
-    drillReason = String(res.reason || 'These rows cannot be identified exactly.');
+    drillReason = String(res.reason || t('drill.these_rows_cannot_be_identified_exactly'));
     drillRows = [];
     drillTotal = 0;
     drillFilters = [];
@@ -339,8 +339,8 @@ function drillChipText(f: any): string {
   const col = String(f.column ?? '');
   const op = String(f.op ?? '');
   if (op === 'period') return col + ': ' + periodLabel(f.period);
-  if (op === 'is_empty') return col + ' is empty';
-  if (op === 'not_empty') return col + ' is not empty';
+  if (op === 'is_empty') return t('drill.is_empty', { col });
+  if (op === 'not_empty') return t('drill.is_not_empty', { col });
   if (op === 'in' || op === 'not in') {
     const vals = Array.isArray(f.values) ? f.values : [];
     const shown = vals.slice(0, 3).map((v: any) => (v == null ? '' : String(v)));
@@ -358,7 +358,7 @@ function drillRenderCount(): void {
     el.textContent = '';
     return;
   }
-  el.textContent = drillTotal === 1 ? '1 row' : drillTotal.toLocaleString() + ' rows';
+  el.textContent = drillTotal === 1 ? t('drill.1_row') : drillTotal.toLocaleString() + ' rows';
 }
 
 function drillPaintTable(scroll: HTMLElement): void {
@@ -384,7 +384,7 @@ function drillPaintTable(scroll: HTMLElement): void {
     }
     btn.setAttribute(
       'aria-label',
-      'Sort by ' + col.name + (drillSortCol === col.name && drillSortDir === 'asc' ? ', descending' : ', ascending'),
+      t('drill.sort_by', { name: col.name, p1: !!(drillSortCol === col.name && drillSortDir === 'asc') }),
     );
     btn.addEventListener('click', () => drillSortBy(col.name));
     th.appendChild(btn);
@@ -412,7 +412,7 @@ function drillPaintTable(scroll: HTMLElement): void {
   if (drillRows.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'drill-empty';
-    empty.textContent = drillSearch.trim() ? 'No rows match that search.' : 'No rows.';
+    empty.textContent = drillSearch.trim() ? t('drill.no_rows_match_that_search') : t('drill.no_rows');
     scroll.appendChild(empty);
   }
 }
@@ -446,7 +446,7 @@ async function exportDrillRows(): Promise<void> {
   if (!(await pvShareGate('export', [o.datasetId], { noted: true }))) return;
   if (btn) {
     btn.disabled = true;
-    btn.textContent = 'Exporting…';
+    btn.textContent = t('drill.exporting');
   }
   let res: any = null;
   try {
@@ -460,15 +460,15 @@ async function exportDrillRows(): Promise<void> {
   }
   if (btn) {
     btn.disabled = false;
-    btn.textContent = 'Export these rows (CSV)';
+    btn.textContent = t('common.export_these_rows_csv');
   }
   if (!res || res.canceled) return;
   if (typeof showToast === 'function') {
     if (res.ok) {
       const file = String(res.dest || '').split(/[\\/]/).pop();
-      showToast(`Exported ${Number(res.rows || 0).toLocaleString()} rows → ${file}`);
+      showToast(t('drill.exported_rows', { p0: Number(res.rows || 0).toLocaleString(), file }));
     } else {
-      showToast(res.error || 'Could not export these rows');
+      showToast(res.error || t('drill.could_not_export_these_rows'));
     }
   }
 }
@@ -482,7 +482,7 @@ function drillPaintPager(): void {
   const first = drillTotal === 0 ? 0 : drillOffset + 1;
   const last = Math.min(drillOffset + drillRows.length, drillTotal);
   const label = document.createElement('span');
-  label.textContent = `Rows ${first.toLocaleString()}–${last.toLocaleString()} of ${drillTotal.toLocaleString()}`;
+  label.textContent = t('common.rows_of', { p0: first.toLocaleString(), p1: last.toLocaleString(), p2: drillTotal.toLocaleString() });
   pager.appendChild(label);
 
   // `side` says which end the chevron sits on: iconLabel() only ever leads.
@@ -509,6 +509,6 @@ function drillPaintPager(): void {
     });
     pager.appendChild(btn);
   };
-  mk('chevron-left', 'Prev', 'left', -1, drillOffset <= 0);
-  mk('chevron-right', 'Next', 'right', 1, drillOffset + DRILL_PAGE_ROWS >= drillTotal);
+  mk('chevron-left', t('common.prev'), 'left', -1, drillOffset <= 0);
+  mk('chevron-right', t('common.next'), 'right', 1, drillOffset + DRILL_PAGE_ROWS >= drillTotal);
 }

@@ -16,9 +16,9 @@ interface EncMapApi {
 }
 
 const ENC_MAP_LEVELS: Array<[string, string]> = [
-  ['point', 'Latitude / longitude points'], ['world_city', 'World cities'],
+  ['point', t('encodingMap.latitude_longitude_points')], ['world_city', t('encodingMap.world_cities')],
   // r6:geo — density in hexagons, and origin → destination routes (mapHexbin.ts / mapFlow.ts).
-  ['hexbin', 'Hexbin density (latitude / longitude)'], ['flow', 'Flows (origin → destination)'],
+  ['hexbin', t('encodingMap.hexbin_density_latitude_longitude')], ['flow', t('encodingMap.flows_origin_destination')],
 ];
 /** The levels that read a latitude / longitude pair. */
 const ENC_MAP_XY = ['point', 'hexbin', 'flow'];
@@ -36,11 +36,11 @@ function encMapMount(root: HTMLElement, geoSel: HTMLSelectElement | null, onChan
     geoSel.appendChild(o);
   }
   const group = document.createElement('optgroup');
-  group.label = 'Your boundaries';
+  group.label = t('encodingMap.your_boundaries');
   geoSel.appendChild(group);
   const importOpt = document.createElement('option');
   importOpt.value = '__import';
-  importOpt.textContent = 'Import boundaries…';
+  importOpt.textContent = t('encodingMap.import_boundaries');
   geoSel.appendChild(importOpt);
 
   const box = document.createElement('div');
@@ -59,15 +59,15 @@ function encMapMount(root: HTMLElement, geoSel: HTMLSelectElement | null, onChan
     box.appendChild(wrap);
     return sel;
   };
-  const latSel = field('Latitude');
-  const lonSel = field('Longitude');
-  const lat2Sel = field('Destination latitude');
-  const lon2Sel = field('Destination longitude');
-  const fromSel = field('Origin name');
-  const toSel = field('Destination name');
-  const colorSel = field('Colour by');
-  const propSel = field('Joins on');
-  const baseSel = field('Basemap');
+  const latSel = field(t('common.latitude'));
+  const lonSel = field(t('common.longitude'));
+  const lat2Sel = field(t('encodingMap.destination_latitude'));
+  const lon2Sel = field(t('encodingMap.destination_longitude'));
+  const fromSel = field(t('encodingMap.origin_name'));
+  const toSel = field(t('encodingMap.destination_name'));
+  const colorSel = field(t('encodingMap.colour_by'));
+  const propSel = field(t('encodingMap.joins_on'));
+  const baseSel = field(t('encodingMap.basemap'));
   const hint = document.createElement('p');
   hint.className = 'enc-map-hint';
   box.appendChild(hint);
@@ -82,7 +82,7 @@ function encMapMount(root: HTMLElement, geoSel: HTMLSelectElement | null, onChan
     }
     sel.value = items.some(([v]) => v === value) ? value : items.length ? items[0][0] : '';
   };
-  opts(baseSel, [['', 'Map tiles (OpenStreetMap)'], ['none', 'None — offline land and water']], '');
+  opts(baseSel, [['', t('encodingMap.map_tiles_openstreetmap')], ['none', t('encodingMap.none_offline_land_and_water')]], '');
 
   const levelOf = (): string => (geoSel.value.startsWith('custom:') ? 'custom' : geoSel.value);
   const show = (): void => {
@@ -90,12 +90,12 @@ function encMapMount(root: HTMLElement, geoSel: HTMLSelectElement | null, onChan
     box.hidden = !lvl;
     (latSel.parentElement as HTMLElement).hidden = ENC_MAP_XY.indexOf(lvl) < 0;
     (lonSel.parentElement as HTMLElement).hidden = ENC_MAP_XY.indexOf(lvl) < 0;
-    labelOf(latSel).textContent = lvl === 'flow' ? 'Origin latitude' : 'Latitude';
-    labelOf(lonSel).textContent = lvl === 'flow' ? 'Origin longitude' : 'Longitude';
+    labelOf(latSel).textContent = lvl === 'flow' ? t('encodingMap.origin_latitude') : t('common.latitude');
+    labelOf(lonSel).textContent = lvl === 'flow' ? t('encodingMap.origin_longitude') : t('common.longitude');
     for (const sel of [lat2Sel, lon2Sel, fromSel, toSel]) (sel.parentElement as HTMLElement).hidden = lvl !== 'flow';
     hint.textContent = lvl === 'hexbin'
-      ? 'Each hexagon shows the first measure — a count of points, or its sum or average. Hexagons get finer as you zoom.'
-      : lvl === 'flow' ? 'Each route is one origin → destination pair; line width is the first measure (count, sum or average).' : '';
+      ? t('encodingMap.each_hexagon_shows_the_first_measure')
+      : lvl === 'flow' ? t('encodingMap.each_route_is_one_origin_destination') : '';
     hint.hidden = !hint.textContent;
     (colorSel.parentElement as HTMLElement).hidden = lvl !== 'point';
     (propSel.parentElement as HTMLElement).hidden = lvl !== 'custom';
@@ -113,7 +113,7 @@ function encMapMount(root: HTMLElement, geoSel: HTMLSelectElement | null, onChan
     for (const b of boundaries) {
       const o = document.createElement('option');
       o.value = 'custom:' + b.id;
-      o.textContent = `${b.name} (${b.featureCount} regions)`;
+      o.textContent = t('encodingMap.regions', { name: b.name, featureCount: b.featureCount });
       group.appendChild(o);
     }
     group.hidden = boundaries.length === 0;
@@ -133,7 +133,7 @@ function encMapMount(root: HTMLElement, geoSel: HTMLSelectElement | null, onChan
       if (!currentProjectId) return;
       const res = await window.hubAuthoring.importBoundaries(currentProjectId);
       if (res && res.ok) {
-        showToast(`Imported ${res.boundary.featureCount} regions from ${res.boundary.name}`, { kind: 'success' });
+        showToast(t('encodingMap.imported_regions_from', { featureCount: res.boundary.featureCount, name: res.boundary.name }), { kind: 'success' });
         await fillBoundaries('custom:' + res.boundary.id);
         onChange();
       } else if (res && res.error) showToast(res.error, { kind: 'error' });
@@ -155,11 +155,11 @@ function encMapMount(root: HTMLElement, geoSel: HTMLSelectElement | null, onChan
       const pick = (axis: string, not: string): string => (nums.find(([n]) => n !== not && like(n, axis)) || nums[0] || [''])[0];
       opts(lat2Sel, nums, (geo && geo.lat2) || pick('lat', latSel.value));
       opts(lon2Sel, nums, (geo && geo.lon2) || pick('lon', lonSel.value));
-      const names = [['', 'None — show coordinates'] as [string, string]].concat(columns.filter((c) => c.type !== 'number').map((c) => [c.name, c.name] as [string, string]));
+      const names = [['', t('encodingMap.none_show_coordinates')] as [string, string]].concat(columns.filter((c) => c.type !== 'number').map((c) => [c.name, c.name] as [string, string]));
       opts(fromSel, names, (geo && geo.from) || '');
       opts(toSel, names, (geo && geo.to) || '');
-      opts(colorSel, [['', 'One colour'] as [string, string]].concat(columns.map((c) => [c.name, c.name] as [string, string])), (geo && geo.color) || '');
-      opts(baseSel, [['', 'Map tiles (OpenStreetMap)'], ['none', 'None — offline land and water']], (geo && geo.basemap === 'none') ? 'none' : '');
+      opts(colorSel, [['', t('encodingMap.one_colour')] as [string, string]].concat(columns.map((c) => [c.name, c.name] as [string, string])), (geo && geo.color) || '');
+      opts(baseSel, [['', t('encodingMap.map_tiles_openstreetmap')], ['none', t('encodingMap.none_offline_land_and_water')]], (geo && geo.basemap === 'none') ? 'none' : '');
       const want = geo && geo.level === 'custom' && geo.boundaryId ? 'custom:' + geo.boundaryId : (geo && geo.level) || '';
       if (geo && geo.property) opts(propSel, [[geo.property, geo.property]], geo.property);
       geoSel.value = want;

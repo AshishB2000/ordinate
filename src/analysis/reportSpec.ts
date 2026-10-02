@@ -25,6 +25,7 @@ import { app } from 'electron';
 import * as projects from '../app/projects';
 import { GRID_COLS } from './dashboards';
 import type { Card, Page } from './dashboards';
+import { t } from '../app/i18n';
 
 export type ReportFormat = 'pdf' | 'pptx' | 'docx';
 export type ReportPageKind = 'cover' | 'summary' | 'sheet' | 'tile' | 'notes' | 'narrative' | 'discussion' | 'scorecard';
@@ -157,7 +158,7 @@ export function sanitizePaper(raw: unknown): ReportPaper {
 
 export function sanitizeCover(raw: unknown): ReportCover {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-  const cover: ReportCover = { title: str(o.title).trim() || 'Report', logo: o.logo !== false };
+  const cover: ReportCover = { title: str(o.title).trim() || t('common.report'), logo: o.logo !== false };
   const subtitle = str(o.subtitle).trim();
   if (subtitle) cover.subtitle = subtitle;
   return cover;
@@ -352,7 +353,7 @@ function normalize(data: any, projectId: string): Report {
     id: String(data.id),
     projectId,
     analysisId: isValidId(data.analysisId) ? data.analysisId : '',
-    name: str(data.name).trim() || 'Untitled report',
+    name: str(data.name).trim() || t('reportSpec.untitled_report'),
     format: sanitizeFormat(data.format),
     pages: sanitizePages(data.pages),
     cover: sanitizeCover(data.cover),

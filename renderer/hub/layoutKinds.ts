@@ -23,7 +23,7 @@ function renderImageCard(card: any, body: HTMLElement): void {
   if (!currentProjectId) return;
   void window.hubAuthoring.readProjectImage(currentProjectId, img.assetId, img.ext).then((res: any) => {
     if (!res || !res.ok) {
-      box.textContent = 'This image is missing from the project.';
+      box.textContent = t('layoutKinds.this_image_is_missing_from_the');
       box.classList.add('is-missing');
       return;
     }
@@ -76,18 +76,18 @@ function renderImageProps(card: any, host: HTMLElement): void {
     renderDashGrid();
     anPaintSelection();
   };
-  host.appendChild(aeInput('Alt text', live().image.alt || '', 'Describe the image', 'What a screen reader says. Leave empty only for decoration.', (v) => set({ alt: v }, 'Edit alt text')));
-  host.appendChild(aeSelect('Fit', [['contain', 'Fit inside'], ['cover', 'Fill and crop'], ['fill', 'Stretch']], live().image.fit, (v) => set({ fit: v }, 'Change image fit')));
+  host.appendChild(aeInput(t('layoutKinds.alt_text'), live().image.alt || '', t('layoutKinds.describe_the_image'), t('layoutKinds.what_a_screen_reader_says_leave'), (v) => set({ alt: v }, t('layoutKinds.edit_alt_text'))));
+  host.appendChild(aeSelect(t('common.fit'), [['contain', t('layoutKinds.fit_inside')], ['cover', t('layoutKinds.fill_and_crop')], ['fill', t('layoutKinds.stretch')]], live().image.fit, (v) => set({ fit: v }, t('layoutKinds.change_image_fit'))));
   const lock = document.createElement('label');
   lock.className = 'an-prop-check';
   const cb = document.createElement('input');
   cb.type = 'checkbox';
   cb.checked = live().image.lockAspect !== false;
   cb.disabled = !live().image.aspect;
-  cb.addEventListener('change', () => set({ lockAspect: cb.checked }, 'Lock aspect'));
-  const t = document.createElement('span');
-  t.textContent = 'Lock aspect ratio';
-  lock.append(cb, t);
+  cb.addEventListener('change', () => set({ lockAspect: cb.checked }, t('layoutKinds.lock_aspect')));
+  const tv = document.createElement('span');
+  tv.textContent = t('layoutKinds.lock_aspect_ratio');
+  lock.append(cb, tv);
   host.appendChild(lock);
 }
 
@@ -107,9 +107,9 @@ function handleAddDivider(): void {
 
 function renderDividerProps(card: any, host: HTMLElement): void {
   const live = (): any => dashCardAnywhere(card.id) || card;
-  host.appendChild(aeSelect('Style', [['line', 'A line'], ['spacer', 'Empty space']], live().divider.style, (v) => {
+  host.appendChild(aeSelect(t('common.style_2'), [['line', t('layoutKinds.a_line')], ['spacer', t('layoutKinds.empty_space')]], live().divider.style, (v) => {
     live().divider = { style: v };
-    markDashDirty('Change divider', true);
+    markDashDirty(t('layoutKinds.change_divider'), true);
     renderDashGrid();
     anPaintSelection();
   }));
@@ -118,7 +118,7 @@ function renderDividerProps(card: any, host: HTMLElement): void {
 // ── Container and Tabs ───────────────────────────────────────────────────────
 
 function groupTitle(card: any): string {
-  return card.type === 'container' ? (card.container && card.container.title) || 'Container' : 'Tabs';
+  return card.type === 'container' ? (card.container && card.container.title) || t('common.container') : t('common.tabs');
 }
 
 /** An empty group (or empty tab) says how to fill it rather than showing a blank box. */
@@ -127,7 +127,7 @@ function groupEmptyHint(card: any, body: HTMLElement, tabId?: string): void {
   if (kids.length) return;
   const p = document.createElement('p');
   p.className = 'grp-empty';
-  p.textContent = tabId ? 'Drag cards into this tab.' : 'Drag cards in here — they move with it.';
+  p.textContent = tabId ? t('layoutKinds.drag_cards_into_this_tab') : t('layoutKinds.drag_cards_in_here_they_move');
   body.appendChild(p);
 }
 
@@ -145,7 +145,7 @@ function renderContainerCard(card: any, body: HTMLElement): void {
     fold.className = 'grp-fold';
     const folded = groupFolded.has(card.id);
     fold.setAttribute('aria-expanded', String(!folded));
-    iconOnly(fold, folded ? 'chevron-right' : 'chevron-down', (folded ? 'Expand ' : 'Collapse ') + groupTitle(card));
+    iconOnly(fold, folded ? 'chevron-right' : 'chevron-down', (folded ? t('common.expand') : t('common.collapse')) + groupTitle(card));
     fold.addEventListener('pointerdown', (e) => e.stopPropagation());
     fold.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -166,7 +166,7 @@ function renderTabsCard(card: any, body: HTMLElement): void {
   const list = document.createElement('div');
   list.className = 'grp-tabs';
   list.setAttribute('role', 'tablist');
-  list.setAttribute('aria-label', 'Tabs');
+  list.setAttribute('aria-label', t('common.tabs'));
   items.forEach((t) => {
     const b = document.createElement('button');
     b.type = 'button';
@@ -207,8 +207,8 @@ function handleAddGroup(kind: 'container' | 'tabs'): void {
   const page = dashCurrentPage();
   if (!page) return;
   const g: any = { id: dashUuid(), type: kind, layout: { x: 0, y: 0, w: 12, h: 5 } };
-  if (kind === 'container') g.container = { title: 'Container', background: 'subtle', padding: 'md', collapsible: true };
-  else g.tabs = { items: [{ id: dashUuid(), name: 'Tab 1' }, { id: dashUuid(), name: 'Tab 2' }] };
+  if (kind === 'container') g.container = { title: t('common.container'), background: 'subtle', padding: 'md', collapsible: true };
+  else g.tabs = { items: [{ id: dashUuid(), name: t('layoutKinds.tab_1') }, { id: dashUuid(), name: t('layoutKinds.tab_2') }] };
   const picked = [...anMulti].filter((id) => page.cards.some((c: any) => c.id === id));
   if (picked.length) cardModel.wrapGroup(page.cards, picked, g);
   else g.layout = { ...dashFindSlot(page.cards, kind === 'tabs' ? 12 : 6, 5), w: kind === 'tabs' ? 12 : 6, h: 5 };
@@ -216,7 +216,7 @@ function handleAddGroup(kind: 'container' | 'tabs'): void {
   const first = page.cards.findIndex((c: any) => picked.includes(c.id));
   page.cards.splice(first >= 0 ? first : page.cards.length, 0, g);
   anMultiClear();
-  markDashDirty('Add ' + kind);
+  markDashDirty(t('layoutKinds.add', { kind }));
   renderDashGrid();
   void anSelectCard(g.id);
 }
@@ -230,34 +230,34 @@ function renderGroupProps(card: any, host: HTMLElement): void {
   };
   if (card.type === 'container') {
     const c = (): any => live().container;
-    host.appendChild(aeInput('Title', c().title || '', 'Container', '', (v) => { c().title = v; redraw('Rename container'); }));
-    host.appendChild(aeSelect('Background', [['subtle', 'Subtle'], ['surface', 'Card'], ['accent', 'Accent tint'], ['none', 'None']], c().background, (v) => { c().background = v; redraw('Container background'); }));
-    host.appendChild(aeSelect('Padding', [['none', 'None'], ['sm', 'Small'], ['md', 'Medium'], ['lg', 'Large']], c().padding, (v) => { c().padding = v; redraw('Container padding'); }));
+    host.appendChild(aeInput(t('common.title'), c().title || '', t('common.container'), '', (v) => { c().title = v; redraw(t('layoutKinds.rename_container')); }));
+    host.appendChild(aeSelect(t('common.background'), [['subtle', t('layoutKinds.subtle')], ['surface', t('common.card')], ['accent', t('layoutKinds.accent_tint')], ['none', t('common.none')]], c().background, (v) => { c().background = v; redraw(t('layoutKinds.container_background')); }));
+    host.appendChild(aeSelect(t('layoutKinds.padding'), [['none', t('common.none')], ['sm', t('layoutKinds.small')], ['md', t('common.medium')], ['lg', t('layoutKinds.large')]], c().padding, (v) => { c().padding = v; redraw(t('layoutKinds.container_padding')); }));
     const l = document.createElement('label');
     l.className = 'an-prop-check';
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.checked = !!c().collapsible;
-    cb.addEventListener('change', () => { c().collapsible = cb.checked; redraw('Container collapsible'); });
+    cb.addEventListener('change', () => { c().collapsible = cb.checked; redraw(t('layoutKinds.container_collapsible')); });
     const s = document.createElement('span');
-    s.textContent = 'Readers can collapse it';
+    s.textContent = t('layoutKinds.readers_can_collapse_it');
     l.append(cb, s);
     host.appendChild(l);
   } else {
     const items = (): any[] => live().tabs.items;
-    items().forEach((t: any, i: number) => {
+    items().forEach((tv: any, i: number) => {
       const row = document.createElement('div');
       row.className = 'ae-row-head';
-      row.appendChild(aeInput(`Tab ${i + 1}`, t.name, `Tab ${i + 1}`, '', (v) => { items()[i].name = v.trim() || `Tab ${i + 1}`; redraw('Rename tab'); }));
+      row.appendChild(aeInput(t('layoutKinds.tab', { p0: i + 1 }), tv.name, t('layoutKinds.tab', { p0: i + 1 }), '', (v) => { items()[i].name = v.trim() || t('layoutKinds.tab', { p0: i + 1 }); redraw(t('layoutKinds.rename_tab')); }));
       if (items().length > 1) {
         const del = document.createElement('button');
         del.type = 'button';
         del.className = 'btn btn-sm ae-del';
-        iconOnly(del, 'trash', `Remove tab ${t.name}`);
+        iconOnly(del, 'trash', t('layoutKinds.remove_tab', { name: tv.name }));
         del.addEventListener('click', () => {
           const page = dashCurrentPage();
-          cardModel.removeTab(page ? page.cards : [], live(), t.id);
-          redraw('Remove tab');
+          cardModel.removeTab(page ? page.cards : [], live(), tv.id);
+          redraw(t('layoutKinds.remove_tab_2'));
           renderKindProps(live());
         });
         row.appendChild(del);
@@ -269,10 +269,10 @@ function renderGroupProps(card: any, host: HTMLElement): void {
       add.type = 'button';
       add.className = 'btn btn-sm ae-add';
       add.appendChild(icon('plus'));
-      add.append('Add tab');
+      add.append(t('layoutKinds.add_tab'));
       add.addEventListener('click', () => {
-        items().push({ id: dashUuid(), name: `Tab ${items().length + 1}` });
-        redraw('Add tab');
+        items().push({ id: dashUuid(), name: t('layoutKinds.tab', { p0: items().length + 1 }) });
+        redraw(t('layoutKinds.add_tab'));
         renderKindProps(live());
       });
       host.appendChild(add);
@@ -280,7 +280,7 @@ function renderGroupProps(card: any, host: HTMLElement): void {
   }
   const p = document.createElement('p');
   p.className = 'an-prop-note an-prop-note--info';
-  p.textContent = 'Drag a card inside to add it; drag it out to take it out. Moving the group moves everything in it.';
+  p.textContent = t('layoutKinds.drag_a_card_inside_to_add');
   host.appendChild(p);
 }
 

@@ -47,14 +47,14 @@ function nbCellEl(id: string): HTMLElement | null {
 function nbCellName(id: string): string {
   const info = nbInfo(id);
   const c = nbCell(id);
-  return (info && info.view) || (c && c.title) || (info ? `Cell ${info.position}` : 'This cell');
+  return (info && info.view) || (c && c.title) || (info ? t('nbPage.cell', { position: info.position }) : t('nbPage.this_cell'));
 }
 
 // ── Open / close ─────────────────────────────────────────────────────────────
 
 function nbShowNotebook(doc: any, graph: any): void {
   nbDiscard();
-  nbDoc = { id: String(doc.id), name: String(doc.name || 'Untitled notebook'), cells: Array.isArray(doc.cells) ? doc.cells : [] };
+  nbDoc = { id: String(doc.id), name: String(doc.name || t('common.untitled_notebook')), cells: Array.isArray(doc.cells) ? doc.cells : [] };
   nbDocProject = currentProjectId || '';
   nbGraph = graph && Array.isArray(graph.cells) ? graph : { cells: [] };
   const list = nbEl('nb-list-view');
@@ -68,7 +68,7 @@ function nbShowNotebook(doc: any, graph: any): void {
   cells.id = 'nb-cells';
   cells.className = 'nb-cells';
   cells.setAttribute('role', 'list');
-  cells.setAttribute('aria-label', 'Cells');
+  cells.setAttribute('aria-label', t('nbPage.cells'));
   page.appendChild(cells);
   nbRenderCells();
   // The datasets complete in the SQL editors and name the empty ones' placeholder.
@@ -101,14 +101,14 @@ function nbSetMeta(state: string): void {
   const el = nbEl('nb-meta');
   if (!el || !nbDoc) return;
   const n = nbDoc.cells.length;
-  el.textContent = `${n} ${n === 1 ? 'cell' : 'cells'} · ${state}`;
+  el.textContent = t('nbPage.text', { n, state });
 }
 
 /** The document changed. `structure`: cells were added, moved or removed — repaint the column. */
 function nbTouch(structure = false): void {
   if (!nbDoc) return;
   nbDirty = true;
-  nbSetMeta('Saving…');
+  nbSetMeta(t('common.saving'));
   if (structure) nbRenderCells();
   window.clearTimeout(nbSaveTimer);
   nbSaveTimer = window.setTimeout(() => { void nbFlush(); }, 400);
@@ -132,12 +132,12 @@ async function nbFlush(): Promise<void> {
     if (nbDoc !== doc) return;
     if (res && res.ok) {
       nbGraph = res.graph;
-      nbSetMeta('Saved');
+      nbSetMeta(t('common.saved'));
       nbPaintStates();
     } else {
       nbDirty = true;
-      nbSetMeta('Not saved');
-      showToast((res && res.error) || 'The notebook could not be saved.', { kind: 'error' });
+      nbSetMeta(t('nbPage.not_saved'));
+      showToast((res && res.error) || t('nbPage.the_notebook_could_not_be_saved'), { kind: 'error' });
     }
   })();
   try {
@@ -156,7 +156,7 @@ function nbHeader(): HTMLElement {
   const back = document.createElement('button');
   back.type = 'button';
   back.className = 'btn btn-ghost btn-sm nb-back';
-  iconLabel(back, 'chevron-left', 'Notebooks');
+  iconLabel(back, 'chevron-left', t('common.notebooks'));
   back.addEventListener('click', () => { void nbShowList(); });
 
   const titleBox = document.createElement('div');
@@ -165,11 +165,11 @@ function nbHeader(): HTMLElement {
   name.className = 'nb-name';
   name.id = 'nb-name';
   name.value = nbDoc ? nbDoc.name : '';
-  name.setAttribute('aria-label', 'Notebook name');
+  name.setAttribute('aria-label', t('nbPage.notebook_name'));
   name.spellcheck = false;
   name.addEventListener('input', () => {
     if (!nbDoc) return;
-    nbDoc.name = name.value.trim() || 'Untitled notebook';
+    nbDoc.name = name.value.trim() || t('common.untitled_notebook');
     nbTouch();
   });
   name.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); name.blur(); } });
@@ -184,35 +184,35 @@ function nbHeader(): HTMLElement {
   runAll.type = 'button';
   runAll.className = 'btn btn-primary';
   runAll.id = 'nb-run-all';
-  iconLabel(runAll, 'play', 'Run all');
+  iconLabel(runAll, 'play', t('common.run_all'));
   runAll.addEventListener('click', () => { void nbRunAll(); });
   const exp = document.createElement('button');
   exp.type = 'button';
   exp.className = 'btn btn-ghost';
   exp.id = 'nb-export';
-  iconLabel(exp, 'download', 'Export Markdown');
+  iconLabel(exp, 'download', t('nbPage.export_markdown'));
   exp.addEventListener('click', () => { void nbExportMarkdown(); });
   const more = document.createElement('button');
   more.type = 'button';
   more.className = 'icon-btn nb-head-more';
-  iconOnly(more, 'more-horizontal', 'Notebook actions');
+  iconOnly(more, 'more-horizontal', t('common.notebook_actions'));
   more.addEventListener('click', () => {
     openMiniMenu(more, (menu: HTMLElement, close: () => void) => {
-      nbMenuItem(menu, close, 'Add a cell at the end', () => nbAddCell('sql', nbDoc ? nbDoc.cells.length : 0));
-      nbMenuItem(menu, close, 'Delete notebook', () => { if (nbDoc) void nbDeleteNotebook(nbDoc.id, nbDoc.name); });
+      nbMenuItem(menu, close, t('nbPage.add_a_cell_at_the_end'), () => nbAddCell('sql', nbDoc ? nbDoc.cells.length : 0));
+      nbMenuItem(menu, close, t('nbPage.delete_notebook'), () => { if (nbDoc) void nbDeleteNotebook(nbDoc.id, nbDoc.name); });
     });
   });
   actions.append(runAll, exp, more);
 
   head.append(back, titleBox, actions);
-  window.setTimeout(() => nbSetMeta('Saved'), 0);
+  window.setTimeout(() => nbSetMeta(t('common.saved')), 0);
   return head;
 }
 
 function nbKeysLine(): HTMLElement {
   const p = document.createElement('p');
   p.className = 'nb-keys';
-  const bits: Array<[string, string]> = [['⇧↩', 'run and move on'], ['⌘↩', 'run'], ['Esc', 'then ↑ ↓ to move between cells']];
+  const bits: Array<[string, string]> = [['⇧↩', t('nbPage.run_and_move_on')], ['⌘↩', 'run'], [t('common.esc'), t('nbPage.then_to_move_between_cells')]];
   bits.forEach(([k, t], i) => {
     if (i) p.appendChild(document.createTextNode(' · '));
     const kbd = document.createElement('kbd');
@@ -243,8 +243,8 @@ function nbRenderCells(): void {
     const empty = makeEmptyState({
       variant: 'notebooks',
       iconName: 'file-text',
-      title: 'An empty notebook',
-      line: 'Start with a query over this project’s datasets, a parameter for the cells below to read, or a note saying what this notebook answers.',
+      title: t('nbPage.an_empty_notebook'),
+      line: t('nbPage.start_with_a_query_over_this'),
     });
     empty.classList.add('nb-page-empty');
     host.append(empty, nbAddBar(0, true));
@@ -291,8 +291,8 @@ function nbBuildCell(c: NbCellDoc): HTMLElement {
     const title = document.createElement('input');
     title.className = 'nb-cell-title';
     title.value = c.title || '';
-    title.placeholder = 'Add a title';
-    title.setAttribute('aria-label', 'Cell title');
+    title.placeholder = t('nbPage.add_a_title');
+    title.setAttribute('aria-label', t('nbPage.cell_title'));
     title.spellcheck = false;
     title.addEventListener('input', () => {
       c.title = title.value;
@@ -304,14 +304,14 @@ function nbBuildCell(c: NbCellDoc): HTMLElement {
   if (c.kind === 'sql') {
     const chip = document.createElement('span');
     chip.className = 'nb-view-chip';
-    chip.title = 'The cells below query this result by this name';
+    chip.title = t('nbPage.the_cells_below_query_this_result');
     chip.append(icon('table', 14), Object.assign(document.createElement('code'), { className: 'nb-view-name' }));
     head.appendChild(chip);
   }
   const stale = document.createElement('span');
   stale.className = 'nb-stale-badge';
-  stale.textContent = 'Stale';
-  stale.title = 'Something this cell reads has changed since it last ran';
+  stale.textContent = t('common.stale');
+  stale.title = t('nbPage.something_this_cell_reads_has_changed');
   stale.hidden = true;
   const gap = document.createElement('span');
   gap.className = 'nb-cell-gap';
@@ -320,15 +320,15 @@ function nbBuildCell(c: NbCellDoc): HTMLElement {
     const run = document.createElement('button');
     run.type = 'button';
     run.className = 'btn btn-sm nb-run';
-    iconLabel(run, 'play', 'Run');
-    run.title = 'Run this cell (⇧↩)';
+    iconLabel(run, 'play', t('common.run'));
+    run.title = t('nbPage.run_this_cell');
     run.addEventListener('click', () => { void nbRunCell(c.id); });
     head.appendChild(run);
   }
   const more = document.createElement('button');
   more.type = 'button';
   more.className = 'icon-btn nb-cell-more';
-  iconOnly(more, 'more-horizontal', 'Cell actions');
+  iconOnly(more, 'more-horizontal', t('nbPage.cell_actions'));
   more.addEventListener('click', () => nbCellMenu(more, c.id));
   head.appendChild(more);
 
@@ -358,14 +358,14 @@ function nbCellMenu(anchor: HTMLElement, id: string): void {
   const c = nbDoc.cells[i];
   openMiniMenu(anchor, (menu: HTMLElement, close: () => void) => {
     if (c.kind === 'sql' || c.kind === 'formula' || c.kind === 'chart') {
-      nbMenuItem(menu, close, 'Run from here down', () => { void nbRunFrom(id); });
+      nbMenuItem(menu, close, t('nbPage.run_from_here_down'), () => { void nbRunFrom(id); });
     }
-    if (c.kind === 'sql' || c.kind === 'formula') nbMenuItem(menu, close, 'Save as dataset…', () => { void nbSaveAsDataset(id); });
-    if (c.kind === 'chart') nbMenuItem(menu, close, 'Pin to dashboard…', () => { void nbPinChart(id); });
-    nbMenuItem(menu, close, 'Move up', () => nbMoveCell(id, -1), i === 0);
-    nbMenuItem(menu, close, 'Move down', () => nbMoveCell(id, 1), i === nbDoc!.cells.length - 1);
-    nbMenuItem(menu, close, 'Duplicate', () => nbDuplicateCell(id));
-    nbMenuItem(menu, close, 'Delete cell', () => nbDeleteCell(id));
+    if (c.kind === 'sql' || c.kind === 'formula') nbMenuItem(menu, close, t('nbPage.save_as_dataset'), () => { void nbSaveAsDataset(id); });
+    if (c.kind === 'chart') nbMenuItem(menu, close, t('nbPage.pin_to_dashboard'), () => { void nbPinChart(id); });
+    nbMenuItem(menu, close, t('common.move_up'), () => nbMoveCell(id, -1), i === 0);
+    nbMenuItem(menu, close, t('common.move_down'), () => nbMoveCell(id, 1), i === nbDoc!.cells.length - 1);
+    nbMenuItem(menu, close, t('common.duplicate'), () => nbDuplicateCell(id));
+    nbMenuItem(menu, close, t('nbPage.delete_cell'), () => nbDeleteCell(id));
   });
 }
 
@@ -381,7 +381,7 @@ function nbCellState(id: string): 'idle' | 'running' | 'ok' | 'error' | 'stale' 
 }
 
 const NB_STATE_WORDS: Record<string, string> = {
-  idle: 'Not run yet', running: 'Running', ok: 'Up to date', error: 'Failed', stale: 'Stale — something it reads changed',
+  idle: t('nbPage.not_run_yet'), running: t('common.running_2'), ok: t('nbPage.up_to_date'), error: t('common.failed'), stale: t('nbPage.stale_something_it_reads_changed'),
 };
 
 /** Repaint every cell's gutter, stale badge, view chip and problem line from the graph and results. */
@@ -394,7 +394,7 @@ function nbPaintStates(): void {
     const st = nbCellState(c.id);
     sec.dataset.state = st;
     sec.classList.toggle('is-stale', st === 'stale');
-    sec.setAttribute('aria-label', `Cell ${i + 1}, ${nbKindLabel(c.kind)}${st === 'stale' ? ', stale' : ''}`);
+    sec.setAttribute('aria-label', t('nbPage.cell_2', { p0: i + 1, kind: nbKindLabel(c.kind), p2: !!(st === 'stale') }));
     const dot = sec.querySelector('.nb-gutter-state') as HTMLElement | null;
     if (dot) {
       dot.dataset.state = st;

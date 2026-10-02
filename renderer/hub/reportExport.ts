@@ -309,7 +309,7 @@ function buildReportHtml({ title, analysis, headlineSegments, png }: any): strin
     .footer { margin-top: 22px; font-size: 9px; color: ${C.muted}; }
   </style></head><body><div class="page">
     <div class="head">
-      <div class="title">${escapeHtml(title || 'Analysis')}</div>
+      <div class="title">${escapeHtml(title || t('common.analysis'))}</div>
       <div class="brand"><img src="${REPORT_LOGO_PNG}" width="13" height="13"><div><div class="wm">Ordinate</div><div class="date">${escapeHtml(dateStr)}</div></div></div>
     </div>
     <div class="rule"></div>
@@ -325,8 +325,8 @@ function buildReportHtml({ title, analysis, headlineSegments, png }: any): strin
 // retina). `png` is the same 2x chart/map image the other formats embed; the dialog's
 // map/fallback handling already ran, so a null chart just renders the "unavailable" note.
 async function exportPng({ title, analysis, headlineSegments, png }: any) {
-  if (!window.hub || typeof window.hub.captureReport !== 'function') { showToast('Save failed'); return; }
-  showToast('Rendering report…');
+  if (!window.hub || typeof window.hub.captureReport !== 'function') { showToast(t('common.save_failed')); return; }
+  showToast(t('reportExport.rendering_report'));
   let reportPng;
   try {
     const html = buildReportHtml({ title, analysis, headlineSegments, png });
@@ -334,14 +334,14 @@ async function exportPng({ title, analysis, headlineSegments, png }: any) {
   } catch (e) {
     console.error('[export] report PNG render failed', e);
   }
-  if (!reportPng) { showToast('Couldn’t render the report image'); return; }
+  if (!reportPng) { showToast(t('reportExport.couldn_t_render_the_report_image')); return; }
   try {
     const res = await window.hub.saveImage(reportPng, reportFilename(title, 'png'));
-    if (res && res.ok) showToast(`Saved: ${String(res.dest).split(/[\\/]/).pop()}`);
-    else if (!res || !res.canceled) showToast('Save failed');
+    if (res && res.ok) showToast(t('common.saved_3', { p0: String(res.dest).split(/[\\/]/).pop() }));
+    else if (!res || !res.canceled) showToast(t('common.save_failed'));
   } catch (e) {
     console.error('[export] PNG save failed', e);
-    showToast('Save failed');
+    showToast(t('common.save_failed'));
   }
 }
 
@@ -355,7 +355,7 @@ async function exportPng({ title, analysis, headlineSegments, png }: any) {
 function openExportDialog({ recommended, selectedExtra, current, vizData, entry, turnIdx, hasGeo, analysis, title, headlineSegments, privacy }: any): void {
   closeExportDialog();
   recommended = recommended || [];
-  if (!recommended.length) { showToast('No chart to export'); return; }
+  if (!recommended.length) { showToast(t('reportExport.no_chart_to_export')); return; }
   const isMapType = isMapChartType; // mapKinds.ts
   const overridesFor = (t: string) => (entry && entry.chartOverrides && entry.chartOverrides[`${turnIdx}:${t}`]) || {};
 
@@ -372,15 +372,15 @@ function openExportDialog({ recommended, selectedExtra, current, vizData, entry,
   const titles = document.createElement('div');
   const eyebrow = document.createElement('div');
   eyebrow.className = 'export-eyebrow';
-  eyebrow.textContent = 'REPORT';
+  eyebrow.textContent = t('reportExport.report');
   const titleEl = document.createElement('div');
   titleEl.className = 'export-title';
-  titleEl.textContent = 'Export report';
+  titleEl.textContent = t('reportExport.export_report');
   titles.appendChild(eyebrow); titles.appendChild(titleEl);
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.className = 'export-x';
-  iconOnly(closeBtn, 'x', 'Close');
+  iconOnly(closeBtn, 'x', t('common.close'));
   closeBtn.addEventListener('click', closeExportDialog);
   head.appendChild(titles); head.appendChild(closeBtn);
   dialog.appendChild(head);
@@ -412,7 +412,7 @@ function openExportDialog({ recommended, selectedExtra, current, vizData, entry,
       previewArea.innerHTML = '';
       const m = document.createElement('div');
       m.className = 'cv-chart-fallback';
-      m.textContent = (VIZ_LABELS[type] || type) + ' needs ' + info.needs + " — it doesn't fit this data.";
+      m.textContent = t('common.needs_it_doesn_t_fit_this', { p0: (VIZ_LABELS[type] || type), needs: info.needs });
       previewArea.appendChild(m);
       setFmtEnabled(false);
       return;
@@ -421,7 +421,7 @@ function openExportDialog({ recommended, selectedExtra, current, vizData, entry,
     if (!info.suited && type !== 'table' && !isMapType(type)) {
       const note = document.createElement('div');
       note.className = 'cv-fit-note';
-      note.textContent = 'This chart may not be the best fit for this data.';
+      note.textContent = t('common.this_chart_may_not_be_the');
       previewArea.appendChild(note);
     }
     setFmtEnabled(true);
@@ -444,11 +444,11 @@ function openExportDialog({ recommended, selectedExtra, current, vizData, entry,
   // Format buttons
   const fmtLabel = document.createElement('div');
   fmtLabel.className = 'export-label';
-  fmtLabel.textContent = 'Format';
+  fmtLabel.textContent = t('common.format');
   body.appendChild(fmtLabel);
   fmtRow = document.createElement('div');
   fmtRow.className = 'export-fmt-row';
-  [['pdf', 'PDF'], ['word', 'Word'], ['ppt', 'PowerPoint'], ['png', 'PNG']].forEach(([fmt, lbl]) => {
+  [['pdf', 'PDF'], ['word', t('common.word')], ['ppt', 'PowerPoint'], ['png', 'PNG']].forEach(([fmt, lbl]) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'export-fmt-btn';
@@ -457,7 +457,7 @@ function openExportDialog({ recommended, selectedExtra, current, vizData, entry,
       if (privacy && !(await pvShareGate(privacy.path, privacy.datasetIds, { noted: true }))) return;
       const type = picker.getSelected();
       const isMap = isMapType(type);
-      showToast(isMap ? 'Capturing map…' : 'Preparing report…');
+      showToast(isMap ? t('reportExport.capturing_map') : t('reportExport.preparing_report'));
       // Maps snapshot the live render (capturePage); charts rasterize offscreen at 2x.
       const png = isMap
         ? await captureMapPNG(vizData, type)
@@ -466,8 +466,8 @@ function openExportDialog({ recommended, selectedExtra, current, vizData, entry,
       // with a clear message so the user can retry or pick a different chart.
       if (!png) {
         showToast(isMap
-          ? "Couldn't capture the map — try again, or pick a chart for the report"
-          : "Couldn't render that chart for the report");
+          ? t('reportExport.couldn_t_capture_the_map_try')
+          : t('reportExport.couldn_t_render_that_chart_for'));
         return;
       }
       closeExportDialog();
@@ -492,6 +492,6 @@ function openExportDialog({ recommended, selectedExtra, current, vizData, entry,
 
   document.body.appendChild(overlay);
   // Dialog semantics + move focus into the modal (close button) + focus return on close.
-  _exportA11y = makeModalAccessible(dialog, 'Export report', closeBtn);
+  _exportA11y = makeModalAccessible(dialog, t('reportExport.export_report'), closeBtn);
   requestAnimationFrame(() => picker.select(picker.getSelected()));
 }

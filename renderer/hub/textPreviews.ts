@@ -7,7 +7,7 @@
 // Classic global-scope script (NO import/export), loaded after textSteps.js.
 
 function txSampleLine(res: any): string {
-  return res && res.sampled ? 'Preview of the first ' + fmtN(res.sampleRows) + ' of ' + fmtN(res.total) + ' rows — saving runs on every row.' : '';
+  return res && res.sampled ? t('textPreviews.preview_of_the_first_of_rows', { sampleRows: fmtN(res.sampleRows), total: fmtN(res.total) }) : '';
 }
 
 /** The first rows of the terms table main computed, as a compact table. */
@@ -16,7 +16,7 @@ function txPaintTermsPreview(box: HTMLElement, res: any): void {
   box.classList.remove('is-warn');
   box.hidden = false;
   const head = document.createElement('div');
-  head.textContent = 'Rows: ' + fmtN(res.before) + ' → ' + fmtN(res.after) + ' terms';
+  head.textContent = t('textPreviews.rows_terms', { before: fmtN(res.before), after: fmtN(res.after) });
   box.appendChild(head);
   const cols: string[] = Array.isArray(res.columns) ? res.columns : [];
   const rows: any[][] = Array.isArray(res.rows) ? res.rows : [];
@@ -66,17 +66,16 @@ function txPaintSentimentPreview(box: HTMLElement, res: any): void {
   box.hidden = false;
   const s = res.sentiment;
   if (!s) {
-    setPreview(box, (res.warnings && res.warnings.length ? res.warnings : ['Nothing to score.']), true);
+    setPreview(box, (res.warnings && res.warnings.length ? res.warnings : [t('textPreviews.nothing_to_score')]), true);
     return;
   }
   const line = document.createElement('div');
-  line.textContent = fmtN(s.scored) + ' rows scored' + (s.empty ? ' · ' + fmtN(s.empty) + ' empty' : '')
-    + (typeof s.mean === 'number' ? ' · average ' + (s.mean > 0 ? '+' : s.mean < 0 ? '−' : '') + Math.abs(s.mean).toFixed(3) : '');
+  line.textContent = t('textPreviews.rows_scored', { scored: fmtN(s.scored), p1: (s.empty ? ' · ' + fmtN(s.empty) + ' empty' : ''), p2: (typeof s.mean === 'number' ? t('textPreviews.average', { p0: (s.mean > 0 ? '+' : s.mean < 0 ? '−' : ''), p1: Math.abs(s.mean).toFixed(3) }) : '') });
   box.appendChild(line);
   box.appendChild(txSentimentBar([
-    { label: 'Negative', count: s.negative, cls: 'is-neg' },
-    { label: 'Neutral', count: s.neutral, cls: 'is-neu' },
-    { label: 'Positive', count: s.positive, cls: 'is-pos' },
+    { label: t('textPreviews.negative'), count: s.negative, cls: 'is-neg' },
+    { label: t('textPreviews.neutral'), count: s.neutral, cls: 'is-neu' },
+    { label: t('textPreviews.positive'), count: s.positive, cls: 'is-pos' },
   ]));
   (Array.isArray(s.examples) ? s.examples : []).forEach((ex: any) => {
     const d = document.createElement('div');

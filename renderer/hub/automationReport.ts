@@ -28,22 +28,22 @@
     // this replaces it for every caller in THIS window only.
     (window as any).captureMapPNG = async (): Promise<string | null> => { skippedMaps++; return null; };
     const report = await window.hub.reportsGet(projectId, reportId);
-    if (!report) return answer({ ok: false, error: 'Report not found.' });
+    if (!report) return answer({ ok: false, error: t('automationReport.report_not_found') });
     const analysis = await window.hub.getAnalysis(projectId, report.analysisId);
-    if (!analysis) return answer({ ok: false, error: 'The dashboard this report prints no longer exists.' });
+    if (!analysis) return answer({ ok: false, error: t('automationReport.the_dashboard_this_report_prints_no') });
     const pages = await buildReportPages({
       projectId, analysis, report,
       filters: Array.isArray(analysis.filters) ? analysis.filters : [],
     });
-    if (!pages.length) return answer({ ok: false, error: 'Every page of this report is excluded — nothing to generate.' });
+    if (!pages.length) return answer({ ok: false, error: t('automationReport.every_page_of_this_report_is') });
     const { base64, ext } = await reportBytes(pages, report);
-    if (!base64) return answer({ ok: false, error: 'The report could not be built.' });
+    if (!base64) return answer({ ok: false, error: t('automationReport.the_report_could_not_be_built') });
     answer({ ok: true, base64, ext });
   };
 
   // DOMContentLoaded fires after every classic script has run, so the whole
   // report pipeline (and the hub's own boot) is defined by then.
   document.addEventListener('DOMContentLoaded', () => {
-    run().catch((e) => answer({ ok: false, error: (e && e.message) || 'The report could not be built.' }));
+    run().catch((e) => answer({ ok: false, error: (e && e.message) || t('automationReport.the_report_could_not_be_built') }));
   });
 })();

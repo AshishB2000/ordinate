@@ -14,16 +14,16 @@
 // datasets, filtered in memory. Add paging when a project has enough datasets to
 // need it; `dataset:list` already returns summaries, not rows, so this is cheap.
 const AN_WIZ_EXAMPLES = [
-  'Show revenue by region over time, and flag any concentration risk.',
-  'Which categories are growing fastest, and which are shrinking?',
-  'Give me an overview sheet, then a sheet per region.',
+  t('anNew.show_revenue_by_region_over_time'),
+  t('anNew.which_categories_are_growing_fastest_and'),
+  t('anNew.give_me_an_overview_sheet_then'),
 ];
 
 // `opts.step` lets a caller that has ALREADY chosen the dataset open straight on
 // the gallery — the Data page's "New dashboard" button knows which dataset you
 // were looking at, so making you confirm it is a step that asks nothing.
 async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}): Promise<void> {
-  if (!currentProjectId) { window.alert('Open a project first.'); return; }
+  if (!currentProjectId) { window.alert(t('common.open_a_project_first')); return; }
 
   let sets: any[] = [];
   try {
@@ -60,7 +60,7 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
   const titles = document.createElement('div');
   const h = document.createElement('div');
   h.className = 'ws-modal-title';
-  h.textContent = 'Create dashboard';
+  h.textContent = t('common.create_dashboard');
   const sub = document.createElement('p');
   sub.className = 'an-wiz-sub';
   titles.appendChild(h);
@@ -68,7 +68,7 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
   const x = document.createElement('button');
   x.type = 'button';
   x.className = 'an-wiz-x';
-  iconOnly(x, 'x', 'Close');
+  iconOnly(x, 'x', t('common.close'));
   x.addEventListener('click', close);
   head.appendChild(titles);
   head.appendChild(x);
@@ -76,9 +76,9 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
   const rail = document.createElement('div');
   rail.className = 'an-wiz-rail';
   const railSteps = [
-    { n: 1, label: 'Choose data' },
-    { n: 2, label: 'Start from' },
-    { n: 3, label: 'Describe it', opt: true },
+    { n: 1, label: t('anNew.choose_data') },
+    { n: 2, label: t('common.start_from') },
+    { n: 3, label: t('common.describe_it'), opt: true },
   ].map((s) => {
     const el = document.createElement('div');
     el.className = 'an-wiz-step';
@@ -93,7 +93,7 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
     if (s.opt) {
       const o = document.createElement('span');
       o.className = 'an-wiz-optional';
-      o.textContent = 'Optional';
+      o.textContent = t('common.optional');
       el.appendChild(o);
     }
     rail.appendChild(el);
@@ -111,11 +111,11 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
   const search = document.createElement('input');
   search.type = 'search';
   search.className = 'ws-modal-input an-wiz-search';
-  search.placeholder = 'Search datasets by name';
+  search.placeholder = t('anNew.search_datasets_by_name');
   const mkDataset = document.createElement('button');
   mkDataset.type = 'button';
   mkDataset.className = 'btn';
-  mkDataset.textContent = 'Create dataset';
+  mkDataset.textContent = t('anNew.create_dataset');
   mkDataset.addEventListener('click', () => {
     // Leaves the wizard for the existing import flow rather than re-hosting it
     // in a modal. Deliberate: one import path, not two.
@@ -129,7 +129,7 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
   table.className = 'an-wiz-table';
   const cols = document.createElement('div');
   cols.className = 'an-wiz-cols';
-  ['', 'Dataset name', 'Rows', 'Columns', 'Source', 'Last modified'].forEach((c) => {
+  ['', t('common.dataset_name'), t('common.rows'), t('common.columns'), t('common.source'), t('anNew.last_modified')].forEach((c) => {
     const s = document.createElement('span');
     s.textContent = c;
     cols.appendChild(s);
@@ -146,11 +146,11 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
   const nameWrap = document.createElement('label');
   nameWrap.className = 'an-wiz-name';
   const nameLab = document.createElement('span');
-  nameLab.textContent = 'Dashboard name';
+  nameLab.textContent = t('anNew.dashboard_name');
   const nameIn = document.createElement('input');
   nameIn.type = 'text';
   nameIn.className = 'ws-modal-input';
-  nameIn.placeholder = 'Untitled dashboard';
+  nameIn.placeholder = t('common.untitled_dashboard');
   // Tracks the dataset until the user types their own, then stops fighting them.
   let nameTouched = false;
   nameIn.addEventListener('input', () => { nameTouched = true; });
@@ -170,13 +170,13 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
     noneEl.hidden = sets.length !== 0;
     nameWrap.hidden = sets.length === 0;
     if (sets.length === 0) {
-      noneEl.textContent = 'This project has no datasets yet. Create one first — a dashboard is built on data.';
+      noneEl.textContent = t('anNew.this_project_has_no_datasets_yet');
       return;
     }
     if (shown.length === 0) {
       const p = document.createElement('p');
       p.className = 'an-wiz-none';
-      p.textContent = 'No dataset matches “' + search.value.trim() + '”.';
+      p.textContent = t('anNew.no_dataset_matches', { p0: search.value.trim() });
       rowsHost.appendChild(p);
       return;
     }
@@ -190,7 +190,7 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
       radio.className = 'an-wiz-radio';
       const nm = document.createElement('span');
       nm.className = 'an-wiz-dsname';
-      nm.textContent = String(d.name || 'Untitled');
+      nm.textContent = String(d.name || t('common.untitled'));
       const rc = document.createElement('span');
       rc.className = 'an-wiz-cell';
       rc.textContent = typeof d.rowCount === 'number' ? d.rowCount.toLocaleString() : '—';
@@ -255,14 +255,14 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
   tplHeadT.textContent = 'Templates';
   const tplHeadP = document.createElement('span');
   tplHeadP.className = 'an-wiz-grouph-p';
-  tplHeadP.textContent = 'A complete dashboard, mapped to your columns.';
+  tplHeadP.textContent = t('anNew.a_complete_dashboard_mapped_to_your');
   tplHead.appendChild(tplHeadT);
   tplHead.appendChild(tplHeadP);
   const tplGrid = document.createElement('div');
   tplGrid.className = 'an-wiz-tpls';
   const tplNote = document.createElement('p');
   tplNote.className = 'an-wiz-none';
-  tplNote.textContent = 'Reading your columns…';
+  tplNote.textContent = t('anNew.reading_your_columns');
   // r7:templates — the user's own templates, FIRST (userTemplateGallery.ts).
   const yoursHost = document.createElement('div');
   yoursHost.className = 'ut-yours-host';
@@ -274,10 +274,10 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
   const layoutHead = document.createElement('div');
   layoutHead.className = 'an-wiz-grouph';
   const layoutHeadT = document.createElement('span');
-  layoutHeadT.textContent = 'Layouts';
+  layoutHeadT.textContent = t('anNew.layouts');
   const layoutHeadP = document.createElement('span');
   layoutHeadP.className = 'an-wiz-grouph-p';
-  layoutHeadP.textContent = 'A scaffold to fill in yourself.';
+  layoutHeadP.textContent = t('anNew.a_scaffold_to_fill_in_yourself');
   layoutHead.appendChild(layoutHeadT);
   layoutHead.appendChild(layoutHeadP);
   pane2.appendChild(layoutHead);
@@ -285,10 +285,10 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
   const startGrid = document.createElement('div');
   startGrid.className = 'an-wiz-starts';
   const START_OPTS: Array<{ id: StartKind; title: string; body: string; art: string[] }> = [
-    { id: 'blank', title: 'Blank sheet', body: 'One empty sheet. Add cards as you go.', art: ['b-full'] },
-    { id: 'kpis', title: 'KPIs + chart', body: 'A KPI strip across the top, with a wide chart beneath it.', art: ['b-strip', 'b-wide'] },
-    { id: 'twoup', title: 'Two-up', body: 'Two charts side by side, with a notes card below.', art: ['b-half', 'b-half', 'b-strip'] },
-    { id: 'ai', title: 'Let the Assistant design it', body: 'Describe what you want and a model proposes the sheets. You review it first.', art: ['b-ai'] },
+    { id: 'blank', title: t('anNew.blank_sheet'), body: t('anNew.one_empty_sheet_add_cards_as'), art: ['b-full'] },
+    { id: 'kpis', title: t('common.kpis_chart'), body: t('anNew.a_kpi_strip_across_the_top'), art: ['b-strip', 'b-wide'] },
+    { id: 'twoup', title: 'Two-up', body: t('anNew.two_charts_side_by_side_with'), art: ['b-half', 'b-half', 'b-strip'] },
+    { id: 'ai', title: t('anNew.let_the_assistant_design_it'), body: t('anNew.describe_what_you_want_and_a'), art: ['b-ai'] },
   ];
   const startCards = START_OPTS.map((o) => {
     const c = document.createElement('button');
@@ -324,7 +324,7 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
   const startNote = document.createElement('p');
   startNote.className = 'an-wiz-note';
   startNote.textContent =
-    AI_NOT_CONFIGURED + ' Drafting is unavailable, but everything else works without one — pick any of the other three.';
+    t('anNew.drafting_is_unavailable_but_everything', { AI_NOT_CONFIGURED });
   startNote.hidden = true;
   pane2.appendChild(startNote);
 
@@ -345,16 +345,15 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
   aiCard.className = 'an-wiz-ai';
   const aiH = document.createElement('h3');
   aiH.className = 'an-wiz-ai-h';
-  iconLabel(aiH, 'sparkles', 'Describe what you want to see');
+  iconLabel(aiH, 'sparkles', t('anNew.describe_what_you_want_to_see'));
   const aiP = document.createElement('p');
   aiP.className = 'an-wiz-ai-p';
   aiP.textContent =
-    'The model proposes structure only — which sheets, which charts, which calculated fields. ' +
-    'Every number is computed by the app from your data, and you review the whole draft before anything is created.';
+    t('anNew.the_model_proposes_structure_only_which');
   const ta = document.createElement('textarea');
   ta.className = 'an-wiz-ta';
   ta.rows = 4;
-  ta.placeholder = 'e.g. Revenue by region over the last year, with a sheet breaking down the top region.';
+  ta.placeholder = t('anNew.e_g_revenue_by_region_over');
   const chips = document.createElement('div');
   chips.className = 'an-wiz-chips';
   AN_WIZ_EXAMPLES.forEach((ex) => {
@@ -389,24 +388,24 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
   const backBtn = document.createElement('button');
   backBtn.type = 'button';
   backBtn.className = 'btn an-wiz-back';
-  iconLabel(backBtn, 'chevron-left', 'Back');
+  iconLabel(backBtn, 'chevron-left', t('common.back'));
   backBtn.addEventListener('click', () => { step = Math.max(1, step - 1); sync(); });
   const spacer = document.createElement('span');
   spacer.className = 'an-wiz-spacer';
   const cancel = document.createElement('button');
   cancel.type = 'button';
   cancel.className = 'btn';
-  cancel.textContent = 'Cancel';
+  cancel.textContent = t('common.cancel');
   cancel.addEventListener('click', close);
   // Only on step 3: a way out of the AI step that still produces the analysis.
   const skip = document.createElement('button');
   skip.type = 'button';
   skip.className = 'btn';
-  skip.textContent = 'Skip — blank sheet';
+  skip.textContent = t('anNew.skip_blank_sheet');
   const next = document.createElement('button');
   next.type = 'button';
   next.className = 'btn btn-primary';
-  next.textContent = 'Next';
+  next.textContent = t('common.next');
   foot.appendChild(backBtn);
   foot.appendChild(spacer);
   foot.appendChild(cancel);
@@ -419,16 +418,16 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
     pane3.hidden = step !== 3;
     const onTemplate = startFrom === 'template';
     sub.textContent =
-      step === 1 ? 'Choose the dataset to build from. You can add more sheets and datasets later.'
-      : step === 2 ? 'Start from a template built for your data, a plain layout, or let a model design it.'
-      : onTemplate ? 'Check which column plays which part. Every figure below is computed from your data.'
-      : 'Describe the dashboard and the Assistant will draft it. You review everything before it is created.';
+      step === 1 ? t('anNew.choose_the_dataset_to_build_from')
+      : step === 2 ? t('anNew.start_from_a_template_built_for')
+      : onTemplate ? t('anNew.check_which_column_plays_which_part')
+      : t('anNew.describe_the_dashboard_and_the_assistant');
 
     // Step 3 belongs to the AI and TEMPLATE routes; the three plain layouts
     // finish at step 2, so the rail dims it for them rather than pretending
     // there is a third step everyone has to walk through.
     const hasStep3 = startFrom === 'ai' || onTemplate;
-    railSteps[2].label.textContent = onTemplate ? 'Map columns' : 'Describe it';
+    railSteps[2].label.textContent = onTemplate ? t('anNew.map_columns') : t('common.describe_it');
     // "Optional" is the AI step's promise (Skip still creates the dashboard);
     // mapping is not optional, so the chip goes away on that route.
     railSteps[2].opt.hidden = onTemplate;
@@ -459,10 +458,10 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
     // Step 2 finishes the wizard for the three plain layouts — there is nothing
     // left to ask, so it says Create rather than marching through a dead step.
     next.textContent =
-      step === 1 ? 'Next'
-      : step === 2 ? (hasStep3 ? 'Next' : 'Create dashboard')
-      : onTemplate ? 'Create dashboard'
-      : 'Draft with the Assistant';
+      step === 1 ? t('common.next')
+      : step === 2 ? (hasStep3 ? t('common.next') : t('common.create_dashboard'))
+      : onTemplate ? t('common.create_dashboard')
+      : t('common.draft_with_the_assistant');
     next.disabled = step === 1 ? !selectedId : false;
     if (step === 3 && !onTemplate) setTimeout(() => ta.focus(), 0);
   }
@@ -478,7 +477,7 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
     if (!ds) return;
     if (tplFor === ds && tplData) { paintTemplates(); return; }
     tplNote.hidden = false;
-    tplNote.textContent = 'Reading your columns…';
+    tplNote.textContent = t('anNew.reading_your_columns');
     tplGrid.innerHTML = '';
     let res: any;
     try {
@@ -487,7 +486,7 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
     if (selectedId !== ds) return; // the user moved on while this was in flight
     if (!res || res.ok === false) {
       tplData = null;
-      tplNote.textContent = (res && res.error) || 'Templates are unavailable for this dataset.';
+      tplNote.textContent = (res && res.error) || t('anNew.templates_are_unavailable_for_this');
       return;
     }
     tplData = res;
@@ -514,7 +513,7 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
     });
   }
 
-  const chosenName = (): string => nameIn.value.trim() || 'Untitled dashboard';
+  const chosenName = (): string => nameIn.value.trim() || t('common.untitled_dashboard');
 
   // Non-AI path: create it, open it, then scaffold.
   //
@@ -529,7 +528,7 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
       res = await window.hub.createAnalysis({ projectId: currentProjectId, name: chosenName() });
     } catch (_) { res = null; }
     if (!res || res.ok === false || !res.id) {
-      window.alert((res && res.error) || 'Failed to create the dashboard.');
+      window.alert((res && res.error) || t('anNew.failed_to_create_the_dashboard'));
       return;
     }
     close();
@@ -548,10 +547,10 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
   // property of the code rather than a promise of this function.
   async function createFromTemplate(): Promise<void> {
     const plan = mapPane.plan();
-    if (!plan) { window.alert('That mapping could not be built. Change a column and try again.'); return; }
+    if (!plan) { window.alert(t('anNew.that_mapping_could_not_be_built')); return; }
     const label = next.textContent;
     next.disabled = true;
-    next.textContent = 'Creating…';
+    next.textContent = t('anNew.creating');
     let res: any;
     try {
       // r7:templates — a user template builds through its own apply, same mapping.
@@ -560,16 +559,16 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
         : await window.hub.buildAnalysisPlan(currentProjectId, plan);
     } catch (_) { res = null; }
     next.disabled = false;
-    next.textContent = label || 'Create dashboard';
+    next.textContent = label || t('common.create_dashboard');
     if (!res || res.ok === false || !res.analysis) {
-      window.alert((res && res.error) || 'Failed to create the dashboard.');
+      window.alert((res && res.error) || t('anNew.failed_to_create_the_dashboard'));
       return;
     }
     close();
     await refreshAnalysisList();
     openAnalysisFrom(res.analysis);
     sumAddToTop(); // summaryCard.ts — every gallery dashboard opens on its Summary
-    if (plan.user && res.dropped && res.dropped.length) showToast(`${res.dropped.length} skipped — ${res.dropped[0]}${res.dropped.length > 1 ? ' …' : ''}`);
+    if (plan.user && res.dropped && res.dropped.length) showToast(t('anNew.skipped', { droppedCount: res.dropped.length, p1: res.dropped[0] }));
   }
 
   skip.addEventListener('click', () => { createFromStarter('blank'); });
@@ -594,7 +593,7 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
     const label = next.textContent;
     next.disabled = true;
     skip.disabled = true;
-    next.textContent = 'Thinking…';
+    next.textContent = t('common.thinking');
     let res: any;
     try {
       res = await window.hub.draftDashboard(currentProjectId, {
@@ -602,11 +601,11 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
         intent: ta.value.trim(),
       });
     } catch (_) {
-      res = { ok: false, error: 'Could not draft a dashboard.' };
+      res = { ok: false, error: t('common.could_not_draft_a_dashboard') };
     }
     next.disabled = false;
     skip.disabled = false;
-    next.textContent = label || 'Draft with the Assistant';
+    next.textContent = label || t('common.draft_with_the_assistant');
     // Step 2 gates this route on aiReady, so notReady here means the model went
     // away between opening the wizard and pressing the button. Send them back to
     // the step that can still produce an analysis rather than stranding them.
@@ -618,7 +617,7 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
       return;
     }
     if (!res || res.ok === false) {
-      window.alert((res && res.error) || 'Could not draft a dashboard.');
+      window.alert((res && res.error) || t('common.could_not_draft_a_dashboard'));
       return;
     }
     close();
@@ -653,7 +652,7 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
 
 async function handleRenameAnalysis(id: string, currentName: string): Promise<void> {
   if (!currentProjectId) return;
-  const name = await promptModal('Rename dashboard', currentName || 'Untitled dashboard', 'Save');
+  const name = await promptModal(t('anNew.rename_dashboard'), currentName || t('common.untitled_dashboard'), t('common.save'));
   if (name === null) return;
   try {
     await window.hub.renameAnalysis(currentProjectId, id, name);
@@ -664,7 +663,7 @@ async function handleRenameAnalysis(id: string, currentName: string): Promise<vo
     if (nameEl) nameEl.textContent = dashCurrent.name;
     // The title is part of the record persistAnalysis writes, so a rename is an
     // undoable change like any other — it just reaches the record by its own IPC.
-    markDashDirty('Rename dashboard');
+    markDashDirty(t('anNew.rename_dashboard'));
     await refreshAnalysisListKeepEditor();
     return;
   }
@@ -694,7 +693,7 @@ async function openAnalysis(id: string): Promise<void> {
     a = null;
   }
   if (!a) {
-    window.alert('That dashboard could not be loaded.');
+    window.alert(t('anNew.that_dashboard_could_not_be_loaded'));
     await refreshAnalysisList();
     return;
   }

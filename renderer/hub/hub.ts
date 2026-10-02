@@ -232,15 +232,15 @@ const stpDialog  = stpPanel ? stpPanel.querySelector('.settings-modal') : null;
 const stpCats    = (stpPanel ? Array.from(stpPanel.querySelectorAll('.settings-cat')) : []) as HTMLElement[];
 const stpPanes   = (stpPanel ? Array.from(stpPanel.querySelectorAll('.settings-pane')) : []) as HTMLElement[];
 const CAT_TITLES = {
-  exec: 'Assistant',
+  exec: t('common.assistant'),
   hotkey: 'Hotkey',
-  prompt: 'Instructions / Rules',
-  appearance: 'Appearance',
-  notifications: 'Notifications',
-  general: 'General',
-  privacy: 'Privacy', // privacySettings.ts — the current project's share policy
-  automation: 'Automation', // settingsAutomation.ts
-  about: 'About',
+  prompt: t('common.instructions_rules'),
+  appearance: t('common.appearance'),
+  notifications: t('common.notifications'),
+  general: t('common.general'),
+  privacy: t('common.privacy'), // privacySettings.ts — the current project's share policy
+  automation: t('common.automation'), // settingsAutomation.ts
+  about: t('common.about'),
 };
 let stpOpener = null;    // element to refocus when the modal closes
 let _stpKeydown = null;  // active keydown handler (Esc + Tab trap) while open
@@ -272,28 +272,28 @@ if (stpPanel) {
 }
 
 const PROVIDER_DISPLAY = {
-  anthropic: 'Claude', openai: 'OpenAI', gemini: 'Gemini',
-  openrouter: 'OpenRouter', ollama: 'Ollama', custom: 'Custom',
+  anthropic: t('common.claude'), openai: 'OpenAI', gemini: t('common.gemini'),
+  openrouter: 'OpenRouter', ollama: t('hub.ollama'), custom: t('common.custom_2'),
 };
 
 const PROVIDER_MODELS = {
   anthropic:  [
-    { v: 'claude-3-5-sonnet-20241022', l: 'Claude 3.5 Sonnet' },
-    { v: 'claude-3-5-haiku-20241022',  l: 'Claude 3.5 Haiku'  },
-    { v: 'claude-3-opus-20240229',      l: 'Claude 3 Opus'     },
+    { v: 'claude-3-5-sonnet-20241022', l: t('hub.claude_3_5_sonnet') },
+    { v: 'claude-3-5-haiku-20241022',  l: t('hub.claude_3_5_haiku')  },
+    { v: 'claude-3-opus-20240229',      l: t('hub.claude_3_opus')     },
   ],
   openai:     [
     { v: 'gpt-4o',      l: 'GPT-4o'      },
-    { v: 'gpt-4o-mini', l: 'GPT-4o mini' },
-    { v: 'gpt-4-turbo', l: 'GPT-4 Turbo' },
+    { v: 'gpt-4o-mini', l: t('hub.gpt_4o_mini') },
+    { v: 'gpt-4-turbo', l: t('hub.gpt_4_turbo') },
   ],
   gemini:     [
-    { v: 'gemini-1.5-pro',   l: 'Gemini 1.5 Pro'   },
-    { v: 'gemini-1.5-flash', l: 'Gemini 1.5 Flash'  },
+    { v: 'gemini-1.5-pro',   l: t('hub.gemini_1_5_pro')   },
+    { v: 'gemini-1.5-flash', l: t('hub.gemini_1_5_flash')  },
   ],
   openrouter: [
     { v: 'openai/gpt-4o',                    l: 'GPT-4o'            },
-    { v: 'anthropic/claude-3.5-sonnet',       l: 'Claude 3.5 Sonnet' },
+    { v: 'anthropic/claude-3.5-sonnet',       l: t('hub.claude_3_5_sonnet') },
   ],
   ollama: [],
   custom: [],
@@ -408,7 +408,7 @@ if (stpClose) stpClose.addEventListener('click', hideSettingsPanel);
 const stpVersionEl = document.querySelector('.stp-version');
 if (stpVersionEl) {
   const v = (window.hub && window.hub.appVersion) || '';
-  stpVersionEl.textContent = v ? `Ordinate ${v}` : 'Ordinate';
+  stpVersionEl.textContent = v ? t('hub.ordinate', { v }) : t('common.ordinate');
 }
 
 const stpAbout = document.getElementById('stp-about');

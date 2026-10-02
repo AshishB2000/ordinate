@@ -392,5 +392,6 @@ export function publicConfig() {
     branding: { ...cfg.branding },
     // Settings → General → Collaboration. No secrets: a name and a folder path.
     displayName: cfg.displayName || '',
+    language:    cfg.language || 'en',
   };
 }

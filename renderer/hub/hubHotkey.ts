@@ -32,7 +32,7 @@ function accelToLabel(accelerator) {
   return parts.map(p => {
     switch (p.toLowerCase()) {
       case 'commandorcontrol': case 'command': case 'cmd':
-      case 'control': case 'ctrl': return 'Ctrl';
+      case 'control': case 'ctrl': return t('common.ctrl');
       case 'shift': return 'Shift';
       case 'alt': case 'option': return 'Alt';
       default: return p.toUpperCase();
@@ -48,10 +48,10 @@ function keyToAccelKey(code) {
   if (/^Digit(\d)$/.test(code)) return code.slice(5);        // Digit1 → 1
   if (/^F(\d+)$/.test(code)) return code;                    // F1, F12
   const MAP = {
-    Space: 'Space', Enter: 'Return', Backspace: 'Backspace', Delete: 'Delete',
+    Space: t('hubHotkey.space'), Enter: t('common.return'), Backspace: 'Backspace', Delete: 'Delete',
     Tab: 'Tab', Escape: 'Escape', Home: 'Home', End: 'End',
-    PageUp: 'PageUp', PageDown: 'PageDown', Insert: 'Insert',
-    ArrowLeft: 'Left', ArrowRight: 'Right', ArrowUp: 'Up', ArrowDown: 'Down',
+    PageUp: 'PageUp', PageDown: 'PageDown', Insert: t('hubHotkey.insert'),
+    ArrowLeft: t('common.left'), ArrowRight: t('common.right'), ArrowUp: t('hubHotkey.up'), ArrowDown: t('common.down'),
     Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']',
     Backslash: '\\', Semicolon: ';', Quote: "'", Comma: ',', Period: '.', Slash: '/',
     Backquote: '`',
@@ -89,8 +89,8 @@ if (window.hub && typeof window.hub.onHotkeyState === 'function') {
     const label = data && data.label;
     if (hotkeyFailMsg) {
       hotkeyFailMsg.textContent = label
-        ? `Couldn't register ${label} — it may already be in use by another app.`
-        : `Couldn't register the shortcut — it may already be in use by another app.`;
+        ? t('hubHotkey.couldn_t_register_it_may_already', { label })
+        : t('common.couldn_t_register_the_shortcut_it');
     }
     if (hotkeyFailBanner) hotkeyFailBanner.style.display = 'flex';
   });
@@ -172,7 +172,7 @@ async function stpSaveHotkey() {
       if (hotkeyFailBanner) hotkeyFailBanner.style.display = 'none';
     } else {
       const rec = document.getElementById('stp-recorder');
-      if (rec) rec.textContent = (result && result.error) || 'Could not register — try another combo';
+      if (rec) rec.textContent = (result && result.error) || t('hubHotkey.could_not_register_try_another_combo');
       if (saveBtn) saveBtn.disabled = false;
     }
   } catch (_) {

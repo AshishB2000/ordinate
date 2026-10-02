@@ -10,15 +10,15 @@
 // the controls show is always what main now holds, repainted on that push —
 // so the preview line, the charts and these controls cannot disagree.
 
-const SF_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const SF_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
-  'August', 'September', 'October', 'November', 'December'];
+const SF_DAYS = [t('settingsFormats.sunday'), t('settingsFormats.monday'), t('settingsFormats.tuesday'), t('settingsFormats.wednesday'), t('settingsFormats.thursday'), t('settingsFormats.friday'), t('settingsFormats.saturday')];
+const SF_MONTHS = [t('settingsFormats.january'), t('settingsFormats.february'), t('settingsFormats.march'), t('settingsFormats.april'), 'May', t('settingsFormats.june'), t('settingsFormats.july'),
+  t('settingsFormats.august'), t('settingsFormats.september'), t('settingsFormats.october'), t('settingsFormats.november'), t('settingsFormats.december')];
 const SF_SWATCHES: Array<[string, string]> = [
-  ['#2563eb', 'Blue'], ['#7c3aed', 'Violet'], ['#0d9488', 'Teal'], ['#16a34a', 'Green'],
-  ['#ea580c', 'Orange'], ['#e11d48', 'Rose'], ['#db2777', 'Pink'], ['#475569', 'Slate'],
+  ['#2563eb', t('common.blue')], ['#7c3aed', t('common.violet')], ['#0d9488', t('common.teal')], ['#16a34a', t('common.green')],
+  ['#ea580c', t('common.orange')], ['#e11d48', t('common.rose')], ['#db2777', t('settingsFormats.pink')], ['#475569', t('settingsFormats.slate')],
 ];
 const SF_STYLE_PRESETS: Array<[string, string]> = [
-  ['auto', 'Auto — follows the app'], ['clean', 'Light'], ['executive', 'Executive'], ['dense', 'Dense'], ['dark', 'Dark'],
+  ['auto', t('settingsFormats.auto_follows_the_app')], ['clean', t('common.light')], ['executive', t('common.executive')], ['dense', t('common.dense')], ['dark', t('common.dark')],
 ];
 
 function sfEl<T extends HTMLElement>(tag: string, cls?: string, text?: string): T {
@@ -88,40 +88,40 @@ function sfSetBranding(patch: any): void {
 function buildFormatsSection(host: HTMLElement): void {
   host.innerHTML = '';
   const head = sfEl('div', 'stp-subhead');
-  head.appendChild(sfEl('div', 'stp-subhead-t', 'Formats'));
+  head.appendChild(sfEl('div', 'stp-subhead-t', t('settingsFormats.formats')));
   head.appendChild(sfEl('div', 'stp-subhead-d',
-    'How every number and date is written — on cards, charts, tables, captions, reports and exports. A metric\'s own format still wins where it says something.'));
+    t('settingsFormats.how_every_number_and_date_is')));
   host.appendChild(head);
 
   const preview = sfEl('div', 'sf-preview');
   preview.id = 'stp-fmt-preview';
   host.appendChild(preview);
 
-  const systemLabel = 'System default' + (navigator.language ? ' (' + navigator.language + ')' : '');
-  host.appendChild(sfRow('Locale', 'Month names, and the grouping and decimal marks unless you pick them below.',
+  const systemLabel = t('settingsFormats.system_default', { p0: (navigator.language ? ' (' + navigator.language + ')' : '') });
+  host.appendChild(sfRow(t('settingsFormats.locale'), t('settingsFormats.month_names_and_the_grouping_and'),
     sfSelect('stp-fmt-locale', [['', systemLabel] as [string, string]].concat(OrdFormat.LOCALES.map((l) => [l.id, l.label] as [string, string])),
       (v) => sfSetFormats({ locale: v }))));
-  host.appendChild(sfRow('Numbers', 'Grouping and decimal marks.',
+  host.appendChild(sfRow(t('settingsFormats.numbers'), t('settingsFormats.grouping_and_decimal_marks'),
     sfSelect('stp-fmt-number', OrdFormat.NUMBER_STYLES.map((s) => [s.id, s.label] as [string, string]), (v) => sfSetFormats({ numberStyle: v }))));
   const cur = sfSelect('stp-fmt-currency', OrdFormat.CURRENCIES.map((c) => [c, c + ' — ' + OrdFormat.currencySymbol(c)] as [string, string]),
     (v) => sfSetFormats({ currency: v }));
   cur.classList.add('sf-select-sm');
-  host.appendChild(sfRow('Currency', 'For money figures without a symbol of their own.',
-    cur, sfSeg('stp-fmt-currency-pos', [['before', 'Before'], ['after', 'After']], (v) => sfSetFormats({ currencyPosition: v }))));
-  host.appendChild(sfRow('Dates', '',
-    sfSeg('stp-fmt-date', [['short', 'Short'], ['medium', 'Medium'], ['iso', 'ISO']], (v) => sfSetFormats({ dateFormat: v }))));
-  host.appendChild(sfRow('Week starts on', 'For "This week", "Last week" and week buckets of relative filters.',
+  host.appendChild(sfRow(t('common.currency'), t('settingsFormats.for_money_figures_without_a_symbol'),
+    cur, sfSeg('stp-fmt-currency-pos', [['before', t('common.before')], ['after', t('common.after')]], (v) => sfSetFormats({ currencyPosition: v }))));
+  host.appendChild(sfRow(t('settingsFormats.dates'), '',
+    sfSeg('stp-fmt-date', [['short', t('settingsFormats.short')], ['medium', t('common.medium')], ['iso', 'ISO']], (v) => sfSetFormats({ dateFormat: v }))));
+  host.appendChild(sfRow(t('settingsFormats.week_starts_on'), t('settingsFormats.for_this_week_last_week_and'),
     sfSelect('stp-fmt-week', SF_DAYS.map((d, i) => [String(i), d] as [string, string]), (v) => sfSetFormats({ weekStart: Number(v) }))));
-  host.appendChild(sfRow('Fiscal year starts in', 'Quarters and years in relative filters follow it — "This fiscal year".',
+  host.appendChild(sfRow(t('settingsFormats.fiscal_year_starts_in'), t('settingsFormats.quarters_and_years_in_relative_filters'),
     sfSelect('stp-fmt-fiscal', SF_MONTHS.map((m, i) => [String(i + 1), m] as [string, string]), (v) => sfSetFormats({ fiscalYearStart: Number(v) }))));
   const sw = sfEl<HTMLButtonElement>('button', 'stp-switch');
   sw.type = 'button';
   sw.id = 'stp-fmt-compact';
   sw.setAttribute('role', 'switch');
-  sw.setAttribute('aria-label', 'Compact numbers');
+  sw.setAttribute('aria-label', t('settingsFormats.compact_numbers'));
   sw.appendChild(sfEl('span', 'stp-switch-thumb'));
   sw.addEventListener('click', () => sfSetFormats({ compact: !OrdFormat.getFormatPrefs().compact }));
-  host.appendChild(sfRow('Compact numbers', 'Big figures as 5.2M rather than 5,194,598.73, where a view has no format of its own.', sw));
+  host.appendChild(sfRow(t('settingsFormats.compact_numbers'), t('settingsFormats.big_figures_as_5_2m_rather'), sw));
 }
 
 function paintFormatsSection(): void {
@@ -145,11 +145,11 @@ function paintFormatsSection(): void {
     const today = new Date();
     const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     const samples: Array<[string, string]> = [
-      ['Number', OrdFormat.formatNumber(1234567.891, { maxDecimals: 2 })],
-      ['Figure', OrdFormat.formatCompact(5194598.73)],
-      ['Money', OrdFormat.formatCurrency(5194598.73, { compact: true })],
-      ['Percent', OrdFormat.formatPercent(0.1321, 1)],
-      ['Date', OrdFormat.formatDate(iso)],
+      [t('common.number'), OrdFormat.formatNumber(1234567.891, { maxDecimals: 2 })],
+      [t('settingsFormats.figure'), OrdFormat.formatCompact(5194598.73)],
+      [t('settingsFormats.money'), OrdFormat.formatCurrency(5194598.73, { compact: true })],
+      [t('common.percent'), OrdFormat.formatPercent(0.1321, 1)],
+      [t('common.date'), OrdFormat.formatDate(iso)],
     ];
     samples.forEach(([k, v]) => {
       const cell = sfEl('div', 'sf-preview-cell');
@@ -165,14 +165,14 @@ function paintFormatsSection(): void {
 function buildBrandingSection(host: HTMLElement): void {
   host.innerHTML = '';
   const head = sfEl('div', 'stp-subhead');
-  head.appendChild(sfEl('div', 'stp-subhead-t', 'Branding'));
-  head.appendChild(sfEl('div', 'stp-subhead-d', 'Your colour and your mark, on the app, its charts, reports, exports and presentations.'));
+  head.appendChild(sfEl('div', 'stp-subhead-t', t('settingsFormats.branding')));
+  head.appendChild(sfEl('div', 'stp-subhead-d', t('settingsFormats.your_colour_and_your_mark_on')));
   host.appendChild(head);
 
   const swatches = sfEl('div', 'sf-swatches');
   swatches.id = 'stp-brand-swatches';
   swatches.setAttribute('role', 'radiogroup');
-  swatches.setAttribute('aria-label', 'Accent colour');
+  swatches.setAttribute('aria-label', t('settingsFormats.accent_colour'));
   SF_SWATCHES.forEach(([hex, name], i) => {
     const b = sfEl<HTMLButtonElement>('button', 'sf-swatch');
     b.type = 'button';
@@ -190,7 +190,7 @@ function buildBrandingSection(host: HTMLElement): void {
   hexIn.type = 'text';
   hexIn.placeholder = '#2563eb';
   hexIn.spellcheck = false;
-  hexIn.setAttribute('aria-label', 'Accent colour as hex');
+  hexIn.setAttribute('aria-label', t('settingsFormats.accent_colour_as_hex'));
   hexIn.addEventListener('change', () => {
     const v = hexIn.value.trim();
     const hex = /^#?[0-9a-f]{6}$/i.test(v) ? (v.startsWith('#') ? v : '#' + v).toLowerCase() : null;
@@ -199,22 +199,22 @@ function buildBrandingSection(host: HTMLElement): void {
   });
   const accentBox = sfEl('div', 'sf-accent');
   accentBox.append(swatches, hexIn);
-  host.appendChild(sfRow('Accent colour', 'Buttons, selections and the chart palette. Contrast is kept readable in light and dark.', accentBox));
+  host.appendChild(sfRow(t('settingsFormats.accent_colour'), t('settingsFormats.buttons_selections_and_the_chart_palette'), accentBox));
 
   const logo = sfEl('div', 'sf-logo');
   logo.id = 'stp-brand-logo';
   const frame = sfEl('div', 'sf-logo-frame');
-  const pick = sfEl<HTMLButtonElement>('button', 'btn btn-sm', 'Choose file…');
+  const pick = sfEl<HTMLButtonElement>('button', 'btn btn-sm', t('settingsFormats.choose_file'));
   pick.type = 'button';
   pick.id = 'stp-brand-logo-pick';
-  const clear = sfEl<HTMLButtonElement>('button', 'btn btn-sm btn-ghost', 'Remove');
+  const clear = sfEl<HTMLButtonElement>('button', 'btn btn-sm btn-ghost', t('common.remove'));
   clear.type = 'button';
   clear.id = 'stp-brand-logo-clear';
   const msg = sfEl('div', 'sf-logo-msg');
   pick.addEventListener('click', async () => {
     msg.textContent = '';
     const res = await window.hub.pickLogo('workspace');
-    if (res && res.ok === false && !res.canceled) msg.textContent = res.error || 'That logo could not be used.';
+    if (res && res.ok === false && !res.canceled) msg.textContent = res.error || t('common.that_logo_could_not_be_used');
     // A new file of the same kind leaves `branding.logo` unchanged ('png'), so
     // the push alone would keep the old image: reload it here.
     if (res && res.ok) { await brandLoadLogo(); paintBrandingSection(); }
@@ -223,12 +223,12 @@ function buildBrandingSection(host: HTMLElement): void {
   const btns = sfEl('div', 'sf-logo-btns');
   btns.append(pick, clear);
   logo.append(frame, btns);
-  const logoRow = sfRow('Logo', 'PNG or SVG, up to 512 KB. On report covers, exported dashboards and the corner of Present mode.', logo);
+  const logoRow = sfRow(t('common.logo'), t('settingsFormats.png_or_svg_up_to_512'), logo);
   logoRow.appendChild(msg);
   logoRow.classList.add('sf-logo-row');
   host.appendChild(logoRow);
 
-  host.appendChild(sfRow('New dashboards start as', 'A dashboard\'s own Style panel can still change it.',
+  host.appendChild(sfRow(t('settingsFormats.new_dashboards_start_as'), t('settingsFormats.a_dashboard_s_own_style_panel'),
     sfSelect('stp-brand-style', SF_STYLE_PRESETS, (v) => sfSetBranding({ dashboardStyle: v }))));
 }
 
@@ -248,11 +248,11 @@ function paintBrandingSection(): void {
     if (wsLogoUrl) {
       const img = document.createElement('img');
       img.src = wsLogoUrl;
-      img.alt = 'Workspace logo';
+      img.alt = t('settingsFormats.workspace_logo');
       frame.appendChild(img);
     } else {
       frame.appendChild(icon('layout-dashboard', 18));
-      frame.appendChild(sfEl('span', 'sf-logo-none', 'No logo'));
+      frame.appendChild(sfEl('span', 'sf-logo-none', t('common.no_logo')));
     }
   }
   const clear = document.getElementById('stp-brand-logo-clear') as HTMLButtonElement | null;

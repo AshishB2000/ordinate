@@ -8,11 +8,11 @@
 
 function swTileTitle(card: any): string {
   const s = (card && card.stats) || {};
-  if (s.kind === 'correlation') return `Correlation · ${s.method === 'spearman' ? 'Spearman' : 'Pearson'}`;
-  if (s.kind === 'regression') return `Regression · ${s.target || ''}`;
+  if (s.kind === 'correlation') return t('statsTile.correlation', { p0: !!(s.method === 'spearman') });
+  if (s.kind === 'regression') return t('statsTile.regression', { p0: s.target || '' });
   if (s.kind === 'groups') return `${s.outcome || ''} by ${s.group || ''}`;
-  if (s.kind === 'distribution') return `Distribution · ${(s.columns || [])[0] || ''}`;
-  return 'Statistics';
+  if (s.kind === 'distribution') return t('statsTile.distribution', { p0: (s.columns || [])[0] || '' });
+  return t('common.statistics');
 }
 
 function swTileTable(host: HTMLElement, head: string[], rows: string[][]): void {
@@ -54,11 +54,11 @@ async function renderStatsCard(card: any, body: HTMLElement): Promise<void> {
     res = await window.hubStats.tile(currentProjectId, card.stats, effectiveFilters(), dashParamPayload(),
       typeof snapDashAsOf === 'string' ? snapDashAsOf : null);
   } catch (_) {
-    res = { ok: false, error: 'Could not compute this tile.' };
+    res = { ok: false, error: t('statsTile.could_not_compute_this_tile') };
   } finally {
     skelClear(body);
   }
-  if (!res || !res.ok) { dashCardMissing(body, (res && res.error) || 'Could not compute this tile.', !res || !res.asOfMissing); return; }
+  if (!res || !res.ok) { dashCardMissing(body, (res && res.error) || t('statsTile.could_not_compute_this_tile'), !res || !res.asOfMissing); return; }
   const tile = res.tile;
   const titleEl = body.closest('.dash-card')?.querySelector('.dash-card-title');
   if (titleEl && !card.heading) titleEl.textContent = tile.title;
@@ -97,7 +97,7 @@ async function swExportCard(card: any, layout: any, forCapture: boolean, measure
   const title = swTileTitle(card);
   let res: any;
   try { res = await window.hubStats.tile(currentProjectId, card.stats, effectiveFilters(), dashParamPayload(), null, 'export'); } catch (_) { res = null; }
-  if (!res || !res.ok) return { kind: 'broken', layout, reason: (res && res.error) || 'Could not compute this tile' };
+  if (!res || !res.ok) return { kind: 'broken', layout, reason: (res && res.error) || t('statsTile.could_not_compute_this_tile_2') };
   const chart = res.view === 'chart';
   const type = chart ? res.tile.chart.chartType : 'table';
   const data = chart ? res.tile.chart.data : res.tile.numeric;
@@ -106,7 +106,7 @@ async function swExportCard(card: any, layout: any, forCapture: boolean, measure
   }
   const frame = Object.assign({ themeClasses: dashExportStyleClasses(), accentHex: dashCurrentStyle().accentHex, style: dashCurrentStyle() }, dashExportChartBox(measure, layout, true));
   const png = chart ? await captureChartPNG(type, data, {}, frame).catch(() => null) : swTablePng(data, frame);
-  return png ? { kind: 'image', layout, png, title } : { kind: 'broken', layout, reason: 'Could not draw this tile' };
+  return png ? { kind: 'image', layout, png, title } : { kind: 'broken', layout, reason: t('statsTile.could_not_draw_this_tile') };
 }
 
 /** The numbers-only table as a picture, in the export's own theme colours. */
@@ -167,16 +167,16 @@ async function swAddToDashboard(spec: any): Promise<void> {
   try { list = await window.hub.listAnalyses(currentProjectId); } catch (_) { list = []; }
   if (!Array.isArray(list)) list = [];
   const NEW = '__new__';
-  const options = list.map((a) => ({ value: String(a.id), label: a && a.name ? String(a.name) : 'Untitled dashboard' }))
-    .concat([{ value: NEW, label: 'New dashboard…' }]);
+  const options = list.map((a) => ({ value: String(a.id), label: a && a.name ? String(a.name) : t('common.untitled_dashboard') }))
+    .concat([{ value: NEW, label: t('common.new_dashboard_2') }]);
   let view = 'table';
   const extra = document.createElement('div');
   extra.className = 'sw-add-view';
   const lbl = document.createElement('span');
   lbl.className = 'sw-ctl-label';
-  lbl.textContent = 'Show as';
-  extra.append(lbl, swSeg('Show the result as', [['table', 'Table'], ['chart', 'Chart']], view, (v) => { view = v; }));
-  const choice = await dashChooseModal('Add to dashboard', options, 'Add', extra);
+  lbl.textContent = t('statsTile.show_as');
+  extra.append(lbl, swSeg(t('statsTile.show_the_result_as'), [['table', t('common.table')], ['chart', 'Chart']], view, (v) => { view = v; }));
+  const choice = await dashChooseModal(t('common.add_to_dashboard'), options, t('common.add'), extra);
   if (choice === null) return;
   const card = { id: dashUuid(), type: 'stats', stats: Object.assign({}, spec, { view }), layout: { x: 0, y: 0, w: 6, h: 6 } };
   // The dashboard open in the editor takes the card in memory, so its own save
@@ -185,29 +185,29 @@ async function swAddToDashboard(spec: any): Promise<void> {
     const page = dashCurrentPage();
     card.layout = { ...dashFindSlot(page.cards, 6, 6), w: 6, h: 6 };
     page.cards.push(card);
-    markDashDirty('Add statistics');
+    markDashDirty(t('statsTile.add_statistics'));
     renderDashGrid();
-    showToast('Added to ' + (dashCurrent.name || 'the dashboard'));
+    showToast(t('common.added_to', { p0: (dashCurrent.name || t('common.the_dashboard')) }));
     return;
   }
   let analysis: any = null;
   if (choice === NEW) {
-    const name = await promptModal('Name the dashboard', 'Untitled dashboard', 'Create');
+    const name = await promptModal(t('common.name_the_dashboard'), t('common.untitled_dashboard'), t('common.create'));
     if (name === null) return;
-    try { analysis = await window.hub.createAnalysis({ projectId: currentProjectId, name: name.trim() || 'Untitled dashboard' }); } catch (_) { analysis = null; }
+    try { analysis = await window.hub.createAnalysis({ projectId: currentProjectId, name: name.trim() || t('common.untitled_dashboard') }); } catch (_) { analysis = null; }
   } else {
     try { analysis = await window.hub.getAnalysis(currentProjectId, choice); } catch (_) { analysis = null; }
   }
-  if (!analysis || !analysis.id) { showToast('That dashboard could not be opened'); return; }
-  const sheets = Array.isArray(analysis.sheets) && analysis.sheets.length ? analysis.sheets : [{ id: dashUuid(), name: 'Sheet 1', cards: [] }];
+  if (!analysis || !analysis.id) { showToast(t('common.that_dashboard_could_not_be_opened')); return; }
+  const sheets = Array.isArray(analysis.sheets) && analysis.sheets.length ? analysis.sheets : [{ id: dashUuid(), name: t('common.sheet_1'), cards: [] }];
   const last = sheets[sheets.length - 1];
   if (!Array.isArray(last.cards)) last.cards = [];
   card.layout = { ...dashFindSlot(last.cards, 6, 6), w: 6, h: 6 };
   last.cards.push(card);
   let saved: any = null;
   try { saved = await window.hub.updateAnalysis(currentProjectId, String(analysis.id), { sheets }); } catch (_) { saved = null; }
-  if (!saved || saved.ok === false) { showToast('Could not add it to that dashboard'); return; }
-  showToast('Added to ' + (analysis.name ? String(analysis.name) : 'the dashboard'));
+  if (!saved || saved.ok === false) { showToast(t('common.could_not_add_it_to_that')); return; }
+  showToast(t('common.added_to', { p0: (analysis.name ? String(analysis.name) : t('common.the_dashboard')) }));
 }
 
 // ── "Statistics…" on a scatter's ⋯ ───────────────────────────────────────────
@@ -222,7 +222,7 @@ function swWireChartMenu(entry: any, type: string, sig: AddEventListenerOptions)
     btn.type = 'button';
     btn.className = 'chart-menu-item';
     btn.id = 'cm-stats';
-    iconLabel(btn, 'activity', 'Statistics…', 14);
+    iconLabel(btn, 'activity', t('common.statistics_2'), 14);
     anchor.after(btn);
   }
   const d = entry && entry.drill;

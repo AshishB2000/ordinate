@@ -23,14 +23,14 @@ async function gsInProject(projectId?: string): Promise<boolean> {
 
 const GS_STEPS: GsStep[] = [
   {
-    id: 'import', icon: 'upload', title: 'Import your data',
-    line: 'Bring in a CSV or Excel file, paste a table, or connect a database.',
-    action: 'Import', run: () => { void cmdImport('file'); },
+    id: 'import', icon: 'upload', title: t('getStarted.import_your_data'),
+    line: t('getStarted.bring_in_a_csv_or_excel'),
+    action: t('getStarted.import'), run: () => { void cmdImport('file'); },
   },
   {
-    id: 'visual', icon: 'chart-bar', title: 'Build a visual',
-    line: 'Chart the sample orders by month, region or category in a few clicks.',
-    action: 'Open the builder',
+    id: 'visual', icon: 'chart-bar', title: t('getStarted.build_a_visual'),
+    line: t('getStarted.chart_the_sample_orders_by_month'),
+    action: t('common.open_the_builder'),
     run: () => {
       void (async () => {
         if (!(await gsInProject(gsSample ? gsSample.projectId : undefined))) return;
@@ -40,9 +40,9 @@ const GS_STEPS: GsStep[] = [
     },
   },
   {
-    id: 'dashboard', icon: 'layout-dashboard', title: 'Create a dashboard',
-    line: 'Start from a template and have a laid-out sheet in one step.',
-    action: 'Browse templates',
+    id: 'dashboard', icon: 'layout-dashboard', title: t('getStarted.create_a_dashboard'),
+    line: t('getStarted.start_from_a_template_and_have'),
+    action: t('getStarted.browse_templates'),
     run: () => {
       void (async () => {
         if (!(await gsInProject(gsSample ? gsSample.projectId : undefined))) return;
@@ -52,9 +52,9 @@ const GS_STEPS: GsStep[] = [
     },
   },
   {
-    id: 'assistant', icon: 'sparkles', title: 'Set up the Assistant',
-    line: 'Pick a model to ask about your data in plain words. Everything else works without one.',
-    action: 'Set up', run: () => { void showSettingsPanel('exec'); },
+    id: 'assistant', icon: 'sparkles', title: t('common.set_up_the_assistant'),
+    line: t('getStarted.pick_a_model_to_ask_about'),
+    action: t('getStarted.set_up'), run: () => { void showSettingsPanel('exec'); },
   },
 ];
 
@@ -75,7 +75,7 @@ async function gsRender(): Promise<void> {
   pill.hidden = !st.collapsed;
   const pillText = pill.querySelector('.gs-pill-text');
   if (pillText) pillText.textContent = progress;
-  pill.setAttribute('aria-label', `Get started: ${progress} done — show the checklist`);
+  pill.setAttribute('aria-label', t('getStarted.get_started_done_show_the_checklist', { progress }));
   card.hidden = !!st.collapsed;
   if (st.collapsed) return;
 
@@ -89,10 +89,10 @@ async function gsRender(): Promise<void> {
   text.className = 'gs-head-text';
   const h = document.createElement('h2');
   h.className = 'gs-title';
-  h.textContent = 'Get started';
+  h.textContent = t('common.get_started');
   const sub = document.createElement('p');
   sub.className = 'gs-sub';
-  sub.textContent = 'Four things to try — with the sample data, or with your own.';
+  sub.textContent = t('getStarted.four_things_to_try_with_the');
   text.append(h, sub);
   const meter = document.createElement('div');
   meter.className = 'gs-meter';
@@ -109,12 +109,12 @@ async function gsRender(): Promise<void> {
   const fold = document.createElement('button');
   fold.type = 'button';
   fold.className = 'gs-icon-btn gs-fold';
-  iconOnly(fold, 'chevron-up', 'Fold the checklist into a progress pill');
+  iconOnly(fold, 'chevron-up', t('getStarted.fold_the_checklist_into_a_progress'));
   fold.addEventListener('click', () => void gsSet({ collapsed: true }));
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'gs-icon-btn gs-dismiss';
-  iconOnly(close, 'x', 'Hide Get started');
+  iconOnly(close, 'x', t('getStarted.hide_get_started'));
   close.addEventListener('click', () => void gsDismiss());
   head.append(mark, text, meter, fold, close);
   card.appendChild(head);
@@ -134,24 +134,24 @@ async function gsRender(): Promise<void> {
     const tick = document.createElement('span');
     tick.className = 'gs-tick';
     tick.appendChild(icon(done ? 'circle-check' : 'circle', 18));
-    tick.setAttribute('aria-label', done ? 'Done' : 'Not done yet');
+    tick.setAttribute('aria-label', done ? t('common.done') : t('getStarted.not_done_yet'));
     top.append(tile, tick);
     const body = document.createElement('div');
     body.className = 'gs-item-body';
-    const t = document.createElement('h3');
-    t.className = 'gs-item-title';
-    t.textContent = step.title;
+    const tv = document.createElement('h3');
+    tv.className = 'gs-item-title';
+    tv.textContent = step.title;
     const l = document.createElement('p');
     l.className = 'gs-item-line';
     l.textContent = step.line;
-    body.append(t, l);
+    body.append(tv, l);
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn btn-sm btn-ghost gs-action';
-    btn.textContent = done ? 'Done' : step.action;
+    btn.textContent = done ? t('common.done') : step.action;
     btn.disabled = done;
     btn.addEventListener('click', step.run);
-    if (done) iconLabel(btn, 'check', 'Done');
+    if (done) iconLabel(btn, 'check', t('common.done'));
     li.append(top, body, btn);
     list.appendChild(li);
   }
@@ -165,7 +165,7 @@ async function gsSet(patch: { collapsed?: boolean; dismissed?: boolean }): Promi
 
 async function gsDismiss(): Promise<void> {
   await gsSet({ dismissed: true });
-  showToast('Get started is hidden. Everything it pointed to is in the sidebar and ⌘K.');
+  showToast(t('getStarted.get_started_is_hidden_everything_it'));
 }
 
 function initGetStarted(): void {

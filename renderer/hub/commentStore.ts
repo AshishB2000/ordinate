@@ -174,7 +174,7 @@ function cmtByOpenThenNewest(a: any, b: any): number {
 }
 
 const CMT_KIND_WORD: Record<string, string> = {
-  analysis: 'Dashboard', card: 'Card', visual: 'Visual', dataset: 'Dataset', story: 'Story',
+  analysis: t('common.dashboard'), card: t('common.card'), visual: 'Visual', dataset: 'Dataset', story: t('common.story'),
 };
 
 /** What a target is called: main's name for it, else the live page's, else its kind. */
@@ -185,8 +185,8 @@ function cmtTargetName(kind: string, id: string): string {
     const el = document.querySelector('.dash-card[data-card-id="' + CSS.escape(id) + '"] .dash-card-title');
     if (el && el.textContent) return el.textContent;
   }
-  if (kind === 'analysis' && typeof dashCurrent !== 'undefined' && dashCurrent && dashCurrent.id === id) return String(dashCurrent.name || 'Dashboard');
-  return CMT_KIND_WORD[kind] || 'Comment';
+  if (kind === 'analysis' && typeof dashCurrent !== 'undefined' && dashCurrent && dashCurrent.id === id) return String(dashCurrent.name || t('common.dashboard'));
+  return CMT_KIND_WORD[kind] || t('common.comment');
 }
 
 /** A comment's text without its Markdown — for a one-line snippet or a printed page. */
@@ -200,16 +200,16 @@ function cmtPlain(body: string): string {
 
 /** "just now", "5 min ago", "3 h ago", "Yesterday", then a date. */
 function cmtAgo(iso: string): string {
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return '';
-  const s = Math.max(0, (Date.now() - t) / 1000);
-  if (s < 45) return 'just now';
-  if (s < 3600) return Math.round(s / 60) + ' min ago';
-  const d = new Date(t);
-  if (d.toDateString() === new Date().toDateString()) return Math.round(s / 3600) + ' h ago';
+  const tv = Date.parse(iso);
+  if (!Number.isFinite(tv)) return '';
+  const s = Math.max(0, (Date.now() - tv) / 1000);
+  if (s < 45) return t('common.just_now');
+  if (s < 3600) return t('common.min_ago', { p0: Math.round(s / 60) });
+  const d = new Date(tv);
+  if (d.toDateString() === new Date().toDateString()) return t('common.h_ago', { p0: Math.round(s / 3600) });
   const y = new Date();
   y.setDate(y.getDate() - 1);
-  if (d.toDateString() === y.toDateString()) return 'Yesterday';
+  if (d.toDateString() === y.toDateString()) return t('common.yesterday');
   const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
   if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
   return d.toLocaleDateString([], opts);
@@ -227,7 +227,7 @@ async function cmtRun(call: Promise<any>): Promise<boolean> {
     res = null;
   }
   if (!res || res.ok === false) {
-    showToast((res && res.error) || 'Could not save the comment');
+    showToast((res && res.error) || t('commentStore.could_not_save_the_comment'));
     return false;
   }
   if (currentProjectId) cmtAccept(currentProjectId, res);

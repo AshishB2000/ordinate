@@ -16,6 +16,7 @@
 
 export {};
 import { ok, failureCount, finish } from './selfcheck';
+import { withT } from './i18nNode';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -158,7 +159,7 @@ ok('junk never throws and yields nothing', [null, 3, 'x', [], { axes: 'y' }].eve
   const el = (): any => ({ style: {}, appendChild(c: any) { return c; }, getContext: () => ({}) });
   const box: any = { __cfgs: [], document: { title: '', createElement: el, getElementById: el } };
   box.window = box;
-  vm.createContext(box);
+  vm.createContext(withT(box));
   for (const m of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) vm.runInContext(m[1], box);
   const ramp = dx.accentRamp(dashboards.sanitizeStyle(undefined)).chart;
   const [pie, plain, bars] = box.__cfgs;
@@ -221,7 +222,7 @@ sandbox.hubFormat = {
   getColorMap: () => Promise.resolve({}),
   assignColors: (pid: string, column: string, values: unknown[]) => { persisted.push({ pid, column, values }); return new Promise(() => {}); },
 };
-vm.createContext(sandbox);
+vm.createContext(withT(sandbox));
 vm.runInContext(fs.readFileSync(CHART_UMD, 'utf8'), sandbox, { filename: 'chart.umd.js' });
 const RealChart = sandbox.Chart;
 function Rec(this: any, _c: unknown, config: any) { recorded.push(config); this.config = config; }

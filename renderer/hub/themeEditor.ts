@@ -123,7 +123,7 @@ function teColorField(token: string, label: string, derive?: (t: any) => void): 
   const hex = sfEl<HTMLInputElement>('input', 'stp-input sf-hex te-hex');
   hex.type = 'text';
   hex.spellcheck = false;
-  hex.setAttribute('aria-label', label + ' as hex');
+  hex.setAttribute('aria-label', t('themeEditor.as_hex', { label }));
   pick.addEventListener('input', () => teSet(token, pick.value.toLowerCase(), derive));
   hex.addEventListener('change', () => {
     const v = hex.value.trim();
@@ -159,7 +159,7 @@ function teRange(id: string, token: string, min: number, max: number): HTMLEleme
 function teFontSelect(id: string, token: string): HTMLElement {
   const sel = sfSelect(id, Object.keys(themeModel.FONTS).map((k) => [k, themeModel.FONTS[k].label] as [string, string]),
     (v) => teSet(token, v));
-  const sample = sfEl('span', 'te-font-sample', 'Aa 123');
+  const sample = sfEl('span', 'te-font-sample', t('themeEditor.aa_123'));
   sample.id = id + '-sample';
   sample.setAttribute('aria-hidden', 'true');
   const box = sfEl('div', 'te-font');
@@ -169,42 +169,42 @@ function teFontSelect(id: string, token: string): HTMLElement {
 
 function teControls(): HTMLElement {
   const box = sfEl('div', 'te-controls');
-  box.appendChild(teSec('Fonts', 'From the four bundled families. They render from the fonts installed on this computer, with system fallbacks — nothing is downloaded.',
-    teField('Text', teFontSelect('te-font-ui', '--font-ui')),
-    teField('Figures', teFontSelect('te-font-num', '--font-numeric'))));
+  box.appendChild(teSec(t('themeEditor.fonts'), t('themeEditor.from_the_four_bundled_families_they'),
+    teField(t('common.text'), teFontSelect('te-font-ui', '--font-ui')),
+    teField(t('themeEditor.figures'), teFontSelect('te-font-num', '--font-numeric'))));
 
   const base = sfEl('div', 'te-color-grid');
-  ([['--bg', 'Background'], ['--surface', 'Surface'], ['--text', 'Text'], ['--border', 'Border']] as Array<[string, string]>)
+  ([['--bg', t('common.background')], ['--surface', t('themeEditor.surface')], ['--text', t('common.text')], ['--border', t('themeEditor.border')]] as Array<[string, string]>)
     .forEach(([t, l]) => base.appendChild(teColorField(t, l, teDeriveBase)));
-  box.appendChild(teSec('Base palette', 'Card heads, insets and the lighter text and border weights follow from these four.', base));
+  box.appendChild(teSec(t('themeEditor.base_palette'), t('themeEditor.card_heads_insets_and_the_lighter'), base));
 
   const ramp = sfEl('div', 'te-ramp');
-  for (let i = 1; i <= 8; i++) ramp.appendChild(teColorField('--chart-' + i, 'Series ' + i));
-  const derive = teButton('Derive ramp from accent', 'btn-ghost te-derive', () => {
+  for (let i = 1; i <= 8; i++) ramp.appendChild(teColorField('--chart-' + i, t('themeEditor.series', { i })));
+  const derive = teButton(t('themeEditor.derive_ramp_from_accent'), 'btn-ghost te-derive', () => {
     if (teDraft) { teDeriveRamp(teDraft.tokens); teRefresh(); }
   }, 'sparkles');
-  box.appendChild(teSec('Accent and chart ramp', 'Each colour is checked against the card surface — 3:1 is the floor for chart marks.',
-    teColorField('--accent', 'Accent', teDeriveAccent), ramp, derive));
+  box.appendChild(teSec(t('themeEditor.accent_and_chart_ramp'), t('themeEditor.each_colour_is_checked_against_the'),
+    teColorField('--accent', t('common.accent'), teDeriveAccent), ramp, derive));
 
   const rule = sfEl<HTMLButtonElement>('button', 'stp-switch');
   rule.type = 'button';
   rule.id = 'te-rule';
   rule.setAttribute('role', 'switch');
-  rule.setAttribute('aria-label', 'Header rule');
+  rule.setAttribute('aria-label', t('themeEditor.header_rule'));
   rule.appendChild(sfEl('span', 'stp-switch-thumb'));
   rule.addEventListener('click', () => teSet('--dash-card-rule', teDraft && teDraft.tokens['--dash-card-rule'] === 'off' ? 'on' : 'off'));
-  box.appendChild(teSec('Cards', '',
-    teField('Border', sfSeg('te-border', [['0', 'None'], ['1', 'Hairline'], ['2', 'Strong']], (v) => teSet('--dash-card-border-w', Number(v)))),
-    teField('Shadow', sfSeg('te-shadow', [['none', 'None'], ['sm', 'Soft'], ['md', 'Raised'], ['lg', 'Lifted']], (v) => teSet('--dash-card-shadow', v))),
-    teField('Corner radius', teRange('te-radius', '--dash-card-radius', 0, 24)),
-    teField('Header rule', rule)));
+  box.appendChild(teSec(t('themeEditor.cards'), '',
+    teField(t('themeEditor.border'), sfSeg('te-border', [['0', t('common.none')], ['1', t('themeEditor.hairline')], ['2', t('themeEditor.strong')]], (v) => teSet('--dash-card-border-w', Number(v)))),
+    teField(t('themeEditor.shadow'), sfSeg('te-shadow', [['none', t('common.none')], ['sm', t('themeEditor.soft')], ['md', t('themeEditor.raised')], ['lg', t('themeEditor.lifted')]], (v) => teSet('--dash-card-shadow', v))),
+    teField(t('themeEditor.corner_radius'), teRange('te-radius', '--dash-card-radius', 0, 24)),
+    teField(t('themeEditor.header_rule'), rule)));
 
   box.appendChild(teSec('KPIs', '',
-    teField('Value size', teRange('te-kpi-size', '--dash-kpi-size', 18, 48)),
-    teField('Label', sfSeg('te-kpi-label', [['below', 'Below the figure'], ['above', 'Above']], (v) => teSet('--dash-kpi-label', v)))));
+    teField(t('themeEditor.value_size'), teRange('te-kpi-size', '--dash-kpi-size', 18, 48)),
+    teField(t('common.label'), sfSeg('te-kpi-label', [['below', t('themeEditor.below_the_figure')], ['above', t('themeEditor.above')]], (v) => teSet('--dash-kpi-label', v)))));
 
-  box.appendChild(teSec('Density', 'The grid pitch. A card keeps its place — only the spacing moves.',
-    teField('Spacing', sfSeg('te-density', [['comfortable', 'Comfortable'], ['compact', 'Compact']], (v) => {
+  box.appendChild(teSec(t('themeEditor.density'), t('themeEditor.the_grid_pitch_a_card_keeps'),
+    teField(t('themeEditor.spacing'), sfSeg('te-density', [['comfortable', t('themeEditor.comfortable')], ['compact', t('common.compact')]], (v) => {
       if (!teDraft) return;
       teDraft.tokens['--dash-gap'] = TE_DENSITY[v][0];
       teSet('--dash-row', TE_DENSITY[v][1]);
@@ -232,19 +232,19 @@ function tePvCard(grid: HTMLElement, title: string, x: number, y: number, w: num
 
 function tePreview(): HTMLElement {
   const pane = sfEl('aside', 'te-preview-pane');
-  pane.appendChild(sfEl('div', 'te-preview-label', 'Preview'));
+  pane.appendChild(sfEl('div', 'te-preview-label', t('common.preview')));
   const frame = sfEl('div', 'te-preview');
   frame.setAttribute('role', 'img');
-  frame.setAttribute('aria-label', 'The sample dashboard drawn in this theme');
+  frame.setAttribute('aria-label', t('themeEditor.the_sample_dashboard_drawn_in_this'));
   const sheet = sfEl('div', 'te-preview-sheet dash-theme--clean dash-density--comfortable dash-accent--blue');
   sheet.id = 'te-preview-sheet';
-  sheet.appendChild(sfEl('div', 'te-pv-title', 'Retail sales'));
+  sheet.appendChild(sfEl('div', 'te-pv-title', t('themeEditor.retail_sales')));
   const grid = sfEl('div', 'dash-grid');
-  ([['Revenue', '2.3M'], ['Profit', '286K'], ['Units sold', '38.7K'], ['Orders', '9,994']] as Array<[string, string]>).forEach(([label, v], i) => {
+  ([[t('common.revenue'), '2.3M'], [t('themeEditor.profit'), '286K'], [t('themeEditor.units_sold'), '38.7K'], [t('common.orders'), '9,994']] as Array<[string, string]>).forEach(([label, v], i) => {
     const body = tePvCard(grid, label, i * 3, 0, 3, 2, 'dash-card--metric');
-    body.append(sfEl('div', 'dash-metric-value tnum', v), sfEl('div', 'dash-metric-label', 'Sum of ' + label.toLowerCase()));
+    body.append(sfEl('div', 'dash-metric-value tnum', v), sfEl('div', 'dash-metric-label', t('themeEditor.sum_of', { p0: label.toLowerCase() })));
   });
-  const line = tePvCard(grid, 'Revenue by month', 0, 2, 7, 4);
+  const line = tePvCard(grid, t('themeEditor.revenue_by_month'), 0, 2, 7, 4);
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 100 50');
   svg.setAttribute('preserveAspectRatio', 'none');
@@ -263,11 +263,11 @@ function tePreview(): HTMLElement {
     b.style.background = 'var(--chart-' + (i + 1) + ')';
     bars.appendChild(b);
   });
-  tePvCard(grid, 'Revenue by category', 7, 2, 5, 4).appendChild(bars);
+  tePvCard(grid, t('themeEditor.revenue_by_category'), 7, 2, 5, 4).appendChild(bars);
   sheet.appendChild(grid);
   frame.appendChild(sheet);
   pane.appendChild(frame);
-  pane.appendChild(sfEl('p', 'te-preview-note', 'The sample dashboard, redrawn as you edit — its KPIs and two charts in this theme’s fonts, colours and cards.'));
+  pane.appendChild(sfEl('p', 'te-preview-note', t('themeEditor.the_sample_dashboard_redrawn_as_you')));
   return pane;
 }
 
@@ -276,12 +276,12 @@ function tePreview(): HTMLElement {
 function teRefresh(): void {
   const view = document.getElementById('te-editor-view');
   if (!teDraft || !view) return;
-  const t = teDraft.tokens;
-  const warns = themeModel.themeWarnings(t);
+  const tv = teDraft.tokens;
+  const warns = themeModel.themeWarnings(tv);
   const byToken = new Map<string, any>(warns.map((w: any) => [w.token, w]));
   view.querySelectorAll('.te-color').forEach((w: HTMLElement) => {
     const token = w.dataset.token || '';
-    const v = teHex(t[token], '#000000');
+    const v = teHex(tv[token], '#000000');
     const pick = w.querySelector('.te-color-input') as HTMLInputElement;
     if (pick.value !== v) pick.value = v;
     const hex = w.querySelector('.te-hex') as HTMLInputElement;
@@ -297,36 +297,36 @@ function teRefresh(): void {
   if (summary) {
     summary.hidden = !warns.length;
     summary.textContent = warns.length === 1
-      ? 'One colour is under its contrast floor — see the note beside it. You can still save.'
-      : warns.length + ' colours are under their contrast floor — see the notes beside them. You can still save.';
+      ? t('themeEditor.one_colour_is_under_its_contrast')
+      : t('themeEditor.colours_are_under_their_contrast_floor', { warnsCount: warns.length });
   }
-  const fontOf = (k: string): string => (themeModel.FONTS[t[k]] ? t[k] : 'hanken');
+  const fontOf = (k: string): string => (themeModel.FONTS[tv[k]] ? tv[k] : 'hanken');
   ([['te-font-ui', '--font-ui'], ['te-font-num', '--font-numeric']] as Array<[string, string]>).forEach(([id, k]) => {
     const sel = document.getElementById(id) as HTMLSelectElement | null;
     if (sel) sel.value = fontOf(k);
     const sample = document.getElementById(id + '-sample');
     if (sample) sample.style.fontFamily = themeModel.FONTS[fontOf(k)].stack;
   });
-  sfSegValue('te-border', String(t['--dash-card-border-w'] ?? 1));
-  sfSegValue('te-shadow', t['--dash-card-shadow'] || 'none');
-  sfSegValue('te-kpi-label', t['--dash-kpi-label'] || 'below');
-  const dens = Object.keys(TE_DENSITY).find((k) => TE_DENSITY[k][0] === t['--dash-gap'] && TE_DENSITY[k][1] === t['--dash-row']);
+  sfSegValue('te-border', String(tv['--dash-card-border-w'] ?? 1));
+  sfSegValue('te-shadow', tv['--dash-card-shadow'] || 'none');
+  sfSegValue('te-kpi-label', tv['--dash-kpi-label'] || 'below');
+  const dens = Object.keys(TE_DENSITY).find((k) => TE_DENSITY[k][0] === tv['--dash-gap'] && TE_DENSITY[k][1] === tv['--dash-row']);
   sfSegValue('te-density', dens || '');
   ([['te-radius', '--dash-card-radius', 12], ['te-kpi-size', '--dash-kpi-size', 28]] as Array<[string, string, number]>).forEach(([id, k, d]) => {
     const r = document.getElementById(id) as HTMLInputElement | null;
-    const v = typeof t[k] === 'number' ? t[k] : d;
+    const v = typeof tv[k] === 'number' ? tv[k] : d;
     if (r) r.value = String(v);
     const out = document.getElementById(id + '-val');
     if (out) out.textContent = v + 'px';
   });
   const rule = document.getElementById('te-rule');
   if (rule) {
-    const on = t['--dash-card-rule'] !== 'off';
+    const on = tv['--dash-card-rule'] !== 'off';
     rule.classList.toggle('stp-switch-on', on);
     rule.setAttribute('aria-checked', on ? 'true' : 'false');
   }
   const sheet = document.getElementById('te-preview-sheet');
-  if (sheet) applyThemeTokens(sheet, t);
+  if (sheet) applyThemeTokens(sheet, tv);
 }
 
 // ── Open / close / save ──────────────────────────────────────────────────────
@@ -343,11 +343,11 @@ function openThemeEditor(theme: any): void {
   name.id = 'te-name';
   name.maxLength = 60;
   name.value = theme.name;
-  name.setAttribute('aria-label', 'Theme name');
+  name.setAttribute('aria-label', t('themeEditor.theme_name'));
   name.addEventListener('input', () => { if (teDraft) teDraft.name = name.value; });
-  const save = teButton('Save theme', 'btn-primary te-save', () => { void teSave(save); }, 'check');
-  head.append(teButton('Themes', 'btn-ghost te-back', closeThemeEditor, 'arrow-left'), name,
-    sfEl('span', 'te-spacer'), teButton('Cancel', 'te-cancel', closeThemeEditor), save);
+  const save = teButton(t('themeEditor.save_theme'), 'btn-primary te-save', () => { void teSave(save); }, 'check');
+  head.append(teButton(t('common.themes'), 'btn-ghost te-back', closeThemeEditor, 'arrow-left'), name,
+    sfEl('span', 'te-spacer'), teButton(t('common.cancel'), 'te-cancel', closeThemeEditor), save);
 
   const summary = sfEl('div', 'te-warn-summary');
   summary.id = 'te-warn-summary';
@@ -378,7 +378,7 @@ async function teSave(btn: HTMLButtonElement): Promise<void> {
   let res: any = null;
   try { res = await window.hubThemes.save({ id: teDraft.id, name: teDraft.name, tokens: teDraft.tokens }); } catch (_) { res = null; }
   btn.disabled = false;
-  if (!res || !res.ok) { showToast((res && res.error) || 'The theme could not be saved.'); return; }
-  showToast('Saved “' + res.theme.name + '”');
+  if (!res || !res.ok) { showToast((res && res.error) || t('common.the_theme_could_not_be_saved')); return; }
+  showToast(t('common.saved_4', { name: res.theme.name }));
   closeThemeEditor();
 }

@@ -14,10 +14,10 @@
 // scaled to a gallery card here.
 
 const UT_KIND: Record<string, { label: string; icon: string }> = {
-  date: { label: 'Date', icon: 'type-date' },
-  measure: { label: 'Measure', icon: 'type-number' },
-  dimension: { label: 'Dimension', icon: 'type-text' },
-  geo: { label: 'Place', icon: 'map-pin' },
+  date: { label: t('common.date'), icon: 'type-date' },
+  measure: { label: t('common.measure'), icon: 'type-number' },
+  dimension: { label: t('userTemplateSave.dimension'), icon: 'type-text' },
+  geo: { label: t('common.place'), icon: 'map-pin' },
   id: { label: 'ID', icon: 'grid' },
 };
 const UT_THUMB_W = 480;
@@ -77,7 +77,7 @@ async function utSaveAsTemplate(analysisId: string): Promise<void> {
     utCaptureThumb(),
     window.hubTemplates.capture(currentProjectId, analysisId).catch(() => null),
   ]);
-  if (!cap || !cap.ok) { showToast((cap && cap.error) || 'This dashboard could not be read.', { kind: 'error' }); return; }
+  if (!cap || !cap.ok) { showToast((cap && cap.error) || t('userTemplateSave.this_dashboard_could_not_be_read'), { kind: 'error' }); return; }
   utSaveDialog(analysisId, cap, thumb);
 }
 
@@ -98,11 +98,11 @@ function utSaveDialog(analysisId: string, cap: any, thumb: string): void {
   // ── Header ──
   const head = utMk('div', 'ut-head');
   const titles = utMk('div');
-  titles.append(utMk('div', 'ws-modal-title', 'Save as template'),
-    utMk('p', 'ut-sub', `“${String(cap.name)}” becomes a template you can build on any dataset. Its columns become roles you map when you use it.`));
+  titles.append(utMk('div', 'ws-modal-title', t('userTemplateSave.save_as_template')),
+    utMk('p', 'ut-sub', t('userTemplateSave.becomes_a_template_you_can_build', { name: String(cap.name) })));
   const x = utMk<HTMLButtonElement>('button', 'an-wiz-x');
   x.type = 'button';
-  iconOnly(x, 'x', 'Close');
+  iconOnly(x, 'x', t('common.close'));
   x.addEventListener('click', close);
   head.append(titles, x);
 
@@ -112,11 +112,11 @@ function utSaveDialog(analysisId: string, cap: any, thumb: string): void {
   if (thumb) {
     const img = utMk<HTMLImageElement>('img', 'ut-thumb-img');
     img.src = thumb;
-    img.alt = 'Preview of the dashboard';
+    img.alt = t('userTemplateSave.preview_of_the_dashboard');
     art.appendChild(img);
   } else {
     art.classList.add('is-empty');
-    art.append(icon('layout-dashboard', 20), utMk('span', '', 'No preview'));
+    art.append(icon('layout-dashboard', 20), utMk('span', '', t('userTemplateSave.no_preview')));
   }
   const fields = utMk('div', 'ut-fields');
   const nameIn = utMk<HTMLInputElement>('input', 'ws-modal-input ut-name');
@@ -126,7 +126,7 @@ function utSaveDialog(analysisId: string, cap: any, thumb: string): void {
   const descIn = utMk<HTMLTextAreaElement>('textarea', 'ws-modal-input ut-desc');
   descIn.rows = 2;
   descIn.maxLength = 500;
-  descIn.placeholder = 'What is this dashboard for? Shown on its gallery card.';
+  descIn.placeholder = t('userTemplateSave.what_is_this_dashboard_for_shown');
   const lab = (t: string, c: HTMLElement): HTMLElement => {
     const l = utMk('label', 'ut-field');
     l.append(utMk('span', 'ut-field-l', t), c);
@@ -138,19 +138,19 @@ function utSaveDialog(analysisId: string, cap: any, thumb: string): void {
   };
   stat(cap.tiles, 'tile', 'tiles');
   stat(cap.charts, 'chart', 'charts');
-  stat(cap.calcFields, 'calculated field', 'calculated fields');
+  stat(cap.calcFields, t('userTemplateSave.calculated_field'), t('userTemplateSave.calculated_fields'));
   stat(cap.metrics, 'metric', 'metrics');
-  fields.append(lab('Name', nameIn), lab('Description', descIn), stats);
+  fields.append(lab(t('common.name'), nameIn), lab(t('common.description'), descIn), stats);
   top.append(art, fields);
 
   // ── Roles ──
   const rolesHead = utMk('div', 'ut-roles-h');
-  rolesHead.append(utMk('span', 'ut-roles-t', 'Roles'),
-    utMk('span', 'ut-roles-p', `${cap.roles.length} from ${String(cap.datasetName || 'the dataset')} · map each to a column when you use the template`));
+  rolesHead.append(utMk('span', 'ut-roles-t', t('userTemplateSave.roles')),
+    utMk('span', 'ut-roles-p', t('userTemplateSave.from_map_each_to_a_column', { rolesCount: cap.roles.length, p1: String(cap.datasetName || t('userTemplateSave.the_dataset')) })));
   const table = utMk('div', 'ut-roles');
   table.setAttribute('role', 'list');
   const cols = utMk('div', 'ut-role ut-role-cols');
-  ['Role', 'Kind', 'Used in', 'Match words', 'Required'].forEach((c) => cols.appendChild(utMk('span', '', c)));
+  [t('userTemplateSave.role'), t('common.kind'), t('common.used_in'), t('userTemplateSave.match_words'), t('common.required')].forEach((c) => cols.appendChild(utMk('span', '', c)));
   table.appendChild(cols);
   const edits = (cap.roles as any[]).map((r) => ({ id: String(r.id), label: String(r.label), required: !!r.required, hints: (r.hints || []).map(String) }));
   (cap.roles as any[]).forEach((r, i) => {
@@ -163,7 +163,7 @@ function utSaveDialog(analysisId: string, cap: any, thumb: string): void {
     label.type = 'text';
     label.maxLength = 80;
     label.value = e.label;
-    label.setAttribute('aria-label', `Role name for ${String(r.column)}`);
+    label.setAttribute('aria-label', t('userTemplateSave.role_name_for', { column: String(r.column) }));
     label.addEventListener('input', () => { e.label = label.value; });
     who.append(label, utMk('span', 'ut-role-src', `from ${String(r.column)}`));
     const kindDef = UT_KIND[String(r.kind)] || UT_KIND.dimension;
@@ -177,17 +177,17 @@ function utSaveDialog(analysisId: string, cap: any, thumb: string): void {
     const hints = utMk<HTMLInputElement>('input', 'ws-modal-input ut-role-hints');
     hints.type = 'text';
     hints.value = e.hints.join(', ');
-    hints.placeholder = 'e.g. revenue, sales';
-    hints.setAttribute('aria-label', `Words that match ${e.label}`);
+    hints.placeholder = t('userTemplateSave.e_g_revenue_sales');
+    hints.setAttribute('aria-label', t('userTemplateSave.words_that_match', { label: e.label }));
     hints.addEventListener('input', () => { e.hints = hints.value.split(',').map((h) => h.trim()).filter(Boolean); });
     const req = utMk<HTMLLabelElement>('label', 'ut-req');
     const chk = utMk<HTMLInputElement>('input');
     chk.type = 'checkbox';
     chk.checked = e.required;
-    chk.setAttribute('aria-label', `${e.label} is required`);
+    chk.setAttribute('aria-label', t('userTemplateSave.is_required', { label: e.label }));
     const reqText = utMk('span', 'ut-req-t');
     const paintReq = (): void => {
-      reqText.textContent = chk.checked ? 'Required' : 'Optional';
+      reqText.textContent = chk.checked ? t('common.required') : t('common.optional');
       row.classList.toggle('is-optional', !chk.checked);
     };
     chk.addEventListener('change', () => { e.required = chk.checked; paintReq(); });
@@ -197,11 +197,10 @@ function utSaveDialog(analysisId: string, cap: any, thumb: string): void {
     table.appendChild(row);
   });
   const note = utMk('p', 'ut-note');
-  note.textContent = 'An optional role left unmapped drops just the tiles, filters and fields that need it.'
-    + (cap.skipped ? ` ${cap.skipped} ${cap.skipped === 1 ? 'tile reads' : 'tiles read'} another dataset and ${cap.skipped === 1 ? 'is' : 'are'} left out.` : '');
+  note.textContent = t('userTemplateSave.an_optional_role_left_unmapped_drops', { p0: (cap.skipped ? t('userTemplateSave.another_dataset_and_left_out', { skipped: cap.skipped }) : '') });
   if (!cap.roles.length) {
     table.innerHTML = '';
-    table.appendChild(utMk('p', 'ut-empty', 'This dashboard reads no columns — the template will build the same sheet on any dataset.'));
+    table.appendChild(utMk('p', 'ut-empty', t('userTemplateSave.this_dashboard_reads_no_columns_the')));
   }
 
   const body = utMk('div', 'ut-body');
@@ -211,14 +210,14 @@ function utSaveDialog(analysisId: string, cap: any, thumb: string): void {
   err.hidden = true;
 
   const actions = utMk('div', 'ws-modal-actions ut-foot');
-  const cancel = utMk<HTMLButtonElement>('button', 'btn', 'Cancel');
+  const cancel = utMk<HTMLButtonElement>('button', 'btn', t('common.cancel'));
   cancel.type = 'button';
   cancel.addEventListener('click', close);
-  const save = utMk<HTMLButtonElement>('button', 'btn btn-primary ut-save', 'Save template');
+  const save = utMk<HTMLButtonElement>('button', 'btn btn-primary ut-save', t('userTemplateSave.save_template'));
   save.type = 'button';
   save.addEventListener('click', async () => {
     save.disabled = true;
-    save.textContent = 'Saving…';
+    save.textContent = t('common.saving');
     let res: any = null;
     try {
       res = await window.hubTemplates.save({
@@ -229,15 +228,15 @@ function utSaveDialog(analysisId: string, cap: any, thumb: string): void {
     } catch (_) { res = null; }
     if (!res || !res.ok) {
       save.disabled = false;
-      save.textContent = 'Save template';
-      err.textContent = (res && res.error) || 'The template could not be saved.';
+      save.textContent = t('userTemplateSave.save_template');
+      err.textContent = (res && res.error) || t('userTemplateSave.the_template_could_not_be_saved');
       err.hidden = false;
       return;
     }
     close();
-    showToast(`Saved “${String(res.name)}” to your templates`, {
+    showToast(t('userTemplateSave.saved_to_your_templates', { name: String(res.name) }), {
       kind: 'success',
-      action: { label: 'Use it', onClick: () => { void anCreateWizard(undefined, {}); } },
+      action: { label: t('userTemplateSave.use_it'), onClick: () => { void anCreateWizard(undefined, {}); } },
     });
   });
   actions.append(cancel, save);
@@ -247,6 +246,6 @@ function utSaveDialog(analysisId: string, cap: any, thumb: string): void {
   overlay.addEventListener('mousedown', (ev) => { if (ev.target === overlay) close(); });
   document.addEventListener('keydown', onKey, true);
   document.body.appendChild(overlay);
-  a11y = makeModalAccessible(box, 'Save as template', nameIn);
+  a11y = makeModalAccessible(box, t('userTemplateSave.save_as_template'), nameIn);
   nameIn.select();
 }

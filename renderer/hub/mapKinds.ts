@@ -31,9 +31,9 @@ function geoMapFits(type: string, geo: any): boolean {
 
 /** The "needs …" line a picker shows for a map this data cannot draw. */
 function geoNeedsText(type: string, hasGeo: boolean): string {
-  if (type === 'map_hexbin') return 'latitude and longitude columns (set Map regions to Hexbin density)';
-  if (type === 'map_flow') return 'origin and destination coordinates (set Map regions to Flows)';
-  return hasGeo ? 'places or regions rather than density or routes' : 'place or region data';
+  if (type === 'map_hexbin') return t('mapKinds.latitude_and_longitude_columns_set_map');
+  if (type === 'map_flow') return t('mapKinds.origin_and_destination_coordinates_set');
+  return hasGeo ? t('mapKinds.places_or_regions_rather_than_density') : t('mapKinds.place_or_region_data');
 }
 
 /** Charts first, then the map this data draws — or ONLY the map, for density and routes (they have no labels to chart). */

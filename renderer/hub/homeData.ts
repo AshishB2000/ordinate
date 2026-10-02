@@ -31,7 +31,7 @@ function hdMakeDatasetRow(pid: string, d: any): HTMLElement {
   row.className = 'home-data-row';
   const name = document.createElement('span');
   name.className = 'home-data-name';
-  name.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
+  name.textContent = d && d.name ? String(d.name) : t('common.untitled_dataset');
   const dq = dqDot(d && d.qualityFailing); // dsRules.ts — a failing quality rule
   if (dq) name.prepend(dq);
   const meta = document.createElement('span');
@@ -65,7 +65,7 @@ async function hdRenderData(pid: string): Promise<void> {
   if (!datasets.length) {
     const empty = document.createElement('p');
     empty.className = 'home-data-empty';
-    empty.textContent = 'No datasets yet — connect one below.';
+    empty.textContent = t('homeData.no_datasets_yet_connect_one_below');
     list.appendChild(empty);
     return;
   }
@@ -97,7 +97,7 @@ function hdMakeVizTile(id: string, v: any): HTMLElement {
 
   const name = document.createElement('span');
   name.className = 'home-viz-name';
-  name.textContent = v && v.name ? String(v.name) : 'Untitled visual';
+  name.textContent = v && v.name ? String(v.name) : t('common.untitled_visual');
 
   card.append(tile, name);
   card.addEventListener('click', () => void hdOpenVisual(String((v && v.id) || id), v));

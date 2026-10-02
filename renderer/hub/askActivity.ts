@@ -124,7 +124,7 @@ function xpActivityCollapse(askId: string): void {
   setIcon(caret, 'chevron-right');
   const text = document.createElement('span');
   text.className = 'xp-activity-summary-text';
-  text.textContent = summaryText || 'Prepared the answer';
+  text.textContent = summaryText || t('askActivity.prepared_the_answer');
   bar.append(caret, text);
   bar.addEventListener('click', () => {
     const show = st.list.hidden;

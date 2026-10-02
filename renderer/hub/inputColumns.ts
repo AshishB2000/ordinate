@@ -25,17 +25,17 @@ interface ItColDraft {
 }
 
 const IT_TEMPLATES: Array<{ id: string; label: string; hint: string; columns: Array<Partial<ItColDraft>> }> = [
-  { id: 'Targets', label: 'Targets', hint: 'A goal per region and month', columns: [
+  { id: 'Targets', label: t('inputColumns.targets'), hint: t('inputColumns.a_goal_per_region_and_month'), columns: [
     { name: 'region', type: 'text', required: true }, { name: 'month', type: 'date' }, { name: 'target', type: 'number', required: true },
   ] },
-  { id: 'Budget', label: 'Budget', hint: 'Planned spend by department', columns: [
+  { id: 'Budget', label: t('inputColumns.budget'), hint: t('inputColumns.planned_spend_by_department'), columns: [
     { name: 'department', type: 'text', required: true }, { name: 'month', type: 'date' },
     { name: 'amount', type: 'number', required: true }, { name: 'owner', type: 'text' },
   ] },
-  { id: 'Mapping', label: 'Mapping', hint: 'Translate one code to another', columns: [
+  { id: 'Mapping', label: t('inputColumns.mapping'), hint: t('inputColumns.translate_one_code_to_another'), columns: [
     { name: 'from', type: 'text', required: true }, { name: 'to', type: 'text', required: true },
   ] },
-  { id: 'Notes', label: 'Notes', hint: 'Dated notes to annotate charts', columns: [
+  { id: 'Notes', label: t('common.notes'), hint: t('inputColumns.dated_notes_to_annotate_charts'), columns: [
     { name: 'date', type: 'date', required: true }, { name: 'note', type: 'text' },
   ] },
 ];
@@ -49,7 +49,7 @@ async function itLookupChoices(selfId: string): Promise<Array<{ id: string; name
   for (const d of (Array.isArray(list) ? list : []).filter((x: any) => x && x.id !== selfId)) {
     let meta: any = null;
     try { meta = await window.hub.getDatasetMeta(currentProjectId, String(d.id)); } catch (_) { meta = null; }
-    if (meta && Array.isArray(meta.columns) && meta.columns.length) out.push({ id: String(d.id), name: String(d.name || 'Untitled dataset'), columns: meta.columns });
+    if (meta && Array.isArray(meta.columns) && meta.columns.length) out.push({ id: String(d.id), name: String(d.name || t('common.untitled_dataset')), columns: meta.columns });
   }
   return out;
 }
@@ -72,23 +72,23 @@ function itColumnsDialog(opts: { mode: 'create' | 'edit'; name?: string; columns
 
     const overlay = itMk('div', 'ws-modal-overlay');
     const box = itMk('div', 'ws-modal it-modal');
-    const title = creating ? 'New input table' : 'Edit columns';
+    const title = creating ? t('inputColumns.new_input_table') : t('common.edit_columns');
     box.appendChild(itMk('div', 'ws-modal-title', title));
     box.appendChild(itMk('p', 'it-modal-sub', creating
-      ? 'A small table you type into Ordinate — targets, budgets, mappings, notes. Up to 10,000 rows, saved as an ordinary dataset that metrics, relationships and alerts use like any other.'
-      : 'Rename, retype or add columns. Values move with their column; anything a new type cannot hold is kept and flagged, and the previous layout stays in History.'));
+      ? t('inputColumns.a_small_table_you_type_into')
+      : t('inputColumns.rename_retype_or_add_columns_values')));
 
     const nameInput = itMk<HTMLInputElement>('input', 'ws-modal-input');
     nameInput.type = 'text';
-    nameInput.placeholder = 'e.g. Regional targets';
+    nameInput.placeholder = t('inputColumns.e_g_regional_targets');
     nameInput.value = opts.name || '';
     nameInput.maxLength = 120;
-    if (creating) box.appendChild(meField('Name', nameInput));
+    if (creating) box.appendChild(meField(t('common.name'), nameInput));
 
     if (creating) {
       const tiles = itMk('div', 'it-templates');
       tiles.setAttribute('role', 'group');
-      tiles.setAttribute('aria-label', 'Start from');
+      tiles.setAttribute('aria-label', t('common.start_from'));
       for (const t of IT_TEMPLATES) {
         const b = itMk<HTMLButtonElement>('button', 'dc-kind-tile it-template');
         b.type = 'button';
@@ -101,17 +101,17 @@ function itColumnsDialog(opts: { mode: 'create' | 'edit'; name?: string; columns
         });
         tiles.appendChild(b);
       }
-      box.appendChild(meField('Start from', tiles));
+      box.appendChild(meField(t('common.start_from'), tiles));
     }
 
     const colsHead = itMk('div', 'it-cols-head');
-    ['Column', 'Type', 'Required', 'Values from', ''].forEach((t) => colsHead.appendChild(itMk('span', '', t)));
+    [t('common.column'), t('common.type'), t('common.required'), t('inputColumns.values_from'), ''].forEach((t) => colsHead.appendChild(itMk('span', '', t)));
     const list = itMk('div', 'it-cols');
     list.setAttribute('role', 'list');
-    list.setAttribute('aria-label', 'Columns');
+    list.setAttribute('aria-label', t('common.columns'));
     const add = itMk<HTMLButtonElement>('button', 'btn btn-sm btn-ghost it-add-col');
     add.type = 'button';
-    iconLabel(add, 'plus', 'Add column');
+    iconLabel(add, 'plus', t('inputColumns.add_column'));
     const warn = itMk('p', 'it-modal-warn');
     warn.hidden = true;
     const err = itMk('p', 'it-modal-err');
@@ -120,9 +120,9 @@ function itColumnsDialog(opts: { mode: 'create' | 'edit'; name?: string; columns
     box.append(colsHead, list, add, warn, err);
 
     const actions = itMk('div', 'ws-modal-actions');
-    const cancel = itMk<HTMLButtonElement>('button', 'btn btn-ghost', 'Cancel');
+    const cancel = itMk<HTMLButtonElement>('button', 'btn btn-ghost', t('common.cancel'));
     cancel.type = 'button';
-    const save = itMk<HTMLButtonElement>('button', 'btn btn-primary', creating ? 'Create table' : 'Save columns');
+    const save = itMk<HTMLButtonElement>('button', 'btn btn-primary', creating ? t('inputColumns.create_table') : t('inputColumns.save_columns'));
     save.type = 'button';
     actions.append(cancel, save);
     box.appendChild(actions);
@@ -142,11 +142,11 @@ function itColumnsDialog(opts: { mode: 'create' | 'edit'; name?: string; columns
       name.value = d.name;
       name.maxLength = 100;
       name.placeholder = `column${n}`;
-      name.setAttribute('aria-label', `Column ${n} name`);
+      name.setAttribute('aria-label', t('inputColumns.column_name', { n }));
       name.addEventListener('input', () => { d.name = name.value; });
       const type = itMk<HTMLSelectElement>('select', 'ws-modal-input it-col-type');
-      type.setAttribute('aria-label', `Column ${n} type`);
-      [['text', 'Text'], ['number', 'Number'], ['date', 'Date']].forEach(([v, t]) => {
+      type.setAttribute('aria-label', t('inputColumns.column_type', { n }));
+      [['text', t('common.text')], ['number', t('common.number')], ['date', t('common.date')]].forEach(([v, t]) => {
         const o = itMk<HTMLOptionElement>('option', '', t);
         o.value = v;
         type.appendChild(o);
@@ -157,12 +157,12 @@ function itColumnsDialog(opts: { mode: 'create' | 'edit'; name?: string; columns
       const box2 = itMk<HTMLInputElement>('input');
       box2.type = 'checkbox';
       box2.checked = d.required;
-      box2.setAttribute('aria-label', `Column ${n} required`);
+      box2.setAttribute('aria-label', t('inputColumns.column_required', { n }));
       box2.addEventListener('change', () => { d.required = box2.checked; });
-      req.append(box2, itMk('span', '', 'Required'));
+      req.append(box2, itMk('span', '', t('common.required')));
       const lk = itMk<HTMLSelectElement>('select', 'ws-modal-input it-col-lookup');
-      lk.setAttribute('aria-label', `Column ${n} values from another dataset`);
-      const none = itMk<HTMLOptionElement>('option', '', 'Any value');
+      lk.setAttribute('aria-label', t('inputColumns.column_values_from_another_dataset', { n }));
+      const none = itMk<HTMLOptionElement>('option', '', t('inputColumns.any_value'));
       none.value = '';
       lk.appendChild(none);
       for (const c of choices) {
@@ -180,7 +180,7 @@ function itColumnsDialog(opts: { mode: 'create' | 'edit'; name?: string; columns
         const kt = d.lookup ? keyType(d.lookup) : null;
         if (kt) { d.type = kt; type.value = kt; }
         type.disabled = !!kt;
-        type.title = kt ? 'Follows the type of the column it looks up' : '';
+        type.title = kt ? t('inputColumns.follows_the_type_of_the_column') : '';
       };
       lk.addEventListener('change', () => {
         let pair: any = null;
@@ -191,7 +191,7 @@ function itColumnsDialog(opts: { mode: 'create' | 'edit'; name?: string; columns
       syncType();
       const x = itMk<HTMLButtonElement>('button', 'btn btn-sm btn-ghost it-col-x');
       x.type = 'button';
-      iconOnly(x, 'trash', `Remove column ${n}`);
+      iconOnly(x, 'trash', t('inputColumns.remove_column', { n }));
       x.addEventListener('click', () => { drafts.splice(i, 1); paint(); });
       r.append(name, type, req, lk, x);
       return r;
@@ -204,15 +204,15 @@ function itColumnsDialog(opts: { mode: 'create' | 'edit'; name?: string; columns
         list.appendChild(makeEmptyState({
           variant: 'columns',
           iconName: 'table',
-          title: 'Define your columns',
-          line: 'Pick a starting point above, or add columns one by one — a name, a type, and whether it is required or takes its values from another dataset.',
-          actionLabel: 'Add column',
+          title: t('inputColumns.define_your_columns'),
+          line: t('inputColumns.pick_a_starting_point_above_or'),
+          actionLabel: t('inputColumns.add_column'),
           onAction: () => { addColumn(); },
         }));
       }
       drafts.forEach((d, i) => list.appendChild(row(d, i)));
       const removed = (opts.columns || []).length - drafts.filter((d) => d.from >= 0).length;
-      warn.textContent = removed > 0 ? `Removing ${removed === 1 ? 'a column deletes its values' : removed + ' columns deletes their values'} — the table before this change stays in History.` : '';
+      warn.textContent = removed > 0 ? t('inputColumns.removing_the_table_before_this_change', { p0: removed === 1 ? t('inputColumns.a_column_deletes_its_values') : t('inputColumns.columns_deletes_their_values', { removed }) }) : '';
       warn.hidden = removed <= 0;
     }
 
@@ -253,11 +253,11 @@ function itColumnsDialog(opts: { mode: 'create' | 'edit'; name?: string; columns
           ? await window.hubInput.create(currentProjectId, nameInput.value.trim(), columns)
           : await window.hubInput.setColumns(currentProjectId, String(opts.datasetId), columns, drafts.map((d) => d.from));
       } catch (e: any) {
-        res = { ok: false, error: (e && e.message) || 'Could not save' };
+        res = { ok: false, error: (e && e.message) || t('common.could_not_save') };
       }
       save.disabled = false;
       if (!res || !res.ok) {
-        err.textContent = (res && res.error) || 'Could not save the columns.';
+        err.textContent = (res && res.error) || t('inputColumns.could_not_save_the_columns');
         err.hidden = false;
         return;
       }
@@ -283,7 +283,7 @@ async function itOpenHistory(): Promise<void> {
   if (!s) return;
   await itFlush();
   if (spIsOpen('history') && vhState && vhState.id === s.id) { spClose(); return; }
-  await vhOpen('dataset', s.id, s.name, 'Table');
+  await vhOpen('dataset', s.id, s.name, t('common.table'));
 }
 
 async function itEditColumns(): Promise<void> {
@@ -291,7 +291,7 @@ async function itEditColumns(): Promise<void> {
   if (!s) return;
   itCancelEdit();
   await itFlush();
-  if (s.pending.length || s.error) { showToast('Save the table first — ' + (s.error || 'edits are still being saved'), { kind: 'error' }); return; }
+  if (s.pending.length || s.error) { showToast(t('inputColumns.save_the_table_first', { p0: (s.error || t('inputColumns.edits_are_still_being_saved')) }), { kind: 'error' }); return; }
   const res = await itColumnsDialog({ mode: 'edit', name: s.name, columns: s.columns, datasetId: s.id });
   if (!res || itS !== s) return;
   itAdopt(res, true);
@@ -299,20 +299,20 @@ async function itEditColumns(): Promise<void> {
   s.sel = { r0: 0, c0: 0, r1: 0, c1: 0 };
   itRender();
   itPaintBar();
-  showToast('Columns saved — the previous layout is in History');
+  showToast(t('inputColumns.columns_saved_the_previous_layout_is'));
   if (typeof expId === 'string' && expId === s.id) void openSavedDataset(s.id);
 }
 
 /** New dataset → Input table: define it, create it, land on its grid ready to type. */
 async function itNewInputTable(): Promise<void> {
-  if (!currentProjectId) { showToast('Open a project first.'); return; }
+  if (!currentProjectId) { showToast(t('common.open_a_project_first')); return; }
   const res = await itColumnsDialog({ mode: 'create' });
   if (!res || !res.ok) return;
   if (currentSection !== 'datasets') selectSection('datasets');
   await refreshDatasetList();
   await openSavedDataset(String(res.id));
   itFocusGrid();
-  showToast('Input table created — type or paste your rows');
+  showToast(t('inputColumns.input_table_created_type_or_paste'));
 }
 
 // The doors, built at load beside the ones they sit with.
@@ -322,21 +322,21 @@ async function itNewInputTable(): Promise<void> {
     const b = itMk<HTMLButtonElement>('button', 'btn btn-ghost');
     b.type = 'button';
     b.id = 'ds-input-open';
-    iconLabel(b, 'table', 'Input table');
-    b.title = 'New dataset you type in — targets, budgets, mappings, notes';
+    iconLabel(b, 'table', t('inputColumns.input_table'));
+    b.title = t('inputColumns.new_dataset_you_type_in_targets');
     b.addEventListener('click', () => { void itNewInputTable(); });
     paste.after(b);
   }
   const emptyActions = document.querySelector('#ds-saved-empty .ws-empty-actions');
   if (emptyActions && !document.getElementById('ds-empty-input')) {
-    const b = itMk<HTMLButtonElement>('button', 'btn btn-ghost', 'Type a table');
+    const b = itMk<HTMLButtonElement>('button', 'btn btn-ghost', t('inputColumns.type_a_table'));
     b.type = 'button';
     b.id = 'ds-empty-input';
     b.addEventListener('click', () => { void itNewInputTable(); });
     emptyActions.appendChild(b);
   }
   registerCommand({
-    id: 'create.input', title: 'New dataset: input table', group: 'Create', icon: 'table',
+    id: 'create.input', title: t('inputColumns.new_dataset_input_table'), group: t('common.create'), icon: 'table',
     when: () => !!currentProjectId, run: () => itNewInputTable(),
   });
 })();

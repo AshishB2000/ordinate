@@ -101,7 +101,7 @@ function makeControlChip(card: any): HTMLElement {
   const label = document.createElement('span');
   label.className = 'dash-fb-chip-label';
   const param = control.kind === 'parameter' ? dashParamById(control.paramId) : null;
-  label.textContent = control.label || (param ? param.name : 'Filter');
+  label.textContent = control.label || (param ? param.name : t('common.filter'));
   if (control.kind === 'parameter') {
     chip.classList.add('dash-fb-chip--param');
     label.prepend(icon('sliders', 12));
@@ -118,7 +118,7 @@ function makeControlChip(card: any): HTMLElement {
   if (control.kind === 'parameter') {
     renderParamControl(card, wrap);
   } else if (!control.datasetId || !control.column) {
-    dashCardMissing(wrap, 'No source column.');
+    dashCardMissing(wrap, t('dashControlBar.no_source_column'));
   } else if (control.kind === 'multi') {
     renderMultiControl(card, wrap);
   } else if (control.kind === 'date_range') {
@@ -135,7 +135,7 @@ function makeControlChip(card: any): HTMLElement {
     const x = document.createElement('button');
     x.type = 'button';
     x.className = 'dash-fb-chip-x';
-    iconOnly(x, 'x', 'Clear ' + (control.label || 'filter'));
+    iconOnly(x, 'x', t('dashControlBar.clear', { p0: (control.label || 'filter') }));
     x.addEventListener('click', () => clearControlToAll(card));
     chip.appendChild(x);
   }
@@ -147,7 +147,7 @@ function makeControlChip(card: any): HTMLElement {
   menu.type = 'button';
   menu.className = 'dash-fb-chip-menu';
   menu.setAttribute('aria-haspopup', 'true');
-  iconOnly(menu, 'more-horizontal', 'Actions for ' + (control.label || 'filter'));
+  iconOnly(menu, 'more-horizontal', t('dashControlBar.actions_for', { p0: (control.label || 'filter') }));
   menu.addEventListener('click', (e) => {
     e.stopPropagation();
     openControlChipMenu(card, menu);
@@ -163,22 +163,22 @@ function openControlChipMenu(card: any, trigger: HTMLElement): void {
   const atAll = controlIsAll(card);
   if (card.control && card.control.kind === 'parameter') {
     // "Save as default" is the ONLY way a reader's value reaches the record.
-    const items: any[] = [{ label: 'Edit parameter…', onClick: () => { void editParameterControl(card); } }];
-    if (!atAll) items.push({ label: 'Save as default', onClick: () => saveParamDefault(card) });
-    items.push({ label: 'Remove', danger: true, onClick: () => removeParameterControl(card) });
+    const items: any[] = [{ label: t('dashControlBar.edit_parameter'), onClick: () => { void editParameterControl(card); } }];
+    if (!atAll) items.push({ label: t('dashControlBar.save_as_default'), onClick: () => saveParamDefault(card) });
+    items.push({ label: t('common.remove'), danger: true, onClick: () => removeParameterControl(card) });
     openRowMenu(trigger, items);
     return;
   }
   openRowMenu(trigger, [
-    { label: 'Edit…', onClick: () => { void handleEditControl(card); } },
+    { label: t('common.edit'), onClick: () => { void handleEditControl(card); } },
     {
       // Greyed-out menu items do not exist in this popup's vocabulary, so an
       // unselected control offers "Clear default" instead of a no-op "Set as
       // default" — the same click, the honest label for what it will do.
-      label: atAll ? 'Clear default' : 'Set as default',
+      label: atAll ? t('common.clear_default') : t('dashControlBar.set_as_default'),
       onClick: () => setControlDefaultFromCurrent(card),
     },
-    { label: 'Remove', danger: true, onClick: () => removeCard(card) },
+    { label: t('common.remove'), danger: true, onClick: () => removeCard(card) },
   ]);
 }
 
@@ -189,7 +189,7 @@ function setControlDefaultFromCurrent(card: any): void {
   const cur = controlState.get(card.id);
   if (controlIsAll(card) || cur === undefined) delete card.control.default;
   else card.control.default = cur;
-  markDashDirty('Set control default');
+  markDashDirty(t('common.set_control_default'));
   renderDashGrid();
 }
 
@@ -210,6 +210,6 @@ async function handleEditControl(card: any): Promise<void> {
   // the new one by a value that may not exist in it.
   controlState.delete(card.id);
   if (next.default) controlState.set(card.id, next.default);
-  markDashDirty('Edit control');
+  markDashDirty(t('common.edit_control'));
   renderDashGrid();
 }

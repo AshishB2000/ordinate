@@ -21,7 +21,7 @@ async function snOpen(id: string): Promise<void> {
   if (!currentProjectId) return;
   let s: any = null;
   try { s = await window.hubScenarios.get(currentProjectId, id); } catch (_) { s = null; }
-  if (!s || !s.id) { showToast('That scenario could not be opened.'); return; }
+  if (!s || !s.id) { showToast(t('scenarioPage.that_scenario_could_not_be_opened')); return; }
   if (snCurrent) await snFlush();
   if (typeof dashCurrent !== 'undefined' && dashCurrent) await handleBackToList();
   if (typeof stStory !== 'undefined' && stStory) await stClose();
@@ -72,7 +72,7 @@ function snChanged(opts: { setup?: boolean } = {}): void {
   clearTimeout(snComputeTimer);
   snComputeTimer = setTimeout(() => { void snCompute(); }, 120);
   clearTimeout(snSaveTimer);
-  snSetStatus('Editing…');
+  snSetStatus(t('scenarioPage.editing'));
   snSaveTimer = setTimeout(() => { void snFlush(); }, 600);
 }
 
@@ -85,7 +85,7 @@ async function snFlush(): Promise<void> {
   try {
     res = await window.hubScenarios.update(currentProjectId, cur.id, { name: cur.name, baseMetricIds: cur.baseMetricIds, drivers: cur.drivers });
   } catch (_) { res = null; }
-  if (snCurrent === cur) snSetStatus(res && res.ok ? 'Saved' : 'Could not save');
+  if (snCurrent === cur) snSetStatus(res && res.ok ? t('common.saved') : t('common.could_not_save'));
 }
 
 async function snCompute(): Promise<void> {
@@ -100,7 +100,7 @@ async function snCompute(): Promise<void> {
   } catch (_) { res = null; }
   if (my !== snSeq || !snCurrent) return;
   if (box) box.classList.remove('is-loading');
-  if (!res || res.ok === false) { snRenderError((res && res.error) || 'Could not compute the scenario.'); return; }
+  if (!res || res.ok === false) { snRenderError((res && res.error) || t('scenarioPage.could_not_compute_the_scenario')); return; }
   snResult = res;
   snRenderResults(res);
   snRenderDrivers();
@@ -127,9 +127,9 @@ function snRenderResults(res: any): void {
     empty.className = 'sn-kpis-empty';
     const h = document.createElement('p');
     h.className = 'sn-kpis-empty-h';
-    h.textContent = 'No metrics in this scenario yet';
+    h.textContent = t('scenarioPage.no_metrics_in_this_scenario_yet');
     const p = document.createElement('p');
-    p.textContent = 'Add the metrics you want to see move — revenue, margin, units — and every driver is applied to all of them at once.';
+    p.textContent = t('scenarioPage.add_the_metrics_you_want_to');
     empty.append(icon('gauge', 20), h, p);
     kpis.appendChild(empty);
   }
@@ -155,7 +155,7 @@ function snKpi(m: any, focused: boolean): HTMLElement {
   b.className = 'sn-kpi' + (m.missing ? ' is-missing' : '');
   b.dataset.metricId = m.metricId;
   b.setAttribute('aria-pressed', String(focused));
-  b.title = m.missing ? 'This metric no longer exists' : 'Show what moves ' + m.name + ' in the sensitivity chart';
+  b.title = m.missing ? t('scenarioPage.this_metric_no_longer_exists') : t('scenarioPage.show_what_moves_in_the_sensitivity', { name: m.name });
   const name = document.createElement('span');
   name.className = 'sn-kpi-name';
   name.textContent = m.name;
@@ -164,13 +164,13 @@ function snKpi(m: any, focused: boolean): HTMLElement {
   value.textContent = m.display || '—';
   const base = document.createElement('span');
   base.className = 'sn-kpi-base tnum';
-  base.textContent = 'Baseline ' + (m.baselineDisplay || '—');
+  base.textContent = t('common.baseline', { p0: (m.baselineDisplay || '—') });
   const delta = document.createElement('span');
   const tone = m.delta === 0 || m.delta === null ? 'flat' : m.tone;
   delta.className = 'sn-kpi-delta tnum is-' + tone;
   if (m.delta !== null && m.delta !== 0) delta.appendChild(icon(m.delta > 0 ? 'arrow-up' : 'arrow-down', 12));
   const text = document.createElement('span');
-  text.textContent = m.delta === null ? 'No figure' : m.delta === 0 ? 'No change' : m.deltaDisplay + (typeof m.pct === 'number' ? ' (' + kpiPct(m.pct) + ')' : '');
+  text.textContent = m.delta === null ? t('scenarioPage.no_figure') : m.delta === 0 ? t('common.no_change') : m.deltaDisplay + (typeof m.pct === 'number' ? ' (' + kpiPct(m.pct) + ')' : '');
   delta.appendChild(text);
   b.append(name, value, base, delta);
   if (!m.missing) b.addEventListener('click', () => { snFocus = m.metricId; void snCompute(); });
@@ -183,7 +183,7 @@ function snRenderTornado(res: any): void {
   const sel = snEl<HTMLSelectElement>('sn-tornado-metric');
   if (!body) return;
   body.textContent = '';
-  const t = res.tornado;
+  const tv = res.tornado;
   if (sel) {
     sel.textContent = '';
     for (const m of res.metrics) {
@@ -193,47 +193,47 @@ function snRenderTornado(res: any): void {
       o.textContent = m.name;
       sel.appendChild(o);
     }
-    sel.value = t ? t.metricId : '';
-    sel.disabled = !t;
+    sel.value = tv ? tv.metricId : '';
+    sel.disabled = !tv;
   }
   if (sub) {
-    sub.textContent = t
-      ? `How far ${t.name} (${t.display}) moves when each driver's target moves ${Math.round(t.step * 100)}% either way, the others as set. Widest first.`
-      : 'Which driver matters most, once there is a metric with a figure.';
+    sub.textContent = tv
+      ? t('scenarioPage.how_far_moves_when_each_driver', { name: tv.name, display: tv.display, p2: Math.round(tv.step * 100) })
+      : t('scenarioPage.which_driver_matters_most_once_there');
   }
-  const still = !!t && t.bars.length > 0 && t.bars.every((b: any) => b.swing === 0);
-  if (!t || !t.bars.length || still) {
+  const still = !!tv && tv.bars.length > 0 && tv.bars.every((b: any) => b.swing === 0);
+  if (!tv || !tv.bars.length || still) {
     const e = document.createElement('div');
     e.className = 'sn-tornado-empty';
     e.appendChild(snTornadoArt());
     const p = document.createElement('p');
-    p.textContent = !t ? 'Add a metric and a driver to see the sensitivity.'
-      : still ? `None of these drivers moves ${t.name}. Pick another metric above, or add a driver on one of its inputs.`
-        : `Add a driver to see which one moves ${t.name} most.`;
+    p.textContent = !tv ? t('scenarioPage.add_a_metric_and_a_driver')
+      : still ? t('scenarioPage.none_of_these_drivers_moves_pick', { name: tv.name })
+        : t('scenarioPage.add_a_driver_to_see_which', { name: tv.name });
     e.appendChild(p);
     body.appendChild(e);
     return;
   }
-  const v = typeof t.value === 'number' ? t.value : 0;
+  const v = typeof tv.value === 'number' ? tv.value : 0;
   let scale = 0;
-  for (const bar of t.bars) {
+  for (const bar of tv.bars) {
     for (const x of [bar.low, bar.high]) if (typeof x === 'number') scale = Math.max(scale, Math.abs(x - v));
   }
   const head = document.createElement('div');
   head.className = 'sn-tor-row sn-tor-row--head';
   head.setAttribute('aria-hidden', 'true');
-  for (const [cls, txt] of [['', 'Driver'], ['sn-tor-num', `At −${Math.round(t.step * 100)}%`], ['sn-tor-axis', t.display], ['sn-tor-num', `At +${Math.round(t.step * 100)}%`]]) {
+  for (const [cls, txt] of [['', t('scenarioPage.driver')], ['sn-tor-num', t('scenarioPage.at', { p0: Math.round(tv.step * 100) })], ['sn-tor-axis', tv.display], ['sn-tor-num', t('scenarioPage.at_2', { p0: Math.round(tv.step * 100) })]]) {
     const s = document.createElement('span');
     if (cls) s.className = cls;
     s.textContent = txt;
     head.appendChild(s);
   }
   body.appendChild(head);
-  for (const bar of t.bars) {
+  for (const bar of tv.bars) {
     const row = document.createElement('div');
     row.className = 'sn-tor-row' + (bar.swing === 0 ? ' is-still' : '');
     row.setAttribute('role', 'img');
-    row.setAttribute('aria-label', `${bar.label}: ${bar.lowDisplay} at −${Math.round(t.step * 100)}%, ${bar.highDisplay} at +${Math.round(t.step * 100)}%`);
+    row.setAttribute('aria-label', t('scenarioPage.at_at', { label: bar.label, lowDisplay: bar.lowDisplay, p2: Math.round(tv.step * 100), highDisplay: bar.highDisplay }));
     const label = document.createElement('span');
     label.className = 'sn-tor-label';
     label.textContent = bar.label;
@@ -260,7 +260,7 @@ function snRenderTornado(res: any): void {
   }
   const legend = document.createElement('div');
   legend.className = 'sn-tor-legend';
-  for (const [side, txt] of [['low', `Driver's target −${Math.round(t.step * 100)}%`], ['high', `Driver's target +${Math.round(t.step * 100)}%`]]) {
+  for (const [side, txt] of [['low', t('scenarioPage.driver_s_target', { p0: Math.round(tv.step * 100) })], ['high', t('scenarioPage.driver_s_target_2', { p0: Math.round(tv.step * 100) })]]) {
     const item = document.createElement('span');
     const sw = document.createElement('span');
     sw.className = 'sn-tor-swatch sn-tor-bar--' + side;
@@ -284,7 +284,7 @@ function snMoreMenu(anchor: HTMLElement): void {
       b.addEventListener('click', () => { close(); run(); });
       menu.appendChild(b);
     };
-    add('Duplicate', () => { void snFlush().then(() => snDuplicate(cur.id)); });
+    add(t('common.duplicate'), () => { void snFlush().then(() => snDuplicate(cur.id)); });
     add('Delete', () => { void snDelete({ id: cur.id, name: cur.name }); });
   });
 }

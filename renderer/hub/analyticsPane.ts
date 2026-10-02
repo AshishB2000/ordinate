@@ -23,20 +23,20 @@ let anpSeries: string[] = [];
 let anpOpenId = '';
 
 const ANP_KINDS: Array<{ kind: string; label: string; icon: string; hint: string }> = [
-  { kind: 'reference', label: 'Reference line', icon: 'minus', hint: 'A line at a value, a statistic of the series, or a metric' },
-  { kind: 'band', label: 'Band', icon: 'columns', hint: 'Shade between two values, or mean ± σ' },
-  { kind: 'target', label: 'Target', icon: 'target', hint: 'A goal line with attainment' },
-  { kind: 'trend', label: 'Trend line', icon: 'trending-up', hint: 'Least-squares line with its slope and R²' },
-  { kind: 'moving_average', label: 'Moving average', icon: 'chart-line', hint: 'Trailing average over N points' },
-  { kind: 'forecast', label: 'Forecast', icon: 'chart-area', hint: 'Linear, seasonal naive or Holt-Winters, with an 80% interval' },
-  { kind: 'annotation', label: 'Annotation', icon: 'pencil', hint: 'A note pinned to a category — or ⌥-click a mark' },
-  { kind: 'highlight', label: 'Highlight', icon: 'star', hint: 'Outline the top, bottom, or points past a threshold' },
+  { kind: 'reference', label: t('analyticsPane.reference_line'), icon: 'minus', hint: t('analyticsPane.a_line_at_a_value_a') },
+  { kind: 'band', label: t('analyticsPane.band'), icon: 'columns', hint: t('analyticsPane.shade_between_two_values_or_mean') },
+  { kind: 'target', label: t('common.target'), icon: 'target', hint: t('analyticsPane.a_goal_line_with_attainment') },
+  { kind: 'trend', label: t('analyticsPane.trend_line'), icon: 'trending-up', hint: t('analyticsPane.least_squares_line_with_its_slope') },
+  { kind: 'moving_average', label: t('common.moving_average'), icon: 'chart-line', hint: t('analyticsPane.trailing_average_over_n_points') },
+  { kind: 'forecast', label: t('analyticsPane.forecast'), icon: 'chart-area', hint: t('analyticsPane.linear_seasonal_naive_or_holt_winters') },
+  { kind: 'annotation', label: t('analyticsPane.annotation'), icon: 'pencil', hint: t('analyticsPane.a_note_pinned_to_a_category') },
+  { kind: 'highlight', label: t('analyticsPane.highlight'), icon: 'star', hint: t('analyticsPane.outline_the_top_bottom_or_points') },
 ];
 
 const ANP_SOURCES: Array<{ value: string; label: string }> = [
-  { value: 'constant', label: 'Constant' }, { value: 'avg', label: 'Average' }, { value: 'median', label: 'Median' },
-  { value: 'min', label: 'Minimum' }, { value: 'max', label: 'Maximum' }, { value: 'percentile', label: 'Percentile' },
-  { value: 'metric', label: 'Metric…' },
+  { value: 'constant', label: t('analyticsPane.constant') }, { value: 'avg', label: 'Average' }, { value: 'median', label: t('common.median') },
+  { value: 'min', label: t('common.minimum') }, { value: 'max', label: t('common.maximum') }, { value: 'percentile', label: t('common.percentile') },
+  { value: 'metric', label: t('common.metric_2') },
 ];
 
 function anpKindInfo(kind: string): { kind: string; label: string; icon: string; hint: string } {
@@ -74,7 +74,7 @@ function anpApplyResolved(data: any): void {
   for (const r of (data && Array.isArray(data.analytics) ? data.analytics : [])) anpResolved.set(String(r.id), r);
   anpLabels = (data && Array.isArray(data.labels) ? data.labels : []).map(String);
   anpSeries = (data && Array.isArray(data.series) ? data.series : [])
-    .filter((s: any) => s && s.role !== 'overlay').map((s: any, i: number) => String(s.name || `Series ${i + 1}`));
+    .filter((s: any) => s && s.role !== 'overlay').map((s: any, i: number) => String(s.name || t('common.series_2', { p0: i + 1 })));
   anpRender();
 }
 
@@ -100,7 +100,7 @@ function anpOverlayDragged(id: string, value: number): void {
 
 /** ⌥-click on a mark: pin a note to that category. */
 async function anpAnnotateAt(label: string, seriesIndex: number): Promise<void> {
-  const text = await promptModal(`Annotate ${label}`, '', 'Add note');
+  const text = await promptModal(t('analyticsPane.annotate', { label }), '', t('analyticsPane.add_note'));
   if (text === null || !text.trim()) return;
   const ov: any = { id: anpNewId(), kind: 'annotation', at: label, text: text.trim() };
   if (seriesIndex > 0 && seriesIndex < anpSeries.length) ov.series = seriesIndex;
@@ -118,7 +118,7 @@ function anpDefaults(kind: string): any {
   if (kind === 'band') ov.sd = 1;
   if (kind === 'moving_average') ov.window = 3;
   if (kind === 'forecast') { ov.method = 'linear'; ov.horizon = 3; ov.season = 'auto'; }
-  if (kind === 'annotation') { ov.at = anpLabels[anpLabels.length - 1] || ''; ov.text = 'Note'; }
+  if (kind === 'annotation') { ov.at = anpLabels[anpLabels.length - 1] || ''; ov.text = t('common.note'); }
   if (kind === 'highlight') { ov.rule = 'top'; ov.n = 3; }
   return ov;
 }
@@ -159,7 +159,7 @@ function anpOpenAddMenu(anchor: HTMLElement): void {
     name.textContent = k.label;
     const hint = document.createElement('span');
     hint.className = 'anp-menu-hint';
-    hint.textContent = ok ? k.hint : `Not drawn on ${VIZ_LABELS[vizCurrentChartType] || 'this chart'}`;
+    hint.textContent = ok ? k.hint : t('analyticsPane.not_drawn_on', { p0: VIZ_LABELS[vizCurrentChartType] || t('analyticsPane.this_chart') });
     text.append(name, hint);
     b.appendChild(text);
     b.addEventListener('click', (e) => {
@@ -203,7 +203,7 @@ function anpRender(): void {
   head.className = 'anp-head';
   const title = document.createElement('span');
   title.className = 'viz-field-label anp-title';
-  title.textContent = 'Analytics';
+  title.textContent = t('analyticsPane.analytics');
   const count = document.createElement('span');
   count.className = 'anp-count';
   count.textContent = vizAnalytics.length ? String(vizAnalytics.length) : '';
@@ -211,7 +211,7 @@ function anpRender(): void {
   add.type = 'button';
   add.className = 'btn btn-sm anp-add';
   add.setAttribute('aria-haspopup', 'menu');
-  add.append(icon('plus'), Object.assign(document.createElement('span'), { textContent: 'Add' }));
+  add.append(icon('plus'), Object.assign(document.createElement('span'), { textContent: t('common.add') }));
   add.addEventListener('click', (e) => { e.stopPropagation(); anpOpenAddMenu(add); });
   head.append(title, count, add);
   host.appendChild(head);
@@ -219,7 +219,7 @@ function anpRender(): void {
   if (!vizAnalytics.length) {
     const empty = document.createElement('p');
     empty.className = 'anp-empty';
-    empty.textContent = 'Lay a reference line, target, trend or forecast over the chart. Drag a line to move it; ⌥-click a mark to annotate it.';
+    empty.textContent = t('analyticsPane.lay_a_reference_line_target_trend');
     host.appendChild(empty);
     return;
   }
@@ -256,10 +256,10 @@ function anpRow(ov: any, accepted: string[]): HTMLElement {
   const read = document.createElement('span');
   read.className = 'anp-row-read';
   const drawn = accepted.indexOf(ov.kind) >= 0;
-  if (!drawn) { read.textContent = `Not drawn on ${VIZ_LABELS[vizCurrentChartType] || 'this chart'}`; read.classList.add('is-warn'); }
-  else if (ov.hidden) read.textContent = 'Hidden';
+  if (!drawn) { read.textContent = t('analyticsPane.not_drawn_on', { p0: VIZ_LABELS[vizCurrentChartType] || t('analyticsPane.this_chart') }); read.classList.add('is-warn'); }
+  else if (ov.hidden) read.textContent = t('analyticsPane.hidden');
   else if (res && res.warning) { read.textContent = res.warning; read.classList.add('is-warn'); }
-  else read.textContent = res ? res.text : 'Computing…';
+  else read.textContent = res ? res.text : t('common.computing');
   text.append(name, read);
   toggle.append(glyph, text);
   toggle.addEventListener('click', () => { anpOpenId = anpOpenId === ov.id ? '' : ov.id; anpRender(); });
@@ -267,12 +267,12 @@ function anpRow(ov: any, accepted: string[]): HTMLElement {
   const eye = document.createElement('button');
   eye.type = 'button';
   eye.className = 'anp-icon-btn';
-  iconOnly(eye, ov.hidden ? 'eye-off' : 'eye', ov.hidden ? 'Show overlay' : 'Hide overlay');
+  iconOnly(eye, ov.hidden ? 'eye-off' : 'eye', ov.hidden ? t('analyticsPane.show_overlay') : t('analyticsPane.hide_overlay'));
   eye.addEventListener('click', () => { if (ov.hidden) delete ov.hidden; else ov.hidden = true; anpChanged(); });
   const del = document.createElement('button');
   del.type = 'button';
   del.className = 'anp-icon-btn';
-  iconOnly(del, 'x', 'Remove overlay');
+  iconOnly(del, 'x', t('analyticsPane.remove_overlay'));
   del.addEventListener('click', () => { vizAnalytics = vizAnalytics.filter((o) => o !== ov); anpChanged(); });
   bar.append(toggle, eye, del);
   row.appendChild(bar);

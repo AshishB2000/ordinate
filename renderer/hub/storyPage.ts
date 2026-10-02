@@ -50,7 +50,7 @@ async function stOpen(id: string, opts: { focusEnd?: boolean } = {}): Promise<vo
   } catch (_) {
     s = null;
   }
-  if (!s || !s.id) { showToast('That story could not be opened.'); return; }
+  if (!s || !s.id) { showToast(t('storyPage.that_story_could_not_be_opened')); return; }
   // The dashboard editor lives on the same section: leave it (saved) first.
   if (dashCurrent) await handleBackToList();
   if (currentSection !== 'analyses') selectSection('analyses');
@@ -99,7 +99,7 @@ function stSetStatus(text: string): void {
 
 function stScheduleSave(): void {
   clearTimeout(stSaveTimer);
-  stSetStatus('Saving…');
+  stSetStatus(t('common.saving'));
   stSaveTimer = setTimeout(() => { void stFlush(); }, 600);
 }
 
@@ -117,7 +117,7 @@ async function stFlush(): Promise<void> {
     } catch (_) {
       res = null;
     }
-    if (stStory === story) stSetStatus(res && res.id ? 'Saved' : 'Could not save');
+    if (stStory === story) stSetStatus(res && res.id ? t('common.saved') : t('common.could_not_save'));
   })();
   await stSaving;
   stSaving = null;
@@ -142,8 +142,8 @@ function stPaintUndo(): void {
   const r = stEl<HTMLButtonElement>('st-redo');
   const ul = dashHistUndoLabel(stHist);
   const rl = dashHistRedoLabel(stHist);
-  if (u) { u.disabled = !ul; u.title = ul ? 'Undo ' + ul.toLowerCase() : 'Nothing to undo'; }
-  if (r) { r.disabled = !rl; r.title = rl ? 'Redo ' + rl.toLowerCase() : 'Nothing to redo'; }
+  if (u) { u.disabled = !ul; u.title = ul ? t('storyPage.undo', { p0: ul.toLowerCase() }) : t('common.nothing_to_undo'); }
+  if (r) { r.disabled = !rl; r.title = rl ? t('storyPage.redo', { p0: rl.toLowerCase() }) : t('common.nothing_to_redo'); }
 }
 
 function stHistStep(dir: 'undo' | 'redo'): void {
@@ -163,7 +163,7 @@ function stHistStep(dir: 'undo' | 'redo'): void {
   }
   stScheduleSave();
   stPaintUndo();
-  showToast((dir === 'undo' ? 'Undid ' : 'Redid ') + e.label.toLowerCase());
+  showToast((dir === 'undo' ? t('storyPage.undid') : t('storyPage.redid')) + e.label.toLowerCase());
 }
 function stUndo(): void { stHistStep('undo'); }
 function stRedo(): void { stHistStep('redo'); }
@@ -214,7 +214,7 @@ function stRemoveBlock(id: string): void {
   if (i < 0) return;
   stStory.blocks.splice(i, 1);
   stEnsureTail();
-  stCommit('Delete block', { render: true });
+  stCommit(t('common.delete_block'), { render: true });
 }
 
 function stMoveBlock(id: string, toIndex: number): void {
@@ -224,7 +224,7 @@ function stMoveBlock(id: string, toIndex: number): void {
   const to = Math.max(0, Math.min(toIndex > from ? toIndex - 1 : toIndex, stStory.blocks.length));
   stStory.blocks.splice(to, 0, b);
   stEnsureTail();
-  stCommit('Move block', { render: true });
+  stCommit(t('storyPage.move_block'), { render: true });
 }
 
 function stRender(): void {
@@ -248,12 +248,12 @@ function stBlockRow(block: any, index: number): HTMLElement {
   const add = document.createElement('button');
   add.type = 'button';
   add.className = 'st-gutter-btn st-add';
-  iconOnly(add, 'plus', 'Add a block below');
+  iconOnly(add, 'plus', t('storyPage.add_a_block_below'));
   add.addEventListener('click', () => stOpenPicker(add, (kind) => { void stAddAfter(block.id, kind); }));
   const handle = document.createElement('button');
   handle.type = 'button';
   handle.className = 'st-gutter-btn st-handle';
-  iconOnly(handle, 'more-vertical', 'Drag to move · click for options');
+  iconOnly(handle, 'more-vertical', t('storyPage.drag_to_move_click_for_options'));
   handle.addEventListener('mousedown', () => { row.draggable = true; });
   handle.addEventListener('click', () => stBlockMenu(handle, block, index));
   gutter.appendChild(add);
@@ -309,13 +309,13 @@ function stBlockMenu(anchor: HTMLElement, block: any, index: number): void {
       b.addEventListener('click', () => { close(); run(); });
       menu.appendChild(b);
     };
-    add('Move up', () => stMoveBlock(block.id, index - 1), index === 0);
-    add('Move down', () => stMoveBlock(block.id, index + 2), index >= stStory.blocks.length - 1);
-    add('Duplicate', () => {
+    add(t('common.move_up'), () => stMoveBlock(block.id, index - 1), index === 0);
+    add(t('common.move_down'), () => stMoveBlock(block.id, index + 2), index >= stStory.blocks.length - 1);
+    add(t('common.duplicate'), () => {
       stInsertAfter(block.id, Object.assign(JSON.parse(JSON.stringify(block)), { id: stNewId() }));
-      stCommit('Duplicate block', { render: true });
+      stCommit(t('storyPage.duplicate_block'), { render: true });
     });
-    if (block.kind === 'visual') add('Open visual', () => { selectSection('visuals'); void openSavedVisual(block.visualId); });
+    if (block.kind === 'visual') add(t('storyPage.open_visual'), () => { selectSection('visuals'); void openSavedVisual(block.visualId); });
     add('Delete', () => stRemoveBlock(block.id));
   });
 }
@@ -326,7 +326,7 @@ async function stAddAfter(id: string, kind: string): Promise<void> {
   if (!block) return;
   stInsertAfter(id, block);
   stEnsureTail();
-  stCommit('Add block', { render: true });
+  stCommit(t('storyPage.add_block'), { render: true });
   if (block.kind === 'text' || block.kind === 'callout') stEditBlock(block.id);
 }
 
@@ -369,8 +369,8 @@ function initStoryPage(): void {
   if (name) {
     name.addEventListener('input', () => {
       if (!stStory) return;
-      stStory.name = name.value.replace(/\s+/g, ' ').trim() || 'Untitled story';
-      stCommit('Rename', { coalesce: true });
+      stStory.name = name.value.replace(/\s+/g, ' ').trim() || t('common.untitled_story');
+      stCommit(t('common.rename'), { coalesce: true });
     });
     name.addEventListener('keydown', (e) => { if (e.key === 'Enter') name.blur(); });
   }
@@ -389,10 +389,10 @@ function initStoryPage(): void {
         const b = document.createElement('button');
         b.type = 'button';
         b.className = 'chart-menu-item dash-card-menu-rm';
-        b.textContent = 'Delete story';
+        b.textContent = t('storyPage.delete_story');
         b.addEventListener('click', () => {
           close();
-          if (!stStory || !window.confirm(`Delete “${stStory.name}”? The charts and metrics it shows are not deleted.`)) return;
+          if (!stStory || !window.confirm(t('common.delete_the_charts_and_metrics_it', { name: stStory.name }))) return;
           const id = stStory.id;
           clearTimeout(stSaveTimer);
           stSaveTimer = 0;

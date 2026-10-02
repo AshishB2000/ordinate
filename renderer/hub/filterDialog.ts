@@ -82,22 +82,22 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
 
     const title = document.createElement('div');
     title.className = 'ws-modal-title';
-    title.textContent = 'Filter: ' + column;
+    title.textContent = t('filterDialog.filter', { column });
     box.appendChild(title);
 
     const sub = document.createElement('p');
     sub.className = 'fd-sub';
     sub.textContent =
-      type === 'number' ? 'Number column' : type === 'date' ? 'Date column' : 'Text column';
+      type === 'number' ? t('filterDialog.number_column') : type === 'date' ? t('common.date_column') : t('common.text_column');
     box.appendChild(sub);
 
     // ── Mode tabs ────────────────────────────────────────────────────────────
     const modes: Array<{ id: string; label: string }> =
       type === 'number'
-        ? [{ id: 'range', label: 'Range' }, { id: 'cond', label: 'Condition' }]
+        ? [{ id: 'range', label: t('common.range') }, { id: 'cond', label: t('common.condition') }]
         : type === 'date'
-          ? [{ id: 'range', label: 'Range' }, { id: 'relative', label: 'Relative' }]
-          : [{ id: 'values', label: 'Values' }, { id: 'cond', label: 'Condition' }];
+          ? [{ id: 'range', label: t('common.range') }, { id: 'relative', label: t('common.relative') }]
+          : [{ id: 'values', label: t('common.values') }, { id: 'cond', label: t('common.condition') }];
 
     let mode = modes[0].id;
     if (existing.op === 'period') mode = 'relative';
@@ -150,11 +150,11 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'btn';
-    cancel.textContent = 'Cancel';
+    cancel.textContent = t('common.cancel');
     const apply = document.createElement('button');
     apply.type = 'button';
     apply.className = 'btn btn-primary';
-    apply.textContent = 'Apply';
+    apply.textContent = t('common.apply');
     actions.appendChild(cancel);
     actions.appendChild(apply);
     box.appendChild(actions);
@@ -228,9 +228,9 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
       const search = document.createElement('input');
       search.type = 'text';
       search.className = 'ws-modal-input fd-search';
-      search.placeholder = 'Search values…';
+      search.placeholder = t('common.search_values');
       search.value = searchTerm;
-      search.setAttribute('aria-label', 'Search values');
+      search.setAttribute('aria-label', t('common.search_values_2'));
       search.addEventListener('input', () => {
         searchTerm = search.value;
         // Debounced: every keystroke is a query against main, and the answer
@@ -247,7 +247,7 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
       all.className = 'fd-link';
       // "shown", not "all": the list is capped, and a button that claimed to
       // select every value while selecting 200 would be a lie.
-      all.textContent = 'Select all shown';
+      all.textContent = t('common.select_all_shown');
       all.addEventListener('click', () => {
         listHost?.querySelectorAll('input[type=checkbox]').forEach((el) => {
           const cb = el as HTMLInputElement;
@@ -260,7 +260,7 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
       const none = document.createElement('button');
       none.type = 'button';
       none.className = 'fd-link';
-      none.textContent = 'Clear selection';
+      none.textContent = t('common.clear_selection');
       none.addEventListener('click', () => {
         selected.clear();
         listHost?.querySelectorAll('input[type=checkbox]').forEach((el) => {
@@ -279,7 +279,7 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
       exCb.checked = exclude;
       exCb.addEventListener('change', () => { exclude = exCb.checked; });
       exWrap.appendChild(exCb);
-      exWrap.appendChild(document.createTextNode(' Exclude these'));
+      exWrap.appendChild(document.createTextNode(t('filterDialog.exclude_these')));
       bulk.appendChild(exWrap);
       body.appendChild(bulk);
 
@@ -304,7 +304,7 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
     async function loadValues(): Promise<void> {
       if (!listHost) return;
       const seq = ++listSeq;
-      listHost.textContent = 'Loading…';
+      listHost.textContent = t('common.loading');
       let res: any = null;
       try {
         res = await window.hub.datasetDistinct(opts.projectId, opts.datasetId, column, FD_PAGE, searchTerm);
@@ -322,7 +322,7 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
       if (values.length === 0) {
         const empty = document.createElement('p');
         empty.className = 'fd-empty';
-        empty.textContent = searchTerm ? 'No values match that search.' : 'This column has no values to filter on.';
+        empty.textContent = searchTerm ? t('common.no_values_match_that_search') : t('common.this_column_has_no_values_to');
         listHost.appendChild(empty);
       }
       values.forEach((v) => {
@@ -353,10 +353,10 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
       if (!noteEl) return;
       const parts: string[] = [];
       // Say it plainly when the list is a window onto something larger.
-      if (lastTotal > lastShown) parts.push(`Showing the first ${lastShown} of ${lastTotal} values — search to narrow.`);
+      if (lastTotal > lastShown) parts.push(t('filterDialog.showing_the_first_of_values_search', { lastShown, lastTotal }));
       if (selected.size > 0) parts.push(`${selected.size} selected.`);
       const refs = [...selected].filter((v) => /^\[\[/.test(v));
-      if (refs.length) parts.push('Follows ' + refs.join(', ') + '.');
+      if (refs.length) parts.push(t('filterDialog.follows', { p0: refs.join(', ') }));
       noteEl.textContent = parts.join(' ');
     }
 
@@ -378,18 +378,17 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
         wrap.appendChild(input);
         return wrap;
       };
-      body.appendChild(mk(type === 'date' ? 'From' : 'Minimum', rangeMin, (v) => { rangeMin = v; }));
-      body.appendChild(mk(type === 'date' ? 'To' : 'Maximum', rangeMax, (v) => { rangeMax = v; }));
+      body.appendChild(mk(type === 'date' ? t('common.from') : t('common.minimum'), rangeMin, (v) => { rangeMin = v; }));
+      body.appendChild(mk(type === 'date' ? t('common.to') : t('common.maximum'), rangeMax, (v) => { rangeMax = v; }));
 
       const hint = document.createElement('p');
       hint.className = 'fd-note';
       if (type === 'date' && !useDate) {
         // The honest version of "we can't use a date picker here".
         hint.textContent =
-          'These dates are not stored as YYYY-MM-DD, so they are compared as text. ' +
-          'Type the value exactly as it appears in the data.';
+          t('filterDialog.these_dates_are_not_stored_as');
       } else {
-        hint.textContent = 'Leave either box empty for an open-ended range. Both bounds are inclusive.';
+        hint.textContent = t('filterDialog.leave_either_box_empty_for_an');
       }
       body.appendChild(hint);
     }
@@ -401,19 +400,19 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
           ? [
               { value: 'contains', label: 'contains' },
               { value: '=', label: 'equals' },
-              { value: '!=', label: 'does not equal' },
-              { value: 'is_empty', label: 'is empty' },
-              { value: 'not_empty', label: 'is not empty' },
+              { value: '!=', label: t('common.does_not_equal') },
+              { value: 'is_empty', label: t('common.is_empty') },
+              { value: 'not_empty', label: t('common.is_not_empty') },
             ]
           : [
               { value: '=', label: 'equals' },
-              { value: '!=', label: 'does not equal' },
-              { value: '>', label: 'greater than' },
-              { value: '<', label: 'less than' },
-              { value: '>=', label: 'at least' },
-              { value: '<=', label: 'at most' },
-              { value: 'is_empty', label: 'is empty' },
-              { value: 'not_empty', label: 'is not empty' },
+              { value: '!=', label: t('common.does_not_equal') },
+              { value: '>', label: t('common.greater_than') },
+              { value: '<', label: t('common.less_than') },
+              { value: '>=', label: t('common.at_least') },
+              { value: '<=', label: t('common.at_most') },
+              { value: 'is_empty', label: t('common.is_empty') },
+              { value: 'not_empty', label: t('common.is_not_empty') },
             ];
       if (!ops.some((o) => o.value === condOp)) condOp = ops[0].value;
 
@@ -421,7 +420,7 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
       opWrap.className = 'fd-field';
       const opSpan = document.createElement('span');
       opSpan.className = 'fd-field-label';
-      opSpan.textContent = 'Condition';
+      opSpan.textContent = t('common.condition');
       const sel = document.createElement('select');
       sel.className = 'ws-modal-input';
       ops.forEach((o) => {
@@ -439,7 +438,7 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
       valWrap.className = 'fd-field';
       const valSpan = document.createElement('span');
       valSpan.className = 'fd-field-label';
-      valSpan.textContent = 'Value';
+      valSpan.textContent = t('common.value');
       const valIn = document.createElement('input');
       valIn.className = 'ws-modal-input';
       // A parameter reference is text even on a number column: main replaces
@@ -503,7 +502,7 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
     paintTabs();
     paintBody();
     syncApply();
-    a11y = makeModalAccessible(box, 'Filter: ' + column, box.querySelector('input') as HTMLElement | null);
+    a11y = makeModalAccessible(box, t('filterDialog.filter', { column }), box.querySelector('input') as HTMLElement | null);
     if (type === 'date') void probeDateShape();
   });
 }
@@ -525,7 +524,7 @@ function fdParamChips(
   row.className = 'fd-params';
   const lead = document.createElement('span');
   lead.className = 'fd-params-lead';
-  lead.textContent = 'Or use a parameter';
+  lead.textContent = t('filterDialog.or_use_a_parameter');
   row.appendChild(lead);
   list.forEach((p) => {
     const b = document.createElement('button');
@@ -533,7 +532,7 @@ function fdParamChips(
     b.className = 'fd-param-chip';
     b.appendChild(icon('sliders', 12));
     b.appendChild(document.createTextNode(' ' + p.name));
-    b.title = 'Filter by [[' + p.name + ']] — follows the ' + p.name + ' control';
+    b.title = t('filterDialog.filter_by_follows_the_control', { name: p.name });
     b.addEventListener('click', () => use(p.name));
     row.appendChild(b);
   });

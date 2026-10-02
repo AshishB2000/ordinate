@@ -40,7 +40,7 @@ async function captureDraft(
   };
   if (!entry || !entry.result) return null;
   if (!currentProjectId) {
-    say('Open a project first.');
+    say(t('common.open_a_project_first'));
     return null;
   }
   let draft: any;
@@ -50,12 +50,12 @@ async function captureDraft(
     draft = null;
   }
   if (!draft || draft.ok === false) {
-    say((draft && draft.error) || 'Could not read the extracted table.');
+    say((draft && draft.error) || t('captureDataset.could_not_read_the_extracted_table'));
     return null;
   }
   const columns = Array.isArray(draft.columns) ? draft.columns : [];
   if (columns.length === 0) {
-    say('That capture had no table to save.');
+    say(t('captureDataset.that_capture_had_no_table_to'));
     return null;
   }
   (Array.isArray(draft.warnings) ? draft.warnings : []).forEach((w: string) => say(String(w)));
@@ -75,14 +75,14 @@ async function captureDraft(
 async function openCaptureComposer(entry: any): Promise<void> {
   const draft = await captureDraft(entry);
   if (!draft) return;
-  const name = (entry.result && entry.result.title) || entry.title || 'Captured data';
+  const name = (entry.result && entry.result.title) || entry.title || t('captureDataset.captured_data');
 
   // The model's own caution, said once, where the review happens.
   const conf = entry.result.extractionConfidence;
   const notes = entry.result.extractionNotes;
   if (conf === 'low' || conf === 'medium' || (typeof notes === 'string' && notes.trim())) {
     if (typeof showToast === 'function') {
-      showToast('The model was unsure about some values — check them against the screenshot.');
+      showToast(t('captureDataset.the_model_was_unsure_about_some'));
     }
   }
 
@@ -123,15 +123,15 @@ function maybeResumeRecapture(entry: any): void {
   const target = pendingCaptureTarget;
   pendingCaptureTarget = null;
   if (!captureHasExtractedTable(entry)) {
-    if (typeof showToast === 'function') showToast('That capture had no table to add.');
+    if (typeof showToast === 'function') showToast(t('captureDataset.that_capture_had_no_table_to_2'));
     return;
   }
   void (async () => {
     const draft = await captureDraft(entry);
     if (!draft) return;
-    const verb = target.mode === 'replace' ? 'Replace the rows of' : 'Append to';
-    const shape = `${draft.rows.length} row${draft.rows.length === 1 ? '' : 's'} × ${draft.columns.length} column${draft.columns.length === 1 ? '' : 's'}`;
-    if (!window.confirm(`${verb} this dataset with the ${shape} read from the new screenshot?`)) return;
+    const verb = target.mode === 'replace' ? t('captureDataset.replace_the_rows_of') : t('captureDataset.append_to');
+    const shape = t('captureDataset.text', { rowsCount: draft.rows.length, columnsCount: draft.columns.length });
+    if (!window.confirm(t('captureDataset.this_dataset_with_the_read_from', { verb, shape }))) return;
 
     let res: any;
     try {
@@ -144,16 +144,16 @@ function maybeResumeRecapture(entry: any): void {
         target,
       });
     } catch (_) {
-      res = { ok: false, error: 'Failed to update the dataset.' };
+      res = { ok: false, error: t('common.failed_to_update_the_dataset') };
     }
     if (!res || res.ok === false) {
-      if (typeof showToast === 'function') showToast((res && res.error) || 'Failed to update the dataset.');
+      if (typeof showToast === 'function') showToast((res && res.error) || t('common.failed_to_update_the_dataset'));
       return;
     }
     (Array.isArray(res.warnings) ? res.warnings : []).forEach((w: string) => {
       if (typeof showToast === 'function') showToast(String(w));
     });
-    if (typeof showToast === 'function') showToast('Dataset updated from the new screenshot.');
+    if (typeof showToast === 'function') showToast(t('captureDataset.dataset_updated_from_the_new_screenshot'));
     if (typeof refreshDatasetList === 'function') { try { await refreshDatasetList(); } catch (_) { /* noop */ } }
     if (typeof selectSection === 'function') selectSection('datasets');
   })();

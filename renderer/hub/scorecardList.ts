@@ -9,7 +9,7 @@
 //
 // Classic global-scope script — NO import/export. textContent only.
 
-const SC_PERIOD_WORD: Record<string, string> = { week: 'Weekly', month: 'Monthly', quarter: 'Quarterly', year: 'Yearly' };
+const SC_PERIOD_WORD: Record<string, string> = { week: t('common.weekly'), month: t('common.monthly'), quarter: t('common.quarterly'), year: t('common.yearly') };
 
 function scEl<T extends HTMLElement = HTMLElement>(id: string): T | null {
   return document.getElementById(id) as T | null;
@@ -64,11 +64,11 @@ function scCard(s: any): HTMLElement {
   body.className = 'sc-card-body';
   const title = document.createElement('div');
   title.className = 'sc-card-title';
-  title.textContent = String(s.name || 'Untitled scorecard');
+  title.textContent = String(s.name || t('scorecardList.untitled_scorecard'));
   const meta = document.createElement('div');
   meta.className = 'sc-card-meta';
   const n = Number(s.rowCount) || 0;
-  meta.textContent = `${SC_PERIOD_WORD[s.period] || 'Monthly'} · ${n} metric${n === 1 ? '' : 's'} · ${formatSidebarTime(s.updatedAt)}`;
+  meta.textContent = t('scorecardList.text', { p0: SC_PERIOD_WORD[s.period] || t('common.monthly'), n, updatedAt: formatSidebarTime(s.updatedAt) });
   body.append(title, meta);
   if (Array.isArray(s.groups) && s.groups.length) {
     const chips = document.createElement('div');
@@ -86,7 +86,7 @@ function scCard(s: any): HTMLElement {
   const more = document.createElement('button');
   more.type = 'button';
   more.className = 'icon-btn sc-card-more';
-  iconOnly(more, 'more-horizontal', 'Scorecard actions');
+  iconOnly(more, 'more-horizontal', t('scorecardList.scorecard_actions'));
   more.addEventListener('click', (e) => {
     e.stopPropagation();
     openMiniMenu(more, (menu: HTMLElement, close: () => void) => {
@@ -98,8 +98,8 @@ function scCard(s: any): HTMLElement {
         b.addEventListener('click', () => { close(); run(); });
         menu.appendChild(b);
       };
-      add('Open', () => { void scOpen(String(s.id)); });
-      add('Duplicate', () => { void scDuplicate(String(s.id)); });
+      add(t('common.open'), () => { void scOpen(String(s.id)); });
+      add(t('common.duplicate'), () => { void scDuplicate(String(s.id)); });
       add('Delete', () => { void scDelete(s); });
     });
   });
@@ -114,7 +114,7 @@ function scCard(s: any): HTMLElement {
 /** A new scorecard: named, monthly, seeded with up to eight of the project's most recent metrics. */
 async function scNew(): Promise<void> {
   if (!currentProjectId) return;
-  const name = await promptModal('Name the scorecard', 'Monthly scorecard', 'Create');
+  const name = await promptModal(t('scorecardList.name_the_scorecard'), t('scorecardList.monthly_scorecard'), t('common.create'));
   if (name === null) return;
   let metrics: any[] = [];
   try { const r = await window.hub.listMetrics(currentProjectId); metrics = r && Array.isArray(r.metrics) ? r.metrics : []; } catch (_) { metrics = []; }
@@ -124,11 +124,11 @@ async function scNew(): Promise<void> {
     .slice(0, 8).map((m: any) => ({ metricId: String(m.id) }));
   let res: any = null;
   try {
-    res = await window.hubPower.scorecardCreate(currentProjectId, { name: name.trim() || 'Monthly scorecard', period: 'month', rows });
+    res = await window.hubPower.scorecardCreate(currentProjectId, { name: name.trim() || t('scorecardList.monthly_scorecard'), period: 'month', rows });
   } catch (_) {
     res = null;
   }
-  if (!res || res.ok === false || !res.scorecard) { showToast('Could not create the scorecard.'); return; }
+  if (!res || res.ok === false || !res.scorecard) { showToast(t('scorecardList.could_not_create_the_scorecard')); return; }
   await scOpen(String(res.scorecard.id));
   // A scorecard is only as good as its targets — go straight to setting them.
   if (rows.length) void scEditRows();
@@ -137,13 +137,13 @@ async function scNew(): Promise<void> {
 async function scDuplicate(id: string): Promise<void> {
   if (!currentProjectId) return;
   const res = await window.hubPower.scorecardDuplicate(currentProjectId, id);
-  if (!res || res.ok === false) { showToast('Could not duplicate the scorecard.'); return; }
+  if (!res || res.ok === false) { showToast(t('scorecardList.could_not_duplicate_the_scorecard')); return; }
   void scRefreshList();
 }
 
 async function scDelete(s: any): Promise<void> {
   if (!currentProjectId) return;
-  if (!window.confirm(`Delete “${s.name}”? The metrics it shows are not deleted.`)) return;
+  if (!window.confirm(t('scorecardList.delete_the_metrics_it_shows_are', { name: s.name }))) return;
   await window.hubPower.scorecardDelete(currentProjectId, String(s.id));
   if (scCurrent && scCurrent.id === s.id) await scClose();
   void scRefreshList();

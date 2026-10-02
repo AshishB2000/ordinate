@@ -124,7 +124,7 @@ interface EncMeasure {
 
 const ENC_AGGS: EncAgg[] = ['sum', 'avg', 'count', 'min', 'max', 'none'];
 const ENC_AGG_LABELS: Record<EncAgg, string> = {
-  sum: 'Sum', avg: 'Average', count: 'Count', min: 'Min', max: 'Max', none: 'Raw (no aggregation)',
+  sum: t('common.sum'), avg: 'Average', count: t('common.count'), min: t('common.min'), max: t('common.max'), none: t('encodingForm.raw_no_aggregation'),
 };
 
 let encFormSeq = 0;
@@ -229,7 +229,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       const del = document.createElement('button');
       del.type = 'button';
       del.className = 'viz-value-del';
-      del.setAttribute('aria-label', 'Remove ' + name.textContent);
+      del.setAttribute('aria-label', t('encodingForm.remove', { textContent: name.textContent }));
       del.textContent = '×';
       del.addEventListener('click', () => {
         sel.value = '';
@@ -244,8 +244,8 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
   function syncSingles(): void {
     // Category is not clearable: a chart without a dimension has nothing to plot,
     // and the form has always guaranteed one.
-    syncSingle(catSel, 'Add a dimension', false);
-    syncSingle(serSel, 'Add a dimension', true);
+    syncSingle(catSel, t('common.add_a_dimension'), false);
+    syncSingle(serSel, t('common.add_a_dimension'), true);
   }
 
   // Falls back to ALL columns when the dataset has no numeric one, so the
@@ -298,7 +298,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     dims.forEach((c) => catSel.appendChild(opt(c)));
     if (nums.length) {
       const grp = document.createElement('optgroup');
-      grp.label = 'Bin numeric…';
+      grp.label = t('encodingForm.bin_numeric');
       nums.forEach((c) => grp.appendChild(opt(c)));
       catSel.appendChild(grp);
     }
@@ -369,7 +369,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     valuesList.innerHTML = '';
     const nums = numberCols();
     if (wells && !measures.some((m) => m.column)) {
-      valuesList.appendChild(placeholder('Drop a measure here'));
+      valuesList.appendChild(placeholder(t('encodingForm.drop_a_measure_here')));
       return;
     }
     const calcCtx = (): TcContext => tcChartContext(columns, catSel ? catSel.value : '', serSel ? serSel.value : '');
@@ -384,13 +384,13 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
         // having named it. The ⋮ menu is how it goes back to being a column.
         const chip = document.createElement('span');
         chip.className = 'viz-value-metric';
-        chip.textContent = m.metricName || m.column || 'Metric';
-        chip.title = 'A saved metric. ⋮ to change it or go back to a column.';
+        chip.textContent = m.metricName || m.column || t('common.metric');
+        chip.title = t('encodingForm.a_saved_metric_to_change_it');
         row.appendChild(chip);
       } else {
         const colSel = document.createElement('select');
         colSel.className = 'viz-select viz-value-col';
-        colSel.setAttribute('aria-label', 'Measure column');
+        colSel.setAttribute('aria-label', t('common.measure_column'));
         fill(colSel, nums.map((c) => ({ value: c.name, label: c.label || c.name, title: c.title })), m.column);
         encAppendRelated(colSel, related, (c) => c.type === 'number', m.column);
         colSel.addEventListener('change', () => { measures[i].column = colSel.value; opts.onChange(); });
@@ -398,7 +398,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
 
         const aggSel = document.createElement('select');
         aggSel.className = 'viz-select viz-value-agg';
-        aggSel.setAttribute('aria-label', 'Aggregation');
+        aggSel.setAttribute('aria-label', t('common.aggregation'));
         fill(aggSel, ENC_AGGS.map((a) => ({ value: a, label: ENC_AGG_LABELS[a] })), m.aggregation);
         aggSel.addEventListener('change', () => {
           measures[i].aggregation = aggSel.value as EncAgg;
@@ -415,7 +415,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
         const menu = document.createElement('button');
         menu.type = 'button';
         menu.className = 'enc-pill-menu';
-        menu.setAttribute('aria-label', 'Options for ' + (m.column || 'this measure'));
+        menu.setAttribute('aria-label', t('encodingForm.options_for', { p0: (m.column || t('encodingForm.this_measure')) }));
         menu.setAttribute('aria-haspopup', 'menu');
         menu.textContent = '⋮';
         menu.addEventListener('click', (e) => {
@@ -437,13 +437,13 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
           // The metric picker, on the pill that already carries this measure —
           // the same popover KPI add and the alert form open (metricPicker.ts).
           items.unshift({
-            label: measures[i].metricId ? 'Change metric…' : 'Use a metric…',
+            label: measures[i].metricId ? t('common.change_metric') : t('common.use_a_metric'),
             onClick: () => { void pickMeasureMetric(i, menu); },
           });
           items.push(tcMenuItem(menu, m.calc, calcCtx, setCalc));
           if (measures.length > 1) {
             items.push({
-              label: 'Remove',
+              label: t('common.remove'),
               danger: true,
               onClick: () => { measures.splice(i, 1); renderMeasures(); opts.onChange(); },
             });
@@ -456,7 +456,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
         const del = document.createElement('button');
         del.type = 'button';
         del.className = 'viz-value-del';
-        del.setAttribute('aria-label', 'Remove measure');
+        del.setAttribute('aria-label', t('encodingForm.remove_measure'));
         del.textContent = '×';
         del.disabled = measures.length <= 1; // keep at least one measure
         del.addEventListener('click', () => {
@@ -492,7 +492,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     const m = picked.metric;
     const def = m && m.definition ? m.definition : {};
     if (typeof def.formula === 'string') {
-      window.alert(`"${m.name}" is a formula metric. A chart measure has to be a column rolled up per category — use it on a KPI card instead.`);
+      window.alert(t('encodingForm.is_a_formula_metric_a_chart', { name: m.name }));
       return;
     }
     measures[i] = {
@@ -510,7 +510,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
   function renderFilters(): void {
     filtersList.innerHTML = '';
     if (wells && !filters.length) {
-      filtersList.appendChild(placeholder('Drop a field here to filter'));
+      filtersList.appendChild(placeholder(t('encodingForm.drop_a_field_here_to_filter')));
       return;
     }
     filters.forEach((f, i) => filtersList.appendChild(makeFilterRow(f, i)));
@@ -545,7 +545,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
 
     const colSel = document.createElement('select');
     colSel.className = 'viz-select';
-    colSel.setAttribute('aria-label', 'Filter column');
+    colSel.setAttribute('aria-label', t('encodingForm.filter_column'));
     fill(colSel, columns.map((c) => ({ value: c.name, label: c.label || c.name, title: c.title })), step.column || '');
     colSel.addEventListener('change', () => {
       // Retargeting to a column of a different type makes the old operand
@@ -565,8 +565,8 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     const edit = document.createElement('button');
     edit.type = 'button';
     edit.className = 'viz-filter-cond';
-    edit.textContent = filterStepSummary(step) || 'set a condition…';
-    edit.setAttribute('aria-label', 'Edit the filter on ' + (step.column || 'this column'));
+    edit.textContent = filterStepSummary(step) || t('common.set_a_condition');
+    edit.setAttribute('aria-label', t('encodingForm.edit_the_filter_on', { p0: (step.column || t('common.this_column')) }));
     edit.addEventListener('click', () => { void editFilter(i); });
     row.appendChild(edit);
     const ctxTag = lodContextTag(step); if (ctxTag) row.appendChild(ctxTag); // r7:lod
@@ -574,7 +574,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     const del = document.createElement('button');
     del.type = 'button';
     del.className = 'viz-value-del';
-    del.setAttribute('aria-label', 'Remove filter');
+    del.setAttribute('aria-label', t('common.remove_filter'));
     del.textContent = '×';
     del.addEventListener('click', () => { filters.splice(i, 1); renderFilters(); opts.onChange(); });
     row.appendChild(del);
@@ -630,7 +630,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       const textCols = columns.filter((c) => c.type !== 'number');
       fill(
         serSel,
-        [{ value: '', label: 'None' }].concat(textCols.map((c) => ({ value: c.name, label: c.label || c.name, title: c.title }))),
+        [{ value: '', label: t('common.none') }].concat(textCols.map((c) => ({ value: c.name, label: c.label || c.name, title: c.title }))),
         preset && typeof preset.series === 'string' ? preset.series : '',
       );
       encAppendRelated(serSel, related, (c) => c.type !== 'number', preset && typeof preset.series === 'string' ? preset.series : '');

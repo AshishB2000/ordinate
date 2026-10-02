@@ -48,7 +48,7 @@ function ctPaintKinds(): void {
   host.textContent = '';
   const counts = new Map<string, number>();
   ctRows.forEach((r) => counts.set(r.kind, (counts.get(r.kind) || 0) + 1));
-  const pills: Array<[string, string, number]> = [['', 'All', ctRows.length]];
+  const pills: Array<[string, string, number]> = [['', t('common.all'), ctRows.length]];
   CT_KINDS.forEach((k) => { if (counts.get(k.kind)) pills.push([k.kind, k.label.endsWith('y') ? k.label.slice(0, -1) + 'ies' : k.label + 's', counts.get(k.kind) || 0]); });
   if (ctKindFilter && !counts.get(ctKindFilter)) ctKindFilter = '';
   pills.forEach(([kind, label, n]) => {
@@ -88,7 +88,7 @@ function ctPaintCatalog(): void {
   const count = ctPageEl('ct-count');
   if (count) {
     count.hidden = ctRows.length === 0;
-    count.textContent = ctRows.length === 1 ? '1 record' : `${ctRows.length} records`;
+    count.textContent = ctRows.length === 1 ? t('catalogPage.1_record') : `${ctRows.length} records`;
   }
   void ctAfterPaint(list, list.previousElementSibling as HTMLElement | null).then(() => {
     const shown = list.querySelectorAll('[data-ct-ref]:not([hidden])').length;
@@ -101,7 +101,7 @@ function ctMakeRow(r: any): HTMLElement {
   row.className = 'ws-row ct-row';
   row.tabIndex = 0;
   row.setAttribute('role', 'button');
-  row.setAttribute('aria-label', `Open ${r.type} ${r.name}`);
+  row.setAttribute('aria-label', t('catalogPage.open', { type: r.type, name: r.name }));
   const open = (): void => { void ctOpenRecord(r.kind, r.id, currentProjectId || '', r.name); };
   row.addEventListener('click', open);
   row.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target === row) open(); });
@@ -119,13 +119,13 @@ function ctMakeRow(r: any): HTMLElement {
   top.className = 'ct-name-top';
   const name = document.createElement('span');
   name.className = 'ct-name';
-  name.textContent = r.name || 'Untitled';
+  name.textContent = r.name || t('common.untitled');
   top.appendChild(name);
   if (r.stale) {
     const stale = document.createElement('span');
     stale.className = 'ct-stale';
-    stale.textContent = 'Stale';
-    stale.title = 'On a refresh schedule, but no new data has landed in over 30 days.';
+    stale.textContent = t('common.stale');
+    stale.title = t('catalogPage.on_a_refresh_schedule_but_no');
     top.appendChild(stale);
   }
   text.appendChild(top);
@@ -149,20 +149,20 @@ function ctMakeRow(r: any): HTMLElement {
   updated.className = 'ws-cell ct-updated';
   updated.textContent = r.updatedAt ? aiAgo(r.updatedAt) : '—';
   if (r.updatedAt) {
-    updated.title = new Date(r.updatedAt).toLocaleString() + (r.updatedBy ? ' · docs by ' + r.updatedBy : '');
+    updated.title = new Date(r.updatedAt).toLocaleString() + (r.updatedBy ? t('catalogPage.docs_by', { updatedBy: r.updatedBy }) : '');
   }
 
   const usage = document.createElement('span');
   usage.className = 'ws-cell ct-usage tnum' + (r.usage ? '' : ' ct-muted');
-  usage.textContent = r.usage ? String(r.usage) : 'Unused';
-  usage.title = r.usage ? `Used by ${r.usage} other record${r.usage === 1 ? '' : 's'}` : 'Nothing in this project uses it yet';
+  usage.textContent = r.usage ? String(r.usage) : t('catalogPage.unused');
+  usage.title = r.usage ? t('catalogPage.used_by_other', { usage: r.usage }) : t('catalogPage.nothing_in_this_project_uses_it');
 
   const actions = document.createElement('span');
   actions.className = 'ws-col-action';
   const details = document.createElement('button');
   details.type = 'button';
   details.className = 'btn btn-sm btn-ghost ct-row-details';
-  iconOnly(details, 'info', `Details for ${r.name}`);
+  iconOnly(details, 'info', t('catalogPage.details_for', { name: r.name }));
   details.addEventListener('click', (e) => {
     e.stopPropagation();
     void ctOpenDetails(details, { kind: r.kind, id: r.id, name: r.name }, { onSaved: () => void ctRefreshCatalog() });
@@ -200,12 +200,11 @@ async function ctPaintColumnsTab(): Promise<void> {
   const flagged = expColumns.filter((c) => docs[c.name] && docs[c.name].sensitivity && docs[c.name].sensitivity !== 'none').length;
   const lead = document.createElement('p');
   lead.className = 'ct-coldoc-lead';
-  lead.textContent = `${expColumns.length} columns · ${documented} documented` + (flagged ? ` · ${flagged} sensitive` : '')
-    + '. Descriptions show as column tooltips, in the chart builder, and in what the Assistant knows.';
+  lead.textContent = t('catalogPage.columns_documented_descriptions_show_as', { expColumnsCount: expColumns.length, documented, p2: (flagged ? t('catalogPage.sensitive', { flagged }) : '') });
   host.appendChild(lead);
 
   if (!expColumns.length) {
-    host.appendChild(makeEmptyState({ variant: 'search', iconName: 'table', title: 'No columns', line: 'This dataset has no columns to document.' }));
+    host.appendChild(makeEmptyState({ variant: 'search', iconName: 'table', title: t('catalogPage.no_columns'), line: t('catalogPage.this_dataset_has_no_columns_to') }));
     return;
   }
 
@@ -214,7 +213,7 @@ async function ctPaintColumnsTab(): Promise<void> {
   const table = document.createElement('table');
   table.className = 'ds-quality-grid';
   const head = document.createElement('tr');
-  ['Column', 'Type', 'Display name', 'Description', 'Example', 'Sensitivity'].forEach((h) => {
+  [t('common.column'), t('common.type'), t('common.display_name'), t('common.description'), t('common.example'), t('common.sensitivity')].forEach((h) => {
     const th = document.createElement('th');
     th.textContent = h;
     head.appendChild(th);
@@ -261,14 +260,14 @@ function ctColumnRow(datasetId: string, col: { name: string; type: string }, c: 
     td.appendChild(box);
     tr.appendChild(td);
   };
-  cell('displayName', col.name, 'Display name');
-  cell('description', 'Add a description…', 'Description');
-  cell('example', ctFirstValue(c) || '—', 'Example');
+  cell('displayName', col.name, t('common.display_name'));
+  cell('description', t('catalogPage.add_a_description'), t('common.description'));
+  cell('example', ctFirstValue(c) || '—', t('common.example'));
 
   const sens = document.createElement('td');
   const sel = document.createElement('select');
   sel.className = 'ct-cell-select';
-  sel.setAttribute('aria-label', 'Sensitivity of ' + col.name);
+  sel.setAttribute('aria-label', t('catalogPage.sensitivity_of', { name: col.name }));
   CT_SENSITIVITY.forEach(([v, label, hint]) => {
     const o = document.createElement('option');
     o.value = v;

@@ -53,7 +53,7 @@ function mpMakeRow(m: any): HTMLElement {
 
   const dataset = document.createElement('span');
   dataset.className = 'ws-cell';
-  dataset.textContent = m.datasetName || '(missing dataset)';
+  dataset.textContent = m.datasetName || t('metricsPage.missing_dataset');
 
   const definition = document.createElement('span');
   definition.className = 'ws-cell mp-def';
@@ -85,15 +85,15 @@ function mpMakeRow(m: any): HTMLElement {
   const more = document.createElement('button');
   more.type = 'button';
   more.className = 'btn btn-sm mp-more';
-  more.setAttribute('aria-label', 'Actions for ' + m.name);
+  more.setAttribute('aria-label', t('metricsPage.actions_for', { name: m.name }));
   more.setAttribute('aria-haspopup', 'menu');
   more.appendChild(icon('more-horizontal'));
   more.addEventListener('click', () => {
     openMiniMenu(more, (menu: HTMLElement, close: () => void) => {
       const items: Array<[string, () => void]> = [
-        ['Edit…', () => void mpOpenEditor(m)],
-        ['Alert me…', () => void mpAlert(m)],
-        ['Duplicate', () => void mpDuplicate(m)],
+        [t('common.edit'), () => void mpOpenEditor(m)],
+        [t('common.alert_me'), () => void mpAlert(m)],
+        [t('common.duplicate'), () => void mpDuplicate(m)],
         ['Delete', () => void mpDelete(m)],
       ];
       items.forEach(([label, run], i) => {
@@ -147,7 +147,7 @@ function mpMakeRow(m: any): HTMLElement {
     }
     if (!used.isConnected) return;
     const usage = r && r.ok !== false ? r.usage : null;
-    used.textContent = usage && usage.total ? usage.summary : 'Not used yet';
+    used.textContent = usage && usage.total ? usage.summary : t('common.not_used_yet');
     used.classList.toggle('mp-unused', !(usage && usage.total));
   })();
 
@@ -191,7 +191,7 @@ async function refreshMetricsList(seed = true): Promise<void> {
   // that already says there are none is the count telling you twice.
   const count = mpEl('mp-count');
   if (count) {
-    count.textContent = mpMetrics.length === 1 ? '1 metric' : `${mpMetrics.length} metrics`;
+    count.textContent = mpMetrics.length === 1 ? t('metricsPage.1_metric') : `${mpMetrics.length} metrics`;
     count.hidden = mpMetrics.length === 0;
   }
 }
@@ -229,10 +229,10 @@ async function mpOpenEditor(existing: any): Promise<void> {
 async function mpAlert(m: any): Promise<void> {
   const def = m.definition || {};
   if (typeof def.formula === 'string') {
-    showToast('Alerts watch a column rolled up by an aggregation — a formula metric cannot be one yet.');
+    showToast(t('common.alerts_watch_a_column_rolled_up'));
     return;
   }
-  if (!def.column) { showToast('This metric has no column to watch.'); return; }
+  if (!def.column) { showToast(t('common.this_metric_has_no_column_to')); return; }
   await openAlertDialog({
     datasetId: String(m.datasetId),
     column: String(def.column),
@@ -266,14 +266,14 @@ async function mpDelete(m: any): Promise<void> {
   } catch (_) { /* a usage read that failed must not claim "used by nothing" */ }
 
   const used = usage && usage.total
-    ? `Used by ${usage.summary}. Those keep working from their own saved column and aggregation, but they stop following this metric.`
+    ? t('metricsPage.used_by_those_keep_working_from', { summary: usage.summary })
     : usage
-      ? 'Nothing uses it yet.'
-      : 'Ordinate could not check what uses it.';
+      ? t('metricsPage.nothing_uses_it_yet')
+      : t('metricsPage.ordinate_could_not_check_what_uses');
   // `window.confirm`, like every other destructive action in the hub
   // (dsList, captureList, connRun): a bespoke confirm dialog for this one
   // button would be a second modal to keep accessible.
-  if (!window.confirm(`Delete "${m.name}"? ${used}`)) return;
+  if (!window.confirm(t('metricsPage.delete', { name: m.name, used }))) return;
   try {
     await window.hub.deleteMetric(currentProjectId, m.id);
   } catch (_) { /* reported by the reload */ }
@@ -314,14 +314,14 @@ function mpCardMenuItems(card: any): Array<[string, () => void]> {
   if (!card || card.type !== 'metric' || !card.metric) return [];
   const m = card.metric;
   if (m.metricId) {
-    return [['Edit metric…', () => {
+    return [[t('metricsPage.edit_metric'), () => {
       void (async () => {
         const r = await window.hub.getMetric(currentProjectId, m.metricId);
         if (r && r.ok !== false) await openMetricEditor(r.metric);
       })();
     }]];
   }
-  return [['Save as metric…', () => {
+  return [[t('metricsPage.save_as_metric'), () => {
     void (async () => {
       const saved = await promoteToMetric({
         datasetId: m.datasetId, column: m.column, aggregation: m.aggregation, label: m.label,
@@ -333,7 +333,7 @@ function mpCardMenuItems(card: any): Array<[string, () => void]> {
         if (!m.label) m.label = saved.name;
         // The same "the card changed, write it and redraw" call every other ⋯
         // item makes (dashGrid.ts's nudgeCard / resizeCard).
-        markDashDirty('Save as metric');
+        markDashDirty(t('metricsPage.save_as_metric_2'));
       }
     })();
   }]];

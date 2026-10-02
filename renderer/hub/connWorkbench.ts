@@ -102,14 +102,14 @@ async function openConnWorkbench(c: any): Promise<void> {
   // Header.
   const logo = connEl('conn-wb-logo');
   const kindId = typeof c.kind === 'string' ? c.kind : '';
-  const label = cwDef ? cwDef.label : kindId || 'Connection';
+  const label = cwDef ? cwDef.label : kindId || t('common.connection');
   if (logo) {
     const built = connMakeLogoFor(kindId, label);
     logo.replaceChildren(...built.childNodes);
     logo.className = built.className + ' cw-logo';
   }
   const title = connEl('conn-wb-title');
-  if (title) title.textContent = String(c.name || 'Untitled connection');
+  if (title) title.textContent = String(c.name || t('common.untitled_connection'));
   const sub = connEl('conn-wb-sub');
   if (sub) {
     const where = connWhere(c);
@@ -124,7 +124,7 @@ async function openConnWorkbench(c: any): Promise<void> {
 
   cwRenderDetails();
   cwRenderQueryChips();
-  cwClearResults('Pick a table on the left, or write a query and Run.');
+  cwClearResults(t('common.pick_a_table_on_the_left'));
   cwSetSql('');
 
   // The two fetches are independent; neither blocks the panel being usable.
@@ -154,18 +154,18 @@ async function cwLoadTables(): Promise<void> {
   const msg = connEl('conn-wb-tree-msg');
   const host = connEl('conn-wb-tree');
   if (host) host.innerHTML = '';
-  if (msg) { msg.textContent = 'Loading tables…'; msg.hidden = false; }
+  if (msg) { msg.textContent = t('connWorkbench.loading_tables'); msg.hidden = false; }
 
   let res: any;
   try {
     res = await window.hub.listConnectionTables(currentProjectId, String(cwConn.id));
   } catch (_) {
-    res = { ok: false, error: 'Could not list tables.' };
+    res = { ok: false, error: t('connWorkbench.could_not_list_tables') };
   }
   if (!cwConn) return; // the workbench closed while this was in flight
 
   if (!res || res.ok === false) {
-    if (msg) { msg.textContent = (res && res.error) || 'Could not list tables.'; msg.hidden = false; }
+    if (msg) { msg.textContent = (res && res.error) || t('connWorkbench.could_not_list_tables'); msg.hidden = false; }
     return;
   }
   cwTables = (Array.isArray(res.tables) ? res.tables : [])
@@ -200,10 +200,10 @@ function cwRenderTree(): void {
 
   if (msg) {
     if (cwTables.length === 0) {
-      msg.textContent = 'This source reported no tables.';
+      msg.textContent = t('connWorkbench.this_source_reported_no_tables');
       msg.hidden = false;
     } else if (shown.length === 0) {
-      msg.textContent = 'No tables match that search.';
+      msg.textContent = t('connWorkbench.no_tables_match_that_search');
       msg.hidden = false;
     } else {
       msg.hidden = true;
@@ -235,8 +235,8 @@ function cwRenderTree(): void {
   }
 }
 
-function cwTableNode(t: { schema?: string; name: string }): HTMLElement {
-  const qualified = cwQualify(t);
+function cwTableNode(tv: { schema?: string; name: string }): HTMLElement {
+  const qualified = cwQualify(tv);
   const wrap = document.createElement('div');
   wrap.className = 'cw-node';
   wrap.dataset.table = qualified;
@@ -253,7 +253,7 @@ function cwTableNode(t: { schema?: string; name: string }): HTMLElement {
   const caret = document.createElement('button');
   caret.type = 'button';
   caret.className = 'cw-caret';
-  caret.setAttribute('aria-label', 'Show columns of ' + qualified);
+  caret.setAttribute('aria-label', t('connWorkbench.show_columns_of', { qualified }));
   caret.setAttribute('aria-expanded', 'false');
   caret.appendChild(icon('chevron-right', 14));
   caret.addEventListener('click', (e) => {
@@ -264,7 +264,7 @@ function cwTableNode(t: { schema?: string; name: string }): HTMLElement {
 
   const label = document.createElement('span');
   label.className = 'cw-row-name';
-  label.textContent = t.name;
+  label.textContent = tv.name;
   label.title = qualified;
   row.appendChild(label);
 
@@ -317,7 +317,7 @@ async function cwToggleColumns(wrap: HTMLElement, qualified: string, caret: HTML
   list.className = 'cw-cols-list';
   const loading = document.createElement('div');
   loading.className = 'cw-row cw-row-col cw-loading';
-  loading.textContent = 'Loading columns…';
+  loading.textContent = t('connWorkbench.loading_columns');
   list.appendChild(loading);
   wrap.appendChild(list);
 
@@ -327,7 +327,7 @@ async function cwToggleColumns(wrap: HTMLElement, qualified: string, caret: HTML
   if (!described) {
     const err = document.createElement('div');
     err.className = 'cw-row cw-row-col cw-loading';
-    err.textContent = 'Columns unavailable.';
+    err.textContent = t('connWorkbench.columns_unavailable');
     list.appendChild(err);
     return;
   }
@@ -372,7 +372,7 @@ function cwColumnNode(qualified: string, col: any): HTMLElement {
   type.className = 'cw-col-type';
   // The source's verbatim type, plus NOT NULL where the catalog says so — that
   // is a fact about the column and the only place the workbench shows it.
-  type.textContent = col.nullable === false ? String(col.type) + ' · not null' : String(col.type);
+  type.textContent = col.nullable === false ? t('connWorkbench.not_null', { type: String(col.type) }) : String(col.type);
   type.title = type.textContent;
   row.appendChild(type);
   return row;
@@ -410,7 +410,7 @@ async function cwDescribe(qualified: string): Promise<{ columns: any[]; rowEstim
   const cell = document.querySelector('.cw-est[data-est-for="' + CSS.escape(qualified) + '"]');
   if (cell instanceof HTMLElement) {
     cell.textContent = Number.isFinite(est) ? cwEstimate(est) : '';
-    cell.title = Number.isFinite(est) ? est.toLocaleString('en-US') + ' rows (estimated)' : '';
+    cell.title = Number.isFinite(est) ? t('connWorkbench.rows_estimated', { p0: est.toLocaleString('en-US') }) : '';
   }
   return { columns, rowEstimate: Number.isFinite(est) ? est : undefined };
 }
@@ -427,7 +427,7 @@ async function cwSelectTable(qualified: string): Promise<void> {
   const node = document.querySelector('.cw-node[data-table="' + CSS.escape(qualified) + '"] .cw-row-table');
   if (node instanceof HTMLElement) node.classList.add('is-on');
 
-  cwClearResults('Loading ' + qualified + '…');
+  cwClearResults(t('connWorkbench.loading', { qualified }));
   // Columns for the editor's autocomplete, in the background: selecting a table
   // is the strongest signal that the next thing typed will name its columns.
   if (!cwColumns.has(qualified)) void cwDescribe(qualified);
@@ -438,13 +438,13 @@ async function cwSelectTable(qualified: string): Promise<void> {
       currentProjectId, String(cwConn.id), qualified, CONN_PREVIEW_ROWS,
     );
   } catch (_) {
-    res = { ok: false, error: 'Could not read that table.' };
+    res = { ok: false, error: t('connWorkbench.could_not_read_that_table') };
   }
   if (!cwConn || cwTable !== qualified) return; // a later click won
 
   if (!res || res.ok === false) {
-    cwSetError((res && res.error) || 'Could not read that table.');
-    cwClearResults('That table could not be read.');
+    cwSetError((res && res.error) || t('connWorkbench.could_not_read_that_table'));
+    cwClearResults(t('connWorkbench.that_table_could_not_be_read'));
     return;
   }
   cwShowResult(res.preview, { table: qualified, sql: '', name: qualified });
@@ -481,14 +481,14 @@ function cwShowResult(result: any, source: { table: string; sql: string; name: s
     const shown = Math.min(rows.length, CONN_PREVIEW_ROWS);
     const warnings: string[] = result && Array.isArray(result.warnings) ? result.warnings : [];
     const base = columns.length
-      ? `${shown.toLocaleString('en-US')} of ${rowCount.toLocaleString('en-US')} rows · ${columns.length} columns`
+      ? t('connWorkbench.of_rows_columns', { p0: shown.toLocaleString('en-US'), p1: rowCount.toLocaleString('en-US'), columnsCount: columns.length })
       : '';
     note.textContent = warnings.length ? base + ' · ' + warnings[0] : base;
     note.title = warnings.join(' ');
   }
 
   const nameInput = connEl('conn-wb-ds-name') as HTMLInputElement | null;
-  if (nameInput) nameInput.value = source.name || 'Connection data';
+  if (nameInput) nameInput.value = source.name || t('connWorkbench.connection_data');
   const save = connEl('conn-wb-save-ds') as HTMLButtonElement | null;
   if (save) save.disabled = columns.length === 0;
 }
@@ -568,21 +568,21 @@ function cwBuildTable(columns: any[], rows: any[]): HTMLElement {
 async function cwSaveAsDataset(): Promise<void> {
   if (!cwConn || !cwPreview) return;
   const nameInput = connEl('conn-wb-ds-name') as HTMLInputElement | null;
-  const name = (nameInput && nameInput.value.trim()) || cwPreviewTable || 'Connection data';
+  const name = (nameInput && nameInput.value.trim()) || cwPreviewTable || t('connWorkbench.connection_data');
   const btn = connEl('conn-wb-save-ds') as HTMLButtonElement | null;
   const limit = cwImportLimit();
   const selection = cwPreviewSql ? { query: cwPreviewSql } : { table: cwPreviewTable };
 
-  if (btn) { btn.disabled = true; btn.textContent = 'Fetching rows…'; }
+  if (btn) { btn.disabled = true; btn.textContent = t('common.fetching_rows'); }
   let res: any;
   try {
     res = await window.hub.runConnection(currentProjectId, String(cwConn.id), selection, limit);
   } catch (_) {
-    res = { ok: false, error: 'Could not read the full result.' };
+    res = { ok: false, error: t('connWorkbench.could_not_read_the_full_result') };
   }
-  if (btn) { btn.disabled = false; btn.textContent = 'Save as dataset'; }
+  if (btn) { btn.disabled = false; btn.textContent = t('common.save_as_dataset'); }
   if (!res || res.ok === false) {
-    cwSetError((res && res.error) || 'Could not read the full result.');
+    cwSetError((res && res.error) || t('connWorkbench.could_not_read_the_full_result'));
     return;
   }
 

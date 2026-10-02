@@ -14,7 +14,7 @@ function buildParseDateForm(body: HTMLElement, existing: any): () => any {
   PP_DATE_FORMATS.forEach((d) => PP_TIME_FORMATS.forEach((t) => formats.push(d + t)));
   const fmtSel = makeNameSelect(formats, e.format || 'YYYY-MM-DD');
   const asIn = textInput(e.as || '');
-  asIn.placeholder = '(replace the column in place)';
+  asIn.placeholder = t('prepareClean.replace_the_column_in_place');
   const preview = makePreviewBox();
   const read = (): any => {
     const step: any = { type: 'parse_date', column: colSel.value, format: fmtSel.value };
@@ -27,21 +27,20 @@ function buildParseDateForm(body: HTMLElement, existing: any): () => any {
     const mine = ++seq;
     const res = await previewPowerStep(read());
     if (mine !== seq || !res) return;
-    if (!res.ok || !res.parseDate) return setPreview(preview, [res.error || 'Could not preview.'], true);
+    if (!res.ok || !res.parseDate) return setPreview(preview, [res.error || t('common.could_not_preview')], true);
     const p = res.parseDate;
-    const lines = [fmtN(p.parsed) + ' of ' + fmtN(p.parsed + p.failed) + ' values parsed · ' + fmtN(p.failed) + ' failed' +
-      (p.empty ? ' · ' + fmtN(p.empty) + ' empty' : '')];
-    if (p.samples.length) lines.push('Did not parse: ' + p.samples.map((x: string) => '"' + x + '"').join(', '));
+    const lines = [t('prepareClean.of_values_parsed_failed', { parsed: fmtN(p.parsed), p1: fmtN(p.parsed + p.failed), failed: fmtN(p.failed), p3: (p.empty ? ' · ' + fmtN(p.empty) + ' empty' : '') })];
+    if (p.samples.length) lines.push(t('prepareClean.did_not_parse', { p0: p.samples.map((x: string) => '"' + x + '"').join(', ') }));
     setPreview(preview, lines, p.failed > 0);
   };
   [colSel, fmtSel].forEach((el) => el.addEventListener('change', () => void refresh()));
-  body.appendChild(fieldRow('Column', colSel));
-  body.appendChild(fieldRow('Format (a value that does not match, or is not a real date, becomes empty)', fmtSel));
-  body.appendChild(fieldRow('New column name', asIn));
+  body.appendChild(fieldRow(t('common.column'), colSel));
+  body.appendChild(fieldRow(t('prepareClean.format_a_value_that_does_not'), fmtSel));
+  body.appendChild(fieldRow(t('common.new_column_name'), asIn));
   body.appendChild(preview);
   void refresh();
   return () => {
-    if (!colSel.value) { window.alert('Pick the column to parse.'); return null; }
+    if (!colSel.value) { window.alert(t('prepareClean.pick_the_column_to_parse')); return null; }
     return read();
   };
 }
@@ -51,7 +50,7 @@ function buildDedupeKeyForm(body: HTMLElement, existing: any): () => any {
   const keys = makeColChecks(Array.isArray(e.columns) ? e.columns : []);
   const keepSel = document.createElement('select');
   keepSel.className = 'ds-step-select';
-  [['first', 'the first row'], ['last', 'the last row'], ['max', 'the row with the highest'], ['min', 'the row with the lowest']]
+  [['first', t('prepareClean.the_first_row')], ['last', t('prepareClean.the_last_row')], ['max', t('prepareClean.the_row_with_the_highest')], ['min', t('prepareClean.the_row_with_the_lowest')]]
     .forEach(([v, label]) => {
       const opt = document.createElement('option');
       opt.value = v;
@@ -60,19 +59,19 @@ function buildDedupeKeyForm(body: HTMLElement, existing: any): () => any {
       keepSel.appendChild(opt);
     });
   const bySel = makeColSelect(e.by);
-  const byRow = fieldRow('…of this column (ties keep the earlier row)', bySel);
+  const byRow = fieldRow(t('prepareClean.of_this_column_ties_keep_the'), bySel);
   const paint = (): void => { byRow.hidden = keepSel.value !== 'max' && keepSel.value !== 'min'; };
   keepSel.addEventListener('change', paint);
-  body.appendChild(fieldRow('Key columns', keys.el));
-  body.appendChild(fieldRow('For each key, keep', keepSel));
+  body.appendChild(fieldRow(t('prepareClean.key_columns'), keys.el));
+  body.appendChild(fieldRow(t('prepareClean.for_each_key_keep'), keepSel));
   body.appendChild(byRow);
   paint();
   return () => {
     const columns = keys.values();
-    if (!columns.length) { window.alert('Pick at least one key column.'); return null; }
+    if (!columns.length) { window.alert(t('prepareClean.pick_at_least_one_key_column')); return null; }
     const step: any = { type: 'dedupe_key', columns, keep: keepSel.value };
     if (step.keep === 'max' || step.keep === 'min') {
-      if (!bySel.value) { window.alert('Pick the column to rank by.'); return null; }
+      if (!bySel.value) { window.alert(t('prepareClean.pick_the_column_to_rank_by')); return null; }
       step.by = bySel.value;
     }
     return step;
@@ -95,7 +94,7 @@ function makePairRow(from: string, to: string, fromHint: string, toHint: string)
   const del = document.createElement('button');
   del.type = 'button';
   del.className = 'ds-step-btn';
-  iconOnly(del, 'x', 'Remove rule');
+  iconOnly(del, 'x', t('common.remove_rule'));
   del.addEventListener('click', () => row.remove());
   row.append(a, arrow, b, del);
   return row;
@@ -112,9 +111,9 @@ function readPairs(list: HTMLElement): Array<{ from: string; to: string }> {
 }
 
 const REPLACE_HINTS: Record<string, string> = {
-  exact: 'A cell equal to "find" becomes "replace with"; the first matching rule wins.',
-  contains: 'Every occurrence of "find" is replaced; the rules apply one after another, in order.',
-  regex: 'Every match of the pattern is replaced (no lookaround or backreferences); rules apply in order.',
+  exact: t('prepareClean.a_cell_equal_to_find_becomes'),
+  contains: t('prepareClean.every_occurrence_of_find_is_replaced'),
+  regex: t('prepareClean.every_match_of_the_pattern_is'),
 };
 
 function buildReplaceForm(body: HTMLElement, existing: any): () => any {
@@ -124,34 +123,34 @@ function buildReplaceForm(body: HTMLElement, existing: any): () => any {
   const caseBox = document.createElement('input');
   caseBox.type = 'checkbox';
   caseBox.checked = !!e.ignoreCase;
-  const caseRow = fieldRow('Ignore case', caseBox);
+  const caseRow = fieldRow(t('common.ignore_case'), caseBox);
   const hint = document.createElement('div');
   hint.className = 'ds-step-hint';
   const list = document.createElement('div');
   list.className = 'ds-agg-list';
-  const add = (from = '', to = ''): void => { list.appendChild(makePairRow(from, to, 'find', 'replace with')); };
+  const add = (from = '', to = ''): void => { list.appendChild(makePairRow(from, to, 'find', t('prepareClean.replace_with'))); };
   (Array.isArray(e.rules) && e.rules.length ? e.rules : [{ from: '', to: '' }]).forEach((r: any) => add(r.from, r.to));
   const addBtn = document.createElement('button');
   addBtn.type = 'button';
   addBtn.className = 'btn';
-  addBtn.textContent = '+ Add rule';
+  addBtn.textContent = t('common.add_rule_2');
   addBtn.addEventListener('click', () => add());
   const paint = (): void => {
     caseRow.hidden = modeSel.value !== 'regex';
     hint.textContent = REPLACE_HINTS[modeSel.value] || '';
   };
   modeSel.addEventListener('change', paint);
-  body.appendChild(fieldRow('Column', colSel));
-  body.appendChild(fieldRow('Match', modeSel));
+  body.appendChild(fieldRow(t('common.column'), colSel));
+  body.appendChild(fieldRow(t('common.match'), modeSel));
   body.appendChild(caseRow);
   body.appendChild(hint);
   body.appendChild(list);
   body.appendChild(addBtn);
   paint();
   return () => {
-    if (!colSel.value) { window.alert('Pick a column.'); return null; }
+    if (!colSel.value) { window.alert(t('common.pick_a_column')); return null; }
     const rules = readPairs(list).filter((r) => modeSel.value === 'exact' || r.from !== '');
-    if (!rules.length) { window.alert('Add at least one rule with text to find.'); return null; }
+    if (!rules.length) { window.alert(t('prepareClean.add_at_least_one_rule_with')); return null; }
     const step: any = { type: 'replace_values', column: colSel.value, mode: modeSel.value, rules };
     if (modeSel.value === 'regex' && caseBox.checked) step.ignoreCase = true;
     return step;
@@ -166,7 +165,7 @@ function makeRuleRow(rule?: any): HTMLElement {
   row.className = 'ds-agg-row pp-rule';
   const ifLbl = document.createElement('span');
   ifLbl.className = 'pp-arrow';
-  ifLbl.textContent = 'If';
+  ifLbl.textContent = t('common.if');
   const colSel = makeColSelect(r.when.column);
   colSel.classList.add('pp-col');
   const opSel = selectFrom(RULE_OPS, r.when.op || '=');
@@ -176,14 +175,14 @@ function makeRuleRow(rule?: any): HTMLElement {
   valIn.placeholder = 'value';
   const thenLbl = document.createElement('span');
   thenLbl.className = 'pp-arrow';
-  thenLbl.textContent = 'then';
+  thenLbl.textContent = t('prepareClean.then');
   const thenIn = textInput(r.then != null ? String(r.then) : '');
   thenIn.classList.add('pp-then');
   thenIn.placeholder = 'result';
   const del = document.createElement('button');
   del.type = 'button';
   del.className = 'ds-step-btn';
-  iconOnly(del, 'x', 'Remove rule');
+  iconOnly(del, 'x', t('common.remove_rule'));
   del.addEventListener('click', () => row.remove());
   const paint = (): void => { valIn.hidden = opSel.value === 'is_empty' || opSel.value === 'not_empty'; };
   opSel.addEventListener('change', paint);
@@ -195,28 +194,28 @@ function makeRuleRow(rule?: any): HTMLElement {
 function buildConditionalForm(body: HTMLElement, existing: any): () => any {
   const e = existing || {};
   const nameIn = textInput(e.name || '');
-  nameIn.placeholder = 'new column name';
+  nameIn.placeholder = t('common.new_column_name_2');
   const list = document.createElement('div');
   list.className = 'ds-agg-list';
   (Array.isArray(e.rules) && e.rules.length ? e.rules : [null]).forEach((r: any) => list.appendChild(makeRuleRow(r)));
   const addBtn = document.createElement('button');
   addBtn.type = 'button';
   addBtn.className = 'btn';
-  addBtn.textContent = '+ Add rule';
+  addBtn.textContent = t('common.add_rule_2');
   addBtn.addEventListener('click', () => list.appendChild(makeRuleRow()));
   const elseIn = textInput(e.else != null ? String(e.else) : '');
-  elseIn.placeholder = '(leave empty)';
+  elseIn.placeholder = t('common.leave_empty');
   const hint = document.createElement('div');
   hint.className = 'ds-step-hint';
-  hint.textContent = 'The first rule that matches decides the value. The rules run as one formula, so the column is typed like any calculated field.';
-  body.appendChild(fieldRow('New column', nameIn));
+  hint.textContent = t('prepareClean.the_first_rule_that_matches_decides');
+  body.appendChild(fieldRow(t('common.new_column'), nameIn));
   body.appendChild(list);
   body.appendChild(addBtn);
-  body.appendChild(fieldRow('Otherwise', elseIn));
+  body.appendChild(fieldRow(t('common.otherwise'), elseIn));
   body.appendChild(hint);
   return () => {
     const name = nameIn.value.trim();
-    if (!name) { window.alert('Name the new column.'); return null; }
+    if (!name) { window.alert(t('common.name_the_new_column')); return null; }
     const rules: any[] = [];
     list.querySelectorAll('.pp-rule').forEach((row) => {
       const column = (row.querySelector('.pp-col') as HTMLSelectElement).value;
@@ -228,7 +227,7 @@ function buildConditionalForm(body: HTMLElement, existing: any): () => any {
       if (op !== 'is_empty' && op !== 'not_empty') when.value = value;
       rules.push({ when, then });
     });
-    if (!rules.length) { window.alert('Add at least one rule.'); return null; }
+    if (!rules.length) { window.alert(t('prepareClean.add_at_least_one_rule')); return null; }
     return { type: 'conditional_column', name, rules, else: elseIn.value === '' ? null : elseIn.value };
   };
 }
@@ -237,18 +236,18 @@ function buildConditionalForm(body: HTMLElement, existing: any): () => any {
 function cleanStepSummary(step: any): string | null {
   switch (step.type) {
     case 'parse_date':
-      return 'Parse ' + step.column + ' as ' + step.format + (step.as ? ' → ' + step.as : '');
+      return t('prepareClean.parse_as', { column: step.column, format: step.format, p2: (step.as ? ' → ' + step.as : '') });
     case 'dedupe_key': {
       const keep = step.keep === 'max' || step.keep === 'min' ? 'the ' + step.keep + ' ' + step.by : 'the ' + step.keep;
-      return 'One row per ' + (step.columns || []).join(', ') + ', keeping ' + keep;
+      return t('prepareClean.one_row_per_keeping', { p0: (step.columns || []).join(', '), keep });
     }
     case 'replace_values': {
       const n = (step.rules || []).length;
-      return 'Replace in ' + step.column + ' (' + step.mode + '): ' + n + ' rule' + (n === 1 ? '' : 's');
+      return t('prepareClean.replace_in', { column: step.column, mode: step.mode, n });
     }
     case 'conditional_column': {
       const n = (step.rules || []).length;
-      return 'Conditional column "' + step.name + '": ' + n + ' rule' + (n === 1 ? '' : 's');
+      return t('prepareClean.conditional_column', { name: step.name, n });
     }
     default:
       return null;

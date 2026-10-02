@@ -9,7 +9,7 @@
 // nextFreeRow, makeModalAccessible) live.
 
 async function handleAddControl(): Promise<void> {
-  if (!currentProjectId) { window.alert('Open a project first.'); return; }
+  if (!currentProjectId) { window.alert(t('common.open_a_project_first')); return; }
   let datasets: any[] = [];
   try {
     datasets = await window.hub.listDatasets(currentProjectId);
@@ -41,11 +41,11 @@ async function handleAddControl(): Promise<void> {
 // authoringProps.ts (the locked "Kind: …" line in the properties panel), so
 // the label text can't drift between the two places it's shown.
 const CONTROL_KINDS_UI: Array<{ kind: string; label: string; hint: string }> = [
-  { kind: 'dropdown', label: 'Dropdown', hint: 'Pick one value' },
-  { kind: 'multi', label: 'Multi-select', hint: 'Pick several values' },
-  { kind: 'date_range', label: 'Date range', hint: 'Relative or fixed dates' },
-  { kind: 'parameter', label: 'Parameter', hint: 'A value you slide or type' },
-  { kind: 'radius', label: 'Radius', hint: 'Within a distance of a place' }, // r6:geo
+  { kind: 'dropdown', label: t('dashAddControl.dropdown'), hint: t('dashAddControl.pick_one_value') },
+  { kind: 'multi', label: 'Multi-select', hint: t('dashAddControl.pick_several_values') },
+  { kind: 'date_range', label: t('dashAddControl.date_range'), hint: t('dashAddControl.relative_or_fixed_dates') },
+  { kind: 'parameter', label: t('common.parameter'), hint: t('dashAddControl.a_value_you_slide_or_type') },
+  { kind: 'radius', label: t('common.radius'), hint: t('dashAddControl.within_a_distance_of_a_place') }, // r6:geo
 ];
 const CONTROL_KIND_LABELS: Record<string, string> = Object.fromEntries(
   CONTROL_KINDS_UI.map((k) => [k.kind, k.label]),
@@ -80,7 +80,7 @@ function openControlDialog(
     box.className = 'ws-modal dash-control-modal';
     const h = document.createElement('div');
     h.className = 'ws-modal-title';
-    h.textContent = editing ? 'Edit control' : 'Add a control';
+    h.textContent = editing ? t('common.edit_control') : t('common.add_a_control');
 
     const field = (labelText: string, control: HTMLElement): HTMLElement => {
       const row = document.createElement('label');
@@ -100,7 +100,7 @@ function openControlDialog(
     const kindRow = document.createElement('div');
     kindRow.className = 'dc-kind';
     kindRow.setAttribute('role', 'radiogroup');
-    kindRow.setAttribute('aria-label', 'Kind');
+    kindRow.setAttribute('aria-label', t('common.kind'));
     const paintKind = (): void => {
       kindRow.querySelectorAll('.dc-kind-tile').forEach((b) => {
         const on = (b as HTMLElement).dataset.kind === kind;
@@ -140,7 +140,7 @@ function openControlDialog(
     datasets.forEach((d) => {
       const opt = document.createElement('option');
       opt.value = String(d.id);
-      opt.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
+      opt.textContent = d && d.name ? String(d.name) : t('common.untitled_dataset');
       dsSel.appendChild(opt);
     });
     if (editing && existing.datasetId) dsSel.value = String(existing.datasetId);
@@ -151,7 +151,7 @@ function openControlDialog(
     const labelInput = document.createElement('input');
     labelInput.type = 'text';
     labelInput.className = 'ws-modal-input';
-    labelInput.placeholder = 'Label';
+    labelInput.placeholder = t('common.label');
     let labelTouched = false;
     if (editing && existing.label) {
       labelInput.value = String(existing.label);
@@ -160,7 +160,7 @@ function openControlDialog(
       labelTouched = existing.label !== 'Filter by ' + (existing.column || '');
     }
     labelInput.addEventListener('input', () => { labelTouched = true; });
-    const autoLabel = (): string => 'Filter by ' + (colSel.value || '');
+    const autoLabel = (): string => t('dashAddControl.filter_by', { p0: (colSel.value || '') });
     const onChange = (): void => {
       if (!labelTouched) labelInput.value = autoLabel();
     };
@@ -297,7 +297,7 @@ function openControlDialog(
       if (kind === 'multi') {
         const list = document.createElement('div');
         list.className = 'fd-list dc-preview-list';
-        list.textContent = 'Loading…';
+        list.textContent = t('common.loading');
         previewWrap.appendChild(list);
         const selected = new Set<string>(
           seed && Array.isArray(seed.values) ? seed.values.map((v: any) => String(v)) : [],
@@ -307,7 +307,7 @@ function openControlDialog(
           if (!values.length) {
             const p = document.createElement('p');
             p.className = 'fd-empty';
-            p.textContent = 'This column has no values.';
+            p.textContent = t('dashAddControl.this_column_has_no_values');
             list.appendChild(p);
           }
           values.forEach((v) => {
@@ -342,7 +342,7 @@ function openControlDialog(
         sel.className = 'dash-ctrl-select';
         const all = document.createElement('option');
         all.value = '';
-        all.textContent = 'All';
+        all.textContent = t('common.all');
         sel.appendChild(all);
         if (seed && seed.value) {
           const o0 = document.createElement('option');
@@ -376,11 +376,11 @@ function openControlDialog(
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'btn';
-    cancel.textContent = 'Cancel';
+    cancel.textContent = t('common.cancel');
     const ok = document.createElement('button');
     ok.type = 'button';
     ok.className = 'btn btn-primary';
-    ok.textContent = editing ? 'Save' : 'Add';
+    ok.textContent = editing ? t('common.save') : t('common.add');
     ok.disabled = datasets.length === 0;
 
     let a11y: { onTabKey: (e: KeyboardEvent) => void; release: () => void } | null = null;
@@ -422,19 +422,19 @@ function openControlDialog(
     if (datasets.length === 0) {
       const empty = document.createElement('p');
       empty.className = 'dash-modal-empty';
-      empty.textContent = 'Import a dataset first — a control filters one.';
+      empty.textContent = t('dashAddControl.import_a_dataset_first_a_control');
       box.appendChild(empty);
     } else {
-      box.appendChild(field('Kind', kindRow));
-      box.appendChild(field('Dataset', dsSel));
-      box.appendChild(field('Column', colSel));
-      box.appendChild(field('Label', labelInput));
-      box.appendChild(field('Preview (also sets the default, if left selected)', previewWrap));
+      box.appendChild(field(t('common.kind'), kindRow));
+      box.appendChild(field(t('common.dataset'), dsSel));
+      box.appendChild(field(t('common.column'), colSel));
+      box.appendChild(field(t('common.label'), labelInput));
+      box.appendChild(field(t('dashAddControl.preview_also_sets_the_default_if'), previewWrap));
     }
     box.appendChild(actions);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
-    a11y = makeModalAccessible(box, editing ? 'Edit control' : 'Add a control', datasets.length ? dsSel : cancel);
+    a11y = makeModalAccessible(box, editing ? t('common.edit_control') : t('common.add_a_control'), datasets.length ? dsSel : cancel);
     paintKind();
     if (datasets.length) void loadColumns();
   });

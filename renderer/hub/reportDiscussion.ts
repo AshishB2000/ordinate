@@ -47,20 +47,20 @@ async function reportDiscussionPage(ctx: ReportContext, page: any): Promise<Rend
   };
   const bullets: string[] = [];
   for (const c of threads) {
-    const t = c.target;
-    const where = t.kind === 'analysis' ? 'the dashboard' : ((names[t.kind + ':' + t.id] || {}).name || 'a tile');
-    const point = t.point ? ' (' + t.point.label + (t.point.series ? ' · ' + t.point.series : '') + ')' : '';
-    const state = c.resolvedAt ? 'Resolved' : 'Open';
-    bullets.push(`[${state}] ${c.author || 'Someone'} on ${where}${point}, ${day(c.createdAt)}: ${cmtPlain(c.body)}`);
-    for (const r of c.replies || []) bullets.push(`    ↳ ${r.author || 'Someone'}, ${day(r.createdAt)}: ${cmtPlain(r.body)}`);
+    const tv = c.target;
+    const where = tv.kind === 'analysis' ? t('common.the_dashboard') : ((names[tv.kind + ':' + tv.id] || {}).name || t('reportDiscussion.a_tile'));
+    const point = tv.point ? ' (' + tv.point.label + (tv.point.series ? ' · ' + tv.point.series : '') + ')' : '';
+    const state = c.resolvedAt ? t('common.resolved') : t('common.open');
+    bullets.push(t('reportDiscussion.on', { state, p1: c.author || t('common.someone'), where, point, createdAt: day(c.createdAt), body: cmtPlain(c.body) }));
+    for (const r of c.replies || []) bullets.push(`    ↳ ${r.author || t('common.someone')}, ${day(r.createdAt)}: ${cmtPlain(r.body)}`);
   }
   return {
     kind: 'discussion',
     layout: page.layout,
-    title: 'Discussion',
+    title: t('common.discussion'),
     meta: [threads.length
-      ? `${open} open · ${threads.length - open} resolved`
-      : 'No one has commented on this dashboard yet.'],
+      ? t('reportDiscussion.open_resolved', { open, p1: threads.length - open })
+      : t('reportDiscussion.no_one_has_commented_on_this')],
     bullets,
   };
 }

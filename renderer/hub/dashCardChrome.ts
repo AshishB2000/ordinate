@@ -64,7 +64,7 @@ function makeDashCardEl(card: any): HTMLElement {
 // The card's ⋯ menu: move, resize, remove. openMiniMenu (chartControls.ts) is
 // the hub's existing popover — positioned, outside-click and Esc already done.
 function dashCardMenuBtn(card: any): HTMLButtonElement {
-  const btn = dashCtrlBtn('more-horizontal', 'Card actions', () => {
+  const btn = dashCtrlBtn('more-horizontal', t('dashCardChrome.card_actions'), () => {
     openMiniMenu(btn, (menu: HTMLElement, close: () => void) => {
       // The chart's own controls popover is a .chart-menu too — this one needs
       // a hook of its own, or a selector for either finds both.
@@ -79,15 +79,15 @@ function dashCardMenuBtn(card: any): HTMLButtonElement {
         .concat(pivotMenuItems(btn.closest('.dash-card'), dashCardTitle(card)))
         // On a tablet / phone layout, that size's own moves (layoutEdit.ts).
         .concat(tileActionMenuItems(card)).concat(ansCardMenuItems(card)).concat(lyMenuItems(card) || [
-        ['Move up', () => nudgeCard(card, 0, -1)],
-        ['Move down', () => nudgeCard(card, 0, 1)],
-        ['Move left', () => nudgeCard(card, -1, 0)],
-        ['Move right', () => nudgeCard(card, 1, 0)],
-        ['Wider', () => resizeCard(card, 1, 0)],
-        ['Narrower', () => resizeCard(card, -1, 0)],
-        ['Taller', () => resizeCard(card, 0, 1)],
-        ['Shorter', () => resizeCard(card, 0, -1)],
-        ['Remove', () => removeCard(card)],
+        [t('common.move_up'), () => nudgeCard(card, 0, -1)],
+        [t('common.move_down'), () => nudgeCard(card, 0, 1)],
+        [t('dashCardChrome.move_left'), () => nudgeCard(card, -1, 0)],
+        [t('dashCardChrome.move_right'), () => nudgeCard(card, 1, 0)],
+        [t('dashCardChrome.wider'), () => resizeCard(card, 1, 0)],
+        [t('dashCardChrome.narrower'), () => resizeCard(card, -1, 0)],
+        [t('common.taller'), () => resizeCard(card, 0, 1)],
+        [t('common.shorter'), () => resizeCard(card, 0, -1)],
+        [t('common.remove'), () => removeCard(card)],
       ] as Array<[string, () => void]>)).forEach(([label, run], i, all) => {
         const row = document.createElement('button');
         row.type = 'button';
@@ -131,6 +131,6 @@ function dashCardTitleRaw(card: any): string {
   // The control's "Label above" (task-3 brief) IS the header title — every
   // other card type's "what is this" text lives there, not duplicated in the
   // body, and renderControlCard (dashControls.ts) owns nothing but the widget.
-  if (card.type === 'control') return (card.control && card.control.label) || 'Filter';
+  if (card.type === 'control') return (card.control && card.control.label) || t('common.filter');
   return card.heading || cardKindTitle(card);
 }

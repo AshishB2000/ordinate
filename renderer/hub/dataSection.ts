@@ -105,7 +105,7 @@ function dxOpenImport(then?: () => void): void {
   // file is being asked about, and a picked file is the one thing the user
   // cannot re-read off the dialog.
   const base = String(dsFilePath || '').split(/[\\/]/).pop() || '';
-  const title = base ? 'Choose a sheet · ' + base : 'Choose a sheet';
+  const title = base ? t('dataSection.choose_a_sheet', { base }) : t('dataSection.choose_a_sheet_2');
   dxSetImportTitle(title);
   const paste = dxEl('ds-paste-wrap');
   if (paste) paste.hidden = true;
@@ -122,14 +122,14 @@ function dxOpenImport(then?: () => void): void {
  * multi-sheet import cannot leave them showing under the textarea.
  */
 function openPasteDialog(): void {
-  dxSetImportTitle('Paste data');
+  dxSetImportTitle(t('common.paste_data'));
   for (const id of ['ds-sheet-wrap', 'ds-sheet-bar', 'ds-warnings', 'ds-preview', 'ds-save-bar']) {
     const el = dxEl(id);
     if (el) el.hidden = true;
   }
   const paste = dxEl('ds-paste-wrap');
   if (paste) paste.hidden = false;
-  if (!dxOpenDialog('ds-import-modal', '.ds-import-modal', 'Paste data', 'ds-paste-input')) {
+  if (!dxOpenDialog('ds-import-modal', '.ds-import-modal', t('common.paste_data'), 'ds-paste-input')) {
     // Already open (a second click): just make sure the box has focus.
     (dxEl('ds-paste-input') as HTMLTextAreaElement | null)?.focus();
   }

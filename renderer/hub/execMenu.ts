@@ -12,14 +12,15 @@
  * it loads (index.html) before every file that reads it. Classic global-scope
  * script: the `const` is the global lexical scope, read inside functions only.
  */
+// i18n-skip: mirrors execConfig.AI_NOT_CONFIGURED byte-for-byte (scripts/test-ai-naming.ts)
 const AI_NOT_CONFIGURED = 'The Assistant isn’t set up yet.';
 
 /** The one label on the one button that fixes it. */
-const AI_SETUP_LABEL = 'Set up the Assistant';
+const AI_SETUP_LABEL = t('common.set_up_the_assistant');
 
 /** The same state, said from the MODEL PICKER's point of view — see
  *  updateExecBtnIcon for why that button must not be named "Assistant". */
-const MODEL_NOT_CONNECTED = 'No model connected';
+const MODEL_NOT_CONNECTED = t('common.no_model_connected');
 
 /** Open Settings on the Assistant tab — the single destination behind every
  *  "Set up the Assistant" button and the dock's header pill. */
@@ -94,7 +95,7 @@ async function gateAssistantDoors(): Promise<void> {
   // Home's ask bar has no room for a notice, so its placeholder carries the
   // same answer. Submitting it opens the dock, which shows the button.
   const ask = document.getElementById('home-ask-input') as HTMLInputElement | null;
-  if (ask) ask.placeholder = ready ? 'Ask about your data…' : 'Set up the Assistant to ask a question…';
+  if (ask) ask.placeholder = ready ? t('common.ask_about_your_data') : t('common.set_up_the_assistant_to_ask');
 }
 
 // Execution-mode menu — the top-right chip popup: agent rows (cloud/local),
@@ -175,7 +176,7 @@ function updateExecBtnIcon(): void {
       // catch, and it caught it the moment this button moved out of the
       // capture header into the top bar. The name it wears now is also simply
       // the truer one.
-      btn.setAttribute('aria-label', `Model: ${active.label}`);
+      btn.setAttribute('aria-label', t('execMenu.model', { label: active.label }));
       btn.title = active.label;
     } else {
       btn.innerHTML = EXEC_BTN_NEUTRAL;
@@ -236,7 +237,7 @@ function renderCloudAgents(): void {
     const connected = Boolean((providers[prov] || {}).connected);
     if (connected) anyConnected = true;
     const isActive = connected && prov === active; // Active REQUIRES Connected
-    const badge = isActive ? 'Active' : (connected ? 'Connected' : 'Not connected');
+    const badge = isActive ? t('common.active') : (connected ? t('common.connected') : t('common.not_connected'));
     const label = BYOK_DISPLAY[prov] || prov;
     const onClick = connected
       ? () => selectCloudAgent(prov)
@@ -246,7 +247,7 @@ function renderCloudAgents(): void {
   if (!anyConnected) {
     const hint = document.createElement('div');
     hint.className = 'exec-agent-empty';
-    hint.textContent = 'No connected provider. Add and test a key to activate one.';
+    hint.textContent = t('execMenu.no_connected_provider_add_and_test');
     execAgentList.appendChild(hint);
   }
 }
@@ -261,7 +262,7 @@ function renderLocalAgents(): void {
   if (!shown.length) {
     const empty = document.createElement('div');
     empty.className = 'exec-agent-empty';
-    empty.textContent = 'Nothing found on this Mac. Open Settings → Assistant to look again.';
+    empty.textContent = t('execMenu.nothing_found_on_this_mac_open');
     execAgentList.appendChild(empty);
   }
   shown.forEach((cli: any) => {
@@ -271,17 +272,17 @@ function renderLocalAgents(): void {
     const isActive = supported && installed && cli.id === activeId;
     let badge: string, onClick: (() => void) | null = null, disabled = false, title: string | null = null;
     if (retired) {
-      badge = 'Retired';
+      badge = t('execMenu.retired');
       disabled = true;
-      title = cli.retiredNote || 'Retired.';
+      title = cli.retiredNote || t('execMenu.retired_2');
     } else if (!installed) {
-      badge = 'Not installed';
+      badge = t('execMenu.not_installed');
       onClick = () => openLocalSettings();
     } else if (!supported) {
-      badge = 'Not supported yet';
+      badge = t('execMenu.not_supported_yet');
       disabled = true;                               // installed but no adapter — not connectable
     } else {
-      badge = isActive ? 'Active' : 'Connected';
+      badge = isActive ? t('common.active') : t('common.connected');
       onClick = () => selectLocalCli(cli.id);
     }
     execAgentList.appendChild(execAgentRow(
@@ -316,16 +317,16 @@ function renderCliModelSelect(id: string, force?: boolean): void {
   if (!execModelCli) return;
   const saved = (execLocal.models || {})[id] || '';
   // Instant skeleton: Default (+ saved if custom), then swap in the live list.
-  const skel = [{ value: '', label: 'Default (CLI config)' }];
+  const skel = [{ value: '', label: t('common.default_cli_config') }];
   if (saved) skel.push({ value: saved, label: saved });
   execModelCli.setOptions(skel, saved);
   execModelCli.disabled = false;
   if (!window.hub || typeof window.hub.listCliModels !== 'function') return;
-  if (force) execSetModelHint('Refreshing…', 'loading');
+  if (force) execSetModelHint(t('common.refreshing'), 'loading');
   window.hub.listCliModels(id).then(res => {
     if (execMode !== 'local' || execLocal.activeId !== id) return;
     const models = (res && res.ok && res.models) || [];
-    const opts = [{ value: '', label: 'Default (CLI config)' }]
+    const opts = [{ value: '', label: t('common.default_cli_config') }]
       .concat(models.map((m: any) => ({ value: m, label: m })));
     if (saved && !models.includes(saved)) opts.push({ value: saved, label: saved });
     execModelCli.setOptions(opts, saved);
@@ -333,10 +334,10 @@ function renderCliModelSelect(id: string, force?: boolean): void {
     // Empty list: only a genuine failure is an error. 'auth' (installed but not
     // signed in) and 'empty'/no-list mean Default is a legit choice → stay neutral.
     const reason = res && res.reason;
-    if (reason === 'failed') execSetModelHint('Couldn’t list models — using Default.', 'warn');
-    else if (reason === 'auth') execSetModelHint('Sign in to this CLI to list its models.', '');
+    if (reason === 'failed') execSetModelHint(t('execMenu.couldn_t_list_models_using_default'), 'warn');
+    else if (reason === 'auth') execSetModelHint(t('execMenu.sign_in_to_this_cli_to'), '');
     else execSetModelHint('', '');
-  }).catch(() => execSetModelHint('Couldn’t list models — using Default.', 'warn'));
+  }).catch(() => execSetModelHint(t('execMenu.couldn_t_list_models_using_default'), 'warn'));
 }
 
 function renderExecModel(): void {
@@ -361,7 +362,7 @@ function renderExecModel(): void {
       execShowModelControl('input');
       if (execModelDl) execModelDl.innerHTML = '';
       execModelSel.value = '';
-      execModelSel.placeholder = 'Select a CLI to choose a model';
+      execModelSel.placeholder = t('execMenu.select_a_cli_to_choose_a');
       execModelSel.disabled = true;
       execSetModelHint('', '');
       return;
@@ -374,8 +375,8 @@ function renderExecModel(): void {
     // Installed CLI without a model list — honest, static, DISABLED "Default".
     execShowModelControl('input');
     if (execModelDl) execModelDl.innerHTML = '';
-    execModelSel.value = 'Default (CLI config)';
-    execModelSel.placeholder = 'Default (CLI config)';
+    execModelSel.value = t('common.default_cli_config');
+    execModelSel.placeholder = t('common.default_cli_config');
     execModelSel.disabled = true;
     return;
   }
@@ -388,9 +389,9 @@ function renderExecModel(): void {
     execShowModelControl('input');
     if (execModelDl) execModelDl.innerHTML = '';
     execModelSel.value = '';
-    execModelSel.placeholder = 'Connect a provider first';
+    execModelSel.placeholder = t('execMenu.connect_a_provider_first');
     execModelSel.disabled = true;
-    execSetModelHint('Add and test a key to choose a model.', '');
+    execSetModelHint(t('execMenu.add_and_test_a_key_to'), '');
     return;
   }
   // Gateway/custom: an arbitrary endpoint's models can't be listed, so the model is
@@ -401,9 +402,9 @@ function renderExecModel(): void {
     execShowModelControl('input');
     if (execModelDl) execModelDl.innerHTML = '';
     execModelSel.value = ((execByok.providers || {})[prov] || {}).model || '';
-    execModelSel.placeholder = 'Model id, e.g. openai/gpt-4o-mini';
+    execModelSel.placeholder = t('execMenu.model_id_e_g_openai_gpt');
     execModelSel.disabled = false;
-    execSetModelHint('Type the exact model id for your gateway.', '');
+    execSetModelHint(t('execMenu.type_the_exact_model_id_for'), '');
     return;
   }
   // A real <select> of live models, so ALL options show with one chevron.
@@ -419,7 +420,7 @@ function renderByokModelSelect(prov: string, force?: boolean): void {
   const saved = ((execByok.providers || {})[prov] || {}).model || '';
   const build = (list: any[] | null | undefined) => {
     const seen = new Set();
-    const rows = [{ value: '', label: 'Default' }];
+    const rows = [{ value: '', label: t('common.default') }];
     (list || []).forEach(m => { if (m.id && !seen.has(m.id)) { seen.add(m.id); rows.push({ value: m.id, label: m.label || m.id }); } });
     if (saved && !seen.has(saved)) rows.push({ value: saved, label: saved }); // keep a custom saved id selectable
     return rows;
@@ -428,14 +429,14 @@ function renderByokModelSelect(prov: string, force?: boolean): void {
   execModelCli.setOptions(build((PROVIDER_MODELS[prov] || []).map((m: any) => ({ id: m.v, label: m.l }))), saved);
   execModelCli.disabled = false;
   if (!window.hub || typeof window.hub.listModels !== 'function') return;
-  if (force) execSetModelHint('Refreshing…', 'loading'); else execSetModelHint('');
+  if (force) execSetModelHint(t('common.refreshing'), 'loading'); else execSetModelHint('');
   window.hub.listModels(prov, force).then(res => {
     if (execMode !== 'byok' || (execByok.activeProvider || 'anthropic') !== prov) return;
     const live = (res && res.models) || [];
     if (live.length) execModelCli.setOptions(build(live), saved);
     const [text, kind] = modelHintFor(res, prov);
     execSetModelHint(text, kind);
-  }).catch(() => execSetModelHint('Couldn’t refresh — showing saved list.', 'warn'));
+  }).catch(() => execSetModelHint(t('execMenu.couldn_t_refresh_showing_saved_list'), 'warn'));
 }
 
 function execSetModelHint(text: string, kind?: string): void {
@@ -455,11 +456,11 @@ function modelHintFor(res: any, prov: string): [string, string] {
   const err = res && res.error;
   if (!err) return ['', ''];
   switch (err) {
-    case 'no_key':  return ['Add a key to load models.', ''];
-    case 'auth':    return ['Key rejected — check your API key.', 'warn'];
-    case 'network': return [`Couldn’t reach ${name} — showing saved list.`, ''];
-    case 'empty':   return ['No models returned.', ''];
-    default:        return ['Couldn’t refresh — showing saved list.', ''];
+    case 'no_key':  return [t('execMenu.add_a_key_to_load_models'), ''];
+    case 'auth':    return [t('execMenu.key_rejected_check_your_api_key'), 'warn'];
+    case 'network': return [t('execMenu.couldn_t_reach_showing_saved_list', { name }), ''];
+    case 'empty':   return [t('execMenu.no_models_returned'), ''];
+    default:        return [t('execMenu.couldn_t_refresh_showing_saved_list'), ''];
   }
 }
 

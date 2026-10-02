@@ -24,7 +24,7 @@
 // the filter bar at load.
 
 const FT_DEBOUNCE_MS = 120;
-const FT_MATCH_WORD: Record<string, string> = { exact: 'exact', prefix: 'prefix', fuzzy: '≈ close', date: 'date', number: 'compare' };
+const FT_MATCH_WORD: Record<string, string> = { exact: 'exact', prefix: 'prefix', fuzzy: t('filterType.close'), date: 'date', number: 'compare' };
 
 interface FtOption {
   /** A suggestion from the parse, or an example to type. */
@@ -52,7 +52,7 @@ async function ftParse(text: string, pick: Record<string, string>): Promise<any>
   try {
     return await window.hubFilters.parse(currentProjectId, String(dashCurrent.id), text, pick);
   } catch (_) {
-    return { ok: false, error: 'Could not read that filter.' };
+    return { ok: false, error: t('filterType.could_not_read_that_filter') };
   }
 }
 
@@ -77,14 +77,14 @@ function ftInit(): void {
   input.id = 'ft-input';
   input.type = 'text';
   input.className = 'ft-input';
-  input.placeholder = 'Filter… e.g. west technology last quarter';
+  input.placeholder = t('filterType.filter_e_g_west_technology_last');
   input.autocomplete = 'off';
   input.spellcheck = false;
   input.setAttribute('role', 'combobox');
   input.setAttribute('aria-autocomplete', 'list');
   input.setAttribute('aria-expanded', 'false');
   input.setAttribute('aria-controls', 'ft-list');
-  input.setAttribute('aria-label', 'Type a filter for this dashboard');
+  input.setAttribute('aria-label', t('filterType.type_a_filter_for_this_dashboard'));
   field.append(mirror, input);
   box.appendChild(field);
 
@@ -96,7 +96,7 @@ function ftInit(): void {
   list.className = 'ft-list';
   list.id = 'ft-list';
   list.setAttribute('role', 'listbox');
-  list.setAttribute('aria-label', 'Filter suggestions');
+  list.setAttribute('aria-label', t('filterType.filter_suggestions'));
   const foot = document.createElement('div');
   foot.className = 'ft-foot';
   foot.id = 'ft-foot';
@@ -208,17 +208,17 @@ function ftPaint(text: string, res: any): void {
 
   if (!text.trim()) { ftPaintExamples(list, foot, res); return; }
   if (!res || !res.ok) {
-    ftEmpty(list, 'alert', 'Could not read that', (res && res.error) || 'Open a dashboard to filter it.');
+    ftEmpty(list, 'alert', t('filterType.could_not_read_that'), (res && res.error) || t('filterType.open_a_dashboard_to_filter_it'));
     return;
   }
   const groups = Array.isArray(res.groups) ? res.groups : [];
   if (!groups.length) {
     const cols = res.columns || {};
     const some = (cols.dimensions || []).slice(0, 3).join(', ');
-    const line = (some ? 'Try a value from ' + some : 'Try a value from this dashboard')
-      + (cols.dates && cols.dates.length ? ', a date like “last quarter”' : '')
-      + (cols.measures && cols.measures.length ? ', or “' + String(cols.measures[0]).replace(/_/g, ' ') + ' > 100”' : '') + '.';
-    ftEmpty(list, 'search', 'Nothing recognised yet', line);
+    const line = (some ? t('filterType.try_a_value_from', { some }) : t('filterType.try_a_value_from_this_dashboard'))
+      + (cols.dates && cols.dates.length ? t('filterType.a_date_like_last_quarter') : '')
+      + (cols.measures && cols.measures.length ? t('filterType.or_100', { p0: String(cols.measures[0]).replace(/_/g, ' ') }) : '') + '.';
+    ftEmpty(list, 'search', t('filterType.nothing_recognised_yet'), line);
   } else {
     groups.forEach((g: any, gi: number) => {
       const group = document.createElement('div');
@@ -270,7 +270,7 @@ function ftEmpty(list: HTMLElement, iconName: string, title: string, line: strin
 function ftPaintExamples(list: HTMLElement, foot: HTMLElement, res: any): void {
   const examples: string[] = res && Array.isArray(res.examples) && res.examples.length
     ? res.examples
-    : ['west technology', 'last quarter', 'revenue > 10k', 'not furniture'];
+    : [t('filterType.west_technology'), t('filterType.last_quarter'), t('filterType.revenue_10k'), t('filterType.not_furniture')];
   const group = document.createElement('div');
   group.className = 'ft-group';
   group.setAttribute('role', 'group');
@@ -281,14 +281,14 @@ function ftPaintExamples(list: HTMLElement, foot: HTMLElement, res: any): void {
   head.setAttribute('role', 'presentation');
   head.appendChild(icon('sparkles', 16));
   const name = document.createElement('span');
-  name.textContent = 'Try typing';
+  name.textContent = t('filterType.try_typing');
   head.appendChild(name);
   group.appendChild(head);
   examples.forEach((ex) => group.appendChild(ftOptionEl({ example: ex })));
   list.appendChild(group);
   const line = document.createElement('span');
   line.className = 'ft-foot-line';
-  line.textContent = 'Values, dates, comparisons and “not …” — read by the app, no Assistant needed.';
+  line.textContent = t('filterType.values_dates_comparisons_and_not_read');
   foot.appendChild(line);
   if (ftActive >= ftOptions.length) ftActive = 0;
   ftHighlight();
@@ -317,21 +317,21 @@ function ftOptionEl(o: FtOption): HTMLElement {
     if (it.negated) {
       const not = document.createElement('span');
       not.className = 'ft-not';
-      not.textContent = 'not';
+      not.textContent = t('filterType.not');
       opt.appendChild(not);
     }
     label.textContent = it.label;
     opt.appendChild(label);
     // What was typed, when it is not simply the value itself.
     if (it.match === 'prefix' || it.match === 'fuzzy' || !it.chosen) {
-      meta.textContent = (it.chosen ? '' : 'use for ') + '“' + it.phrase + '”';
+      meta.textContent = (it.chosen ? '' : t('filterType.use_for')) + '“' + it.phrase + '”';
     }
     opt.appendChild(meta);
     const tag = document.createElement('span');
     tag.className = 'ft-tag ft-tag--' + it.match;
     tag.textContent = FT_MATCH_WORD[it.match] || it.match;
     opt.appendChild(tag);
-    if (!it.chosen) opt.setAttribute('aria-description', 'Switch “' + it.phrase + '” to ' + it.column);
+    if (!it.chosen) opt.setAttribute('aria-description', t('filterType.switch_to', { phrase: it.phrase, column: it.column }));
   }
   opt.addEventListener('mousedown', (e) => { e.preventDefault(); ftActive = n; void ftChoose(n); });
   opt.addEventListener('mousemove', () => { if (ftActive !== n) { ftActive = n; ftHighlight(); } });
@@ -344,7 +344,7 @@ function ftPaintFoot(foot: HTMLElement, res: any): void {
     const u = document.createElement('div');
     u.className = 'ft-unknown';
     const lead = document.createElement('span');
-    lead.textContent = 'Not recognised:';
+    lead.textContent = t('filterType.not_recognised');
     u.appendChild(lead);
     unknown.forEach((w) => {
       const m = document.createElement('mark');
@@ -360,19 +360,19 @@ function ftPaintFoot(foot: HTMLElement, res: any): void {
   const k = document.createElement('span');
   k.className = 'kbd';
   k.textContent = '↵';
-  const t = document.createElement('span');
-  t.textContent = chips ? `apply ${chips} filter${chips === 1 ? '' : 's'}` : 'nothing to apply yet';
+  const tv = document.createElement('span');
+  tv.textContent = chips ? t('filterType.apply', { chips }) : t('filterType.nothing_to_apply_yet');
   const k2 = document.createElement('span');
   k2.className = 'kbd';
   k2.textContent = '↑↓';
   const t2 = document.createElement('span');
-  t2.textContent = 'choose';
+  t2.textContent = t('filterType.choose');
   const k3 = document.createElement('span');
   k3.className = 'kbd';
-  k3.textContent = 'esc';
+  k3.textContent = t('filterType.esc');
   const t3 = document.createElement('span');
-  t3.textContent = 'close';
-  keys.append(k, t, k2, t2, k3, t3);
+  t3.textContent = t('filterType.close_2');
+  keys.append(k, tv, k2, t2, k3, t3);
   foot.appendChild(keys);
 }
 
@@ -424,7 +424,7 @@ async function ftApplyTyped(): Promise<void> {
   if (!applied.length) return;
   ftReset();
   ftClose();
-  showToast('Filtered to ' + applied.join(' · '));
+  showToast(t('common.filtered_to', { p0: applied.join(' · ') }));
 }
 
 function ftKeydown(e: KeyboardEvent): void {
