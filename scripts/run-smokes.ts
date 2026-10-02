@@ -117,6 +117,9 @@ export const SMOKES = [
   // Round 10: saved views, retail calendars, multi-currency, incremental
   // refresh and drag and drop, in one launch (sections in scripts/r10*.ts).
   'smoke-round10',
+  // Round 7: notebooks, level-of-detail expressions, save as template, linked
+  // hover and motion, and interface languages, in one launch (sections in scripts/r7*.ts).
+  'smoke-round7',
 ];
 
 /** Longest-processing-time-first: each smoke, longest first, onto whichever
