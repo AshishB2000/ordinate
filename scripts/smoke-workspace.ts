@@ -12,6 +12,7 @@
 
 export {};
 import { ok, failureCount } from './selfcheck';
+import { closeApp } from './smokeFixture';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -401,7 +402,7 @@ async function main(): Promise<void> {
     await projectsSection(win, app);
   } finally {
     ok('zero renderer console errors', errors.length === 0, errors.slice(0, 5).join(' | '));
-    await app.close().catch(() => {});
+    await closeApp(app);
   }
   process.exit(failureCount() ? 1 : 0);
 }

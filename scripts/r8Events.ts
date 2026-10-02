@@ -59,7 +59,8 @@ const fill = (win: Win, sel: string, value: string): Promise<boolean> =>
 /** The builder chart's events plugin, or null. */
 const builderEvents = (win: Win): Promise<{ n: number; titles: string[] } | null> => win.evaluate(() => {
   const c = chartInstances.get(document.getElementById('viz-area'));
-  const p = c && (c.config.plugins || []).find((x: any) => x && x.id === 'ordEvents');
+  // Mid-render the slot can hold a chart without its config yet: not ready, poll again.
+  const p = c && c.config && (c.config.plugins || []).find((x: any) => x && x.id === 'ordEvents');
   return p ? { n: p.events.length, titles: p.events.map((e: any) => e.title) } : null;
 });
 

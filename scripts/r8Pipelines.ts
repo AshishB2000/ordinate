@@ -215,7 +215,7 @@ export async function pipelinesSection(s: Smoke, fx: Fixture): Promise<void> {
   await pick(win, 'dataset:' + fileId);
   ok('pipelines: the history lists the run', await until(win, () => win.evaluate(() => document.querySelectorAll('#pq-runs .pq-run:not(.pq-run--head)').length >= 1)));
   await click(win, '#pq-runs .pq-run:not(.pq-run--head)');
-  ok('pipelines: a run opens its log inline — row counts', /2 rows before, 2 after/.test(await text(win, '#pq-runs .pq-log:not([hidden])')), await text(win, '#pq-runs'));
+  ok('pipelines: a run opens its log inline — row counts', await until(win, async () => /2 rows before, 2 after/.test(await text(win, '#pq-runs .pq-log:not([hidden])'))), await text(win, '#pq-runs'));
 
   // ── Run from here: a failure stops what follows, and raises an alert ─────
   await main('setPolicy');

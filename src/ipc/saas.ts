@@ -21,6 +21,7 @@ import { refreshAsJob } from '../data/refreshJob';
 import { refreshDependents } from '../data/datasetDependents';
 import { runQualityChecks } from '../analysis/qualityRun';
 import * as hubs from '../windows/hubRegistry';
+import { onQuit } from '../app/quitCleanup';
 
 /** Every dataset built from `connId`, refreshed one after another. Never throws. */
 async function refreshFromWatch(projectId: string, connId: string): Promise<void> {
@@ -78,5 +79,5 @@ export function register(deps: { headless?: boolean }): void {
       console.error('[folderWatch] could not start:', err instanceof Error ? err.message : err);
     }
   });
-  app.on('before-quit', () => folderWatch.stopAll());
+  onQuit(() => folderWatch.stopAll());
 }

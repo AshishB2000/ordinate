@@ -98,6 +98,7 @@ import { createHubWindow } from './windows/hubWindow';
 // Every hub window main has open. Pushes go to the PRIMARY (once-only work) or
 // to all of them (state each window paints) — see the module header.
 import * as hubs from './windows/hubRegistry';
+import * as quitCleanup from './app/quitCleanup';
 
 import { platformDefaultHotkey, hotkeyLabel } from './app/hotkey';
 
@@ -732,6 +733,12 @@ void app.whenReady().then(async () => {
 
   // Always open the hub on launch.
   openHub();
+});
+
+// Timers and every non-hub window (offscreen report/export, overlay) go first;
+// hubs close normally so an unsaved-changes prompt still gets its say.
+app.on('before-quit', () => {
+  quitCleanup.runQuit(BrowserWindow.getAllWindows().filter((w) => !hubs.all().includes(w)));
 });
 
 app.on('will-quit', () => {

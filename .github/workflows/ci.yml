@@ -38,9 +38,19 @@ jobs:
       - name: Run self-checks
         run: npm test
 
+  # Four shards in parallel, balanced by scripts/smoke-durations.json — the
+  # serial chain had grown past 40 minutes. Each smoke is killed by name after 10
+  # minutes (scripts/run-smokes.ts) and the job after 60, so a hung app can
+  # never again hold a runner for six hours. The console-error rule is inside
+  # every smoke, unchanged.
   smoke:
-    name: App smoke test (real Electron)
+    name: smoke (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -55,7 +65,7 @@ jobs:
         run: npx playwright install-deps chromium
       # No display on a CI runner, and Electron will not start without one.
       - name: Run the smoke test under a virtual display
-        run: xvfb-run -a npm run smoke
+        run: npm run build && xvfb-run -a node scripts/run-smokes.js --shard ${{ matrix.shard }}/4
         env:
           SMOKE_ARTIFACT_DIR: ${{ runner.temp }}
       # Upload the screenshot ALWAYS — on a failure it is the only way to see
@@ -76,10 +86,23 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: smoke-screenshots
+          name: smoke-screenshots-${{ matrix.shard }}
           path: ${{ runner.temp }}/*.png
           if-no-files-found: warn
           # The default is 90 days. A ~400 KB screenshot per PR run, kept for
           # three months, is what filled the quota in the first place; nobody has
           # ever wanted last quarter's smoke screenshot.
           retention-days: 7
+
+  # THE required check. Branch protection names one context, not four, so a
+  # shard that is renamed or added cannot silently drop out of the gate: this
+  # job fails unless every shard succeeded (a skipped or cancelled shard fails
+  # it too).
+  smoke-all:
+    name: smoke (all shards)
+    runs-on: ubuntu-latest
+    needs: smoke
+    if: always()
+    steps:
+      - name: Every shard passed
+        run: test "${{ needs.smoke.result }}" = success

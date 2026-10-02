@@ -15,6 +15,7 @@
 
 export {}; // module scope — sibling scripts share top-level names
 import { ok, failureCount } from './selfcheck';
+import { closeApp } from './smokeFixture';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -256,7 +257,7 @@ async function main(): Promise<void> {
     JSON.stringify({ dismissed, now: reloaded.ids.length }));
 
   ok('no renderer console errors at any point', errors.length === 0, errors.join('\n'));
-  await app.close();
+  await closeApp(app);
 }
 
 void main()

@@ -17,6 +17,7 @@
 
 export {}; // module scope — sibling scripts share top-level names
 import { ok, failureCount } from './selfcheck';
+import { closeApp } from './smokeFixture';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -86,7 +87,7 @@ async function main(): Promise<void> {
     return null;
   });
   ok('the sample dashboard is there to theme', Boolean(ids && ids.pid), JSON.stringify(ids));
-  if (!ids) { await app.close(); return; }
+  if (!ids) { await closeApp(app); return; }
 
   /** Everything a theme can change, measured rather than assumed. */
   const measure = (): Promise<any> => win.evaluate(() => {
@@ -194,7 +195,7 @@ async function main(): Promise<void> {
   ok('no renderer console errors across every theme switch', errors.length === 0,
     errors.slice(0, 3).join(' | '));
 
-  await app.close();
+  await closeApp(app);
   try { fs.rmSync(userData, { recursive: true, force: true }); } catch (_) { /* temp dir */ }
 }
 

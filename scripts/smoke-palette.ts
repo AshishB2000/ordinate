@@ -21,6 +21,7 @@
 
 export {}; // module scope — sibling scripts share top-level names
 import { ok, failureCount } from './selfcheck';
+import { closeApp } from './smokeFixture';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -288,7 +289,7 @@ async function main(): Promise<void> {
 
   ok('no renderer console errors through the whole run', errors.length === 0, errors.join(' | '));
 
-  await app.close();
+  await closeApp(app);
   console.log('[smoke-palette] artifacts in', shotDir);
 }
 

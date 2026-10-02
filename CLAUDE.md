@@ -190,7 +190,12 @@ factories. `renderer/{hub,overlay}/` → windows.
   error** — which is what catches a CSP violation. Note the first paint is a splash screen: a
   screenshot taken there passes every size and DOM check while proving nothing.
 - **CI** (`.github/workflows/`) runs type-check + tests + smoke, and `lint.yml` blocking, on every
-  PR to `develop`.
+  PR to `develop`. Smokes run as **four parallel shards** (`run-smokes --shard i/4`, balanced by
+  `scripts/smoke-durations.json` — refresh it from the `durations:` line a run prints); "smoke (all
+  shards)" is the required check. **No smoke can hang the chain:** each is killed by name after 10
+  minutes, and every smoke closes its app through `closeApp` (a 15 s race) — anything the app spawns
+  (on Linux a file reveal is `xdg-open`, which can start a browser) inherits Playwright's pipes and
+  would otherwise block `app.close()` forever. A new smoke goes in `SMOKES` AND the durations file.
 
 ```bash
 npm start          # run the app

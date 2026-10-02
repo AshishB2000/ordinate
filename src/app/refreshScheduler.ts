@@ -33,6 +33,7 @@ import type { AlertEvent } from '../analysis/alerts';
 // Imported, not injected like the alert hook: it decides nothing about WHEN and
 // notifies no one itself — its events join this tick's batch below.
 import { runQualityChecks } from '../analysis/qualityRun';
+import { track } from './quitCleanup';
 
 /** How often the tick looks for work. The schedules themselves are hours apart. */
 const TICK_MS = 60_000;
@@ -283,8 +284,7 @@ export function start(): void {
   if (timer) return;
   // No immediate first tick: launch is already busy, and anything overdue is
   // still overdue 60 seconds later.
-  timer = setInterval(() => { void tickNow(); }, TICK_MS);
-  if (typeof timer.unref === 'function') timer.unref();
+  timer = track(setInterval(() => { void tickNow(); }, TICK_MS));
 }
 
 export function stop(): void {

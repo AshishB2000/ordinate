@@ -20,6 +20,7 @@
 
 export {};
 import { ok, failureCount } from './selfcheck';
+import { closeApp } from './smokeFixture';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -251,7 +252,7 @@ async function main(): Promise<void> {
   ok('no renderer console errors across every preset', errors.length === 0, errors.slice(0, 3).join(' | '));
   console.log('\nscreenshots: ' + SHOTS);
 
-  await app.close();
+  await closeApp(app);
   try { fs.rmSync(userData, { recursive: true, force: true }); } catch (_) { /* temp dir */ }
 }
 

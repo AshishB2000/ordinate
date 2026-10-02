@@ -11,7 +11,7 @@
 // The master switch is read on EVERY tick rather than captured here, so turning
 // it off in Settings takes effect at once instead of at the next restart.
 
-import { app } from 'electron';
+import { onQuit } from './quitCleanup';
 
 import * as config from './config';
 import { maybeNotify } from './notify';
@@ -62,5 +62,5 @@ export function start({ hubFocused }: { hubFocused: () => boolean }): void {
   scheduler.afterTick(() => hubs.send('reports:run-due'));
 
   scheduler.start();
-  app.on('before-quit', () => scheduler.stop());
+  onQuit(() => scheduler.stop());
 }

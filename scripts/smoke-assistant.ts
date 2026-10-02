@@ -32,6 +32,7 @@
 
 export {}; // module scope — sibling scripts share top-level names
 import { ok, failureCount } from './selfcheck';
+import { closeApp } from './smokeFixture';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -158,7 +159,7 @@ async function main(): Promise<void> {
   });
   ok('the bundled sample project is present to build against',
     Boolean(seeded.projectId), JSON.stringify(seeded));
-  if (!seeded.projectId) { await app.close(); return; }
+  if (!seeded.projectId) { await closeApp(app); return; }
 
   await win.evaluate(async (id: string) => { await (window as any).adoptProject(id); }, seeded.projectId);
   await win.waitForTimeout(1200);
@@ -388,7 +389,7 @@ async function main(): Promise<void> {
   ok('no renderer console errors across the whole loop', errors.length === 0,
     errors.slice(0, 3).join(' | '));
 
-  await app.close();
+  await closeApp(app);
   try { fs.rmSync(userData, { recursive: true, force: true }); } catch (_) { /* temp dir */ }
 }
 

@@ -145,6 +145,16 @@ async function settle(win: Win, ms = 900): Promise<void> {
 
 /** Tab through `scope` from its first control; the path must be the DOM order. */
 async function focusOrder(win: Win, scope: string | null, max = 40): Promise<{ ok: boolean; detail: string }> {
+  // Wait for the surface to stop growing: Home's insights row (and any other
+  // async section) lands after the first paint, and a control inserted mid-walk
+  // reads as a focus-order bug. Stable = the same tabbables twice, 500 ms apart.
+  let last = '';
+  for (let i = 0; i < 20; i++) {
+    const now: string = await win.evaluate((sc) => (window as any).__a11y.tabbables(sc).map((e: Element) => (window as any).__a11y.where(e)).join('|'), scope);
+    if (now === last) break;
+    last = now;
+    await settle(win, 500);
+  }
   const n = await win.evaluate(({ scope }) => {
     const list = (window as any).__a11y.tabbables(scope);
     (window as any).__a11yList = list;
