@@ -1006,3 +1006,9 @@ scripts/**/*.js
 /preload/hubTemplatesPreload.js
 /renderer/hub/userTemplateSave.js
 /renderer/hub/userTemplateGallery.js
+
+# r7:motion
+/renderer/hub/motionPlan.js
+/renderer/hub/motion.js
+/renderer/hub/kpiTicker.js
+/renderer/hub/linkedHover.js

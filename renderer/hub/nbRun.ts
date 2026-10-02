@@ -17,7 +17,6 @@ const nbRunning = new Map<string, string>(); // cell id → run id
 let nbExecSeq = 0;
 let nbBatchRunning = false;
 const nbChartInstances = new Map<string, any>();
-// R7 HOOK: motion — every drawn notebook chart is here by cell id, for linked hover to join.
 
 function nbDestroyCharts(): void {
   for (const ch of nbChartInstances.values()) { try { ch.destroy(); } catch (_) { /* already gone */ } }
@@ -195,6 +194,8 @@ function nbRenderResult(id: string): void {
   if (c.kind === 'chart' && r.chart) {
     const wrap = document.createElement('div');
     wrap.className = 'nb-chart';
+    // Linked hover (linkedHover.ts): two chart cells over the same cell and category light together.
+    if (c.encoding && c.encoding.category) wrap.dataset.lhField = `nb:${c.sourceCellId}|${c.encoding.category}`;
     const canvas = document.createElement('canvas');
     canvas.setAttribute('role', 'img');
     canvas.setAttribute('aria-label', `${(VIZ_LABELS as any)[r.chart.chartType] || 'Chart'} of ${nbCellName(c.sourceCellId || '')}`);

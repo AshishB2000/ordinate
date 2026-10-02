@@ -1,0 +1,18 @@
+/* r7:motion — linked hover and data transitions.
+   The chart motion itself is Chart.js on its canvas (chartRender.ts holds the one
+   config); this file is the little that is DOM. The global prefers-reduced-motion
+   block in hub.css zeroes every animation here along with the rest. */
+
+/* A card's last chart image while the next figures compute (motion.ts mtHold):
+   a picture of the chart, not a control — it takes no pointer and never shrinks. */
+.mt-hold { pointer-events: none; overflow: hidden; }
+.mt-hold > canvas { display: block; flex: none; }
+
+/* The KPI figure counts in tabular figures (hub.css .dash-metric-value), so its
+   box holds still; nothing here changes size while it ticks. The delta pill
+   fades in once its comparison lands, a beat after the figure starts moving. */
+@keyframes mtFadeIn { from { opacity: 0; } }
+.dash-metric-delta:not(.is-loading),
+.dash-metric-vs {
+  animation: mtFadeIn var(--dur-panel) var(--ease-out) 120ms both;
+}

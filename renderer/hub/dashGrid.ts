@@ -119,6 +119,7 @@ function closeDashboardEditor(): void {
   dashDragId = null;
   dashHistClear(); // one dashboard's undo stack never reaches the next one
   destroyDashCharts(); // tear down card charts/maps before wiping the grid (no leak)
+  mtForget(); // motion.ts — what this sheet showed is nobody's "before" now
   const grid = dashEl('dash-grid');
   if (grid) grid.innerHTML = '';
   const pages = dashEl('dash-pages');
@@ -643,7 +644,7 @@ async function resolveCardVisual(card: any): Promise<{ visual: any; inline: bool
 // rewritten, but an un-cleared aria-busy would leave the card announced as
 // loading forever.
 async function renderVisualCard(card: any, body: HTMLElement): Promise<void> {
-  skelChart(body);
+  if (!mtHold(card.id, body)) skelChart(body); // motion.ts — its last image, not a blink
   try { await renderVisualCardInto(card, body); } finally { skelClear(body); }
 }
 
@@ -708,6 +709,7 @@ async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void>
   };
   const area = document.createElement('div');
   area.className = 'dash-viz-area cv-viz-area';
+  area.dataset.lhField = lhFieldOf(visual); // linkedHover.ts — the dimension it links on
   body.innerHTML = '';
   body.appendChild(area);
   setPivotGridOnCard(body.closest('.dash-card'), type === 'pivot' ? data.pivot : null, drill);

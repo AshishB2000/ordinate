@@ -73,7 +73,7 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
   body.innerHTML = '';
   const valEl = document.createElement('div');
   valEl.className = 'dash-metric-value tnum';
-  valEl.textContent = '…';
+  valEl.textContent = kpiHold(card.id) || '…'; // kpiTicker.ts — the last figure while the next computes
   const labelEl = document.createElement('div');
   labelEl.className = 'dash-metric-label';
   labelEl.textContent = m.label || ((DASH_AGG_LABELS[m.aggregation as DashAgg] || m.aggregation) + ' of ' + (m.column || ''));
@@ -101,7 +101,7 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
       mr = null;
     }
     if (mr && mr.ok !== false) {
-      valEl.textContent = mr.display || '—';
+      kpiTick(valEl, card.id, mr.value, mr.display || '—', (v) => (OrdFormat as any).formatMetric(v, mr.format));
       if (!m.label && mr.name) labelEl.textContent = mr.name;
       paintParamErrors(body, mr.paramErrors);
       fxPaintTileNote(body, mr.fx); // fxUi.ts
@@ -130,7 +130,8 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
   paintParamErrors(body, r.paramErrors);
   if (r.value == null) { valEl.textContent = '—'; return; }
   // Reuse the shared chart number formatter (auto/plain/thousands/compact/…).
-  valEl.textContent = fmtWith(r.value, r.fx && (!m.format || m.format === 'auto') ? 'currency' : (m.format || 'auto'));
+  const kpiFmt = r.fx && (!m.format || m.format === 'auto') ? 'currency' : (m.format || 'auto');
+  kpiTick(valEl, card.id, r.value, fmtWith(r.value, kpiFmt), (v) => fmtWith(v, kpiFmt));
   fxPaintTileNote(body, r.fx); // converted money: rows with no rate, the sample label (fxUi.ts)
   void paintMetricCalc(card, body); // "Calculate as" (calcMenu.ts)
   void paintMetricCompare(card, body);

@@ -94,7 +94,8 @@ function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx,
   }
 
   // Get the live canvas — re-queries after each override re-render.
-  function getLiveCanvas() { return container.querySelector('canvas') || canvas; }
+  // A mid-transition chart is first landed on its final frame (motion.ts).
+  function getLiveCanvas() { mtSettle(chartInstances.get(container)); return container.querySelector('canvas') || canvas; }
 
   // ── Action: copy chart as image ──────────────────────────────────────
   // A grid of panels is ONE image of the whole grid (facetGrid.captureFacetPNG).

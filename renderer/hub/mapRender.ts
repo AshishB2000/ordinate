@@ -436,6 +436,7 @@ async function renderMapInArea(container: HTMLElement, data: any, type: string):
       renderGeoFallback(container, data, "Couldn't place these regions on the map — showing the data instead.");
     }
   }
+  if (typeof lhWireMap === 'function') lhWireMap(container, map); // linkedHover.ts — a dashboard's shared hover
 }
 
 // ponytail: map/geo/periodInfo params are any — MapLibre is read off window as an

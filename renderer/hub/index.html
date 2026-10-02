@@ -89,6 +89,9 @@
   <!-- r7-css:templates -->
   <link rel="stylesheet" href="templates.css"/>
 
+  <!-- r7-css:motion -->
+  <link rel="stylesheet" href="motion.css"/>
+
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
        injecting a <style> at render time, which the hub CSP (style-src 'self')
@@ -3791,6 +3794,15 @@
      (userTemplateGallery.ts, which uses the save file's utMk). -->
 <script src="userTemplateSave.js"></script>
 <script src="userTemplateGallery.js"></script>
+
+<!-- r7:motion -->
+<!-- Linked hover and data transitions. buildChart (chartRender.js) and the
+     dashboard grid reach these at call time: the pure transition plan, the
+     Chart.js transition driver, the KPI ticker, then the hover bus. -->
+<script src="motionPlan.js"></script>
+<script src="motion.js"></script>
+<script src="kpiTicker.js"></script>
+<script src="linkedHover.js"></script>
 
 <script src="hub.js"></script>
 
