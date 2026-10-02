@@ -18,7 +18,7 @@
 // the empty state is `.ws-empty`. Only `.cap-card-img` is new, and it is the
 // image frame.
 
-type ClTab = 'datasets' | 'captures' | 'metrics' | 'query' | 'catalog';
+type ClTab = 'datasets' | 'captures' | 'metrics' | 'query' | 'catalog' | 'pipelines';
 let clActive: ClTab = 'datasets';
 
 function clEl(id: string): HTMLElement | null {
@@ -53,6 +53,10 @@ const CL_TABS: Array<{ id: ClTab; tab: string; panel: string; sub: string }> = [
   {
     id: 'catalog', tab: 'ds-tab-catalog', panel: 'ct-wrap',
     sub: 'Everything in this project — what it is, who owns it, what uses it and whether it is fresh.',
+  },
+  {
+    id: 'pipelines', tab: 'ds-tab-pipelines', panel: 'pq-wrap',
+    sub: 'Everything that runs on a schedule or after another step, as one pipeline — run it, schedule it and read every run.',
   },
 ];
 
@@ -91,6 +95,7 @@ function clSelectTab(tab: ClTab): void {
   if (tab === 'metrics') void refreshMetricsList();
   if (tab === 'query') void qtOpen(); // queryTab.ts — wires itself on first open
   if (tab === 'catalog') void ctRefreshCatalog();
+  if (tab === 'pipelines') void pqOpen(); // pipelinesPage.ts
 }
 
 /** Land on the Data page with the Captures tab showing — where "‹ Back" goes. */

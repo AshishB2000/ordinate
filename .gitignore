@@ -889,6 +889,16 @@ scripts/**/*.js
 /src/ipc/visualsFacets.js
 
 # r8:pipelines
+/src/app/pipelines.js
+/src/app/pipelineCron.js
+/src/app/pipelineStore.js
+/src/app/pipelineView.js
+/src/app/pipelineRunner.js
+/src/ipc/pipelines.js
+/preload/hubPipelinesPreload.js
+/renderer/hub/pipelinesPage.js
+/renderer/hub/pipelinesGraph.js
+/renderer/hub/pipelinesDetail.js
 
 # r8:events
 

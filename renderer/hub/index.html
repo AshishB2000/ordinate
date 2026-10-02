@@ -72,6 +72,9 @@
   <!-- r6-css:input -->
   <link rel="stylesheet" href="input.css"/>
 
+  <!-- r8-css:pipelines -->
+  <link rel="stylesheet" href="pipelines.css"/>
+
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
        injecting a <style> at render time, which the hub CSP (style-src 'self')
@@ -806,7 +809,13 @@
                   aria-selected="false" aria-controls="qt-wrap" tabindex="-1">Query</button>
           <button class="ds-tab" type="button" role="tab" id="ds-tab-catalog"
                   aria-selected="false" aria-controls="ct-wrap" tabindex="-1">Catalog</button>
+          <button class="ds-tab" type="button" role="tab" id="ds-tab-pipelines"
+                  aria-selected="false" aria-controls="pq-wrap" tabindex="-1">Pipelines</button>
         </div>
+
+        <!-- r8:pipelines — the Pipelines tab: one DAG of everything that runs,
+             built entirely by pipelinesPage.ts / pipelinesGraph.ts / pipelinesDetail.ts. -->
+        <div id="pq-wrap" role="tabpanel" aria-labelledby="ds-tab-pipelines" hidden></div>
 
         <!-- The Catalog tab: every record of every kind, with its description,
              tags, owner, last update and usage (catalogPage.ts). The shared
@@ -3640,6 +3649,13 @@
 <script src="inputKeys.js"></script>
 <script src="inputPage.js"></script>
 <script src="inputColumns.js"></script>
+
+<!-- r8:pipelines -->
+<!-- The Data page's Pipelines tab: the page (state, head, empty state), its
+     graph, then the selected step's panel. -->
+<script src="pipelinesPage.js"></script>
+<script src="pipelinesGraph.js"></script>
+<script src="pipelinesDetail.js"></script>
 
 <script src="hub.js"></script>
 

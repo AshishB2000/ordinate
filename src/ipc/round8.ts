@@ -16,6 +16,7 @@ export function register(deps: Round8Deps): void {
   // r8:facets
 
   // r8:pipelines
+  require('./pipelines').register(deps); // the Data page's Pipelines tab: one DAG, run, schedule, history
 
   // r8:events
 
