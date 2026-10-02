@@ -914,5 +914,9 @@ scripts/**/*.js
 /scripts/test-eventsHolidays.js
 
 # r8:summary
+/src/analysis/summaryCard.js
+/src/ipc/summary.js
+/preload/hubSummaryPreload.js
+/renderer/hub/summaryCard.js
 
 # r8:search

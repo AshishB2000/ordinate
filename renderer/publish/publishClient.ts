@@ -329,6 +329,10 @@ function pcCard(card: any, combo: number, page: any, onPick: (column: string, la
     el.appendChild(pcEl('div', 'pub-broken', payload.hidden));
     return el;
   }
+  if (card.kind === 'summary') {
+    for (const line of payload.sentences || []) el.appendChild(pcEl('p', 'pub-text-p', line));
+    return el;
+  }
   if (card.kind === 'metric') {
     const box = pcEl('div', 'pub-kpi');
     box.appendChild(pcEl('div', 'pub-kpi-value', payload.display || '—'));

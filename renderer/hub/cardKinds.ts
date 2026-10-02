@@ -17,6 +17,7 @@ function renderAuthoringCard(card: any, body: HTMLElement): boolean {
     container: renderContainerCard,
     tabs: renderTabsCard,
     stats: renderStatsCard, // statsTile.ts — a statistics result, recomputed per render
+    summary: renderSummaryCard, // summaryCard.ts — the sheet's tiles in sentences, recomputed per render
   };
   const fn = draw[card.type];
   if (!fn) return false;
@@ -31,6 +32,7 @@ function cardKindTitle(card: any): string {
   if (card.type === 'divider') return 'Divider';
   if (card.type === 'container' || card.type === 'tabs') return groupTitle(card);
   if (card.type === 'stats') return swTileTitle(card);
+  if (card.type === 'summary') return 'Summary';
   return 'Text';
 }
 
@@ -71,10 +73,12 @@ const KIND_ADDS: Array<[string, string, () => void | Promise<void>]> = [
   ['Container', 'layout-dashboard', () => handleAddGroup('container')],
   ['Tabs', 'columns', () => handleAddGroup('tabs')],
   ['Navigation', 'arrow-right', handleAddNav],
+  ['Summary', 'sparkles', () => sumAddToTop()], // summaryCard.ts (loads later)
 ];
 
 /** What an export shows for a kind here: an image as its picture; layout-only kinds as nothing. */
 async function exportAuthoringCard(card: any, layout: any): Promise<any> {
+  if (card.type === 'summary') return sumExportCard(layout); // summaryCard.ts — its sentences as a text block
   if (card.type === 'image' && currentProjectId && card.image) {
     const res = await window.hubAuthoring.readProjectImage(currentProjectId, card.image.assetId, card.image.ext).catch(() => null);
     return res && res.ok ? { kind: 'image', layout, png: res.dataUrl, title: card.image.alt || '' } : null;

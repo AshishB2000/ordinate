@@ -144,6 +144,7 @@ function sanitizeFlow(raw: unknown): unknown {
 export function sanitizePayload(raw: unknown): unknown {
   const o = obj(raw);
   if (typeof o.error === 'string') return { error: str(o.error, MAX_LABEL) };
+  if (Array.isArray(o.sentences)) return { sentences: arr(o.sentences, 5).map((x) => str(x, MAX_LABEL)) }; // a Summary card's
   if ('display' in o || ('value' in o && !('labels' in o))) {
     return { value: num(o.value), display: str(o.display, 120), caption: str(o.caption, MAX_LABEL) };
   }
@@ -204,7 +205,7 @@ function sanitizeCard(raw: unknown): unknown {
   const title = str(o.title, MAX_LABEL);
   if (kind === 'text') return { kind, layout, sizes, title, heading: str(o.heading, MAX_LABEL), text: str(o.text) };
   if (kind === 'broken') return { kind, layout, sizes, title, reason: str(o.reason, MAX_LABEL) || 'Source removed' };
-  if (kind !== 'chart' && kind !== 'metric') return null;
+  if (kind !== 'chart' && kind !== 'metric' && kind !== 'summary') return null;
   const payloads = arr(o.payloads, 5000).map(sanitizePayload);
   const variants = arr(o.variants, 5000).map((v) => int(v, 0, Math.max(0, payloads.length - 1), 0));
   const card: Obj = { kind, layout, sizes, title, variants, payloads };

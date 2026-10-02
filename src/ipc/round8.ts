@@ -22,6 +22,7 @@ export function register(deps: Round8Deps): void {
   (require('./events') as typeof import('./events')).register();
 
   // r8:summary
+  require('./summary').register(); // the Summary card (src/ipc/summary.ts)
 
   // r8:search
 }
