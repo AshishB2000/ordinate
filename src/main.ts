@@ -638,6 +638,7 @@ require("./ipc/filterParse").register(); // typed filters: "west technology last
 require("./ipc/build").register({ headless: !!HEADLESS }); // plans, formatting, themes, SaaS sources, snapshots
 require("./ipc/round6").register({ headless: !!HEADLESS }); // layouts, statistics, text, geospatial, input tables
 require("./ipc/round8").register({ headless: !!HEADLESS }); // facets, pipelines, events, summary card, data search
+require("./ipc/views").register({ headless: !!HEADLESS, focusHub, getHubWindow: hubs.primary }); // r10:views — saved views, ordinate:// links
 // Week 13 — capture → dataset bridge. resolveCropPath hands the on-disk crop path
 // from main's per-entry state (entryData, then the summaries cache) so a renderer-
 // sent path is never trusted; both maps already carry cropPath per entryId.

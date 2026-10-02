@@ -101,6 +101,9 @@ export interface Report {
   /** Add a final Discussion page: the dashboard's comment threads. Off by
    *  default — comments are a working conversation, printed only on purpose. */
   discussion: boolean;
+  /** Print under a saved view of the dashboard (./savedViews): its id, 'all'
+   *  for one section per view, or absent for the dashboard as saved. */
+  viewId?: string;
   schedule?: ReportSchedule;
   lastRunAt?: string;
   lastFile?: string;
@@ -364,6 +367,7 @@ function normalize(data: any, projectId: string): Report {
   const schedule = sanitizeSchedule(data.schedule);
   if (schedule) r.schedule = schedule;
   if (isValidId(data.scorecardId)) r.scorecardId = data.scorecardId;
+  if (isValidId(data.viewId) || data.viewId === 'all') r.viewId = data.viewId;
   if (str(data.lastRunAt)) r.lastRunAt = str(data.lastRunAt);
   if (str(data.lastFile)) r.lastFile = str(data.lastFile);
   return r;
@@ -430,6 +434,7 @@ export interface ReportInput {
   narrative?: unknown;
   discussion?: unknown;
   schedule?: unknown;
+  viewId?: unknown;
 }
 
 export async function saveReport(projectId: string, input: ReportInput): Promise<Report | null> {
@@ -469,6 +474,9 @@ export async function updateReport(
   if (patch.schedule !== undefined) {
     const s = sanitizeSchedule(patch.schedule);
     if (s) merged.schedule = s; else delete merged.schedule;
+  }
+  if (patch.viewId !== undefined) {
+    if (isValidId(patch.viewId) || patch.viewId === 'all') merged.viewId = patch.viewId; else delete merged.viewId;
   }
   if (patch.lastRunAt) merged.lastRunAt = patch.lastRunAt;
   if (patch.lastFile) merged.lastFile = patch.lastFile;

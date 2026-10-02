@@ -357,6 +357,35 @@ function pcDashboard(page: any, root: HTMLElement): void {
   bar.setAttribute('role', 'group');
   bar.setAttribute('aria-label', 'Filters');
   const selects: HTMLSelectElement[] = [];
+  // r10:views — the dashboard's saved views: each one sets every filter and the sheet.
+  const views: any[] = Array.isArray(d.views) ? d.views : [];
+  const viewSel = document.createElement('select');
+  const putView = (i: number): void => {
+    const v = views[i];
+    if (!v) return;
+    picks = d.controls.map((c: any, k: number) => (v.picks[k] < c.options.length ? v.picks[k] : defaults[k]));
+    sheet = v.sheet < d.sheets.length ? v.sheet : 0;
+  };
+  if (views.length) {
+    const lab = pcEl('label', 'pub-filter pub-view');
+    lab.appendChild(pcEl('span', 'pub-filter-label', 'View'));
+    viewSel.className = 'pub-filter-select pub-view-select';
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = 'Custom';
+    viewSel.appendChild(none);
+    views.forEach((v, j) => {
+      const opt = document.createElement('option');
+      opt.value = String(j);
+      opt.textContent = v.name;
+      viewSel.appendChild(opt);
+    });
+    const def = views.findIndex((v) => v.default);
+    if (def >= 0) { putView(def); viewSel.value = String(def); }
+    viewSel.addEventListener('change', () => { if (viewSel.value !== '') { putView(Number(viewSel.value)); draw(); } });
+    lab.appendChild(viewSel);
+    bar.appendChild(lab);
+  }
   d.controls.forEach((c: any, i: number) => {
     const lab = pcEl('label', 'pub-filter');
     lab.appendChild(pcEl('span', 'pub-filter-label', c.label));
@@ -370,17 +399,17 @@ function pcDashboard(page: any, root: HTMLElement): void {
       sel.appendChild(opt);
     });
     sel.value = String(picks[i]);
-    sel.addEventListener('change', () => { picks = pkNextPicks(d.mode, defaults, picks, i, Number(sel.value)); draw(); });
+    sel.addEventListener('change', () => { picks = pkNextPicks(d.mode, defaults, picks, i, Number(sel.value)); viewSel.value = ''; draw(); });
     selects.push(sel);
     lab.appendChild(sel);
     bar.appendChild(lab);
   });
-  if (d.controls.length) {
+  if (d.controls.length || views.length) {
     // On a phone the bar folds into one "Filters (N)" button that opens it as
     // a sheet. Which of the two shows is the stylesheet's call; this only
     // toggles the sheet open and shut.
     bar.id = 'pub-filters';
-    const open = pcEl('button', 'pub-filters-open', `Filters (${d.controls.length})`) as HTMLButtonElement;
+    const open = pcEl('button', 'pub-filters-open', d.controls.length ? `Filters (${d.controls.length})` : 'Views') as HTMLButtonElement;
     open.type = 'button';
     open.setAttribute('aria-controls', 'pub-filters');
     open.setAttribute('aria-expanded', 'false');
@@ -407,7 +436,7 @@ function pcDashboard(page: any, root: HTMLElement): void {
       const b = pcEl('button', 'pub-tab', s.name) as HTMLButtonElement;
       b.type = 'button';
       b.setAttribute('role', 'tab');
-      b.addEventListener('click', () => { sheet = i; draw(); });
+      b.addEventListener('click', () => { sheet = i; viewSel.value = ''; draw(); });
       tabs.appendChild(b);
     });
     root.appendChild(tabs);
@@ -422,6 +451,7 @@ function pcDashboard(page: any, root: HTMLElement): void {
     const j = d.controls[i].options.indexOf(label);
     if (j < 0) return;
     picks = pkNextPicks(d.mode, defaults, picks, i, picks[i] === j ? 0 : j);
+    viewSel.value = '';
     draw();
   };
 

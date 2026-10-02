@@ -80,6 +80,7 @@ function openEditorWith(rec: any, title: string): void {
   if (nameEl) nameEl.textContent = title;
   dashHistReset(); // this state is the floor — nothing before it is undoable
   dashSelOnOpen(); // dashSelection.ts — a navigation's carried selection, or none
+  svOnOpen(); // savedViews.ts — the view asked for, else the default view
   renderDashFilterBar();
   renderDashPages();
   renderDashGrid();

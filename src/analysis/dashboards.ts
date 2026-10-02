@@ -311,7 +311,7 @@ export function sanitizeCardVisual(raw: unknown): CardVisual | null {
 // the whole card (same severity as an unrecognized `metric.format` above).
 // Absence (or an object with none of the fields for this kind) → undefined,
 // which callers treat as "no default".
-function sanitizeControlDefault(kind: ControlKind, raw: unknown): ControlValue | undefined {
+export function sanitizeControlDefault(kind: ControlKind, raw: unknown): ControlValue | undefined {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
   if (!o) return undefined;
 

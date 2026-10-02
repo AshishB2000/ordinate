@@ -27,6 +27,8 @@ interface CpRecord {
   type: string;
   /** Catalog tags, coloured (src/app/catalogIndex.ts). */
   tags?: CtTag[];
+  /** A saved view's dashboard (src/ipc/search.ts). */
+  parentId?: string;
 }
 
 interface CpRow {
@@ -76,6 +78,7 @@ const CP_KIND_ICON: Record<string, string> = {
   dataset: 'database',
   visual: 'columns',
   analysis: 'grid',
+  view: 'layers',
   capture: 'camera',
   connection: 'plug',
   metric: 'gauge',
@@ -98,6 +101,7 @@ function cpToRecord(h: any): CpRecord {
     meta: String(meta || ''),
     type: String(h.type && h.kind ? h.type : CP_KIND_LABEL[kind] || 'Record'),
     tags: Array.isArray(h.tags) ? h.tags : undefined,
+    parentId: h.parentId ? String(h.parentId) : undefined,
   };
 }
 
@@ -252,6 +256,7 @@ async function cpExportDashboard(r: CpRecord): Promise<void> {
 
 /** Go to a record, through the section's OWN opener — never a second one. */
 async function paletteOpenRecord(r: CpRecord): Promise<void> {
+  if (r.kind === 'view' && r.parentId) { await svOpenDashboardView(r.projectId, r.parentId, r.id); return; } // savedViews.ts
   if (r.kind === 'visual') {
     if (r.projectId && r.projectId !== currentProjectId) await openWorkspace(r.projectId);
     selectSection('visuals');

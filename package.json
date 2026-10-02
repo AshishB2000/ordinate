@@ -70,6 +70,14 @@
     "appId": "app.screenshot.desktop",
     "productName": "Screenchart",
     "copyright": "Screenchart",
+    "protocols": [
+      {
+        "name": "Ordinate link",
+        "schemes": [
+          "ordinate"
+        ]
+      }
+    ],
     "directories": {
       "output": "dist",
       "buildResources": "assets/icons"

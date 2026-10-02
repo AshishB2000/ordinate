@@ -930,3 +930,12 @@ scripts/**/*.js
 /scripts/test-dataSearchResident.js
 /scripts/bench-dataSearch.js
 /scripts/r8Search.js
+
+# r10:views
+/src/analysis/savedViews.js
+/src/app/deepLink.js
+/src/ipc/views.js
+/preload/hubViewsPreload.js
+/renderer/hub/savedViews.js
+/scripts/test-savedViews.js
+/scripts/r10Views.js

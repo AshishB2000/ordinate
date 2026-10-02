@@ -246,6 +246,11 @@ function sanitizeDashboard(raw: unknown): unknown {
       const s = obj(sh);
       return { name: str(s.name, MAX_LABEL) || 'Sheet', cards: arr(s.cards, 400).map(sanitizeCard).filter(Boolean) };
     }),
+    // r10:views — a name, a sheet index and one option index per control; nothing else.
+    views: arr(o.views, 50).map((raw) => {
+      const v = obj(raw);
+      return { name: str(v.name, 80) || 'View', sheet: int(v.sheet, 0, 49, 0), picks: arr(v.picks, 16).map((p) => int(p, 0, MAX_OPTIONS - 1, 0)), default: v.default === true };
+    }),
   };
 }
 
