@@ -210,6 +210,8 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
         rm.setAttribute('aria-label', 'Remove filter');
         rm.textContent = '×';
         rm.addEventListener('click', () => { filters.splice(i, 1); paintFilters(); schedulePreview(); });
+        const ctxTag = lodContextTag(s); // r7:lod
+        if (ctxTag) chip.appendChild(ctxTag);
         chip.appendChild(rm);
         filterList.appendChild(chip);
       });
@@ -218,7 +220,7 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
       const col = columns.find((c) => c.name === colSel.value) || columns[0];
       if (!col) return;
       const steps = await openFilterDialog({
-        projectId: currentProjectId, datasetId: dsSel.value, column: col.name, type: col.type,
+        projectId: currentProjectId, datasetId: dsSel.value, column: col.name, type: col.type, lodToggle: true,
       });
       if (!steps || !steps.length) return;
       filters = filters.concat(steps);

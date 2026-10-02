@@ -362,6 +362,8 @@ function renderDashFilterBar(): void {
     x.textContent = '×';
     x.addEventListener('click', () => removeDashFilterAt(i));
     chip.appendChild(txt);
+    const ctxTag = lodContextTag(step); // r7:lod — "Apply before LOD"
+    if (ctxTag) chip.appendChild(ctxTag);
     chip.appendChild(x);
     chips.appendChild(chip);
   });
@@ -461,7 +463,7 @@ async function distinctColumnOptions(
 // two different `in` lists on one column would look like the same chip.
 function dashStepKey(s: any): string {
   return JSON.stringify([s.column, s.op, s.value == null ? null : s.value, s.values == null ? null : s.values,
-    s.period == null ? null : s.period]);
+    s.period == null ? null : s.period, s.context === true]);
 }
 
 // + Filter: dataset → column → the type-aware dialog. The dialog replaces the
@@ -479,6 +481,7 @@ async function handleAddDashFilter(): Promise<void> {
     column: picked.column,
     type: col && col.type ? String(col.type) : 'text',
     params: dashParams(),
+    lodToggle: true,
   });
   if (steps === null || steps.length === 0) return;
 
@@ -520,6 +523,7 @@ async function handleEditDashFilter(idx: number): Promise<void> {
     type,
     existing: step,
     params: dashParams(),
+    lodToggle: true,
   });
   if (steps === null) return;
   list.splice(idx, 1, ...steps);

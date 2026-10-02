@@ -384,6 +384,7 @@ async function vizOpenRecord(visual: any, id?: string): Promise<void> {
         column: f && f.column != null ? String(f.column) : '',
         op: f && f.op != null ? String(f.op) : '=',
         value: f && f.value != null ? String(f.value) : '',
+        ...(f && f.context === true ? { context: true } : {}), // r7:lod
       }))
     : [];
   await loadDatasetOptions(String(visual.datasetId || ''));

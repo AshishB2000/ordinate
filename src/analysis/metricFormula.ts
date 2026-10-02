@@ -28,8 +28,9 @@
 // The synthetic token KEEPS the start/end of the text it replaced, so a parse
 // error inside a rewritten call still underlines what the user typed.
 
-import { tokenize, type Tok } from '../formula/formulaTokens';
-import { compileTokens, type Compiled, type SourceSpan } from '../formula/formula';
+import { FormulaError, tokenize, type Tok } from '../formula/formulaTokens';
+import { compile, compileTokens, type Compiled, type SourceSpan } from '../formula/formula';
+import { isLodExpression, lodDimProblem } from '../formula/lod';
 import type { MetricAggregation } from './metricValue';
 
 /**
@@ -94,11 +95,41 @@ function parseAggRef(ref: string): AggOperand | null {
  * while `min(1, 2)` and `min(x)` over a non-column stay the row-level function
  * the calculated-field grammar already defines.
  */
-function rewriteAggregations(tokens: Tok[], columns: ReadonlySet<string>): Tok[] {
+function rewriteAggregations(tokens: Tok[], columns: ReadonlySet<string>, src: string): Tok[] {
   const out: Tok[] = [];
   for (let i = 0; i < tokens.length; i += 1) {
     const name = tokens[i];
     const open = tokens[i + 1];
+    // r7:lod — `sum({FIXED [Region] : SUM([Sales])})`: the aggregation of a
+    // level-of-detail value. The `{…}` source text becomes the "column", and
+    // ipc/lodData evaluates it per row before aggregating (analysis/lodQuery).
+    const brace = tokens[i + 2];
+    if (name.kind === 'name' && AGG_FNS.has(name.value.toLowerCase()) && open && open.kind === 'punc' &&
+        open.value === '(' && brace && brace.kind === 'punc' && brace.value === '{') {
+      let depth = 0;
+      let j = i + 2;
+      for (; j < tokens.length; j += 1) {
+        const t = tokens[j];
+        if (t.kind === 'punc' && t.value === '{') depth += 1;
+        if (t.kind === 'punc' && t.value === '}') depth -= 1;
+        if (depth === 0) break;
+      }
+      const close = tokens[j + 1];
+      const lod = j < tokens.length ? src.slice(brace.start, tokens[j].end) : '';
+      // A malformed `{…}` reports ITS error, positioned in the metric's text —
+      // left in place, the parser would only see "Unknown function: sum".
+      const inner = compile(lod || src.slice(brace.start));
+      if (!inner.ok) {
+        const e = new FormulaError(inner.error);
+        if (inner.at) e.at = { start: brace.start + inner.at.start, end: brace.start + inner.at.end };
+        throw e;
+      }
+      if (close && close.kind === 'punc' && close.value === ')' && isLodExpression(lod)) {
+        out.push({ kind: 'col', value: AGG_PREFIX + name.value.toLowerCase() + ':' + lod, start: name.start, end: close.end });
+        i = j + 1;
+        continue;
+      }
+    }
     const arg = tokens[i + 2];
     const close = tokens[i + 3];
     const isCall =
@@ -148,7 +179,16 @@ export function compileMetricFormula(expression: string, columns: Iterable<strin
     return at ? { ok: false, error, at } : { ok: false, error };
   }
 
-  const res = compileTokens(rewriteAggregations(tokens, new Set(columns)), expression);
+  const colList = Array.from(columns);
+  let rewritten: Tok[];
+  try {
+    rewritten = rewriteAggregations(tokens, new Set(colList), expression);
+  } catch (e) {
+    const at = e instanceof FormulaError ? e.at : undefined;
+    const error = e instanceof Error ? e.message : 'Parse error';
+    return at ? { ok: false, error, at } : { ok: false, error };
+  }
+  const res = compileTokens(rewritten, expression);
   if (!res.ok) return res;
 
   const aggregates: AggOperand[] = [];
@@ -165,6 +205,14 @@ export function compileMetricFormula(expression: string, columns: Iterable<strin
     // fallback (it will simply not resolve).
     if (agg) aggregates.push(agg);
     else metricRefs.push(ref);
+    // r7:lod — an LOD dimension the dataset lacks is an error, positioned in
+    // the metric's own text. Skipped when the caller passed no columns.
+    const lod = agg && agg.column[0] === '{' && colList.length ? compile(agg.column) : null;
+    const bad = lod && lod.ok ? lodDimProblem(lod.fn, colList) : null;
+    if (agg && bad) {
+      const base = expression.indexOf(agg.column);
+      return { ok: false, error: bad.error, at: { start: base + bad.at.start, end: base + bad.at.end } };
+    }
   }
   return { ok: true, program: { fn: res.fn, aggregates, metricRefs } };
 }

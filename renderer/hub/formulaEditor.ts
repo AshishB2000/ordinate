@@ -72,8 +72,11 @@ function fxTokenClass(tok: any, names: Set<string>): string {
   if (tok.kind === 'param') return 'fx-t-param';
   if (tok.kind === 'str') return 'fx-t-str';
   if (tok.kind === 'num') return 'fx-t-num';
+  if (tok.kind === 'punc' && (tok.value === '{' || tok.value === '}' || tok.value === ':')) return 'fx-t-lod';
   if (tok.kind === 'name') {
     const lower = String(tok.value).toLowerCase();
+    if (lower === 'fixed' || lower === 'include' || lower === 'exclude') return 'fx-t-lod';
+    if (lower === 'sum' || lower === 'avg' || lower === 'count' || lower === 'countd') return 'fx-t-fn'; // LOD aggregates
     if (FX_KEYWORDS.indexOf(lower) >= 0 || names.has(lower)) return 'fx-t-fn';
     return 'fx-t-col';
   }
@@ -282,9 +285,10 @@ function openFormulaEditor(opts: FormulaEditorOpts): Promise<void> {
       docs.forEach((d) => {
         if (d.category !== cat) {
           cat = d.category;
-          group(cat.charAt(0).toUpperCase() + cat.slice(1));
+          group(cat === 'lod' ? 'Level of detail' : cat.charAt(0).toUpperCase() + cat.slice(1));
         }
-        item(d.signature, d.summary, d.name + '(', 0, 'fx-item-fn');
+        if (d.insert) item(d.signature, d.summary + '\n' + d.example, d.insert, lodCaretBack(d), 'fx-item-fn fx-item-lod');
+        else item(d.signature, d.summary, d.name + '(', 0, 'fx-item-fn');
       });
       if (!cols.length && !docs.length) {
         const none = document.createElement('div');
@@ -312,13 +316,17 @@ function openFormulaEditor(opts: FormulaEditorOpts): Promise<void> {
           .map((c) => ({ label: String(c.name), insert: '[' + c.name + ']', sub: String(c.type) }));
         return items.length ? { items, from: open } : null;
       }
+      const dims = lodDimContext(before, columns);
+      if (dims) return dims;
       const word = /[A-Za-z_][A-Za-z0-9_]*$/.exec(before);
       if (!word || word[0].length < 2) return null;
       const frag = word[0].toLowerCase();
+      const braced = before.slice(0, caret - word[0].length).trimEnd().endsWith('{');
       const items = (fxDocs || [])
-        .filter((d) => d.name.indexOf(frag) === 0)
+        // Right after `{` only FIXED / INCLUDE / EXCLUDE can follow.
+        .filter((d) => (braced ? d.kind === 'keyword' : d.kind !== 'recipe') && d.name.indexOf(frag) === 0)
         .slice(0, 12)
-        .map((d) => ({ label: d.signature, insert: d.name + '(', sub: d.summary }));
+        .map((d) => ({ label: d.signature, insert: lodKeywordInsert(d, braced) || d.name + '(', sub: d.summary }));
       return items.length ? { items, from: caret - word[0].length } : null;
     };
 
@@ -430,10 +438,12 @@ function openFormulaEditor(opts: FormulaEditorOpts): Promise<void> {
         // aligned, and an empty first row simply leaves the header left-aligned
         // like the "—" underneath it.
         const first = sample.rows[0];
+        const lodFrom = sample.columns.length - (sample.lodColumns || 0);
         sample.columns.forEach((c: string, i: number) => {
           const th = document.createElement('th');
           th.textContent = c;
           if (typeof first.inputs[i] === 'number') th.className = 'fx-num';
+          if (i >= lodFrom) lodPreviewHeader(th, c);
           hr.appendChild(th);
         });
         const rth = document.createElement('th');
@@ -451,12 +461,13 @@ function openFormulaEditor(opts: FormulaEditorOpts): Promise<void> {
             td.textContent = v === null || v === undefined ? '—' : String(v);
             tr.appendChild(td);
           };
-          r.inputs.forEach((v: any) => cell(v, ''));
+          r.inputs.forEach((v: any, i: number) => cell(v, i >= lodFrom ? 'fx-lod-cell' : ''));
           cell(r.result, 'fx-res');
           tbody.appendChild(tr);
         });
         table.appendChild(tbody);
         preview.appendChild(table);
+        if (sample.note) preview.appendChild(lodPreviewNote(sample.note));
       } else if (last && last.ok) {
         const none = document.createElement('div');
         none.className = 'fx-side-empty';

@@ -257,7 +257,7 @@ async function wholeTable(ctx: Ctx, id: string): Promise<Table & { deps: string[
 }
 
 /** One calculated column over `input`, by the Prepare pipeline's own step. */
-// R7 HOOK: lod — a formula cell IS a calculated_field step, so whatever that step learns (LOD) a cell gets.
+// A formula cell IS a calculated_field step, so it gets everything that step knows — LOD included.
 export function applyFormula(
   cell: Extract<NbCell, { kind: 'formula' }>,
   input: Table,

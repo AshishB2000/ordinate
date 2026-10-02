@@ -220,6 +220,17 @@ const clean = (raw: any[]): Cells => model.sanitizeCells(raw, newId);
   ok('origin: a bad dep drops it', origin.sanitizeOrigin({ kind: 'notebook', notebookId: U(1), cellId: U(2), deps: ['x'] }) === undefined);
 }
 
+// A formula cell IS a calculated_field step, so it speaks LOD (src/formula/lod.ts):
+// share of region is each row over its region's FIXED total.
+{
+  const input = { columns: [{ name: 'region', type: 'text' }, { name: 'sales', type: 'number' }], rows: [['W', 10], ['W', 30], ['E', 60]] } as any;
+  const out = run.applyFormula({ id: U(9), kind: 'formula', column: 'share', expression: '[sales] / {FIXED [region] : SUM([sales])}' } as any, input, []);
+  ok('formula cell: an LOD runs, share of region', JSON.stringify(out.rows.map((r) => r[2])) === '[0.25,0.75,1]', JSON.stringify(out.rows));
+  let msg = '';
+  try { run.applyFormula({ id: U(9), kind: 'formula', column: 'x', expression: '{FIXED [regon] : SUM([sales])}' } as any, input, []); } catch (e: any) { msg = String(e.message); }
+  ok('formula cell: an LOD on a missing dimension says which', /regon/.test(msg), msg);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 6. A real run
 // ─────────────────────────────────────────────────────────────────────────────

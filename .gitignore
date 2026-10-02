@@ -985,3 +985,12 @@ scripts/**/*.js
 /renderer/hub/nbCells.js
 /renderer/hub/nbRun.js
 /renderer/hub/nbActions.js
+
+# r7:lod
+/src/ipc/round7.js
+/src/formula/lod.js
+/src/formula/didYouMean.js
+/src/analysis/lodQuery.js
+/src/engine/lodResident.js
+/src/ipc/lodData.js
+/renderer/hub/lodUi.js

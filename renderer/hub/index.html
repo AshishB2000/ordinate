@@ -83,6 +83,9 @@
   <!-- r7-css:notebooks -->
   <link rel="stylesheet" href="notebooks.css"/>
 
+  <!-- r7-css:lod -->
+  <link rel="stylesheet" href="lod.css"/>
+
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
        injecting a <style> at render time, which the hub CSP (style-src 'self')
@@ -3773,6 +3776,12 @@
 <script src="nbCells.js"></script>
 <script src="nbRun.js"></script>
 <script src="nbActions.js"></script>
+
+<!-- r7:lod -->
+<!-- Level-of-detail expressions: the formula editor's LOD completion and
+     preview columns, the filter dialog's "Apply before LOD" switch and the
+     context tag (lodUi.ts). Called at runtime only, so any position works. -->
+<script src="lodUi.js"></script>
 
 <script src="hub.js"></script>
 

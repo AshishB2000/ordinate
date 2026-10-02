@@ -50,7 +50,7 @@ export function looseEq(a: FValue, b: FValue): boolean {
 
 // Parse a value to a local-time Date, or null. Numbers are NOT treated as date
 // serials (Tableau's serial encoding is ambiguous across engines) — return null.
-function toDate(v: FValue): Date | null {
+export function toDate(v: FValue): Date | null {
   if (v == null || typeof v === 'boolean') return null;
   if (typeof v === 'number') return null; // ponytail: no serial-date guessing
   const s = String(v).trim();

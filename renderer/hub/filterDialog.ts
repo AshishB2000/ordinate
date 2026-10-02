@@ -58,6 +58,8 @@ interface FilterDialogOpts {
   existing?: any;
   /** The open dashboard's parameters — offered as `[[name]]` values. */
   params?: Array<{ name: string; kind: string }>;
+  /** r7:lod — offer "Apply before LOD" (a visual's or a dashboard's filter, never Prepare's). */
+  lodToggle?: boolean;
 }
 
 /**
@@ -140,6 +142,8 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
     const body = document.createElement('div');
     body.className = 'fd-body';
     box.appendChild(body);
+    const lodCtx = opts.lodToggle ? lodContextToggle(existing.context === true) : null;
+    if (lodCtx) box.appendChild(lodCtx.el);
 
     const actions = document.createElement('div');
     actions.className = 'ws-modal-actions';
@@ -488,7 +492,9 @@ function openFilterDialog(opts: FilterDialogOpts): Promise<any[] | null> {
       else if (a11y) a11y.onTabKey(e);
     }
     cancel.addEventListener('click', () => close(null));
-    apply.addEventListener('click', () => { if (!apply.disabled) close(buildSteps()); });
+    apply.addEventListener('click', () => {
+      if (!apply.disabled) close(lodCtx ? lodMarkContext(buildSteps(), lodCtx.on()) : buildSteps());
+    });
     overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) close(null); });
     document.addEventListener('keydown', onKey, true);
 

@@ -529,7 +529,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
       type: col ? col.type : 'text',
       existing: cur,
       // On a dashboard, its parameters can drive a visual's own filter too.
-      params: dashCurrent ? dashParams() : undefined,
+      params: dashCurrent ? dashParams() : undefined, lodToggle: true,
     });
     if (steps === null) return; // cancelled — leave the row exactly as it was
     // A min/max range is TWO steps and always was; splicing in place keeps each
@@ -569,6 +569,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
     edit.setAttribute('aria-label', 'Edit the filter on ' + (step.column || 'this column'));
     edit.addEventListener('click', () => { void editFilter(i); });
     row.appendChild(edit);
+    const ctxTag = lodContextTag(step); if (ctxTag) row.appendChild(ctxTag); // r7:lod
 
     const del = document.createElement('button');
     del.type = 'button';
@@ -740,6 +741,7 @@ function createEncodingForm(host: HTMLElement, opts: EncodingFormOpts): Encoding
           const s: any = { type: 'filter', column: f.column, op: f.op || '=' };
           if (isListFilterOp(f.op)) s.values = Array.isArray(f.values) ? f.values.slice() : [];
           else if (!isValuelessFilterOp(f.op)) s.value = f.value != null ? f.value : '';
+          if (f.context === true) s.context = true; // r7:lod — "Apply before LOD"
           return s;
         });
     },

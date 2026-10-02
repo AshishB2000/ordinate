@@ -32,7 +32,8 @@ import { radiusControlSteps } from './geo/radius';
 // step, which is cheap to keep and wrong to guess at.
 function stepKey(s: FilterStep): string {
   // `period` too: two different relative ranges on one column are two filters.
-  return JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null, s.radius ?? null]);
+  // `context` too (r7:lod): the same predicate before and after LODs is two filters.
+  return JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null, s.radius ?? null, s.context === true]);
 }
 
 // Merge dashboard-wide filters with a card's own filters into ONE ordered list:

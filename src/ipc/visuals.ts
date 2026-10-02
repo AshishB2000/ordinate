@@ -10,6 +10,7 @@ import type { VizDataResult } from '../analysis/vizData';
 import * as trace from '../engine/residentTrace';
 // The two resident fast paths `vizDataFor` tries before hydrating a row.
 import { residentPivotData, residentVizData } from './visualsResident';
+import { lodVizFor } from './lodData';
 import { residentEngineData } from './visualsEngines';
 import { authoringVizData } from './vizExtras';
 import { withPeriodOverlay } from './visualsOverlay';
@@ -464,6 +465,9 @@ async function computeVizData(
   // Small multiples: one grouped query with the facet dims added (./visualsFacets).
   const faceted = await facetVizData(projectId, datasetId, encoding, filters, (e, f) => vizDataFor(projectId, datasetId, e, f, opts), opts.maxHydrateRows);
   if (faceted) return faceted;
+  // r7:lod — context filters or an INCLUDE/EXCLUDE field: the LOD pass first.
+  const lod = await lodVizFor(projectId, datasetId, encoding, filters, opts.maxHydrateRows);
+  if (lod) return lod;
   // A field or filter from a RELATED dataset, or a map: vizExtras answers instead.
   // Every map hydrates (no resident path draws one), so the ceiling holds first.
   if (encoding && encoding.geo) {

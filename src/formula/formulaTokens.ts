@@ -156,8 +156,11 @@ export function tokenize(src: string): Tok[] {
       continue;
     }
 
-    // punctuation
-    if (c === '(' || c === ')' || c === ',') {
+    // punctuation — `{`, `}` and `:` frame a level-of-detail expression,
+    // `{FIXED [Region] : SUM([Sales])}` (formulaParse.parseLod). Column refs
+    // inside one stay ordinary `col` tokens, so a token-level rewrite of column
+    // names (save-as-template) reaches them too.
+    if (c === '(' || c === ')' || c === ',' || c === '{' || c === '}' || c === ':') {
       toks.push({ kind: 'punc', value: c, start: i, end: i + 1 });
       i += 1;
       continue;

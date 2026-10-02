@@ -15,10 +15,55 @@ import { type EvalFn, arith, compareOp, looseEq, num, truthy, FUNCTIONS } from '
 // Precedence, lowest → highest:
 //   or → and → not → comparison → additive → multiplicative → unary → primary
 
+// ── Level of detail ──────────────────────────────────────────────────────────
+//
+// `{FIXED [Region], [Segment] : SUM([Sales])}` — Tableau's grammar, keywords
+// case-insensitive, no dimensions (`{FIXED : SUM([Sales])}`) meaning the whole
+// table. The body is exactly ONE aggregate over a row-level expression.
+//
+// An LOD is a ROW-LEVEL value: the aggregate at that row's group. The parser
+// cannot compute it — it needs every row — so it records a `LodSpec` and
+// returns a reader of the row-map slot `@lod:<n>`, which formula/lod.ts fills
+// before the row is evaluated. `@` cannot start a token, so no column a user
+// can name collides with the slot. A nested LOD is recorded before the one
+// around it, so filling slots in index order is filling them in dependency
+// order.
+
+export type LodKind = 'fixed' | 'include' | 'exclude';
+export type LodAgg = 'sum' | 'avg' | 'min' | 'max' | 'count' | 'countd';
+export const LOD_AGGS: ReadonlySet<string> = new Set<LodAgg>(['sum', 'avg', 'min', 'max', 'count', 'countd']);
+
+/** A dimension as written, with the source span an error underlines. */
+export interface LodDim {
+  name: string;
+  start: number;
+  end: number;
+}
+
+export interface LodSpec {
+  /** The row-map slot the compiled expression reads this LOD's value from. */
+  key: string;
+  kind: LodKind;
+  dims: LodDim[];
+  agg: LodAgg;
+  /** The row-level expression inside the aggregate. */
+  arg: EvalFn;
+  /** The argument when it is ONE bare column reference — the resident path's precondition. */
+  argCol: string | null;
+  /** True when the argument itself contains an LOD. */
+  nested: boolean;
+  /** Source offsets of the whole `{…}`. */
+  start: number;
+  end: number;
+}
+
+const LITERAL_NAMES = new Set(['true', 'false', 'null']);
+
 export class Parser {
   private toks: Tok[];
   private pos = 0;
   refs: Set<string> = new Set();
+  lods: LodSpec[] = [];
 
   constructor(toks: Tok[]) {
     this.toks = toks;
@@ -250,6 +295,8 @@ export class Parser {
       return e;
     }
 
+    if (t.kind === 'punc' && t.value === '{') return this.parseLod();
+
     this.fail('Unexpected token: ' + t.value);
   }
 
@@ -301,6 +348,58 @@ export class Parser {
       for (const w of whens) if (looseEq(s, w.val(row))) return w.then(row);
       return elseFn ? elseFn(row) : null;
     };
+  }
+
+  // { FIXED|INCLUDE|EXCLUDE [dim], … : AGG(<expr>) }
+  private parseLod(): EvalFn {
+    const open = this.toks[this.pos];
+    this.pos += 1; // consume {
+    const kw = this.peek();
+    const kind = kw && kw.kind === 'name' ? kw.value.toLowerCase() : '';
+    if (kind !== 'fixed' && kind !== 'include' && kind !== 'exclude') {
+      this.fail('Expected FIXED, INCLUDE or EXCLUDE after "{"');
+    }
+    this.pos += 1;
+    const dims: LodDim[] = [];
+    if (!this.isPunc(':')) {
+      for (;;) {
+        const d = this.peek();
+        if (!d || (d.kind !== 'col' && d.kind !== 'name')) {
+          this.fail(`Expected a dimension like [Region] or ":" but got ${d ? d.value : 'end of input'}`);
+        }
+        if (!dims.some((x) => x.name === d.value)) dims.push({ name: d.value, start: d.start, end: d.end });
+        this.refs.add(d.value);
+        this.pos += 1;
+        if (!this.isPunc(',')) break;
+        this.pos += 1;
+      }
+    }
+    this.expectPunc(':');
+    const fnTok = this.peek();
+    const agg = fnTok && fnTok.kind === 'name' ? fnTok.value.toLowerCase() : '';
+    if (!LOD_AGGS.has(agg)) {
+      this.fail('Expected one aggregate — SUM, AVG, MIN, MAX, COUNT or COUNTD — after ":"');
+    }
+    this.pos += 1;
+    this.expectPunc('(');
+    const before = this.lods.length;
+    const argAt = this.pos;
+    const arg = this.parseOr();
+    const only = this.toks[argAt];
+    const bare = this.pos - argAt === 1 && !!only &&
+      (only.kind === 'col' || (only.kind === 'name' && !LITERAL_NAMES.has(only.value.toLowerCase())));
+    this.expectPunc(')');
+    const close = this.peek();
+    this.expectPunc('}');
+    const key = '@lod:' + this.lods.length;
+    this.lods.push({
+      key, kind: kind as LodKind, dims, agg: agg as LodAgg, arg,
+      argCol: bare ? only.value : null,
+      nested: this.lods.length > before,
+      start: open.start,
+      end: close ? close.end : open.end,
+    });
+    return (row) => row[key] ?? null;
   }
 
   private parseCall(name: string): EvalFn {

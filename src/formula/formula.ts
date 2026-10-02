@@ -21,7 +21,7 @@
 // its own decimal expansion, which the >15-digit guard would reject.
 
 import { FormulaError, tokenize, type Tok } from './formulaTokens';
-import { Parser } from './formulaParse';
+import { Parser, type LodSpec } from './formulaParse';
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
@@ -34,6 +34,10 @@ export interface Compiled {
   // Column names referenced by the expression, so transforms.ts can warn when a
   // formula references a column that does not exist.
   refs: string[];
+  /** Level-of-detail expressions, in fill order — empty for an ordinary formula.
+   *  `evaluate` reads each one's value from `row[lod.key]`; formula/lod.ts
+   *  computes those over the whole table. Without it they read as null. */
+  lods: LodSpec[];
 }
 
 /** Where an error is, in SOURCE OFFSETS — `expression.slice(start, end)` is the
@@ -109,6 +113,7 @@ export function compileTokens(tokens: Tok[], src: string): CompileResult {
     const refs = Array.from(parser.refs);
     const compiled: Compiled = {
       refs,
+      lods: parser.lods,
       evaluate(row: Record<string, FValue>): FValue {
         try {
           const v = fn(row);

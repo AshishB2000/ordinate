@@ -22,7 +22,7 @@
 // work here: `[length]` is a COLUMN REFERENCE in this language, so a bracketed
 // argument in a signature reads as data rather than as syntax.
 
-export type FunctionCategory = 'number' | 'string' | 'date' | 'logical' | 'conversion';
+export type FunctionCategory = 'number' | 'string' | 'date' | 'logical' | 'conversion' | 'lod';
 
 export interface FunctionDoc {
   /** The name as written in an expression — the key in `FUNCTIONS`. */
@@ -34,6 +34,9 @@ export interface FunctionDoc {
   summary: string;
   /** A COMPILABLE expression — asserted by scripts/test-formulaDocs.ts. */
   example: string;
+  /** r7:lod — what a click inserts when it is not `name(`, and what kind of entry it is. */
+  insert?: string;
+  kind?: 'keyword' | 'recipe';
 }
 
 type Entry = Omit<FunctionDoc, 'name'>;
@@ -153,6 +156,37 @@ export const FUNCTION_DOCS: Record<string, FunctionDoc> = Object.fromEntries(
 
 /** The catalog as a list, grouped by category in the order the editor shows them. */
 export const FUNCTION_CATEGORIES: FunctionCategory[] = ['number', 'string', 'date', 'logical', 'conversion'];
+
+/**
+ * r7:lod — the level-of-detail catalog. NOT in `FUNCTION_DOCS`: FIXED, INCLUDE
+ * and EXCLUDE are syntax, not `FUNCTIONS` keys, so the parity test above must
+ * not see them. Three KEYWORD entries, then three RECIPES — whole expressions
+ * worth copying, inserted as written. scripts/test-lod.ts compiles every
+ * example. The recipes' columns are invented, like every example here.
+ */
+const lodEntry = (name: string, kind: 'keyword' | 'recipe', signature: string, summary: string, example: string, insert: string): FunctionDoc =>
+  ({ name, category: 'lod', kind, signature, summary, example, insert });
+
+export const LOD_DOCS: FunctionDoc[] = [
+  lodEntry('fixed', 'keyword', '{FIXED [dim], … : AGG(expr)}',
+    'Aggregates at exactly the named dimensions, whatever the visual shows. Ordinary filters leave it alone; a filter set to "Apply before LOD" narrows it.',
+    '{FIXED [region] : SUM([sales])}', '{FIXED [] : SUM()}'),
+  lodEntry('include', 'keyword', '{INCLUDE [dim], … : AGG(expr)}',
+    'Aggregates at the visual’s dimensions plus these. Outside a visual it is FIXED on its own dimensions.',
+    '{INCLUDE [customer] : SUM([sales])}', '{INCLUDE [] : SUM()}'),
+  lodEntry('exclude', 'keyword', '{EXCLUDE [dim], … : AGG(expr)}',
+    'Aggregates at the visual’s dimensions minus these. Outside a visual it is the whole table.',
+    '{EXCLUDE [region] : SUM([sales])}', '{EXCLUDE [] : SUM()}'),
+  lodEntry('share of region', 'recipe', 'Share of region',
+    'Each row’s sales as a fraction of its whole region’s sales — sum it by region and every region reads 100%.',
+    '[sales] / {FIXED [region] : SUM([sales])}', '[sales] / {FIXED [region] : SUM([sales])}'),
+  lodEntry('first order date per customer', 'recipe', 'First order date per customer',
+    'The earliest order date of each row’s customer, on every one of that customer’s rows — the cohort start.',
+    '{FIXED [customer] : MIN([order_date])}', '{FIXED [customer] : MIN([order_date])}'),
+  lodEntry('customers with more than 3 orders', 'recipe', 'Customers with more than 3 orders',
+    'True on every row whose customer placed more than three distinct orders — use it as a filter or a dimension.',
+    '{FIXED [customer] : COUNTD([order_id])} > 3', '{FIXED [customer] : COUNTD([order_id])} > 3'),
+];
 
 export function listFunctionDocs(): FunctionDoc[] {
   return FUNCTION_CATEGORIES.flatMap((cat) =>
