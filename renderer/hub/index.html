@@ -78,6 +78,8 @@
   <link rel="stylesheet" href="events.css"/>
   <!-- r8-css:summary -->
   <link rel="stylesheet" href="summary.css"/>
+  <!-- r8-css:search -->
+  <link rel="stylesheet" href="search.css"/>
 
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
@@ -3723,6 +3725,11 @@
 <!-- The Summary card: draws main's sentences, links each to its tile, Rewrite;
      cardKinds/dashShare/reportRender/anNew call it at run time. -->
 <script src="summaryCard.js"></script>
+<!-- r8:search -->
+<!-- Search inside the data: ⌘K's Data group, its row actions and the grid's
+     column = value filter (dataSearch.ts). After palette.js, filterTypeApply.js
+     and the dataset explorer it calls into. -->
+<script src="dataSearch.js"></script>
 
 <script src="hub.js"></script>
 

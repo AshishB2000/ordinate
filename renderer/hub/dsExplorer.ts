@@ -63,6 +63,7 @@ type DatasetPageReq = {
   search?: string;
   sortColumn?: string;
   sortDir?: 'asc' | 'desc';
+  filters?: any[]; // ⌘K's "Open filtered" (dataSearch.ts)
 };
 function datasetPageBridge(): ((p: string, d: string, r: DatasetPageReq) => Promise<any>) | undefined {
   return (window.hub as unknown as { datasetPage?: (p: string, d: string, r: DatasetPageReq) => Promise<any> })
@@ -133,6 +134,7 @@ async function openSavedDataset(id: string): Promise<void> {
   dsCloseProfile();
   // dsRules.ts — a failing-rows filter or a rules list never carries over.
   dqResetForDataset();
+  if (typeof dsrResetGridFilter === 'function') dsrResetGridFilter(); // dataSearch.ts — ⌘K's column = value filter
   const quality = dsEl('ds-quality');
   if (quality) {
     quality.innerHTML = '';

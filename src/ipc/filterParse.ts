@@ -30,7 +30,7 @@ const MAX_TEXT = 500;
 const cache = new Map<string, { at: number; catalog: Promise<FilterCatalog | null> }>();
 
 /** The datasets the dashboard's cards read, in card order — the dimension order. */
-async function dashboardDatasetIds(projectId: string, dashboardId: string): Promise<string[] | null> {
+export async function dashboardDatasetIds(projectId: string, dashboardId: string): Promise<string[] | null> {
   const a = await analysis.getAnalysis(projectId, dashboardId);
   if (!a) return null;
   const ids: string[] = [];

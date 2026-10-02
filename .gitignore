@@ -920,3 +920,13 @@ scripts/**/*.js
 /renderer/hub/summaryCard.js
 
 # r8:search
+/src/data/dataSearch.js
+/src/data/dataSearchRun.js
+/src/engine/dataSearchResident.js
+/src/ipc/dataSearch.js
+/preload/hubSearchPreload.js
+/renderer/hub/dataSearch.js
+/scripts/test-dataSearch.js
+/scripts/test-dataSearchResident.js
+/scripts/bench-dataSearch.js
+/scripts/r8Search.js

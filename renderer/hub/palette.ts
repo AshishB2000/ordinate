@@ -29,6 +29,8 @@ let cpSeq = 0;
 let cpTimer: number | null = null;
 /** The record whose secondary actions are showing, if any (→ opened them). */
 let cpActionsFor: CpRecord | null = null;
+/** A row with its own actions (a data hit) whose → list is showing, if any. */
+let cpActionRow: CpRow | null = null;
 
 function cpEl<T extends HTMLElement = HTMLElement>(id: string): T | null {
   return document.getElementById(id) as T | null;
@@ -46,6 +48,7 @@ function paletteOpen(prefill = ''): void {
   const input = cpEl<HTMLInputElement>('cp-input');
   if (!overlay || !input) return;
   cpActionsFor = null;
+  cpActionRow = null;
   overlay.hidden = false;
   input.value = prefill;
   input.focus();
@@ -61,6 +64,7 @@ function paletteClose(): void {
   cpGroups = [];
   cpFlat = [];
   cpActionsFor = null;
+  cpActionRow = null;
   const input = cpEl<HTMLInputElement>('cp-input');
   if (input) input.value = '';
   // The top bar's input is what opens this on focus, so leaving focus there
@@ -78,7 +82,7 @@ function paletteCloseTop(): boolean {
   if (cpSheetIsOpen()) { paletteHideShortcuts(); return true; }
   if (paletteIsOpen()) {
     // → opened an action list; Escape steps back out of it first.
-    if (cpActionsFor) { cpActionsFor = null; void cpRefresh(); return true; }
+    if (cpActionsFor || cpActionRow) { cpActionsFor = null; cpActionRow = null; void cpRefresh(); return true; }
     paletteClose();
     return true;
   }
@@ -93,6 +97,7 @@ async function cpRefresh(): Promise<void> {
   const seq = ++cpSeq;
 
   if (cpActionsFor) { cpPaint(cpActionGroups(cpActionsFor)); return; }
+  if (cpActionRow) { cpPaint([{ label: cpActionRow.title, rows: cpActionRow.actions || [] }]); return; }
 
   const raw = input.value;
   const prefix = raw.charAt(0);
@@ -143,9 +148,18 @@ async function cpRefresh(): Promise<void> {
   cpPaint(groups.slice());
 
   if (mode !== 'commands') {
+    // Values inside every dataset (dataSearch.ts) — asked at once, painted after
+    // the records, which are a list read and come back first.
+    const data = mode === 'all' && typeof dsrPaletteGroup === 'function' ? dsrPaletteGroup(q) : null;
     const hits = await cpSearchRecords(q);
     if (seq !== cpSeq) return;
     if (hits.length) groups.push({ label: 'Results', rows: hits.map(cpRecordRow) });
+    cpPaint(groups);
+    if (!data) return;
+    dsrPaintPending();
+    const found = await data;
+    if (seq !== cpSeq) return;
+    if (found) groups.push(found);
     cpPaint(groups);
   }
 }
@@ -224,7 +238,26 @@ function cpRowEl(r: CpRow, i: number): HTMLElement {
   meta.textContent = r.meta;
   row.appendChild(meta);
 
-  if (r.keys) {
+  if (r.count) {
+    const n = document.createElement('span');
+    n.className = 'cp-row-count';
+    n.textContent = r.count;
+    row.appendChild(n);
+  }
+
+  if (r.actions) {
+    r.actions.forEach((a) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'cp-row-act';
+      b.title = a.title;
+      b.setAttribute('aria-label', a.title);
+      b.appendChild(icon(a.icon, 14));
+      // mousedown, like the row: the input's blur would tear the list down first.
+      b.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); a.run(); });
+      row.appendChild(b);
+    });
+  } else if (r.keys) {
     const k = document.createElement('span');
     k.className = 'kbd cp-row-key';
     k.textContent = r.keys;
@@ -293,19 +326,21 @@ function cpKeydown(e: KeyboardEvent): void {
     const input = cpEl<HTMLInputElement>('cp-input');
     // Only when the caret is at the end — otherwise → is still how you move
     // through what you typed.
-    if (row && row.record && input && input.selectionStart === input.value.length) {
+    if (row && (row.record || row.actions) && input && input.selectionStart === input.value.length) {
       e.preventDefault();
-      cpActionsFor = row.record;
+      cpActionsFor = row.record || null;
+      cpActionRow = row.record ? null : row;
       cpSel = 0;
       void cpRefresh();
     }
     return;
   }
-  if (e.key === 'ArrowLeft' && cpActionsFor) {
+  if (e.key === 'ArrowLeft' && (cpActionsFor || cpActionRow)) {
     const input = cpEl<HTMLInputElement>('cp-input');
     if (input && input.selectionStart === 0) {
       e.preventDefault();
       cpActionsFor = null;
+      cpActionRow = null;
       cpSel = 0;
       void cpRefresh();
     }

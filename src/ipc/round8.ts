@@ -25,4 +25,5 @@ export function register(deps: Round8Deps): void {
   require('./summary').register(); // the Summary card (src/ipc/summary.ts)
 
   // r8:search
+  require('./dataSearch').register(); // search inside the data — ⌘K's Data group
 }

@@ -40,6 +40,10 @@ interface CpRow {
   record?: CpRecord;
   /** Tag chips shown after the title. */
   chips?: CtTag[];
+  /** A right-aligned count, e.g. "1,204 rows" (dataSearch.ts). */
+  count?: string;
+  /** The row's own actions: buttons on the row, and the → list (dataSearch.ts). */
+  actions?: CpRow[];
 }
 
 interface CpGroup { label: string; rows: CpRow[] }
