@@ -994,3 +994,15 @@ scripts/**/*.js
 /src/engine/lodResident.js
 /src/ipc/lodData.js
 /renderer/hub/lodUi.js
+
+# r7:templates
+/src/ipc/round7.js
+/src/ipc/userTemplates.js
+/src/analysis/userTemplate.js
+/src/analysis/userTemplateRefs.js
+/src/analysis/userTemplateApply.js
+/src/analysis/userTemplateFile.js
+/src/app/userTemplateStore.js
+/preload/hubTemplatesPreload.js
+/renderer/hub/userTemplateSave.js
+/renderer/hub/userTemplateGallery.js

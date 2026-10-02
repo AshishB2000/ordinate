@@ -12,6 +12,7 @@ export function register(deps: Round7Deps): void {
   require('./notebooks').register();
   // r7:lod
   // r7:templates
+  require('./userTemplates').register(); // Save as template, the gallery's "Yours" (src/ipc/userTemplates.ts)
   // r7:motion
   // r7:i18n
 }

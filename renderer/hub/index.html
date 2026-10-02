@@ -86,6 +86,9 @@
   <!-- r7-css:lod -->
   <link rel="stylesheet" href="lod.css"/>
 
+  <!-- r7-css:templates -->
+  <link rel="stylesheet" href="templates.css"/>
+
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
        injecting a <style> at render time, which the hub CSP (style-src 'self')
@@ -3782,6 +3785,12 @@
      preview columns, the filter dialog's "Apply before LOD" switch and the
      context tag (lodUi.ts). Called at runtime only, so any position works. -->
 <script src="lodUi.js"></script>
+
+<!-- r7:templates -->
+<!-- Save as template (userTemplateSave.ts) and the gallery's "Yours" group
+     (userTemplateGallery.ts, which uses the save file's utMk). -->
+<script src="userTemplateSave.js"></script>
+<script src="userTemplateGallery.js"></script>
 
 <script src="hub.js"></script>
 

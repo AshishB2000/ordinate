@@ -131,7 +131,8 @@ function anTplRenderGallery(host: HTMLElement, templates: any[], picked: string,
 
     const art = document.createElement('span');
     art.className = 'an-wiz-tpl-art';
-    const url = anTplThumbUrl(String(tpl.thumb || ''));
+    // A user template's picture is the dashboard it was saved from (r7:templates).
+    const url = tpl.thumbnail ? String(tpl.thumbnail) : anTplThumbUrl(String(tpl.thumb || ''));
     if (url) {
       const img = document.createElement('img');
       img.className = 'an-wiz-tpl-img';
@@ -322,6 +323,7 @@ function anTplMapPane(): AnTplMapApi {
     const mine = ++seq;
     const mapped = Object.keys(mapping()).length;
     const total = (tpl.roles || []).length;
+    if (tpl.user) { await utRefreshMapping(mine, mapped, total); return; }
     let res: any = null;
     try {
       res = await window.hub.templatePlan({
@@ -350,6 +352,30 @@ function anTplMapPane(): AnTplMapApi {
       + (skipped ? ` · ${skipped} skipped` : '');
     const metrics = (shown && shown.sheets && shown.sheets[0] && shown.sheets[0].metrics) || [];
     await paintKpis(metrics, mine);
+  }
+
+  /** r7:templates — a USER template's mapping step: main plans it (utpl:preview)
+   *  and says which tiles a skipped role takes with it; the KPI strip is the
+   *  same `dashboard:metric` path. Create then goes through utpl:apply. */
+  async function utRefreshMapping(mine: number, mapped: number, total: number): Promise<void> {
+    let res: any = null;
+    try {
+      res = await window.hubTemplates.preview({ projectId, datasetId, templateId: String(tpl.id), mapping: mapping() });
+    } catch (_) { res = null; }
+    if (mine !== seq) return;
+    if (!res || !res.ok) {
+      lastPlan = null;
+      summary.textContent = (res && res.error) || 'This mapping cannot be built.';
+      summary.title = '';
+      kpis.innerHTML = '';
+      return;
+    }
+    lastPlan = { user: true };
+    const skipped = Math.max(0, res.total - res.tiles);
+    summary.textContent = `${mapped} of ${total} mapped · ${res.tiles} tile${res.tiles === 1 ? '' : 's'} will be built`
+      + (skipped ? ` · ${skipped} skipped` : '');
+    summary.title = (res.dropped || []).join('\n');
+    await paintKpis(res.kpis || [], mine);
   }
 
   /** One `dashboard:metric` call per KPI — the built tile's own channel. A KPI
@@ -395,6 +421,7 @@ function anTplMapPane(): AnTplMapApi {
       maxTiles = 0;
       seq += 1;
       summary.textContent = 'Reading your data…';
+      summary.title = '';
       kpis.innerHTML = '';
       renderRows();
       refresh();

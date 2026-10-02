@@ -238,6 +238,7 @@ function makeAnListItem(a: any, previews: any[]): HTMLElement {
       },
       { label: 'History', onClick: () => void vhOpen('dashboard', String(a.id), a && a.name ? String(a.name) : '') },
       { label: 'Lineage', onClick: () => void lnOpen('dashboard', String(a.id), a && a.name ? String(a.name) : '') },
+      { label: 'Save as template…', onClick: () => void utSaveAsTemplate(String(a.id)) }, // r7:templates
       { label: 'Delete', danger: true, onClick: () => handleDeleteAnalysis(String(a.id)) },
     ]);
   });

@@ -105,8 +105,9 @@ async function main(): Promise<void> {
      ['Sales overview', 'Finance P&L', 'Marketing funnel', 'Operations', 'Customer', 'Inventory']
        .every((n) => gallery.names.includes(n)),
      JSON.stringify(gallery.names));
-  ok('…each card painted, under a Templates and a Layouts heading',
-     gallery.painted && JSON.stringify(gallery.groups) === JSON.stringify(['Templates', 'Layouts']),
+  // "Yours" (r7:templates) comes FIRST, in its empty state on a fresh install.
+  ok('…each card painted, under Yours, Templates and Layouts headings',
+     gallery.painted && JSON.stringify(gallery.groups) === JSON.stringify(['Yours', 'Templates', 'Layouts']),
      JSON.stringify(gallery.groups));
   ok('…with a REAL rendered thumbnail on every one, not an icon',
      gallery.thumbs === 6 && gallery.thumbsReal === 6 && gallery.thumbSize > 100,

@@ -123,6 +123,13 @@ function initAuthoring(): void {
           if (typeof openPublishDialog === 'function') void openPublishDialog(dashCurrent ? String(dashCurrent.id) : undefined);
         });
         menu.appendChild(pub);
+        // r7:templates — this dashboard as a template in the gallery's "Yours".
+        const tpl = document.createElement('button');
+        tpl.type = 'button';
+        tpl.className = 'chart-menu-item';
+        tpl.textContent = 'Save as template…';
+        tpl.addEventListener('click', () => { close(); if (dashCurrent) void utSaveAsTemplate(String(dashCurrent.id)); });
+        menu.appendChild(tpl);
       });
     });
   }

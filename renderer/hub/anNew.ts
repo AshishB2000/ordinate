@@ -263,6 +263,10 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
   const tplNote = document.createElement('p');
   tplNote.className = 'an-wiz-none';
   tplNote.textContent = 'Reading your columns…';
+  // r7:templates — the user's own templates, FIRST (userTemplateGallery.ts).
+  const yoursHost = document.createElement('div');
+  yoursHost.className = 'ut-yours-host';
+  pane2.appendChild(yoursHost);
   pane2.appendChild(tplHead);
   pane2.appendChild(tplGrid);
   pane2.appendChild(tplNote);
@@ -495,10 +499,17 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
     if (!tplData) return;
     const subject = (tplData.templates || []).filter((t: any) => t.group === 'Templates');
     tplNote.hidden = subject.length > 0;
-    anTplRenderGallery(tplGrid, subject, tplPicked, (id: string) => {
+    const pick = (id: string): void => {
       startFrom = 'template';
       tplPicked = id;
       paintTemplates();
+      sync();
+    };
+    anTplRenderGallery(tplGrid, subject, tplPicked, pick);
+    utPaintYours(yoursHost, (tplData.templates || []).filter((t: any) => t.group === 'Yours'), tplPicked, pick, () => {
+      tplData = null;
+      if (startFrom === 'template') { startFrom = 'blank'; tplPicked = ''; }
+      void loadTemplates();
       sync();
     });
   }
@@ -543,7 +554,10 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
     next.textContent = 'Creating…';
     let res: any;
     try {
-      res = await window.hub.buildAnalysisPlan(currentProjectId, plan);
+      // r7:templates — a user template builds through its own apply, same mapping.
+      res = plan.user
+        ? await window.hubTemplates.apply({ projectId: currentProjectId, datasetId: selectedId, templateId: tplPicked, mapping: mapPane.mapping(), name: chosenName() })
+        : await window.hub.buildAnalysisPlan(currentProjectId, plan);
     } catch (_) { res = null; }
     next.disabled = false;
     next.textContent = label || 'Create dashboard';
@@ -555,6 +569,7 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
     await refreshAnalysisList();
     openAnalysisFrom(res.analysis);
     sumAddToTop(); // summaryCard.ts — every gallery dashboard opens on its Summary
+    if (plan.user && res.dropped && res.dropped.length) showToast(`${res.dropped.length} skipped — ${res.dropped[0]}${res.dropped.length > 1 ? ' …' : ''}`);
   }
 
   skip.addEventListener('click', () => { createFromStarter('blank'); });

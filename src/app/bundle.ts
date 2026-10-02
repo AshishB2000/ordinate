@@ -34,6 +34,7 @@ import { app } from 'electron';
 import * as projects from './projects';
 import { projectDir, projectsBase, isValidId } from './recordKinds';
 import { bundleThemesEntry, importBundleThemes } from './themeStore';
+import { bundleTemplatesEntry, importBundleTemplates } from './userTemplateStore'; // r7:templates
 
 export const BUNDLE_FORMAT = 'ordinate-project';
 export const BUNDLE_VERSION = 1;
@@ -72,6 +73,7 @@ const ENTRY_RULES: Array<{ re: RegExp; count?: string }> = [
   // The workspace themes this project's dashboards name (themeStore.ts). Not a
   // project file: written at export, adopted into the workspace at import.
   { re: /^themes\.json$/ },
+  { re: /^templates\.json$/ }, // r7:templates — user templates from these dashboards (userTemplateStore.ts)
 ];
 
 const MAX_ENTRIES = 50_000;
@@ -352,6 +354,8 @@ export async function exportProject(
   }
   const themes = await bundleThemesEntry(entries);
   if (themes) entries.push(themes);
+  const templates = await bundleTemplatesEntry(entries); // r7:templates
+  if (templates) entries.push(templates);
   const alerts = entries.find((e) => e.name === 'alerts.json');
   if (alerts) {
     try { counts.alerts = (JSON.parse(alerts.data.toString('utf8')).rules || []).length; } catch (_) { counts.alerts = 0; }
@@ -466,7 +470,7 @@ export async function importBundle(bytes: Buffer, opts: BundleProgress & { name?
   const dir = projectDir(created.id);
   try {
     for (const e of entries) {
-      if (e.name === 'manifest.json' || e.name === 'project.json' || e.name === 'themes.json') continue; // the new project has its own; themes are workspace records
+      if (e.name === 'manifest.json' || e.name === 'project.json' || e.name === 'themes.json' || e.name === 'templates.json') continue; // the new project has its own; themes are workspace records
       const rel = swap(e.name);
       if (!ruleFor(rel)) throw new Error('A remapped name left the whitelist.'); // cannot happen; guard anyway
       const target = path.join(dir, ...rel.split('/'));
@@ -490,6 +494,7 @@ export async function importBundle(bytes: Buffer, opts: BundleProgress & { name?
       } catch (_) { /* optional */ }
     }
     await importBundleThemes(entries, swap).catch(() => 0); // a theme costs the look, never the import
+    await importBundleTemplates(entries, swap); // r7:templates — merged by id, never clobbering
   } catch (err: any) {
     await projects.deleteProject(created.id);
     return { ok: false, error: err?.message || 'The bundle could not be written.' };
