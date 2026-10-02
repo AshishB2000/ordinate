@@ -13,9 +13,9 @@
 let pvMaskPrefill = '';
 
 const PV_GENERALIZE_MODES: Array<[string, string]> = [
-  ['bucket', 'Bucket numbers'],
-  ['month', 'Truncate dates to the month'],
-  ['domain', 'Keep only the email domain'],
+  ['bucket', t('prepareMask.bucket_numbers')],
+  ['month', t('prepareMask.truncate_dates_to_the_month')],
+  ['domain', t('prepareMask.keep_only_the_email_domain')],
 ];
 
 /** The pipeline row's sentence for a mask step, or null for any other step. */
@@ -24,15 +24,15 @@ function pvMaskSummary(step: any): string | null {
   const col = String(step.column || '');
   switch (step.type) {
     case 'mask_hash':
-      return `Mask ${col}: hash to tokens`;
+      return t('prepareMask.mask_hash_to_tokens', { col });
     case 'mask_redact': {
       const keep = Number.isFinite(Number(step.keep)) ? Number(step.keep) : 4;
-      return keep > 0 ? `Mask ${col}: keep last ${keep}` : `Mask ${col}: hide all`;
+      return keep > 0 ? t('prepareMask.mask_keep_last', { col, keep }) : t('prepareMask.mask_hide_all', { col });
     }
     case 'mask_generalize':
-      if (step.mode === 'month') return `Mask ${col}: month only`;
-      if (step.mode === 'domain') return `Mask ${col}: domain only`;
-      return `Mask ${col}: buckets of ${Number(step.size) > 0 ? Number(step.size).toLocaleString() : 10}`;
+      if (step.mode === 'month') return t('prepareMask.mask_month_only', { col });
+      if (step.mode === 'domain') return t('prepareMask.mask_domain_only', { col });
+      return t('prepareMask.mask_buckets_of', { col, p1: Number(step.size) > 0 ? Number(step.size).toLocaleString() : 10 });
     default:
       return null;
   }
@@ -65,15 +65,15 @@ function pvBuildMaskForm(type: string, body: HTMLElement, existing: any): (() =>
   if (type !== 'mask_hash' && type !== 'mask_redact' && type !== 'mask_generalize') return null;
   const colSel = makeColSelect(existing ? existing.column : pvMaskPrefill || undefined);
   pvMaskPrefill = '';
-  body.appendChild(fieldRow('Column', colSel));
+  body.appendChild(fieldRow(t('common.column'), colSel));
   const need = (): string | null => {
     if (colSel.value) return colSel.value;
-    window.alert('Pick a column to mask.');
+    window.alert(t('prepareMask.pick_a_column_to_mask'));
     return null;
   };
 
   if (type === 'mask_hash') {
-    body.appendChild(pvMaskHint('Each value becomes a short token like #3f9a0c21b7d4 — the same token for the same value everywhere in this project, so counts, joins and groupings still work. The key that makes the tokens stays in this project\'s folder and never leaves it.'));
+    body.appendChild(pvMaskHint(t('prepareMask.each_value_becomes_a_short_token')));
     return () => {
       const column = need();
       return column ? { type, column } : null;
@@ -82,14 +82,14 @@ function pvBuildMaskForm(type: string, body: HTMLElement, existing: any): (() =>
 
   if (type === 'mask_redact') {
     const keep = pvNumberInput(existing && Number.isFinite(Number(existing.keep)) ? Number(existing.keep) : 4, 0, 8, '1');
-    body.appendChild(fieldRow('Characters to keep', keep));
+    body.appendChild(fieldRow(t('prepareMask.characters_to_keep'), keep));
     const hint = pvMaskHint('');
     const paint = (): void => {
       const k = Math.max(0, Math.min(8, Math.floor(Number(keep.value) || 0)));
       const sample = '4111111111111234';
       hint.textContent = k > 0
-        ? `${sample} becomes •••${sample.slice(-k)}. A value no longer than ${k} characters is hidden whole.`
-        : 'Every value becomes •••.';
+        ? t('prepareMask.becomes_a_value_no_longer_than', { sample, p1: sample.slice(-k), k })
+        : t('prepareMask.every_value_becomes');
     };
     keep.addEventListener('input', paint);
     paint();
@@ -106,19 +106,19 @@ function pvBuildMaskForm(type: string, body: HTMLElement, existing: any): (() =>
     const m = PV_GENERALIZE_MODES.find((x) => x[0] === o.value);
     if (m) o.textContent = m[1];
   });
-  body.appendChild(fieldRow('Generalise', mode));
+  body.appendChild(fieldRow(t('prepareMask.generalise'), mode));
   const size = pvNumberInput(existing && Number(existing.size) > 0 ? Number(existing.size) : 10, 0);
-  const sizeRow = fieldRow('Bucket size', size);
+  const sizeRow = fieldRow(t('prepareMask.bucket_size'), size);
   body.appendChild(sizeRow);
   const hint = pvMaskHint('');
   body.appendChild(hint);
   const paint = (): void => {
     sizeRow.hidden = mode.value !== 'bucket';
     hint.textContent = mode.value === 'month'
-      ? '2024-03-17 becomes 2024-03. Values that are not dates are cleared.'
+      ? t('prepareMask.2024_03_17_becomes_2024_03')
       : mode.value === 'domain'
-        ? 'jane@example.com becomes @example.com. Values that are not email addresses are cleared.'
-        : `Each number is rounded down to its bucket: with ${Number(size.value) > 0 ? Number(size.value).toLocaleString() : 10}, 57 becomes ${Number(size.value) > 0 ? Math.floor(57 / Number(size.value)) * Number(size.value) : 50}. The column stays a number column.`;
+        ? t('prepareMask.jane_example_com_becomes_example_com')
+        : t('prepareMask.each_number_is_rounded_down_to', { p0: Number(size.value) > 0 ? Number(size.value).toLocaleString() : 10, p1: Number(size.value) > 0 ? Math.floor(57 / Number(size.value)) * Number(size.value) : 50 });
   };
   mode.addEventListener('change', paint);
   size.addEventListener('input', paint);
@@ -129,7 +129,7 @@ function pvBuildMaskForm(type: string, body: HTMLElement, existing: any): (() =>
     if (mode.value === 'bucket') {
       const s = Number(size.value);
       if (!(s > 0)) {
-        window.alert('Enter a bucket size greater than zero.');
+        window.alert(t('prepareMask.enter_a_bucket_size_greater_than'));
         return null;
       }
       return { type, column, mode: 'bucket', size: s };

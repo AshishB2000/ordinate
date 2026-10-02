@@ -19,7 +19,7 @@ async function runTileAction(action: any, card: any, visual: any, category?: unk
   const clicked = category === undefined ? null : tileClicked(visual, category);
   const steps = cardModel.carrySteps(action, { clicked, filters: effectiveFilters(), selection: [] });
   if (action.kind === 'navigate') {
-    if (!action.target) { showToast('This action has no dashboard to open yet.', { kind: 'info' }); return; }
+    if (!action.target) { showToast(t('tileActions.this_action_has_no_dashboard_to'), { kind: 'info' }); return; }
     await dashNavigate(action.target, steps);
     return;
   }
@@ -31,7 +31,7 @@ async function runTileAction(action: any, card: any, visual: any, category?: unk
   }
   if (action.kind === 'filter_target') {
     const tiles = (action.tiles || []).filter((t: string) => t !== card.id);
-    if (!tiles.length) { showToast('This action has no tiles to narrow yet.', { kind: 'info' }); return; }
+    if (!tiles.length) { showToast(t('tileActions.this_action_has_no_tiles_to'), { kind: 'info' }); return; }
     dashNarrowTiles(tiles, clicked ? [{ type: 'filter', column: clicked.column, op: '=', value: clicked.value }].concat(facetSteps) : steps);
   }
 }
@@ -77,7 +77,7 @@ function tileActionMenuItems(card: any): Array<[string, () => void]> {
     : null;
   // The accessible alternative to a drawn chart: its figures as a real table (a11y.ts).
   const table: Array<[string, () => void]> = el && el.querySelector('.dash-viz-area canvas')
-    ? [[el.querySelector('.a11y-table-wrap') ? 'View as chart' : 'View as table', () => a11yToggleTable(el)]]
+    ? [[el.querySelector('.a11y-table-wrap') ? t('tileActions.view_as_chart') : t('tileActions.view_as_table'), () => a11yToggleTable(el)]]
     : [];
   return table.concat(actions
     .filter((a) => a.trigger === 'menu' && a.kind !== 'tooltip_visual')
@@ -90,10 +90,10 @@ function tileActionMenuItems(card: any): Array<[string, () => void]> {
 }
 
 function tileActionLabel(a: any): string {
-  if (a.kind === 'navigate') return 'Open linked dashboard';
-  if (a.kind === 'url') return 'Open link';
-  if (a.kind === 'filter_target') return 'Narrow linked tiles';
-  return 'Show tooltip visual';
+  if (a.kind === 'navigate') return t('tileActions.open_linked_dashboard');
+  if (a.kind === 'url') return t('tileActions.open_link');
+  if (a.kind === 'filter_target') return t('tileActions.narrow_linked_tiles');
+  return t('tileActions.show_tooltip_visual');
 }
 
 // ── tooltip_visual ───────────────────────────────────────────────────────────
@@ -155,13 +155,13 @@ function wireTooltipVisual(area: HTMLElement, visual: any, action: any): void {
     if (!currentProjectId) return;
     if (!tipVisual) tipVisual = await window.hub.getVisual(currentProjectId, action.tooltipVisualId).catch(() => null);
     if (my !== seq || !tvTip) return;
-    if (!tipVisual) { box.textContent = 'The tooltip visual was deleted.'; return; }
+    if (!tipVisual) { box.textContent = t('tileActions.the_tooltip_visual_was_deleted'); return; }
     const clicked = tileClicked(visual, mark.category);
     const filters = mergeDashFilters(effectiveFilters(), tipVisual.filters)
       .concat(clicked ? [{ type: 'filter', column: clicked.column, op: '=', value: clicked.value }] : [], mark.facet ? mark.facet.steps : []);
     const res = await window.hub.computeVisualData(currentProjectId, tipVisual.datasetId, tipVisual.encoding, filters).catch(() => null);
     if (my !== seq || !tvTip) return;
-    if (!res || !res.ok) { box.textContent = 'No data for ' + key + '.'; return; }
+    if (!res || !res.ok) { box.textContent = t('tileActions.no_data_for', { key }); return; }
     const sub = document.createElement('div');
     sub.className = 'tv-tip-sub';
     sub.textContent = String(tipVisual.name || 'Visual');
@@ -170,6 +170,6 @@ function wireTooltipVisual(area: HTMLElement, visual: any, action: any): void {
     tvChart = buildChart(canvas, res.data, type.indexOf('map_') === 0 ? 'column' : type, {
       showLegend: false, valueMode: 'off', noAnimate: true, showTooltips: false,
     });
-    if (!tvChart) box.textContent = 'No data for ' + key + '.';
+    if (!tvChart) box.textContent = t('tileActions.no_data_for', { key });
   });
 }

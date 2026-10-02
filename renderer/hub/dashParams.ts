@@ -99,7 +99,7 @@ function saveParamDefault(card: any): void {
   if (!p) return;
   p.value = dashParamValue(p);
   paramState.delete(p.id);
-  markDashDirty('Save parameter default');
+  markDashDirty(t('dashParams.save_parameter_default'));
   renderDashGrid();
 }
 
@@ -131,7 +131,7 @@ function paramNum(v: any): string {
 function renderParamControl(card: any, wrap: HTMLElement): void {
   const p = dashParamById(card.control.paramId);
   if (!p) {
-    dashCardMissing(wrap, 'Parameter removed.');
+    dashCardMissing(wrap, t('dashParams.parameter_removed'));
     return;
   }
   const cur = dashParamValue(p);
@@ -173,7 +173,7 @@ function renderParamControl(card: any, wrap: HTMLElement): void {
     sel.setAttribute('aria-label', label);
     const all = document.createElement('option');
     all.value = '';
-    all.textContent = 'All';
+    all.textContent = t('common.all');
     sel.appendChild(all);
     const chosen = Array.isArray(cur) ? String(cur[0] || '') : String(cur == null ? '' : cur);
     const fill = (values: string[]): void => {
@@ -216,7 +216,7 @@ function renderParamControl(card: any, wrap: HTMLElement): void {
     }, 350));
   } else {
     input.type = 'text';
-    input.placeholder = 'Type a value';
+    input.placeholder = t('dashParams.type_a_value');
     input.value = Array.isArray(cur) ? cur.join(', ') : cur == null ? '' : String(cur);
     input.addEventListener('input', () => later(() => {
       const v = input.value;

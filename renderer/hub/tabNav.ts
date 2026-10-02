@@ -182,25 +182,25 @@ async function tabLoadProject(pid: string | null): Promise<void> {
 
 /** Open `key`'s record on its page (no-op if it already is) and mark it active. */
 async function tabShow(key: string): Promise<boolean> {
-  const t = tabFind(key);
-  const k = tabKindOf(t);
-  if (!t || !k) return false;
-  if (!tabIsOpen(t) && tabProject) {
+  const tv = tabFind(key);
+  const k = tabKindOf(tv);
+  if (!tv || !k) return false;
+  if (!tabIsOpen(tv) && tabProject) {
     // Deleted since the tab was made? Say so quietly and drop it, rather than
     // let the opener raise its own "could not be loaded" alert.
-    const name = await k.resolve(tabProject, t.id);
+    const name = await k.resolve(tabProject, tv.id);
     if (name === null) {
       tabSet(tabClose(tabState, key));
-      showToast(`That ${k.label.toLowerCase()} no longer exists, so its tab was closed.`);
+      showToast(t('tabNav.that_no_longer_exists_so_its', { p0: k.label.toLowerCase() }));
       return false;
     }
   }
   tabSet(tabActivate(tabState, key));
-  if (!tabIsOpen(t) || currentSection !== k.section) {
-    await k.open(t.id);
+  if (!tabIsOpen(tv) || currentSection !== k.section) {
+    await k.open(tv.id);
     tabApplySplit(); // the opener's selectSection hid the other pane
   }
-  if (tabIsOpen(t)) return true;
+  if (tabIsOpen(tv)) return true;
   // The opener could not show it (deleted since, or unreadable): drop the tab.
   tabSet(tabClose(tabState, key));
   return false;
@@ -295,15 +295,15 @@ async function tabOpenBackground(kind: string, id: string): Promise<void> {
  * editors on one record would each autosave over the other.
  */
 async function tabToNewWindow(key: string): Promise<void> {
-  const t = tabFind(key);
+  const tv = tabFind(key);
   const pid = currentProjectId;
-  if (!t || !pid) return;
+  if (!tv || !pid) return;
   if (!(await tabCloseKey(key))) return;
   let res: { ok: boolean } | null = null;
-  try { res = await window.hub.openRecordWindow(t.kind, t.id, pid); } catch (_) { res = null; }
+  try { res = await window.hub.openRecordWindow(tv.kind, tv.id, pid); } catch (_) { res = null; }
   if (!res || !res.ok) {
-    tabSet(tabOpen(tabState, t, true)); // put it back
-    showToast("Couldn't open a new window", { kind: 'error' });
+    tabSet(tabOpen(tabState, tv, true)); // put it back
+    showToast(t('tabNav.couldn_t_open_a_new_window'), { kind: 'error' });
   }
 }
 
@@ -335,27 +335,27 @@ function tabBootSecondary(): void {
 
 function initTabs(): void {
   registerCommand({
-    id: 'tab.close', title: 'Close tab', group: 'View', icon: 'x', keys: 'mod+w',
+    id: 'tab.close', title: t('tabNav.close_tab'), group: t('common.view'), icon: 'x', keys: 'mod+w',
     when: () => !!tabState.active,
     run: () => { const k = tabState.active; if (k) void tabRun(() => tabCloseKey(k).then(() => undefined)); },
   });
   registerCommand({
-    id: 'tab.next', title: 'Next tab', group: 'Navigate', icon: 'chevron-right', keys: 'mod+shift+]',
+    id: 'tab.next', title: t('tabNav.next_tab'), group: t('common.navigate'), icon: 'chevron-right', keys: 'mod+shift+]',
     when: () => tabState.tabs.length > 0,
     run: () => { const k = tabNeighbour(tabState, 1); if (k) void tabRun(() => tabSwitchTo(k)); },
   });
   registerCommand({
-    id: 'tab.prev', title: 'Previous tab', group: 'Navigate', icon: 'chevron-left', keys: 'mod+shift+[',
+    id: 'tab.prev', title: t('tabNav.previous_tab'), group: t('common.navigate'), icon: 'chevron-left', keys: 'mod+shift+[',
     when: () => tabState.tabs.length > 0,
     run: () => { const k = tabNeighbour(tabState, -1); if (k) void tabRun(() => tabSwitchTo(k)); },
   });
   registerCommand({
-    id: 'tab.split', title: 'Toggle split view', group: 'View', icon: 'columns', keys: 'mod+\\',
+    id: 'tab.split', title: t('tabNav.toggle_split_view'), group: t('common.view'), icon: 'columns', keys: 'mod+\\',
     when: () => !!tabState.active,
     run: () => { void tabRun(() => tabSplitCommand()); },
   });
   registerCommand({
-    id: 'tab.newWindow', title: 'Open tab in new window', group: 'View', icon: 'external-link',
+    id: 'tab.newWindow', title: t('tabNav.open_tab_in_new_window'), group: t('common.view'), icon: 'external-link',
     when: () => !!tabState.active,
     run: () => { const k = tabState.active; if (k) void tabRun(() => tabToNewWindow(k)); },
   });

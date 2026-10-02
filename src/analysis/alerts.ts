@@ -34,6 +34,7 @@ import type { MetricAggregation } from './metricValue';
 import type { FilterStep } from '../data/transforms';
 import type { Anomaly } from './anomalies';
 import { diffAnomalies } from './anomalyWatch';
+import { t } from '../app/i18n';
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
@@ -223,7 +224,7 @@ export function sanitizeRule(raw: any): AlertRule | null {
 
   const rule: AlertRule = {
     id: String(raw.id),
-    name: str(raw.name) || 'Alert',
+    name: str(raw.name) || t('common.alert'),
     datasetId: String(raw.datasetId),
     metric: { column, aggregation: aggregation as MetricAggregation },
     compare,
@@ -286,7 +287,7 @@ export function sanitizeEvent(raw: any): AlertEvent | null {
   const ev: AlertEvent = {
     id: String(raw.id),
     ruleId: String(raw.ruleId),
-    ruleName: str(raw.ruleName) || 'Alert',
+    ruleName: str(raw.ruleName) || t('common.alert'),
     datasetId: UUID_RE.test(String(raw.datasetId || '')) ? String(raw.datasetId) : '',
     at: str(raw.at, 40) || new Date(0).toISOString(),
     value: num(raw.value),
@@ -363,14 +364,21 @@ export function isSnoozed(rule: AlertRule, now: number): boolean {
 
 // ── The sentence ─────────────────────────────────────────────────────────────
 
-const OP_WORD: Record<ThresholdOp, string> = {
-  '>': 'above', '<': 'below', '>=': 'at or above', '<=': 'at or below',
-};
+// Functions, not constants: read at call time, so the words follow Settings → Language.
+function opWord(op: ThresholdOp): string {
+  const words: Record<ThresholdOp, string> = {
+    '>': t('alerts.above'), '<': t('alerts.below'), '>=': t('alerts.at_or_above'), '<=': t('alerts.at_or_below'), // i18n-text
+  };
+  return words[op];
+}
 
-const VS_WORD: Record<ChangeVs, string> = {
-  previous_refresh: 'the previous refresh',
-  previous_period: 'the previous period',
-};
+function vsWord(vs: ChangeVs): string {
+  const words: Record<ChangeVs, string> = {
+    previous_refresh: t('alerts.the_previous_refresh'),
+    previous_period: t('alerts.the_previous_period'),
+  };
+  return words[vs];
+}
 
 /**
  * What the user reads, composed from the app's own figures.
@@ -391,15 +399,15 @@ export function alertMessage(
   const label = rule.metric.label || rule.metric.column || rule.name;
   if (rule.compare === 'anomaly') {
     const where = rule.metric.column ? ` in ${label}` : '';
-    return `${newAnomalies} new anomal${newAnomalies === 1 ? 'y' : 'ies'}${where}.`;
+    return t('alerts.new', { newAnomalies, where });
   }
   if (rule.compare === 'threshold' && rule.threshold) {
-    return `${label} is ${fmtMetric(value)} — ${OP_WORD[rule.threshold.op]} ${fmtMetric(rule.threshold.value)}.`;
+    return t('alerts.is', { label, value: fmtMetric(value), op: opWord(rule.threshold.op), value2: fmtMetric(rule.threshold.value) });
   }
   const pct = changePct(value, previous);
   const verb = pct != null && pct < 0 ? 'fell' : 'rose';
-  const vs = rule.change ? VS_WORD[rule.change.vs] : VS_WORD.previous_refresh;
-  return `${label} ${verb} ${fmtPct(pct)} to ${fmtMetric(value)} since ${vs}.`;
+  const vs = vsWord(rule.change ? rule.change.vs : 'previous_refresh');
+  return t('alerts.to_since', { label, verb, pct: fmtPct(pct), value: fmtMetric(value), vs });
 }
 
 /**
@@ -414,8 +422,8 @@ export function digestMessage(events: AlertEvent[]): string {
   const NAMED = 3;
   const names = list.slice(0, NAMED).map((e) => e.ruleName);
   const rest = list.length - names.length;
-  const tail = rest > 0 ? `, and ${rest} more` : '';
-  return `${list.length} alerts fired — ${names.join(', ')}${tail}.`;
+  const tail = rest > 0 ? t('alerts.and_more', { rest }) : '';
+  return t('alerts.alerts_fired', { listCount: list.length, p1: names.join(', '), tail });
 }
 
 // ── The decision ─────────────────────────────────────────────────────────────
@@ -542,7 +550,7 @@ export function wouldFire(
     if (prev == null) {
       return {
         fire: false,
-        message: `Nothing to compare ${fmtMetric(value)} against yet — this can fire from the next refresh on.`,
+        message: t('alerts.nothing_to_compare_against_yet_this', { value: fmtMetric(value) }),
       };
     }
     return { fire: changeHit(rule, value, prev), message: alertMessage(rule, value, prev) };
@@ -556,14 +564,14 @@ export function suggestRuleName(
   rule: Pick<AlertRule, 'compare' | 'metric' | 'threshold' | 'change'>,
   label?: string,
 ): string {
-  const name = label || rule.metric.label || rule.metric.column || 'Metric';
+  const name = label || rule.metric.label || rule.metric.column || t('common.metric');
   if (rule.compare === 'threshold' && rule.threshold) {
-    return `${name} ${OP_WORD[rule.threshold.op]} ${fmtMetric(rule.threshold.value)}`;
+    return `${name} ${opWord(rule.threshold.op)} ${fmtMetric(rule.threshold.value)}`;
   }
   if (rule.compare === 'change' && rule.change) {
     const dir = rule.change.direction === 'up' ? 'up' : rule.change.direction === 'down' ? 'down' : 'changes';
     const by = rule.change.direction === 'either' ? 'by ' : '';
     return `${name} ${dir} ${by}${fmtPct(rule.change.pct)}`;
   }
-  return `Anomalies in ${name}`;
+  return t('alerts.anomalies_in_2', { name });
 }

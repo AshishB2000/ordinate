@@ -12,10 +12,10 @@
 // would quietly correct.
 
 const PD_KINDS: Array<{ kind: string; label: string; hint: string }> = [
-  { kind: 'number', label: 'Number', hint: 'A slider with bounds' },
-  { kind: 'text', label: 'Text', hint: 'Typed, or picked' },
-  { kind: 'date', label: 'Date', hint: 'A date picker' },
-  { kind: 'list', label: 'List', hint: 'Several values' },
+  { kind: 'number', label: t('common.number'), hint: t('paramDialog.a_slider_with_bounds') },
+  { kind: 'text', label: t('common.text'), hint: t('paramDialog.typed_or_picked') },
+  { kind: 'date', label: t('common.date'), hint: t('paramDialog.a_date_picker') },
+  { kind: 'list', label: t('common.list'), hint: t('paramDialog.several_values') },
 ];
 const PD_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]{0,39}$/;
 
@@ -41,11 +41,11 @@ function openParamDialog(existing?: { param: any; label: string }): Promise<Para
     box.className = 'ws-modal dash-control-modal pd-modal';
     const h = document.createElement('div');
     h.className = 'ws-modal-title';
-    h.textContent = editing ? 'Edit parameter' : 'Add a parameter';
+    h.textContent = editing ? t('paramDialog.edit_parameter') : t('paramDialog.add_a_parameter');
     box.appendChild(h);
     const lede = document.createElement('p');
     lede.className = 'pd-lede';
-    lede.textContent = 'A value the reader moves, that the sheet refers to by name.';
+    lede.textContent = t('paramDialog.a_value_the_reader_moves_that');
     box.appendChild(lede);
 
     const field = (labelText: string, control: HTMLElement, hint?: HTMLElement): HTMLElement => {
@@ -85,16 +85,16 @@ function openParamDialog(existing?: { param: any; label: string }): Promise<Para
         row.appendChild(document.createTextNode(' ' + where));
         refs.appendChild(row);
       };
-      mk('[[' + n + ']]', 'in filters and formulas');
-      mk('{{' + n + '}}', 'in titles and text');
+      mk('[[' + n + ']]', t('paramDialog.in_filters_and_formulas'));
+      mk('{{' + n + '}}', t('paramDialog.in_titles_and_text'));
     };
-    box.appendChild(field('Name', nameIn, refs));
+    box.appendChild(field(t('common.name'), nameIn, refs));
 
     // ── Kind ────────────────────────────────────────────────────────────────
     const kindRow = document.createElement('div');
     kindRow.className = 'dc-kind pd-kinds';
     kindRow.setAttribute('role', 'radiogroup');
-    kindRow.setAttribute('aria-label', 'Type');
+    kindRow.setAttribute('aria-label', t('common.type'));
     PD_KINDS.forEach((k) => {
       const b = document.createElement('button');
       b.type = 'button';
@@ -125,7 +125,7 @@ function openParamDialog(existing?: { param: any; label: string }): Promise<Para
         b.setAttribute('aria-checked', on ? 'true' : 'false');
       });
     };
-    box.appendChild(field('Type', kindRow));
+    box.appendChild(field(t('common.type'), kindRow));
 
     // ── Value / bounds / options, by kind ──────────────────────────────────
     const valueHost = document.createElement('div');
@@ -144,39 +144,39 @@ function openParamDialog(existing?: { param: any; label: string }): Promise<Para
       const same = ep && ep.kind === kind;
       if (kind === 'number') {
         defIn = input('number', same ? ep.value : 1000);
-        valueHost.appendChild(field('Default', defIn));
+        valueHost.appendChild(field(t('common.default'), defIn));
         const grid = document.createElement('div');
         grid.className = 'pd-bounds';
         minIn = input('number', same ? ep.min : 0, 'none');
         maxIn = input('number', same ? ep.max : 10000, 'none');
         stepIn = input('number', same ? ep.step : 100, 'any');
-        grid.appendChild(field('Minimum', minIn));
-        grid.appendChild(field('Maximum', maxIn));
-        grid.appendChild(field('Step', stepIn));
+        grid.appendChild(field(t('common.minimum'), minIn));
+        grid.appendChild(field(t('common.maximum'), maxIn));
+        grid.appendChild(field(t('common.step'), stepIn));
         valueHost.appendChild(grid);
         const hint = document.createElement('p');
         hint.className = 'pd-hint';
-        hint.textContent = 'With both a minimum and a maximum the control is a slider; otherwise a number box.';
+        hint.textContent = t('paramDialog.with_both_a_minimum_and_a');
         valueHost.appendChild(hint);
       } else if (kind === 'date') {
         defIn = input('date', same ? ep.value : '');
-        valueHost.appendChild(field('Default', defIn));
+        valueHost.appendChild(field(t('common.default'), defIn));
       } else {
         defIn = input('text', same ? (Array.isArray(ep.value) ? ep.value.join(', ') : ep.value) : '',
-          kind === 'list' ? 'West, East' : 'Any text');
-        valueHost.appendChild(field(kind === 'list' ? 'Default values (comma-separated)' : 'Default', defIn));
+          kind === 'list' ? t('paramDialog.west_east') : t('paramDialog.any_text'));
+        valueHost.appendChild(field(kind === 'list' ? t('paramDialog.default_values_comma_separated') : t('common.default'), defIn));
         optsIn = document.createElement('textarea');
         optsIn.className = 'ws-modal-input pd-opts';
         optsIn.rows = 3;
-        optsIn.placeholder = 'One option per line — leave empty for a free text box';
+        optsIn.placeholder = t('paramDialog.one_option_per_line_leave_empty');
         optsIn.value = same && Array.isArray(ep.list) ? ep.list.join('\n') : '';
-        valueHost.appendChild(field('Options', optsIn));
+        valueHost.appendChild(field(t('common.options'), optsIn));
       }
       [defIn, minIn, maxIn, stepIn, optsIn].forEach((el) => el && el.addEventListener('input', validate));
     }
 
-    const labelIn = input('text', existing ? existing.label : '', 'Shown on the chip — defaults to the name');
-    box.appendChild(field('Label', labelIn));
+    const labelIn = input('text', existing ? existing.label : '', t('paramDialog.shown_on_the_chip_defaults_to'));
+    box.appendChild(field(t('common.label'), labelIn));
 
     const err = document.createElement('p');
     err.className = 'pd-err';
@@ -188,11 +188,11 @@ function openParamDialog(existing?: { param: any; label: string }): Promise<Para
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'btn';
-    cancel.textContent = 'Cancel';
+    cancel.textContent = t('common.cancel');
     const ok = document.createElement('button');
     ok.type = 'button';
     ok.className = 'btn btn-primary';
-    ok.textContent = editing ? 'Save' : 'Add parameter';
+    ok.textContent = editing ? t('common.save') : t('paramDialog.add_parameter');
     actions.appendChild(cancel);
     actions.appendChild(ok);
     box.appendChild(actions);
@@ -206,21 +206,21 @@ function openParamDialog(existing?: { param: any; label: string }): Promise<Para
     /** The parameter as typed, or a message saying why it cannot be saved. */
     function build(): { param?: any; error?: string } {
       const name = nameIn.value.trim();
-      if (!PD_NAME_RE.test(name)) return { error: 'A name starts with a letter and uses letters, digits and underscores.' };
+      if (!PD_NAME_RE.test(name)) return { error: t('paramDialog.a_name_starts_with_a_letter') };
       const clash = dashParams().some((p) => p && String(p.name).toLowerCase() === name.toLowerCase() && (!ep || p.id !== ep.id));
-      if (clash) return { error: 'This dashboard already has a parameter called "' + name + '".' };
+      if (clash) return { error: t('paramDialog.this_dashboard_already_has_a_parameter', { name }) };
       const param: any = { name, kind };
       if (kind === 'number') {
         const v = num(defIn);
         const min = num(minIn);
         const max = num(maxIn);
         const step = num(stepIn);
-        if ([v, min, max, step].some((x) => Number.isNaN(x))) return { error: 'Numbers only in the number fields.' };
-        if (min !== undefined && max !== undefined && min > max) return { error: 'The minimum is above the maximum.' };
+        if ([v, min, max, step].some((x) => Number.isNaN(x))) return { error: t('paramDialog.numbers_only_in_the_number_fields') };
+        if (min !== undefined && max !== undefined && min > max) return { error: t('paramDialog.the_minimum_is_above_the_maximum') };
         if (v !== undefined && ((min !== undefined && v < min) || (max !== undefined && v > max))) {
-          return { error: 'The default is outside the bounds.' };
+          return { error: t('paramDialog.the_default_is_outside_the_bounds') };
         }
-        if (step !== undefined && step <= 0) return { error: 'The step must be above zero.' };
+        if (step !== undefined && step <= 0) return { error: t('paramDialog.the_step_must_be_above_zero') };
         param.value = v === undefined ? null : v;
         if (min !== undefined) param.min = min;
         if (max !== undefined) param.max = max;
@@ -233,7 +233,7 @@ function openParamDialog(existing?: { param: any; label: string }): Promise<Para
         const raw = defIn ? defIn.value : '';
         param.value = kind === 'list' ? raw.split(',').map((x) => x.trim()).filter(Boolean) : raw || null;
         if (opts.length && kind === 'text' && param.value && !opts.includes(param.value)) {
-          return { error: 'The default is not one of the options.' };
+          return { error: t('paramDialog.the_default_is_not_one_of') };
         }
       }
       return { param };
@@ -306,7 +306,7 @@ async function editParameterControl(card: any): Promise<void> {
   // The live value was picked against the OLD definition (its bounds, its
   // options); the edited default is what the sheet should show now.
   paramState.delete(p.id);
-  markDashDirty('Edit parameter');
+  markDashDirty(t('paramDialog.edit_parameter'));
   renderDashGrid();
 }
 
@@ -318,7 +318,7 @@ function removeParameterControl(card: any): void {
   if (!stillUsed && dashCurrent) {
     dashCurrent.parameters = dashParams().filter((p) => p.id !== id);
     paramState.delete(id);
-    markDashDirty('Remove parameter');
+    markDashDirty(t('paramDialog.remove_parameter'));
     renderDashGrid();
   }
 }

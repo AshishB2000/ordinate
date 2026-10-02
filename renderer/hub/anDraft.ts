@@ -29,28 +29,28 @@
 // The older reply (`sheets: [{ name, cards }]`, no plan) is still accepted, so
 // this call site works either side of the Phase E merge.
 async function handleDraftAnalysis(): Promise<void> {
-  if (!currentProjectId) { window.alert('Open a project first.'); return; }
+  if (!currentProjectId) { window.alert(t('common.open_a_project_first')); return; }
   const btn = dashEl('an-draft-btn') as HTMLButtonElement | null;
   // The label lives in the <span> iconLabel builds. Read THAT, not the
   // button's textContent: before the first click the button is still the one
   // index.html shipped, and restoring its raw text would undo the icon.
   const labelEl = btn ? btn.querySelector('span') : null;
   const label = labelEl ? labelEl.textContent : '';
-  if (btn) { btn.disabled = true; iconLabel(btn, 'sparkles', 'Thinking…'); }
+  if (btn) { btn.disabled = true; iconLabel(btn, 'sparkles', t('common.thinking')); }
   let res: any;
   try {
     res = await window.hub.draftDashboard(currentProjectId);
   } catch (_) {
-    res = { ok: false, error: 'Could not draft a dashboard.' };
+    res = { ok: false, error: t('common.could_not_draft_a_dashboard') };
   }
-  if (btn) { btn.disabled = false; iconLabel(btn, 'sparkles', label || 'Draft with the Assistant'); }
+  if (btn) { btn.disabled = false; iconLabel(btn, 'sparkles', label || t('common.draft_with_the_assistant')); }
 
   if (res && res.notReady) {
     window.alert(AI_NOT_CONFIGURED);
     return;
   }
   if (!res || res.ok === false) {
-    window.alert((res && res.error) || 'Could not draft a dashboard.');
+    window.alert((res && res.error) || t('common.could_not_draft_a_dashboard'));
     return;
   }
 
@@ -86,7 +86,7 @@ async function anBuildDraft(res: any, preferredName?: string): Promise<void> {
   // version flag. A `plan` means the Phase E pipeline owns the write (it has to:
   // calculated fields and visuals are records this renderer cannot mint).
   // Otherwise the draft is already a sheet array and createAnalysis takes it.
-  const name = (preferredName || '').trim() || res.name || 'Assistant dashboard';
+  const name = (preferredName || '').trim() || res.name || t('common.assistant_dashboard');
   let saved: any = null;
   try {
     if (res.plan && typeof window.hub.buildAnalysisPlan === 'function') {
@@ -96,7 +96,7 @@ async function anBuildDraft(res: any, preferredName?: string): Promise<void> {
         (preferredName || '').trim() ? { ...res.plan, name } : res.plan;
       const built = await window.hub.buildAnalysisPlan(currentProjectId, planToBuild);
       if (built && built.ok === false) {
-        window.alert(built.error || 'Failed to build the dashboard.');
+        window.alert(built.error || t('anDraft.failed_to_build_the_dashboard'));
         return;
       }
       // Accept either { ok, analysis } or a bare Analysis — whichever main returns.
@@ -119,7 +119,7 @@ async function anBuildDraft(res: any, preferredName?: string): Promise<void> {
   }
   // The write may well have succeeded even if we cannot recognise what came
   // back — the refreshed list above is the honest fallback, and it is visible.
-  window.alert((saved && saved.error) || 'The dashboard was not opened. Check the list below.');
+  window.alert((saved && saved.error) || t('anDraft.the_dashboard_was_not_opened_check'));
 }
 
 // Review-before-create. Everything the model produced, plus everything main
@@ -136,7 +136,7 @@ function anDraftReviewModal(draft: any): Promise<boolean> {
 
     const h = document.createElement('div');
     h.className = 'ws-modal-title';
-    h.textContent = 'Assistant draft — review before creating';
+    h.textContent = t('anDraft.assistant_draft_review_before_creating');
     box.appendChild(h);
 
     const scroll = document.createElement('div');
@@ -144,7 +144,7 @@ function anDraftReviewModal(draft: any): Promise<boolean> {
 
     const name = document.createElement('div');
     name.className = 'an-draft-name';
-    name.textContent = draft && draft.name ? String(draft.name) : 'Assistant dashboard';
+    name.textContent = draft && draft.name ? String(draft.name) : t('common.assistant_dashboard');
     scroll.appendChild(name);
 
     // The model's own reasoning, labelled as interpretation — the same badge the
@@ -152,7 +152,7 @@ function anDraftReviewModal(draft: any): Promise<boolean> {
     if (draft && typeof draft.rationale === 'string' && draft.rationale.trim()) {
       const panel = document.createElement('div');
       panel.className = 'ai-interp an-draft-rationale';
-      panel.appendChild(mkAiPanel('Why the model proposed this'));
+      panel.appendChild(mkAiPanel(t('anDraft.why_the_model_proposed_this')));
       const body = document.createElement('div');
       body.className = 'ai-interp-body';
       body.textContent = draft.rationale;
@@ -171,7 +171,7 @@ function anDraftReviewModal(draft: any): Promise<boolean> {
     // are new columns in the user's data and must not arrive unannounced.
     const calcs: any[] = Array.isArray(draft && draft.calculatedFields) ? draft.calculatedFields : [];
     if (calcs.length) {
-      scroll.appendChild(anDraftSectionLabel('Calculated fields it will add'));
+      scroll.appendChild(anDraftSectionLabel(t('anDraft.calculated_fields_it_will_add')));
       calcs.forEach((c: any) => {
         const row = document.createElement('div');
         row.className = 'an-draft-calc';
@@ -191,7 +191,7 @@ function anDraftReviewModal(draft: any): Promise<boolean> {
     const sheets: any[] = Array.isArray(draft && draft.sheets) ? draft.sheets : [];
     sheets.forEach((sheet: any, si: number) => {
       scroll.appendChild(anDraftSectionLabel(
-        (sheet && sheet.name ? String(sheet.name) : 'Sheet ' + (si + 1)),
+        (sheet && sheet.name ? String(sheet.name) : t('anDraft.sheet', { p0: (si + 1) })),
       ));
       // New shape: `visuals` (previewable). Old shape: `cards` (no preview data).
       const visuals: any[] = Array.isArray(sheet && sheet.visuals) ? sheet.visuals : [];
@@ -199,7 +199,7 @@ function anDraftReviewModal(draft: any): Promise<boolean> {
       if (!visuals.length && !cards.length) {
         const none = document.createElement('div');
         none.className = 'an-draft-note';
-        none.textContent = 'Nothing survived on this sheet.';
+        none.textContent = t('anDraft.nothing_survived_on_this_sheet');
         scroll.appendChild(none);
         return;
       }
@@ -218,7 +218,7 @@ function anDraftReviewModal(draft: any): Promise<boolean> {
 
     const foot = document.createElement('p');
     foot.className = 'an-draft-foot';
-    foot.textContent = 'Every figure here was computed by the app, not written by the model. You can edit everything after it is created.';
+    foot.textContent = t('anDraft.every_figure_here_was_computed_by');
     box.appendChild(foot);
 
     const actions = document.createElement('div');
@@ -226,11 +226,11 @@ function anDraftReviewModal(draft: any): Promise<boolean> {
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'btn';
-    cancel.textContent = 'Discard';
+    cancel.textContent = t('anDraft.discard');
     const ok = document.createElement('button');
     ok.type = 'button';
     ok.className = 'btn btn-primary';
-    ok.textContent = 'Create dashboard';
+    ok.textContent = t('common.create_dashboard');
 
     let a11y: { onTabKey: (e: KeyboardEvent) => void; release: () => void } | null = null;
     function close(val: boolean): void {
@@ -264,7 +264,7 @@ function anDraftReviewModal(draft: any): Promise<boolean> {
     box.appendChild(actions);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
-    a11y = makeModalAccessible(box, 'Assistant draft — review before creating', ok);
+    a11y = makeModalAccessible(box, t('anDraft.assistant_draft_review_before_creating'), ok);
   });
 }
 
@@ -277,11 +277,11 @@ function anDraftAppendDropped(host: HTMLElement, raw: unknown): void {
   const dropped: any[] = Array.isArray(raw) ? raw : [];
   if (!dropped.length) return;
   host.appendChild(anDraftSectionLabel(
-    dropped.length + (dropped.length === 1 ? ' thing was dropped' : ' things were dropped'),
+    t('anDraft.text', { droppedCount: dropped.length }),
   ));
   const why = document.createElement('div');
   why.className = 'an-draft-note';
-  why.textContent = 'The app refused these because it could not verify them. They are listed so the draft is not flattered by hiding its own mistakes.';
+  why.textContent = t('anDraft.the_app_refused_these_because_it');
   host.appendChild(why);
   dropped.forEach((d: any) => {
     const row = document.createElement('div');
@@ -337,7 +337,7 @@ function anDraftVisualEl(v: any, compact?: boolean): HTMLElement {
     const note = document.createElement('div');
     note.className = 'an-draft-note an-draft-note--why';
     // No placeholder, no zero, no "—" pretending to be a value: only the reason.
-    note.textContent = String((v && v.note) || 'The app could not compute this one yet.');
+    note.textContent = String((v && v.note) || t('anDraft.the_app_could_not_compute_this'));
     wrap.appendChild(note);
     return wrap;
   }
@@ -365,7 +365,7 @@ function anDraftVisualEl(v: any, compact?: boolean): HTMLElement {
       const entry = compact ? null : { id: 'draft-preview', chartOverrides: {} };
       renderVizInArea(area, data, type || 'column', entry, 'v');
     } catch (_) {
-      area.textContent = 'This one could not be drawn.';
+      area.textContent = t('anDraft.this_one_could_not_be_drawn');
     }
   }, 0);
   return wrap;

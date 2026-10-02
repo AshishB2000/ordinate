@@ -147,6 +147,14 @@ renderer-safe views and strip every raw key and secret. `executionReady()` gates
 - **File size is a real limit** (500 soft / 800 hard, CI-enforced): @.claude/rules/file-size.md
 - **Hub CSP is strict** (`default-src 'none'; style-src 'self'; script-src 'self'`): **no inline
   `style=` in hub HTML** — use `hub.css` classes. `element.style.x` from JS is fine.
+- **Every user-visible string goes through the catalog.** `t('key', { params })` in renderer TS (and
+  in main's sentence files — captions, insights, alerts, reports), `data-i18n*` in `index.html`.
+  Write the English literal, then run `node scripts/i18n-extract.js`: it rewrites the literal,
+  regenerates `renderer/i18n/en.json` and adds the key to the es/de/fr/ja drafts as `null`. Never
+  hand-edit `en.json`; after a rebase, take develop's file and rerun the script. `test-i18n` fails on
+  a hard-coded string, a missing key or a dropped `{param}`. Figures are formatted (`format.ts`)
+  BEFORE they reach `t()`; `// i18n-skip` marks a string that must stay English. A local named `t`
+  shadows the global — the script renames it where it must.
 - **Heavy vendor bundles load on FIRST USE** (`lazyScript.ts`): pdfmake, pptxgenjs, docx, MapLibre.
   **`async = false` is load-bearing** — two groups are order-dependent and dynamic scripts default
   to async.

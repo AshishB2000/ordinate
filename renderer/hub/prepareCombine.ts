@@ -46,13 +46,13 @@ function makeDatasetPicker(selected: string, onPick: (id: string) => void): HTML
   sel.className = 'ds-step-select pp-dataset';
   const loading = document.createElement('option');
   loading.value = '';
-  loading.textContent = 'Loading datasets…';
+  loading.textContent = t('prepareCombine.loading_datasets');
   sel.appendChild(loading);
   void ppOtherDatasets().then((list) => {
     sel.innerHTML = '';
     const blank = document.createElement('option');
     blank.value = '';
-    blank.textContent = list.length ? 'Choose a dataset…' : 'No other dataset in this project';
+    blank.textContent = list.length ? t('prepareCombine.choose_a_dataset') : t('prepareCombine.no_other_dataset_in_this_project');
     sel.appendChild(blank);
     list.forEach((d) => {
       const opt = document.createElement('option');
@@ -78,7 +78,7 @@ function buildLookupForm(body: HTMLElement, existing: any): () => any {
   let checks = makeColChecks([], []);
   colsHost.appendChild(checks.el);
   const prefixIn = textInput(e.prefix || '');
-  prefixIn.placeholder = '(optional) e.g. product_';
+  prefixIn.placeholder = t('prepareCombine.optional_e_g_product');
   const note = document.createElement('div');
   note.className = 'ds-step-hint';
   const preview = makePreviewBox();
@@ -94,10 +94,10 @@ function buildLookupForm(body: HTMLElement, existing: any): () => any {
     const mine = ++seq;
     const res = await previewPowerStep(read());
     if (mine !== seq || !res) return;
-    if (!res.ok || !res.lookup) return setPreview(preview, [(res && res.error) || 'Could not preview.'], true);
+    if (!res.ok || !res.lookup) return setPreview(preview, [(res && res.error) || t('common.could_not_preview')], true);
     const l = res.lookup;
-    const lines = [fmtN(l.matched) + ' of ' + fmtN(l.total) + ' rows matched · ' + l.ratePct + '%'];
-    if (l.dupes > 0) lines.push(fmtN(l.dupes) + ' key value(s) repeat in the other dataset — the first match in stored order is used.');
+    const lines = [t('prepareCombine.of_rows_matched', { matched: fmtN(l.matched), total: fmtN(l.total), ratePct: l.ratePct })];
+    if (l.dupes > 0) lines.push(t('prepareCombine.key_value_s_repeat_in_the', { dupes: fmtN(l.dupes) }));
     (res.warnings || []).filter((w: string) => /skipped|already exists/.test(w)).forEach((w: string) => lines.push(w));
     setPreview(preview, lines, l.dupes > 0 || l.matched < l.total);
   };
@@ -117,13 +117,13 @@ function buildLookupForm(body: HTMLElement, existing: any): () => any {
           const theirs = rel.from.datasetId === expId ? rel.to : rel.from;
           left = mineEnd.column;
           right = theirs.column;
-          note.textContent = 'Keys taken from the relationship in the data model.';
+          note.textContent = t('prepareCombine.keys_taken_from_the_relationship_in');
         }
       } catch (_) { /* no model: pick the keys by hand */ }
     }
     if (!right) right = otherCols.indexOf(left) >= 0 ? left : '';
     if (left) leftSel.value = left;
-    const r2 = makeNameSelect(otherCols, right, 'Choose the matching column…');
+    const r2 = makeNameSelect(otherCols, right, t('prepareCombine.choose_the_matching_column'));
     rightHost.replaceChild(r2, rightSel);
     rightSel = r2;
     rightSel.addEventListener('change', () => void refresh());
@@ -135,17 +135,17 @@ function buildLookupForm(body: HTMLElement, existing: any): () => any {
   };
   dsSel = makeDatasetPicker(e.datasetId || '', (id) => void onPick(id));
   leftSel.addEventListener('change', () => void refresh());
-  body.appendChild(fieldRow('Look up in', dsSel));
-  body.appendChild(fieldRow('Key in this dataset', leftSel));
-  body.appendChild(fieldRow('Matching key in the other dataset (one row per key)', rightHost));
+  body.appendChild(fieldRow(t('prepareCombine.look_up_in'), dsSel));
+  body.appendChild(fieldRow(t('prepareCombine.key_in_this_dataset'), leftSel));
+  body.appendChild(fieldRow(t('prepareCombine.matching_key_in_the_other_dataset'), rightHost));
   body.appendChild(note);
-  body.appendChild(fieldRow('Columns to bring across', colsHost));
-  body.appendChild(fieldRow('Prefix for the new columns', prefixIn));
+  body.appendChild(fieldRow(t('prepareCombine.columns_to_bring_across'), colsHost));
+  body.appendChild(fieldRow(t('prepareCombine.prefix_for_the_new_columns'), prefixIn));
   body.appendChild(preview);
   return () => {
     const step = read();
-    if (!step.datasetId || !step.leftKey || !step.rightKey) { window.alert('Pick the other dataset and a key on each side.'); return null; }
-    if (!step.columns.length) { window.alert('Pick at least one column to bring across.'); return null; }
+    if (!step.datasetId || !step.leftKey || !step.rightKey) { window.alert(t('prepareCombine.pick_the_other_dataset_and_a')); return null; }
+    if (!step.columns.length) { window.alert(t('prepareCombine.pick_at_least_one_column_to')); return null; }
     if (!step.prefix) delete step.prefix;
     return step;
   };
@@ -177,11 +177,11 @@ function buildUnionForm(body: HTMLElement, existing: any): () => any {
     const mine = ++seq;
     const res = await previewPowerStep(read());
     if (mine !== seq || !res) return;
-    if (!res.ok || !res.union) return setPreview(preview, [(res && res.error) || 'Could not preview.'], true);
+    if (!res.ok || !res.union) return setPreview(preview, [(res && res.error) || t('common.could_not_preview')], true);
     const u = res.union;
     const lines = [rowsLine(res) + ' (' + fmtN(u.otherRows) + ' appended)'];
-    if (u.unmatched.length) lines.push('Dropped — no matching column here: ' + u.unmatched.join(', '));
-    if (u.missing.length) lines.push('Empty for the appended rows: ' + u.missing.join(', '));
+    if (u.unmatched.length) lines.push(t('prepareCombine.dropped_no_matching_column_here', { p0: u.unmatched.join(', ') }));
+    if (u.missing.length) lines.push(t('prepareCombine.empty_for_the_appended_rows', { p0: u.missing.join(', ') }));
     setPreview(preview, lines, u.unmatched.length > 0);
   };
   const onPick = async (id: string): Promise<void> => {
@@ -199,7 +199,7 @@ function buildUnionForm(body: HTMLElement, existing: any): () => any {
       lbl.className = 'pp-arrow';
       lbl.textContent = to + ' ←';
       const hit = prior.find((m: any) => m.to === to);
-      const sel = makeNameSelect(spare, hit ? hit.from : '', '(leave empty)');
+      const sel = makeNameSelect(spare, hit ? hit.from : '', t('common.leave_empty'));
       sel.addEventListener('change', () => void refresh());
       row.append(lbl, sel);
       mapHost.appendChild(row);
@@ -207,17 +207,17 @@ function buildUnionForm(body: HTMLElement, existing: any): () => any {
     if (!mapHost.children.length) {
       const ok = document.createElement('div');
       ok.className = 'ds-step-hint';
-      ok.textContent = 'Every column here has a same-named column there.';
+      ok.textContent = t('prepareCombine.every_column_here_has_a_same');
       mapHost.appendChild(ok);
     }
     void refresh();
   };
   dsSel = makeDatasetPicker(e.datasetId || '', (id) => void onPick(id));
-  body.appendChild(fieldRow('Append the rows of', dsSel));
-  body.appendChild(fieldRow('Columns are matched by name; fill the rest from', mapHost));
+  body.appendChild(fieldRow(t('prepareCombine.append_the_rows_of'), dsSel));
+  body.appendChild(fieldRow(t('prepareCombine.columns_are_matched_by_name_fill'), mapHost));
   body.appendChild(preview);
   return () => {
-    if (!dsSel.value) { window.alert('Pick the dataset to append.'); return null; }
+    if (!dsSel.value) { window.alert(t('prepareCombine.pick_the_dataset_to_append')); return null; }
     return read();
   };
 }
@@ -245,14 +245,14 @@ function buildPowerStepForm(type: string, body: HTMLElement, existing: any): () 
 /** prepare.stepSummaryText's default: one line per power step. */
 function powerStepSummary(step: any): string {
   if (step.type === 'lookup_join') {
-    return 'Look up ' + (step.columns || []).join(', ') + ' by ' + step.leftKey + ' = ' + step.rightKey + ppDatasetName(step.datasetId);
+    return t('prepareCombine.look_up_by', { p0: (step.columns || []).join(', '), leftKey: step.leftKey, rightKey: step.rightKey, datasetId: ppDatasetName(step.datasetId) });
   }
-  if (step.type === 'union') return 'Append the rows of' + ppDatasetName(step.datasetId);
-  return reshapeStepSummary(step) || cleanStepSummary(step) || geoStepSummary(step) || 'Unknown step';
+  if (step.type === 'union') return t('prepareCombine.append_the_rows_of_2', { datasetId: ppDatasetName(step.datasetId) });
+  return reshapeStepSummary(step) || cleanStepSummary(step) || geoStepSummary(step) || t('common.unknown_step');
 }
 
 /** ' "Products"' — the name from the last dataset list, when there is one. */
 function ppDatasetName(id: string): string {
   const name = ppNames.get(id);
-  return name ? ' "' + name + '"' : ' another dataset';
+  return name ? ' "' + name + '"' : t('prepareCombine.another_dataset');
 }

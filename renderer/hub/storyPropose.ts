@@ -18,20 +18,20 @@ async function stProposeStory(intent: string, datasetId: string, containerId = '
     res = null;
   }
   if (!res || res.notReady) {
-    if (res && res.notReady) showToast('Set up the Assistant in Settings to draft a story.');
+    if (res && res.notReady) showToast(t('storyPropose.set_up_the_assistant_in_settings'));
     return;
   }
-  if (res.ok === false) { showToast(res.error ? String(res.error) : 'Could not draft a story.'); return; }
+  if (res.ok === false) { showToast(res.error ? String(res.error) : t('storyPropose.could_not_draft_a_story')); return; }
   const sheets: any[] = Array.isArray(res.sheets) ? res.sheets : [];
   if (!sheets.length && !(Array.isArray(res.dropped) && res.dropped.length)) return;
   stRenderStoryProposal(res, containerId);
 }
 
 function stRenderStoryProposal(res: any, containerId: string): void {
-  const { card, actions } = dkProposalCard('Suggested story');
+  const { card, actions } = dkProposalCard(t('storyPropose.suggested_story'));
   card.classList.add('st-proposal');
   card.appendChild(Object.assign(document.createElement('div'), {
-    className: 'dk-plan-name', textContent: res.name ? String(res.name) : 'Assistant story',
+    className: 'dk-plan-name', textContent: res.name ? String(res.name) : t('storyPropose.assistant_story'),
   }));
   if (typeof res.rationale === 'string' && res.rationale.trim()) {
     card.appendChild(Object.assign(document.createElement('div'), { className: 'ai-interp-body', textContent: String(res.rationale) }));
@@ -42,7 +42,7 @@ function stRenderStoryProposal(res: any, containerId: string): void {
   (Array.isArray(res.sheets) ? res.sheets : []).forEach((sheet: any) => {
     const li = document.createElement('li');
     li.className = 'st-prop-section';
-    li.appendChild(Object.assign(document.createElement('div'), { className: 'st-prop-h', textContent: String(sheet.name || 'Section') }));
+    li.appendChild(Object.assign(document.createElement('div'), { className: 'st-prop-h', textContent: String(sheet.name || t('storyPropose.section')) }));
     const kpis: any[] = Array.isArray(sheet.metrics) ? sheet.metrics : [];
     if (kpis.length) {
       const row = document.createElement('div');
@@ -72,7 +72,7 @@ function stRenderStoryProposal(res: any, containerId: string): void {
   card.appendChild(outline);
   if (typeof anDraftAppendDropped === 'function') anDraftAppendDropped(card, res.dropped);
 
-  const build = dkMkBtn('Build story', true, () => {
+  const build = dkMkBtn(t('storyPropose.build_story'), true, () => {
     void (async () => {
       if (!currentProjectId) return;
       build.disabled = true;
@@ -84,7 +84,7 @@ function stRenderStoryProposal(res: any, containerId: string): void {
       }
       if (!out || !out.ok || !out.story) {
         build.disabled = false;
-        showToast(out && out.error ? String(out.error) : 'Could not build that story.');
+        showToast(out && out.error ? String(out.error) : t('storyPropose.could_not_build_that_story'));
         return;
       }
       dkRemoveProposalCard(card);
@@ -92,7 +92,7 @@ function stRenderStoryProposal(res: any, containerId: string): void {
     })();
   });
   actions.appendChild(build);
-  actions.appendChild(dkMkBtn('Dismiss', false, () => dkRemoveProposalCard(card)));
+  actions.appendChild(dkMkBtn(t('common.dismiss'), false, () => dkRemoveProposalCard(card)));
   card.appendChild(actions);
   dkAppendProposal(card, containerId);
 }

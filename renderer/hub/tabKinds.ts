@@ -52,7 +52,7 @@ async function tkName(get: Promise<any>, field = 'name'): Promise<string | null>
 const TAB_KINDS: Record<string, TabKind> = {
   dataset: {
     icon: 'database',
-    label: 'Dataset',
+    label: t('common.dataset'),
     section: 'datasets',
     open: async (id) => { selectSection('datasets'); await openSavedDataset(id); },
     close: () => {
@@ -89,7 +89,7 @@ const TAB_KINDS: Record<string, TabKind> = {
   // Stored as an Analysis record; the product calls it a dashboard.
   analysis: {
     icon: 'layout-dashboard',
-    label: 'Dashboard',
+    label: t('common.dashboard'),
     section: 'analyses',
     open: async (id) => { selectSection('analyses'); await openAnalysis(id); },
     close: async () => { if (dashCurrent) await handleBackToList(); return true; },
@@ -101,12 +101,12 @@ const TAB_KINDS: Record<string, TabKind> = {
   },
   report: {
     icon: 'file-text',
-    label: 'Report',
+    label: t('common.report'),
     section: 'analyses',
     open: (id) => rbOpenReportById(id),
     // The same question the builder's own Back asks.
     close: () => {
-      if (rbDirty && !window.confirm('Discard unsaved changes to this report?')) return false;
+      if (rbDirty && !window.confirm(t('common.discard_unsaved_changes_to_this_report'))) return false;
       rbClose();
       return true;
     },
@@ -120,7 +120,7 @@ const TAB_KINDS: Record<string, TabKind> = {
   // the report builder, so like a report it cannot sit beside one in a split.
   story: {
     icon: 'file-text',
-    label: 'Story',
+    label: t('common.story'),
     section: 'analyses',
     open: (id) => stOpen(id),
     close: async () => { await stClose(); return true; },
@@ -132,7 +132,7 @@ const TAB_KINDS: Record<string, TabKind> = {
   // A scorecard page shares the Dashboards section too, exactly like a story.
   scorecard: {
     icon: 'target',
-    label: 'Scorecard',
+    label: t('common.scorecard'),
     section: 'analyses',
     open: (id) => scOpen(id),
     close: async () => { await scClose(); return true; },
@@ -143,7 +143,7 @@ const TAB_KINDS: Record<string, TabKind> = {
   // A what-if scenario page shares the Dashboards section too, like a scorecard.
   scenario: {
     icon: 'sliders',
-    label: 'Scenario',
+    label: t('common.scenario'),
     section: 'analyses',
     open: (id) => snOpen(id),
     close: async () => { await snClose(); return true; },
@@ -154,7 +154,7 @@ const TAB_KINDS: Record<string, TabKind> = {
   // A capture's id is its numeric entry id; tabs carry it as a string.
   capture: {
     icon: 'camera',
-    label: 'Capture',
+    label: t('common.capture'),
     section: 'capture',
     open: async (id) => {
       const live = entries.find((e) => String(e.id) === id);
@@ -170,13 +170,13 @@ const TAB_KINDS: Record<string, TabKind> = {
     current: () => {
       if (currentSection !== 'capture' || currentEntryId == null) return null;
       const e = getEntry(currentEntryId);
-      return { id: String(currentEntryId), name: String((e && e.title) || 'Capture') };
+      return { id: String(currentEntryId), name: String((e && e.title) || t('common.capture')) };
     },
     resolve: async (pid, id) => {
       try {
         const list = await window.hub.listCaptures(pid);
         const c = (Array.isArray(list) ? list : []).find((x) => String(x.id) === id);
-        return c ? String(c.title || 'Capture') : null;
+        return c ? String(c.title || t('common.capture')) : null;
       } catch (_) {
         return '';
       }

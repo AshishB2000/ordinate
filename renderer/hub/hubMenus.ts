@@ -46,7 +46,7 @@ const SHARE_URL  = GITHUB_URL;
 // NOTE: LinkedIn (share-offsite) and Facebook (sharer) accept a URL only and
 // ignore SHARE_TEXT — they pull the page's own OpenGraph title/description. The
 // other four carry the text. Colon (not em-dash) so the encoded text reads clean.
-const SHARE_TEXT = 'Ordinate: screenshot any chart, table, or data and get instant analysis in plain English. Local-first, bring your own model.';
+const SHARE_TEXT = t('hubMenus.ordinate_screenshot_any_chart_table_or');
 
 const _enc = encodeURIComponent;
 const SHARE_LINKS = {
@@ -187,7 +187,7 @@ if (smSettingsBtn) {
 // the same config (byok block / localCli) the Settings modal uses. The active
 // agent's brand logo becomes the button icon.
 const BYOK_AGENTS  = ['anthropic', 'openai', 'gemini', 'gateway'];
-const BYOK_DISPLAY = { anthropic: 'Claude', openai: 'OpenAI', gemini: 'Gemini', gateway: 'Gateway' };
+const BYOK_DISPLAY = { anthropic: t('common.claude'), openai: 'OpenAI', gemini: t('common.gemini'), gateway: t('hubMenus.gateway') };
 // Local CLIs with a working run adapter — keep in sync with src/analyze.js.
 const RUNNABLE_LOCAL = ['claude', 'antigravity', 'codex', 'grok', 'opencode', 'cursor'];
 // Local CLIs that expose a model picker — all runnable CLIs now do. Static lists:
@@ -230,7 +230,7 @@ const execModelDl      = document.getElementById('exec-model-dl');
 // Local CLI / BYOK model picker — a custom dropdown (native <select> popups are
 // OS-rendered and overflow the window for long lists). Mounted where the old
 // <select id="exec-model-cli"> sat, just before the hint.
-const execModelCli     = makeDropdown({ className: 'exec-model-dd', ariaLabel: 'Model', onChange: onExecModelChange });
+const execModelCli     = makeDropdown({ className: 'exec-model-dd', ariaLabel: t('common.model'), onChange: onExecModelChange });
 const execModelRefresh = document.getElementById('exec-model-refresh');
 const execModelHint    = document.getElementById('exec-model-hint');
 if (execModelHint && execModelHint.parentNode) execModelHint.parentNode.insertBefore(execModelCli.el, execModelHint);

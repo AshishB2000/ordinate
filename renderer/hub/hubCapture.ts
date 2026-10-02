@@ -67,7 +67,7 @@ function openLightboxSrc(src: string): void {
   lightboxImg.src = src;
   imgLightbox.hidden = false;
   if (_lightboxA11y) return; // already open
-  _lightboxA11y = makeModalAccessible(imgLightbox as HTMLElement, 'Image preview', lightboxClose as HTMLElement | null);
+  _lightboxA11y = makeModalAccessible(imgLightbox as HTMLElement, t('hubCapture.image_preview'), lightboxClose as HTMLElement | null);
   document.addEventListener('keydown', _lightboxKey, true);
 }
 function openLightbox(): void {
@@ -110,8 +110,8 @@ function capPaintHeader(entry: any): void {
   const title = capEl('cap-title');
   if (title) {
     title.textContent = entry.state === 'loading'
-      ? 'Analyzing your capture…'
-      : (entry.title || (entry.state === 'error' ? 'Analysis failed' : 'Capture'));
+      ? t('hubCapture.analyzing_your_capture')
+      : (entry.title || (entry.state === 'error' ? t('hubCapture.analysis_failed') : t('common.capture')));
   }
   const badge = capEl('cap-badge');
   if (badge) badge.hidden = !entry.datasetId;
@@ -161,14 +161,13 @@ async function capRenderExtracted(entry: any, host: HTMLElement): Promise<void> 
   box.className = 'cap-extracted';
   const head = document.createElement('h4');
   head.className = 'cap-sec-h';
-  head.textContent = 'What the app read';
+  head.textContent = t('hubCapture.what_the_app_read');
   box.appendChild(head);
   const note = document.createElement('p');
   note.className = 'cap-sec-p';
   const r = draft.rows.length;
   const c = draft.columns.length;
-  note.textContent = `${r} row${r === 1 ? '' : 's'} × ${c} column${c === 1 ? '' : 's'}`
-    + ' — check them against the screenshot before you save.';
+  note.textContent = t('hubCapture.check_them_against_the_screenshot_before', { r, c });
   box.appendChild(note);
 
   const scroll = document.createElement('div');
@@ -265,12 +264,12 @@ async function capLoadFromDisk(entry: any): Promise<void> {
   } catch (_) { thread = null; }
   if (currentEntryId !== snapId) return;
   if (!thread) {
-    capShowError({ errorType: 'unknown', message: 'Could not load this capture.' });
+    capShowError({ errorType: 'unknown', message: t('hubCapture.could_not_load_this_capture') });
     return;
   }
   entry.state = 'result';
   entry.result = thread.result;
-  entry.title = thread.title || 'Capture';
+  entry.title = thread.title || t('common.capture');
   // The full record is the truth about both links — a Home "Recent" row
   // carries neither, so taking them from the summary alone would leave "Ask"
   // opening a blank conversation and "New visual" disabled on a capture that
@@ -305,7 +304,7 @@ function openCaptureFromSummary(summary: any): void {
     state: 'disk',
     result: null,
     error: null,
-    title: summary.title || 'Capture',
+    title: summary.title || t('common.capture'),
     datasetId: summary.datasetId || null,
     copilotThreadId: summary.copilotThreadId || null,
     updatedAt: summary.updatedAt || null,

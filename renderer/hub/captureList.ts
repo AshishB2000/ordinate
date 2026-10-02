@@ -36,31 +36,31 @@ function clEl(id: string): HTMLElement | null {
 const CL_TABS: Array<{ id: ClTab; tab: string; panel: string; sub: string }> = [
   {
     id: 'datasets', tab: 'ds-tab-datasets', panel: 'ds-saved',
-    sub: 'Import CSV, JSON, or Excel — or paste data — to save a structured dataset in this project.',
+    sub: t('common.import_csv_json_or_excel_or'),
   },
   {
     id: 'captures', tab: 'ds-tab-captures', panel: 'cap-grid-wrap',
-    sub: 'Screenshots you analyzed in this project. Save the ones that carry a table as a dataset.',
+    sub: t('captureList.screenshots_you_analyzed_in_this_project'),
   },
   {
     id: 'metrics', tab: 'ds-tab-metrics', panel: 'mp-wrap',
-    sub: 'The numbers this project is about, defined once and shown the same way everywhere.',
+    sub: t('captureList.the_numbers_this_project_is_about'),
   },
   {
     id: 'query', tab: 'ds-tab-query', panel: 'qt-wrap',
-    sub: 'Query this project’s datasets with SQL — join, filter and aggregate them, then save the result as a dataset.',
+    sub: t('captureList.query_this_project_s_datasets_with'),
   },
   {
     id: 'catalog', tab: 'ds-tab-catalog', panel: 'ct-wrap',
-    sub: 'Everything in this project — what it is, who owns it, what uses it and whether it is fresh.',
+    sub: t('captureList.everything_in_this_project_what_it'),
   },
   {
     id: 'pipelines', tab: 'ds-tab-pipelines', panel: 'pq-wrap',
-    sub: 'Everything that runs on a schedule or after another step, as one pipeline — run it, schedule it and read every run.',
+    sub: t('captureList.everything_that_runs_on_a_schedule'),
   },
   {
     id: 'events', tab: 'ds-tab-events', panel: 'ev-wrap', // r8:events — eventsPage.ts wires the click
-    sub: 'Launches, campaigns, incidents and holidays. Every chart with a date axis marks them, and findings name the one a change landed in.',
+    sub: t('captureList.launches_campaigns_incidents_and'),
   },
 ];
 
@@ -135,7 +135,7 @@ function clMakeCard(c: any): HTMLElement {
 
   const name = document.createElement('span');
   name.className = 'viz-card-name';
-  name.textContent = c.title || 'Capture';
+  name.textContent = c.title || t('common.capture');
   body.appendChild(name);
 
   const meta = document.createElement('span');
@@ -149,7 +149,7 @@ function clMakeCard(c: any): HTMLElement {
   if (c.datasetId) {
     const badge = document.createElement('span');
     badge.className = 'ds-source-badge cap-card-badge';
-    badge.textContent = 'Dataset';
+    badge.textContent = t('common.dataset');
     card.appendChild(badge);
   }
 
@@ -158,14 +158,14 @@ function clMakeCard(c: any): HTMLElement {
   const open = document.createElement('button');
   open.type = 'button';
   open.className = 'btn btn-sm';
-  open.textContent = 'Open';
+  open.textContent = t('common.open');
   open.addEventListener('click', (e) => { e.stopPropagation(); openCaptureFromSummary(c); });
   acts.appendChild(open);
 
   const save = document.createElement('button');
   save.type = 'button';
   save.className = 'btn btn-sm';
-  save.textContent = 'Save as dataset';
+  save.textContent = t('common.save_as_dataset');
   // Saving needs the extracted table, which only the full record carries — so
   // this opens the capture and lets its own (gated) button do the work, rather
   // than loading every capture's result to decide whether to draw a button.
@@ -187,7 +187,7 @@ function clMakeCard(c: any): HTMLElement {
 }
 
 async function clDelete(id: string): Promise<void> {
-  if (!window.confirm('Delete this capture and its analysis? This can\'t be undone.')) return;
+  if (!window.confirm(t('captureList.delete_this_capture_and_its_analysis'))) return;
   try {
     await window.hub.deleteThread(id);
   } catch (_) { /* the refresh below tells the truth either way */ }

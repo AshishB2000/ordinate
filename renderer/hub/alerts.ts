@@ -23,29 +23,26 @@
 
 /** The compares, in tab order. Anomaly last: it is the one with no fields. */
 const AL_TABS: ReadonlyArray<{ id: string; label: string }> = [
-  { id: 'threshold', label: 'Threshold' },
-  { id: 'change', label: 'Change' },
-  { id: 'anomaly', label: 'Anomaly' },
+  { id: 'threshold', label: t('common.threshold') },
+  { id: 'change', label: t('common.change') },
+  { id: 'anomaly', label: t('alerts.anomaly') },
 ];
 
 const AL_OPS: ReadonlyArray<{ value: string; label: string }> = [
-  { value: '<', label: 'is below' },
-  { value: '<=', label: 'is at or below' },
-  { value: '>', label: 'is above' },
-  { value: '>=', label: 'is at or above' },
+  { value: '<', label: t('alerts.is_below') },
+  { value: '<=', label: t('alerts.is_at_or_below') },
+  { value: '>', label: t('alerts.is_above') },
+  { value: '>=', label: t('alerts.is_at_or_above') },
 ];
 
 const AL_DIRECTIONS: ReadonlyArray<{ value: string; label: string }> = [
-  { value: 'down', label: 'falls by' },
-  { value: 'up', label: 'rises by' },
-  { value: 'either', label: 'moves by' },
+  { value: 'down', label: t('alerts.falls_by') },
+  { value: 'up', label: t('alerts.rises_by') },
+  { value: 'either', label: t('common.moves_by') },
 ];
 
 const AL_ANOMALY_NOTE =
-  'Ordinate checks this data after every refresh for outliers, sudden '
-  + 'period-over-period swings, values that have stopped arriving and columns '
-  + 'gone lopsided — and tells you only about findings that are new since the '
-  + 'last check. No fields to set, and no model is involved.';
+  t('alerts.ordinate_checks_this_data_after_every');
 
 interface AlertDialogOpts {
   datasetId: string;
@@ -82,7 +79,7 @@ interface AlertDialogOpts {
 function openAlertDialog(opts: AlertDialogOpts): Promise<any> {
   return new Promise((resolve) => {
     const existing = opts.existing || {};
-    const label = opts.label || opts.column || 'this metric';
+    const label = opts.label || opts.column || t('alerts.this_metric');
     let done = false;
 
     const overlay = document.createElement('div');
@@ -93,7 +90,7 @@ function openAlertDialog(opts: AlertDialogOpts): Promise<any> {
 
     const title = document.createElement('div');
     title.className = 'ws-modal-title';
-    title.textContent = existing.id ? 'Edit alert' : 'Alert me…';
+    title.textContent = existing.id ? t('alerts.edit_alert') : t('common.alert_me');
     box.appendChild(title);
 
     // ── The metric summary. The dialog's first job is to prove it is about the
@@ -180,8 +177,8 @@ function openAlertDialog(opts: AlertDialogOpts): Promise<any> {
     function paintBody(): void {
       body.innerHTML = '';
       if (mode === 'threshold') {
-        const r = row('Alert me when this metric');
-        const op = makeDropdown({ ariaLabel: 'Comparison', onChange: (v) => { thrOp = v; syncName(); clearTest(); } });
+        const r = row(t('alerts.alert_me_when_this_metric'));
+        const op = makeDropdown({ ariaLabel: t('alerts.comparison'), onChange: (v) => { thrOp = v; syncName(); clearTest(); } });
         op.setOptions(AL_OPS.map((o) => ({ value: o.value, label: o.label })), thrOp);
         r.appendChild(op.el);
         const input = document.createElement('input');
@@ -193,16 +190,16 @@ function openAlertDialog(opts: AlertDialogOpts): Promise<any> {
         // for "below what?" is what it is right now. ROUNDED, because the
         // placeholder is a suggestion the user may type over, and
         // "5194598.7299" is not a number anyone would choose to type.
-        input.placeholder = currentValue == null ? 'a number' : String(Math.round(currentValue));
-        input.setAttribute('aria-label', 'Threshold value');
+        input.placeholder = currentValue == null ? t('alerts.a_number') : String(Math.round(currentValue));
+        input.setAttribute('aria-label', t('alerts.threshold_value'));
         input.addEventListener('input', () => { thrValue = input.value; syncName(); clearTest(); });
         r.appendChild(input);
         body.appendChild(r);
         return;
       }
       if (mode === 'change') {
-        const r = row('Alert me when this metric');
-        const dir = makeDropdown({ ariaLabel: 'Direction', onChange: (v) => { chgDir = v; syncName(); clearTest(); } });
+        const r = row(t('alerts.alert_me_when_this_metric'));
+        const dir = makeDropdown({ ariaLabel: t('common.direction'), onChange: (v) => { chgDir = v; syncName(); clearTest(); } });
         dir.setOptions(AL_DIRECTIONS.map((d) => ({ value: d.value, label: d.label })), chgDir);
         r.appendChild(dir.el);
         const pct = document.createElement('input');
@@ -211,35 +208,34 @@ function openAlertDialog(opts: AlertDialogOpts): Promise<any> {
         pct.min = '0';
         pct.step = 'any';
         pct.value = chgPct;
-        pct.setAttribute('aria-label', 'Percent');
+        pct.setAttribute('aria-label', t('common.percent'));
         pct.addEventListener('input', () => { chgPct = pct.value; syncName(); clearTest(); });
         r.appendChild(pct);
         const unit = document.createElement('span');
         unit.className = 'al-row-label';
-        unit.textContent = '% or more';
+        unit.textContent = t('alerts.or_more');
         r.appendChild(unit);
         body.appendChild(r);
 
-        const r2 = row('compared with');
-        const vs = makeDropdown({ ariaLabel: 'Compared with', onChange: (v) => { chgVs = v; paintBody(); clearTest(); } });
+        const r2 = row(t('alerts.compared_with'));
+        const vs = makeDropdown({ ariaLabel: t('alerts.compared_with_2'), onChange: (v) => { chgVs = v; paintBody(); clearTest(); } });
         vs.setOptions([
-          { value: 'previous_refresh', label: 'the previous refresh' },
-          { value: 'previous_period', label: 'the previous period' },
+          { value: 'previous_refresh', label: t('alerts.the_previous_refresh') },
+          { value: 'previous_period', label: t('alerts.the_previous_period') },
         ], chgVs);
         r2.appendChild(vs.el);
         body.appendChild(r2);
 
         if (chgVs === 'previous_period') {
-          const r3 = row('using the date column');
+          const r3 = row(t('alerts.using_the_date_column'));
           if (dateColumns.length === 0) {
             const note = document.createElement('p');
             note.className = 'al-note';
-            note.textContent = 'This dataset has no date column, so there are no periods to compare. '
-              + 'Use "the previous refresh" instead.';
+            note.textContent = t('alerts.this_dataset_has_no_date_column');
             body.appendChild(note);
           } else {
             if (!chgPeriod || dateColumns.indexOf(chgPeriod) < 0) chgPeriod = dateColumns[0];
-            const col = makeDropdown({ ariaLabel: 'Date column', onChange: (v) => { chgPeriod = v; clearTest(); } });
+            const col = makeDropdown({ ariaLabel: t('common.date_column'), onChange: (v) => { chgPeriod = v; clearTest(); } });
             col.setOptions(dateColumns.map((c) => ({ value: c, label: c })), chgPeriod);
             r3.appendChild(col.el);
             body.appendChild(r3);
@@ -254,12 +250,12 @@ function openAlertDialog(opts: AlertDialogOpts): Promise<any> {
     }
 
     // ── Name ────────────────────────────────────────────────────────────────
-    const nameRow = row('Name');
+    const nameRow = row(t('common.name'));
     const nameInput = document.createElement('input');
     nameInput.className = 'ws-modal-input al-name';
     nameInput.type = 'text';
     nameInput.value = existing.name || '';
-    nameInput.setAttribute('aria-label', 'Alert name');
+    nameInput.setAttribute('aria-label', t('common.alert_name'));
     nameInput.addEventListener('input', () => { nameTouched = true; });
     nameRow.appendChild(nameInput);
     box.appendChild(nameRow);
@@ -279,9 +275,9 @@ function openAlertDialog(opts: AlertDialogOpts): Promise<any> {
         nameInput.value = `${label} ${(word ? word.label : 'is').replace(/^is /, '')} ${target}`.trim();
       } else if (mode === 'change') {
         const word = AL_DIRECTIONS.find((d) => d.value === chgDir);
-        nameInput.value = `${label} ${(word ? word.label : 'moves by').replace(/ by$/, '')} ${chgPct || '…'}%`;
+        nameInput.value = `${label} ${(word ? word.label : t('common.moves_by')).replace(/ by$/, '')} ${chgPct || '…'}%`;
       } else {
-        nameInput.value = `Anomalies in ${label}`;
+        nameInput.value = t('alerts.anomalies_in', { label });
       }
     }
 
@@ -302,17 +298,17 @@ function openAlertDialog(opts: AlertDialogOpts): Promise<any> {
     const testBtn = document.createElement('button');
     testBtn.type = 'button';
     testBtn.className = 'btn btn-sm al-test-btn';
-    testBtn.textContent = 'Test';
+    testBtn.textContent = t('common.test');
     const spacer = document.createElement('span');
     spacer.className = 'al-actions-spacer';
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'btn';
-    cancel.textContent = 'Cancel';
+    cancel.textContent = t('common.cancel');
     const save = document.createElement('button');
     save.type = 'button';
     save.className = 'btn btn-primary al-save';
-    save.textContent = 'Save';
+    save.textContent = t('common.save');
     actions.appendChild(testBtn);
     actions.appendChild(spacer);
     actions.appendChild(cancel);
@@ -354,7 +350,7 @@ function openAlertDialog(opts: AlertDialogOpts): Promise<any> {
       testBtn.disabled = true;
       test.hidden = false;
       test.className = 'al-test';
-      test.textContent = 'Checking…';
+      test.textContent = t('common.checking');
       let r: any;
       try {
         r = await window.hub.testAlertRule(currentProjectId, draft());
@@ -364,13 +360,13 @@ function openAlertDialog(opts: AlertDialogOpts): Promise<any> {
       testBtn.disabled = false;
       if (!r || r.ok === false) {
         test.className = 'al-test is-bad';
-        test.textContent = (r && r.error) || 'Fill the condition in first.';
+        test.textContent = (r && r.error) || t('alerts.fill_the_condition_in_first');
         return;
       }
       // Both halves are app-computed: `fire` is the same decision a real
       // evaluation makes, and `message` is the sentence it would have sent.
       test.className = 'al-test ' + (r.fire ? 'is-fire' : 'is-quiet');
-      test.textContent = (r.fire ? 'Would fire — ' : 'Would not fire — ') + r.message;
+      test.textContent = (r.fire ? t('alerts.would_fire') : t('alerts.would_not_fire')) + r.message;
     });
 
     function close(rule: any): void {
@@ -401,11 +397,11 @@ function openAlertDialog(opts: AlertDialogOpts): Promise<any> {
       if (!r || r.ok === false) {
         test.hidden = false;
         test.className = 'al-test is-bad';
-        test.textContent = (r && r.error) || 'That rule is not complete.';
+        test.textContent = (r && r.error) || t('alerts.that_rule_is_not_complete');
         return;
       }
       await alRefreshRules();
-      showToast('Alert saved.');
+      showToast(t('alerts.alert_saved'));
       close(r.rule);
     });
 
@@ -498,7 +494,7 @@ function alAttachCardBell(cardEl: HTMLElement, head: HTMLElement, card: any): vo
   const unseen = alHasUnseenFor(rules);
   const el = document.createElement('span');
   el.className = 'al-card-bell' + (unseen ? ' is-fired' : '');
-  el.title = rules.length === 1 ? rules[0].name : rules.length + ' alerts on this metric';
+  el.title = rules.length === 1 ? rules[0].name : t('alerts.alerts_on_this_metric', { rulesCount: rules.length });
   el.setAttribute('aria-label', el.title);
   el.appendChild(icon('bell', 14));
   head.appendChild(el);
@@ -514,14 +510,14 @@ function alAttachCardBell(cardEl: HTMLElement, head: HTMLElement, card: any): vo
  */
 function alCardMenuItems(card: any): Array<[string, () => void]> {
   if (!card || card.type !== 'metric') return [];
-  return [['Alert me…', () => { void alertMeFromCard(card); }]];
+  return [[t('common.alert_me'), () => { void alertMeFromCard(card); }]];
 }
 
 /** A KPI card's ⋯ menu. The card knows its dataset, column, aggregation and label. */
 async function alertMeFromCard(card: any): Promise<void> {
   const m = (card && card.metric) || {};
   if (!m.datasetId || !m.column || !m.aggregation) {
-    showToast('This card has no metric to alert on.');
+    showToast(t('alerts.this_card_has_no_metric_to'));
     return;
   }
   const existing = alRulesForMetric(m.datasetId, m.column, m.aggregation)[0];
@@ -549,7 +545,7 @@ async function alertMeFromColumn(): Promise<void> {
   const col = expColumns[dsProfileCol];
   if (!col || !expId) return;
   if (col.type !== 'number') {
-    showToast('Alerts watch a number — pick a numeric column.');
+    showToast(t('alerts.alerts_watch_a_number_pick_a'));
     return;
   }
   await openAlertDialog({
@@ -571,7 +567,7 @@ async function alertMeFromColumn(): Promise<void> {
  */
 async function alertMeFromInsight(ins: any): Promise<void> {
   if (!ins || !ins.datasetId || !ins.column) {
-    showToast('That insight is not about one column.');
+    showToast(t('common.that_insight_is_not_about_one'));
     return;
   }
   const down = Number(ins.facts && ins.facts.pctChange) < 0;

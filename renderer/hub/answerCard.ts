@@ -39,7 +39,7 @@ function ansTeardown(root: Element | null): void {
 function ansMount(row: HTMLElement, bubble: HTMLElement, turn: any): void {
   const card = ansEl('div', 'ans-card is-loading');
   card.setAttribute('aria-busy', 'true');
-  card.appendChild(ansEl('div', 'ans-title', turn.answer && turn.answer.title ? String(turn.answer.title) : 'Answer'));
+  card.appendChild(ansEl('div', 'ans-title', turn.answer && turn.answer.title ? String(turn.answer.title) : t('answerCard.answer')));
   const sk = skelBlock('ans-skel');
   card.appendChild(sk);
   row.insertBefore(card, bubble);
@@ -57,7 +57,7 @@ function ansMount(row: HTMLElement, bubble: HTMLElement, turn: any): void {
     sk.remove();
     if (!res || res.ok !== true) {
       card.classList.add('is-error');
-      card.appendChild(ansEl('div', 'ans-note', res && res.reason ? String(res.reason) : 'This answer could not be drawn.'));
+      card.appendChild(ansEl('div', 'ans-note', res && res.reason ? String(res.reason) : t('answerCard.this_answer_could_not_be_drawn')));
       bubble.hidden = !narrated;
       return;
     }
@@ -68,7 +68,7 @@ function ansMount(row: HTMLElement, bubble: HTMLElement, turn: any): void {
 function ansRender(card: HTMLElement, res: any, narrated: boolean): void {
   card.textContent = '';
   const head = ansEl('div', 'ans-head');
-  head.appendChild(ansEl('div', 'ans-title', String(res.title || 'Answer')));
+  head.appendChild(ansEl('div', 'ans-title', String(res.title || t('answerCard.answer'))));
   const meta = ansEl('div', 'ans-meta');
   meta.appendChild(ansEl('span', 'ans-meta-ds', String(res.datasetName || '')));
   (Array.isArray(res.filterLabels) ? res.filterLabels : []).forEach((f: string) => {
@@ -114,12 +114,12 @@ function ansRender(card: HTMLElement, res: any, narrated: boolean): void {
     actions.appendChild(b);
     return b;
   };
-  btn('Save as visual', true, (b) => { void ansSave(res, b); });
-  btn('Add to dashboard', false, (b) => { void ansAddToDashboard(res, b); });
-  btn('Open in builder', false, () => { void ansOpenInBuilder(res); });
-  btn('Show table', false, (b) => {
+  btn(t('common.save_as_visual'), true, (b) => { void ansSave(res, b); });
+  btn(t('common.add_to_dashboard'), false, (b) => { void ansAddToDashboard(res, b); });
+  btn(t('answerCard.open_in_builder'), false, () => { void ansOpenInBuilder(res); });
+  btn(t('answerCard.show_table'), false, (b) => {
     tableWrap.hidden = !tableWrap.hidden;
-    b.textContent = tableWrap.hidden ? 'Show table' : 'Hide table';
+    b.textContent = tableWrap.hidden ? t('answerCard.show_table') : t('answerCard.hide_table');
     if (!tableWrap.hidden && !tableWrap.firstChild) {
       const t = ansEl('table', 'cv-table ans-table');
       tableWrap.appendChild(t);
@@ -153,7 +153,7 @@ function ansVisual(res: any): { datasetId: string; name: string; chartType: stri
   if (s.grain) encoding.grain = s.grain;
   return {
     datasetId: String(s.datasetId),
-    name: truncate(String(res.title || 'Answer'), 60),
+    name: truncate(String(res.title || t('answerCard.answer')), 60),
     chartType: String(res.chartType || 'column'),
     encoding,
     filters: Array.isArray(res.steps) ? res.steps : [],
@@ -180,11 +180,11 @@ async function ansSave(res: any, b: HTMLButtonElement): Promise<void> {
   const id = await ansSaveVisual(res);
   if (!id) {
     b.disabled = false;
-    showToast('Could not save the visual.');
+    showToast(t('common.could_not_save_the_visual'));
     return;
   }
-  b.textContent = 'Saved';
-  showToast('Saved as visual — find it in Visuals.');
+  b.textContent = t('common.saved');
+  showToast(t('common.saved_as_visual_find_it_in'));
 }
 
 /**
@@ -198,7 +198,7 @@ async function ansAddToDashboard(res: any, b: HTMLButtonElement): Promise<void> 
     const id = await ansSaveVisual(res);
     if (id) {
       pushCard({ id: dashUuid(), type: 'visual', visualId: id, layout: { ...dashFindSlot(dashCards(), 6, 6), w: 6, h: 6 } });
-      showToast('Added to the dashboard.');
+      showToast(t('common.added_to_the_dashboard'));
       return;
     }
   } else {
@@ -206,7 +206,7 @@ async function ansAddToDashboard(res: any, b: HTMLButtonElement): Promise<void> 
     if (await dkTurnIntoAnalysis(v.datasetId, v.name, v.chartType, v.encoding, v.filters)) return;
   }
   b.disabled = false;
-  showToast('Could not add it to a dashboard.');
+  showToast(t('answerCard.could_not_add_it_to_a'));
 }
 
 async function ansOpenInBuilder(res: any): Promise<void> {
@@ -231,7 +231,7 @@ async function ansRerun(spec: any, label: string, chip: HTMLButtonElement): Prom
   chip.disabled = false;
   chip.classList.remove('is-busy');
   if (!r || !r.ok) {
-    showToast(r && r.reason ? String(r.reason) : 'Could not run that follow-up.');
+    showToast(r && r.reason ? String(r.reason) : t('answerCard.could_not_run_that_follow_up'));
     return;
   }
   if (r.threadId) dkThreadId = String(r.threadId);
@@ -252,7 +252,7 @@ async function ansExplain(target: { visualId?: string; tile?: any }): Promise<vo
     r = null;
   }
   if (!r || !r.ok || !r.threadId) {
-    showToast(r && r.reason ? String(r.reason) : 'Could not explain that chart.');
+    showToast(r && r.reason ? String(r.reason) : t('answerCard.could_not_explain_that_chart'));
     return;
   }
   dkSetOpen(true);
@@ -267,10 +267,10 @@ async function ansExplain(target: { visualId?: string; tile?: any }): Promise<vo
  */
 function ansCardMenuItems(card: any): Array<[string, () => void]> {
   if (!card || card.type !== 'visual') return [];
-  return [['Explain', () => {
+  return [[t('common.explain'), () => {
     void (async () => {
       const r = await resolveCardVisual(card);
-      if (!r) { showToast('This chart cannot be explained.'); return; }
+      if (!r) { showToast(t('answerCard.this_chart_cannot_be_explained')); return; }
       const v = r.visual;
       await ansExplain({ tile: {
         datasetId: v.datasetId, encoding: v.encoding, chartType: v.chartType,

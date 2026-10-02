@@ -19,34 +19,34 @@ let dsTypeMenuClose: (() => void) | null = null; // openMiniMenu's closer, while
 let expStepCounts: any[] | null = null;
 
 const STEP_TYPES: Array<{ type: string; label: string }> = [
-  { type: 'calculated_field', label: 'Calculated field' },
-  { type: 'filter', label: 'Filter rows' },
-  { type: 'group_aggregate', label: 'Group & aggregate' },
-  { type: 'dedupe', label: 'Remove duplicates' },
-  { type: 'fill_empty', label: 'Fill empty cells' },
-  { type: 'trim', label: 'Trim whitespace' },
-  { type: 'drop_column', label: 'Drop column' },
-  { type: 'rename_column', label: 'Rename column' },
+  { type: 'calculated_field', label: t('common.calculated_field') },
+  { type: 'filter', label: t('prepare.filter_rows') },
+  { type: 'group_aggregate', label: t('prepare.group_aggregate') },
+  { type: 'dedupe', label: t('prepare.remove_duplicates') },
+  { type: 'fill_empty', label: t('prepare.fill_empty_cells') },
+  { type: 'trim', label: t('prepare.trim_whitespace') },
+  { type: 'drop_column', label: t('common.drop_column') },
+  { type: 'rename_column', label: t('common.rename_column') },
   // Forms and summaries in prepareMask.ts.
-  { type: 'mask_hash', label: 'Mask — hash' },
-  { type: 'mask_redact', label: 'Mask — redact' },
-  { type: 'mask_generalize', label: 'Mask — generalise' },
+  { type: 'mask_hash', label: t('prepare.mask_hash') },
+  { type: 'mask_redact', label: t('prepare.mask_redact') },
+  { type: 'mask_generalize', label: t('prepare.mask_generalise') },
   // The power steps (prepareReshape / prepareClean / prepareCombine).
-  { type: 'split_column', label: 'Split column' },
-  { type: 'replace_values', label: 'Replace values' },
-  { type: 'conditional_column', label: 'Conditional column' },
-  { type: 'parse_date', label: 'Parse dates' },
-  { type: 'dedupe_key', label: 'Keep one row per key' },
-  { type: 'window', label: 'Window (rank, previous, running total)' },
-  { type: 'unpivot', label: 'Unpivot columns to rows' },
-  { type: 'pivot', label: 'Pivot rows to columns' },
-  { type: 'lookup_join', label: 'Look up from another dataset' },
-  { type: 'union', label: 'Append another dataset' },
+  { type: 'split_column', label: t('prepare.split_column') },
+  { type: 'replace_values', label: t('prepare.replace_values') },
+  { type: 'conditional_column', label: t('prepare.conditional_column') },
+  { type: 'parse_date', label: t('prepare.parse_dates') },
+  { type: 'dedupe_key', label: t('prepare.keep_one_row_per_key') },
+  { type: 'window', label: t('prepare.window_rank_previous_running_total') },
+  { type: 'unpivot', label: t('prepare.unpivot_columns_to_rows') },
+  { type: 'pivot', label: t('prepare.pivot_rows_to_columns') },
+  { type: 'lookup_join', label: t('prepare.look_up_from_another_dataset') },
+  { type: 'union', label: t('prepare.append_another_dataset') },
   // The text family (textSteps.ts).
-  { type: 'text_terms', label: 'Text — count terms' },
-  { type: 'text_sentiment', label: 'Text — sentiment score' },
-  { type: 'keyword_rules', label: 'Text — tag with keyword rules' },
-  { type: 'spatial_join', label: 'Assign regions (spatial join)' }, // prepareGeo.ts (r6:geo)
+  { type: 'text_terms', label: t('prepare.text_count_terms') },
+  { type: 'text_sentiment', label: t('prepare.text_sentiment_score') },
+  { type: 'keyword_rules', label: t('prepare.text_tag_with_keyword_rules') },
+  { type: 'spatial_join', label: t('prepare.assign_regions_spatial_join') }, // prepareGeo.ts (r6:geo)
 ];
 const FILTER_OPS = ['=', '!=', '>', '<', '>=', '<=', 'contains', 'is_empty', 'not_empty', 'in', 'not in'];
 const AGG_FNS = ['sum', 'avg', 'count', 'min', 'max'];
@@ -57,40 +57,40 @@ function pEl(id: string): HTMLElement | null {
 
 // ── Steps list (ordered, editable) ───────────────────────────────────────────
 function stepSummaryText(step: any): string {
-  if (!step || typeof step !== 'object') return 'Unknown step';
+  if (!step || typeof step !== 'object') return t('common.unknown_step');
   switch (step.type) {
     case 'calculated_field':
-      return 'Calculated field "' + step.name + '" = ' + step.expression;
+      return t('prepare.calculated_field', { name: step.name, expression: step.expression });
     case 'filter':
-      if (step.op === 'period') return 'Filter: ' + step.column + ' in ' + periodLabel(step.period).toLowerCase();
-      if (step.op === 'is_empty') return 'Filter: ' + step.column + ' is empty';
-      if (step.op === 'not_empty') return 'Filter: ' + step.column + ' is not empty';
+      if (step.op === 'period') return t('prepare.filter_in', { column: step.column, p1: periodLabel(step.period).toLowerCase() });
+      if (step.op === 'is_empty') return t('prepare.filter_is_empty', { column: step.column });
+      if (step.op === 'not_empty') return t('prepare.filter_is_not_empty', { column: step.column });
       if (isListFilterOp(step.op)) {
         const list = formatFilterValues(step.values);
         // An empty list is SKIPPED by the pipeline (with a warning), so the
         // summary says so rather than implying the step is doing something.
-        return 'Filter: ' + step.column + ' ' + step.op + ' ' + (list ? '(' + list + ')' : '— no values yet');
+        return t('prepare.filter', { column: step.column, op: step.op, p2: (list ? '(' + list + ')' : t('prepare.no_values_yet')) });
       }
-      return 'Filter: ' + step.column + ' ' + step.op + ' ' + (step.value != null ? step.value : '');
+      return t('prepare.filter', { column: step.column, op: step.op, p2: (step.value != null ? step.value : '') });
     case 'group_aggregate': {
       const by = Array.isArray(step.groupBy) ? step.groupBy.join(', ') : '';
       const aggs = Array.isArray(step.aggregations)
         ? step.aggregations.map((a: any) => a.fn + '(' + a.column + ') → ' + a.as).join(', ')
         : '';
-      return 'Group by ' + by + '; ' + aggs;
+      return t('prepare.group_by', { by, aggs });
     }
     case 'dedupe': {
-      const cols = Array.isArray(step.columns) && step.columns.length ? step.columns.join(', ') : 'all columns';
-      return 'Remove duplicates by ' + cols;
+      const cols = Array.isArray(step.columns) && step.columns.length ? step.columns.join(', ') : t('prepare.all_columns');
+      return t('prepare.remove_duplicates_by', { cols });
     }
     case 'fill_empty':
-      return 'Fill empty in ' + step.column + ' with "' + step.value + '"';
+      return t('prepare.fill_empty_in_with', { column: step.column, value: step.value });
     case 'trim':
-      return step.column ? 'Trim whitespace in ' + step.column : 'Trim whitespace (all text columns)';
+      return step.column ? t('prepare.trim_whitespace_in', { column: step.column }) : t('prepare.trim_whitespace_all_text_columns');
     case 'drop_column':
-      return 'Drop column ' + step.column;
+      return t('prepare.drop_column', { column: step.column });
     case 'rename_column':
-      return 'Rename ' + step.from + ' → ' + step.to;
+      return t('common.rename_2', { from: step.from, to: step.to });
     default:
       return pvMaskSummary(step) || sgStepSummary(step) || txStepSummary(step) // prepareMask / segments / textSteps
         || powerStepSummary(step); // prepareCombine.ts
@@ -114,7 +114,7 @@ function renderStepsList(): void {
   if (!expSteps.length) {
     const empty = document.createElement('div');
     empty.className = 'ds-steps-empty';
-    empty.textContent = 'No steps yet. Add one to transform the data — the original stays intact and every step is reversible.';
+    empty.textContent = t('prepare.no_steps_yet_add_one_to');
     list.appendChild(empty);
     return;
   }
@@ -145,12 +145,12 @@ function renderStepsList(): void {
 
     const actions = document.createElement('div');
     actions.className = 'ds-step-actions';
-    actions.appendChild(mkStepBtn('arrow-up', 'Move step up', i === 0, () => moveStep(i, -1)));
+    actions.appendChild(mkStepBtn('arrow-up', t('prepare.move_step_up'), i === 0, () => moveStep(i, -1)));
     actions.appendChild(
-      mkStepBtn('arrow-down', 'Move step down', i === expSteps.length - 1, () => moveStep(i, 1)),
+      mkStepBtn('arrow-down', t('prepare.move_step_down'), i === expSteps.length - 1, () => moveStep(i, 1)),
     );
-    actions.appendChild(mkStepBtn('pencil', 'Edit step', false, () => openStepEditor(step.type, i)));
-    actions.appendChild(mkStepBtn('trash', 'Remove step', false, () => removeStep(i)));
+    actions.appendChild(mkStepBtn('pencil', t('prepare.edit_step'), false, () => openStepEditor(step.type, i)));
+    actions.appendChild(mkStepBtn('trash', t('prepare.remove_step'), false, () => removeStep(i)));
     rowEl.appendChild(actions);
 
     list.appendChild(rowEl);
@@ -160,7 +160,7 @@ function renderStepsList(): void {
 // ── Apply an IPC { ok, dataset, preview } reply → refresh the live preview ─────
 function applyStepResult(res: any): boolean {
   if (!res || res.ok === false) {
-    window.alert((res && res.error) || 'Failed to update the pipeline.');
+    window.alert((res && res.error) || t('prepare.failed_to_update_the_pipeline'));
     return false;
   }
   const preview = res.preview || {};
@@ -229,7 +229,7 @@ function openStepEditor(type: string, index: number): void {
   const title = document.createElement('div');
   title.className = 'ds-step-editor-title';
   const meta = STEP_TYPES.find((s) => s.type === type);
-  title.textContent = (index >= 0 ? 'Edit: ' : 'Add: ') + (meta ? meta.label : type);
+  title.textContent = (index >= 0 ? t('prepare.edit') : t('prepare.add')) + (meta ? meta.label : type);
   editor.appendChild(title);
 
   const body = document.createElement('div');
@@ -243,12 +243,12 @@ function openStepEditor(type: string, index: number): void {
   const save = document.createElement('button');
   save.type = 'button';
   save.className = 'btn btn-primary';
-  save.textContent = 'Save step';
+  save.textContent = t('prepare.save_step');
   save.addEventListener('click', () => saveStepFromForm(getStep));
   const cancel = document.createElement('button');
   cancel.type = 'button';
   cancel.className = 'btn';
-  cancel.textContent = 'Cancel';
+  cancel.textContent = t('common.cancel');
   cancel.addEventListener('click', () => closeStepEditor());
   actions.appendChild(save);
   actions.appendChild(cancel);
@@ -310,14 +310,14 @@ async function handleSuggestSteps(): Promise<void> {
   if (actions) actions.hidden = true;
   if (list) {
     list.className = 'ds-suggest-list ds-suggest-hint';
-    list.textContent = 'Thinking…';
+    list.textContent = t('common.thinking');
   }
   if (btn) btn.disabled = true;
   let res: any;
   try {
     res = await window.hub.suggestDatasetSteps(currentProjectId, expId);
   } catch (_) {
-    res = { ok: false, error: 'Could not get suggestions.' };
+    res = { ok: false, error: t('prepare.could_not_get_suggestions') };
   }
   if (btn) btn.disabled = false;
   if (!list) return;
@@ -335,13 +335,13 @@ async function handleSuggestSteps(): Promise<void> {
     if (actions) actions.hidden = false;
   } else if (res && res.ok && Array.isArray(res.steps)) {
     list.className = 'ds-suggest-list ds-suggest-hint';
-    list.textContent = 'No steps suggested — the data already looks ready.';
+    list.textContent = t('prepare.no_steps_suggested_the_data_already');
   } else if (res && res.notReady) {
     list.className = 'ds-suggest-list ds-suggest-hint';
     list.textContent = AI_NOT_CONFIGURED;
   } else {
     list.className = 'ds-suggest-list ds-suggest-hint';
-    list.textContent = (res && res.error) || 'Could not get step suggestions.';
+    list.textContent = (res && res.error) || t('prepare.could_not_get_step_suggestions');
   }
 }
 
@@ -358,7 +358,7 @@ async function handleSuggestCalcField(): Promise<void> {
     if (!out) return;
     out.hidden = false;
     out.innerHTML = '';
-    const head = mkAiPanel('Assistant suggestion — the app compiles and computes the formula');
+    const head = mkAiPanel(t('prepare.assistant_suggestion_the_app_compiles'));
     out.appendChild(head);
     const hint = document.createElement('div');
     hint.className = 'ai-interp-hint';
@@ -366,14 +366,14 @@ async function handleSuggestCalcField(): Promise<void> {
     out.appendChild(hint);
   };
 
-  showHint('Thinking…');
+  showHint(t('common.thinking'));
   if (btn) btn.disabled = true;
 
   let res: any;
   try {
     res = await window.hub.suggestCalcField(currentProjectId, expId);
   } catch (_) {
-    res = { ok: false, error: 'Could not suggest a calculated field.' };
+    res = { ok: false, error: t('prepare.could_not_suggest_a_calculated_field') };
   }
   if (btn) btn.disabled = false;
 
@@ -382,7 +382,7 @@ async function handleSuggestCalcField(): Promise<void> {
     return;
   }
   if (!res || res.ok === false) {
-    showHint((res && res.error) || 'Could not suggest a calculated field.');
+    showHint((res && res.error) || t('prepare.could_not_suggest_a_calculated_field'));
     return;
   }
 
@@ -404,8 +404,7 @@ function prefillCalcFieldEditor(name: unknown, expression: unknown, warning?: un
   openCalcField(-1, {
     name: String(name || ''),
     expression: String(expression || ''),
-    note: 'Assistant suggestion — review and edit; the app compiles and computes the formula.'
-      + (warning ? ' ' + String(warning) : ''),
+    note: t('prepare.assistant_suggestion_review_and_edit_the', { p0: (warning ? ' ' + String(warning) : '') }),
   });
 }
 

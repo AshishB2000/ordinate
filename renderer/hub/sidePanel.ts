@@ -88,7 +88,7 @@ function spOpen(opts: SidePanelOpts): SidePanel {
   const x = document.createElement('button');
   x.type = 'button';
   x.className = 'dsp-x ws-side-x';
-  iconOnly(x, 'x', 'Close');
+  iconOnly(x, 'x', t('common.close'));
   x.addEventListener('click', () => spClose());
   head.append(ident, x);
 
@@ -114,7 +114,7 @@ function spWhen(iso: string): string {
   const today = new Date();
   const days = Math.round((new Date(today.toDateString()).getTime() - new Date(d.toDateString()).getTime()) / 86400000);
   if (days === 0) return time;
-  if (days === 1) return 'Yesterday ' + time;
+  if (days === 1) return t('sidePanel.yesterday', { time });
   const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
   if (d.getFullYear() !== today.getFullYear()) opts.year = 'numeric';
   return d.toLocaleDateString([], opts) + ', ' + time;

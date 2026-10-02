@@ -37,7 +37,7 @@ function swCount(n: number): string {
 function swSigKey(host: HTMLElement): void {
   const p = document.createElement('p');
   p.className = 'sw-footnote';
-  p.textContent = 'Significance: *** p < 0.001 · ** p < 0.01 · * p < 0.05 · · p < 0.1. Two-sided tests.';
+  p.textContent = t('statsViews.significance_p_0_001_p_0');
   host.appendChild(p);
 }
 
@@ -46,8 +46,8 @@ function swSigKey(host: HTMLElement): void {
 function swViewCorrelation(host: HTMLElement, r: any, spec: any): void {
   const { columns, cells, method } = r.matrix;
   const sym = method === 'spearman' ? 'ρ' : 'r';
-  swResultHead(host, `${method === 'spearman' ? 'Spearman' : 'Pearson'} correlation · ${columns.length} columns`,
-    `${swCount(r.rows)} rows · each pair on the rows where both have a value · p from t on n − 2 df`, spec);
+  swResultHead(host, t('statsViews.correlation_columns', { p0: !!(method === 'spearman'), columnsCount: columns.length }),
+    t('statsViews.rows_each_pair_on_the_rows', { rows: swCount(r.rows) }), spec);
 
   const wrap = document.createElement('div');
   wrap.className = 'sw-heat-wrap';
@@ -55,7 +55,7 @@ function swViewCorrelation(host: HTMLElement, r: any, spec: any): void {
   table.className = 'sw-heat';
   const caption = document.createElement('caption');
   caption.className = 'sw-sr';
-  caption.textContent = `${method === 'spearman' ? 'Spearman' : 'Pearson'} correlation matrix`;
+  caption.textContent = t('statsViews.correlation_matrix', { p0: !!(method === 'spearman') });
   table.appendChild(caption);
   const thead = document.createElement('thead');
   const hr = document.createElement('tr');
@@ -96,10 +96,10 @@ function swViewCorrelation(host: HTMLElement, r: any, spec: any): void {
       b.dataset.j = String(j);
       const rv = c.r;
       b.textContent = i === j ? '1' : rv === null ? '—' : rv.toFixed(2) + swStars(c.p);
-      const text = i === j ? `${rowName}: ${swCount(c.n)} values` : rv === null
-        ? `${rowName} × ${colName}: not enough rows with both (${swCount(c.n)})`
+      const text = i === j ? t('statsViews.values', { rowName, n: swCount(c.n) }) : rv === null
+        ? t('statsViews.not_enough_rows_with_both', { rowName, colName, n: swCount(c.n) })
         : `${rowName} × ${colName}: ${sym} = ${rv.toFixed(3)}, p ${swP(c.p)}, n = ${swCount(c.n)}`;
-      b.setAttribute('aria-label', text + (i !== j && rv !== null ? '. Open the scatter.' : ''));
+      b.setAttribute('aria-label', text + (i !== j && rv !== null ? t('statsViews.open_the_scatter') : ''));
       b.dataset.tip = text;
       if (typeof rv === 'number') {
         const k = Math.round(Math.min(1, Math.abs(rv)) * 55);
@@ -132,7 +132,7 @@ function swViewCorrelation(host: HTMLElement, r: any, spec: any): void {
   const legend = document.createElement('div');
   legend.className = 'sw-heat-legend';
   legend.setAttribute('aria-hidden', 'true');
-  for (const [cls, text] of [['sw-leg-neg', '−1 negative'], ['sw-leg-bar', ''], ['sw-leg-pos', '+1 positive']]) {
+  for (const [cls, text] of [['sw-leg-neg', t('statsViews.1_negative')], ['sw-leg-bar', ''], ['sw-leg-pos', t('statsViews.1_positive')]]) {
     const s = document.createElement('span');
     s.className = cls;
     s.textContent = text;
@@ -144,10 +144,10 @@ function swViewCorrelation(host: HTMLElement, r: any, spec: any): void {
   const pair = document.createElement('section');
   pair.className = 'sw-pair';
   pair.id = 'sw-pair';
-  pair.setAttribute('aria-label', 'Selected pair');
+  pair.setAttribute('aria-label', t('statsViews.selected_pair'));
   const hint = document.createElement('p');
   hint.className = 'sw-pair-hint';
-  hint.textContent = 'Select a cell to see that pair’s scatter with its fitted line.';
+  hint.textContent = t('statsViews.select_a_cell_to_see_that');
   pair.appendChild(hint);
   host.appendChild(pair);
   const want = swState.pair;
@@ -161,11 +161,11 @@ async function swShowPair(x: string, y: string, spec: any): Promise<void> {
   host.textContent = '';
   host.setAttribute('aria-busy', 'true');
   let res: any;
-  try { res = await window.hubStats.pair(currentProjectId, spec, x, y); } catch (_) { res = { ok: false, error: 'Could not draw that pair.' }; }
+  try { res = await window.hubStats.pair(currentProjectId, spec, x, y); } catch (_) { res = { ok: false, error: t('statsViews.could_not_draw_that_pair') }; }
   if (!document.contains(host)) return;
   host.removeAttribute('aria-busy');
   host.textContent = '';
-  if (!res || !res.ok) { swPaintProblem(host, (res && res.error) || 'Could not draw that pair.'); return; }
+  if (!res || !res.ok) { swPaintProblem(host, (res && res.error) || t('statsViews.could_not_draw_that_pair')); return; }
   const p = res.pair;
   const head = document.createElement('div');
   head.className = 'sw-pair-head';
@@ -175,7 +175,7 @@ async function swShowPair(x: string, y: string, spec: any): Promise<void> {
   const model = document.createElement('button');
   model.type = 'button';
   model.className = 'btn btn-sm';
-  iconLabel(model, 'trending-up', `Model ${y} on ${x}`);
+  iconLabel(model, 'trending-up', t('statsViews.model_on', { y, x }));
   model.addEventListener('click', () => {
     swState.specs.regression = { kind: 'regression', target: y, predictors: [x] };
     swState.replies.regression = null;
@@ -188,7 +188,7 @@ async function swShowPair(x: string, y: string, spec: any): Promise<void> {
   const items: Array<[string, string, string?]> = [
     [spec.method === 'spearman' ? 'ρ' : 'r', c.r === null ? '—' : c.r.toFixed(3)], ['p', swP(c.p)], ['n', swCount(c.n)],
   ];
-  if (p.fit) items.push(['Slope', swFmt(p.fit.slope), `${y} per unit of ${x}`], ['Intercept', swFmt(p.fit.intercept)]);
+  if (p.fit) items.push([t('statsViews.slope'), swFmt(p.fit.slope), t('statsViews.per_unit_of', { y, x })], [t('statsViews.intercept'), swFmt(p.fit.intercept)]);
   swStatRow(host, items);
   swScatterFit(host, p);
 }
@@ -201,16 +201,16 @@ function swViewRegression(host: HTMLElement, r: any, spec: any): void {
   const save = document.createElement('button');
   save.type = 'button';
   save.className = 'btn btn-sm btn-primary sw-save-calc';
-  iconLabel(save, 'function', `Save as predicted_${f.target}`);
-  save.title = `Add predicted_${f.target} to this dataset as a calculated field`;
+  iconLabel(save, 'function', t('statsViews.save_as_predicted', { target: f.target }));
+  save.title = t('statsViews.add_predicted_to_this_dataset_as', { target: f.target });
   save.addEventListener('click', () => { void swSaveFormula(spec, save); });
-  swResultHead(host, `Regression of ${f.target} on ${f.terms.length - 1} term${f.terms.length === 2 ? '' : 's'}`,
-    `${swCount(f.n)} rows used${f.dropped ? ` · ${swCount(f.dropped)} dropped for a missing value` : ''}${refs ? ` · reference: ${refs}` : ''}`, spec, [save]);
+  swResultHead(host, t('statsViews.regression_of_on_term', { target: f.target, p1: f.terms.length - 1, p2: !!(f.terms.length === 2) }),
+    t('statsViews.rows_used', { n: swCount(f.n), p1: f.dropped ? t('statsViews.dropped_for_a_missing_value', { dropped: swCount(f.dropped) }) : '', p2: refs ? t('statsViews.reference', { refs }) : '' }), spec, [save]);
   swSentence(host, r.sentence);
   swStatRow(host, [
-    ['R²', f.r2.toFixed(3)], ['Adjusted R²', f.adjR2.toFixed(3)],
-    ['F', swFmt(f.f), `on ${f.fDf1} and ${swCount(f.fDf2)} df`], ['Model p', swP(f.fP)],
-    ['Residual SE', swFmt(f.sigma)], ['n', swCount(f.n)],
+    ['R²', f.r2.toFixed(3)], [t('statsViews.adjusted_r2'), f.adjR2.toFixed(3)],
+    ['F', swFmt(f.f), t('statsViews.on_and_df', { fDf1: f.fDf1, fDf2: swCount(f.fDf2) })], [t('statsViews.model_p'), swP(f.fP)],
+    [t('statsViews.residual_se'), swFmt(f.sigma)], ['n', swCount(f.n)],
   ]);
 
   // The coefficient table, with each 95% interval drawn against zero.
@@ -225,15 +225,15 @@ function swViewRegression(host: HTMLElement, r: any, spec: any): void {
   table.className = 'sw-table sw-coef';
   const caption = document.createElement('caption');
   caption.className = 'sw-sr';
-  caption.textContent = 'Coefficients';
+  caption.textContent = t('statsViews.coefficients');
   table.appendChild(caption);
   const thead = document.createElement('thead');
   const hr = document.createElement('tr');
-  for (const [text, cls] of [['Term', ''], ['Estimate', 'num'], ['Std. error', 'num'], ['t', 'num'], ['p', 'num'], ['', 'sig'], ['95% confidence interval', 'ci']]) {
+  for (const [text, cls] of [[t('statsViews.term'), ''], [t('statsViews.estimate'), 'num'], [t('statsViews.std_error'), 'num'], ['t', 'num'], ['p', 'num'], ['', 'sig'], [t('statsViews.95_confidence_interval'), 'ci']]) {
     const th = document.createElement('th');
     th.scope = 'col';
     th.textContent = text;
-    if (!text) th.setAttribute('aria-label', 'Significance');
+    if (!text) th.setAttribute('aria-label', t('statsViews.significance'));
     if (cls) th.className = cls;
     hr.appendChild(th);
   }
@@ -299,10 +299,10 @@ async function swSaveFormula(spec: any, btn: HTMLButtonElement): Promise<void> {
   if (!currentProjectId) return;
   btn.disabled = true;
   let res: any;
-  try { res = await window.hubStats.saveFormula(currentProjectId, spec); } catch (_) { res = { ok: false, error: 'Could not save the calculated field.' }; }
+  try { res = await window.hubStats.saveFormula(currentProjectId, spec); } catch (_) { res = { ok: false, error: t('statsViews.could_not_save_the_calculated_field') }; }
   btn.disabled = false;
-  if (!res || !res.ok) { showToast((res && res.error) || 'Could not save the calculated field.'); return; }
-  showToast(`${res.replaced ? 'Updated' : 'Added'} ${res.name} — it is a calculated field in Prepare.`);
+  if (!res || !res.ok) { showToast((res && res.error) || t('statsViews.could_not_save_the_calculated_field')); return; }
+  showToast(t('statsViews.it_is_a_calculated_field_in', { p0: !!(res.replaced), name: res.name }));
   // The new column joins the pickers here, and the dataset page behind the
   // panel repaints with it.
   let meta: any = null;

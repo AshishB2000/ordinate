@@ -57,8 +57,8 @@ function qtParamField(name: string, st: QtParamEntry): HTMLElement {
 
   const kind = document.createElement('select');
   kind.className = 'conn-input qt-param-kind';
-  kind.setAttribute('aria-label', `Type of ${name}`);
-  for (const [v, l] of [['text', 'Text'], ['number', 'Number'], ['date', 'Date'], ['list', 'List']]) {
+  kind.setAttribute('aria-label', t('queryParams.type_of', { name }));
+  for (const [v, l] of [['text', t('common.text')], ['number', t('common.number')], ['date', t('common.date')], ['list', t('common.list')]]) {
     const o = document.createElement('option');
     o.value = v;
     o.textContent = l;
@@ -68,7 +68,7 @@ function qtParamField(name: string, st: QtParamEntry): HTMLElement {
 
   const value = document.createElement('input');
   value.className = 'conn-input qt-param-value';
-  value.setAttribute('aria-label', `Value of ${name}`);
+  value.setAttribute('aria-label', t('queryParams.value_of', { name }));
   const shape = (): void => {
     value.type = st.kind === 'number' ? 'number' : st.kind === 'date' ? 'date' : 'text';
     value.placeholder = st.kind === 'list' ? 'a, b, c' : st.kind === 'number' ? '0' : st.kind === 'date' ? '' : 'value';
@@ -101,7 +101,7 @@ function qtCollectParams(sql: string): { params: any[]; error: string } {
       params.push({ name, kind: 'list', value: raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [] });
       continue;
     }
-    if (!raw && st.kind !== 'text') return { params, error: `Give [[${name}]] a value in the parameters row.` };
+    if (!raw && st.kind !== 'text') return { params, error: t('queryParams.give_a_value_in_the_parameters', { name }) };
     params.push({ name, kind: st.kind, value: st.kind === 'number' ? Number(raw) : raw });
   }
   return { params, error: '' };

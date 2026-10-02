@@ -13,10 +13,10 @@
 // which comparison it wants.
 
 const KPI_COMPARE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: '', label: 'No comparison' },
-  { value: 'previous_period', label: 'Previous period' },
-  { value: 'previous_year', label: 'Same period last year' },
-  { value: 'custom', label: 'Custom range…' },
+  { value: '', label: t('kpiCompare.no_comparison') },
+  { value: 'previous_period', label: t('common.previous_period') },
+  { value: 'previous_year', label: t('kpiCompare.same_period_last_year') },
+  { value: 'custom', label: t('kpiCompare.custom_range') },
 ];
 
 /** "+18.2%" / "−4.1%" — one decimal under 10%, none above, a real minus sign. */
@@ -62,13 +62,13 @@ async function paintMetricCompare(card: any, body: HTMLElement): Promise<void> {
     row.classList.add('is-hint');
     body.classList.add('has-delta');
     row.appendChild(icon('calendar', 12));
-    row.appendChild(document.createTextNode(' Add a date filter to compare'));
-    row.title = 'Previous period and last year move the date range in scope, and this card has none.';
+    row.appendChild(document.createTextNode(t('kpiCompare.add_a_date_filter_to_compare')));
+    row.title = t('kpiCompare.previous_period_and_last_year_move');
     return;
   }
   if (r.delta == null) {
     row.classList.add('is-flat');
-    row.textContent = 'No figure ' + r.label;
+    row.textContent = t('kpiCompare.no_figure', { label: r.label });
     return;
   }
 
@@ -93,6 +93,7 @@ async function paintMetricCompare(card: any, body: HTMLElement): Promise<void> {
   const vs = document.createElement('div');
   vs.className = 'dash-metric-vs';
   vs.textContent = r.label;
+  vs.title = r.label; // the line ellipsizes beside a Why? (drivers.css)
   row.insertAdjacentElement('afterend', vs);
   if (!flat && typeof drvMountKpiWhy === 'function') drvMountKpiWhy(card, vs); // driversEntry.ts — "Why?"
   // The label under the figure repeats the card's title in the common case;
@@ -104,7 +105,7 @@ async function paintMetricCompare(card: any, body: HTMLElement): Promise<void> {
 
   const prevText = r.previousDisplay || (r.previous == null ? '—' : fmtWith(r.previous, m.format || 'auto'));
   const range = r.prior ? ppFmtRange(r.prior.from, r.prior.to) : '';
-  row.title = 'Was ' + prevText + (range ? ' · ' + range : '');
+  row.title = t('kpiCompare.was', { prevText, p1: (range ? ' · ' + range : '') });
 }
 
 /**
@@ -117,7 +118,7 @@ function anRenderCompareProps(card: any, host: HTMLElement): void {
   const cur = m.compare && m.compare.mode ? m.compare : null;
 
   const sel = document.createElement('select');
-  sel.setAttribute('aria-label', 'Compare with');
+  sel.setAttribute('aria-label', t('kpiCompare.compare_with'));
   sel.className = 'an-prop-input';
   KPI_COMPARE_OPTIONS.forEach((o) => {
     const opt = document.createElement('option');
@@ -144,8 +145,8 @@ function anRenderCompareProps(card: any, host: HTMLElement): void {
     range.appendChild(wrap);
     return input;
   };
-  const from = mk('From', 'from');
-  const to = mk('To', 'to');
+  const from = mk(t('common.from'), 'from');
+  const to = mk(t('common.to'), 'to');
   host.appendChild(range);
 
   const note = document.createElement('p');
@@ -156,10 +157,10 @@ function anRenderCompareProps(card: any, host: HTMLElement): void {
     const mode = sel.value;
     range.hidden = mode !== 'custom';
     note.textContent = mode === 'custom'
-      ? 'The card\'s figure against the same figure over these dates.'
+      ? t('kpiCompare.the_card_s_figure_against_the')
       : mode
-        ? 'Moves the date range of the dashboard\'s filters and resolves the figure again — so it needs a date filter or date control in scope.'
-        : 'Show how the figure changed against another period, coloured by whether up is good.';
+        ? t('kpiCompare.moves_the_date_range_of_the')
+        : t('kpiCompare.show_how_the_figure_changed_against');
   }
   function write(): void {
     const mode = sel.value;
@@ -169,7 +170,7 @@ function anRenderCompareProps(card: any, host: HTMLElement): void {
       m.compare = { mode, from: from.value, to: to.value };
     } else m.compare = { mode };
     sync();
-    markDashDirty('Compare');
+    markDashDirty(t('common.compare'));
     renderDashGrid();
     anPaintSelection();
   }
@@ -189,9 +190,9 @@ function anRenderKpiProps(card: any): void {
   const h = document.createElement('div');
   h.className = 'an-kpi-props-h';
   h.appendChild(icon('arrow-up', 14));
-  const t = document.createElement('span');
-  t.textContent = 'Compare';
-  h.appendChild(t);
+  const tv = document.createElement('span');
+  tv.textContent = t('common.compare');
+  h.appendChild(tv);
   host.appendChild(h);
   anRenderCompareProps(card, host);
   void tcRenderKpiProps(card, host); // "Calculate as" (calcMenu.ts)

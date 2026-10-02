@@ -19,6 +19,7 @@ import { ok, failureCount } from './selfcheck';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vm from 'vm';
+import { withT } from './i18nNode';
 
 const HUB = path.join(__dirname, '..', 'renderer', 'hub');
 
@@ -32,7 +33,7 @@ function loadRendererScript(file: string, names: string[]): Record<string, any> 
   sandbox.window = sandbox;
   sandbox.document = undefined;
   sandbox.localStorage = undefined;
-  vm.createContext(sandbox);
+  vm.createContext(withT(sandbox));
   return vm.runInContext(code + '\n;({' + names.map((n) => n + ': ' + n).join(', ') + '});', sandbox);
 }
 

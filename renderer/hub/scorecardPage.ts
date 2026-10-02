@@ -16,13 +16,13 @@ let scOffset = 0;
 let scResult: any = null;
 let scSeq = 0;
 
-const SC_STATUS_WORD: Record<string, string> = { good: 'On track', warn: 'At risk', off: 'Off track', none: 'No target' };
+const SC_STATUS_WORD: Record<string, string> = { good: t('common.on_track'), warn: t('common.at_risk'), off: t('common.off_track'), none: t('common.no_target') };
 
 async function scOpen(id: string): Promise<void> {
   if (!currentProjectId) return;
   let sc: any = null;
   try { sc = await window.hubPower.scorecardGet(currentProjectId, id); } catch (_) { sc = null; }
-  if (!sc || !sc.id) { showToast('That scorecard could not be opened.'); return; }
+  if (!sc || !sc.id) { showToast(t('scorecardPage.that_scorecard_could_not_be_opened')); return; }
   if (typeof dashCurrent !== 'undefined' && dashCurrent) await handleBackToList();
   if (typeof stStory !== 'undefined' && stStory) await stClose();
   if (currentSection !== 'analyses') selectSection('analyses');
@@ -64,7 +64,7 @@ async function scCompute(): Promise<void> {
   try { res = await window.hubPower.scorecardCompute(currentProjectId, scCurrent.id, scOffset); } catch (_) { res = null; }
   if (my !== scSeq || !scCurrent) return;
   if (body) body.classList.remove('is-loading');
-  if (!res || res.ok === false) { scRenderError((res && res.error) || 'Could not compute the scorecard.'); return; }
+  if (!res || res.ok === false) { scRenderError((res && res.error) || t('scorecardPage.could_not_compute_the_scorecard')); return; }
   scResult = res;
   scRender(res);
 }
@@ -125,13 +125,13 @@ function scRender(res: any): void {
     empty.className = 'sc-empty-rows';
     const h = document.createElement('p');
     h.className = 'sc-empty-rows-h';
-    h.textContent = 'No metrics on this scorecard yet';
+    h.textContent = t('scorecardPage.no_metrics_on_this_scorecard_yet');
     const p = document.createElement('p');
-    p.textContent = 'Add the metrics you want to track, give each a target, and the app scores every period for you.';
+    p.textContent = t('scorecardPage.add_the_metrics_you_want_to');
     const add = document.createElement('button');
     add.type = 'button';
     add.className = 'btn btn-primary';
-    add.textContent = 'Add metrics';
+    add.textContent = t('scorecardPage.add_metrics');
     add.addEventListener('click', () => { void scEditRows(); });
     empty.append(h, p, add);
     table.appendChild(empty);
@@ -141,11 +141,11 @@ function scRender(res: any): void {
   const head = document.createElement('div');
   head.className = 'sc-row sc-row--head';
   head.setAttribute('role', 'row');
-  for (const t of ['', 'Metric', res.window ? res.window.label : 'Current', 'Target', 'Attainment', 'vs previous', 'Last 12', 'Owner', '']) {
+  for (const tv of ['', t('common.metric'), res.window ? res.window.label : t('common.current'), t('common.target'), t('common.attainment'), t('common.vs_previous'), t('scorecardPage.last_12'), t('common.owner'), '']) {
     const c = document.createElement('span');
     c.className = 'sc-cell';
     c.setAttribute('role', 'columnheader');
-    c.textContent = t;
+    c.textContent = tv;
     head.appendChild(c);
   }
   table.appendChild(head);
@@ -165,12 +165,12 @@ function scGroupHead(group: string, roll: any): HTMLElement {
   h.className = 'sc-group';
   const name = document.createElement('span');
   name.className = 'sc-group-name';
-  name.textContent = group || 'Other';
+  name.textContent = group || t('common.other');
   h.appendChild(name);
   if (roll) {
     const r = document.createElement('span');
     r.className = 'sc-group-roll';
-    r.textContent = roll.scored ? `${roll.onTrack} of ${roll.scored} on track` : `${roll.total} metric${roll.total === 1 ? '' : 's'}, no targets`;
+    r.textContent = roll.scored ? t('scorecardPage.of_on_track', { onTrack: roll.onTrack, scored: roll.scored }) : t('scorecardPage.no_targets', { total: roll.total });
     const meter = document.createElement('span');
     meter.className = 'sc-group-meter';
     const fill = document.createElement('span');
@@ -210,14 +210,14 @@ function scRow(r: any): HTMLElement {
   if (r.undated) {
     const note = document.createElement('span');
     note.className = 'sc-note';
-    note.textContent = 'all time — no date column';
+    note.textContent = t('scorecardPage.all_time_no_date_column');
     name.appendChild(note);
   }
   row.appendChild(name);
 
   row.appendChild(scCell('sc-cell--value', r.display || '—'));
   const tgt = scCell('sc-cell--target', r.targetDisplay || '—');
-  if (r.targetName) tgt.title = 'Target from the metric ' + r.targetName;
+  if (r.targetName) tgt.title = t('scorecardPage.target_from_the_metric', { targetName: r.targetName });
   row.appendChild(tgt);
 
   const att = scCell('sc-cell--att');
@@ -251,7 +251,7 @@ function scRow(r: any): HTMLElement {
   const svg = Array.isArray(r.spark) && r.spark.length ? aiSparkline(r.spark) : null;
   if (svg) {
     svg.setAttribute('role', 'img');
-    svg.setAttribute('aria-label', `${r.name} over the last ${r.spark.length} periods`);
+    svg.setAttribute('aria-label', t('scorecardPage.over_the_last_periods', { name: r.name, sparkCount: r.spark.length }));
     spark.appendChild(svg);
   }
   row.appendChild(spark);
@@ -272,11 +272,11 @@ function scRow(r: any): HTMLElement {
   if (r.comments) {
     const c = document.createElement('span');
     c.className = 'sc-activity sc-activity--comments';
-    c.title = `${r.comments} open comment thread${r.comments === 1 ? '' : 's'} where this metric appears`;
+    c.title = t('scorecardPage.open_comment_where_this_metric_appears', { comments: r.comments });
     c.appendChild(icon('message-square', 16));
-    const t = document.createElement('span');
-    t.textContent = String(r.comments);
-    c.appendChild(t);
+    const tv = document.createElement('span');
+    tv.textContent = String(r.comments);
+    c.appendChild(tv);
     act.appendChild(c);
   }
   row.appendChild(act);
@@ -326,9 +326,9 @@ function scMoreMenu(anchor: HTMLElement): void {
       b.addEventListener('click', () => { close(); run(); });
       menu.appendChild(b);
     };
-    add('Create report…', () => { void scCreateReport(cur.id); });
-    if (canPublish) add('Publish…', () => { void publish(cur.id); });
-    add('Duplicate', () => { void scDuplicate(cur.id); });
+    add(t('common.create_report'), () => { void scCreateReport(cur.id); });
+    if (canPublish) add(t('common.publish'), () => { void publish(cur.id); });
+    add(t('common.duplicate'), () => { void scDuplicate(cur.id); });
     add('Delete', () => { void scDelete({ id: cur.id, name: cur.name }); });
   });
 }

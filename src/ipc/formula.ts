@@ -30,10 +30,13 @@ import { ipcMain } from 'electron';
 
 import { compile, type FValue, type SourceSpan } from '../formula/formula';
 import { tokenize, type Tok } from '../formula/formulaTokens';
-import { listFunctionDocs, type FunctionDoc } from '../formula/formulaDocs';
+import { LOD_DOCS, listFunctionDocs, type FunctionDoc } from '../formula/formulaDocs';
+import { nearestColumn } from '../formula/didYouMean';
+import { lodDimProblem } from '../formula/lod';
 import { detectColumnType } from '../data/parse';
 import * as datasets from '../data/datasets';
 import { pageFor } from './datasets';
+import { lodPreview } from './lodData';
 
 /** How many rows the preview shows. Small on purpose: this runs per keystroke. */
 const SAMPLE_ROWS = 8;
@@ -55,9 +58,14 @@ export interface UnknownRef {
 }
 
 export interface FormulaSample {
-  /** The referenced columns that EXIST, in the order the expression names them. */
+  /** The referenced columns that EXIST, in the order the expression names them,
+   *  then one column per LOD expression, headed by its source text. */
   columns: string[];
   rows: Array<{ inputs: FValue[]; result: FValue }>;
+  /** How many trailing `columns` are LOD values rather than dataset columns. */
+  lodColumns?: number;
+  /** Why the LOD values are missing from the preview, when they are. */
+  note?: string;
 }
 
 export interface FormulaCheck {
@@ -78,58 +86,6 @@ const EMPTY_SAMPLE: FormulaSample = { columns: [], rows: [] };
 
 function emptyCheck(tokens: Tok[], error: string, at?: SourceSpan): FormulaCheck {
   return { tokens, ok: false, error, at, refs: [], unknownRefs: [], resultType: null, sample: EMPTY_SAMPLE };
-}
-
-// ── Did you mean ─────────────────────────────────────────────────────────────
-
-/**
- * Levenshtein distance, two rows rather than a full matrix.
- *
- * Only ever run over COLUMN NAMES against one another, so the inputs are short
- * and few; there is no cache and does not need one.
- */
-function editDistance(a: string, b: string): number {
-  if (a === b) return 0;
-  if (!a.length) return b.length;
-  if (!b.length) return a.length;
-  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i += 1) {
-    const cur = [i];
-    for (let j = 1; j <= b.length; j += 1) {
-      cur[j] = Math.min(
-        prev[j] + 1,
-        cur[j - 1] + 1,
-        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-    }
-    prev = cur;
-  }
-  return prev[b.length];
-}
-
-/**
- * The nearest column name, or undefined when nothing is near enough.
- *
- * The threshold scales with the typo's length: a third of it, at least one and
- * at most three. A flat threshold is wrong at both ends — at 1 it misses
- * `reveune`/`revenue` (a transposition is 2), and at 3 it confidently offers
- * `qty` for a three-letter word that shares nothing with it. Compared
- * case-insensitively because the lookup that failed is case-SENSITIVE, so
- * `[Revenue]` against a `revenue` column is exactly the case worth catching.
- */
-function nearestColumn(name: string, columns: string[]): string | undefined {
-  const target = name.toLowerCase();
-  const limit = Math.max(1, Math.min(3, Math.floor(target.length / 3)));
-  let best: string | undefined;
-  let bestDist = Infinity;
-  for (const col of columns) {
-    const dist = editDistance(target, col.toLowerCase());
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = col;
-    }
-  }
-  return best !== undefined && bestDist <= limit ? best : undefined;
 }
 
 // ── Result type ──────────────────────────────────────────────────────────────
@@ -185,6 +141,9 @@ async function checkFormula(projectId: string, datasetId: string, expression: st
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   if (!meta) return emptyCheck(tokens, 'Dataset not found');
   const columnNames = meta.columns.map((c) => c.name);
+  // r7:lod — an unknown LOD dimension is an ERROR, underlined, not a hint.
+  const lodBad = lodDimProblem(res.fn, columnNames);
+  if (lodBad) return emptyCheck(tokens, lodBad.error, lodBad.at);
 
   const unknownRefs: UnknownRef[] = refs
     .filter((ref) => !columnNames.includes(ref))
@@ -198,16 +157,24 @@ async function checkFormula(projectId: string, datasetId: string, expression: st
   // and eight real rows say so immediately where a green tick does not.
   const page = await pageFor(projectId, datasetId, { offset: 0, limit: SAMPLE_ROWS }, 'formulaCheck');
   const known = refs.filter((ref) => columnNames.includes(ref));
-  const sample: FormulaSample = { columns: known, rows: [] };
+  // An LOD's value is an aggregate over the WHOLE table, so it is computed
+  // there (ipc/lodData) and only its first eight values join the sample.
+  const lods = res.fn.lods;
+  const lodVals = lods.length ? await lodPreview(projectId, datasetId, res.fn, SAMPLE_ROWS) : [];
+  const sample: FormulaSample = { columns: known.concat(lods.map((l) => src.slice(l.start, l.end))), rows: [] };
+  if (lods.length) sample.lodColumns = lods.length;
+  if (!lodVals) sample.note = 'This dataset is too large to preview level-of-detail values here; they are computed when the field is saved.';
   if (page.ok) {
-    for (const row of page.rows) {
+    page.rows.forEach((row, r) => {
       const rowMap: Record<string, FValue> = {};
       for (let i = 0; i < columnNames.length; i += 1) rowMap[columnNames[i]] = (row[i] ?? null) as FValue;
+      const lodRow = lods.map((_, j) => (lodVals ? lodVals[j][r] ?? null : null));
+      lods.forEach((l, j) => { rowMap[l.key] = lodRow[j]; });
       sample.rows.push({
-        inputs: known.map((ref) => rowMap[ref] ?? null),
+        inputs: known.map((ref) => rowMap[ref] ?? null).concat(lodRow),
         result: res.fn.evaluate(rowMap),
       });
-    }
+    });
   }
 
   return {
@@ -231,5 +198,6 @@ export function register(): void {
     }
   });
 
-  ipcMain.handle('formula:functions', (): FunctionDoc[] => listFunctionDocs());
+  // r7:lod — the level-of-detail entries ride at the end, in their own category.
+  ipcMain.handle('formula:functions', (): FunctionDoc[] => listFunctionDocs().concat(LOD_DOCS));
 }

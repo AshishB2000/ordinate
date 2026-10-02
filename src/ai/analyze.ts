@@ -4,6 +4,7 @@
 import { net } from 'electron';
 import * as config from '../app/config';
 import * as execConfig from '../app/execConfig';
+import { withLanguage } from '../app/i18n';
 import { runLocalCli } from '../cli/localCliRun';
 import { computeMetrics, deriveChartData } from '../formula/calc';
 import { writeHeadline, verifyHeadlineNumbers } from './headline';
@@ -13,8 +14,7 @@ import { CHAT_SYSTEM_PROMPT, makeActionFilter, splitAction, type SuggestedAction
 // Prompts with no dedicated parser of their own live in ./prompts.ts; the capture
 // envelope below stays here, next to parseReply(), which reads its answer.
 import {
-  EXPLAIN_SYSTEM_PROMPT, SUGGEST_STEPS_SYSTEM_PROMPT, SUGGEST_CHARTS_SYSTEM_PROMPT,
-  SUGGEST_CALC_FIELD_SYSTEM_PROMPT,
+  EXPLAIN_SYSTEM_PROMPT, SUGGEST_STEPS_SYSTEM_PROMPT, SUGGEST_CHARTS_SYSTEM_PROMPT, SUGGEST_CALC_FIELD_SYSTEM_PROMPT,
 } from './prompts';
 
 /** The one "no model is configured" reply. Six entry points returned this exact
@@ -557,7 +557,6 @@ function resolveByok():
 // There is no separate memory/summary AI step in the app today, so nothing consumes
 // this. When one is added, route it here: if mode === 'override', call callProvider()
 // with that BYOK provider family as the fallback; otherwise reuse dispatch() below.
-
 // Route one request through whichever execution mode is active.
 // Returns the shared { rawText } | { error } shape regardless of backend.
 // Local CLIs with a working run adapter. Others (retired/install-only) are not
@@ -565,6 +564,7 @@ function resolveByok():
 const RUNNABLE_LOCAL_CLIS = ['claude', 'antigravity', 'codex', 'grok', 'opencode', 'cursor'];
 
 export async function dispatch(systemPrompt: string, messages: NeutralMsg[], onDelta?: (delta: string) => void, opts?: { prose?: boolean }): Promise<CallResult> {
+  systemPrompt = withLanguage(systemPrompt); // Settings → Language: one line, absent in English
   const cfg = config.get();
   if ((cfg.executionMode || 'byok') === 'local') {
     const activeId = cfg.localCli && cfg.localCli.activeId;

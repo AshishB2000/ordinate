@@ -22,7 +22,7 @@ async function fmtPaintProfileColors(col: any): Promise<void> {
   if (!sec) {
     sec = document.createElement('section');
     sec.className = 'fmt-dsp-colors';
-    sec.setAttribute('aria-label', 'Colours');
+    sec.setAttribute('aria-label', t('common.colours'));
     body.appendChild(sec);
   }
   sec.innerHTML = '';
@@ -38,11 +38,11 @@ async function fmtPaintProfileColors(col: any): Promise<void> {
 
   const head = document.createElement('p');
   head.className = 'dsp-head';
-  head.textContent = 'Colours';
+  head.textContent = t('common.colours');
   sec.appendChild(head);
   const note = document.createElement('p');
   note.className = 'dsp-note';
-  note.textContent = 'Every chart in this project draws these values in these colours.';
+  note.textContent = t('fmtProfile.every_chart_in_this_project_draws');
   sec.appendChild(note);
 
   let res: any = null;
@@ -56,7 +56,7 @@ async function fmtPaintProfileColors(col: any): Promise<void> {
   if (!values.length) {
     const none = document.createElement('p');
     none.className = 'dsp-note';
-    none.textContent = 'No values to colour in this column.';
+    none.textContent = t('fmtProfile.no_values_to_colour_in_this');
     sec.appendChild(none);
     return;
   }
@@ -73,8 +73,7 @@ async function fmtPaintProfileColors(col: any): Promise<void> {
   if (total > values.length) {
     const more = document.createElement('p');
     more.className = 'dsp-note';
-    more.textContent = 'First ' + values.length + ' of ' + total.toLocaleString()
-      + ' values. The rest are dealt a colour the first time a chart draws them.';
+    more.textContent = t('fmtProfile.first_of_values_the_rest_are', { valuesCount: values.length, p1: total.toLocaleString() });
     sec.appendChild(more);
   }
 
@@ -89,7 +88,7 @@ async function fmtPaintProfileColors(col: any): Promise<void> {
     b.addEventListener('click', () => { void run().then((ok) => { if (ok) repaint(); }); });
     actions.appendChild(b);
   };
-  btn('Apply palette', 'Deal the eight colours out again, in this column’s order', () => fmtApplyPalette(column, values));
-  btn('Reset', 'Forget these colours — each value is dealt one when a chart next draws it', () => fmtResetColors(column));
+  btn(t('common.apply_palette'), t('fmtProfile.deal_the_eight_colours_out_again'), () => fmtApplyPalette(column, values));
+  btn(t('common.reset'), t('fmtProfile.forget_these_colours_each_value_is'), () => fmtResetColors(column));
   sec.appendChild(actions);
 }

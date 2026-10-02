@@ -19,7 +19,7 @@ const EV_KIND_VAR: Record<string, string> = {
   launch: '--accent', campaign: '--warn', incident: '--error', holiday: '--ok', other: '--text-dim',
 };
 const EV_KIND_NAME: Record<string, string> = {
-  launch: 'Launch', campaign: 'Campaign', incident: 'Incident', holiday: 'Holiday', other: 'Event',
+  launch: t('common.launch'), campaign: t('common.campaign'), incident: t('common.incident'), holiday: t('common.holiday'), other: t('common.event'),
 };
 const EV_ICON_R = 7;
 
@@ -124,7 +124,7 @@ function eventsPlugin(cfg: { events: EvMark[]; fontFamily: string; isStatic: boo
     for (const { ev, x, y } of state.icons) {
       if (!cfg.isStatic && state.hover !== ev.id) continue;
       const color = getCSSVar(EV_KIND_VAR[ev.kind] || '--text-dim', canvas) || '#64748b';
-      const full = cfg.isStatic ? ev.title : `${EV_KIND_NAME[ev.kind] || 'Event'} · ${ev.title} · ${ev.when}`;
+      const full = cfg.isStatic ? ev.title : `${EV_KIND_NAME[ev.kind] || t('common.event')} · ${ev.title} · ${ev.when}`;
       const text = full.length > 64 ? full.slice(0, 63) + '…' : full;
       const right = x > (area.left + area.right) / 2;
       annPill(ctx, text, x + (right ? -(EV_ICON_R + 3) : EV_ICON_R + 3), y, getCSSVar('--surface-float', canvas) || '#fff',

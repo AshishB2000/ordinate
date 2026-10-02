@@ -95,11 +95,11 @@ function cpToRecord(h: any): CpRecord {
   return {
     kind,
     id: String(h.id || ''),
-    name: String(h.name || 'Untitled'),
+    name: String(h.name || t('common.untitled')),
     projectId: String(h.projectId || currentProjectId || ''),
     projectName: String(h.projectName || ''),
     meta: String(meta || ''),
-    type: String(h.type && h.kind ? h.type : CP_KIND_LABEL[kind] || 'Record'),
+    type: String(h.type && h.kind ? h.type : CP_KIND_LABEL[kind] || t('common.record')),
     tags: Array.isArray(h.tags) ? h.tags : undefined,
     parentId: h.parentId ? String(h.parentId) : undefined,
   };
@@ -108,26 +108,26 @@ function cpToRecord(h: any): CpRecord {
 const CP_KIND_LABEL: Record<string, string> = {
   dataset: 'Dataset',
   visual: 'Visual',
-  analysis: 'Dashboard',
-  capture: 'Capture',
-  connection: 'Connection',
-  metric: 'Metric',
-  report: 'Report',
-  alert: 'Alert',
+  analysis: t('common.dashboard'),
+  capture: t('common.capture'),
+  connection: t('common.connection'),
+  metric: t('common.metric'),
+  report: t('common.report'),
+  alert: t('common.alert'),
 };
 
 /** `#sal` — the project's tags as rows; picking one shows everything carrying it in the Catalog. */
 function cpTagGroup(q: string): CpGroup | null {
   if (q.charAt(0) !== '#' || !ctTagsCache || ctTagsCache.projectId !== currentProjectId) return null;
   const want = ctNormTag(q);
-  const rows = ctTagsCache.tags.filter((t) => !want || t.name.indexOf(want) === 0).slice(0, CP_MAX_SUGGEST).map((t) => ({
-    title: 'Everything tagged #' + t.name,
-    meta: `${t.count || 0} tagged · Catalog`,
+  const rows = ctTagsCache.tags.filter((t) => !want || t.name.indexOf(want) === 0).slice(0, CP_MAX_SUGGEST).map((tv) => ({
+    title: t('paletteRows.everything_tagged', { name: tv.name }),
+    meta: t('paletteRows.tagged_catalog', { p0: tv.count || 0 }),
     icon: 'filter',
-    chips: [t],
-    run: () => { paletteClose(); ctShowTag(t.name); },
+    chips: [tv],
+    run: () => { paletteClose(); ctShowTag(tv.name); },
   }));
-  return rows.length ? { label: 'Tags', rows } : null;
+  return rows.length ? { label: t('common.tags'), rows } : null;
 }
 
 /** The commands that belong to whatever is open, under the record's own name. */
@@ -156,15 +156,15 @@ function cpChartSuggestions(): CpGroup | null {
   if (!cats.length) return null;
   const datasetId = expId;
   const rows = cats.map((cat: any) => ({
-    title: `Chart ${measure.name} by ${cat.name}`,
-    meta: 'Visual · from ' + expName,
+    title: t('paletteRows.chart_by', { name: measure.name, name2: cat.name }),
+    meta: t('paletteRows.visual_from', { expName }),
     icon: 'columns',
     run: () => {
       paletteClose();
       void cpOpenChart(datasetId, cat.name, measure.name);
     },
   }));
-  return { label: 'Suggested', rows };
+  return { label: t('paletteRows.suggested'), rows };
 }
 
 /** Open the builder on a preconfigured encoding — the same call a saved visual
@@ -178,7 +178,7 @@ async function cpOpenChart(datasetId: string, category: string, measure: string)
 /** `@` — the open dataset's columns. Picking one profiles it. */
 function cpColumnGroups(q: string): CpGroup[] {
   if (!cmdDatasetOpen() || !Array.isArray(expColumns)) {
-    return [{ label: 'Columns', rows: [] }];
+    return [{ label: t('common.columns'), rows: [] }];
   }
   const needle = q.trim().toLowerCase();
   const rows: CpRow[] = [];
@@ -192,33 +192,33 @@ function cpColumnGroups(q: string): CpGroup[] {
       run: () => { paletteClose(); void dsOpenProfile(i); },
     });
   });
-  return [{ label: 'Columns in ' + expName, rows }];
+  return [{ label: t('paletteRows.columns_in', { expName }), rows }];
 }
 
 /** The secondary actions on a record (→). */
 function cpActionGroups(r: CpRecord): CpGroup[] {
   const rows: CpRow[] = [
-    { title: 'Open', meta: r.name, icon: 'play', run: () => { paletteClose(); void paletteOpenRecord(r); } },
-    { title: 'Ask about it', meta: 'In the Assistant', icon: 'sparkles', run: () => { paletteClose(); void paletteOpenInDock(r); } },
+    { title: t('common.open'), meta: r.name, icon: 'play', run: () => { paletteClose(); void paletteOpenRecord(r); } },
+    { title: t('paletteRows.ask_about_it'), meta: t('paletteRows.in_the_assistant'), icon: 'sparkles', run: () => { paletteClose(); void paletteOpenInDock(r); } },
   ];
   // Star is Home's pin list, and Home paints datasets, dashboards and captures.
   // Offering it on a visual would write a key nothing ever shows.
   if (r.kind === 'dataset' || r.kind === 'analysis' || r.kind === 'capture') {
-    rows.push({ title: 'Star', meta: 'Pin it on Home', icon: 'star', run: () => { paletteClose(); toggleStar({ type: r.kind, id: r.id }); } });
+    rows.push({ title: t('common.star'), meta: t('paletteRows.pin_it_on_home'), icon: 'star', run: () => { paletteClose(); toggleStar({ type: r.kind, id: r.id }); } });
   }
   if (r.kind === 'visual') {
-    rows.push({ title: 'Add to dashboard', meta: cmdDashboardOpen() ? 'The open dashboard' : 'Open a dashboard first', icon: 'grid', run: () => { paletteClose(); cpAddVisualToDashboard(r); } });
+    rows.push({ title: t('common.add_to_dashboard'), meta: cmdDashboardOpen() ? t('paletteRows.the_open_dashboard') : t('paletteRows.open_a_dashboard_first'), icon: 'grid', run: () => { paletteClose(); cpAddVisualToDashboard(r); } });
   }
   if (r.kind === 'analysis') {
-    rows.push({ title: 'Export', meta: 'PDF, PNG or HTML', icon: 'download', run: () => { paletteClose(); void cpExportDashboard(r); } });
+    rows.push({ title: t('common.export_2'), meta: t('paletteRows.pdf_png_or_html'), icon: 'download', run: () => { paletteClose(); void cpExportDashboard(r); } });
   }
   const histType = CP_HISTORY_TYPE[r.kind];
   if (histType) {
-    rows.push({ title: 'Version history', meta: 'Every save, restorable', icon: 'history', run: () => { paletteClose(); void cpOpenHistory(r, histType); } });
+    rows.push({ title: t('common.version_history'), meta: t('paletteRows.every_save_restorable'), icon: 'history', run: () => { paletteClose(); void cpOpenHistory(r, histType); } });
   }
   const linType = CP_LINEAGE_TYPE[r.kind];
   if (linType) {
-    rows.push({ title: 'Lineage', meta: 'What it is built from, and what uses it', icon: 'lineage', run: () => { paletteClose(); void cpOpenLineage(r, linType); } });
+    rows.push({ title: t('common.lineage'), meta: t('paletteRows.what_it_is_built_from_and'), icon: 'lineage', run: () => { paletteClose(); void cpOpenLineage(r, linType); } });
   }
   return [{ label: r.name, rows }];
 }
@@ -244,9 +244,9 @@ async function cpOpenHistory(r: CpRecord, type: string): Promise<void> {
 }
 
 function cpAddVisualToDashboard(r: CpRecord): void {
-  if (!cmdDashboardOpen()) { showToast('Open a dashboard first'); return; }
+  if (!cmdDashboardOpen()) { showToast(t('paletteRows.open_a_dashboard_first')); return; }
   pushCard({ id: dashUuid(), type: 'visual', visualId: r.id, layout: { ...dashFindSlot(dashCards(), 6, 6), w: 6, h: 6 } });
-  showToast('Added to ' + (dashCurrent.name || 'the dashboard'));
+  showToast(t('common.added_to', { p0: (dashCurrent.name || t('common.the_dashboard')) }));
 }
 
 async function cpExportDashboard(r: CpRecord): Promise<void> {

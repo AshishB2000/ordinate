@@ -33,7 +33,7 @@ interface PlState {
 const plLive: PlState[] = [];
 
 const PL_STATUS_TEXT: Record<string, string> = {
-  pending: 'Pending', running: 'Running…', done: 'Done', skipped: 'Skipped', failed: 'Failed',
+  pending: t('planCard.pending'), running: t('common.running'), done: t('common.done'), skipped: t('planCard.skipped'), failed: t('common.failed'),
 };
 
 /** Entry point from dkOfferProposal (dockPropose.ts) for a 'plan' action. Silent if nothing survives the check. */
@@ -42,7 +42,7 @@ async function dkOfferPlanProposal(action: any, threadId: string, containerId = 
   let res: any;
   try { res = await window.hubPlan.check(currentProjectId, action && action.steps); } catch (_) { return; }
   if (!res || !res.ok || !Array.isArray(res.steps) || !res.steps.length) return;
-  const { card } = dkProposalCard('Plan — ' + res.steps.length + ' step' + (res.steps.length === 1 ? '' : 's'));
+  const { card } = dkProposalCard(t('common.plan', { stepsCount: res.steps.length }));
   card.classList.add('pl-card');
   const body = document.createElement('div');
   body.className = 'pl-body';
@@ -77,10 +77,10 @@ function plEl(tag: string, cls: string, text?: string): HTMLElement {
 function plLineText(st: PlState, i: number): string {
   const s = st.steps[i];
   if (s && s.kind === 'step' && typeof stepSummaryText === 'function') {
-    try { return stepSummaryText(s.step) + (s.dataset ? ' in "' + s.dataset + '"' : ''); } catch (_) { /* fall through */ }
+    try { return stepSummaryText(s.step) + (s.dataset ? t('planCard.in', { dataset: s.dataset }) : ''); } catch (_) { /* fall through */ }
   }
   const lines = st.snap ? st.snap.lines : st.lines;
-  return lines && lines[i] ? String(lines[i].text) : 'Step ' + (i + 1);
+  return lines && lines[i] ? String(lines[i].text) : t('planCard.step', { p0: (i + 1) });
 }
 
 function plStatusOf(st: PlState, i: number): string {
@@ -101,7 +101,7 @@ function plStepRow(st: PlState, i: number): HTMLElement {
 
   const main = plEl('div', 'pl-main');
   main.appendChild(plEl('div', 'pl-line', plLineText(st, i)));
-  if (check && check.ok === false) main.appendChild(plEl('div', 'pl-note is-error', String(check.error || 'This step cannot run as it stands.')));
+  if (check && check.ok === false) main.appendChild(plEl('div', 'pl-note is-error', String(check.error || t('planCard.this_step_cannot_run_as_it'))));
   else if (check && check.deferred) main.appendChild(plEl('div', 'pl-note', String(check.deferred)));
   if (st.snap && status === 'failed' && st.snap.errors[i]) main.appendChild(plEl('div', 'pl-note is-error', String(st.snap.errors[i])));
   const result = st.snap && st.snap.results ? st.snap.results[i] : null;
@@ -119,7 +119,7 @@ function plResult(r: any): HTMLElement {
   const box = plEl('div', 'pl-result');
   // A KPI chip already says what the summary would ("Revenue = 965"); the log keeps the sentence.
   const hasKpi = Array.isArray(r.kpis) && r.kpis.length > 0;
-  if (!hasKpi) box.appendChild(plEl('span', 'pl-result-text', String(r.summary || 'Done')));
+  if (!hasKpi) box.appendChild(plEl('span', 'pl-result-text', String(r.summary || t('common.done'))));
   if (hasKpi) {
     r.kpis.forEach((k: any) => {
       const chip = plEl('span', 'pl-kpi');
@@ -133,8 +133,8 @@ function plResult(r: any): HTMLElement {
     a.type = 'button';
     a.className = 'pl-link';
     try { a.appendChild(icon('external-link', 13)); } catch (_) { /* text only */ }
-    a.appendChild(document.createTextNode(String(r.link.name || 'Open')));
-    a.title = 'Open ' + String(r.link.type);
+    a.appendChild(document.createTextNode(String(r.link.name || t('common.open'))));
+    a.title = t('planCard.open', { type: String(r.link.type) });
     a.addEventListener('click', () => {
       if (typeof lnOpenNode === 'function') void lnOpenNode({ ref: { type: r.link.type, id: r.link.id }, name: r.link.name });
     });
@@ -148,7 +148,7 @@ function plRender(st: PlState): void {
   if (st.intent) st.body.appendChild(plEl('div', 'ai-interp-body pl-intent', st.intent));
   if (st.dropped) {
     st.body.appendChild(plEl('div', 'pl-note is-error',
-      st.dropped + ' part' + (st.dropped === 1 ? '' : 's') + ' of the Assistant\'s plan were not steps and were left out.'));
+      t('planCard.of_the_assistant_s_plan_were', { dropped: st.dropped })));
   }
   const list = plEl('ol', 'pl-steps');
   st.steps.forEach((_s, i) => list.appendChild(plStepRow(st, i)));
@@ -157,7 +157,7 @@ function plRender(st: PlState): void {
   const invalid = !st.snap ? st.checks.filter((c: any) => c && c.ok === false).length : 0;
   if (invalid && !st.editing) {
     st.body.appendChild(plEl('div', 'ai-interp-hint',
-      invalid + ' step' + (invalid === 1 ? '' : 's') + ' will fail as written — Edit, or run and use Fix when it stops.'));
+      t('planCard.will_fail_as_written_edit_or', { invalid })));
   }
   if (st.note) st.body.appendChild(plEl('div', 'ai-interp-hint pl-flash', st.note));
   st.body.appendChild(plActions(st));
@@ -175,7 +175,7 @@ function plActions(st: PlState): HTMLElement {
   const state = snap ? String(snap.state) : 'ready';
 
   if (st.busy) {
-    row.appendChild(plBtn(st.stopAsked ? 'Stopping after this step…' : 'Stop after this step', false, () => {
+    row.appendChild(plBtn(st.stopAsked ? t('planCard.stopping_after_this_step') : t('planCard.stop_after_this_step'), false, () => {
       st.stopAsked = true;
       plRender(st);
     }, st.stopAsked));
@@ -183,38 +183,37 @@ function plActions(st: PlState): HTMLElement {
   }
   if (!snap) {
     if (st.editing) {
-      row.appendChild(plBtn('Done editing', true, () => { void plRecheck(st); }));
+      row.appendChild(plBtn(t('planCard.done_editing'), true, () => { void plRecheck(st); }));
       return row;
     }
-    row.appendChild(plBtn('Run all', true, () => { void plGo(st, true); }));
-    row.appendChild(plBtn('Step through', false, () => { void plGo(st, false); }));
-    row.appendChild(plBtn('Edit', false, () => { st.editing = true; st.note = ''; plRender(st); }));
-    row.appendChild(plBtn('Cancel', false, () => dkRemoveProposalCard(st.card)));
+    row.appendChild(plBtn(t('common.run_all'), true, () => { void plGo(st, true); }));
+    row.appendChild(plBtn(t('planCard.step_through'), false, () => { void plGo(st, false); }));
+    row.appendChild(plBtn(t('common.edit_2'), false, () => { st.editing = true; st.note = ''; plRender(st); }));
+    row.appendChild(plBtn(t('common.cancel'), false, () => dkRemoveProposalCard(st.card)));
     return row;
   }
   if (state === 'failed') {
     const i = Number(snap.next);
     row.classList.add('pl-fail');
-    row.appendChild(plBtn('Fix', true, () => { void plFix(st, i); }));
-    row.appendChild(plBtn('Skip', false, () => { void plSkip(st, i); }));
-    row.appendChild(plBtn('Stop', false, () => { void plCall(st, () => window.hubPlan.stop(snap.runId)); }));
+    row.appendChild(plBtn(t('planCard.fix'), true, () => { void plFix(st, i); }));
+    row.appendChild(plBtn(t('common.skip'), false, () => { void plSkip(st, i); }));
+    row.appendChild(plBtn(t('planCard.stop'), false, () => { void plCall(st, () => window.hubPlan.stop(snap.runId)); }));
     return row;
   }
   if (state === 'paused' || state === 'ready') {
-    row.appendChild(plBtn('Run step ' + (Number(snap.next) + 1), true, () => { void plGo(st, false); }));
-    row.appendChild(plBtn('Run the rest', false, () => { void plGo(st, true); }));
-    row.appendChild(plBtn('Skip it', false, () => { void plCall(st, () => window.hubPlan.skip(snap.runId, Number(snap.next))); }));
-    row.appendChild(plBtn('Stop', false, () => { void plCall(st, () => window.hubPlan.stop(snap.runId)); }));
+    row.appendChild(plBtn(t('planCard.run_step', { p0: (Number(snap.next) + 1) }), true, () => { void plGo(st, false); }));
+    row.appendChild(plBtn(t('planCard.run_the_rest'), false, () => { void plGo(st, true); }));
+    row.appendChild(plBtn(t('planCard.skip_it'), false, () => { void plCall(st, () => window.hubPlan.skip(snap.runId, Number(snap.next))); }));
+    row.appendChild(plBtn(t('planCard.stop'), false, () => { void plCall(st, () => window.hubPlan.stop(snap.runId)); }));
     return row;
   }
   if (state === 'undone') {
     const u = snap.undo || { undone: 0, failed: [] };
-    row.appendChild(plEl('span', 'ai-interp-hint', 'Undone — ' + u.undone + ' record' + (u.undone === 1 ? '' : 's') + ' put back'
-      + (u.failed && u.failed.length ? '; ' + u.failed.length + ' could not be.' : '.')));
+    row.appendChild(plEl('span', 'ai-interp-hint', t('planCard.undone_put_back', { undone: u.undone, p2: (u.failed && u.failed.length ? t('planCard.could_not_be', { failedCount: u.failed.length }) : '.') })));
   } else if (snap.canUndo) {
-    row.appendChild(plBtn('Undo run', false, () => { void plCall(st, () => window.hubPlan.undo(snap.runId)); }));
+    row.appendChild(plBtn(t('planCard.undo_run'), false, () => { void plCall(st, () => window.hubPlan.undo(snap.runId)); }));
   }
-  row.appendChild(plBtn('Done', state !== 'undone', () => plDone(st)));
+  row.appendChild(plBtn(t('common.done'), state !== 'undone', () => plDone(st)));
   return row;
 }
 
@@ -227,7 +226,7 @@ function plDone(st: PlState): void {
 /** Take a snapshot from main: redraw, log the run into the conversation, reload a restyled open dashboard. */
 function plApply(st: PlState, snap: any): void {
   if (!snap || snap.ok === false) {
-    st.note = (snap && snap.error) || 'That did not work.';
+    st.note = (snap && snap.error) || t('planCard.that_did_not_work');
     if (snap && snap.runId) st.snap = snap;
     return;
   }
@@ -251,7 +250,7 @@ async function plCall(st: PlState, fn: () => Promise<any>): Promise<void> {
   st.busy = true;
   plRender(st);
   let snap: any;
-  try { snap = await fn(); } catch (_) { snap = { ok: false, error: 'That did not work.' }; }
+  try { snap = await fn(); } catch (_) { snap = { ok: false, error: t('planCard.that_did_not_work') }; }
   st.busy = false;
   plApply(st, snap);
   plRender(st);
@@ -265,7 +264,7 @@ async function plGo(st: PlState, all: boolean): Promise<void> {
     try {
       started = await window.hubPlan.start(currentProjectId, st.threadId || (typeof dkThreadId === 'string' ? dkThreadId : ''), st.intent, st.steps);
     } catch (_) { started = null; }
-    if (!started || !started.ok) { st.note = (started && started.error) || 'Could not start the plan.'; plRender(st); return; }
+    if (!started || !started.ok) { st.note = (started && started.error) || t('planCard.could_not_start_the_plan'); plRender(st); return; }
     st.snap = started;
     st.card.classList.add('pl-live');
     if (plLive.indexOf(st) < 0) plLive.push(st);
@@ -280,7 +279,7 @@ async function plGo(st: PlState, all: boolean): Promise<void> {
     if (i >= 0 && Array.isArray(st.snap.status)) st.snap.status[i] = 'running';
     plRender(st);
     let snap: any;
-    try { snap = await window.hubPlan.next(runId); } catch (_) { snap = { ok: false, error: 'The step could not run.' }; }
+    try { snap = await window.hubPlan.next(runId); } catch (_) { snap = { ok: false, error: t('planCard.the_step_could_not_run') }; }
     plApply(st, snap);
     if (!all || st.stopAsked || !st.snap || st.snap.state !== 'paused') break;
   }
@@ -303,15 +302,15 @@ async function plSkip(st: PlState, i: number): Promise<void> {
 async function plFix(st: PlState, i: number): Promise<void> {
   if (st.busy || !st.snap) return;
   st.busy = true;
-  st.note = 'Asking the Assistant to fix step ' + (i + 1) + '…';
+  st.note = t('planCard.asking_the_assistant_to_fix_step', { p0: (i + 1) });
   plRender(st);
   let res: any;
-  try { res = await window.hubPlan.fix(st.snap.runId, i); } catch (_) { res = { ok: false, error: 'Fix failed.' }; }
+  try { res = await window.hubPlan.fix(st.snap.runId, i); } catch (_) { res = { ok: false, error: t('planCard.fix_failed') }; }
   st.busy = false;
   plApply(st, res);
   if (res && res.ok) {
     st.steps = res.steps;
-    st.note = 'Step ' + (i + 1) + ' was rewritten and passed the check — run it when ready.';
+    st.note = t('planCard.step_was_rewritten_and_passed_the', { p0: (i + 1) });
   }
   plRender(st);
 }

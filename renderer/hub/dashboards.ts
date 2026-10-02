@@ -36,7 +36,7 @@ function dashGapPx(): number { return dashGridPx('--dash-gap', 12); }
 type DashAgg = 'sum' | 'avg' | 'count' | 'min' | 'max';
 const DASH_AGGS: DashAgg[] = ['sum', 'avg', 'count', 'min', 'max'];
 const DASH_AGG_LABELS: Record<DashAgg, string> = {
-  sum: 'Sum', avg: 'Average', count: 'Count', min: 'Min', max: 'Max',
+  sum: t('common.sum'), avg: 'Average', count: t('common.count'), min: t('common.min'), max: t('common.max'),
 };
 
 // ── Module-local state ────────────────────────────────────────────────────────
@@ -175,7 +175,7 @@ function dashChooseModal(
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'btn';
-    cancel.textContent = 'Cancel';
+    cancel.textContent = t('common.cancel');
     const ok = document.createElement('button');
     ok.type = 'button';
     ok.className = 'btn btn-primary';
@@ -208,7 +208,7 @@ function dashChooseModal(
     else {
       const empty = document.createElement('p');
       empty.className = 'dash-modal-empty';
-      empty.textContent = 'Nothing to pick — create one in its section first.';
+      empty.textContent = t('common.nothing_to_pick_create_one_in');
       box.appendChild(empty);
     }
     if (extra) box.appendChild(extra);

@@ -257,7 +257,7 @@ function buildPlotSpec(type: string, encoding: PlotEncoding, viewName: string): 
     return {
       relation: viewName,
       marks: [{ mark: 'rectY', options: { x: { bin: m0.column }, y: { agg: 'count' }, inset: 0.5 } }],
-      attributes: { xLabel: m0.column, yLabel: 'Count' },
+      attributes: { xLabel: m0.column, yLabel: t('common.count') },
       requires: [{ column: m0.column, numeric: true }],
     };
   }
@@ -322,13 +322,13 @@ function buildPlotSpec(type: string, encoding: PlotEncoding, viewName: string): 
       if (!split) return null;
       return spec(
         [{ mark: 'barY', options: { x: { column: cat }, y, fill: { column: split }, offset: 'normalize', ...stackOrder } }],
-        { ...axis, yLabel: 'Share of ' + m0.column },
+        { ...axis, yLabel: t('plotRender.share_of', { column: m0.column }) },
       );
     case 'pct_stacked_bar':
       if (!split) return null;
       return spec(
         [{ mark: 'barX', options: { y: { column: cat }, x: y, fill: { column: split }, offset: 'normalize', ...stackOrder } }],
-        { xLabel: 'Share of ' + m0.column, yLabel: cat },
+        { xLabel: t('plotRender.share_of', { column: m0.column }), yLabel: cat },
       );
 
     // ── Lines and areas ──
@@ -403,18 +403,18 @@ function mosaicSpecSql(spec: PlotSpec): string {
     const v = opts[channel] as { column?: string; agg?: MosaicAgg; bin?: string } | undefined;
     if (!v || typeof v !== 'object') continue; // a literal (offset, inset, …)
     if (typeof v.bin === 'string') {
-      select.push(`bin(${mosaicQuoteIdent(v.bin)}) AS ${mosaicQuoteIdent(channel)}`);
+      select.push(t('plotRender.bin_as', { bin: mosaicQuoteIdent(v.bin), channel: mosaicQuoteIdent(channel) }));
       groupBy.push(mosaicQuoteIdent(channel));
       continue;
     }
     if (v.agg === 'count') {
-      select.push(`count() AS ${mosaicQuoteIdent(channel)}`);
+      select.push(t('plotRender.count_as', { channel: mosaicQuoteIdent(channel) }));
       aggregated = true;
       continue;
     }
     if (typeof v.column !== 'string') continue;
     if (v.agg) {
-      select.push(`${v.agg}(${mosaicQuoteIdent(v.column)}) AS ${mosaicQuoteIdent(channel)}`);
+      select.push(t('plotRender.as', { agg: v.agg, column: mosaicQuoteIdent(v.column), channel: mosaicQuoteIdent(channel) }));
       aggregated = true;
     } else {
       select.push(`${mosaicQuoteIdent(v.column)} AS ${mosaicQuoteIdent(channel)}`);
@@ -423,7 +423,7 @@ function mosaicSpecSql(spec: PlotSpec): string {
   }
 
   let sql = 'SELECT ' + select.join(', ') + ' FROM ' + mosaicQuoteIdent(spec.relation);
-  if (aggregated && groupBy.length) sql += ' GROUP BY ' + groupBy.join(', ');
+  if (aggregated && groupBy.length) sql += t('plotRender.group_by', { p0: groupBy.join(', ') });
   return sql;
 }
 
@@ -646,7 +646,7 @@ async function renderMosaicViz(
   const haveVg = await ensureVgplot();
   if (!current()) return true; // superseded while the bundle was loading
   if (!haveVg) {
-    mosaicNote(container, 'fallback', 'window.vg missing');
+    mosaicNote(container, 'fallback', t('plotRender.window_vg_missing'));
     return false;
   }
 
@@ -654,17 +654,17 @@ async function renderMosaicViz(
   try {
     view = await window.hub.mosaicView(source.projectId, source.datasetId);
   } catch (err) {
-    view = { ok: false, error: err instanceof Error ? err.message : 'mosaic:view failed' };
+    view = { ok: false, error: err instanceof Error ? err.message : t('plotRender.mosaic_view_failed') };
   }
   if (!current()) return true; // superseded — the newer render owns the container
   if (!view || view.ok === false) {
-    mosaicNote(container, 'fallback', (view && view.error) || 'no view');
+    mosaicNote(container, 'fallback', (view && view.error) || t('plotRender.no_view'));
     return false;
   }
 
   const spec = buildPlotSpec(type, source.encoding, view.name);
   if (!spec) {
-    mosaicNote(container, 'fallback', 'no spec for ' + type);
+    mosaicNote(container, 'fallback', t('plotRender.no_spec_for', { type }));
     return false;
   }
 
@@ -677,11 +677,11 @@ async function renderMosaicViz(
   for (const req of spec.requires) {
     const col = byName.get(req.column);
     if (!col) {
-      mosaicNote(container, 'fallback', 'view has no column ' + req.column);
+      mosaicNote(container, 'fallback', t('plotRender.view_has_no_column', { column: req.column }));
       return false;
     }
     if (req.numeric && col.sqlType !== 'DOUBLE') {
-      mosaicNote(container, 'fallback', req.column + ' is not numeric in the view');
+      mosaicNote(container, 'fallback', t('plotRender.is_not_numeric_in_the_view', { column: req.column }));
       return false;
     }
   }
@@ -690,14 +690,14 @@ async function renderMosaicViz(
   const fail = (err: unknown) => {
     if (failed || !current()) return;
     failed = true;
-    mosaicNote(container, 'fallback', 'query error: ' + (err instanceof Error ? err.message : String(err)));
+    mosaicNote(container, 'fallback', t('plotRender.query_error', { p0: (err instanceof Error ? err.message : String(err)) }));
     container.innerHTML = '';
     onLateFailure();
   };
 
   const made = mosaicContext(fail);
   if (!made) {
-    mosaicNote(container, 'fallback', 'window.vg missing');
+    mosaicNote(container, 'fallback', t('plotRender.window_vg_missing'));
     return false;
   }
 
@@ -708,7 +708,7 @@ async function renderMosaicViz(
     el = mosaicPlotElement(made.ctx, spec, width, height);
   } catch (err) {
     try { made.coordinator.clear(); } catch (_) { /* nothing connected yet */ }
-    mosaicNote(container, 'fallback', err instanceof Error ? err.message : 'plot() threw');
+    mosaicNote(container, 'fallback', err instanceof Error ? err.message : t('plotRender.plot_threw'));
     return false;
   }
   if (!current()) {

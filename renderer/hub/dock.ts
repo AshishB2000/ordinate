@@ -135,43 +135,43 @@ function dkContextRef(): { kind: string; id: string; label: string; name: string
   if (sw) return sw;
   if (currentSection === 'datasets') {
     if (typeof expId === 'string' && expId) {
-      const name = typeof expName === 'string' && expName ? expName : 'open dataset';
-      return { kind: 'dataset', id: expId, label: 'dataset · ' + name, name };
+      const name = typeof expName === 'string' && expName ? expName : t('dock.open_dataset');
+      return { kind: 'dataset', id: expId, label: t('common.dataset_2', { name }), name };
     }
-    return { kind: '', id: '', label: 'whole project', name: '' };
+    return { kind: '', id: '', label: t('common.whole_project'), name: '' };
   }
   if (currentSection === 'visuals') {
     if (typeof vizEditingId === 'string' && vizEditingId) {
-      return { kind: 'visual', id: vizEditingId, label: 'visual · open visual', name: '' };
+      return { kind: 'visual', id: vizEditingId, label: t('dock.visual_open_visual'), name: '' };
     }
-    return { kind: '', id: '', label: 'whole project', name: '' };
+    return { kind: '', id: '', label: t('common.whole_project'), name: '' };
   }
   // An open CAPTURE is the context. This is what makes a follow-up about a
   // screenshot an ordinary dock ask: main's buildFacts resolves the capture,
   // computes its statistics and hands them over like any other entity's.
   if (currentSection === 'capture' && currentEntryId) {
     const entry = typeof getEntry === 'function' ? getEntry(currentEntryId) : null;
-    const name = (entry && entry.title) || 'this capture';
-    return { kind: 'capture', id: String(currentEntryId), label: 'capture · ' + name, name };
+    const name = (entry && entry.title) || t('dock.this_capture');
+    return { kind: 'capture', id: String(currentEntryId), label: t('dock.capture', { name }), name };
   }
   // An open SCORECARD is the context — its rows, targets and statuses for the
   // period on screen (buildFacts → ai/scorecardFacts.ts), so "what's off track?"
   // is answered from the app's own verdicts.
   if (currentSection === 'analyses' && typeof scCurrent !== 'undefined' && scCurrent) {
-    return { kind: 'scorecard', id: scCurrent.id, label: 'scorecard · ' + scCurrent.name, name: scCurrent.name };
+    return { kind: 'scorecard', id: scCurrent.id, label: t('dock.scorecard', { name: scCurrent.name }), name: scCurrent.name };
   }
   // An open SCENARIO: its baseline and scenario figures, drivers and tornado
   // (buildFacts → ai/scenarioFacts.ts), so "which driver matters most?" is read
   // off the app's own sensitivity.
   if (currentSection === 'analyses' && typeof snCurrent !== 'undefined' && snCurrent) {
-    return { kind: 'scenario', id: snCurrent.id, label: 'scenario · ' + snCurrent.name, name: snCurrent.name };
+    return { kind: 'scenario', id: snCurrent.id, label: t('dock.scenario', { name: snCurrent.name }), name: snCurrent.name };
   }
   // An OPEN dashboard is the context; the Dashboards LIST is not. In scope now
   // because an edit delta can only name a tile the model was actually shown.
   if (currentSection === 'analyses' && dashCurrent && dashCurrent.id) {
-    return { kind: 'analysis', id: String(dashCurrent.id), label: 'dashboard · ' + (dashCurrent.name || 'open dashboard'), name: String(dashCurrent.name || '') };
+    return { kind: 'analysis', id: String(dashCurrent.id), label: t('dock.dashboard', { p0: (dashCurrent.name || t('dock.open_dashboard')) }), name: String(dashCurrent.name || '') };
   }
-  return { kind: '', id: '', label: 'whole project', name: '' };
+  return { kind: '', id: '', label: t('common.whole_project'), name: '' };
 }
 
 /**
@@ -187,7 +187,7 @@ function dkRenderContext(): void {
   el.textContent = '';
   const label = document.createElement('span');
   label.className = 'dk-context-label';
-  label.textContent = 'Based on ' + ref.label;
+  label.textContent = t('dock.based_on', { label: ref.label });
   el.appendChild(label);
   // The same "stats app-computed" pill the transcript's provenance line uses —
   // .xp-prov-chip, not a new chip style (.ai-chip died with the copilot panel).
@@ -353,25 +353,25 @@ function dkRenderThreadTitle(): void {
   const el = document.getElementById('dk-thread-title-text');
   if (!el) return;
   const first = document.querySelector('#dk-messages .xp-msg-user .xp-bubble') as HTMLElement | null;
-  const t = first && first.textContent ? first.textContent.trim() : '';
-  el.textContent = t ? (t.length > 40 ? t.slice(0, 40) + '\u2026' : t) : 'New conversation';
+  const tv = first && first.textContent ? first.textContent.trim() : '';
+  el.textContent = tv ? (tv.length > 40 ? tv.slice(0, 40) + '\u2026' : tv) : t('common.new_conversation');
 }
 
-function dkMakeThreadRow(t: any): HTMLElement {
+function dkMakeThreadRow(tv: any): HTMLElement {
   const row = document.createElement('button');
   row.type = 'button';
   row.className = 'dk-thread-row';
   row.setAttribute('role', 'menuitem');
-  if (String(t.id || '') === dkThreadId) row.classList.add('is-active');
+  if (String(tv.id || '') === dkThreadId) row.classList.add('is-active');
   const name = document.createElement('span');
   name.className = 'dk-thread-row-name';
-  name.textContent = t.title || 'Conversation';
+  name.textContent = tv.title || t('dock.conversation');
   const meta = document.createElement('span');
   meta.className = 'dk-thread-row-meta';
-  const n = typeof t.turnCount === 'number' ? t.turnCount : 0;
-  meta.textContent = n === 1 ? '1 turn' : n + ' turns';
+  const n = typeof tv.turnCount === 'number' ? tv.turnCount : 0;
+  meta.textContent = n === 1 ? t('dock.1_turn') : n + ' turns';
   row.append(name, meta);
-  row.addEventListener('click', () => void dkOpenThread(String(t.id || '')));
+  row.addEventListener('click', () => void dkOpenThread(String(tv.id || '')));
   return row;
 }
 
@@ -386,8 +386,8 @@ async function dkRenderThreadList(): Promise<void> {
   } catch (_) { threads = []; }
   if (!threads.length) { // the shared empty state (emptyState.ts), compact for a 300px dock
     host.appendChild(makeEmptyState({
-      variant: 'dock', iconName: 'sparkles', title: 'No past conversations yet',
-      line: 'Ask something below and every thread in this project collects here.',
+      variant: 'dock', iconName: 'sparkles', title: t('dock.no_past_conversations_yet'),
+      line: t('dock.ask_something_below_and_every_thread'),
     }));
     return;
   }
@@ -433,7 +433,7 @@ function dkPaintAiToggle(enabled: boolean, ready: boolean): void {
   if (!btn) return;
   dkAiNeedsModel = !ready;
   if (!ready) {
-    btn.textContent = 'Not set up';
+    btn.textContent = t('dock.not_set_up');
     btn.removeAttribute('aria-pressed'); // not a toggle in this state — a link to the fix
     btn.title = AI_NOT_CONFIGURED;
     btn.classList.remove('dk-ai-toggle--off');
@@ -441,9 +441,9 @@ function dkPaintAiToggle(enabled: boolean, ready: boolean): void {
     return;
   }
   btn.classList.remove('dk-ai-toggle--none');
-  btn.textContent = enabled ? 'Assistant: On' : 'Assistant: Off';
+  btn.textContent = enabled ? t('common.assistant_on') : t('dock.assistant_off');
   btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-  btn.title = enabled ? 'Turn the Assistant off' : 'Turn the Assistant on';
+  btn.title = enabled ? t('common.turn_the_assistant_off') : t('dock.turn_the_assistant_on');
   btn.classList.toggle('dk-ai-toggle--off', !enabled);
 }
 
@@ -497,7 +497,7 @@ async function dkSend(): Promise<void> {
   if (typeof dkClearProposal === 'function') dkClearProposal(); // last turn's proposal, if any, is superseded
   dkHideHint();
   xpAppendBubble('user', question, undefined, 'dk-messages');
-  xpAppendBubble('assistant', 'Thinking…', undefined, 'dk-messages');
+  xpAppendBubble('assistant', t('common.thinking'), undefined, 'dk-messages');
   xpScrollToBottom('dk-messages');
   // Both side channels ride the ONE askId above: streaming fills the pending
   // bubble, the activity region shows the app's work beneath it (askActivity.ts).
@@ -512,7 +512,7 @@ async function dkSend(): Promise<void> {
   try {
     res = await window.hub.copilotAsk(currentProjectId, { kind: ref.kind, id: ref.id, ...(ref.kind === 'scorecard' ? { offset: scOffset } : {}), ...(ref.kind === 'stats' ? { stats: swAssistantSpec() } : {}) }, question, dkThreadId || undefined, askId);
   } catch (_) {
-    res = { ok: false, error: 'Something went wrong. Try again.' };
+    res = { ok: false, error: t('common.something_went_wrong_try_again') };
   }
 
   dkBusy = false;
@@ -546,7 +546,7 @@ async function dkSend(): Promise<void> {
     aiSetupNotice(document.getElementById('dk-hint'));
   } else {
     dkSetComposerEnabled(true);
-    dkShowHint((res && res.error) || 'Could not answer that. Try again.');
+    dkShowHint((res && res.error) || t('dock.could_not_answer_that_try_again'));
   }
 }
 
@@ -582,8 +582,8 @@ async function dkRefresh(): Promise<void> {
     // button would stay on screen pointing at a dataset that's no longer open.
     if (typeof dkClearProposal === 'function') dkClearProposal();
     dkSetComposerEnabled(false);
-    if (input) input.placeholder = 'Open a project to ask a question…';
-    dkShowHint('Open a project to ask a question.');
+    if (input) input.placeholder = t('dock.open_a_project_to_ask_a');
+    dkShowHint(t('dock.open_a_project_to_ask_a_2'));
     return;
   }
   if (newBtn) newBtn.disabled = false;
@@ -599,19 +599,19 @@ async function dkRefresh(): Promise<void> {
 
   if (!enabled) {
     dkSetComposerEnabled(false);
-    if (input) input.placeholder = 'The Assistant is off. Turn it back on with the toggle above.';
-    dkShowHint('The Assistant is off. Everything else in Ordinate works exactly as it does now.');
+    if (input) input.placeholder = t('dock.the_assistant_is_off_turn_it');
+    dkShowHint(t('dock.the_assistant_is_off_everything_else'));
     return;
   }
   if (!ready) {
     dkSetComposerEnabled(false);
-    if (input) input.placeholder = 'Set up the Assistant to ask a question…';
+    if (input) input.placeholder = t('common.set_up_the_assistant_to_ask');
     aiSetupNotice(document.getElementById('dk-hint'));
     dkPaintPoweredBy(null);
     return;
   }
   dkSetComposerEnabled(true);
-  if (input) input.placeholder = "Ask about what you're looking at…";
+  if (input) input.placeholder = t('common.ask_about_what_you_re_looking');
   dkHideHint();
   dkPaintPoweredBy(status);
 }

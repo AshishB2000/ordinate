@@ -108,7 +108,7 @@ function itFillDown(): void {
   const s = itS;
   if (!s) return;
   const b = OrdInputEdits.fillDownBatch(s.rows, s.sel);
-  if (!b) { showToast('Select the cells to fill — the first row is copied down over the rest.'); return; }
+  if (!b) { showToast(t('inputKeys.select_the_cells_to_fill_the')); return; }
   itCommit(b);
 }
 
@@ -127,7 +127,7 @@ function itBeginEdit(mode: 'replace' | 'keep'): void {
   const v = r < s.rows.length ? s.rows[r][c] : null;
   input.value = mode === 'keep' && v !== null ? String(v) : '';
   input.classList.toggle('is-num', col.type === 'number');
-  input.setAttribute('aria-label', `${col.name}, row ${r + 1}`);
+  input.setAttribute('aria-label', t('inputKeys.row', { name: col.name, p1: r + 1 }));
   input.placeholder = col.type === 'date' ? 'YYYY-MM-DD' : '';
   input.hidden = false;
   itScrollToActive();
@@ -230,7 +230,7 @@ function itLookupOpen(): void {
     itPop = itMk('div', 'it-pop');
     itPop.id = 'it-pop';
     itPop.setAttribute('role', 'listbox');
-    itPop.setAttribute('aria-label', 'Values to choose from');
+    itPop.setAttribute('aria-label', t('inputKeys.values_to_choose_from'));
     // A click inside keeps the editor focused, so choosing is not a blur.
     itPop.addEventListener('mousedown', (e) => e.preventDefault());
     // Inside the grid's scroll box, like the editor: it moves with the cell
@@ -279,10 +279,10 @@ function itLookupPaint(values: string[], total: number, lk: any): void {
   itPopItems = values;
   const current = input.value;
   itPopIdx = values.indexOf(current);
-  const head = itMk('div', 'it-pop-head', `${(itS && itS.lookupNames[lk.datasetId]) || 'Lookup'} · ${lk.column}`);
+  const head = itMk('div', 'it-pop-head', `${(itS && itS.lookupNames[lk.datasetId]) || t('inputKeys.lookup')} · ${lk.column}`);
   pop.appendChild(head);
   if (!values.length) {
-    pop.appendChild(itMk('div', 'it-pop-empty', itPopTyped && current ? `No value matches “${current}”` : 'That column has no values yet'));
+    pop.appendChild(itMk('div', 'it-pop-empty', itPopTyped && current ? t('inputKeys.no_value_matches', { current }) : t('inputKeys.that_column_has_no_values_yet')));
   }
   values.forEach((v, i) => {
     const opt = itMk('div', 'it-opt', v);
@@ -298,7 +298,7 @@ function itLookupPaint(values: string[], total: number, lk: any): void {
     pop.appendChild(opt);
   });
   if (total > values.length) {
-    pop.appendChild(itMk('div', 'it-pop-foot', `Showing ${values.length} of ${total.toLocaleString('en-US')} — type to narrow`));
+    pop.appendChild(itMk('div', 'it-pop-foot', t('inputKeys.showing_of_type_to_narrow', { valuesCount: values.length, p1: total.toLocaleString('en-US') })));
   }
   if (itPopIdx >= 0) input.setAttribute('aria-activedescendant', 'it-opt-' + itPopIdx);
   else input.removeAttribute('aria-activedescendant');
@@ -351,13 +351,13 @@ function itClipboard(e: ClipboardEvent, kind: 'copy' | 'cut' | 'paste'): void {
   e.preventDefault();
   const plan = OrdInputEdits.pasteBatch(text, s.sel, s.rows.length, s.columns.length, s.cap);
   if (!plan) {
-    if (text && s.rows.length >= s.cap) showToast(`The table is at its ${s.cap.toLocaleString('en-US')}-row limit.`, { kind: 'error' });
+    if (text && s.rows.length >= s.cap) showToast(t('inputKeys.the_table_is_at_its_row', { p0: s.cap.toLocaleString('en-US') }), { kind: 'error' });
     return;
   }
   const p = plan.range;
   itCommit(plan.batch, { r0: p.r1, c0: p.c1, r1: p.r0, c1: p.c0 });
   itScrollToActive();
   if (plan.clipped) {
-    showToast(`${plan.clipped.toLocaleString('en-US')} pasted ${plan.clipped === 1 ? 'cell does' : 'cells do'} not fit — past the last column or the ${s.cap.toLocaleString('en-US')}-row limit.`);
+    showToast(t('inputKeys.pasted_not_fit_past_the_last', { p0: plan.clipped.toLocaleString('en-US'), clipped: plan.clipped, p2: s.cap.toLocaleString('en-US') }));
   }
 }

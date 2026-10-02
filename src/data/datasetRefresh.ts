@@ -30,6 +30,8 @@ import { refreshConnectionInto } from '../ipc/connections';
 import { refreshIncremental } from './incrementalRefresh';
 import { runForDataset } from '../engine/sqlDatasets';
 import { scanDataset } from '../app/privacyStore';
+import { getNotebook } from '../analysis/notebook/store';
+import { cellTable } from '../analysis/notebook/run';
 
 /**
  * Row ceiling for a refreshed table. Deliberately the same 1,000,000 the import
@@ -180,6 +182,15 @@ async function runOrigin(
       // inputs first (combined does): a change to an input PUSHES a re-run of
       // this one instead (datasetDependents.ts).
       const res = await runForDataset(projectId, origin.sql, origin.params || []);
+      if (!res.ok) return fail(res.error);
+      return store(projectId, id, res.columns, res.rows, warnings);
+    }
+    case 'notebook': {
+      // Same contract as `sql`: re-run the cell (and what it reads) from the
+      // notebook as saved, at the dataset cap; an input's change pushes this.
+      const nb = await getNotebook(projectId, origin.notebookId);
+      if (!nb) return fail(`The notebook "${name}" was saved from has been deleted.`);
+      const res = await cellTable(projectId, nb, origin.cellId);
       if (!res.ok) return fail(res.error);
       return store(projectId, id, res.columns, res.rows, warnings);
     }

@@ -20,16 +20,16 @@ function dlChip(label: string, id: string | null, kind: string): HTMLElement {
   const chip = document.createElement('button');
   chip.type = 'button';
   chip.className = 'ds-lineage-chip';
-  chip.appendChild(icon(kind === 'sql' ? 'code' : 'database', 16));
+  chip.appendChild(icon(kind === 'sql' ? 'code' : kind === 'notebook' ? 'file-text' : 'database', 16));
   const text = document.createElement('span');
   text.textContent = label;
   chip.appendChild(text);
   if (id) {
-    chip.title = 'Open ' + label;
+    chip.title = t('dsLineage.open', { label });
     chip.addEventListener('click', () => { void openSavedDataset(id); });
   } else {
     chip.disabled = true;
-    chip.title = 'This dataset has been deleted';
+    chip.title = t('dsLineage.this_dataset_has_been_deleted');
   }
   return chip;
 }
@@ -67,16 +67,16 @@ async function dsRenderLineage(d: any): Promise<void> {
   const byId = new Map<string, any>(list.map((x) => [String(x.id), x]));
   const me = byId.get(id);
   const upIds: string[] = me && Array.isArray(me.originDeps) ? me.originDeps : [];
-  const down = list.filter((x) => x && x.originKind === 'sql' && Array.isArray(x.originDeps) && x.originDeps.includes(id));
+  const down = list.filter((x) => x && (x.originKind === 'sql' || x.originKind === 'notebook') && Array.isArray(x.originDeps) && x.originDeps.includes(id));
 
   if (upIds.length) {
-    host.appendChild(dlGroup('Reads from', upIds.map((u) => {
+    host.appendChild(dlGroup(t('dsLineage.reads_from'), upIds.map((u) => {
       const s = byId.get(u);
-      return s ? dlChip(String(s.name), u, String(s.sourceKind || '')) : dlChip('Deleted dataset', null, '');
+      return s ? dlChip(String(s.name), u, String(s.sourceKind || '')) : dlChip(t('dsLineage.deleted_dataset'), null, '');
     })));
   }
   if (down.length) {
-    host.appendChild(dlGroup('Used by', down.map((x) => dlChip(String(x.name), String(x.id), 'sql'))));
+    host.appendChild(dlGroup(t('common.used_by'), down.map((x) => dlChip(String(x.name), String(x.id), String(x.originKind)))));
   }
 
   const origin = d && d.origin;
@@ -86,11 +86,24 @@ async function dsRenderLineage(d: any): Promise<void> {
     view.className = 'btn btn-sm btn-ghost ds-lineage-query';
     view.appendChild(icon('code', 16));
     const text = document.createElement('span');
-    text.textContent = 'View query';
+    text.textContent = t('dsLineage.view_query');
     view.appendChild(text);
     view.title = origin.sql.length > 400 ? origin.sql.slice(0, 400) + '…' : origin.sql;
     view.addEventListener('click', () => qtOpenWithSql(origin.sql, origin.params));
     host.appendChild(view);
+  }
+  // r7:notebooks — a notebook cell's result names its notebook and opens it there.
+  if (origin && origin.kind === 'notebook' && typeof origin.notebookId === 'string') {
+    const from = document.createElement('button');
+    from.type = 'button';
+    from.className = 'btn btn-sm btn-ghost ds-lineage-query ds-lineage-notebook';
+    from.appendChild(icon('file-text', 16));
+    const text = document.createElement('span');
+    text.textContent = t('dsLineage.open_notebook');
+    from.appendChild(text);
+    from.title = t('dsLineage.saved_from_a_notebook_cell_it');
+    from.addEventListener('click', () => { void nbOpenById(origin.notebookId, origin.cellId); });
+    host.appendChild(from);
   }
   host.hidden = host.childNodes.length === 0;
 }

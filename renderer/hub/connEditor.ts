@@ -208,7 +208,7 @@ function cwCompletions(prefix: string): { text: string; kind: string; sub: strin
   // Tables first, then columns, then keywords: in a schema browser the thing
   // being named is almost always the data, and a keyword is three characters
   // the user can finish themselves.
-  for (const t of cwTables) take(cwQualify(t), 'table', t.schema ? 'table in ' + t.schema : 'table');
+  for (const tv of cwTables) take(cwQualify(tv), 'table', tv.schema ? t('connEditor.table_in', { schema: tv.schema }) : 'table');
   for (const [table, cols] of cwColumns) for (const c of cols) take(c, 'column', table);
   for (const k of CW_KEYWORDS) take(k.toUpperCase(), 'keyword', '');
   return out.slice(0, CW_AC_MAX);
@@ -323,9 +323,9 @@ function cwSetMessage(text: string, isError: boolean, columns?: any[]): void {
 async function cwRunQuery(): Promise<void> {
   if (!cwConn) return;
   const sql = cwGetSql().trim();
-  if (!sql) { cwSetMessage('Write a query first.', true); return; }
+  if (!sql) { cwSetMessage(t('common.write_a_query_first'), true); return; }
   cwSetError('');
-  cwSetMessage('Running…', false);
+  cwSetMessage(t('common.running'), false);
   const btn = connEl('conn-wb-run') as HTMLButtonElement | null;
   if (btn) btn.disabled = true;
 
@@ -335,7 +335,7 @@ async function cwRunQuery(): Promise<void> {
       currentProjectId, String(cwConn.id), { query: sql }, CONN_PREVIEW_ROWS,
     );
   } catch (_) {
-    res = { ok: false, error: 'Could not run the query.' };
+    res = { ok: false, error: t('connEditor.could_not_run_the_query') };
   }
   if (btn) btn.disabled = false;
   if (!cwConn) return;
@@ -343,7 +343,7 @@ async function cwRunQuery(): Promise<void> {
   if (!res || res.ok === false) {
     // The dialect's own message, inline, where the query is — not a toast that
     // is gone before it has been read.
-    cwSetMessage((res && res.error) || 'Could not run the query.', true);
+    cwSetMessage((res && res.error) || t('connEditor.could_not_run_the_query'), true);
     return;
   }
   cwSetMessage('', false);
@@ -351,16 +351,16 @@ async function cwRunQuery(): Promise<void> {
   // highlighted table row would claim otherwise.
   cwTable = '';
   document.querySelectorAll('.cw-row-table.is-on').forEach((el) => el.classList.remove('is-on'));
-  cwShowResult(res.preview, { table: '', sql, name: cwQueryName() || 'Query result' });
+  cwShowResult(res.preview, { table: '', sql, name: cwQueryName() || t('common.query_result') });
 }
 
 /** Check the statement and report the columns it WOULD produce. No rows. */
 async function cwExplainQuery(): Promise<void> {
   if (!cwConn) return;
   const sql = cwGetSql().trim();
-  if (!sql) { cwSetMessage('Write a query first.', true); return; }
+  if (!sql) { cwSetMessage(t('common.write_a_query_first'), true); return; }
   cwSetError('');
-  cwSetMessage('Checking…', false);
+  cwSetMessage(t('common.checking'), false);
   const btn = connEl('conn-wb-explain') as HTMLButtonElement | null;
   if (btn) btn.disabled = true;
 
@@ -368,18 +368,18 @@ async function cwExplainQuery(): Promise<void> {
   try {
     res = await window.hub.explainConnectionSql(currentProjectId, String(cwConn.id), sql);
   } catch (_) {
-    res = { ok: false, error: 'Could not check the query.' };
+    res = { ok: false, error: t('connEditor.could_not_check_the_query') };
   }
   if (btn) btn.disabled = false;
   if (!cwConn) return;
 
   if (!res || res.ok === false) {
-    cwSetMessage((res && res.error) || 'Could not check the query.', true);
+    cwSetMessage((res && res.error) || t('connEditor.could_not_check_the_query'), true);
     return;
   }
   const columns: any[] = Array.isArray(res.columns) ? res.columns : [];
   cwSetMessage(
-    columns.length === 1 ? 'Returns 1 column.' : `Returns ${columns.length} columns.`,
+    columns.length === 1 ? t('connEditor.returns_1_column') : t('connEditor.returns_columns', { columnsCount: columns.length }),
     false,
     columns,
   );
@@ -409,7 +409,7 @@ function cwQueryChip(q: any): HTMLElement {
   const open = document.createElement('button');
   open.type = 'button';
   open.className = 'cw-chip-open';
-  open.textContent = String(q.name || 'Untitled query');
+  open.textContent = String(q.name || t('connEditor.untitled_query'));
   open.title = String(q.sql || '');
   open.addEventListener('click', () => {
     cwQueryId = String(q.id);
@@ -422,14 +422,14 @@ function cwQueryChip(q: any): HTMLElement {
   const rename = document.createElement('button');
   rename.type = 'button';
   rename.className = 'cw-chip-act';
-  iconOnly(rename, 'pencil', 'Rename ' + String(q.name || 'query'), 12);
+  iconOnly(rename, 'pencil', t('connEditor.rename', { p0: String(q.name || 'query') }), 12);
   rename.addEventListener('click', () => { void cwRenameQuery(q); });
   chip.appendChild(rename);
 
   const del = document.createElement('button');
   del.type = 'button';
   del.className = 'cw-chip-act';
-  iconOnly(del, 'x', 'Delete ' + String(q.name || 'query'), 12);
+  iconOnly(del, 'x', t('common.delete', { p0: String(q.name || 'query') }), 12);
   del.addEventListener('click', () => { void cwDeleteQuery(q); });
   chip.appendChild(del);
   return chip;
@@ -453,15 +453,15 @@ function cwApplyQueries(queries: any): void {
 async function cwSaveQuery(): Promise<void> {
   if (!cwConn) return;
   const sql = cwGetSql().trim();
-  if (!sql) { cwSetMessage('Write a query first.', true); return; }
+  if (!sql) { cwSetMessage(t('common.write_a_query_first'), true); return; }
 
   let name = cwQueryName();
   if (!cwQueryId) {
-    const suggested = cwPreviewTable || 'Query';
+    const suggested = cwPreviewTable || t('common.query');
     // promptModal, not window.prompt: Electron does NOT implement prompt() —
     // it is a no-op that returns null, so a native prompt here would silently
     // make ⌘S do nothing. See projects.ts.
-    const typed = await promptModal('Name this query', suggested, 'Save');
+    const typed = await promptModal(t('connEditor.name_this_query'), suggested, t('common.save'));
     if (typed === null) return; // cancelled
     name = typed.trim() || suggested;
   }
@@ -474,10 +474,10 @@ async function cwSaveQuery(): Promise<void> {
       sql,
     });
   } catch (_) {
-    res = { ok: false, error: 'Could not save that query.' };
+    res = { ok: false, error: t('connEditor.could_not_save_that_query') };
   }
   if (!res || res.ok === false) {
-    cwSetMessage((res && res.error) || 'Could not save that query.', true);
+    cwSetMessage((res && res.error) || t('connEditor.could_not_save_that_query'), true);
     return;
   }
   // A brand-new query has to become the LOADED one, or the next ⌘S would make
@@ -489,13 +489,13 @@ async function cwSaveQuery(): Promise<void> {
     cwQueryId = String(res.queries[0].id);
   }
   cwApplyQueries(res.queries);
-  cwSetMessage('Saved as “' + name + '”.', false);
+  cwSetMessage(t('connEditor.saved_as', { name }), false);
   void refreshConnectionList();
 }
 
 async function cwRenameQuery(q: any): Promise<void> {
   if (!cwConn || !q) return;
-  const typed = await promptModal('Rename this query', String(q.name || ''), 'Rename');
+  const typed = await promptModal(t('connEditor.rename_this_query'), String(q.name || ''), t('common.rename'));
   if (typed === null) return;
   const name = typed.trim();
   if (!name) return;
@@ -505,10 +505,10 @@ async function cwRenameQuery(q: any): Promise<void> {
     // to overwrite what a dataset was built from.
     res = await window.hub.saveConnectionQuery(currentProjectId, String(cwConn.id), { id: String(q.id), name });
   } catch (_) {
-    res = { ok: false, error: 'Could not rename that query.' };
+    res = { ok: false, error: t('connEditor.could_not_rename_that_query') };
   }
   if (!res || res.ok === false) {
-    cwSetMessage((res && res.error) || 'Could not rename that query.', true);
+    cwSetMessage((res && res.error) || t('connEditor.could_not_rename_that_query'), true);
     return;
   }
   cwApplyQueries(res.queries);
@@ -516,15 +516,15 @@ async function cwRenameQuery(q: any): Promise<void> {
 
 async function cwDeleteQuery(q: any): Promise<void> {
   if (!cwConn || !q) return;
-  if (!window.confirm('Delete the query “' + String(q.name || '') + '”? Datasets built from it keep refreshing.')) return;
+  if (!window.confirm(t('connEditor.delete_the_query_datasets_built_from', { p0: String(q.name || '') }))) return;
   let res: any;
   try {
     res = await window.hub.deleteConnectionQuery(currentProjectId, String(cwConn.id), String(q.id));
   } catch (_) {
-    res = { ok: false, error: 'Could not delete that query.' };
+    res = { ok: false, error: t('connEditor.could_not_delete_that_query') };
   }
   if (!res || res.ok === false) {
-    cwSetMessage((res && res.error) || 'Could not delete that query.', true);
+    cwSetMessage((res && res.error) || t('connEditor.could_not_delete_that_query'), true);
     return;
   }
   if (cwQueryId === String(q.id)) cwQueryId = '';

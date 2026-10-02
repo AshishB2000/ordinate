@@ -22,7 +22,7 @@
 // ── Shape ────────────────────────────────────────────────────────────────────
 
 /** The menus a command can appear under. Order is the order they are shown in. */
-const CMD_GROUPS = ['Navigate', 'Create', 'Data', 'Visual', 'Dashboard', 'Assistant', 'View', 'Help'] as const;
+const CMD_GROUPS = [t('common.navigate'), t('common.create'), t('common.data'), 'Visual', t('common.dashboard'), t('common.assistant'), t('common.view'), t('common.help')] as const;
 type CommandGroup = (typeof CMD_GROUPS)[number];
 
 interface Command {
@@ -90,7 +90,7 @@ function runCommand(id: string): void {
   if (!cmdAvailable(cmd)) {
     // Reachable from the menu bar, which is built once at boot and so offers
     // commands that are not applicable on the current surface.
-    if (typeof showToast === 'function') showToast('Not available here');
+    if (typeof showToast === 'function') showToast(t('commands.not_available_here'));
     return;
   }
   cmdNoteRun(id);
@@ -123,7 +123,7 @@ function keyLabel(keys: string | string[] | undefined): string {
   const name = CMD_KEY_NAMES[main] || (main.length === 1 ? main.toUpperCase() : main);
   if (CMD_IS_MAC) return (alt ? '⌥' : '') + (shift ? '⇧' : '') + (mod ? '⌘' : '') + name;
   const pre: string[] = [];
-  if (mod) pre.push('Ctrl');
+  if (mod) pre.push(t('common.ctrl'));
   if (alt) pre.push('Alt');
   if (shift) pre.push('Shift');
   return pre.concat(name).join('+');
@@ -131,7 +131,7 @@ function keyLabel(keys: string | string[] | undefined): string {
 
 /** Printed names for the keys whose `e.key` is a word or a symbol. */
 const CMD_KEY_NAMES: Record<string, string> = {
-  escape: 'Esc',
+  escape: t('common.esc'),
   enter: '↵',
   ',': ',',
   '?': '?',
@@ -156,9 +156,9 @@ function keyAccelerator(keys: string | string[] | undefined): string {
 
 const CMD_ACCEL_NAMES: Record<string, string> = {
   escape: 'Escape',
-  enter: 'Return',
+  enter: t('common.return'),
   ',': ',',
-  '=': 'Plus',
+  '=': t('commands.plus'),
   '-': '-',
 };
 

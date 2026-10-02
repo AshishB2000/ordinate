@@ -25,7 +25,7 @@ function bkPlural(n: number, one: string): string {
 function bkCounts(counts: Record<string, number>): string {
   const parts = BK_COUNT_WORDS.filter(([k]) => (counts[k] || 0) > 0).map(([k, one]) => bkPlural(counts[k], one));
   if ((counts.versions || 0) > 0) parts.push('history');
-  return parts.length ? parts.join(' · ') : 'An empty project';
+  return parts.length ? parts.join(' · ') : t('settingsBackups.an_empty_project');
 }
 
 function bkSize(bytes: number): string {
@@ -37,12 +37,12 @@ function bkSize(bytes: number): string {
 function bkWhen(iso: string): string {
   const d = new Date(iso);
   const now = new Date();
-  if (d.getTime() <= now.getTime() + 60 * 1000) return 'within a few minutes';
+  if (d.getTime() <= now.getTime() + 60 * 1000) return t('settingsBackups.within_a_few_minutes');
   const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const day = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const that = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  if (that === day) return 'today at ' + time;
-  if (that - day === 86400000) return 'tomorrow at ' + time;
+  if (that === day) return t('settingsBackups.today_at', { time });
+  if (that - day === 86400000) return t('settingsBackups.tomorrow_at', { time });
   return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ' at ' + time;
 }
 
@@ -58,9 +58,9 @@ function bkBtn(label: string, cls: string, ic?: string): HTMLButtonElement {
 function buildBackupsSection(host: HTMLElement): void {
   host.textContent = '';
   const head = sfEl('div', 'stp-subhead');
-  head.appendChild(sfEl('div', 'stp-subhead-t', 'Backups'));
+  head.appendChild(sfEl('div', 'stp-subhead-t', t('settingsBackups.backups')));
   head.appendChild(sfEl('div', 'stp-subhead-d',
-    'Every project, saved as a .ordinate file in a folder you choose. Restoring one always makes a new project — nothing you have now is overwritten.'));
+    t('settingsBackups.every_project_saved_as_a_ordinate')));
   host.appendChild(head);
 
   const card = sfEl('div', 'bk-card');
@@ -74,7 +74,7 @@ function buildBackupsSection(host: HTMLElement): void {
   const err = sfEl('div', 'bk-card-err');
   err.setAttribute('role', 'status');
   body.append(bar, err);
-  const now = bkBtn('Back up now', 'btn-primary bk-now', 'hard-drive');
+  const now = bkBtn(t('settingsBackups.back_up_now'), 'btn-primary bk-now', 'hard-drive');
   now.id = 'bk-now';
   now.addEventListener('click', () => void bkBackUpNow());
   card.append(tile, body, now);
@@ -82,39 +82,39 @@ function buildBackupsSection(host: HTMLElement): void {
 
   const path = sfEl('div', 'bk-path');
   path.id = 'bk-path';
-  const choose = bkBtn('Choose…', 'bk-choose');
+  const choose = bkBtn(t('common.choose'), 'bk-choose');
   choose.id = 'bk-choose';
   choose.addEventListener('click', async () => {
     const r = await window.hubBackup.chooseFolder();
-    if (r && r.ok) { bkPaint(r.settings); showToast('Backups will go to ' + r.settings.folder, { kind: 'success' }); }
+    if (r && r.ok) { bkPaint(r.settings); showToast(t('settingsBackups.backups_will_go_to', { folder: r.settings.folder }), { kind: 'success' }); }
   });
   const reveal = sfEl<HTMLButtonElement>('button', 'btn btn-sm btn-ghost bk-reveal');
   reveal.type = 'button';
-  iconOnly(reveal, 'external-link', 'Show the backup folder');
+  iconOnly(reveal, 'external-link', t('settingsBackups.show_the_backup_folder'));
   reveal.addEventListener('click', async () => {
     const r = await window.hubBackup.revealFolder();
-    if (r && !r.ok) showToast(r.error || 'The folder could not be opened', { kind: 'error' });
+    if (r && !r.ok) showToast(r.error || t('settingsBackups.the_folder_could_not_be_opened'), { kind: 'error' });
   });
-  const reset = sfEl<HTMLButtonElement>('button', 'bk-link bk-default', 'Use default');
+  const reset = sfEl<HTMLButtonElement>('button', 'bk-link bk-default', t('settingsBackups.use_default'));
   reset.type = 'button';
   reset.id = 'bk-default';
   reset.addEventListener('click', async () => bkPaint(await window.hubBackup.useDefaultFolder()));
-  const folderRow = sfRow('Folder', '', choose, reveal);
+  const folderRow = sfRow(t('common.folder'), '', choose, reveal);
   folderRow.querySelector('.stp-rl')!.append(path, reset);
   host.appendChild(folderRow);
 
-  host.appendChild(sfRow('Schedule', 'Checked every few minutes while Ordinate is open.',
-    sfSeg('bk-cadence', [['off', 'Off'], ['daily', 'Daily'], ['weekly', 'Weekly']],
+  host.appendChild(sfRow(t('common.schedule'), t('settingsBackups.checked_every_few_minutes_while_ordinate'),
+    sfSeg('bk-cadence', [['off', t('common.off')], ['daily', t('settingsBackups.daily')], ['weekly', t('common.weekly')]],
       async (v) => bkPaint(await window.hubBackup.set({ cadence: v })))));
 
-  const keep = sfSelect('bk-keep', [3, 5, 7, 14, 30].map((n) => [String(n), `${n} per project`] as [string, string]),
+  const keep = sfSelect('bk-keep', [3, 5, 7, 14, 30].map((n) => [String(n), t('settingsBackups.per_project', { n })] as [string, string]),
     async (v) => bkPaint(await window.hubBackup.set({ keep: Number(v) })));
-  host.appendChild(sfRow('Keep', 'The newest scheduled backups of each project. The copy taken just before an import or a version restore is kept apart — the last 5.', keep));
+  host.appendChild(sfRow(t('settingsBackups.keep'), t('settingsBackups.the_newest_scheduled_backups_of_each'), keep));
 
-  const restore = bkBtn('Restore from backup…', 'bk-restore-open', 'rotate-ccw');
+  const restore = bkBtn(t('settingsBackups.restore_from_backup'), 'bk-restore-open', 'rotate-ccw');
   restore.id = 'bk-restore-open';
   restore.addEventListener('click', () => void bkOpenRestore());
-  host.appendChild(sfRow('Restore', 'Bring a backup back as a new project, beside the ones you have.', restore));
+  host.appendChild(sfRow(t('common.restore'), t('settingsBackups.bring_a_backup_back_as_a'), restore));
 }
 
 function bkPaint(v: any): void {
@@ -129,16 +129,16 @@ function bkPaint(v: any): void {
   const title = card.querySelector('.bk-card-title') as HTMLElement;
   const sub = card.querySelector('.bk-card-sub') as HTMLElement;
   if (running) {
-    title.textContent = 'Backing up…';
-    sub.textContent = (bkJob && bkJob.note) || 'Writing every project to the backup folder';
+    title.textContent = t('settingsBackups.backing_up');
+    sub.textContent = (bkJob && bkJob.note) || t('settingsBackups.writing_every_project_to_the_backup');
   } else if (v.lastRunAt) {
-    title.textContent = 'Last backup ' + jpAgo(v.lastRunAt);
-    sub.textContent = v.cadence === 'off' ? 'The schedule is off — back up by hand, or pick Daily below.'
-      : 'Next backup ' + bkWhen(v.nextAt) + '.';
+    title.textContent = t('settingsBackups.last_backup', { lastRunAt: jpAgo(v.lastRunAt) });
+    sub.textContent = v.cadence === 'off' ? t('settingsBackups.the_schedule_is_off_back_up')
+      : t('settingsBackups.next_backup', { nextAt: bkWhen(v.nextAt) });
   } else {
-    title.textContent = 'No backups yet';
-    sub.textContent = v.cadence === 'off' ? 'The schedule is off. Back up now to make the first one.'
-      : 'The first one runs within minutes of launch — or make it now.';
+    title.textContent = t('settingsBackups.no_backups_yet');
+    sub.textContent = v.cadence === 'off' ? t('settingsBackups.the_schedule_is_off_back_up_2')
+      : t('settingsBackups.the_first_one_runs_within_minutes');
   }
   const fill = card.querySelector('.bk-bar-fill') as HTMLElement;
   fill.style.width = Math.round(100 * ((bkJob && bkJob.progress) || 0)) + '%';
@@ -157,7 +157,7 @@ function bkPaint(v: any): void {
     if (![...keep.options].some((o) => o.value === String(v.keep))) {
       const o = document.createElement('option');
       o.value = String(v.keep);
-      o.textContent = `${v.keep} per project`;
+      o.textContent = t('settingsBackups.per_project_2', { keep: v.keep });
       keep.appendChild(o);
     }
     keep.value = String(v.keep);
@@ -175,10 +175,10 @@ async function bkBackUpNow(): Promise<boolean> {
   bkJob = null;
   await bkRefresh();
   if (!r || r.canceled) return false;
-  if (!r.ok) { showToast(r.error || 'The backup failed', { kind: 'error' }); return false; }
+  if (!r.ok) { showToast(r.error || t('settingsBackups.the_backup_failed'), { kind: 'error' }); return false; }
   const n = r.count || 0;
-  showToast(n ? `Backed up ${bkPlural(n, 'project')}` + (r.failed && r.failed.length ? ` — ${r.failed.length} could not be` : '')
-    : 'Nothing to back up yet', { kind: r.failed && r.failed.length ? 'error' : 'success' });
+  showToast(n ? t('settingsBackups.backed_up', { p0: bkPlural(n, 'project'), p1: (r.failed && r.failed.length ? t('settingsBackups.could_not_be', { failedCount: r.failed.length }) : '') })
+    : t('settingsBackups.nothing_to_back_up_yet'), { kind: r.failed && r.failed.length ? 'error' : 'success' });
   return true;
 }
 
@@ -194,19 +194,19 @@ async function bkOpenRestore(): Promise<void> {
   const box = sfEl('div', 'ws-modal bk-modal');
   const head = sfEl('div', 'bk-modal-head');
   const htext = sfEl('div', 'bk-modal-htext');
-  htext.append(sfEl('div', 'ws-modal-title', 'Restore from backup'),
-    sfEl('div', 'bk-modal-sub', 'The backup comes back as a new project, named for the day it was taken. Every project you have now stays exactly as it is.'));
+  htext.append(sfEl('div', 'ws-modal-title', t('settingsBackups.restore_from_backup_2')),
+    sfEl('div', 'bk-modal-sub', t('settingsBackups.the_backup_comes_back_as_a')));
   const x = sfEl<HTMLButtonElement>('button', 'btn btn-sm btn-ghost bk-modal-x');
   x.type = 'button';
-  iconOnly(x, 'x', 'Close');
+  iconOnly(x, 'x', t('common.close'));
   head.append(htext, x);
   const list = sfEl('div', 'bk-list');
   list.setAttribute('role', 'listbox');
-  list.setAttribute('aria-label', 'Backups');
+  list.setAttribute('aria-label', t('settingsBackups.backups'));
   const foot = sfEl('div', 'bk-modal-foot');
   const where = sfEl('div', 'bk-where');
-  const cancel = bkBtn('Cancel', 'bk-cancel');
-  const go = bkBtn('Restore as new project', 'btn-primary bk-go');
+  const cancel = bkBtn(t('common.cancel'), 'bk-cancel');
+  const go = bkBtn(t('settingsBackups.restore_as_new_project'), 'btn-primary bk-go');
   go.disabled = true;
   const btns = sfEl('div', 'bk-foot-btns');
   btns.append(cancel, go);
@@ -233,7 +233,7 @@ async function bkOpenRestore(): Promise<void> {
   overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) close(); });
   x.addEventListener('click', close);
   cancel.addEventListener('click', close);
-  a11y = makeModalAccessible(box, 'Restore from backup', x);
+  a11y = makeModalAccessible(box, t('settingsBackups.restore_from_backup_2'), x);
 
   const paintList = async (): Promise<void> => {
     list.textContent = '';
@@ -248,7 +248,7 @@ async function bkOpenRestore(): Promise<void> {
     const items: any[] = (res && res.items) || [];
     // Nothing to pick: no dead "Restore" button, and Cancel reads as Close.
     go.hidden = !items.length;
-    cancel.textContent = items.length ? 'Cancel' : 'Close';
+    cancel.textContent = items.length ? t('common.cancel') : t('common.close');
     if (!items.length) { list.appendChild(bkEmpty(res, async () => { if (await bkBackUpNow()) await paintList(); })); return; }
     const groups = new Map<string, any[]>();
     for (const it of items) {
@@ -272,7 +272,7 @@ async function bkOpenRestore(): Promise<void> {
       }));
       list.appendChild(g);
     }
-    if (res.skipped) list.appendChild(sfEl('div', 'bk-skipped', `${bkPlural(res.skipped, 'file')} in this folder could not be read, so ${res.skipped === 1 ? 'it is' : 'they are'} not listed.`));
+    if (res.skipped) list.appendChild(sfEl('div', 'bk-skipped', t('settingsBackups.in_this_folder_could_not_be', { p0: bkPlural(res.skipped, 'file'), skipped: res.skipped })));
   };
 
   go.addEventListener('click', async () => {
@@ -280,12 +280,12 @@ async function bkOpenRestore(): Promise<void> {
     busy = true;
     go.disabled = true;
     cancel.disabled = true;
-    go.textContent = 'Restoring…';
+    go.textContent = t('settingsBackups.restoring');
     const r = await window.hubBackup.restore(picked);
     busy = false;
     cancel.disabled = false;
-    if (!r || r.canceled) { go.textContent = 'Restore as new project'; go.disabled = false; return; }
-    if (!r.ok) { go.textContent = 'Restore as new project'; go.disabled = false; showToast(r.error || 'The backup could not be restored', { kind: 'error' }); return; }
+    if (!r || r.canceled) { go.textContent = t('settingsBackups.restore_as_new_project'); go.disabled = false; return; }
+    if (!r.ok) { go.textContent = t('settingsBackups.restore_as_new_project'); go.disabled = false; showToast(r.error || t('settingsBackups.the_backup_could_not_be_restored'), { kind: 'error' }); return; }
     bkDone(list, foot, r, () => { close(); bkClosePanelAndOpen(String(r.project.id)); }, close);
   });
 
@@ -306,7 +306,7 @@ function bkRow(it: any, pick: (id: string) => void): HTMLElement {
     weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
   })));
   if (it.reason !== 'scheduled') {
-    top.appendChild(sfEl('span', 'bk-chip', it.reason === 'before-import' ? 'Before an import' : 'Before a version restore'));
+    top.appendChild(sfEl('span', 'bk-chip', it.reason === 'before-import' ? t('settingsBackups.before_an_import') : t('settingsBackups.before_a_version_restore')));
   }
   main.append(top, sfEl('span', 'bk-row-counts', bkCounts(it.counts || {})));
   const meta = sfEl('span', 'bk-row-meta');
@@ -321,12 +321,12 @@ function bkEmpty(res: any, backUp: () => Promise<void>): HTMLElement {
   const box = sfEl('div', 'bk-empty');
   const art = sfEl('span', 'bk-empty-art');
   art.appendChild(icon('hard-drive', 22));
-  box.append(art, sfEl('div', 'bk-empty-t', 'No backups yet'),
-    sfEl('div', 'bk-empty-d', 'Backups show up here once one has run. Make the first now — it takes a few seconds, and every project is included.'));
-  const b = bkBtn('Back up now', 'btn-primary', 'hard-drive');
+  box.append(art, sfEl('div', 'bk-empty-t', t('settingsBackups.no_backups_yet')),
+    sfEl('div', 'bk-empty-d', t('settingsBackups.backups_show_up_here_once_one')));
+  const b = bkBtn(t('settingsBackups.back_up_now'), 'btn-primary', 'hard-drive');
   b.addEventListener('click', () => { b.disabled = true; void backUp().finally(() => { b.disabled = false; }); });
   box.appendChild(b);
-  if (res && res.skipped) box.appendChild(sfEl('div', 'bk-skipped', `${bkPlural(res.skipped, 'file')} in the folder could not be read.`));
+  if (res && res.skipped) box.appendChild(sfEl('div', 'bk-skipped', t('settingsBackups.in_the_folder_could_not_be', { p0: bkPlural(res.skipped, 'file') })));
   return box;
 }
 
@@ -335,14 +335,14 @@ function bkDone(list: HTMLElement, foot: HTMLElement, r: any, open: () => void, 
   const box = sfEl('div', 'bk-empty bk-done');
   const art = sfEl('span', 'bk-empty-art bk-done-art');
   art.appendChild(icon('circle-check', 22));
-  box.append(art, sfEl('div', 'bk-empty-t', 'Restored as “' + r.project.name + '”'),
-    sfEl('div', 'bk-empty-d', bkCounts(r.counts || {}) + '. Your other projects were not touched.'));
+  box.append(art, sfEl('div', 'bk-empty-t', t('settingsBackups.restored_as', { name: r.project.name })),
+    sfEl('div', 'bk-empty-d', t('settingsBackups.your_other_projects_were_not_touched', { p0: bkCounts(r.counts || {}) })));
   list.appendChild(box);
   foot.textContent = '';
   const btns = sfEl('div', 'bk-foot-btns');
-  const later = bkBtn('Close', 'bk-cancel');
+  const later = bkBtn(t('common.close'), 'bk-cancel');
   later.addEventListener('click', close);
-  const go = bkBtn('Open project', 'btn-primary bk-open');
+  const go = bkBtn(t('settingsBackups.open_project'), 'btn-primary bk-open');
   go.addEventListener('click', open);
   btns.append(later, go);
   foot.append(sfEl('div', 'bk-where'), btns);

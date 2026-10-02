@@ -68,7 +68,7 @@ function dkPaintPoweredBy(status: any): void {
   const el = document.getElementById('dk-powered');
   if (!el) return;
   const active = status ? execActiveConnected(status) : null;
-  el.textContent = active ? 'Powered by ' + active.label : '';
+  el.textContent = active ? t('dockHero.powered_by', { label: active.label }) : '';
   el.dataset.ready = active ? '1' : '';
   dkSyncHeroVisible();
 }

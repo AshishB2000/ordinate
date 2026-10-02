@@ -145,8 +145,8 @@ async function anRenderEmptyChips(): Promise<void> {
   if (!Array.isArray(sets) || !sets.length) return;
 
   sets.slice(0, AN_CHIP_MAX).forEach((d: any) => {
-    const name = d && d.name ? String(d.name) : 'my data';
-    const text = 'Build an overview of ' + name;
+    const name = d && d.name ? String(d.name) : t('anList.my_data');
+    const text = t('anList.build_an_overview_of', { name });
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'ws-empty-chip';
@@ -208,13 +208,12 @@ function makeAnListItem(a: any, previews: any[]): HTMLElement {
 
   const name = document.createElement('span');
   name.className = 'viz-card-name';
-  name.textContent = a && a.name ? String(a.name) : 'Untitled dashboard';
+  name.textContent = a && a.name ? String(a.name) : t('common.untitled_dashboard');
 
   const sheets = a && typeof a.sheetCount === 'number' ? a.sheetCount : 1;
   const meta = document.createElement('span');
   meta.className = 'viz-card-meta';
-  meta.textContent = sheets + (sheets === 1 ? ' sheet · ' : ' sheets · ')
-    + formatSidebarTime(a && a.updatedAt);
+  meta.textContent = t('anList.text', { sheets, p2: formatSidebarTime(a && a.updatedAt) });
 
   open.appendChild(name);
   open.appendChild(meta);
@@ -227,17 +226,18 @@ function makeAnListItem(a: any, previews: any[]): HTMLElement {
   menuBtn.type = 'button';
   menuBtn.className = 'viz-card-menu an-row-menu';
   menuBtn.setAttribute('aria-haspopup', 'menu');
-  iconOnly(menuBtn, 'more-horizontal', 'Dashboard options');
+  iconOnly(menuBtn, 'more-horizontal', t('anList.dashboard_options'));
   menuBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     openRowMenu(menuBtn, [
-      { label: 'Open', onClick: () => { openAnalysis(String(a.id)); } },
+      { label: t('common.open'), onClick: () => { openAnalysis(String(a.id)); } },
       {
-        label: 'Rename',
+        label: t('common.rename'),
         onClick: () => handleRenameAnalysis(String(a.id), a && a.name ? String(a.name) : ''),
       },
-      { label: 'History', onClick: () => void vhOpen('dashboard', String(a.id), a && a.name ? String(a.name) : '') },
-      { label: 'Lineage', onClick: () => void lnOpen('dashboard', String(a.id), a && a.name ? String(a.name) : '') },
+      { label: t('common.history'), onClick: () => void vhOpen('dashboard', String(a.id), a && a.name ? String(a.name) : '') },
+      { label: t('common.lineage'), onClick: () => void lnOpen('dashboard', String(a.id), a && a.name ? String(a.name) : '') },
+      { label: t('common.save_as_template'), onClick: () => void utSaveAsTemplate(String(a.id)) }, // r7:templates
       { label: 'Delete', danger: true, onClick: () => handleDeleteAnalysis(String(a.id)) },
     ]);
   });

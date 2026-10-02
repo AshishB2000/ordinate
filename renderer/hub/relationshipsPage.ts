@@ -18,7 +18,7 @@ let relDatasets: any[] = [];
 let relSelectedId = '';
 let relMetas = new Map<string, any>();
 
-const REL_SUB = 'Relate datasets once — visuals then use columns from all of them, joined live when they ask.';
+const REL_SUB = t('relationshipsPage.relate_datasets_once_visuals_then_use');
 
 function relEl(id: string): HTMLElement | null {
   return document.getElementById(id);
@@ -26,7 +26,7 @@ function relEl(id: string): HTMLElement | null {
 
 function relName(id: string): string {
   const d = relDatasets.find((x) => x.id === id);
-  return d ? String(d.name) : 'Missing dataset';
+  return d ? String(d.name) : t('relationshipsPage.missing_dataset');
 }
 
 function relRate(r: any): number {
@@ -82,7 +82,7 @@ function initRelationshipsPage(): void {
   tab.setAttribute('aria-selected', 'false');
   tab.setAttribute('aria-controls', 'rel-wrap');
   tab.tabIndex = -1;
-  tab.textContent = 'Relationships';
+  tab.textContent = t('relationshipsPage.relationships');
   captures.after(tab);
 
   const panel = document.createElement('div');
@@ -101,7 +101,7 @@ function initRelationshipsPage(): void {
   add.id = 'rel-new';
   add.appendChild(icon('plus'));
   const addLabel = document.createElement('span');
-  addLabel.textContent = 'New relationship';
+  addLabel.textContent = t('common.new_relationship');
   add.appendChild(addLabel);
   add.addEventListener('click', () => void openRelationshipDialog());
   const count = document.createElement('span');
@@ -110,20 +110,20 @@ function initRelationshipsPage(): void {
   const explain = document.createElement('p');
   explain.className = 'rel-explain';
   explain.textContent =
-    'A relationship joins live at query time and copies nothing; Combine datasets makes a new, materialised dataset instead.';
+    t('relationshipsPage.a_relationship_joins_live_at_query');
   head.append(add, count, explain);
 
   const canvas = document.createElement('div');
   canvas.className = 'rel-canvas';
   canvas.id = 'rel-canvas';
   canvas.setAttribute('role', 'group');
-  canvas.setAttribute('aria-label', 'Data model diagram');
+  canvas.setAttribute('aria-label', t('relationshipsPage.data_model_diagram'));
 
   const table = document.createElement('div');
   table.className = 'ws-table rel-table';
   const cols = document.createElement('div');
   cols.className = 'ws-table-cols rel-cols';
-  ['Many side', 'One side', 'Kind', 'Matched', 'Unmatched', 'Action'].forEach((t, i) => {
+  [t('common.many_side'), t('common.one_side'), t('common.kind'), t('relationshipsPage.matched'), t('relationshipsPage.unmatched'), t('common.action')].forEach((t, i) => {
     const s = document.createElement('span');
     s.textContent = t;
     if (i === 5) s.className = 'ws-col-action';
@@ -132,7 +132,7 @@ function initRelationshipsPage(): void {
   const list = document.createElement('div');
   list.id = 'rel-list';
   list.setAttribute('role', 'list');
-  list.setAttribute('aria-label', 'Relationships');
+  list.setAttribute('aria-label', t('relationshipsPage.relationships'));
   table.append(cols, list);
 
   panel.append(head, canvas, table);
@@ -158,7 +158,7 @@ async function refreshRelationships(): Promise<void> {
   relModel = res && res.ok ? res.relationships : [];
   relDatasets = Array.isArray(list) ? list : [];
   const count = relEl('rel-count');
-  if (count) count.textContent = relModel.length === 1 ? '1 relationship' : `${relModel.length} relationships`;
+  if (count) count.textContent = relModel.length === 1 ? t('relationshipsPage.1_relationship') : `${relModel.length} relationships`;
   relRenderCanvas();
   relRenderList();
 }
@@ -211,17 +211,17 @@ function relMakeCard(id: string): HTMLElement {
   card.className = 'rel-node';
   card.dataset.datasetId = id;
   card.setAttribute('role', 'group');
-  card.setAttribute('aria-label', 'Dataset ' + String(d.name || ''));
+  card.setAttribute('aria-label', t('relationshipsPage.dataset', { p0: String(d.name || '') }));
   const top = document.createElement('div');
   top.className = 'rel-node-head';
   top.appendChild(icon('database', 14));
   const name = document.createElement('span');
   name.className = 'rel-node-name';
-  name.textContent = String(d.name || 'Dataset');
+  name.textContent = String(d.name || t('common.dataset'));
   top.appendChild(name);
   const meta = document.createElement('div');
   meta.className = 'rel-node-meta';
-  meta.textContent = `${Number(d.rowCount || 0).toLocaleString()} rows · ${Number(d.columnCount || 0)} columns`;
+  meta.textContent = t('relationshipsPage.rows_columns', { p0: Number(d.rowCount || 0).toLocaleString(), p1: Number(d.columnCount || 0) });
   card.append(top, meta);
   const keys = relKeyColumns(id);
   if (keys.length) {
@@ -246,9 +246,9 @@ function relRenderCanvas(): void {
   canvas.innerHTML = '';
   if (relDatasets.length < 2) {
     canvas.appendChild(relEmpty(
-      'Relate two datasets',
-      'A relationship needs two datasets — say orders and a table of targets or regions. Import the second one, then relate them here.',
-      'Import file',
+      t('relationshipsPage.relate_two_datasets'),
+      t('relationshipsPage.a_relationship_needs_two_datasets_say'),
+      t('common.import_file'),
       () => { relEl('ds-tab-datasets')?.click(); relEl('ds-import-open')?.click(); },
     ));
     canvas.classList.add('is-empty');
@@ -268,7 +268,7 @@ function relRenderCanvas(): void {
     if (li === lanes.length - 1 && unrelated.length) {
       const cap = document.createElement('div');
       cap.className = 'rel-lane-cap';
-      cap.textContent = relModel.length ? 'Not related yet' : 'Datasets';
+      cap.textContent = relModel.length ? t('relationshipsPage.not_related_yet') : t('common.datasets');
       col.appendChild(cap);
     }
     lane.forEach((id) => col.appendChild(relMakeCard(id)));
@@ -277,7 +277,7 @@ function relRenderCanvas(): void {
   if (relModel.length === 0) {
     const hint = document.createElement('div');
     hint.className = 'rel-canvas-hint';
-    hint.textContent = 'No relationships yet. New relationship picks two datasets and suggests the column that joins them.';
+    hint.textContent = t('relationshipsPage.no_relationships_yet_new_relationship');
     canvas.appendChild(hint);
   }
   requestAnimationFrame(() => relDrawEdges());
@@ -333,8 +333,7 @@ function relDrawEdges(): void {
     label.className = 'rel-edge-label' + (r.id === relSelectedId ? ' is-selected' : '');
     label.textContent = `${relCardLabel(r.cardinality)} · ${relPct(relRate(r))}`;
     label.setAttribute('aria-label',
-      `${relName(r.from.datasetId)}.${r.from.column} to ${relName(r.to.datasetId)}.${r.to.column}, ` +
-      `${r.cardinality === 'one_to_one' ? 'one to one' : 'many to one'}, ${relPct(relRate(r))} matched`);
+      t('relationshipsPage.to_matched', { datasetId: relName(r.from.datasetId), column: r.from.column, datasetId2: relName(r.to.datasetId), column2: r.to.column, p4: !!(r.cardinality === 'one_to_one'), p5: relPct(relRate(r)) }));
     label.style.left = (p.x + q.x) / 2 + 'px';
     label.style.top = (p.y + q.y) / 2 + 'px';
     label.addEventListener('click', () => relSelect(r.id));
@@ -372,7 +371,7 @@ function relRenderList(): void {
   if (relModel.length === 0) {
     const none = document.createElement('div');
     none.className = 'rel-none';
-    none.textContent = 'Relationships you add appear here, with how many rows found their match.';
+    none.textContent = t('relationshipsPage.relationships_you_add_appear_here_with');
     list.appendChild(none);
     return;
   }
@@ -383,7 +382,7 @@ function relRenderList(): void {
     row.setAttribute('role', 'listitem');
     const kind = document.createElement('span');
     kind.className = 'rel-kind';
-    kind.textContent = r.cardinality === 'one_to_one' ? 'One to one' : 'Many to one';
+    kind.textContent = r.cardinality === 'one_to_one' ? t('relationshipsPage.one_to_one') : t('relationshipsPage.many_to_one');
     const matched = document.createElement('span');
     matched.className = 'rel-num';
     matched.textContent = `${r.verified.matched.toLocaleString()} (${relPct(relRate(r))})`;
@@ -393,12 +392,12 @@ function relRenderList(): void {
     const more = document.createElement('button');
     more.type = 'button';
     more.className = 'btn btn-sm mp-more';
-    iconOnly(more, 'more-horizontal', `Actions for ${relName(r.from.datasetId)} to ${relName(r.to.datasetId)}`);
+    iconOnly(more, 'more-horizontal', t('relationshipsPage.actions_for_to', { datasetId: relName(r.from.datasetId), datasetId2: relName(r.to.datasetId) }));
     more.setAttribute('aria-haspopup', 'menu');
     more.addEventListener('click', (e) => {
       e.stopPropagation();
       openRowMenu(more, [
-        { label: 'Show on diagram', onClick: () => relSelect(r.id) },
+        { label: t('relationshipsPage.show_on_diagram'), onClick: () => relSelect(r.id) },
         { label: 'Delete', danger: true, onClick: () => void relDelete(r) },
       ]);
     });
@@ -413,10 +412,10 @@ function relRenderList(): void {
 
 async function relDelete(r: any): Promise<void> {
   if (!currentProjectId) return;
-  if (!window.confirm(`Delete the relationship ${relName(r.from.datasetId)} → ${relName(r.to.datasetId)}? Visuals using its columns will say so instead of drawing.`)) return;
+  if (!window.confirm(t('relationshipsPage.delete_the_relationship_visuals_using', { datasetId: relName(r.from.datasetId), datasetId2: relName(r.to.datasetId) }))) return;
   const res = await window.hubAuthoring.deleteRelationship(currentProjectId, r.id);
   encRelatedInvalidate();
-  if (res && res.ok) showToast('Relationship deleted', { kind: 'success' });
+  if (res && res.ok) showToast(t('relationshipsPage.relationship_deleted'), { kind: 'success' });
   await refreshRelationships();
 }
 

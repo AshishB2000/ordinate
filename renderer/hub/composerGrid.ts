@@ -36,7 +36,7 @@ function paintGrid(rows: any[][]): void {
   if (!dcRawCols.length) {
     const empty = document.createElement('div');
     empty.className = 'dc-grid-empty';
-    empty.textContent = 'Nothing to preview yet.';
+    empty.textContent = t('composerGrid.nothing_to_preview_yet');
     host.appendChild(empty);
     return;
   }
@@ -57,8 +57,8 @@ function paintGrid(rows: any[][]): void {
       restore.className = 'dc-restore';
       restore.type = 'button';
       restore.textContent = '↩';
-      restore.title = `Restore ${col.name}`;
-      restore.setAttribute('aria-label', `Restore ${col.name}`);
+      restore.title = t('composerGrid.restore', { name: col.name });
+      restore.setAttribute('aria-label', t('composerGrid.restore', { name: col.name }));
       restore.addEventListener('click', () => {
         m.dropped = false;
         paintGridFromCache();
@@ -78,8 +78,8 @@ function paintGrid(rows: any[][]): void {
     if (m.name !== String(col.name)) {
       const dot = document.createElement('span');
       dot.className = 'dc-th-dot';
-      dot.title = `Renamed from ${col.name}`;
-      dot.setAttribute('aria-label', `Renamed from ${col.name}`);
+      dot.title = t('composerGrid.renamed_from', { name: col.name });
+      dot.setAttribute('aria-label', t('composerGrid.renamed_from', { name: col.name }));
       btn.appendChild(dot);
     }
     const ty = document.createElement('span');
@@ -115,7 +115,7 @@ function paintGrid(rows: any[][]): void {
       input.type = 'text';
       input.className = 'dc-cell';
       input.value = value;
-      input.setAttribute('aria-label', `${mapFor(col).name}, row ${dcPage * dcPageRows + r + 1}`);
+      input.setAttribute('aria-label', t('composerGrid.row', { p0: mapFor(col).name, p1: dcPage * dcPageRows + r + 1 }));
       input.addEventListener('change', () => dcEditCell(r, c, input.value));
       td.appendChild(input);
       tr.appendChild(td);

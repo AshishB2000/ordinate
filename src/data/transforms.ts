@@ -17,6 +17,7 @@ import type { ParsedColumn } from './parse';
 import { detectColumnType, coerceValue } from './parse';
 import { compile } from '../formula/formula';
 import type { FValue } from '../formula/formula';
+import { evaluateTable, lodDimProblem } from '../formula/lod';
 import { runOnDuckDb } from '../engine/pipelineDuck';
 import type { FilterOp } from './filterOps';
 import { FILTER_OPS, LIST_OPS, PERIOD_OP, emptyListWarning, periodSkipWarning } from './filterOps';
@@ -97,6 +98,8 @@ export interface FilterStep {
   period?: PeriodSpec;
   /** op `within_km`: the longitude column, a centre and a distance (analysis/geo/radius.ts). */
   radius?: RadiusSpec;
+  /** r7:lod — a CONTEXT filter: applied before LOD expressions (analysis/lodQuery.ts). */
+  context?: boolean;
 }
 export interface GroupAggregateStep {
   type: 'group_aggregate';
@@ -318,6 +321,10 @@ function stepCalculatedField(t: TableData, s: CalculatedFieldStep): StepResult {
     return skip(t, `Calculated field "${name}" skipped: ${compiled.error}`);
   }
 
+  // r7:lod — an LOD dimension that is not a column would fuse its groups.
+  const lodBad = lodDimProblem(compiled.fn, t.columns.map((c) => c.name));
+  if (lodBad) return skip(t, `Calculated field "${name}" skipped: ${lodBad.error}`);
+
   const warnings: string[] = [];
   const missing = compiled.fn.refs.filter((ref) => colIndex(t.columns, ref) < 0);
   if (missing.length > 0) {
@@ -327,12 +334,9 @@ function stepCalculatedField(t: TableData, s: CalculatedFieldStep): StepResult {
   const columns = t.columns.map((c) => ({ ...c }));
   const rows = t.rows.map((r) => r.slice());
 
-  // Evaluate per row against a {colName: value} map.
-  const results: FValue[] = rows.map((r) => {
-    const rowMap: Record<string, FValue> = {};
-    for (let c = 0; c < columns.length; c += 1) rowMap[columns[c].name] = r[c];
-    return compiled.fn.evaluate(rowMap);
-  });
+  // Evaluate per row against a {colName: value} map — LODs filled over the
+  // whole table first (formula/lod.ts), at no visual's dimensions.
+  const results: FValue[] = evaluateTable(compiled.fn, columns, rows);
 
   // Append the new column, then type it. retypeColumn keeps a computed double a
   // number and still sends text results through the strict-number path.
@@ -707,6 +711,7 @@ function sanitizeStep(item: unknown): TransformStep | null {
       // SQL builders — which is where an array would otherwise become an
       // uncontrolled number of bound parameters.
       if (Array.isArray(o.values)) step.values = o.values.filter(isCell);
+      if (o.context === true) step.context = true;
       if (op === PERIOD_OP) {
         const period = sanitizePeriod(o.period);
         if (!period) return null;

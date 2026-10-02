@@ -32,7 +32,7 @@ async function snPaintScenarioCard(card: any, body: HTMLElement, valEl: HTMLElem
   const title = (body.closest('.dash-card')?.querySelector('.dash-card-title')?.textContent || '').trim();
   if ((labelEl.textContent || '').trim() === title) labelEl.hidden = true;
   body.classList.add('has-delta');
-  const base = 'Baseline ' + (r.baselineDisplay || '—');
+  const base = t('common.baseline', { p0: (r.baselineDisplay || '—') });
   if (typeof r.delta === 'number' && r.delta !== 0) {
     const row = document.createElement('div');
     row.className = 'dash-metric-delta ' + (r.tone === 'good' ? 'is-good' : r.tone === 'bad' ? 'is-bad' : 'is-flat');
@@ -52,10 +52,10 @@ async function snPaintScenarioCard(card: any, body: HTMLElement, valEl: HTMLElem
   }
   const chip = document.createElement('div');
   chip.className = 'dash-metric-scn';
-  chip.title = 'A what-if — ' + base.toLowerCase();
-  const t = document.createElement('span');
-  t.textContent = 'Scenario: ' + r.scenarioName;
-  chip.append(icon('sliders', 12), t);
+  chip.title = t('scenarioCard.a_what_if', { p0: base.toLowerCase() });
+  const tv = document.createElement('span');
+  tv.textContent = t('scenarioCard.scenario', { scenarioName: r.scenarioName });
+  chip.append(icon('sliders', 12), tv);
   body.appendChild(chip);
   return true;
 }
@@ -68,19 +68,19 @@ async function snRenderKpiScenarioProps(card: any, host: HTMLElement): Promise<v
   sec.className = 'sn-kpi-props';
   const h = document.createElement('div');
   h.className = 'an-kpi-props-h';
-  const t = document.createElement('span');
-  t.textContent = 'Scenario';
-  h.append(icon('sliders', 14), t);
+  const tv = document.createElement('span');
+  tv.textContent = t('common.scenario');
+  h.append(icon('sliders', 14), tv);
   const sel = document.createElement('select');
   sel.className = 'an-prop-input';
-  sel.setAttribute('aria-label', 'Show this metric under a scenario');
+  sel.setAttribute('aria-label', t('scenarioCard.show_this_metric_under_a_scenario'));
   const none = document.createElement('option');
   none.value = '';
-  none.textContent = 'Baseline — no scenario';
+  none.textContent = t('scenarioCard.baseline_no_scenario');
   sel.appendChild(none);
   const note = document.createElement('p');
   note.className = 'an-prop-note an-prop-note--info';
-  note.textContent = 'Shows the figure under a saved what-if, with its change on the baseline. A driver that follows a parameter moves with this dashboard\'s parameter controls.';
+  note.textContent = t('scenarioCard.shows_the_figure_under_a_saved');
   sec.append(h, sel, note);
   host.appendChild(sec); // placed now, filled below — so it keeps its place in the panel
 
@@ -96,12 +96,12 @@ async function snRenderKpiScenarioProps(card: any, host: HTMLElement): Promise<v
   sel.value = m.scenarioId && list.some((s) => String(s.id) === m.scenarioId) ? m.scenarioId : '';
   if (!list.length) {
     sel.disabled = true;
-    note.textContent = 'No scenarios in this project yet — make one under Dashboards → Scenarios.';
+    note.textContent = t('scenarioCard.no_scenarios_in_this_project_yet');
   }
   sel.addEventListener('change', () => {
     if (sel.value) m.scenarioId = sel.value;
     else delete m.scenarioId;
-    markDashDirty('Scenario');
+    markDashDirty(t('common.scenario'));
     renderDashGrid();
     anPaintSelection();
   });

@@ -34,7 +34,7 @@ function anRenderFields(): void {
   if (!shown.length) {
     const none = document.createElement('p');
     none.className = 'an-pane-hint';
-    none.textContent = 'No field matches “' + (box?.value || '').trim() + '”.';
+    none.textContent = t('authoringPanes.no_field_matches', { p0: (box?.value || '').trim() });
     host.appendChild(none);
     return;
   }
@@ -71,7 +71,7 @@ function anFieldItem(col: { name: string; type: string; label?: string; title?: 
   name.textContent = col.label || col.name;
   item.appendChild(icon);
   item.appendChild(name);
-  item.title = col.name + ' · ' + col.type + (draggable ? ' — drag or click to add' : ' — click to add')
+  item.title = col.name + ' · ' + col.type + (draggable ? t('authoringPanes.drag_or_click_to_add') : t('authoringPanes.click_to_add'))
     + (col.title ? '\n' + col.title : ''); // the catalog description
 
   if (draggable) {
@@ -126,7 +126,7 @@ function anRenderBrowseFields(): void {
   if (!shown.length) {
     const none = document.createElement('p');
     none.className = 'an-pane-hint';
-    none.textContent = 'No field matches “' + (search?.value || '').trim() + '”.';
+    none.textContent = t('authoringPanes.no_field_matches', { p0: (search?.value || '').trim() });
     host.appendChild(none);
     return;
   }
@@ -188,7 +188,7 @@ function anNextWell(colType: string): string {
 function anDropInto(well: string, column: string): void {
   if (!anForm) return;
   const okDrop = anForm.dropField(well, column);
-  if (!okDrop) showToast('“' + column + '” is not a column of this visual’s dataset.');
+  if (!okDrop) showToast(t('authoringPanes.is_not_a_column_of_this', { column }));
 }
 
 // ── AI in the Visuals panel ─────────────────────────────────────────────────
@@ -220,7 +220,7 @@ async function anRenderAiSlot(): Promise<void> {
   btn.type = 'button';
   btn.className = 'btn btn-sm an-ai-btn';
   btn.id = 'an-suggest-btn';
-  iconLabel(btn, 'sparkles', 'Suggest a visual');
+  iconLabel(btn, 'sparkles', t('common.suggest_a_visual'));
   btn.disabled = !anAiReady;
   btn.addEventListener('click', () => anSuggestVisual(btn));
   slot.appendChild(btn);
@@ -229,7 +229,7 @@ async function anRenderAiSlot(): Promise<void> {
   note.className = 'an-ai-note';
   note.id = 'an-ai-note';
   if (!anAiReady) {
-    aiSetupNotice(note, 'The chart types below are recommended by the app itself and work without one.');
+    aiSetupNotice(note, t('authoringPanes.the_chart_types_below_are_recommended'));
   } else {
     note.hidden = true;
   }
@@ -249,7 +249,7 @@ async function anSuggestVisual(btn: HTMLButtonElement): Promise<void> {
   const labelEl = btn.querySelector('span');
   const label = labelEl ? labelEl.textContent : '';
   btn.disabled = true;
-  iconLabel(btn, 'sparkles', 'Thinking…');
+  iconLabel(btn, 'sparkles', t('common.thinking'));
   let res: any;
   try {
     res = await window.hub.suggestVisual(currentProjectId, String(anVisual.datasetId));
@@ -257,7 +257,7 @@ async function anSuggestVisual(btn: HTMLButtonElement): Promise<void> {
     res = { ok: false };
   }
   btn.disabled = false;
-  iconLabel(btn, 'sparkles', label || 'Suggest a visual');
+  iconLabel(btn, 'sparkles', label || t('common.suggest_a_visual'));
 
   if (res && res.notReady) {
     anAiReady = false;
@@ -265,13 +265,13 @@ async function anSuggestVisual(btn: HTMLButtonElement): Promise<void> {
     return;
   }
   if (!res || res.ok === false || !res.encoding) {
-    anSetAiNote((res && res.error) || 'Could not suggest a visual.');
+    anSetAiNote((res && res.error) || t('authoringPanes.could_not_suggest_a_visual'));
     return;
   }
   // Confirmed before it touches anything, like every other AI action here: the
   // model proposes STRUCTURE and the user approves it. Every figure that then
   // appears is computed by the app from the same encoding.
-  if (!window.confirm('Apply the suggested visual? You can still adjust it before it is saved.')) return;
+  if (!window.confirm(t('authoringPanes.apply_the_suggested_visual_you_can'))) return;
   anSetAiNote('');
   anForm.setEncoding(res.encoding);
   if (typeof res.chartType === 'string' && res.chartType) anVisual.chartType = res.chartType;
@@ -326,7 +326,7 @@ async function anRenderSwitcher(): Promise<void> {
   mount.innerHTML = '';
   const h = document.createElement('p');
   h.className = 'an-switcher-h';
-  h.textContent = 'Change visual type';
+  h.textContent = t('authoringPanes.change_visual_type');
   mount.appendChild(h);
 
   // ONE row naming the CURRENT type, not a grid of every type — the reference
@@ -334,7 +334,7 @@ async function anRenderSwitcher(): Promise<void> {
   const row = document.createElement('button');
   row.type = 'button';
   row.className = 'an-typerow';
-  row.setAttribute('aria-label', 'Change visual type');
+  row.setAttribute('aria-label', t('authoringPanes.change_visual_type'));
   const ic = document.createElement('span');
   ic.className = 'an-typerow-ic';
   ic.innerHTML = VIZ_ICONS[initial] || ''; // trusted static SVG, as renderResult.ts
@@ -411,7 +411,7 @@ function anRenderGallery(): void {
     nm.textContent = VIZ_LABELS[type] || type;
     tile.appendChild(ic);
     tile.appendChild(nm);
-    tile.title = (VIZ_LABELS[type] || type) + (rec ? ' · recommended for this data' : '');
+    tile.title = (VIZ_LABELS[type] || type) + (rec ? t('authoringPanes.recommended_for_this_data') : '');
     tile.addEventListener('click', () => anGalleryPick(type));
     mount.appendChild(tile);
   });

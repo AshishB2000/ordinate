@@ -30,14 +30,14 @@ function amSwitch(id: string, label: string, on: boolean, onToggle: () => void):
   return b;
 }
 
-function amCopyButton(text: () => string, label = 'Copy'): HTMLButtonElement {
+function amCopyButton(text: () => string, label = t('common.copy')): HTMLButtonElement {
   const b = sfEl<HTMLButtonElement>('button', 'btn btn-sm am-copy');
   b.type = 'button';
   b.append(icon('copy', 14), document.createTextNode(label));
   b.addEventListener('click', () => {
     window.hub.copyText(text());
     b.classList.add('is-done');
-    b.lastChild!.textContent = 'Copied';
+    b.lastChild!.textContent = t('settingsAutomation.copied');
     setTimeout(() => { b.classList.remove('is-done'); b.lastChild!.textContent = label; }, 1600);
   });
   return b;
@@ -91,12 +91,12 @@ function amTokenRow(): HTMLElement {
     box.append(code, amCopyButton(() => amFreshToken));
     const wrap = sfEl('div', 'am-token-wrap');
     wrap.append(box, sfEl('div', 'am-note am-note-warn',
-      'Shown once. Copy it now — it is kept in memory only and changes every time Ordinate starts.'));
-    return sfRow('Access token', 'Tools send it as a Bearer token.', wrap);
+      t('settingsAutomation.shown_once_copy_it_now_it')));
+    return sfRow(t('settingsAutomation.access_token'), t('settingsAutomation.tools_send_it_as_a_bearer'), wrap);
   }
-  const masked = sfEl('code', 'am-token-value am-token-masked', s.token.exists ? s.token.masked : 'Not issued yet');
+  const masked = sfEl('code', 'am-token-value am-token-masked', s.token.exists ? s.token.masked : t('settingsAutomation.not_issued_yet'));
   masked.id = 'am-token-value';
-  const regen = sfEl<HTMLButtonElement>('button', 'btn btn-sm', 'Regenerate');
+  const regen = sfEl<HTMLButtonElement>('button', 'btn btn-sm', t('common.regenerate'));
   regen.type = 'button';
   regen.id = 'am-token-regen';
   regen.disabled = !s.running;
@@ -105,39 +105,39 @@ function amTokenRow(): HTMLElement {
     await amTakeToken();
     amPaint();
   });
-  return sfRow('Access token',
-    'Hidden after it was shown. Regenerate for a new one — tools using the old token stop working at once.',
+  return sfRow(t('settingsAutomation.access_token'),
+    t('settingsAutomation.hidden_after_it_was_shown_regenerate'),
     masked, regen);
 }
 
 function amHttpSection(host: HTMLElement): void {
   const s = amStatus;
-  host.appendChild(amSubhead('Local HTTP server',
-    'For tools that connect by URL instead of starting Ordinate themselves. It listens on this computer only (127.0.0.1) and every request needs the access token.'));
+  host.appendChild(amSubhead(t('settingsAutomation.local_http_server'),
+    t('settingsAutomation.for_tools_that_connect_by_url')));
   const group = sfEl('div', 'stp-group');
-  group.appendChild(sfRow('Serve over HTTP', 'A second switch, off by default.',
-    amSwitch('am-http', 'Serve MCP over local HTTP', s.http, () => void amSet({ http: !s.http }))));
+  group.appendChild(sfRow(t('settingsAutomation.serve_over_http'), t('settingsAutomation.a_second_switch_off_by_default'),
+    amSwitch('am-http', t('settingsAutomation.serve_mcp_over_local_http'), s.http, () => void amSet({ http: !s.http }))));
   if (s.http) {
     const pill = sfEl('span', 'am-pill ' + (s.running ? 'is-on' : s.error ? 'is-err' : 'is-off'));
     pill.id = 'am-http-state';
     pill.appendChild(sfEl('span', 'am-dot'));
-    pill.appendChild(document.createTextNode(s.running ? 'Listening' : s.error ? 'Not running' : 'Stopped'));
+    pill.appendChild(document.createTextNode(s.running ? t('settingsAutomation.listening') : s.error ? t('settingsAutomation.not_running') : t('settingsAutomation.stopped')));
     const port = sfEl<HTMLInputElement>('input', 'stp-input am-port');
     port.id = 'am-port';
     port.type = 'number';
     port.min = '1024';
     port.max = '65535';
     port.value = amPortDraft || String(s.port);
-    port.setAttribute('aria-label', 'Port');
-    const apply = sfEl<HTMLButtonElement>('button', 'btn btn-sm', 'Apply');
+    port.setAttribute('aria-label', t('common.port'));
+    const apply = sfEl<HTMLButtonElement>('button', 'btn btn-sm', t('common.apply'));
     apply.type = 'button';
     apply.id = 'am-port-apply';
     apply.hidden = !amPortDraft || amPortDraft === String(s.port);
     port.addEventListener('input', () => { amPortDraft = port.value; apply.hidden = !port.value || port.value === String(s.port); });
     port.addEventListener('keydown', (e) => { if (e.key === 'Enter') apply.click(); });
     apply.addEventListener('click', () => void amSet({ port: Number(port.value) }));
-    const where = s.error ? s.error : s.running ? s.url : 'Starts when you apply a free port.';
-    group.appendChild(sfRow('Address', where, pill, port, apply));
+    const where = s.error ? s.error : s.running ? s.url : t('settingsAutomation.starts_when_you_apply_a_free');
+    group.appendChild(sfRow(t('common.address'), where, pill, port, apply));
     group.appendChild(amTokenRow());
   }
   host.appendChild(group);
@@ -149,8 +149,8 @@ function amHttpSection(host: HTMLElement): void {
 
 function amToolsSection(host: HTMLElement): void {
   const tools: any[] = Array.isArray(amStatus.tools) ? amStatus.tools : [];
-  host.appendChild(amSubhead('What a connected tool can do',
-    'Every figure is computed by Ordinate. Connections, keys and settings are never exposed.'));
+  host.appendChild(amSubhead(t('settingsAutomation.what_a_connected_tool_can_do'),
+    t('settingsAutomation.every_figure_is_computed_by_ordinate')));
   const box = sfEl('div', 'am-tools');
   const group = (title: string, hint: string, list: any[], kind: string): HTMLElement => {
     const g = sfEl('div', 'am-tools-group am-tools-' + kind);
@@ -166,8 +166,8 @@ function amToolsSection(host: HTMLElement): void {
     return g;
   };
   box.append(
-    group('Read', 'Look, compute and export — nothing in the workspace changes.', tools.filter((t) => t.readOnly), 'read'),
-    group('Create', 'Save a new visual or dashboard. Never changes data; each one is listed in Jobs.', tools.filter((t) => !t.readOnly), 'write'),
+    group(t('settingsAutomation.read'), t('settingsAutomation.look_compute_and_export_nothing_in'), tools.filter((t) => t.readOnly), 'read'),
+    group(t('common.create'), t('settingsAutomation.save_a_new_visual_or_dashboard'), tools.filter((t) => !t.readOnly), 'write'),
   );
   host.appendChild(box);
 }
@@ -179,9 +179,9 @@ function amPaint(): void {
   host.textContent = '';
 
   const master = sfEl('div', 'stp-group');
-  master.appendChild(sfRow('Allow tools to connect',
-    'Runs a local MCP server, so a tool like Claude Code can read your datasets and metrics and draft visuals and dashboards. It can never change your data.',
-    amSwitch('am-enabled', 'Allow tools like Claude Code to connect', s.enabled, () => void amSet({ enabled: !s.enabled }))));
+  master.appendChild(sfRow(t('settingsAutomation.allow_tools_to_connect'),
+    t('settingsAutomation.runs_a_local_mcp_server_so'),
+    amSwitch('am-enabled', t('settingsAutomation.allow_tools_like_claude_code_to'), s.enabled, () => void amSet({ enabled: !s.enabled }))));
   host.appendChild(master);
 
   if (!s.enabled) {
@@ -190,22 +190,22 @@ function amPaint(): void {
     const ic = sfEl('div', 'am-off-ic');
     ic.appendChild(icon('shield', 20));
     const text = sfEl('div', 'am-off-text');
-    text.append(sfEl('div', 'am-off-t', 'No tool can connect'),
-      sfEl('div', 'am-off-d', 'The MCP server is off, so nothing outside this window can reach your workspace. Turn it on when you want a tool like Claude Code to work with your data.'));
+    text.append(sfEl('div', 'am-off-t', t('settingsAutomation.no_tool_can_connect')),
+      sfEl('div', 'am-off-d', t('settingsAutomation.the_mcp_server_is_off_so')));
     off.append(ic, text);
     host.appendChild(off);
   } else {
-    host.appendChild(amSubhead('Connect Claude Code',
-      'Claude Code starts Ordinate in the background and talks to it over stdio — no port, no token. Run this once in a terminal:'));
+    host.appendChild(amSubhead(t('settingsAutomation.connect_claude_code'),
+      t('settingsAutomation.claude_code_starts_ordinate_in_the')));
     host.appendChild(amCode(s.stdioSetup, 'am-stdio-cmd'));
     amHttpSection(host);
     amToolsSection(host);
   }
 
-  host.appendChild(amSubhead('Command line',
-    'Script Ordinate from any terminal. Always available — it runs as you, on your own files, whether or not the switch above is on.'));
+  host.appendChild(amSubhead(t('settingsAutomation.command_line'),
+    t('settingsAutomation.script_ordinate_from_any_terminal_always')));
   host.appendChild(amCode(s.cliExample, 'am-cli-cmd'));
-  host.appendChild(sfEl('div', 'am-note', 'Add --cli help for every command, --json for machine output. Exit codes: 0 ok, 1 error, 2 usage, 3 not found.'));
+  host.appendChild(sfEl('div', 'am-note', t('settingsAutomation.add_cli_help_for_every_command')));
 }
 
 async function amRefresh(): Promise<void> {

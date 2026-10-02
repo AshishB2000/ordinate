@@ -265,17 +265,19 @@ export async function layoutsSection(s: Smoke, fx: Fixture): Promise<void> {
   const d1 = await grid(win);
   ok('desktop: every card is in the cell it started in — the phone edits moved nothing here',
     JSON.stringify(d1.cards.map((c) => [c.id, c.col, c.row]).sort()) === deskCells && !d1.frame, JSON.stringify(d1));
-  const saved = await until(win, async () => {
-    const r = await record();
-    return !!r.sheets[0].layouts && !!r.sheets[0].layouts.phone;
-  }, 10_000);
+  // Every phone edit autosaves on its own, so wait for the LAST one to land — the
+  // first save (Average hidden) alone already satisfies "a phone layout exists".
+  const phoneSaved = (r: any): boolean => {
+    const items: any[] = (r.sheets[0].layouts && r.sheets[0].layouts.phone && r.sheets[0].layouts.phone.items) || [];
+    const at = (id: string): number => items.findIndex((i) => i.id === id);
+    return at(ID.map) >= 0 && at(ID.map) < at(ID.sales) && items[at(ID.avg)]?.hidden === true
+      && items[at(ID.notes)]?.h === tallNotes && !r.sheets[0].layouts.tablet;
+  };
+  await until(win, async () => phoneSaved(await record()), 15_000);
   const onDisk = await record();
-  const phoneItems: any[] = saved ? onDisk.sheets[0].layouts.phone.items : [];
   ok('desktop: on disk the cards keep their desktop layouts', JSON.stringify(onDisk.sheets[0].cards.map((c: any) => c.layout)) === desktopLayouts);
   ok('desktop: …and the page carries the phone layout — map before sales, Average hidden, the note taller, no tablet',
-    saved && phoneItems.findIndex((i) => i.id === ID.map) < phoneItems.findIndex((i) => i.id === ID.sales)
-      && phoneItems.find((i) => i.id === ID.avg).hidden === true && phoneItems.find((i) => i.id === ID.notes).h === tallNotes
-      && !onDisk.sheets[0].layouts.tablet, JSON.stringify(onDisk.sheets[0].layouts));
+    phoneSaved(onDisk), JSON.stringify(onDisk.sheets[0].layouts));
 
   // ── Published: all three layouts, switched by the page's CSS alone ──────
   const pub: any = await app.evaluate(async (electronModule, a: { pid: string; aid: string }) => {

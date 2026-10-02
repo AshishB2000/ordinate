@@ -76,7 +76,7 @@ function encAppendRelated(sel: HTMLSelectElement | null, cols: EncRelatedCol[], 
     let g = groups.get(c.datasetId);
     if (!g) {
       g = document.createElement('optgroup');
-      g.label = 'From ' + c.group;
+      g.label = t('encodingRelated.from', { group: c.group });
       groups.set(c.datasetId, g);
       sel.appendChild(g);
     }

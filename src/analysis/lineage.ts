@@ -74,6 +74,8 @@ export interface LineageInput {
   alerts: Rec[];
   connections?: Array<{ id: string; name: string; kind?: string }>;
   captures?: Array<{ id: string; title?: string }>;
+  /** r7:notebooks — the notebooks a `notebook` origin names. */
+  notebooks?: Array<{ id: string; name: string }>;
 }
 
 const SOURCE_WORD: Record<string, string> = {
@@ -129,6 +131,7 @@ export function buildGraph(input: LineageInput): LineageGraph {
   };
   const connName = new Map((input.connections || []).map((c) => [c.id, c]));
   const captureName = new Map((input.captures || []).map((c) => [c.id, c.title || '']));
+  const notebookName = new Map((input.notebooks || []).map((n) => [n.id, n.name]));
 
   // Datasets, their sources, their prepare steps and calculated fields.
   const calcOf = new Map<string, Map<string, string>>(); // datasetId → field name → node id
@@ -195,6 +198,15 @@ export function buildGraph(input: LineageInput): LineageGraph {
         name: captureName.get(str(o.captureId)) || 'Screenshot', sub: 'Screenshot',
         ref: { type: 'capture', id: str(o.captureId) },
       });
+    } else if (o.kind === 'notebook') {
+      // A notebook cell's result: the notebook is the source, and the datasets
+      // its cells read are inputs exactly as a combine's parents are.
+      sid = add({
+        id: 'source:notebook:' + str(o.notebookId), kind: 'source',
+        name: notebookName.get(str(o.notebookId)) || 'Deleted notebook', sub: 'Notebook',
+        ref: notebookName.has(str(o.notebookId)) ? { type: 'notebook', id: str(o.notebookId) } : undefined,
+      });
+      for (const p of arr(o.deps)) link('dataset:' + str(p), target);
     } else if (o.kind === 'combined' || o.kind === 'composed') {
       const parents = o.kind === 'combined'
         ? [str(o.leftId), str(o.rightId)]

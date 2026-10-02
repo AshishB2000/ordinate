@@ -101,7 +101,7 @@ async function openSavedDataset(id: string): Promise<void> {
   dsShow('ds-sheet-bar', false);
 
   expId = String(ds.id || id);
-  expName = ds.name ? String(ds.name) : 'Untitled dataset';
+  expName = ds.name ? String(ds.name) : t('common.untitled_dataset');
   if (typeof dkSync === 'function') dkSync(); // dock.ts — context line now names this dataset
   expColumns = normalizeCols(ds.columns);
   // Intentionally empty: rows are never hydrated into the renderer any more.
@@ -234,7 +234,7 @@ function renderCapStrip(ds: any): void {
     const thumb = document.createElement('img');
     thumb.className = 'ds-cap-thumb';
     thumb.src = src;
-    thumb.alt = 'Capture screenshot';
+    thumb.alt = t('common.capture_screenshot');
     thumb.addEventListener('click', () => {
       if (typeof openLightboxSrc === 'function') openLightboxSrc(src);
     });
@@ -243,7 +243,7 @@ function renderCapStrip(ds: any): void {
     const viewBtn = document.createElement('button');
     viewBtn.type = 'button';
     viewBtn.className = 'btn btn-sm';
-    viewBtn.textContent = 'View original';
+    viewBtn.textContent = t('dsExplorer.view_original');
     viewBtn.addEventListener('click', () => {
       if (typeof openLightboxSrc === 'function') openLightboxSrc(src);
     });
@@ -255,7 +255,7 @@ function renderCapStrip(ds: any): void {
   replaceBtn.type = 'button';
   replaceBtn.id = 'ds-recapture-replace';
   replaceBtn.className = 'btn btn-sm';
-  replaceBtn.textContent = 'Recapture (replace)';
+  replaceBtn.textContent = t('dsExplorer.recapture_replace');
   replaceBtn.addEventListener('click', () => {
     if (typeof startRecapture === 'function') startRecapture(dsId, 'replace');
   });
@@ -265,7 +265,7 @@ function renderCapStrip(ds: any): void {
   appendBtn.type = 'button';
   appendBtn.id = 'ds-recapture-append';
   appendBtn.className = 'btn btn-sm';
-  appendBtn.textContent = 'Recapture (append)';
+  appendBtn.textContent = t('dsExplorer.recapture_append');
   appendBtn.addEventListener('click', () => {
     if (typeof startRecapture === 'function') startRecapture(dsId, 'append');
   });
@@ -384,12 +384,12 @@ function dsOpenMoreMenu(anchor: HTMLElement): void {
       b.addEventListener('click', () => { close(); run(); });
       el.appendChild(b);
     };
-    add('activity', 'Statistics', () => void swOpen({ datasetId: id })); // statsPanel.ts
-    add('lineage', 'Lineage', () => void lnOpen('dataset', id, expName));
+    add('activity', t('common.statistics'), () => void swOpen({ datasetId: id })); // statsPanel.ts
+    add('lineage', t('common.lineage'), () => void lnOpen('dataset', id, expName));
     const input = dsEl('ds-explorer')?.classList.contains('is-input');
-    add('history', input ? 'Version history' : 'Pipeline history', () => void vhOpen('dataset', id, expName, input ? 'Table' : undefined));
-    add('layers', 'Find segments', () => void sgOpen(id, expName)); // segments.ts
-    add('trash', 'Move to Trash', () => void handleDeleteDataset(id), true);
+    add('history', input ? t('common.version_history') : t('common.pipeline_history'), () => void vhOpen('dataset', id, expName, input ? t('common.table') : undefined));
+    add('layers', t('common.find_segments'), () => void sgOpen(id, expName)); // segments.ts
+    add('trash', t('dsExplorer.move_to_trash'), () => void handleDeleteDataset(id), true);
   }, () => anchor.setAttribute('aria-expanded', 'false'));
 }
 

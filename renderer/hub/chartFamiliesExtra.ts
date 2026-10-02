@@ -83,7 +83,7 @@ function buildExtraDatasets(c: ChartCtx): { datasets: any[]; chartLabels: any[] 
         },
         {
           type: 'line',
-          label: 'Cumulative %',
+          label: t('chartFamiliesExtra.cumulative'),
           data: p.cumPct,
           yAxisID: 'y1',
           borderColor: opts._paretoLine, backgroundColor: opts._paretoLine,
@@ -229,10 +229,10 @@ function buildExtraScales(
 
 // ── Tooltips ────────────────────────────────────────────────────────────────
 // Added onto the shared tooltip config; the swatch is the mark's own colour.
-function applyExtraTooltip(c: ChartCtx, t: any): void {
+function applyExtraTooltip(c: ChartCtx, tv: any): void {
   const { opts, fmt, palette } = c;
   const swatch = (color: string) => ({ borderColor: color, backgroundColor: color, borderWidth: 0, borderRadius: 2 });
-  const cb = t.callbacks;
+  const cb = tv.callbacks;
   if (c.isWaterfall) {
     const w = opts._wf;
     cb.label = (item: ChartJsCtx) => {
@@ -243,7 +243,7 @@ function applyExtraTooltip(c: ChartCtx, t: any): void {
     cb.labelColor = (item: ChartJsCtx) => swatch(opts._wfColors[item.dataIndex]);
   } else if (c.isPareto) {
     cb.label = (item: ChartJsCtx) => (item.datasetIndex === 1
-      ? `Cumulative: ${Number(item.raw).toFixed(1)}%`
+      ? t('chartFamiliesExtra.cumulative_2', { p0: Number(item.raw).toFixed(1) })
       : (item.dataset.label ? item.dataset.label + ': ' : '') + fmt(item.raw));
     cb.labelColor = (item: ChartJsCtx) => swatch(item.datasetIndex === 1 ? opts._paretoLine : palette[0]);
   } else if (c.isBullet) {
@@ -252,11 +252,11 @@ function applyExtraTooltip(c: ChartCtx, t: any): void {
       if (!r || r.value === null) return 'n/a';
       if (r.target === null) return fmt(r.value);
       const pct = r.target ? ` (${Math.round((r.value / r.target) * 100)}%)` : '';
-      return `${fmt(r.value)} of ${fmt(r.target)} target${pct}`;
+      return t('chartFamiliesExtra.of_target', { value: fmt(r.value), target: fmt(r.target), pct });
     };
   } else if (c.isCalendar) {
     cb.title = (items: ChartJsCtx[]) => { const r = items[0] && items[0].raw; return r ? `${CAL_WEEKDAYS[r.wd]} ${r.d}` : ''; };
-    cb.label = (item: ChartJsCtx) => (item.raw && typeof item.raw.v === 'number' ? fmt(item.raw.v) : 'No data');
+    cb.label = (item: ChartJsCtx) => (item.raw && typeof item.raw.v === 'number' ? fmt(item.raw.v) : t('chartFamiliesExtra.no_data'));
     cb.labelColor = (item: ChartJsCtx) => swatch(opts._calHeat(item.raw ? item.raw.v : null));
   } else if (c.isRadar) {
     // The polygon is normalised; the figure shown is the raw one.

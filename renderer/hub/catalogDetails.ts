@@ -36,8 +36,8 @@ function ctField(label: string, control: HTMLElement): HTMLElement {
 function ctStamp(el: HTMLElement, doc: { updatedBy?: string; updatedAt?: string } | null): void {
   const at = doc && doc.updatedAt ? aiAgo(doc.updatedAt) : '';
   el.textContent = at
-    ? `Updated by ${(doc && doc.updatedBy) || 'someone'} · ${at}`
-    : 'Not documented yet — anything you add here is saved as you go.';
+    ? t('catalogDetails.updated_by', { p0: (doc && doc.updatedBy) || 'someone', at })
+    : t('catalogDetails.not_documented_yet_anything_you_add');
 }
 
 /** A text box that commits on blur and on Enter (Shift+Enter is a newline in a textarea). */
@@ -69,21 +69,21 @@ function ctTagEditor(initial: string[], onChange: (tags: string[]) => void): HTM
   const chips = ctEl('span', 'ct-tagedit-chips');
   const input = ctEl('input', 'ct-tag-input');
   input.type = 'text';
-  input.placeholder = 'Add a tag…';
-  input.setAttribute('aria-label', 'Add a tag');
+  input.placeholder = t('catalogDetails.add_a_tag');
+  input.setAttribute('aria-label', t('catalogDetails.add_a_tag_2'));
   const sugg = ctEl('div', 'ct-sugg');
   sugg.setAttribute('role', 'listbox');
   sugg.hidden = true;
 
   const paint = (): void => {
     chips.textContent = '';
-    tags.forEach((t) => {
-      const chip = ctEl('span', 'ct-chip tag-c' + colorOf(t), t);
+    tags.forEach((tv) => {
+      const chip = ctEl('span', 'ct-chip tag-c' + colorOf(tv), tv);
       const x = ctEl('button', 'ct-chip-x');
       x.type = 'button';
-      x.setAttribute('aria-label', 'Remove tag ' + t);
+      x.setAttribute('aria-label', t('catalogDetails.remove_tag', { t: tv }));
       x.appendChild(icon('x', 12));
-      x.addEventListener('click', () => { tags = tags.filter((n) => n !== t); paint(); onChange(tags); });
+      x.addEventListener('click', () => { tags = tags.filter((n) => n !== tv); paint(); onChange(tags); });
       chip.appendChild(x);
       chips.appendChild(chip);
     });
@@ -117,7 +117,7 @@ function ctTagEditor(initial: string[], onChange: (tags: string[]) => void): HTM
       row.setAttribute('role', 'option');
       if (known.has(name)) row.appendChild(ctTagChips([name], 1));
       else {
-        row.appendChild(ctEl('span', 'ct-sugg-new', 'Create'));
+        row.appendChild(ctEl('span', 'ct-sugg-new', t('common.create')));
         row.appendChild(ctTagChips([{ name, color: ctNextColor() }], 1));
       }
       // mousedown, not click: the box's blur would take the list away first.
@@ -178,11 +178,11 @@ async function ctOpenDetails(anchor: HTMLElement, target: CtTarget, opts: { desc
   const ref = target.kind + ':' + target.id;
   let res: any = null;
   try { res = await window.hub.catalogGet(projectId, ref); } catch (_) { res = null; }
-  if (!res || res.ok === false) { showToast('Could not read the details.'); return; }
+  if (!res || res.ok === false) { showToast(t('catalogDetails.could_not_read_the_details')); return; }
   await ctLoadTags();
   const doc = res.doc || {};
   const saved = { description: String(doc.description || ''), owner: String(doc.owner || '') };
-  const kindLabel = (ctKind(target.kind) || { label: 'Record' }).label;
+  const kindLabel = (ctKind(target.kind) || { label: t('common.record') }).label;
   let desc: HTMLInputElement | HTMLTextAreaElement | null = null;
   let owner: HTMLInputElement | HTMLTextAreaElement | null = null;
   let tagField: HTMLElement | null = null;
@@ -191,7 +191,7 @@ async function ctOpenDetails(anchor: HTMLElement, target: CtTarget, opts: { desc
   const save = async (patch: Record<string, unknown>): Promise<void> => {
     let r: any = null;
     try { r = await window.hub.catalogSet(projectId, ref, patch); } catch (_) { r = null; }
-    if (!r || r.ok === false) { showToast((r && r.error) || 'Could not save the details.'); return; }
+    if (!r || r.ok === false) { showToast((r && r.error) || t('catalogDetails.could_not_save_the_details')); return; }
     ctStamp(stamp, r.doc);
     if (patch.tags !== undefined) await ctTagsChanged();
     if (opts.onSaved) opts.onSaved();
@@ -207,17 +207,17 @@ async function ctOpenDetails(anchor: HTMLElement, target: CtTarget, opts: { desc
   openMiniMenu(anchor, (el: HTMLElement) => {
     el.classList.add('ct-pop');
     el.setAttribute('role', 'dialog');
-    el.setAttribute('aria-label', `Details for ${target.name || kindLabel}`);
+    el.setAttribute('aria-label', t('catalogDetails.details_for', { p0: target.name || kindLabel }));
     ctPopHead(el, kindLabel + ' details', target.name || '');
     if (opts.description !== false) {
-      desc = ctTextBox(true, saved.description, 'What is this, and when should someone use it?', (v) => commitText('description', v));
-      el.appendChild(ctField('Description', desc));
+      desc = ctTextBox(true, saved.description, t('catalogDetails.what_is_this_and_when_should'), (v) => commitText('description', v));
+      el.appendChild(ctField(t('common.description'), desc));
     }
     const tagNames = (Array.isArray(doc.tags) ? doc.tags : []).map((t: any) => String(t && t.name ? t.name : t));
     tagField = ctTagEditor(tagNames, (tags) => void save({ tags }));
-    el.appendChild(ctField('Tags', tagField));
-    owner = ctTextBox(false, saved.owner, 'Who to ask about this', (v) => commitText('owner', v));
-    el.appendChild(ctField('Owner', owner));
+    el.appendChild(ctField(t('common.tags'), tagField));
+    owner = ctTextBox(false, saved.owner, t('catalogDetails.who_to_ask_about_this'), (v) => commitText('owner', v));
+    el.appendChild(ctField(t('common.owner'), owner));
     ctStamp(stamp, doc);
     el.appendChild(stamp);
   }, () => {
@@ -233,9 +233,9 @@ async function ctOpenDetails(anchor: HTMLElement, target: CtTarget, opts: { desc
 // ── Columns ──────────────────────────────────────────────────────────────────
 
 const CT_SENSITIVITY: Array<[string, string, string]> = [
-  ['none', 'None', 'Nothing sensitive'],
-  ['personal', 'Personal', 'Identifies a person — names, emails, addresses'],
-  ['financial', 'Financial', 'Money a person or the business would not publish'],
+  ['none', t('common.none'), t('catalogDetails.nothing_sensitive')],
+  ['personal', t('common.personal'), t('catalogDetails.identifies_a_person_names_emails')],
+  ['financial', t('common.financial'), t('catalogDetails.money_a_person_or_the_business')],
 ];
 
 /** Save one column's notes and repaint what shows them. Returns the stored doc. */
@@ -243,7 +243,7 @@ async function ctSaveColumn(datasetId: string, column: string, patch: Record<str
   if (!currentProjectId) return null;
   let r: any = null;
   try { r = await window.hub.catalogSetColumn(currentProjectId, datasetId, column, patch); } catch (_) { r = null; }
-  if (!r || r.ok === false) { showToast((r && r.error) || 'Could not save the column notes.'); return null; }
+  if (!r || r.ok === false) { showToast((r && r.error) || t('catalogDetails.could_not_save_the_column_notes')); return null; }
   const docs = await ctLoadColumnDocs(datasetId);
   docs[column] = r.column;
   // The grid's header tooltips read this cache; repaint from the window in hand.
@@ -256,7 +256,7 @@ async function ctSaveColumn(datasetId: string, column: string, patch: Record<str
 function ctSensitivityControl(value: string, onPick: (v: string) => void): HTMLElement {
   const seg = ctEl('div', 'ct-seg');
   seg.setAttribute('role', 'radiogroup');
-  seg.setAttribute('aria-label', 'Sensitivity');
+  seg.setAttribute('aria-label', t('common.sensitivity'));
   const paint = (cur: string): void => {
     seg.querySelectorAll<HTMLElement>('.ct-seg-btn').forEach((b) => {
       const on = b.dataset.value === cur;
@@ -303,12 +303,12 @@ async function ctOpenColumnDetails(anchor: HTMLElement, datasetId: string, colum
   openMiniMenu(anchor, (el: HTMLElement) => {
     el.classList.add('ct-pop');
     el.setAttribute('role', 'dialog');
-    el.setAttribute('aria-label', 'Details for column ' + column);
-    ctPopHead(el, 'Column details', column);
-    el.appendChild(ctField('Display name', box('displayName', false, column)));
-    el.appendChild(ctField('Description', box('description', true, 'What does one value in this column mean?')));
-    el.appendChild(ctField('Example', box('example', false, example || 'A typical value')));
-    el.appendChild(ctField('Sensitivity', ctSensitivityControl(doc.sensitivity || 'none', (v) => {
+    el.setAttribute('aria-label', t('catalogDetails.details_for_column', { column }));
+    ctPopHead(el, t('catalogDetails.column_details'), column);
+    el.appendChild(ctField(t('common.display_name'), box('displayName', false, column)));
+    el.appendChild(ctField(t('common.description'), box('description', true, t('catalogDetails.what_does_one_value_in_this'))));
+    el.appendChild(ctField(t('common.example'), box('example', false, example || t('catalogDetails.a_typical_value'))));
+    el.appendChild(ctField(t('common.sensitivity'), ctSensitivityControl(doc.sensitivity || 'none', (v) => {
       void ctSaveColumn(datasetId, column, { sensitivity: v }).then((d) => { if (d) ctStamp(stamp, d); });
     })));
     ctStamp(stamp, doc.updatedAt ? doc : null);
@@ -349,7 +349,7 @@ const CT_HEADERS: Array<{ btn: string; target: () => CtTarget | null; empty?: st
   {
     btn: 'viz-details-btn',
     target: () => (vizEditingId ? { kind: 'visual', id: vizEditingId, name: (vizEl('viz-builder-name') || { textContent: '' }).textContent || '' } : null),
-    empty: 'Save the visual first — then it can carry a description and tags.',
+    empty: t('catalogDetails.save_the_visual_first_then_it'),
   },
   { btn: 'dash-details-btn', target: () => (dashCurrent && dashCurrent.id ? { kind: 'analysis', id: String(dashCurrent.id), name: String(dashCurrent.name || '') } : null) },
   { btn: 'rp-details-btn', target: () => (rbReport && rbReport.id ? { kind: 'report', id: String(rbReport.id), name: String(rbReport.name || '') } : null) },
@@ -359,16 +359,16 @@ const CT_HEADERS: Array<{ btn: string; target: () => CtTarget | null; empty?: st
 /** The metric editor's row — tags and owner (its own Description box is right above). */
 function ctMetricDetailsRow(metricId: string, name: string): HTMLElement {
   const row = ctEl('div', 'me-field ct-me-row');
-  row.appendChild(ctEl('span', 'me-field-label', 'Tags & owner'));
+  row.appendChild(ctEl('span', 'me-field-label', t('catalogDetails.tags_owner')));
   const line = ctEl('div', 'ct-me-line');
   const chips = ctEl('span', 'ct-me-chips');
   const paint = async (): Promise<void> => {
     await ctLoadTags();
     chips.textContent = '';
     const tags = ctTagsOf('metric:' + metricId);
-    chips.appendChild(tags.length ? ctTagChips(tags, 6) : ctEl('span', 'ct-muted', 'No tags yet'));
+    chips.appendChild(tags.length ? ctTagChips(tags, 6) : ctEl('span', 'ct-muted', t('catalogDetails.no_tags_yet')));
   };
-  const btn = ctEl('button', 'btn btn-sm btn-ghost ct-details-btn', 'Edit…');
+  const btn = ctEl('button', 'btn btn-sm btn-ghost ct-details-btn', t('common.edit'));
   btn.type = 'button';
   btn.setAttribute('aria-haspopup', 'dialog');
   btn.addEventListener('click', () => void ctOpenDetails(btn, { kind: 'metric', id: metricId, name }, { description: false, onSaved: () => void paint() }));
@@ -385,10 +385,10 @@ function initCatalogDetails(): void {
     if (!b) return;
     b.setAttribute('aria-haspopup', 'dialog');
     b.addEventListener('click', () => {
-      const t = h.target();
-      if (!t) { showToast(h.empty || 'Nothing to describe yet.'); return; }
-      void ctOpenDetails(b, t, {
-        onSaved: () => { if (t.kind === 'dataset') void ctPaintHeaderChips(document.getElementById('ds-explorer-tags'), 'dataset:' + t.id); },
+      const tv = h.target();
+      if (!tv) { showToast(h.empty || t('catalogDetails.nothing_to_describe_yet')); return; }
+      void ctOpenDetails(b, tv, {
+        onSaved: () => { if (tv.kind === 'dataset') void ctPaintHeaderChips(document.getElementById('ds-explorer-tags'), 'dataset:' + tv.id); },
       });
     });
   });

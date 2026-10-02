@@ -150,7 +150,7 @@ function initVisuals(): void {
     vizCurrentChartType = '';
     vizOverrides = {};
     const nameEl = vizEl('viz-builder-name');
-    if (nameEl) nameEl.textContent = 'New visual';
+    if (nameEl) nameEl.textContent = t('common.new_visual');
     onDatasetChange(dsSel.value);
   });
   // Category / Split / Geo / measures / filters are the encoding form's, and it

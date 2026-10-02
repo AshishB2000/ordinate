@@ -27,9 +27,16 @@
 import type { ColumnType, ParsedColumn } from '../data/parse';
 import type { Anomaly } from './anomalies';
 import {
-  DEFAULTS, foldPeriods, measureEncoding, orderPeriods, pct1, periodPlan, round,
+  DEFAULTS, foldPeriods, measureEncoding, orderPeriods, periodPlan, round,
 } from './insightsAgg';
 import type { Agg, Insight, InsightChart, InsightKind, InsightOptions } from './insightsAgg';
+import { formatNumber, formatPercent } from '../app/format';
+import { t } from '../app/i18n';
+
+/** A figure in a sentence, as the workspace writes numbers (format.ts). */
+const fmtNum = (n: number): string => formatNumber(round(n), { maxDecimals: 2 });
+/** |ratio| as a percent, one decimal at most: 0.5 → "50%". */
+const pctAbs = (ratio: number): string => formatPercent(Math.abs(ratio), 1, { maxOnly: true });
 
 // The shapes and the two aggregators are this module's public surface too —
 // a caller wants `insights.residentAgg`, not a second import of a file whose
@@ -140,15 +147,15 @@ function moverInsights(ctx: Ctx, dateCol: string, measure: string, catCol: strin
   for (const m of picked) {
     if (seen.has(m.cat)) continue;
     seen.add(m.cat);
-    const dir = m.delta > 0 ? 'rose' : 'fell';
-    const pctText = m.pct === null ? '' : ` ${Math.abs(pct1(m.pct))}%`;
+    // Figures in the prose are written by format.ts (Settings → General → Formats);
+    // `facts` below keeps the raw numbers.
+    const pctText = m.pct === null ? '' : ` ${pctAbs(m.pct)}`;
     out.push({
       id: `${ctx.datasetId}:mover:${catCol}:${measure}:${m.cat}:${now}`,
       kind: 'mover',
-      title: `${m.cat} ${measure} ${dir}${pctText} in ${now}`,
+      title: t('insights.in', { cat: m.cat, measure, p2: !!(m.delta > 0), pctText, now }),
       detail:
-        `${measure} for "${m.cat}" ${dir} from ${round(m.from)} in ${prev} to ${round(m.to)} in ${now}` +
-        (m.pct === null ? ' (no prior value to compare against).' : ` — a change of ${round(m.delta)} (${pct1(m.pct)}%).`),
+        t('insights.for_from_in_to_in', { measure, cat: m.cat, p2: !!(m.delta > 0), from: fmtNum(m.from), prev, to: fmtNum(m.to), now, p7: (m.pct === null ? t('insights.no_prior_value_to_compare_against') : t('insights.a_change_of', { delta: fmtNum(m.delta), p1: formatPercent(m.pct, 1, { maxOnly: true }) })) }),
       severity: m.pct !== null && Math.abs(m.pct) >= ctx.o.moverWarnPct ? 'warn' : 'info',
       datasetId: ctx.datasetId,
       column: catCol,
@@ -198,15 +205,12 @@ function trendInsight(ctx: Ctx, dateCol: string, measure: string): Insight | nul
   const ratio = change / Math.abs(start);
   if (Math.abs(ratio) <= ctx.o.trendPct) return null;
 
-  const dir = change > 0 ? 'up' : 'down';
   return {
     id: `${ctx.datasetId}:trend:${dateCol}:${measure}:${periods[0]}:${periods[n - 1]}`,
     kind: 'trend',
-    title: `${measure} trended ${dir} ${Math.abs(pct1(ratio))}% over ${n} periods`,
+    title: t('insights.trended_over_periods', { measure, p1: !!(change > 0), ratio: pctAbs(ratio), n }),
     detail:
-      `A least-squares line through ${measure} over the last ${n} periods ` +
-      `(${periods[0]} to ${periods[n - 1]}) ${dir === 'up' ? 'rises' : 'falls'} ` +
-      `${Math.abs(round(change))}, or ${pct1(ratio)}% of where it starts.`,
+      t('insights.a_least_squares_line_through_over', { measure, n, p2: periods[0], p3: periods[n - 1], p4: !!(change > 0), p5: fmtNum(Math.abs(change)), p6: formatPercent(ratio, 1, { maxOnly: true }) }),
     severity: 'info',
     datasetId: ctx.datasetId,
     column: measure,
@@ -247,11 +251,9 @@ function concentrationInsight(
   return {
     id: `${ctx.datasetId}:concentration:${catCol}:${measure}`,
     kind: 'concentration',
-    title: `${head} of ${n} ${catCol} are ${Math.round(share * 100)}% of ${measure}`,
+    title: t('insights.of_are_of', { head, n, catCol, p3: formatPercent(share, 0), measure }),
     detail:
-      `The top ${head} of ${n} values in "${catCol}" carry ${round(cum)} of ${round(total)} ` +
-      `total ${measure} (${pct1(share)}%). The largest, "${pairs[0].cat}", is ` +
-      `${pct1(pairs[0].v / total)}% on its own.`,
+      t('insights.the_top_of_values_in_carry', { head, n, catCol, cum: fmtNum(cum), total: fmtNum(total), measure, p6: formatPercent(share, 1, { maxOnly: true }), p7: pairs[0].cat, p8: formatPercent(pairs[0].v / total, 1, { maxOnly: true }) }),
     severity: 'info',
     datasetId: ctx.datasetId,
     column: catCol,
@@ -305,16 +307,16 @@ function anomalyTitle(a: Anomaly, type?: ColumnType): string {
   const col = a.column ?? '';
   switch (a.kind) {
     case 'numeric_outlier':
-      return `${col} has ${a.facts.count} value${a.facts.count === 1 ? '' : 's'} outside its expected range`;
+      return t('insights.has_outside_its_expected_range', { col, count: a.facts.count });
     case 'dominant_category':
-      return `${a.facts.value} is ${Math.round(Number(a.facts.share) * 100)}% of ${col}`;
+      return t('insights.is_of', { value: a.facts.value, p1: formatPercent(Number(a.facts.share), 0), col });
     case 'period_change':
       return `${col} ${Number(a.facts.pctChange) >= 0 ? 'rose' : 'fell'} ` +
-        `${Math.abs(pct1(Number(a.facts.pctChange)))}% in ${a.facts.toPeriod}`;
+        `${pctAbs(Number(a.facts.pctChange))} in ${a.facts.toPeriod}`;
     case 'empty_heavy':
-      return `${col} is mostly empty`;
+      return t('insights.is_mostly_empty', { col });
     default:
-      return `${col} never changes${type === 'number' ? ' (one number, every row)' : ''}`;
+      return t('insights.never_changes_2', { col, p1: !!(type === 'number') });
   }
 }
 
@@ -457,6 +459,9 @@ export function detectInsights(
   }
 }
 
+// i18n-skip-begin — the model's frame stays English; the Assistant is told which
+// language to answer in (src/app/i18n.ts languageInstruction), and the insight
+// lines it quotes are already in the reader's language.
 // PURE facts block for the model. Same guard-line contract as
 // `anomalies.buildAnomaliesFacts`: the model cites, it does not compute.
 const GUARD_LINE =
@@ -474,3 +479,4 @@ export function buildInsightsFacts(datasetName: string, list: Insight[]): string
   for (const i of items) lines.push(`- [${i.severity}] ${i.detail}`);
   return lines.join('\n');
 }
+// i18n-skip-end

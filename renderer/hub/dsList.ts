@@ -71,7 +71,7 @@ async function dsLoadConnKinds(items: any[]): Promise<void> {
   for (const c of Array.isArray(list) ? list : []) {
     if (!c || !c.id) continue;
     const kind = typeof c.kind === 'string' ? c.kind : '';
-    dsConnKinds.set(String(c.id), { kind, label: String(c.name || kind || 'Connection') });
+    dsConnKinds.set(String(c.id), { kind, label: String(c.name || kind || t('common.connection')) });
   }
 }
 
@@ -89,9 +89,9 @@ function dsFreshnessText(d: any): string {
   // shorthand, which read as a status rather than as a promise about the
   // future.
   const every = d && d.autoRefresh && d.autoRefresh.every;
-  if (every) return `Refreshes ${every} · last ${when}`;
-  if (d && d.originKind) return 'Data as of ' + when;
-  return (d && d.sourceKind === 'input' ? 'Edited ' : 'Imported ') + when;
+  if (every) return t('dsList.refreshes_last', { every, when });
+  if (d && d.originKind) return t('dsList.data_as_of', { when });
+  return (d && d.sourceKind === 'input' ? t('dsList.edited') : t('dsList.imported')) + when;
 }
 
 /**
@@ -108,10 +108,10 @@ function dsAutoRefreshPicker(d: any, onDone?: () => void): HTMLElement | null {
   sel.className = 'ds-auto-select';
   sel.setAttribute('aria-label', `Auto-refresh ${d.name || 'dataset'}`);
   const opts: Array<[string, string]> = [
-    ['off', 'Auto-refresh: Off'],
-    ['hourly', 'Auto-refresh: Hourly'],
-    ['daily', 'Auto-refresh: Daily'],
-    ['weekly', 'Auto-refresh: Weekly'],
+    ['off', t('dsList.auto_refresh_off')],
+    ['hourly', t('dsList.auto_refresh_hourly')],
+    ['daily', t('dsList.auto_refresh_daily')],
+    ['weekly', t('dsList.auto_refresh_weekly')],
   ];
   for (const [value, label] of opts) {
     const o = document.createElement('option');
@@ -130,7 +130,7 @@ function dsAutoRefreshPicker(d: any, onDone?: () => void): HTMLElement | null {
       res = { ok: false };
     }
     if (!res || res.ok === false) {
-      showToast('Could not change the schedule.');
+      showToast(t('dsList.could_not_change_the_schedule'));
       sel.value = (d.autoRefresh && d.autoRefresh.every) || 'off';
       return;
     }
@@ -155,8 +155,8 @@ function dsWatchToggle(d: any): HTMLElement | null {
   const on = Boolean(d.autoRefresh.watch);
   btn.classList.toggle('is-on', on);
   btn.setAttribute('aria-pressed', String(on));
-  btn.textContent = on ? '◉ Watching' : '◎ Watch';
-  btn.title = 'Notify me when new anomalies appear after an auto-refresh';
+  btn.textContent = on ? t('dsList.watching') : t('dsList.watch');
+  btn.title = t('dsList.notify_me_when_new_anomalies_appear');
   btn.addEventListener('click', async (e) => {
     e.stopPropagation();
     const next = !btn.classList.contains('is-on');
@@ -167,7 +167,7 @@ function dsWatchToggle(d: any): HTMLElement | null {
       res = { ok: false };
     }
     if (!res || res.ok === false) {
-      showToast((res && res.error) || 'Could not change the watch.');
+      showToast((res && res.error) || t('dsList.could_not_change_the_watch'));
       return;
     }
     await refreshDatasetList();
@@ -183,15 +183,16 @@ function dsWatchToggle(d: any): HTMLElement | null {
 const DS_SOURCE_LABELS: Record<string, string> = {
   csv: 'CSV',
   json: 'JSON',
-  xlsx: 'Excel',
-  paste: 'Paste',
+  xlsx: t('dsList.excel'),
+  paste: t('dsList.paste'),
   url: 'URL',
-  postgres: 'Postgres',
-  combined: 'Combined',
-  capture: 'Screenshot',
+  postgres: t('dsList.postgres'),
+  combined: t('dsList.combined'),
+  capture: t('common.screenshot'),
   sql: 'SQL',
-  input: 'Input',
-  parquet: 'Parquet',
+  input: t('dsList.input'),
+  parquet: t('dsList.parquet'),
+  notebook: t('dsList.notebook'), // r7:notebooks — a notebook cell's result (nbActions.ts)
 };
 
 /** The camera mark a capture-sourced record carries, wherever it is listed. */
@@ -219,8 +220,7 @@ function dsCameraGlyph(): SVGSVGElement {
 }
 
 const DS_NOT_REFRESHABLE_HINT =
-  'This dataset was saved before its source was recorded, or has no re-fetchable source '
-  + '(pasted text, or a screenshot capture). Re-importing the file will make it refreshable.';
+  t('dsList.this_dataset_was_saved_before_its');
 
 function makeSavedItem(d: any): HTMLElement {
   const row = document.createElement('div');
@@ -241,7 +241,7 @@ function makeSavedItem(d: any): HTMLElement {
       const thumb = document.createElement('img');
       thumb.className = 'ds-cap-thumb';
       thumb.src = 'file://' + cropPath;
-      thumb.alt = 'Capture screenshot';
+      thumb.alt = t('common.capture_screenshot');
       thumb.addEventListener('click', (e) => {
         e.stopPropagation();
         if (typeof openLightboxSrc === 'function') openLightboxSrc('file://' + cropPath);
@@ -250,13 +250,13 @@ function makeSavedItem(d: any): HTMLElement {
     }
     const badge = document.createElement('span');
     badge.className = 'ds-cap-badge';
-    badge.textContent = 'Capture';
+    badge.textContent = t('common.capture');
     open.appendChild(badge);
   }
 
   const name = document.createElement('span');
   name.className = 'ds-saved-name';
-  name.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
+  name.textContent = d && d.name ? String(d.name) : t('common.untitled_dataset');
   // Red, not the amber refresh dot: a data-quality rule is failing. The dot goes
   // straight to the Quality tab; the rest of the row still opens the grid.
   const dq = dqDot(d && d.qualityFailing);
@@ -285,7 +285,7 @@ function makeSavedItem(d: any): HTMLElement {
     source.appendChild(dsCameraGlyph());
     const label = document.createElement('span');
     label.className = 'ds-source-badge';
-    label.textContent = 'From screenshot · ' + formatSidebarTime((d && d.updatedAt) || null);
+    label.textContent = t('dsList.from_screenshot', { p0: formatSidebarTime((d && d.updatedAt) || null) });
     source.appendChild(label);
   } else {
     // A connection-sourced dataset shows WHICH source it came from. `csv` /
@@ -295,8 +295,8 @@ function makeSavedItem(d: any): HTMLElement {
     const conn = d && d.originConnId ? dsConnKinds.get(String(d.originConnId)) : undefined;
     // A query over this project's datasets: the same code mark the Query tab
     // and the lineage chips carry.
-    if (kind === 'sql') {
-      const glyph = icon('code', 16);
+    if (kind === 'sql' || kind === 'notebook') {
+      const glyph = icon(kind === 'sql' ? 'code' : 'file-text', 16);
       glyph.classList.add('ds-sql-glyph');
       source.appendChild(glyph);
     }
@@ -308,7 +308,7 @@ function makeSavedItem(d: any): HTMLElement {
     const badge = document.createElement('span');
     badge.className = 'ds-source-badge';
     const def = conn && typeof connDefById === 'function' ? connDefById(conn.kind) : null;
-    badge.textContent = conn ? conn.label : DS_SOURCE_LABELS[kind] || kind || 'Unknown';
+    badge.textContent = conn ? conn.label : DS_SOURCE_LABELS[kind] || kind || t('dsList.unknown');
     if (conn) badge.title = (def ? def.label + ' · ' : '') + conn.label;
     source.appendChild(badge);
   }
@@ -326,7 +326,7 @@ function makeSavedItem(d: any): HTMLElement {
     const dot = document.createElement('span');
     dot.className = 'ds-fresh-dot';
     dot.setAttribute('role', 'img');
-    dot.setAttribute('aria-label', 'Last refresh failed');
+    dot.setAttribute('aria-label', t('dsList.last_refresh_failed'));
     dot.textContent = '●';
     freshLine.appendChild(dot);
   }
@@ -347,7 +347,7 @@ function makeSavedItem(d: any): HTMLElement {
   // WHY it failed, on hover. A red dot whose cause is one dataset-open away is
   // a warning that makes you go and look; the row already has the reason.
   else if (d && d.lastRefreshStatus === 'error') {
-    fresh.title = String(d.lastRefreshError || 'The last refresh failed.');
+    fresh.title = String(d.lastRefreshError || t('common.the_last_refresh_failed'));
   }
   open.addEventListener('click', () => openSavedDataset(String(d.id)));
 
@@ -383,8 +383,8 @@ function makeSavedItem(d: any): HTMLElement {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn btn-sm ds-saved-refresh';
-    btn.setAttribute('aria-label', 'Refresh dataset');
-    iconLabel(btn, 'refresh', 'Refresh');
+    btn.setAttribute('aria-label', t('dsList.refresh_dataset'));
+    iconLabel(btn, 'refresh', t('common.refresh'));
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       handleRefreshDataset(String(d.id), btn, status);
@@ -400,9 +400,9 @@ function makeSavedItem(d: any): HTMLElement {
   const viz = document.createElement('button');
   viz.type = 'button';
   viz.className = 'btn btn-sm ds-saved-viz';
-  viz.setAttribute('aria-label', `New visual from ${d && d.name ? d.name : 'this dataset'}`);
-  viz.title = 'Build a chart from this dataset';
-  viz.textContent = 'New visual';
+  viz.setAttribute('aria-label', t('dsList.new_visual_from', { p0: d && d.name ? d.name : t('dsList.this_dataset') }));
+  viz.title = t('dsList.build_a_chart_from_this_dataset');
+  viz.textContent = t('common.new_visual');
   viz.addEventListener('click', (e) => {
     e.stopPropagation();
     if (typeof selectSection === 'function') selectSection('visuals');
@@ -413,12 +413,12 @@ function makeSavedItem(d: any): HTMLElement {
   const comb = document.createElement('button');
   comb.type = 'button';
   comb.className = 'btn btn-sm ds-saved-combine';
-  comb.setAttribute('aria-label', `Combine ${d && d.name ? d.name : 'dataset'} with another dataset`);
-  comb.title = 'Combine this dataset with another';
-  comb.textContent = 'Combine…';
+  comb.setAttribute('aria-label', t('dsList.combine_with_another_dataset', { p0: d && d.name ? d.name : 'dataset' }));
+  comb.title = t('dsList.combine_this_dataset_with_another');
+  comb.textContent = t('dsList.combine');
   comb.addEventListener('click', (e) => {
     e.stopPropagation();
-    void openComposerOnDataset(String(d.id), String((d && d.name) || 'Dataset'));
+    void openComposerOnDataset(String(d.id), String((d && d.name) || t('common.dataset')));
   });
   actions.appendChild(comb);
 
@@ -428,8 +428,8 @@ function makeSavedItem(d: any): HTMLElement {
   // Icon-only, so the accessible name is iconOnly's aria-label; `title` is the
   // hover tooltip, which an icon with no text needs to be identifiable at all.
   // It is set first because iconOnly() only fills in a title that is missing.
-  del.title = `Delete ${d && d.name ? d.name : 'dataset'}…`;
-  iconOnly(del, 'trash', `Delete ${d && d.name ? d.name : 'dataset'}`);
+  del.title = t('dsList.delete', { p0: d && d.name ? d.name : 'dataset' });
+  iconOnly(del, 'trash', t('common.delete', { p0: d && d.name ? d.name : 'dataset' }));
   del.addEventListener('click', (e) => {
     e.stopPropagation();
     handleDeleteDataset(String(d.id));
@@ -466,20 +466,20 @@ async function handleRefreshDataset(
   if (status) {
     status.hidden = false;
     status.classList.remove('is-error');
-    status.textContent = 'Refreshing…';
+    status.textContent = t('common.refreshing');
   }
   let res: any;
   try {
     res = await window.hub.refreshDataset(currentProjectId, id);
   } catch (_) {
-    res = { ok: false, error: 'Could not refresh this dataset.' };
+    res = { ok: false, error: t('dsList.could_not_refresh_this_dataset') };
   }
   if (btn) {
     btn.disabled = false;
     btn.classList.remove('is-busy');
   }
   const failed = !res || res.ok === false;
-  const error = failed ? ((res && res.error) || 'Could not refresh this dataset.') : '';
+  const error = failed ? ((res && res.error) || t('dsList.could_not_refresh_this_dataset')) : '';
   // Warnings are NOT a failure — the data landed, but something in the pipeline
   // no longer fits it, and that is worth saying next to the row.
   const warnings: string[] = !failed && Array.isArray(res.warnings) ? res.warnings : [];
@@ -539,10 +539,10 @@ function applyAutoRefreshOutcome(o: any): void {
       const every = fresh.textContent && fresh.textContent.indexOf(' · auto ') >= 0
         ? fresh.textContent.slice(fresh.textContent.indexOf(' · auto '))
         : '';
-      fresh.textContent = 'Data as of ' + formatSidebarTime(new Date().toISOString()) + every;
+      fresh.textContent = t('dsList.data_as_of_2', { p0: formatSidebarTime(new Date().toISOString()), every });
     }
   }
-  setRowRefreshStatus(String(o.datasetId), o.ok ? '' : String(o.error || 'Refresh failed.'), !o.ok);
+  setRowRefreshStatus(String(o.datasetId), o.ok ? '' : String(o.error || t('dsList.refresh_failed')), !o.ok);
 }
 
 if (window.hub && typeof window.hub.onDatasetRefreshed === 'function') {
@@ -568,16 +568,15 @@ async function handleRefreshAll(): Promise<void> {
 
   let okCount = 0;
   const failures = new Map<string, string>();
-  for (const t of targets) {
-    const res = await handleRefreshDataset(t.id, t.button, t.status, false);
+  for (const tv of targets) {
+    const res = await handleRefreshDataset(tv.id, tv.button, tv.status, false);
     if (res.ok) okCount += 1;
-    else failures.set(t.id, res.error || 'Could not refresh this dataset.');
+    else failures.set(tv.id, res.error || t('dsList.could_not_refresh_this_dataset'));
   }
 
   if (btn) btn.disabled = false;
   const failed = targets.length - okCount;
-  const summary = 'Refreshed ' + okCount + ' of ' + targets.length
-    + (failed > 0 ? ' · ' + failed + ' failed' : '');
+  const summary = t('dsList.refreshed_of', { okCount, targetsCount: targets.length, p2: (failed > 0 ? ' · ' + failed + ' failed' : '') });
   if (typeof showToast === 'function') showToast(summary);
 
   // Repaint so every row's timestamp and warning dot reflect what is on disk,

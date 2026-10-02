@@ -11,12 +11,12 @@
 // progress and Cancel) before the ordinary save.
 
 const TX_STEP_TYPES = new Set(['text_terms', 'text_sentiment', 'keyword_rules']);
-const TX_LANGS: Array<[string, string]> = [['en', 'English'], ['es', 'Spanish'], ['fr', 'French'], ['de', 'German']];
+const TX_LANGS: Array<[string, string]> = [['en', t('textSteps.english')], ['es', t('textSteps.spanish')], ['fr', t('textSteps.french')], ['de', t('textSteps.german')]];
 const TX_RANGES: Array<[string, string]> = [
-  ['1-1', 'Single words'], ['1-2', 'Words and pairs'], ['2-2', 'Pairs only'],
-  ['1-3', 'Words, pairs and triples'], ['2-3', 'Pairs and triples'], ['3-3', 'Triples only'],
+  ['1-1', t('textSteps.single_words')], ['1-2', t('textSteps.words_and_pairs')], ['2-2', t('textSteps.pairs_only')],
+  ['1-3', t('textSteps.words_pairs_and_triples')], ['2-3', t('textSteps.pairs_and_triples')], ['3-3', t('textSteps.triples_only')],
 ];
-const TX_MATCHES: Array<[string, string]> = [['contains', 'contains'], ['word', 'has the word'], ['regex', 'matches (regex)']];
+const TX_MATCHES: Array<[string, string]> = [['contains', 'contains'], ['word', t('textSteps.has_the_word')], ['regex', t('textSteps.matches_regex')]];
 
 /** A prefill for the NEXT text editor opened (the profile's buttons) — read once. */
 let txPrefill: any = null;
@@ -77,22 +77,21 @@ function txTermsForm(body: HTMLElement, e: any): () => any {
   const colSel = makeNameSelect(cols, e.column || cols[0]);
   const langSel = txLabelledSelect(TX_LANGS, e.lang || 'en');
   const rangeSel = txLabelledSelect(TX_RANGES, (e.minN || 1) + '-' + (e.maxN || 1));
-  const bySel = makeNameSelect(expColumns.map((c: any) => String(c.name)), e.by || '', '(none — across all rows)');
-  const rankSel = txLabelledSelect([['tfidf', 'Most distinctive of each group (TF-IDF)'], ['count', 'Most frequent in each group']],
+  const bySel = makeNameSelect(expColumns.map((c: any) => String(c.name)), e.by || '', t('textSteps.none_across_all_rows'));
+  const rankSel = txLabelledSelect([['tfidf', t('textSteps.most_distinctive_of_each_group_tf')], ['count', t('textSteps.most_frequent_in_each_group')]],
     e.rank || 'tfidf');
-  const rankRow = fieldRow('Rank terms by', rankSel);
+  const rankRow = fieldRow(t('textSteps.rank_terms_by'), rankSel);
   const topIn = document.createElement('input');
   topIn.type = 'number';
   topIn.min = '1';
   topIn.max = '1000';
   topIn.className = 'ds-step-input';
   topIn.value = String(e.top || 25);
-  const nums = txCheck('Keep numbers as terms', !!e.keepNumbers);
-  const senti = txCheck('Add each term’s average sentiment', !!e.sentiment);
+  const nums = txCheck(t('textSteps.keep_numbers_as_terms'), !!e.keepNumbers);
+  const senti = txCheck(t('textSteps.add_each_term_s_average_sentiment'), !!e.sentiment);
   const hint = document.createElement('div');
   hint.className = 'ds-step-hint';
-  hint.textContent = 'The table becomes one row per term — term, words, count (and tfidf per group). Stop words are removed; '
-    + 'contractions stay whole ("don’t"). TF-IDF treats each group as one document: a term every group uses scores 0.';
+  hint.textContent = t('textSteps.the_table_becomes_one_row_per');
   const preview = makePreviewBox();
   preview.classList.add('tx-preview');
   const read = (): any => {
@@ -110,21 +109,21 @@ function txTermsForm(body: HTMLElement, e: any): () => any {
   let seq = 0;
   const refresh = async (): Promise<void> => {
     rankRow.hidden = !bySel.value;
-    if (!colSel.value) return setPreview(preview, ['This dataset has no text column to count.'], true);
+    if (!colSel.value) return setPreview(preview, [t('textSteps.this_dataset_has_no_text_column')], true);
     const mine = ++seq;
     const res = await txPreview(read());
     if (mine !== seq) return;
-    if (!res || !res.ok) return setPreview(preview, [(res && res.error) || 'Could not preview.'], true);
+    if (!res || !res.ok) return setPreview(preview, [(res && res.error) || t('common.could_not_preview')], true);
     txPaintTermsPreview(preview, res);
   };
   const live = txLive(refresh);
   [colSel, langSel, rangeSel, bySel, rankSel].forEach((el) => el.addEventListener('change', () => void refresh()));
   [topIn, nums.box, senti.box].forEach((el) => el.addEventListener('input', live));
-  body.append(fieldRow('Text column', colSel), fieldRow('Language (stop words)', langSel), fieldRow('Terms', rangeSel),
-    fieldRow('Group by (optional)', bySel), rankRow, fieldRow('Terms kept (per group)', topIn), nums.row, senti.row, hint, preview);
+  body.append(fieldRow(t('common.text_column'), colSel), fieldRow(t('textSteps.language_stop_words'), langSel), fieldRow(t('textSteps.terms'), rangeSel),
+    fieldRow(t('textSteps.group_by_optional'), bySel), rankRow, fieldRow(t('textSteps.terms_kept_per_group'), topIn), nums.row, senti.row, hint, preview);
   void refresh();
   return () => {
-    if (!colSel.value) { window.alert('Pick the text column.'); return null; }
+    if (!colSel.value) { window.alert(t('textSteps.pick_the_text_column')); return null; }
     return read();
   };
 }
@@ -139,8 +138,7 @@ function txSentimentForm(body: HTMLElement, e: any): () => any {
   syncPlaceholder();
   const hint = document.createElement('div');
   hint.className = 'ds-step-hint';
-  hint.textContent = 'VADER sentiment (an English lexicon, MIT): a score from −1 (negative) to +1 (positive) per row, '
-    + 'with 0 for text that carries none. Empty text stays empty. The lexicon version is recorded on the step.';
+  hint.textContent = t('textSteps.vader_sentiment_an_english_lexicon_mit');
   const preview = makePreviewBox();
   preview.classList.add('tx-preview');
   const read = (): any => {
@@ -152,19 +150,19 @@ function txSentimentForm(body: HTMLElement, e: any): () => any {
   let seq = 0;
   const refresh = async (): Promise<void> => {
     syncPlaceholder();
-    if (!colSel.value) return setPreview(preview, ['This dataset has no text column to score.'], true);
+    if (!colSel.value) return setPreview(preview, [t('textSteps.this_dataset_has_no_text_column_2')], true);
     const mine = ++seq;
     const res = await txPreview(read());
     if (mine !== seq) return;
-    if (!res || !res.ok) return setPreview(preview, [(res && res.error) || 'Could not preview.'], true);
+    if (!res || !res.ok) return setPreview(preview, [(res && res.error) || t('common.could_not_preview')], true);
     txPaintSentimentPreview(preview, res);
   };
   colSel.addEventListener('change', () => void refresh());
   asIn.addEventListener('input', txLive(refresh));
-  body.append(fieldRow('Text column', colSel), fieldRow('New column name', asIn), hint, preview);
+  body.append(fieldRow(t('common.text_column'), colSel), fieldRow(t('common.new_column_name'), asIn), hint, preview);
   void refresh();
   return () => {
-    if (!colSel.value) { window.alert('Pick the text column.'); return null; }
+    if (!colSel.value) { window.alert(t('textSteps.pick_the_text_column')); return null; }
     return read();
   };
 }
@@ -182,37 +180,37 @@ function txRuleRow(rule: any, list: HTMLElement, onChange: () => void): HTMLElem
   row.className = 'tx-rule';
   const pat = textInput(r.pattern || '');
   pat.classList.add('tx-pat');
-  pat.placeholder = 'refund';
-  pat.setAttribute('aria-label', 'Pattern');
+  pat.placeholder = t('textSteps.refund');
+  pat.setAttribute('aria-label', t('common.pattern'));
   const match = txLabelledSelect(TX_MATCHES, r.match || 'word');
   match.classList.add('tx-match');
-  match.setAttribute('aria-label', 'Match');
+  match.setAttribute('aria-label', t('common.match'));
   const caseLbl = document.createElement('label');
   caseLbl.className = 'tx-case-lbl';
-  caseLbl.title = 'Match upper and lower case exactly';
+  caseLbl.title = t('textSteps.match_upper_and_lower_case_exactly');
   const cs = document.createElement('input');
   cs.type = 'checkbox';
   cs.className = 'tx-case';
   cs.checked = !!r.caseSensitive;
   const csText = document.createElement('span');
-  csText.textContent = 'Aa';
+  csText.textContent = t('textSteps.aa');
   csText.setAttribute('aria-hidden', 'true');
-  cs.setAttribute('aria-label', 'Match case');
+  cs.setAttribute('aria-label', t('textSteps.match_case'));
   caseLbl.append(cs, csText);
   const ifLbl = document.createElement('span');
   ifLbl.className = 'pp-arrow';
-  ifLbl.textContent = 'If text';
+  ifLbl.textContent = t('textSteps.if_text');
   const arrow = document.createElement('span');
   arrow.className = 'pp-arrow';
   arrow.textContent = '→';
   const cat = textInput(r.category || '');
   cat.classList.add('tx-cat');
-  cat.placeholder = 'Billing';
-  cat.setAttribute('aria-label', 'Category');
+  cat.placeholder = t('textSteps.billing');
+  cat.setAttribute('aria-label', t('common.category'));
   const up = document.createElement('button');
   up.type = 'button';
   up.className = 'ds-step-btn';
-  iconOnly(up, 'arrow-up', 'Move rule up — earlier rules win');
+  iconOnly(up, 'arrow-up', t('textSteps.move_rule_up_earlier_rules_win'));
   up.addEventListener('click', () => {
     const prev = row.previousElementSibling;
     if (prev) { list.insertBefore(row, prev); onChange(); }
@@ -220,7 +218,7 @@ function txRuleRow(rule: any, list: HTMLElement, onChange: () => void): HTMLElem
   const del = document.createElement('button');
   del.type = 'button';
   del.className = 'ds-step-btn';
-  iconOnly(del, 'x', 'Remove rule');
+  iconOnly(del, 'x', t('common.remove_rule'));
   del.addEventListener('click', () => { row.remove(); onChange(); });
   [pat, cat].forEach((el) => el.addEventListener('input', onChange));
   [match, cs].forEach((el) => el.addEventListener('change', onChange));
@@ -262,12 +260,12 @@ function txKeywordForm(body: HTMLElement, e: any): () => any {
   const refresh = async (): Promise<void> => {
     asIn.placeholder = (colSel.value || 'text') + '_category';
     const step = read();
-    if (!colSel.value) return setPreview(preview, ['This dataset has no text column to tag.'], true);
-    if (!step.rules.length) return setPreview(preview, ['Add a rule to see how many rows each category gets.']);
+    if (!colSel.value) return setPreview(preview, [t('textSteps.this_dataset_has_no_text_column_3')], true);
+    if (!step.rules.length) return setPreview(preview, [t('textSteps.add_a_rule_to_see_how')]);
     const mine = ++seq;
     const res = await txPreview(step);
     if (mine !== seq) return;
-    if (!res || !res.ok) return setPreview(preview, [(res && res.error) || 'Could not preview.'], true);
+    if (!res || !res.ok) return setPreview(preview, [(res && res.error) || t('common.could_not_preview')], true);
     txPaintCategoryPreview(preview, res);
   };
   const live = txLive(refresh);
@@ -276,18 +274,17 @@ function txKeywordForm(body: HTMLElement, e: any): () => any {
   const addBtn = document.createElement('button');
   addBtn.type = 'button';
   addBtn.className = 'btn';
-  addBtn.textContent = '+ Add rule';
+  addBtn.textContent = t('common.add_rule_2');
   addBtn.addEventListener('click', () => add());
-  const elseIn = textInput(e.otherwise === undefined ? 'Other' : e.otherwise === null ? '' : String(e.otherwise));
-  elseIn.placeholder = '(leave empty)';
+  const elseIn = textInput(e.otherwise === undefined ? t('common.other') : e.otherwise === null ? '' : String(e.otherwise));
+  elseIn.placeholder = t('common.leave_empty');
   elseIn.addEventListener('input', live);
   const hint = document.createElement('div');
   hint.className = 'ds-step-hint';
-  hint.textContent = 'The FIRST rule that matches decides the category, so order matters — move a rule up to give it priority. '
-    + 'Matching ignores case unless the box is ticked.';
+  hint.textContent = t('textSteps.the_first_rule_that_matches_decides');
   colSel.addEventListener('change', () => void refresh());
   asIn.addEventListener('input', live);
-  body.append(fieldRow('Text column', colSel), fieldRow('New column name', asIn));
+  body.append(fieldRow(t('common.text_column'), colSel), fieldRow(t('common.new_column_name'), asIn));
   // From the profile: its top terms as one-click rules.
   const terms: string[] = Array.isArray(e.terms) ? e.terms.slice(0, 8) : [];
   if (terms.length) {
@@ -295,31 +292,31 @@ function txKeywordForm(body: HTMLElement, e: any): () => any {
     chips.className = 'tx-chips';
     const lead = document.createElement('span');
     lead.className = 'tx-muted';
-    lead.textContent = 'Common words:';
+    lead.textContent = t('textSteps.common_words');
     chips.appendChild(lead);
-    terms.forEach((t) => {
+    terms.forEach((tv) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'tx-chip';
-      b.textContent = t;
-      b.setAttribute('aria-label', 'Add a rule for “' + t + '”');
+      b.textContent = tv;
+      b.setAttribute('aria-label', t('textSteps.add_a_rule_for', { t: tv }));
       b.addEventListener('click', () => {
         const blank = Array.from(list.querySelectorAll('.tx-rule')).find((row) => !(row.querySelector('.tx-pat') as HTMLInputElement).value.trim());
         if (blank) blank.remove();
-        add({ pattern: t, match: 'word', category: t.charAt(0).toUpperCase() + t.slice(1) });
+        add({ pattern: tv, match: 'word', category: tv.charAt(0).toUpperCase() + tv.slice(1) });
         live();
       });
       chips.appendChild(b);
     });
     body.appendChild(chips);
   }
-  body.append(list, addBtn, fieldRow('Otherwise', elseIn), hint, preview);
+  body.append(list, addBtn, fieldRow(t('common.otherwise'), elseIn), hint, preview);
   void refresh();
   return () => {
-    if (!colSel.value) { window.alert('Pick the text column.'); return null; }
+    if (!colSel.value) { window.alert(t('textSteps.pick_the_text_column')); return null; }
     const step = read();
-    if (!step.rules.length) { window.alert('Add at least one rule with a pattern.'); return null; }
-    if (step.rules.some((r: any) => !r.category)) { window.alert('Give every rule a category.'); return null; }
+    if (!step.rules.length) { window.alert(t('textSteps.add_at_least_one_rule_with')); return null; }
+    if (step.rules.some((r: any) => !r.category)) { window.alert(t('textSteps.give_every_rule_a_category')); return null; }
     return step;
   };
 }
@@ -340,27 +337,26 @@ function txBuildStepForm(type: string, body: HTMLElement, existing: any): (() =>
 function txStepSummary(step: any): string {
   if (!step || !TX_STEP_TYPES.has(step.type)) return '';
   if (step.type === 'text_sentiment') {
-    return 'Sentiment of ' + step.column + ' → ' + (step.as || step.column + '_sentiment') + (step.lexiconVersion ? ' (' + step.lexiconVersion + ')' : '');
+    return t('textSteps.sentiment_of', { column: step.column, p1: (step.as || step.column + '_sentiment'), p2: (step.lexiconVersion ? ' (' + step.lexiconVersion + ')' : '') });
   }
   if (step.type === 'keyword_rules') {
     const n = Array.isArray(step.rules) ? step.rules.length : 0;
-    return 'Tag ' + step.column + ' with ' + n + (n === 1 ? ' rule' : ' rules') + ' → ' + (step.as || step.column + '_category');
+    return t('textSteps.tag_with', { column: step.column, n, p3: (step.as || step.column + '_category') });
   }
-  const range = step.minN === step.maxN ? (step.minN === 1 ? 'words' : step.minN + '-word terms') : step.minN + '–' + step.maxN + '-word terms';
-  return 'Top ' + step.top + ' ' + range + ' in ' + step.column
-    + (step.by ? (step.rank === 'tfidf' ? ', most distinctive per ' : ', per ') + step.by : '');
+  const range = step.minN === step.maxN ? (step.minN === 1 ? 'words' : t('textSteps.word_terms', { minN: step.minN })) : t('textSteps.word_terms_2', { minN: step.minN, maxN: step.maxN });
+  return t('textSteps.top_in', { top: step.top, range, column: step.column, p3: (step.by ? (step.rank === 'tfidf' ? t('textSteps.most_distinctive_per') : t('textSteps.per')) + step.by : '') });
 }
 
 /** Save a text step (add at -1, else replace) — replies like dataset:addStep, or { cancelled }. */
 async function txCommitStep(index: number, step: any): Promise<any> {
-  if (!currentProjectId || !expId || !window.hubText) return { ok: false, error: 'No dataset is open.' };
+  if (!currentProjectId || !expId || !window.hubText) return { ok: false, error: t('textSteps.no_dataset_is_open') };
   const save = document.querySelector('#ds-step-editor .btn-primary') as HTMLButtonElement | null;
   const label = save ? save.textContent : '';
-  if (save) { save.disabled = true; save.textContent = 'Saving…'; }
+  if (save) { save.disabled = true; save.textContent = t('common.saving'); }
   try {
     return await window.hubText.commitStep(currentProjectId, expId, index, step);
   } catch (_) {
-    return { ok: false, error: 'Could not save the step.' };
+    return { ok: false, error: t('textSteps.could_not_save_the_step') };
   } finally {
     if (save && save.isConnected) { save.disabled = false; save.textContent = label; }
   }

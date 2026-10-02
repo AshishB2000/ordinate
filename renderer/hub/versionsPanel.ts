@@ -17,7 +17,7 @@
 // way to undo a restore is to restore the version before it.
 
 const VH_TYPE_WORD: Record<string, string> = {
-  dashboard: 'Dashboard', visual: 'Visual', metric: 'Metric', report: 'Report', dataset: 'Pipeline',
+  dashboard: t('common.dashboard'), visual: 'Visual', metric: t('common.metric'), report: t('common.report'), dataset: 'Pipeline',
 };
 
 interface VhState {
@@ -39,7 +39,7 @@ async function vhOpen(type: string, id: string, name?: string, word0?: string): 
   const panel = spOpen({
     kind: 'history',
     title: name || word,
-    sub: 'Version history · ' + word,
+    sub: t('versionsPanel.version_history', { word }),
     onClose: () => { vhEndPreview(); vhState = null; },
   });
   vhState = { type, id, name: name || word, list: [], sel: '', body: panel.body };
@@ -67,8 +67,8 @@ function vhPaint(): void {
     st.body.appendChild(makeEmptyState({
       variant: 'starred',
       iconName: 'history',
-      title: 'No saved versions yet',
-      line: 'Every save from now on is kept here, up to 50, and any of them can be brought back.',
+      title: t('versionsPanel.no_saved_versions_yet'),
+      line: t('versionsPanel.every_save_from_now_on_is'),
     }));
     return;
   }
@@ -96,8 +96,8 @@ function vhPaint(): void {
   const note = document.createElement('p');
   note.className = 'dsp-note vh-foot-note';
   note.textContent = st.list.length >= 50
-    ? 'The 50 most recent saves are kept.'
-    : `${st.list.length} ${st.list.length === 1 ? 'save' : 'saves'} kept · up to 50`;
+    ? t('versionsPanel.the_50_most_recent_saves_are')
+    : t('versionsPanel.kept_up_to_50', { listCount: st.list.length });
   st.body.appendChild(note);
 }
 
@@ -105,8 +105,8 @@ function vhDayLabel(iso: string): string {
   const d = new Date(iso);
   const today = new Date();
   const days = Math.round((new Date(today.toDateString()).getTime() - new Date(d.toDateString()).getTime()) / 86400000);
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Yesterday';
+  if (days === 0) return t('common.today');
+  if (days === 1) return t('common.yesterday');
   return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
@@ -140,7 +140,7 @@ function vhRow(v: any, isCurrent: boolean): HTMLElement {
   if (isCurrent) {
     const badge = document.createElement('span');
     badge.className = 'vh-badge';
-    badge.textContent = 'Current';
+    badge.textContent = t('common.current');
     top.appendChild(badge);
   }
   const summary = document.createElement('span');
@@ -151,13 +151,13 @@ function vhRow(v: any, isCurrent: boolean): HTMLElement {
     const r = document.createElement('span');
     r.className = 'vh-restored';
     r.appendChild(icon('rotate-ccw', 12));
-    const t = document.createElement('span');
-    t.textContent = 'Restored from ' + spWhen(v.restoredFrom);
-    r.appendChild(t);
+    const tv = document.createElement('span');
+    tv.textContent = t('versionsPanel.restored_from', { restoredFrom: spWhen(v.restoredFrom) });
+    r.appendChild(tv);
     main.appendChild(r);
   }
   row.appendChild(main);
-  row.setAttribute('aria-label', `${spWhen(v.savedAt)}${isCurrent ? ', current' : ''}: ${v.summary || ''}`);
+  row.setAttribute('aria-label', t('versionsPanel.text', { savedAt: spWhen(v.savedAt), p1: !!(isCurrent), p2: v.summary || '' }));
   row.addEventListener('click', () => {
     if (isCurrent) void vhBackToCurrent();
     else void vhPreview(v);
@@ -205,7 +205,7 @@ async function vhPreview(v: any): Promise<void> {
   try {
     snap = await window.hub.versionsGet(currentProjectId, st.type, st.id, String(v.key));
   } catch (_) { snap = null; }
-  if (!snap || !snap.record) { showToast('That version could not be read'); return; }
+  if (!snap || !snap.record) { showToast(t('versionsPanel.that_version_could_not_be_read')); return; }
   if (vhState !== st) return;
   st.sel = String(v.key);
   st.body.querySelectorAll('.vh-row').forEach((r) => {
@@ -227,19 +227,19 @@ function vhBanner(v: any): HTMLElement {
   const text = document.createElement('div');
   text.className = 'vh-banner-text';
   const strong = document.createElement('strong');
-  strong.textContent = 'Viewing version from ' + spWhen(v.savedAt);
+  strong.textContent = t('versionsPanel.viewing_version_from', { savedAt: spWhen(v.savedAt) });
   const sub = document.createElement('span');
-  sub.textContent = String(v.summary || '') + ' · read-only';
+  sub.textContent = t('versionsPanel.read_only', { p0: String(v.summary || '') });
   text.append(strong, sub);
   const restore = document.createElement('button');
   restore.type = 'button';
   restore.className = 'btn btn-sm btn-primary vh-restore-btn';
-  iconLabel(restore, 'rotate-ccw', 'Restore');
+  iconLabel(restore, 'rotate-ccw', t('common.restore'));
   restore.addEventListener('click', () => void vhRestore(v));
   const back = document.createElement('button');
   back.type = 'button';
   back.className = 'btn btn-sm btn-ghost vh-back-btn';
-  back.textContent = 'Back to current';
+  back.textContent = t('versionsPanel.back_to_current');
   back.addEventListener('click', () => void vhBackToCurrent());
   const actions = document.createElement('div');
   actions.className = 'vh-banner-actions';
@@ -261,7 +261,7 @@ async function vhPreviewDashboard(rec: any, v: any): Promise<void> {
   // current version, and the preview is about to replace the editor's state.
   if (dashDirty && dashCurrent && String(dashCurrent.id) === st.id && !dashReadOnly) await persistDashboard();
   const live = await window.hub.getAnalysis(currentProjectId as string, st.id).catch(() => null);
-  if (!live) { showToast('That dashboard is gone'); return; }
+  if (!live) { showToast(t('versionsPanel.that_dashboard_is_gone')); return; }
   vhDropBanners();
   // The editor opens the SNAPSHOT with dashReadOnly already set, so the cards
   // draw without drag handles and the 600 ms autosave cannot fire.
@@ -272,7 +272,7 @@ async function vhPreviewDashboard(rec: any, v: any): Promise<void> {
   dashMode = 'analysis';
   dashReadOnly = true;
   mountDashEditor('an-editor-host');
-  if (!Array.isArray(snap.sheets) || !snap.sheets.length) snap.sheets = [{ id: dashUuid(), name: 'Sheet 1', cards: [] }];
+  if (!Array.isArray(snap.sheets) || !snap.sheets.length) snap.sheets = [{ id: dashUuid(), name: t('common.sheet_1'), cards: [] }];
   snap.pages = snap.sheets;
   dashShow('an-list-view', false);
   openEditorWith(snap, snap.name);
@@ -286,7 +286,7 @@ async function vhPreviewDashboard(rec: any, v: any): Promise<void> {
 async function vhPreviewVisual(rec: any, v: any): Promise<void> {
   const st = vhState as VhState;
   const live = await window.hub.getVisual(currentProjectId as string, st.id).catch(() => null);
-  if (!live) { showToast('That visual is gone'); return; }
+  if (!live) { showToast(t('versionsPanel.that_visual_is_gone')); return; }
   vhDropBanners();
   await vizOpenRecord({ ...live, ...rec, id: live.id, datasetId: live.datasetId });
   const vb = document.getElementById('viz-builder');
@@ -316,25 +316,25 @@ function vhPreviewInPanel(rec: any, v: any): void {
     facts.append(dt, dd);
   };
   if (st.type === 'metric') {
-    add('Name', rec.name || '');
+    add(t('common.name'), rec.name || '');
     const def = rec.definition || {};
-    add('Definition', def.formula ? String(def.formula) : `${def.aggregation || 'sum'}(${def.column || ''})`);
-    add('Filters', Array.isArray(rec.filters) && rec.filters.length ? vhFilterWords(rec.filters) : 'None');
+    add(t('common.definition'), def.formula ? String(def.formula) : `${def.aggregation || 'sum'}(${def.column || ''})`);
+    add(t('common.filters'), Array.isArray(rec.filters) && rec.filters.length ? vhFilterWords(rec.filters) : t('common.none'));
     const f = rec.format || {};
-    add('Format', [f.kind, f.decimals !== undefined ? f.decimals + ' dp' : '', f.compact ? 'compact' : ''].filter(Boolean).join(' · '));
-    if (rec.description) add('Description', rec.description);
+    add(t('common.format'), [f.kind, f.decimals !== undefined ? f.decimals + ' dp' : '', f.compact ? 'compact' : ''].filter(Boolean).join(' · '));
+    if (rec.description) add(t('common.description'), rec.description);
   } else if (st.type === 'report') {
-    add('Name', rec.name || '');
-    add('Format', String(rec.format || '').toUpperCase());
+    add(t('common.name'), rec.name || '');
+    add(t('common.format'), String(rec.format || '').toUpperCase());
     const pages = Array.isArray(rec.pages) ? rec.pages : [];
-    add('Pages', `${pages.filter((p: any) => p && p.include !== false).length} of ${pages.length} included`);
-    add('Cover', rec.cover && rec.cover.title ? rec.cover.title : '');
-    add('Schedule', rec.schedule && rec.schedule.cadence && rec.schedule.cadence !== 'off'
-      ? `${rec.schedule.cadence} at ${rec.schedule.at}` : 'Off');
+    add(t('common.pages'), t('versionsPanel.of_included', { p0: pages.filter((p: any) => p && p.include !== false).length, pagesCount: pages.length }));
+    add(t('common.cover'), rec.cover && rec.cover.title ? rec.cover.title : '');
+    add(t('common.schedule'), rec.schedule && rec.schedule.cadence && rec.schedule.cadence !== 'off'
+      ? `${rec.schedule.cadence} at ${rec.schedule.at}` : t('common.off'));
   } else if (st.type === 'dataset') {
     const steps = Array.isArray(rec.steps) ? rec.steps : [];
     if (rec.table) { vhPreviewTable(box, facts, add, rec.table, steps.length); return; }
-    add('Steps', steps.length ? String(steps.length) : 'None — the source as imported');
+    add(t('common.steps'), steps.length ? String(steps.length) : t('versionsPanel.none_the_source_as_imported'));
     box.appendChild(facts);
     const ol = document.createElement('ol');
     ol.className = 'vh-steps';
@@ -355,19 +355,19 @@ function vhPreviewInPanel(rec: any, v: any): void {
 function vhPreviewTable(box: HTMLElement, facts: HTMLElement, add: (k: string, v: string) => void, table: any, steps: number): void {
   const cols: any[] = Array.isArray(table.columns) ? table.columns : [];
   const rows: any[][] = Array.isArray(table.rows) ? table.rows : [];
-  add('Rows', rows.length.toLocaleString('en-US'));
-  add('Columns', cols.map((c) => String(c && c.name)).join(', '));
-  if (steps) add('Prepare steps', String(steps));
+  add(t('common.rows'), rows.length.toLocaleString('en-US'));
+  add(t('common.columns'), cols.map((c) => String(c && c.name)).join(', '));
+  if (steps) add(t('versionsPanel.prepare_steps'), String(steps));
   box.appendChild(facts);
-  const t = document.createElement('table');
-  t.className = 'vh-table';
+  const tv = document.createElement('table');
+  tv.className = 'vh-table';
   const hr = document.createElement('tr');
   for (const c of cols) {
     const th = document.createElement('th');
     th.textContent = String(c && c.name);
     hr.appendChild(th);
   }
-  t.appendChild(hr);
+  tv.appendChild(hr);
   for (const r of rows.slice(0, 8)) {
     const tr = document.createElement('tr');
     cols.forEach((_c, i) => {
@@ -375,13 +375,13 @@ function vhPreviewTable(box: HTMLElement, facts: HTMLElement, add: (k: string, v
       td.textContent = r && r[i] != null ? String(r[i]) : '';
       tr.appendChild(td);
     });
-    t.appendChild(tr);
+    tv.appendChild(tr);
   }
-  if (rows.length) box.appendChild(t);
+  if (rows.length) box.appendChild(tv);
   if (rows.length > 8) {
     const more = document.createElement('p');
     more.className = 'dsp-note';
-    more.textContent = `…and ${(rows.length - 8).toLocaleString('en-US')} more rows`;
+    more.textContent = t('versionsPanel.and_more_rows', { p0: (rows.length - 8).toLocaleString('en-US') });
     box.appendChild(more);
   }
   box.hidden = false;
@@ -392,17 +392,17 @@ function vhFilterWords(filters: any[]): string {
 }
 
 function vhStepWords(s: any): string {
-  if (!s || typeof s !== 'object') return 'Step';
+  if (!s || typeof s !== 'object') return t('common.step');
   switch (s.type) {
-    case 'calculated_field': return `Calculated field ${s.name} = ${s.expression}`;
-    case 'filter': return 'Filter ' + vhFilterWords([s]);
-    case 'rename_column': return `Rename ${s.from} → ${s.to}`;
-    case 'drop_column': return `Drop ${s.column}`;
-    case 'fill_empty': return `Fill empty ${s.column} with ${s.value}`;
-    case 'trim': return s.column ? `Trim ${s.column}` : 'Trim text columns';
-    case 'dedupe': return 'Remove duplicate rows';
-    case 'group_aggregate': return `Group by ${(s.groupBy || []).join(', ')}`;
-    default: return pvMaskSummary(s) || String(s.type || 'Step');
+    case 'calculated_field': return t('versionsPanel.calculated_field', { name: s.name, expression: s.expression });
+    case 'filter': return t('common.filter_2', { p0: vhFilterWords([s]) });
+    case 'rename_column': return t('common.rename_2', { from: s.from, to: s.to });
+    case 'drop_column': return t('versionsPanel.drop', { column: s.column });
+    case 'fill_empty': return t('versionsPanel.fill_empty_with', { column: s.column, value: s.value });
+    case 'trim': return s.column ? t('versionsPanel.trim', { column: s.column }) : t('versionsPanel.trim_text_columns');
+    case 'dedupe': return t('versionsPanel.remove_duplicate_rows');
+    case 'group_aggregate': return t('versionsPanel.group_by', { p0: (s.groupBy || []).join(', ') });
+    default: return pvMaskSummary(s) || String(s.type || t('common.step'));
   }
 }
 
@@ -435,10 +435,10 @@ async function vhRestore(v: any): Promise<void> {
   try {
     res = await window.hub.versionsRestore(currentProjectId, st.type, st.id, String(v.key));
   } catch (_) { res = null; }
-  if (!res || !res.ok) { showToast((res && res.error) || 'Could not restore that version'); return; }
+  if (!res || !res.ok) { showToast((res && res.error) || t('versionsPanel.could_not_restore_that_version')); return; }
   showToast(res.unchanged
-    ? 'That version is already the current one'
-    : 'Restored the version from ' + spWhen(v.savedAt) + ' — the one before it is still in History');
+    ? t('versionsPanel.that_version_is_already_the_current')
+    : t('versionsPanel.restored_the_version_from_the_one', { savedAt: spWhen(v.savedAt) }));
   // Back to current reopens a dashboard or visual from disk — which now IS the
   // restored content. The panel-previewed kinds repaint whatever shows them.
   await vhBackToCurrent();

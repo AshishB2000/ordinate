@@ -15,7 +15,7 @@
 // each event's "when" text with the list.
 
 const EV_KINDS: Array<[string, string]> = [
-  ['launch', 'Launch'], ['campaign', 'Campaign'], ['incident', 'Incident'], ['holiday', 'Holiday'], ['other', 'Other'],
+  ['launch', t('common.launch')], ['campaign', t('common.campaign')], ['incident', t('common.incident')], ['holiday', t('common.holiday')], ['other', t('common.other')],
 ];
 const EV_SVG = 'http://www.w3.org/2000/svg';
 
@@ -35,7 +35,7 @@ function evMk<T extends HTMLElement = HTMLElement>(tag: string, cls: string, tex
 
 function evKindName(kind: string): string {
   const k = EV_KINDS.find((x) => x[0] === kind);
-  return k ? k[1] : 'Other';
+  return k ? k[1] : t('common.other');
 }
 
 /** The kind's mark — the SAME glyph a chart draws (chartEvents.evIcon), as SVG. */
@@ -64,7 +64,7 @@ function evKindMark(kind: string): SVGSVGElement {
 
 function evDatasetName(id: string): string {
   const d = evState.datasets.find((x) => x && x.id === id);
-  return d ? String(d.name) : 'a deleted dataset';
+  return d ? String(d.name) : t('eventsPage.a_deleted_dataset');
 }
 
 /** "All charts" · "Orders" · "Orders · Region = West". */
@@ -73,7 +73,7 @@ function evScopeText(e: any): string {
   const parts: string[] = [];
   if (Array.isArray(s.datasetIds) && s.datasetIds.length) parts.push(s.datasetIds.map(evDatasetName).join(', '));
   for (const f of Array.isArray(s.filters) ? s.filters : []) parts.push(`${f.column} = ${(f.values || []).join(' or ')}`);
-  return parts.length ? parts.join(' · ') : 'All charts';
+  return parts.length ? parts.join(' · ') : t('eventsPage.all_charts');
 }
 
 /** Inclusive day count of an event, for the When column's second line. */
@@ -119,7 +119,7 @@ function evPaint(): void {
   const counts = new Map<string, number>();
   all.forEach((e) => counts.set(e.kind, (counts.get(e.kind) || 0) + 1));
   if (evKind && !counts.get(evKind)) evKind = '';
-  const opts: Array<[string, string, number]> = [['', 'All', all.length]];
+  const opts: Array<[string, string, number]> = [['', t('common.all'), all.length]];
   EV_KINDS.forEach(([k, label]) => { if (counts.get(k)) opts.push([k, label, counts.get(k) || 0]); });
   if (all.length) {
     opts.forEach(([k, label, n]) => {
@@ -150,7 +150,7 @@ function evRow(e: any): HTMLElement {
   name.appendChild(evKindMark(e.kind));
   const btn = evMk<HTMLButtonElement>('button', 'mp-name ev-title', String(e.title));
   btn.type = 'button';
-  btn.title = 'Edit this event';
+  btn.title = t('eventsPage.edit_this_event');
   btn.addEventListener('click', () => { void evEdit(e); });
   name.appendChild(btn);
 
@@ -158,7 +158,7 @@ function evRow(e: any): HTMLElement {
 
   const when = evMk('div', 'ev-when');
   when.appendChild(evMk('span', 'ev-when-main', e.end ? `${evDateText(e.date)} – ${evDateText(e.end)}` : evDateText(e.date)));
-  when.appendChild(evMk('span', 'ev-when-sub', e.end ? `${evDays(e)} days · drawn as a band` : 'One day · drawn as a marker'));
+  when.appendChild(evMk('span', 'ev-when-sub', e.end ? t('eventsPage.days_drawn_as_a_band', { e: evDays(e) }) : t('eventsPage.one_day_drawn_as_a_marker')));
 
   const scope = evMk('span', 'ws-cell ev-scope', evScopeText(e));
   scope.title = scope.textContent || '';
@@ -166,11 +166,11 @@ function evRow(e: any): HTMLElement {
   const actions = evMk('div', 'mp-actions');
   const edit = evMk<HTMLButtonElement>('button', 'btn btn-sm btn-ghost mp-more');
   edit.type = 'button';
-  iconOnly(edit, 'pencil', `Edit ${e.title}`);
+  iconOnly(edit, 'pencil', t('eventsPage.edit', { title: e.title }));
   edit.addEventListener('click', () => { void evEdit(e); });
   const del = evMk<HTMLButtonElement>('button', 'btn btn-sm btn-ghost mp-more');
   del.type = 'button';
-  iconOnly(del, 'trash', `Delete ${e.title}`);
+  iconOnly(del, 'trash', t('eventsPage.delete', { title: e.title }));
   del.addEventListener('click', () => { void evDelete(e); });
   actions.append(edit, del);
 
@@ -180,9 +180,9 @@ function evRow(e: any): HTMLElement {
 
 async function evDelete(e: any): Promise<void> {
   if (!currentProjectId) return;
-  if (!window.confirm(`Delete "${e.title}"? Charts stop marking it and findings stop naming it.`)) return;
+  if (!window.confirm(t('eventsPage.delete_charts_stop_marking_it_and', { title: e.title }))) return;
   try { await window.hubEvents.remove(currentProjectId, e.id); } catch (_) { /* the reload reports it */ }
-  evFlash(`Deleted "${e.title}".`);
+  evFlash(t('eventsPage.deleted', { title: e.title }));
   await evRefresh();
 }
 
@@ -197,7 +197,7 @@ function evPaintCalendars(): void {
     const row = evMk('div', 'cm-toggle-row ev-cal');
     const text = evMk('div', 'ev-cal-text');
     text.appendChild(evMk('span', 'ev-cal-name', `${c.name}`));
-    text.appendChild(evMk('span', 'ev-cal-sub', `${c.code} · about ${c.perYear || 0} a year`));
+    text.appendChild(evMk('span', 'ev-cal-sub', t('eventsPage.about_a_year', { code: c.code, p1: c.perYear || 0 })));
     if (c.note) text.title = c.note;
     const sw = evMk<HTMLButtonElement>('button', 'cm-switch' + (on.has(c.code) ? ' cm-switch-on' : ''));
     sw.type = 'button';
@@ -220,8 +220,8 @@ async function evToggleCalendar(code: string, on: boolean): Promise<void> {
   if (res && res.ok) {
     evState.calendars = res.calendars;
     const name = (evState.available.find((c) => c.code === code) || { name: code }).name;
-    evFlash(on ? `${name} holidays now mark every date axis.` : `${name} holidays switched off.`);
-  } else evFlash((res && res.error) || 'Could not change the calendars.', true);
+    evFlash(on ? t('eventsPage.holidays_now_mark_every_date_axis', { name }) : t('eventsPage.holidays_switched_off', { name }));
+  } else evFlash((res && res.error) || t('eventsPage.could_not_change_the_calendars'), true);
   evPaintCalendars();
 }
 
@@ -232,8 +232,8 @@ async function evImportFile(file: File | null): Promise<void> {
   let res: any = null;
   try { res = await window.hubEvents.importCsv(currentProjectId, await file.text()); } catch (_) { res = null; }
   if (res && res.ok) {
-    evFlash(`Imported ${res.added} event${res.added === 1 ? '' : 's'} from ${file.name}` + (res.skipped ? ` · ${res.skipped} row${res.skipped === 1 ? '' : 's'} skipped (no readable date or title)` : '') + '.');
-  } else evFlash((res && res.error) || 'Could not import that file.', true);
+    evFlash(t('eventsPage.imported_from', { added: res.added, name: file.name, p3: (res.skipped ? t('eventsPage.skipped_no_readable_date_or_title', { skipped: res.skipped }) : '') }));
+  } else evFlash((res && res.error) || t('eventsPage.could_not_import_that_file'), true);
   await evRefresh();
 }
 

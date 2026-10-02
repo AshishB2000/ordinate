@@ -33,7 +33,7 @@ async function pvSummary(path: PvPath, datasetIds: string[] | null): Promise<any
 function pvColumnList(s: any, max = 6): string {
   const cols: any[] = Array.isArray(s && s.columns) ? s.columns : [];
   const names = cols.slice(0, max).map((c) => (c.datasetName ? `${c.column} (${c.datasetName})` : String(c.column)));
-  return names.join(', ') + (cols.length > max ? `, and ${cols.length - max} more` : '');
+  return names.join(', ') + (cols.length > max ? t('common.and_more', { p0: cols.length - max }) : '');
 }
 
 /**
@@ -68,8 +68,8 @@ function pvShareNote(path: PvPath, datasetIds: string[] | null): HTMLElement {
     const link = document.createElement('button');
     link.type = 'button';
     link.className = 'pv-link';
-    link.textContent = 'Change';
-    link.setAttribute('aria-label', 'Change the share policy');
+    link.textContent = t('common.change');
+    link.setAttribute('aria-label', t('privacyShare.change_the_share_policy'));
     link.addEventListener('click', () => pvOpenPolicy(link));
     el.appendChild(link);
     el.hidden = false;
@@ -98,28 +98,28 @@ function pvConfirmInclude(s: any): Promise<boolean> {
     head.appendChild(icon('shield', 18));
     const title = document.createElement('div');
     title.className = 'ws-modal-title';
-    title.textContent = 'Include sensitive data?';
+    title.textContent = t('privacyShare.include_sensitive_data');
     head.appendChild(title);
     const body = document.createElement('p');
     body.className = 'pv-confirm-body';
-    body.textContent = `${s.line}: ${pvColumnList(s)}. Anyone who receives this will see their values.`;
+    body.textContent = t('privacyShare.anyone_who_receives_this_will_see', { line: s.line, s: pvColumnList(s) });
     const note = document.createElement('p');
     note.className = 'pv-confirm-note';
-    note.textContent = 'The share policy for this project says to include them. You can mask or drop them instead.';
+    note.textContent = t('privacyShare.the_share_policy_for_this_project');
     const actions = document.createElement('div');
     actions.className = 'ws-modal-actions';
     const change = document.createElement('button');
     change.type = 'button';
     change.className = 'btn pv-confirm-change';
-    change.textContent = 'Change policy';
+    change.textContent = t('privacyShare.change_policy');
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'btn';
-    cancel.textContent = 'Cancel';
+    cancel.textContent = t('common.cancel');
     const ok = document.createElement('button');
     ok.type = 'button';
     ok.className = 'btn btn-primary';
-    ok.textContent = 'Include and export';
+    ok.textContent = t('privacyShare.include_and_export');
 
     let a11y: { onTabKey: (e: KeyboardEvent) => void; release: () => void } | null = null;
     const close = (v: boolean): void => {
@@ -149,7 +149,7 @@ function pvConfirmInclude(s: any): Promise<boolean> {
     box.appendChild(actions);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
-    a11y = makeModalAccessible(box, 'Include sensitive data?', cancel);
+    a11y = makeModalAccessible(box, t('privacyShare.include_sensitive_data'), cancel);
   });
 }
 
@@ -161,7 +161,7 @@ async function pvShareGate(path: PvPath, datasetIds: string[] | null, opts: { no
   const s = await pvSummary(path, datasetIds);
   if (!s || !s.count) return true;
   if (s.action === 'include') return pvConfirmInclude(s);
-  if (!opts.noted) showToast(s.line, { action: { label: 'Change', onClick: () => pvOpenPolicy(null) } });
+  if (!opts.noted) showToast(s.line, { action: { label: t('common.change'), onClick: () => pvOpenPolicy(null) } });
   return true;
 }
 
@@ -171,7 +171,7 @@ async function pvShareGate(path: PvPath, datasetIds: string[] | null, opts: { no
  * an export that silently skipped it would be the one leak this exists to stop.
  */
 async function pvVisualData(projectId: string, datasetId: string, encoding: any, filters: any, params: any, share: PvPath, analytics?: any): Promise<any> {
-  if (!window.hubPrivacy) return { ok: false, error: 'The share policy could not be applied.' };
+  if (!window.hubPrivacy) return { ok: false, error: t('privacyShare.the_share_policy_could_not_be') };
   return window.hubPrivacy.visualData(projectId, datasetId, encoding, filters, params, share, analytics);
 }
 
@@ -191,7 +191,7 @@ async function pvShareData(src: { projectId?: string; datasetId?: string; encodi
     r = null;
   }
   if (!r || r.ok === false || !r.data) {
-    showToast((r && r.error) || 'The share policy could not be applied.');
+    showToast((r && r.error) || t('privacyShare.the_share_policy_could_not_be'));
     return null;
   }
   return r.data;

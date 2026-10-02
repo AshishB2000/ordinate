@@ -185,11 +185,26 @@ function stripSemicolons(sql: string): string {
   return out;
 }
 
-async function compile(projectId: unknown, sql: unknown, params: unknown): Promise<Compiled | { error: string }> {
+/**
+ * Named statements the query may read as tables — a notebook's SQL cells
+ * (src/analysis/notebook/run.ts). Each is the user's text, gated and bound
+ * exactly like the statement itself, and prepended as a CTE AFTER the dataset
+ * CTEs, in order, so a later one may read an earlier one.
+ */
+export interface SqlView { name: string; sql: string }
+
+async function compile(projectId: unknown, sql: unknown, params: unknown, views: SqlView[] = []): Promise<Compiled | { error: string }> {
   if (!isValidId(projectId)) return { error: 'Invalid project id' };
   if (typeof sql !== 'string' || !sql.trim()) return { error: 'Write a query first.' };
   if (sql.length > MAX_ORIGIN_SQL) {
     return { error: `The query is longer than ${MAX_ORIGIN_SQL.toLocaleString('en-US')} characters.` };
+  }
+  // Views first: their CTEs come first in the text, so their binds do too.
+  const boundViews: Array<{ name: string; sql: string; binds: SqlBindValue[]; used: string[] }> = [];
+  for (const v of views) {
+    const b = bindSqlParams(v.sql, params);
+    if ('error' in b) return { error: `${v.name}: ${b.error}` };
+    boundViews.push({ name: v.name, ...b });
   }
   const bound = bindSqlParams(sql, params);
   if ('error' in bound) return bound;
@@ -210,10 +225,15 @@ async function compile(projectId: unknown, sql: unknown, params: unknown): Promi
     if (e.alias) known.add(foldKey(e.alias));
     known.add(e.slug);
   }
+  for (const v of boundViews) known.add(foldKey(v.name));
+  for (const v of boundViews) {
+    const g = readOnlyError(v.sql, known);
+    if (g) return { error: `${v.name}: ${g}` };
+  }
   const guard = readOnlyError(bound.sql, known);
   if (guard) return { error: guard };
 
-  const deps = extractDeps(bound.sql, cat);
+  const deps = [...new Set([...boundViews.flatMap((v) => extractDeps(v.sql, cat)), ...extractDeps(bound.sql, cat)])];
   const ctes: string[] = [];
   for (const id of deps) {
     const e = cat.find((x) => x.id === id) as CatalogEntry;
@@ -225,6 +245,7 @@ async function compile(projectId: unknown, sql: unknown, params: unknown): Promi
     ctes.push(`${quoteIdent(primary)} AS (${viewSelectSql(src.parquetPath, src.columns)})`);
     if (e.alias !== null && foldKey(e.alias) !== e.slug) ctes.push(`${quoteIdent(e.slug)} AS (SELECT * FROM ${quoteIdent(e.alias)})`);
   }
+  for (const v of boundViews) ctes.push(`${quoteIdent(v.name)} AS (\n${stripSemicolons(v.sql)}\n)`);
   const prelude = ctes.length ? `WITH ${ctes.join(',\n')}\n` : '';
   const body = stripSemicolons(bound.sql);
   return {
@@ -232,9 +253,9 @@ async function compile(projectId: unknown, sql: unknown, params: unknown): Promi
       `${prelude}SELECT * FROM (\n${body}\n) AS _q`
       + (aliases ? `(${aliases.map(quoteIdent).join(', ')})` : '')
       + (limit !== null ? ` LIMIT ${limit}` : ''),
-    binds: bound.binds,
+    binds: [...boundViews.flatMap((v) => v.binds), ...bound.binds],
     deps,
-    used: bound.used,
+    used: [...new Set([...boundViews.flatMap((v) => v.used), ...bound.used])],
   };
 }
 
@@ -278,10 +299,12 @@ export type RunResult =
   | { ok: false; error: string };
 
 /** Run, bounded to `limit` rows (fetched as limit+1, so "more" is known, not guessed). */
-export async function runSql(projectId: unknown, sql: unknown, params: unknown = [], limit: number = PREVIEW_ROWS): Promise<RunResult> {
+export async function runSql(
+  projectId: unknown, sql: unknown, params: unknown = [], limit: number = PREVIEW_ROWS, views: SqlView[] = [],
+): Promise<RunResult> {
   const t0 = Date.now();
   try {
-    const c = await compile(projectId, sql, params);
+    const c = await compile(projectId, sql, params, views);
     if ('error' in c) return { ok: false, error: c.error };
     const described = await describe(c);
     const n = Math.max(1, Math.min(Math.floor(Number(limit)) || PREVIEW_ROWS, ROW_LIMIT));

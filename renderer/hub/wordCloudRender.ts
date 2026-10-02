@@ -153,17 +153,16 @@ function buildWordCloud(canvas: HTMLCanvasElement, labels: any[], allSeries: Cha
     ctx.fillStyle = theme.textColor;
     if (!layout.placed.length) {
       ctx.textAlign = 'center';
-      ctx.fillText('No words to draw — every value is empty or zero', w / 2, top + areaH / 2);
+      ctx.fillText(t('wordCloudRender.no_words_to_draw_every_value'), w / 2, top + areaH / 2);
     } else if (live && layout.dropped.length) {
       ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';
       const n = layout.dropped.length;
-      ctx.fillText(n.toLocaleString() + (n === 1 ? ' smaller word did' : ' smaller words did') + ' not fit', 6, h - 4);
+      ctx.fillText(t('wordCloudRender.not_fit', { p0: n.toLocaleString(), n }), 6, h - 4);
     }
     canvas.setAttribute('aria-label', layout.placed.length
-      ? 'Word cloud: ' + layout.placed.slice(0, 8).map((p) => p.text + ' ' + theme.fmt(p.weight)).join(', ')
-        + (layout.placed.length > 8 ? ', …' : '')
-      : 'Word cloud: no words to draw');
+      ? t('wordCloudRender.word_cloud', { p0: layout.placed.slice(0, 8).map((p) => p.text + ' ' + theme.fmt(p.weight)).join(', '), p1: !!(layout.placed.length > 8) })
+      : t('wordCloudRender.word_cloud_no_words_to_draw'));
   }
 
   function hitAt(e: MouseEvent): WcPlaced | null {
@@ -185,8 +184,8 @@ function buildWordCloud(canvas: HTMLCanvasElement, labels: any[], allSeries: Cha
       tip.setAttribute('role', 'tooltip');
       (canvas.parentElement || document.body).appendChild(tip);
     }
-    const lines = [p.text, (size.name || 'Value') + ': ' + theme.fmt(p.weight)];
-    if (tone && toneVals[p.index] !== null) lines.push((tone.name || 'Colour') + ': ' + theme.fmt(toneVals[p.index]));
+    const lines = [p.text, (size.name || t('common.value')) + ': ' + theme.fmt(p.weight)];
+    if (tone && toneVals[p.index] !== null) lines.push((tone.name || t('common.colour')) + ': ' + theme.fmt(toneVals[p.index]));
     tip.textContent = '';
     lines.forEach((t, k) => {
       const line = document.createElement(k === 0 ? 'strong' : 'span');

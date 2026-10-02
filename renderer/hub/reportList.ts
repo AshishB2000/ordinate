@@ -52,14 +52,14 @@ function rbSelectTab(tab: string): void {
   const sub = document.querySelector('#an-list-view .viz-sub') as HTMLElement | null;
   if (sub) {
     sub.textContent = isReports
-      ? 'Dashboards as files you can send — PDF, PowerPoint or Word — on demand or on a schedule.'
+      ? t('reportList.dashboards_as_files_you_can_send')
       : isStories
-        ? 'Documents you read top to bottom — prose around live charts and metrics.'
+        ? t('reportList.documents_you_read_top_to_bottom')
         : isScores
-          ? 'Metrics against their targets, one period at a time — on track, at risk or off track.'
+          ? t('reportList.metrics_against_their_targets_one_period')
           : isScen
-            ? 'What-ifs over your metrics — move a price, a region\'s volume or a discount, and see every figure follow.'
-            : 'Sheets of charts, metrics and text over your datasets.';
+            ? t('reportList.what_ifs_over_your_metrics_move')
+            : t('common.sheets_of_charts_metrics_and_text');
   }
   if (other) {
     if (dash) dash.hidden = true;
@@ -87,7 +87,7 @@ async function rbRefreshList(): Promise<void> {
 }
 
 const RB_CADENCE_WORD: Record<string, string> = {
-  daily: 'Every day', weekly: 'Every week', monthly: 'Every month',
+  daily: t('common.every_day'), weekly: t('common.every_week'), monthly: t('common.every_month'),
 };
 
 function rbCard(r: any): HTMLElement {
@@ -114,7 +114,7 @@ function rbCard(r: any): HTMLElement {
   thumb.appendChild(mark);
   const tTitle = document.createElement('span');
   tTitle.className = 'rb-card-thumb-title';
-  tTitle.textContent = (r.cover && r.cover.title) || r.name || 'Report';
+  tTitle.textContent = (r.cover && r.cover.title) || r.name || t('common.report');
   thumb.appendChild(tTitle);
   band.appendChild(thumb);
   const badge = document.createElement('span');
@@ -127,17 +127,17 @@ function rbCard(r: any): HTMLElement {
   body.className = 'rb-card-body';
   const h = document.createElement('h3');
   h.className = 'rb-card-name';
-  h.textContent = r.name || 'Report';
+  h.textContent = r.name || t('common.report');
   body.appendChild(h);
   ctDecorate(card, 'report', String(r.id), body); // catalog tag chips
 
   const lines: string[] = [];
   lines.push(`${r.pageCount} ${r.pageCount === 1 ? 'page' : 'pages'}`);
   const cadence = r.schedule && RB_CADENCE_WORD[r.schedule.cadence];
-  lines.push(cadence ? `${cadence} at ${r.schedule.at}` : 'No schedule');
+  lines.push(cadence ? `${cadence} at ${r.schedule.at}` : t('reportList.no_schedule'));
   lines.push(r.lastRunAt
-    ? 'Last generated ' + new Date(r.lastRunAt).toLocaleString()
-    : 'Never generated');
+    ? t('reportList.last_generated') + new Date(r.lastRunAt).toLocaleString()
+    : t('reportList.never_generated'));
   for (const line of lines) {
     const p = document.createElement('p');
     p.className = 'rb-card-line';
@@ -161,13 +161,13 @@ function rbCard(r: any): HTMLElement {
     b.addEventListener('click', fn);
     (into || actions).appendChild(b);
   };
-  act('Generate now', 'btn btn-sm btn-primary', () => void rbGenerateFromList(r.id));
-  act('Edit', 'btn btn-sm', () => void rbOpenReportById(r.id));
-  act('History', 'rb-link', () => void vhOpen('report', String(r.id), r.name || 'Report'), secondary);
-  act('Lineage', 'rb-link', () => void lnOpen('report', String(r.id), r.name || 'Report'), secondary);
-  act('Duplicate', 'rb-link', async () => {
+  act(t('reportList.generate_now'), 'btn btn-sm btn-primary', () => void rbGenerateFromList(r.id));
+  act(t('common.edit_2'), 'btn btn-sm', () => void rbOpenReportById(r.id));
+  act(t('common.history'), 'rb-link', () => void vhOpen('report', String(r.id), r.name || t('common.report')), secondary);
+  act(t('common.lineage'), 'rb-link', () => void lnOpen('report', String(r.id), r.name || t('common.report')), secondary);
+  act(t('common.duplicate'), 'rb-link', async () => {
     const res = await window.hub.reportsDuplicate(currentProjectId as string, r.id);
-    if (!res || res.ok === false) { showToast((res && res.error) || 'Could not duplicate'); return; }
+    if (!res || res.ok === false) { showToast((res && res.error) || t('reportList.could_not_duplicate')); return; }
     await rbRefreshList();
   }, secondary);
   act('Delete', 'rb-link rb-link--danger', async () => {
@@ -185,24 +185,24 @@ function rbCard(r: any): HTMLElement {
 async function rbGenerateFromList(id: string): Promise<void> {
   if (!currentProjectId) return;
   const report = await window.hub.reportsGet(currentProjectId, id);
-  if (!report) { showToast('That report is gone'); return; }
+  if (!report) { showToast(t('common.that_report_is_gone')); return; }
   const analysis = await reportAnalysisFor(currentProjectId, report); // a scorecard report has no dashboard
-  if (!analysis) { showToast('The dashboard this report prints has been deleted'); return; }
+  if (!analysis) { showToast(t('common.the_dashboard_this_report_prints_has')); return; }
   if (!(await pvShareGate('report', await pvCardDatasetIds(analysis)))) return;
-  showToast('Building report…');
+  showToast(t('common.building_report'));
   const pages = await buildReportPages({
     projectId: currentProjectId, analysis,
     filters: Array.isArray(analysis.filters) ? analysis.filters : [], report,
   });
-  if (!pages.length) { showToast('Every page is excluded — nothing to generate'); return; }
+  if (!pages.length) { showToast(t('common.every_page_is_excluded_nothing_to')); return; }
   const { base64, ext } = await reportBytes(pages, report);
-  if (!base64) { showToast('Couldn’t build the report'); return; }
+  if (!base64) { showToast(t('common.couldn_t_build_the_report')); return; }
   const res = await window.hub.reportsSaveAs(currentProjectId, id, base64, ext);
   if (res && res.ok) {
-    showToast('Saved: ' + String(res.dest).split(/[\\/]/).pop());
+    showToast(t('common.saved_3', { p0: String(res.dest).split(/[\\/]/).pop() }));
     void window.hub.reportsReveal(currentProjectId, id);
     await rbRefreshList();
   } else if (!res || !res.canceled) {
-    showToast((res && res.error) || 'Save failed');
+    showToast((res && res.error) || t('common.save_failed'));
   }
 }

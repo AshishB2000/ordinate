@@ -81,8 +81,8 @@ function tabFocusPane(key: string): void {
 function tabRefuseSplit(a: TabRec, b: TabRec): void {
   const la = (tabKindOf(a)?.label || 'record').toLowerCase();
   const lb = (tabKindOf(b)?.label || 'record').toLowerCase();
-  const what = la === lb ? `Two ${la}s` : `A ${la} and a ${lb}`;
-  showToast(`${what} share one page, so they can't sit side by side. Split view pairs records from different pages.`);
+  const what = la === lb ? t('tabSplit.two_s', { la }) : t('tabSplit.a_and_a', { la, lb });
+  showToast(t('tabSplit.share_one_page_so_they_can', { what }));
 }
 
 /**
@@ -113,7 +113,7 @@ async function tabSplitCommand(): Promise<void> {
   if (!s.active) return;
   const partner = tabSplitPartner(s, tabFits);
   if (!partner) {
-    showToast('Open a record from another page — a dataset beside a dashboard, say — to see the two side by side.');
+    showToast(t('tabSplit.open_a_record_from_another_page'));
     return;
   }
   const active = s.active;
@@ -126,7 +126,7 @@ async function tabSplitWith(key: string): Promise<void> {
   const left = s.active && s.active !== key ? s.active : tabSplitPartner({ ...s, active: key }, tabFits);
   const R = tabFind(key);
   if (!left || !R) {
-    showToast('Open a record from another page to see the two side by side.');
+    showToast(t('tabSplit.open_a_record_from_another_page_2'));
     return;
   }
   await tabDrive(() => tabShowSplit(left, key, key, s.split ? s.split.ratio : 0.5));
@@ -148,10 +148,10 @@ function tabDivider(body: HTMLElement): HTMLElement {
   d.className = 'tab-divider';
   d.hidden = true;
   d.tabIndex = 0;
-  d.title = 'Drag to resize · double-click to even out';
+  d.title = t('tabSplit.drag_to_resize_double_click_to');
   d.setAttribute('role', 'separator');
   d.setAttribute('aria-orientation', 'vertical');
-  d.setAttribute('aria-label', 'Resize split view');
+  d.setAttribute('aria-label', t('tabSplit.resize_split_view'));
   d.setAttribute('aria-valuemin', String(TAB_RATIO_MIN * 100));
   d.setAttribute('aria-valuemax', String(TAB_RATIO_MAX * 100));
 
@@ -210,7 +210,7 @@ function tabDropTrack(e: DragEvent): void {
   el.className = 'tab-drop';
   el.appendChild(icon('columns', 16));
   const label = document.createElement('span');
-  label.textContent = 'Drop to open side by side';
+  label.textContent = t('tabSplit.drop_to_open_side_by_side');
   el.appendChild(label);
   el.style.top = r.top + 8 + 'px';
   el.style.left = r.right - w + 'px';

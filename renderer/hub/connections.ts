@@ -64,7 +64,7 @@ interface ConnDef {
 
 // Fixed display order; anything with an unrecognised category is appended under
 // its own heading rather than dropped.
-const CONN_CATEGORY_ORDER = ['Databases', 'Cloud warehouses', 'Query engines', 'Files & local', 'Apps & SaaS'];
+const CONN_CATEGORY_ORDER = [t('connections.databases'), t('connections.cloud_warehouses'), t('connections.query_engines'), t('connections.files_local'), t('connections.apps_saas')];
 
 // What main has always supported, in main's own field keys. Used only when the
 // catalog channel is unavailable.
@@ -73,40 +73,40 @@ const CONN_FALLBACK_CATALOG: ConnDef[] = [
     id: 'postgres',
     label: 'PostgreSQL',
     family: 'postgres',
-    category: 'Databases',
-    blurb: 'Read-only access to a Postgres database.',
+    category: t('connections.databases'),
+    blurb: t('connections.read_only_access_to_a_postgres'),
     fields: [
-      { key: 'host', label: 'Host', type: 'text', default: 'localhost', placeholder: 'localhost' },
-      { key: 'port', label: 'Port', type: 'number', default: 5432, placeholder: '5432' },
-      { key: 'database', label: 'Database', type: 'text', required: true, placeholder: 'mydb' },
-      { key: 'user', label: 'User', type: 'text', placeholder: 'postgres' },
-      { key: 'password', label: 'Password', type: 'password', secret: true, placeholder: '••••••••' },
+      { key: 'host', label: t('connections.host'), type: 'text', default: 'localhost', placeholder: 'localhost' },
+      { key: 'port', label: t('common.port'), type: 'number', default: 5432, placeholder: '5432' },
+      { key: 'database', label: t('common.database'), type: 'text', required: true, placeholder: 'mydb' },
+      { key: 'user', label: t('connections.user'), type: 'text', placeholder: 'postgres' },
+      { key: 'password', label: t('connections.password'), type: 'password', secret: true, placeholder: '••••••••' },
       { key: 'ssl', label: 'SSL', type: 'checkbox', default: false },
       {
         key: 'table',
-        label: 'Table',
+        label: t('common.table'),
         type: 'text',
-        placeholder: 'schema.table (optional)',
-        help: 'Optional. You can also pick a table after connecting.',
+        placeholder: t('connections.schema_table_optional'),
+        help: t('connections.optional_you_can_also_pick_a'),
       },
-      { key: 'query', label: 'Query', type: 'text', placeholder: 'select … (optional; overrides table)' },
+      { key: 'query', label: t('common.query'), type: 'text', placeholder: t('connections.select_optional_overrides_table') },
     ],
   },
   {
     id: 'url',
-    label: 'URL / API (JSON)',
+    label: t('connections.url_api_json'),
     family: 'http',
-    category: 'Files & local',
-    blurb: 'Fetch JSON from an https endpoint.',
+    category: t('connections.files_local'),
+    blurb: t('connections.fetch_json_from_an_https_endpoint'),
     fields: [
       { key: 'url', label: 'URL', type: 'text', required: true, placeholder: 'https://api.example.com/data.json' },
       {
         key: 'token',
-        label: 'Auth token',
+        label: t('connections.auth_token'),
         type: 'password',
         secret: true,
-        placeholder: 'Optional Bearer token',
-        help: 'Sent as a Bearer header. Stored outside the shareable project folder.',
+        placeholder: t('connections.optional_bearer_token'),
+        help: t('connections.sent_as_a_bearer_header_stored'),
       },
     ],
   },
@@ -168,16 +168,16 @@ const CONN_ACTION_LOGOS: Record<string, ConnLogo> = {
   'home-import': {
     path: 'M11 3h2v7h3l-4 4-4-4h3V3Z M4 13v6a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-6h-2v5H6v-5H4Z',
     color: 'currentColor',
-    title: 'Import file',
+    title: t('common.import_file'),
   },
   'home-paste': {
     path: 'M9 2h6a2 2 0 0 1 2 2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2-2Zm0 4h6V4H9v2Zm-2 3v2h10V9H7Zm0 4v2h10v-2H7Zm0 4v2h7v-2H7Z',
     color: 'currentColor',
-    title: 'Paste data',
+    title: t('common.paste_data'),
   },
   'home-capture': {
     src: 'assets/connectors/screenchart.png',
-    title: 'Screenshot',
+    title: t('common.screenshot'),
   },
 };
 

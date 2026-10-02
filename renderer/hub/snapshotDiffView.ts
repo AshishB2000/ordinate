@@ -22,7 +22,7 @@ function snapChip(kind: string, n: number, word: string): HTMLElement {
 }
 
 function snapMore(shown: number, total: number): HTMLElement | null {
-  return total > shown ? snapEl('p', 'snap-more', `Showing the first ${shown.toLocaleString('en-US')} of ${total.toLocaleString('en-US')}.`) : null;
+  return total > shown ? snapEl('p', 'snap-more', t('snapshotDiffView.showing_the_first_of', { p0: shown.toLocaleString('en-US'), p1: total.toLocaleString('en-US') })) : null;
 }
 
 /** Added or removed rows: the compared columns, in the current table's order. */
@@ -43,10 +43,10 @@ function snapRowsTable(columns: string[], rows: any[]): HTMLElement {
 /** Changed rows: one line per changed cell, the key once per row. */
 function snapChangedTable(diff: any): HTMLElement {
   const wrap = snapEl('div', 'snap-scroll');
-  const t = snapEl<HTMLTableElement>('table', 'snap-grid snap-changed');
-  const h = t.createTHead().insertRow();
-  for (const c of [diff.key || 'Row', 'Column', 'Before', 'After']) h.appendChild(snapEl('th', '', c));
-  const b = t.createTBody();
+  const tv = snapEl<HTMLTableElement>('table', 'snap-grid snap-changed');
+  const h = tv.createTHead().insertRow();
+  for (const c of [diff.key || t('common.row'), t('common.column'), t('common.before'), t('common.after')]) h.appendChild(snapEl('th', '', c));
+  const b = tv.createTBody();
   for (const r of diff.changed) {
     r.cells.forEach((cell: any, i: number) => {
       const tr = b.insertRow();
@@ -66,7 +66,7 @@ function snapChangedTable(diff: any): HTMLElement {
       after.appendChild(snapCell(cell.new));
     });
   }
-  wrap.appendChild(t);
+  wrap.appendChild(tv);
   return wrap;
 }
 
@@ -91,23 +91,22 @@ function snapPaintDiff(out: HTMLElement, diff: any): void {
   out.appendChild(sum);
 
   const notes: string[] = [];
-  if (diff.mode === 'row') notes.push('Matched on the whole row: a row with any cell different reads as one removed and one added.');
+  if (diff.mode === 'row') notes.push(t('snapshotDiffView.matched_on_the_whole_row_a'));
   if (diff.duplicates.old || diff.duplicates.new) {
-    notes.push(`${(diff.duplicates.old + diff.duplicates.new).toLocaleString('en-US')} row(s) repeat an earlier ${diff.key} ` +
-      `(${diff.duplicates.old} then, ${diff.duplicates.new} now) — only the first row of each is compared.`);
+    notes.push(t('snapshotDiffView.row_s_repeat_an_earlier_then', { p0: (diff.duplicates.old + diff.duplicates.new).toLocaleString('en-US'), key: diff.key, old: diff.duplicates.old, new: diff.duplicates.new }));
   }
-  if (diff.addedColumns.length) notes.push(`New columns, not compared: ${diff.addedColumns.join(', ')}.`);
-  if (diff.removedColumns.length) notes.push(`Columns since removed, not compared: ${diff.removedColumns.join(', ')}.`);
+  if (diff.addedColumns.length) notes.push(t('snapshotDiffView.new_columns_not_compared', { p0: diff.addedColumns.join(', ') }));
+  if (diff.removedColumns.length) notes.push(t('snapshotDiffView.columns_since_removed_not_compared', { p0: diff.removedColumns.join(', ') }));
   for (const n of notes) out.appendChild(snapEl('p', 'snap-note', n));
 
   const total = diff.counts.added + diff.counts.removed + diff.counts.changed;
   if (total === 0) {
-    out.appendChild(snapEl('p', 'snap-same', 'No differences — the compared columns hold the same rows.'));
+    out.appendChild(snapEl('p', 'snap-same', t('snapshotDiffView.no_differences_the_compared_columns_hold')));
     return;
   }
-  if (diff.counts.changed) out.appendChild(snapSection('Changed', diff.counts.changed, snapChangedTable(diff), diff.changed.length));
-  if (diff.counts.added) out.appendChild(snapSection('Added since', diff.counts.added, snapRowsTable(diff.columns, diff.added), diff.added.length));
-  if (diff.counts.removed) out.appendChild(snapSection('Removed since', diff.counts.removed, snapRowsTable(diff.columns, diff.removed), diff.removed.length));
+  if (diff.counts.changed) out.appendChild(snapSection(t('snapshotDiffView.changed'), diff.counts.changed, snapChangedTable(diff), diff.changed.length));
+  if (diff.counts.added) out.appendChild(snapSection(t('snapshotDiffView.added_since'), diff.counts.added, snapRowsTable(diff.columns, diff.added), diff.added.length));
+  if (diff.counts.removed) out.appendChild(snapSection(t('snapshotDiffView.removed_since'), diff.counts.removed, snapRowsTable(diff.columns, diff.removed), diff.removed.length));
 }
 
 /** Open (or re-point) the compare panel at one snapshot. */
@@ -119,11 +118,11 @@ async function snapOpenDiff(datasetId: string, s: any, current: any): Promise<vo
   document.querySelector(`#snap-body .snap-row[data-stamp="${CSS.escape(s.stamp)}"]`)?.classList.add('is-open');
 
   const head = snapEl('div', 'snap-diff-head');
-  head.appendChild(snapEl('h5', 'snap-diff-h', `${snapWhen(s.at)} compared with now`));
-  const label = snapEl<HTMLLabelElement>('label', 'snap-diff-key', 'Match rows by ');
+  head.appendChild(snapEl('h5', 'snap-diff-h', t('snapshotDiffView.compared_with_now', { at: snapWhen(s.at) })));
+  const label = snapEl<HTMLLabelElement>('label', 'snap-diff-key', t('snapshotDiffView.match_rows_by'));
   const sel = snapEl<HTMLSelectElement>('select', 'snap-keep-select');
   sel.id = 'snap-diff-key';
-  const whole = snapEl<HTMLOptionElement>('option', '', 'the whole row');
+  const whole = snapEl<HTMLOptionElement>('option', '', t('snapshotDiffView.the_whole_row'));
   whole.value = '';
   sel.appendChild(whole);
   const shared = (current.columns as string[]).filter((c) => (s.columns as string[]).includes(c));
@@ -135,7 +134,7 @@ async function snapOpenDiff(datasetId: string, s: any, current: any): Promise<vo
   label.appendChild(sel);
   const close = snapEl<HTMLButtonElement>('button', 'btn btn-sm btn-ghost snap-diff-close');
   close.type = 'button';
-  close.setAttribute('aria-label', 'Close the comparison');
+  close.setAttribute('aria-label', t('snapshotDiffView.close_the_comparison'));
   close.appendChild(icon('x', 14));
   close.addEventListener('click', () => {
     host.innerHTML = '';
@@ -150,13 +149,13 @@ async function snapOpenDiff(datasetId: string, s: any, current: any): Promise<vo
   const run = async (): Promise<void> => {
     const seq = ++snapDiffSeq;
     out.innerHTML = '';
-    out.appendChild(snapEl('p', 'snap-loading', 'Comparing…'));
+    out.appendChild(snapEl('p', 'snap-loading', t('snapshotDiffView.comparing')));
     let r: any = null;
     try { r = await window.hubSnapshots.diff(currentProjectId, datasetId, s.stamp, sel.value || null); } catch (_) { r = null; }
     if (seq !== snapDiffSeq || !out.isConnected) return;
     if (!r || r.ok === false) {
       out.innerHTML = '';
-      out.appendChild(snapEl('p', 'snap-error', (r && r.error) || 'Could not compare the snapshot.'));
+      out.appendChild(snapEl('p', 'snap-error', (r && r.error) || t('snapshotDiffView.could_not_compare_the_snapshot')));
       return;
     }
     snapPaintDiff(out, r.diff);

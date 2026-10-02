@@ -259,7 +259,7 @@ function reportFilterLine(ctx: ReportContext): string {
       }
     }
   }
-  return parts.length ? 'Filtered: ' + parts.join(' · ') : '';
+  return parts.length ? t('common.filtered', { p0: parts.join(' · ') }) : '';
 }
 
 // ── the page list ────────────────────────────────────────────────────────────
@@ -337,14 +337,14 @@ async function buildReportPages(ctx: ReportContext): Promise<RenderedPage[]> {
         try { meta.push(...((await window.hub.catalogSensitivity(ctx.projectId, ctx.analysis.id)).lines || [])); } catch (_) { /* no line */ }
         return {
           kind: 'cover', layout: page.layout,
-          title: cover.title || report.name || 'Report',
+          title: cover.title || report.name || t('common.report'),
           subtitle: cover.subtitle || '',
           meta, logo: cover.logo !== false ? await reportLogo(ctx.analysis) : null,
         };
       }
       case 'summary':
         return {
-          kind: 'summary', layout: page.layout, title: 'Summary',
+          kind: 'summary', layout: page.layout, title: t('common.summary'),
           kpis: allKpis.map((k) => ({ label: k.label, value: k.text })),
           bullets: allCaptions.slice(),
           caption: page.caption,
@@ -371,7 +371,7 @@ async function buildReportPages(ctx: ReportContext): Promise<RenderedPage[]> {
           } catch (_) { caption = ''; }
         }
         return {
-          kind: 'sheet', layout: page.layout, title: sheet.name || 'Sheet',
+          kind: 'sheet', layout: page.layout, title: sheet.name || t('common.sheet'),
           kpis: kpis.map((k) => ({ label: k.label, value: k.text })), tiles, caption,
         };
       }
@@ -381,20 +381,20 @@ async function buildReportPages(ctx: ReportContext): Promise<RenderedPage[]> {
           // A card the author removed from the dashboard. The page stays and
           // says so, rather than vanishing from a report someone has already
           // ordered a schedule of.
-          return { kind: 'tile', layout: page.layout, title: 'Tile', body: 'This tile is no longer on the dashboard.' };
+          return { kind: 'tile', layout: page.layout, title: t('common.tile'), body: t('reportRender.this_tile_is_no_longer_on') };
         }
-        const t = await tileFor(found.card, reportImageBox(report, 'tile'));
-        if (!t) return { kind: 'tile', layout: page.layout, title: 'Tile', body: 'This tile could not be drawn.' };
+        const tv = await tileFor(found.card, reportImageBox(report, 'tile'));
+        if (!tv) return { kind: 'tile', layout: page.layout, title: t('common.tile'), body: t('reportRender.this_tile_could_not_be_drawn') };
         return {
-          kind: 'tile', layout: page.layout, title: t.title || 'Tile',
-          png: t.png, grid: t.grid || null, caption: page.caption || t.caption,
+          kind: 'tile', layout: page.layout, title: tv.title || t('common.tile'),
+          png: tv.png, grid: tv.grid || null, caption: page.caption || tv.caption,
         };
       }
       case 'notes':
-        return { kind: 'notes', layout: page.layout, title: 'Notes', body: page.notes || '' };
+        return { kind: 'notes', layout: page.layout, title: t('common.notes'), body: page.notes || '' };
       case 'narrative': {
         const body = await reportNarrative(ctx, allCaptions);
-        return body ? { kind: 'narrative', layout: page.layout, title: 'Narrative', body } : null;
+        return body ? { kind: 'narrative', layout: page.layout, title: t('common.narrative'), body } : null;
       }
       default:
         return page.kind === 'scorecard' ? reportScorecardPage(ctx, page) : reportDiscussionPage(ctx, page); // reportScorecard.ts / reportDiscussion.ts
@@ -414,9 +414,7 @@ async function buildReportPages(ctx: ReportContext): Promise<RenderedPage[]> {
  */
 async function reportNarrative(ctx: ReportContext, captions: string[]): Promise<string> {
   if (!captions.length) return '';
-  const prompt = 'Write exactly two short paragraphs summarising this dashboard for a business reader. '
-    + 'Use ONLY the figures in these app-computed sentences, verbatim — do not calculate, round or invent any number:\n\n'
-    + captions.map((c) => '- ' + c).join('\n');
+  const prompt = t('reportRender.write_exactly_two_short_paragraphs', { p0: captions.map((c) => '- ' + c).join('\n') });
   try {
     // ponytail: this lands as a turn in the project's current conversation,
     // like any other ask. A dedicated per-report thread would be tidier; do it
@@ -543,7 +541,7 @@ function renderPreviewPage(host: HTMLElement, rp: RenderedPage | null, report: a
   if (!rp) {
     const empty = document.createElement('p');
     empty.className = 'rb-sheet-empty';
-    empty.textContent = 'Select a page to preview it.';
+    empty.textContent = t('reportRender.select_a_page_to_preview_it');
     sheet.appendChild(empty);
     return;
   }
@@ -551,7 +549,7 @@ function renderPreviewPage(host: HTMLElement, rp: RenderedPage | null, report: a
   const head = document.createElement('div');
   head.className = 'rb-sheet-head';
   const hName = document.createElement('span');
-  hName.textContent = report.name || 'Report';
+  hName.textContent = report.name || t('common.report');
   const hDate = document.createElement('span');
   hDate.textContent = reportDateStr();
   head.appendChild(hName);
@@ -659,22 +657,22 @@ function renderPreviewPage(host: HTMLElement, rp: RenderedPage | null, report: a
       case 'tiles': {
         const grid = document.createElement('div');
         grid.className = 'rb-tiles';
-        for (const t of b.tiles) {
+        for (const tv of b.tiles) {
           const cell = document.createElement('figure');
           cell.className = 'rb-tile';
-          if (t.png) {
+          if (tv.png) {
             const img = document.createElement('img');
-            img.src = t.png;
-            img.alt = t.title;
+            img.src = tv.png;
+            img.alt = tv.title;
             cell.appendChild(img);
           } else {
             const miss = document.createElement('div');
             miss.className = 'rb-tile-missing';
-            miss.textContent = 'Could not be drawn';
+            miss.textContent = t('common.could_not_be_drawn');
             cell.appendChild(miss);
           }
           const cap = document.createElement('figcaption');
-          cap.textContent = t.title;
+          cap.textContent = tv.title;
           cell.appendChild(cap);
           grid.appendChild(cell);
         }

@@ -4,16 +4,18 @@
    colour, size and duration comes from theme.css. */
 
 /* ── the door on a KPI card ────────────────────────────────────────────────── */
-/* The "vs …" line and its Why?, side by side; the line keeps its own text. */
+/* The "vs …" line and its Why?, side by side on ONE line: a wrapped Why? is a
+   third line a short KPI card has no room for, so the "vs …" text ellipsizes. */
 .dash-metric-vsrow {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 6px;
   max-width: 100%;
 }
+.dash-metric-vsrow > .dash-metric-vs { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dash-metric-why {
+  flex-shrink: 0;
   padding: 0 6px;
   border: 1px solid var(--accent-line);
   border-radius: var(--r-full);

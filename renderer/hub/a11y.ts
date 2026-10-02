@@ -47,7 +47,7 @@ function a11yAnnounce(msg: string, assertive = false): void {
 
 const A11Y_MODAL = '[aria-modal="true"], .ws-modal-overlay';
 const A11Y_FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]';
+  t('a11y.a_href_button_not_disabled_input');
 
 function a11yShown(el: Element): boolean {
   return (el as HTMLElement).getClientRects().length > 0 && !el.closest('[hidden], [inert]');
@@ -226,7 +226,7 @@ function a11ySegmented(root: ParentNode): void {
     const opts = Array.from(seg.children).filter((c) => c.tagName === 'BUTTON') as HTMLElement[];
     if (opts.length < 2) return;
     seg.setAttribute('role', 'radiogroup');
-    if (!seg.getAttribute('aria-label')) seg.setAttribute('aria-label', seg.getAttribute('title') || 'Options');
+    if (!seg.getAttribute('aria-label')) seg.setAttribute('aria-label', seg.getAttribute('title') || t('common.options'));
     const sync = (): void => {
       const on = opts.find((o) => /\b(active|is-on|is-active|is-selected)\b/.test(o.className)) || opts[0];
       opts.forEach((o) => {
@@ -303,14 +303,14 @@ function a11yChart(canvas: HTMLCanvasElement): void {
   const title = (canvas.closest('.dash-card')?.querySelector('.dash-card-title')?.textContent || '').trim();
   const data = a11yChartData(chart);
   const type = String((chart.config && chart.config.type) || 'bar');
-  canvas.setAttribute('aria-label', (title ? title + '. ' : '') + `Chart with ${data.labels.length} ${data.labels.length === 1 ? 'value' : 'values'}.`);
+  canvas.setAttribute('aria-label', t('a11y.chart_with', { p0: (title ? title + '. ' : ''), labelsCount: data.labels.length }));
   // The builder's chart is a QUERY the user just ran: say when it is back, and what it found.
   const inBuilder = !!canvas.closest('#viz-area');
   if (window.hub && typeof window.hub.reportsCaption === 'function') {
     void window.hub.reportsCaption({ chartType: type, data }).then((cap: any) => {
       if (typeof cap === 'string' && cap && canvas.isConnected) {
         canvas.setAttribute('aria-label', (title ? title + '. ' : '') + cap + '.');
-        if (inBuilder) a11yAnnounce('Chart updated. ' + cap + '.');
+        if (inBuilder) a11yAnnounce(t('a11y.chart_updated', { cap }));
       }
     }).catch(() => { /* the plain label stays */ });
   }
@@ -328,7 +328,7 @@ function a11yChart(canvas: HTMLCanvasElement): void {
       chart.update('none');
     } catch (_) { /* a chart type without tooltips */ }
     const v = data.series[di] ? data.series[di].values[ix] : null;
-    a11yAnnounce(`${data.labels[ix]}${data.series.length > 1 ? ', ' + data.series[di].name : ''}: ${typeof v === 'number' ? _fmtVal(v) : 'no value'}`);
+    a11yAnnounce(`${data.labels[ix]}${data.series.length > 1 ? ', ' + data.series[di].name : ''}: ${typeof v === 'number' ? _fmtVal(v) : t('a11y.no_value')}`);
   };
   canvas.addEventListener('keydown', (e) => {
     const n = data.labels.length;
@@ -364,12 +364,12 @@ function a11yChart(canvas: HTMLCanvasElement): void {
 function a11yMap(wrap: HTMLElement): void {
   const box = wrap.querySelector('.cv-map-container') as HTMLElement | null;
   if (!box) return;
-  const title = (wrap.closest('.dash-card')?.querySelector('.dash-card-title')?.textContent || 'Map').trim();
+  const title = (wrap.closest('.dash-card')?.querySelector('.dash-card-title')?.textContent || t('a11y.map')).trim();
   const d = wrap.dataset;
   const what = d.clusters !== undefined
-    ? `${Number(d.points || 0) + Number(d.clusters || 0)} marks (${d.clusters} clusters)`
-    : d.matched !== undefined ? `${d.matched} regions with values` : 'geographic data';
-  const label = `${title}. Map showing ${what}.`;
+    ? t('a11y.marks_clusters', { p0: Number(d.points || 0) + Number(d.clusters || 0), clusters: d.clusters })
+    : d.matched !== undefined ? t('a11y.regions_with_values', { matched: d.matched }) : t('a11y.geographic_data');
+  const label = t('a11y.map_showing', { title, what });
   // Only on change: this runs on every scan, and a same-value write is still a
   // mutation the scan's own observer would answer — a loop.
   if (box.getAttribute('aria-label') === label) return;
@@ -394,18 +394,18 @@ function a11yToggleTable(cardEl: HTMLElement): void {
   const wrap = document.createElement('div');
   wrap.className = 'a11y-table-wrap';
   if (!data || !data.labels.length) {
-    wrap.textContent = 'This tile has no table view.';
+    wrap.textContent = t('a11y.this_tile_has_no_table_view');
   } else {
     const table = document.createElement('table');
     table.className = 'a11y-table';
     const cap = document.createElement('caption');
-    cap.textContent = (cardEl.querySelector('.dash-card-title')?.textContent || 'Data').trim();
+    cap.textContent = (cardEl.querySelector('.dash-card-title')?.textContent || t('common.data')).trim();
     table.appendChild(cap);
     const head = document.createElement('tr');
     [''].concat(data.series.map((s: any) => s.name)).forEach((h, i) => {
       const th = document.createElement('th');
       th.scope = 'col';
-      th.textContent = i === 0 ? 'Category' : h;
+      th.textContent = i === 0 ? t('common.category') : h;
       head.appendChild(th);
     });
     const thead = document.createElement('thead');
@@ -463,7 +463,7 @@ function a11yDashProgress(): void {
   const key = dashCurrent.id + '/' + dashPageIdx;
   if (!cards || key === a11yDashReady || grid.querySelector('[aria-busy="true"]')) return;
   a11yDashReady = key;
-  a11yAnnounce(`${dashCurrent.name || 'Dashboard'} is ready — ${cards} ${cards === 1 ? 'tile' : 'tiles'}.`);
+  a11yAnnounce(t('a11y.is_ready', { p0: dashCurrent.name || t('common.dashboard'), cards }));
 }
 
 function a11yScan(root: ParentNode): void {

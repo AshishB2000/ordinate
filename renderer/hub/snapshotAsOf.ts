@@ -26,11 +26,11 @@ function snapPicker(id: string): { wrap: HTMLLabelElement; sel: HTMLSelectElemen
   const wrap = snapEl<HTMLLabelElement>('label', 'snap-asof');
   wrap.id = id + '-wrap';
   wrap.hidden = true;
-  wrap.appendChild(snapEl('span', 'snap-asof-label', 'As of'));
+  wrap.appendChild(snapEl('span', 'snap-asof-label', t('snapshotAsOf.as_of')));
   const sel = snapEl<HTMLSelectElement>('select', 'snap-asof-select');
   sel.id = id;
-  sel.setAttribute('aria-label', 'Show the data as of');
-  const latest = snapEl<HTMLOptionElement>('option', '', 'Latest');
+  sel.setAttribute('aria-label', t('snapshotAsOf.show_the_data_as_of'));
+  const latest = snapEl<HTMLOptionElement>('option', '', t('snapshotAsOf.latest'));
   latest.value = '';
   sel.appendChild(latest);
   wrap.appendChild(sel);
@@ -180,8 +180,8 @@ function snapVizData(projectId: string, datasetId: string, encoding: any, filter
 /** "How the number changed as data arrived": the metric on each snapshot, then now. */
 function snapMetricHistory(metricId: string): HTMLElement {
   const sec = snapEl('div', 'snap-mh');
-  sec.appendChild(snapEl('div', 'snap-mh-h', 'Across snapshots'));
-  const note = snapEl('p', 'snap-mh-note', 'Loading…');
+  sec.appendChild(snapEl('div', 'snap-mh-h', t('snapshotAsOf.across_snapshots')));
+  const note = snapEl('p', 'snap-mh-note', t('common.loading'));
   const area = snapEl('div', 'snap-mh-chart');
   area.hidden = true;
   sec.append(note, area);
@@ -190,18 +190,18 @@ function snapMetricHistory(metricId: string): HTMLElement {
     try { r = await window.hubSnapshots.metricHistory(currentProjectId, metricId); } catch (_) { r = null; }
     const points: any[] = r && r.ok && Array.isArray(r.points) ? r.points : [];
     if (points.length < 2) {
-      note.textContent = 'No snapshots yet. Each time this metric’s dataset refreshes with snapshots on, its value is plotted here.';
+      note.textContent = t('snapshotAsOf.no_snapshots_yet_each_time_this');
       return;
     }
-    note.textContent = 'How the number changed as data arrived — the value on each kept snapshot, then now.';
+    note.textContent = t('snapshotAsOf.how_the_number_changed_as_data');
     area.hidden = false;
     // Drawn once mounted (buildChart reads its theme off the canvas); an editor
     // closed before the reply came back simply draws nothing.
     if (!area.isConnected) return;
     const when = snapWhenAll(points.map((p) => p.at));
     renderVizInArea(area, {
-      labels: points.map((p, i) => (p.latest ? 'Now' : when[i])),
-      series: [{ name: 'Value', values: points.map((p) => p.value) }],
+      labels: points.map((p, i) => (p.latest ? t('snapshotAsOf.now') : when[i])),
+      series: [{ name: t('common.value'), values: points.map((p) => p.value) }],
     }, 'line_markers', null, '');
   })();
   return sec;

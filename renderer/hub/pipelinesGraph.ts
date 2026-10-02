@@ -11,23 +11,23 @@
 const PQ_NS = 'http://www.w3.org/2000/svg';
 
 const PQ_KIND: Record<string, { word: string; icon: string }> = {
-  source: { word: 'Source', icon: 'plug' },
-  dataset: { word: 'Dataset', icon: 'database' },
-  quality: { word: 'Quality checks', icon: 'shield' },
-  alert: { word: 'Alert', icon: 'bell' },
-  report: { word: 'Report', icon: 'file-text' },
-  publish: { word: 'Publish', icon: 'globe' },
+  source: { word: t('common.source'), icon: 'plug' },
+  dataset: { word: t('common.dataset'), icon: 'database' },
+  quality: { word: t('pipelinesGraph.quality_checks'), icon: 'shield' },
+  alert: { word: t('common.alert'), icon: 'bell' },
+  report: { word: t('common.report'), icon: 'file-text' },
+  publish: { word: t('common.publish_2'), icon: 'globe' },
 };
 
 const PQ_STATUS: Record<string, { word: string; icon: string }> = {
-  running: { word: 'Running', icon: 'loader' },
-  queued: { word: 'Queued', icon: 'history' },
+  running: { word: t('common.running_2'), icon: 'loader' },
+  queued: { word: t('pipelinesGraph.queued'), icon: 'history' },
   ok: { word: 'OK', icon: 'circle-check' },
-  failed: { word: 'Failed', icon: 'alert' },
-  blocked: { word: 'Blocked', icon: 'lock' },
-  paused: { word: 'Paused', icon: 'circle' },
-  never: { word: 'Not run yet', icon: 'circle' },
-  source: { word: 'Source', icon: 'arrow-right' },
+  failed: { word: t('common.failed'), icon: 'alert' },
+  blocked: { word: t('pipelinesGraph.blocked'), icon: 'lock' },
+  paused: { word: t('pipelinesGraph.paused'), icon: 'circle' },
+  never: { word: t('nbPage.not_run_yet'), icon: 'circle' },
+  source: { word: t('common.source'), icon: 'arrow-right' },
 };
 
 /** What a card's pill says: live state first, then a pause, then the last run. */
@@ -80,8 +80,8 @@ function pqCard(n: any): HTMLElement {
     meta.appendChild(r);
   };
   line('calendar', n.schedule.text);
-  line('history', n.lastRun ? `${pqRel(n.lastRun.at)}${n.lastRun.durationMs !== undefined ? ' · ' + pqDur(n.lastRun.durationMs) : ''}` : 'Never run');
-  line('arrow-right', n.nextRunAt ? 'Next ' + (Date.parse(n.nextRunAt) <= Date.now() ? 'on the next check' : pqRel(n.nextRunAt)) : 'No run planned', n.nextRunAt ? '' : 'is-dim');
+  line('history', n.lastRun ? `${pqRel(n.lastRun.at)}${n.lastRun.durationMs !== undefined ? ' · ' + pqDur(n.lastRun.durationMs) : ''}` : t('common.never_run'));
+  line('arrow-right', n.nextRunAt ? t('pipelinesGraph.next', { p0: (Date.parse(n.nextRunAt) <= Date.now() ? t('common.on_the_next_check') : pqRel(n.nextRunAt)) }) : t('pipelinesGraph.no_run_planned'), n.nextRunAt ? '' : 'is-dim');
   card.append(top, pill, meta);
 
   const select = (): void => {
@@ -117,7 +117,7 @@ function pqGraph(v: any): HTMLElement {
     h.appendChild(pqEl('span', '', stage));
     h.appendChild(pqEl('span', 'pq-col-n', String(inStage.length)));
     col.appendChild(h);
-    if (!inStage.length) col.appendChild(pqEl('div', 'pq-col-none', 'None'));
+    if (!inStage.length) col.appendChild(pqEl('div', 'pq-col-none', t('common.none')));
     for (const n of inStage) col.appendChild(pqCard(n));
     cols.appendChild(col);
   });

@@ -129,7 +129,7 @@ if (stpAutoRefresh) {
       await window.hub.setAutoRefreshEnabled(on);
     } catch (_) {
       reflectSwitch(stpAutoRefresh, !on); // put it back; nothing was saved
-      showToast('Could not change that setting.');
+      showToast(t('common.could_not_change_that_setting'));
     }
   });
 }
@@ -182,10 +182,10 @@ if (stpNotifDesktop) {
     if (on && window.hub && typeof window.hub.bootstrapNotifications === 'function') {
       try {
         const r = await window.hub.bootstrapNotifications();
-        if (r && r.supported === false) showToast('Desktop notifications aren’t supported on this system.');
+        if (r && r.supported === false) showToast(t('hubNotify.desktop_notifications_aren_t_supported'));
         // "Screenchart" here is the BUNDLE name, which is what System Settings lists
         // — not a missed rename. See the note in index.html's permission panel.
-        else showToast('Sent a test notification. If it didn’t appear, allow Screenchart in System Settings → Notifications.');
+        else showToast(t('hubNotify.sent_a_test_notification_if_it'));
       } catch (_) { /* never block the toggle */ }
     }
   });
@@ -219,21 +219,21 @@ document.querySelectorAll('[data-delete]').forEach(btn => {
   btn.addEventListener('click', async () => {
     const scope = btn.getAttribute('data-delete');
     if (!window.hub || typeof window.hub.deleteData !== 'function') return;
-    if (stpDeleteResult) { stpDeleteResult.hidden = false; stpDeleteResult.textContent = 'Waiting for confirmation…'; }
+    if (stpDeleteResult) { stpDeleteResult.hidden = false; stpDeleteResult.textContent = t('hubNotify.waiting_for_confirmation'); }
     try {
       const r = await window.hub.deleteData(scope);
       if (r && r.cancelled) { if (stpDeleteResult) stpDeleteResult.hidden = true; return; }
       if (r && r.ok) {
-        if (stpDeleteResult) stpDeleteResult.textContent = 'Deleted. ' + (r.removed || []).join(' · ');
+        if (stpDeleteResult) stpDeleteResult.textContent = t('hubNotify.deleted', { p0: (r.removed || []).join(' · ') });
         // Main also pushed key:changed + (for history) hub:history []. Refresh the
         // visible settings/provider state so it shows disconnected/empty now.
         await refreshKeyStatus();
         if (typeof refreshExecPane === 'function') refreshExecPane();
       } else if (stpDeleteResult) {
-        stpDeleteResult.textContent = 'Couldn’t delete. Try again.';
+        stpDeleteResult.textContent = t('hubNotify.couldn_t_delete_try_again');
       }
     } catch (_) {
-      if (stpDeleteResult) stpDeleteResult.textContent = 'Couldn’t delete. Try again.';
+      if (stpDeleteResult) stpDeleteResult.textContent = t('hubNotify.couldn_t_delete_try_again');
     }
   });
 });

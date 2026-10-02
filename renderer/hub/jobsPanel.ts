@@ -35,8 +35,8 @@ const JP_KIND_ICON: Record<string, string> = {
 };
 
 const JP_STATE_WORD: Record<string, string> = {
-  queued: 'Waiting', running: 'Running', done: 'Done', error: 'Failed',
-  cancelled: 'Cancelled', interrupted: 'Interrupted',
+  queued: t('jobsPanel.waiting'), running: t('common.running_2'), done: t('common.done'), error: t('common.failed'),
+  cancelled: t('jobsPanel.cancelled'), interrupted: t('jobsPanel.interrupted'),
 };
 
 function jpBtn(): HTMLButtonElement | null {
@@ -45,13 +45,13 @@ function jpBtn(): HTMLButtonElement | null {
 
 /** "just now", "4 min ago", "2 h ago", then a date. */
 function jpAgo(iso: string | undefined): string {
-  const t = iso ? Date.parse(iso) : NaN;
-  if (!Number.isFinite(t)) return '';
-  const s = Math.max(0, Math.round((Date.now() - t) / 1000));
-  if (s < 45) return 'just now';
-  if (s < 3600) return Math.round(s / 60) + ' min ago';
-  if (s < 86400) return Math.round(s / 3600) + ' h ago';
-  return new Date(t).toLocaleDateString();
+  const tv = iso ? Date.parse(iso) : NaN;
+  if (!Number.isFinite(tv)) return '';
+  const s = Math.max(0, Math.round((Date.now() - tv) / 1000));
+  if (s < 45) return t('common.just_now');
+  if (s < 3600) return t('common.min_ago', { p0: Math.round(s / 60) });
+  if (s < 86400) return t('common.h_ago', { p0: Math.round(s / 3600) });
+  return new Date(tv).toLocaleDateString();
 }
 
 /** How long a finished job took, when it ran at all. */
@@ -85,8 +85,8 @@ function jpPaintButton(): void {
     badge.textContent = String(Math.min(jpState.active.length, 9)) + (jpState.active.length > 9 ? '+' : '');
   }
   const label = jpState.active.length === 0
-    ? 'Jobs'
-    : `Jobs — ${running} running` + (waiting ? `, ${waiting} waiting` : '');
+    ? t('common.jobs')
+    : t('jobsPanel.jobs_running', { running, p1: (waiting ? t('jobsPanel.waiting_2', { waiting }) : '') });
   btn.title = label;
   btn.setAttribute('aria-label', label);
 }
@@ -123,7 +123,7 @@ async function jpToggle(): Promise<void> {
   jpPopover.className = 'jp-pop';
   jpPopover.id = 'jp-pop';
   jpPopover.setAttribute('role', 'dialog');
-  jpPopover.setAttribute('aria-label', 'Jobs');
+  jpPopover.setAttribute('aria-label', t('common.jobs'));
   document.body.appendChild(jpPopover);
   btn.setAttribute('aria-expanded', 'true');
   document.addEventListener('keydown', jpOnKey, true);
@@ -152,13 +152,13 @@ function jpRender(): void {
   head.className = 'jp-head';
   const title = document.createElement('span');
   title.className = 'jp-title';
-  title.textContent = 'Jobs';
+  title.textContent = t('common.jobs');
   head.appendChild(title);
   if (jpState.recent.length) {
     const clear = document.createElement('button');
     clear.type = 'button';
     clear.className = 'jp-link';
-    clear.textContent = 'Clear finished';
+    clear.textContent = t('jobsPanel.clear_finished');
     clear.addEventListener('click', async () => {
       try { await window.hubPlatform.clearJobs(); } catch (_) { /* the push repaints */ }
       await jpRefresh();
@@ -174,16 +174,16 @@ function jpRender(): void {
     list.appendChild(makeEmptyState({
       variant: 'jobs',
       iconName: 'activity',
-      title: 'Nothing running',
-      line: 'Imports, refreshes, exports, publishes and backups show up here while they run — you can keep working.',
+      title: t('jobsPanel.nothing_running'),
+      line: t('jobsPanel.imports_refreshes_exports_publishes_and'),
     }));
   } else {
     if (jpState.active.length) {
-      list.appendChild(jpSection('Running'));
+      list.appendChild(jpSection(t('common.running_2')));
       jpState.active.forEach((j) => list.appendChild(jpRow(j)));
     }
     if (jpState.recent.length) {
-      list.appendChild(jpSection('Recent'));
+      list.appendChild(jpSection(t('common.recent')));
       jpState.recent.forEach((j) => list.appendChild(jpRow(j)));
     }
   }
@@ -224,7 +224,7 @@ function jpRow(j: JpJob): HTMLElement {
   const detail = document.createElement('span');
   detail.className = 'jp-detail';
   if (j.state === 'running' || j.state === 'queued') {
-    detail.textContent = j.note || (j.state === 'queued' ? 'Waiting for a free slot' : Math.round(j.progress * 100) + '%');
+    detail.textContent = j.note || (j.state === 'queued' ? t('jobsPanel.waiting_for_a_free_slot') : Math.round(j.progress * 100) + '%');
   } else {
     const bits = [jpAgo(j.finishedAt)];
     const d = jpDuration(j);
@@ -260,15 +260,15 @@ function jpRow(j: JpJob): HTMLElement {
   const acts = document.createElement('div');
   acts.className = 'jp-acts';
   if ((j.state === 'running' || j.state === 'queued') && j.cancellable) {
-    acts.appendChild(jpAction('Cancel', 'x', async () => {
+    acts.appendChild(jpAction(t('common.cancel'), 'x', async () => {
       try { await window.hubPlatform.cancelJob(j.id); } catch (_) { /* the push repaints */ }
     }));
   }
   if (j.state === 'done' && j.result && j.result.path) {
-    acts.appendChild(jpAction('Reveal', 'folder', async () => {
+    acts.appendChild(jpAction(t('common.reveal'), 'folder', async () => {
       let res: any = null;
       try { res = await window.hubPlatform.revealJob(j.id); } catch (_) { res = null; }
-      if (!res || !res.ok) showToast((res && res.error) || 'Could not show the file.');
+      if (!res || !res.ok) showToast((res && res.error) || t('jobsPanel.could_not_show_the_file'));
     }));
   }
   row.appendChild(acts);
@@ -305,7 +305,7 @@ function jpAction(label: string, iconName: string, onClick: () => void | Promise
 // ── Jobs whose work runs HERE ────────────────────────────────────────────────
 
 class RjCancelled extends Error {
-  constructor() { super('Cancelled'); this.name = 'RjCancelled'; }
+  constructor() { super(t('jobsPanel.cancelled')); this.name = 'RjCancelled'; }
 }
 
 const rjCancelled = new Set<string>();
@@ -344,14 +344,14 @@ async function rjRun<T extends { path?: string; message?: string } | null>(
     if (id) {
       await window.hubPlatform.finishRendererJob(id, out
         ? { ok: true, message: out.message, path: out.path }
-        : { ok: false, error: 'Nothing was produced.' });
+        : { ok: false, error: t('jobsPanel.nothing_was_produced') });
     }
     return out;
   } catch (err: any) {
     const cancelled = err instanceof RjCancelled;
     if (id) {
       try {
-        await window.hubPlatform.finishRendererJob(id, { ok: false, error: cancelled ? 'Cancelled.' : String((err && err.message) || err || 'Failed') });
+        await window.hubPlatform.finishRendererJob(id, { ok: false, error: cancelled ? t('jobsPanel.cancelled_2') : String((err && err.message) || err || t('common.failed')) });
       } catch (_) { /* main will fail it when the window goes */ }
     }
     if (cancelled) return null;

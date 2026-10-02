@@ -37,6 +37,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
+import { withT } from './i18nNode';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -168,7 +169,7 @@ function checkChartVocabulary(): void {
   sandbox.window = sandbox;
   sandbox.document = undefined;
   sandbox.localStorage = undefined;
-  vm.createContext(sandbox);
+  vm.createContext(withT(sandbox));
   const got = vm.runInContext(code + '\n;({ALL_CHART_TYPE_IDS, VIZ_LABELS});', sandbox);
   const real: string[] = got.ALL_CHART_TYPE_IDS.concat(['table', 'map_bubble', 'map_choropleth']);
   ok('the chart vocabulary under test is the real one', real.length === 37, `${real.length} types`);

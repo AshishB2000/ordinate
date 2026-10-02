@@ -43,7 +43,7 @@ function cmdVisualBuilderOpen(): boolean {
 function cmdContextRef(): { kind: string; id: string; label: string; name: string } {
   return typeof dkContextRef === 'function'
     ? dkContextRef()
-    : { kind: '', id: '', label: 'whole project', name: '' };
+    : { kind: '', id: '', label: t('common.whole_project'), name: '' };
 }
 
 // ── Small shared actions ─────────────────────────────────────────────────────
@@ -117,24 +117,24 @@ function cmdZoom(step: number | null): void {
 
 function registerAppCommands(): void {
   // ── Navigate ───────────────────────────────────────────────────────────────
-  registerCommand({ id: 'nav.home', title: 'Go to Home', group: 'Navigate', icon: 'home', keys: 'mod+1', run: () => cmdGoto('home') });
-  registerCommand({ id: 'nav.data', title: 'Go to Data', group: 'Navigate', icon: 'database', keys: 'mod+2', run: () => cmdGoto('datasets') });
-  registerCommand({ id: 'nav.visuals', title: 'Go to Visuals', group: 'Navigate', icon: 'columns', keys: 'mod+3', run: () => cmdGoto('visuals') });
-  registerCommand({ id: 'nav.dashboards', title: 'Go to Dashboards', group: 'Navigate', icon: 'grid', keys: 'mod+4', run: () => cmdGoto('analyses') });
-  registerCommand({ id: 'nav.connect', title: 'Go to Connect a source', group: 'Navigate', icon: 'plug', run: () => cmdGoto('connect') });
-  registerCommand({ id: 'nav.settings', title: 'Settings', group: 'Navigate', icon: 'settings', keys: 'mod+,', run: () => showSettingsPanel() });
+  registerCommand({ id: 'nav.home', title: t('commandDefs.go_to_home'), group: t('common.navigate'), icon: 'home', keys: 'mod+1', run: () => cmdGoto('home') });
+  registerCommand({ id: 'nav.data', title: t('commandDefs.go_to_data'), group: t('common.navigate'), icon: 'database', keys: 'mod+2', run: () => cmdGoto('datasets') });
+  registerCommand({ id: 'nav.visuals', title: t('commandDefs.go_to_visuals'), group: t('common.navigate'), icon: 'columns', keys: 'mod+3', run: () => cmdGoto('visuals') });
+  registerCommand({ id: 'nav.dashboards', title: t('commandDefs.go_to_dashboards'), group: t('common.navigate'), icon: 'grid', keys: 'mod+4', run: () => cmdGoto('analyses') });
+  registerCommand({ id: 'nav.connect', title: t('commandDefs.go_to_connect_a_source'), group: t('common.navigate'), icon: 'plug', run: () => cmdGoto('connect') });
+  registerCommand({ id: 'nav.settings', title: t('common.settings'), group: t('common.navigate'), icon: 'settings', keys: 'mod+,', run: () => showSettingsPanel() });
 
   // ── Create ─────────────────────────────────────────────────────────────────
-  registerCommand({ id: 'create.import', title: 'New dataset from a file', group: 'Create', icon: 'upload', keys: 'mod+i', run: () => cmdImport('file') });
-  registerCommand({ id: 'create.paste', title: 'New dataset from pasted text', group: 'Create', icon: 'clipboard', run: () => cmdImport('paste') });
-  registerCommand({ id: 'create.connect', title: 'New dataset from a connection', group: 'Create', icon: 'plug', run: () => cmdGoto('connect') });
-  registerCommand({ id: 'create.capture', title: 'New dataset from a screenshot', group: 'Create', icon: 'camera', run: () => doCapture() });
-  registerCommand({ id: 'create.visual', title: 'New visual', group: 'Create', icon: 'columns', keys: 'mod+shift+n', run: () => handleNewVisual() });
-  registerCommand({ id: 'create.dashboard', title: 'New dashboard', group: 'Create', icon: 'grid', keys: 'mod+n', run: () => anCreateWizard() });
+  registerCommand({ id: 'create.import', title: t('commandDefs.new_dataset_from_a_file'), group: t('common.create'), icon: 'upload', keys: 'mod+i', run: () => cmdImport('file') });
+  registerCommand({ id: 'create.paste', title: t('commandDefs.new_dataset_from_pasted_text'), group: t('common.create'), icon: 'clipboard', run: () => cmdImport('paste') });
+  registerCommand({ id: 'create.connect', title: t('commandDefs.new_dataset_from_a_connection'), group: t('common.create'), icon: 'plug', run: () => cmdGoto('connect') });
+  registerCommand({ id: 'create.capture', title: t('commandDefs.new_dataset_from_a_screenshot'), group: t('common.create'), icon: 'camera', run: () => doCapture() });
+  registerCommand({ id: 'create.visual', title: t('common.new_visual'), group: t('common.create'), icon: 'columns', keys: 'mod+shift+n', run: () => handleNewVisual() });
+  registerCommand({ id: 'create.dashboard', title: t('common.new_dashboard'), group: t('common.create'), icon: 'grid', keys: 'mod+n', run: () => anCreateWizard() });
   registerCommand({
     id: 'create.dashboardFromTemplate',
-    title: 'New dashboard from a template',
-    group: 'Create',
+    title: t('commandDefs.new_dashboard_from_a_template'),
+    group: t('common.create'),
     icon: 'layers',
     // The wizard's step 2 IS the template gallery, but it can only be opened on
     // a dataset the user has already picked — so with one open we skip ahead,
@@ -143,11 +143,11 @@ function registerAppCommands(): void {
   });
 
   // ── Data (a dataset is open) ───────────────────────────────────────────────
-  registerCommand({ id: 'data.prepare', title: 'Prepare this dataset', group: 'Data', icon: 'sliders', when: cmdDatasetOpen, run: () => togglePreparePanel() });
+  registerCommand({ id: 'data.prepare', title: t('commandDefs.prepare_this_dataset'), group: t('common.data'), icon: 'sliders', when: cmdDatasetOpen, run: () => togglePreparePanel() });
   registerCommand({
     id: 'data.addStep',
-    title: 'Add a prepare step',
-    group: 'Data',
+    title: t('commandDefs.add_a_prepare_step'),
+    group: t('common.data'),
     icon: 'plus',
     when: cmdDatasetOpen,
     // The panel first: the step editor opens INSIDE it, and an editor in a
@@ -156,78 +156,78 @@ function registerAppCommands(): void {
   });
   registerCommand({
     id: 'data.calcField',
-    title: 'Add a calculated field',
-    group: 'Data',
+    title: t('commandDefs.add_a_calculated_field'),
+    group: t('common.data'),
     icon: 'zap',
     when: cmdDatasetOpen,
     run: () => { togglePreparePanel(); openStepEditor('calculated_field', -1); },
   });
   registerCommand({
     id: 'data.profile',
-    title: 'Profile a column',
-    group: 'Data',
+    title: t('commandDefs.profile_a_column'),
+    group: t('common.data'),
     icon: 'eye',
     when: cmdDatasetOpen,
     // Which column is the question, so this re-opens the palette scoped to the
     // open dataset's columns rather than guessing one.
     run: () => paletteOpen('@'),
   });
-  registerCommand({ id: 'data.refresh', title: 'Refresh this dataset', group: 'Data', icon: 'refresh', when: cmdDatasetOpen, run: () => { void handleRefreshDataset(expId, null, null); } });
-  registerCommand({ id: 'data.history', title: 'Pipeline history', group: 'Data', icon: 'history', when: cmdDatasetOpen, run: () => { void vhOpen('dataset', expId, expName); } });
-  registerCommand({ id: 'data.lineage', title: 'Show lineage', group: 'Data', icon: 'lineage', when: cmdDatasetOpen, run: () => { void lnOpen('dataset', expId, expName); } });
+  registerCommand({ id: 'data.refresh', title: t('commandDefs.refresh_this_dataset'), group: t('common.data'), icon: 'refresh', when: cmdDatasetOpen, run: () => { void handleRefreshDataset(expId, null, null); } });
+  registerCommand({ id: 'data.history', title: t('common.pipeline_history'), group: t('common.data'), icon: 'history', when: cmdDatasetOpen, run: () => { void vhOpen('dataset', expId, expName); } });
+  registerCommand({ id: 'data.lineage', title: t('commandDefs.show_lineage'), group: t('common.data'), icon: 'lineage', when: cmdDatasetOpen, run: () => { void lnOpen('dataset', expId, expName); } });
   // Find segments (segments.ts) — the same page the dataset's ⋯ menu opens.
-  registerCommand({ id: 'data.segments', title: 'Find segments in this dataset', group: 'Data', icon: 'layers', when: cmdDatasetOpen, run: () => { void sgOpen(expId, expName); } });
-  registerCommand({ id: 'data.rfm', title: 'Score customers (RFM)', group: 'Data', icon: 'user', when: cmdDatasetOpen, run: () => { void sgOpen(expId, expName, 'rfm'); } });
+  registerCommand({ id: 'data.segments', title: t('commandDefs.find_segments_in_this_dataset'), group: t('common.data'), icon: 'layers', when: cmdDatasetOpen, run: () => { void sgOpen(expId, expName); } });
+  registerCommand({ id: 'data.rfm', title: t('commandDefs.score_customers_rfm'), group: t('common.data'), icon: 'user', when: cmdDatasetOpen, run: () => { void sgOpen(expId, expName, 'rfm'); } });
 
   // ── Visual ─────────────────────────────────────────────────────────────────
   registerCommand({
     id: 'visual.fromDataset',
-    title: 'New visual from this dataset',
+    title: t('commandDefs.new_visual_from_this_dataset'),
     group: 'Visual',
     icon: 'columns',
     when: cmdDatasetOpen,
     run: () => handleNewVisual({ datasetId: expId }),
   });
-  registerCommand({ id: 'visual.save', title: 'Save this visual', group: 'Visual', icon: 'check', when: cmdVisualBuilderOpen, run: () => handleSaveVisual() });
-  registerCommand({ id: 'visual.suggest', title: 'Suggest a visual', group: 'Visual', icon: 'sparkles', when: cmdVisualBuilderOpen, run: () => handleSuggestVisual() });
-  registerCommand({ id: 'visual.history', title: 'Version history', group: 'Visual', icon: 'history', when: () => cmdVisualBuilderOpen() && !!vizEditingId, run: () => { document.getElementById('viz-history-btn')?.click(); } });
-  registerCommand({ id: 'visual.lineage', title: 'Show lineage', group: 'Visual', icon: 'lineage', when: () => cmdVisualBuilderOpen() && !!vizEditingId, run: () => { void lnOpen('visual', vizEditingId, document.getElementById('viz-builder-name')?.textContent || ''); } });
+  registerCommand({ id: 'visual.save', title: t('commandDefs.save_this_visual'), group: 'Visual', icon: 'check', when: cmdVisualBuilderOpen, run: () => handleSaveVisual() });
+  registerCommand({ id: 'visual.suggest', title: t('common.suggest_a_visual'), group: 'Visual', icon: 'sparkles', when: cmdVisualBuilderOpen, run: () => handleSuggestVisual() });
+  registerCommand({ id: 'visual.history', title: t('common.version_history'), group: 'Visual', icon: 'history', when: () => cmdVisualBuilderOpen() && !!vizEditingId, run: () => { document.getElementById('viz-history-btn')?.click(); } });
+  registerCommand({ id: 'visual.lineage', title: t('commandDefs.show_lineage'), group: 'Visual', icon: 'lineage', when: () => cmdVisualBuilderOpen() && !!vizEditingId, run: () => { void lnOpen('visual', vizEditingId, document.getElementById('viz-builder-name')?.textContent || ''); } });
 
   // ── Dashboard (the editor is open) ─────────────────────────────────────────
-  registerCommand({ id: 'dash.addVisual', title: 'Add a visual', group: 'Dashboard', icon: 'columns', when: cmdDashboardOpen, run: () => handleAddVisual() });
-  registerCommand({ id: 'dash.addMetric', title: 'Add a metric', group: 'Dashboard', icon: 'zap', when: cmdDashboardOpen, run: () => handleAddMetric() });
-  registerCommand({ id: 'dash.addText', title: 'Add text', group: 'Dashboard', icon: 'pencil', when: cmdDashboardOpen, run: () => handleAddText() });
-  registerCommand({ id: 'dash.addControl', title: 'Add a control', group: 'Dashboard', icon: 'sliders', when: cmdDashboardOpen, run: () => handleAddControl() });
+  registerCommand({ id: 'dash.addVisual', title: t('common.add_a_visual'), group: t('common.dashboard'), icon: 'columns', when: cmdDashboardOpen, run: () => handleAddVisual() });
+  registerCommand({ id: 'dash.addMetric', title: t('common.add_a_metric'), group: t('common.dashboard'), icon: 'zap', when: cmdDashboardOpen, run: () => handleAddMetric() });
+  registerCommand({ id: 'dash.addText', title: t('common.add_text'), group: t('common.dashboard'), icon: 'pencil', when: cmdDashboardOpen, run: () => handleAddText() });
+  registerCommand({ id: 'dash.addControl', title: t('common.add_a_control'), group: t('common.dashboard'), icon: 'sliders', when: cmdDashboardOpen, run: () => handleAddControl() });
   // ONE history, two editors: ⌘Z walks the open story's stack when a story is
   // open (storyPage.ts keeps it in dashHistory's own structure), else the dashboard's.
   // One undo binding: a dashboard, a story, or an input table's grid (inputPage.ts).
-  registerCommand({ id: 'dash.undo', title: 'Undo', group: 'Dashboard', icon: 'undo', keys: 'mod+z', when: () => cmdDashboardOpen() || stIsOpen() || itIsActive(), run: () => (itIsActive() ? itUndo() : stIsOpen() ? stUndo() : dashUndo()) });
-  registerCommand({ id: 'dash.redo', title: 'Redo', group: 'Dashboard', icon: 'redo', keys: ['mod+shift+z', 'mod+y'], when: () => cmdDashboardOpen() || stIsOpen() || itIsActive(), run: () => (itIsActive() ? itRedo() : stIsOpen() ? stRedo() : dashRedo()) });
-  registerCommand({ id: 'story.present', title: 'Present this story', group: 'Dashboard', icon: 'maximize', when: stIsOpen, run: () => { void stEnterPresent(); } });
-  registerCommand({ id: 'story.exportPdf', title: 'Export this story as PDF', group: 'Dashboard', icon: 'download', when: stIsOpen, run: () => { void stExportPdf(); } });
-  registerCommand({ id: 'story.new', title: 'New story', group: 'Create', icon: 'file-text', when: () => !!currentProjectId, run: () => { void stNewStory(); } });
-  registerCommand({ id: 'dash.save', title: 'Save', group: 'Dashboard', icon: 'check', keys: 'mod+s', when: cmdDashboardOpen, run: () => handleSaveDashboard() });
-  registerCommand({ id: 'dash.present', title: 'Present', group: 'Dashboard', icon: 'maximize', keys: 'mod+p', when: () => !!dashCurrent, run: () => enterDashPresent() });
-  registerCommand({ id: 'dash.history', title: 'Version history', group: 'Dashboard', icon: 'history', when: () => !!dashCurrent, run: () => { void vhOpen('dashboard', String(dashCurrent.id), String(dashCurrent.name || '')); } });
-  registerCommand({ id: 'dash.lineage', title: 'Show lineage', group: 'Dashboard', icon: 'lineage', when: () => !!dashCurrent, run: () => { void lnOpen('dashboard', String(dashCurrent.id), String(dashCurrent.name || '')); } });
-  registerCommand({ id: 'dash.export', title: 'Export…', group: 'Dashboard', icon: 'download', keys: 'mod+e', when: () => !!dashCurrent, run: () => handleDashExport() });
-  registerCommand({ id: 'dash.exportPdf', title: 'Export as PDF', group: 'Dashboard', icon: 'download', when: () => !!dashCurrent, run: () => dashExportAs('pdf') });
-  registerCommand({ id: 'dash.exportPng', title: 'Export as PNG', group: 'Dashboard', icon: 'download', when: () => !!dashCurrent, run: () => dashExportAs('png') });
-  registerCommand({ id: 'dash.exportHtml', title: 'Export as HTML', group: 'Dashboard', icon: 'download', when: () => !!dashCurrent, run: () => dashExportAs('html') });
-  registerCommand({ id: 'dash.style', title: 'Change the style preset', group: 'Dashboard', icon: 'layers', when: cmdDashboardOpen, run: () => handleDashStyle() });
-  registerCommand({ id: 'dash.nextPage', title: 'Next page', group: 'Dashboard', icon: 'grid', when: () => !!dashCurrent, run: () => cmdDashPage(1) });
-  registerCommand({ id: 'dash.prevPage', title: 'Previous page', group: 'Dashboard', icon: 'grid', when: () => !!dashCurrent, run: () => cmdDashPage(-1) });
-  registerCommand({ id: 'dash.clearFilters', title: 'Clear filters', group: 'Dashboard', icon: 'filter', when: () => !!dashCurrent && dashFilters().length > 0, run: () => handleClearDashFilters() });
+  registerCommand({ id: 'dash.undo', title: t('common.undo'), group: t('common.dashboard'), icon: 'undo', keys: 'mod+z', when: () => cmdDashboardOpen() || stIsOpen() || itIsActive(), run: () => (itIsActive() ? itUndo() : stIsOpen() ? stUndo() : dashUndo()) });
+  registerCommand({ id: 'dash.redo', title: t('common.redo'), group: t('common.dashboard'), icon: 'redo', keys: ['mod+shift+z', 'mod+y'], when: () => cmdDashboardOpen() || stIsOpen() || itIsActive(), run: () => (itIsActive() ? itRedo() : stIsOpen() ? stRedo() : dashRedo()) });
+  registerCommand({ id: 'story.present', title: t('commandDefs.present_this_story'), group: t('common.dashboard'), icon: 'maximize', when: stIsOpen, run: () => { void stEnterPresent(); } });
+  registerCommand({ id: 'story.exportPdf', title: t('commandDefs.export_this_story_as_pdf'), group: t('common.dashboard'), icon: 'download', when: stIsOpen, run: () => { void stExportPdf(); } });
+  registerCommand({ id: 'story.new', title: t('common.new_story'), group: t('common.create'), icon: 'file-text', when: () => !!currentProjectId, run: () => { void stNewStory(); } });
+  registerCommand({ id: 'dash.save', title: t('common.save'), group: t('common.dashboard'), icon: 'check', keys: 'mod+s', when: cmdDashboardOpen, run: () => handleSaveDashboard() });
+  registerCommand({ id: 'dash.present', title: t('common.present'), group: t('common.dashboard'), icon: 'maximize', keys: 'mod+p', when: () => !!dashCurrent, run: () => enterDashPresent() });
+  registerCommand({ id: 'dash.history', title: t('common.version_history'), group: t('common.dashboard'), icon: 'history', when: () => !!dashCurrent, run: () => { void vhOpen('dashboard', String(dashCurrent.id), String(dashCurrent.name || '')); } });
+  registerCommand({ id: 'dash.lineage', title: t('commandDefs.show_lineage'), group: t('common.dashboard'), icon: 'lineage', when: () => !!dashCurrent, run: () => { void lnOpen('dashboard', String(dashCurrent.id), String(dashCurrent.name || '')); } });
+  registerCommand({ id: 'dash.export', title: t('common.export'), group: t('common.dashboard'), icon: 'download', keys: 'mod+e', when: () => !!dashCurrent, run: () => handleDashExport() });
+  registerCommand({ id: 'dash.exportPdf', title: t('commandDefs.export_as_pdf'), group: t('common.dashboard'), icon: 'download', when: () => !!dashCurrent, run: () => dashExportAs('pdf') });
+  registerCommand({ id: 'dash.exportPng', title: t('commandDefs.export_as_png'), group: t('common.dashboard'), icon: 'download', when: () => !!dashCurrent, run: () => dashExportAs('png') });
+  registerCommand({ id: 'dash.exportHtml', title: t('commandDefs.export_as_html'), group: t('common.dashboard'), icon: 'download', when: () => !!dashCurrent, run: () => dashExportAs('html') });
+  registerCommand({ id: 'dash.style', title: t('commandDefs.change_the_style_preset'), group: t('common.dashboard'), icon: 'layers', when: cmdDashboardOpen, run: () => handleDashStyle() });
+  registerCommand({ id: 'dash.nextPage', title: t('commandDefs.next_page'), group: t('common.dashboard'), icon: 'grid', when: () => !!dashCurrent, run: () => cmdDashPage(1) });
+  registerCommand({ id: 'dash.prevPage', title: t('commandDefs.previous_page'), group: t('common.dashboard'), icon: 'grid', when: () => !!dashCurrent, run: () => cmdDashPage(-1) });
+  registerCommand({ id: 'dash.clearFilters', title: t('common.clear_filters'), group: t('common.dashboard'), icon: 'filter', when: () => !!dashCurrent && dashFilters().length > 0, run: () => handleClearDashFilters() });
 
   // ── Assistant ──────────────────────────────────────────────────────────────
   // ⌘L was the dock's own binding before there was a registry; it still works,
   // declared here instead of bound in dock.ts, so the sheet and the menu can see it.
-  registerCommand({ id: 'ai.open', title: 'Toggle the Assistant', group: 'Assistant', icon: 'sparkles', keys: ['mod+j', 'mod+l'], run: () => cmdToggleDock() });
-  registerCommand({ id: 'ai.new', title: 'New conversation', group: 'Assistant', icon: 'plus', when: cmdHasProject, run: async () => { cmdOpenDock(); await dkNew(); } });
+  registerCommand({ id: 'ai.open', title: t('commandDefs.toggle_the_assistant'), group: t('common.assistant'), icon: 'sparkles', keys: ['mod+j', 'mod+l'], run: () => cmdToggleDock() });
+  registerCommand({ id: 'ai.new', title: t('common.new_conversation'), group: t('common.assistant'), icon: 'plus', when: cmdHasProject, run: async () => { cmdOpenDock(); await dkNew(); } });
   registerCommand({
     id: 'ai.askAboutThis',
-    title: 'Ask about this',
-    group: 'Assistant',
+    title: t('commandDefs.ask_about_this'),
+    group: t('common.assistant'),
     icon: 'send',
     when: () => !!cmdContextRef().kind,
     // No question is invented for the user: the dock opens on the record and the
@@ -236,31 +236,31 @@ function registerAppCommands(): void {
   });
 
   // ── View ───────────────────────────────────────────────────────────────────
-  registerCommand({ id: 'view.palette', title: 'Command palette', group: 'View', icon: 'search', keys: 'mod+k', run: () => paletteOpen('') });
+  registerCommand({ id: 'view.palette', title: t('common.command_palette'), group: t('common.view'), icon: 'search', keys: 'mod+k', run: () => paletteOpen('') });
   registerCommand({
     id: 'view.theme',
-    title: 'Toggle dark mode',
-    group: 'View',
+    title: t('commandDefs.toggle_dark_mode'),
+    group: t('common.view'),
     icon: 'eye',
     keys: 'mod+shift+d',
     run: () => setThemePreference(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'),
   });
   registerCommand({
     id: 'view.sidebar',
-    title: 'Toggle the sidebar',
-    group: 'View',
+    title: t('commandDefs.toggle_the_sidebar'),
+    group: t('common.view'),
     icon: 'list',
     run: () => { document.body.classList.toggle('no-sidebar'); },
   });
-  registerCommand({ id: 'view.zoomIn', title: 'Zoom in', group: 'View', icon: 'plus', keys: 'mod+=', run: () => cmdZoom(1) });
-  registerCommand({ id: 'view.zoomOut', title: 'Zoom out', group: 'View', icon: 'minus', keys: 'mod+-', run: () => cmdZoom(-1) });
-  registerCommand({ id: 'view.zoomReset', title: 'Reset zoom', group: 'View', icon: 'refresh', keys: 'mod+0', run: () => cmdZoom(null) });
-  registerCommand({ id: 'view.escape', title: 'Close the top-most layer', group: 'View', icon: 'x', keys: 'escape', run: () => { paletteCloseTop(); } });
+  registerCommand({ id: 'view.zoomIn', title: t('commandDefs.zoom_in'), group: t('common.view'), icon: 'plus', keys: 'mod+=', run: () => cmdZoom(1) });
+  registerCommand({ id: 'view.zoomOut', title: t('commandDefs.zoom_out'), group: t('common.view'), icon: 'minus', keys: 'mod+-', run: () => cmdZoom(-1) });
+  registerCommand({ id: 'view.zoomReset', title: t('commandDefs.reset_zoom'), group: t('common.view'), icon: 'refresh', keys: 'mod+0', run: () => cmdZoom(null) });
+  registerCommand({ id: 'view.escape', title: t('commandDefs.close_the_top_most_layer'), group: t('common.view'), icon: 'x', keys: 'escape', run: () => { paletteCloseTop(); } });
 
   // ── Help ───────────────────────────────────────────────────────────────────
-  registerCommand({ id: 'help.shortcuts', title: 'Keyboard shortcuts', group: 'Help', icon: 'info', keys: '?', run: () => paletteShowShortcuts() });
-  registerCommand({ id: 'help.whatsNew', title: "What's new", group: 'Help', icon: 'star', run: () => cmdOpenLink(HELP_LINKS.whatsnew) });
-  registerCommand({ id: 'help.report', title: 'Report a problem', group: 'Help', icon: 'alert', run: () => cmdOpenLink(HELP_LINKS.help) });
+  registerCommand({ id: 'help.shortcuts', title: t('common.keyboard_shortcuts'), group: t('common.help'), icon: 'info', keys: '?', run: () => paletteShowShortcuts() });
+  registerCommand({ id: 'help.whatsNew', title: t('common.what_s_new'), group: t('common.help'), icon: 'star', run: () => cmdOpenLink(HELP_LINKS.whatsnew) });
+  registerCommand({ id: 'help.report', title: t('commandDefs.report_a_problem'), group: t('common.help'), icon: 'alert', run: () => cmdOpenLink(HELP_LINKS.help) });
 }
 
 /**

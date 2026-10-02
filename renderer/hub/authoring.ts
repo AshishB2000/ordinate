@@ -65,7 +65,7 @@ function anSyncWorkbench(): void {
     if (on) {
       nameEl.setAttribute('role', 'button');
       nameEl.setAttribute('tabindex', '0');
-      nameEl.title = 'Click to rename';
+      nameEl.title = t('authoring.click_to_rename');
     } else {
       nameEl.removeAttribute('role');
       nameEl.removeAttribute('tabindex');

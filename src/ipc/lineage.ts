@@ -10,6 +10,7 @@ import * as alertStore from '../analysis/alertStore';
 import * as connections from '../connectors/connections';
 import * as history from '../app/history';
 import { isValidId } from '../app/ids';
+import { listNotebooks } from '../analysis/notebook/store';
 
 // Lineage IPC — the dependency graph around one record (src/analysis/lineage.ts
 // builds it; this reads the project's records to build it from).
@@ -26,7 +27,7 @@ const PREFIX: Record<string, string> = {
 const present = <T>(list: Array<T | null>): T[] => list.filter((x): x is T => x !== null);
 
 export async function loadInput(projectId: string): Promise<LineageInput> {
-  const [dsList, visList, anList, metList, reports, alertFile, conns, caps] = await Promise.all([
+  const [dsList, visList, anList, metList, reports, alertFile, conns, caps, nbs] = await Promise.all([
     datasets.listDatasets(projectId).catch(() => []),
     visuals.listVisuals(projectId).catch(() => []),
     analysis.listAnalyses(projectId).catch(() => []),
@@ -35,6 +36,7 @@ export async function loadInput(projectId: string): Promise<LineageInput> {
     alertStore.load(projectId).catch(() => ({ rules: [] })),
     connections.listConnections(projectId).catch(() => []),
     history.loadAllSummaries(projectId).catch(() => []),
+    listNotebooks(projectId).catch(() => []),
   ]);
   return {
     datasets: present(await Promise.all(dsList.map((d) => datasets.getDatasetMeta(projectId, d.id)))),
@@ -45,6 +47,7 @@ export async function loadInput(projectId: string): Promise<LineageInput> {
     alerts: alertFile.rules || [],
     connections: conns.map((c) => ({ id: c.id, name: c.name, kind: c.connectorId })),
     captures: caps.map((c) => ({ id: String(c.id), title: c.title })),
+    notebooks: nbs.map((n) => ({ id: n.id, name: n.name })),
   };
 }
 

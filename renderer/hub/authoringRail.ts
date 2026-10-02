@@ -90,11 +90,11 @@ function initAuthoring(): void {
     more.addEventListener('click', () => {
       openMiniMenu(more, (menu: HTMLElement, close: () => void) => {
         ([
-          ['Style…', 'dash-style-btn'],
-          ['Present', 'dash-present-btn'],
-          ['Export…', 'dash-export-btn'],
-          ['Create report…', 'dash-report-btn'],
-          ['Share', 'dash-share-btn'],
+          [t('common.style'), 'dash-style-btn'],
+          [t('common.present'), 'dash-present-btn'],
+          [t('common.export'), 'dash-export-btn'],
+          [t('common.create_report'), 'dash-report-btn'],
+          [t('common.share'), 'dash-share-btn'],
         ] as Array<[string, string]>).forEach(([label, target]) => {
           const row = document.createElement('button');
           row.type = 'button';
@@ -107,7 +107,7 @@ function initAuthoring(): void {
         const lin = document.createElement('button');
         lin.type = 'button';
         lin.className = 'chart-menu-item';
-        lin.textContent = 'Lineage';
+        lin.textContent = t('common.lineage');
         lin.addEventListener('click', () => {
           close();
           if (dashCurrent) void lnOpen('dashboard', String(dashCurrent.id), String(dashCurrent.name || ''));
@@ -117,12 +117,19 @@ function initAuthoring(): void {
         const pub = document.createElement('button');
         pub.type = 'button';
         pub.className = 'chart-menu-item';
-        pub.textContent = 'Publish…';
+        pub.textContent = t('common.publish');
         pub.addEventListener('click', () => {
           close();
           if (typeof openPublishDialog === 'function') void openPublishDialog(dashCurrent ? String(dashCurrent.id) : undefined);
         });
         menu.appendChild(pub);
+        // r7:templates — this dashboard as a template in the gallery's "Yours".
+        const tpl = document.createElement('button');
+        tpl.type = 'button';
+        tpl.className = 'chart-menu-item';
+        tpl.textContent = t('common.save_as_template');
+        tpl.addEventListener('click', () => { close(); if (dashCurrent) void utSaveAsTemplate(String(dashCurrent.id)); });
+        menu.appendChild(tpl);
       });
     });
   }
@@ -164,7 +171,7 @@ function initAuthoring(): void {
   if (calc) {
     calc.addEventListener('click', () => {
       if (!anVisual || !anVisual.datasetId) {
-        window.alert('Select a visual card first — a calculated field is added to its dataset.');
+        window.alert(t('authoringRail.select_a_visual_card_first_a'));
         return;
       }
       // A calculated field belongs to the DATASET, so this still writes a
@@ -182,10 +189,10 @@ function initAuthoring(): void {
             expression: field.expression,
           });
           if (!res || res.ok === false) {
-            window.alert((res && res.error) || 'Failed to add the calculated field.');
+            window.alert((res && res.error) || t('authoringRail.failed_to_add_the_calculated_field'));
             return false;
           }
-          showToast('Added “' + field.name + '” to this dataset.');
+          showToast(t('authoringRail.added_to_this_dataset', { name: field.name }));
           return true;
         },
       });

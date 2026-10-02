@@ -16,18 +16,18 @@
 // always lived. Classic global-scope renderer <script>: no import/export.
 
 const PV_KIND_WORDS: Record<string, string> = {
-  email: 'email addresses', phone: 'phone numbers', national_id: 'national ID numbers',
-  card_number: 'card numbers', iban: 'bank account numbers', ip_address: 'IP addresses',
-  street_address: 'street addresses', person_name: "people's names", birth_date: 'dates of birth',
-  salary: 'pay or income',
+  email: t('privacyReview.email_addresses'), phone: t('privacyReview.phone_numbers'), national_id: t('privacyReview.national_id_numbers'),
+  card_number: t('privacyReview.card_numbers'), iban: t('privacyReview.bank_account_numbers'), ip_address: t('privacyReview.ip_addresses'),
+  street_address: t('privacyReview.street_addresses'), person_name: t('privacyReview.people_s_names'), birth_date: t('privacyReview.dates_of_birth'),
+  salary: t('privacyReview.pay_or_income'),
 };
-const PV_LEVEL_LABEL: Record<string, string> = { personal: 'Personal', financial: 'Financial' };
+const PV_LEVEL_LABEL: Record<string, string> = { personal: t('common.personal'), financial: t('common.financial') };
 // What the EXPORT path does with a marked column; the other three paths are
 // one click away in Settings → Privacy.
 const PV_ACTION_SENTENCE: Record<string, string> = {
-  mask: 'Exports replace its values with project tokens.',
-  drop: 'Exports leave it out.',
-  include: 'Exports include it — after asking you each time.',
+  mask: t('privacyReview.exports_replace_its_values_with_project'),
+  drop: t('privacyReview.exports_leave_it_out'),
+  include: t('privacyReview.exports_include_it_after_asking_you'),
 };
 
 function pvEl(tag: string, cls: string, text?: string): HTMLElement {
@@ -48,7 +48,7 @@ function pvBtn(cls: string, text: string, onClick: () => void): HTMLButtonElemen
 
 /** "Looks like email addresses" — the proposal's headline. */
 function pvProposalTitle(p: any): string {
-  return 'Looks like ' + (PV_KIND_WORDS[p.kind] || 'sensitive data');
+  return t('privacyReview.looks_like', { p0: (PV_KIND_WORDS[p.kind] || t('privacyReview.sensitive_data')) });
 }
 
 // ── The composer ─────────────────────────────────────────────────────────────
@@ -79,8 +79,8 @@ function pvComposerChip(rawName: string): HTMLElement | null {
   chip.className = 'pv-chip pv-chip--' + level + (decided ? ' is-set' : '');
   chip.appendChild(icon(decided ? 'check' : 'shield', 12));
   chip.appendChild(document.createTextNode(PV_LEVEL_LABEL[level] + (decided ? '' : '?')));
-  chip.title = decided ? `Marked ${level} — change` : `${pvProposalTitle(p)}. ${p.reason}`;
-  chip.setAttribute('aria-label', decided ? `${rawName}: marked ${level}. Change` : `${rawName}: ${pvProposalTitle(p).toLowerCase()}. Review`);
+  chip.title = decided ? t('privacyReview.marked_change', { level }) : `${pvProposalTitle(p)}. ${p.reason}`;
+  chip.setAttribute('aria-label', decided ? t('privacyReview.marked_change_2', { rawName, level }) : t('privacyReview.review', { rawName, p1: pvProposalTitle(p).toLowerCase() }));
   chip.addEventListener('click', (e) => {
     e.stopPropagation();
     openMiniMenu(chip, (menu: HTMLElement, close: () => void) => {
@@ -93,11 +93,11 @@ function pvComposerChip(rawName: string): HTMLElement | null {
         paintGridFromCache();
       };
       const other = level === 'personal' ? 'financial' : 'personal';
-      for (const [v, label] of [[level, `Mark as ${level}`], [other, `Mark as ${other}`], ['none', 'Not sensitive']]) {
+      for (const [v, label] of [[level, t('common.mark_as', { level })], [other, t('privacyReview.mark_as', { other })], ['none', t('common.not_sensitive')]]) {
         const row = pvBtn('chart-menu-item', label, () => pick(v));
         menu.appendChild(row);
       }
-      menu.appendChild(pvEl('div', 'pv-pop-foot', 'Nothing is marked until you choose. You can change it later from the column’s details.'));
+      menu.appendChild(pvEl('div', 'pv-pop-foot', t('privacyReview.nothing_is_marked_until_you_choose')));
     });
   });
   return chip;
@@ -135,8 +135,8 @@ async function pvDecide(column: string, level: string): Promise<void> {
   const ds = expId;
   let r: any = null;
   try { r = await window.hubPrivacy.decide(currentProjectId, ds, column, level); } catch (_) { r = null; }
-  if (!r || !r.ok) { showToast('Could not save that.'); return; }
-  showToast(level === 'none' ? `“${column}” won’t be flagged again` : `“${column}” marked ${level}`);
+  if (!r || !r.ok) { showToast(t('common.could_not_save_that')); return; }
+  showToast(level === 'none' ? t('privacyReview.won_t_be_flagged_again', { column }) : t('privacyReview.marked', { column, level }));
   if (typeof ctLoadColumnDocs === 'function') await ctLoadColumnDocs(ds, true); // the catalog's own cache
   await pvLoadReview(ds);
   pvPaintBannerNow();
@@ -145,9 +145,9 @@ async function pvDecide(column: string, level: string): Promise<void> {
 
 function pvDecideButtons(p: any, host: HTMLElement): void {
   const other = p.level === 'personal' ? 'financial' : 'personal';
-  host.appendChild(pvBtn('btn btn-sm btn-primary', `Mark as ${p.level}`, () => void pvDecide(p.column, p.level)));
-  host.appendChild(pvBtn('btn btn-sm', `Mark as ${other}`, () => void pvDecide(p.column, other)));
-  host.appendChild(pvBtn('btn btn-sm pv-quiet', 'Not sensitive', () => void pvDecide(p.column, 'none')));
+  host.appendChild(pvBtn('btn btn-sm btn-primary', t('common.mark_as', { level: p.level }), () => void pvDecide(p.column, p.level)));
+  host.appendChild(pvBtn('btn btn-sm', t('privacyReview.mark_as', { other }), () => void pvDecide(p.column, other)));
+  host.appendChild(pvBtn('btn btn-sm pv-quiet', t('common.not_sensitive'), () => void pvDecide(p.column, 'none')));
 }
 
 /** Called when a dataset page opens (dsExplorer.openSavedDataset). */
@@ -171,10 +171,10 @@ function pvPaintBannerNow(): void {
   head.appendChild(icon('shield', 16));
   const n = pending.length;
   const text = pvEl('div', 'pv-banner-text');
-  text.appendChild(pvEl('strong', '', `${n} column${n === 1 ? '' : 's'} look${n === 1 ? 's' : ''} sensitive`));
+  text.appendChild(pvEl('strong', '', t('privacyReview.sensitive', { n })));
   text.appendChild(pvEl('span', 'pv-banner-cols', ' — ' + pending.map((p) => p.column).join(', ')));
   head.appendChild(text);
-  const toggle = pvBtn('btn btn-sm', pvBannerOpen ? 'Done' : 'Review', () => { pvBannerOpen = !pvBannerOpen; pvPaintBannerNow(); });
+  const toggle = pvBtn('btn btn-sm', pvBannerOpen ? t('common.done') : t('privacyReview.review_2'), () => { pvBannerOpen = !pvBannerOpen; pvPaintBannerNow(); });
   toggle.setAttribute('aria-expanded', String(pvBannerOpen));
   head.appendChild(toggle);
   host.appendChild(head);
@@ -188,7 +188,7 @@ function pvPaintBannerNow(): void {
       const i = expColumns.findIndex((c) => c.name === p.column);
       if (i >= 0 && dsProfileCol !== i) void dsOpenProfile(i);
     });
-    name.title = 'Open the column profile';
+    name.title = t('privacyReview.open_the_column_profile');
     ident.appendChild(name);
     ident.appendChild(pvEl('span', 'pv-level pv-level--' + p.level, PV_LEVEL_LABEL[p.level] + '?')); // a proposal, not a mark
     ident.appendChild(pvEl('div', 'pv-review-reason', `${pvProposalTitle(p)}. ${p.reason}`));
@@ -198,7 +198,7 @@ function pvPaintBannerNow(): void {
     row.appendChild(acts);
     list.appendChild(row);
   }
-  list.appendChild(pvEl('p', 'pv-review-foot', 'Nothing is marked until you choose. Marked columns are masked or left out of exports by this project’s share policy.'));
+  list.appendChild(pvEl('p', 'pv-review-foot', t('privacyReview.nothing_is_marked_until_you_choose_2')));
   host.appendChild(list);
 }
 
@@ -238,11 +238,11 @@ function pvPaintProfileNow(column: string): void {
   const masked = (expSteps || []).some((s: any) => s && typeof s.type === 'string' && s.type.startsWith('mask_') && s.column === column);
   const action = pvReview.policy ? pvReview.policy.export : 'mask';
   host.appendChild(pvEl('p', 'pv-prof-reason', masked
-    ? 'Masked by a Prepare step — the values here are already tokens or generalised.'
+    ? t('privacyReview.masked_by_a_prepare_step_the')
     : PV_ACTION_SENTENCE[action] || PV_ACTION_SENTENCE.mask));
   const acts = pvEl('div', 'pv-prof-acts');
-  if (!masked) acts.appendChild(pvBtn('btn btn-sm', 'Mask in Prepare…', () => pvOpenMaskEditor(column)));
-  const policy = pvBtn('pv-link', 'Share policy', () => void showSettingsPanel('privacy'));
+  if (!masked) acts.appendChild(pvBtn('btn btn-sm', t('privacyReview.mask_in_prepare'), () => pvOpenMaskEditor(column)));
+  const policy = pvBtn('pv-link', t('privacyReview.share_policy'), () => void showSettingsPanel('privacy'));
   acts.appendChild(policy);
   host.appendChild(acts);
   host.hidden = false;

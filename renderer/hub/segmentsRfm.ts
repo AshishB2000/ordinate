@@ -25,7 +25,7 @@ function sgRfmSelect(id: string, label: string, options: Array<{ name: string; t
   l.htmlFor = id;
   const sel = sgEl<HTMLSelectElement>('select', 'sg-rfm-select');
   sel.id = id;
-  const blank = sgEl<HTMLOptionElement>('option', '', 'Pick a column');
+  const blank = sgEl<HTMLOptionElement>('option', '', t('segmentsRfm.pick_a_column'));
   blank.value = '';
   sel.appendChild(blank);
   for (const c of options) {
@@ -59,21 +59,21 @@ function sgPaintRfm(): void {
   const card = sgEl('section', 'sg-card sg-setup');
   card.setAttribute('aria-labelledby', 'sg-rfm-h');
   const head = sgEl('div', 'sg-card-head');
-  const h = sgEl('h3', 'sg-card-h', 'Who, when and how much');
+  const h = sgEl('h3', 'sg-card-h', t('segmentsRfm.who_when_and_how_much'));
   h.id = 'sg-rfm-h';
   head.append(h, sgEl('p', 'sg-hint',
-    'One row per order. Recency is counted from the latest order date in the data, so the same data scores the same way on any day.'));
+    t('segmentsRfm.one_row_per_order_recency_is')));
   const fields = sgEl('div', 'sg-rfm-fields');
   const nums = info.columns.filter((c) => c.type === 'number');
   fields.append(
-    sgRfmSelect('sg-rfm-id', 'Customer id', info.columns, info.rfm.id),
-    sgRfmSelect('sg-rfm-date', 'Order date', info.columns, info.rfm.date),
-    sgRfmSelect('sg-rfm-amount', 'Amount', nums, info.rfm.amount),
+    sgRfmSelect('sg-rfm-id', t('segmentsRfm.customer_id'), info.columns, info.rfm.id),
+    sgRfmSelect('sg-rfm-date', t('segmentsRfm.order_date'), info.columns, info.rfm.date),
+    sgRfmSelect('sg-rfm-amount', t('segmentsRfm.amount'), nums, info.rfm.amount),
   );
   const row = sgEl('div', 'sg-run-row');
-  const run = sgButton('btn btn-primary', 'play', 'Score customers', () => void sgRfmRun());
+  const run = sgButton('btn btn-primary', 'play', t('segmentsRfm.score_customers'), () => void sgRfmRun());
   run.id = 'sg-rfm-run';
-  row.append(run, sgEl('span', 'sg-run-hint', 'Rows without an id, a readable date or a number are left out and counted.'));
+  row.append(run, sgEl('span', 'sg-run-hint', t('segmentsRfm.rows_without_an_id_a_readable')));
   card.append(head, fields, row, sgProgressBox('rfm'), sgErrorLine('rfm'));
   const results = sgEl('div', 'sg-results');
   results.id = 'sg-rfm-results';
@@ -90,13 +90,13 @@ async function sgRfmRun(): Promise<void> {
   sgBusy = 'rfm';
   sgShowError('rfm', '');
   sgRfmSync();
-  sgProgress('rfm', true, 0, 'Starting…');
+  sgProgress('rfm', true, 0, t('common.starting'));
   sgWatchJob(info.datasetId, 'rfm');
   let res: any;
   try {
     res = await window.hubSegments.rfm(info.projectId, info.datasetId, spec);
   } catch (err) {
-    res = { ok: false, error: err instanceof Error ? err.message : 'Could not score the customers' };
+    res = { ok: false, error: err instanceof Error ? err.message : t('segmentsRfm.could_not_score_the_customers') };
   }
   sgStopWatch();
   sgBusy = '';
@@ -104,8 +104,8 @@ async function sgRfmRun(): Promise<void> {
   sgProgress('rfm', false);
   sgRfmSync();
   if (!res || !res.ok) {
-    if (res && res.cancelled) sgShowError('rfm', 'Stopped. Nothing was changed.', true);
-    else sgShowError('rfm', (res && res.error) || 'Could not score the customers.');
+    if (res && res.cancelled) sgShowError('rfm', t('common.stopped_nothing_was_changed'), true);
+    else sgShowError('rfm', (res && res.error) || t('segmentsRfm.could_not_score_the_customers_2'));
     return;
   }
   sgRfmResult = res.result;
@@ -119,16 +119,16 @@ function sgRfmPaintResults(): void {
   host.textContent = '';
   const r = sgRfmResult;
   if (!r) {
-    host.appendChild(sgEmpty('user', 'Score customers by recency, frequency and spend',
-      'Every customer gets a 1–5 score for how recently, how often and how much they buy, and one of eleven named segments — from Champions to Lost. Save the scores as a dataset and chart them like any other.'));
+    host.appendChild(sgEmpty('user', t('segmentsRfm.score_customers_by_recency_frequency_and'),
+      t('segmentsRfm.every_customer_gets_a_1_5')));
     return;
   }
   const kpis = sgEl('div', 'sg-kpis');
   kpis.append(
     sgKpi(sgFmt(r.customers), 'customers'),
-    sgKpi(sgFmt(r.used), 'orders scored'),
-    sgKpi(r.asOf || '—', 'recency measured from'),
-    sgKpi(sgFmt(r.skipped), r.skipped === 1 ? 'row left out' : 'rows left out'),
+    sgKpi(sgFmt(r.used), t('segmentsRfm.orders_scored')),
+    sgKpi(r.asOf || '—', t('segmentsRfm.recency_measured_from')),
+    sgKpi(sgFmt(r.skipped), r.skipped === 1 ? t('segmentsRfm.row_left_out') : t('segmentsRfm.rows_left_out')),
   );
   const pair = sgEl('div', 'sg-pair sg-pair--wide');
   pair.append(sgRfmGrid(r), sgRfmSaveCard(r));
@@ -136,17 +136,17 @@ function sgRfmPaintResults(): void {
 }
 
 function sgRfmTable(r: any): HTMLElement {
-  const card = sgCard('sg-rfm-segs', 'Segments', 'All eleven, with how many customers each holds and what they look like on average.');
+  const card = sgCard('sg-rfm-segs', t('segmentsRfm.segments'), t('segmentsRfm.all_eleven_with_how_many_customers'));
   const scroll = sgEl('div', 'sg-table-scroll');
-  const t = sgEl<HTMLTableElement>('table', 'sg-table sg-rfm-table');
-  t.id = 'sg-rfm-table';
-  const hr = t.createTHead().insertRow();
-  for (const [text, cls] of [['Segment', ''], ['Customers', 'sg-num'], ['Share', ''], ['Days since last order', 'sg-num'], ['Orders', 'sg-num'], ['Spend', 'sg-num']]) {
+  const tv = sgEl<HTMLTableElement>('table', 'sg-table sg-rfm-table');
+  tv.id = 'sg-rfm-table';
+  const hr = tv.createTHead().insertRow();
+  for (const [text, cls] of [[t('segmentsRfm.segment'), ''], [t('segmentsRfm.customers'), 'sg-num'], [t('common.share'), ''], [t('segmentsRfm.days_since_last_order'), 'sg-num'], [t('common.orders'), 'sg-num'], [t('segmentsRfm.spend'), 'sg-num']]) {
     const th = sgEl<HTMLTableCellElement>('th', cls, text);
     th.scope = 'col';
     hr.appendChild(th);
   }
-  const body = t.createTBody();
+  const body = tv.createTBody();
   for (const s of r.segments) {
     const tr = body.insertRow();
     tr.className = 'sg-rfm-row' + (s.count ? '' : ' is-none');
@@ -171,23 +171,23 @@ function sgRfmTable(r: any): HTMLElement {
     tr.appendChild(sgEl('td', 'sg-num', s.frequency === null ? '—' : sgFmt(s.frequency, 1)));
     tr.appendChild(sgEl('td', 'sg-num', s.monetary === null ? '—' : sgFmt(s.monetary, 2)));
   }
-  scroll.appendChild(t);
+  scroll.appendChild(tv);
   card.appendChild(scroll);
   return card;
 }
 
 function sgRfmGrid(r: any): HTMLElement {
-  const card = sgCard('sg-rfm-map', 'The R × FM map', 'Rows are the recency score, columns the average of the frequency and monetary scores. Each cell is one segment.');
-  const t = sgEl<HTMLTableElement>('table', 'sg-rfm-grid');
-  t.createCaption().textContent = 'Customers by recency score and frequency-monetary score';
-  const hr = t.createTHead().insertRow();
+  const card = sgCard('sg-rfm-map', t('segmentsRfm.the_r_fm_map'), t('segmentsRfm.rows_are_the_recency_score_columns'));
+  const tv = sgEl<HTMLTableElement>('table', 'sg-rfm-grid');
+  tv.createCaption().textContent = t('segmentsRfm.customers_by_recency_score_and_frequency');
+  const hr = tv.createTHead().insertRow();
   hr.appendChild(sgEl('td', 'sg-rfm-corner'));
   for (let fm = 1; fm <= 5; fm++) {
     const th = sgEl<HTMLTableCellElement>('th', 'sg-rfm-axis', `FM ${fm}`);
     th.scope = 'col';
     hr.appendChild(th);
   }
-  const body = t.createTBody();
+  const body = tv.createTBody();
   r.layout.forEach((row: string[], ri: number) => {
     const tr = body.insertRow();
     const th = sgEl<HTMLTableCellElement>('th', 'sg-rfm-axis', `R ${5 - ri}`);
@@ -196,20 +196,20 @@ function sgRfmGrid(r: any): HTMLElement {
     row.forEach((seg: string, ci: number) => {
       const n = r.grid[ri][ci];
       const td = sgEl('td', 'sg-rfm-cell ' + sgRfmTone(seg) + (n ? '' : ' is-zero'));
-      td.title = `R ${5 - ri} · FM ${ci + 1} — ${seg}: ${sgFmt(n)} customer${n === 1 ? '' : 's'}`;
+      td.title = t('segmentsRfm.r_fm', { p0: 5 - ri, p1: ci + 1, seg, n: sgFmt(n), n2: n });
       td.append(sgEl('span', 'sg-rfm-cell-n', sgFmt(n)), sgEl('span', 'sg-rfm-cell-s', seg));
       tr.appendChild(td);
     });
   });
-  card.appendChild(t);
+  card.appendChild(tv);
   return card;
 }
 
 function sgRfmSaveCard(r: any): HTMLElement {
-  const card = sgCard('sg-rfm-save', 'Save as a dataset',
-    `Writes one row per customer — id, recency, frequency, monetary, the three scores and the segment — as a new dataset of ${sgFmt(r.customers)} rows, ready for charts, dashboards and joins.`);
+  const card = sgCard('sg-rfm-save', t('segmentsRfm.save_as_a_dataset'),
+    t('segmentsRfm.writes_one_row_per_customer_id', { customers: sgFmt(r.customers) }));
   const row = sgEl('div', 'sg-save-row');
-  const save = sgButton('btn btn-primary', 'database', 'Save as dataset', () => void sgRfmSave());
+  const save = sgButton('btn btn-primary', 'database', t('common.save_as_dataset'), () => void sgRfmSave());
   save.id = 'sg-rfm-save';
   const status = sgEl('p', 'sg-save-status');
   status.id = 'sg-rfm-status';
@@ -232,21 +232,21 @@ async function sgRfmSave(): Promise<void> {
   try {
     res = await window.hubSegments.rfmSave(info.projectId, info.datasetId, sgRfmSpec);
   } catch (err) {
-    res = { ok: false, error: err instanceof Error ? err.message : 'Could not save the dataset' };
+    res = { ok: false, error: err instanceof Error ? err.message : t('segmentsRfm.could_not_save_the_dataset') };
   }
   if (!res || !res.ok) {
     if (save) save.disabled = false;
-    status.textContent = (res && res.error) || 'Could not save the dataset.';
+    status.textContent = (res && res.error) || t('segmentsRfm.could_not_save_the_dataset_2');
     status.classList.add('is-error');
     return;
   }
   const ds = res.dataset;
   status.classList.add('is-ok');
-  status.append(icon('circle-check', 16), sgEl('span', '', `Saved “${ds.name}” — ${sgFmt(ds.rowCount)} customers.`));
-  status.appendChild(sgButton('btn btn-sm', 'table', 'Open dataset', () => {
+  status.append(icon('circle-check', 16), sgEl('span', '', t('segmentsRfm.saved_customers', { name: ds.name, rowCount: sgFmt(ds.rowCount) })));
+  status.appendChild(sgButton('btn btn-sm', 'table', t('segmentsRfm.open_dataset'), () => {
     sgSeq++;
     selectSection('datasets');
     void openSavedDataset(ds.id);
   }));
-  showToast(`Saved “${ds.name}”`, { kind: 'success' });
+  showToast(t('common.saved_4', { name: ds.name }), { kind: 'success' });
 }

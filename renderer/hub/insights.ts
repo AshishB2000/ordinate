@@ -182,7 +182,7 @@ function insCard(ins: any, actions: InsAction[], onGone: (id: string) => void): 
   const x = document.createElement('button');
   x.type = 'button';
   x.className = 'dash-card-btn ins-x';
-  x.setAttribute('aria-label', 'Dismiss this insight');
+  x.setAttribute('aria-label', t('insights.dismiss_this_insight'));
   x.textContent = '×';
   x.addEventListener('click', async (e) => {
     e.stopPropagation();
@@ -231,7 +231,7 @@ function insCard(ins: any, actions: InsAction[], onGone: (id: string) => void): 
 
 /** A visual name derived from the app's own title. Never model text. */
 function insVisualName(ins: any): string {
-  return String(ins.title || 'Insight').slice(0, 80);
+  return String(ins.title || t('insights.insight')).slice(0, 80);
 }
 
 /**
@@ -268,7 +268,7 @@ async function insAddToDashboard(ins: any): Promise<void> {
   const done = typeof dkTurnIntoAnalysis === 'function'
     && await dkTurnIntoAnalysis(String(ins.datasetId), insVisualName(ins),
       String(ins.chart.type || 'line'), ins.chart.encoding, ins.chart.filters || []);
-  if (!done) showToast('Could not add that to a dashboard.');
+  if (!done) showToast(t('insights.could_not_add_that_to_a'));
 }
 
 /**
@@ -281,7 +281,7 @@ async function insAskWhy(ins: any): Promise<void> {
   if (typeof dkSetOpen === 'function') dkSetOpen(true);
   const input = document.getElementById('dk-input') as HTMLTextAreaElement | null;
   if (!input) return;
-  input.value = 'Why: ' + String(ins.title || '');
+  input.value = t('insights.why', { p0: String(ins.title || '') });
   input.dispatchEvent(new Event('input', { bubbles: true }));
   input.focus();
   try { input.setSelectionRange(input.value.length, input.value.length); } catch (_) { /* not focusable yet */ }
@@ -304,7 +304,7 @@ function insExplain(ins: any): void {
     ? expColumns.findIndex((col: any) => col && col.name === ins.column)
     : -1;
   if (c < 0 || typeof dsOpenProfile !== 'function') {
-    showToast('That insight is not about one column.');
+    showToast(t('common.that_insight_is_not_about_one'));
     return;
   }
   void dsOpenProfile(c);
@@ -313,7 +313,7 @@ function insExplain(ins: any): void {
 /** The rail's "+ Add": one more tile on the open sheet, through dashAdd's path. */
 async function insAddTile(ins: any): Promise<void> {
   const visualId = await insSaveVisual(ins);
-  if (!visualId) { showToast('Could not add that tile.'); return; }
+  if (!visualId) { showToast(t('insights.could_not_add_that_tile')); return; }
   // pushCard → markDashDirty → renderDashGrid: the same three steps every Add
   // takes, which is what puts this on the undo stack with everything else.
   pushCard({
@@ -356,11 +356,11 @@ function insPaintHome(): void {
   };
   insHomeList.forEach((ins) => {
     row.appendChild(insCard(ins, [
-      { label: 'Add to dashboard', primary: true, run: insAddToDashboard },
-      { label: 'Ask why', run: insAskWhy },
+      { label: t('common.add_to_dashboard'), primary: true, run: insAddToDashboard },
+      { label: t('insights.ask_why'), run: insAskWhy },
       // "Again" is a CHANGE, so the dialog opens on that tab with this
       // insight's own direction already chosen (alerts.ts).
-      { label: 'Alert me if this happens again', run: insAlertMe },
+      { label: t('insights.alert_me_if_this_happens_again'), run: insAlertMe },
     ], gone));
   });
 }
@@ -368,14 +368,14 @@ function insPaintHome(): void {
 // ── Surface 2: the dataset's Insights tab ───────────────────────────────────
 
 const INS_KIND_LABELS: Record<string, string> = {
-  mover: 'Biggest movers',
-  trend: 'Trends',
-  concentration: 'Concentration',
-  period_change: 'Period changes',
-  numeric_outlier: 'Outliers',
-  dominant_category: 'Dominant values',
-  empty_heavy: 'Mostly empty',
-  constant_column: 'Never changes',
+  mover: t('insights.biggest_movers'),
+  trend: t('insights.trends'),
+  concentration: t('insights.concentration'),
+  period_change: t('insights.period_changes'),
+  numeric_outlier: t('insights.outliers'),
+  dominant_category: t('insights.dominant_values'),
+  empty_heavy: t('insights.mostly_empty'),
+  constant_column: t('insights.never_changes'),
 };
 
 async function insRenderDatasetTab(): Promise<void> {
@@ -402,9 +402,8 @@ function insPaintDatasetTab(): void {
     host.appendChild(makeEmptyState({
       variant: 'insights',
       iconName: 'zap',
-      title: 'Nothing stands out yet',
-      line: 'Insights appear when a dataset has a date column and at least two periods, ' +
-        'or a category with an outsized share.',
+      title: t('insights.nothing_stands_out_yet'),
+      line: t('insights.insights_appear_when_a_dataset_has'),
     }));
     return;
   }
@@ -428,7 +427,7 @@ function insPaintDatasetTab(): void {
     grid.className = 'ins-grid';
     group.forEach((ins) => {
       grid.appendChild(insCard(ins, ins.column
-        ? [{ label: 'Explain', run: insExplain }, { label: 'Alert me if this happens again', run: insAlertMe }]
+        ? [{ label: t('common.explain'), run: insExplain }, { label: t('insights.alert_me_if_this_happens_again'), run: insAlertMe }]
         : [], gone));
     });
     host.appendChild(grid);
@@ -479,8 +478,8 @@ function insPaintRail(): void {
     host.appendChild(makeEmptyState({
       variant: 'rail',
       iconName: 'zap',
-      title: 'Nothing stands out',
-      line: 'None of the datasets this dashboard uses has a trend or share worth flagging yet.',
+      title: t('insights.nothing_stands_out'),
+      line: t('insights.none_of_the_datasets_this_dashboard'),
     }));
     return;
   }
@@ -489,6 +488,6 @@ function insPaintRail(): void {
     insPaintRail();
   };
   insRailList.forEach((ins) => {
-    host.appendChild(insCard(ins, [{ label: '+ Add', primary: true, run: insAddTile }], gone));
+    host.appendChild(insCard(ins, [{ label: t('insights.add'), primary: true, run: insAddTile }], gone));
   });
 }

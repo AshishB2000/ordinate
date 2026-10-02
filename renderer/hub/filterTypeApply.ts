@@ -84,27 +84,27 @@ async function ftPaletteGroups(q: string): Promise<CpGroup[]> {
   if (!q.trim() || !ftDashboardOpen()) return [];
   const res = await ftParse(q, {});
   if (!res || !res.ok || !Array.isArray(res.chips) || !res.chips.length) return [];
-  const words = (res.unknown || []).length ? ' · not recognised: ' + res.unknown.join(', ') : '';
+  const words = (res.unknown || []).length ? t('filterTypeApply.not_recognised', { p0: res.unknown.join(', ') }) : '';
   const rows: CpRow[] = res.chips.map((chip: any) => ({
     title: chip.label,
-    meta: 'Filter · ' + (FT_MATCH_WORD[chip.match] || chip.match) + ' match' + words,
+    meta: t('filterTypeApply.filter_match', { p0: (FT_MATCH_WORD[chip.match] || chip.match), words }),
     icon: 'filter',
     run: () => { paletteClose(); ftApplyAndTell([chip]); },
   }));
   if (res.chips.length > 1) {
     rows.unshift({
-      title: `Apply all ${res.chips.length} filters`,
+      title: t('filterTypeApply.apply_all_filters', { chipsCount: res.chips.length }),
       meta: res.chips.map((c: any) => c.label).join(' · '),
       icon: 'filter',
       run: () => { paletteClose(); ftApplyAndTell(res.chips); },
     });
   }
-  return [{ label: 'Filter ' + (dashCurrent.name || 'this dashboard'), rows }];
+  return [{ label: t('common.filter_2', { p0: (dashCurrent.name || t('common.this_dashboard')) }), rows }];
 }
 
 function ftApplyAndTell(chips: any[]): void {
   const applied = ftApplyChips(chips);
-  if (applied.length) showToast('Filtered to ' + applied.join(' · '));
+  if (applied.length) showToast(t('common.filtered_to', { p0: applied.join(' · ') }));
 }
 
 // ── The dock: "filter this to furniture" ─────────────────────────────────────
@@ -124,15 +124,15 @@ async function ftDockFilter(question: string): Promise<boolean> {
   const res = await ftParse(m[1], {});
   let text: string;
   if (!res || !res.ok) {
-    text = 'I could not read the values on this dashboard, so nothing was filtered.';
+    text = t('filterTypeApply.i_could_not_read_the_values');
   } else {
     const applied = ftApplyChips(res.chips);
     text = applied.length
-      ? 'Filtered ' + (dashCurrent.name || 'this dashboard') + ' to ' + applied.join(' · ') + '.'
-      : 'Nothing there matched a value, date or comparison on this dashboard, so no filter was applied.';
-    if (res.unknown && res.unknown.length) text += ' Not recognised: ' + res.unknown.map((w: string) => '“' + w + '”').join(', ') + '.';
+      ? t('filterTypeApply.filtered_to', { p0: (dashCurrent.name || t('common.this_dashboard')), p1: applied.join(' · ') })
+      : t('filterTypeApply.nothing_there_matched_a_value_date');
+    if (res.unknown && res.unknown.length) text += t('filterTypeApply.not_recognised_2', { p0: res.unknown.map((w: string) => '“' + w + '”').join(', ') });
   }
-  xpAppendBubble('assistant', text, { note: 'Applied by the app · no model asked' }, 'dk-messages');
+  xpAppendBubble('assistant', text, { note: t('filterTypeApply.applied_by_the_app_no_model') }, 'dk-messages');
   xpScrollToBottom('dk-messages');
   return true;
 }

@@ -19,8 +19,8 @@ interface FacetShelfApi {
 let vizFacetForm: FacetShelfApi | null = null;
 
 const FACET_TITLES: Array<[string, string]> = [
-  ['{value}', 'Value'],
-  ['{field}: {value}', 'Field: value'],
+  ['{value}', t('common.value')],
+  [t('facetShelf.text'), t('facetShelf.field_value')],
 ];
 
 function createFacetShelf(opts: { onChange: () => void }): FacetShelfApi {
@@ -29,69 +29,69 @@ function createFacetShelf(opts: { onChange: () => void }): FacetShelfApi {
 
   const root = document.createElement('section');
   root.className = 'fc-shelf';
-  root.setAttribute('aria-label', 'Small multiples');
+  root.setAttribute('aria-label', t('common.small_multiples'));
 
   const head = document.createElement('div');
   head.className = 'fc-shelf-head';
   const title = document.createElement('span');
   title.className = 'fc-shelf-title';
-  title.textContent = 'Small multiples';
+  title.textContent = t('common.small_multiples');
   const badge = document.createElement('span');
   badge.className = 'fc-shelf-badge';
   const clear = document.createElement('button');
   clear.type = 'button';
   clear.className = 'btn btn-sm fc-shelf-clear';
-  clear.textContent = 'Clear';
+  clear.textContent = t('common.clear');
   clear.addEventListener('click', () => { state = {}; paint(); opts.onChange(); });
   head.append(title, badge, clear);
 
   const empty = document.createElement('p');
   empty.className = 'fc-shelf-empty';
-  empty.textContent = 'Split this chart into a grid of panels — one per value of a field, all drawn the same way.';
+  empty.textContent = t('facetShelf.split_this_chart_into_a_grid');
 
   const dims = document.createElement('div');
   dims.className = 'fc-shelf-dims';
-  const rowSel = facetSelect('Rows', 'Facet rows');
-  const colSel = facetSelect('Columns', 'Facet columns');
+  const rowSel = facetSelect(t('common.rows'), t('facetShelf.facet_rows'));
+  const colSel = facetSelect(t('common.columns'), t('facetShelf.facet_columns'));
   dims.append(rowSel.box, colSel.box);
 
   const more = document.createElement('div');
   more.className = 'fc-shelf-opts';
 
   // Shared / independent — a segmented control, because the two are a pair.
-  const scaleBox = facetOpt('Value axis', 'div'); // a <label> would click its first button
+  const scaleBox = facetOpt(t('facetShelf.value_axis'), 'div'); // a <label> would click its first button
   scaleBox.classList.add('is-wide');
   const seg = document.createElement('div');
   seg.className = 'seg';
   seg.setAttribute('role', 'group');
-  seg.setAttribute('aria-label', 'Value axis');
+  seg.setAttribute('aria-label', t('facetShelf.value_axis'));
   const segBtns = (['shared', 'independent'] as const).map((v) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'seg-opt';
-    b.textContent = v === 'shared' ? 'Shared' : 'Independent';
+    b.textContent = v === 'shared' ? t('facetShelf.shared') : t('facetShelf.independent');
     b.addEventListener('click', () => { state.scale = v === 'shared' ? undefined : v; paint(); opts.onChange(); });
     seg.appendChild(b);
     return { v, b };
   });
   scaleBox.appendChild(seg);
 
-  const orderBox = facetOpt('Order');
+  const orderBox = facetOpt(t('fmtSort.order'));
   const order = document.createElement('select');
   order.className = 'viz-select';
-  order.setAttribute('aria-label', 'Panel order');
-  for (const [v, t] of [['label', 'By label'], ['measure', 'By value']]) order.appendChild(new Option(t, v));
+  order.setAttribute('aria-label', t('facetShelf.panel_order'));
+  for (const [v, tv] of [['label', t('facetShelf.by_label')], ['measure', t('facetShelf.by_value')]]) order.appendChild(new Option(tv, v));
   order.addEventListener('change', () => { state.order = order.value === 'measure' ? 'measure' : undefined; opts.onChange(); });
   orderBox.appendChild(order);
 
-  const maxBox = facetOpt('Panels before Other');
+  const maxBox = facetOpt(t('facetShelf.panels_before_other'));
   const max = document.createElement('input');
   max.type = 'number';
   max.min = '2';
   max.max = '36';
   max.className = 'viz-select';
   max.placeholder = '12';
-  max.setAttribute('aria-label', 'Panels before the rest fold into Other');
+  max.setAttribute('aria-label', t('facetShelf.panels_before_the_rest_fold_into'));
   max.addEventListener('change', () => {
     const n = Math.round(Number(max.value));
     state.max = Number.isFinite(n) && n >= 2 && n <= 36 ? n : undefined;
@@ -100,10 +100,10 @@ function createFacetShelf(opts: { onChange: () => void }): FacetShelfApi {
   });
   maxBox.appendChild(max);
 
-  const titleBox = facetOpt('Panel title');
+  const titleBox = facetOpt(t('facetShelf.panel_title'));
   const titleSel = document.createElement('select');
   titleSel.className = 'viz-select';
-  titleSel.setAttribute('aria-label', 'Panel title format');
+  titleSel.setAttribute('aria-label', t('facetShelf.panel_title_format'));
   for (const [v, t] of FACET_TITLES) titleSel.appendChild(new Option(t, v));
   titleSel.addEventListener('change', () => { state.title = titleSel.value === '{value}' ? undefined : titleSel.value; opts.onChange(); });
   titleBox.appendChild(titleSel);
@@ -123,7 +123,7 @@ function createFacetShelf(opts: { onChange: () => void }): FacetShelfApi {
 
   function fill(sel: HTMLSelectElement, value: string | undefined): void {
     sel.textContent = '';
-    sel.appendChild(new Option('None', ''));
+    sel.appendChild(new Option(t('common.none'), ''));
     for (const c of cols) sel.appendChild(new Option(c.label || c.name, c.name));
     sel.value = value && cols.some((c) => c.name === value) ? value : '';
   }
@@ -136,7 +136,7 @@ function createFacetShelf(opts: { onChange: () => void }): FacetShelfApi {
     empty.hidden = on;
     more.hidden = !on;
     clear.hidden = !on;
-    badge.textContent = state.rows && state.cols ? 'Matrix' : on ? 'Wrapped' : '';
+    badge.textContent = state.rows && state.cols ? t('facetShelf.matrix') : on ? t('facetShelf.wrapped') : '';
     segBtns.forEach(({ v, b }) => b.setAttribute('aria-pressed', String((state.scale || 'shared') === v)));
     order.value = state.order === 'measure' ? 'measure' : 'label';
     max.value = state.max ? String(state.max) : '';

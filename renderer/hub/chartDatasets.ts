@@ -92,7 +92,7 @@ function buildChartDatasets(c: ChartCtx): { datasets: any[]; chartLabels: any[] 
       borderWidth: 0,
       hoverOffset: 0,
     }];
-    chartLabels = [series[0].name || 'Value', ''];
+    chartLabels = [series[0].name || t('common.value'), ''];
     opts._gaugeValue = value;   // for the center-label plugin
     opts._gaugeLabel = series[0].name || (labels && labels[0]) || '';   // metric name
   } else if (isTreemap) {
@@ -208,7 +208,7 @@ function buildChartDatasets(c: ChartCtx): { datasets: any[]; chartLabels: any[] 
     datasets = [
       { data: vals.map((v: number) => (maxV - v) / 2), backgroundColor: 'transparent', borderWidth: 0, stack: 'f' },
       {
-        label: series[0].name || 'Value',
+        label: series[0].name || t('common.value'),
         data: vals,
         backgroundColor: vals.map((_: number, i: number) => palette[i % palette.length]),
         borderWidth: 0, borderRadius: 4, stack: 'f',
@@ -221,7 +221,7 @@ function buildChartDatasets(c: ChartCtx): { datasets: any[]; chartLabels: any[] 
     const bins = histogramBins(series[0].values.filter((v: any) => typeof v === 'number'));
     chartLabels = bins.labels;
     datasets = [{
-      label: 'Count',
+      label: t('common.count'),
       data: bins.counts,
       backgroundColor: makeBarGradient(palette[0], isHoriz),
       borderColor: 'transparent', borderWidth: 0, borderRadius: 3,
@@ -237,7 +237,7 @@ function buildChartDatasets(c: ChartCtx): { datasets: any[]; chartLabels: any[] 
       : series.length - 1;
     const vals = (series[pIdx] || series[0]).values;
     const flows = labels
-      .map((lab: any, i: number) => ({ from: String(lab), to: 'Total', flow: typeof vals[i] === 'number' ? Math.abs(vals[i]) : 0 }))
+      .map((lab: any, i: number) => ({ from: String(lab), to: t('common.total'), flow: typeof vals[i] === 'number' ? Math.abs(vals[i]) : 0 }))
       .filter((f: { flow: number }) => f.flow > 0);
     datasets = [{
       data: flows,
@@ -280,7 +280,7 @@ function buildChartDatasets(c: ChartCtx): { datasets: any[]; chartLabels: any[] 
     const cols = useSeries.map((s: ChartSeriesShape) => s.name || '');
     chartLabels = cols;
     datasets = [{
-      label: 'Distribution',
+      label: t('common.distribution'),
       data: useSeries.map((s: ChartSeriesShape) => s.values.filter((v: any) => typeof v === 'number')),
       backgroundColor: palette[0] + '55',
       borderColor: palette[0],

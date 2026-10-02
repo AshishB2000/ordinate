@@ -35,7 +35,7 @@ function lyPaintFilterBar(): void {
   btn.hidden = false;
   const controls = dashBarControls();
   const active = controls.filter((c) => !controlIsAll(c)).length;
-  iconLabel(btn, 'filter', 'Filters (' + controls.length + ')');
+  iconLabel(btn, 'filter', t('layoutFilters.filters', { controlsCount: controls.length }));
   if (active) {
     const badge = document.createElement('span');
     badge.className = 'ly-fb-badge';
@@ -43,7 +43,7 @@ function lyPaintFilterBar(): void {
     btn.appendChild(badge);
   }
   btn.classList.toggle('is-on', active > 0);
-  btn.setAttribute('aria-label', 'Filters, ' + controls.length + (controls.length === 1 ? ' control' : ' controls')
+  btn.setAttribute('aria-label', t('layoutFilters.filters_2') + controls.length + (controls.length === 1 ? ' control' : ' controls')
     + (active ? ', ' + active + ' active' : ''));
   if (lySheet) lySheet.paint();
 }
@@ -71,12 +71,12 @@ function lyOpenFilterSheet(): void {
   const clear = document.createElement('button');
   clear.type = 'button';
   clear.className = 'btn';
-  clear.textContent = 'Clear all';
+  clear.textContent = t('common.clear_all');
   clear.addEventListener('click', () => clearAllControlsToAll());
   const done = document.createElement('button');
   done.type = 'button';
   done.className = 'btn btn-primary';
-  done.textContent = 'Done';
+  done.textContent = t('common.done');
   actions.append(clear, done);
   box.append(grab, title, sub, body, actions);
   overlay.appendChild(box);
@@ -85,9 +85,8 @@ function lyOpenFilterSheet(): void {
   const paint = (): void => {
     const controls = dashBarControls();
     const active = controls.filter((c) => !controlIsAll(c)).length;
-    title.textContent = 'Filters';
-    sub.textContent = controls.length + (controls.length === 1 ? ' filter' : ' filters') + ' on this page'
-      + (active ? ' · ' + active + ' narrowing the figures' : ' · showing everything');
+    title.textContent = t('common.filters');
+    sub.textContent = t('layoutFilters.on_this_page', { controlsCount: controls.length, p2: (active ? t('layoutFilters.narrowing_the_figures', { active }) : t('layoutFilters.showing_everything')) });
     clear.disabled = active === 0;
   };
   paint();
@@ -112,5 +111,5 @@ function lyOpenFilterSheet(): void {
   overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) close(); });
   document.addEventListener('keydown', onKey, true);
   lySheet = { close, paint };
-  a11y = makeModalAccessible(box, 'Filters', done);
+  a11y = makeModalAccessible(box, t('common.filters'), done);
 }

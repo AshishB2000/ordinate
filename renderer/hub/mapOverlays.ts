@@ -9,8 +9,8 @@ function _addUnmatchedNote(wrap: HTMLElement, names: string[]): void {
   if (!names || names.length === 0) return;
   const note = document.createElement('div');
   note.className = 'cv-map-unmatched';
-  note.title = 'Couldn\'t place: ' + names.join(', ');
-  note.textContent = 'Couldn\'t place: ' + names.join(', ');
+  note.title = t('mapOverlays.couldn_t_place', { p0: names.join(', ') });
+  note.textContent = t('mapOverlays.couldn_t_place', { p0: names.join(', ') });
   wrap.appendChild(note);
 }
 
@@ -22,11 +22,11 @@ function _addMapPeriodDropdown(wrap: HTMLElement, periods: string[], defaultIdx:
   box.className = 'cv-map-period';
   const select = document.createElement('select');
   select.className = 'cv-map-period-select';
-  select.setAttribute('aria-label', 'Select period');
+  select.setAttribute('aria-label', t('common.select_period'));
   periods.forEach((p, i) => {
     const opt = document.createElement('option');
     opt.value = String(i);
-    opt.textContent = p || ('Period ' + (i + 1));
+    opt.textContent = p || (t('common.period', { p0: (i + 1) }));
     if (i === defaultIdx) opt.selected = true;
     select.appendChild(opt);
   });
@@ -41,8 +41,8 @@ function _addMapValuesMenu(parent: HTMLElement, getMode: () => string, onPick: (
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'cv-values-btn';
-  btn.append('Values', icon('chevron-down'));   // caret TRAILS the label, so not iconLabel()
-  btn.setAttribute('aria-label', 'Value labels');
+  btn.append(t('common.values'), icon('chevron-down'));   // caret TRAILS the label, so not iconLabel()
+  btn.setAttribute('aria-label', t('common.value_labels'));
   const sync = () => btn.classList.toggle('active', getMode() !== 'off');
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -57,7 +57,7 @@ function _addMapMenuButton(parent: HTMLElement, data: any): void {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'cv-chart-menu-btn';
-  iconOnly(btn, 'more-horizontal', 'Map options');
+  iconOnly(btn, 'more-horizontal', t('mapOverlays.map_options'));
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
     openMiniMenu(btn, (el, close) => {
@@ -66,10 +66,10 @@ function _addMapMenuButton(parent: HTMLElement, data: any): void {
       const row = document.createElement('button');
       row.type = 'button';
       row.className = 'chart-menu-item';
-      row.textContent = 'Copy data';
+      row.textContent = t('mapOverlays.copy_data');
       row.addEventListener('click', () => {
         close();
-        if (window.hub) { window.hub.copyText(dataToTSV(data)); showToast('Data copied to clipboard'); }
+        if (window.hub) { window.hub.copyText(dataToTSV(data)); showToast(t('common.data_copied_to_clipboard')); }
       });
       sec.appendChild(row);
       el.appendChild(sec);
@@ -84,7 +84,7 @@ function _addBubbleLegend(wrap: HTMLElement, minVal: number, maxVal: number, col
 
   const title = document.createElement('div');
   title.className = 'cv-map-legend-title';
-  title.textContent = 'Size = value';
+  title.textContent = t('mapOverlays.size_value');
   leg.appendChild(title);
 
   [[minR, minVal], [maxR, maxVal]].forEach(([r, v]) => {
@@ -114,7 +114,7 @@ function _addChoroplethLegend(wrap: HTMLElement, minVal: number, maxVal: number)
 
   const title = document.createElement('div');
   title.className = 'cv-map-legend-title';
-  title.textContent = 'Value';
+  title.textContent = t('common.value');
   leg.appendChild(title);
 
   // Gradient bar as inline SVG — no inline CSS needed

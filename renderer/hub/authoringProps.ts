@@ -51,10 +51,10 @@ function anScheduleWrite(): void {
 }
 
 /** Said wherever a pivot card is selected — one string, two callers. */
-const AN_PIVOT_NOTE = 'Rows, Columns and Values are edited in the Visuals builder.';
+const AN_PIVOT_NOTE = t('authoringProps.rows_columns_and_values_are_edited');
 /** The same note for whichever builder-only shelves the selected card has. */
 function anShelfNote(): string {
-  return !anIsPivot() ? '' : anVisual.chartType === 'pivot' ? AN_PIVOT_NOTE : 'Its cohort / funnel shelves are edited in the Visuals builder.';
+  return !anIsPivot() ? '' : anVisual.chartType === 'pivot' ? AN_PIVOT_NOTE : t('authoringProps.its_cohort_funnel_shelves_are_edited');
 }
 
 /** Is the selected card a pivot? Its shelves live in the Visuals builder. */
@@ -86,7 +86,7 @@ async function anWriteVisual(): Promise<void> {
   if (!anVisual || !anForm || !currentProjectId || dashMode !== 'analysis') return;
   const encoding = anEncodingToWrite();
   if (!anIsPivot() && (!encoding.category || !encoding.values || encoding.values.length === 0)) {
-    setAnPropsNote('Pick a category and at least one measure for this visual to draw.');
+    setAnPropsNote(t('authoringProps.pick_a_category_and_at_least'));
     return;
   }
   // The pivot hint is sticky: it explains a panel that stays this way, so a
@@ -126,8 +126,8 @@ function anRenderInteractions(card: any): void {
     const p = document.createElement('p');
     p.className = 'an-prop-note an-prop-note--info';
     p.textContent = card
-      ? 'A ' + card.type + ' card has no chart to interact with.'
-      : 'Select a visual card to set its interactions.';
+      ? t('authoringProps.a_card_has_no_chart_to', { type: card.type })
+      : t('authoringProps.select_a_visual_card_to_set');
     host.appendChild(p);
     return;
   }
@@ -163,16 +163,15 @@ function anRenderInteractions(card: any): void {
 
   const cat = (anVisual.encoding && anVisual.encoding.category) || '';
   toggle(
-    'Clicking this visual filters the sheet',
+    t('authoringProps.clicking_this_visual_filters_the_sheet'),
     cat
-      ? 'Click a bar or slice to filter every other card by that ' + cat + '. Click it again to clear. '
-        + 'Cards whose dataset has no “' + cat + '” column are left alone.'
-      : 'Give this visual a category first — a click has to mean one value of one column.',
+      ? t('authoringProps.click_a_bar_or_slice_to', { cat })
+      : t('authoringProps.give_this_visual_a_category_first'),
     'crossFilter', false,
   );
   toggle(
-    'Show tooltips',
-    'The hover readout on bars, points and slices.',
+    t('authoringProps.show_tooltips'),
+    t('authoringProps.the_hover_readout_on_bars_points'),
     'showTooltips', true,
   );
 
@@ -182,8 +181,7 @@ function anRenderInteractions(card: any): void {
   if (type === 'table' || type.indexOf('map_') === 0) {
     const p = document.createElement('p');
     p.className = 'an-prop-note';
-    p.textContent = 'Click-to-filter does not apply to ' + (VIZ_LABELS[type] || type)
-      + ' yet — only charts are clickable.';
+    p.textContent = t('authoringProps.click_to_filter_does_not_apply', { p0: (VIZ_LABELS[type] || type) });
     host.appendChild(p);
   }
   void renderActionEditor(card, host); // actionEditor.ts — navigate / link / narrow / tooltip
@@ -238,7 +236,7 @@ function anRenderControlProps(card: any, host: HTMLElement): void {
 
   const kindLine = document.createElement('p');
   kindLine.className = 'an-prop-note an-prop-note--info';
-  kindLine.textContent = 'Kind: ' + (CONTROL_KIND_LABELS[control.kind] || control.kind) + ' (fixed after creation).';
+  kindLine.textContent = t('authoringProps.kind_fixed_after_creation', { p0: (CONTROL_KIND_LABELS[control.kind] || control.kind) });
   host.appendChild(kindLine);
 
   const labelled = (text: string, control0: HTMLElement): void => {
@@ -254,9 +252,9 @@ function anRenderControlProps(card: any, host: HTMLElement): void {
   dsSel.disabled = true;
   const dsOpt0 = document.createElement('option');
   dsOpt0.value = control.datasetId;
-  dsOpt0.textContent = 'Loading…';
+  dsOpt0.textContent = t('common.loading');
   dsSel.appendChild(dsOpt0);
-  labelled('Dataset', dsSel);
+  labelled(t('common.dataset'), dsSel);
 
   const colSel = document.createElement('select');
   colSel.className = 'an-prop-input';
@@ -265,17 +263,17 @@ function anRenderControlProps(card: any, host: HTMLElement): void {
   colOpt0.value = control.column;
   colOpt0.textContent = control.column;
   colSel.appendChild(colOpt0);
-  labelled('Column', colSel);
+  labelled(t('common.column'), colSel);
 
   const labelIn = document.createElement('input');
   labelIn.type = 'text';
   labelIn.className = 'an-prop-input';
   labelIn.value = control.label || '';
-  labelled('Label', labelIn);
+  labelled(t('common.label'), labelIn);
 
   const defSummary = document.createElement('p');
   defSummary.className = 'an-prop-note an-prop-note--info';
-  defSummary.textContent = 'Default: ' + describeControlDefault(control);
+  defSummary.textContent = t('authoringProps.default', { control: describeControlDefault(control) });
   host.appendChild(defSummary);
 
   const defActions = document.createElement('div');
@@ -283,23 +281,23 @@ function anRenderControlProps(card: any, host: HTMLElement): void {
   const useCurBtn = document.createElement('button');
   useCurBtn.type = 'button';
   useCurBtn.className = 'btn btn-sm';
-  useCurBtn.textContent = 'Use current selection as default';
+  useCurBtn.textContent = t('authoringProps.use_current_selection_as_default');
   useCurBtn.disabled = !controlState.has(card.id);
   useCurBtn.addEventListener('click', () => {
     const cur = controlState.get(card.id);
     if (cur === undefined) return;
     control.default = cur;
-    markDashDirty('Set control default');
+    markDashDirty(t('common.set_control_default'));
     anRenderProps(card);
   });
   const clearDefBtn = document.createElement('button');
   clearDefBtn.type = 'button';
   clearDefBtn.className = 'btn btn-sm';
-  clearDefBtn.textContent = 'Clear default';
+  clearDefBtn.textContent = t('common.clear_default');
   clearDefBtn.disabled = control.default === undefined;
   clearDefBtn.addEventListener('click', () => {
     delete control.default;
-    markDashDirty('Clear control default');
+    markDashDirty(t('authoringProps.clear_control_default'));
     anRenderProps(card);
   });
   defActions.appendChild(useCurBtn);
@@ -309,8 +307,7 @@ function anRenderControlProps(card: any, host: HTMLElement): void {
   const hint = document.createElement('p');
   hint.className = 'an-prop-note an-prop-note--info';
   hint.textContent =
-    'Try the control on the sheet, then use the button above to save its current selection as the default. '
-    + 'Just trying it never changes the saved dashboard on its own.';
+    t('authoringProps.try_the_control_on_the_sheet');
   host.appendChild(hint);
 
   // Label: debounced like every other text field in this panel, so a keypress
@@ -320,7 +317,7 @@ function anRenderControlProps(card: any, host: HTMLElement): void {
     control.label = labelIn.value;
     // Per KEYSTROKE: coalescing, so typing a label is ONE undo, not one per
     // character (dashHistory.ts's DASH_HIST_COALESCE_MS).
-    markDashDirty('Edit control label', true);
+    markDashDirty(t('authoringProps.edit_control_label'), true);
     if (labelTimer !== null) window.clearTimeout(labelTimer);
     labelTimer = window.setTimeout(() => {
       labelTimer = null;
@@ -362,7 +359,7 @@ function anRenderControlProps(card: any, host: HTMLElement): void {
     control.datasetId = dsSel.value;
     controlState.delete(card.id);
     delete control.default;
-    markDashDirty('Change control dataset');
+    markDashDirty(t('authoringProps.change_control_dataset'));
     void loadControlColumns().then(() => {
       // Only adopt the new selection if the fetch actually produced one —
       // an empty colSel.value (failed fetch, columnless dataset, or the
@@ -378,7 +375,7 @@ function anRenderControlProps(card: any, host: HTMLElement): void {
     control.column = colSel.value;
     controlState.delete(card.id);
     delete control.default;
-    markDashDirty('Change control column');
+    markDashDirty(t('authoringProps.change_control_column'));
     renderDashGrid();
     anPaintSelection();
     anRenderProps(card);
@@ -397,7 +394,7 @@ function anRenderControlProps(card: any, host: HTMLElement): void {
     datasets.forEach((d) => {
       const opt = document.createElement('option');
       opt.value = String(d.id);
-      opt.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
+      opt.textContent = d && d.name ? String(d.name) : t('common.untitled_dataset');
       dsSel.appendChild(opt);
     });
     dsSel.value = control.datasetId;
@@ -472,7 +469,7 @@ function anRenderProps(card: any): void {
     host.appendChild(wrap);
   };
 
-  const display = section('Display settings', true);
+  const display = section(t('authoringProps.display_settings'), true);
   if (card.type === 'control' && card.control) {
     anRenderControlProps(card, display);
   } else if (card.type === 'visual' && anVisual) {
@@ -484,44 +481,44 @@ function anRenderProps(card: any): void {
       if (anVisual) anVisual.name = nameIn.value;
       anScheduleWrite();
     });
-    labelled(display, 'Title', nameIn);
-    check(display, 'Show legend', 'showLegend', true);
+    labelled(display, t('common.title'), nameIn);
+    check(display, t('authoringProps.show_legend'), 'showLegend', true);
     const legPos = document.createElement('select');
     legPos.className = 'an-prop-input';
-    [['top', 'Top'], ['right', 'Right'], ['bottom', 'Bottom'], ['left', 'Left']].forEach(([v, l]) => {
+    [['top', t('common.top')], ['right', t('common.right')], ['bottom', t('common.bottom')], ['left', t('common.left')]].forEach(([v, l]) => {
       const o = document.createElement('option');
       o.value = v; o.textContent = l;
       legPos.appendChild(o);
     });
     legPos.value = String(ov().legendPosition || 'bottom');
     legPos.addEventListener('change', () => { ov().legendPosition = legPos.value; anScheduleWrite(); });
-    labelled(display, 'Legend position', legPos);
+    labelled(display, t('authoringProps.legend_position'), legPos);
     // Axes (titles, range, log, format, ticks, gridlines), data labels, sort
     // and colours: the SAME panel the chart's ⋯ Customize menu carries.
     fmtRenderAnalysisFormat(host, anVisual, anScheduleWrite);
   } else {
     const k = document.createElement('p');
     k.className = 'an-prop-note an-prop-note--info';
-    k.textContent = 'A ' + card.type + ' card. Select a visual card to edit fields and a title.';
+    k.textContent = t('authoringProps.a_card_select_a_visual_card', { type: card.type });
     display.appendChild(k);
   }
 
-  const layout = section('Layout', false);
+  const layout = section(t('authoringProps.layout'), false);
   // ponytail: no width/height numbers here on purpose — the card is dragged and
   // resized on the sheet, and a second way to set the same two integers is what
   // the steppers already were.
   const how = document.createElement('p');
   how.className = 'an-prop-note an-prop-note--info';
   how.textContent =
-    'Drag the card to move it, or drag its right/bottom edge to resize. With the card focused, arrow keys move it and shift+arrows resize it.';
+    t('authoringProps.drag_the_card_to_move_it');
   layout.appendChild(how);
 
   if (card.type === 'visual' && anVisual) {
-    const shared = section('Sharing', false);
+    const shared = section(t('authoringProps.sharing'), false);
     const p = document.createElement('p');
     p.className = 'an-prop-note an-prop-note--info';
     p.textContent =
-      'This is a saved visual. Editing its fields changes it everywhere it is used — published dashboards keep the copy they were published with.';
+      t('authoringProps.this_is_a_saved_visual_editing');
     shared.appendChild(p);
   }
 
@@ -534,7 +531,7 @@ function anRenderProps(card: any): void {
   const del = document.createElement('button');
   del.type = 'button';
   del.className = 'btn btn-danger an-prop-del';
-  del.textContent = 'Remove card';
+  del.textContent = t('common.remove_card');
   del.addEventListener('click', () => {
     removeCard(card);
     anSelectCard(null);

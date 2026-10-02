@@ -100,11 +100,11 @@ async function qtLoadSchema(): Promise<void> {
       empty.appendChild(makeEmptyState({
         variant: 'query',
         iconName: 'code',
-        title: 'Nothing to query yet',
-        line: 'Every dataset in this project becomes a table you can query with SQL — join them, filter them, aggregate them, and save the result as a dataset that stays up to date.',
-        actionLabel: 'Import a file',
+        title: t('queryTab.nothing_to_query_yet'),
+        line: t('queryTab.every_dataset_in_this_project_becomes'),
+        actionLabel: t('queryTab.import_a_file'),
         onAction: () => { if (typeof handleImportFile === 'function') void handleImportFile(); },
-        ghostLabel: 'Connect data',
+        ghostLabel: t('common.connect_data'),
         onGhost: () => { if (typeof openConnPanel === 'function') openConnPanel(''); },
       }));
     }
@@ -126,16 +126,16 @@ async function qtLoadSchema(): Promise<void> {
  */
 function qtStarter(): string {
   const d = qtSchema.find((x) => x.queryable && x.columns.length) || qtSchema.find((x) => x.queryable);
-  if (!d) return 'select * from …';
+  if (!d) return t('queryTab.select_from');
   // Group by a label, not an id: `order_id` is a text column nobody sums by.
   const texts = d.columns.filter((c) => c.type === 'text');
   const text = texts.find((c) => !/(^|_)(id|uuid|key|code)$|id$/i.test(c.name)) || texts[0];
   const num = d.columns.find((c) => c.type === 'number');
   if (text && num) {
-    return `select ${qeIdent(text.name)}, sum(${qeIdent(num.name)}) as ${qeIdent(num.name)}\nfrom ${d.slug}\ngroup by 1\norder by 2 desc`;
+    return t('queryTab.select_sum_as_from_group_by', { name: qeIdent(text.name), name2: qeIdent(num.name), slug: d.slug });
   }
-  if (text) return `select ${qeIdent(text.name)}, count(*) as rows\nfrom ${d.slug}\ngroup by 1\norder by 2 desc`;
-  return `select *\nfrom ${d.slug}\nlimit 100`;
+  if (text) return t('queryTab.select_count_as_rows_from_group', { name: qeIdent(text.name), slug: d.slug });
+  return t('common.select_from_limit_100', { slug: d.slug });
 }
 
 function qtApplyStarter(): void {
@@ -161,7 +161,7 @@ function qtRenderTree(): void {
     shown += 1;
   }
   if (msg) {
-    msg.textContent = shown ? '' : 'No dataset or column matches that search.';
+    msg.textContent = shown ? '' : t('queryTab.no_dataset_or_column_matches_that');
     msg.hidden = shown > 0;
   }
 }
@@ -186,13 +186,13 @@ function qtDatasetNode(d: QtDataset, cols: QtColumn[], forceOpen: boolean): HTML
   row.setAttribute('aria-expanded', String(open));
   row.tabIndex = 0;
   row.title = d.queryable
-    ? `Insert ${d.slug}` + (d.alias && qtFold(d.alias) !== d.slug ? ` — or query it as ${qeIdent(d.alias)}` : '')
-    : 'Saved before datasets were stored as Parquet — import it again to query it.';
+    ? t('queryTab.insert', { slug: d.slug, p1: (d.alias && qtFold(d.alias) !== d.slug ? t('queryTab.or_query_it_as', { alias: qeIdent(d.alias) }) : '') })
+    : t('queryTab.saved_before_datasets_were_stored_as');
 
   const caret = document.createElement('button');
   caret.type = 'button';
   caret.className = 'cw-caret';
-  caret.setAttribute('aria-label', (open ? 'Hide' : 'Show') + ' columns of ' + d.name);
+  caret.setAttribute('aria-label', t('queryTab.columns_of', { p0: !!(open), name: d.name }));
   caret.appendChild(icon('chevron-right', 14));
   caret.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -208,7 +208,7 @@ function qtDatasetNode(d: QtDataset, cols: QtColumn[], forceOpen: boolean): HTML
   name.textContent = d.name;
   const slug = document.createElement('span');
   slug.className = 'qt-ds-slug';
-  slug.textContent = d.queryable ? d.slug : 'not queryable — re-import';
+  slug.textContent = d.queryable ? d.slug : t('queryTab.not_queryable_re_import');
   text.append(name, slug);
   row.appendChild(text);
 
@@ -244,7 +244,7 @@ function qtColumnNode(c: QtColumn): HTMLElement {
   row.setAttribute('role', 'treeitem');
   row.tabIndex = 0;
   const ident = qeIdent(c.name);
-  row.title = 'Insert ' + ident;
+  row.title = t('queryTab.insert_2', { ident });
   const name = document.createElement('span');
   name.className = 'cw-row-name';
   name.textContent = c.name;
@@ -281,7 +281,7 @@ function qtShowError(heading: string, message: string): void {
   if (m) m.textContent = message;
   if (box) box.hidden = false;
   const status = qtEl('qt-status');
-  if (status) { status.textContent = 'Error'; status.classList.add('is-error'); }
+  if (status) { status.textContent = t('queryTab.error'); status.classList.add('is-error'); }
   const idle = qtEl('qt-idle');
   if (idle) idle.hidden = true;
 }
@@ -308,7 +308,7 @@ function qtRequest(): { sql: string; params: any[] } | null {
     const starter = qtStarter();
     if (!qtSchema.some((d) => d.queryable)) {
       qtClearResults();
-      qtShowError('Nothing to run', 'Write a query first.');
+      qtShowError(t('queryTab.nothing_to_run'), t('common.write_a_query_first'));
       return null;
     }
     qeSetSql(starter);
@@ -318,7 +318,7 @@ function qtRequest(): { sql: string; params: any[] } | null {
   const { params, error } = qtCollectParams(sql);
   if (error) {
     qtClearResults();
-    qtShowError('A parameter needs a value', error);
+    qtShowError(t('queryTab.a_parameter_needs_a_value'), error);
     return null;
   }
   return { sql, params };
@@ -329,18 +329,18 @@ async function qtRun(): Promise<void> {
   const req = qtRequest();
   if (!req) return;
   const seq = ++qtSeq;
-  qtSetBusy(true, 'Running…');
+  qtSetBusy(true, t('common.running'));
   let res: any;
   try {
     res = await window.hub.sqlRun(currentProjectId, req.sql, req.params);
   } catch (_) {
-    res = { ok: false, error: 'The query could not be sent.' };
+    res = { ok: false, error: t('queryTab.the_query_could_not_be_sent') };
   }
   qtSetBusy(false, '');
   if (seq !== qtSeq) return;
   qtClearResults();
   if (!res || res.ok === false) {
-    qtShowError('The query did not run', (res && res.error) || 'The query failed.');
+    qtShowError(t('common.the_query_did_not_run'), (res && res.error) || t('queryTab.the_query_failed'));
     return;
   }
   const columns: any[] = Array.isArray(res.columns) ? res.columns : [];
@@ -355,13 +355,12 @@ async function qtRun(): Promise<void> {
   const status = qtEl('qt-status');
   if (status) {
     const n = Number(res.rowCount) || 0;
-    status.textContent = (res.truncated ? `${n.toLocaleString('en-US')}+ rows` : `${n.toLocaleString('en-US')} ${n === 1 ? 'row' : 'rows'}`)
-      + ` · ${Number(res.elapsedMs) || 0} ms`;
+    status.textContent = t('queryTab.ms', { p0: (res.truncated ? t('common.rows_2', { p0: n.toLocaleString('en-US') }) : `${n.toLocaleString('en-US')} ${n === 1 ? 'row' : 'rows'}`), p1: Number(res.elapsedMs) || 0 });
   }
   const note = qtEl('qt-note');
   if (note) {
     note.textContent = `${columns.length} ${columns.length === 1 ? 'column' : 'columns'}`
-      + (res.truncated ? ' · showing the first 500 — Save as dataset keeps them all' : '');
+      + (res.truncated ? t('queryTab.showing_the_first_500_save_as') : '');
   }
   qtHasResult = true;
   const save = qtEl('qt-save') as HTMLButtonElement | null;
@@ -373,19 +372,19 @@ async function qtExplain(): Promise<void> {
   const req = qtRequest();
   if (!req) return;
   const seq = ++qtSeq;
-  qtSetBusy(true, 'Checking…');
+  qtSetBusy(true, t('common.checking'));
   let res: any;
   try {
     res = await window.hub.sqlExplain(currentProjectId, req.sql, req.params);
   } catch (_) {
-    res = { ok: false, error: 'The query could not be checked.' };
+    res = { ok: false, error: t('queryTab.the_query_could_not_be_checked') };
   }
   qtSetBusy(false, '');
   if (seq !== qtSeq) return;
   const keepGrid = qtHasResult;
   qtEl('qt-error')?.setAttribute('hidden', '');
   if (!res || res.ok === false) {
-    qtShowError('The query is not valid', (res && res.error) || 'The query could not be checked.');
+    qtShowError(t('queryTab.the_query_is_not_valid'), (res && res.error) || t('queryTab.the_query_could_not_be_checked'));
     return;
   }
   const cols = qtEl('qt-cols');
@@ -408,7 +407,7 @@ async function qtExplain(): Promise<void> {
   const status = qtEl('qt-status');
   if (status) {
     const n = Array.isArray(res.columns) ? res.columns.length : 0;
-    status.textContent = `Valid · returns ${n} ${n === 1 ? 'column' : 'columns'}`;
+    status.textContent = t('queryTab.valid_returns', { n });
     status.classList.remove('is-error');
   }
   // No rows yet: the chips sit above the idle note rather than in a blank card.
@@ -425,29 +424,29 @@ async function qtSave(): Promise<void> {
   const prevStatus = statusEl ? statusEl.textContent : '';
   const btn = qtEl('qt-save') as HTMLButtonElement | null;
   const label = btn ? btn.querySelector('span') : null;
-  qtSetBusy(true, 'Fetching every row…');
+  qtSetBusy(true, t('queryTab.fetching_every_row'));
   if (btn) btn.disabled = true;
-  if (label) label.textContent = 'Fetching rows…';
+  if (label) label.textContent = t('common.fetching_rows');
   let res: any;
   try {
     res = await window.hub.sqlPrepareSave(currentProjectId, req.sql, req.params);
   } catch (_) {
-    res = { ok: false, error: 'The full result could not be read.' };
+    res = { ok: false, error: t('queryTab.the_full_result_could_not_be') };
   }
   qtSetBusy(false, '');
   // The preview underneath is unchanged — put its summary back, not "Fetching…".
   if (statusEl) statusEl.textContent = prevStatus;
-  if (label) label.textContent = 'Save as dataset';
+  if (label) label.textContent = t('common.save_as_dataset');
   if (btn) btn.disabled = false;
   if (res && res.canceled) return; // cancelled from the Jobs popover
   if (!res || res.ok === false) {
-    qtShowError('The result was not saved', (res && res.error) || 'The full result could not be read.');
+    qtShowError(t('queryTab.the_result_was_not_saved'), (res && res.error) || t('queryTab.the_full_result_could_not_be'));
     return;
   }
   const columns: any[] = Array.isArray(res.columns) ? res.columns : [];
   const rows: any[] = Array.isArray(res.rows) ? res.rows : [];
   const firstDep = qtSchema.find((d) => res.origin && Array.isArray(res.origin.deps) && d.id === res.origin.deps[0]);
-  const name = firstDep ? `${firstDep.name} query` : 'Query result';
+  const name = firstDep ? `${firstDep.name} query` : t('common.query_result');
   if (typeof selectSection === 'function') selectSection('datasets');
   // The composer closes back onto the Datasets tab, where the new dataset is.
   clSelectTab('datasets');

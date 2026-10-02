@@ -12,36 +12,36 @@ const PL_AGGS = ['sum', 'avg', 'count', 'min', 'max'];
 
 /** The editable fields per step kind. Paths are dotted into the step object. */
 const PL_FIELDS: Record<string, PlField[]> = {
-  import: [{ key: 'file', label: 'File' }, { key: 'name', label: 'Dataset name' }],
-  calc: [{ key: 'dataset', label: 'Dataset' }, { key: 'name', label: 'Column' }, { key: 'expression', label: 'Formula', wide: true }],
+  import: [{ key: 'file', label: t('planEdit.file') }, { key: 'name', label: t('common.dataset_name') }],
+  calc: [{ key: 'dataset', label: t('common.dataset') }, { key: 'name', label: t('common.column') }, { key: 'expression', label: t('common.formula'), wide: true }],
   metric: [
-    { key: 'dataset', label: 'Dataset' }, { key: 'name', label: 'Metric' },
-    { key: 'column', label: 'Column' }, { key: 'aggregation', label: 'Aggregation', kind: 'select', options: PL_AGGS },
+    { key: 'dataset', label: t('common.dataset') }, { key: 'name', label: t('common.metric') },
+    { key: 'column', label: t('common.column') }, { key: 'aggregation', label: t('common.aggregation'), kind: 'select', options: PL_AGGS },
   ],
   chart: [
-    { key: 'dataset', label: 'Dataset' }, { key: 'name', label: 'Visual' }, { key: 'chartType', label: 'Chart type' },
-    { key: 'encoding.category', label: 'Category' }, { key: 'encoding.values.0.column', label: 'Measure' },
-    { key: 'encoding.values.0.aggregation', label: 'Aggregation', kind: 'select', options: PL_AGGS },
+    { key: 'dataset', label: t('common.dataset') }, { key: 'name', label: 'Visual' }, { key: 'chartType', label: t('common.chart_type') },
+    { key: 'encoding.category', label: t('common.category') }, { key: 'encoding.values.0.column', label: t('common.measure') },
+    { key: 'encoding.values.0.aggregation', label: t('common.aggregation'), kind: 'select', options: PL_AGGS },
   ],
   dashboard: [
-    { key: 'name', label: 'Dashboard' },
-    { key: 'visuals', label: 'Visuals (comma-separated)', kind: 'list', wide: true },
-    { key: 'metrics', label: 'Metrics (comma-separated)', kind: 'list', wide: true },
+    { key: 'name', label: t('common.dashboard') },
+    { key: 'visuals', label: t('planEdit.visuals_comma_separated'), kind: 'list', wide: true },
+    { key: 'metrics', label: t('planEdit.metrics_comma_separated'), kind: 'list', wide: true },
   ],
   style: [
-    { key: 'dashboard', label: 'Dashboard' },
-    { key: 'preset', label: 'Style', kind: 'select', options: ['clean', 'executive', 'dense', 'dark'] },
+    { key: 'dashboard', label: t('common.dashboard') },
+    { key: 'preset', label: t('common.style_2'), kind: 'select', options: ['clean', 'executive', 'dense', 'dark'] },
   ],
   alert: [
-    { key: 'metric', label: 'Metric' }, { key: 'op', label: 'When', kind: 'select', options: ['>', '<', '>=', '<='] },
-    { key: 'value', label: 'Value', kind: 'number' }, { key: 'name', label: 'Alert name' },
+    { key: 'metric', label: t('common.metric') }, { key: 'op', label: t('common.when'), kind: 'select', options: ['>', '<', '>=', '<='] },
+    { key: 'value', label: t('common.value'), kind: 'number' }, { key: 'name', label: t('common.alert_name') },
   ],
 };
 
 /** A prepare step's own fields — whatever scalar/list keys it carries besides its type. */
 function plPrepareFields(step: any): PlField[] {
   const inner = step && step.step && typeof step.step === 'object' ? step.step : {};
-  const out: PlField[] = [{ key: 'dataset', label: 'Dataset' }];
+  const out: PlField[] = [{ key: 'dataset', label: t('common.dataset') }];
   Object.keys(inner).filter((k) => k !== 'type').forEach((k) => {
     const v = inner[k];
     if (Array.isArray(v)) out.push({ key: 'step.' + k, label: k, kind: 'list' });
@@ -90,7 +90,7 @@ function plEditFields(st: PlState, i: number): HTMLElement {
       input = inp;
     }
     input.className = 'pl-input';
-    input.setAttribute('aria-label', 'Step ' + (i + 1) + ' ' + f.label);
+    input.setAttribute('aria-label', t('planEdit.step', { p0: (i + 1), label: f.label }));
     input.addEventListener('change', () => {
       const raw = input.value;
       const next = JSON.parse(JSON.stringify(st.steps[i]));
@@ -115,7 +115,7 @@ function plEditControls(st: PlState, i: number): HTMLElement {
     b.className = 'btn btn-icon pl-icon-btn';
     try { b.appendChild(icon(name, 14)); } catch (_) { b.textContent = label; }
     b.title = label;
-    b.setAttribute('aria-label', label + ' — step ' + (i + 1));
+    b.setAttribute('aria-label', t('planEdit.step_2', { label, p1: (i + 1) }));
     b.disabled = disabled;
     b.addEventListener('click', () => { cb(); plRender(st); });
     box.appendChild(b);
@@ -125,9 +125,9 @@ function plEditControls(st: PlState, i: number): HTMLElement {
     [st.checks[a], st.checks[b]] = [st.checks[b], st.checks[a]];
     [st.lines[a], st.lines[b]] = [st.lines[b], st.lines[a]];
   };
-  mk('arrow-up', 'Move up', i === 0, () => swap(i, i - 1));
-  mk('arrow-down', 'Move down', i === st.steps.length - 1, () => swap(i, i + 1));
-  mk('trash', 'Remove', st.steps.length <= 1, () => {
+  mk('arrow-up', t('common.move_up'), i === 0, () => swap(i, i - 1));
+  mk('arrow-down', t('common.move_down'), i === st.steps.length - 1, () => swap(i, i + 1));
+  mk('trash', t('common.remove'), st.steps.length <= 1, () => {
     st.steps.splice(i, 1);
     st.checks.splice(i, 1);
     st.lines.splice(i, 1);
@@ -141,7 +141,7 @@ async function plRecheck(st: PlState): Promise<void> {
   let res: any;
   try { res = await window.hubPlan.check(currentProjectId, st.steps); } catch (_) { res = null; }
   if (!res || !res.ok) {
-    st.note = (res && res.error) || 'Could not check the edited plan.';
+    st.note = (res && res.error) || t('planEdit.could_not_check_the_edited_plan');
     plRender(st);
     return;
   }
@@ -150,8 +150,8 @@ async function plRecheck(st: PlState): Promise<void> {
   st.lines = res.lines || [];
   st.editing = false;
   const bad = st.checks.filter((c: any) => c && c.ok === false).length;
-  st.note = bad ? '' : 'Checked — every step passes.';
+  st.note = bad ? '' : t('planEdit.checked_every_step_passes');
   const head = st.card.querySelector('.ai-interp-label');
-  if (head) head.textContent = 'Plan — ' + st.steps.length + ' step' + (st.steps.length === 1 ? '' : 's');
+  if (head) head.textContent = t('common.plan', { stepsCount: st.steps.length });
   plRender(st);
 }

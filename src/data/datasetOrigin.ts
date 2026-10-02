@@ -80,7 +80,15 @@ export type DatasetOrigin =
    * read, which is what a change to one of them re-runs this for
    * (datasetDependents.ts) and what the lineage line names.
    */
-  | { kind: 'sql'; sql: string; params?: SqlParam[]; deps: string[] };
+  | { kind: 'sql'; sql: string; params?: SqlParam[]; deps: string[] }
+  /**
+   * One cell of a notebook (src/analysis/notebook): a refresh re-runs that
+   * cell and everything above it that it reads, from the notebook AS SAVED,
+   * with its parameter cells' stored values. `deps` are the datasets the run
+   * read — what a change to one of them re-runs this for (datasetDependents.ts),
+   * exactly like a `sql` origin's.
+   */
+  | { kind: 'notebook'; notebookId: string; cellId: string; deps: string[] };
 
 /**
  * Whitelist an untrusted `origin` — from a stored file OR a save IPC payload —
@@ -198,6 +206,14 @@ export function sanitizeOrigin(raw: unknown): DatasetOrigin | undefined {
       const out: DatasetOrigin = { kind: 'sql', sql, deps: [...new Set(deps as string[])] };
       if (params.length) out.params = params;
       return out;
+    }
+    case 'notebook': {
+      const notebookId = str(o.notebookId);
+      const cellId = str(o.cellId);
+      if (!isValidId(notebookId) || !isValidId(cellId)) return undefined;
+      const deps = Array.isArray(o.deps) ? o.deps : [];
+      if (deps.length > MAX_SQL_DEPS || !deps.every((d) => isValidId(d))) return undefined;
+      return { kind: 'notebook', notebookId, cellId, deps: [...new Set(deps as string[])] };
     }
     default:
       return undefined;

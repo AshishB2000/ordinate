@@ -21,14 +21,14 @@ let _chartMenuEscape  = null;
 // Curated swatches for the customize panel (drawn from theme palette + tasteful extras).
 // Must be declared before the chartMenuEl IIFE that builds the swatch buttons.
 const CURATED_COLORS = [
-  { hex: '#4f7cd4', label: 'Blue'   },
-  { hex: '#13a99e', label: 'Teal'   },
-  { hex: '#e8960c', label: 'Amber'  },
-  { hex: '#7c52e8', label: 'Violet' },
-  { hex: '#e83859', label: 'Rose'   },
-  { hex: '#0ea5e9', label: 'Sky'    },
-  { hex: '#22c55e', label: 'Green'  },
-  { hex: '#f97316', label: 'Orange' },
+  { hex: '#4f7cd4', label: t('common.blue')   },
+  { hex: '#13a99e', label: t('common.teal')   },
+  { hex: '#e8960c', label: t('hubResultMenus.amber')  },
+  { hex: '#7c52e8', label: t('common.violet') },
+  { hex: '#e83859', label: t('common.rose')   },
+  { hex: '#0ea5e9', label: t('hubResultMenus.sky')    },
+  { hex: '#22c55e', label: t('common.green')  },
+  { hex: '#f97316', label: t('common.orange') },
 ];
 
 // Build the popover once and append to body.
@@ -218,7 +218,7 @@ if (imgActCopy) {
   imgActCopy.addEventListener('click', () => {
     closeImgActionMenu();
     const src = getImgSrc();
-    if (src && window.hub) { window.hub.copyImage(src); showToast('Screenshot copied to clipboard'); }
+    if (src && window.hub) { window.hub.copyImage(src); showToast(t('hubResultMenus.screenshot_copied_to_clipboard')); }
   });
 }
 if (imgActDownload) {
@@ -229,7 +229,7 @@ if (imgActDownload) {
     const result = await window.hub.saveImage(src);
     if (result && result.ok) {
       const name = result.dest ? result.dest.split('/').pop() : 'screenshot';
-      showToast(`Saved: ${name}`);
+      showToast(t('common.saved_2', { name }));
     }
   });
 }

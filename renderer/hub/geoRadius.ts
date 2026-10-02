@@ -22,7 +22,7 @@ const RADIUS_PRESETS = [5, 10, 25, 50, 100];
 
 function radiusSentence(km: number, place: string): string {
   const k = Number.isInteger(km) ? String(km) : String(Math.round(km * 10) / 10);
-  return `within ${k} km of ${place}`;
+  return t('geoRadius.within_km_of', { k, place });
 }
 
 /** controlStepsRenderer's radius branch: one within_km step, or none while unset. */
@@ -43,30 +43,30 @@ function radiusEditor(seed: any, onChange: (v: any) => void): HTMLElement {
   row.className = 'geo-radius-row';
   const within = document.createElement('span');
   within.className = 'geo-radius-word';
-  within.textContent = 'Within';
+  within.textContent = t('geoRadius.within');
   const km = document.createElement('input');
   km.type = 'number';
   km.min = '0.1';
   km.max = '20016';
   km.step = 'any';
   km.className = 'ws-modal-input geo-radius-km';
-  km.setAttribute('aria-label', 'Distance in kilometres');
+  km.setAttribute('aria-label', t('geoRadius.distance_in_kilometres'));
   km.value = String(seed && seed.km > 0 ? seed.km : 25);
   const of = document.createElement('span');
   of.className = 'geo-radius-word';
-  of.textContent = 'km of';
+  of.textContent = t('geoRadius.km_of');
   const place = document.createElement('input');
   place.type = 'text';
   place.className = 'ws-modal-input geo-radius-place';
-  place.placeholder = 'City, county or ZIP — e.g. Austin, TX';
-  place.setAttribute('aria-label', 'Place');
+  place.placeholder = t('geoRadius.city_county_or_zip_e_g');
+  place.setAttribute('aria-label', t('common.place'));
   place.value = seed && seed.place ? String(seed.place) : '';
   row.append(within, km, of, place);
 
   const presets = document.createElement('div');
   presets.className = 'geo-radius-presets';
   presets.setAttribute('role', 'group');
-  presets.setAttribute('aria-label', 'Common distances');
+  presets.setAttribute('aria-label', t('geoRadius.common_distances'));
   RADIUS_PRESETS.forEach((n) => {
     const b = document.createElement('button');
     b.type = 'button';
@@ -101,8 +101,8 @@ function radiusEditor(seed: any, onChange: (v: any) => void): HTMLElement {
   const lookup = async (): Promise<void> => {
     const text = place.value.trim();
     const mine = ++seq;
-    if (!text) { resolved = null; paint('Type a place to measure from.', ''); emit(); return; }
-    paint('Looking up “' + text + '”…', '');
+    if (!text) { resolved = null; paint(t('geoRadius.type_a_place_to_measure_from'), ''); emit(); return; }
+    paint(t('geoRadius.looking_up', { text }), '');
     let res: any = null;
     try { res = await window.hubGeo.resolvePlace(text); } catch (_) { res = null; }
     if (mine !== seq) return;
@@ -111,7 +111,7 @@ function radiusEditor(seed: any, onChange: (v: any) => void): HTMLElement {
       paint(`${res.place.label} · ${res.place.lat.toFixed(3)}, ${res.place.lng.toFixed(3)}`, 'ok');
     } else {
       resolved = null;
-      paint((res && res.error) || 'That place could not be looked up.', 'err');
+      paint((res && res.error) || t('geoRadius.that_place_could_not_be_looked'), 'err');
     }
     emit();
   };
@@ -121,7 +121,7 @@ function radiusEditor(seed: any, onChange: (v: any) => void): HTMLElement {
   });
   km.addEventListener('input', emit);
   if (resolved) paint(`${resolved.label} · ${resolved.lat.toFixed(3)}, ${resolved.lng.toFixed(3)}`, 'ok');
-  else paint('Type a place to measure from.', '');
+  else paint(t('geoRadius.type_a_place_to_measure_from'), '');
   emit();
   return box;
 }
@@ -136,7 +136,7 @@ function renderRadiusControl(card: any, wrap: HTMLElement): void {
   chip.appendChild(icon('map-pin', 14));
   const txt = document.createElement('span');
   const cur = controlCurrentValue(card);
-  txt.textContent = cur && cur.value ? cur.value : 'Anywhere';
+  txt.textContent = cur && cur.value ? cur.value : t('geoRadius.anywhere');
   chip.appendChild(txt);
   wrap.appendChild(chip);
   chip.addEventListener('click', () => openRadiusPopover(card, chip));
@@ -148,23 +148,23 @@ function openRadiusPopover(card: any, anchor: HTMLElement): void {
   const pop = document.createElement('div');
   pop.className = 'dash-ctrl-popover geo-radius-pop';
   pop.setAttribute('role', 'dialog');
-  pop.setAttribute('aria-label', (control.label || 'Radius') + ' — distance from a place');
+  pop.setAttribute('aria-label', t('geoRadius.distance_from_a_place', { p0: (control.label || t('common.radius')) }));
   let pending: any = null;
   const actions = document.createElement('div');
   actions.className = 'dash-ctrl-popover-actions';
   const clear = document.createElement('button');
   clear.type = 'button';
   clear.className = 'btn btn-sm';
-  clear.textContent = 'Anywhere';
-  clear.setAttribute('aria-label', 'Clear the radius');
+  clear.textContent = t('geoRadius.anywhere');
+  clear.setAttribute('aria-label', t('geoRadius.clear_the_radius'));
   const cancel = document.createElement('button');
   cancel.type = 'button';
   cancel.className = 'btn btn-sm';
-  cancel.textContent = 'Cancel';
+  cancel.textContent = t('common.cancel');
   const apply = document.createElement('button');
   apply.type = 'button';
   apply.className = 'btn btn-primary btn-sm';
-  apply.textContent = 'Apply';
+  apply.textContent = t('common.apply');
   actions.append(clear, cancel, apply);
   // After the buttons exist: the editor reports its seed at once.
   pop.appendChild(radiusEditor(controlCurrentValue(card), (v) => { pending = v; apply.disabled = !v; }));
@@ -221,10 +221,10 @@ function openRadiusControlDialog(datasets: any[], existing?: any): Promise<any> 
     box.className = 'ws-modal dash-control-modal geo-radius-modal';
     const h = document.createElement('div');
     h.className = 'ws-modal-title';
-    h.textContent = editing ? 'Edit radius control' : 'Add a radius control';
+    h.textContent = editing ? t('geoRadius.edit_radius_control') : t('geoRadius.add_a_radius_control');
     const lede = document.createElement('p');
     lede.className = 'geo-radius-lede';
-    lede.textContent = 'Keeps the rows whose point lies within a distance of a place. Places come from the offline table — cities, US counties and ZIP codes.';
+    lede.textContent = t('geoRadius.keeps_the_rows_whose_point_lies');
     const field = (text: string, el: HTMLElement): HTMLElement => {
       const row = document.createElement('label');
       row.className = 'dm-field';
@@ -239,7 +239,7 @@ function openRadiusControlDialog(datasets: any[], existing?: any): Promise<any> 
     datasets.forEach((d) => {
       const o = document.createElement('option');
       o.value = String(d.id);
-      o.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
+      o.textContent = d && d.name ? String(d.name) : t('common.untitled_dataset');
       dsSel.appendChild(o);
     });
     if (editing && existing.datasetId) dsSel.value = String(existing.datasetId);
@@ -248,7 +248,7 @@ function openRadiusControlDialog(datasets: any[], existing?: any): Promise<any> 
     const label = document.createElement('input');
     label.type = 'text';
     label.className = 'ws-modal-input';
-    label.value = editing && existing.label ? String(existing.label) : 'Near';
+    label.value = editing && existing.label ? String(existing.label) : t('geoRadius.near');
     const note = document.createElement('p');
     note.className = 'geo-radius-cols-note';
     let def: any = editing && existing.default ? existing.default : null;
@@ -259,11 +259,11 @@ function openRadiusControlDialog(datasets: any[], existing?: any): Promise<any> 
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'btn';
-    cancel.textContent = 'Cancel';
+    cancel.textContent = t('common.cancel');
     const ok = document.createElement('button');
     ok.type = 'button';
     ok.className = 'btn btn-primary';
-    ok.textContent = editing ? 'Save' : 'Add';
+    ok.textContent = editing ? t('common.save') : t('common.add');
     actions.append(cancel, ok);
 
     const loadColumns = async (): Promise<void> => {
@@ -281,7 +281,7 @@ function openRadiusControlDialog(datasets: any[], existing?: any): Promise<any> 
         const pick = [want, guess].find((v) => v && nums.indexOf(v) >= 0);
         if (pick) sel.value = pick;
       }
-      note.textContent = nums.length < 2 ? 'This dataset needs two number columns — a latitude and a longitude.' : '';
+      note.textContent = nums.length < 2 ? t('geoRadius.this_dataset_needs_two_number_columns') : '';
       note.hidden = !note.textContent;
       ok.disabled = nums.length < 2;
     };
@@ -296,8 +296,8 @@ function openRadiusControlDialog(datasets: any[], existing?: any): Promise<any> 
     }
     function submit(): void {
       if (ok.disabled || !dsSel.value || !latSel.value || !lngSel.value) return;
-      if (latSel.value === lngSel.value) { note.textContent = 'Pick two different columns for latitude and longitude.'; note.hidden = false; return; }
-      const out: any = { kind: 'radius', datasetId: dsSel.value, column: latSel.value, lngColumn: lngSel.value, label: label.value.trim() || 'Near' };
+      if (latSel.value === lngSel.value) { note.textContent = t('geoRadius.pick_two_different_columns_for_latitude'); note.hidden = false; return; }
+      const out: any = { kind: 'radius', datasetId: dsSel.value, column: latSel.value, lngColumn: lngSel.value, label: label.value.trim() || t('geoRadius.near') };
       if (def) out.default = def;
       close(out);
     }
@@ -315,19 +315,19 @@ function openRadiusControlDialog(datasets: any[], existing?: any): Promise<any> 
     if (!datasets.length) {
       const empty = document.createElement('p');
       empty.className = 'dash-modal-empty';
-      empty.textContent = 'Import a dataset with latitude and longitude columns first.';
+      empty.textContent = t('geoRadius.import_a_dataset_with_latitude_and');
       box.appendChild(empty);
       ok.disabled = true;
     } else {
       const cols = document.createElement('div');
       cols.className = 'geo-radius-cols';
-      cols.append(field('Latitude', latSel), field('Longitude', lngSel));
-      box.append(field('Dataset', dsSel), cols, note, field('Label', label), field('Default (optional — applied when the sheet opens)', editor));
+      cols.append(field(t('common.latitude'), latSel), field(t('common.longitude'), lngSel));
+      box.append(field(t('common.dataset'), dsSel), cols, note, field(t('common.label'), label), field(t('geoRadius.default_optional_applied_when_the_sheet'), editor));
     }
     box.appendChild(actions);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
-    a11y = makeModalAccessible(box, h.textContent || 'Radius control', datasets.length ? dsSel : cancel);
+    a11y = makeModalAccessible(box, h.textContent || t('geoRadius.radius_control'), datasets.length ? dsSel : cancel);
     if (datasets.length) void loadColumns();
   });
 }
@@ -348,6 +348,6 @@ async function editRadiusControl(card: any, datasets: any[]): Promise<void> {
   card.control = next;
   controlState.delete(card.id);
   if (next.default) controlState.set(card.id, next.default);
-  markDashDirty('Edit control');
+  markDashDirty(t('common.edit_control'));
   renderDashGrid();
 }

@@ -110,8 +110,11 @@ export async function automationSection(s: Smoke, fx: Fixture): Promise<void> {
   //    window's Jobs popover through automation-log.jsonl.
   const electronBin = require('electron') as unknown as string; // from Node, the package is the binary's path
   const headless = await new Promise<{ code: number; out: string }>((resolve) => {
-    execFile(electronBin, ['.', '--user-data-dir=' + s.userData, '--cli', 'datasets', 'import', fx.csvPath, '--project', fx.projectId, '--json'],
-      { cwd: REPO, timeout: 60_000 }, (err, stdout) => resolve({ code: err ? Number((err as { code?: unknown }).code) || 1 : 0, out: String(stdout) }));
+    // Playwright adds --no-sandbox on Linux for the GUI; a bare spawn must too, or
+    // the CI runner kills Electron at startup over its SUID sandbox helper.
+    const noSandbox = process.platform === 'linux' ? ['--no-sandbox'] : [];
+    execFile(electronBin, ['.', ...noSandbox, '--user-data-dir=' + s.userData, '--cli', 'datasets', 'import', fx.csvPath, '--project', fx.projectId, '--json'],
+      { cwd: REPO, timeout: 60_000 }, (err, stdout, stderr) => resolve({ code: err ? Number((err as { code?: unknown }).code) || 1 : 0, out: String(stdout) || String(stderr) }));
   });
   let imported: any = null;
   try { imported = JSON.parse(headless.out).result; } catch (_) { /* reported below */ }

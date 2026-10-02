@@ -42,12 +42,12 @@ function pjOnKey(e: KeyboardEvent): void {
 
 /** "opened 2h ago" — or "never opened" for a project nobody has switched to. */
 function pjAgo(iso: string | null): string {
-  if (!iso) return 'never opened';
+  if (!iso) return t('projectSwitcher.never_opened');
   const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
-  if (s < 60) return 'opened just now';
-  if (s < 3600) return `opened ${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `opened ${Math.floor(s / 3600)}h ago`;
-  if (s < 86400 * 7) return `opened ${Math.floor(s / 86400)}d ago`;
+  if (s < 60) return t('projectSwitcher.opened_just_now');
+  if (s < 3600) return t('projectSwitcher.opened_m_ago', { p0: Math.floor(s / 60) });
+  if (s < 86400) return t('projectSwitcher.opened_h_ago', { p0: Math.floor(s / 3600) });
+  if (s < 86400 * 7) return t('projectSwitcher.opened_d_ago', { p0: Math.floor(s / 86400) });
   return 'opened ' + new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
@@ -82,7 +82,7 @@ async function openProjectSwitcher(trigger: HTMLElement): Promise<void> {
   const pop = document.createElement('div');
   pop.className = 'pj-pop';
   pop.setAttribute('role', 'dialog');
-  pop.setAttribute('aria-label', 'Projects');
+  pop.setAttribute('aria-label', t('projectSwitcher.projects'));
   pjPop = pop;
   pjPaint(list);
   document.body.appendChild(pop);
@@ -112,7 +112,7 @@ function pjPaint(list: any[]): void {
   head.className = 'pj-head';
   const h = document.createElement('span');
   h.className = 'pj-head-h';
-  h.textContent = 'Projects';
+  h.textContent = t('projectSwitcher.projects');
   const n = document.createElement('span');
   n.className = 'pj-head-n';
   n.textContent = String(live.length);
@@ -135,9 +135,9 @@ function pjPaint(list: any[]): void {
     actions.appendChild(b);
     return b;
   };
-  act('plus', 'New project', () => void pjNew(), 'pj-new');
-  act('upload', 'Import project…', () => void pjImport(), 'pj-import');
-  if (typeof syOpenFromFolder === 'function') act('folder', 'Open from folder…', () => void syOpenFromFolder(), 'pj-open-folder');
+  act('plus', t('projectSwitcher.new_project'), () => void pjNew(), 'pj-new');
+  act('upload', t('projectSwitcher.import_project'), () => void pjImport(), 'pj-import');
+  if (typeof syOpenFromFolder === 'function') act('folder', t('projectSwitcher.open_from_folder'), () => void syOpenFromFolder(), 'pj-open-folder');
   pop.appendChild(actions);
 
   if (archived.length) {
@@ -146,9 +146,9 @@ function pjPaint(list: any[]): void {
     fold.className = 'pj-fold';
     fold.setAttribute('aria-expanded', String(pjShowArchived));
     fold.appendChild(icon(pjShowArchived ? 'chevron-down' : 'chevron-right', 14));
-    const t = document.createElement('span');
-    t.textContent = `Archived (${archived.length})`;
-    fold.appendChild(t);
+    const tv = document.createElement('span');
+    tv.textContent = t('projectSwitcher.archived', { archivedCount: archived.length });
+    fold.appendChild(tv);
     fold.addEventListener('click', () => { pjShowArchived = !pjShowArchived; pjPaint(list); });
     pop.appendChild(fold);
     if (pjShowArchived) {
@@ -164,7 +164,7 @@ function pjPaint(list: any[]): void {
         const restore = document.createElement('button');
         restore.type = 'button';
         restore.className = 'btn btn-sm pj-restore';
-        restore.textContent = 'Restore';
+        restore.textContent = t('common.restore');
         restore.addEventListener('click', () => void pjArchive(p, false));
         row.append(name, restore);
         box.appendChild(row);
@@ -196,8 +196,8 @@ function pjRow(p: any, liveCount: number): HTMLElement {
   if (p.sample) {
     const badge = document.createElement('span');
     badge.className = 'pj-badge';
-    badge.textContent = 'Sample';
-    badge.title = 'Holds the bundled sample data';
+    badge.textContent = t('projectSwitcher.sample');
+    badge.title = t('projectSwitcher.holds_the_bundled_sample_data');
     top.appendChild(badge);
   }
   const meta = document.createElement('span');
@@ -229,11 +229,11 @@ function pjRow(p: any, liveCount: number): HTMLElement {
         if (run) b.addEventListener('click', () => { close(); run(); });
         menu.appendChild(b);
       };
-      item('pencil', 'Rename…', () => void pjRename(p));
-      item('package', 'Export project…', () => void pjExport(p));
+      item('pencil', t('projectSwitcher.rename'), () => void pjRename(p));
+      item('package', t('projectSwitcher.export_project'), () => void pjExport(p));
       if (typeof syMenuItems === 'function') syMenuItems(p, item);
       // The last open project cannot be archived: there would be nowhere to be.
-      item('archive', liveCount > 1 ? 'Archive' : 'Archive (the only project)', liveCount > 1 ? () => void pjArchive(p, true) : null);
+      item('archive', liveCount > 1 ? t('projectSwitcher.archive') : t('projectSwitcher.archive_the_only_project'), liveCount > 1 ? () => void pjArchive(p, true) : null);
     });
   });
   row.appendChild(more);
@@ -265,7 +265,7 @@ async function pjSwitchTo(id: string): Promise<void> {
   if (dashCurrent && typeof handleBackToList === 'function') await handleBackToList();
   if (typeof vizDatasetId === 'string' && vizDatasetId && typeof closeVisualBuilder === 'function') closeVisualBuilder();
   if (expId) document.getElementById('ds-explorer-close')?.click();
-  if (!(await adoptProject(id))) { showToast('That project could not be opened', { kind: 'error' }); return; }
+  if (!(await adoptProject(id))) { showToast(t('projectSwitcher.that_project_could_not_be_opened'), { kind: 'error' }); return; }
   selectSection(currentSection === 'capture' || currentSection === 'connect' ? 'datasets' : currentSection);
 }
 
@@ -278,20 +278,20 @@ function pjPaintCurrent(name: string): void {
 
 async function pjNew(): Promise<void> {
   pjClose();
-  const name = await promptModal('New project', '', 'Create');
+  const name = await promptModal(t('projectSwitcher.new_project'), '', t('common.create'));
   if (name === null) return;
-  const created = await window.hub.createProject(name.trim() || 'Untitled project');
-  if (!created || !created.id) { showToast('Could not create the project', { kind: 'error' }); return; }
+  const created = await window.hub.createProject(name.trim() || t('common.untitled_project'));
+  if (!created || !created.id) { showToast(t('projectSwitcher.could_not_create_the_project'), { kind: 'error' }); return; }
   await pjSwitchTo(String(created.id));
-  showToast(`Created “${created.name}”`, { kind: 'success' });
+  showToast(t('projectSwitcher.created', { name: created.name }), { kind: 'success' });
 }
 
 async function pjRename(p: any): Promise<void> {
   pjClose();
-  const name = await promptModal('Rename project', p.name, 'Rename');
+  const name = await promptModal(t('projectSwitcher.rename_project'), p.name, t('common.rename'));
   if (name === null || !name.trim() || name.trim() === p.name) return;
   const res = await window.hub.renameProject(p.id, name.trim());
-  if (!res) { showToast('Could not rename the project', { kind: 'error' }); return; }
+  if (!res) { showToast(t('projectSwitcher.could_not_rename_the_project'), { kind: 'error' }); return; }
   if (p.id === currentProjectId) {
     const el = document.getElementById('ws-project-name');
     if (el) el.textContent = res.name;
@@ -310,9 +310,9 @@ async function pjArchive(p: any, archived: boolean): Promise<void> {
   pjClose();
   await window.hub.archiveProject(p.id, archived);
   if (archived) {
-    showToast(`Archived “${p.name}”`, { action: { label: 'Undo', onClick: () => void pjArchive(p, false) } });
+    showToast(t('projectSwitcher.archived_2', { name: p.name }), { action: { label: t('common.undo'), onClick: () => void pjArchive(p, false) } });
   } else {
-    showToast(`Restored “${p.name}”`, { kind: 'success' });
+    showToast(t('common.restored', { name: p.name }), { kind: 'success' });
   }
   if (currentSection === 'home' && typeof renderRecent === 'function') void renderRecent();
 }
@@ -325,8 +325,8 @@ async function pjExport(p: any): Promise<void> {
   if (p.id === currentProjectId && !(await pvShareGate('bundle', null))) return;
   const res = await window.hub.exportProject(p.id);
   if (!res || res.canceled) return;
-  if (!res.ok) { showToast(res.error || 'Export failed', { kind: 'error' }); return; }
-  showToast(`Exported “${p.name}” to ${String(res.path).split(/[\\/]/).pop()}`, { kind: 'success' });
+  if (!res.ok) { showToast(res.error || t('common.export_failed'), { kind: 'error' }); return; }
+  showToast(t('projectSwitcher.exported_to', { name: p.name, p1: String(res.path).split(/[\\/]/).pop() }), { kind: 'success' });
 }
 
 // `given` is a bundle already imported elsewhere (a dropped .ordinate, dndIn.ts).
@@ -334,8 +334,8 @@ async function pjImport(given?: any): Promise<void> {
   pjClose();
   const res = given || await window.hub.importProject();
   if (!res || res.canceled) return;
-  if (!res.ok) { showToast(res.error || 'That bundle could not be imported', { kind: 'error' }); return; }
+  if (!res.ok) { showToast(res.error || t('projectSwitcher.that_bundle_could_not_be_imported'), { kind: 'error' }); return; }
   const c = res.counts || {};
   await pjSwitchTo(String(res.project.id));
-  showToast(`Imported “${res.project.name}” — ${pjPlural(c.datasets || 0, 'dataset')}, ${pjPlural(c.visuals || 0, 'visual')}, ${pjPlural(c.dashboards || 0, 'dashboard')}`, { kind: 'success' });
+  showToast(t('projectSwitcher.imported', { name: res.project.name, p1: pjPlural(c.datasets || 0, 'dataset'), p2: pjPlural(c.visuals || 0, 'visual'), p3: pjPlural(c.dashboards || 0, 'dashboard') }), { kind: 'success' });
 }

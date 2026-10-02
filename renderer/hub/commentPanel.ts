@@ -48,7 +48,7 @@ let cmtPanel: CmtPanelState | null = null;
  */
 function openCommentThread(targetKind: string, targetId: string, commentId?: string, opts: { point?: { label: string; series?: string } } = {}): void {
   if (!currentProjectId || !targetId || !CMT_KIND_WORD[targetKind]) return;
-  cmtOpenPanel('thread', targetKind, targetId, cmtTargetName(targetKind, targetId), 'Comments · ' + CMT_KIND_WORD[targetKind]);
+  cmtOpenPanel('thread', targetKind, targetId, cmtTargetName(targetKind, targetId), t('commentPanel.comments', { p0: CMT_KIND_WORD[targetKind] }));
   if (!cmtPanel) return;
   cmtPanel.focusId = commentId || '';
   cmtPanel.point = opts.point || null;
@@ -60,7 +60,7 @@ function openCommentThread(targetKind: string, targetId: string, commentId?: str
 /** Every thread on the open dashboard. */
 function cmtOpenDashboardThreads(commentId?: string): void {
   if (!dashCurrent) return;
-  cmtOpenPanel('all', 'analysis', String(dashCurrent.id), String(dashCurrent.name || 'Dashboard'), 'Comments · Dashboard');
+  cmtOpenPanel('all', 'analysis', String(dashCurrent.id), String(dashCurrent.name || t('common.dashboard')), t('commentPanel.comments_dashboard'));
   if (!cmtPanel) return;
   cmtPanel.focusId = commentId || '';
   cmtPaintPanel();
@@ -139,7 +139,7 @@ function cmtPaintPanel(): void {
       // Thread mode: resolved threads sit under their own small heading.
       if (st.mode === 'thread' && c.resolvedAt && !headed) {
         headed = true;
-        list.appendChild(cmtEl('div', 'cmt-divider', 'Resolved · ' + done.length));
+        list.appendChild(cmtEl('div', 'cmt-divider', t('commentPanel.resolved', { doneCount: done.length })));
       }
       list.appendChild(cmtThread(c));
     }
@@ -166,8 +166,8 @@ function cmtFilterBar(open: number, done: number, total: number): HTMLElement {
   const st = cmtPanel as CmtPanelState;
   const bar = cmtEl('div', 'cmt-filter');
   bar.setAttribute('role', 'radiogroup');
-  bar.setAttribute('aria-label', 'Show');
-  ([['open', 'Open', open], ['resolved', 'Resolved', done], ['all', 'All', total]] as Array<[CmtPanelState['filter'], string, number]>)
+  bar.setAttribute('aria-label', t('common.show'));
+  ([['open', t('common.open'), open], ['resolved', t('common.resolved'), done], ['all', t('common.all'), total]] as Array<[CmtPanelState['filter'], string, number]>)
     .forEach(([value, label, n]) => {
       const b = cmtEl('button', 'cmt-filter-opt' + (st.filter === value ? ' is-on' : ''));
       b.type = 'button';
@@ -184,16 +184,16 @@ function cmtFilterBar(open: number, done: number, total: number): HTMLElement {
 
 function cmtEmpty(total: number, filter: string): HTMLElement {
   if (filter === 'resolved') {
-    return makeEmptyState({ variant: 'starred', iconName: 'circle-check', title: 'Nothing resolved yet', line: 'Threads you resolve move here, and can be reopened.' });
+    return makeEmptyState({ variant: 'starred', iconName: 'circle-check', title: t('commentPanel.nothing_resolved_yet'), line: t('commentPanel.threads_you_resolve_move_here_and') });
   }
   if (filter === 'open' && total) {
-    return makeEmptyState({ variant: 'starred', iconName: 'circle-check', title: 'All caught up', line: 'Every thread on this dashboard is resolved.' });
+    return makeEmptyState({ variant: 'starred', iconName: 'circle-check', title: t('commentPanel.all_caught_up'), line: t('commentPanel.every_thread_on_this_dashboard_is') });
   }
   return makeEmptyState({
     variant: 'starred',
     iconName: 'message-square',
-    title: 'No comments yet — start the discussion',
-    line: 'Ask a question, flag a number or leave a note for whoever opens this next. ⌘-click a chart mark to pin a comment to it.',
+    title: t('commentPanel.no_comments_yet_start_the_discussion'),
+    line: t('commentPanel.ask_a_question_flag_a_number'),
   });
 }
 
@@ -236,12 +236,12 @@ function cmtThread(c: any): HTMLElement {
 
   const head = cmtEl('header', 'cmt-head');
   const who = cmtEl('span', 'cmt-who');
-  who.append(cmtEl('span', 'cmt-author', c.author || 'Someone'), cmtWhen(c.createdAt));
+  who.append(cmtEl('span', 'cmt-author', c.author || t('common.someone')), cmtWhen(c.createdAt));
   if (c.updatedAt) who.appendChild(cmtEl('span', 'cmt-edited', 'edited'));
   head.append(cmtAvatar(c.author || '?'), who);
   if (c.resolvedAt) {
     const done = cmtEl('span', 'cmt-state');
-    iconLabel(done, 'circle-check', 'Resolved', 14);
+    iconLabel(done, 'circle-check', t('common.resolved'), 14);
     head.appendChild(done);
   }
   el.appendChild(head);
@@ -252,7 +252,7 @@ function cmtThread(c: any): HTMLElement {
     const where = cmtEl('div', 'cmt-where');
     if (n) {
       const pin = cmtEl('span', 'cmt-pin', '#' + n);
-      pin.title = 'Pinned to ' + cmtPointText(c.target.point);
+      pin.title = t('commentPanel.pinned_to', { point: cmtPointText(c.target.point) });
       where.append(pin, cmtEl('span', 'cmt-pin-label', cmtPointText(c.target.point)));
     }
     if (st.mode === 'all' && c.target.kind !== 'analysis') {
@@ -271,12 +271,12 @@ function cmtThread(c: any): HTMLElement {
   }
 
   const actions = cmtEl('div', 'cmt-actions');
-  if (!c.resolvedAt) actions.appendChild(cmtBtn('Reply', 'cmt-act', () => { st.replying = c.id; st.replyDraft = ''; cmtPaintPanel(); cmtFocusIn(c.id, '.cmt-reply-box .cmt-input'); }));
+  if (!c.resolvedAt) actions.appendChild(cmtBtn(t('commentPanel.reply'), 'cmt-act', () => { st.replying = c.id; st.replyDraft = ''; cmtPaintPanel(); cmtFocusIn(c.id, '.cmt-reply-box .cmt-input'); }));
   actions.appendChild(c.resolvedAt
-    ? cmtBtn('Reopen', 'cmt-act', () => void cmtRun(window.hubPower.reopenComment(currentProjectId as string, c.id)), 'rotate-ccw')
-    : cmtBtn('Resolve', 'cmt-act cmt-act--resolve', () => void cmtRun(window.hubPower.resolveComment(currentProjectId as string, c.id)), 'check'));
+    ? cmtBtn(t('commentPanel.reopen'), 'cmt-act', () => void cmtRun(window.hubPower.reopenComment(currentProjectId as string, c.id)), 'rotate-ccw')
+    : cmtBtn(t('commentPanel.resolve'), 'cmt-act cmt-act--resolve', () => void cmtRun(window.hubPower.resolveComment(currentProjectId as string, c.id)), 'check'));
   if (c.mine) {
-    actions.appendChild(cmtBtn('Edit', 'cmt-act', () => { st.editing = c.id; st.editDraft = c.body; cmtPaintPanel(); cmtFocusIn(c.id, '.cmt-edit .cmt-input'); }));
+    actions.appendChild(cmtBtn(t('common.edit_2'), 'cmt-act', () => { st.editing = c.id; st.editDraft = c.body; cmtPaintPanel(); cmtFocusIn(c.id, '.cmt-edit .cmt-input'); }));
     actions.appendChild(cmtDeleteBtn('del:' + c.id, () => window.hubPower.deleteComment(currentProjectId as string, c.id)));
   }
   el.appendChild(actions);
@@ -289,7 +289,7 @@ function cmtReply(c: any, r: any): HTMLElement {
   el.dataset.replyId = r.id;
   const head = cmtEl('div', 'cmt-head cmt-head--reply');
   const who = cmtEl('span', 'cmt-who');
-  who.append(cmtEl('span', 'cmt-author', r.author || 'Someone'), cmtWhen(r.createdAt));
+  who.append(cmtEl('span', 'cmt-author', r.author || t('common.someone')), cmtWhen(r.createdAt));
   head.append(cmtAvatar(r.author || '?', true), who);
   if (r.mine) head.appendChild(cmtDeleteBtn('rep:' + r.id, () => window.hubPower.deleteCommentReply(currentProjectId as string, c.id, r.id), true));
   el.append(head, cmtMarkdown(r.body));
@@ -301,7 +301,7 @@ function cmtReply(c: any, r: any): HTMLElement {
 function cmtDeleteBtn(key: string, call: () => Promise<any>, compact?: boolean): HTMLButtonElement {
   const st = cmtPanel as CmtPanelState;
   const armed = st.armed === key;
-  const b = cmtBtn(armed ? 'Delete?' : 'Delete', 'cmt-act cmt-act--danger' + (armed ? ' is-armed' : '') + (compact ? ' cmt-act--compact' : ''), () => {
+  const b = cmtBtn(armed ? t('commentPanel.delete') : 'Delete', 'cmt-act cmt-act--danger' + (armed ? ' is-armed' : '') + (compact ? ' cmt-act--compact' : ''), () => {
     if (st.armed !== key) {
       st.armed = key;
       cmtPaintPanel();
@@ -311,7 +311,7 @@ function cmtDeleteBtn(key: string, call: () => Promise<any>, compact?: boolean):
     st.armed = '';
     void cmtRun(call());
   });
-  b.setAttribute('aria-label', armed ? 'Click again to delete' : 'Delete');
+  b.setAttribute('aria-label', armed ? t('commentPanel.click_again_to_delete') : 'Delete');
   return b;
 }
 
@@ -334,7 +334,7 @@ function cmtTextarea(value: string, placeholder: string, onInput: (v: string) =>
 function cmtReplyBox(c: any): HTMLElement {
   const st = cmtPanel as CmtPanelState;
   const wrap = cmtEl('div', 'cmt-reply-box');
-  const box = cmtTextarea(st.replyDraft, 'Reply…', (v) => { st.replyDraft = v; });
+  const box = cmtTextarea(st.replyDraft, t('commentPanel.reply_2'), (v) => { st.replyDraft = v; });
   const send = async (): Promise<void> => {
     if (!st.replyDraft.trim()) return;
     const text = st.replyDraft;
@@ -344,9 +344,9 @@ function cmtReplyBox(c: any): HTMLElement {
   };
   cmtOnSubmitKey(box, () => void send());
   const row = cmtEl('div', 'cmt-box-row');
-  row.append(cmtEl('span', 'cmt-hint', '⌘↩ to reply'),
-    cmtBtn('Cancel', 'btn btn-sm btn-ghost', () => { st.replying = ''; cmtPaintPanel(); }),
-    cmtBtn('Reply', 'btn btn-sm btn-primary', () => void send()));
+  row.append(cmtEl('span', 'cmt-hint', t('commentPanel.to_reply')),
+    cmtBtn(t('common.cancel'), 'btn btn-sm btn-ghost', () => { st.replying = ''; cmtPaintPanel(); }),
+    cmtBtn(t('commentPanel.reply'), 'btn btn-sm btn-primary', () => void send()));
   wrap.append(box, row);
   return wrap;
 }
@@ -354,7 +354,7 @@ function cmtReplyBox(c: any): HTMLElement {
 function cmtEditBox(c: any): HTMLElement {
   const st = cmtPanel as CmtPanelState;
   const wrap = cmtEl('div', 'cmt-edit');
-  const box = cmtTextarea(st.editDraft, 'Edit comment', (v) => { st.editDraft = v; }, 3);
+  const box = cmtTextarea(st.editDraft, t('commentPanel.edit_comment'), (v) => { st.editDraft = v; }, 3);
   const save = async (): Promise<void> => {
     if (!st.editDraft.trim()) return;
     const text = st.editDraft;
@@ -364,9 +364,9 @@ function cmtEditBox(c: any): HTMLElement {
   };
   cmtOnSubmitKey(box, () => void save());
   const row = cmtEl('div', 'cmt-box-row');
-  row.append(cmtEl('span', 'cmt-hint', '⌘↩ to save'),
-    cmtBtn('Cancel', 'btn btn-sm btn-ghost', () => { st.editing = ''; cmtPaintPanel(); }),
-    cmtBtn('Save', 'btn btn-sm btn-primary', () => void save()));
+  row.append(cmtEl('span', 'cmt-hint', t('commentPanel.to_save')),
+    cmtBtn(t('common.cancel'), 'btn btn-sm btn-ghost', () => { st.editing = ''; cmtPaintPanel(); }),
+    cmtBtn(t('common.save'), 'btn btn-sm btn-primary', () => void save()));
   wrap.append(box, row);
   return wrap;
 }
@@ -382,20 +382,20 @@ function cmtPaintComposer(): void {
   const wrap = cmtEl('div', 'cmt-compose');
   if (st.point) {
     const chip = cmtEl('div', 'cmt-compose-pin');
-    chip.append(icon('map-pin', 14), cmtEl('span', '', 'Pinned to '), cmtEl('strong', '', cmtPointText(st.point)));
+    chip.append(icon('map-pin', 14), cmtEl('span', '', t('commentPanel.pinned_to_2')), cmtEl('strong', '', cmtPointText(st.point)));
     const x = cmtEl('button', 'cmt-compose-unpin');
     x.type = 'button';
-    iconOnly(x, 'x', 'Don’t pin', 14);
+    iconOnly(x, 'x', t('commentPanel.don_t_pin'), 14);
     x.addEventListener('click', () => { st.point = null; cmtPaintComposer(); });
     chip.appendChild(x);
     wrap.appendChild(chip);
   }
-  const placeholder = st.mode === 'all' ? 'Comment on this dashboard…' : st.point ? 'What about this point?' : 'Add a comment…';
+  const placeholder = st.mode === 'all' ? t('commentPanel.comment_on_this_dashboard') : st.point ? t('commentPanel.what_about_this_point') : t('commentPanel.add_a_comment');
   const box = cmtTextarea(draft, placeholder, () => { /* read at send time */ }, 3);
-  const post = cmtBtn('Comment', 'btn btn-sm btn-primary cmt-post', () => void cmtPost(box));
+  const post = cmtBtn(t('common.comment'), 'btn btn-sm btn-primary cmt-post', () => void cmtPost(box));
   cmtOnSubmitKey(box, () => void cmtPost(box));
   const row = cmtEl('div', 'cmt-box-row');
-  row.append(cmtEl('span', 'cmt-hint', '**bold**, *italic*, `code`, lists · ⌘↩ to post'), post);
+  row.append(cmtEl('span', 'cmt-hint', t('commentPanel.bold_italic_code_lists_to_post')), post);
   wrap.append(box, row);
   st.foot.appendChild(wrap);
 }

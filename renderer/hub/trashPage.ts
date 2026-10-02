@@ -7,12 +7,12 @@
 // widths, the type tile and the days-left pill.
 
 const TR_TYPE: Record<string, { word: string; icon: string }> = {
-  dataset: { word: 'Dataset', icon: 'database' },
+  dataset: { word: t('common.dataset'), icon: 'database' },
   visual: { word: 'Visual', icon: 'chart-bar' },
-  dashboard: { word: 'Dashboard', icon: 'layout-dashboard' },
-  metric: { word: 'Metric', icon: 'gauge' },
-  report: { word: 'Report', icon: 'file-text' },
-  alert: { word: 'Alert', icon: 'bell' },
+  dashboard: { word: t('common.dashboard'), icon: 'layout-dashboard' },
+  metric: { word: t('common.metric'), icon: 'gauge' },
+  report: { word: t('common.report'), icon: 'file-text' },
+  alert: { word: t('common.alert'), icon: 'bell' },
 };
 
 /** Names of the records on screen, so a "taken along with" line can name its parent. */
@@ -54,8 +54,8 @@ async function trRefresh(): Promise<void> {
     emptyHost.replaceChildren(makeEmptyState({
       variant: 'page',
       iconName: 'trash',
-      title: 'Trash is empty',
-      line: 'Anything you delete — a dataset, a visual, a dashboard, a metric, a report or an alert — waits here for 30 days, and can be put back exactly where it was.',
+      title: t('trashPage.trash_is_empty'),
+      line: t('trashPage.anything_you_delete_a_dataset_a'),
     }));
   }
   if (count) {
@@ -68,7 +68,7 @@ async function trRefresh(): Promise<void> {
 }
 
 function trRow(it: any): HTMLElement {
-  const t = TR_TYPE[it.type] || { word: 'Record', icon: 'file-text' };
+  const tv = TR_TYPE[it.type] || { word: t('common.record'), icon: 'file-text' };
   const row = document.createElement('div');
   row.className = 'ws-row tr-row';
   row.dataset.type = String(it.type);
@@ -78,25 +78,25 @@ function trRow(it: any): HTMLElement {
   nameCell.className = 'tr-name-cell';
   const tile = document.createElement('span');
   tile.className = 'tr-type-tile tr-type-tile--' + it.type;
-  tile.appendChild(icon(t.icon));
+  tile.appendChild(icon(tv.icon));
   const text = document.createElement('div');
   text.className = 'tr-name-text';
   const name = document.createElement('span');
   name.className = 'tr-name';
-  name.textContent = it.name || 'Untitled';
+  name.textContent = it.name || t('common.untitled');
   text.appendChild(name);
   if (it.deletedWith) {
     const parent = trItems.find((x) => x.id === it.deletedWith);
     const sub = document.createElement('span');
     sub.className = 'tr-sub';
-    sub.textContent = parent ? `Deleted with “${parent.name}”` : 'Deleted with its dataset';
+    sub.textContent = parent ? t('trashPage.deleted_with', { name: parent.name }) : t('trashPage.deleted_with_its_dataset');
     text.appendChild(sub);
   }
   nameCell.append(tile, text);
 
   const type = document.createElement('span');
   type.className = 'ws-cell';
-  type.textContent = t.word;
+  type.textContent = tv.word;
 
   const when = document.createElement('span');
   when.className = 'ws-cell tnum';
@@ -104,19 +104,19 @@ function trRow(it: any): HTMLElement {
 
   const left = document.createElement('span');
   left.className = 'tr-left' + (it.daysLeft <= 3 ? ' is-soon' : '');
-  left.textContent = it.daysLeft === 0 ? 'Removed today' : `${it.daysLeft} ${it.daysLeft === 1 ? 'day' : 'days'} left`;
+  left.textContent = it.daysLeft === 0 ? t('trashPage.removed_today') : t('trashPage.left', { daysLeft: it.daysLeft });
 
   const actions = document.createElement('div');
   actions.className = 'tr-actions';
   const restore = document.createElement('button');
   restore.type = 'button';
   restore.className = 'btn btn-sm tr-restore';
-  iconLabel(restore, 'rotate-ccw', 'Restore');
+  iconLabel(restore, 'rotate-ccw', t('common.restore'));
   restore.addEventListener('click', () => void trRestore(it));
   const purge = document.createElement('button');
   purge.type = 'button';
   purge.className = 'btn btn-sm btn-ghost tr-purge';
-  purge.textContent = 'Delete permanently';
+  purge.textContent = t('trashPage.delete_permanently');
   purge.addEventListener('click', () => void trPurge(it));
   actions.append(restore, purge);
 
@@ -128,7 +128,7 @@ async function trRestore(it: any): Promise<void> {
   if (!currentProjectId) return;
   let res: any = null;
   try { res = await window.hub.trashRestore(currentProjectId, it.type, it.id); } catch (_) { res = null; }
-  if (!res || !res.ok) { showToast((res && res.error) || 'Could not restore that', { kind: 'error' }); return; }
+  if (!res || !res.ok) { showToast((res && res.error) || t('trashPage.could_not_restore_that'), { kind: 'error' }); return; }
   showToast(trRestoredLine(res.restored || []), { kind: 'success' });
   await trRefresh();
 }
@@ -136,21 +136,21 @@ async function trRestore(it: any): Promise<void> {
 /** "Restored “Revenue by month” — and its dataset “Retail orders”, which was in Trash too". */
 function trRestoredLine(restored: any[]): string {
   const main = restored[0];
-  if (!main) return 'Restored';
-  let line = `Restored “${main.name}”`;
+  if (!main) return t('trashPage.restored');
+  let line = t('common.restored', { name: main.name });
   const rest = restored.slice(1);
   if (main.type === 'visual' && rest.length && rest[0].type === 'dataset') {
-    line += ` — and its dataset “${rest[0].name}”, which was in Trash too`;
+    line += t('trashPage.and_its_dataset_which_was_in', { p0: rest[0].name });
   } else if (main.type === 'dataset' && rest.length) {
-    line += ` and ${rest.length} ${rest.length === 1 ? 'visual' : 'visuals'} deleted with it`;
+    line += t('trashPage.and_deleted_with_it', { restCount: rest.length });
   }
   return line;
 }
 
 async function trPurge(it: any): Promise<void> {
   if (!currentProjectId) return;
-  const t = TR_TYPE[it.type] || { word: 'record' };
-  if (!window.confirm(`Delete “${it.name}” permanently?\n\nThis ${t.word.toLowerCase()} and its version history are removed for good. This cannot be undone.`)) return;
+  const tv = TR_TYPE[it.type] || { word: 'record' };
+  if (!window.confirm(t('trashPage.delete_permanently_this_and_its_version', { name: it.name, p1: tv.word.toLowerCase() }))) return;
   await window.hub.trashPurge(currentProjectId, it.type, it.id);
   await trRefresh();
 }
@@ -158,10 +158,10 @@ async function trPurge(it: any): Promise<void> {
 async function trEmptyAll(): Promise<void> {
   if (!currentProjectId || !trItems.length) return;
   const n = trItems.length;
-  if (!window.confirm(`Empty the Trash?\n\n${n} ${n === 1 ? 'item is' : 'items are'} removed for good, with ${n === 1 ? 'its' : 'their'} version history. This cannot be undone.`)) return;
+  if (!window.confirm(t('trashPage.empty_the_trash_removed_for_good', { n }))) return;
   await window.hub.trashEmpty(currentProjectId);
   await trRefresh();
-  showToast('Trash emptied');
+  showToast(t('trashPage.trash_emptied'));
 }
 
 /**
@@ -169,13 +169,13 @@ async function trEmptyAll(): Promise<void> {
  * restore through the Trash, the same call the page's Restore makes.
  */
 function trDeletedToast(type: string, id: string, name: string, res: any, after?: () => void): void {
-  if (!res || res.ok === false) { showToast('Could not delete that', { kind: 'error' }); return; }
+  if (!res || res.ok === false) { showToast(t('trashPage.could_not_delete_that'), { kind: 'error' }); return; }
   const n = Number(res.cascaded || 0);
   const what = name ? `“${name}”` : (TR_TYPE[type] ? 'the ' + TR_TYPE[type].word.toLowerCase() : 'it');
-  const line = `Moved ${what}${n ? ` and ${n} ${n === 1 ? 'visual' : 'visuals'}` : ''} to Trash`;
+  const line = t('trashPage.moved_to_trash', { what, p1: n ? t('trashPage.and', { n }) : '' });
   showToast(line, {
     action: {
-      label: 'Undo',
+      label: t('common.undo'),
       onClick: async () => {
         if (!currentProjectId) return;
         const r = await window.hub.trashRestore(currentProjectId, type, id);

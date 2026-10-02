@@ -37,8 +37,8 @@ let sgJobId = '';
 let sgJobUnsub: (() => void) | null = null;
 
 const SG_REASON: Record<string, string> = {
-  'id-like': 'looks like an id',
-  'near-constant': 'nearly constant',
+  'id-like': t('segments.looks_like_an_id'),
+  'near-constant': t('segments.nearly_constant'),
   'mostly empty': 'mostly empty',
   'no values': 'no values',
 };
@@ -95,10 +95,10 @@ function sgMount(): HTMLElement {
   sec.appendChild(page);
 
   const head = sgEl('div', 'sg-head');
-  const back = sgButton('btn btn-sm ds-back', 'arrow-left', 'Back to dataset', () => sgBack());
+  const back = sgButton('btn btn-sm ds-back', 'arrow-left', t('segments.back_to_dataset'), () => sgBack());
   back.id = 'sg-back';
   const ident = sgEl('div', 'sg-ident');
-  const title = sgEl('h2', 'sg-title', 'Find segments');
+  const title = sgEl('h2', 'sg-title', t('common.find_segments'));
   title.id = 'sg-title';
   const sub = sgEl('p', 'sg-sub');
   sub.id = 'sg-sub';
@@ -107,7 +107,7 @@ function sgMount(): HTMLElement {
 
   const tabs = sgEl('div', 'tabs sg-tabs');
   tabs.setAttribute('role', 'tablist');
-  tabs.setAttribute('aria-label', 'Segmentation method');
+  tabs.setAttribute('aria-label', t('segments.segmentation_method'));
   const tab = (id: string, label: string, mode: 'kmeans' | 'rfm'): HTMLButtonElement => {
     const b = sgButton('tab sg-tab', null, label, () => sgSelectTab(mode, true));
     b.id = id;
@@ -116,8 +116,8 @@ function sgMount(): HTMLElement {
     b.dataset.mode = mode;
     return b;
   };
-  const tk = tab('sg-tab-kmeans', 'Segments (k-means)', 'kmeans');
-  const tr = tab('sg-tab-rfm', 'Customers (RFM)', 'rfm');
+  const tk = tab('sg-tab-kmeans', t('segments.segments_k_means'), 'kmeans');
+  const tr = tab('sg-tab-rfm', t('segments.customers_rfm'), 'rfm');
   tabs.append(tk, tr);
   tabs.addEventListener('keydown', (e) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
@@ -180,7 +180,7 @@ async function sgOpen(datasetId?: string, name?: string, mode: 'kmeans' | 'rfm' 
     p.textContent = '';
     const wait = sgEl('div', 'sg-card sg-loading');
     wait.setAttribute('role', 'status');
-    wait.append(icon('loader', 16), sgEl('span', '', 'Reading the columns…'));
+    wait.append(icon('loader', 16), sgEl('span', '', t('segments.reading_the_columns')));
     p.appendChild(wait);
   }
   let res: any = null;
@@ -195,14 +195,14 @@ async function sgOpen(datasetId?: string, name?: string, mode: 'kmeans' | 'rfm' 
       const p = document.getElementById(`sg-tabp-${m}`);
       if (!p) continue;
       p.textContent = '';
-      p.appendChild(sgEmpty('alert', 'This dataset could not be read', (res && res.error) || 'Go back and open it again.'));
+      p.appendChild(sgEmpty('alert', t('segments.this_dataset_could_not_be_read'), (res && res.error) || t('segments.go_back_and_open_it_again')));
     }
     return;
   }
   sgInfo = { projectId, datasetId: id, ...res } as SgInfo;
-  if (sub) sub.textContent = `${res.name} · ${sgFmt(res.rowCount)} rows`;
+  if (sub) sub.textContent = t('segments.rows', { name: res.name, rowCount: sgFmt(res.rowCount) });
   const back = document.getElementById('sg-back');
-  if (back) iconLabel(back, 'arrow-left', `Back to ${res.name}`);
+  if (back) iconLabel(back, 'arrow-left', t('segments.back_to', { name: res.name }));
   sgPaintKmeans();
   sgPaintRfm();
 }
@@ -228,9 +228,9 @@ function sgSyncRun(): void {
   if (run) run.disabled = n < 2 || !!sgBusy;
   if (hint && sgInfo) {
     const rows = sgInfo.rowCount > sgInfo.sampleCap
-      ? `an even ${sgFmt(sgInfo.sampleCap)} of ${sgFmt(sgInfo.rowCount)} rows are fitted, every row is assigned`
+      ? t('segments.an_even_of_rows_are_fitted', { sampleCap: sgFmt(sgInfo.sampleCap), rowCount: sgFmt(sgInfo.rowCount) })
       : `${sgFmt(sgInfo.rowCount)} rows`;
-    hint.textContent = n < 2 ? 'Pick at least two columns.' : `${n} columns · ${rows}`;
+    hint.textContent = n < 2 ? t('segments.pick_at_least_two_columns') : t('segments.columns', { n, rows });
   }
 }
 
@@ -238,10 +238,10 @@ function sgSetupCard(info: SgInfo): HTMLElement {
   const card = sgEl('section', 'sg-card sg-setup');
   card.setAttribute('aria-labelledby', 'sg-cols-h');
   const head = sgEl('div', 'sg-card-head');
-  const h = sgEl('h3', 'sg-card-h', 'Columns to compare');
+  const h = sgEl('h3', 'sg-card-h', t('segments.columns_to_compare'));
   h.id = 'sg-cols-h';
   head.append(h, sgEl('p', 'sg-hint',
-    'Each column is put on the same scale, then rows that are alike are grouped. The number of segments, 2 to 8, is the one with the best silhouette score. Ticked by default: every number column the profile does not flag.'));
+    t('segments.each_column_is_put_on_the')));
   card.appendChild(head);
 
   const chips = sgEl('div', 'sg-chips');
@@ -262,19 +262,19 @@ function sgSetupCard(info: SgInfo): HTMLElement {
     chip.append(box, sgEl('span', 'sg-chip-name', f.name));
     if (f.reason) {
       chip.appendChild(sgEl('span', 'sg-chip-why', SG_REASON[f.reason] || f.reason));
-      chip.title = `Not ticked: ${SG_REASON[f.reason] || f.reason}`;
+      chip.title = t('segments.not_ticked', { p0: SG_REASON[f.reason] || f.reason });
     }
     chips.appendChild(chip);
   }
   card.appendChild(chips);
   if (!info.features.length) {
-    card.appendChild(sgEl('p', 'sg-note', 'This dataset has no number columns, so there is nothing to compare. RFM works on a date and an amount.'));
+    card.appendChild(sgEl('p', 'sg-note', t('segments.this_dataset_has_no_number_columns')));
   } else if (info.otherColumns) {
-    card.appendChild(sgEl('p', 'sg-note', `${info.otherColumns} text or date column${info.otherColumns === 1 ? ' is' : 's are'} not listed — segments compare numbers.`));
+    card.appendChild(sgEl('p', 'sg-note', t('segments.text_or_date_column_not_listed', { otherColumns: info.otherColumns })));
   }
 
   const row = sgEl('div', 'sg-run-row');
-  const run = sgButton('btn btn-primary', 'play', 'Find segments', () => void sgRun());
+  const run = sgButton('btn btn-primary', 'play', t('common.find_segments'), () => void sgRun());
   run.id = 'sg-run';
   const hint = sgEl('span', 'sg-run-hint');
   hint.id = 'sg-run-hint';
@@ -290,13 +290,13 @@ function sgProgressBox(prefix: string): HTMLElement {
   box.setAttribute('role', 'status');
   const bar = sgEl('div', 'sg-bar');
   bar.setAttribute('role', 'progressbar');
-  bar.setAttribute('aria-label', 'Progress');
+  bar.setAttribute('aria-label', t('segments.progress'));
   bar.setAttribute('aria-valuemin', '0');
   bar.setAttribute('aria-valuemax', '100');
   const fill = sgEl('div', 'sg-bar-fill');
   bar.appendChild(fill);
   const note = sgEl('span', 'sg-progress-note');
-  const cancel = sgButton('btn btn-sm', 'x', 'Cancel', () => {
+  const cancel = sgButton('btn btn-sm', 'x', t('common.cancel'), () => {
     if (sgJobId) void window.hubPlatform.cancelJob(sgJobId);
   });
   cancel.classList.add('sg-cancel');
@@ -342,7 +342,7 @@ function sgWatchJob(datasetId: string, prefix: string): void {
     const job = ((snap && snap.active) || []).find((j: any) => j && j.kind === 'analysis' && j.datasetId === datasetId);
     if (!job) return;
     sgJobId = String(job.id || '');
-    const note = job.state === 'queued' ? 'Waiting for another job on this dataset…' : job.note || 'Working…';
+    const note = job.state === 'queued' ? t('segments.waiting_for_another_job_on_this') : job.note || t('segments.working');
     sgProgress(prefix, true, Number(job.progress) || 0, note);
   });
 }
@@ -373,13 +373,13 @@ async function sgRun(): Promise<void> {
   sgBusy = 'fit';
   sgShowError('sg', '');
   sgSyncRun();
-  sgProgress('sg', true, 0, 'Starting…');
+  sgProgress('sg', true, 0, t('common.starting'));
   sgWatchJob(info.datasetId, 'sg');
   let res: any;
   try {
     res = await window.hubSegments.fit(info.projectId, info.datasetId, features);
   } catch (err) {
-    res = { ok: false, error: err instanceof Error ? err.message : 'Could not find segments' };
+    res = { ok: false, error: err instanceof Error ? err.message : t('segments.could_not_find_segments') };
   }
   sgStopWatch();
   sgBusy = '';
@@ -387,8 +387,8 @@ async function sgRun(): Promise<void> {
   sgProgress('sg', false);
   sgSyncRun();
   if (!res || !res.ok) {
-    if (res && res.cancelled) sgShowError('sg', 'Stopped. Nothing was changed.', true);
-    else sgShowError('sg', (res && res.error) || 'Could not find segments.');
+    if (res && res.cancelled) sgShowError('sg', t('common.stopped_nothing_was_changed'), true);
+    else sgShowError('sg', (res && res.error) || t('segments.could_not_find_segments_2'));
     return;
   }
   sgResult = res.result;
@@ -402,16 +402,16 @@ function sgStepSummary(step: any): string | null {
   if (!step || step.type !== 'segment') return null;
   const k = Array.isArray(step.names) ? step.names.length : 0;
   const by = Array.isArray(step.features) ? step.features.join(', ') : '';
-  return `Segments: ${k} groups by ${by} → ${step.column}`;
+  return t('segments.segments_groups_by', { k, by, column: step.column });
 }
 
 /** The ✎ editor for a segment step: the model is the fit's, only the column's name changes here. */
 function sgBuildStepForm(type: string, body: HTMLElement, existing: any): (() => any) | null {
   if (type !== 'segment' || !existing) return null;
   const input = textInput(String(existing.column || ''));
-  body.appendChild(fieldRow('Column', input));
+  body.appendChild(fieldRow(t('common.column'), input));
   const list = sgEl('ul', 'sg-step-names');
-  list.setAttribute('aria-label', 'Segments this step assigns');
+  list.setAttribute('aria-label', t('segments.segments_this_step_assigns'));
   (Array.isArray(existing.names) ? existing.names : []).forEach((n: string, i: number) => {
     const li = sgEl('li', 'sg-step-name');
     const sw = sgEl('span', 'sg-swatch');
@@ -421,13 +421,13 @@ function sgBuildStepForm(type: string, body: HTMLElement, existing: any): (() =>
   });
   body.appendChild(list);
   const note = sgEl('p', 'sg-step-note',
-    `The model — each column's mean and spread, and ${list.childElementCount} centroids — was fitted by Find segments and is reapplied on every refresh. To change it, fit again.`);
+    t('segments.the_model_each_column_s_mean', { childElementCount: list.childElementCount }));
   body.appendChild(note);
-  body.appendChild(sgButton('btn btn-sm', 'layers', 'Open Find segments', () => void sgOpen(expId, expName)));
+  body.appendChild(sgButton('btn btn-sm', 'layers', t('segments.open_find_segments'), () => void sgOpen(expId, expName)));
   return () => {
     const column = input.value.trim();
     if (!column) {
-      window.alert('Name the column.');
+      window.alert(t('segments.name_the_column'));
       return null;
     }
     return { ...existing, column };

@@ -18,12 +18,12 @@ function pushCard(card: any): void {
   if (!page) return;
   if (!Array.isArray(page.cards)) page.cards = [];
   page.cards.push(card);
-  markDashDirty('Add ' + (card && card.type === 'control' ? 'control' : card && card.type ? card.type : 'card'));
+  markDashDirty(t('common.add_2', { p0: (card && card.type === 'control' ? 'control' : card && card.type ? card.type : 'card') }));
   renderDashGrid();
 }
 
 async function handleAddVisual(): Promise<void> {
-  if (!currentProjectId) { window.alert('Open a project first.'); return; }
+  if (!currentProjectId) { window.alert(t('common.open_a_project_first')); return; }
   let visuals: any[] = [];
   try {
     visuals = await window.hub.listVisuals(currentProjectId);
@@ -60,7 +60,7 @@ async function handleAddVisual(): Promise<void> {
     visual = await window.hub.saveVisual({
       projectId: currentProjectId,
       datasetId: choice.datasetId,
-      name: suggested ? suggestVisualName(choice.encoding || {}, chartType) : 'Untitled visual',
+      name: suggested ? suggestVisualName(choice.encoding || {}, chartType) : t('common.untitled_visual'),
       chartType,
       encoding: suggested ? choice.encoding : { category: '', values: [] },
       overrides: {},
@@ -70,7 +70,7 @@ async function handleAddVisual(): Promise<void> {
     visual = null;
   }
   if (!visual || visual.ok === false || !visual.id) {
-    showToast('Could not create the visual.');
+    showToast(t('dashAdd.could_not_create_the_visual'));
     return;
   }
   const card = { id: dashUuid(), type: 'visual', visualId: String(visual.id), layout: { ...dashFindSlot(dashCards(), 6, 6), w: 6, h: 6 } };
@@ -102,7 +102,7 @@ function openVisualPicker(
     box.className = 'ws-modal vn-pick-modal';
     const h = document.createElement('div');
     h.className = 'ws-modal-title';
-    h.textContent = 'Add a visual';
+    h.textContent = t('common.add_a_visual');
 
     let a11y: { onTabKey: (e: KeyboardEvent) => void; release: () => void } | null = null;
     function close(val: { kind: 'existing'; visualId: string } | { kind: 'new' } | { kind: 'ai' } | null): void {
@@ -131,8 +131,8 @@ function openVisualPicker(
         actions.appendChild(b);
         return b;
       };
-      mk('plus', 'New visual', 'new');
-      const ai = mk('sparkles', 'Suggest with the Assistant', 'ai');
+      mk('plus', t('common.new_visual'), 'new');
+      const ai = mk('sparkles', t('dashAdd.suggest_with_the_assistant'), 'ai');
       // The standard not_ready treatment: disabled, with the standard sentence.
       // Painted async — the dialog opens instantly and the button un-disables
       // if a model turns out to be configured.
@@ -161,7 +161,7 @@ function openVisualPicker(
       art.innerHTML = VIZ_ICONS[v && v.chartType] || VIZ_ICONS.column;
       const nm = document.createElement('span');
       nm.className = 'vn-pick-name';
-      nm.textContent = v && v.name ? String(v.name) : 'Untitled visual';
+      nm.textContent = v && v.name ? String(v.name) : t('common.untitled_visual');
       const meta = document.createElement('span');
       meta.className = 'vn-pick-meta';
       meta.textContent =
@@ -178,7 +178,7 @@ function openVisualPicker(
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'btn';
-    cancel.textContent = 'Cancel';
+    cancel.textContent = t('common.cancel');
     cancel.addEventListener('click', () => close(null));
     footer.appendChild(cancel);
 
@@ -192,12 +192,12 @@ function openVisualPicker(
       box.classList.add('vn-pick-modal--empty');
       const p = document.createElement('p');
       p.className = 'vn-pick-empty';
-      p.textContent = 'No saved visuals yet — make one right here.';
+      p.textContent = t('dashAdd.no_saved_visuals_yet_make_one');
       box.appendChild(p);
     } else {
       const p = document.createElement('p');
       p.className = 'dash-modal-empty';
-      p.textContent = 'Nothing to pick — create one in its section first.';
+      p.textContent = t('common.nothing_to_pick_create_one_in');
       box.appendChild(p);
     }
     box.appendChild(footer);
@@ -205,7 +205,7 @@ function openVisualPicker(
     overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) close(null); });
     document.addEventListener('keydown', onKey, true);
     document.body.appendChild(overlay);
-    a11y = makeModalAccessible(box, 'Add a visual', null);
+    a11y = makeModalAccessible(box, t('common.add_a_visual'), null);
   });
 }
 
@@ -224,7 +224,7 @@ function openVisualPicker(
  * body, which positions it sensibly rather than at 0,0.
  */
 async function handleAddMetric(): Promise<void> {
-  if (!currentProjectId) { window.alert('Open a project first.'); return; }
+  if (!currentProjectId) { window.alert(t('common.open_a_project_first')); return; }
 
   const anchor = (document.activeElement as HTMLElement | null)
     || document.getElementById('dash-add-metric')
@@ -292,7 +292,7 @@ function openMetricDialog(
     box.className = 'ws-modal dash-metric-modal';
     const h = document.createElement('div');
     h.className = 'ws-modal-title';
-    h.textContent = 'Add a metric';
+    h.textContent = t('common.add_a_metric');
 
     const field = (labelText: string, control: HTMLElement): HTMLElement => {
       const row = document.createElement('label');
@@ -310,7 +310,7 @@ function openMetricDialog(
     datasets.forEach((d) => {
       const opt = document.createElement('option');
       opt.value = String(d.id);
-      opt.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
+      opt.textContent = d && d.name ? String(d.name) : t('common.untitled_dataset');
       dsSel.appendChild(opt);
     });
 
@@ -323,7 +323,7 @@ function openMetricDialog(
     const aggRow = document.createElement('div');
     aggRow.className = 'dm-aggs';
     aggRow.setAttribute('role', 'radiogroup');
-    aggRow.setAttribute('aria-label', 'Aggregation');
+    aggRow.setAttribute('aria-label', t('common.aggregation'));
     let aggregation: DashAgg = 'sum';
     const paintAggs = (): void => {
       aggRow.querySelectorAll('.dm-agg').forEach((b) => {
@@ -346,7 +346,7 @@ function openMetricDialog(
     const labelInput = document.createElement('input');
     labelInput.type = 'text';
     labelInput.className = 'ws-modal-input';
-    labelInput.placeholder = 'Label';
+    labelInput.placeholder = t('common.label');
     // The label follows the other three fields until the user edits it by hand —
     // after that it is theirs and no change below may clobber it.
     let labelTouched = false;
@@ -429,11 +429,11 @@ function openMetricDialog(
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'btn';
-    cancel.textContent = 'Cancel';
+    cancel.textContent = t('common.cancel');
     const ok = document.createElement('button');
     ok.type = 'button';
     ok.className = 'btn btn-primary';
-    ok.textContent = 'Add';
+    ok.textContent = t('common.add');
     ok.disabled = datasets.length === 0;
 
     let a11y: { onTabKey: (e: KeyboardEvent) => void; release: () => void } | null = null;
@@ -471,28 +471,28 @@ function openMetricDialog(
     if (datasets.length === 0) {
       const empty = document.createElement('p');
       empty.className = 'dash-modal-empty';
-      empty.textContent = 'Import a dataset first — a metric reads one.';
+      empty.textContent = t('dashAdd.import_a_dataset_first_a_metric');
       box.appendChild(empty);
     } else {
-      box.appendChild(field('Dataset', dsSel));
-      box.appendChild(field('Column', colSel));
-      box.appendChild(field('Aggregation', aggRow));
-      box.appendChild(field('Label', labelInput));
+      box.appendChild(field(t('common.dataset'), dsSel));
+      box.appendChild(field(t('common.column'), colSel));
+      box.appendChild(field(t('common.aggregation'), aggRow));
+      box.appendChild(field(t('common.label'), labelInput));
       box.appendChild(preview);
     }
     box.appendChild(actions);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
-    a11y = makeModalAccessible(box, 'Add a metric', datasets.length ? dsSel : cancel);
+    a11y = makeModalAccessible(box, t('common.add_a_metric'), datasets.length ? dsSel : cancel);
     paintAggs();
     if (datasets.length) void loadColumns();
   });
 }
 
 async function handleAddText(): Promise<void> {
-  const heading = await promptModal('Text card — heading (optional)', '', 'Next');
+  const heading = await promptModal(t('dashAdd.text_card_heading_optional'), '', t('common.next'));
   if (heading === null) return;
-  const text = await promptModal('Text card — body (optional)', '', 'Add');
+  const text = await promptModal(t('dashAdd.text_card_body_optional'), '', t('common.add'));
   if (text === null) return;
   if (!heading.trim() && !text.trim()) return; // a card with no content is dropped anyway
   // Notes run the full width — a caption under a row of charts, not a tile beside them.
@@ -516,7 +516,7 @@ async function applyStarter(kind: string, datasetId?: string): Promise<void> {
   const page = dashCurrentPage();
   if (!page || !currentProjectId) return;
   if (!Array.isArray(page.cards)) page.cards = [];
-  if (page.cards.length && !window.confirm('Add starter cards to this page?')) return;
+  if (page.cards.length && !window.confirm(t('dashAdd.add_starter_cards_to_this_page'))) return;
 
   const dsId = datasetId || await pickStarterDataset();
   if (!dsId) return;
@@ -526,7 +526,7 @@ async function applyStarter(kind: string, datasetId?: string): Promise<void> {
     res = await window.hub.starterCards(currentProjectId, kind, dsId);
   } catch (_) { res = null; }
   if (!res || res.ok === false || !Array.isArray(res.cards) || !res.cards.length) {
-    window.alert((res && res.error) || 'Could not build a starter layout from that dataset.');
+    window.alert((res && res.error) || t('dashAdd.could_not_build_a_starter_layout'));
     return;
   }
 
@@ -537,13 +537,13 @@ async function applyStarter(kind: string, datasetId?: string): Promise<void> {
     if (card && card.layout) card.layout.y = (card.layout.y || 0) + y0;
     page.cards.push(card);
   }
-  markDashDirty('Add cards');
+  markDashDirty(t('dashAdd.add_cards'));
   renderDashPages();
   renderDashGrid();
   // Anything the validator refused is said out loud rather than silently missing
   // — the same rule the Assistant's proposal card follows.
   if (Array.isArray(res.dropped) && res.dropped.length) {
-    showToast(res.dropped.length === 1 ? 'One tile could not be built.' : `${res.dropped.length} tiles could not be built.`);
+    showToast(res.dropped.length === 1 ? t('dashAdd.one_tile_could_not_be_built') : t('dashAdd.tiles_could_not_be_built', { droppedCount: res.dropped.length }));
   }
 }
 
@@ -552,14 +552,14 @@ async function pickStarterDataset(): Promise<string | null> {
   let list: any[] = [];
   try { list = await window.hub.listDatasets(currentProjectId); } catch (_) { list = []; }
   if (!Array.isArray(list) || !list.length) {
-    window.alert('Import a dataset first — a starter layout builds from one.');
+    window.alert(t('dashAdd.import_a_dataset_first_a_starter'));
     return null;
   }
   if (list.length === 1) return String(list[0].id);
   return await dashChooseModal(
-    'Build the starter layout from',
-    list.map((d) => ({ value: String(d.id), label: d && d.name ? String(d.name) : 'Untitled dataset' })),
-    'Build',
+    t('dashAdd.build_the_starter_layout_from'),
+    list.map((d) => ({ value: String(d.id), label: d && d.name ? String(d.name) : t('common.untitled_dataset') })),
+    t('common.build'),
   );
 }
 

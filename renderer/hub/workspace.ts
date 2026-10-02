@@ -29,7 +29,7 @@ function showHome(): void {
   // without clearing the label leaves the last one named under a Home that is
   // cross-project. Same guarded lookup adoptProject() uses.
   const nameEl = document.getElementById('ws-project-name');
-  if (nameEl) nameEl.textContent = 'All projects';
+  if (nameEl) nameEl.textContent = t('common.all_projects');
   selectSection('home');
 }
 
@@ -76,8 +76,8 @@ async function adoptProject(id: string): Promise<boolean> {
   // #ws-project-name was removed with the old nav; keep the guarded write so any
   // future header stays in sync without a hard dependency.
   const nameEl = document.getElementById('ws-project-name');
-  if (nameEl) nameEl.textContent = project.name || 'Untitled project';
-  if (typeof pjPaintCurrent === 'function') pjPaintCurrent(project.name || 'Untitled project');
+  if (nameEl) nameEl.textContent = project.name || t('common.untitled_project');
+  if (typeof pjPaintCurrent === 'function') pjPaintCurrent(project.name || t('common.untitled_project'));
   // …and holds its lock.json while it is open, if it lives in a sync folder.
   if (typeof syAdopted === 'function') void syAdopted(project.id);
   // A project can be adopted with no section change (e.g. "+New → Data
@@ -225,12 +225,12 @@ async function ensureWorkspaceForCapture(): Promise<void> {
         proj = (Array.isArray(list) && list[0]) || null;
       } catch (_) { /* ignore — fall through to create */ }
       if (!proj) {
-        try { proj = await window.hub.createProject('My workspace'); } catch (_) { /* ignore */ }
+        try { proj = await window.hub.createProject(t('workspace.my_workspace')); } catch (_) { /* ignore */ }
       }
       if (proj && proj.id) {
         currentProjectId = String(proj.id);
         const nameEl = document.getElementById('ws-project-name');
-        if (nameEl) nameEl.textContent = proj.name || 'Untitled project';
+        if (nameEl) nameEl.textContent = proj.name || t('common.untitled_project');
       }
     }
   } catch (_) { /* never let project setup abort the capture render */ }
@@ -261,7 +261,7 @@ function wsSyncAiStatus(): void {
     if (label) label.textContent = text;
   };
   window.hub.getKeyStatus().then((st: any) => {
-    if (st && st.isReady) paint('ready', 'Assistant ready');
-    else paint('not_ready', 'Assistant not set up');
-  }).catch(() => paint('not_ready', 'Assistant not set up'));
+    if (st && st.isReady) paint('ready', t('workspace.assistant_ready'));
+    else paint('not_ready', t('common.assistant_not_set_up'));
+  }).catch(() => paint('not_ready', t('common.assistant_not_set_up')));
 }

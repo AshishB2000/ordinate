@@ -76,7 +76,7 @@ function dkPageLabel(pageIndex: unknown): string {
   const i = typeof pageIndex === 'number' && pageIndex >= 0 ? pageIndex : 0;
   const pages = dashCurrent && Array.isArray(dashCurrent.pages) ? dashCurrent.pages : [];
   const p = pages[i];
-  return p && p.name ? String(p.name) : 'Page ' + (i + 1);
+  return p && p.name ? String(p.name) : t('common.page_2', { p0: (i + 1) });
 }
 
 /** The title of an existing tile, for a line that names one. */
@@ -87,13 +87,13 @@ function dkTileTitle(cardId: string): string {
     for (const c of cards) {
       if (c && c.id === cardId) {
         if (c.type === 'metric' && c.metric) return String(c.metric.label || c.metric.column);
-        if (c.type === 'text') return String(c.heading || 'Text');
+        if (c.type === 'text') return String(c.heading || t('common.text'));
         if (c.type === 'control' && c.control) return String(c.control.label || c.control.column);
-        return 'this tile';
+        return t('dockEdit.this_tile');
       }
     }
   }
-  return 'this tile';
+  return t('dockEdit.this_tile');
 }
 
 /** One op → { sign, text }. The sign carries the KIND of change; the text says
@@ -109,40 +109,40 @@ function dkDeltaLine(op: any): { sign: string; cls: string; text: string } | nul
     case 'addMetric':
       return {
         sign: '+', cls: 'dk-delta-add',
-        text: `${op.label} — ${op.aggregation} of ${op.column} → ${dkPageLabel(op.pageIndex)}`,
+        text: t('dockEdit.of', { label: op.label, aggregation: op.aggregation, column: op.column, pageIndex: dkPageLabel(op.pageIndex) }),
       };
     case 'addControl':
       if (op.kind === 'parameter' && op.param) {
         return {
           sign: '+', cls: 'dk-delta-add',
-          text: `Parameter [[${op.param.name}]] (${op.param.kind}) — ${op.label} → ${dkPageLabel(op.pageIndex)}`,
+          text: t('dockEdit.parameter', { name: op.param.name, kind: op.param.kind, label: op.label, pageIndex: dkPageLabel(op.pageIndex) }),
         };
       }
       return {
         sign: '+', cls: 'dk-delta-add',
-        text: `${op.label} — ${op.kind.replace('_', ' ')} filter on ${op.column} → ${dkPageLabel(op.pageIndex)}`,
+        text: t('dockEdit.filter_on', { label: op.label, p1: op.kind.replace('_', ' '), column: op.column, pageIndex: dkPageLabel(op.pageIndex) }),
       };
     case 'addPage':
-      return { sign: '+', cls: 'dk-delta-add', text: `New page "${op.name}"` };
+      return { sign: '+', cls: 'dk-delta-add', text: t('dockEdit.new_page', { name: op.name }) };
     case 'replaceTileEncoding': {
       const bits: string[] = [];
-      if (op.chartType) bits.push('now a ' + op.chartType);
+      if (op.chartType) bits.push(t('dockEdit.now_a', { chartType: op.chartType }));
       if (op.encoding && op.encoding.category) bits.push('by ' + op.encoding.category);
       return {
         sign: '~', cls: 'dk-delta-mod',
-        text: `${op.title || dkTileTitle(op.cardId)}: ${bits.join(', ') || 'new encoding'}`,
+        text: `${op.title || dkTileTitle(op.cardId)}: ${bits.join(', ') || t('dockEdit.new_encoding')}`,
       };
     }
     case 'moveTile': {
-      const where = op.position === 'top' ? 'to the top'
-        : op.position === 'bottom' ? 'to the bottom'
+      const where = op.position === 'top' ? t('dockEdit.to_the_top')
+        : op.position === 'bottom' ? t('dockEdit.to_the_bottom')
           : `${op.position} ${op.anchorTitle || dkTileTitle(op.anchorCardId)}`;
-      return { sign: '~', cls: 'dk-delta-mod', text: `Move ${op.title || dkTileTitle(op.cardId)} ${where}` };
+      return { sign: '~', cls: 'dk-delta-mod', text: t('dockEdit.move', { p0: op.title || dkTileTitle(op.cardId), where }) };
     }
     case 'renamePage':
-      return { sign: '~', cls: 'dk-delta-mod', text: `Rename ${dkPageLabel(op.pageIndex)} to "${op.name}"` };
+      return { sign: '~', cls: 'dk-delta-mod', text: t('dockEdit.rename_to', { pageIndex: dkPageLabel(op.pageIndex), name: op.name }) };
     case 'setTitle':
-      return { sign: '~', cls: 'dk-delta-mod', text: `Rename this dashboard to "${op.name}"` };
+      return { sign: '~', cls: 'dk-delta-mod', text: t('dockEdit.rename_this_dashboard_to', { name: op.name }) };
     case 'removeTile':
       return { sign: '−', cls: 'dk-delta-del', text: op.title || dkTileTitle(op.cardId) };
     default:
@@ -151,7 +151,7 @@ function dkDeltaLine(op: any): { sign: string; cls: string; text: string } | nul
 }
 
 function dkRenderDeltaCard(res: any, containerId = 'dk-messages'): void {
-  const { card, actions } = dkProposalCard('Suggested change');
+  const { card, actions } = dkProposalCard(t('dockEdit.suggested_change'));
   const ops: any[] = Array.isArray(res.ops) ? res.ops : [];
 
   const list = document.createElement('div');
@@ -191,14 +191,14 @@ function dkRenderDeltaCard(res: any, containerId = 'dk-messages'): void {
   if (!ops.length) {
     // Everything was refused. The dropped list above is the whole message; an
     // Apply button here would do nothing and imply otherwise.
-    const dismissOnly = dkMkBtn('Dismiss', false, () => dkRemoveProposalCard(card));
+    const dismissOnly = dkMkBtn(t('common.dismiss'), false, () => dkRemoveProposalCard(card));
     actions.appendChild(dismissOnly);
     card.appendChild(actions);
     dkAppendProposal(card, containerId);
     return;
   }
 
-  const apply = dkMkBtn('Apply', true, () => {
+  const apply = dkMkBtn(t('common.apply'), true, () => {
     void (async () => {
       apply.disabled = true;
       let snap: DkDeltaSnapshot | null = null;
@@ -209,7 +209,7 @@ function dkRenderDeltaCard(res: any, containerId = 'dk-messages'): void {
       }
       if (!snap) {
         apply.disabled = false;
-        showToast('Could not apply that change.');
+        showToast(t('dockEdit.could_not_apply_that_change'));
         return;
       }
       dkMarkDeltaApplied(card, actions, snap, ops.length);
@@ -217,7 +217,7 @@ function dkRenderDeltaCard(res: any, containerId = 'dk-messages'): void {
   });
   actions.appendChild(apply);
 
-  const dismiss = dkMkBtn('Dismiss', false, () => dkRemoveProposalCard(card));
+  const dismiss = dkMkBtn(t('common.dismiss'), false, () => dkRemoveProposalCard(card));
   actions.appendChild(dismiss);
   card.appendChild(actions);
   dkAppendProposal(card, containerId);
@@ -229,26 +229,26 @@ function dkMarkDeltaApplied(card: HTMLElement, actions: HTMLElement, snap: DkDel
   actions.textContent = '';
   const done = document.createElement('div');
   done.className = 'dk-delta-done';
-  done.textContent = n === 1 ? 'Applied 1 change.' : `Applied ${n} changes.`;
+  done.textContent = n === 1 ? t('dockEdit.applied_1_change') : t('dockEdit.applied_changes', { n });
   card.insertBefore(done, actions);
 
-  const undo = dkMkBtn('Undo', false, () => {
+  const undo = dkMkBtn(t('common.undo'), false, () => {
     void (async () => {
       undo.disabled = true;
       try {
         await dkUndoDelta(snap);
       } catch (_) {
         undo.disabled = false;
-        showToast('Could not undo that change.');
+        showToast(t('dockEdit.could_not_undo_that_change'));
         return;
       }
-      showToast('Change undone.');
+      showToast(t('dockEdit.change_undone'));
       dkRemoveProposalCard(card);
     })();
   });
   actions.appendChild(undo);
 
-  const close = dkMkBtn('Dismiss', false, () => dkRemoveProposalCard(card));
+  const close = dkMkBtn(t('common.dismiss'), false, () => dkRemoveProposalCard(card));
   actions.appendChild(close);
 }
 
@@ -367,7 +367,7 @@ async function dkApplyDelta(ops: any[]): Promise<DkDeltaSnapshot | null> {
     }
   }
 
-  markDashDirty('Assistant change');
+  markDashDirty(t('dockEdit.assistant_change'));
   renderDashPages();
   renderDashGrid();
   return snap;
@@ -470,7 +470,7 @@ async function dkUndoDelta(snap: DkDeltaSnapshot): Promise<void> {
   // persistAnalysis does after main sanitizes.
   if (dashPageIdx >= dashCurrent.pages.length) dashPageIdx = snap.pageIdx < dashCurrent.pages.length ? snap.pageIdx : 0;
 
-  markDashDirty('Undo Assistant change');
+  markDashDirty(t('dockEdit.undo_assistant_change'));
   renderDashPages();
   renderDashGrid();
 }

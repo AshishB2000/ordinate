@@ -163,7 +163,7 @@ function dashHistApply(snap: any): void {
   if (dashPageIdx >= dashCurrent.pages.length) dashPageIdx = dashCurrent.pages.length - 1;
   if (dashPageIdx < 0) dashPageIdx = 0;
   const nameEl = dashEl('dash-name');
-  if (nameEl) nameEl.textContent = dashCurrent.name || 'Untitled dashboard';
+  if (nameEl) nameEl.textContent = dashCurrent.name || t('common.untitled_dashboard');
   syncDashStyle(); // before the grid: charts read their palette at construction
   renderDashFilterBar();
   renderDashPages();
@@ -187,7 +187,7 @@ function dashHistStep(dir: 'undo' | 'redo'): void {
   scheduleDashSave();
   paintDashUndoBtns();
   if (typeof showToast === 'function') {
-    showToast((dir === 'undo' ? 'Undid: ' : 'Redid: ') + e.label);
+    showToast((dir === 'undo' ? t('common.undid') : t('common.redid')) + e.label);
   }
 }
 
@@ -196,13 +196,13 @@ function dashRedo(): void { dashHistStep('redo'); }
 
 /** Enable/disable the header pair and put the change they name in the tooltip. */
 function paintDashUndoBtns(): void {
-  ([['dash-undo-btn', dashHistUndoLabel(dashHist), 'Undo'],
-    ['dash-redo-btn', dashHistRedoLabel(dashHist), 'Redo'],
+  ([['dash-undo-btn', dashHistUndoLabel(dashHist), t('common.undo')],
+    ['dash-redo-btn', dashHistRedoLabel(dashHist), t('common.redo')],
   ] as Array<[string, string | null, string]>).forEach(([id, label, verb]) => {
     const b = dashEl(id) as HTMLButtonElement | null;
     if (!b) return;
     b.disabled = label === null;
-    b.title = label === null ? 'Nothing to ' + verb.toLowerCase() : verb + ': ' + label;
+    b.title = label === null ? t('dashHistory.nothing_to', { p0: verb.toLowerCase() }) : verb + ': ' + label;
   });
 }
 

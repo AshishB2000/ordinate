@@ -53,8 +53,8 @@ function renderHexbinMap(map: any, wrap: HTMLElement, geo: any, data: any): void
   wrap.classList.add('geo-map');
   if (!hex.points || !levels.length) {
     geoMapEmpty(wrap, hex.skipped
-      ? `None of the ${hex.skipped.toLocaleString()} rows has a latitude and longitude the map can place.`
-      : 'No rows to place on the map.');
+      ? t('mapHexbin.none_of_the_rows_has_a', { p0: hex.skipped.toLocaleString() })
+      : t('mapHexbin.no_rows_to_place_on_the'));
     return;
   }
   const notes = geoMapNotes(wrap);
@@ -77,7 +77,7 @@ function renderHexbinMap(map: any, wrap: HTMLElement, geo: any, data: any): void
         paint: { 'line-color': getCSSVar('--surface', wrap) || '#ffffff', 'line-width': 0.6, 'line-opacity': 0.8 },
       });
       _attachHoverPopup(map, HEX_FILL, (p) => {
-        const v = p.__val === null || p.__val === undefined || p.__val === 'null' ? 'no data' : _fmtVal(Number(p.__val));
+        const v = p.__val === null || p.__val === undefined || p.__val === 'null' ? t('common.no_data') : _fmtVal(Number(p.__val));
         return `<strong>${_escGeo(hex.label)}: ${_escGeo(v)}</strong><br><span class="cv-map-tt-muted">${Number(p.__n).toLocaleString()} point${Number(p.__n) === 1 ? '' : 's'} in this hexagon</span>`;
       });
     }
@@ -87,14 +87,14 @@ function renderHexbinMap(map: any, wrap: HTMLElement, geo: any, data: any): void
     const title = legend && legend.querySelector('.cv-map-legend-title');
     if (title) title.textContent = hex.label;
     const idx = levels.indexOf(level);
-    notes.info.textContent = `${hex.points.toLocaleString()} points · ${level.hexes.length.toLocaleString()} hexagons · level ${level.res + 1} of ${levels.length + hex.dropped.length}`;
+    notes.info.textContent = t('mapHexbin.points_hexagons_level_of', { p0: hex.points.toLocaleString(), p1: level.hexes.length.toLocaleString(), p2: level.res + 1, p3: levels.length + hex.dropped.length });
     // Read by the smoke and by the map's accessible description.
     wrap.dataset.hexes = String(level.hexes.length);
     wrap.dataset.hexRes = String(level.res);
     const capped = hex.dropped.length && idx === levels.length - 1 && map.getZoom() + 1 > level.zoom + 2;
     const parts: string[] = [];
-    if (hex.skipped) parts.push(`${hex.skipped.toLocaleString()} rows had no usable coordinates`);
-    if (capped) parts.push(`finer levels exceed ${hex.maxHexes.toLocaleString()} hexagons — this is the finest drawn`);
+    if (hex.skipped) parts.push(t('mapHexbin.rows_had_no_usable_coordinates', { p0: hex.skipped.toLocaleString() }));
+    if (capped) parts.push(t('mapHexbin.finer_levels_exceed_hexagons_this_is', { p0: hex.maxHexes.toLocaleString() }));
     notes.warn.textContent = parts.join(' · ');
     notes.warn.hidden = parts.length === 0;
   };

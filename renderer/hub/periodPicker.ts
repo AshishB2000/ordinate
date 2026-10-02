@@ -27,14 +27,14 @@ const PP_UNITS: Array<{ preset: string; one: string; many: string }> = [
 /** The quick picks, in the order a reader scans them: short to long. */
 const PP_GROUPS: Array<{ title: string; items: any[] }> = [
   {
-    title: 'Days',
+    title: t('periodPicker.days'),
     items: [
       { preset: 'today' }, { preset: 'yesterday' },
       { preset: 'last_n_days', n: 7 }, { preset: 'last_n_days', n: 30 }, { preset: 'last_n_days', n: 90 },
     ],
   },
   {
-    title: 'Weeks and months',
+    title: t('periodPicker.weeks_and_months'),
     items: [
       { preset: 'this_week' }, { preset: 'last_week' },
       { preset: 'this_month' }, { preset: 'last_month' },
@@ -42,7 +42,7 @@ const PP_GROUPS: Array<{ title: string; items: any[] }> = [
     ],
   },
   {
-    title: 'Quarters and years',
+    title: t('periodPicker.quarters_and_years'),
     items: [
       { preset: 'this_quarter' }, { preset: 'last_quarter' }, { preset: 'qtd' },
       { preset: 'this_year' }, { preset: 'last_year' }, { preset: 'ytd' },
@@ -68,28 +68,28 @@ function periodLabel(spec: any): string {
   const month = ppWeekCal() ? 'period' : 'month';
   const n = Math.max(1, Math.floor(Number(spec.n) || 1));
   switch (spec.preset) {
-    case 'today': return 'Today';
-    case 'yesterday': return 'Yesterday';
-    case 'this_week': return 'This week';
-    case 'last_week': return 'Last week';
-    case 'this_month': return 'This ' + month;
-    case 'last_month': return 'Last ' + month;
-    case 'this_quarter': return 'This ' + fiscal + 'quarter';
-    case 'last_quarter': return 'Last ' + fiscal + 'quarter';
-    case 'this_year': return 'This ' + fiscal + 'year';
-    case 'last_year': return 'Last ' + fiscal + 'year';
-    case 'ytd': return fiscal ? 'Fiscal year to date' : 'Year to date';
-    case 'qtd': return fiscal ? 'Fiscal quarter to date' : 'Quarter to date';
+    case 'today': return t('common.today');
+    case 'yesterday': return t('common.yesterday');
+    case 'this_week': return t('periodPicker.this_week');
+    case 'last_week': return t('periodPicker.last_week');
+    case 'this_month': return t('periodPicker.this', { month });
+    case 'last_month': return t('periodPicker.last_3', { month });
+    case 'this_quarter': return t('periodPicker.this_quarter', { fiscal });
+    case 'last_quarter': return t('periodPicker.last_quarter', { fiscal });
+    case 'this_year': return t('periodPicker.this_year', { fiscal });
+    case 'last_year': return t('periodPicker.last_year', { fiscal });
+    case 'ytd': return fiscal ? t('periodPicker.fiscal_year_to_date') : t('periodPicker.year_to_date');
+    case 'qtd': return fiscal ? t('periodPicker.fiscal_quarter_to_date') : t('periodPicker.quarter_to_date');
     case 'custom': {
       if (spec.from && spec.to) return spec.from + ' to ' + spec.to;
-      return spec.from ? 'From ' + spec.from : 'Until ' + spec.to;
+      return spec.from ? t('periodPicker.from', { from: spec.from }) : t('periodPicker.until', { to: spec.to });
     }
     default: {
       const u = PP_UNITS.find((x) => x.preset === spec.preset);
-      if (!u) return 'Custom range';
+      if (!u) return t('periodPicker.custom_range');
       const word = spec.preset === 'last_n_months' ? month + (n === 1 ? '' : 's') : n === 1 ? u.one : u.many;
       const pre = spec.preset === 'last_n_quarters' || spec.preset === 'last_n_years' ? fiscal : '';
-      return 'Last ' + n + ' ' + pre + word;
+      return t('periodPicker.last', { n, pre, word });
     }
   }
 }
@@ -113,7 +113,7 @@ function ppIsRelative(v: any): boolean {
 function periodValueText(v: any): string {
   if (ppIsRelative(v)) return periodLabel(v);
   if (v && (v.from || v.to)) return ppFmtRange(v.from, v.to);
-  return 'All dates';
+  return t('periodPicker.all_dates');
 }
 
 function ppSame(a: any, b: any): boolean {
@@ -141,7 +141,7 @@ function buildPeriodPanel(opts: { value: any; relativeOnly?: boolean; onChange: 
   tabs.setAttribute('role', 'tablist');
   const tabBtns: Record<string, HTMLButtonElement> = {};
   if (!opts.relativeOnly) {
-    ([['rel', 'Relative'], ['abs', 'Between dates']] as Array<[string, string]>).forEach(([id, label]) => {
+    ([['rel', t('common.relative')], ['abs', t('periodPicker.between_dates')]] as Array<[string, string]>).forEach(([id, label]) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'fd-tab';
@@ -168,12 +168,12 @@ function buildPeriodPanel(opts: { value: any; relativeOnly?: boolean; onChange: 
     resolved.innerHTML = '';
     if (!value) {
       resolved.appendChild(icon('calendar', 14));
-      resolved.appendChild(document.createTextNode(' No date filter — every date is included'));
+      resolved.appendChild(document.createTextNode(t('periodPicker.no_date_filter_every_date_is')));
       return;
     }
     if (!ppIsRelative(value)) {
       resolved.appendChild(icon('calendar', 14));
-      resolved.appendChild(document.createTextNode(' ' + (ppFmtRange(value.from, value.to) || 'Pick a start or an end')));
+      resolved.appendChild(document.createTextNode(' ' + (ppFmtRange(value.from, value.to) || t('periodPicker.pick_a_start_or_an_end'))));
       return;
     }
     let res: any = null;
@@ -224,16 +224,16 @@ function buildPeriodPanel(opts: { value: any; relativeOnly?: boolean; onChange: 
     custom.className = 'pp-custom';
     const lead = document.createElement('span');
     lead.className = 'pp-custom-lead';
-    lead.textContent = 'Last';
+    lead.textContent = t('periodPicker.last_2');
     const n = document.createElement('input');
     n.type = 'number';
     n.min = '1';
     n.max = '3660';
     n.className = 'ws-modal-input pp-n';
-    n.setAttribute('aria-label', 'How many');
+    n.setAttribute('aria-label', t('common.how_many'));
     const unit = document.createElement('select');
     unit.className = 'ws-modal-input pp-unit';
-    unit.setAttribute('aria-label', 'Unit');
+    unit.setAttribute('aria-label', t('periodPicker.unit'));
     PP_UNITS.forEach((u) => {
       const o = document.createElement('option');
       o.value = u.preset;
@@ -246,7 +246,7 @@ function buildPeriodPanel(opts: { value: any; relativeOnly?: boolean; onChange: 
     const go = document.createElement('button');
     go.type = 'button';
     go.className = 'btn btn-sm';
-    go.textContent = 'Use';
+    go.textContent = t('common.use');
     const useCustom = (): void => {
       const k = Math.max(1, Math.min(3660, Math.floor(Number(n.value) || 1)));
       set({ preset: unit.value, n: k });
@@ -262,8 +262,7 @@ function buildPeriodPanel(opts: { value: any; relativeOnly?: boolean; onChange: 
 
     const hint = document.createElement('p');
     hint.className = 'pp-hint';
-    hint.textContent = '"Last" periods are complete ones — Last 30 days ends yesterday. '
-      + (ppIsFiscal() ? 'Quarters and years follow your fiscal year.' : 'Weeks and fiscal years follow Settings → Formats.');
+    hint.textContent = t('periodPicker.last_periods_are_complete_ones_last', { p0: !!(ppIsFiscal()) });
     body.appendChild(hint);
   }
 
@@ -294,12 +293,12 @@ function buildPeriodPanel(opts: { value: any; relativeOnly?: boolean; onChange: 
       wrap.appendChild(input);
       return wrap;
     };
-    row.appendChild(mk('From', 'from'));
-    row.appendChild(mk('To', 'to'));
+    row.appendChild(mk(t('common.from'), 'from'));
+    row.appendChild(mk(t('common.to'), 'to'));
     body.appendChild(row);
     const hint = document.createElement('p');
     hint.className = 'pp-hint';
-    hint.textContent = 'Both dates are inclusive. Leave one empty for an open-ended range.';
+    hint.textContent = t('periodPicker.both_dates_are_inclusive_leave_one');
     body.appendChild(hint);
   }
 
@@ -328,7 +327,7 @@ function openPeriodPopover(anchor: HTMLElement, current: any, label: string, onA
   const pop = document.createElement('div');
   pop.className = 'dash-ctrl-popover pp-pop';
   pop.setAttribute('role', 'dialog');
-  pop.setAttribute('aria-label', label + ' dates');
+  pop.setAttribute('aria-label', label + t('periodPicker.dates'));
   pop.appendChild(buildPeriodPanel({ value: pending, onChange: (v) => { pending = v; } }));
 
   const actions = document.createElement('div');
@@ -336,15 +335,15 @@ function openPeriodPopover(anchor: HTMLElement, current: any, label: string, onA
   const clear = document.createElement('button');
   clear.type = 'button';
   clear.className = 'fd-link pp-clear';
-  clear.textContent = 'All dates';
+  clear.textContent = t('periodPicker.all_dates');
   const cancel = document.createElement('button');
   cancel.type = 'button';
   cancel.className = 'btn btn-sm';
-  cancel.textContent = 'Cancel';
+  cancel.textContent = t('common.cancel');
   const apply = document.createElement('button');
   apply.type = 'button';
   apply.className = 'btn btn-primary btn-sm';
-  apply.textContent = 'Apply';
+  apply.textContent = t('common.apply');
   actions.appendChild(clear);
   actions.appendChild(cancel);
   actions.appendChild(apply);

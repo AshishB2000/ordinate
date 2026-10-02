@@ -88,7 +88,7 @@ async function dsOpenProfile(c: number): Promise<void> {
   paintExplorerTable(); // repaint so the clicked header carries .is-profiled
 
   const title = dsProfileEl('.js-dsp-name');
-  if (title) title.textContent = col.name || 'Column ' + (c + 1);
+  if (title) title.textContent = col.name || t('common.column_2', { p0: (c + 1) });
   const kind = dsProfileEl('.js-dsp-kind');
   if (kind) kind.textContent = col.type;
   ctPaintProfileDoc(); // catalogDetails.ts — the column's description, when it has one
@@ -106,7 +106,7 @@ async function dsOpenProfile(c: number): Promise<void> {
     chart.innerHTML = '';
     const loading = document.createElement('p');
     loading.className = 'dsp-note';
-    loading.textContent = 'Reading the column…';
+    loading.textContent = t('dsProfile.reading_the_column');
     chart.appendChild(loading);
   }
 
@@ -211,21 +211,21 @@ function dsPaintProfileFacts(c: number, extra?: { median?: number | null; distin
   // Quality tab's "% empty" uses, so the two never disagree on the same column.
   const filled = sum && typeof sum.nonEmpty === 'number' ? sum.nonEmpty : null;
   const total = expRowCount;
-  add('Filled', filled === null ? '—'
+  add(t('dsProfile.filled'), filled === null ? '—'
     : filled.toLocaleString() + ' of ' + total.toLocaleString() + dsPctSuffix(filled, total));
-  add('Empty', filled === null ? '—' : Math.max(0, total - filled).toLocaleString());
+  add(t('common.empty'), filled === null ? '—' : Math.max(0, total - filled).toLocaleString());
 
   const distinct = sum && typeof sum.distinct === 'number' ? sum.distinct
     : extra && typeof extra.distinct === 'number' ? extra.distinct : null;
-  add('Distinct', distinct === null ? '—' : distinct.toLocaleString());
+  add(t('dsProfile.distinct'), distinct === null ? '—' : distinct.toLocaleString());
 
   if (col.type === 'number') {
-    add('Min', sum && typeof sum.min === 'number' ? fmtNum(sum.min) : '—');
+    add(t('common.min'), sum && typeof sum.min === 'number' ? fmtNum(sum.min) : '—');
     // Absent until the query lands, then either a number or "—". Never a
     // placeholder that could be mistaken for a computed zero.
-    add('Median', extra && typeof extra.median === 'number' ? fmtNum(extra.median)
+    add(t('common.median'), extra && typeof extra.median === 'number' ? fmtNum(extra.median)
       : extra ? '—' : '…');
-    add('Max', sum && typeof sum.max === 'number' ? fmtNum(sum.max) : '—');
+    add(t('common.max'), sum && typeof sum.max === 'number' ? fmtNum(sum.max) : '—');
   }
 }
 
@@ -258,15 +258,15 @@ function dsPaintProfileChart(col: ExpCol, dist: { label: string; value: number }
   const heading = document.createElement('p');
   heading.className = 'dsp-head';
   heading.textContent =
-    col.type === 'number' ? 'Distribution'
-    : col.type === 'date' ? 'Rows by month'
-    : 'Top values';
+    col.type === 'number' ? t('common.distribution')
+    : col.type === 'date' ? t('dsProfile.rows_by_month')
+    : t('dsProfile.top_values');
   host.appendChild(heading);
 
   if (!dist || dist.length === 0) {
     const none = document.createElement('p');
     none.className = 'dsp-note';
-    none.textContent = 'No values to chart in this column.';
+    none.textContent = t('dsProfile.no_values_to_chart_in_this');
     host.appendChild(none);
     return;
   }
@@ -286,7 +286,7 @@ function dsPaintProfileChart(col: ExpCol, dist: { label: string; value: number }
     if (dist.length > kept) {
       const note = document.createElement('p');
       note.className = 'dsp-note';
-      note.textContent = 'Top ' + kept + ' of ' + dist.length + ' values shown.';
+      note.textContent = t('dsProfile.top_of_values_shown', { kept, distCount: dist.length });
       host.appendChild(note);
     }
   }
@@ -373,7 +373,7 @@ function dsPaintHistogram(host: HTMLElement, dist: { label: string; value: numbe
 
   const note = document.createElement('p');
   note.className = 'dsp-note dsp-hist-note';
-  note.textContent = dist.length + ' buckets · ' + total.toLocaleString() + ' rows';
+  note.textContent = t('dsProfile.buckets_rows', { distCount: dist.length, p1: total.toLocaleString() });
   host.appendChild(note);
 }
 
@@ -421,7 +421,7 @@ function dsWireProfileActions(): void {
       const sum: any = expSummaries[dsProfileCol];
       const value = sum && sum.mostCommon ? String(sum.mostCommon.value) : '';
       if (!value) {
-        showToast('This column has no repeated value to filter on.');
+        showToast(t('dsProfile.this_column_has_no_repeated_value'));
         return;
       }
       const input = dsEl('ds-search') as HTMLInputElement | null;
@@ -483,7 +483,7 @@ function dsRenderQualityTable(): void {
 
   const thead = document.createElement('thead');
   const htr = document.createElement('tr');
-  ['Column', 'Type', 'Filled', 'Distinct', 'Sample values'].forEach((h) => {
+  [t('common.column'), t('common.type'), t('dsProfile.filled'), t('dsProfile.distinct'), t('dsProfile.sample_values')].forEach((h) => {
     const th = document.createElement('th');
     th.textContent = h;
     htr.appendChild(th);
@@ -498,7 +498,7 @@ function dsRenderQualityTable(): void {
 
     const name = document.createElement('td');
     name.className = 'dsq-name';
-    name.textContent = col.name || 'Column ' + (c + 1);
+    name.textContent = col.name || t('common.column_2', { p0: (c + 1) });
     tr.appendChild(name);
 
     const type = document.createElement('td');
@@ -542,7 +542,7 @@ function dsRenderQualityTable(): void {
     } else {
       distinct.textContent = '—';
       distinct.className = 'dsq-muted';
-      distinct.title = 'Counted on demand — click this column\u2019s name in the Data tab to profile it';
+      distinct.title = t('dsProfile.counted_on_demand_click_this_column');
     }
     tr.appendChild(distinct);
 

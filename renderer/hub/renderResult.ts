@@ -179,7 +179,7 @@ function renderMetrics(result) {
   box.className = 'cv-metrics';
   const head = document.createElement('div');
   head.className = 'cv-metrics-head';
-  head.textContent = 'Computed from the extracted data';
+  head.textContent = t('renderResult.computed_from_the_extracted_data');
   box.appendChild(head);
 
   selected.forEach(m => {
@@ -230,7 +230,7 @@ function renderDetails(result) {
   det.className = 'cv-details';
   const sum = document.createElement('summary');
   sum.className = 'cv-details-summary';
-  sum.textContent = 'Show details';
+  sum.textContent = t('renderResult.show_details');
   det.appendChild(sum);
   det.appendChild(metricsEl);
   return det;
@@ -241,19 +241,19 @@ function renderDetails(result) {
 // once, "100% stacked <orientation>", maps disambiguated). Renaming only; which
 // types are offered is decided by SHAPE_CHARTS/eligibility below.
 const VIZ_LABELS = {
-  column: 'Column', bar: 'Bar', clustered_column: 'Clustered column', clustered_bar: 'Clustered bar',
-  stacked_column: 'Stacked column', stacked_bar: 'Stacked bar',
-  pct_stacked_column: '100% stacked column', pct_stacked_bar: '100% stacked bar',
-  line: 'Line', line_markers: 'Line with markers', area: 'Area', stacked_area: 'Stacked area',
-  pie: 'Pie', donut: 'Donut', scatter: 'Scatter', gauge: 'Gauge',
-  combo: 'Line + column', bubble: 'Bubble', treemap: 'Treemap', heatmap: 'Heatmap',
-  funnel: 'Funnel', histogram: 'Histogram',
-  sankey: 'Sankey', candlestick: 'Candlestick', boxplot: 'Box plot',
-  waterfall: 'Waterfall', bullet: 'Bullet', calendar: 'Calendar heatmap', radar: 'Radar', pareto: 'Pareto',
-  pivot: 'Pivot table', cohort: 'Cohort', event_funnel: 'Event funnel',
-  table: 'Table', map_bubble: 'Bubble map', map_choropleth: 'Region map',
-  word_cloud: 'Word cloud',
-  map_hexbin: 'Hexbin map', map_flow: 'Flow map',
+  column: 'Column', bar: t('renderResult.bar'), clustered_column: t('renderResult.clustered_column'), clustered_bar: t('renderResult.clustered_bar'),
+  stacked_column: t('renderResult.stacked_column'), stacked_bar: t('renderResult.stacked_bar'),
+  pct_stacked_column: t('renderResult.100_stacked_column'), pct_stacked_bar: t('renderResult.100_stacked_bar'),
+  line: t('renderResult.line'), line_markers: t('renderResult.line_with_markers'), area: t('renderResult.area'), stacked_area: t('renderResult.stacked_area'),
+  pie: t('renderResult.pie'), donut: t('renderResult.donut'), scatter: t('renderResult.scatter'), gauge: t('renderResult.gauge'),
+  combo: t('renderResult.line_column'), bubble: t('renderResult.bubble'), treemap: t('renderResult.treemap'), heatmap: t('renderResult.heatmap'),
+  funnel: t('renderResult.funnel'), histogram: t('renderResult.histogram'),
+  sankey: t('renderResult.sankey'), candlestick: t('renderResult.candlestick'), boxplot: t('renderResult.box_plot'),
+  waterfall: t('renderResult.waterfall'), bullet: t('renderResult.bullet'), calendar: t('renderResult.calendar_heatmap'), radar: t('renderResult.radar'), pareto: t('renderResult.pareto'),
+  pivot: t('renderResult.pivot_table'), cohort: t('common.cohort'), event_funnel: t('renderResult.event_funnel'),
+  table: t('common.table'), map_bubble: t('renderResult.bubble_map'), map_choropleth: t('renderResult.region_map'),
+  word_cloud: t('renderResult.word_cloud'),
+  map_hexbin: t('renderResult.hexbin_map'), map_flow: t('renderResult.flow_map'),
 };
 
 // Small monochrome glyph per chart type for the viz chips. currentColor so each icon
@@ -463,9 +463,9 @@ function buildVizPicker(opts) {
     const parts = [];
     const ns = CHART_SERIES_MIN[type] || 1, nl = CHART_LABELS_MIN[type] || 1;
     if (isMapType(type) && !chartCanRender(type, data, hasGeo)) parts.push(geoNeedsText(type, hasGeo));
-    if (numSeries < ns) parts.push(`at least ${ns} numeric series`);
-    if (numLabels < nl) parts.push(`at least ${nl} categories`);
-    return parts.join(' and ') || 'different data';
+    if (numSeries < ns) parts.push(t('renderResult.at_least_numeric_series', { ns }));
+    if (numLabels < nl) parts.push(t('renderResult.at_least_categories', { nl }));
+    return parts.join(' and ') || t('renderResult.different_data');
   }
   function makeChip(type) {
     const chip = document.createElement('button');
@@ -516,9 +516,9 @@ function buildVizPicker(opts) {
     // Three tiers — a type lives in exactly one: Recommended (auto-suited),
     // Selected (pulled in from Other), or Other (not yet added).
     const groups = [
-      { label: 'Recommended', types: recommended },
-      { label: 'Selected', types: pool.filter(t => selectedOthers.has(t)), selected: true },
-      { label: 'Other charts', types: pool.filter(t => !suitedSet.has(t) && !selectedOthers.has(t)) },
+      { label: t('renderResult.recommended'), types: recommended },
+      { label: t('renderResult.selected'), types: pool.filter(t => selectedOthers.has(t)), selected: true },
+      { label: t('renderResult.other_charts'), types: pool.filter(t => !suitedSet.has(t) && !selectedOthers.has(t)) },
     ];
     groups.forEach(g => {
       if (!g.types.length) return;
@@ -536,14 +536,14 @@ function buildVizPicker(opts) {
         it.className = 'cv-more-item' + tier + (fits ? '' : ' is-unfit');
         it.innerHTML = VIZ_ICONS[type] || '';
         it.appendChild(document.createTextNode(VIZ_LABELS[type] || type));
-        if (!fits) it.title = 'Needs ' + needsText(type);
+        if (!fits) it.title = t('renderResult.needs', { type: needsText(type) });
         it.addEventListener('click', (e) => { e.stopPropagation(); pickType(type); });
         if (g.selected) {
           const rm = document.createElement('span');
           rm.className = 'cv-more-remove';
           rm.textContent = '×';
-          rm.title = 'Remove';
-          rm.setAttribute('aria-label', 'Remove ' + (VIZ_LABELS[type] || type));
+          rm.title = t('common.remove');
+          rm.setAttribute('aria-label', t('common.remove_2', { p0: (VIZ_LABELS[type] || type) }));
           rm.addEventListener('click', (e) => { e.stopPropagation(); removeSelected(type); });
           it.appendChild(rm);
         }
@@ -583,8 +583,8 @@ function buildVizPicker(opts) {
   const moreBtn = document.createElement('button');
   moreBtn.type = 'button';
   moreBtn.className = 'cv-viz-more';
-  moreBtn.textContent = '+ More';
-  moreBtn.setAttribute('aria-label', 'More chart types');
+  moreBtn.textContent = t('renderResult.more');
+  moreBtn.setAttribute('aria-label', t('renderResult.more_chart_types'));
   moreBtn.addEventListener('click', (e) => { e.stopPropagation(); openMorePanel(); });
   switcher.appendChild(moreBtn);
 
@@ -670,7 +670,7 @@ function renderTurnResult(result, activeVizType, entry, turnIdx) {
             vizArea.innerHTML = '';
             const m = document.createElement('div');
             m.className = 'cv-chart-fallback';
-            m.textContent = (VIZ_LABELS[type] || type) + ' needs ' + info.needs + " — it doesn't fit this data.";
+            m.textContent = t('common.needs_it_doesn_t_fit_this', { p0: (VIZ_LABELS[type] || type), needs: info.needs });
             vizArea.appendChild(m);
             return;
           }
@@ -679,7 +679,7 @@ function renderTurnResult(result, activeVizType, entry, turnIdx) {
           if (!info.suited && isChartable(type)) {
             const note = document.createElement('div');
             note.className = 'cv-fit-note';
-            note.textContent = 'This chart may not be the best fit for this data.';
+            note.textContent = t('common.this_chart_may_not_be_the');
             vizArea.appendChild(note);
           }
         },

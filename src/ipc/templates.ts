@@ -6,6 +6,7 @@ import { resolveGeoHits } from '../analysis/geoResolve';
 import { mapRoles, type GeoHits, type RoleMapping, type DefinedMeasure } from '../analysis/templateRoles';
 import * as metrics from '../analysis/metrics';
 import { TEMPLATES, templateById } from '../analysis/templates';
+import * as userTemplates from '../app/userTemplateStore'; // r7:templates
 
 // TEMPLATES IPC — the gallery's two channels. NOT an AI path: both work with no
 // model configured, because a template is app code reading app-computed column
@@ -34,7 +35,7 @@ const GEO_SAMPLE_ROWS = 200;
 
 /** Text columns' sample values, for the geo signal only. Never returned to the
  *  renderer — a sample value is a cell out of the table. */
-async function geoHitsFor(projectId: string, ds: PlanDataset): Promise<GeoHits> {
+export async function geoHitsFor(projectId: string, ds: PlanDataset): Promise<GeoHits> {
   const textCols = ds.columns
     .map((c, i) => ({ c, i }))
     .filter((x) => x.c.type === 'text');
@@ -58,7 +59,7 @@ async function geoHitsFor(projectId: string, ds: PlanDataset): Promise<GeoHits> 
  */
 const REASON_NAMED_MAX = 2;
 
-function reasonFor(missing: string[]): string {
+export function reasonFor(missing: string[]): string {
   if (missing.length === 0) return '';
   const labels = missing.map((l) => l.toLowerCase());
   if (labels.length === 1) return `Needs a ${labels[0]} column`;
@@ -99,10 +100,21 @@ export function register() {
           reason: reasonFor(missingRequired),
         };
       });
+      // r7:templates — the user's own templates, FIRST, through the same mapper.
+      // `tiles` is the card count, the denominator of "N skipped".
+      const yours = (await userTemplates.listTemplates()).map((t) => {
+        const { matches, missingRequired } = mapRoles(t.roles, ds, geoHits, defined);
+        return {
+          id: t.id, group: 'Yours', user: true, name: t.name, blurb: t.description, thumb: '', thumbnail: t.thumbnail,
+          roles: t.roles.map((r) => ({ id: r.id, label: r.label, kind: r.kind, required: r.required })),
+          matches, missingRequired, reason: reasonFor(missingRequired),
+          tiles: t.body.sheets.reduce((n: number, p) => n + (((p as { cards?: unknown[] }).cards) || []).length, 0),
+        };
+      });
       // The COLUMNS the mapping step's selects offer, with their declared type
       // for the glyph. Names and types only — no rows, no summaries, no values.
       const columns = ds.columns.map((c) => ({ name: c.name, type: c.type }));
-      return { ok: true, datasetId: ds.id, datasetName: ds.name, columns, templates };
+      return { ok: true, datasetId: ds.id, datasetName: ds.name, columns, templates: [...yours, ...templates] };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to read the templates' };
     }

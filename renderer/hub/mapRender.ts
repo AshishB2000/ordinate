@@ -373,7 +373,7 @@ async function renderMapInArea(container: HTMLElement, data: any, type: string):
   if (type === 'map_choropleth' && !geo.points) {
     geoData = await loadChoroplethData(geo.level, geo);
     if (!geoData || !geoData.features || geoData.features.length === 0) {
-      renderGeoFallback(container, data, "No map boundaries for this level — showing the data instead.");
+      renderGeoFallback(container, data, t('mapRender.no_map_boundaries_for_this_level'));
       return;
     }
   }
@@ -433,9 +433,10 @@ async function renderMapInArea(container: HTMLElement, data: any, type: string):
       if (f && f.properties && f.properties.__item) mapMarkClick(container, data.markColumn, f.properties.__item);
     });
     if (matched === 0) {
-      renderGeoFallback(container, data, "Couldn't place these regions on the map — showing the data instead.");
+      renderGeoFallback(container, data, t('mapRender.couldn_t_place_these_regions_on'));
     }
   }
+  if (typeof lhWireMap === 'function') lhWireMap(container, map); // linkedHover.ts — a dashboard's shared hover
 }
 
 // ponytail: map/geo/periodInfo params are any — MapLibre is read off window as an
@@ -447,7 +448,7 @@ function _renderBubbleMap(map: any, wrap: HTMLElement, geo: any, periodInfo: any
   if (placeable.length === 0) {
     const fb = document.createElement('div');
     fb.className = 'cv-chart-fallback';
-    fb.textContent = 'No lat/lng coordinates in geo data for bubble map.';
+    fb.textContent = t('mapRender.no_lat_lng_coordinates_in_geo');
     wrap.appendChild(fb);
     return;
   }

@@ -33,41 +33,41 @@ interface PivotBuilderApi {
 
 const PIVOT_LIMITS: Record<PivotShelf, number> = { rows: 3, columns: 2, values: 4 };
 const PIVOT_SHELF_LABEL: Record<PivotShelf, string> = {
-  rows: 'Rows', columns: 'Columns', values: 'Values',
+  rows: t('common.rows'), columns: t('common.columns'), values: t('common.values'),
 };
 const PIVOT_SHELF_EMPTY: Record<PivotShelf, string> = {
-  rows: 'Add a dimension', columns: 'Add a dimension', values: 'Add a measure',
+  rows: t('common.add_a_dimension'), columns: t('common.add_a_dimension'), values: t('pivotBuilder.add_a_measure'),
 };
 
 const PIVOT_GRAINS: Array<{ value: string; label: string }> = [
-  { value: '', label: 'No roll-up' },
-  { value: 'year', label: 'Year' },
-  { value: 'quarter', label: 'Quarter' },
-  { value: 'month', label: 'Month' },
+  { value: '', label: t('pivotBuilder.no_roll_up') },
+  { value: 'year', label: t('common.year') },
+  { value: 'quarter', label: t('common.quarter') },
+  { value: 'month', label: t('common.month') },
 ];
 
 const PIVOT_SHOW_AS: Array<{ value: string; label: string }> = [
-  { value: 'value', label: 'Value' },
-  { value: 'pct_row', label: '% of row' },
-  { value: 'pct_col', label: '% of column' },
-  { value: 'pct_total', label: '% of total' },
-  { value: 'rank', label: 'Rank' },
+  { value: 'value', label: t('common.value') },
+  { value: 'pct_row', label: t('pivotBuilder.of_row') },
+  { value: 'pct_col', label: t('pivotBuilder.of_column') },
+  { value: 'pct_total', label: t('common.of_total') },
+  { value: 'rank', label: t('common.rank') },
 ];
 
 const PIVOT_FORMATS: Array<{ value: string; label: string }> = [
-  { value: 'auto', label: 'Auto' },
-  { value: 'plain', label: 'Plain' },
-  { value: 'thousands', label: 'Thousands' },
-  { value: 'compact', label: 'Compact' },
-  { value: 'percent', label: 'Percent' },
-  { value: 'currency', label: 'Currency' },
+  { value: 'auto', label: t('common.auto') },
+  { value: 'plain', label: t('common.plain') },
+  { value: 'thousands', label: t('pivotBuilder.thousands') },
+  { value: 'compact', label: t('common.compact') },
+  { value: 'percent', label: t('common.percent') },
+  { value: 'currency', label: t('common.currency') },
 ];
 
 const PIVOT_COND: Array<{ value: string; label: string }> = [
-  { value: '', label: 'None' },
-  { value: 'scale', label: 'Colour scale' },
-  { value: 'bars', label: 'Data bars' },
-  { value: 'threshold', label: 'Above / below' },
+  { value: '', label: t('common.none') },
+  { value: 'scale', label: t('pivotBuilder.colour_scale') },
+  { value: 'bars', label: t('pivotBuilder.data_bars') },
+  { value: 'threshold', label: t('pivotBuilder.above_below') },
 ];
 
 interface PivotChip {
@@ -173,7 +173,7 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
     if (shelf !== 'values' && isDate(chip.column)) {
       const g = document.createElement('select');
       g.className = 'viz-select pivot-grain';
-      g.setAttribute('aria-label', 'Roll ' + chip.column + ' up by');
+      g.setAttribute('aria-label', t('pivotBuilder.roll_up_by', { column: chip.column }));
       PIVOT_GRAINS.forEach((it) => {
         const o = document.createElement('option');
         o.value = it.value;
@@ -188,7 +188,7 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
     const menu = document.createElement('button');
     menu.type = 'button';
     menu.className = 'enc-pill-menu';
-    menu.setAttribute('aria-label', 'Options for ' + chip.column);
+    menu.setAttribute('aria-label', t('pivotBuilder.options_for', { column: chip.column }));
     menu.setAttribute('aria-haspopup', 'menu');
     menu.textContent = '⋮';
     menu.addEventListener('click', (e) => {
@@ -200,7 +200,7 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
     const del = document.createElement('button');
     del.type = 'button';
     del.className = 'viz-value-del';
-    del.setAttribute('aria-label', 'Remove ' + chip.column);
+    del.setAttribute('aria-label', t('pivotBuilder.remove', { column: chip.column }));
     del.textContent = '×';
     del.addEventListener('click', () => {
       shelves[shelf].splice(i, 1);
@@ -212,7 +212,7 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
   }
 
   const aggLabel = (a: EncAgg | undefined): string =>
-    ENC_AGG_LABELS[(a || 'sum') as EncAgg] || 'Sum';
+    ENC_AGG_LABELS[(a || 'sum') as EncAgg] || t('common.sum');
 
   /** The pivot as "Calculate as" sees it: row dimensions run down, column ones across. */
   const pivotCalcContext = (): TcContext => ({
@@ -220,7 +220,7 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
     dims: shelves.rows.map((c): TcContext['dims'][number] => ({ name: c.column, axis: 'down' }))
       .concat(shelves.columns.map((c): TcContext['dims'][number] => ({ name: c.column, axis: 'across' }))),
     yoyOff: shelves.rows.concat(shelves.columns).some((c) => isDate(c.column) && c.grain)
-      ? '' : 'Needs a date dimension rolled up by year, quarter or month',
+      ? '' : t('pivotBuilder.needs_a_date_dimension_rolled_up'),
   });
 
   function chipMenuItems(
@@ -233,7 +233,7 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
       // The metric picker, first: the same popover KPI add, the chart builder
       // and an alert rule open (metricPicker.ts).
       items.push({
-        label: chip.metricId ? 'Change metric…' : 'Use a metric…',
+        label: chip.metricId ? t('common.change_metric') : t('common.use_a_metric'),
         onClick: () => { void pickValueMetric(chip); },
       });
       (['sum', 'avg', 'count', 'min', 'max'] as EncAgg[]).forEach((a) => {
@@ -251,13 +251,13 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
         (calc) => { if (calc) chip.calc = calc; else delete chip.calc; redraw(); }));
       PIVOT_SHOW_AS.forEach((s) => {
         items.push({
-          label: 'Show as: ' + s.label,
+          label: t('pivotBuilder.show_as', { label: s.label }),
           onClick: () => { chip.showAs = s.value === 'value' ? undefined : s.value; redraw(); },
         });
       });
       PIVOT_FORMATS.forEach((f) => {
         items.push({
-          label: 'Format: ' + f.label,
+          label: t('pivotBuilder.format', { label: f.label }),
           onClick: () => { chip.format = f.value === 'auto' ? undefined : f.value; redraw(); },
         });
       });
@@ -268,10 +268,10 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
       .filter((c) => c.name !== chip.column)
       .slice(0, 20)
       .forEach((c) => {
-        items.push({ label: 'Use ' + c.name, onClick: () => { chip.column = c.name; chip.grain = undefined; redraw(); } });
+        items.push({ label: t('pivotBuilder.use', { name: c.name }), onClick: () => { chip.column = c.name; chip.grain = undefined; redraw(); } });
       });
     items.push({
-      label: 'Remove',
+      label: t('common.remove'),
       danger: true,
       onClick: () => { shelves[shelf].splice(i, 1); if (shelf === 'values') conditional.delete(i); redraw(); },
     });
@@ -297,11 +297,11 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
     const m = picked.metric;
     const def = m && m.definition ? m.definition : {};
     if (typeof def.formula === 'string') {
-      window.alert(`"${m.name}" is a formula metric. Every pivot cell is a column rolled up within a group — use it on a KPI card instead.`);
+      window.alert(t('pivotBuilder.is_a_formula_metric_every_pivot', { name: m.name }));
       return;
     }
     if (!columns.some((c) => c.name === def.column)) {
-      window.alert(`"${m.name}" is defined on a different dataset's column.`);
+      window.alert(t('pivotBuilder.is_defined_on_a_different_dataset', { name: m.name }));
       return;
     }
     chip.column = def.column;
@@ -348,7 +348,7 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
     add.type = 'button';
     add.className = 'pivot-add';
     add.textContent = '+';
-    add.setAttribute('aria-label', 'Add a field to ' + PIVOT_SHELF_LABEL[shelf]);
+    add.setAttribute('aria-label', t('pivotBuilder.add_a_field_to', { p0: PIVOT_SHELF_LABEL[shelf] }));
     add.setAttribute('aria-haspopup', 'menu');
     add.addEventListener('click', (e) => { e.stopPropagation(); addPicker(shelf, add); });
     head.appendChild(add);
@@ -367,14 +367,14 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
   totalsRow.className = 'viz-build-row pivot-opts';
   const totalsLabel = document.createElement('span');
   totalsLabel.className = 'viz-build-label';
-  totalsLabel.textContent = 'Totals';
+  totalsLabel.textContent = t('pivotBuilder.totals');
   totalsRow.appendChild(totalsLabel);
   const totalsBox = document.createElement('div');
   totalsBox.className = 'pivot-checks';
   ([
-    ['rows', 'Total column'],
-    ['columns', 'Total row'],
-    ['grand', 'Grand total'],
+    ['rows', t('pivotBuilder.total_column')],
+    ['columns', t('pivotBuilder.total_row')],
+    ['grand', t('pivotBuilder.grand_total')],
   ] as Array<[keyof typeof totals, string]>).forEach(([key, text]) => {
     const lab = document.createElement('label');
     lab.className = 'pivot-check';
@@ -395,7 +395,7 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
   sortRow.className = 'viz-build-row pivot-opts';
   const sortLabel = document.createElement('span');
   sortLabel.className = 'viz-build-label';
-  sortLabel.textContent = 'Sort';
+  sortLabel.textContent = t('common.sort');
   sortRow.appendChild(sortLabel);
   const sortText = document.createElement('span');
   sortText.className = 'pivot-sort-state';
@@ -404,7 +404,7 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
   sortClear.type = 'button';
   sortClear.className = 'viz-value-del';
   sortClear.textContent = '×';
-  sortClear.setAttribute('aria-label', 'Clear the sort');
+  sortClear.setAttribute('aria-label', t('pivotBuilder.clear_the_sort'));
   sortClear.addEventListener('click', () => { sort = null; redraw(); });
   sortRow.appendChild(sortClear);
   root.appendChild(sortRow);
@@ -414,14 +414,14 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
   topRow.className = 'viz-build-row pivot-opts';
   const topLabel = document.createElement('span');
   topLabel.className = 'viz-build-label';
-  topLabel.textContent = 'Top N';
+  topLabel.textContent = t('common.top_n');
   topRow.appendChild(topLabel);
   const topInput = document.createElement('input');
   topInput.type = 'number';
   topInput.min = '1';
   topInput.className = 'viz-select pivot-topn';
   topInput.placeholder = 'all';
-  topInput.setAttribute('aria-label', 'Keep only the top N of the first row dimension');
+  topInput.setAttribute('aria-label', t('pivotBuilder.keep_only_the_top_n_of'));
   topInput.addEventListener('change', () => {
     const n = Math.floor(Number(topInput.value));
     topN = Number.isInteger(n) && n > 0 ? { n, byValueIdx: 0 } : null;
@@ -435,7 +435,7 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
   condRow.className = 'viz-build-row pivot-opts pivot-cond';
   const condLabel = document.createElement('span');
   condLabel.className = 'viz-build-label';
-  condLabel.textContent = 'Formatting';
+  condLabel.textContent = t('pivotBuilder.formatting');
   condRow.appendChild(condLabel);
   const condList = document.createElement('div');
   condList.className = 'pivot-cond-list';
@@ -447,7 +447,7 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
     if (!shelves.values.length) {
       const ph = document.createElement('div');
       ph.className = 'enc-empty';
-      ph.textContent = 'Add a value to format it';
+      ph.textContent = t('pivotBuilder.add_a_value_to_format_it');
       condList.appendChild(ph);
       return;
     }
@@ -461,7 +461,7 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
 
       const sel = document.createElement('select');
       sel.className = 'viz-select';
-      sel.setAttribute('aria-label', 'Conditional formatting for ' + chip.column);
+      sel.setAttribute('aria-label', t('pivotBuilder.conditional_formatting_for', { column: chip.column }));
       PIVOT_COND.forEach((c) => {
         const o = document.createElement('option');
         o.value = c.value;
@@ -483,7 +483,7 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
         th.type = 'number';
         th.className = 'viz-select pivot-threshold';
         th.value = String(cur.threshold ?? 0);
-        th.setAttribute('aria-label', 'Threshold for ' + chip.column);
+        th.setAttribute('aria-label', t('pivotBuilder.threshold_for', { column: chip.column }));
         th.addEventListener('change', () => {
           const n = Number(th.value);
           conditional.set(i, { kind: 'threshold', threshold: Number.isFinite(n) ? n : 0 });
@@ -496,10 +496,10 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
   }
 
   function sortSummary(): string {
-    if (!sort) return 'First seen';
+    if (!sort) return t('pivotBuilder.first_seen');
     const dir = sort.dir === 'desc' ? 'descending' : 'ascending';
-    if (sort.by === 'label') return 'Row labels, ' + dir;
-    return 'Column ' + (sort.by + 1) + ', ' + dir;
+    if (sort.by === 'label') return t('pivotBuilder.row_labels', { dir });
+    return t('pivotBuilder.column', { p0: (sort.by + 1), dir });
   }
 
   function redraw(): void {

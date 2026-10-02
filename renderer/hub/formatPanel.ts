@@ -43,8 +43,8 @@ interface FmtPanelCtx {
 }
 
 const FMT_NUMBER_FORMATS: Array<[string, string]> = [
-  ['', 'Chart default'], ['auto', 'Auto (K/M/B)'], ['plain', 'Plain'], ['thousands', 'Thousands (1,234)'],
-  ['compact', 'Compact (1.2K)'], ['percent', 'Percent (12%)'], ['currency', 'Currency ($1,234)'],
+  ['', t('formatPanel.chart_default')], ['auto', t('formatPanel.auto_k_m_b')], ['plain', t('common.plain')], ['thousands', t('formatPanel.thousands_1_234')],
+  ['compact', t('formatPanel.compact_1_2k')], ['percent', t('formatPanel.percent_12')], ['currency', t('formatPanel.currency_1_234')],
 ];
 
 /** Disclosure sections the user opened — kept open across the panel's own re-renders. */
@@ -59,7 +59,7 @@ function fmtMeasureNames(encoding: any): string[] {
     if (!col) return;
     const agg = typeof v.aggregation === 'string' ? v.aggregation : 'sum';
     if (agg === 'count') out.push(col);
-    else if (agg === 'none') out.push('sum of ' + col, col);
+    else if (agg === 'none') out.push(t('formatPanel.sum_of', { col }), col);
     else out.push(agg + ' of ' + col);
   });
   return out;
@@ -170,12 +170,12 @@ function fmtLegendField(host: HTMLElement, ctx: FmtPanelCtx): void {
   const dflt = legendOnByDefault(ctx.type, chartSeries(ctx.data || {}));
   const shown = ov.showLegend !== undefined ? !!ov.showLegend : dflt;
   const value = shown ? (ov.legendPosition || 'bottom') : 'none';
-  const sel = fmtSelect('legend', [['top', 'Top'], ['right', 'Right'], ['bottom', 'Bottom'], ['left', 'Left'], ['none', 'None']],
+  const sel = fmtSelect('legend', [['top', t('common.top')], ['right', t('common.right')], ['bottom', t('common.bottom')], ['left', t('common.left')], ['none', t('common.none')]],
     value, (v) => {
       if (v === 'none') ctx.patch({ showLegend: false });
       else ctx.patch({ showLegend: dflt ? null : true, legendPosition: v === 'bottom' ? null : v });
     });
-  fmtField(host, 'Legend', sel);
+  fmtField(host, t('formatPanel.legend'), sel);
 }
 
 // ── Axes ────────────────────────────────────────────────────────────────────
@@ -209,8 +209,8 @@ function fmtAxisBlock(body: HTMLElement, ctx: FmtPanelCtx, key: 'x' | 'y' | 'y2'
   const a = (ov.axes && ov.axes[key]) || {};
   const head = document.createElement('div');
   head.className = 'fmt-sub';
-  head.textContent = (key === 'x' ? 'X axis' : key === 'y' ? 'Y axis' : 'Right axis')
-    + (role === 'value' ? ' · values' : ' · categories');
+  head.textContent = (key === 'x' ? t('formatPanel.x_axis') : key === 'y' ? t('formatPanel.y_axis') : t('formatPanel.right_axis'))
+    + (role === 'value' ? t('formatPanel.values') : t('formatPanel.categories'));
   body.appendChild(head);
 
   // The title keys predate this panel (xAxisLabel / yAxisLabel); the right
@@ -220,14 +220,14 @@ function fmtAxisBlock(body: HTMLElement, ctx: FmtPanelCtx, key: 'x' | 'y' | 'y2'
   title.className = 'cm-input';
   title.type = 'text';
   title.autocomplete = 'off';
-  title.placeholder = 'No title';
+  title.placeholder = t('formatPanel.no_title');
   title.value = ov[titleKey] || '';
   let titleTimer: number | null = null;
   title.addEventListener('input', () => {
     if (titleTimer !== null) window.clearTimeout(titleTimer);
     titleTimer = window.setTimeout(() => { titleTimer = null; ctx.patch({ [titleKey]: title.value.trim() || null }); }, 400);
   });
-  fmtField(body, 'Title', title);
+  fmtField(body, t('common.title'), title);
 
   if (role === 'value') {
     const pair = document.createElement('div');
@@ -241,14 +241,14 @@ function fmtAxisBlock(body: HTMLElement, ctx: FmtPanelCtx, key: 'x' | 'y' | 'y2'
       inp.className = 'cm-input';
       inp.type = 'number';
       inp.step = 'any';
-      inp.placeholder = 'Auto';
+      inp.placeholder = t('common.auto');
       inp.value = typeof a[prop] === 'number' ? String(a[prop]) : '';
       inp.addEventListener('change', () => {
         const n = inp.value.trim() === '' ? null : Number(inp.value);
         const next = Object.assign({}, a, { [prop]: n });
-        const problem = n !== null && !Number.isFinite(n) ? 'Enter a number, or leave it empty for Auto.'
-          : typeof next.min === 'number' && typeof next.max === 'number' && !(next.min < next.max) ? 'Min must be below Max.'
-          : a.log && typeof next.min === 'number' && next.min <= 0 ? 'A log scale needs Min above 0.'
+        const problem = n !== null && !Number.isFinite(n) ? t('formatPanel.enter_a_number_or_leave_it')
+          : typeof next.min === 'number' && typeof next.max === 'number' && !(next.min < next.max) ? t('formatPanel.min_must_be_below_max')
+          : a.log && typeof next.min === 'number' && next.min <= 0 ? t('formatPanel.a_log_scale_needs_min_above')
           : '';
         err.textContent = problem;
         err.hidden = !problem;
@@ -256,8 +256,8 @@ function fmtAxisBlock(body: HTMLElement, ctx: FmtPanelCtx, key: 'x' | 'y' | 'y2'
       });
       fmtField(pair, label, inp);
     };
-    num('min', 'Min');
-    num('max', 'Max');
+    num('min', t('common.min'));
+    num('max', t('common.max'));
     body.appendChild(err);
 
     // "Start at zero" is the chart's VALUE axis (buildChartScales' yZero): y,
@@ -268,21 +268,21 @@ function fmtAxisBlock(body: HTMLElement, ctx: FmtPanelCtx, key: 'x' | 'y' | 'y2'
     // Not under a log scale, which has no zero to start at.
     if (key === zeroAxis && !a.log && !s.isScatter && !s.isBubble && !s.isCandlestick && !s.isBoxplot && !s.opts.pct) {
       const on = ov.yZero !== undefined ? !!ov.yZero : s.chartType === 'bar';
-      fmtSwitch(body, key + ':zero', 'Start at zero', on, (next) => ctx.patch({ yZero: next }));
+      fmtSwitch(body, key + ':zero', t('formatPanel.start_at_zero'), on, (next) => ctx.patch({ yZero: next }));
     }
 
     const minBlocks = typeof a.min === 'number' && a.min <= 0;
-    fmtSwitch(body, key + ':log', 'Log scale', !!a.log, (on) => fmtSetAxis(ctx, key, { log: on }), !a.log && minBlocks);
-    if (!a.log && minBlocks) fmtNote(body, 'A log scale needs Min above 0.');
+    fmtSwitch(body, key + ':log', t('formatPanel.log_scale'), !!a.log, (on) => fmtSetAxis(ctx, key, { log: on }), !a.log && minBlocks);
+    if (!a.log && minBlocks) fmtNote(body, t('formatPanel.a_log_scale_needs_min_above'));
     if (a.log && ctx.data && fmtDataOnAxis(ctx, key === 'x' ? 'y' : key).some((v) => v <= 0)) {
-      fmtNote(body, 'Some values here are zero or below, so this axis is drawn linear.', true);
+      fmtNote(body, t('formatPanel.some_values_here_are_zero_or'), true);
     }
-    fmtField(body, 'Number format', fmtSelect(key + ':format', FMT_NUMBER_FORMATS, a.format || '',
+    fmtField(body, t('formatPanel.number_format'), fmtSelect(key + ':format', FMT_NUMBER_FORMATS, a.format || '',
       (v) => fmtSetAxis(ctx, key, { format: v || null })));
   }
-  fmtField(body, 'Tick density', fmtSelect(key + ':ticks', [['', 'Auto'], ['few', 'Fewer'], ['many', 'More']], a.ticks || '',
+  fmtField(body, t('formatPanel.tick_density'), fmtSelect(key + ':ticks', [['', t('common.auto')], ['few', t('formatPanel.fewer')], ['many', t('common.more')]], a.ticks || '',
     (v) => fmtSetAxis(ctx, key, { ticks: v || null })));
-  fmtSwitch(body, key + ':hide', 'Hide axis', !!a.hide, (on) => fmtSetAxis(ctx, key, { hide: on }));
+  fmtSwitch(body, key + ':hide', t('formatPanel.hide_axis'), !!a.hide, (on) => fmtSetAxis(ctx, key, { hide: on }));
 }
 
 /** Measure series a right axis can take: two or more, and not a split. */
@@ -295,12 +295,12 @@ function fmtDualMeasures(ctx: FmtPanelCtx): string[] {
 function fmtAxesSection(host: HTMLElement, ctx: FmtPanelCtx): void {
   const roles = fmtAxisRoles(ctx.type);
   if (!roles.x && !roles.y) return;
-  const body = fmtSection(host, 'Axes');
-  fmtSwitch(body, 'gridlines', 'Gridlines', ctx.ov().showGridlines !== false,
+  const body = fmtSection(host, t('formatPanel.axes'));
+  fmtSwitch(body, 'gridlines', t('formatPanel.gridlines'), ctx.ov().showGridlines !== false,
     (on) => ctx.patch({ showGridlines: on ? null : false }));
   // r8:events — the project's events on this date axis (chartEvents.ts); on by default.
   if ((ctx.data && Array.isArray(ctx.data.events)) || ctx.ov().showEvents === false) {
-    fmtSwitch(body, 'events', 'Event markers', ctx.ov().showEvents !== false, (on) => ctx.patch({ showEvents: on ? null : false }));
+    fmtSwitch(body, 'events', t('formatPanel.event_markers'), ctx.ov().showEvents !== false, (on) => ctx.patch({ showEvents: on ? null : false }));
   }
   if (roles.x) fmtAxisBlock(body, ctx, 'x', roles.x);
   if (roles.y) fmtAxisBlock(body, ctx, 'y', roles.y);
@@ -312,7 +312,7 @@ function fmtAxesSection(host: HTMLElement, ctx: FmtPanelCtx): void {
   const right = new Set(assigned || (ctx.type === 'combo' ? measures.slice(1) : []));
   const head = document.createElement('div');
   head.className = 'fmt-sub';
-  head.textContent = 'Measures on the right axis';
+  head.textContent = t('formatPanel.measures_on_the_right_axis');
   body.appendChild(head);
   measures.forEach((m) => {
     const on = right.has(m);
@@ -332,16 +332,16 @@ function fmtAxesSection(host: HTMLElement, ctx: FmtPanelCtx): void {
 function fmtLabelsSection(host: HTMLElement, ctx: FmtPanelCtx): void {
   if (NO_VALUE_LABEL_TYPES.has(ctx.type) || ctx.type === 'table' || ctx.type.indexOf('map_') === 0) return;
   const ov = ctx.ov();
-  const body = fmtSection(host, 'Data labels');
+  const body = fmtSection(host, t('formatPanel.data_labels'));
   const mode = ov.valueMode || (ov.showValues ? 'all' : 'maxmin');
-  fmtField(body, 'Show', fmtSelect('labels:mode', VALUE_MODES as Array<[string, string]>, mode,
+  fmtField(body, t('common.show'), fmtSelect('labels:mode', VALUE_MODES as Array<[string, string]>, mode,
     (v) => ctx.patch({ valueMode: v })));
-  fmtField(body, 'Format', fmtSelect('labels:format', FMT_NUMBER_FORMATS, ov.labelFormat || '',
+  fmtField(body, t('common.format'), fmtSelect('labels:format', FMT_NUMBER_FORMATS, ov.labelFormat || '',
     (v) => ctx.patch({ labelFormat: v || null })));
   const roles = fmtAxisRoles(ctx.type);
   if (roles.x === 'value' || roles.y === 'value') {
-    fmtField(body, 'Position', fmtSelect('labels:pos',
-      [['outside', 'Outside end'], ['inside', 'Inside end'], ['center', 'Centre']], ov.labelPosition || 'outside',
+    fmtField(body, t('formatPanel.position'), fmtSelect('labels:pos',
+      [['outside', t('formatPanel.outside_end')], ['inside', t('formatPanel.inside_end')], ['center', t('common.centre')]], ov.labelPosition || 'outside',
       (v) => ctx.patch({ labelPosition: v === 'outside' ? null : v })));
   }
 }

@@ -19,13 +19,13 @@
 
 const ME_AGGS: string[] = ['sum', 'avg', 'count', 'min', 'max'];
 const ME_AGG_LABELS: Record<string, string> = {
-  sum: 'Sum', avg: 'Average', count: 'Count', min: 'Min', max: 'Max',
+  sum: t('common.sum'), avg: 'Average', count: t('common.count'), min: t('common.min'), max: t('common.max'),
 };
 const ME_FORMAT_KINDS: Array<[string, string]> = [
-  ['number', 'Number'], ['currency', 'Currency'], ['percent', 'Percent'], ['duration', 'Duration'],
+  ['number', t('common.number')], ['currency', t('common.currency')], ['percent', t('common.percent')], ['duration', t('metricEditor.duration')],
 ];
 const ME_DIRECTIONS: Array<[string, string]> = [
-  ['', 'No opinion'], ['up_good', 'Up is good'], ['down_good', 'Down is good'],
+  ['', t('metricEditor.no_opinion')], ['up_good', t('metricEditor.up_is_good')], ['down_good', t('metricEditor.down_is_good')],
 ];
 
 /** Debounce for the live preview — long enough that typing a formula does not
@@ -75,18 +75,18 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
 
     const h = document.createElement('div');
     h.className = 'ws-modal-title';
-    h.textContent = editingId ? 'Edit metric' : 'New metric';
+    h.textContent = editingId ? t('metricEditor.edit_metric') : t('common.new_metric');
     box.appendChild(h);
     // A saved metric's History (versionsPanel.ts) — the metrics table's ⋯ is
     // another branch's file, so the editor is this record's door to it.
     const histBtn = document.createElement('button');
     histBtn.type = 'button';
     histBtn.className = 'btn btn-sm btn-ghost me-history-btn';
-    iconLabel(histBtn, 'history', 'History');
+    iconLabel(histBtn, 'history', t('common.history'));
     const linBtn = document.createElement('button');
     linBtn.type = 'button';
     linBtn.className = 'btn btn-sm btn-ghost me-history-btn';
-    iconLabel(linBtn, 'lineage', 'Lineage');
+    iconLabel(linBtn, 'lineage', t('common.lineage'));
     if (editingId) {
       const tools = document.createElement('span');
       tools.className = 'me-title-tools';
@@ -105,9 +105,9 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
     nameInput.className = 'ws-modal-input';
-    nameInput.placeholder = 'Revenue';
+    nameInput.placeholder = t('common.revenue');
     nameInput.value = existing ? String(existing.name || '') : '';
-    box.appendChild(meField('Name', nameInput, 'Formulas reference a metric by this name.'));
+    box.appendChild(meField(t('common.name'), nameInput, t('metricEditor.formulas_reference_a_metric_by_this')));
 
     // ── Dataset ──────────────────────────────────────────────────────────────
     const dsSel = document.createElement('select');
@@ -115,16 +115,16 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
     // Immutable once saved: every card and rule pointing here was written about
     // THIS dataset's numbers, so a re-target is a new metric.
     if (editingId) dsSel.disabled = true;
-    box.appendChild(meField('Dataset', dsSel, editingId ? 'A metric cannot change dataset — duplicate it instead.' : ''));
+    box.appendChild(meField(t('common.dataset'), dsSel, editingId ? t('metricEditor.a_metric_cannot_change_dataset_duplicate') : ''));
 
     // ── Definition: two tabs ─────────────────────────────────────────────────
     const tabs = document.createElement('div');
     tabs.className = 'me-tabs';
     tabs.setAttribute('role', 'tablist');
-    tabs.setAttribute('aria-label', 'Definition');
+    tabs.setAttribute('aria-label', t('common.definition'));
     const simpleTab = document.createElement('button');
     const formulaTab = document.createElement('button');
-    [['Simple', simpleTab], ['Formula', formulaTab]].forEach(([label, btn]) => {
+    [[t('metricEditor.simple'), simpleTab], [t('common.formula'), formulaTab]].forEach(([label, btn]) => {
       const b = btn as HTMLButtonElement;
       b.type = 'button';
       b.className = 'me-tab';
@@ -139,12 +139,12 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
     simplePane.className = 'me-pane';
     const colSel = document.createElement('select');
     colSel.className = 'ws-modal-input';
-    simplePane.appendChild(meField('Column', colSel));
+    simplePane.appendChild(meField(t('common.column'), colSel));
 
     const aggRow = document.createElement('div');
     aggRow.className = 'dm-aggs';
     aggRow.setAttribute('role', 'radiogroup');
-    aggRow.setAttribute('aria-label', 'Aggregation');
+    aggRow.setAttribute('aria-label', t('common.aggregation'));
     const paintAggs = (): void => {
       aggRow.querySelectorAll('.dm-agg').forEach((b) => {
         const on = (b as HTMLElement).dataset.agg === aggregation;
@@ -162,7 +162,7 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
       b.addEventListener('click', () => { aggregation = a; paintAggs(); schedulePreview(); });
       aggRow.appendChild(b);
     });
-    simplePane.appendChild(meField('Aggregation', aggRow));
+    simplePane.appendChild(meField(t('common.aggregation'), aggRow));
     box.appendChild(simplePane);
 
     // Formula pane
@@ -175,8 +175,8 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
     formulaInput.placeholder = '[Profit] / [Revenue]';
     formulaInput.value = typeof def.formula === 'string' ? def.formula : '';
     formulaPane.appendChild(meField(
-      'Formula', formulaInput,
-      'Other metrics by name in [brackets], or an aggregation of a column — sum(revenue) - sum(cost).',
+      t('common.formula'), formulaInput,
+      t('metricEditor.other_metrics_by_name_in_brackets'),
     ));
     // The metric names available, so the reference does not have to be
     // remembered. A chip inserts it at the caret.
@@ -193,10 +193,10 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
     const addFilter = document.createElement('button');
     addFilter.type = 'button';
     addFilter.className = 'btn btn-sm';
-    addFilter.textContent = 'Add filter';
+    addFilter.textContent = t('common.add_filter');
     filterWrap.appendChild(filterList);
     filterWrap.appendChild(addFilter);
-    box.appendChild(meField('Filters', filterWrap, 'Applied before the aggregation — part of what the metric means.'));
+    box.appendChild(meField(t('common.filters'), filterWrap, t('metricEditor.applied_before_the_aggregation_part_of')));
 
     const paintFilters = (): void => {
       filterList.innerHTML = '';
@@ -207,9 +207,11 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
         const rm = document.createElement('button');
         rm.type = 'button';
         rm.className = 'me-filter-rm';
-        rm.setAttribute('aria-label', 'Remove filter');
+        rm.setAttribute('aria-label', t('common.remove_filter'));
         rm.textContent = '×';
         rm.addEventListener('click', () => { filters.splice(i, 1); paintFilters(); schedulePreview(); });
+        const ctxTag = lodContextTag(s); // r7:lod
+        if (ctxTag) chip.appendChild(ctxTag);
         chip.appendChild(rm);
         filterList.appendChild(chip);
       });
@@ -218,7 +220,7 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
       const col = columns.find((c) => c.name === colSel.value) || columns[0];
       if (!col) return;
       const steps = await openFilterDialog({
-        projectId: currentProjectId, datasetId: dsSel.value, column: col.name, type: col.type,
+        projectId: currentProjectId, datasetId: dsSel.value, column: col.name, type: col.type, lodToggle: true,
       });
       if (!steps || !steps.length) return;
       filters = filters.concat(steps);
@@ -242,27 +244,27 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
     decInput.min = '0';
     decInput.max = '6';
     decInput.className = 'ws-modal-input me-format-dec';
-    decInput.setAttribute('aria-label', 'Decimal places');
+    decInput.setAttribute('aria-label', t('metricEditor.decimal_places'));
     const prefixInput = document.createElement('input');
     prefixInput.type = 'text';
     prefixInput.className = 'ws-modal-input me-format-affix';
-    prefixInput.placeholder = 'Prefix';
-    prefixInput.setAttribute('aria-label', 'Prefix');
+    prefixInput.placeholder = t('metricEditor.prefix');
+    prefixInput.setAttribute('aria-label', t('metricEditor.prefix'));
     const suffixInput = document.createElement('input');
     suffixInput.type = 'text';
     suffixInput.className = 'ws-modal-input me-format-affix';
-    suffixInput.placeholder = 'Suffix';
-    suffixInput.setAttribute('aria-label', 'Suffix');
+    suffixInput.placeholder = t('metricEditor.suffix');
+    suffixInput.setAttribute('aria-label', t('metricEditor.suffix'));
     const compactWrap = document.createElement('label');
     compactWrap.className = 'me-compact';
     const compactBox = document.createElement('input');
     compactBox.type = 'checkbox';
     const compactText = document.createElement('span');
-    compactText.textContent = 'Compact';
+    compactText.textContent = t('common.compact');
     compactWrap.appendChild(compactBox);
     compactWrap.appendChild(compactText);
     [kindSel, decInput, prefixInput, suffixInput, compactWrap].forEach((el) => fmtRow.appendChild(el));
-    box.appendChild(meField('Format', fmtRow));
+    box.appendChild(meField(t('common.format'), fmtRow));
 
     const fmt = (existing && existing.format) || {};
     kindSel.value = ME_FORMAT_KINDS.some(([k]) => k === fmt.kind) ? fmt.kind : 'number';
@@ -275,9 +277,9 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
     const descInput = document.createElement('input');
     descInput.type = 'text';
     descInput.className = 'ws-modal-input';
-    descInput.placeholder = 'What this number means, for whoever reads it next';
+    descInput.placeholder = t('metricEditor.what_this_number_means_for_whoever');
     descInput.value = existing && existing.description ? String(existing.description) : '';
-    box.appendChild(meField('Description', descInput));
+    box.appendChild(meField(t('common.description'), descInput));
 
     const dirSel = document.createElement('select');
     dirSel.className = 'ws-modal-input';
@@ -288,7 +290,7 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
       dirSel.appendChild(o);
     });
     dirSel.value = existing && existing.direction ? existing.direction : '';
-    box.appendChild(meField('Direction', dirSel, 'Which way is good news, for the surfaces that colour a change.'));
+    box.appendChild(meField(t('common.direction'), dirSel, t('metricEditor.which_way_is_good_news_for')));
     // Tags and owner live in the catalog (catalogDetails.ts); the description above stays the metric's own.
     if (editingId) box.appendChild(ctMetricDetailsRow(editingId, String((existing && existing.name) || '')));
 
@@ -411,11 +413,11 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'btn btn-ghost';
-    cancel.textContent = 'Cancel';
+    cancel.textContent = t('common.cancel');
     const save = document.createElement('button');
     save.type = 'button';
     save.className = 'btn btn-primary';
-    save.textContent = editingId ? 'Save' : 'Create metric';
+    save.textContent = editingId ? t('common.save') : t('metricEditor.create_metric');
     actions.appendChild(cancel);
     actions.appendChild(save);
     box.appendChild(actions);
@@ -447,7 +449,7 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
     save.addEventListener('click', async () => {
       err.hidden = true;
       const name = nameInput.value.trim();
-      if (!name) { err.textContent = 'A metric needs a name.'; err.hidden = false; nameInput.focus(); return; }
+      if (!name) { err.textContent = t('metricEditor.a_metric_needs_a_name'); err.hidden = false; nameInput.focus(); return; }
       const payload = {
         name,
         datasetId: dsSel.value,
@@ -464,13 +466,13 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
           ? await window.hub.updateMetric(currentProjectId, editingId, payload)
           : await window.hub.saveMetric(currentProjectId, payload);
       } catch (e: any) {
-        res = { ok: false, error: (e && e.message) || 'Could not save the metric' };
+        res = { ok: false, error: (e && e.message) || t('metricEditor.could_not_save_the_metric') };
       }
       save.disabled = false;
       if (!res || res.ok === false) {
         // Shown IN the dialog, not as a toast: the user's work is still in
         // these boxes and closing over it to report a name clash would lose it.
-        err.textContent = (res && res.error) || 'Could not save the metric.';
+        err.textContent = (res && res.error) || t('metricEditor.could_not_save_the_metric_2');
         err.hidden = false;
         return;
       }
@@ -479,7 +481,7 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
 
     overlay.appendChild(box);
     document.body.appendChild(overlay);
-    a11y = makeModalAccessible(box, editingId ? 'Edit metric' : 'New metric', nameInput);
+    a11y = makeModalAccessible(box, editingId ? t('metricEditor.edit_metric') : t('common.new_metric'), nameInput);
     paintAggs();
     paintMode();
     paintFilters();
@@ -496,7 +498,7 @@ function openMetricEditor(existing: any, opts: { datasetId?: string } = {}): Pro
       list.forEach((d: any) => {
         const o = document.createElement('option');
         o.value = String(d.id);
-        o.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
+        o.textContent = d && d.name ? String(d.name) : t('common.untitled_dataset');
         dsSel.appendChild(o);
       });
       const want = (existing && existing.datasetId) || opts.datasetId;

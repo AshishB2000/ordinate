@@ -973,3 +973,53 @@ scripts/**/*.js
 # Quit cleanup + smoke runner hardening. Emitted siblings.
 /src/app/quitCleanup.js
 /scripts/test-quitCleanup.js
+# r7:notebooks
+/src/analysis/notebook/*.js
+/src/ipc/notebooks.js
+/src/ipc/round7.js
+/preload/hubNotebooksPreload.js
+/renderer/hub/nbList.js
+/renderer/hub/nbPage.js
+/renderer/hub/nbColumn.js
+/renderer/hub/nbEditor.js
+/renderer/hub/nbCells.js
+/renderer/hub/nbRun.js
+/renderer/hub/nbActions.js
+
+# r7:lod
+/src/formula/lod.js
+/src/formula/didYouMean.js
+/src/analysis/lodQuery.js
+/src/engine/lodResident.js
+/src/ipc/lodData.js
+/renderer/hub/lodUi.js
+
+# r7:templates
+/src/ipc/userTemplates.js
+/src/analysis/userTemplate.js
+/src/analysis/userTemplateRefs.js
+/src/analysis/userTemplateApply.js
+/src/analysis/userTemplateFile.js
+/src/app/userTemplateStore.js
+/preload/hubTemplatesPreload.js
+/renderer/hub/userTemplateSave.js
+/renderer/hub/userTemplateGallery.js
+
+# r7:motion
+/renderer/hub/motionPlan.js
+/renderer/hub/motion.js
+/renderer/hub/kpiTicker.js
+/renderer/hub/linkedHover.js
+
+# r7:i18n
+/src/app/i18nCore.js
+/src/app/i18n.js
+/src/ipc/i18n.js
+/preload/hubLanguagePreload.js
+/renderer/hub/i18n.js
+/renderer/hub/settingsLanguage.js
+/scripts/i18nLex.js
+/scripts/i18nDetect.js
+/scripts/i18n-extract.js
+/scripts/test-i18n.js
+/scripts/i18nNode.js

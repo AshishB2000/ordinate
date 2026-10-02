@@ -56,8 +56,8 @@ function aiPaintBell(): void {
     badge.textContent = unseen > 9 ? '9+' : String(unseen);
   }
   const label = unseen === 0
-    ? 'Alerts'
-    : `Alerts — ${unseen} unread`;
+    ? t('common.alerts')
+    : t('alertsInbox.alerts_unread', { unseen });
   btn.title = label;
   btn.setAttribute('aria-label', label);
 }
@@ -101,7 +101,7 @@ async function aiTogglePopover(): Promise<void> {
   aiPopover.className = 'al-pop';
   aiPopover.id = 'al-pop';
   aiPopover.setAttribute('role', 'dialog');
-  aiPopover.setAttribute('aria-label', 'Alerts');
+  aiPopover.setAttribute('aria-label', t('common.alerts'));
   document.body.appendChild(aiPopover);
   btn.setAttribute('aria-expanded', 'true');
   document.addEventListener('keydown', aiOnKey, true);
@@ -126,13 +126,13 @@ function aiRenderPopover(): void {
   head.className = 'al-pop-head';
   const title = document.createElement('span');
   title.className = 'al-pop-title';
-  title.textContent = 'Alerts';
+  title.textContent = t('common.alerts');
   head.appendChild(title);
   if (alEvents.some((e: any) => !e.seen)) {
     const all = document.createElement('button');
     all.type = 'button';
     all.className = 'al-pop-link';
-    all.textContent = 'Mark all seen';
+    all.textContent = t('alertsInbox.mark_all_seen');
     all.addEventListener('click', async () => {
       try { await window.hub.markAlertSeen(currentProjectId); } catch (_) { /* repaint tells the truth */ }
       await aiRefresh();
@@ -148,10 +148,10 @@ function aiRenderPopover(): void {
     list.appendChild(makeEmptyState({
       variant: 'alerts',
       iconName: 'bell',
-      title: alRules.length ? 'Nothing has fired' : 'No alerts yet',
+      title: alRules.length ? t('alertsInbox.nothing_has_fired') : t('alertsInbox.no_alerts_yet'),
       line: alRules.length
-        ? 'Your rules are watching. You’ll see anything they catch here.'
-        : 'Open a KPI card’s actions menu and choose “Alert me…” to watch a number.',
+        ? t('alertsInbox.your_rules_are_watching_you_ll')
+        : t('alertsInbox.open_a_kpi_card_s_actions'),
     }));
   } else {
     alEvents.forEach((e: any) => list.appendChild(aiEventRow(e)));
@@ -163,7 +163,7 @@ function aiRenderPopover(): void {
   const manage = document.createElement('button');
   manage.type = 'button';
   manage.className = 'al-pop-link';
-  manage.textContent = 'Manage rules';
+  manage.textContent = t('common.manage_rules');
   manage.addEventListener('click', () => { aiClosePopover(); void aiOpenRulesPage(); });
   foot.appendChild(manage);
   aiPopover.appendChild(foot);
@@ -179,7 +179,7 @@ function aiEventRow(e: any): HTMLElement {
   main.className = 'al-ev-main';
   const name = document.createElement('div');
   name.className = 'al-ev-name';
-  name.textContent = String(e.ruleName || 'Alert');
+  name.textContent = String(e.ruleName || t('common.alert'));
   const msg = document.createElement('div');
   msg.className = 'al-ev-msg';
   msg.textContent = String(e.message || '');
@@ -197,17 +197,17 @@ function aiEventRow(e: any): HTMLElement {
 
   const acts = document.createElement('div');
   acts.className = 'al-ev-acts';
-  if (e.analysisId) acts.appendChild(aiAction('Open dashboard', () => {
+  if (e.analysisId) acts.appendChild(aiAction(t('alertsInbox.open_dashboard'), () => {
     aiClosePopover();
     void openAnalysis(String(e.analysisId));
   }));
-  acts.appendChild(aiAction('Explain', () => { void aiExplain(e); }));
+  acts.appendChild(aiAction(t('common.explain'), () => { void aiExplain(e); }));
   // What drove it: the rule's latest two periods, decomposed (driversEntry.ts).
   if (rule && rule.compare !== 'anomaly' && typeof drvWhyFromAlert === 'function') {
-    acts.appendChild(aiAction('Why?', () => { aiClosePopover(); drvWhyFromAlert(String(rule.id)); }));
+    acts.appendChild(aiAction(t('common.why'), () => { aiClosePopover(); drvWhyFromAlert(String(rule.id)); }));
   }
-  if (rule) acts.appendChild(aiAction('Snooze 24h', () => { void aiSnooze(rule); }));
-  if (!e.seen) acts.appendChild(aiAction('Mark seen', async () => {
+  if (rule) acts.appendChild(aiAction(t('alertsInbox.snooze_24h'), () => { void aiSnooze(rule); }));
+  if (!e.seen) acts.appendChild(aiAction(t('alertsInbox.mark_seen'), async () => {
     try { await window.hub.markAlertSeen(currentProjectId, String(e.id)); } catch (_) { /* repaint tells the truth */ }
     await aiRefresh();
   }));
@@ -265,15 +265,15 @@ function aiSparkline(history: any): SVGSVGElement | null {
 
 /** "4m ago" / "3h ago" / "2d ago". Relative, because "when" is the only question. */
 function aiAgo(iso: string): string {
-  const t = Date.parse(String(iso || ''));
-  if (!Number.isFinite(t)) return '';
-  const secs = Math.max(0, Math.round((Date.now() - t) / 1000));
-  if (secs < 60) return 'just now';
+  const tv = Date.parse(String(iso || ''));
+  if (!Number.isFinite(tv)) return '';
+  const secs = Math.max(0, Math.round((Date.now() - tv) / 1000));
+  if (secs < 60) return t('common.just_now');
   const mins = Math.round(secs / 60);
-  if (mins < 60) return mins + 'm ago';
+  if (mins < 60) return t('alertsInbox.m_ago', { mins });
   const hours = Math.round(mins / 60);
-  if (hours < 24) return hours + 'h ago';
-  return Math.round(hours / 24) + 'd ago';
+  if (hours < 24) return t('alertsInbox.h_ago', { hours });
+  return t('alertsInbox.d_ago', { p0: Math.round(hours / 24) });
 }
 
 /** Snooze the rule behind an event for a day. */
@@ -281,9 +281,9 @@ async function aiSnooze(rule: any): Promise<void> {
   const until = new Date(Date.now() + AI_SNOOZE_MS).toISOString();
   try {
     await window.hub.patchAlertRule(currentProjectId, String(rule.id), { snoozedUntil: until });
-    showToast(`Snoozed "${rule.name}" for 24 hours.`);
+    showToast(t('alertsInbox.snoozed_for_24_hours', { name: rule.name }));
   } catch (_) {
-    showToast('Could not snooze that rule.');
+    showToast(t('alertsInbox.could_not_snooze_that_rule'));
   }
   await aiRefresh();
 }
@@ -306,11 +306,11 @@ async function aiExplain(e: any): Promise<void> {
   if (r && r.reason === 'not_ready') {
     // One name for this state everywhere — AI_NOT_CONFIGURED / AI_SETUP_LABEL
     // (execMenu.ts), pinned by scripts/test-ai-naming.ts.
-    showToast(AI_NOT_CONFIGURED + ' ' + AI_SETUP_LABEL + ' in Settings to explain alerts.');
+    showToast(t('alertsInbox.in_settings_to_explain_alerts', { AI_NOT_CONFIGURED, AI_SETUP_LABEL }));
     return;
   }
   if (!r || r.ok === false || !r.threadId) {
-    showToast((r && r.error) || 'Could not explain that alert.');
+    showToast((r && r.error) || t('alertsInbox.could_not_explain_that_alert'));
     return;
   }
   aiClosePopover();
@@ -337,7 +337,7 @@ async function aiOpenRulesPage(): Promise<void> {
   head.className = 'al-rules-head';
   const title = document.createElement('div');
   title.className = 'ws-modal-title';
-  title.textContent = 'Alert rules';
+  title.textContent = t('common.alert_rules');
   head.appendChild(title);
   box.appendChild(head);
 
@@ -367,12 +367,12 @@ async function aiOpenRulesPage(): Promise<void> {
   digest.type = 'checkbox';
   digest.addEventListener('change', async () => {
     try { await window.hub.setAlertDigest(currentProjectId, digest.checked); } catch (_) {
-      showToast('Could not change that setting.');
+      showToast(t('common.could_not_change_that_setting'));
     }
   });
   digestWrap.appendChild(digest);
   const digestText = document.createElement('span');
-  digestText.textContent = 'One digest notification per refresh';
+  digestText.textContent = t('alertsInbox.one_digest_notification_per_refresh');
   digestWrap.appendChild(digestText);
   actions.appendChild(digestWrap);
 
@@ -382,7 +382,7 @@ async function aiOpenRulesPage(): Promise<void> {
   const doneBtn = document.createElement('button');
   doneBtn.type = 'button';
   doneBtn.className = 'btn btn-primary';
-  doneBtn.textContent = 'Done';
+  doneBtn.textContent = t('common.done');
   doneBtn.addEventListener('click', close);
   actions.appendChild(doneBtn);
   box.appendChild(actions);
@@ -397,8 +397,8 @@ async function aiOpenRulesPage(): Promise<void> {
       body.appendChild(makeEmptyState({
         variant: 'rules',
         iconName: 'bell',
-        title: 'No alert rules yet',
-        line: 'Open a KPI card’s actions menu and choose “Alert me…”, or use a numeric column’s profile.',
+        title: t('alertsInbox.no_alert_rules_yet'),
+        line: t('alertsInbox.open_a_kpi_card_s_actions_2'),
       }));
       return;
     }
@@ -406,7 +406,7 @@ async function aiOpenRulesPage(): Promise<void> {
     table.className = 'al-rules-table';
     const thead = document.createElement('thead');
     const hr = document.createElement('tr');
-    ['', 'Rule', 'Metric', 'Condition', 'Last value', 'Last fired', 'Quiet hours', ''].forEach((h) => {
+    ['', t('common.rule'), t('common.metric'), t('common.condition'), t('alertsInbox.last_value'), t('alertsInbox.last_fired'), t('alertsInbox.quiet_hours'), ''].forEach((h) => {
       const th = document.createElement('th');
       th.textContent = h;
       hr.appendChild(th);
@@ -434,7 +434,7 @@ function aiRuleRow(r: any, repaint: () => Promise<void>): HTMLElement {
   toggle.className = 'stp-switch' + (r.enabled !== false ? ' stp-switch-on' : '');
   toggle.setAttribute('role', 'switch');
   toggle.setAttribute('aria-checked', String(r.enabled !== false));
-  toggle.setAttribute('aria-label', 'Enable ' + r.name);
+  toggle.setAttribute('aria-label', t('alertsInbox.enable', { name: r.name }));
   const thumb = document.createElement('span');
   thumb.className = 'stp-switch-thumb';
   toggle.appendChild(thumb);
@@ -443,16 +443,16 @@ function aiRuleRow(r: any, repaint: () => Promise<void>): HTMLElement {
     try {
       await window.hub.patchAlertRule(currentProjectId, String(r.id), { enabled: next });
     } catch (_) {
-      showToast('Could not change that rule.');
+      showToast(t('alertsInbox.could_not_change_that_rule'));
     }
     await repaint();
   });
   onCell.appendChild(toggle);
   tr.appendChild(onCell);
 
-  tr.appendChild(aiCell(String(r.name || 'Alert'), 'al-rule-name'));
+  tr.appendChild(aiCell(String(r.name || t('common.alert')), 'al-rule-name'));
   const m = r.metric || {};
-  tr.appendChild(aiCell(m.column ? `${m.aggregation}(${m.column})` : 'whole dataset'));
+  tr.appendChild(aiCell(m.column ? `${m.aggregation}(${m.column})` : t('alertsInbox.whole_dataset')));
   tr.appendChild(aiCell(aiConditionText(r)));
   tr.appendChild(aiCell(r.lastValue == null ? '—' : fmtWith(r.lastValue, 'auto'), 'tnum'));
   tr.appendChild(aiCell(r.lastFiredAt ? aiAgo(r.lastFiredAt) : 'never'));
@@ -465,13 +465,13 @@ function aiRuleRow(r: any, repaint: () => Promise<void>): HTMLElement {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'dash-card-btn al-rule-del';
-  iconOnly(btn, 'trash', 'Delete ' + r.name, 14);
+  iconOnly(btn, 'trash', t('alertsInbox.delete', { name: r.name }), 14);
   btn.addEventListener('click', async () => {
-    if (!window.confirm(`Delete "${r.name}"? Its past alerts go with it.`)) return;
+    if (!window.confirm(t('alertsInbox.delete_its_past_alerts_go_with', { name: r.name }))) return;
     try {
       await window.hub.deleteAlertRule(currentProjectId, String(r.id));
     } catch (_) {
-      showToast('Could not delete that rule.');
+      showToast(t('common.could_not_delete_that_rule'));
     }
     await repaint();
     await aiRefresh();
@@ -496,10 +496,10 @@ function aiConditionText(r: any): string {
   }
   if (r.compare === 'change' && r.change) {
     const word = AL_DIRECTIONS.find((d) => d.value === r.change.direction);
-    const vs = r.change.vs === 'previous_period' ? 'previous period' : 'previous refresh';
-    return `${word ? word.label : 'moves by'} ${r.change.pct}% vs ${vs}`;
+    const vs = r.change.vs === 'previous_period' ? t('alertsInbox.previous_period') : t('alertsInbox.previous_refresh');
+    return t('alertsInbox.vs', { p0: word ? word.label : t('common.moves_by'), pct: r.change.pct, vs });
   }
-  return 'new anomalies';
+  return t('alertsInbox.new_anomalies');
 }
 
 /**
@@ -532,18 +532,18 @@ function aiQuietPicker(r: any, repaint: () => Promise<void>): HTMLElement {
     return sel;
   };
 
-  const from = hourSelect(q ? q.from : null, 'Quiet hours from');
-  const to = hourSelect(q ? q.to : null, 'Quiet hours to');
+  const from = hourSelect(q ? q.from : null, t('alertsInbox.quiet_hours_from'));
+  const to = hourSelect(q ? q.to : null, t('alertsInbox.quiet_hours_to'));
   const apply = async (): Promise<void> => {
     // Either both ends or neither: a half-set window has no meaning, and
     // `null` is how main is told to clear it.
     const f = from.value === '' ? null : Number(from.value);
-    const t = to.value === '' ? null : Number(to.value);
-    const patch = f == null || t == null ? { quietHours: null } : { quietHours: { from: f, to: t } };
+    const tv = to.value === '' ? null : Number(to.value);
+    const patch = f == null || tv == null ? { quietHours: null } : { quietHours: { from: f, to: tv } };
     try {
       await window.hub.patchAlertRule(currentProjectId, String(r.id), patch);
     } catch (_) {
-      showToast('Could not change the quiet hours.');
+      showToast(t('alertsInbox.could_not_change_the_quiet_hours'));
     }
     await repaint();
   };

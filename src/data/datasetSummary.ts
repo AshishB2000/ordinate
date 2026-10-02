@@ -50,7 +50,7 @@ export interface DatasetSummary {
 /** The parent ids an origin names, in its own order. */
 export function originParents(origin: DatasetOrigin | undefined): string[] {
   if (!origin) return [];
-  if (origin.kind === 'sql') return origin.deps.slice();
+  if (origin.kind === 'sql' || origin.kind === 'notebook') return origin.deps.slice();
   if (origin.kind === 'combined') return [origin.leftId, origin.rightId];
   if (origin.kind === 'composed') return [origin.baseId, ...origin.joins.map((j) => j.datasetId)];
   return [];

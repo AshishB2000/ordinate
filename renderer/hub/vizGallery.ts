@@ -103,13 +103,13 @@ function makeVizDatasetCard(d: any): HTMLElement {
 
   const name = document.createElement('span');
   name.className = 'viz-ds-name';
-  name.textContent = d && d.name ? String(d.name) : 'Untitled dataset';
+  name.textContent = d && d.name ? String(d.name) : t('common.untitled_dataset');
 
   const meta = document.createElement('span');
   meta.className = 'viz-ds-meta';
   const rows = typeof d.rowCount === 'number' ? d.rowCount.toLocaleString() : '—';
   const cols = typeof d.columnCount === 'number' ? String(d.columnCount) : '—';
-  meta.textContent = rows + ' rows · ' + cols + ' columns';
+  meta.textContent = t('vizGallery.rows_columns', { rows, cols });
 
   const kind = document.createElement('span');
   kind.className = 'viz-ds-kind';
@@ -129,14 +129,14 @@ function makeVizNoDataCard(): HTMLElement {
   box.className = 'viz-ds-none';
   const h = document.createElement('h4');
   h.className = 'viz-ds-none-h';
-  h.textContent = 'No data yet';
+  h.textContent = t('vizGallery.no_data_yet');
   const p = document.createElement('p');
   p.className = 'viz-ds-none-p';
-  p.textContent = 'Import a CSV, paste a table, or connect a source — then build your first visual.';
+  p.textContent = t('vizGallery.import_a_csv_paste_a_table');
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'btn btn-primary';
-  btn.textContent = 'Import data';
+  btn.textContent = t('common.import_data');
   btn.addEventListener('click', () => {
     if (typeof selectSection === 'function') selectSection('datasets');
   });
@@ -230,7 +230,7 @@ function makeVisualCard(v: any): HTMLElement {
 
   const name = document.createElement('span');
   name.className = 'viz-card-name';
-  name.textContent = v && v.name ? String(v.name) : 'Untitled visual';
+  name.textContent = v && v.name ? String(v.name) : t('common.untitled_visual');
 
   const meta = document.createElement('span');
   meta.className = 'viz-card-meta';
@@ -249,7 +249,7 @@ function makeVisualCard(v: any): HTMLElement {
   const fav = v && v.favorite === true;
   setIcon(star, fav ? 'star-filled' : 'star');
   star.setAttribute('aria-pressed', fav ? 'true' : 'false');
-  star.setAttribute('aria-label', fav ? 'Unfavourite' : 'Favourite');
+  star.setAttribute('aria-label', fav ? t('vizGallery.unfavourite') : t('vizGallery.favourite'));
   star.addEventListener('click', (e) => {
     e.stopPropagation();
     handleToggleFavorite(id, !fav, star);
@@ -258,7 +258,7 @@ function makeVisualCard(v: any): HTMLElement {
   const menuBtn = document.createElement('button');
   menuBtn.type = 'button';
   menuBtn.className = 'viz-card-menu';
-  iconOnly(menuBtn, 'more-horizontal', 'More actions');
+  iconOnly(menuBtn, 'more-horizontal', t('common.more_actions'));
   menuBtn.setAttribute('aria-haspopup', 'menu');
   menuBtn.setAttribute('aria-expanded', 'false');
   menuBtn.addEventListener('click', (e) => {
@@ -293,14 +293,14 @@ function openVisualCardMenu(anchor: HTMLButtonElement, v: any): void {
         if (run) b.addEventListener('click', () => { close(); run(); });
         el.appendChild(b);
       };
-      add('Open', () => openSavedVisual(id));
-      add('Rename', () => handleRenameVisual(id, v && v.name ? String(v.name) : ''));
-      add('Duplicate', () => handleDuplicateVisual(id));
-      add('Add to dashboard', () => handleAddVisualToAnalysis(id));
-      add('Explain', () => { void ansExplain({ visualId: id }); });
-      add('Export', () => handleExportVisual(id));
-      add('History', () => void vhOpen('visual', id, v && v.name ? String(v.name) : ''));
-      add('Lineage', () => void lnOpen('visual', id, v && v.name ? String(v.name) : ''));
+      add(t('common.open'), () => openSavedVisual(id));
+      add(t('common.rename'), () => handleRenameVisual(id, v && v.name ? String(v.name) : ''));
+      add(t('common.duplicate'), () => handleDuplicateVisual(id));
+      add(t('common.add_to_dashboard'), () => handleAddVisualToAnalysis(id));
+      add(t('common.explain'), () => { void ansExplain({ visualId: id }); });
+      add(t('common.export_2'), () => handleExportVisual(id));
+      add(t('common.history'), () => void vhOpen('visual', id, v && v.name ? String(v.name) : ''));
+      add(t('common.lineage'), () => void lnOpen('visual', id, v && v.name ? String(v.name) : ''));
       add('Delete', () => handleDeleteVisual(id, v && v.name ? String(v.name) : ''));
     },
     () => anchor.setAttribute('aria-expanded', 'false'),
@@ -326,7 +326,7 @@ async function handleExportVisual(id: string): Promise<void> {
     visual = null;
   }
   if (!visual) {
-    showToast('That visual could not be loaded');
+    showToast(t('vizGallery.that_visual_could_not_be_loaded'));
     return;
   }
 
@@ -340,7 +340,7 @@ async function handleExportVisual(id: string): Promise<void> {
     res = null;
   }
   if (!res || res.ok === false || !res.data) {
-    showToast((res && res.error) || 'Could not compute this visual');
+    showToast((res && res.error) || t('vizGallery.could_not_compute_this_visual'));
     return;
   }
   const data = res.data;
@@ -372,9 +372,18 @@ async function handleExportVisual(id: string): Promise<void> {
 // ── Add a saved visual to an analysis ────────────────────────────────────────
 // Appends a visual card to the LAST sheet of the chosen analysis and persists
 // it. Deliberately does NOT navigate: the user is browsing the gallery and asked
-// to file this away, not to leave.
+// to file this away, not to leave. Two halves, because a notebook's "Pin to
+// dashboard" (nbActions.ts) asks WHERE before it makes the visual it adds.
 async function handleAddVisualToAnalysis(id: string): Promise<void> {
-  if (!currentProjectId) return;
+  const analysis = await dashPickForAdd();
+  if (analysis && await dashAppendVisualCard(analysis, id)) {
+    showToast(t('common.added_to', { p0: (analysis.name ? String(analysis.name) : t('common.the_dashboard')) }));
+  }
+}
+
+/** "Add to dashboard": pick one, or name a new one. The analysis record, or null (cancelled, or toasted). */
+async function dashPickForAdd(): Promise<any> {
+  if (!currentProjectId) return null;
   let list: any[] = [];
   try {
     list = await window.hub.listAnalyses(currentProjectId);
@@ -385,17 +394,17 @@ async function handleAddVisualToAnalysis(id: string): Promise<void> {
 
   const NEW = '__new__';
   const options = list
-    .map((a) => ({ value: String(a.id), label: a && a.name ? String(a.name) : 'Untitled dashboard' }))
-    .concat([{ value: NEW, label: 'New dashboard…' }]);
-  const choice = await dashChooseModal('Add to dashboard', options, 'Add');
-  if (choice === null) return;
+    .map((a) => ({ value: String(a.id), label: a && a.name ? String(a.name) : t('common.untitled_dashboard') }))
+    .concat([{ value: NEW, label: t('common.new_dashboard_2') }]);
+  const choice = await dashChooseModal(t('common.add_to_dashboard'), options, t('common.add'));
+  if (choice === null) return null;
 
   let analysis: any = null;
   if (choice === NEW) {
-    const name = await promptModal('Name the dashboard', 'Untitled dashboard', 'Create');
-    if (name === null) return;
+    const name = await promptModal(t('common.name_the_dashboard'), t('common.untitled_dashboard'), t('common.create'));
+    if (name === null) return null;
     try {
-      analysis = await window.hub.createAnalysis({ projectId: currentProjectId, name: name.trim() || 'Untitled dashboard' });
+      analysis = await window.hub.createAnalysis({ projectId: currentProjectId, name: name.trim() || t('common.untitled_dashboard') });
     } catch (_) {
       analysis = null;
     }
@@ -407,15 +416,19 @@ async function handleAddVisualToAnalysis(id: string): Promise<void> {
     }
   }
   if (!analysis || !analysis.id) {
-    showToast('That dashboard could not be opened');
-    return;
+    showToast(t('common.that_dashboard_could_not_be_opened'));
+    return null;
   }
+  return analysis;
+}
 
+/** Append a visual card to `analysis`'s last sheet and save it. False (toasted) when the save failed. */
+async function dashAppendVisualCard(analysis: any, id: string): Promise<boolean> {
   // An analysis always has at least one sheet; a record that somehow has none
   // gets one rather than dropping the card on the floor.
   const sheets = Array.isArray(analysis.sheets) && analysis.sheets.length
     ? analysis.sheets
-    : [{ id: dashUuid(), name: 'Sheet 1', cards: [] }];
+    : [{ id: dashUuid(), name: t('common.sheet_1'), cards: [] }];
   const last = sheets[sheets.length - 1];
   if (!Array.isArray(last.cards)) last.cards = [];
   // Same layout maths the grid editor uses for its own + Visual — nextFreeRow
@@ -430,10 +443,10 @@ async function handleAddVisualToAnalysis(id: string): Promise<void> {
     saved = null;
   }
   if (!saved || saved.ok === false) {
-    showToast('Could not add it to that dashboard');
-    return;
+    showToast(t('common.could_not_add_it_to_that'));
+    return false;
   }
-  showToast('Added to ' + (analysis.name ? String(analysis.name) : 'the dashboard'));
+  return true;
 }
 
 // Optimistic: the star flips immediately, then the list repaints (favourites
@@ -443,7 +456,7 @@ async function handleToggleFavorite(id: string, next: boolean, star: HTMLButtonE
   if (!currentProjectId) return;
   setIcon(star, next ? 'star-filled' : 'star');   // filled/outline, as on Home
   star.setAttribute('aria-pressed', next ? 'true' : 'false');
-  star.setAttribute('aria-label', next ? 'Unfavourite' : 'Favourite');
+  star.setAttribute('aria-label', next ? t('vizGallery.unfavourite') : t('vizGallery.favourite'));
   try {
     await window.hub.updateVisual(currentProjectId, id, { favorite: next });
   } catch (_) {
@@ -454,7 +467,7 @@ async function handleToggleFavorite(id: string, next: boolean, star: HTMLButtonE
 
 async function handleRenameVisual(id: string, current: string): Promise<void> {
   if (!currentProjectId) return;
-  const name = await promptModal('Rename this visual', current, 'Rename');
+  const name = await promptModal(t('common.rename_this_visual'), current, t('common.rename'));
   if (name === null || !name.trim()) return;
   try {
     await window.hub.updateVisual(currentProjectId, id, { name: name.trim() });

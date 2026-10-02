@@ -19,7 +19,7 @@ async function loadDatasetOptions(selectedId: string): Promise<any[]> {
   const sel = vizSelect('viz-dataset-select');
   fillSelect(
     sel,
-    items.map((d) => ({ value: String(d.id), label: (d && d.name ? String(d.name) : 'Untitled dataset') })),
+    items.map((d) => ({ value: String(d.id), label: (d && d.name ? String(d.name) : t('common.untitled_dataset')) })),
     selectedId,
   );
   return items;
@@ -29,7 +29,7 @@ async function loadDatasetOptions(selectedId: string): Promise<any[]> {
 // omitted, the builder falls back to the first in the list, as it always did.
 async function openVisualBuilder(datasetId?: string): Promise<void> {
   if (!currentProjectId) {
-    window.alert('Open a project first.');
+    window.alert(t('common.open_a_project_first'));
     return;
   }
   vizEditingId = '';
@@ -38,14 +38,14 @@ async function openVisualBuilder(datasetId?: string): Promise<void> {
   vizOverrides = {};
   anpSetOverlays([]); // analyticsPane.ts — a new visual has none
   const nameEl = vizEl('viz-builder-name');
-  if (nameEl) nameEl.textContent = 'New visual';
+  if (nameEl) nameEl.textContent = t('common.new_visual');
   ensureVizForm();
   const datasets = await loadDatasetOptions(datasetId || '');
   showVizGallery(false);
   if (!datasets.length) {
     // No datasets to build from — show the builder shell with a clear hint.
     if (vizForm) vizForm.show(false);
-    setVizWarnings(['Import a dataset in the Datasets section first, then build a visual from it.']);
+    setVizWarnings([t('vizBuilder.import_a_dataset_in_the_datasets')]);
     clearVizArea();
     return;
   }
@@ -69,7 +69,7 @@ function closeVisualBuilder(): void {
   const sh = vizEl('viz-suggest-hint');
   if (sh) sh.hidden = true;
   const nameEl = vizEl('viz-builder-name');
-  if (nameEl) nameEl.textContent = 'New visual';
+  if (nameEl) nameEl.textContent = t('common.new_visual');
   clearVizArea();
   setVizWarnings([]);
 }
@@ -86,7 +86,7 @@ async function onDatasetChange(datasetId: string, preset?: any): Promise<void> {
   }
   if (!ds) {
     if (vizForm) vizForm.show(false);
-    setVizWarnings(['That dataset could not be loaded.']);
+    setVizWarnings([t('vizBuilder.that_dataset_could_not_be_loaded')]);
     clearVizArea();
     return;
   }
@@ -143,7 +143,7 @@ function setVizSampleNote(sample: any): void {
   if (!note) return;
   const text = sample && typeof sample.note === 'string' ? sample.note : '';
   note.textContent = text;
-  note.title = text && sample.by ? `Stratified by ${sample.by}. Saving the visual and every dashboard use all rows.` : text;
+  note.title = text && sample.by ? t('vizBuilder.stratified_by_saving_the_visual_and', { by: sample.by }) : text;
   note.hidden = !text;
 }
 
@@ -217,12 +217,12 @@ async function recomputeVisual(): Promise<void> {
       ? await window.hubPlatform.previewVisualData(currentProjectId, vizDatasetId, encoding, vizForm!.getFilters(), undefined, vizAnalytics)
       : await window.hub.computeVisualData(currentProjectId, vizDatasetId, encoding, vizForm!.getFilters(), undefined, vizAnalytics);
   } catch (_) {
-    res = { ok: false, error: 'Could not compute the visual.' };
+    res = { ok: false, error: t('vizBuilder.could_not_compute_the_visual') };
   } finally {
     if (loadingArea) loadingArea.classList.remove('is-loading');
   }
   if (!res || res.ok === false) {
-    setVizWarnings([(res && res.error) || 'Could not compute the visual.']);
+    setVizWarnings([(res && res.error) || t('vizBuilder.could_not_compute_the_visual')]);
     vizForm!.applyCategoryInfo(null);
     clearVizArea();
     return;
@@ -264,7 +264,7 @@ async function recomputeVisual(): Promise<void> {
     glyph.innerHTML = VIZ_ICONS.column;
     m.appendChild(glyph);
     const text = document.createElement('span');
-    text.textContent = 'Pick a category and at least one measure to draw a chart.';
+    text.textContent = t('vizBuilder.pick_a_category_and_at_least');
     m.appendChild(text);
     area.appendChild(m);
     vizPicker = null;
@@ -311,7 +311,7 @@ async function recomputeVisual(): Promise<void> {
         area.innerHTML = '';
         const m = document.createElement('div');
         m.className = 'cv-chart-fallback';
-        m.textContent = (VIZ_LABELS[type] || type) + ' needs ' + info.needs + " — it doesn't fit this data.";
+        m.textContent = t('common.needs_it_doesn_t_fit_this', { p0: (VIZ_LABELS[type] || type), needs: info.needs });
         area.appendChild(m);
         return;
       }
@@ -358,7 +358,7 @@ async function openSavedVisual(id: string): Promise<void> {
     visual = null;
   }
   if (!visual) {
-    window.alert('That visual could not be loaded.');
+    window.alert(t('common.that_visual_could_not_be_loaded'));
     await refreshVisualList();
     return;
   }
@@ -384,6 +384,7 @@ async function vizOpenRecord(visual: any, id?: string): Promise<void> {
         column: f && f.column != null ? String(f.column) : '',
         op: f && f.op != null ? String(f.op) : '=',
         value: f && f.value != null ? String(f.value) : '',
+        ...(f && f.context === true ? { context: true } : {}), // r7:lod
       }))
     : [];
   await loadDatasetOptions(String(visual.datasetId || ''));
@@ -397,7 +398,7 @@ async function vizOpenRecord(visual: any, id?: string): Promise<void> {
 // ── Save ─────────────────────────────────────────────────────────────────────
 async function handleSaveVisual(): Promise<void> {
   if (!currentProjectId || !vizDatasetId) {
-    window.alert('Pick a dataset first.');
+    window.alert(t('vizBuilder.pick_a_dataset_first'));
     return;
   }
   const encoding = vizEncodingForType();
@@ -406,16 +407,16 @@ async function handleSaveVisual(): Promise<void> {
   if (engineNeeds) { window.alert(engineNeeds); return; }
   if (encoding.pivot) {
     if (!encoding.pivot.rows.length || !encoding.pivot.values.length) {
-      window.alert('Pick a row dimension and at least one value before saving.');
+      window.alert(t('vizBuilder.pick_a_row_dimension_and_at'));
       return;
     }
   } else if (!encoding.category || !Array.isArray(encoding.values) || encoding.values.length === 0) {
-    window.alert('Pick a category and at least one measure before saving.');
+    window.alert(t('vizBuilder.pick_a_category_and_at_least_2'));
     return;
   }
   const chartType = vizCurrentChartType || 'column';
   const suggested = suggestVisualName(encoding, chartType);
-  const name = await promptModal(vizEditingId ? 'Rename this visual' : 'Name this visual', suggested, 'Save');
+  const name = await promptModal(vizEditingId ? t('common.rename_this_visual') : t('vizBuilder.name_this_visual'), suggested, t('common.save'));
   if (name === null) return;
   const finalName = name.trim() || suggested;
 
@@ -429,11 +430,11 @@ async function handleSaveVisual(): Promise<void> {
       res = await window.hub.saveVisual({ projectId: currentProjectId, datasetId: vizDatasetId, name: finalName, chartType, encoding, overrides: vizOverrides, filters, analytics: vizAnalytics });
     }
   } catch (_) {
-    window.alert('Failed to save the visual.');
+    window.alert(t('vizBuilder.failed_to_save_the_visual'));
     return;
   }
   if (!res || res.ok === false) {
-    window.alert((res && res.error) || 'Failed to save the visual.');
+    window.alert((res && res.error) || t('vizBuilder.failed_to_save_the_visual'));
     return;
   }
   closeVisualBuilder();
@@ -447,7 +448,7 @@ async function handleSaveVisual(): Promise<void> {
 // chart they had not seen.
 async function handleSuggestVisual(): Promise<void> {
   if (!currentProjectId || !vizDatasetId) {
-    window.alert('Pick a dataset first.');
+    window.alert(t('vizBuilder.pick_a_dataset_first'));
     return;
   }
   const hint = vizEl('viz-suggest-hint');

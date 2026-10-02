@@ -115,6 +115,22 @@ const chartInstances = new WeakMap();
 // browser only grants a handful before it starts dropping the oldest.
 const mapInstances = new WeakMap();
 
+// ── Motion: THE one Chart.js animation config ───────────────────────────────
+// Every chart this file builds animates by these numbers, and a dashboard
+// transition (motion.ts) steps through the `mtStep` half of it when bars leave
+// and the rest slide. prefers-reduced-motion is read LIVE — flipping it in the
+// OS turns the next draw and the next transition into an instant swap without
+// a reload. noAnimate (export, thumbnails, reports) always gets the final frame.
+const CHART_MOTION_MS = 300;
+// A MediaQueryList's `matches` is live, so reading it per draw IS listening.
+const chartMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+function chartMotionReduced(): boolean { return chartMotionQuery.matches; }
+
+function chartAnimation(overrides: any): any {
+  return overrides.noAnimate || chartMotionReduced() ? false : { duration: CHART_MOTION_MS, easing: 'easeOutCubic' };
+}
+
 // The plottable series for a chart: those with a non-empty values array.
 // buildChart and the period dropdown share this so hidden-series indices align.
 function chartSeries(data: ChartDataShape | null | undefined): ChartSeriesShape[] {
@@ -189,10 +205,7 @@ function buildChart(
   const gridColor  = getCSSVar('--border', canvas);
   const surfColor  = getCSSVar('--surface', canvas);
   const titleColor = getCSSVar('--text-strong', canvas);
-  const fontFamily = getCSSVar('--font-ui', canvas) || 'system-ui, sans-serif';
-
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const animDuration = reduceMotion ? 0 : 480;
+  const fontFamily = getCSSVar('--font-ui', canvas) || t('chartRender.system_ui_sans_serif');
 
   // ── Chart type resolution (chartTypeSpec.js) ────────────────────────────
   const spec = resolveChartType(type);
@@ -340,7 +353,7 @@ function buildChart(
       const v = opts._funnelVals[item.dataIndex];
       const top = opts._funnelVals[0] || 0;
       const pct = top ? Math.round((v / top) * 100) : null;
-      return pct != null ? `${fmt(v)} (${pct}% of top)` : fmt(v);
+      return pct != null ? t('chartRender.of_top', { v: fmt(v), pct }) : fmt(v);
     };
   }
   if (isExtraFamily(spec)) applyExtraTooltip(c, tooltipConfig);
@@ -370,6 +383,9 @@ function buildChart(
   // r8:events — the project's events on a date axis (chartEvents.js), unless this visual hides them.
   const evMarks = typeof evDrawable === 'function' ? evDrawable(data, spec, !!sortOrder, overrides) : [];
   if (evMarks.length) inlinePlugins.push(eventsPlugin({ events: evMarks, fontFamily, isStatic: !!overrides.devicePixelRatio }));
+  // Linked hover + transitions (linkedHover.ts / motion.ts). Both no-op outside a
+  // dashboard card; guarded because the chart test harnesses load families only.
+  if (typeof lhPlugin !== 'undefined') inlinePlugins.push(lhPlugin, mtPlugin);
 
   // ── Series filter (period multi-select) ────────────────────────────────────
   // Hide deselected series. Indices align with `series` (both use chartSeries()).
@@ -383,7 +399,7 @@ function buildChart(
 
   // ── Build chart ──────────────────────────────────────────────────────────
   try {
-    return new window.Chart(canvas, {
+    const chart = new window.Chart(canvas, {
       type: chartType,
       data: { labels: chartLabels, datasets },
       plugins: inlinePlugins,
@@ -393,7 +409,8 @@ function buildChart(
         // Export capture passes devicePixelRatio:2 (crisp PNG) + noAnimate (draw the
         // final frame immediately so toDataURL isn't a mid-animation snapshot).
         devicePixelRatio: overrides.devicePixelRatio || undefined,
-        animation: overrides.noAnimate ? false : { duration: animDuration, easing: 'easeOutQuart' },
+        animation: chartAnimation(overrides),
+        transitions: { mtStep: { animation: { duration: CHART_MOTION_MS / 2 } } },
         indexAxis: opts.indexAxis || 'x',
         ...(interactionConfig ? { interaction: interactionConfig } : {}),
         layout: { padding: { top: overrides.title ? 6 : 10, right: 12, bottom: 4, left: 6 } },
@@ -452,6 +469,8 @@ function buildChart(
         scales,
       },
     });
+    if (typeof mtAfterBuild === 'function') mtAfterBuild(chart, type, overrides);
+    return chart;
   } catch (_) {
     return null;
   }

@@ -18,15 +18,15 @@
 // one dialog vocabulary across the hub.
 
 const DQ_KINDS: Array<{ kind: string; label: string; hint: string }> = [
-  { kind: 'not_null', label: 'Not empty', hint: 'Every row has a value' },
-  { kind: 'unique', label: 'Unique', hint: 'No value appears twice' },
-  { kind: 'range', label: 'Range', hint: 'Numbers or dates stay in bounds' },
-  { kind: 'regex', label: 'Pattern', hint: 'Text matches a format' },
-  { kind: 'in_set', label: 'Allowed values', hint: 'Only values from a list' },
-  { kind: 'row_count', label: 'Row count', hint: 'The table stays a sensible size' },
-  { kind: 'references', label: 'Reference', hint: 'Values exist in another dataset' },
+  { kind: 'not_null', label: t('dsRuleEditor.not_empty'), hint: t('dsRuleEditor.every_row_has_a_value') },
+  { kind: 'unique', label: t('dsRuleEditor.unique'), hint: t('dsRuleEditor.no_value_appears_twice') },
+  { kind: 'range', label: t('common.range'), hint: t('dsRuleEditor.numbers_or_dates_stay_in_bounds') },
+  { kind: 'regex', label: t('common.pattern'), hint: t('dsRuleEditor.text_matches_a_format') },
+  { kind: 'in_set', label: t('dsRuleEditor.allowed_values'), hint: t('dsRuleEditor.only_values_from_a_list') },
+  { kind: 'row_count', label: t('dsRuleEditor.row_count'), hint: t('dsRuleEditor.the_table_stays_a_sensible_size') },
+  { kind: 'references', label: t('dsRuleEditor.reference'), hint: t('dsRuleEditor.values_exist_in_another_dataset') },
 ];
-const DQ_PRESETS: Array<[string, string]> = [['email', 'Email'], ['phone', 'Phone'], ['zip', 'ZIP code'], ['date', 'ISO date']];
+const DQ_PRESETS: Array<[string, string]> = [['email', t('dsRuleEditor.email')], ['phone', t('dsRuleEditor.phone')], ['zip', t('dsRuleEditor.zip_code')], ['date', t('dsRuleEditor.iso_date')]];
 /** Debounce for the live preview — one query per pause, not per keystroke. */
 const DQ_PREVIEW_MS = 300;
 /** Prefill an allowed-values list only when the column has this few values. */
@@ -43,9 +43,9 @@ function dqFmtBound(v: any): string {
 
 function dqBetween(subject: string, a: any, verbFrom: string): string {
   const has = (v: any): boolean => v !== undefined && v !== null && v !== '';
-  if (has(a.min) && has(a.max)) return `${subject} ${verbFrom} between ${dqFmtBound(a.min)} and ${dqFmtBound(a.max)}`;
-  if (has(a.min)) return `${subject} ${verbFrom} at least ${dqFmtBound(a.min)}`;
-  return `${subject} ${verbFrom} at most ${dqFmtBound(a.max)}`;
+  if (has(a.min) && has(a.max)) return t('dsRuleEditor.between_and', { subject, verbFrom, min: dqFmtBound(a.min), max: dqFmtBound(a.max) });
+  if (has(a.min)) return t('dsRuleEditor.at_least', { subject, verbFrom, min: dqFmtBound(a.min) });
+  return t('dsRuleEditor.at_most', { subject, verbFrom, max: dqFmtBound(a.max) });
 }
 
 /**
@@ -56,24 +56,24 @@ function dqRuleWords(rule: any, dsNames?: Map<string, string>): string {
   const a = (rule && rule.args) || {};
   const col = String((rule && rule.column) || '');
   switch (rule && rule.kind) {
-    case 'not_null': return `${col} is never empty`;
-    case 'unique': return `${col} is unique`;
+    case 'not_null': return t('dsRuleEditor.is_never_empty', { col });
+    case 'unique': return t('dsRuleEditor.is_unique', { col });
     case 'range': return dqBetween(col, a, 'is');
     case 'regex': {
       const preset = DQ_PRESETS.find(([id]) => id === a.preset);
-      return preset ? `${col} matches ${preset[1]}` : `${col} matches /${a.pattern || ''}/`;
+      return preset ? `${col} matches ${preset[1]}` : t('dsRuleEditor.matches', { col, p1: a.pattern || '' });
     }
     case 'in_set': {
       const vals: string[] = Array.isArray(a.values) ? a.values : [];
       const shown = vals.slice(0, 3).join(', ');
-      return `${col} is one of ${shown}${vals.length > 3 ? ` +${vals.length - 3} more` : ''}`;
+      return t('dsRuleEditor.is_one_of', { col, shown, p2: vals.length > 3 ? t('dsRuleEditor.more', { p0: vals.length - 3 }) : '' });
     }
-    case 'row_count': return dqBetween('Row count', a, 'is');
+    case 'row_count': return dqBetween(t('dsRuleEditor.row_count'), a, 'is');
     case 'references': {
-      const other = (dsNames && dsNames.get(String(a.datasetId))) || 'another dataset';
-      return `${col} exists in ${other} · ${a.column || ''}`;
+      const other = (dsNames && dsNames.get(String(a.datasetId))) || t('common.another_dataset');
+      return t('dsRuleEditor.exists_in', { col, other, p2: a.column || '' });
     }
-    default: return String((rule && rule.kind) || 'Rule');
+    default: return String((rule && rule.kind) || t('common.rule'));
   }
 }
 
@@ -144,14 +144,14 @@ function dqOpenRuleEditor(
     box.className = 'ws-modal dq-modal';
     const title = document.createElement('div');
     title.className = 'ws-modal-title';
-    title.textContent = existing ? 'Edit rule' : 'Add rule';
+    title.textContent = existing ? t('common.edit_rule') : t('common.add_rule');
     box.appendChild(title);
 
     // ── Kind tiles ───────────────────────────────────────────────────────────
     const kinds = document.createElement('div');
     kinds.className = 'dq-kinds';
     kinds.setAttribute('role', 'radiogroup');
-    kinds.setAttribute('aria-label', 'Rule kind');
+    kinds.setAttribute('aria-label', t('dsRuleEditor.rule_kind'));
     DQ_KINDS.forEach((k) => {
       const b = document.createElement('button');
       b.type = 'button';
@@ -173,7 +173,7 @@ function dqOpenRuleEditor(
     // ── Column ───────────────────────────────────────────────────────────────
     const colSel = document.createElement('select');
     colSel.className = 'ws-modal-input';
-    const colField = meField('Column', colSel);
+    const colField = meField(t('common.column'), colSel);
     box.appendChild(colField);
 
     // ── Per-kind arguments ───────────────────────────────────────────────────
@@ -182,8 +182,8 @@ function dqOpenRuleEditor(
     box.appendChild(argsHost);
 
     // ── Severity ─────────────────────────────────────────────────────────────
-    box.appendChild(meField('Severity', dqSeg([['fail', 'Fail'], ['warn', 'Warn']], () => severity, (v) => { severity = v; schedulePreview(); }, 'Severity'),
-      'Fail raises an alert and puts a red dot on the dataset; Warn only shows here.'));
+    box.appendChild(meField(t('common.severity'), dqSeg([['fail', t('common.fail')], ['warn', t('common.warn')]], () => severity, (v) => { severity = v; schedulePreview(); }, t('common.severity')),
+      t('dsRuleEditor.fail_raises_an_alert_and_puts')));
 
     // ── The live preview (main's count) and the error line ───────────────────
     const preview = document.createElement('div');
@@ -200,11 +200,11 @@ function dqOpenRuleEditor(
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'btn btn-ghost';
-    cancel.textContent = 'Cancel';
+    cancel.textContent = t('common.cancel');
     const save = document.createElement('button');
     save.type = 'button';
     save.className = 'btn btn-primary';
-    save.textContent = existing ? 'Save rule' : 'Add rule';
+    save.textContent = existing ? t('dsRuleEditor.save_rule') : t('common.add_rule');
     actions.append(cancel, save);
     box.appendChild(actions);
 
@@ -224,7 +224,7 @@ function dqOpenRuleEditor(
     };
     function schedulePreview(): void {
       window.clearTimeout(previewTimer);
-      setPreview('busy', 'Checking the data…');
+      setPreview('busy', t('dsRuleEditor.checking_the_data'));
       previewTimer = window.setTimeout(async () => {
         const seq = ++previewSeq;
         let res: any;
@@ -234,12 +234,12 @@ function dqOpenRuleEditor(
           res = null;
         }
         if (seq !== previewSeq || done) return;
-        if (!res) setPreview('muted', 'Could not check the data.');
-        else if (res.ok === false) setPreview('muted', 'Not checkable yet — ' + String(res.error || 'finish the rule'));
-        else if (res.error) setPreview('fail', 'Cannot run: ' + String(res.error));
-        else if (res.passed) setPreview('pass', kind === 'row_count' ? 'Passes now' : 'Passes now — no rows fail');
-        else if (kind === 'row_count') setPreview('fail', 'Would fail now');
-        else setPreview('fail', `Would fail ${Number(res.failing).toLocaleString()} ${res.failing === 1 ? 'row' : 'rows'} now`);
+        if (!res) setPreview('muted', t('dsRuleEditor.could_not_check_the_data'));
+        else if (res.ok === false) setPreview('muted', t('dsRuleEditor.not_checkable_yet', { p0: String(res.error || t('dsRuleEditor.finish_the_rule')) }));
+        else if (res.error) setPreview('fail', t('dsRuleEditor.cannot_run', { error: String(res.error) }));
+        else if (res.passed) setPreview('pass', kind === 'row_count' ? t('dsRuleEditor.passes_now') : t('dsRuleEditor.passes_now_no_rows_fail'));
+        else if (kind === 'row_count') setPreview('fail', t('dsRuleEditor.would_fail_now'));
+        else setPreview('fail', t('dsRuleEditor.would_fail_now_2', { p0: Number(res.failing).toLocaleString(), failing: res.failing }));
       }, DQ_PREVIEW_MS);
     }
 
@@ -259,18 +259,18 @@ function dqOpenRuleEditor(
         const dflt = stored || (kind === 'row_count'
           ? { min: ctx.rowCount }
           : sum && typeof sum.min === 'number' ? { min: sum.min, max: sum.max } : {});
-        const min = dqInput(isDate ? 'date' : 'number', dflt.min, 'No minimum');
-        const max = dqInput(isDate ? 'date' : 'number', dflt.max, 'No maximum');
+        const min = dqInput(isDate ? 'date' : 'number', dflt.min, t('dsRuleEditor.no_minimum'));
+        const max = dqInput(isDate ? 'date' : 'number', dflt.max, t('dsRuleEditor.no_maximum'));
         const pair = document.createElement('div');
         pair.className = 'dq-pair';
-        pair.append(meField('Minimum', min), meField('Maximum', max));
+        pair.append(meField(t('common.minimum'), min), meField(t('common.maximum'), max));
         argsHost.appendChild(pair);
         const hint = document.createElement('p');
         hint.className = 'me-field-hint dq-hint';
         hint.textContent = kind === 'row_count'
-          ? `This dataset has ${ctx.rowCount.toLocaleString()} rows now.`
-          : isDate ? 'Dates are compared as YYYY-MM-DD; a cell that is not a date fails.'
-            : 'Prefilled with the column’s current min and max. Empty cells are ignored.';
+          ? t('dsRuleEditor.this_dataset_has_rows_now', { p0: ctx.rowCount.toLocaleString() })
+          : isDate ? t('dsRuleEditor.dates_are_compared_as_yyyy_mm')
+            : t('dsRuleEditor.prefilled_with_the_column_s_current');
         argsHost.appendChild(hint);
         const num = (i: HTMLInputElement): any => (i.value === '' ? undefined : isDate ? i.value : Number(i.value));
         readArgs = () => ({ min: num(min), max: num(max) });
@@ -279,9 +279,9 @@ function dqOpenRuleEditor(
         let preset: string = stored ? String(stored.preset || '') : 'email';
         const pattern = dqInput('text', stored && !stored.preset ? stored.pattern : '', 'e.g. [A-Z]{2}-[0-9]{4}');
         pattern.classList.add('dq-mono');
-        const custom = meField('Pattern', pattern, 'The whole cell must match. \\s, lookarounds and back-references are not supported.');
-        const seg = dqSeg([...DQ_PRESETS, ['', 'Custom']], () => preset, (v) => { preset = v; custom.hidden = preset !== ''; schedulePreview(); }, 'Format');
-        argsHost.append(meField('Format', seg), custom);
+        const custom = meField(t('common.pattern'), pattern, t('dsRuleEditor.the_whole_cell_must_match_s'));
+        const seg = dqSeg([...DQ_PRESETS, ['', t('common.custom_2')]], () => preset, (v) => { preset = v; custom.hidden = preset !== ''; schedulePreview(); }, t('common.format'));
+        argsHost.append(meField(t('common.format'), seg), custom);
         custom.hidden = preset !== '';
         readArgs = () => (preset ? { preset } : { pattern: pattern.value });
         pattern.addEventListener('input', schedulePreview);
@@ -289,9 +289,9 @@ function dqOpenRuleEditor(
         const ta = document.createElement('textarea');
         ta.className = 'ws-modal-input dq-values';
         ta.rows = 5;
-        ta.placeholder = 'One value per line';
+        ta.placeholder = t('dsRuleEditor.one_value_per_line');
         ta.value = stored && Array.isArray(stored.values) ? stored.values.join('\n') : '';
-        const field = meField('Allowed values', ta, 'One per line, matched exactly. Empty cells are ignored.');
+        const field = meField(t('dsRuleEditor.allowed_values'), ta, t('dsRuleEditor.one_per_line_matched_exactly_empty'));
         argsHost.appendChild(field);
         readArgs = () => ({ values: ta.value.split('\n').map((s) => s.replace(/\r$/, '')).filter((s) => s.trim() !== '') });
         ta.addEventListener('input', schedulePreview);
@@ -303,7 +303,7 @@ function dqOpenRuleEditor(
             if (res.values.length > DQ_SET_PREFILL) return; // too many to be a list of allowed values
             ta.value = res.values.join('\n');
             const hint = field.querySelector('.me-field-hint');
-            if (hint) hint.textContent = `Prefilled with the ${res.values.length} values in this column today. One per line, matched exactly.`;
+            if (hint) hint.textContent = t('dsRuleEditor.prefilled_with_the_values_in_this', { valuesCount: res.values.length });
             schedulePreview();
           })();
         }
@@ -312,7 +312,7 @@ function dqOpenRuleEditor(
         dsSel.className = 'ws-modal-input';
         const refCol = document.createElement('select');
         refCol.className = 'ws-modal-input';
-        argsHost.append(meField('Dataset', dsSel), meField('Its column', refCol, 'Every non-empty value must exist there.'));
+        argsHost.append(meField(t('common.dataset'), dsSel), meField(t('dsRuleEditor.its_column'), refCol, t('dsRuleEditor.every_non_empty_value_must_exist')));
         readArgs = () => ({ datasetId: dsSel.value, column: refCol.value });
         const loadCols = async (want?: string): Promise<void> => {
           refCol.textContent = '';
@@ -335,7 +335,7 @@ function dqOpenRuleEditor(
           (Array.isArray(list) ? list : []).forEach((d: any) => {
             const o = document.createElement('option');
             o.value = String(d.id);
-            o.textContent = (d.name ? String(d.name) : 'Untitled dataset') + (d.id === ctx.datasetId ? ' (this dataset)' : '');
+            o.textContent = (d.name ? String(d.name) : t('common.untitled_dataset')) + (d.id === ctx.datasetId ? t('dsRuleEditor.this_dataset') : '');
             dsSel.appendChild(o);
           });
           const wantDs = stored ? String(stored.datasetId || '') : (list.find((d: any) => d.id !== ctx.datasetId) || {}).id;
@@ -392,11 +392,11 @@ function dqOpenRuleEditor(
       try {
         res = await window.hub.saveQualityRule(ctx.projectId, ctx.datasetId, draft());
       } catch (e: any) {
-        res = { ok: false, error: (e && e.message) || 'Could not save the rule' };
+        res = { ok: false, error: (e && e.message) || t('dsRuleEditor.could_not_save_the_rule') };
       }
       save.disabled = false;
       if (!res || res.ok === false) {
-        err.textContent = (res && res.error) || 'Could not save the rule.';
+        err.textContent = (res && res.error) || t('dsRuleEditor.could_not_save_the_rule_2');
         err.hidden = false;
         return;
       }
@@ -406,6 +406,6 @@ function dqOpenRuleEditor(
     overlay.appendChild(box);
     document.body.appendChild(overlay);
     paintKind();
-    a11y = makeModalAccessible(box, existing ? 'Edit rule' : 'Add rule', kinds.querySelector('.dq-kind.is-on') as HTMLElement | null);
+    a11y = makeModalAccessible(box, existing ? t('common.edit_rule') : t('common.add_rule'), kinds.querySelector('.dq-kind.is-on') as HTMLElement | null);
   });
 }

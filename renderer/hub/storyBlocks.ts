@@ -68,14 +68,14 @@ function stRenderText(body: HTMLElement, block: any): void {
   if (!block.text.trim()) {
     view = document.createElement('div');
     view.className = 'st-placeholder';
-    view.textContent = 'Type / for charts, metrics and more — or just write. # makes a heading.';
+    view.textContent = t('storyBlocks.type_for_charts_metrics_and_more');
   } else {
     view = stMarkdownDom(block.text);
   }
   view.classList.add('is-editable');
   view.tabIndex = 0;
   view.setAttribute('role', 'button');
-  view.setAttribute('aria-label', 'Edit text');
+  view.setAttribute('aria-label', t('common.edit_text'));
   view.addEventListener('click', () => stEditBlock(block.id));
   view.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); stEditBlock(block.id); } });
   body.appendChild(view);
@@ -102,15 +102,15 @@ function stTextEditor(body: HTMLElement, block: any): void {
   ta.className = 'st-text-input';
   ta.value = block.text;
   ta.rows = 1;
-  ta.placeholder = block.kind === 'callout' ? 'Callout text' : 'Type / for blocks';
-  ta.setAttribute('aria-label', block.kind === 'callout' ? 'Callout text' : 'Text');
+  ta.placeholder = block.kind === 'callout' ? t('storyBlocks.callout_text') : t('storyBlocks.type_for_blocks');
+  ta.setAttribute('aria-label', block.kind === 'callout' ? t('storyBlocks.callout_text') : t('common.text'));
   body.appendChild(ta);
   requestAnimationFrame(() => stAutoGrow(ta));
   let picking = false;
   ta.addEventListener('input', () => {
     block.text = ta.value;
     stAutoGrow(ta);
-    stCommit('Edit text', { coalesce: true });
+    stCommit(t('common.edit_text'), { coalesce: true });
     if (ta.value.trim() && !/^\/\S*$/.test(ta.value)) stSyncTail();
     // `/` typed into an EMPTY text line opens the block picker, which then
     // filters by whatever follows the slash.
@@ -134,7 +134,7 @@ function stTextEditor(body: HTMLElement, block: any): void {
         const prev = stStory.blocks[i - 1];
         stStory.blocks.splice(i, 1);
         stEditingId = prev.kind === 'text' ? prev.id : '';
-        stCommit('Delete block', { render: true });
+        stCommit(t('common.delete_block'), { render: true });
         if (stEditingId) stEditBlock(stEditingId);
       }
     }
@@ -157,7 +157,7 @@ async function stPickInto(id: string, kind: string): Promise<void> {
   if (!block) return;
   if (kind === 'text' || kind === 'heading') {
     block.text = kind === 'heading' ? '## ' : '';
-    stCommit('Edit text');
+    stCommit(t('common.edit_text'));
     stEditBlock(id);
     return;
   }
@@ -168,7 +168,7 @@ async function stPickInto(id: string, kind: string): Promise<void> {
     return;
   }
   stEditingId = '';
-  stReplaceBlock(id, made, 'Add ' + (ST_KIND_LABEL[kind] || 'block').toLowerCase());
+  stReplaceBlock(id, made, t('common.add_2', { p0: (ST_KIND_LABEL[kind] || 'block').toLowerCase() }));
   if (made.kind === 'callout') stEditBlock(made.id);
 }
 
@@ -178,12 +178,12 @@ function stRenderCallout(body: HTMLElement, block: any): void {
   const tone = document.createElement('button');
   tone.type = 'button';
   tone.className = 'st-callout-icon';
-  iconOnly(tone, ST_TONE_ICON[block.tone] || 'info', 'Change the callout style');
+  iconOnly(tone, ST_TONE_ICON[block.tone] || 'info', t('storyBlocks.change_the_callout_style'));
   tone.addEventListener('click', (e) => {
     e.stopPropagation();
     const order = ['info', 'success', 'warning', 'danger'];
     block.tone = order[(order.indexOf(block.tone) + 1) % order.length];
-    stCommit('Callout style', { render: true });
+    stCommit(t('storyBlocks.callout_style'), { render: true });
   });
   box.appendChild(tone);
   const inner = document.createElement('div');
@@ -192,7 +192,7 @@ function stRenderCallout(body: HTMLElement, block: any): void {
   body.appendChild(box);
   if (stEditingId === block.id) { stTextEditor(inner, block); return; }
   if (block.text.trim()) inner.appendChild(stMarkdownDom(block.text));
-  else inner.appendChild(Object.assign(document.createElement('div'), { className: 'st-placeholder', textContent: 'Write the callout…' }));
+  else inner.appendChild(Object.assign(document.createElement('div'), { className: 'st-placeholder', textContent: t('storyBlocks.write_the_callout') }));
   inner.classList.add('is-editable');
   inner.addEventListener('click', () => stEditBlock(block.id));
 }
@@ -209,11 +209,11 @@ function stCaptionField(block: any): HTMLTextAreaElement {
   const cap = document.createElement('textarea');
   cap.className = 'st-caption';
   cap.rows = 1;
-  cap.setAttribute('aria-label', 'Caption');
+  cap.setAttribute('aria-label', t('common.caption'));
   cap.value = typeof block.caption === 'string' ? block.caption : '';
   cap.addEventListener('input', () => {
     if (cap.value.trim()) block.caption = cap.value; else delete block.caption;
-    stCommit('Edit caption', { coalesce: true });
+    stCommit(t('storyBlocks.edit_caption'), { coalesce: true });
   });
   cap.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); cap.blur(); } });
   return cap;
@@ -255,7 +255,7 @@ async function stRenderVisual(body: HTMLElement, block: any): Promise<void> {
   head.className = 'st-fig-head';
   const title = document.createElement('div');
   title.className = 'st-fig-title';
-  title.textContent = 'Loading chart…';
+  title.textContent = t('storyBlocks.loading_chart');
   head.appendChild(title);
   const chips = document.createElement('div');
   chips.className = 'st-fig-filters';
@@ -270,7 +270,7 @@ async function stRenderVisual(body: HTMLElement, block: any): Promise<void> {
 
   const got = await stVisualData(block);
   if (!got) {
-    title.textContent = 'This chart no longer exists';
+    title.textContent = t('storyBlocks.this_chart_no_longer_exists');
     fig.classList.add('is-missing');
     cap.hidden = true;
     return;
@@ -278,7 +278,7 @@ async function stRenderVisual(body: HTMLElement, block: any): Promise<void> {
   title.textContent = String(got.visual.name || 'Chart');
   // Empty means "the app's caption": shown as the placeholder, so clearing the
   // field brings it back rather than leaving a blank.
-  cap.placeholder = got.caption || 'Add a caption';
+  cap.placeholder = got.caption || t('storyBlocks.add_a_caption');
   stPaintPinned(chips, block, got.visual);
   if (document.body.contains(area)) renderVizInArea(area, got.data, got.visual.chartType || 'column', null, '');
 }
@@ -293,15 +293,15 @@ function stPaintPinned(host: HTMLElement, block: any, visual: any): void {
     const x = document.createElement('button');
     x.type = 'button';
     x.className = 'st-pin-x';
-    iconOnly(x, 'x', 'Remove this filter', 12);
-    x.addEventListener('click', () => { block.filters.splice(i, 1); stCommit('Remove filter', { render: true }); });
+    iconOnly(x, 'x', t('storyBlocks.remove_this_filter'), 12);
+    x.addEventListener('click', () => { block.filters.splice(i, 1); stCommit(t('common.remove_filter'), { render: true }); });
     chip.appendChild(x);
     host.appendChild(chip);
   });
   const add = document.createElement('button');
   add.type = 'button';
   add.className = 'st-pin-add';
-  iconLabel(add, 'filter', 'Pin a filter', 12);
+  iconLabel(add, 'filter', t('storyBlocks.pin_a_filter'), 12);
   add.addEventListener('click', () => { void stPinFilter(add, block, visual); });
   host.appendChild(add);
 }
@@ -316,7 +316,7 @@ async function stMetricFigures(block: any): Promise<Array<{ name: string; displa
     try { r = currentProjectId ? await window.hub.metricValue(currentProjectId, id, block.filters || []) : null; } catch (_) { r = null; }
     out.push(r && r.ok !== false && r.name
       ? { name: String(r.name), display: String(r.display ?? '—'), value: typeof r.value === 'number' ? r.value : null }
-      : { name: 'Missing metric', display: '—', value: null });
+      : { name: t('common.missing_metric'), display: '—', value: null });
   }
   return out;
 }
@@ -337,7 +337,7 @@ async function stRenderMetrics(body: HTMLElement, block: any): Promise<void> {
     const cap = stCaptionField(block);
     let app = '';
     try { app = await window.hub.reportsCaption({ kpis: figs.map((f) => ({ label: f.name, value: f.value })) }); } catch (_) { app = ''; }
-    cap.placeholder = app || 'Add a caption';
+    cap.placeholder = app || t('storyBlocks.add_a_caption');
     body.appendChild(cap);
   }
 }
@@ -353,7 +353,7 @@ function stRenderImage(body: HTMLElement, block: any): void {
   img.alt = block.alt || '';
   fig.appendChild(img);
   const cap = stCaptionField(block);
-  cap.placeholder = 'Add a caption';
+  cap.placeholder = t('storyBlocks.add_a_caption');
   fig.appendChild(cap);
   body.appendChild(fig);
 }

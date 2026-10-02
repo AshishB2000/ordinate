@@ -18,10 +18,11 @@ import { describePeriod, PERIOD_PRESETS, N_PRESETS } from '../src/analysis/dateI
 import type { CalendarPrefs, PeriodSpec } from '../src/analysis/dateIntel';
 
 import { ok, finish } from './selfcheck';
+import { withT } from './i18nNode';
 
 const code = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'hub', 'periodPicker.js'), 'utf8');
 // The one formatter, as the renderer binds it (formatBind.ts).
-const ctx = vm.createContext({ OrdFormat: require('../src/app/format') });
+const ctx = vm.createContext(withT({ OrdFormat: require('../src/app/format') }));
 vm.runInContext(code, ctx);
 
 const specs: PeriodSpec[] = [];

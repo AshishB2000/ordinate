@@ -11,11 +11,11 @@
 let incOpen = false;
 
 const INC_HOW: Record<string, string> = {
-  server: 'filtered at the source',
-  files: 'changed files, filtered at read',
-  after: 'filtered after fetch',
-  unchanged: 'no file changed',
-  full: 'full refresh',
+  server: t('incremental.filtered_at_the_source'),
+  files: t('incremental.changed_files_filtered_at_read'),
+  after: t('incremental.filtered_after_fetch'),
+  unchanged: t('incremental.no_file_changed'),
+  full: t('incremental.full_refresh'),
 };
 
 const INC_UNITS: Array<{ label: string; secs: number }> = [
@@ -68,15 +68,15 @@ async function incPaint(d: any): Promise<void> {
 
 function incSummary(view: any): string {
   const s = view.settings;
-  if (!s || !s.enabled) return 'Off — every refresh fetches the whole source';
-  const parts = ['Cursor ' + s.cursorColumn];
+  if (!s || !s.enabled) return t('incremental.off_every_refresh_fetches_the_whole');
+  const parts = [t('incremental.cursor', { cursorColumn: s.cursorColumn })];
   if (s.keyColumn) parts.push('key ' + s.keyColumn);
   parts.push('high-water ' + incMark(s.highWater));
   const last = s.log && s.log[0];
   if (last) {
     parts.push(last.mode === 'full'
-      ? 'last run full, ' + incNum(last.fetched) + ' rows'
-      : 'last run ' + incNum(last.fetched) + ' fetched, ' + incNum(last.inserted) + ' inserted, ' + incNum(last.updated) + ' updated');
+      ? t('incremental.last_run_full_rows', { fetched: incNum(last.fetched) })
+      : t('incremental.last_run_fetched_inserted_updated', { fetched: incNum(last.fetched), inserted: incNum(last.inserted), updated: incNum(last.updated) }));
   }
   return parts.join(' · ');
 }
@@ -91,8 +91,8 @@ function incRender(host: HTMLElement, id: string, view: any): void {
   det.open = incOpen;
   det.addEventListener('toggle', () => { incOpen = det.open; });
   const sum = incEl('summary', 'inc-sum');
-  sum.appendChild(incEl('span', 'inc-title', 'Incremental refresh'));
-  sum.appendChild(incEl('span', 'inc-pill' + (on ? ' is-on' : ''), on ? 'On' : 'Off'));
+  sum.appendChild(incEl('span', 'inc-title', t('incremental.incremental_refresh')));
+  sum.appendChild(incEl('span', 'inc-pill' + (on ? ' is-on' : ''), on ? t('incremental.on') : t('common.off')));
   sum.appendChild(incEl('span', 'inc-sum-text', incSummary(view)));
   det.appendChild(sum);
 
@@ -115,7 +115,7 @@ function incForm(id: string, view: any): HTMLElement {
   const s = view.settings || null;
   const form = incEl('div', 'inc-form');
   if (!view.cursorColumns.length) {
-    form.appendChild(incEl('p', 'inc-empty', 'This dataset has no number or date column to use as a cursor, so it can only refresh in full.'));
+    form.appendChild(incEl('p', 'inc-empty', t('incremental.this_dataset_has_no_number_or')));
     return form;
   }
 
@@ -125,7 +125,7 @@ function incForm(id: string, view: any): HTMLElement {
   enabled.checked = !!(s && s.enabled);
   const check = incEl('label', 'inc-check');
   check.appendChild(enabled);
-  check.appendChild(document.createTextNode(' Refresh incrementally'));
+  check.appendChild(document.createTextNode(t('incremental.refresh_incrementally')));
   form.appendChild(check);
 
   const cursor = incEl('select');
@@ -136,11 +136,11 @@ function incForm(id: string, view: any): HTMLElement {
     cursor.appendChild(o);
   }
   cursor.value = s && view.cursorColumns.some((c: any) => c.name === s.cursorColumn) ? s.cursorColumn : view.cursorColumns[0].name;
-  form.appendChild(incField('Cursor column', cursor));
+  form.appendChild(incField(t('incremental.cursor_column'), cursor));
 
   const key = incEl('select');
   key.id = 'inc-key';
-  const none = incEl('option', undefined, 'None — append new rows');
+  const none = incEl('option', undefined, t('incremental.none_append_new_rows'));
   none.value = '';
   key.appendChild(none);
   for (const n of view.keyColumns) {
@@ -149,7 +149,7 @@ function incForm(id: string, view: any): HTMLElement {
     key.appendChild(o);
   }
   key.value = (s && s.keyColumn) || '';
-  form.appendChild(incField('Key column (upsert)', key));
+  form.appendChild(incField(t('incremental.key_column_upsert'), key));
 
   const amount = incEl('input');
   amount.type = 'number';
@@ -163,7 +163,7 @@ function incForm(id: string, view: any): HTMLElement {
   const idUnit = incEl('span', 'inc-lookback-ids', 'ids');
   const wrap = incEl('span', 'inc-lookback');
   wrap.append(amount, unit, idUnit);
-  form.appendChild(incField('Lookback', wrap));
+  form.appendChild(incField(t('incremental.lookback'), wrap));
 
   const typeOf = (): string => (view.cursorColumns.find((c: any) => c.name === cursor.value) || {}).type;
   const syncUnit = (secs: number): void => {
@@ -188,14 +188,14 @@ function incForm(id: string, view: any): HTMLElement {
   cursor.addEventListener('change', () => syncUnit(0));
 
   const actions = incEl('div', 'inc-actions');
-  const save = incEl('button', 'btn btn-primary btn-sm', 'Save');
+  const save = incEl('button', 'btn btn-primary btn-sm', t('common.save'));
   save.type = 'button';
   save.id = 'inc-save';
-  const full = incEl('button', 'btn btn-sm', 'Full refresh now');
+  const full = incEl('button', 'btn btn-sm', t('incremental.full_refresh_now'));
   full.type = 'button';
   full.id = 'inc-full';
   full.disabled = !(s && s.enabled);
-  full.title = full.disabled ? 'Turn incremental refresh on first' : 'Re-fetch everything and reset the high-water mark';
+  full.title = full.disabled ? t('incremental.turn_incremental_refresh_on_first') : t('incremental.re_fetch_everything_and_reset_the');
   const msg = incEl('span', 'inc-msg');
   msg.id = 'inc-msg';
   msg.setAttribute('role', 'status');
@@ -212,28 +212,28 @@ function incForm(id: string, view: any): HTMLElement {
         enabled: enabled.checked, cursorColumn: cursor.value, keyColumn: key.value, lookback,
       });
     } catch (_) {
-      res = { ok: false, error: 'Could not save the settings.' };
+      res = { ok: false, error: t('incremental.could_not_save_the_settings') };
     }
     save.disabled = false;
     if (!res || !res.ok) {
-      msg.textContent = (res && res.error) || 'Could not save the settings.';
+      msg.textContent = (res && res.error) || t('incremental.could_not_save_the_settings');
       msg.classList.add('is-error');
       return;
     }
     incOpen = true;
     incRender(dsEl('inc-panel') as HTMLElement, id, res);
     const again = dsEl('inc-msg');
-    if (again) again.textContent = 'Saved';
+    if (again) again.textContent = t('common.saved');
   });
 
   full.addEventListener('click', async () => {
     full.disabled = true;
     msg.classList.remove('is-error');
-    msg.textContent = 'Full refresh…';
+    msg.textContent = t('incremental.full_refresh_2');
     const flagged = await window.hubIncremental.requestFull(currentProjectId as string, id).catch(() => null);
     if (!flagged || !flagged.ok) {
       full.disabled = false;
-      msg.textContent = (flagged && flagged.error) || 'Could not start a full refresh.';
+      msg.textContent = (flagged && flagged.error) || t('incremental.could_not_start_a_full_refresh');
       msg.classList.add('is-error');
       return;
     }
@@ -249,25 +249,25 @@ function incForm(id: string, view: any): HTMLElement {
 function incHow(view: any): HTMLElement {
   const p = incEl('p', 'inc-how');
   const fetch = view.fetch === 'server'
-    ? `Rows past the high-water mark are requested from ${view.source} itself.`
+    ? t('incremental.rows_past_the_high_water_mark', { source: view.source })
     : view.fetch === 'files'
-      ? 'Only files changed since the last run are re-read, and only rows past the high-water mark are kept.'
-      : `${view.source} cannot filter on the server, so each run fetches as before and rows are filtered after fetch.`;
-  p.textContent = `${fetch} With a key column, a fetched row replaces the stored row with the same key; without one, new rows are appended and rows already stored are not added twice. Every ${view.fullEvery}th run is a full refresh, to correct drift.`;
+      ? t('incremental.only_files_changed_since_the_last')
+      : t('incremental.cannot_filter_on_the_server_so', { source: view.source });
+  p.textContent = t('incremental.with_a_key_column_a_fetched', { fetch, fullEvery: view.fullEvery });
   return p;
 }
 
 function incLog(s: any): HTMLElement {
   const wrap = incEl('div', 'inc-log-wrap');
-  wrap.appendChild(incEl('h4', 'inc-log-title', 'Refresh log'));
+  wrap.appendChild(incEl('h4', 'inc-log-title', t('incremental.refresh_log')));
   const log: any[] = (s && s.log) || [];
   if (!log.length) {
-    wrap.appendChild(incEl('p', 'inc-empty', 'No runs yet. The first refresh is a full one and sets the high-water mark.'));
+    wrap.appendChild(incEl('p', 'inc-empty', t('incremental.no_runs_yet_the_first_refresh')));
     return wrap;
   }
   const table = incEl('table', 'inc-log');
   const head = incEl('tr');
-  for (const h of ['When', 'Run', 'Fetched', 'Inserted', 'Updated', 'High-water mark']) head.appendChild(incEl('th', undefined, h));
+  for (const h of [t('common.when'), t('common.run'), t('incremental.fetched'), t('incremental.inserted'), t('html.updated'), t('incremental.high_water_mark')]) head.appendChild(incEl('th', undefined, h));
   const thead = incEl('thead');
   thead.appendChild(head);
   table.appendChild(thead);
@@ -276,7 +276,7 @@ function incLog(s: any): HTMLElement {
     const tr = incEl('tr', 'inc-log-row is-' + e.mode);
     tr.appendChild(incEl('td', 'inc-when', incWhen(e.at)));
     const run = incEl('td', 'inc-run');
-    run.appendChild(incEl('span', 'inc-mode', e.mode === 'full' ? 'Full' : 'Incremental'));
+    run.appendChild(incEl('span', 'inc-mode', e.mode === 'full' ? t('incremental.full') : t('incremental.incremental')));
     run.appendChild(incEl('span', 'inc-run-how', e.mode === 'full' ? (e.note || INC_HOW.full) : (INC_HOW[e.how] || e.how)));
     if (e.note && e.mode !== 'full') run.title = e.note;
     tr.appendChild(run);

@@ -32,14 +32,14 @@ async function ctEnterProject(projectId: string): Promise<void> {
 }
 
 const CT_KINDS: Array<{ kind: string; label: string; icon: string; open: (id: string, projectId: string, name: string) => Promise<void> }> = [
-  { kind: 'dataset', label: 'Dataset', icon: 'database', open: (id, projectId, name) => openRecentItem({ type: 'dataset', id, projectId, name }) },
+  { kind: 'dataset', label: t('common.dataset'), icon: 'database', open: (id, projectId, name) => openRecentItem({ type: 'dataset', id, projectId, name }) },
   {
     kind: 'visual', label: 'Visual', icon: 'columns',
     open: async (id, projectId) => { await ctEnterProject(projectId); selectSection('visuals'); await openSavedVisual(id); },
   },
-  { kind: 'analysis', label: 'Dashboard', icon: 'grid', open: (id, projectId, name) => openRecentItem({ type: 'analysis', id, projectId, name }) },
+  { kind: 'analysis', label: t('common.dashboard'), icon: 'grid', open: (id, projectId, name) => openRecentItem({ type: 'analysis', id, projectId, name }) },
   {
-    kind: 'metric', label: 'Metric', icon: 'chart-line',
+    kind: 'metric', label: t('common.metric'), icon: 'chart-line',
     open: async (id, projectId) => {
       await ctEnterProject(projectId);
       selectSection('datasets');
@@ -47,9 +47,9 @@ const CT_KINDS: Array<{ kind: string; label: string; icon: string; open: (id: st
       await mpOpenEditor({ id });
     },
   },
-  { kind: 'report', label: 'Report', icon: 'file-text', open: (id, projectId, name) => openRecentItem({ type: 'report', id, projectId, name }) },
+  { kind: 'report', label: t('common.report'), icon: 'file-text', open: (id, projectId, name) => openRecentItem({ type: 'report', id, projectId, name }) },
   {
-    kind: 'story', label: 'Story', icon: 'file-text',
+    kind: 'story', label: t('common.story'), icon: 'file-text',
     open: async (id, projectId) => {
       await ctEnterProject(projectId);
       await stOpen(id);
@@ -148,7 +148,7 @@ async function ctAfterPaint(list: HTMLElement | null, barBefore?: HTMLElement | 
     bar = document.createElement('div');
     bar.className = 'ct-filter';
     bar.setAttribute('role', 'toolbar');
-    bar.setAttribute('aria-label', 'Filter by tag');
+    bar.setAttribute('aria-label', t('catalogUi.filter_by_tag'));
     anchor.parentElement.insertBefore(bar, anchor);
     ctLists.set(list, bar);
   }
@@ -181,7 +181,7 @@ function ctPaintBar(bar: HTMLElement, present: Map<string, number>, total: numbe
   if (bar.hidden) return;
   const label = document.createElement('span');
   label.className = 'ct-filter-label';
-  label.textContent = 'Tags';
+  label.textContent = t('common.tags');
   bar.appendChild(label);
   const names = Array.from(present.keys()).sort((a, b) => (present.get(b) || 0) - (present.get(a) || 0) || a.localeCompare(b));
   if (ctActiveTag && names.indexOf(ctActiveTag) < 0) names.unshift(ctActiveTag);
@@ -193,7 +193,7 @@ function ctPaintBar(bar: HTMLElement, present: Map<string, number>, total: numbe
     b.setAttribute('aria-pressed', String(on));
     b.textContent = name;
     const n = present.get(name) || 0;
-    b.title = on ? 'Show everything' : `Show only #${name} (${n})`;
+    b.title = on ? t('catalogUi.show_everything') : t('catalogUi.show_only', { name, n });
     b.addEventListener('click', () => ctSetActiveTag(on ? '' : name));
     bar.appendChild(b);
   });
@@ -201,12 +201,12 @@ function ctPaintBar(bar: HTMLElement, present: Map<string, number>, total: numbe
     const clear = document.createElement('button');
     clear.type = 'button';
     clear.className = 'ct-filter-clear';
-    clear.textContent = 'Clear';
+    clear.textContent = t('common.clear');
     clear.addEventListener('click', () => ctSetActiveTag(''));
     bar.appendChild(clear);
     const note = document.createElement('span');
     note.className = 'ct-filter-note';
-    note.textContent = shown ? `${shown} of ${total}` : `Nothing here is tagged #${ctActiveTag}`;
+    note.textContent = shown ? `${shown} of ${total}` : t('catalogUi.nothing_here_is_tagged', { ctActiveTag });
     bar.appendChild(note);
   }
 }

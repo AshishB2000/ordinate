@@ -86,7 +86,7 @@ function promptModal(title: string, defaultValue: string, okLabel: string): Prom
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'btn';
-    cancel.textContent = 'Cancel';
+    cancel.textContent = t('common.cancel');
     const ok = document.createElement('button');
     ok.type = 'button';
     ok.className = 'btn btn-primary';
@@ -187,7 +187,7 @@ async function resolveProjectId(opts: { create?: boolean } = {}): Promise<string
 
   if (!id && mayCreate) {
     try {
-      const created = await window.hub.createProject('Untitled project');
+      const created = await window.hub.createProject(t('common.untitled_project'));
       id = created && created.id ? String(created.id) : '';
     } catch (_) {
       return '';
@@ -218,8 +218,8 @@ async function newAnalysis(): Promise<void> {
 // Open the +New menu anchored to the button, reusing the shared row-menu popup.
 function openNewMenu(trigger: HTMLElement): void {
   openRowMenu(trigger, [
-    { label: 'Dashboard', onClick: () => newAnalysis() },
-    { label: 'Data source', onClick: () => startFromSource('catalog') },
+    { label: t('common.dashboard'), onClick: () => newAnalysis() },
+    { label: t('projects.data_source'), onClick: () => startFromSource('catalog') },
   ]);
 }
 

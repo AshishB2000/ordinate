@@ -14,7 +14,7 @@ function mkAiPanel(labelText: string): HTMLElement {
   head.className = 'ai-interp-head';
   const badge = document.createElement('span');
   badge.className = 'ai-badge';
-  badge.textContent = 'Assistant';
+  badge.textContent = t('common.assistant');
   const label = document.createElement('span');
   label.className = 'ai-interp-label';
   label.textContent = labelText;

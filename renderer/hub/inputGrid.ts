@@ -57,7 +57,7 @@ function itHead(s: ItState): HTMLTableSectionElement {
   tr.setAttribute('aria-rowindex', '1');
   const corner = itMk('th', 'it-rn it-corner');
   corner.setAttribute('role', 'columnheader');
-  corner.setAttribute('aria-label', 'Row number');
+  corner.setAttribute('aria-label', t('common.row_number'));
   tr.appendChild(corner);
   s.columns.forEach((col, c) => {
     const th = itMk('th', 'it-th');
@@ -66,25 +66,25 @@ function itHead(s: ItState): HTMLTableSectionElement {
     th.dataset.c = String(c);
     const type = itMk('span', 'it-th-type it-th-type--' + col.type);
     type.appendChild(icon(itTypeIcon(col.type), 14));
-    type.title = col.type === 'number' ? 'Number' : col.type === 'date' ? 'Date' : 'Text';
+    type.title = col.type === 'number' ? t('common.number') : col.type === 'date' ? t('common.date') : t('common.text');
     const name = itMk('span', 'it-th-name', col.name);
     th.append(type, name);
     const bits: string[] = [col.type];
     if (col.required) {
-      const req = itMk('span', 'it-th-req', 'Required');
+      const req = itMk('span', 'it-th-req', t('common.required'));
       th.appendChild(req);
       bits.push('required');
     }
     if (col.lookup) {
-      const where = `${s.lookupNames[col.lookup.datasetId] || 'another dataset'} · ${col.lookup.column}`;
+      const where = `${s.lookupNames[col.lookup.datasetId] || t('common.another_dataset')} · ${col.lookup.column}`;
       const lk = itMk('span', 'it-th-lookup');
       lk.appendChild(icon('link', 12));
-      lk.title = 'Looks up ' + where;
+      lk.title = t('inputGrid.looks_up', { where });
       th.appendChild(lk);
-      bits.push('looks up ' + where);
+      bits.push(t('inputGrid.looks_up_2', { where }));
     }
     th.setAttribute('aria-label', `${col.name}, ${bits.join(', ')}`);
-    th.title = 'Select column';
+    th.title = t('inputGrid.select_column');
     tr.appendChild(th);
   });
   thead.appendChild(tr);
@@ -112,7 +112,7 @@ function itRowEl(s: ItState, r: number, ghost: boolean): HTMLTableRowElement {
   rn.dataset.r = String(r);
   if (ghost) {
     rn.appendChild(icon('plus', 12));
-    rn.setAttribute('aria-label', 'New row');
+    rn.setAttribute('aria-label', t('inputGrid.new_row'));
   } else {
     rn.textContent = String(r + 1);
   }
@@ -131,7 +131,7 @@ function itRowEl(s: ItState, r: number, ghost: boolean): HTMLTableRowElement {
     const v = row ? row[c] : null;
     td.textContent = itDisplay(v, col);
     if (ghost && c === 0) {
-      const hint = itMk('span', 'it-ghost-hint', s.rows.length ? 'New row' : 'Type to add the first row');
+      const hint = itMk('span', 'it-ghost-hint', s.rows.length ? t('inputGrid.new_row') : t('inputGrid.type_to_add_the_first_row'));
       td.appendChild(hint);
     }
     const sel = itInSel(r, c);
@@ -161,7 +161,7 @@ function itRowEl(s: ItState, r: number, ghost: boolean): HTMLTableRowElement {
 function itIssueWords(i: any): string {
   if (i.kind === 'rule' && itS) {
     const rule = itS.rules.find((r: any) => r && r.id === i.ruleId);
-    if (rule && typeof dqRuleWords === 'function') return 'Rule: ' + dqRuleWords(rule, new Map(Object.entries(itS.lookupNames)));
+    if (rule && typeof dqRuleWords === 'function') return t('inputGrid.rule', { p0: dqRuleWords(rule, new Map(Object.entries(itS.lookupNames))) });
   }
   return String(i.message || '');
 }

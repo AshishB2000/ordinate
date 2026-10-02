@@ -36,7 +36,7 @@ async function openRelationshipDialog(): Promise<void> {
   if (!currentProjectId) return;
   if (!relDatasets.length) await refreshRelationships();
   if (relDatasets.length < 2) {
-    showToast('Import a second dataset first — a relationship joins two.', { kind: 'info' });
+    showToast(t('relationshipDialog.import_a_second_dataset_first_a'), { kind: 'info' });
     return;
   }
   const pid = currentProjectId;
@@ -48,17 +48,17 @@ async function openRelationshipDialog(): Promise<void> {
   box.className = 'ws-modal rel-modal';
   const title = document.createElement('div');
   title.className = 'ws-modal-title';
-  title.textContent = 'New relationship';
+  title.textContent = t('common.new_relationship');
   const intro = document.createElement('p');
   intro.className = 'rel-modal-intro';
-  intro.textContent = 'Each row of the many side finds its one row on the other side where the key columns agree. Visuals built on the many side can then use both.';
+  intro.textContent = t('relationshipDialog.each_row_of_the_many_side');
 
   const sides = document.createElement('div');
   sides.className = 'rel-modal-sides';
-  const fromDs = relSelect2('Many side', 'The rows that look something up — orders, events.');
-  const toDs = relSelect2('One side', 'The lookup — targets, regions, products.');
-  const fromCol = relSelect2('Key column', '');
-  const toCol = relSelect2('Matches column', '');
+  const fromDs = relSelect2(t('common.many_side'), t('relationshipDialog.the_rows_that_look_something_up'));
+  const toDs = relSelect2(t('common.one_side'), t('relationshipDialog.the_lookup_targets_regions_products'));
+  const fromCol = relSelect2(t('relationshipDialog.key_column'), '');
+  const toCol = relSelect2(t('relationshipDialog.matches_column'), '');
   const left = document.createElement('div');
   left.className = 'rel-modal-side';
   left.append(fromDs.wrap, fromCol.wrap);
@@ -74,16 +74,16 @@ async function openRelationshipDialog(): Promise<void> {
   const sugHead = document.createElement('div');
   sugHead.className = 'rel-sug-head';
   sugHead.id = 'rel-sug-head';
-  sugHead.textContent = 'Suggested keys';
+  sugHead.textContent = t('relationshipDialog.suggested_keys');
   const sug = document.createElement('div');
   sug.className = 'rel-sug';
   sug.setAttribute('role', 'radiogroup');
   sug.setAttribute('aria-labelledby', 'rel-sug-head');
 
-  const card = relSelect2('Kind', '');
+  const card = relSelect2(t('common.kind'), '');
   relFillSelect(card.sel, [
-    { value: 'many_to_one', label: 'Many to one — many rows share one lookup row' },
-    { value: 'one_to_one', label: 'One to one — each row has exactly one partner' },
+    { value: 'many_to_one', label: t('relationshipDialog.many_to_one_many_rows_share') },
+    { value: 'one_to_one', label: t('relationshipDialog.one_to_one_each_row_has') },
   ], 'many_to_one');
   const cardHint = card.wrap.querySelector('.me-field-hint') as HTMLElement | null;
   const note = document.createElement('p');
@@ -100,17 +100,17 @@ async function openRelationshipDialog(): Promise<void> {
   const cancel = document.createElement('button');
   cancel.type = 'button';
   cancel.className = 'btn btn-ghost';
-  cancel.textContent = 'Cancel';
+  cancel.textContent = t('common.cancel');
   const save = document.createElement('button');
   save.type = 'button';
   save.className = 'btn btn-primary';
-  save.textContent = 'Save relationship';
+  save.textContent = t('relationshipDialog.save_relationship');
   actions.append(cancel, save);
 
   box.append(title, intro, sides, sugHead, sug, card.wrap, note, err, actions);
   overlay.appendChild(box);
   document.body.appendChild(overlay);
-  const a11y = makeModalAccessible(box, 'New relationship', fromDs.sel);
+  const a11y = makeModalAccessible(box, t('common.new_relationship'), fromDs.sel);
 
   const finish = (): void => {
     a11y.release();
@@ -135,7 +135,7 @@ async function openRelationshipDialog(): Promise<void> {
     if (!candidates.length) {
       const none = document.createElement('p');
       none.className = 'rel-sug-none';
-      none.textContent = 'No column pair looks related. Choose the key columns yourself above.';
+      none.textContent = t('relationshipDialog.no_column_pair_looks_related_choose');
       sug.appendChild(none);
       return;
     }
@@ -152,7 +152,7 @@ async function openRelationshipDialog(): Promise<void> {
       pair.textContent = `${c.from} → ${c.to}`;
       const rate = document.createElement('span');
       rate.className = 'rel-sug-rate';
-      rate.textContent = c.rate === null ? 'not measured' : `${relPct(c.rate)} match`;
+      rate.textContent = c.rate === null ? t('relationshipDialog.not_measured') : `${relPct(c.rate)} match`;
       const meter = document.createElement('span');
       meter.className = 'rel-sug-meter';
       meter.setAttribute('aria-hidden', 'true');
@@ -161,7 +161,7 @@ async function openRelationshipDialog(): Promise<void> {
       meter.appendChild(fill);
       const why = document.createElement('span');
       why.className = 'rel-sug-why';
-      why.textContent = [c.name === 1 ? 'same name' : c.name >= 0.6 ? 'similar names' : '', c.typeMatch ? 'same type' : 'different types']
+      why.textContent = [c.name === 1 ? t('relationshipDialog.same_name') : c.name >= 0.6 ? t('relationshipDialog.similar_names') : '', c.typeMatch ? t('relationshipDialog.same_type') : t('relationshipDialog.different_types')]
         .filter(Boolean).join(' · ');
       b.append(pair, meter, rate, why);
       b.addEventListener('click', () => {
@@ -194,13 +194,13 @@ async function openRelationshipDialog(): Promise<void> {
     if (fromDs.sel.value === toDs.sel.value) {
       candidates = [];
       sug.innerHTML = '';
-      note.textContent = 'Pick two different datasets.';
+      note.textContent = t('relationshipDialog.pick_two_different_datasets');
       return;
     }
     sug.innerHTML = '';
     const busy = document.createElement('p');
     busy.className = 'rel-sug-none';
-    busy.textContent = 'Checking which columns match…';
+    busy.textContent = t('relationshipDialog.checking_which_columns_match');
     sug.appendChild(busy);
     const res = await window.hubAuthoring.suggestRelationshipKeys(pid, fromDs.sel.value, toDs.sel.value);
     if (my !== seq) return;
@@ -213,10 +213,10 @@ async function openRelationshipDialog(): Promise<void> {
       toCol.sel.value = best.to;
       if (best.cardinality) card.sel.value = best.cardinality;
       if (best.stats && best.stats.toKeys !== best.stats.toKeyed) {
-        note.textContent = `${relName(toDs.sel.value)}.${best.to} repeats some values — each lookup uses the first row with that value.`;
+        note.textContent = t('relationshipDialog.repeats_some_values_each_lookup_uses', { value: relName(toDs.sel.value), to: best.to });
       }
     }
-    if (cardHint) cardHint.textContent = best && best.cardinality ? 'Chosen from the data.' : '';
+    if (cardHint) cardHint.textContent = best && best.cardinality ? t('relationshipDialog.chosen_from_the_data') : '';
     paintSuggestions();
   };
   fromDs.sel.addEventListener('change', () => void loadSides());
@@ -233,7 +233,7 @@ async function openRelationshipDialog(): Promise<void> {
     });
     save.disabled = false;
     if (!res || !res.ok) {
-      err.textContent = (res && res.error) || 'Could not save the relationship.';
+      err.textContent = (res && res.error) || t('relationshipDialog.could_not_save_the_relationship');
       err.hidden = false;
       return;
     }
@@ -241,7 +241,7 @@ async function openRelationshipDialog(): Promise<void> {
     encRelatedInvalidate();
     const r = res.relationship;
     relSelectedId = r.id;
-    showToast(`Related ${relName(r.from.datasetId)} → ${relName(r.to.datasetId)} on ${r.from.column} (${relPct(relRate(r))} matched)`, { kind: 'success' });
+    showToast(t('relationshipDialog.related_on_matched', { datasetId: relName(r.from.datasetId), datasetId2: relName(r.to.datasetId), column: r.from.column, p3: relPct(relRate(r)) }), { kind: 'success' });
     await refreshRelationships();
   });
 

@@ -65,9 +65,9 @@ let dcOpenJoin = -1;
 let dcOpenCol = '';
 
 const DC_MODES: ReadonlyArray<{ id: DcMode; label: string; hint: string }> = [
-  { id: 'inner', label: 'Inner', hint: 'Only rows that match on both sides' },
-  { id: 'left', label: 'Left', hint: 'Every row on the left; blanks where there is no match' },
-  { id: 'append', label: 'Append', hint: 'Stack the rows; columns line up by name' },
+  { id: 'inner', label: t('composer.inner'), hint: t('composer.only_rows_that_match_on_both') },
+  { id: 'left', label: t('common.left'), hint: t('composer.every_row_on_the_left_blanks') },
+  { id: 'append', label: t('composer.append'), hint: t('composer.stack_the_rows_columns_line_up') },
 ];
 
 function dcEl(id: string): HTMLElement | null {
@@ -174,7 +174,7 @@ async function renderComposerSources(): Promise<void> {
     group.hidden = !inline;
     if (inline) {
       const sheet = dcOrigin && dcOrigin.sheetName ? ` · ${dcOrigin.sheetName}` : '';
-      const row = dcSourceRow(inline.label, `${inline.rows.toLocaleString()} rows${sheet} · on the canvas`, () => {});
+      const row = dcSourceRow(inline.label, t('composer.rows_on_the_canvas', { p0: inline.rows.toLocaleString(), sheet }), () => {});
       row.classList.add('dc-src-used');
       row.setAttribute('aria-disabled', 'true');
       importList.appendChild(row);
@@ -205,7 +205,7 @@ async function addTableById(id: string, name: string): Promise<void> {
     ds = res && res.dataset ? res.dataset : res;
   } catch (_) { ds = null; }
   if (!ds || !Array.isArray(ds.columns)) {
-    showToast('Could not read that dataset.');
+    showToast(t('composer.could_not_read_that_dataset'));
     return;
   }
   const table: DcTable = {
@@ -257,28 +257,28 @@ function chainColumns(): string[] {
 
 // ── The canvas ───────────────────────────────────────────────────────────────
 
-function dcChip(t: DcTable, onRemove: (() => void) | null): HTMLElement {
+function dcChip(tv: DcTable, onRemove: (() => void) | null): HTMLElement {
   const chip = document.createElement('div');
   chip.className = 'dc-chip';
   const name = document.createElement('div');
   name.className = 'dc-chip-name';
-  name.textContent = t.label;
+  name.textContent = tv.label;
   const meta = document.createElement('div');
   meta.className = 'dc-chip-meta';
-  meta.textContent = `${t.rows.toLocaleString()} rows`;
+  meta.textContent = `${tv.rows.toLocaleString()} rows`;
   chip.appendChild(name);
   chip.appendChild(meta);
-  if (t.kind) {
+  if (tv.kind) {
     const badge = document.createElement('span');
     badge.className = 'dc-chip-kind';
-    badge.textContent = t.kind;
+    badge.textContent = tv.kind;
     chip.appendChild(badge);
   }
   if (onRemove) {
     const x = document.createElement('button');
     x.className = 'dc-chip-x';
     x.type = 'button';
-    iconOnly(x, 'x', `Remove ${t.label}`);
+    iconOnly(x, 'x', t('composer.remove', { label: tv.label }));
     x.addEventListener('click', onRemove);
     chip.appendChild(x);
   }
@@ -292,7 +292,7 @@ function renderCanvas(): void {
   if (!dcBase) {
     const hint = document.createElement('div');
     hint.className = 'dc-canvas-empty';
-    hint.textContent = 'Pick a table on the left to start from.';
+    hint.textContent = t('composer.pick_a_table_on_the_left');
     canvas.appendChild(hint);
     return;
   }
@@ -308,8 +308,7 @@ function renderCanvas(): void {
     badge.innerHTML = dcModeIcon(link.mode);
     const modeLabel = DC_MODES.find((m) => m.id === link.mode);
     badge.setAttribute('aria-label',
-      `${modeLabel ? modeLabel.label : link.mode} join with ${link.table.label}`
-      + (link.mode !== 'append' && !link.on ? ' — no key chosen' : ''));
+      t('composer.join_with', { p0: modeLabel ? modeLabel.label : link.mode, label: link.table.label, p2: !!(link.mode !== 'append' && !link.on) }));
     badge.addEventListener('click', () => openJoinPop(i));
     wrap.appendChild(badge);
     canvas.appendChild(wrap);
@@ -338,8 +337,8 @@ function renderCanvas(): void {
 function removeLink(i: number): void {
   const after = dcLinks.length - 1 - i;
   const msg = after > 0
-    ? `Remove "${dcLinks[i].table.label}" and the ${after} table${after === 1 ? '' : 's'} joined after it?`
-    : `Remove "${dcLinks[i].table.label}"?`;
+    ? t('composer.remove_and_the_joined_after_it', { p0: dcLinks[i].table.label, after })
+    : t('composer.remove_2', { p0: dcLinks[i].table.label });
   if (!window.confirm(msg)) return;
   dcLinks = dcLinks.slice(0, i);
   closeJoinPop();
@@ -414,7 +413,7 @@ function paintJoinNote(link: DcLink): void {
   const note = dcEl('dc-join-note');
   if (!note) return;
   if (link.mode !== 'append' && !link.on) {
-    note.textContent = 'Choose a column on each side to join on.';
+    note.textContent = t('composer.choose_a_column_on_each_side');
     note.hidden = false;
   } else {
     note.hidden = true;
@@ -485,11 +484,11 @@ async function runPreview(): Promise<void> {
   try {
     res = await window.hub.composePreview(currentProjectId, dcBase.ref, joins, dcPage);
   } catch (_) {
-    res = { ok: false, error: 'Could not build the preview' };
+    res = { ok: false, error: t('composer.could_not_build_the_preview') };
   }
   if (seq !== dcPreviewSeq) return; // a newer edit already won
   if (!res || !res.ok) {
-    paintWarnings([(res && res.error) || 'Could not build the preview']);
+    paintWarnings([(res && res.error) || t('composer.could_not_build_the_preview')]);
     return;
   }
   dcRawCols = res.columns || [];
@@ -506,7 +505,7 @@ function paintCount(): void {
   const el = dcEl('dc-count');
   if (!el) return;
   const cols = visibleCols().length;
-  el.textContent = `${dcTotal.toLocaleString()} rows · ${cols} column${cols === 1 ? '' : 's'}`;
+  el.textContent = t('composer.rows', { p0: dcTotal.toLocaleString(), cols });
 }
 
 function paintWarnings(list: string[]): void {
@@ -528,7 +527,7 @@ function paintPager(): void {
   if (!pager || !label) return;
   const pages = Math.max(1, Math.ceil(dcTotal / dcPageRows));
   pager.hidden = pages <= 1;
-  label.textContent = `Page ${dcPage + 1} of ${pages.toLocaleString()}`;
+  label.textContent = t('composer.page_of', { p0: dcPage + 1, p1: pages.toLocaleString() });
   const prev = dcEl('dc-prev') as HTMLButtonElement | null;
   const next = dcEl('dc-next') as HTMLButtonElement | null;
   if (prev) prev.disabled = dcPage === 0;
@@ -568,15 +567,15 @@ async function handleComposerSave(): Promise<void> {
   if (!dcBase || !currentProjectId) return;
   const missing = dcLinks.filter((l) => l.mode !== 'append' && !l.on);
   if (missing.length) {
-    showToast(`Choose a join key for "${missing[0].table.label}" first.`);
+    showToast(t('composer.choose_a_join_key_for_first', { p0: missing[0].table.label }));
     const i = dcLinks.indexOf(missing[0]);
     if (i >= 0) openJoinPop(i);
     return;
   }
   const nameEl = dcEl('dc-name') as HTMLInputElement | null;
-  const name = (nameEl && nameEl.value.trim()) || dcBase.label || 'Untitled dataset';
+  const name = (nameEl && nameEl.value.trim()) || dcBase.label || t('common.untitled_dataset');
   const btn = dcEl('dc-save') as HTMLButtonElement | null;
-  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  if (btn) { btn.disabled = true; btn.textContent = t('common.saving'); }
 
   // Retypes land through the SAME column update the explorer's header menu
   // makes — now inside the save job (main applies `retype` after the rows),
@@ -595,12 +594,12 @@ async function handleComposerSave(): Promise<void> {
       retype: changedType ? mappedColumns() : undefined,
     });
   } catch (_) {
-    res = { ok: false, error: 'Failed to save the dataset.' };
+    res = { ok: false, error: t('common.failed_to_save_the_dataset') };
   }
-  if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
-  if (res && res.canceled) { showToast('Import cancelled.'); return; }
+  if (btn) { btn.disabled = false; btn.textContent = t('common.save'); }
+  if (res && res.canceled) { showToast(t('composer.import_cancelled')); return; }
   if (!res || !res.ok) {
-    window.alert((res && res.error) || 'Failed to save the dataset.');
+    window.alert((res && res.error) || t('common.failed_to_save_the_dataset'));
     return;
   }
 
@@ -615,10 +614,10 @@ async function handleComposerSave(): Promise<void> {
   for (const w of (res.warnings || [])) showToast(w);
   closeComposer();
   await refreshDatasetList();
-  showToast(`Saved "${name}".`);
+  showToast(t('composer.saved', { name }));
   // A dataset saved from the Query tab opens on its own page, where its
   // lineage (what it reads from, and that it refreshes when they change) is.
-  if (dcOrigin && dcOrigin.kind === 'sql' && res.dataset && res.dataset.id) void openSavedDataset(String(res.dataset.id));
+  if (dcOrigin && (dcOrigin.kind === 'sql' || dcOrigin.kind === 'notebook') && res.dataset && res.dataset.id) void openSavedDataset(String(res.dataset.id));
 }
 
 // ── Boot wiring (once) ───────────────────────────────────────────────────────
@@ -636,7 +635,7 @@ async function openComposerOnDataset(id: string, name: string): Promise<void> {
     ds = res && res.dataset ? res.dataset : res;
   } catch (_) { ds = null; }
   if (!ds || !Array.isArray(ds.columns)) {
-    showToast('Could not read that dataset.');
+    showToast(t('composer.could_not_read_that_dataset'));
     return;
   }
   openComposer({

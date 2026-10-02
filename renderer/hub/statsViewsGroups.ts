@@ -16,7 +16,7 @@ function swTestCard(host: HTMLElement, title: string, p: number, rows: Array<[st
   h.textContent = title;
   const chip = document.createElement('span');
   chip.className = 'sw-verdict ' + (p < 0.05 ? 'is-sig' : 'is-ns');
-  chip.textContent = p < 0.05 ? 'Significant' : 'Not significant';
+  chip.textContent = p < 0.05 ? t('statsViewsGroups.significant') : t('statsViewsGroups.not_significant');
   head.append(h, chip);
   const dl = document.createElement('dl');
   dl.className = 'sw-dl';
@@ -64,7 +64,7 @@ function swSimpleTable(host: HTMLElement, caption: string, head: string[], rows:
     r.forEach((v, i) => {
       const cell = document.createElement(i === 0 ? 'th' : 'td');
       if (i === 0) (cell as HTMLTableCellElement).scope = 'row';
-      else cell.className = i >= numericFrom ? 'num tnum' : '';
+      else cell.className = i >= numericFrom ? t('statsViewsGroups.num_tnum') : '';
       cell.textContent = v;
       tr.appendChild(cell);
     });
@@ -92,8 +92,8 @@ function swWarnings(host: HTMLElement, list: string[]): void {
 function swViewGroups(host: HTMLElement, r: any, spec: any): void {
   const k = r.groups.length;
   const n = r.groups.reduce((s: number, g: any) => s + g.n, 0);
-  const tests = r.mode === 'two' ? "Welch's t-test and Mann–Whitney U" : r.mode === 'many' ? 'One-way ANOVA and Kruskal–Wallis' : r.prop ? 'Two-proportion z-test and chi-square' : 'Chi-square test of independence';
-  swResultHead(host, `${r.outcome} by ${r.group}`, `${tests} · ${k} groups · n = ${swCount(n)}`, spec);
+  const tests = r.mode === 'two' ? t('statsViewsGroups.welch_s_t_test_and_mann') : r.mode === 'many' ? t('statsViewsGroups.one_way_anova_and_kruskal_wallis') : r.prop ? t('statsViewsGroups.two_proportion_z_test_and_chi') : t('statsViewsGroups.chi_square_test_of_independence');
+  swResultHead(host, `${r.outcome} by ${r.group}`, t('statsViewsGroups.groups_n', { tests, k, n: swCount(n) }), spec);
   swSentence(host, r.sentence);
   swWarnings(host, r.warnings);
   const cards = document.createElement('div');
@@ -103,43 +103,43 @@ function swViewGroups(host: HTMLElement, r: any, spec: any): void {
   if (r.mode === 'two') {
     const w = r.welch;
     const [a, b] = r.groups;
-    swTestCard(cards, "Welch's t-test", w.p, [
+    swTestCard(cards, t('statsViewsGroups.welch_s_t_test'), w.p, [
       ['t', swFmt(w.t)], ['df', swFmt(w.df)], ['p', swP(w.p)],
-      [`Mean difference (${a.label} − ${b.label})`, swFmt(w.diff)], ['95% CI', `${swFmt(w.ciLow)} to ${swFmt(w.ciHigh)}`],
-      ["Cohen's d", swFmt(w.cohenD)], ["Hedges' g", swFmt(w.hedgesG)],
-    ], 'Does not assume equal variances.');
+      [t('statsViewsGroups.mean_difference', { label: a.label, label2: b.label }), swFmt(w.diff)], [t('statsViewsGroups.95_ci'), `${swFmt(w.ciLow)} to ${swFmt(w.ciHigh)}`],
+      [t('statsViewsGroups.cohen_s_d'), swFmt(w.cohenD)], [t('statsViewsGroups.hedges_g'), swFmt(w.hedgesG)],
+    ], t('statsViewsGroups.does_not_assume_equal_variances'));
     const m = r.mannWhitney;
-    swTestCard(cards, 'Mann–Whitney U', m.p, [
-      ['U', swFmt(m.u)], ['z', swFmt(m.z)], ['p', swP(m.p)], ['Rank-biserial r', swFmt(m.rankBiserial)],
-    ], 'Rank-based: no normality assumption. Normal approximation with tie and continuity corrections.');
+    swTestCard(cards, t('statsViewsGroups.mann_whitney_u'), m.p, [
+      ['U', swFmt(m.u)], ['z', swFmt(m.z)], ['p', swP(m.p)], [t('statsViewsGroups.rank_biserial_r'), swFmt(m.rankBiserial)],
+    ], t('statsViewsGroups.rank_based_no_normality_assumption'));
   } else if (r.mode === 'many') {
     const a = r.anova;
-    swTestCard(cards, 'One-way ANOVA', a.p, [
+    swTestCard(cards, t('statsViewsGroups.one_way_anova'), a.p, [
       ['F', swFmt(a.f)], ['df', `${a.df1}, ${swCount(a.df2)}`], ['p', swP(a.p)], ['η²', swFmt(a.etaSq)],
-    ], 'Assumes similar spread in every group.');
+    ], t('statsViewsGroups.assumes_similar_spread_in_every_group'));
     const kw = r.kruskal;
     swTestCard(cards, 'Kruskal–Wallis', kw.p, [
       ['H', swFmt(kw.h)], ['df', String(kw.df)], ['p', swP(kw.p)], ['ε²', swFmt(kw.epsilonSq)],
-    ], 'Rank-based, with the tie correction.');
+    ], t('statsViewsGroups.rank_based_with_the_tie_correction'));
   } else {
     if (r.prop) {
       const p = r.prop;
       const [a, b] = r.table.rows;
-      swTestCard(cards, 'Two-proportion z-test', p.p, [
-        [`${a}: share ${p.success}`, (p.p1 * 100).toFixed(1) + '%'], [`${b}: share ${p.success}`, (p.p2 * 100).toFixed(1) + '%'],
-        ['Difference', (p.diff * 100).toFixed(1) + ' points'], ['95% CI', `${(p.ciLow * 100).toFixed(1)} to ${(p.ciHigh * 100).toFixed(1)} points`],
-        ['z', swFmt(p.z)], ['p', swP(p.p)], ["Cohen's h", swFmt(p.cohenH)],
+      swTestCard(cards, t('statsViewsGroups.two_proportion_z_test'), p.p, [
+        [t('statsViewsGroups.share', { a, success: p.success }), (p.p1 * 100).toFixed(1) + '%'], [t('statsViewsGroups.share_2', { b, success: p.success }), (p.p2 * 100).toFixed(1) + '%'],
+        [t('statsViewsGroups.difference'), (p.diff * 100).toFixed(1) + ' points'], [t('statsViewsGroups.95_ci'), t('statsViewsGroups.to_points', { p0: (p.ciLow * 100).toFixed(1), p1: (p.ciHigh * 100).toFixed(1) })],
+        ['z', swFmt(p.z)], ['p', swP(p.p)], [t('statsViewsGroups.cohen_s_h'), swFmt(p.cohenH)],
       ]);
     }
     const c = r.chi;
-    swTestCard(cards, 'Chi-square test of independence', c.p, [
-      ['χ²', swFmt(c.chi2)], ['df', String(c.df)], ['p', swP(c.p)], ["Cramér's V", swFmt(c.cramerV)], ['n', swCount(c.n)],
-    ], 'Without continuity correction.');
+    swTestCard(cards, t('statsViewsGroups.chi_square_test_of_independence'), c.p, [
+      ['χ²', swFmt(c.chi2)], ['df', String(c.df)], ['p', swP(c.p)], [t('statsViewsGroups.cramer_s_v'), swFmt(c.cramerV)], ['n', swCount(c.n)],
+    ], t('statsViewsGroups.without_continuity_correction'));
   }
 
   if (r.mode === 'table') {
     const { rows, cols, counts } = r.table;
-    swSimpleTable(host, 'Counts', [r.group, ...cols, 'Total'], rows.map((row: string, i: number) => {
+    swSimpleTable(host, t('statsViewsGroups.counts'), [r.group, ...cols, t('common.total')], rows.map((row: string, i: number) => {
       const total = counts[i].reduce((s: number, x: number) => s + x, 0);
       return [row, ...counts[i].map((x: number) => `${swCount(x)} (${total ? ((x / total) * 100).toFixed(0) : 0}%)`), swCount(total)];
     }));
@@ -148,7 +148,7 @@ function swViewGroups(host: HTMLElement, r: any, spec: any): void {
   const grid = document.createElement('div');
   grid.className = 'sw-split';
   host.appendChild(grid);
-  swSimpleTable(grid, 'Groups', [r.group, 'n', 'Mean', 'SD', 'Median'],
+  swSimpleTable(grid, t('common.groups'), [r.group, 'n', t('statsViewsGroups.mean'), 'SD', t('common.median')],
     r.groups.map((g: any) => [g.label, swCount(g.n), swFmt(g.mean), swFmt(g.sd), swFmt(g.median)]));
   swMeansBar(grid, r.outcome, r.groups);
 }
@@ -157,14 +157,14 @@ function swViewGroups(host: HTMLElement, r: any, spec: any): void {
 
 function swViewDistribution(host: HTMLElement, r: any, spec: any): void {
   const m = r.moments;
-  const t = r.normality;
-  const name = t ? (t.method === 'shapiro-wilk' ? 'Shapiro–Wilk' : "D'Agostino–Pearson K²") : 'no normality test';
-  swResultHead(host, `Distribution of ${r.column}`, `${swCount(m.n)} values · ${name}`, spec);
+  const tv = r.normality;
+  const name = tv ? (tv.method === 'shapiro-wilk' ? 'Shapiro–Wilk' : t('statsViewsGroups.d_agostino_pearson_k2')) : t('statsViewsGroups.no_normality_test');
+  swResultHead(host, t('common.distribution_of', { column: r.column }), t('statsViewsGroups.values', { n: swCount(m.n), name }), spec);
   swSentence(host, r.sentence);
   swStatRow(host, [
-    ['n', swCount(m.n)], ['Mean', swFmt(m.mean)], ['SD', swFmt(m.sd)], ['Median', swFmt(m.median)],
-    ['Min', swFmt(m.min)], ['Max', swFmt(m.max)],
-    ['Skewness', swFmt(m.skewness), 'adjusted G1'], ['Excess kurtosis', swFmt(m.kurtosis), 'G2, normal = 0'],
+    ['n', swCount(m.n)], [t('statsViewsGroups.mean'), swFmt(m.mean)], ['SD', swFmt(m.sd)], [t('common.median'), swFmt(m.median)],
+    [t('common.min'), swFmt(m.min)], [t('common.max'), swFmt(m.max)],
+    [t('statsViewsGroups.skewness'), swFmt(m.skewness), t('statsViewsGroups.adjusted_g1')], [t('statsViewsGroups.excess_kurtosis'), swFmt(m.kurtosis), t('statsViewsGroups.g2_normal_0')],
   ]);
   const grid = document.createElement('div');
   grid.className = 'sw-split sw-split--wide';
@@ -175,13 +175,13 @@ function swViewDistribution(host: HTMLElement, r: any, spec: any): void {
   const side = document.createElement('div');
   side.className = 'sw-cards sw-cards--stack';
   grid.appendChild(side);
-  if (t) {
-    swTestCard(side, t.method === 'shapiro-wilk' ? 'Shapiro–Wilk test' : "D'Agostino–Pearson test", t.p,
-      t.method === 'shapiro-wilk'
-        ? [['W', t.statistic.toFixed(4)], ['p', swP(t.p)], ['n', swCount(m.n)]]
-        : [['K²', swFmt(t.statistic)], ['z (skewness)', swFmt(t.zSkew)], ['z (kurtosis)', swFmt(t.zKurt)], ['p', swP(t.p)], ['n', swCount(m.n)]],
-      t.method === 'shapiro-wilk'
-        ? 'Royston (1995), for 3 to 5,000 values. A small p means the data are unlikely to be normal.'
-        : "Above 5,000 values: D'Agostino's skewness and Anscombe–Glynn's kurtosis tests combined.");
+  if (tv) {
+    swTestCard(side, tv.method === 'shapiro-wilk' ? t('statsViewsGroups.shapiro_wilk_test') : t('statsViewsGroups.d_agostino_pearson_test'), tv.p,
+      tv.method === 'shapiro-wilk'
+        ? [['W', tv.statistic.toFixed(4)], ['p', swP(tv.p)], ['n', swCount(m.n)]]
+        : [['K²', swFmt(tv.statistic)], [t('statsViewsGroups.z_skewness'), swFmt(tv.zSkew)], [t('statsViewsGroups.z_kurtosis'), swFmt(tv.zKurt)], ['p', swP(tv.p)], ['n', swCount(m.n)]],
+      tv.method === 'shapiro-wilk'
+        ? t('statsViewsGroups.royston_1995_for_3_to_5')
+        : t('statsViewsGroups.above_5_000_values_d_agostino'));
   }
 }

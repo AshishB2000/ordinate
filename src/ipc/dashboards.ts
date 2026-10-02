@@ -10,6 +10,7 @@ import type { MetricAggregation } from '../analysis/metricValue';
 import { applyPipeline } from '../data/transforms';
 import type { FilterStep } from '../data/transforms';
 import { joinedMetricFor } from './relationships';
+import { lodMetricFor } from './lodData';
 import { paramValues, resolveFilterParams } from '../analysis/params';
 import type { ParamValues } from '../analysis/params';
 import { paramTable } from '../data/paramReplay';
@@ -201,6 +202,9 @@ async function metricFor(
   filters: FilterStep[],
   target: MetricTarget,
 ): Promise<{ ok: boolean; value: number | null }> {
+  // r7:lod — a context filter over an LOD field, or a metric over an LOD.
+  const lod = await lodMetricFor(projectId, datasetId, spec, filters, target);
+  if (lod) return lod;
   // A column or filter this dataset lacks may live on a RELATED one.
   const joined = await joinedMetricFor(projectId, datasetId, spec, filters);
   if (joined) return joined;

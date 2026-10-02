@@ -33,7 +33,7 @@ function txProfileSection(): HTMLElement | null {
   if (!sec) {
     sec = document.createElement('section');
     sec.className = 'tx-dsp';
-    sec.setAttribute('aria-label', 'Text');
+    sec.setAttribute('aria-label', t('common.text'));
     const chart = body.querySelector('.js-dsp-chart');
     if (chart) body.insertBefore(sec, chart);
     else body.appendChild(sec);
@@ -70,10 +70,10 @@ async function txPaintProfile(col: any, lang?: string): Promise<void> {
     sec.hidden = false;
     const head = document.createElement('p');
     head.className = 'dsp-head';
-    head.textContent = 'Text';
+    head.textContent = t('common.text');
     const err = document.createElement('p');
     err.className = 'dsp-note tx-error';
-    err.textContent = res.error || 'Could not read this column’s text.';
+    err.textContent = res.error || t('textProfile.could_not_read_this_column_s');
     sec.append(head, err);
     return;
   }
@@ -91,10 +91,10 @@ function txPaintProfileBody(sec: HTMLElement, col: any, p: any): void {
   headRow.className = 'tx-dsp-head';
   const head = document.createElement('p');
   head.className = 'dsp-head';
-  head.textContent = 'Text';
+  head.textContent = t('common.text');
   const langSel = document.createElement('select');
   langSel.className = 'tx-lang';
-  langSel.setAttribute('aria-label', 'Language for stop words');
+  langSel.setAttribute('aria-label', t('textProfile.language_for_stop_words'));
   TX_LANGS.forEach(([v, label]) => {
     const opt = document.createElement('option');
     opt.value = v;
@@ -109,8 +109,8 @@ function txPaintProfileBody(sec: HTMLElement, col: any, p: any): void {
   const note = document.createElement('p');
   note.className = 'dsp-note';
   note.textContent = p.sampled < p.cap
-    ? 'All ' + fmtN(p.sampled) + ' filled values.'
-    : 'The first ' + fmtN(p.sampled) + ' filled values, in row order.';
+    ? t('textProfile.all_filled_values', { sampled: fmtN(p.sampled) })
+    : t('textProfile.the_first_filled_values_in_row', { sampled: fmtN(p.sampled) });
   sec.appendChild(note);
 
   const facts = document.createElement('dl');
@@ -122,15 +122,15 @@ function txPaintProfileBody(sec: HTMLElement, col: any, p: any): void {
     dd.textContent = v;
     facts.append(dt, dd);
   };
-  add('Average length', Math.round(p.avgLength).toLocaleString() + ' characters');
-  add('Median length', Math.round(p.medianLength).toLocaleString() + ' characters');
+  add(t('textProfile.average_length'), Math.round(p.avgLength).toLocaleString() + ' characters');
+  add(t('textProfile.median_length'), Math.round(p.medianLength).toLocaleString() + ' characters');
   sec.appendChild(facts);
 
   if (p.sentiment) {
     const s = p.sentiment;
     const sh = document.createElement('p');
     sh.className = 'dsp-head';
-    sh.textContent = 'Sentiment';
+    sh.textContent = t('textProfile.sentiment');
     const big = document.createElement('div');
     big.className = 'tx-senti-head';
     const num = document.createElement('span');
@@ -138,7 +138,7 @@ function txPaintProfileBody(sec: HTMLElement, col: any, p: any): void {
     num.textContent = txSigned(s.mean, 2);
     const cap = document.createElement('span');
     cap.className = 'tx-muted';
-    cap.textContent = 'average, ' + txMood(s.mean) + ' (VADER, −1 to +1)';
+    cap.textContent = t('textProfile.average_vader_1_to_1', { mean: txMood(s.mean) });
     big.append(num, cap);
     const bands = Array.isArray(s.bands) ? s.bands : [];
     const cls = ['is-neg2', 'is-neg', 'is-neu', 'is-pos', 'is-pos2'];
@@ -146,13 +146,13 @@ function txPaintProfileBody(sec: HTMLElement, col: any, p: any): void {
     if (p.lang !== 'en') {
       const warn = document.createElement('p');
       warn.className = 'dsp-note';
-      warn.textContent = 'VADER’s lexicon is English — scores for other languages read only the English words in them.';
+      warn.textContent = t('textProfile.vader_s_lexicon_is_english_scores');
       sec.appendChild(warn);
     }
   }
 
-  txTermBars(sec, 'Top terms', p.topTerms, 'No terms left after removing stop words.');
-  txTermBars(sec, 'Top word pairs', p.topBigrams, 'No word pairs repeat in these values.');
+  txTermBars(sec, t('textProfile.top_terms'), p.topTerms, t('textProfile.no_terms_left_after_removing_stop'));
+  txTermBars(sec, t('textProfile.top_word_pairs'), p.topBigrams, t('textProfile.no_word_pairs_repeat_in_these'));
 
   const actions = document.createElement('div');
   actions.className = 'tx-dsp-actions';
@@ -167,10 +167,10 @@ function txPaintProfileBody(sec: HTMLElement, col: any, p: any): void {
   };
   const column = String(col.name);
   const terms = (p.topTerms || []).map((t: any) => t.term);
-  btn('Count terms', 'A Prepare step: this column’s top terms as a table', 'text_terms',
+  btn(t('textProfile.count_terms'), t('textProfile.a_prepare_step_this_column_s'), 'text_terms',
     { column, lang: p.lang, minN: 1, maxN: 2, top: 25 });
-  btn('Add sentiment', 'A Prepare step: a sentiment score per row, −1 to +1', 'text_sentiment', { column });
-  btn('Tag with rules', 'A Prepare step: a category per row from keyword rules', 'keyword_rules', { column, terms });
+  btn(t('textProfile.add_sentiment'), t('textProfile.a_prepare_step_a_sentiment_score'), 'text_sentiment', { column });
+  btn(t('textProfile.tag_with_rules'), t('textProfile.a_prepare_step_a_category_per'), 'keyword_rules', { column, terms });
   sec.appendChild(actions);
 }
 

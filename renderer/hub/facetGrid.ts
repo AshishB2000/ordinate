@@ -51,7 +51,7 @@ function facetGridOf(data: any, type: string, overrides?: any): FacetGridShape |
   const panels: FacetPanelShape[] = [];
   series.forEach((s, i) => {
     if (hidden.has(i)) return;
-    const title = s.name || 'Series ' + (i + 1);
+    const title = s.name || t('common.series_2', { p0: (i + 1) });
     panels.push({ row: 0, col: panels.length, title, steps: [], labels: data.labels || [], series: [s], empty: false, domain: null, seriesName: s.name });
   });
   return { rows: [], cols: panels.map((p) => p.title), scale: 'independent', domain: null, panels };
@@ -77,7 +77,7 @@ function facetDrawPanels(host: HTMLElement, grid: FacetGridShape, data: any, typ
   const el = document.createElement('div');
   el.className = 'fc-grid';
   el.setAttribute('role', 'group');
-  el.setAttribute('aria-label', 'Small multiples');
+  el.setAttribute('aria-label', t('common.small_multiples'));
   const matrix = grid.rows.length > 0;
   if (matrix) {
     el.classList.add('is-matrix');
@@ -99,7 +99,7 @@ function facetDrawPanels(host: HTMLElement, grid: FacetGridShape, data: any, typ
     if (p.empty) {
       const none = document.createElement('div');
       none.className = 'fc-none';
-      none.textContent = 'No data';
+      none.textContent = t('chartFamiliesExtra.no_data');
       cell.appendChild(none);
       continue;
     }
@@ -113,7 +113,7 @@ function facetDrawPanels(host: HTMLElement, grid: FacetGridShape, data: any, typ
     const wrap = document.createElement('div');
     wrap.className = 'cv-canvas-wrap is-fresh';
     const canvas = document.createElement('canvas');
-    canvas.setAttribute('aria-label', p.title + ' chart');
+    canvas.setAttribute('aria-label', p.title + t('facetGrid.chart'));
     wrap.appendChild(canvas);
     cell.appendChild(wrap);
     const chart = buildChart(canvas, facetPanelData(data, p), type, ov);
@@ -212,7 +212,7 @@ function renderFacetGrid(container: HTMLElement, grid: FacetGridShape, data: any
   if (grid.folded) {
     const note = document.createElement('p');
     note.className = 'fc-note';
-    note.textContent = 'Values past the panel limit are grouped as Other.';
+    note.textContent = t('facetGrid.values_past_the_panel_limit_are');
     chartWrapper.appendChild(note);
   }
 

@@ -81,11 +81,11 @@ async function dndAddVisual(visualId: string, key: string | null): Promise<void>
     await tabRun(() => tabSwitchTo(key));
     const want = key.slice('analysis:'.length);
     for (let i = 0; i < 50 && !(dashCurrent && String(dashCurrent.id) === want); i++) await new Promise((r) => setTimeout(r, 100));
-    if (!dashCurrent || String(dashCurrent.id) !== want) { showToast('That dashboard did not open.', { kind: 'error' }); return; }
+    if (!dashCurrent || String(dashCurrent.id) !== want) { showToast(t('dndOut.that_dashboard_did_not_open'), { kind: 'error' }); return; }
   }
-  if (!dashCurrent || dashReadOnly) { showToast('A published dashboard is read-only.', { kind: 'error' }); return; }
+  if (!dashCurrent || dashReadOnly) { showToast(t('dndOut.a_published_dashboard_is_read_only'), { kind: 'error' }); return; }
   pushCard({ id: dashUuid(), type: 'visual', visualId, layout: { ...dashFindSlot(dashCards(), 6, 6), w: 6, h: 6 } });
-  showToast('Added to ' + (dashCurrent.name || 'the dashboard'), { kind: 'success' });
+  showToast(t('common.added_to', { p0: (dashCurrent.name || t('common.the_dashboard')) }), { kind: 'success' });
 }
 
 function initDndOut(): void {
@@ -94,8 +94,8 @@ function initDndOut(): void {
   grip.className = 'dnd-grip';
   grip.draggable = true;
   grip.hidden = true;
-  grip.title = 'Drag out as a PNG';
-  grip.setAttribute('aria-label', 'Drag this chart out as a PNG');
+  grip.title = t('dndOut.drag_out_as_a_png');
+  grip.setAttribute('aria-label', t('dndOut.drag_this_chart_out_as_a'));
   grip.appendChild(icon('grip-vertical', 16));
   document.body.appendChild(grip);
   dndGrip = grip;

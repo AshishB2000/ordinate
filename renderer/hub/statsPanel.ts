@@ -17,7 +17,7 @@
 type SwTab = 'correlation' | 'regression' | 'groups' | 'distribution';
 
 const SW_TABS: Array<[SwTab, string]> = [
-  ['correlation', 'Correlation'], ['regression', 'Regression'], ['groups', 'Compare groups'], ['distribution', 'Distribution'],
+  ['correlation', t('statsPanel.correlation')], ['regression', t('statsPanel.regression')], ['groups', t('statsPanel.compare_groups')], ['distribution', t('common.distribution')],
 ];
 /** Above this many rows a run is a background job — no auto-run on every click. */
 const SW_AUTO_MAX_ROWS = 200_000;
@@ -44,8 +44,8 @@ function swIsOpen(): boolean {
 /** The dock's context while the panel is open (dock.ts dkContextRef). */
 function swAssistantRef(): { kind: string; id: string; label: string; name: string } | null {
   if (!swIsOpen() || !swState.datasetId) return null;
-  const name = SW_TABS.find((t) => t[0] === swState.tab)?.[1] || 'Statistics';
-  return { kind: 'stats', id: swState.datasetId, label: `statistics · ${name} · ${swState.datasetName}`, name: `${name} on ${swState.datasetName}` };
+  const name = SW_TABS.find((t) => t[0] === swState.tab)?.[1] || t('common.statistics');
+  return { kind: 'stats', id: swState.datasetId, label: t('statsPanel.statistics', { name, datasetName: swState.datasetName }), name: `${name} on ${swState.datasetName}` };
 }
 
 /** The spec the dock sends with an ask — main recomputes it as facts. */
@@ -83,7 +83,7 @@ function swDefaultSpecs(): Record<SwTab, any> {
  * scatter's ⋯) pre-fills Correlation and Regression with its two columns.
  */
 async function swOpen(opts: { datasetId?: string; tab?: SwTab; pair?: [string, string] } = {}): Promise<void> {
-  if (!currentProjectId) { showToast('Open a project first'); return; }
+  if (!currentProjectId) { showToast(t('statsPanel.open_a_project_first')); return; }
   let id = opts.datasetId || (typeof expId === 'string' && expId ? expId : '') || swState.datasetId;
   let list: any[] = [];
   try { list = await window.hub.listDatasets(currentProjectId); } catch (_) { list = []; }
@@ -127,7 +127,7 @@ function swEnsureShell(): void {
   el.className = 'sw-panel';
   el.id = 'sw-panel';
   el.setAttribute('role', 'region');
-  el.setAttribute('aria-label', 'Statistics');
+  el.setAttribute('aria-label', t('common.statistics'));
 
   const head = document.createElement('header');
   head.className = 'sw-head';
@@ -138,7 +138,7 @@ function swEnsureShell(): void {
   const mark = document.createElement('span');
   mark.className = 'sw-mark';
   mark.appendChild(icon('activity', 16));
-  h.append(mark, 'Statistics');
+  h.append(mark, t('common.statistics'));
   const sub = document.createElement('p');
   sub.className = 'sw-sub';
   sub.id = 'sw-sub';
@@ -149,7 +149,7 @@ function swEnsureShell(): void {
   const dsLabel = document.createElement('label');
   dsLabel.className = 'sw-inline-field';
   dsLabel.htmlFor = 'sw-dataset';
-  dsLabel.textContent = 'Dataset';
+  dsLabel.textContent = t('common.dataset');
   const ds = document.createElement('select');
   ds.id = 'sw-dataset';
   ds.className = 'sw-select';
@@ -158,8 +158,8 @@ function swEnsureShell(): void {
   close.type = 'button';
   close.className = 'btn btn-sm sw-close';
   close.id = 'sw-close';
-  iconLabel(close, 'x', 'Close');
-  close.setAttribute('aria-label', 'Close statistics');
+  iconLabel(close, 'x', t('common.close'));
+  close.setAttribute('aria-label', t('statsPanel.close_statistics'));
   close.addEventListener('click', () => swClose());
   actions.append(dsLabel, ds, close);
   head.append(ident, actions);
@@ -167,7 +167,7 @@ function swEnsureShell(): void {
   const tabs = document.createElement('div');
   tabs.className = 'tabs sw-tabs';
   tabs.setAttribute('role', 'tablist');
-  tabs.setAttribute('aria-label', 'Analyses');
+  tabs.setAttribute('aria-label', t('statsPanel.analyses'));
   for (const [key, label] of SW_TABS) {
     const b = document.createElement('button');
     b.type = 'button';
@@ -197,7 +197,7 @@ function swEnsureShell(): void {
   const controls = document.createElement('aside');
   controls.className = 'sw-controls';
   controls.id = 'sw-controls';
-  controls.setAttribute('aria-label', 'Analysis settings');
+  controls.setAttribute('aria-label', t('statsPanel.analysis_settings'));
   const results = document.createElement('div');
   results.className = 'sw-results';
   results.id = 'sw-results';
@@ -226,7 +226,7 @@ function swFillDatasets(list: any[], id: string): void {
   for (const d of list) {
     const o = document.createElement('option');
     o.value = d.id;
-    o.textContent = d.name || 'Untitled dataset';
+    o.textContent = d.name || t('common.untitled_dataset');
     sel.appendChild(o);
   }
   sel.value = id;
@@ -237,7 +237,7 @@ async function swLoadDataset(id: string): Promise<void> {
   let meta: any = null;
   try { meta = await window.hub.getDatasetMeta(currentProjectId, id); } catch (_) { meta = null; }
   swState.datasetId = meta ? id : '';
-  swState.datasetName = meta ? meta.name || 'Untitled dataset' : '';
+  swState.datasetName = meta ? meta.name || t('common.untitled_dataset') : '';
   swState.rowCount = meta ? Number(meta.rowCount) || 0 : 0;
   swState.columns = meta && Array.isArray(meta.columns) ? meta.columns.map((c: any) => ({ name: String(c.name), type: String(c.type) })) : [];
   swState.specs = swDefaultSpecs();
@@ -246,8 +246,8 @@ async function swLoadDataset(id: string): Promise<void> {
   const sub = document.getElementById('sw-sub');
   if (sub) {
     sub.textContent = meta
-      ? `${swState.datasetName} · ${swState.rowCount.toLocaleString('en-US')} rows · every figure computed by the app`
-      : 'This dataset could not be opened.';
+      ? t('statsPanel.rows_every_figure_computed_by_the', { datasetName: swState.datasetName, p1: swState.rowCount.toLocaleString('en-US') })
+      : t('statsPanel.this_dataset_could_not_be_opened');
   }
   swSyncDock();
 }
@@ -286,7 +286,7 @@ async function swRun(): Promise<void> {
   const seq = ++swState.seq;
   swPaintLoading(swState.rowCount > SW_AUTO_MAX_ROWS);
   let reply: any;
-  try { reply = await window.hubStats.run(currentProjectId, spec); } catch (_) { reply = { ok: false, error: 'Something went wrong. Try again.' }; }
+  try { reply = await window.hubStats.run(currentProjectId, spec); } catch (_) { reply = { ok: false, error: t('common.something_went_wrong_try_again') }; }
   if (seq !== swState.seq || !swIsOpen()) return;
   reply = Object.assign({}, reply, { spec, tab });
   swState.replies[tab] = reply;
@@ -315,18 +315,18 @@ function swPaintLoading(job: boolean): void {
   box.setAttribute('role', 'status');
   const spin = icon('loader', 20);
   spin.classList.add('sw-spin');
-  const t = document.createElement('p');
-  t.textContent = job ? 'Running as a background job — progress and Cancel are in Jobs.' : 'Computing…';
-  box.append(spin, t);
+  const tv = document.createElement('p');
+  tv.textContent = job ? t('statsPanel.running_as_a_background_job_progress') : t('common.computing');
+  box.append(spin, tv);
   host.appendChild(box);
 }
 
 function swPaintStale(): void {
   const host = swResults();
   host.appendChild(makeEmptyState({
-    variant: 'sw', iconName: 'play', title: 'Ready to run',
-    line: `${swState.rowCount.toLocaleString('en-US')} rows — large runs go to the background as a job.`,
-    actionLabel: 'Run analysis', onAction: () => { void swRun(); },
+    variant: 'sw', iconName: 'play', title: t('statsPanel.ready_to_run'),
+    line: t('statsPanel.rows_large_runs_go_to_the', { p0: swState.rowCount.toLocaleString('en-US') }),
+    actionLabel: t('common.run_analysis'), onAction: () => { void swRun(); },
   }));
 }
 
@@ -335,10 +335,10 @@ function swPaintEmptyProject(): void {
   const c = document.getElementById('sw-controls');
   if (c) c.textContent = '';
   const sub = document.getElementById('sw-sub');
-  if (sub) sub.textContent = 'No datasets yet';
+  if (sub) sub.textContent = t('common.no_datasets_yet');
   swResults().appendChild(makeEmptyState({
-    variant: 'sw', iconName: 'database', title: 'No data to analyse',
-    line: 'Import a dataset first, then come back to correlate, model and compare it.',
+    variant: 'sw', iconName: 'database', title: t('statsPanel.no_data_to_analyse'),
+    line: t('statsPanel.import_a_dataset_first_then_come'),
   }));
 }
 
@@ -348,16 +348,16 @@ function swPaintProblem(host: HTMLElement, message: string): void {
 }
 
 function swProblemTitle(message: string): string {
-  if (/^Pick /.test(message)) return 'Choose what to analyse';
-  if (/^Need /.test(message)) return 'Not enough data';
-  return 'This analysis cannot run';
+  if (/^Pick /.test(message)) return t('statsPanel.choose_what_to_analyse');
+  if (/^Need /.test(message)) return t('statsPanel.not_enough_data');
+  return t('statsPanel.this_analysis_cannot_run');
 }
 
 function swPaintReply(reply: any): void {
   const host = swResults();
-  if (!reply || reply.ok === false) { swPaintProblem(host, (reply && reply.error) || 'Could not run the analysis.'); return; }
+  if (!reply || reply.ok === false) { swPaintProblem(host, (reply && reply.error) || t('statsPanel.could_not_run_the_analysis')); return; }
   const r = reply.result;
-  if (!r || r.ok === false) { swPaintProblem(host, (r && r.error) || 'Could not run the analysis.'); return; }
+  if (!r || r.ok === false) { swPaintProblem(host, (r && r.error) || t('statsPanel.could_not_run_the_analysis')); return; }
   if (r.kind === 'correlation') swViewCorrelation(host, r, reply.spec);
   else if (r.kind === 'regression') swViewRegression(host, r, reply.spec);
   else if (r.kind === 'groups') swViewGroups(host, r, reply.spec);
@@ -368,24 +368,24 @@ function swPaintReply(reply: any): void {
 function swResultHead(host: HTMLElement, title: string, meta: string, spec: any, extra?: HTMLElement[]): void {
   const head = document.createElement('div');
   head.className = 'sw-result-head';
-  const t = document.createElement('div');
+  const tv = document.createElement('div');
   const h = document.createElement('h3');
   h.className = 'sw-result-title';
   h.textContent = title;
   const m = document.createElement('p');
   m.className = 'sw-result-meta';
   m.textContent = meta;
-  t.append(h, m);
+  tv.append(h, m);
   const acts = document.createElement('div');
   acts.className = 'sw-result-actions';
   for (const e of extra || []) acts.appendChild(e);
   const add = document.createElement('button');
   add.type = 'button';
   add.className = 'btn btn-sm sw-add-dash';
-  iconLabel(add, 'layout-dashboard', 'Add to dashboard');
+  iconLabel(add, 'layout-dashboard', t('common.add_to_dashboard'));
   add.addEventListener('click', () => { void swAddToDashboard(spec); });
   acts.appendChild(add);
-  head.append(t, acts);
+  head.append(tv, acts);
   host.appendChild(head);
 }
 
@@ -429,7 +429,7 @@ function swStatRow(host: HTMLElement, items: Array<[string, string, string?]>): 
 // ── Entry points: the palette, and a scatter's ⋯ ─────────────────────────────
 
 registerCommand({
-  id: 'data.statistics', title: 'Statistics…', group: 'Data', icon: 'activity',
+  id: 'data.statistics', title: t('common.statistics_2'), group: t('common.data'), icon: 'activity',
   when: () => !!currentProjectId,
   run: () => { void swOpen(); },
 });

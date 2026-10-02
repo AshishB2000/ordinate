@@ -39,7 +39,7 @@ async function txtResolveToken(name: string, el: HTMLElement): Promise<void> {
     return;
   }
   el.classList.add('is-missing');
-  el.title = `No metric or parameter is called “${name}”`;
+  el.title = t('textCard.no_metric_or_parameter_is_called', { name });
 }
 
 function renderMarkdownCard(card: any, body: HTMLElement): void {
@@ -58,7 +58,7 @@ function renderMarkdownCard(card: any, body: HTMLElement): void {
   } else {
     const p = document.createElement('p');
     p.className = 'dash-card-p md-empty';
-    p.textContent = 'Empty text — write Markdown in Properties.';
+    p.textContent = t('textCard.empty_text_write_markdown_in_properties');
     box.appendChild(p);
   }
   body.appendChild(box);
@@ -89,16 +89,16 @@ function txtFitToContent(cardId: string): void {
   card.layout.h = rows;
   reapplyCardStyle(card);
   authoringAfterGesture(card, 'resize', 0, 0);
-  markDashDirty('Fit to content');
+  markDashDirty(t('textCard.fit_to_content'));
 }
 
 /** Properties for a text card: heading, Markdown body, Fit to content. */
 function renderTextProps(card: any, host: HTMLElement): void {
   const live = (): any => dashCardAnywhere(card.id) || card;
-  const heading = aeInput('Heading', live().heading || '', 'Optional', '', (v) => {
+  const heading = aeInput(t('common.heading'), live().heading || '', t('common.optional'), '', (v) => {
     live().heading = v.trim() || undefined;
     if (!live().heading && !live().text) live().text = ' ';
-    markDashDirty('Edit text', true);
+    markDashDirty(t('common.edit_text'), true);
     renderDashGrid();
     anPaintSelection();
   });
@@ -106,9 +106,9 @@ function renderTextProps(card: any, host: HTMLElement): void {
 
   const wrap = document.createElement('label');
   wrap.className = 'ae-field';
-  const t = document.createElement('span');
-  t.className = 'ae-label';
-  t.textContent = 'Text';
+  const tv = document.createElement('span');
+  tv.className = 'ae-label';
+  tv.textContent = t('common.text');
   const area = document.createElement('textarea');
   area.className = 'an-prop-input md-editor';
   area.rows = 10;
@@ -116,7 +116,7 @@ function renderTextProps(card: any, host: HTMLElement): void {
   area.value = live().text || '';
   const help = document.createElement('span');
   help.className = 'ae-hint';
-  help.textContent = 'Markdown: # heading, **bold**, *italic*, - list, 1. list, `code`, [link](https://…). {{Revenue}} shows a metric; {{name}} a parameter.';
+  help.textContent = t('textCard.markdown_heading_bold_italic_list_1');
   let timer: number | null = null;
   area.addEventListener('input', () => {
     if (timer !== null) window.clearTimeout(timer);
@@ -124,19 +124,19 @@ function renderTextProps(card: any, host: HTMLElement): void {
       timer = null;
       const c = live();
       c.text = area.value;
-      markDashDirty('Edit text', true);
+      markDashDirty(t('common.edit_text'), true);
       const el = document.querySelector(`#dash-grid .dash-card[data-card-id="${c.id}"] .dash-card-body`) as HTMLElement | null;
       if (el) renderMarkdownCard(c, el);
     }, 300);
   });
-  wrap.append(t, area, help);
+  wrap.append(tv, area, help);
   host.appendChild(wrap);
 
   const fit = document.createElement('button');
   fit.type = 'button';
   fit.className = 'btn btn-sm ae-add';
-  fit.textContent = 'Fit to content';
-  fit.title = 'Make the card exactly as tall as its text';
+  fit.textContent = t('textCard.fit_to_content');
+  fit.title = t('textCard.make_the_card_exactly_as_tall');
   fit.addEventListener('click', () => txtFitToContent(card.id));
   host.appendChild(fit);
 }

@@ -21,24 +21,24 @@ async function collabRefresh(): Promise<void> {
 
 function buildCollabSection(host: HTMLElement): void {
   const head = sfEl('div', 'stp-subhead');
-  head.appendChild(sfEl('div', 'stp-subhead-t', 'Collaboration'));
+  head.appendChild(sfEl('div', 'stp-subhead-t', t('settingsCollab.collaboration')));
   head.appendChild(sfEl('div', 'stp-subhead-d',
-    'Comments are signed with your name and travel with their project. Put a project in a sync folder (the project switcher’s Move to sync folder…) and comments written on two machines merge.'));
+    t('settingsCollab.comments_are_signed_with_your_name')));
   host.appendChild(head);
 
   const name = sfEl<HTMLInputElement>('input', 'stp-input cmt-display-name');
   name.id = 'stp-display-name';
   name.type = 'text';
   name.maxLength = 80;
-  name.placeholder = 'Your computer’s user name';
+  name.placeholder = t('settingsCollab.your_computer_s_user_name');
   name.autocomplete = 'off';
   name.spellcheck = false;
-  name.setAttribute('aria-label', 'Display name');
+  name.setAttribute('aria-label', t('common.display_name'));
   name.addEventListener('change', async () => {
     const res = await window.hubPower.setDisplayName(name.value);
-    if (res && res.ok) showToast('New comments are signed “' + res.author + '”');
+    if (res && res.ok) showToast(t('settingsCollab.new_comments_are_signed', { author: res.author }));
   });
-  host.appendChild(sfRow('Display name', 'On every comment and reply you write. Empty uses your computer’s user name.', name));
+  host.appendChild(sfRow(t('common.display_name'), t('settingsCollab.on_every_comment_and_reply_you'), name));
 }
 
 (function initSettingsCollab(): void {
