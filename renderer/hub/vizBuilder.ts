@@ -108,6 +108,7 @@ async function onDatasetChange(datasetId: string, preset?: any): Promise<void> {
   // which is what makes switching chart type carry the work over.
   vizPivotForm!.setColumns(cols, (preset && preset.pivot) || pivotFromEncoding(preset || {}));
   if (vizEngineForm) vizEngineForm.setColumns(cols, preset || {}); // cohort / funnel shelves (cohortBuilder.ts)
+  if (vizFacetForm) vizFacetForm.setColumns(cols, preset && preset.facet); // small multiples (facetShelf.ts)
   applyPivotMode(vizCurrentChartType === 'pivot');
 
   vizForm!.show(true);
@@ -181,6 +182,7 @@ function applyPivotMode(on: boolean): void {
   vizForm.showFields(!on && !engine);
   vizPivotForm.show(on);
   if (vizEngineForm) vizEngineForm.show(engine);
+  if (vizFacetForm) vizFacetForm.show(!engine); // a cohort / funnel is already its own grid
 }
 
 /**
@@ -193,9 +195,11 @@ function applyPivotMode(on: boolean): void {
  */
 function vizEncodingForType(): any {
   if (engineKind(vizCurrentChartType) && vizEngineForm) return vizEngineForm.encodingFor(engineKind(vizCurrentChartType));
-  if (vizCurrentChartType !== 'pivot') return vizForm!.getEncoding();
+  const facet = vizFacetForm ? vizFacetForm.getFacet() : null; // small multiples, chart or pivot
+  const extra = facet ? { facet } : {};
+  if (vizCurrentChartType !== 'pivot') return Object.assign(vizForm!.getEncoding(), extra);
   const pivot = vizPivotForm!.getPivot();
-  return Object.assign(encodingFromPivot(pivot), { pivot });
+  return Object.assign(encodingFromPivot(pivot), { pivot }, extra);
 }
 
 async function recomputeVisual(): Promise<void> {
@@ -244,7 +248,9 @@ async function recomputeVisual(): Promise<void> {
     shape = catCol && catCol.type === 'date' ? 'time_series' : 'categorical';
   }
   // Maps after charts, never first — except density and routes, which are ONLY a map (mapKinds.ts).
-  const recommended = withGeoChartType(eligibleChartTypes(shape, countNumericSeries(data), (data.labels || []).length), data.geo);
+  // Small multiples are judged on ONE panel: every panel is drawn the same way.
+  const fit = facetControlsData(data);
+  const recommended = withGeoChartType(eligibleChartTypes(shape, countNumericSeries(fit), (fit.labels || []).length), data.geo);
 
   if (!recommended.length) {
     area.innerHTML = '';
@@ -266,14 +272,14 @@ async function recomputeVisual(): Promise<void> {
   }
 
   const initial =
-    vizCurrentChartType && (recommended.indexOf(vizCurrentChartType) >= 0 || canShow(vizCurrentChartType, data))
+    vizCurrentChartType && (recommended.indexOf(vizCurrentChartType) >= 0 || canShow(vizCurrentChartType, fit))
       ? vizCurrentChartType
       : recommended[0];
 
   const picker = buildVizPicker({
     recommended,
     pool: ALL_CHART_TYPE_IDS.concat(['table'], MAP_CHART_TYPES),
-    data,
+    data: fit,
     hasGeo: !!data.geo,
     initial,
     onSelect: (type: string, info: any) => {

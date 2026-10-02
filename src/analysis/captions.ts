@@ -30,6 +30,8 @@ import type { ResolvedOverlay } from './analytics';
 import { calcLabel } from './tableCalc';
 import type { CalcSeries } from './tableCalc';
 import { CATEGORY_CAP, OTHER_LABEL } from './categoryKey';
+import { facetCaption } from './facetCaption';
+import type { FacetGrid } from './facets';
 
 // ── the app's compact number format ──────────────────────────────────────────
 //
@@ -93,7 +95,7 @@ export interface CaptionInput {
   /** Chart id (`column`, `line`, `map_choropleth`, …). Omitted for a KPI row. */
   chartType?: string;
   /** The `{labels, series}` the renderers consume — charts only. May carry its resolved `analytics`. */
-  data?: (ChartData & { analytics?: ResolvedOverlay[]; cohort?: CohortGrid; eventFunnel?: EventFunnel }) | null;
+  data?: (ChartData & { analytics?: ResolvedOverlay[]; cohort?: CohortGrid; eventFunnel?: EventFunnel; facets?: FacetGrid }) | null;
   /**
    * The Analytics pane's resolved overlays (./analytics). A trend or a forecast
    * adds its own clause to the sentence; the rest are drawn, not narrated.
@@ -138,6 +140,8 @@ function familyCaption(input: CaptionInput): string {
   if (Array.isArray(input.kpis)) return kpiCaption(input.kpis);
 
   const family = captionFamily(input.chartType);
+  // Small multiples: one sentence ACROSS the panels (./facetCaption).
+  if (input.data && input.data.facets) return facetCaption(input.data.facets, family);
   const measure = measureNoun(input.data, input.names);
   // A pivot's sentence is about the GRID — how big it is and where its peak
   // sits — which `{labels, series}` cannot say: a leaf row's label is a joined

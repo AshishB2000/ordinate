@@ -76,7 +76,7 @@ export const sizeLayout = require('../../renderer/hub/sizeLayout') as {
   publishCells: (cards: Card[], layouts: PageLayouts | undefined) => Record<string, Partial<Record<'tablet' | 'phone', SizeCell | { hidden: true }>>>;
 };
 
-export type CardType = 'visual' | 'text' | 'metric' | 'control' | 'nav' | 'image' | 'divider' | 'container' | 'tabs' | 'stats';
+export type CardType = 'visual' | 'text' | 'metric' | 'control' | 'nav' | 'image' | 'divider' | 'container' | 'tabs' | 'stats' | 'summary';
 export type CardAction = 'delete-sample';
 export type MetricAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';
 /**
@@ -232,7 +232,7 @@ function isValidId(id: unknown): id is string {
   return typeof id === 'string' && UUID_RE.test(id);
 }
 
-const CARD_TYPES: ReadonlySet<string> = new Set(['visual', 'text', 'metric', 'control', ...cardModel.EXTRA_TYPES, 'stats']);
+const CARD_TYPES: ReadonlySet<string> = new Set(['visual', 'text', 'metric', 'control', ...cardModel.EXTRA_TYPES, 'stats', 'summary']);
 /** Exported so analysisPlan's metric validation clamps against THIS set rather
  *  than a fourth copy of it — dashboardDelta.ts already restates one, and it
  *  says so apologetically. One whitelist, one place to widen it. */
@@ -352,6 +352,10 @@ export function sanitizeCard(raw: unknown): Card | null {
   const card: Card = { id, type, layout };
   if (!cardModel.sanitizeExtras(o, card)) return null;
   if (cardModel.EXTRA_TYPES.includes(type)) return card;
+
+  // The Summary card stores nothing: its sentences are recomputed from the
+  // sheet's own tiles on every render (src/ipc/summary.ts).
+  if (type === 'summary') return card;
 
   if (type === 'stats') {
     // A statistics tile stores its SPEC, whitelisted field by field; a card

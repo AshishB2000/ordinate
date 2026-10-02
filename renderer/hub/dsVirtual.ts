@@ -105,6 +105,7 @@ function dsvEnsure(first: number, last: number): void {
       search: expSearch.trim(),
       sortColumn: expSortColumnName(),
       sortDir: expSortDir === 1 ? 'asc' : 'desc',
+      filters: typeof dsrGridSteps === 'function' ? dsrGridSteps() : undefined, // dataSearch.ts
     };
     void (async () => {
       let res: any = null;

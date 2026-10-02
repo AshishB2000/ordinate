@@ -222,6 +222,7 @@ export interface ChartReplyLike {
     series?: { name: string; role?: string }[];
     geo?: unknown;
     pivot?: { rowHeaders: string[][]; colHeaders: string[][] };
+    facets?: unknown;
   };
 }
 export interface HiddenReply { ok: false; error: string; hiddenByPolicy: true }
@@ -251,6 +252,14 @@ export async function applyToChart<R extends ChartReplyLike>(
   if (isEngineEncoding(encoding)) {
     const touched = (await Promise.all(engineColumns(encoding).map((c) => sens(datasetId, c)))).some(Boolean);
     return touched ? { ok: false, error: HIDDEN_BY_POLICY, hiddenByPolicy: true } : reply;
+  }
+  // Small multiples spread facet and category values through panel titles,
+  // filter steps and the flattened series names — hide rather than half-mask.
+  if (encoding.facet && reply.data.facets) {
+    const labelish = await Promise.all([encoding.facet.rows, encoding.facet.cols, encoding.category, encoding.series].map((c) => sens(datasetId, c)));
+    const valueish = await Promise.all((encoding.values || []).map((m) => sens(datasetId, m.column)));
+    const hide = labelish.some(Boolean) || (action === 'drop' && valueish.some(Boolean));
+    return hide ? { ok: false, error: HIDDEN_BY_POLICY, hiddenByPolicy: true } : reply;
   }
   const catS = await sens(encoding.categoryDatasetId, encoding.category);
   const serS = await sens(encoding.seriesDatasetId, encoding.series);

@@ -46,6 +46,33 @@ function decode(base64: unknown): Buffer | null {
 
 const EXTS: ReadonlySet<string> = new Set(['pdf', 'pptx', 'docx']);
 
+/**
+ * The scheduled write itself — the IPC below, and a pipeline's report step
+ * (src/app/pipelineRunner.ts), which builds the bytes the CLI's way.
+ */
+export async function writeScheduledReport(pid: string, rid: string, buf: Buffer | null, when: Date): Promise<{ ok: boolean; error?: string; dest?: string; notified?: boolean }> {
+  const report = await reportSpec.getReport(pid, rid);
+  if (!report) return { ok: false, error: 'Report not found.' };
+  const folder = report.schedule && report.schedule.folder;
+  if (!folder) return { ok: false, error: 'This report has no scheduled folder.' };
+  if (!buf) return { ok: false, error: 'Nothing to write.' };
+
+  const dest = path.join(folder, reportSpec.reportFilename(report.name, report.format, when));
+  try {
+    await fs.promises.mkdir(folder, { recursive: true });
+    await fs.promises.writeFile(dest, buf);
+  } catch (e) {
+    console.error('[reports] scheduled write failed', e);
+    return { ok: false, error: 'Could not write into the scheduled folder.' };
+  }
+  // Stamp with the SAME clock the filename used. Stamping with Date.now()
+  // instead would let a faked-clock run reschedule itself against real time.
+  await reportSpec.updateReport(pid, rid, { lastRunAt: when.toISOString(), lastFile: dest });
+  const notified = notifyFile(`Report ready — ${path.basename(dest)}`, dest);
+  noteWrittenPath(dest); // a renderer job may name it for the Jobs popover's Reveal
+  return { ok: true, dest, notified };
+}
+
 export function register() {
   ipcMain.handle('reports:list', async (_e, { projectId }: any = {}) =>
     reportSpec.listReports(String(projectId || '')));
@@ -139,32 +166,9 @@ export function register() {
    * `nowMs` is a parameter so a test can drive a dated filename without waiting
    * for a calendar day — the same reason scheduleDue takes `now`.
    */
-  ipcMain.handle('reports:writeScheduled', async (_e, { projectId, id, base64, nowMs }: any = {}) => {
-    const pid = String(projectId || '');
-    const rid = String(id || '');
-    const report = await reportSpec.getReport(pid, rid);
-    if (!report) return { ok: false, error: 'Report not found.' };
-    const folder = report.schedule && report.schedule.folder;
-    if (!folder) return { ok: false, error: 'This report has no scheduled folder.' };
-    const buf = decode(base64);
-    if (!buf) return { ok: false, error: 'Nothing to write.' };
-
-    const when = Number.isFinite(Number(nowMs)) ? new Date(Number(nowMs)) : new Date();
-    const dest = path.join(folder, reportSpec.reportFilename(report.name, report.format, when));
-    try {
-      await fs.promises.mkdir(folder, { recursive: true });
-      await fs.promises.writeFile(dest, buf);
-    } catch (e) {
-      console.error('[reports] scheduled write failed', e);
-      return { ok: false, error: 'Could not write into the scheduled folder.' };
-    }
-    // Stamp with the SAME clock the filename used. Stamping with Date.now()
-    // instead would let a faked-clock run reschedule itself against real time.
-    await reportSpec.updateReport(pid, rid, { lastRunAt: when.toISOString(), lastFile: dest });
-    const notified = notifyFile(`Report ready — ${path.basename(dest)}`, dest);
-    noteWrittenPath(dest); // a renderer job may name it for the Jobs popover's Reveal
-    return { ok: true, dest, notified };
-  });
+  ipcMain.handle('reports:writeScheduled', async (_e, { projectId, id, base64, nowMs }: any = {}) =>
+    writeScheduledReport(String(projectId || ''), String(id || ''), decode(base64),
+      Number.isFinite(Number(nowMs)) ? new Date(Number(nowMs)) : new Date()));
 
   /**
    * Which reports are due at `nowMs`, across every project.

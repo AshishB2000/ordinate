@@ -31,6 +31,8 @@ import type { FunnelEncoding } from './funnelEvents';
 import { sanitizeOverlays } from './analytics';
 import type { Overlay } from './analytics';
 import { sanitizeTableCalc } from './tableCalc';
+import { sanitizeFacet } from './facets';
+import type { FacetEncoding } from './facets';
 import type { TableCalc } from './tableCalc';
 import { sanitizeFormat, NUMBER_FORMAT_IDS, SORT_MODE_IDS } from './chartFormat';
 import type { FormatOverrides, FormatContext, SortMode } from './chartFormat';
@@ -147,6 +149,8 @@ export interface VizEncoding {
   overlay?: 'previous_year';
   /** A KEY DRIVERS waterfall tile's question (analysis/driverScope) — recomputed on every render. */
   drivers?: DriversEncoding;
+  /** Small multiples (./facets): one panel per facet value. It changes the DATA, so it rides here. */
+  facet?: FacetEncoding;
 }
 
 // Whitelisted chart-styling overrides — the SAME object shape the capture-flow ⋯
@@ -187,6 +191,8 @@ export interface VizOverrides extends FormatOverrides {
   bulletTarget?: number;
   /** Waterfall: categories drawn as totals, beyond those LABELLED "Total"/"Subtotal"/"Grand total". */
   waterfallTotals?: string[];
+  /** Project events on a date axis (analysis/events). Absent = shown; only `false` hides them. r8:events */
+  showEvents?: boolean;
 }
 
 export interface Visual {
@@ -319,6 +325,8 @@ export function sanitizeEncoding(raw: unknown): VizEncoding {
   if (cohort) enc.cohort = cohort;
   const eventFunnel = sanitizeEventFunnel(o.eventFunnel);
   if (eventFunnel) enc.eventFunnel = eventFunnel;
+  const facet = sanitizeFacet(o.facet);
+  if (facet) enc.facet = facet;
   if (o.geo && typeof o.geo === 'object') {
     const g = o.geo as Record<string, unknown>;
     if (typeof g.level === 'string' && GEO_LEVELS.has(g.level)) {
@@ -411,6 +419,7 @@ export function sanitizeOverrides(raw: unknown, ctx?: FormatContext): VizOverrid
   if ('smooth' in o) out.smooth = Boolean(o.smooth);
   if ('crossFilter' in o) out.crossFilter = Boolean(o.crossFilter);
   if ('showTooltips' in o) out.showTooltips = Boolean(o.showTooltips);
+  if (o.showEvents === false) out.showEvents = false; // r8:events — absent = on
 
   // Numeric fields — finite numbers only.
   if (Array.isArray(o.hiddenSeries)) {

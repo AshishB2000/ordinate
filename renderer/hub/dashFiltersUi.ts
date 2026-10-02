@@ -38,15 +38,17 @@ function wireCrossFilter(area: HTMLElement, visual: any): boolean {
     // click on one does nothing rather than throwing.
     const mark = chartMarkAt(area, e);
     if (!mark) return; // a click on empty canvas is not a filter
-    applyCrossFilter(String(column), mark.category);
+    applyCrossFilter(String(column), mark.category, mark.facet ? mark.facet.steps : []);
   });
   return true;
 }
 
 /** Toggle the clicked value on the sheet's filter list, then redraw everything. */
-function applyCrossFilter(column: string, value: unknown): void {
+function applyCrossFilter(column: string, value: unknown, facetSteps: any[] = []): void {
   if (!dashCurrent || dashReadOnly) return; // a published snapshot is not editable
   dashCurrent.filters = toggleCrossFilterSteps(dashCurrent.filters, column, value);
+  // A small-multiples panel's own value filters too ("Other" is a list, not a click).
+  for (const f of facetSteps) if (f && f.op === '=') dashCurrent.filters = toggleCrossFilterSteps(dashCurrent.filters, f.column, f.value);
   markDashDirty('Cross-filter');
   renderDashFilterBar();
   renderDashGrid();

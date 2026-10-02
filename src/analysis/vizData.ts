@@ -22,9 +22,11 @@ import type { CategoryInfo, CivilDate, DateGrain } from './categoryKey';
 import { buildPivotGrid, pivotChartData } from './pivotData';
 import type { PivotGrid } from './pivotData';
 import type { ResolvedOverlay } from './analytics';
+import type { EventMark } from './events';
 import { engineVizData } from './engineViz';
 import type { CohortGrid } from './cohortData';
 import type { EventFunnel } from './funnelEvents';
+import type { FacetGrid } from './facets';
 
 // === the buildChart input shape (chartRender.ts). A series is "plottable" when
 // values is a non-empty array; non-numeric cells MUST be null (the renderers test
@@ -54,6 +56,10 @@ export interface VizDataResult {
     eventFunnel?: EventFunnel;
     /** The Analytics pane's overlays, resolved (./analytics) — only when the visual has some. */
     analytics?: ResolvedOverlay[];
+    /** Small multiples (./facets): one panel per facet value, beside a flattened `{labels, series}`. */
+    facets?: FacetGrid;
+    /** The project's events on a date axis (./events), when any land on it. r8:events */
+    events?: EventMark[];
   };
   recommendedShape: string; // feeds the renderer's eligibleChartTypes()
   warnings: string[];
@@ -77,25 +83,25 @@ function colIndex(columns: ParsedColumn[], name: string): number {
 // A value cell → number or null. The strict rule: only a finite JS number passes;
 // everything else (string, null, NaN, Infinity) becomes null so the renderer never
 // sees a non-number where it expects one.
-function numOrNull(cell: Cell): number | null {
+export function numOrNull(cell: Cell): number | null {
   return typeof cell === 'number' && Number.isFinite(cell) ? cell : null;
 }
 
 // A category/label cell → string|number, verbatim. A leading-zero id stored as
 // text ("007") stays the string "007"; a numeric label stays a number.
-function labelVal(cell: Cell): string | number {
+export function labelVal(cell: Cell): string | number {
   if (typeof cell === 'number') return cell;
   return cell == null ? '' : String(cell);
 }
 
 // Stable key for grouping label/series cells by identity (type-aware).
-function keyOf(cell: Cell): string {
+export function keyOf(cell: Cell): string {
   return JSON.stringify(cell == null ? null : cell);
 }
 
 // Display-only series name. Aggregated → "sum of price"; count / raw (`none`) /
 // single verbatim column → just the column name.
-function measureLabel(v: VizMeasure): string {
+export function measureLabel(v: VizMeasure): string {
   if (v.aggregation === 'none' || v.aggregation === 'count') return v.column;
   return `${v.aggregation} of ${v.column}`;
 }
@@ -237,7 +243,7 @@ function buildPivot(
 // Every decision and every label comes from ./categoryKey, which the resident
 // path calls too. Nothing is formatted twice.
 
-interface CategoryRewrite {
+export interface CategoryRewrite {
   table: TableData;
   encoding: VizEncoding;
   info: CategoryInfo;
@@ -338,7 +344,7 @@ function capText(
 }
 
 /** The caller guarantees `encoding.category` is a real column of `table`. */
-function rewriteCategory(
+export function rewriteCategory(
   table: TableData,
   encoding: VizEncoding,
 ): CategoryRewrite {

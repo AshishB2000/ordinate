@@ -163,7 +163,61 @@ function pkChartConfig(chartType: string, payload: any, ramp: string[], fmt: (v:
     type: lineish ? 'line' : 'bar',
     data: { labels, datasets },
     options: { ...base, indexAxis: horizontal ? 'y' : 'x', scales },
+    plugins: horizontal ? [] : pkEventPlugins(payload),
   };
+}
+
+// r8:events — a chart's event markers, placed by main on label indices: a line
+// for a single date, a shaded band for a range, the title along the top (a
+// page has no hover to reveal it). Colours are the hub's kind colours.
+const PK_EVENT_COLORS: Record<string, string> = { launch: '#2563eb', campaign: '#c77d11', incident: '#e11d48', holiday: '#059669', other: '#64748b' };
+
+function pkEventPlugins(payload: any): any[] {
+  const evs: any[] = payload && Array.isArray(payload.events) ? payload.events : [];
+  if (!evs.length) return [];
+  const geom = (chart: any, e: any): { l: number; r: number } | null => {
+    const x = chart.scales && chart.scales.x;
+    const a = chart.chartArea;
+    if (!x || !a) return null;
+    const n = Array.isArray(payload.labels) ? payload.labels.length : 0;
+    const step = n > 1 ? x.getPixelForValue(1) - x.getPixelForValue(0) : a.right - a.left;
+    const l = x.getPixelForValue(e.from);
+    const r = x.getPixelForValue(e.to);
+    return e.range ? { l: Math.max(a.left, l - step / 2), r: Math.min(a.right, r + step / 2) } : { l, r: l };
+  };
+  return [{
+    id: 'pkEvents',
+    beforeDatasetsDraw(chart: any) {
+      const a = chart.chartArea;
+      const ctx = chart.ctx;
+      ctx.save();
+      for (const e of evs) {
+        const g = geom(chart, e);
+        if (!g) continue;
+        ctx.fillStyle = ctx.strokeStyle = PK_EVENT_COLORS[e.kind] || PK_EVENT_COLORS.other;
+        if (e.range) { ctx.globalAlpha = 0.1; ctx.fillRect(g.l, a.top, g.r - g.l, a.bottom - a.top); }
+        else { ctx.globalAlpha = 0.7; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(g.l, a.top); ctx.lineTo(g.l, a.bottom); ctx.stroke(); ctx.setLineDash([]); }
+        ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+    },
+    afterDatasetsDraw(chart: any) {
+      const a = chart.chartArea;
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.font = '600 10px system-ui, sans-serif';
+      ctx.textBaseline = 'top';
+      evs.forEach((e: any, i: number) => {
+        const g = geom(chart, e);
+        if (!g) return;
+        const t = String(e.title).length > 28 ? String(e.title).slice(0, 27) + '…' : String(e.title);
+        ctx.fillStyle = PK_EVENT_COLORS[e.kind] || PK_EVENT_COLORS.other;
+        const w = ctx.measureText(t).width;
+        ctx.fillText(t, Math.max(a.left, Math.min(a.right - w, g.l + 3)), a.top + 2 + (i % 3) * 12);
+      });
+      ctx.restore();
+    },
+  }];
 }
 
 // ── Maps: projections (unit space, y down) ───────────────────────────────────

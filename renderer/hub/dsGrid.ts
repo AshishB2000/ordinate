@@ -212,6 +212,7 @@ async function refreshExplorerPage(retried?: boolean): Promise<void> {
     search: expSearch.trim(),
     sortColumn: expSortColumnName(),
     sortDir: expSortDir === 1 ? 'asc' : 'desc',
+    filters: typeof dsrGridSteps === 'function' ? dsrGridSteps() : undefined, // dataSearch.ts
   };
 
   let res: any = null;

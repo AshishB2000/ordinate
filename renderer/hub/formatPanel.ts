@@ -298,6 +298,10 @@ function fmtAxesSection(host: HTMLElement, ctx: FmtPanelCtx): void {
   const body = fmtSection(host, 'Axes');
   fmtSwitch(body, 'gridlines', 'Gridlines', ctx.ov().showGridlines !== false,
     (on) => ctx.patch({ showGridlines: on ? null : false }));
+  // r8:events — the project's events on this date axis (chartEvents.ts); on by default.
+  if ((ctx.data && Array.isArray(ctx.data.events)) || ctx.ov().showEvents === false) {
+    fmtSwitch(body, 'events', 'Event markers', ctx.ov().showEvents !== false, (on) => ctx.patch({ showEvents: on ? null : false }));
+  }
   if (roles.x) fmtAxisBlock(body, ctx, 'x', roles.x);
   if (roles.y) fmtAxisBlock(body, ctx, 'y', roles.y);
   const measures = roles.y2 ? fmtDualMeasures(ctx) : [];

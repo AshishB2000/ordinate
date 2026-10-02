@@ -1,0 +1,180 @@
+/* Small multiples — the trellis grid (facetGrid.js) and the builder's Facet
+   shelf (facetShelf.js). Its own sheet, linked after hub.css. Tokens only. */
+
+/* ── The grid ─────────────────────────────────────────────────────────────── */
+
+.fc-wrap { min-height: 0; }
+.fc-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+/* One field wraps at a minimum panel width; two make a matrix with a header
+   row and a header column (--fc-cols is set from JS, the only inline value). */
+.fc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--sp-12);
+  width: 100%;
+}
+.fc-grid.is-matrix {
+  grid-template-columns: minmax(48px, 96px) repeat(var(--fc-cols, 2), minmax(150px, 1fr));
+  align-items: stretch;
+}
+.fc-cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+  padding: var(--sp-8);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.fc-cell.is-empty {
+  border-style: dashed;
+  background: var(--surface-2);
+}
+.fc-title,
+.fc-head,
+.fc-rowhead {
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fc-head {
+  padding: 0 var(--sp-4);
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--t-11);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.fc-rowhead {
+  align-self: center;
+  padding-right: var(--sp-4);
+  color: var(--muted);
+  font-size: var(--t-11);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.fc-cell .cv-canvas-wrap {
+  height: clamp(170px, 24vh, 240px);
+}
+.fc-none {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  color: var(--text-faint);
+  font-size: var(--t-12);
+}
+.fc-pivot { overflow: auto; max-height: 320px; }
+
+.fc-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-12);
+  padding-top: var(--sp-8);
+  color: var(--muted);
+  font-size: var(--t-11);
+}
+.fc-legend-item { display: inline-flex; align-items: center; gap: var(--sp-4); }
+.fc-swatch { width: 10px; height: 10px; border-radius: 2px; background: var(--muted); }
+.fc-note {
+  margin: var(--sp-8) 0 0;
+  color: var(--text-dim);
+  font-size: var(--t-11);
+}
+
+/* In a dashboard tile the user set the height: panels keep a fixed height and
+   the grid scrolls inside the tile instead of squeezing every chart flat. */
+.dash-card .fc-scroll { overflow: auto; }
+.dash-card .fc-cell .cv-canvas-wrap { flex: none; height: 150px; min-height: 0; }
+.dash-card .fc-grid { gap: var(--sp-8); }
+
+/* The export holder grows to the whole grid — nothing is cropped. */
+.export-capture-holder.fc-capture { height: auto; padding: var(--sp-12); background: var(--surface); }
+.export-capture-holder.fc-capture .fc-cell .cv-canvas-wrap { height: 220px; }
+
+/* ── The Facet shelf (builder) ────────────────────────────────────────────── */
+
+.fc-shelf {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  margin-top: var(--sp-16);
+  padding-top: var(--sp-12);
+  border-top: 1px solid var(--border);
+}
+.fc-shelf-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-height: 24px;
+}
+.fc-shelf-title {
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.fc-shelf-badge {
+  white-space: nowrap;
+  padding: 0 var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--t-11);
+  font-weight: 600;
+  line-height: 18px;
+}
+.fc-shelf-badge:empty { display: none; }
+.fc-shelf-clear { margin-left: auto; }
+.fc-shelf-empty {
+  margin: 0;
+  padding: var(--sp-12);
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+}
+.fc-shelf-dims,
+.fc-shelf-opts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-8);
+}
+.fc-shelf-opt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.fc-shelf-opt.is-wide { grid-column: 1 / -1; }
+.fc-shelf-label {
+  font-size: var(--t-11);
+  font-weight: 600;
+  color: var(--muted);
+}
+.fc-shelf .viz-select {
+  width: 100%;
+  max-width: none;
+  padding: var(--sp-8);
+  border-radius: var(--r-md);
+  line-height: 1.4;
+}
+/* The two scale options share the column evenly, so "Independent" never clips. */
+.fc-shelf .seg { display: flex; width: 100%; box-sizing: border-box; }
+.fc-shelf .seg-opt { flex: 1 1 0; min-width: 0; padding: 0 var(--sp-4); height: 34px; }
+.fc-shelf.is-on .fc-shelf-dims { padding: var(--sp-8); border-radius: var(--r-md); background: var(--accent-soft); }

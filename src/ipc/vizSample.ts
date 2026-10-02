@@ -7,6 +7,7 @@ import type { FilterStep } from '../data/transforms';
 import { vizDataFor } from './visuals';
 import { withPeriodOverlay } from './visualsOverlay';
 import { withAnalytics } from './visualsAnalytics';
+import { withEvents } from './events'; // r8:events
 import { withTableCalcs } from '../analysis/tableCalc';
 import { sanitizeOverlays } from '../analysis/analytics';
 
@@ -30,7 +31,7 @@ export function register(): void {
       const run = async (p: string, d: string, e: VizEncoding, f: FilterStep[]) =>
         withTableCalcs(await vizDataFor(p, d, e, f, { params: values, sample: true }), e);
       const periods = await withPeriodOverlay(await run(projectId, datasetId, enc, bound.steps), projectId, datasetId, enc, bound.steps, run);
-      const reply = await withAnalytics(periods, projectId, sanitizeOverlays(analytics), bound.steps, values);
+      const reply = await withEvents(await withAnalytics(periods, projectId, sanitizeOverlays(analytics), bound.steps, values), projectId, datasetId, bound.steps); // r8:events
       return reply.ok && bound.errors.length
         ? { ...reply, warnings: reply.warnings.concat(bound.errors), paramErrors: bound.errors }
         : reply;

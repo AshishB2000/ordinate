@@ -97,17 +97,24 @@ function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx,
   function getLiveCanvas() { return container.querySelector('canvas') || canvas; }
 
   // ── Action: copy chart as image ──────────────────────────────────────
-  function onCopyImg() {
+  // A grid of panels is ONE image of the whole grid (facetGrid.captureFacetPNG).
+  async function imageUrl() {
+    const ov = (entry.chartOverrides && entry.chartOverrides[overrideKey]) || {};
+    return facetGridOf(data, type, ov) ? captureChartPNG(type, data, fmtWithScope(ov, entry.drill)) : getLiveCanvas().toDataURL('image/png');
+  }
+
+  async function onCopyImg() {
     closeChartMenu();
-    const dataUrl = getLiveCanvas().toDataURL('image/png');
+    const dataUrl = await imageUrl();
+    if (!dataUrl) return;
     if (window.hub) { window.hub.copyImage(dataUrl); showToast('Chart copied to clipboard'); }
   }
 
   // ── Action: download chart PNG ───────────────────────────────────────
   async function onDownload() {
     closeChartMenu();
-    const dataUrl = getLiveCanvas().toDataURL('image/png');
-    if (!window.hub) return;
+    const dataUrl = await imageUrl();
+    if (!window.hub || !dataUrl) return;
     const result = await window.hub.saveImage(dataUrl);
     if (result && result.ok) {
       const name = result.dest ? result.dest.split('/').pop() : 'chart.png';
@@ -260,7 +267,11 @@ function openChartMenu(anchorBtn, container, canvas, data, type, entry, turnIdx,
 // wireDrillClick in drill.ts). Passing it blindly would compose an equality
 // filter on a column the visual never split by.
 function chartMarkAt(area, e) {
-  const chart = chartInstances.get(area);
+  let chart = chartInstances.get(area);
+  // Small multiples (facetGrid.ts): hit-test the panel under the pointer, and
+  // say which panel — its facet value travels with the mark.
+  const panel = Array.isArray(chart) ? facetPanelAt(chart, e) : null;
+  if (panel) chart = panel.chart;
   if (!chart || typeof chart.getElementsAtEventForMode !== 'function') return null;
   let hit = [];
   try {
@@ -274,8 +285,8 @@ function chartMarkAt(area, e) {
   if (category === undefined) return null;
   const sets = (chart.data && chart.data.datasets) || [];
   const split = sets.length > 1 ? sets[hit[0].datasetIndex] : null;
-  const series = split && typeof split.label === 'string' ? split.label : undefined;
-  return { category, series };
+  const series = split && typeof split.label === 'string' ? split.label : panel && panel.facet.series;
+  return panel ? { category, series, facet: panel.facet } : { category, series };
 }
 
 // ── Per-graph control cluster: Values menu, period multi-select, ⋯ ──────────
@@ -441,7 +452,7 @@ function addChartControls(chartWrapper, container, canvas, data, type, entry, tu
   const cluster = document.createElement('div');
   cluster.className = 'cv-graph-controls';
   const overrides = (entry.chartOverrides && entry.chartOverrides[overrideKey]) || {};
-  const series = chartSeries(data);
+  const series = chartSeries(facetControlsData(data)); // a faceted grid lists ONE panel's series
   const valueMode = overrides.valueMode || (overrides.showValues ? 'all' : 'maxmin');
 
   // Values ▾ (only where the renderer can actually draw value labels)
@@ -477,7 +488,7 @@ function addChartControls(chartWrapper, container, canvas, data, type, entry, tu
         const arr = Array.from(hidden).sort((a: any, b: any) => a - b);
         patchOverride(entry, overrideKey, { hiddenSeries: arr.length ? arr : null });
         const chart = chartInstances.get(container);
-        if (chartIsSmallMultiple(type, series.length)) {
+        if (chartIsSmallMultiple(type, series.length) || Array.isArray(chart)) {
           // Re-render the grid so hidden periods drop out (chart is an array here).
           renderVizInArea(container, data, type, entry, turnIdx);
         } else if (PER_SERIES_DATASET_TYPES.has(type) && chart) {

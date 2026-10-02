@@ -30,9 +30,11 @@ import { formatValue } from '../app/format';
 import { readDistinctPage, distinctValuesPageJs } from '../engine/datasetPage';
 import type { FilterStep } from '../data/transforms';
 import { vizDataFor } from '../ipc/visuals';
+import { withEvents } from '../ipc/events'; // r8:events
 import { computeCardMetric } from '../ipc/dashboards';
 import { resolveMetric } from '../ipc/metrics';
 import { computeStatsTile } from '../ipc/stats';
+import { computeSummary } from '../ipc/summary';
 import { statsTitle } from '../analysis/stats/present';
 import { planCombos, parseKey, MAX_OPTIONS_PER_CONTROL } from './combos';
 import type { ComboPlan, ControlDomain } from './combos';
@@ -50,7 +52,7 @@ export interface PublishedControl {
 
 export interface PublishedCard {
   id: string;
-  kind: 'chart' | 'metric' | 'text' | 'broken';
+  kind: 'chart' | 'metric' | 'text' | 'broken' | 'summary';
   layout: { x: number; y: number; w: number; h: number };
   /** The card's cell on the tablet and phone grids (or hidden there) — the
    *  page's CSS breakpoints switch between these and `layout`. */
@@ -102,6 +104,8 @@ export type Outgoing = (datasetId: string, encoding: VizEncoding, data: VizDataR
  * labels, so one written before masking would publish the very label the
  * policy hid. Series go from the app's `{name}` to the export's `{label}`.
  */
+const sameLabels = (a: unknown[], b: unknown[]): boolean => a.length === b.length && a.every((l, i) => Object.is(l, b[i]));
+
 export async function chartPayload(
   datasetId: string,
   encoding: VizEncoding,
@@ -121,6 +125,8 @@ export async function chartPayload(
     series: data.series.map((s) => ({ label: s.name, values: s.values })),
     ...(data.pivot ? { pivot: data.pivot } : {}),
     ...(data.geo ? { geo: data.geo } : {}),
+    // r8:events — event markers, only while the shaped labels are still the ones they index.
+    ...(raw.events && (overrides as any)?.showEvents !== false && sameLabels(raw.labels, data.labels) ? { events: raw.events } : {}), // any: a visual's overrides record
     caption: tileCaption({ chartType, data, geo: data.geo, pivot: data.pivot, overrides: overrides as any }), // any: a visual's overrides record
   };
 }
@@ -329,7 +335,7 @@ export async function buildDashboard(
           if (ctx.checkCancelled) ctx.checkCancelled();
           const merged = mergeDashboardFilters(scope.filters, v.filters);
           const bound = resolveFilterParams(merged, scope.params);
-          const reply = await vizDataFor(projectId, v.datasetId, enc, bound.steps, { params: scope.params });
+          const reply = await withEvents(await vizDataFor(projectId, v.datasetId, enc, bound.steps, { params: scope.params }), projectId, v.datasetId, bound.steps);
           const payload = reply.ok
             ? await chartPayload(v.datasetId, enc, v.chartType || 'column', v.overrides, reply.data, outgoing)
             : { error: reply.error || 'Could not compute this tile.' };
@@ -392,6 +398,18 @@ export async function buildDashboard(
           if (ctx.progress) ctx.progress(done / total, `${done.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} tile answers`);
         }
         cards.push({ ...base, kind: 'chart', title: statsTitle(card.stats), chartType: chartType || 'column' });
+        continue;
+      }
+      if (card.type === 'summary') {
+        // The Summary card (src/ipc/summary.ts), recomputed per combination —
+        // minus any sentence quoting a column the share policy withholds.
+        for (const scope of scopes) {
+          if (ctx.checkCancelled) ctx.checkCancelled();
+          const list = await computeSummary(projectId, a.sheets, { analysisId: a.id, filters: scope.filters, params: scope.params, outbound: true });
+          base.variants.push(intern(store, { sentences: list.map((x) => x.text) }));
+          done++;
+        }
+        cards.push({ ...base, kind: 'summary', title: 'Summary' });
         continue;
       }
       // Image, nav, divider, container and tabs cards carry no figures; a

@@ -46,6 +46,7 @@ export { markRefresh, setAutoRefresh, writeQuality } from './datasetRecord';
 // as-of hooks (read a dataset as it was) — each one line at its call site.
 import { keepAround, removeAll as removeSnapshots } from './snapshots';
 import * as asOf from './asOf';
+import { scheduleIndex, removeIndex } from '../engine/dataSearchResident'; // ⌘K's value index
 export type { DatasetOrigin } from './datasetOrigin';
 export type { DatasetSummary } from './datasetSummary';
 export { sanitizeOrigin };
@@ -243,6 +244,7 @@ async function persistNow(projectId: string, dataset: Dataset, explicit: parquet
   delete meta.rows;
   if (!dataset.source) delete meta.source;
   await writeJsonAtomic(file, meta);
+  scheduleIndex({ parquetPath: parquetPath(projectId, dataset.id), columns: dataset.columns }); // save AND refresh land here
 }
 
 // Load the tables for a v3 record. Returns false when the data cannot be read —
@@ -745,6 +747,7 @@ export async function deleteDataset(projectId: string, id: string): Promise<bool
     await fs.promises.rm(parquetPath(projectId, id), { force: true });
     await fs.promises.rm(sourceParquetPath(projectId, id), { force: true });
     await removeSnapshots(projectId, id);
+    await removeIndex(parquetPath(projectId, id));
     return true;
   } catch (_) {
     return false;

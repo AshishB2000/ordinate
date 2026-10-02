@@ -144,6 +144,7 @@ function sanitizeFlow(raw: unknown): unknown {
 export function sanitizePayload(raw: unknown): unknown {
   const o = obj(raw);
   if (typeof o.error === 'string') return { error: str(o.error, MAX_LABEL) };
+  if (Array.isArray(o.sentences)) return { sentences: arr(o.sentences, 5).map((x) => str(x, MAX_LABEL)) }; // a Summary card's
   if ('display' in o || ('value' in o && !('labels' in o))) {
     return { value: num(o.value), display: str(o.display, 120), caption: str(o.caption, MAX_LABEL) };
   }
@@ -156,7 +157,28 @@ export function sanitizePayload(raw: unknown): unknown {
   if (o.pivot) out.pivot = sanitizePivot(o.pivot);
   if (o.geo) out.geo = sanitizeGeo(o.geo);
   if (typeof o.hidden === 'string') out.hidden = str(o.hidden, MAX_LABEL);
+  if (Array.isArray(o.events)) out.events = sanitizeEventMarks(o.events, data.labels.length);
   return out;
+}
+
+const EVENT_KINDS: ReadonlySet<string> = new Set(['launch', 'campaign', 'incident', 'holiday', 'other']);
+
+/**
+ * r8:events — a chart's event markers: a closed-enum kind, two strings and two
+ * label indices inside the chart. Nothing else of an event (its id, its scope,
+ * the datasets and filters it names) reaches a page.
+ */
+function sanitizeEventMarks(raw: unknown[], labelCount: number): Obj[] {
+  if (!labelCount) return [];
+  return arr(raw, 200).map((r) => {
+    const o = obj(r);
+    const from = int(o.from, 0, Math.max(0, labelCount - 1), -1);
+    const to = int(o.to, 0, Math.max(0, labelCount - 1), -1);
+    return {
+      kind: EVENT_KINDS.has(o.kind as string) ? o.kind : 'other',
+      title: str(o.title, MAX_LABEL), when: str(o.when, 120), from, to: Math.max(from, to), range: o.range === true,
+    };
+  }).filter((e) => (e.from as number) >= 0 && e.title);
 }
 
 /**
@@ -183,7 +205,7 @@ function sanitizeCard(raw: unknown): unknown {
   const title = str(o.title, MAX_LABEL);
   if (kind === 'text') return { kind, layout, sizes, title, heading: str(o.heading, MAX_LABEL), text: str(o.text) };
   if (kind === 'broken') return { kind, layout, sizes, title, reason: str(o.reason, MAX_LABEL) || 'Source removed' };
-  if (kind !== 'chart' && kind !== 'metric') return null;
+  if (kind !== 'chart' && kind !== 'metric' && kind !== 'summary') return null;
   const payloads = arr(o.payloads, 5000).map(sanitizePayload);
   const variants = arr(o.variants, 5000).map((v) => int(v, 0, Math.max(0, payloads.length - 1), 0));
   const card: Obj = { kind, layout, sizes, title, variants, payloads };

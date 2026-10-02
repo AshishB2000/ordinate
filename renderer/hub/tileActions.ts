@@ -15,7 +15,7 @@ function tileClicked(visual: any, category: unknown): any {
   return col && category !== undefined ? { column: String(col), value: category } : null;
 }
 
-async function runTileAction(action: any, card: any, visual: any, category?: unknown): Promise<void> {
+async function runTileAction(action: any, card: any, visual: any, category?: unknown, facetSteps: any[] = []): Promise<void> {
   const clicked = category === undefined ? null : tileClicked(visual, category);
   const steps = cardModel.carrySteps(action, { clicked, filters: effectiveFilters(), selection: [] });
   if (action.kind === 'navigate') {
@@ -32,7 +32,7 @@ async function runTileAction(action: any, card: any, visual: any, category?: unk
   if (action.kind === 'filter_target') {
     const tiles = (action.tiles || []).filter((t: string) => t !== card.id);
     if (!tiles.length) { showToast('This action has no tiles to narrow yet.', { kind: 'info' }); return; }
-    dashNarrowTiles(tiles, clicked ? [{ type: 'filter', column: clicked.column, op: '=', value: clicked.value }] : steps);
+    dashNarrowTiles(tiles, clicked ? [{ type: 'filter', column: clicked.column, op: '=', value: clicked.value }].concat(facetSteps) : steps);
   }
 }
 
@@ -59,7 +59,7 @@ function wireTileActions(area: HTMLElement, card: any, visual: any): boolean {
   area.addEventListener('click', (e) => {
     const mark = chartMarkAt(area, e);
     if (!mark) return;
-    for (const a of clicks) void runTileAction(a, card, visual, mark.category);
+    for (const a of clicks) void runTileAction(a, card, visual, mark.category, mark.facet ? mark.facet.steps : []);
   });
   // A map has no Chart.js marks; mapRender dispatches its clicked region/point.
   area.addEventListener('cv-mark-click', (e: Event) => {
@@ -112,10 +112,12 @@ function wireTooltipVisual(area: HTMLElement, visual: any, action: any): void {
   let tipVisual: any = null;
   // The tile's own Chart.js tooltip would sit on top of this one.
   requestAnimationFrame(() => {
-    const ch = chartInstances.get(area);
-    if (ch && ch.options && ch.options.plugins && ch.options.plugins.tooltip) {
-      ch.options.plugins.tooltip.enabled = false;
-      ch.update('none');
+    const inst = chartInstances.get(area);
+    for (const ch of Array.isArray(inst) ? inst : [inst]) { // small multiples: every panel
+      if (ch && ch.options && ch.options.plugins && ch.options.plugins.tooltip) {
+        ch.options.plugins.tooltip.enabled = false;
+        ch.update('none');
+      }
     }
   });
   const place = (e: MouseEvent): void => {
@@ -130,7 +132,7 @@ function wireTooltipVisual(area: HTMLElement, visual: any, action: any): void {
   area.addEventListener('mousemove', async (e) => {
     const mark = chartMarkAt(area, e);
     if (!mark) { lastKey = null; tvHide(); return; }
-    const key = String(mark.category);
+    const key = String(mark.category) + (mark.facet ? ' · ' + mark.facet.title : '');
     if (key === lastKey) { place(e); return; }
     lastKey = key;
     const my = ++seq;
@@ -156,7 +158,7 @@ function wireTooltipVisual(area: HTMLElement, visual: any, action: any): void {
     if (!tipVisual) { box.textContent = 'The tooltip visual was deleted.'; return; }
     const clicked = tileClicked(visual, mark.category);
     const filters = mergeDashFilters(effectiveFilters(), tipVisual.filters)
-      .concat(clicked ? [{ type: 'filter', column: clicked.column, op: '=', value: clicked.value }] : []);
+      .concat(clicked ? [{ type: 'filter', column: clicked.column, op: '=', value: clicked.value }] : [], mark.facet ? mark.facet.steps : []);
     const res = await window.hub.computeVisualData(currentProjectId, tipVisual.datasetId, tipVisual.encoding, filters).catch(() => null);
     if (my !== seq || !tvTip) return;
     if (!res || !res.ok) { box.textContent = 'No data for ' + key + '.'; return; }

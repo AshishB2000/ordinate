@@ -300,6 +300,7 @@ async function buildReportPages(ctx: ReportContext): Promise<RenderedPage[]> {
   const allCaptions: string[] = [];
   const allKpis: Array<{ label: string; value: number | null; text: string }> = [];
   if (summaryWanted) {
+    allCaptions.push(...await sumReportLines(ctx)); // summaryCard.ts — the Summary card's sentences lead
     for (const sheet of sheets) {
       const kpis = await reportKpis(ctx, sheet);
       allKpis.push(...kpis);

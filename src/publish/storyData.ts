@@ -13,6 +13,7 @@ import { tileCaption } from '../analysis/captions';
 import { vizDataFor } from '../ipc/visuals';
 import { resolveMetric } from '../ipc/metrics';
 import { chartPayload } from './dashboardData';
+import { withEvents } from '../ipc/events'; // r8:events
 import type { BuildProgress, Outgoing } from './dashboardData';
 
 export interface PublishedBlock {
@@ -65,7 +66,8 @@ export async function buildStory(
         if (enc.geo.level === 'custom' && enc.geo.boundaryId) boundaryIds.add(enc.geo.boundaryId);
         else geoLevels.add(enc.geo.level);
       }
-      const reply = await vizDataFor(projectId, v.datasetId, enc, mergeDashboardFilters(b.filters, v.filters));
+      const blockFilters = mergeDashboardFilters(b.filters, v.filters);
+      const reply = await withEvents(await vizDataFor(projectId, v.datasetId, enc, blockFilters), projectId, v.datasetId, blockFilters); // r8:events
       if (!reply.ok) { blocks.push({ kind: 'broken', reason: reply.error }); continue; }
       const data = await chartPayload(v.datasetId, enc, v.chartType || 'column', v.overrides, reply.data, outgoing);
       if (typeof data.hidden === 'string') { blocks.push({ kind: 'broken', reason: data.hidden }); continue; }

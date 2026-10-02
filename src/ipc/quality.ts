@@ -12,6 +12,27 @@ import { pageFor } from './datasets';
 import { getDatasetMeta } from '../data/datasets';
 import * as jobs from '../app/jobs';
 
+/**
+ * "Run checks" as a job — the button below, and a pipeline's quality step
+ * (src/app/pipelineRunner.ts). One at a time per dataset, and the resident
+ * evaluation runs in a compute worker.
+ */
+// ponytail: ids are untrusted renderer values here, as they were inline — the stores UUID-check them.
+export async function submitQualityRun(projectId: any, datasetId: any): Promise<{ id: string; done: Promise<unknown> }> {
+  const meta = await getDatasetMeta(projectId, datasetId);
+  return jobs.submit({
+    kind: 'quality',
+    label: `Quality checks · ${meta ? meta.name : 'dataset'}`,
+    projectId: typeof projectId === 'string' ? projectId : undefined,
+    datasetId: typeof datasetId === 'string' ? datasetId : undefined,
+    run: async (ctx) => {
+      ctx.progress(0.1, `${meta && meta.quality ? meta.quality.rules.length : 0} rule(s)`);
+      return quality.runQualityChecks(projectId, datasetId);
+    },
+    resultOf: (events) => ({ message: events.length ? `${events.length} rule(s) started failing` : 'Checks finished' }),
+  });
+}
+
 export function register(): void {
   // Rules + the latest run + the 30-run history, in one read of the record.
   ipcMain.handle('quality:list', async (_e, { projectId, datasetId }: any = {}) => {
@@ -45,19 +66,7 @@ export function register(): void {
   // per dataset, and the resident evaluation runs in a compute worker.
   ipcMain.handle('quality:run', async (_e, { projectId, datasetId }: any = {}) => {
     try {
-      const meta = await getDatasetMeta(projectId, datasetId);
-      const job = jobs.submit({
-        kind: 'quality',
-        label: `Quality checks · ${meta ? meta.name : 'dataset'}`,
-        projectId: typeof projectId === 'string' ? projectId : undefined,
-        datasetId: typeof datasetId === 'string' ? datasetId : undefined,
-        run: async (ctx) => {
-          ctx.progress(0.1, `${meta && meta.quality ? meta.quality.rules.length : 0} rule(s)`);
-          return quality.runQualityChecks(projectId, datasetId);
-        },
-        resultOf: (events) => ({ message: events.length ? `${events.length} rule(s) started failing` : 'Checks finished' }),
-      });
-      await job.done;
+      await (await submitQualityRun(projectId, datasetId)).done;
       const q = await quality.listQuality(projectId, datasetId);
       if (!q) return { ok: false, error: 'Dataset not found' };
       return { ok: true, rules: q.rules, latest: q.latest || null, history: q.history || [] };

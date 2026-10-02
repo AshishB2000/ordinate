@@ -1,5 +1,5 @@
 // Result rendering — turns an analysis result into DOM: the viz area
-// (renderVizInArea / renderSmallMultiples), metrics / headline / details, the
+// (renderVizInArea; small multiples in facetGrid.ts), metrics / headline / details, the
 // chart-type eligibility helpers, and renderTurnResult. Extracted from hub.js
 // as a pure structural move (no logic changes). The result *controller*
 // (showAnalyzeResult, followups, IPC handlers, the entries/currentEntryId state
@@ -70,10 +70,12 @@ function renderChartJsInArea(container, data, type, entry, turnIdx, source?) {
   // context when a Customize re-render passes no source.
   const colorSrc = source || (entry && entry.drill) || null;
 
-  // Grouped share/magnitude charts (pie, donut, gauge, treemap, funnel, histogram)
-  // can't stack series into one chart — render one mini per period instead.
-  if (entry && chartIsSmallMultiple(type, chartSeries(data).length)) {
-    renderSmallMultiples(container, data, type, entry, turnIdx, colorSrc);
+  // Small multiples — a faceted visual, or a share chart (pie, donut, gauge,
+  // treemap, funnel, histogram) over 2+ series: one grid of panels (facetGrid.ts).
+  const ovForGrid = entry && entry.chartOverrides ? entry.chartOverrides[`${turnIdx}:${type}`] : null;
+  const facetGrid = facetGridOf(data, type, ovForGrid);
+  if (facetGrid) {
+    renderFacetGrid(container, facetGrid, data, type, entry, turnIdx, colorSrc);
     return;
   }
 
@@ -160,61 +162,6 @@ function controlsSlotFor(container) {
   if (!container || typeof container.closest !== 'function') return null;
   const host = container.closest(CONTROLS_HOSTS);
   return host ? host.querySelector('.cv-controls-slot') : null;
-}
-
-// Render a grouped share/magnitude chart as small multiples: one mini chart per
-// period (series), side by side. Each mini is buildChart() fed a single-series
-// slice of the data, so it reuses every renderer + Values/Customize override.
-function renderSmallMultiples(container, data, type, entry, turnIdx, colorSrc?) {
-  const series = chartSeries(data);
-  const overrideKey = `${turnIdx}:${type}`;
-  const overrides = (entry.chartOverrides && entry.chartOverrides[overrideKey]) || {};
-  const hidden = new Set(Array.isArray(overrides.hiddenSeries) ? overrides.hiddenSeries : []);
-
-  const chartWrapper = document.createElement('div');
-  chartWrapper.className = 'cv-chart-wrapper';
-  const grid = document.createElement('div');
-  grid.className = 'cv-small-multiples';
-  chartWrapper.appendChild(grid);
-  container.appendChild(chartWrapper);
-
-  // Per-mini overrides drop series-level keys that don't apply to a 1-series slice:
-  // hiddenSeries is handled here (which minis render), title would repeat on each.
-  const miniOv = Object.assign({}, fmtWithScope(overrides, colorSrc));
-  delete miniOv.hiddenSeries;
-  delete miniOv.title; delete miniOv.commentPins; // a pin names ONE chart's point, not every mini's
-  miniOv._smallMultiple = true;   // per-mini caption already names the period
-  // A bottom legend on every small mini repeats the same categories N times and
-  // crowds the tiny chart — rely on the on-slice labels instead (unless forced on).
-  if (miniOv.showLegend === undefined) miniOv.showLegend = false;
-
-  const charts = [];
-  series.forEach((s, i) => {
-    if (hidden.has(i)) return;
-    const cell = document.createElement('div');
-    cell.className = 'cv-sm-cell';
-    const cap = document.createElement('div');
-    cap.className = 'cv-sm-title';
-    cap.textContent = s.name || ('Series ' + (i + 1));
-    cell.appendChild(cap);
-    const wrap = document.createElement('div');
-    wrap.className = 'cv-canvas-wrap is-fresh';
-    const canvas = document.createElement('canvas');
-    canvas.setAttribute('aria-label', cap.textContent + ' chart');
-    wrap.appendChild(canvas);
-    cell.appendChild(wrap);
-    grid.appendChild(cell);
-    const c = buildChart(canvas, Object.assign({}, data, { series: [s], analytics: null }), type, miniOv);
-    if (c) charts.push(c);
-  });
-
-  if (!charts.length) {
-    container.innerHTML = '<div class="cv-chart-fallback">Couldn\'t draw a chart from this data.</div>';
-    return;
-  }
-  chartInstances.set(container, charts);
-  // One shared control cluster for the whole grid (no single canvas → null).
-  addChartControls(controlsSlotFor(container) || chartWrapper, container, null, data, type, entry, turnIdx, overrideKey);
 }
 
 // Build a DOM turn element showing analysis + optional viz switcher for a result.

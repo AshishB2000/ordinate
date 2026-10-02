@@ -524,7 +524,10 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
     close();
     await refreshAnalysisList();
       openAnalysisFrom(res);
-    if (kind === 'kpis' || kind === 'twoup') await applyStarter(kind, selectedId || undefined);
+    if (kind === 'kpis' || kind === 'twoup') {
+      await applyStarter(kind, selectedId || undefined);
+      sumAddToTop(); // summaryCard.ts — every gallery dashboard opens on its Summary
+    }
   }
 
   // TEMPLATE path: the plan the mapping step already previewed, built through
@@ -551,6 +554,7 @@ async function anCreateWizard(datasetId?: string, opts: { step?: number } = {}):
     close();
     await refreshAnalysisList();
     openAnalysisFrom(res.analysis);
+    sumAddToTop(); // summaryCard.ts — every gallery dashboard opens on its Summary
   }
 
   skip.addEventListener('click', () => { createFromStarter('blank'); });

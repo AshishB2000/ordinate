@@ -47,6 +47,8 @@ function applyCaptureFrame(holder: HTMLElement, frame?: CaptureFrame): void {
 function captureChartPNG(
   type: string, data: any, overrides?: any, frame?: CaptureFrame,
 ): Promise<string | null> {
+  const grid = facetGridOf(data, type, overrides); // small multiples export as the whole grid
+  if (grid) return captureFacetPNG(type, grid, data, overrides, frame);
   return new Promise<string | null>((resolve) => {
     const holder = document.createElement('div');
     holder.className = 'export-capture-holder';

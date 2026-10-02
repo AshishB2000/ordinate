@@ -16,6 +16,7 @@ import { withPeriodOverlay } from './visualsOverlay';
 import { sampledVizData } from './vizSampleData';
 import type { SampleInfo } from '../analysis/sampling';
 import { withAnalytics } from './visualsAnalytics';
+import { withEvents } from './events'; // r8:events
 import { sanitizeOverlays } from '../analysis/analytics';
 import { withTableCalcs } from '../analysis/tableCalc';
 import { paramValues, resolveFilterParams } from '../analysis/params';
@@ -42,6 +43,8 @@ import { applyToChart, rowShaper } from '../app/sharePolicy';
 import { isSharePath } from '../app/privacyStore';
 import { withAsOf } from '../data/asOf';
 import { driversVizData } from './drivers';
+import { facetVizData, isFaceted } from './visualsFacets';
+import { buildFacetData } from '../analysis/facets';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus
 // `visual:data` which loads a dataset and runs the PURE bridge (src/vizData.ts) to
@@ -444,13 +447,16 @@ async function computeVizData(
   // table holds those fields unbound. Everything else is untouched below.
   const replay = await paramTable(projectId, datasetId, opts.params);
   if (replay) {
-    const r = buildVizData(replay.columns, replay.rows, encoding, filters);
+    const r = (isFaceted(encoding) ? buildFacetData : buildVizData)(replay.columns, replay.rows, encoding, filters);
     return {
       ok: true, data: r.data, recommendedShape: r.recommendedShape,
       warnings: r.warnings.concat(replay.errors), category: r.category,
     };
   }
 
+  // Small multiples: one grouped query with the facet dims added (./visualsFacets).
+  const faceted = await facetVizData(projectId, datasetId, encoding, filters, (e, f) => vizDataFor(projectId, datasetId, e, f, opts), opts.maxHydrateRows);
+  if (faceted) return faceted;
   // A field or filter from a RELATED dataset, or a map: vizExtras answers instead.
   // Every map hydrates (no resident path draws one), so the ceiling holds first.
   if (encoding && encoding.geo) {
@@ -574,7 +580,7 @@ export function register() {
       // The Analytics pane's overlays, resolved on the finished reply under the
       // same scope — AFTER the share policy, so an overlay can only name what
       // the shaped chart still shows.
-      const reply = await withAnalytics(shaped, projectId, sanitizeOverlays(analytics), flt, values);
+      const reply = await withEvents(await withAnalytics(shaped, projectId, sanitizeOverlays(analytics), flt, values), projectId, datasetId, flt); // r8:events
       // A parameter that cannot be made well-typed is a VALIDATION message the
       // tile shows — never a silently empty chart.
       return reply.ok && bound.errors.length

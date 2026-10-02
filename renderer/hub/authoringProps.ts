@@ -74,6 +74,8 @@ function anIsPivot(): boolean {
  */
 function anEncodingToWrite(): any {
   const encoding = anForm!.getEncoding();
+  // Small multiples are set in the Visuals builder; an edit here must not drop them.
+  if (anVisual && anVisual.encoding && anVisual.encoding.facet) encoding.facet = anVisual.encoding.facet;
   if (anIsPivot()) {
     for (const k of ['pivot', 'cohort', 'eventFunnel']) if (anVisual.encoding[k]) encoding[k] = anVisual.encoding[k];
   }

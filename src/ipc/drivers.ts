@@ -49,6 +49,9 @@ import type { DriversSpec, PeriodScopes } from '../analysis/driverScope';
 import * as alertStore from '../analysis/alertStore';
 import { resolveMetric } from './metrics';
 import { computeCardMetric } from './dashboards';
+import { dateRangeSpan, duringClause, eventWhen, eventsDuring, periodSpan } from '../analysis/events'; // r8:events
+import { projectEvents } from '../analysis/eventStore';
+import { isoFromDays } from '../analysis/dateIntel';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -110,6 +113,8 @@ export interface DriversResult {
   /** "Revenue fell $412K" — the panel's title. */
   headline: string;
   caption: string;
+  /** Project events during period A — named in the caption (analysis/events). r8:events */
+  events?: Array<{ title: string; kind: string; when: string }>;
   path: Array<{ column: string; value: string; label: string }>;
   /** What "Alert me" pre-fills; null when the metric is not a column rollup. */
   alert: { datasetId: string; column: string; aggregation: string; metricId?: string; label: string; filters: FilterStep[]; periodColumn: string; direction: 'up' | 'down' } | null;
@@ -255,7 +260,9 @@ async function latestScopes(projectId: string, spec: DriversSpec, column: string
   const path = pathSteps(spec.path);
   const step = (key: string): FilterStep => ({ type: 'filter', column, op: periods.op, value: key } as FilterStep);
   const pretty = (key: string): string => rangeLabel(bucketRange(key, key.length === 7 ? 'month' : 'day')) || key;
-  return { a: spec.filters.concat([step(now)], path), b: spec.filters.concat([step(prev)], path), aLabel: pretty(now), bLabel: pretty(prev), column };
+  const span = periodSpan(now); // r8:events
+  const aRange = span ? { from: isoFromDays(span.from), to: isoFromDays(span.to) } : undefined;
+  return { a: spec.filters.concat([step(now)], path), b: spec.filters.concat([step(prev)], path), aLabel: pretty(now), bLabel: pretty(prev), column, aRange };
 }
 
 const tokens = new Map<string, { projectId: string; spec: DriversSpec; params: unknown }>();
@@ -364,6 +371,10 @@ export async function driversFor(projectId: string, spec: DriversSpec, rawParams
       }
     : null;
 
+  // A change that landed during a project event says so — dates matched by the app. r8:events
+  const during = eventsDuring(await projectEvents(projectId), dateRangeSpan(scopes.aRange), spec.datasetId, scopes.a);
+  if (caption && during.length) caption = caption.replace(/\.$/, '') + duringClause(during) + '.';
+
   const stored: DriversSpec = selectedDim ? { ...spec, dimension: selectedDim.column } : spec;
   const out: DriversResult = {
     ok: true,
@@ -387,6 +398,7 @@ export async function driversFor(projectId: string, spec: DriversSpec, rawParams
     spec: stored,
   };
   if (unavailable) out.unavailable = unavailable;
+  if (during.length) out.events = during.map((e) => ({ title: e.title, kind: e.kind, when: eventWhen(e) }));
   return out;
 }
 

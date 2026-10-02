@@ -876,3 +876,57 @@ scripts/**/*.js
 /renderer/hub/inputKeys.js
 /renderer/hub/inputPage.js
 /renderer/hub/inputColumns.js
+
+# r8 (round 8)
+/src/ipc/round8.js
+
+# r8:facets
+/renderer/hub/facetGrid.js
+/renderer/hub/facetShelf.js
+/src/analysis/facets.js
+/src/analysis/facetCaption.js
+/src/engine/facetResident.js
+/src/ipc/visualsFacets.js
+
+# r8:pipelines
+/src/app/pipelines.js
+/src/app/pipelineCron.js
+/src/app/pipelineStore.js
+/src/app/pipelineView.js
+/src/app/pipelineRunner.js
+/src/ipc/pipelines.js
+/preload/hubPipelinesPreload.js
+/renderer/hub/pipelinesPage.js
+/renderer/hub/pipelinesGraph.js
+/renderer/hub/pipelinesDetail.js
+
+# r8:events
+/renderer/hub/chartEvents.js
+/renderer/hub/eventsPage.js
+/renderer/hub/eventsEditor.js
+/preload/hubEventsPreload.js
+/src/analysis/events.js
+/src/analysis/eventStore.js
+/src/analysis/holidays.js
+/src/ipc/events.js
+/scripts/r8Events.js
+/scripts/test-events.js
+/scripts/test-eventsHolidays.js
+
+# r8:summary
+/src/analysis/summaryCard.js
+/src/ipc/summary.js
+/preload/hubSummaryPreload.js
+/renderer/hub/summaryCard.js
+
+# r8:search
+/src/data/dataSearch.js
+/src/data/dataSearchRun.js
+/src/engine/dataSearchResident.js
+/src/ipc/dataSearch.js
+/preload/hubSearchPreload.js
+/renderer/hub/dataSearch.js
+/scripts/test-dataSearch.js
+/scripts/test-dataSearchResident.js
+/scripts/bench-dataSearch.js
+/scripts/r8Search.js

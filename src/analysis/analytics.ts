@@ -371,7 +371,7 @@ const BUCKET_RE: Record<DateGrain, RegExp> = {
   year: /^\d{4}$/, quarter: /^\d{4}-Q[1-4]$/, month: /^\d{4}-\d{2}$/, week: /^\d{4}-\d{2}-\d{2}$/, day: /^\d{4}-\d{2}-\d{2}$/,
 };
 
-function axisOf(data: ChartData, ctx: ResolveContext): { kind: 'date' | 'number' | 'text'; grain?: DateGrain } {
+export function axisOf(data: ChartData, ctx: ResolveContext): { kind: 'date' | 'number' | 'text'; grain?: DateGrain } {
   const c = ctx.category;
   if (c && c.kind === 'date' && c.grain) return { kind: 'date', grain: c.grain };
   if (c && c.kind === 'number') return { kind: 'number' };

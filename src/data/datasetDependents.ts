@@ -111,7 +111,7 @@ async function pushFrom(projectId: string, rootId: string): Promise<void> {
   }
 }
 
-async function recomputeSteps(projectId: string, id: string): Promise<{ ok: boolean }> {
+export async function recomputeSteps(projectId: string, id: string): Promise<{ ok: boolean }> {
   const meta = await datasets.getDatasetMeta(projectId, id);
   const res = meta ? await datasets.updateSteps(projectId, id, meta.steps || []) : null;
   return { ok: res !== null };
