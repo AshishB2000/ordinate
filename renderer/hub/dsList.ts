@@ -192,6 +192,7 @@ const DS_SOURCE_LABELS: Record<string, string> = {
   sql: 'SQL',
   input: 'Input',
   parquet: 'Parquet',
+  notebook: 'Notebook', // r7:notebooks — a notebook cell's result (nbActions.ts)
 };
 
 /** The camera mark a capture-sourced record carries, wherever it is listed. */
@@ -295,8 +296,8 @@ function makeSavedItem(d: any): HTMLElement {
     const conn = d && d.originConnId ? dsConnKinds.get(String(d.originConnId)) : undefined;
     // A query over this project's datasets: the same code mark the Query tab
     // and the lineage chips carry.
-    if (kind === 'sql') {
-      const glyph = icon('code', 16);
+    if (kind === 'sql' || kind === 'notebook') {
+      const glyph = icon(kind === 'sql' ? 'code' : 'file-text', 16);
       glyph.classList.add('ds-sql-glyph');
       source.appendChild(glyph);
     }

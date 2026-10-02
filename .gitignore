@@ -973,3 +973,15 @@ scripts/**/*.js
 # Quit cleanup + smoke runner hardening. Emitted siblings.
 /src/app/quitCleanup.js
 /scripts/test-quitCleanup.js
+# r7:notebooks
+/src/analysis/notebook/*.js
+/src/ipc/notebooks.js
+/src/ipc/round7.js
+/preload/hubNotebooksPreload.js
+/renderer/hub/nbList.js
+/renderer/hub/nbPage.js
+/renderer/hub/nbColumn.js
+/renderer/hub/nbEditor.js
+/renderer/hub/nbCells.js
+/renderer/hub/nbRun.js
+/renderer/hub/nbActions.js

@@ -20,7 +20,7 @@ function dlChip(label: string, id: string | null, kind: string): HTMLElement {
   const chip = document.createElement('button');
   chip.type = 'button';
   chip.className = 'ds-lineage-chip';
-  chip.appendChild(icon(kind === 'sql' ? 'code' : 'database', 16));
+  chip.appendChild(icon(kind === 'sql' ? 'code' : kind === 'notebook' ? 'file-text' : 'database', 16));
   const text = document.createElement('span');
   text.textContent = label;
   chip.appendChild(text);
@@ -67,7 +67,7 @@ async function dsRenderLineage(d: any): Promise<void> {
   const byId = new Map<string, any>(list.map((x) => [String(x.id), x]));
   const me = byId.get(id);
   const upIds: string[] = me && Array.isArray(me.originDeps) ? me.originDeps : [];
-  const down = list.filter((x) => x && x.originKind === 'sql' && Array.isArray(x.originDeps) && x.originDeps.includes(id));
+  const down = list.filter((x) => x && (x.originKind === 'sql' || x.originKind === 'notebook') && Array.isArray(x.originDeps) && x.originDeps.includes(id));
 
   if (upIds.length) {
     host.appendChild(dlGroup('Reads from', upIds.map((u) => {
@@ -76,7 +76,7 @@ async function dsRenderLineage(d: any): Promise<void> {
     })));
   }
   if (down.length) {
-    host.appendChild(dlGroup('Used by', down.map((x) => dlChip(String(x.name), String(x.id), 'sql'))));
+    host.appendChild(dlGroup('Used by', down.map((x) => dlChip(String(x.name), String(x.id), String(x.originKind)))));
   }
 
   const origin = d && d.origin;
@@ -91,6 +91,19 @@ async function dsRenderLineage(d: any): Promise<void> {
     view.title = origin.sql.length > 400 ? origin.sql.slice(0, 400) + '…' : origin.sql;
     view.addEventListener('click', () => qtOpenWithSql(origin.sql, origin.params));
     host.appendChild(view);
+  }
+  // r7:notebooks — a notebook cell's result names its notebook and opens it there.
+  if (origin && origin.kind === 'notebook' && typeof origin.notebookId === 'string') {
+    const from = document.createElement('button');
+    from.type = 'button';
+    from.className = 'btn btn-sm btn-ghost ds-lineage-query ds-lineage-notebook';
+    from.appendChild(icon('file-text', 16));
+    const text = document.createElement('span');
+    text.textContent = 'Open notebook';
+    from.appendChild(text);
+    from.title = 'Saved from a notebook cell — it refreshes when that cell or what it reads changes';
+    from.addEventListener('click', () => { void nbOpenById(origin.notebookId, origin.cellId); });
+    host.appendChild(from);
   }
   host.hidden = host.childNodes.length === 0;
 }

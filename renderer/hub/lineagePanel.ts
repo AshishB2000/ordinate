@@ -128,6 +128,7 @@ function lnSummary(g: any): HTMLElement {
 function lnIconFor(n: any): string {
   if (n.kind === 'source' && n.ref && n.ref.type === 'connection') return 'plug';
   if (n.kind === 'source' && n.ref && n.ref.type === 'capture') return 'camera';
+  if (n.kind === 'source' && /^source:notebook:/.test(n.id || '')) return 'file-text'; // r7:notebooks
   if (n.kind === 'source' && /Web address/.test(n.sub || '')) return 'link';
   return (LN_KIND[n.kind] || LN_KIND.dataset).icon;
 }
@@ -282,6 +283,8 @@ async function lnOpenNode(n: any): Promise<void> {
     if (typeof openConnPanel === 'function') openConnPanel();
   } else if (ref.type === 'capture') {
     if (typeof openCaptureFromSummary === 'function') openCaptureFromSummary({ id: ref.id, title: n.name });
+  } else if (ref.type === 'notebook') {
+    await nbOpenById(ref.id); // r7:notebooks — nbList.ts
   }
 }
 

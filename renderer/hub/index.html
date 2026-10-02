@@ -80,6 +80,8 @@
   <link rel="stylesheet" href="summary.css"/>
   <!-- r8-css:search -->
   <link rel="stylesheet" href="search.css"/>
+  <!-- r7-css:notebooks -->
+  <link rel="stylesheet" href="notebooks.css"/>
 
   <link rel="stylesheet" href="../../node_modules/maplibre-gl/dist/maplibre-gl.css"/>
   <!-- Observable Plot's base ruleset as a real same-origin file: Plot ships it by
@@ -3760,6 +3762,17 @@
      charts / datasets out and visuals onto dashboards (dndOut.js). -->
 <script src="dndIn.js"></script>
 <script src="dndOut.js"></script>
+<!-- r7:notebooks -->
+<!-- Notebooks (nbList.ts): the Data page's Notebooks tab. The list and tab
+     first, then the page, the SQL editor, the other cell editors, running and
+     results, and what a result can become (dataset, pinned visual, Markdown). -->
+<script src="nbList.js"></script>
+<script src="nbPage.js"></script>
+<script src="nbColumn.js"></script>
+<script src="nbEditor.js"></script>
+<script src="nbCells.js"></script>
+<script src="nbRun.js"></script>
+<script src="nbActions.js"></script>
 
 <script src="hub.js"></script>
 

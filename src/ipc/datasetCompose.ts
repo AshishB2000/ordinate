@@ -312,7 +312,7 @@ export function register(): void {
   // between chunks of the Parquet write, and the main thread free throughout.
   ipcMain.handle('dataset:composeSave', async (_e, payload: any = {}) => {
     const name = (payload && typeof payload.name === 'string' && payload.name.trim()) || 'dataset';
-    const sql = payload && payload.origin && payload.origin.kind === 'sql';
+    const sql = payload && payload.origin && (payload.origin.kind === 'sql' || payload.origin.kind === 'notebook');
     const job = jobs.submit({
       kind: sql ? 'sql-save' : 'import',
       label: sql ? `Save query as ${name}` : `Import ${name}`,

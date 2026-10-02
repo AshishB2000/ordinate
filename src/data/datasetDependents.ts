@@ -51,10 +51,11 @@ async function pushFrom(projectId: string, rootId: string): Promise<void> {
   const stepOnly = new Set<string>(); // read another dataset in a union/lookup step, no query to re-run
   for (const d of list) {
     names.set(d.id, d.name);
-    if (d.originKind === 'sql') inputs.set(d.id, d.originDeps || []);
+    const query = d.originKind === 'sql' || d.originKind === 'notebook'; // re-runs its statement
+    if (query) inputs.set(d.id, d.originDeps || []);
     if (d.stepDeps && d.stepDeps.length) {
       inputs.set(d.id, [...(inputs.get(d.id) || []), ...d.stepDeps]);
-      if (d.originKind !== 'sql') stepOnly.add(d.id);
+      if (!query) stepOnly.add(d.id);
     }
   }
 

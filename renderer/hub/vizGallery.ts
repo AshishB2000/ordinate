@@ -372,9 +372,18 @@ async function handleExportVisual(id: string): Promise<void> {
 // ── Add a saved visual to an analysis ────────────────────────────────────────
 // Appends a visual card to the LAST sheet of the chosen analysis and persists
 // it. Deliberately does NOT navigate: the user is browsing the gallery and asked
-// to file this away, not to leave.
+// to file this away, not to leave. Two halves, because a notebook's "Pin to
+// dashboard" (nbActions.ts) asks WHERE before it makes the visual it adds.
 async function handleAddVisualToAnalysis(id: string): Promise<void> {
-  if (!currentProjectId) return;
+  const analysis = await dashPickForAdd();
+  if (analysis && await dashAppendVisualCard(analysis, id)) {
+    showToast('Added to ' + (analysis.name ? String(analysis.name) : 'the dashboard'));
+  }
+}
+
+/** "Add to dashboard": pick one, or name a new one. The analysis record, or null (cancelled, or toasted). */
+async function dashPickForAdd(): Promise<any> {
+  if (!currentProjectId) return null;
   let list: any[] = [];
   try {
     list = await window.hub.listAnalyses(currentProjectId);
@@ -388,12 +397,12 @@ async function handleAddVisualToAnalysis(id: string): Promise<void> {
     .map((a) => ({ value: String(a.id), label: a && a.name ? String(a.name) : 'Untitled dashboard' }))
     .concat([{ value: NEW, label: 'New dashboard…' }]);
   const choice = await dashChooseModal('Add to dashboard', options, 'Add');
-  if (choice === null) return;
+  if (choice === null) return null;
 
   let analysis: any = null;
   if (choice === NEW) {
     const name = await promptModal('Name the dashboard', 'Untitled dashboard', 'Create');
-    if (name === null) return;
+    if (name === null) return null;
     try {
       analysis = await window.hub.createAnalysis({ projectId: currentProjectId, name: name.trim() || 'Untitled dashboard' });
     } catch (_) {
@@ -408,9 +417,13 @@ async function handleAddVisualToAnalysis(id: string): Promise<void> {
   }
   if (!analysis || !analysis.id) {
     showToast('That dashboard could not be opened');
-    return;
+    return null;
   }
+  return analysis;
+}
 
+/** Append a visual card to `analysis`'s last sheet and save it. False (toasted) when the save failed. */
+async function dashAppendVisualCard(analysis: any, id: string): Promise<boolean> {
   // An analysis always has at least one sheet; a record that somehow has none
   // gets one rather than dropping the card on the floor.
   const sheets = Array.isArray(analysis.sheets) && analysis.sheets.length
@@ -431,9 +444,9 @@ async function handleAddVisualToAnalysis(id: string): Promise<void> {
   }
   if (!saved || saved.ok === false) {
     showToast('Could not add it to that dashboard');
-    return;
+    return false;
   }
-  showToast('Added to ' + (analysis.name ? String(analysis.name) : 'the dashboard'));
+  return true;
 }
 
 // Optimistic: the star flips immediately, then the list repaints (favourites

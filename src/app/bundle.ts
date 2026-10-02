@@ -59,6 +59,7 @@ const ENTRY_RULES: Array<{ re: RegExp; count?: string }> = [
   { re: new RegExp(`^connections/${UUID}\\.json$`, 'i'), count: 'connections' },
   { re: new RegExp(`^history/(?:dataset|visual|dashboard|metric|report)/${UUID}/${KEY}\\.json$`, 'i'), count: 'versions' },
   { re: new RegExp(`^stories/${UUID}\\.json$`, 'i'), count: 'stories' },
+  { re: new RegExp(`^notebooks/${UUID}\\.json$`, 'i'), count: 'notebooks' }, // r7:notebooks
   { re: new RegExp(`^boundaries/${UUID}\\.json$`, 'i'), count: 'boundaries' },
   // Binary (and SVG) images: not `.json`, so import never rewrites their bytes.
   { re: new RegExp(`^assets/${UUID}\\.(?:png|jpg|svg)$`, 'i'), count: 'assets' },

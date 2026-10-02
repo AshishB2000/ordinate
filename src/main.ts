@@ -643,6 +643,7 @@ require("./ipc/views").register({ headless: !!HEADLESS, focusHub, getHubWindow: 
 require("./ipc/fx").register(); // multi-currency: target, rate source, column declarations
 require("./ipc/incremental").register(); // incremental refresh: cursor, high-water mark, refresh log
 require("./ipc/dragDrop").register({ ingestCapture, openExecutionSettings, onActive: setActiveProject, headless: !!HEADLESS }); // r10:dragdrop
+require("./ipc/round7").register({ headless: !!HEADLESS }); // notebooks, LOD, user templates, motion, languages
 // Week 13 — capture → dataset bridge. resolveCropPath hands the on-disk crop path
 // from main's per-entry state (entryData, then the summaries cache) so a renderer-
 // sent path is never trusted; both maps already carry cropPath per entryId.

@@ -57,7 +57,7 @@ export interface Dataset {
   id: string;
   projectId: string;
   name: string;
-  sourceKind: 'csv' | 'json' | 'paste' | 'xlsx' | 'postgres' | 'url' | 'combined' | 'capture' | 'sql' | 'input' | 'parquet';
+  sourceKind: 'csv' | 'json' | 'paste' | 'xlsx' | 'postgres' | 'url' | 'combined' | 'capture' | 'sql' | 'input' | 'parquet' | 'notebook';
   columns: ParsedColumn[];
   rows: (string | number | null)[][];
   rowCount: number;
@@ -139,7 +139,7 @@ export interface AutoRefresh {
 
 export type AutoRefreshEvery = 'hourly' | 'daily' | 'weekly';
 
-const SOURCE_KINDS: ReadonlySet<string> = new Set(['csv', 'json', 'paste', 'xlsx', 'postgres', 'url', 'combined', 'capture', 'sql', 'input', 'parquet']);
+const SOURCE_KINDS: ReadonlySet<string> = new Set(['csv', 'json', 'paste', 'xlsx', 'postgres', 'url', 'combined', 'capture', 'sql', 'input', 'parquet', 'notebook']);
 
 // Coerce an untrusted `capture` link (from a stored file OR a save/recapture IPC
 // payload) into the stored shape, or undefined if there is nothing usable. Accepts
