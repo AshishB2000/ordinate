@@ -504,6 +504,16 @@ export function withRelation<T>(key: string, sql: string, run: () => T): T {
   }
 }
 
+/** `withRelation` for a run that awaits (engine/fxResident): the key must be unique per call. */
+export async function withRelationAsync<T>(key: string, sql: string, run: () => Promise<T>): Promise<T> {
+  joinRelations.set(key, sql);
+  try {
+    return await run();
+  } finally {
+    joinRelations.delete(key);
+  }
+}
+
 export function plainFrom(parquetPath: string): string {
   return joinRelations.get(parquetPath) ?? relationSql(parquetPath);
 }

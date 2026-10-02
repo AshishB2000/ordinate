@@ -48,6 +48,7 @@ async function paintMetricCompare(card: any, body: HTMLElement): Promise<void> {
       effectiveFilters(),
       m.compare,
       dashParamPayload(),
+      fxDashCode() || undefined, // fxUi.ts — the dashboard's own currency, as the headline
     );
   } catch (_) {
     r = null;

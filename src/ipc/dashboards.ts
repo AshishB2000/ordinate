@@ -14,6 +14,8 @@ import { paramValues, resolveFilterParams } from '../analysis/params';
 import type { ParamValues } from '../analysis/params';
 import { paramTable } from '../data/paramReplay';
 import { withAsOf } from '../data/asOf';
+import { fxCardMetric, fxContext, fxScope } from './fxQuery';
+import type { FxInfo } from '../analysis/fx';
 
 // Dashboards IPC — list/get/save/update/delete a Dashboard, plus `dashboard:metric`
 // which loads a dataset and runs the PURE src/metricValue.ts helper to produce the
@@ -141,17 +143,21 @@ export async function computeCardMetric(
   spec: { column: string; aggregation: MetricAggregation },
   filters: FilterStep[] = [],
   params?: ParamValues,
-): Promise<{ ok: boolean; value: number | null }> {
+): Promise<{ ok: boolean; value: number | null; fx?: FxInfo }> {
+  // A declared money column converts to the target currency (./fxQuery); a count never does.
+  const fxc = spec.aggregation !== 'count' ? await fxContext(projectId, datasetId, [spec.column], [spec.column, ...filters.map((f) => f.column)]) : null;
+  const run = (): Promise<{ ok: boolean; value: number | null; fx?: FxInfo }> => fxc
+    ? fxCardMetric(projectId, datasetId, spec, filters, params, fxc)
+    : computeCardMetricUncached(projectId, datasetId, spec, filters, params);
   // The answer cache (engine/queryCache): every KPI on an open dashboard, and
   // the same KPI again for an alert, a formula metric or a compare. A null
   // VALUE is a real answer and is kept; ok:false (dataset gone) is not.
   const parts = await answerKey.keyParts(projectId, datasetId);
-  if (!parts) return computeCardMetricUncached(projectId, datasetId, spec, filters, params);
+  if (!parts) return run();
   const key = queryCache.cacheKey('metric', parts, {
-    column: spec.column, aggregation: spec.aggregation, filters, params: params ?? null, ...answerKey.ambient(),
+    column: spec.column, aggregation: spec.aggregation, filters, params: params ?? null, ...answerKey.ambient(), fx: fxc ? fxc.key : undefined,
   });
-  return queryCache.through('metric', key, [datasetId, queryCache.projectDep(projectId)],
-    () => computeCardMetricUncached(projectId, datasetId, spec, filters, params), (r) => r.ok);
+  return queryCache.through('metric', key, [datasetId, queryCache.projectDep(projectId)], run, (r) => r.ok);
 }
 
 async function computeCardMetricUncached(
@@ -233,7 +239,7 @@ export function register() {
   // untrusted renderer input to filter-only steps, not a formatter, and BOTH
   // paths consume its output. The response shape is byte-identical either way.
   // `asOf` (view state, data/asOf.ts): the dataset read as of that time.
-  ipcMain.handle('dashboard:metric', async (_e, { projectId, datasetId, column, aggregation, filters, params, asOf }: any = {}) => withAsOf(projectId, asOf, async () => {
+  ipcMain.handle('dashboard:metric', async (_e, { projectId, datasetId, column, aggregation, filters, params, asOf, currency }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, async () => {
     try {
       // Parameters resolve FIRST — `[[threshold]]` becomes the number it names —
       // so both paths below see ordinary, typed filter steps.
@@ -242,9 +248,10 @@ export function register() {
       const spec = { column, aggregation: aggregation as MetricAggregation };
       const res = await computeCardMetric(projectId, datasetId, spec, bound.steps, values);
       if (!res.ok) return { ok: false, error: 'Dataset not found' };
-      return bound.errors.length ? { ok: true, value: res.value, paramErrors: bound.errors } : { ok: true, value: res.value };
+      const fx = res.fx ? { fx: res.fx } : {};
+      return bound.errors.length ? { ok: true, value: res.value, paramErrors: bound.errors, ...fx } : { ok: true, value: res.value, ...fx };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute the metric' };
     }
-  }));
+  })));
 }

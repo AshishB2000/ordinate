@@ -195,8 +195,23 @@ export function formatCompact(v: number | null | undefined): string {
   return compactText(v, 1, true, prefs);
 }
 
+// The renderer's DISPLAY currency when a project or an open dashboard converts
+// money to a target other than the workspace's (renderer/hub/fxUi.ts sets it).
+// Main never sets it — it serves several projects at once — and passes the
+// target to `formatMetric` explicitly instead.
+let currencyOverride = '';
+
+export function setCurrencyOverride(code: string | null): void {
+  currencyOverride = typeof code === 'string' && /^[A-Z]{3}$/.test(code) ? code : '';
+}
+
+/** The currency money is shown in: the override, else the workspace's. */
+function activeCurrency(): string {
+  return currencyOverride || prefs.currency;
+}
+
 /** The workspace currency's symbol: $, €, £, ¥, ₹ — or CHF where there is no glyph. */
-export function currencySymbol(code: string = prefs.currency): string {
+export function currencySymbol(code: string = activeCurrency()): string {
   try {
     const part = new Intl.NumberFormat(localeOf(prefs), { style: 'currency', currency: code, currencyDisplay: 'narrowSymbol' })
       .formatToParts(1).find((x) => x.type === 'currency');
@@ -280,7 +295,7 @@ function formatDuration(totalSeconds: number): string {
  * switching Settings to EUR turns $5.2M into €5.2M everywhere at once.
  * `null` is the app's honest "no figure" and reads as an em dash, never 0.
  */
-export function formatMetric(value: number | null | undefined, f: MetricFormatLike): string {
+export function formatMetric(value: number | null | undefined, f: MetricFormatLike, currency?: string): string {
   if (value == null || typeof value !== 'number' || !Number.isFinite(value)) return '—';
   const scaled = f.kind === 'percent' ? value * 100 : value;
   let body: string;
@@ -292,7 +307,7 @@ export function formatMetric(value: number | null | undefined, f: MetricFormatLi
   else body = digits(scaled, f.decimals, f.decimals, prefs);
 
   const suffix = (f.suffix || '') + (f.kind === 'percent' ? '%' : '');
-  if (f.kind === 'currency' && !f.prefix) return withSymbol(body, currencySymbol(), prefs.currencyPosition) + suffix;
+  if (f.kind === 'currency' && !f.prefix) return withSymbol(body, currencySymbol(currency || activeCurrency()), prefs.currencyPosition) + suffix;
   const prefix = f.prefix || '';
   // The minus sign leads, always: "-$1,200", never "$-1,200".
   if (prefix && body.startsWith('-')) return '-' + prefix + body.slice(1) + suffix;

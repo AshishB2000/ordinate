@@ -45,6 +45,10 @@ import { relatedColumnNames } from './relationships';
 import * as versions from '../app/versions';
 import * as trash from '../app/trash';
 import { withAsOf } from '../data/asOf';
+import { fxScope } from './fxQuery';
+import { mergeFx } from '../analysis/fx';
+import type { FxInfo } from '../analysis/fx';
+import { formatMetric } from '../app/format';
 
 /** How many distinct values of a breakout column are read before rolling up. */
 const SERIES_SCAN = 2000;
@@ -71,6 +75,18 @@ interface ResolveCtx {
   stack: Set<string>;
   /** The dashboard's parameters at their current values — see analysis/params. */
   params: ParamValues;
+  /** Set when any operand was money converted to the target currency (./fxQuery). */
+  fx?: FxInfo;
+}
+
+/**
+ * A figure as text, in the target currency when it was converted: a column
+ * rollup becomes money; a formula keeps its own kind (a ratio of two converted
+ * sums is still a ratio), and a currency-kind one takes the target's symbol.
+ */
+export function displayOf(value: number | null, format: metrics.MetricFormat, fx: FxInfo | undefined, simple: boolean): string {
+  if (!fx || (!simple && format.kind !== 'currency')) return formatMetricValue(value, format);
+  return formatMetric(value, { ...format, kind: 'currency', prefix: undefined }, fx.target);
 }
 
 async function namesFor(ctx: ResolveCtx): Promise<Map<string, Metric>> {
@@ -102,6 +118,7 @@ async function resolveDefinition(
   if (!isFormulaDefinition(definition)) {
     if (!definition.column) return null;
     const res = await computeCardMetric(ctx.projectId, datasetId, definition, all, ctx.params);
+    ctx.fx = mergeFx(ctx.fx, res.fx);
     return res.ok ? res.value : null;
   }
 
@@ -126,6 +143,7 @@ async function resolveDefinition(
       all,
       ctx.params,
     );
+    ctx.fx = mergeFx(ctx.fx, res.fx);
     values.set(agg.ref, res.ok ? res.value : null);
   }
 
@@ -179,6 +197,7 @@ export interface ResolvedMetric {
   format: metrics.MetricFormat;
   definitionText: string;
   direction?: 'up_good' | 'down_good';
+  fx?: FxInfo;
 }
 
 /**
@@ -206,11 +225,12 @@ export async function resolveMetric(
     id: metric.id,
     name: metric.name,
     value,
-    display: formatMetricValue(value, metric.format),
+    display: displayOf(value, metric.format, ctx.fx, !isFormulaDefinition(metric.definition)),
     format: metric.format,
     definitionText: describeDefinition(metric),
   };
   if (metric.direction) out.direction = metric.direction;
+  if (ctx.fx) out.fx = ctx.fx;
   return out;
 }
 
@@ -281,7 +301,7 @@ export async function resolveMetricSeries(
     ctx.stack.add(metric.name.toLowerCase());
     const v = await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, 0);
     out.values.push(v);
-    out.display.push(formatMetricValue(v, metric.format));
+    out.display.push(displayOf(v, metric.format, ctx.fx, !isFormulaDefinition(metric.definition)));
   }
   return out;
 }
@@ -428,7 +448,7 @@ export function register() {
   });
 
   // `asOf` (view state, data/asOf.ts): every dataset read as of that time.
-  ipcMain.handle('metric:value', async (_e, { projectId, id, filters, params, asOf }: any = {}) => withAsOf(projectId, asOf, async () => {
+  ipcMain.handle('metric:value', async (_e, { projectId, id, filters, params, asOf, currency }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, async () => {
     try {
       const values = paramValues(params);
       const bound = resolveFilterParams(sanitizeDashboardFilters(filters), values);
@@ -438,7 +458,7 @@ export function register() {
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute the metric' };
     }
-  }));
+  })));
 
   /**
    * The editor's live preview: a figure for a definition that has NOT been
@@ -455,7 +475,8 @@ export function register() {
       return {
         ok: true,
         value,
-        display: formatMetricValue(value, fmt),
+        display: displayOf(value, fmt, ctx.fx, !isFormulaDefinition(def)),
+        ...(ctx.fx ? { fx: ctx.fx } : {}),
         definitionText: describeDefinition({ definition: def, filters: own }),
       };
     } catch (err: any) {

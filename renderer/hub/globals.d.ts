@@ -413,7 +413,7 @@ declare global {
       duplicateMetric(projectId: string, id: string): Promise<any>;
       deleteMetric(projectId: string, id: string): Promise<any>;
       metricValue(projectId: string, id: string, filters?: any, params?: any): Promise<any>;
-      compareMetric(projectId: string, card: any, filters: any, compare: any, params?: any): Promise<any>;
+      compareMetric(projectId: string, card: any, filters: any, compare: any, params?: any, currency?: string): Promise<any>;
       resolvePeriod(period: any): Promise<any>;
       calendarToday(): Promise<any>;
       previewMetric(

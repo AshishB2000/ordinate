@@ -107,6 +107,8 @@ function snapSeeDataset(id: string): void {
 /** A dashboard card's chart data — `visual:data`, as of the picker's time. */
 function snapVisualData(projectId: string, datasetId: string, encoding: any, filters: any, params: any, analytics?: any): Promise<any> {
   snapSeeDataset(datasetId);
+  const fx = fxDashRead('visualData', { projectId, datasetId, encoding, filters, params, analytics, asOf: snapDashAsOf || undefined }); // fxUi.ts
+  if (fx) return fx;
   return snapDashAsOf && window.hubSnapshots
     ? window.hubSnapshots.visualData(projectId, datasetId, encoding, filters, params, snapDashAsOf, analytics)
     : window.hub.computeVisualData(projectId, datasetId, encoding, filters, params, analytics);
@@ -115,6 +117,8 @@ function snapVisualData(projectId: string, datasetId: string, encoding: any, fil
 /** A dashboard metric card naming a saved Metric — `metric:value`, as of the picker's time. */
 function snapMetricValue(projectId: string, metricId: string, filters: any, params: any): Promise<any> {
   if (metricId && !snapDashSeen.metrics.has(metricId)) { snapDashSeen.metrics.add(metricId); snapDashRefill(); }
+  const fx = fxDashRead('metricValue', { projectId, id: metricId, filters, params, asOf: snapDashAsOf || undefined }); // fxUi.ts
+  if (fx) return fx;
   return snapDashAsOf && window.hubSnapshots
     ? window.hubSnapshots.metricValue(projectId, metricId, filters, params, snapDashAsOf)
     : window.hub.metricValue(projectId, metricId, filters, params);
@@ -123,6 +127,8 @@ function snapMetricValue(projectId: string, metricId: string, filters: any, para
 /** A dashboard metric card over a column — `dashboard:metric`, as of the picker's time. */
 function snapComputeMetric(projectId: string, datasetId: string, column: string, aggregation: string, filters: any, params: any): Promise<any> {
   snapSeeDataset(datasetId);
+  const fx = fxDashRead('computeMetric', { projectId, datasetId, column, aggregation, filters, params, asOf: snapDashAsOf || undefined }); // fxUi.ts
+  if (fx) return fx;
   return snapDashAsOf && window.hubSnapshots
     ? window.hubSnapshots.computeMetric(projectId, datasetId, column, aggregation, filters, params, snapDashAsOf)
     : window.hub.computeMetric(projectId, datasetId, column, aggregation, filters, params);

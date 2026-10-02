@@ -45,6 +45,8 @@ import { withAsOf } from '../data/asOf';
 import { driversVizData } from './drivers';
 import { facetVizData, isFaceted } from './visualsFacets';
 import { buildFacetData } from '../analysis/facets';
+import { fxScope, fxVizContext, fxVizData } from './fxQuery';
+import type { FxInfo } from '../analysis/fx';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus
 // `visual:data` which loads a dataset and runs the PURE bridge (src/vizData.ts) to
@@ -377,6 +379,8 @@ export type VizDataReply =
       overlay?: { kind: 'previous_year'; caption?: string; pct?: number };
       /** Present when the BUILDER preview was computed on a sample — see ./vizSampleData. */
       sample?: SampleInfo & { note: string };
+      /** Present when a money measure was converted — see ./fxQuery. */
+      fx?: FxInfo;
     }
   | { ok: false; error: string; tooLarge?: true };
 
@@ -425,9 +429,10 @@ export async function vizDataFor(
   const parts = await answerKey.keyParts(projectId, datasetId);
   if (!parts) return computeVizData(projectId, datasetId, encoding, filters, opts);
   const op = encoding && encoding.pivot ? 'pivot' : 'aggregate';
+  const fxc = await fxVizContext(projectId, datasetId, encoding, filters);
   const key = queryCache.cacheKey(op, parts, {
     encoding, filters, params: opts.params ?? null, max: opts.maxHydrateRows ?? null, sample: opts.sample === true,
-    ...answerKey.ambient(),
+    ...answerKey.ambient(), fx: fxc ? fxc.key : undefined,
   });
   return queryCache.through(op, key, [datasetId, queryCache.projectDep(projectId)],
     () => computeVizData(projectId, datasetId, encoding, filters, opts), (r) => r.ok);
@@ -442,6 +447,8 @@ async function computeVizData(
 ): Promise<VizDataReply> {
   // A key-drivers waterfall tile is a QUESTION, answered afresh (ipc/drivers.ts).
   if (encoding && encoding.drivers) return driversVizData(projectId, datasetId, encoding, filters, opts.params);
+  const converted = await fxVizData(projectId, datasetId, encoding, filters, opts); // money measures, in the target currency
+  if (converted) return converted;
   // A pipeline that references a dashboard parameter answers from the dataset
   // REPLAYED with the query's values bound (data/paramReplay.ts) — the stored
   // table holds those fields unbound. Everything else is untouched below.
@@ -559,7 +566,7 @@ export function register() {
   // here, after vizDataFor, so a cached answer is shaped on its way out and the
   // cache never holds a masked one (app/sharePolicy.ts).
   // `asOf` (view state, data/asOf.ts): every dataset read as of that time.
-  ipcMain.handle('visual:data', async (_e, { projectId, datasetId, encoding, filters, params, share, analytics, asOf }: any = {}) => withAsOf(projectId, asOf, async () => {
+  ipcMain.handle('visual:data', async (_e, { projectId, datasetId, encoding, filters, params, share, analytics, asOf, currency }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, async () => {
     try {
       // Sanitisation FIRST, always — the encoding and the filters are untrusted
       // renderer input, and both paths below consume the sanitized values.
@@ -589,7 +596,7 @@ export function register() {
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute the visual data' };
     }
-  }));
+  })));
 
   // ── The rows behind one mark (drill-down) ────────────────────────────────
   //

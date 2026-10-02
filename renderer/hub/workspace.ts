@@ -72,6 +72,7 @@ async function adoptProject(id: string): Promise<boolean> {
   currentProjectId = project.id;
   // The project's category colours, before any chart of it draws (fmtColors.ts).
   if (typeof fmtAdoptColorMap === 'function') fmtAdoptColorMap(project);
+  if (typeof fxAdopt === 'function') void fxAdopt(project.id); // its currency (fxUi.ts)
   // #ws-project-name was removed with the old nav; keep the guarded write so any
   // future header stays in sync without a hard dependency.
   const nameEl = document.getElementById('ws-project-name');

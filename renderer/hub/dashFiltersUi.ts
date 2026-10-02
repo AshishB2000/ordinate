@@ -104,6 +104,7 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
       valEl.textContent = mr.display || '—';
       if (!m.label && mr.name) labelEl.textContent = mr.name;
       paintParamErrors(body, mr.paramErrors);
+      fxPaintTileNote(body, mr.fx); // fxUi.ts
       void paintMetricCalc(card, body); // "Calculate as" (calcMenu.ts)
       void paintMetricCompare(card, body);
       return;
@@ -129,7 +130,8 @@ async function renderMetricCard(card: any, body: HTMLElement): Promise<void> {
   paintParamErrors(body, r.paramErrors);
   if (r.value == null) { valEl.textContent = '—'; return; }
   // Reuse the shared chart number formatter (auto/plain/thousands/compact/…).
-  valEl.textContent = fmtWith(r.value, m.format || 'auto');
+  valEl.textContent = fmtWith(r.value, r.fx && (!m.format || m.format === 'auto') ? 'currency' : (m.format || 'auto'));
+  fxPaintTileNote(body, r.fx); // converted money: rows with no rate, the sample label (fxUi.ts)
   void paintMetricCalc(card, body); // "Calculate as" (calcMenu.ts)
   void paintMetricCompare(card, body);
 }

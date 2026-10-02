@@ -15,6 +15,7 @@ import { pivotChartData } from '../analysis/pivotData';
 import * as trace from '../engine/residentTrace';
 import type { VizEncoding } from '../analysis/visuals';
 import type { FilterStep } from '../data/transforms';
+import type { ParsedColumn } from '../data/parse';
 import { FILTER_OPS, LIST_OPS } from '../data/filterOps';
 
 // ── Phase 2.5: the resident fast path for `visual:data` ─────────────────────
@@ -125,6 +126,7 @@ export async function residentVizData(
   datasetId: string,
   encoding: VizEncoding,
   filters: FilterStep[],
+  srcOverride?: { parquetPath: string; columns: ParsedColumn[] }, // a converted relation (ipc/fxQuery)
 ): Promise<VizDataResult | null> {
   try {
     if (!encoding) return null;
@@ -142,7 +144,7 @@ export async function residentVizData(
     if (values.every((v) => v.aggregation === 'none')) return null;
 
     // v2 record, missing .parquet, or no working bridge → the JS path.
-    const src = await datasets.residentSource(projectId, datasetId);
+    const src = srcOverride ?? await datasets.residentSource(projectId, datasetId);
     if (!src) {
       trace.record('vizAggregate', 'skipped');
       return null;

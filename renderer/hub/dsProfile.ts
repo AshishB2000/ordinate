@@ -94,6 +94,7 @@ async function dsOpenProfile(c: number): Promise<void> {
   ctPaintProfileDoc(); // catalogDetails.ts — the column's description, when it has one
   void pvPaintProfile(col.name); // privacyReview.ts — a sensitivity proposal, or what exports do with it
   void txPaintProfile(col); // textProfile.ts — the Text section, for a text column of longer values
+  void fxPaintProfile(col); // fxUi.ts — the Currency section, for a number column
 
   // The facts that need no round trip: they came back with `dataset:stats` when
   // the dataset was opened. Painted FIRST so the panel is never empty while the

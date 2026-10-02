@@ -17798,3 +17798,52 @@ body.ws-side-push .app-sidebar { display: none; }
    year-end choices wrap on a narrow panel instead of overflowing it. */
 .sf-preview.cal-preview { margin-top: var(--sp-12); }
 #stp-cal-yearend { flex-wrap: wrap; }
+
+/* ── Multi-currency ── */
+/* fxUi.ts / fxSettings.ts: tile notes, the dashboard's currency picker, the
+   column profile's Currency section and Settings → General → Currency. */
+.fx-select {
+  padding: var(--sp-4) var(--sp-8);
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
+  color: var(--text-strong);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  max-width: 240px;
+}
+.fx-select:hover { border-color: var(--accent); }
+.fx-select:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; border-color: var(--accent); }
+.fx-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--t-11);
+  line-height: 1.4;
+  white-space: normal;
+}
+.fx-chip .ic { flex: 0 0 auto; }
+.fx-chip-warn { color: var(--warn); background: var(--warn-soft); }
+.fx-chip-sample { color: var(--muted); background: var(--surface-2); border: 1px dashed var(--border); }
+.fx-tile-note { display: flex; flex-wrap: wrap; gap: 4px; margin: var(--sp-4) 0 0; }
+.dash-card--metric .fx-tile-note { justify-content: center; }
+.fx-dash { display: inline-flex; align-items: center; gap: var(--sp-4); font-size: var(--t-12); color: var(--muted); }
+.fx-dash[hidden] { display: none; }
+.fx-dash.is-on .fx-select { border-color: var(--accent); background: var(--accent-soft); }
+.fx-dsp { display: flex; flex-direction: column; gap: var(--sp-8); padding: var(--sp-8) 0; border-top: 1px solid var(--border-hairline); }
+.fx-dsp[hidden] { display: none; }
+.fx-dsp-grid { display: grid; grid-template-columns: 1fr; gap: var(--sp-4); }
+.fx-dsp-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-8); font-size: var(--t-12); }
+.fx-dsp-k { color: var(--muted); white-space: nowrap; }
+.fx-dsp-status { display: flex; flex-direction: column; gap: var(--sp-4); }
+.fx-dsp-total { margin: 0; }
+.fx-map { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4) var(--sp-8); }
+.fx-map-cell { display: flex; flex-direction: column; gap: 2px; font-size: var(--t-11); color: var(--muted); }
+.fx-sample { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-4); padding: var(--sp-8) 0; }
+.fx-sample-note, .fx-empty { margin: 0; font-size: var(--t-12); line-height: 1.5; color: var(--muted); }
+/* A chart tile with a note: the chart gives up the note's height, so the note is never clipped. */
+.dash-card-body:has(> .dash-viz-area ~ .fx-tile-note) { display: flex; flex-direction: column; }
+.dash-card-body:has(> .dash-viz-area ~ .fx-tile-note) > .dash-viz-area { flex: 1 1 auto; height: auto; }
+.dash-card-body > .dash-viz-area ~ .fx-tile-note { flex: 0 0 auto; }

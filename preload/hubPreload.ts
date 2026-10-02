@@ -601,8 +601,8 @@ contextBridge.exposeInMainWorld('hub', {
   // filters' date range moved to the comparison period, resolved in main.
   // { ok, value, previous, delta, pct, label, prior, display?, previousDisplay?,
   //   deltaDisplay?, direction? } | { ok, reason: 'no_date_filter', label }.
-  compareMetric: (projectId: string, card: any, filters: any, compare: any, params?: any) =>
-    ipcRenderer.invoke('metric:compare', { projectId, card, filters, compare, params }),
+  compareMetric: (projectId: string, card: any, filters: any, compare: any, params?: any, currency?: string) =>
+    ipcRenderer.invoke('metric:compare', { projectId, card, filters, compare, params, currency }),
   // A relative period → its dates today, under the workspace calendar.
   resolvePeriod: (period: any) => ipcRenderer.invoke('period:resolve', period),
   calendarToday: () => ipcRenderer.invoke('calendar:today'),

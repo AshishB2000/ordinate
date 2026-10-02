@@ -25,7 +25,9 @@ import { bucketStartOf, weekCalOf, weekLabel, weekPos } from '../analysis/retail
 import { compareScope } from '../analysis/periodScope';
 import { paramValues, resolveFilterParams } from '../analysis/params';
 import { computeCardMetric } from './dashboards';
-import { resolveMetric } from './metrics';
+import { displayOf, resolveMetric } from './metrics';
+import { fxScope } from './fxQuery';
+import type { FxInfo } from '../analysis/fx';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -76,12 +78,14 @@ export async function compareMetric(
   let value: number | null;
   let previous: number | null;
   const out: CompareResult = { ok: true, label, prior: moved.prior };
+  let metricFx: FxInfo | undefined;
   if (metric) {
     const a = await resolveMetric(projectId, metric.id, { filters, params });
     const b = await resolveMetric(projectId, metric.id, { filters: moved.filters, params });
     if (!a || !b) return { ok: false, error: 'Metric not found' };
     value = finite(a.value);
     previous = finite(b.value);
+    metricFx = a.fx;
     out.display = a.display;
     out.previousDisplay = b.display;
     if (metric.direction) out.direction = metric.direction;
@@ -99,7 +103,8 @@ export async function compareMetric(
   out.delta = delta;
   out.pct = delta !== null && previous !== null && previous !== 0 ? (delta / Math.abs(previous)) * 100 : null;
   if (metric && delta !== null) {
-    out.deltaDisplay = formatMetricValue(Math.abs(delta), metric.format);
+    // The delta is in the same (converted) currency as the figures beside it.
+    out.deltaDisplay = metricFx ? displayOf(Math.abs(delta), metric.format, metricFx, !metrics.isFormulaDefinition(metric.definition)) : formatMetricValue(Math.abs(delta), metric.format);
     // A change in a PERCENT is in points: 13.2% vs 12.0% is "1.2 pts", and a
     // relative change of a ratio ("up 10%") reads as the ratio itself moving.
     if (metric.format.kind === 'percent') {
@@ -137,10 +142,11 @@ export function register(): void {
     };
   });
 
-  ipcMain.handle('metric:compare', async (_e, { projectId, card, filters, compare, params }: any = {}) => {
+  ipcMain.handle('metric:compare', async (_e, { projectId, card, filters, compare, params, currency }: any = {}) => {
     try {
       if (typeof projectId !== 'string' || !UUID_RE.test(projectId)) return { ok: false, error: 'Invalid project' };
-      return await compareMetric(projectId, card && typeof card === 'object' ? card : {}, filters, compare, params);
+      // A dashboard's own currency: both figures and the delta convert to it, as the headline does.
+      return await fxScope(currency, () => compareMetric(projectId, card && typeof card === 'object' ? card : {}, filters, compare, params));
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compare' };
     }

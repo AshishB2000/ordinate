@@ -3741,6 +3741,13 @@
      ⌘K, ordinate:// links) and reports per view. openEditorWith (dashGrid.js),
      paletteRows.js and reportBuilder.js call into it at run time. -->
 <script src="savedViews.js"></script>
+<!-- r10:currency -->
+<!-- Multi-currency: the display currency, a dashboard's own target and its
+     reads (snapshotAsOf.js calls fxDashRead), tile notes, the column profile's
+     Currency section (fxUi.js), and Settings → General → Currency
+     (fxSettings.js, after settingsFormats.js whose row builders it uses). -->
+<script src="fxUi.js"></script>
+<script src="fxSettings.js"></script>
 
 <script src="hub.js"></script>
 
