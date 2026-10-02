@@ -185,6 +185,8 @@ function brandTokens(hex: string): { light: Record<string, string>; dark: Record
     '--brand-dk-accent-soft': brandRgba(dk, 0.16),
     '--brand-dk-accent-line': brandRgba(dk, 0.32),
     '--brand-dk-focus': brandRgba(dk, 0.4),
+    // The accent as TEXT (a hovered name): AA on the raised surfaces, so lighter still.
+    '--brand-dk-accent-fg': brandWalk(dk, 1, (h) => ['#1c1c20', '#232327', '#2a2a30'].every((s) => brandContrast(h, s) >= 4.5)),
   };
   paletteFromSeed(dk, CHART_PALETTE.length).forEach((c, i) => {
     dark['--brand-dk-chart-' + (i + 1)] = i === 0 ? dk

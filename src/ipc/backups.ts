@@ -10,6 +10,7 @@ import { CADENCES } from '../app/backupSettings';
 import type { BackupSettings } from '../app/backupSettings';
 import { captureProjectId } from '../app/captureRecord';
 import * as hubs from '../windows/hubRegistry';
+import { track } from '../app/quitCleanup';
 import type { PlatformDeps } from './platform';
 
 // Backups IPC — Settings → General → Backups, "Restore from backup…", the
@@ -201,7 +202,7 @@ export function register(deps: PlatformDeps): void {
   // The schedule belongs to the GUI: a headless run registers the handlers and
   // starts nothing. First look a minute after launch, then every ten minutes.
   if (!deps.headless) {
-    setTimeout(tick, 60 * 1000).unref();
-    setInterval(tick, TICK_MS).unref();
+    track(setTimeout(tick, 60 * 1000));
+    track(setInterval(tick, TICK_MS));
   }
 }

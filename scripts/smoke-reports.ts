@@ -26,6 +26,7 @@
 
 export {}; // module scope — sibling scripts share top-level names
 import { ok, failureCount } from './selfcheck';
+import { closeApp } from './smokeFixture';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -174,7 +175,7 @@ async function main(): Promise<void> {
     return null;
   });
   ok('the bundled sample seeded a project with a dashboard', !!(seeded && seeded.analysisId), JSON.stringify(seeded));
-  if (!seeded) { await app.close(); return; }
+  if (!seeded) { await closeApp(app); return; }
 
   // ── Open it, then Create report… ──────────────────────────────────────────
   await win.evaluate(async (s: any) => {
@@ -386,7 +387,7 @@ async function main(): Promise<void> {
   // ── Zero renderer console errors, over the whole run ──────────────────────
   ok('no renderer console errors', errors.length === 0, errors.slice(0, 5).join(' | '));
 
-  await app.close();
+  await closeApp(app);
 }
 
 main()

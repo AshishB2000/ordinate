@@ -24,6 +24,7 @@
 
 export {}; // module scope — sibling scripts share top-level names
 import { ok, failureCount } from './selfcheck';
+import { closeApp } from './smokeFixture';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -119,7 +120,7 @@ async function main(): Promise<void> {
     return null;
   });
   ok('the sample dashboard is there to export', Boolean(ids && ids.pid), JSON.stringify(ids));
-  if (!ids) { await app.close(); return; }
+  if (!ids) { await closeApp(app); return; }
 
   await win.evaluate(async (i: any) => {
     await (window as any).adoptProject(i.pid);
@@ -340,7 +341,7 @@ async function main(): Promise<void> {
     errors.slice(0, 3).join(' | '));
 
   await win.screenshot({ path: path.join(shotDir, 'export-source-dashboard.png') });
-  await app.close();
+  await closeApp(app);
   try { fs.rmSync(userData, { recursive: true, force: true }); } catch (_) { /* temp dir */ }
 }
 

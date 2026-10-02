@@ -16679,6 +16679,9 @@ html.st-presenting .hub-topbar { display: none; }
   color: var(--text-strong);
 }
 .ct-row:hover .ct-name { color: var(--accent); }
+/* The dark accent is ~4.1:1 on a hovered row, under AA: lift it. A brand accent
+   gets its own lifted shade (chartPalette.brandTokens --brand-dk-accent-fg). */
+[data-theme="dark"] .ct-row:hover .ct-name { color: var(--brand-dk-accent-fg, #60a5fa); }
 .ct-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-12); color: var(--muted); }
 .ct-stale {
   flex: none;

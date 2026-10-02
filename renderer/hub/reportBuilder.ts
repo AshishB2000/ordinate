@@ -464,8 +464,12 @@ async function rbGenerate(): Promise<void> {
     return null;
   }).catch((e: any) => { failed = String((e && e.message) || 'Couldn’t build the report'); return null; });
   if (out && out.path) {
-    showToast('Saved: ' + out.message);
-    void window.hub.reportsReveal(projectId, report.id);
+    // Offered, never done for them: a reveal the user did not ask for pops a
+    // file manager over the app (on Linux, xdg-open may start a browser).
+    showToast('Saved: ' + out.message, {
+      kind: 'success',
+      action: { label: 'Show in folder', onClick: () => { void window.hub.reportsReveal(projectId, report.id); } },
+    });
   } else if (failed) {
     showToast(failed);
   }

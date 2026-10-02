@@ -970,3 +970,6 @@ scripts/**/*.js
 /scripts/r10DragDrop.js
 /scripts/test-sniff.js
 /scripts/test-dragOut.js
+# Quit cleanup + smoke runner hardening. Emitted siblings.
+/src/app/quitCleanup.js
+/scripts/test-quitCleanup.js

@@ -11,6 +11,7 @@ import { getProject } from '../app/projects';
 import { noteDir } from '../connectors/duckdbDirs';
 import { hardeningState } from './mosaic';
 import * as hubs from '../windows/hubRegistry';
+import { track } from '../app/quitCleanup';
 import { pickFolder } from './backups';
 import type { PlatformDeps } from './platform';
 
@@ -209,7 +210,7 @@ export function register(deps: PlatformDeps): void {
     .then((list) => { for (const s of list) if (s.available) noteDir(s.target); });
 
   if (!deps.headless) {
-    setInterval(heartbeat, HEARTBEAT_MS).unref();
+    track(setInterval(heartbeat, HEARTBEAT_MS));
     app.on('will-quit', () => {
       const ids = new Set(held.values());
       held.clear();

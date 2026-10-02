@@ -65,6 +65,7 @@ for (const seed of [...branding.ACCENT_SWATCHES, ...HOSTILE]) {
   }
   for (const s of DARK_SURFACES) {
     if (contrast(D['--brand-dk-accent'], s) < 4) fails.push('dark accent on ' + s);
+    if (contrast(D['--brand-dk-accent-fg'], s) < 4.5) fails.push('dark accent-as-text on ' + s);
     for (let i = 1; i <= 8; i += 1) {
       if (contrast(D['--brand-dk-chart-' + i], s) < 3) fails.push('dark chart-' + i + ' on ' + s);
     }
@@ -96,6 +97,7 @@ ok('a non-hex seed yields no tokens', brandTokens('red') === null && brandTokens
 const theme = fs.readFileSync(path.join(REPO, 'renderer/theme.css'), 'utf8');
 ok('theme.css: --accent reads --brand-accent in light', /--accent:\s*var\(--brand-accent,/.test(theme));
 ok('theme.css: --accent reads --brand-dk-accent in dark', /--accent:\s*var\(--brand-dk-accent,/.test(theme));
+ok('hub.css: the catalog hover reads --brand-dk-accent-fg in dark', /\[data-theme="dark"\] \.ct-row:hover \.ct-name \{ color: var\(--brand-dk-accent-fg,/.test(fs.readFileSync(path.join(__dirname, '..', 'renderer', 'hub', 'hub.css'), 'utf8')));
 ok('theme.css: the chart ramp reads --brand-chart-1', /--chart-1:\s*var\(--brand-chart-1,/.test(theme));
 
 // ── Branding settings ───────────────────────────────────────────────────────

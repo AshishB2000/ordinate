@@ -177,7 +177,9 @@ export async function scorecardsSection(s: Smoke, ids: Ids): Promise<void> {
 
   // A row's detail: the line with its target and forecast, the breakdown, Alert me.
   await win.evaluate((id: string) => (document.querySelector(`#sc-table .sc-row[data-metric-id="${id}"]`) as HTMLElement | null)?.click(), made.rev);
-  await win.waitForTimeout(3500);
+  // Poll, not a fixed sleep: the detail's two charts wait on main's figures,
+  // which take longer on a loaded runner.
+  await win.waitForFunction(() => document.querySelectorAll('#sc-detail canvas').length >= 2, null, { timeout: 20_000 }).catch(() => null);
   const det = await win.evaluate(() => {
     const aside = document.getElementById('sc-detail') as HTMLElement;
     const canvases = [...aside.querySelectorAll('canvas')];

@@ -101,11 +101,32 @@ export async function launchSmoke(tag: string): Promise<Smoke> {
   await killSplash();
 
   const close = async (): Promise<void> => {
-    await app.close();
+    await closeApp(app);
     try { fs.rmSync(userData, { recursive: true, force: true }); } catch (_) { /* temp dir */ }
   };
 
   return { app, win, errors, killSplash, userData, shotDir, close };
+}
+
+/**
+ * Close the app, but never wait on it for more than 15 seconds.
+ *
+ * Playwright's close() resolves only once the Electron process has exited AND
+ * its stdio pipes have closed. Anything the app spawned inherits those pipes —
+ * on Linux a reveal runs xdg-open, which can start a browser that outlives the
+ * app — and then close() never resolves: smoke-reports hung CI for six hours
+ * after its last passing assertion. Past the deadline the process is killed and
+ * the smoke goes on to its own exit, which the runner then sees.
+ */
+export async function closeApp(app: ElectronApp, ms = 15_000): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<'late'>((r) => { timer = setTimeout(() => r('late'), ms); });
+  const res = await Promise.race([app.close().then(() => 'closed' as const, () => 'closed' as const), late]);
+  clearTimeout(timer);
+  if (res === 'late') {
+    console.warn(`[smoke] app.close() did not finish in ${ms / 1000}s — killing the app`);
+    try { app.process().kill('SIGKILL'); } catch (_) { /* already gone */ }
+  }
 }
 
 /** Reload the renderer and wait the splash out again. */
@@ -446,4 +467,7 @@ export function finishSmoke(label: string, failures: number): void {
     process.exit(1);
   }
   console.log(`All ${label} smoke checks passed.`);
+  // Exit explicitly: a handle the app or Playwright left open must never turn
+  // a passing smoke into a hung one.
+  process.exit(0);
 }
