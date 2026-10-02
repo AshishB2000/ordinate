@@ -31,6 +31,8 @@ import type { FunnelEncoding } from './funnelEvents';
 import { sanitizeOverlays } from './analytics';
 import type { Overlay } from './analytics';
 import { sanitizeTableCalc } from './tableCalc';
+import { sanitizeFacet } from './facets';
+import type { FacetEncoding } from './facets';
 import type { TableCalc } from './tableCalc';
 import { sanitizeFormat, NUMBER_FORMAT_IDS, SORT_MODE_IDS } from './chartFormat';
 import type { FormatOverrides, FormatContext, SortMode } from './chartFormat';
@@ -147,6 +149,8 @@ export interface VizEncoding {
   overlay?: 'previous_year';
   /** A KEY DRIVERS waterfall tile's question (analysis/driverScope) — recomputed on every render. */
   drivers?: DriversEncoding;
+  /** Small multiples (./facets): one panel per facet value. It changes the DATA, so it rides here. */
+  facet?: FacetEncoding;
 }
 
 // Whitelisted chart-styling overrides — the SAME object shape the capture-flow ⋯
@@ -319,6 +323,8 @@ export function sanitizeEncoding(raw: unknown): VizEncoding {
   if (cohort) enc.cohort = cohort;
   const eventFunnel = sanitizeEventFunnel(o.eventFunnel);
   if (eventFunnel) enc.eventFunnel = eventFunnel;
+  const facet = sanitizeFacet(o.facet);
+  if (facet) enc.facet = facet;
   if (o.geo && typeof o.geo === 'object') {
     const g = o.geo as Record<string, unknown>;
     if (typeof g.level === 'string' && GEO_LEVELS.has(g.level)) {

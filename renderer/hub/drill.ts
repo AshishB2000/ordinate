@@ -79,7 +79,8 @@ function wireDrillClick(area: HTMLElement, ctx: DrillOpts): void {
       projectId: live.projectId,
       datasetId: live.datasetId,
       encoding: live.encoding,
-      filters: live.filters,
+      // A small-multiples panel adds its facet value: the rows are that panel's.
+      filters: (live.filters || []).concat(mark.facet ? mark.facet.steps : []),
       mark: { category: mark.category, series: hasSplit ? mark.series : undefined },
       trigger: area,
       asOf: live.asOf,

@@ -2604,36 +2604,6 @@ textarea:focus-visible {
   text-align: center;
 }
 
-/* Small multiples: one mini chart per period for grouped share/magnitude types
-   (pie, donut, gauge, treemap, funnel, histogram). Top padding clears the
-   absolutely-positioned control cluster. */
-.cv-small-multiples {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: var(--sp-16);
-  width: 100%;
-  padding-top: var(--sp-32);
-}
-.cv-sm-cell {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.cv-sm-title {
-  font-family: var(--font-ui);
-  font-size: var(--t-12);
-  font-weight: 600;
-  color: var(--text-strong);
-  text-align: center;
-  margin-bottom: var(--sp-4);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cv-sm-cell .cv-canvas-wrap {
-  height: clamp(180px, 26vh, 260px);
-}
-
 .cv-col-body {
   overflow-x: auto;
   border-radius: var(--r-sm, 4px);
@@ -4155,7 +4125,6 @@ button.ex-cli-row.selected .ex-cli-use { display: none; }
    compact so the picker + preview + format buttons all fit (modal scrolls if not). */
 .export-viz-area { min-height: 0; margin-top: 2px; }
 .export-viz-area .cv-canvas-wrap { height: clamp(220px, 34vh, 340px); }
-.export-viz-area .cv-small-multiples { padding-top: var(--sp-8); }
 .export-fmt-btn:disabled,
 .export-fmt-btn.is-disabled { opacity: 0.45; cursor: default; }
 .export-fmt-btn:disabled:hover,

@@ -42,6 +42,8 @@ import { applyToChart, rowShaper } from '../app/sharePolicy';
 import { isSharePath } from '../app/privacyStore';
 import { withAsOf } from '../data/asOf';
 import { driversVizData } from './drivers';
+import { facetVizData, isFaceted } from './visualsFacets';
+import { buildFacetData } from '../analysis/facets';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus
 // `visual:data` which loads a dataset and runs the PURE bridge (src/vizData.ts) to
@@ -444,13 +446,16 @@ async function computeVizData(
   // table holds those fields unbound. Everything else is untouched below.
   const replay = await paramTable(projectId, datasetId, opts.params);
   if (replay) {
-    const r = buildVizData(replay.columns, replay.rows, encoding, filters);
+    const r = (isFaceted(encoding) ? buildFacetData : buildVizData)(replay.columns, replay.rows, encoding, filters);
     return {
       ok: true, data: r.data, recommendedShape: r.recommendedShape,
       warnings: r.warnings.concat(replay.errors), category: r.category,
     };
   }
 
+  // Small multiples: one grouped query with the facet dims added (./visualsFacets).
+  const faceted = await facetVizData(projectId, datasetId, encoding, filters, (e, f) => vizDataFor(projectId, datasetId, e, f, opts), opts.maxHydrateRows);
+  if (faceted) return faceted;
   // A field or filter from a RELATED dataset, or a map: vizExtras answers instead.
   // Every map hydrates (no resident path draws one), so the ceiling holds first.
   if (encoding && encoding.geo) {

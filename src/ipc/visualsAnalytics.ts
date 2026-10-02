@@ -51,6 +51,18 @@ export async function withAnalytics(
 ): Promise<VizDataReply> {
   try {
     if (!reply.ok || !overlays.length || reply.data.pivot || reply.data.geo) return reply;
+    // Small multiples: each panel's overlays from its OWN figures, a metric
+    // under the panel's own filter — an average line is that panel's average.
+    const grid = reply.data.facets;
+    if (grid) {
+      // Copied, never mutated: the reply may be the answer cache's own object.
+      const panels = await Promise.all(grid.panels.map(async (p) => {
+        if (p.empty) return p;
+        const analytics = await resolveChartOverlays(projectId, p, reply.category, overlays, filters.concat(p.steps), params);
+        return analytics.length ? { ...p, analytics } : p;
+      }));
+      return { ...reply, data: { ...reply.data, facets: { ...grid, panels } } };
+    }
     const analytics = await resolveChartOverlays(projectId, reply.data, reply.category, overlays, filters, params);
     return analytics.length ? { ...reply, data: { ...reply.data, analytics } } : reply;
   } catch (_) {

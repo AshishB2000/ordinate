@@ -181,4 +181,7 @@ function ensureVizForm(): void {
   });
   mount.insertBefore(vizEngineForm.el, vizForm.el);
   vizEngineForm.show('');
+  // Small multiples (facetShelf.ts), below the chart's and the pivot's shelves alike.
+  vizFacetForm = createFacetShelf({ onChange: () => scheduleRecompute() });
+  mount.appendChild(vizFacetForm.el);
 }

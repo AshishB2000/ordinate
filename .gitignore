@@ -876,3 +876,22 @@ scripts/**/*.js
 /renderer/hub/inputKeys.js
 /renderer/hub/inputPage.js
 /renderer/hub/inputColumns.js
+
+# r8 (round 8)
+/src/ipc/round8.js
+
+# r8:facets
+/renderer/hub/facetGrid.js
+/renderer/hub/facetShelf.js
+/src/analysis/facets.js
+/src/analysis/facetCaption.js
+/src/engine/facetResident.js
+/src/ipc/visualsFacets.js
+
+# r8:pipelines
+
+# r8:events
+
+# r8:summary
+
+# r8:search
