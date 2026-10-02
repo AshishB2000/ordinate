@@ -93,6 +93,7 @@ async function paintMetricCompare(card: any, body: HTMLElement): Promise<void> {
   const vs = document.createElement('div');
   vs.className = 'dash-metric-vs';
   vs.textContent = r.label;
+  vs.title = r.label; // the line ellipsizes beside a Why? (drivers.css)
   row.insertAdjacentElement('afterend', vs);
   if (!flat && typeof drvMountKpiWhy === 'function') drvMountKpiWhy(card, vs); // driversEntry.ts — "Why?"
   // The label under the figure repeats the card's title in the common case;
