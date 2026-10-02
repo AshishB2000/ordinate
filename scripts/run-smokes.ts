@@ -93,6 +93,9 @@ const SMOKES = [
   // Depth round 6: layouts for every size, statistics, text analytics,
   // geospatial analysis and input tables, in one launch (sections in scripts/r6*.ts).
   'smoke-round6',
+  // Round 8: small multiples, pipelines, event annotations, the summary card
+  // and search inside the data, in one launch (sections in scripts/r8*.ts).
+  'smoke-round8',
 ];
 
 const results: { name: string; code: number }[] = [];
