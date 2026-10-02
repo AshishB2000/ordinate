@@ -17791,3 +17791,10 @@ body.ws-side-push .app-sidebar { display: none; }
 .sv-act--rm:hover { color: var(--error); }
 .sv-save { font-weight: 500; }
 .sv-save svg { color: var(--accent); }
+
+/* ── Retail calendars ──────────────────────────────────────────────────────────
+   Settings → Formats → Calendar (settingsCalendar.ts): the panel's own rows and
+   preview strip; these only space the strip under its rows and let the long
+   year-end choices wrap on a narrow panel instead of overflowing it. */
+.sf-preview.cal-preview { margin-top: var(--sp-12); }
+#stp-cal-yearend { flex-wrap: wrap; }

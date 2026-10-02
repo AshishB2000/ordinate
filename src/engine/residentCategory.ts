@@ -19,6 +19,8 @@
 import type { ColumnType, ParsedColumn } from '../data/parse';
 import type { Cell } from '../data/transforms';
 import { binLabel, dateBucketLabel } from '../analysis/categoryKey';
+import { activeWeekCal, unitOfGrain } from '../analysis/retailCalendar';
+import { weekBucketSql } from './weekCalSql';
 import type { DateGrain } from '../analysis/categoryKey';
 import { sqlEmpty } from './sqlGen';
 import { shapeDate } from './periodSql';
@@ -113,6 +115,10 @@ export function sqlCanonicalDate(p: string): string {
  * number rather than a BIGINT the bridge would hand back as a string.
  */
 export function dateBucketSql(d: string, grain: DateGrain): string {
+  // A week calendar compiles its own buckets (engine/weekCalSql), pinned to the
+  // JS reference `categoryKey.dateBucket` by scripts/test-retailCalendar.ts.
+  const wc = grain === 'day' ? null : activeWeekCal();
+  if (wc) return weekBucketSql(d, unitOfGrain(grain)!, wc);
   return `CAST(date_diff('day', DATE '1970-01-01', date_trunc('${grain}', ${d})) AS INTEGER)`;
 }
 

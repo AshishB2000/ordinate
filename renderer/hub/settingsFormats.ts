@@ -264,9 +264,9 @@ function paintBrandingSection(): void {
 (function initSettingsFormats(): void {
   const f = document.getElementById('stp-formats');
   const b = document.getElementById('stp-branding');
-  if (f) buildFormatsSection(f);
+  if (f) { buildFormatsSection(f); buildCalendarGroup(f); }
   if (b) buildBrandingSection(b);
-  const paint = (): void => { paintFormatsSection(); paintBrandingSection(); };
+  const paint = (): void => { paintFormatsSection(); paintBrandingSection(); paintCalendarGroup(); };
   paint();
   // brand.ts sends this after every push from main — and a theme flip, which
   // is harmless to repaint on.

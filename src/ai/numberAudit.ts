@@ -87,6 +87,8 @@ export interface NumberAudit {
 // "2024" and "3", and that stray 3 would be a violation under every month the
 // model names.
 const DATE_SHAPES: RegExp[] = [
+  /FY\d{2,4}(?: Q[1-4]| P\d{2}(?: W\d)?)?/g, // FY24, FY24 Q1, FY24 P03 W2 (a retail calendar)
+  /\d{4}-[PW]\d{2}/g, // 2020-W53, 2020-P12 (the ISO week-year)
   /\d{4}[-/]\d{1,2}[-/]\d{1,2}/g, // 2024-03-05, 2024/3/5
   /\d{1,2}[-/]\d{1,2}[-/]\d{4}/g, // 03/05/2024
   /\d{4}-Q[1-4]/gi, // 2024-Q1

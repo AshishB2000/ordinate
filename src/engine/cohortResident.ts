@@ -22,6 +22,8 @@
 import type { FilterStep } from '../data/transforms';
 import type { CalendarPrefs } from '../analysis/dateIntel';
 import { getCalendar } from '../analysis/dateIntel';
+import { unitOfGrain, weekCalOf } from '../analysis/retailCalendar';
+import { weekOrdinalSql } from './weekCalSql';
 import type { CohortEncoding, CohortGrain, CohortGrid, CohortGroups } from '../analysis/cohortData';
 import { cohortNeeds, foldCohort } from '../analysis/cohortData';
 import { sqlEmpty } from './sqlGen';
@@ -33,6 +35,8 @@ import type * as duck from './duckdb';
 
 /** `cohortData.periodOrdinal` in SQL, over a DATE column `dt`. Calendar values are sanitised integers. */
 export function periodOrdinalSql(dt: string, grain: CohortGrain, cal: CalendarPrefs): string {
+  const wc = weekCalOf(cal);
+  if (wc) return weekOrdinalSql(dt, unitOfGrain(grain)!, wc);
   const ws = Math.trunc(cal.weekStart);
   const fy = Math.trunc(cal.fiscalYearStart);
   if (grain === 'week') {

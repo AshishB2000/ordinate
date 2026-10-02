@@ -605,6 +605,7 @@ contextBridge.exposeInMainWorld('hub', {
     ipcRenderer.invoke('metric:compare', { projectId, card, filters, compare, params }),
   // A relative period → its dates today, under the workspace calendar.
   resolvePeriod: (period: any) => ipcRenderer.invoke('period:resolve', period),
+  calendarToday: () => ipcRenderer.invoke('calendar:today'),
   // The editor's live figure for a definition that is not saved yet — same
   // resolver, same formatter, so the preview cannot disagree with the record.
   previewMetric: (projectId: string, datasetId: string, definition: any, filters?: any, format?: any) =>

@@ -939,3 +939,10 @@ scripts/**/*.js
 /renderer/hub/savedViews.js
 /scripts/test-savedViews.js
 /scripts/r10Views.js
+# Retail and fiscal calendars (round 10) — emitted siblings.
+/src/analysis/civilDays.js
+/src/analysis/retailCalendar.js
+/src/engine/weekCalSql.js
+/renderer/hub/settingsCalendar.js
+/scripts/test-retailCalendar.js
+/scripts/r10Calendars.js

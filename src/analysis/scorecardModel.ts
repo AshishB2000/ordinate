@@ -15,6 +15,7 @@
 import type { CalendarPrefs } from './dateIntel';
 import { daysFromIso, isoFromDays } from './dateIntel';
 import { civilFromDays, daysFromCivil } from './categoryKey';
+import { ordinalOf, ordinalStart, unitOfGrain, weekCalOf, weekLabel } from './retailCalendar';
 
 export type ScorePeriod = 'week' | 'month' | 'quarter' | 'year';
 export const SCORE_PERIODS: readonly ScorePeriod[] = ['week', 'month', 'quarter', 'year'];
@@ -114,12 +115,21 @@ function monthSpan(startIdx: number, months: number): { from: string; to: string
  * Weeks start on the workspace's week start; quarters and years follow its
  * fiscal year. A fiscal year is named for the calendar year it ENDS in
  * (FY2025 = Jul 2024 – Jun 2025), the usual convention; a calendar year is
- * just its number. Null when the anchor is not an ISO date.
+ * just its number. Under a week calendar every period is that calendar's
+ * (a "month" is its period) and reads as an axis does: FY24 P03. Null when the
+ * anchor is not an ISO date.
  */
 export function periodWindow(anchorIso: string, period: ScorePeriod, offset: number, cal: CalendarPrefs): PeriodWindow | null {
   const day = daysFromIso(anchorIso);
   if (day === null) return null;
   const k = Math.floor(offset) || 0; // negative = periods AFTER the anchor (a forecast axis)
+  const wc = weekCalOf(cal);
+  if (wc) {
+    const unit = unitOfGrain(period)!;
+    const o = ordinalOf(day, unit, wc) - k;
+    const s = ordinalStart(o, unit, wc);
+    return { from: isoFromDays(s), to: isoFromDays(ordinalStart(o + 1, unit, wc) - 1), label: weekLabel(s, unit, wc) };
+  }
   if (period === 'week') {
     const dow = ((day + 4) % 7 + 7) % 7; // 1970-01-01 was a Thursday; 0 = Sunday
     const start = day - ((dow - cal.weekStart + 7) % 7) - 7 * k;

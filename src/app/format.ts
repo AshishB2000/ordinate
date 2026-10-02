@@ -36,6 +36,10 @@ export interface FormatPrefs {
   weekStart: number;
   /** 1 = January … 12 — read by the relative periods, not by this file. */
   fiscalYearStart: number;
+  /** Gregorian, a retail 4-4-5 / 4-5-4 / 5-4-4 or the ISO week-year (analysis/retailCalendar). Not read here. */
+  calendarType: 'gregorian' | '445' | '454' | '544' | 'iso';
+  /** Retail year end: the Saturday nearest Jan 31, or the last Saturday of January. Not read here. */
+  yearEnd: 'nearest' | 'last';
   /** Big figures as 5.2M rather than 5,194,598.73 where a view has no format of its own. */
   compact: boolean;
 }
@@ -48,6 +52,8 @@ const FORMAT_DEFAULTS: FormatPrefs = {
   dateFormat: 'medium',
   weekStart: 1,
   fiscalYearStart: 1,
+  calendarType: 'gregorian',
+  yearEnd: 'nearest',
   compact: true,
 };
 
@@ -103,6 +109,8 @@ export function sanitizeFormatPrefs(raw: unknown): FormatPrefs {
     dateFormat: oneOf(o.dateFormat, ['short', 'medium', 'iso'] as const, 'medium'),
     weekStart: Number.isInteger(ws) && ws >= 0 && ws <= 6 ? ws : FORMAT_DEFAULTS.weekStart,
     fiscalYearStart: Number.isInteger(fy) && fy >= 1 && fy <= 12 ? fy : FORMAT_DEFAULTS.fiscalYearStart,
+    calendarType: oneOf(o.calendarType, ['gregorian', '445', '454', '544', 'iso'] as const, 'gregorian'),
+    yearEnd: oneOf(o.yearEnd, ['nearest', 'last'] as const, 'nearest'),
     compact: o.compact === undefined ? FORMAT_DEFAULTS.compact : o.compact !== false,
   };
 }

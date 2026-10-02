@@ -15,7 +15,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vm from 'vm';
 import { describePeriod, PERIOD_PRESETS, N_PRESETS } from '../src/analysis/dateIntel';
-import type { PeriodSpec } from '../src/analysis/dateIntel';
+import type { CalendarPrefs, PeriodSpec } from '../src/analysis/dateIntel';
 
 import { ok, finish } from './selfcheck';
 
@@ -31,12 +31,17 @@ for (const p of PERIOD_PRESETS) {
   else specs.push({ preset: p });
 }
 
-for (const fy of [1, 7]) {
-  const cal = { weekStart: 1, fiscalYearStart: fy };
+const cals: Array<[string, CalendarPrefs]> = [
+  ['fy1', { weekStart: 1, fiscalYearStart: 1 }],
+  ['fy7', { weekStart: 1, fiscalYearStart: 7 }],
+  ['454', { weekStart: 1, fiscalYearStart: 1, calendarType: '454', yearEnd: 'nearest' }],
+  ['iso', { weekStart: 1, fiscalYearStart: 7, calendarType: 'iso', yearEnd: 'nearest' }],
+];
+for (const [name, cal] of cals) {
   for (const spec of specs) {
     const main = describePeriod(spec, cal);
     const renderer = vm.runInContext(`wsFormats = ${JSON.stringify(cal)}; periodLabel(${JSON.stringify(spec)})`, ctx);
-    ok(`fy${fy} ${spec.preset}${spec.n ? '(' + spec.n + ')' : ''}: "${main}"`, renderer === main, `renderer said "${renderer}"`);
+    ok(`${name} ${spec.preset}${spec.n ? '(' + spec.n + ')' : ''}: "${main}"`, renderer === main, `renderer said "${renderer}"`);
   }
 }
 

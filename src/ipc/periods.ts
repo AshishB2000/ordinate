@@ -20,7 +20,8 @@ import * as metrics from '../analysis/metrics';
 import { sanitizeDashboardFilters } from '../analysis/dashboards';
 import type { MetricAggregation } from '../analysis/metricValue';
 import { formatMetricValue } from '../analysis/metricFormat';
-import { describeCompare, describePeriod, getCalendar, resolvePeriodNow, sanitizeCompare, sanitizePeriod, todayIso } from '../analysis/dateIntel';
+import { daysFromIso, describeCompare, describePeriod, getCalendar, resolvePeriodNow, sanitizeCompare, sanitizePeriod, todayIso } from '../analysis/dateIntel';
+import { bucketStartOf, weekCalOf, weekLabel, weekPos } from '../analysis/retailCalendar';
 import { compareScope } from '../analysis/periodScope';
 import { paramValues, resolveFilterParams } from '../analysis/params';
 import { computeCardMetric } from './dashboards';
@@ -117,6 +118,23 @@ export function register(): void {
     const r = resolvePeriodNow(spec);
     if (!r) return { ok: false, error: 'Unknown period' };
     return { ok: true, from: r.from, to: r.to, label: describePeriod(spec, getCalendar()), today: todayIso() };
+  });
+
+  // Settings → Formats → Calendar's preview: today's week label under the
+  // workspace calendar (empty for gregorian), its year's length, and the
+  // current fiscal year's dates — all main's, so the preview cannot disagree
+  // with the axes and filters it describes.
+  ipcMain.handle('calendar:today', async () => {
+    const today = todayIso();
+    const day = daysFromIso(today);
+    const year = resolvePeriodNow({ preset: 'this_year' });
+    const wc = weekCalOf(getCalendar());
+    if (day === null || !year) return { ok: false, error: 'No clock' };
+    return {
+      ok: true, today, from: year.from, to: year.to,
+      label: wc ? weekLabel(bucketStartOf(day, 'week', wc), 'week', wc) : '',
+      weeks: wc ? weekPos(day, wc).weeks : null,
+    };
   });
 
   ipcMain.handle('metric:compare', async (_e, { projectId, card, filters, compare, params }: any = {}) => {

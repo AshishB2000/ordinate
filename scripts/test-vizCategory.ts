@@ -58,6 +58,7 @@ const datasets: typeof import('../src/data/datasets') = require('../src/data/dat
 const vizData: typeof import('../src/analysis/vizData') = require('../src/analysis/vizData');
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const categoryKey: typeof import('../src/analysis/categoryKey') = require('../src/analysis/categoryKey');
+const dateIntel: typeof import('../src/analysis/dateIntel') = require('../src/analysis/dateIntel');
 const residentQuery: typeof import('../src/engine/residentQuery') = require('../src/engine/residentQuery');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
@@ -265,6 +266,26 @@ async function main(): Promise<void> {
     };
     await diff(`date grain=${grain}`, dates, enc);
   }
+
+  // Under a week calendar every grain but day is that calendar's, on both
+  // paths (engine/weekCalSql) — the fixture spans NRF fiscal 2023, a 53-week year.
+  for (const cal of [{ calendarType: '454', yearEnd: 'nearest' }, { calendarType: 'iso' }]) {
+    dateIntel.setCalendar(cal);
+    for (const grain of categoryKey.DATE_GRAINS) {
+      await diff(`date grain=${grain} (${cal.calendarType})`, dates, { category: 'd', values: [{ column: 'v', aggregation: 'sum' }], grain });
+    }
+    await diff(`date grain=default (${cal.calendarType})`, dates, { category: 'd', values: [{ column: 'v', aggregation: 'avg' }] });
+  }
+  {
+    const { reply } = await viaFunnel(dates, { category: 'd', values: [{ column: 'v', aggregation: 'sum' }], grain: 'week' });
+    ok('ISO weeks label as 2022-W01', reply.data.labels[0] === '2022-W01', String(reply.data.labels[0]));
+  }
+  dateIntel.setCalendar({ calendarType: '454' });
+  {
+    const { reply } = await viaFunnel(dates, { category: 'd', values: [{ column: 'v', aggregation: 'sum' }], grain: 'week' });
+    ok('4-5-4 weeks label as FY21 P12 W1', reply.data.labels[0] === 'FY21 P12 W1', String(reply.data.labels[0]));
+  }
+  dateIntel.setCalendar({});
 
   // The DEFAULT grain: no `grain` on the encoding, so both paths must choose the
   // same one from the same distinct-bucket counts. 300 dates over ~2.5 years

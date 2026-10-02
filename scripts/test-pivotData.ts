@@ -25,6 +25,7 @@ import * as pivotResident from '../src/engine/pivotResident';
 import * as pq from '../src/engine/parquetStore';
 import * as duck from '../src/engine/duckdb';
 import { parseCsv } from '../src/data/parse';
+import { setCalendar } from '../src/analysis/dateIntel';
 import type { ParsedColumn } from '../src/data/parse';
 import type { Cell, FilterStep } from '../src/data/transforms';
 import type { PivotEncoding, PivotGrid } from '../src/analysis/pivotData';
@@ -474,6 +475,16 @@ function testSample(): void {
     values: [{ column: 'profit', aggregation: 'avg' }],
     totals: { rows: true, columns: true, grand: true },
   });
+  // Under a retail calendar a pivot's month / quarter / year are its periods,
+  // quarters and years — compiled in SQL (engine/weekCalSql), labelled in JS.
+  setCalendar({ calendarType: '454', yearEnd: 'nearest' });
+  for (const grain of ['month', 'quarter', 'year'] as const) {
+    diffGrid(`sample/4-5-4 ${grain}`, f, {
+      rows: [{ column: 'order_date', grain }], columns: [{ column: 'region' }],
+      values: [{ column: 'revenue', aggregation: 'sum' }], totals: { rows: true, columns: true, grand: true },
+    });
+  }
+  setCalendar({});
 
   // The grand total of sum(revenue) over the whole sample IS the sample
   // dashboard's Revenue KPI. Asserted here, off the same bytes, so the smoke's

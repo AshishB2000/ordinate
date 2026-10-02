@@ -19,6 +19,12 @@
 // month (1 = January, which is the calendar year). A fiscal year is named by the
 // calendar year it STARTS in here only for arithmetic; nothing prints that name.
 //
+// Or the workspace runs a WEEK CALENDAR (retailCalendar.ts: retail 4-4-5 /
+// 4-5-4 / 5-4-4, or the ISO week-year). Then weeks, "months" (its periods),
+// quarters and years are that calendar's: "This month" is the current period,
+// weeks start on its own weekday (Sunday retail, Monday ISO) whatever
+// `weekStart` says, and last year is the same fiscal week a year back.
+//
 // ── Which cells a period matches ────────────────────────────────────────────
 // A date column is stored as its ORIGINAL text (parse.ts never normalises it),
 // so a period filter has to read dates the same way in JS and in SQL or the
@@ -32,6 +38,11 @@
 
 import { daysFromCivil, civilFromDays } from './categoryKey';
 import type { CivilDate, DateGrain } from './categoryKey';
+import {
+  CALENDAR_TYPES, bucketStartOf, ordinalOf, ordinalStart, sameDayLastYear, setActiveWeekCal, unitOfGrain,
+  weekCalOf, weekLabel, weekLabelStart, weekPos, yearStart as weekYearStart,
+} from './retailCalendar';
+import type { CalendarType, WeekCal, WeekUnit, YearEndRule } from './retailCalendar';
 
 export type PeriodPreset =
   | 'today' | 'yesterday'
@@ -77,6 +88,10 @@ export interface CalendarPrefs {
   weekStart: number;
   /** 1 = January … 12 = December. */
   fiscalYearStart: number;
+  /** Absent = 'gregorian', today's calendar. Anything else is a week calendar (retailCalendar.ts). */
+  calendarType?: CalendarType;
+  /** Retail only: which Saturday ends the year. Absent = 'nearest'. */
+  yearEnd?: YearEndRule;
 }
 
 export const DEFAULT_CALENDAR: CalendarPrefs = { weekStart: 1, fiscalYearStart: 1 };
@@ -154,6 +169,8 @@ export function sanitizeCalendar(raw: unknown): CalendarPrefs {
   return {
     weekStart: Number.isInteger(ws) && ws >= 0 && ws <= 6 ? ws : DEFAULT_CALENDAR.weekStart,
     fiscalYearStart: Number.isInteger(fy) && fy >= 1 && fy <= 12 ? fy : DEFAULT_CALENDAR.fiscalYearStart,
+    calendarType: (CALENDAR_TYPES as readonly unknown[]).includes(o.calendarType) ? (o.calendarType as CalendarType) : 'gregorian',
+    yearEnd: o.yearEnd === 'last' ? 'last' : 'nearest',
   };
 }
 
@@ -209,6 +226,9 @@ export function resolvePeriod(spec: PeriodSpec, today: string, cal: CalendarPref
   if (t === null || !spec) return null;
   const c = civilFromDays(t);
   const n = Math.max(1, Math.min(MAX_N, Math.floor(Number(spec.n) || 1)));
+  const wc = weekCalOf(cal);
+  const inWeeks = wc ? resolveWeekCal(spec.preset, t, n, wc) : undefined;
+  if (inWeeks) return inWeeks;
   const iso = isoFromDays;
   const dow = (((t + 4) % 7) + 7) % 7; // 0 = Sunday; 1970-01-01 was a Thursday
   const weekStart = t - ((dow - cal.weekStart + 7) % 7);
@@ -241,6 +261,64 @@ export function resolvePeriod(spec: PeriodSpec, today: string, cal: CalendarPref
   }
 }
 
+/** The week-calendar presets (weeks, periods, quarters, years); undefined for the rest. */
+function resolveWeekCal(preset: PeriodPreset, t: number, n: number, wc: WeekCal): DateRange | undefined {
+  const span = (unit: WeekUnit, back: number, count: number): DateRange => {
+    const o = ordinalOf(t, unit, wc) - back;
+    return { from: isoFromDays(ordinalStart(o, unit, wc)), to: isoFromDays(ordinalStart(o + count, unit, wc) - 1) };
+  };
+  const toDate = (unit: WeekUnit): DateRange => ({ from: isoFromDays(bucketStartOf(t, unit, wc)), to: isoFromDays(t) });
+  switch (preset) {
+    case 'this_week': return span('week', 0, 1);
+    case 'last_week': return span('week', 1, 1);
+    case 'last_n_weeks': return span('week', n, n);
+    case 'this_month': return span('period', 0, 1);
+    case 'last_month': return span('period', 1, 1);
+    case 'last_n_months': return span('period', n, n);
+    case 'this_quarter': return span('quarter', 0, 1);
+    case 'last_quarter': return span('quarter', 1, 1);
+    case 'last_n_quarters': return span('quarter', n, n);
+    case 'this_year': return span('year', 0, 1);
+    case 'last_year': return span('year', 1, 1);
+    case 'last_n_years': return span('year', n, n);
+    case 'ytd': return toDate('year');
+    case 'qtd': return toDate('quarter');
+    default: return undefined;
+  }
+}
+
+/**
+ * Under a week calendar. Last year is by FISCAL POSITION — the same week number
+ * and weekday a year back (retailCalendar.sameDayLastYear), so a 53-week year
+ * compares week for week; its week 53 has no twin and compares with week 52.
+ * An end on the year's last day maps to the prior year's last day, so a whole
+ * 53-week year compares with the whole 52-week year before it. The previous
+ * period of whole periods is that many periods back; anything else moves back
+ * by its length in days (whole weeks included).
+ */
+function shiftWeekCal(r: DateRange, mode: 'previous_period' | 'previous_year', wc: WeekCal): DateRange | null {
+  const f = daysFromIso(r.from);
+  const t = daysFromIso(r.to);
+  if (mode === 'previous_year') {
+    if (f === null && t === null) return null;
+    const back = (day: number | null, isEnd: boolean): string | undefined => {
+      if (day === null) return undefined;
+      const key = weekPos(day, wc).key;
+      if (isEnd && day + 1 === weekYearStart(key + 1, wc)) return isoFromDays(weekYearStart(key, wc) - 1);
+      return isoFromDays(sameDayLastYear(day, wc));
+    };
+    return { from: back(f, false), to: back(t, true) };
+  }
+  if (f === null || t === null) return null;
+  if (f === bucketStartOf(f, 'period', wc) && t + 1 === bucketStartOf(t + 1, 'period', wc)) {
+    const o = ordinalOf(f, 'period', wc);
+    const count = ordinalOf(t, 'period', wc) - o + 1;
+    return { from: isoFromDays(ordinalStart(o - count, 'period', wc)), to: isoFromDays(f - 1) };
+  }
+  const len = t - f + 1;
+  return { from: isoFromDays(f - len), to: isoFromDays(f - 1) };
+}
+
 /**
  * The comparison range for a resolved one.
  *
@@ -249,9 +327,11 @@ export function resolvePeriod(spec: PeriodSpec, today: string, cal: CalendarPref
  * of whole months moves back by that many MONTHS, so "this quarter" compares
  * with the previous quarter rather than with the previous 92 days; anything
  * else moves back by its length in days. An open-ended range has no length,
- * so it has no previous period (null).
+ * so it has no previous period (null). A week calendar: see `shiftWeekCal`.
  */
-export function shiftRange(r: DateRange, mode: 'previous_period' | 'previous_year'): DateRange | null {
+export function shiftRange(r: DateRange, mode: 'previous_period' | 'previous_year', cal: CalendarPrefs = calendar): DateRange | null {
+  const wc = weekCalOf(cal);
+  if (wc) return shiftWeekCal(r, mode, wc);
   const f = daysFromIso(r.from);
   const t = daysFromIso(r.to);
   if (mode === 'previous_year') {
@@ -284,15 +364,19 @@ const UNIT: Record<string, [string, string]> = {
 
 /** "Last 30 days", "This fiscal year", "Custom range". */
 export function describePeriod(spec: PeriodSpec, cal: CalendarPrefs = DEFAULT_CALENDAR): string {
-  const fiscal = cal.fiscalYearStart !== 1 ? 'fiscal ' : '';
+  // A retail year is always fiscal; an ISO year is just "year". A week
+  // calendar's months are its periods.
+  const wc = weekCalOf(cal);
+  const fiscal = (wc ? wc.type !== 'iso' : cal.fiscalYearStart !== 1) ? 'fiscal ' : '';
+  const month = wc ? 'period' : 'month';
   const n = Math.max(1, Math.floor(Number(spec.n) || 1));
   switch (spec.preset) {
     case 'today': return 'Today';
     case 'yesterday': return 'Yesterday';
     case 'this_week': return 'This week';
     case 'last_week': return 'Last week';
-    case 'this_month': return 'This month';
-    case 'last_month': return 'Last month';
+    case 'this_month': return `This ${month}`;
+    case 'last_month': return `Last ${month}`;
     case 'this_quarter': return `This ${fiscal}quarter`;
     case 'last_quarter': return `Last ${fiscal}quarter`;
     case 'this_year': return `This ${fiscal}year`;
@@ -306,7 +390,8 @@ export function describePeriod(spec: PeriodSpec, cal: CalendarPrefs = DEFAULT_CA
     default: {
       const u = UNIT[spec.preset];
       if (!u) return 'Custom range';
-      const unit = spec.preset === 'last_n_quarters' || spec.preset === 'last_n_years' ? `${fiscal}${u[n === 1 ? 0 : 1]}` : u[n === 1 ? 0 : 1];
+      const word = spec.preset === 'last_n_months' ? month + (n === 1 ? '' : 's') : u[n === 1 ? 0 : 1];
+      const unit = spec.preset === 'last_n_quarters' || spec.preset === 'last_n_years' ? `${fiscal}${word}` : word;
       return `Last ${n} ${unit}`;
     }
   }
@@ -341,6 +426,7 @@ let calendar: CalendarPrefs = { ...DEFAULT_CALENDAR };
 
 export function setCalendar(c: unknown): void {
   calendar = sanitizeCalendar(c);
+  setActiveWeekCal(calendar);
 }
 
 export function getCalendar(): CalendarPrefs {
@@ -364,9 +450,17 @@ export function resolvePeriodNow(spec: PeriodSpec): DateRange | null {
  * A `categoryKey.dateBucketLabel` → the label of the same bucket a year
  * earlier, so an overlay series can be aligned period by period. Weeks move by
  * 52 weeks (364 days) to stay on their weekday; days move by a calendar year.
+ * Under a week calendar a bucket moves by fiscal position (shiftWeekCal):
+ * FY23 P12 W5, the 53rd week, lines up with FY22 P12 W4.
  */
 export function shiftBucketLabel(label: string, grain: DateGrain): string | null {
   const s = String(label);
+  const wc = grain === 'day' ? null : weekCalOf(calendar);
+  if (wc) {
+    const unit = unitOfGrain(grain)!;
+    const start = weekLabelStart(s, unit, wc);
+    return start === null ? null : weekLabel(bucketStartOf(sameDayLastYear(start, wc), unit, wc), unit, wc);
+  }
   if (grain === 'year') return /^\d{4}$/.test(s) ? String(Number(s) - 1).padStart(4, '0') : null;
   if (grain === 'quarter') {
     const m = /^(\d{4})-Q([1-4])$/.exec(s);
