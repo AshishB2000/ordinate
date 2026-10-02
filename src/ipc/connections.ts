@@ -158,6 +158,22 @@ async function runSaved(
 }
 
 /**
+ * Run a statement on a saved connection and return the cells UNTYPED — for an
+ * incremental refresh (src/data/incrementalRefresh.ts), which types a batch to
+ * the stored table. The secret is resolved here, in main, as for runSaved.
+ */
+export async function runSavedText(
+  projectId: string,
+  connId: string,
+  selection: { table?: string; query?: string },
+): ReturnType<typeof connectionRun.runConnectionText> {
+  const conn = await connections.getConnection(projectId, connId);
+  if (!conn) return { ok: false, error: 'Connection not found' };
+  const secrets = loadSecrets(connId, getConnector(conn.connectorId));
+  return connectionRun.runConnectionText(conn.connectorId, conn.values, secrets, selection);
+}
+
+/**
  * WHAT a dataset's refresh should re-run.
  *
  * The dataset's own origin wins, because one connection now feeds many
@@ -168,7 +184,7 @@ async function runSaved(
  * falls through to the connection's own single saved selection, which is
  * exactly what it has always refreshed to.
  */
-function selectionForDataset(origin: unknown): { table?: string; query?: string } | undefined {
+export function selectionForDataset(origin: unknown): { table?: string; query?: string } | undefined {
   if (!origin || typeof origin !== 'object') return undefined;
   const o = origin as Record<string, unknown>;
   if (o.kind !== 'connection') return undefined;

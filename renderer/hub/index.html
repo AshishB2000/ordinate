@@ -1236,6 +1236,10 @@
           <!-- Week 13 — capture provenance: thumbnail + view-original + recapture. -->
           <div class="ds-cap-strip" id="ds-cap-strip" hidden></div>
 
+          <!-- r10:incremental — a connection or folder dataset's incremental
+               refresh: settings, Full refresh now, the refresh log (incremental.ts). -->
+          <div class="inc-panel" id="inc-panel" hidden></div>
+
           <!-- Sensitivity proposals from import or refresh, waiting for the
                user — never applied until they choose (privacyReview.ts). -->
           <div class="pv-banner" id="pv-review-banner" role="status" hidden></div>
@@ -3748,6 +3752,9 @@
      (fxSettings.js, after settingsFormats.js whose row builders it uses). -->
 <script src="fxUi.js"></script>
 <script src="fxSettings.js"></script>
+<!-- r10:incremental -->
+<!-- The dataset page's Incremental refresh panel; dsExplorer calls incPaint at run time. -->
+<script src="incremental.js"></script>
 
 <script src="hub.js"></script>
 

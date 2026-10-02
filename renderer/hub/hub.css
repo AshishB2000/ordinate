@@ -17847,3 +17847,60 @@ body.ws-side-push .app-sidebar { display: none; }
 .dash-card-body:has(> .dash-viz-area ~ .fx-tile-note) { display: flex; flex-direction: column; }
 .dash-card-body:has(> .dash-viz-area ~ .fx-tile-note) > .dash-viz-area { flex: 1 1 auto; height: auto; }
 .dash-card-body > .dash-viz-area ~ .fx-tile-note { flex: 0 0 auto; }
+
+/* ── Incremental refresh ──
+   The dataset page's collapsible strip (incremental.ts): status in one line,
+   then settings, how this source fetches, and the refresh log. */
+.inc-panel { border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); }
+.inc-details > .inc-sum {
+  display: flex; align-items: center; gap: var(--sp-8); min-width: 0;
+  padding: var(--sp-8) var(--sp-12); cursor: pointer; list-style: none;
+  font-size: var(--t-12); color: var(--muted);
+}
+.inc-details > .inc-sum::-webkit-details-marker { display: none; }
+.inc-details > .inc-sum::before {
+  content: ''; flex: 0 0 auto; width: 6px; height: 6px; margin-right: 2px;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg); transition: transform var(--dur-fast) var(--ease-out);
+}
+.inc-details[open] > .inc-sum::before { transform: rotate(45deg); }
+.inc-details > .inc-sum:hover { color: var(--text); }
+.inc-title { font-weight: 600; color: var(--text-strong); white-space: nowrap; }
+.inc-pill {
+  flex: 0 0 auto; padding: 1px var(--sp-8); border-radius: var(--r-full);
+  border: 1px solid var(--border); font-size: var(--t-11); font-weight: 600; color: var(--muted);
+}
+.inc-pill.is-on { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.inc-sum-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inc-body {
+  display: flex; flex-direction: column; gap: var(--sp-12);
+  padding: var(--sp-4) var(--sp-12) var(--sp-12); border-top: 1px solid var(--border-hairline);
+}
+.inc-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-12); padding-top: var(--sp-8); }
+.inc-check { display: flex; align-items: center; gap: var(--sp-4); height: var(--ctl-md); color: var(--text); font-size: var(--t-13); }
+.inc-field { display: flex; flex-direction: column; gap: var(--sp-4); }
+.inc-field-label { font-size: var(--t-11); color: var(--muted); }
+.inc-lookback { display: flex; align-items: center; gap: var(--sp-4); }
+.inc-lookback .inc-lookback-n { width: 84px; }
+.inc-lookback-ids { font-size: var(--t-12); color: var(--muted); }
+.inc-actions { display: flex; align-items: center; gap: var(--sp-8); height: var(--ctl-md); }
+.inc-msg { font-size: var(--t-12); color: var(--muted); }
+.inc-msg.is-error { color: var(--error); }
+.inc-how { margin: 0; max-width: 72ch; font-size: var(--t-12); line-height: var(--lh-body); color: var(--muted); }
+.inc-empty { margin: 0; font-size: var(--t-12); color: var(--text-dim); }
+.inc-log-title { margin: 0 0 var(--sp-4); font-size: var(--t-12); font-weight: 600; color: var(--text-strong); }
+.inc-log-wrap { overflow-x: auto; }
+.inc-log { width: 100%; border-collapse: collapse; font-size: var(--t-12); }
+.inc-log th {
+  padding: var(--sp-4) var(--sp-8); text-align: left; white-space: nowrap;
+  font-size: var(--t-11); font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--border);
+}
+.inc-log td { padding: var(--sp-4) var(--sp-8); border-bottom: 1px solid var(--border-hairline); color: var(--text); vertical-align: top; }
+.inc-log tr:last-child td { border-bottom: 0; }
+.inc-log th:nth-child(n+3):nth-child(-n+5), .inc-log .inc-n { text-align: right; font-family: var(--font-numeric); font-variant-numeric: tabular-nums; }
+.inc-when { white-space: nowrap; color: var(--muted); }
+.inc-mode, .inc-run-how { display: block; }
+.inc-mode { font-weight: 600; }
+.inc-log-row.is-full .inc-mode { color: var(--accent); }
+.inc-run-how { font-size: var(--t-11); color: var(--muted); }
+.inc-mark { font-family: var(--font-mono); font-size: var(--t-11); white-space: nowrap; }

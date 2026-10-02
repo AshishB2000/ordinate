@@ -946,3 +946,15 @@ scripts/**/*.js
 /renderer/hub/settingsCalendar.js
 /scripts/test-retailCalendar.js
 /scripts/r10Calendars.js
+
+# r10:incremental
+/src/data/incremental.js
+/src/data/incrementalRefresh.js
+/src/engine/incrementalDuck.js
+/src/connectors/incrementalSql.js
+/src/ipc/incremental.js
+/preload/hubIncrementalPreload.js
+/renderer/hub/incremental.js
+/scripts/test-incrementalMerge.js
+/scripts/test-incrementalRefresh.js
+/scripts/r10Incremental.js

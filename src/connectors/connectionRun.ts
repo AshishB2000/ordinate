@@ -111,6 +111,13 @@ const DIALECTS: Readonly<Record<string, Dialect>> = {
 /** Compile a validated `schema.table` (or `db.schema.table`) into a bounded
  *  SELECT for this family. Returns null when the name fails the whitelist. */
 export function buildTableSql(family: string, table: string, rowLimit: number): string | null {
+  const quoted = quotedTable(family, table);
+  return quoted === null ? null : (DIALECTS[family] || ANSI).limit(`select * from ${quoted}`, rowLimit);
+}
+
+/** A validated table name quoted for this family, or null when it fails the
+ *  whitelist. Exported for incremental refresh, which adds a WHERE to it. */
+export function quotedTable(family: string, table: string): string | null {
   const name = String(table || '').trim();
   const parts = name.split('.');
   if (parts.length === 0 || parts.length > 3 || parts.some((p) => !IDENT_RE.test(p))) return null;
@@ -121,8 +128,7 @@ export function buildTableSql(family: string, table: string, rowLimit: number): 
   // against the app's own in-memory catalog and find nothing. Quote the whole
   // name as one identifier instead. Splitting it was a silent wrong-catalog
   // lookup that only a non-`main` schema could reach.
-  const quoted = family === 'duckdb' ? dialect.quote(name) : parts.map(dialect.quote).join('.');
-  return dialect.limit(`select * from ${quoted}`, rowLimit);
+  return family === 'duckdb' ? dialect.quote(name) : parts.map(dialect.quote).join('.');
 }
 
 /** The SQL a saved selection runs, or an error string. Exported for the
@@ -231,6 +237,40 @@ export async function runConnection(
   selection: { table?: string; query?: string },
   bounds?: RunBounds,
 ): Promise<RunOk | RunErr> {
+  const res = await fetchRows(connectorId, values, secrets, selection, bounds);
+  if (!res.ok) return res;
+  return { ok: true, result: toParseResult(res.columns, res.rows, res.truncated), truncated: res.truncated };
+}
+
+/**
+ * `runConnection`, but the cells as the STRINGS the type detector would see,
+ * untyped. For incremental refresh, which coerces a batch to the stored table's
+ * types rather than re-detecting them from a handful of new rows.
+ */
+export async function runConnectionText(
+  connectorId: unknown,
+  values: Record<string, unknown>,
+  secrets: Record<string, string>,
+  selection: { table?: string; query?: string },
+  bounds?: RunBounds,
+): Promise<{ ok: true; header: string[]; body: string[][]; truncated: boolean } | RunErr> {
+  const res = await fetchRows(connectorId, values, secrets, selection, bounds);
+  if (!res.ok) return res;
+  return {
+    ok: true,
+    header: res.columns.map((c) => String(c?.name ?? '')),
+    body: res.rows.map((row) => (row || []).map(cellToString)),
+    truncated: res.truncated,
+  };
+}
+
+async function fetchRows(
+  connectorId: unknown,
+  values: Record<string, unknown>,
+  secrets: Record<string, string>,
+  selection: { table?: string; query?: string },
+  bounds?: RunBounds,
+): Promise<{ ok: true; columns: ConnectorColumn[]; rows: (string | number | boolean | null)[][]; truncated: boolean } | RunErr> {
   const def = resolve(connectorId);
   if (!def) return { ok: false, error: unknownConnector(connectorId) };
   const ctx = buildContext(values, secrets, bounds);
@@ -243,11 +283,7 @@ export async function runConnection(
     if (!res.ok) return { ok: false, error: safeError(res.error, ctx.secrets) };
     const truncated = res.truncated === true || (res.rows || []).length > ctx.rowLimit;
     const rows = (res.rows || []).slice(0, ctx.rowLimit); // trust, then verify
-    return {
-      ok: true,
-      result: toParseResult(res.columns || [], rows, truncated),
-      truncated,
-    };
+    return { ok: true, columns: res.columns || [], rows, truncated };
   } catch (err: unknown) {
     return { ok: false, error: safeError(err, ctx.secrets) };
   }
