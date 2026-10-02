@@ -28,8 +28,10 @@ import * as alertStore from '../analysis/alertStore';
 const MAX_RESULTS = 20;
 
 export interface SearchHit {
-  kind: 'dataset' | 'visual' | 'analysis' | 'connection' | 'metric' | 'report' | 'story' | 'alert';
+  kind: 'dataset' | 'visual' | 'analysis' | 'view' | 'connection' | 'metric' | 'report' | 'story' | 'alert';
   id: string;
+  /** A saved view's dashboard id — the record a `view` hit opens. */
+  parentId?: string;
   name: string;
   /** A dim second line: rows, chart type, sheet count — whatever the list already knows. */
   sub: string;
@@ -49,6 +51,7 @@ const TYPE_LABEL: Record<SearchHit['kind'], string> = {
   dataset: 'Dataset',
   visual: 'Visual',
   analysis: 'Dashboard',
+  view: 'Saved view',
   connection: 'Connection',
   metric: 'Metric',
   report: 'Report',
@@ -82,10 +85,11 @@ async function search(projectId: string, query: string): Promise<SearchHit[]> {
 
   // Grouped in the order the sidebar lists the sections, so the results read in
   // the same order as the app they point into.
-  const push = (kind: SearchHit['kind'], id: unknown, name: unknown, sub: string): void => {
+  const push = (kind: SearchHit['kind'], id: unknown, name: unknown, sub: string, parentId?: string): void => {
     if (hits.length >= MAX_RESULTS) return;
     hits.push({
       kind,
+      ...(parentId ? { parentId } : {}),
       id: String(id),
       name: String(name),
       sub,
@@ -109,7 +113,7 @@ async function search(projectId: string, query: string): Promise<SearchHit[]> {
   return hits;
 }
 
-type Push = (kind: SearchHit['kind'], id: unknown, name: unknown, sub: string) => void;
+type Push = (kind: SearchHit['kind'], id: unknown, name: unknown, sub: string, parentId?: string) => void;
 
 async function searchOne(projectId: string, q: string, push: Push): Promise<void> {
   try {
@@ -128,6 +132,11 @@ async function searchOne(projectId: string, q: string, push: Push): Promise<void
     for (const a of await analysis.listAnalyses(projectId)) {
       const sheets = Array.isArray((a as any).sheets) ? (a as any).sheets.length : (a as any).sheetCount;
       if (matches(a.name, q)) push('analysis', a.id, a.name, sheets ? `${sheets} sheet${sheets === 1 ? '' : 's'}` : 'dashboard');
+      // r10:views — "Retail overview › West Q4", matched on the whole phrase.
+      for (const v of a.views || []) {
+        const label = `${a.name} › ${v.name}`;
+        if (matches(label, q)) push('view', v.id, label, 'Saved view', a.id);
+      }
     }
   } catch (_) { /* ignore */ }
 

@@ -35,6 +35,8 @@ import * as visuals from './visuals';
 import type { FilterStep } from '../data/transforms';
 import { sanitizeParameters } from './params';
 import type { Parameter } from './params';
+import { sanitizeViews, sanitizeDefaultViewId } from './savedViews';
+import type { SavedView } from './savedViews';
 
 // Re-exported so callers can type an analysis sheet without importing two
 // modules — and so it stays visible that a sheet IS a dashboard Page.
@@ -85,6 +87,11 @@ export interface Analysis {
    */
   parameters: Parameter[];
 
+  /** Named reader states (./savedViews) and the one the dashboard opens on
+   *  ('' = none). Re-sanitized against the sheets on every load and save. */
+  views?: SavedView[];
+  defaultViewId?: string;
+
   createdAt: string;
   /** Bumped by any sheet/filter/name edit. */
   updatedAt: string;
@@ -96,6 +103,8 @@ export interface AnalysisSummary {
   name: string;
   sheetCount: number;
   updatedAt: string;
+  /** Saved views by name — ⌘K lists "Dashboard › View" rows from these. */
+  views?: Array<{ id: string; name: string }>;
 }
 
 let projectsBase: string | null = null;
@@ -142,7 +151,7 @@ function isValidAnalysis(data: any): boolean {
 // cannot point itself at another project.
 function normalize(data: any, projectId: string): Analysis {
   const createdAt = data.createdAt || new Date().toISOString();
-  return {
+  return withViews({
     id: String(data.id),
     projectId,
     name: typeof data.name === 'string' && data.name.trim() ? data.name : 'Untitled dashboard',
@@ -154,7 +163,15 @@ function normalize(data: any, projectId: string): Analysis {
     createdAt,
     updatedAt: data.updatedAt || createdAt,
     schemaVersion: 1,
-  };
+  }, data.views, data.defaultViewId);
+}
+
+/** Saved views, checked against the record's FINAL sheets and parameters — a
+ *  view naming a card that is gone loses that pick. Absent → none. */
+function withViews(a: Analysis, views: unknown, defaultViewId: unknown): Analysis {
+  a.views = sanitizeViews(views, a);
+  a.defaultViewId = sanitizeDefaultViewId(defaultViewId, a.views);
+  return a;
 }
 
 // No-op stub kept for symmetry with dashboards.init()/visuals.init(). The
@@ -190,6 +207,7 @@ export async function listAnalyses(projectId: string): Promise<AnalysisSummary[]
         name: a.name,
         sheetCount: a.sheets.length,
         updatedAt: a.updatedAt,
+        views: (a.views || []).map((v) => ({ id: v.id, name: v.name })),
       });
     } catch (err: any) {
       if (err.code !== 'ENOENT') {
@@ -268,6 +286,8 @@ export async function updateAnalysis(
     filters?: unknown;
     style?: unknown;
     parameters?: unknown;
+    views?: unknown;
+    defaultViewId?: unknown;
   },
 ): Promise<Analysis | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
@@ -289,6 +309,8 @@ export async function updateAnalysis(
     parameters: patch.parameters !== undefined ? sanitizeParameters(patch.parameters, randomUUID) : existing.parameters,
     updatedAt: new Date().toISOString(),
   };
+  withViews(updated, patch.views !== undefined ? patch.views : existing.views,
+    patch.defaultViewId !== undefined ? patch.defaultViewId : existing.defaultViewId);
   await fs.promises.mkdir(analysesDir(projectId), { recursive: true });
   await writeJsonAtomic(analysisFilePath(projectId, id), updated);
   return updated;

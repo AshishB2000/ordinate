@@ -24,6 +24,7 @@ import { civilFromDays, daysFromCivil, isDateGrain } from './categoryKey';
 import { compareScope } from './periodScope';
 import { daysFromIso, describeCompare, isoFromDays, sanitizeCompare } from './dateIntel';
 import type { DateRange } from './dateIntel';
+import { activeWeekCal, unitOfGrain, weekLabelRange } from './retailCalendar';
 
 export type DriverCompare =
   | { mode: 'previous_period' | 'previous_year' }
@@ -145,10 +146,15 @@ export function sanitizeDriversSpec(raw: unknown, filters: FilterStep[]): Driver
 /**
  * A chart axis label (categoryKey.dateBucketLabel) → the inclusive dates it
  * covers. Weeks and days are both labelled by their first day; the grain says
- * which.
+ * which. Under a week calendar the label is that calendar's (FY24 P03 W2).
  */
 export function bucketRange(label: string, grain: DateGrain): DateRange | null {
   const s = String(label);
+  const wc = grain === 'day' ? null : activeWeekCal();
+  if (wc) {
+    const r = weekLabelRange(s, unitOfGrain(grain)!, wc);
+    return r ? { from: isoFromDays(r.first), to: isoFromDays(r.last) } : null;
+  }
   let first: number | null = null;
   let next: number | null = null;
   if (grain === 'year') {

@@ -19,6 +19,7 @@ interface OrdFormatApi {
   formatDate(iso: string | null | undefined, style?: string, withYear?: boolean): string;
   formatDateRange(from?: string, to?: string): string;
   currencySymbol(code?: string): string;
+  setCurrencyOverride(code: string | null): void; // fxUi.ts — the display currency
   LOCALES: ReadonlyArray<{ id: string; label: string }>;
   CURRENCIES: readonly string[];
   NUMBER_STYLES: ReadonlyArray<{ id: string; label: string }>;

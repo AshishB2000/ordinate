@@ -17711,3 +17711,273 @@ body.ws-side-push .app-sidebar { display: none; }
 .cm-text { margin: 4px 0 var(--sp-8); font-size: var(--t-13); line-height: var(--lh-body); color: var(--text-strong); }
 .cm-actions { display: flex; justify-content: flex-end; gap: var(--sp-4); }
 .cm-target { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: var(--r-sm); }
+
+/* ── Saved views ── */
+/* The header's Views button names the view on screen; the menu lists the
+   dashboard's views with their actions, and an empty state that says what a
+   view is (savedViews.ts). */
+.dash-views-btn.is-on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.dash-views-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.dash-views-name::before { content: '·'; margin-right: var(--sp-4); font-weight: 400; color: var(--muted); }
+.chart-menu.sv-menu { min-width: 300px; max-width: 360px; }
+.sv-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-4) var(--sp-12) var(--sp-8);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sv-count {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: var(--t-11);
+  letter-spacing: 0;
+}
+.sv-empty {
+  display: flex;
+  gap: var(--sp-12);
+  align-items: flex-start;
+  margin: 0 var(--sp-12) var(--sp-8);
+  padding: var(--sp-12);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-md);
+  color: var(--muted);
+}
+.sv-empty svg { flex-shrink: 0; color: var(--text-dim); }
+.sv-empty p { margin: 0; font-size: var(--t-12); line-height: 1.45; }
+.sv-row { display: flex; align-items: center; }
+.sv-row-main { flex: 1; min-width: 0; padding-right: var(--sp-4); }
+.sv-row.is-active .sv-row-main svg { color: var(--accent); }
+.sv-row.is-active .sv-name { font-weight: 600; }
+.sv-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sv-badge {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--t-11);
+  font-weight: 600;
+}
+.sv-acts { display: flex; gap: 2px; padding-right: var(--sp-8); opacity: 0; transition: opacity 0.12s; }
+.sv-row:hover .sv-acts, .sv-row:focus-within .sv-acts { opacity: 1; }
+.sv-act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.sv-act:hover, .sv-act:focus-visible { background: var(--surface-2); color: var(--text); outline: none; }
+.sv-act.is-on { color: var(--accent); }
+.sv-act--rm:hover { color: var(--error); }
+.sv-save { font-weight: 500; }
+.sv-save svg { color: var(--accent); }
+
+/* ── Retail calendars ──────────────────────────────────────────────────────────
+   Settings → Formats → Calendar (settingsCalendar.ts): the panel's own rows and
+   preview strip; these only space the strip under its rows and let the long
+   year-end choices wrap on a narrow panel instead of overflowing it. */
+.sf-preview.cal-preview { margin-top: var(--sp-12); }
+#stp-cal-yearend { flex-wrap: wrap; }
+
+/* ── Multi-currency ── */
+/* fxUi.ts / fxSettings.ts: tile notes, the dashboard's currency picker, the
+   column profile's Currency section and Settings → General → Currency. */
+.fx-select {
+  padding: var(--sp-4) var(--sp-8);
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
+  color: var(--text-strong);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  max-width: 240px;
+}
+.fx-select:hover { border-color: var(--accent); }
+.fx-select:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; border-color: var(--accent); }
+.fx-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--t-11);
+  line-height: 1.4;
+  white-space: normal;
+}
+.fx-chip .ic { flex: 0 0 auto; }
+.fx-chip-warn { color: var(--warn); background: var(--warn-soft); }
+.fx-chip-sample { color: var(--muted); background: var(--surface-2); border: 1px dashed var(--border); }
+.fx-tile-note { display: flex; flex-wrap: wrap; gap: 4px; margin: var(--sp-4) 0 0; }
+.dash-card--metric .fx-tile-note { justify-content: center; }
+.fx-dash { display: inline-flex; align-items: center; gap: var(--sp-4); font-size: var(--t-12); color: var(--muted); }
+.fx-dash[hidden] { display: none; }
+.fx-dash.is-on .fx-select { border-color: var(--accent); background: var(--accent-soft); }
+.fx-dsp { display: flex; flex-direction: column; gap: var(--sp-8); padding: var(--sp-8) 0; border-top: 1px solid var(--border-hairline); }
+.fx-dsp[hidden] { display: none; }
+.fx-dsp-grid { display: grid; grid-template-columns: 1fr; gap: var(--sp-4); }
+.fx-dsp-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-8); font-size: var(--t-12); }
+.fx-dsp-k { color: var(--muted); white-space: nowrap; }
+.fx-dsp-status { display: flex; flex-direction: column; gap: var(--sp-4); }
+.fx-dsp-total { margin: 0; }
+.fx-map { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4) var(--sp-8); }
+.fx-map-cell { display: flex; flex-direction: column; gap: 2px; font-size: var(--t-11); color: var(--muted); }
+.fx-sample { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-4); padding: var(--sp-8) 0; }
+.fx-sample-note, .fx-empty { margin: 0; font-size: var(--t-12); line-height: 1.5; color: var(--muted); }
+/* A chart tile with a note: the chart gives up the note's height, so the note is never clipped. */
+.dash-card-body:has(> .dash-viz-area ~ .fx-tile-note) { display: flex; flex-direction: column; }
+.dash-card-body:has(> .dash-viz-area ~ .fx-tile-note) > .dash-viz-area { flex: 1 1 auto; height: auto; }
+.dash-card-body > .dash-viz-area ~ .fx-tile-note { flex: 0 0 auto; }
+
+/* ── Incremental refresh ──
+   The dataset page's collapsible strip (incremental.ts): status in one line,
+   then settings, how this source fetches, and the refresh log. */
+.inc-panel { border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); }
+.inc-details > .inc-sum {
+  display: flex; align-items: center; gap: var(--sp-8); min-width: 0;
+  padding: var(--sp-8) var(--sp-12); cursor: pointer; list-style: none;
+  font-size: var(--t-12); color: var(--muted);
+}
+.inc-details > .inc-sum::-webkit-details-marker { display: none; }
+.inc-details > .inc-sum::before {
+  content: ''; flex: 0 0 auto; width: 6px; height: 6px; margin-right: 2px;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg); transition: transform var(--dur-fast) var(--ease-out);
+}
+.inc-details[open] > .inc-sum::before { transform: rotate(45deg); }
+.inc-details > .inc-sum:hover { color: var(--text); }
+.inc-title { font-weight: 600; color: var(--text-strong); white-space: nowrap; }
+.inc-pill {
+  flex: 0 0 auto; padding: 1px var(--sp-8); border-radius: var(--r-full);
+  border: 1px solid var(--border); font-size: var(--t-11); font-weight: 600; color: var(--muted);
+}
+.inc-pill.is-on { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.inc-sum-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inc-body {
+  display: flex; flex-direction: column; gap: var(--sp-12);
+  padding: var(--sp-4) var(--sp-12) var(--sp-12); border-top: 1px solid var(--border-hairline);
+}
+.inc-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-12); padding-top: var(--sp-8); }
+.inc-check { display: flex; align-items: center; gap: var(--sp-4); height: var(--ctl-md); color: var(--text); font-size: var(--t-13); }
+.inc-field { display: flex; flex-direction: column; gap: var(--sp-4); }
+.inc-field-label { font-size: var(--t-11); color: var(--muted); }
+.inc-lookback { display: flex; align-items: center; gap: var(--sp-4); }
+.inc-lookback .inc-lookback-n { width: 84px; }
+.inc-lookback-ids { font-size: var(--t-12); color: var(--muted); }
+.inc-actions { display: flex; align-items: center; gap: var(--sp-8); height: var(--ctl-md); }
+.inc-msg { font-size: var(--t-12); color: var(--muted); }
+.inc-msg.is-error { color: var(--error); }
+.inc-how { margin: 0; max-width: 72ch; font-size: var(--t-12); line-height: var(--lh-body); color: var(--muted); }
+.inc-empty { margin: 0; font-size: var(--t-12); color: var(--text-dim); }
+.inc-log-title { margin: 0 0 var(--sp-4); font-size: var(--t-12); font-weight: 600; color: var(--text-strong); }
+.inc-log-wrap { overflow-x: auto; }
+.inc-log { width: 100%; border-collapse: collapse; font-size: var(--t-12); }
+.inc-log th {
+  padding: var(--sp-4) var(--sp-8); text-align: left; white-space: nowrap;
+  font-size: var(--t-11); font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--border);
+}
+.inc-log td { padding: var(--sp-4) var(--sp-8); border-bottom: 1px solid var(--border-hairline); color: var(--text); vertical-align: top; }
+.inc-log tr:last-child td { border-bottom: 0; }
+.inc-log th:nth-child(n+3):nth-child(-n+5), .inc-log .inc-n { text-align: right; font-family: var(--font-numeric); font-variant-numeric: tabular-nums; }
+.inc-when { white-space: nowrap; color: var(--muted); }
+.inc-mode, .inc-run-how { display: block; }
+.inc-mode { font-weight: 600; }
+.inc-log-row.is-full .inc-mode { color: var(--accent); }
+.inc-run-how { font-size: var(--t-11); color: var(--muted); }
+.inc-mark { font-family: var(--font-mono); font-size: var(--t-11); white-space: nowrap; }
+
+/* ── Drag and drop ── */
+/* One full-window overlay for files dragged in (dndIn.ts). It never takes the
+   pointer, so the element under the drag stays the event target and a map's
+   settings can say "Add boundaries to this map". */
+.dnd-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-24);
+  border: 2px dashed var(--accent-line);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  pointer-events: none;
+  animation: fadeUp var(--dur-menu) var(--ease-out);
+}
+.dnd-overlay[hidden] { display: none; }
+.dnd-overlay.is-zone { background: color-mix(in srgb, var(--bg) 40%, transparent); }
+.dnd-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-8);
+  max-width: 420px;
+  padding: var(--sp-24) var(--sp-32);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+.dnd-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.dnd-title {
+  font-size: var(--t-15);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tr-tight);
+  color: var(--text-strong);
+}
+.dnd-sub { font-size: var(--t-12); line-height: var(--lh-body); color: var(--muted); }
+
+/* The grip that drags a chart out as a PNG (dndOut.ts), on the hovered chart's corner. */
+.dnd-grip {
+  position: fixed;
+  z-index: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ctl-sm);
+  height: var(--ctl-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  color: var(--muted);
+  cursor: grab;
+}
+.dnd-grip[hidden] { display: none; }
+.dnd-grip:hover { color: var(--text); background: var(--surface-2); }
+.dnd-grip:active { cursor: grabbing; }
+
+/* A visual card in flight: dashboard tabs say they take it, the one under it lights up. */
+body.dnd-visual-drag .tab-item[data-key^="analysis:"] { box-shadow: inset 0 0 0 1px var(--accent-line); }
+.tab-item.dnd-target-over { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+#dash-grid.dnd-target-over { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: var(--r-lg); }

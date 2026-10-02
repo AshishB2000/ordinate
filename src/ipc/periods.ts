@@ -20,11 +20,14 @@ import * as metrics from '../analysis/metrics';
 import { sanitizeDashboardFilters } from '../analysis/dashboards';
 import type { MetricAggregation } from '../analysis/metricValue';
 import { formatMetricValue } from '../analysis/metricFormat';
-import { describeCompare, describePeriod, getCalendar, resolvePeriodNow, sanitizeCompare, sanitizePeriod, todayIso } from '../analysis/dateIntel';
+import { daysFromIso, describeCompare, describePeriod, getCalendar, resolvePeriodNow, sanitizeCompare, sanitizePeriod, todayIso } from '../analysis/dateIntel';
+import { bucketStartOf, weekCalOf, weekLabel, weekPos } from '../analysis/retailCalendar';
 import { compareScope } from '../analysis/periodScope';
 import { paramValues, resolveFilterParams } from '../analysis/params';
 import { computeCardMetric } from './dashboards';
-import { resolveMetric } from './metrics';
+import { displayOf, resolveMetric } from './metrics';
+import { fxScope } from './fxQuery';
+import type { FxInfo } from '../analysis/fx';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -75,12 +78,14 @@ export async function compareMetric(
   let value: number | null;
   let previous: number | null;
   const out: CompareResult = { ok: true, label, prior: moved.prior };
+  let metricFx: FxInfo | undefined;
   if (metric) {
     const a = await resolveMetric(projectId, metric.id, { filters, params });
     const b = await resolveMetric(projectId, metric.id, { filters: moved.filters, params });
     if (!a || !b) return { ok: false, error: 'Metric not found' };
     value = finite(a.value);
     previous = finite(b.value);
+    metricFx = a.fx;
     out.display = a.display;
     out.previousDisplay = b.display;
     if (metric.direction) out.direction = metric.direction;
@@ -98,7 +103,8 @@ export async function compareMetric(
   out.delta = delta;
   out.pct = delta !== null && previous !== null && previous !== 0 ? (delta / Math.abs(previous)) * 100 : null;
   if (metric && delta !== null) {
-    out.deltaDisplay = formatMetricValue(Math.abs(delta), metric.format);
+    // The delta is in the same (converted) currency as the figures beside it.
+    out.deltaDisplay = metricFx ? displayOf(Math.abs(delta), metric.format, metricFx, !metrics.isFormulaDefinition(metric.definition)) : formatMetricValue(Math.abs(delta), metric.format);
     // A change in a PERCENT is in points: 13.2% vs 12.0% is "1.2 pts", and a
     // relative change of a ratio ("up 10%") reads as the ratio itself moving.
     if (metric.format.kind === 'percent') {
@@ -119,10 +125,28 @@ export function register(): void {
     return { ok: true, from: r.from, to: r.to, label: describePeriod(spec, getCalendar()), today: todayIso() };
   });
 
-  ipcMain.handle('metric:compare', async (_e, { projectId, card, filters, compare, params }: any = {}) => {
+  // Settings → Formats → Calendar's preview: today's week label under the
+  // workspace calendar (empty for gregorian), its year's length, and the
+  // current fiscal year's dates — all main's, so the preview cannot disagree
+  // with the axes and filters it describes.
+  ipcMain.handle('calendar:today', async () => {
+    const today = todayIso();
+    const day = daysFromIso(today);
+    const year = resolvePeriodNow({ preset: 'this_year' });
+    const wc = weekCalOf(getCalendar());
+    if (day === null || !year) return { ok: false, error: 'No clock' };
+    return {
+      ok: true, today, from: year.from, to: year.to,
+      label: wc ? weekLabel(bucketStartOf(day, 'week', wc), 'week', wc) : '',
+      weeks: wc ? weekPos(day, wc).weeks : null,
+    };
+  });
+
+  ipcMain.handle('metric:compare', async (_e, { projectId, card, filters, compare, params, currency }: any = {}) => {
     try {
       if (typeof projectId !== 'string' || !UUID_RE.test(projectId)) return { ok: false, error: 'Invalid project' };
-      return await compareMetric(projectId, card && typeof card === 'object' ? card : {}, filters, compare, params);
+      // A dashboard's own currency: both figures and the delta convert to it, as the headline does.
+      return await fxScope(currency, () => compareMetric(projectId, card && typeof card === 'object' ? card : {}, filters, compare, params));
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compare' };
     }

@@ -177,7 +177,7 @@ function createPivotBuilder(host: HTMLElement, opts: PivotBuilderOpts): PivotBui
       PIVOT_GRAINS.forEach((it) => {
         const o = document.createElement('option');
         o.value = it.value;
-        o.textContent = it.label;
+        o.textContent = it.value === 'month' ? calMonthWord() : it.label;
         g.appendChild(o);
       });
       g.value = chip.grain || '';

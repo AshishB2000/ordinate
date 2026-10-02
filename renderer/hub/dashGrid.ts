@@ -80,6 +80,7 @@ function openEditorWith(rec: any, title: string): void {
   if (nameEl) nameEl.textContent = title;
   dashHistReset(); // this state is the floor — nothing before it is undoable
   dashSelOnOpen(); // dashSelection.ts — a navigation's carried selection, or none
+  svOnOpen(); // savedViews.ts — the view asked for, else the default view
   renderDashFilterBar();
   renderDashPages();
   renderDashGrid();
@@ -694,7 +695,7 @@ async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void>
   const entry: any = {
     id: card.id,
     drill,
-    chartOverrides: { ['v:' + type]: cmtWithPins(visual.overrides, 'card', card.id) }, // COMMENT PIN HOOK
+    chartOverrides: { ['v:' + type]: fxOverrides(cmtWithPins(visual.overrides, 'card', card.id), res.fx) }, // COMMENT PIN HOOK; money in the target (fxUi.ts)
     // On a PUBLISHED card this is a no-op: the snapshot is read-only, and
     // writing back would edit a source visual this card no longer follows —
     // the styling would silently move somewhere else's chart and not this one.
@@ -719,6 +720,7 @@ async function renderVisualCardInto(card: any, body: HTMLElement): Promise<void>
   });
   paintOverlayCaption(area, res, type);
   paintParamErrors(body, res.paramErrors);
+  fxPaintTileNote(body, res.fx); // rows with no rate, the sample label (fxUi.ts)
   // Cross-filter first: when it is on it owns the plain click (it writes), and
   // drilling stays available through the ⋯ menu. Otherwise the click drills.
   // Drilling is a READ, so it is offered on a published snapshot too.

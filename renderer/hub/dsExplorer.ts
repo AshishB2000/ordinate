@@ -198,6 +198,8 @@ function renderExplorerIdent(d: any): void {
     host.hidden = !picker;
   }
 
+  if (typeof incPaint === 'function') void incPaint(d); // incremental.ts — the Incremental refresh panel
+
   const btn = dsEl('ds-explorer-refresh') as HTMLButtonElement | null;
   if (btn) {
     btn.hidden = !(d && d.originKind);

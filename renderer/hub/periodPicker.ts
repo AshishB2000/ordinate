@@ -50,22 +50,30 @@ const PP_GROUPS: Array<{ title: string; items: any[] }> = [
   },
 ];
 
+/** A week calendar (retail / ISO) — its "months" are periods and a retail year is always fiscal. */
+function ppWeekCal(): string {
+  const t = wsFormats && wsFormats.calendarType;
+  return t && t !== 'gregorian' ? String(t) : '';
+}
+
 function ppIsFiscal(): boolean {
-  return Number(wsFormats && wsFormats.fiscalYearStart) > 1;
+  const wc = ppWeekCal();
+  return wc ? wc !== 'iso' : Number(wsFormats && wsFormats.fiscalYearStart) > 1;
 }
 
 /** "Last 30 days", "This fiscal year" — the mirror of dateIntel.describePeriod. */
 function periodLabel(spec: any): string {
   if (!spec || typeof spec !== 'object') return '';
   const fiscal = ppIsFiscal() ? 'fiscal ' : '';
+  const month = ppWeekCal() ? 'period' : 'month';
   const n = Math.max(1, Math.floor(Number(spec.n) || 1));
   switch (spec.preset) {
     case 'today': return 'Today';
     case 'yesterday': return 'Yesterday';
     case 'this_week': return 'This week';
     case 'last_week': return 'Last week';
-    case 'this_month': return 'This month';
-    case 'last_month': return 'Last month';
+    case 'this_month': return 'This ' + month;
+    case 'last_month': return 'Last ' + month;
     case 'this_quarter': return 'This ' + fiscal + 'quarter';
     case 'last_quarter': return 'Last ' + fiscal + 'quarter';
     case 'this_year': return 'This ' + fiscal + 'year';
@@ -79,7 +87,7 @@ function periodLabel(spec: any): string {
     default: {
       const u = PP_UNITS.find((x) => x.preset === spec.preset);
       if (!u) return 'Custom range';
-      const word = n === 1 ? u.one : u.many;
+      const word = spec.preset === 'last_n_months' ? month + (n === 1 ? '' : 's') : n === 1 ? u.one : u.many;
       const pre = spec.preset === 'last_n_quarters' || spec.preset === 'last_n_years' ? fiscal : '';
       return 'Last ' + n + ' ' + pre + word;
     }

@@ -27,6 +27,7 @@ import * as combine from './combine';
 import { parseFile, sourceKindForPath } from './fileImport';
 import { runConnection } from '../connectors/connectionRun';
 import { refreshConnectionInto } from '../ipc/connections';
+import { refreshIncremental } from './incrementalRefresh';
 import { runForDataset } from '../engine/sqlDatasets';
 import { scanDataset } from '../app/privacyStore';
 
@@ -94,11 +95,36 @@ export async function refreshDataset(
     return fail(`"${meta.name}" is nested more than ${MAX_COMBINE_DEPTH} combines deep, so it was left unchanged.`);
   }
   walk.visited.add(id);
+  return serialized(projectId + '/' + id, () => refreshLocked(projectId, id, meta.name, origin, walk));
+}
 
+/**
+ * One refresh per dataset at a time. Two at once (a manual ↻ during a
+ * scheduled or folder-watch run) would each merge against the table as THEY
+ * read it, and the later write would bring back what the earlier one changed —
+ * an incremental merge over a stale base undoing a full refresh. The cycle
+ * guard above runs first, so a combine tree never waits on itself.
+ */
+const inFlight = new Map<string, Promise<unknown>>();
+function serialized<T>(key: string, run: () => Promise<T>): Promise<T> {
+  const prev = inFlight.get(key) || Promise.resolve();
+  const next = prev.then(run, run);
+  inFlight.set(key, next);
+  void next.finally(() => { if (inFlight.get(key) === next) inFlight.delete(key); }).catch(() => undefined);
+  return next;
+}
+
+async function refreshLocked(
+  projectId: string,
+  id: string,
+  name: string,
+  origin: DatasetOrigin,
+  walk: Walk,
+): Promise<RefreshResult> {
   const warnings: string[] = [];
   let result: RefreshResult;
   try {
-    result = await runOrigin(projectId, id, meta.name, origin, walk, warnings);
+    result = await runOrigin(projectId, id, name, origin, walk, warnings);
   } catch (err: any) {
     // Belt and braces: every branch already returns a typed error, so reaching
     // here means an unexpected throw — which must still not touch the table.
@@ -134,6 +160,10 @@ async function runOrigin(
     case 'url':
       return refreshFromUrl(projectId, id, origin, warnings);
     case 'connection': {
+      // Opted in to incremental refresh: only rows past the high-water mark
+      // (src/data/incrementalRefresh.ts). Null means it has not.
+      const incremental = await refreshIncremental(projectId, id, origin, warnings);
+      if (incremental) return incremental;
       // Delegated whole: the secret is resolved in main by the connections
       // layer, and the connection's own lastStatus/lastRefreshedAt still update.
       const res = await refreshConnectionInto(projectId, origin.connId, id, warnings);

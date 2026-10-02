@@ -202,6 +202,7 @@ function makeVisualCard(v: any): HTMLElement {
   const card = document.createElement('div');
   card.className = 'viz-card' + (v && v.favorite === true ? ' viz-card--fav' : '');
   card.dataset.recKind = 'visual'; card.dataset.recId = id; // ⌘-click → background tab (tabStrip.ts)
+  card.draggable = true; // drag onto a dashboard tab to add it (dndOut.ts)
 
   // The whole card is ONE button, so a card is a single Tab stop. The star and
   // the ⋯ menu are siblings of it (nested buttons are invalid HTML) positioned

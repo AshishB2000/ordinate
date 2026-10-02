@@ -22,6 +22,7 @@ import type { FilterStep } from '../data/transforms';
 import type { DateGrain } from './categoryKey';
 import { daysFromIso, isoFromDays, resolvePeriodNow, shiftRange, todayIso } from './dateIntel';
 import type { CompareMode, DateRange } from './dateIntel';
+import { activeWeekCal } from './retailCalendar';
 
 export interface ScopeColumn {
   name: string;
@@ -184,7 +185,8 @@ export function overlayCaption(
   if (pairs === 0 || pri === 0) return null;
   const pct = ((cur - pri) / Math.abs(pri)) * 100;
   const name = measure ? measure.charAt(0).toUpperCase() + measure.slice(1) : 'The total';
-  const noun = grain === 'year' ? 'the previous year' : `the same ${GRAIN_NOUN[grain]} last year`;
+  const nouns = grain === 'month' && activeWeekCal() ? 'periods' : GRAIN_NOUN[grain];
+  const noun = grain === 'year' ? 'the previous year' : `the same ${nouns} last year`;
   const r = Math.round(Math.abs(pct));
   if (r === 0) return { caption: `${name} is flat vs ${noun}`, pct };
   return { caption: `${name} is ${pct > 0 ? 'up' : 'down'} ${r}% vs ${noun}`, pct };

@@ -36,7 +36,9 @@ import { resolveMetric } from '../ipc/metrics';
 import { computeStatsTile } from '../ipc/stats';
 import { computeSummary } from '../ipc/summary';
 import { statsTitle } from '../analysis/stats/present';
-import { planCombos, parseKey, MAX_OPTIONS_PER_CONTROL } from './combos';
+import { planCombos, parseKey, comboKey, MAX_OPTIONS_PER_CONTROL } from './combos';
+import { viewControlValue, viewParamValue, viewPageIndex } from '../analysis/savedViews'; // r10:views
+import type { SavedView } from '../analysis/savedViews';
 import type { ComboPlan, ControlDomain } from './combos';
 import { sanitizeRadiusValue } from '../analysis/geo/radius';
 
@@ -84,6 +86,42 @@ export interface PublishedDashboard {
   geoLevels: string[];
   /** Custom project boundaries the map tiles draw, by id. */
   boundaryIds: string[];
+  /** Saved views the page offers as a dropdown: a pick per control, a sheet. */
+  views: PublishedView[];
+}
+
+export interface PublishedView { name: string; sheet: number; picks: number[]; default: boolean }
+
+/**
+ * A saved view as a published page can show it: the option each control lands
+ * on, and the sheet. A view whose combination the site does not carry (a
+ * "one filter at a time" site, two filters moved) is left out rather than
+ * shown on the wrong figures.
+ */
+function publishedViews(a: analysis.Analysis, specs: ControlSpec[], plan: ComboPlan): PublishedView[] {
+  const out: PublishedView[] = [];
+  for (const v of a.views || []) {
+    const picks = specs.map((s, i) => viewPick(a, v, s, plan.domains[i]));
+    // A pick the page does not carry (-1) leaves the view out: showing the
+    // default figures under the view's name would be a wrong answer, not a near one.
+    if (picks.some((p) => p < 0) || !plan.keys.includes(comboKey(picks))) continue;
+    out.push({ name: v.name, sheet: viewPageIndex(v, a.sheets), picks, default: v.id === a.defaultViewId });
+  }
+  return out;
+}
+
+function viewPick(a: analysis.Analysis, view: SavedView, s: ControlSpec, domain: ControlDomain): number {
+  let label: string | undefined;
+  if (s.control.kind === 'parameter') {
+    const p = (a.parameters || []).find((x) => x.id === s.control.paramId);
+    const v = p ? viewParamValue(view, p) : null;
+    label = Array.isArray(v) ? String(v[0]) : String(v);
+  } else {
+    const want = JSON.stringify(viewControlValue(view, s.card));
+    const at = s.states.findIndex((st) => JSON.stringify(st ?? null) === want);
+    label = at >= 0 ? s.domain.options[at] : undefined;
+  }
+  return label === undefined ? -1 : domain.options.indexOf(label);
 }
 
 export interface BuildProgress {
@@ -444,5 +482,6 @@ export async function buildDashboard(
     sheets,
     geoLevels: [...geoLevels],
     boundaryIds: [...boundaryIds],
+    views: publishedViews(a, specs, plan),
   };
 }

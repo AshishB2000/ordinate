@@ -96,6 +96,9 @@ const SMOKES = [
   // Round 8: small multiples, pipelines, event annotations, the summary card
   // and search inside the data, in one launch (sections in scripts/r8*.ts).
   'smoke-round8',
+  // Round 10: saved views, retail calendars, multi-currency, incremental
+  // refresh and drag and drop, in one launch (sections in scripts/r10*.ts).
+  'smoke-round10',
 ];
 
 const results: { name: string; code: number }[] = [];

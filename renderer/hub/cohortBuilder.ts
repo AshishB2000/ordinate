@@ -114,7 +114,7 @@ function createEngineBuilder(host: HTMLElement, opts: { onChange: () => void; da
   const cEntity = select('eb-c-entity', 'Cohort entity column', (v) => { cohort.entity = v; });
   const cDate = select('eb-c-date', 'Cohort event date column', (v) => { cohort.date = v; });
   const cValue = select('eb-c-value', 'Cohort value column', (v) => { cohort.value = v; if (!v) cohort.show = 'retention'; syncCohort(); });
-  const cGrain = segmented('Cohort grain', [['week', 'Week'], ['month', 'Month'], ['quarter', 'Quarter']],
+  const cGrain = segmented('Cohort grain', [['week', 'Week'], ['month', calMonthWord()], ['quarter', 'Quarter']],
     () => cohort.grain, (v) => { cohort.grain = v; });
   const cShow = segmented('Cohort figure', [['retention', 'Retention %'], ['value', 'Cumulative value']],
     () => cohort.show, (v) => { cohort.show = v; });

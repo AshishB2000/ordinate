@@ -930,3 +930,43 @@ scripts/**/*.js
 /scripts/test-dataSearchResident.js
 /scripts/bench-dataSearch.js
 /scripts/r8Search.js
+
+# r10:views
+/src/analysis/savedViews.js
+/src/app/deepLink.js
+/src/ipc/views.js
+/preload/hubViewsPreload.js
+/renderer/hub/savedViews.js
+/scripts/test-savedViews.js
+/scripts/r10Views.js
+# Retail and fiscal calendars (round 10) — emitted siblings.
+/src/analysis/civilDays.js
+/src/analysis/retailCalendar.js
+/src/engine/weekCalSql.js
+/renderer/hub/settingsCalendar.js
+/scripts/test-retailCalendar.js
+/scripts/r10Calendars.js
+
+# r10:incremental
+/src/data/incremental.js
+/src/data/incrementalRefresh.js
+/src/engine/incrementalDuck.js
+/src/connectors/incrementalSql.js
+/src/ipc/incremental.js
+/preload/hubIncrementalPreload.js
+/renderer/hub/incremental.js
+/scripts/test-incrementalMerge.js
+/scripts/test-incrementalRefresh.js
+/scripts/r10Incremental.js
+
+# r10:dragdrop
+/src/data/sniff.js
+/src/app/dropImport.js
+/src/app/dragOut.js
+/src/ipc/dragDrop.js
+/preload/hubDropPreload.js
+/renderer/hub/dndIn.js
+/renderer/hub/dndOut.js
+/scripts/r10DragDrop.js
+/scripts/test-sniff.js
+/scripts/test-dragOut.js

@@ -9,7 +9,9 @@
 // triangle is the honest shape of "not happened yet".
 //
 // The period grammar is the workspace calendar's (dateIntel): weeks start on
-// `weekStart`, quarters on the fiscal-year start month. A date cell is read by
+// `weekStart`, quarters on the fiscal-year start month — or, under a week
+// calendar (retailCalendar), its weeks, periods (the "month" grain) and
+// quarters, labelled FY24 P03 W2 / FY24 P03 / FY24 Q1. A date cell is read by
 // `dateIntel.periodDay` — the same two shapes a period filter reads, whose SQL
 // twin (`periodSql.sqlPeriodDate`) is already pinned by a differential test.
 //
@@ -25,6 +27,7 @@ import { applyPipeline } from '../data/transforms';
 import { civilFromDays } from './categoryKey';
 import { getCalendar, isoFromDays, periodDay } from './dateIntel';
 import type { CalendarPrefs } from './dateIntel';
+import { ordinalOf, ordinalStart, unitOfGrain, weekCalOf, weekLabel } from './retailCalendar';
 import { formatCompact } from '../app/format';
 
 export type CohortGrain = 'week' | 'month' | 'quarter';
@@ -112,6 +115,8 @@ export function cohortColumns(enc: CohortEncoding): string[] {
 
 /** An epoch day → its period's ordinal. Consecutive periods differ by exactly 1. */
 export function periodOrdinal(day: number, grain: CohortGrain, cal: CalendarPrefs): number {
+  const wc = weekCalOf(cal);
+  if (wc) return ordinalOf(day, unitOfGrain(grain)!, wc);
   // 1970-01-01 was a Thursday, so (day + 4) mod 7 is the Sunday-based weekday.
   if (grain === 'week') return Math.floor((day + 4 - cal.weekStart) / 7);
   const c = civilFromDays(day);
@@ -123,6 +128,11 @@ const pad = (n: number, w: number): string => String(n).padStart(w, '0');
 
 /** A period ordinal → the cohort's row label. */
 export function cohortLabel(ord: number, grain: CohortGrain, cal: CalendarPrefs): string {
+  const wc = weekCalOf(cal);
+  if (wc) {
+    const unit = unitOfGrain(grain)!;
+    return weekLabel(ordinalStart(ord, unit, wc), unit, wc);
+  }
   if (grain === 'week') return isoFromDays(ord * 7 - 4 + cal.weekStart); // the week's first day
   const month = grain === 'month' ? ord : ord * 3 + cal.fiscalYearStart - 1;
   const y = Math.floor(month / 12);
@@ -244,6 +254,7 @@ export function buildCohort(
 export function foldCohort(enc: CohortEncoding, g: CohortGroups, cal: CalendarPrefs = getCalendar()): CohortGrid {
   const out = emptyGrid(enc, '');
   out.excluded = g.excluded;
+  if (enc.grain === 'month' && weekCalOf(cal)) out.periodNoun = 'Period';
   out.valueName = enc.show === 'value' && enc.value ? `${enc.value} per member` : '';
   const byCohort = new Map<number, Map<number, CohortCell>>();
   for (const cell of g.cells) {

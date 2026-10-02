@@ -42,6 +42,8 @@ import { formatValue } from '../app/format';
 import { CALC_KIND_NAMES, CALC_WINDOW_DEFAULT, calcParts, calcSequence, isMovingKind, isPercentKind, sanitizeTableCalc } from '../analysis/tableCalc';
 import type { TableCalc } from '../analysis/tableCalc';
 import { shiftBucketLabel } from '../analysis/dateIntel';
+import { bucketRange } from '../analysis/driverScope';
+import { activeWeekCal } from '../analysis/retailCalendar';
 import type { DateGrain } from '../analysis/categoryKey';
 import { computeCardMetric } from './dashboards';
 import { resolveMetric } from './metrics';
@@ -119,8 +121,9 @@ async function periodSeries(
     { category: dateCol, values: [measure], grain: 'month' }, scoped, { params: s.params });
   if (!reply.ok || !reply.data.series[0]) return null;
   // Real months only: rows with no date form a blank bucket, which is not a period.
+  // Under a week calendar the "months" are its periods (FY24 P03).
   const all = reply.data.labels.map(String);
-  const keep = all.map((_, i) => i).filter((i) => /^\d{4}-\d{2}$/.test(all[i]));
+  const keep = all.map((_, i) => i).filter((i) => (activeWeekCal() ? bucketRange(all[i], 'month') !== null : /^\d{4}-\d{2}$/.test(all[i])));
   const labels = keep.map((i) => all[i]);
   if (!formula || !s.metric) {
     const values = reply.data.series[0].values;
@@ -129,9 +132,12 @@ async function periodSeries(
   const months = labels.slice(-FORMULA_PERIODS);
   const values: (number | null)[] = [];
   for (const m of months) {
-    const r = await resolveMetric(s.projectId, s.metric.id, {
-      filters: filters.concat([{ type: 'filter', column: dateCol, op: 'contains', value: m }]), params: s.params,
-    });
+    // A period of a week calendar is not a substring of its dates: filter on its days.
+    const days = activeWeekCal() ? bucketRange(m, 'month') : null;
+    const step: FilterStep = days
+      ? { type: 'filter', column: dateCol, op: 'period', period: { preset: 'custom', from: days.from, to: days.to } }
+      : { type: 'filter', column: dateCol, op: 'contains', value: m };
+    const r = await resolveMetric(s.projectId, s.metric.id, { filters: filters.concat([step]), params: s.params });
     values.push(r ? finite(r.value) : null);
   }
   return { labels: months, values, grain: 'month' };

@@ -41,7 +41,9 @@ import type { InputBlock } from './inputTable/columns';
 import {
   datasetsDir, datasetFilePath, parquetPath, sourceParquetPath, writeJsonAtomic, sanitizeAutoRefresh,
 } from './datasetRecord';
-export { markRefresh, setAutoRefresh, writeQuality } from './datasetRecord';
+export { markRefresh, setAutoRefresh, writeQuality, writeIncremental } from './datasetRecord';
+import { sanitizeIncremental } from './incremental';
+import type { IncrementalSettings } from './incremental';
 // Data snapshots: the refresh hook (keep the table being replaced) and the
 // as-of hooks (read a dataset as it was) — each one line at its call site.
 import { keepAround, removeAll as removeSnapshots } from './snapshots';
@@ -55,7 +57,7 @@ export interface Dataset {
   id: string;
   projectId: string;
   name: string;
-  sourceKind: 'csv' | 'json' | 'paste' | 'xlsx' | 'postgres' | 'url' | 'combined' | 'capture' | 'sql' | 'input';
+  sourceKind: 'csv' | 'json' | 'paste' | 'xlsx' | 'postgres' | 'url' | 'combined' | 'capture' | 'sql' | 'input' | 'parquet';
   columns: ParsedColumn[];
   rows: (string | number | null)[][];
   rowCount: number;
@@ -114,6 +116,8 @@ export interface Dataset {
   quality?: DatasetQuality;
   /** An input table's typed-but-refused cells (src/data/inputTable/columns.ts). */
   input?: InputBlock;
+  /** Incremental refresh settings, mark and log (src/data/incremental.ts). Written via writeIncremental. */
+  incremental?: IncrementalSettings;
 }
 
 export interface AutoRefresh {
@@ -135,7 +139,7 @@ export interface AutoRefresh {
 
 export type AutoRefreshEvery = 'hourly' | 'daily' | 'weekly';
 
-const SOURCE_KINDS: ReadonlySet<string> = new Set(['csv', 'json', 'paste', 'xlsx', 'postgres', 'url', 'combined', 'capture', 'sql', 'input']);
+const SOURCE_KINDS: ReadonlySet<string> = new Set(['csv', 'json', 'paste', 'xlsx', 'postgres', 'url', 'combined', 'capture', 'sql', 'input', 'parquet']);
 
 // Coerce an untrusted `capture` link (from a stored file OR a save/recapture IPC
 // payload) into the stored shape, or undefined if there is nothing usable. Accepts
@@ -329,6 +333,8 @@ function normalize(data: any, projectId: string): Dataset {
   if (quality) ds.quality = quality;
   const input = kind === 'input' ? sanitizeInputBlock(data.input) : undefined;
   if (input) ds.input = input;
+  const incremental = sanitizeIncremental(data.incremental, origin?.kind); // connection origins only
+  if (incremental) ds.incremental = incremental;
   return ds;
 }
 

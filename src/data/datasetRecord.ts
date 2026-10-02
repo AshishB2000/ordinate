@@ -20,6 +20,8 @@ import { sanitizeAnomalyKeys } from '../analysis/anomalyWatch';
 import { sanitizeQuality } from '../analysis/qualityRules';
 import type { DatasetQuality } from '../analysis/qualityRules';
 import type { AutoRefresh, AutoRefreshEvery } from './datasets';
+import { sanitizeIncremental } from './incremental';
+import type { IncrementalSettings } from './incremental';
 
 let projectsBase: string | null = null;
 
@@ -156,6 +158,27 @@ export async function setAutoRefresh(
   }
 }
 
+/**
+ * Read-modify-write the record's `incremental` block (src/data/incremental.ts)
+ * — METADATA ONLY, never the table, never `updatedAt`. Serialized per record
+ * on the same chain as quality writes. `mutate` gets the sanitized block;
+ * undefined removes it. Resolves with what was written, or false.
+ */
+export function writeIncremental(
+  projectId: string,
+  id: string,
+  mutate: (current: IncrementalSettings | undefined) => IncrementalSettings | undefined,
+): Promise<IncrementalSettings | undefined | false> {
+  if (!isValidId(projectId) || !isValidId(id)) return Promise.resolve(false);
+  return serialized(datasetFilePath(projectId, id), (raw) => {
+    const kind = sanitizeOrigin(raw.origin)?.kind;
+    const next = sanitizeIncremental(mutate(sanitizeIncremental(raw.incremental, kind)), kind);
+    if (next) raw.incremental = next;
+    else delete raw.incremental;
+    return next;
+  });
+}
+
 // Quality writes to one record are serialized: a run finishing while a rule is
 // being saved must not write back the rule list it read before the save.
 // ponytail: in-process chain per record; the other metadata writers above are
@@ -176,14 +199,21 @@ export function writeQuality(
   mutate: (current: DatasetQuality | undefined) => DatasetQuality | undefined,
 ): Promise<DatasetQuality | undefined | false> {
   if (!isValidId(projectId) || !isValidId(id)) return Promise.resolve(false);
-  const file = datasetFilePath(projectId, id);
-  const run = async (): Promise<DatasetQuality | undefined | false> => {
+  return serialized(datasetFilePath(projectId, id), (raw) => {
+    const next = sanitizeQuality(mutate(sanitizeQuality(raw.quality)));
+    if (next) raw.quality = next;
+    else delete raw.quality;
+    return next;
+  });
+}
+
+/** Read the raw record, let `apply` edit it, write it back — one at a time per file. */
+function serialized<T>(file: string, apply: (raw: Record<string, unknown>) => T): Promise<T | false> {
+  const run = async (): Promise<T | false> => {
     try {
       const raw = JSON.parse(await fs.promises.readFile(file, 'utf8'));
       if (!raw || typeof raw !== 'object') return false;
-      const next = sanitizeQuality(mutate(sanitizeQuality(raw.quality)));
-      if (next) raw.quality = next;
-      else delete raw.quality;
+      const next = apply(raw);
       await writeJsonAtomic(file, raw);
       return next;
     } catch (_) {

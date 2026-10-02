@@ -32,6 +32,9 @@ import { ok, finish } from './selfcheck';
 const MON: CalendarPrefs = { weekStart: 1, fiscalYearStart: 1 };
 const SUN: CalendarPrefs = { weekStart: 0, fiscalYearStart: 1 };
 const APRIL: CalendarPrefs = { weekStart: 1, fiscalYearStart: 4 };
+// Week calendars: the fixture's dates cross NRF fiscal 2023's 53rd week (Jan 28 – Feb 3 2024).
+const RETAIL: CalendarPrefs = { weekStart: 1, fiscalYearStart: 1, calendarType: '454', yearEnd: 'nearest' };
+const ISO_WEEKS: CalendarPrefs = { weekStart: 1, fiscalYearStart: 1, calendarType: 'iso', yearEnd: 'nearest' };
 
 const COLS: ParsedColumn[] = [
   { name: 'user', type: 'text' }, { name: 'day', type: 'date' },
@@ -224,6 +227,10 @@ function testDifferential(): void {
   }
   diff('diff/week/Sunday start', f, enc({ grain: 'week' }), SUN);
   diff('diff/quarter/fiscal April', f, enc({ grain: 'quarter', show: 'value', value: 'amount' }), APRIL);
+  for (const grain of ['week', 'month', 'quarter'] as const) {
+    diff(`diff/${grain}/retail 4-5-4`, f, enc({ grain, show: 'value', value: 'amount' }), RETAIL);
+    diff(`diff/${grain}/ISO week-year`, f, enc({ grain }), ISO_WEEKS);
+  }
   diff('diff/filtered', f, enc(), MON, [{ type: 'filter', column: 'plan', op: '=', value: 'x' }]);
   diff('diff/filtered-to-nothing', f, enc(), MON, [{ type: 'filter', column: 'plan', op: '=', value: 'none' }]);
   diff('diff/empty-table', fixture(COLS, []), enc());

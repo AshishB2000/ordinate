@@ -120,6 +120,13 @@ function encMapMount(root: HTMLElement, geoSel: HTMLSelectElement | null, onChan
     if (select) geoSel.value = select;
     show();
   };
+  // A GeoJSON dropped on these rows (dndIn.ts) lands here once main stored it.
+  for (const zone of [geoSel.closest('.viz-build-row') as HTMLElement, box]) {
+    zone.dataset.dropZone = 'boundaries';
+    zone.addEventListener('ordinate:boundaries-added', (e) => {
+      void fillBoundaries('custom:' + (e as CustomEvent).detail.id).then(() => { last = geoSel.value; onChange(); });
+    });
+  }
   geoSel.addEventListener('change', async () => {
     if (geoSel.value === '__import') {
       geoSel.value = last;

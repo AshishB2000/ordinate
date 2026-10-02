@@ -227,7 +227,7 @@ async function rbPreview(): Promise<void> {
   let rp: any = null;
   try {
     const one = { ...rbReport, pages: [{ ...page, include: true }] };
-    const built = await buildReportPages(rbContext(one));
+    const built = await svReportPages(rbContext(one));
     rp = built[0] || null;
   } catch (e) {
     console.error('[report] preview failed', e);
@@ -283,6 +283,7 @@ function rbLoadSettings(): void {
   set('rp-set-paper', (rbReport.paper && rbReport.paper.size) || 'letter');
   set('rp-set-orient', (rbReport.paper && rbReport.paper.orientation) || 'portrait');
   check('rp-set-filters', rbReport.includeFilters !== false);
+  svFillReportViews(rbSelect('rp-set-view'), rbAnalysis, rbReport.viewId || ''); // savedViews.ts
   check('rp-set-narrative', rbReport.narrative === true);
   check('rp-set-discussion', rbReport.discussion === true);
   const sch = rbReport.schedule || { cadence: 'off', at: '09:00', folder: '' };
@@ -315,6 +316,7 @@ function rbReadSettings(): void {
   rbReport.cover = { title: val('rp-set-title').trim() || rbReport.name, subtitle: val('rp-set-subtitle').trim(), logo: on('rp-set-logo') };
   rbReport.paper = { size: val('rp-set-paper') || 'letter', orientation: val('rp-set-orient') || 'portrait' };
   rbReport.includeFilters = on('rp-set-filters');
+  rbReport.viewId = val('rp-set-view');
   rbReport.narrative = on('rp-set-narrative');
   rbReport.discussion = on('rp-set-discussion');
   const cadence = val('rp-set-cadence') || 'off';
@@ -417,7 +419,7 @@ async function rbSave(): Promise<boolean> {
     name: rbReport.name, format: rbReport.format, pages: rbReport.pages,
     cover: rbReport.cover, paper: rbReport.paper,
     includeFilters: rbReport.includeFilters, narrative: rbReport.narrative, discussion: rbReport.discussion,
-    schedule: rbReport.schedule,
+    schedule: rbReport.schedule, viewId: rbReport.viewId || '',
   });
   if (!res || res.ok === false) { showToast((res && res.error) || 'Could not save'); return false; }
   // Take main's clamped copy back: the record on disk is the sanitized one, and
@@ -450,7 +452,7 @@ async function rbGenerate(): Promise<void> {
   let failed = '';
   const out = await rjRun('report', `Report · ${report.name || 'Untitled'}`, projectId, async (step) => {
     await step(0.05, 'Laying out the pages');
-    const pages = await buildReportPages(ctx);
+    const pages = await svReportPages(ctx);
     if (!pages.length) { failed = 'Every page is excluded — nothing to generate'; return null; }
     await step(0.6, `Writing ${pages.length} page${pages.length === 1 ? '' : 's'}`);
     const { base64, ext } = await reportBytes(pages, report);
@@ -498,7 +500,7 @@ async function reportsRunDue(nowMs?: number): Promise<number> {
       // "Report ready" notification (notifyFile) is the one the user gets.
       const out = await rjRun('report', `Scheduled report · ${report.name || 'Untitled'}`, d.projectId, async (step) => {
         await step(0.05, 'Laying out the pages');
-        const pages = await buildReportPages({
+        const pages = await svReportPages({
           projectId: d.projectId, analysis,
           filters: Array.isArray(analysis.filters) ? analysis.filters : [],
           report,
@@ -598,7 +600,7 @@ function initReportBuilder(): void {
   // Settings: every control writes the record and repaints. `change` rather
   // than `input` on the text fields keeps the preview off the keystroke path.
   const SETTINGS = ['rp-set-name', 'rp-set-format', 'rp-set-title', 'rp-set-subtitle', 'rp-set-logo',
-    'rp-set-paper', 'rp-set-orient', 'rp-set-filters', 'rp-set-narrative', 'rp-set-discussion', 'rp-set-cadence', 'rp-set-at'];
+    'rp-set-paper', 'rp-set-orient', 'rp-set-filters', 'rp-set-view', 'rp-set-narrative', 'rp-set-discussion', 'rp-set-cadence', 'rp-set-at'];
   for (const id of SETTINGS) {
     const el = rbInput(id) || rbSelect(id);
     if (!el) continue;

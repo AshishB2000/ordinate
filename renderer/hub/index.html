@@ -1236,6 +1236,10 @@
           <!-- Week 13 — capture provenance: thumbnail + view-original + recapture. -->
           <div class="ds-cap-strip" id="ds-cap-strip" hidden></div>
 
+          <!-- r10:incremental — a connection or folder dataset's incremental
+               refresh: settings, Full refresh now, the refresh log (incremental.ts). -->
+          <div class="inc-panel" id="inc-panel" hidden></div>
+
           <!-- Sensitivity proposals from import or refresh, waiting for the
                user — never applied until they choose (privacyReview.ts). -->
           <div class="pv-banner" id="pv-review-banner" role="status" hidden></div>
@@ -1752,6 +1756,9 @@
                 </select></label>
             </div>
             <p class="rb-note" id="rp-paper-note" hidden>A deck is always 16:9 — paper settings don't apply.</p>
+            <!-- r10:views — print the dashboard as one of its saved views, or once per view. -->
+            <label class="rb-field"><span class="rb-field-label">Saved view</span>
+              <select class="rb-input" id="rp-set-view"><option value="">As saved — no view</option></select></label>
 
             <div class="rb-pane-head"><span class="rb-pane-h">Cover</span></div>
             <label class="rb-field"><span class="rb-field-label">Title</span>
@@ -2093,6 +2100,8 @@
                hosts: analyses and published dashboards share this editor. -->
           <span class="dash-fresh" id="dash-fresh" hidden></span>
           <button class="btn btn-sm" type="button" id="dash-refresh-data" hidden><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-refresh"/></svg><span>Refresh data</span></button>
+          <!-- r10:views — saved views (savedViews.ts). Not dash-edit-only: a view is a reader's state. -->
+          <button class="btn btn-sm dash-views-btn" type="button" id="dash-views-btn" aria-haspopup="menu" title="Saved views"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-layers"/></svg><span>Views</span><span class="dash-views-name" id="dash-views-name" hidden></span></button>
           <span class="dash-head-spacer"></span>
           <div class="dash-head-zone dash-head-zone--add">
             <button class="btn btn-sm dash-edit-only" type="button" id="dash-add-visual"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-plus"/></svg><span>Visual</span></button>
@@ -3293,6 +3302,7 @@
 <script src="filterValues.js"></script>
 <script src="periodPicker.js"></script>
 <script src="brand.js"></script>
+<script src="settingsCalendar.js"></script>
 <script src="settingsFormats.js"></script>
 <script src="filterDialog.js"></script>
 <!-- The one calculated-field editor, opened by prepare.js, authoringRail.js and
@@ -3730,6 +3740,26 @@
      column = value filter (dataSearch.ts). After palette.js, filterTypeApply.js
      and the dataset explorer it calls into. -->
 <script src="dataSearch.js"></script>
+<!-- r10:views -->
+<!-- Saved views: the dashboard header's Views menu, opening on a view (default,
+     ⌘K, ordinate:// links) and reports per view. openEditorWith (dashGrid.js),
+     paletteRows.js and reportBuilder.js call into it at run time. -->
+<script src="savedViews.js"></script>
+<!-- r10:currency -->
+<!-- Multi-currency: the display currency, a dashboard's own target and its
+     reads (snapshotAsOf.js calls fxDashRead), tile notes, the column profile's
+     Currency section (fxUi.js), and Settings → General → Currency
+     (fxSettings.js, after settingsFormats.js whose row builders it uses). -->
+<script src="fxUi.js"></script>
+<script src="fxSettings.js"></script>
+<!-- r10:incremental -->
+<!-- The dataset page's Incremental refresh panel; dsExplorer calls incPaint at run time. -->
+<script src="incremental.js"></script>
+<!-- r10:dragdrop -->
+<!-- Drag and drop: files in with the full-window overlay and paste (dndIn.js),
+     charts / datasets out and visuals onto dashboards (dndOut.js). -->
+<script src="dndIn.js"></script>
+<script src="dndOut.js"></script>
 
 <script src="hub.js"></script>
 

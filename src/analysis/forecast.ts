@@ -25,6 +25,7 @@
 import type { DateGrain } from './categoryKey';
 import { civilFromDays, daysFromCivil } from './categoryKey';
 import { daysFromIso, isoFromDays } from './dateIntel';
+import { activeWeekCal, ordinalOf, ordinalStart, unitOfGrain, weekLabel, weekLabelStart } from './retailCalendar';
 
 export type ForecastMethod = 'linear' | 'seasonal_naive' | 'holt_winters';
 
@@ -230,6 +231,15 @@ export function futureLabels(labels: string[], grain: DateGrain, count: number):
   const last = labels[labels.length - 1];
   if (last === undefined) return null;
   const out: string[] = [];
+  const wc = grain === 'day' ? null : activeWeekCal();
+  if (wc) {
+    const unit = unitOfGrain(grain)!;
+    const first = weekLabelStart(last, unit, wc);
+    if (first === null) return null;
+    const o = ordinalOf(first, unit, wc);
+    for (let i = 1; i <= count; i++) out.push(weekLabel(ordinalStart(o + i, unit, wc), unit, wc));
+    return out;
+  }
   if (grain === 'year') {
     if (!/^\d{4}$/.test(last)) return null;
     for (let i = 1; i <= count; i++) out.push(String(Number(last) + i).padStart(4, '0'));

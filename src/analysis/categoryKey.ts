@@ -15,6 +15,11 @@
 // turn it into text.
 
 import type { Cell } from '../data/transforms';
+import { civilFromDays, daysFromCivil } from './civilDays';
+import type { CivilDate } from './civilDays';
+import { activeWeekCal, bucketStartOf, unitOfGrain, weekLabel } from './retailCalendar';
+
+export { civilFromDays, daysFromCivil };
 
 export type DateGrain = 'day' | 'week' | 'month' | 'quarter' | 'year';
 
@@ -56,11 +61,7 @@ export interface CategoryInfo {
 const ISO_SHAPE = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/;
 const US_SHAPE = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/; // MM/DD/YYYY — looksLikeDate's order
 
-export interface CivilDate {
-  y: number;
-  m: number;
-  d: number;
-}
+export type { CivilDate } from './civilDays';
 
 /** Empty is `null` OR `''` OR whitespace — the same class the SQL side spells out. */
 function isEmpty(cell: Cell): boolean {
@@ -112,32 +113,6 @@ export function parseDateCell(cell: Cell): CivilDate | null {
   return { y: dt.getUTCFullYear(), m: dt.getUTCMonth() + 1, d: dt.getUTCDate() };
 }
 
-// Howard Hinnant's civil↔days pair. Chosen over `Date.UTC` because that maps
-// years 0–99 into 1900–1999, and over a hand-rolled leap-year loop because this
-// is exact for every proleptic-Gregorian date — the same calendar DuckDB uses,
-// which is what makes `dateBucket` equal `epoch day of date_trunc(...)`.
-export function daysFromCivil(y: number, m: number, d: number): number {
-  const yy = y - (m <= 2 ? 1 : 0);
-  const era = Math.floor(yy / 400);
-  const yoe = yy - era * 400;
-  const doy = Math.floor((153 * (m + (m > 2 ? -3 : 9)) + 2) / 5) + d - 1;
-  const doe = yoe * 365 + Math.floor(yoe / 4) - Math.floor(yoe / 100) + doy;
-  return era * 146097 + doe - 719468;
-}
-
-export function civilFromDays(z: number): CivilDate {
-  const n = z + 719468;
-  const era = Math.floor(n / 146097);
-  const doe = n - era * 146097;
-  const yoe = Math.floor((doe - Math.floor(doe / 1460) + Math.floor(doe / 36524) - Math.floor(doe / 146096)) / 365);
-  const y = yoe + era * 400;
-  const doy = doe - (365 * yoe + Math.floor(yoe / 4) - Math.floor(yoe / 100));
-  const mp = Math.floor((5 * doy + 2) / 153);
-  const d = doy - Math.floor((153 * mp + 2) / 5) + 1;
-  const m = mp + (mp < 10 ? 3 : -9);
-  return { y: y + (m <= 2 ? 1 : 0), m, d };
-}
-
 /**
  * The bucket id: the epoch day number of the bucket's FIRST day.
  *
@@ -145,8 +120,14 @@ export function civilFromDays(z: number): CivilDate {
  * the day offset from 1970-01-01. Week starts MONDAY (ISO), matching
  * `date_trunc('week', …)`: 1970-01-01 was a Thursday, so Monday-index is
  * `(day + 3) mod 7`.
+ *
+ * Under a week calendar (Settings → Formats → Calendar: retail or ISO) every
+ * grain but `day` is that calendar's bucket instead — `month` is its period —
+ * and `residentCategory.dateBucketSql` compiles the same calendar.
  */
 export function dateBucket(parsed: CivilDate, grain: DateGrain): number {
+  const wc = grain === 'day' ? null : activeWeekCal();
+  if (wc) return bucketStartOf(daysFromCivil(parsed.y, parsed.m, parsed.d), unitOfGrain(grain)!, wc);
   if (grain === 'year') return daysFromCivil(parsed.y, 1, 1);
   if (grain === 'quarter') return daysFromCivil(parsed.y, 1 + 3 * Math.floor((parsed.m - 1) / 3), 1);
   if (grain === 'month') return daysFromCivil(parsed.y, parsed.m, 1);
@@ -162,6 +143,8 @@ function pad(n: number, width: number): string {
 
 /** The bucket id → the axis label. The ONLY place a group label is formatted. */
 export function dateBucketLabel(epochDay: number, grain: DateGrain): string {
+  const wc = grain === 'day' ? null : activeWeekCal();
+  if (wc) return weekLabel(epochDay, unitOfGrain(grain)!, wc);
   const c = civilFromDays(epochDay);
   const y = pad(c.y, 4);
   if (grain === 'year') return y;

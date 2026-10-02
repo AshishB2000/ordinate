@@ -63,6 +63,13 @@ const DRV_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** The grain an axis label was written at (categoryKey.dateBucketLabel's shapes). */
 function drvGrainOf(label: string, prev: string, set?: string): string | null {
+  // A week calendar's labels (FY24 P03 W2, 2020-W53 — retailCalendar.weekLabel); main checks them.
+  if (calIsWeekCal() && !DRV_DAY.test(label)) {
+    if (/W\d+$/.test(label)) return 'week';
+    if (/P\d{2}$/.test(label)) return 'month';
+    if (/Q[1-4]$/.test(label)) return 'quarter';
+    return /^(FY)?\d+$/.test(label) ? 'year' : null;
+  }
   if (set === 'week' || set === 'day') return DRV_DAY.test(label) ? set : null;
   if (DRV_YEAR.test(label)) return 'year';
   if (DRV_QUARTER.test(label)) return 'quarter';
