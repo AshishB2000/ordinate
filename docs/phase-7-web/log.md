@@ -565,3 +565,41 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
 - **Desktop bug carried and pinned:** `geoMatch`'s substring rule gives West Virginia Virginia's value
   (26 labels for 25 states in the sample) — fix both copies as its own task. Point colours use the
   default palette until the project colour map has a web channel (T2.7).
+
+## 2026-10-03 — T6.2 Web hardening
+
+- **Dependency:** `@fastify/rate-limit ^11.2.0` (§2).
+- **CSRF (`src/server/csrf.ts`)** on every non-GET, before sign-in (a refusal costs no DB query):
+  (1) Origin — cross-site `Origin`, `Origin: null`, or `Sec-Fetch-Site: cross-site` without an
+  Origin → 403 `origin`; (2) double-submit — cookie `ordinate_csrf` (`__Host-` + Secure in prod,
+  script-readable, SameSite=Lax) must equal `X-CSRF-Token` (timing-safe) → else 403 `csrf`. The
+  cookie is issued on page/API responses lacking it, never on static assets. Exempt: `Authorization:
+  Bearer` only where a token actually decides identity (Postgres configured), and `/api/mcp` (refuses
+  cookies itself). The Origin check compares with Host — the ingress must preserve Host (nginx,
+  ALB, GKE do by default).
+- **Headers (`src/server/headers.ts`)** on every response, incl. SSE: CSP by PATH — `APP_CSP`
+  outside `/api/` (+ `frame-ancestors 'none'`), deny-all `API_CSP` under it (by content-type broke
+  e2e: a 304 for index.html has none and the browser merges it into the cached page); the Vite meta
+  CSP is gone, the header is the single source. X-Frame-Options DENY, nosniff, Referrer-Policy
+  `strict-origin-when-cross-origin` (OSM's tile policy wants a Referer; paths never leave the
+  origin), Permissions-Policy, COOP same-origin, HSTS in prod.
+- **Integration with T1.3 (orchestrator):** the OSM tile hosts moved from the old build-time CSP into
+  `MAP_TILE_ORIGINS`; the test now pins exactly those three hosts, only in img-src/connect-src, and no
+  other external host anywhere. The maps e2e passes with the header CSP (zero violations).
+- **Limits (`src/server/limits.ts`):** login+callback 60/min per client IP; RPC 3000/min per IP and
+  1200/min per user (org + email); 429 + Retry-After; client IP from X-Forwarded-For only when the TCP
+  peer is in `TRUSTED_PROXY_CIDRS`. Per-pod counters (`ponytail:` — N pods allow N× the limit; a
+  shared store when it matters). JSON body cap `MAX_RPC_BODY_KB` 1024 (separate from uploads);
+  `RPC_TIMEOUT_SECONDS` 60 → 504 and the request's abort signal interrupts DuckDB (measured: 504 in
+  1013 ms with a 1 s limit; the org worker answered `SELECT 1` 2 ms later).
+- **Proof:** `test-webHardening` 166 (every route class's headers incl. 304/404/403/413/429, prod
+  HSTS + `__Host-` cookie; CSRF matrix on rpc/files/logout/logout-everywhere/page DELETE; rate limits
+  incl. XFF spoof rotation; body cap; timeout). Negative control: disabling the CSRF match, the SSE
+  header copy and the timeout race fails 31 checks. Session fixation: a planted LIVE attacker session
+  is ended when the victim signs in over it (`test-auth-db`). Logout-everywhere: e2e signs a second
+  browser context out from the account menu. 14 existing suites + the load test send the CSRF pair
+  (`scripts/csrfPair.ts`); bearer-token suites deliberately do not (proves the exemption).
+- **Note for the load test:** 600 requests as one dev user exceed 1200/min only if finished in < 30 s
+  — raise `RATE_LIMIT_RPC_PER_MINUTE` for it. `/api/mcp` has no rate limit yet.
+- Observed under load (8 agents, load avg > 30): `test-auth-db` failed once in a full DB run and passed
+  twice alone — watch for a recurrence.

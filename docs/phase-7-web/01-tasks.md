@@ -402,7 +402,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   each hop.
 - **Done when:** a test table of 30+ hostile URLs is refused; allowlisted private hosts work.
 
-### [ ] T6.2 Web hardening
+### [x] T6.2 Web hardening
 - **Branch** `web/t6.2-web-hardening` · **Depends** T3.2
 - CSRF (double-submit token on every non-GET), strict CSP / HSTS / frame-ancestors / referrer
   policy / nosniff headers, rate limits on login and RPC, request body caps, per-RPC timeouts,
