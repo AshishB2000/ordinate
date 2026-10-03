@@ -20,19 +20,28 @@ export interface Server {
   /** http://127.0.0.1:<port> */
   readonly base: string;
   readonly dataDir: string;
-  /** What the seed made. */
-  readonly sample: { readonly projectId: string; readonly projectName: string };
+  /** What the seed made. `large`: the 1M-row dataset in the sample project, when asked for. */
+  readonly sample: {
+    readonly projectId: string;
+    readonly projectName: string;
+    readonly large?: { readonly datasetId: string; readonly rows: number; readonly ms: number };
+  };
   /** Everything the server printed — attach to a failure. */
   log(): string;
   stop(): Promise<void>;
 }
 
-export async function startServer(extraEnv: Record<string, string> = {}): Promise<Server> {
+export interface SeedOptions {
+  /** Also seed a 1,000,000-row dataset (seed.ts --large). */
+  readonly large?: boolean;
+}
+
+export async function startServer(extraEnv: Record<string, string> = {}, seedOpts: SeedOptions = {}): Promise<Server> {
   for (const f of [MAIN, path.join(REPO, 'web', 'dist', 'index.html')]) {
     if (!existsSync(f)) throw new Error(`${path.relative(REPO, f)} is missing: run npm run build:ts && npm --prefix web run build`);
   }
   const dataDir = mkdtempSync(path.join(os.tmpdir(), 'ordinate-e2e-'));
-  const seed = spawnSync(process.execPath, [SEED, dataDir], { encoding: 'utf8', timeout: 120_000 });
+  const seed = spawnSync(process.execPath, [SEED, dataDir, ...(seedOpts.large ? ['--large'] : [])], { encoding: 'utf8', timeout: 120_000 });
   if (seed.status !== 0) throw new Error(`seeding the sample project failed:\n${seed.stderr || seed.stdout}`);
   const sample = JSON.parse(seed.stdout.trim().split('\n').pop() ?? '{}') as Server['sample'];
 

@@ -9,7 +9,7 @@
 //    workers) in a child process, with THIS file preloaded as a probe: it runs
 //    `perf_hooks.monitorEventLoopDelay` inside the server and answers over IPC.
 // 3. LOAD: `--vus` virtual users, each `--iterations` times, over HTTP RPC:
-//    open the dataset (`dataset:meta`), one page (random offset, sorted every
+//    open the dataset (`dataset:columns`), one page (random offset, sorted every
 //    other time), three chart queries at once as a dashboard does
 //    (`visual:data`: sum by region, monthly average, max + count by category,
 //    each under a random filter so the answer cache rarely helps), one stats
@@ -122,7 +122,7 @@ async function main(): Promise<void> {
   };
 
   const iteration = async (i: number): Promise<void> => {
-    await timed('open dataset (dataset:meta)', () => rpc('dataset:meta', { projectId, id: datasetId }));
+    await timed('open dataset (dataset:columns)', () => rpc('dataset:columns', { projectId, id: datasetId }));
     const sorted = i % 2 === 1;
     await timed(`page (dataset:page${sorted ? ', sorted' : ''})`, () =>
       rpc('dataset:page', { projectId, datasetId, offset: Math.floor(Math.random() * (ROWS - 100)), limit: 100, ...(sorted ? { sortColumn: 'sales', sortDir: 'desc' } : {}) }));
@@ -144,7 +144,7 @@ async function main(): Promise<void> {
   };
 
   // Warm-up: one pass alone (starts the org worker, first reads of the file).
-  const meta = (await rpc('dataset:meta', { projectId, id: datasetId })) as { rowCount?: number; storage?: unknown } | null;
+  const meta = (await rpc('dataset:columns', { projectId, id: datasetId })) as { rowCount?: number } | null;
   if (meta?.rowCount !== ROWS) throw new Error(`the dataset has ${String(meta?.rowCount)} rows, not ${ROWS}`);
   await iteration(0);
   for (const k of Object.keys(times)) times[k] = [];

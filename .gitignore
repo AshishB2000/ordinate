@@ -1103,3 +1103,6 @@ scripts/**/*.js
 /src/api/visuals.js
 /scripts/test-duckdbPool.js
 /scripts/loadtest.js
+
+# web/t1.4-datagrid
+/scripts/test-datasetPageRpc.js

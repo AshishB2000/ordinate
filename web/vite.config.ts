@@ -35,7 +35,8 @@ export default defineConfig({
     // web/ plus the one server file the client shares: the wire codec.
     // …and the desktop icon set, which a test diffs the generated icons against
     // (its directory: a `?raw` id only passes the check as a child path).
-    fs: { allow: ['.', '../src/server/wire.ts', '../renderer/hub'] },
+    // …and the app's number formatter (the data grid's cells).
+    fs: { allow: ['.', '../src/server/wire.ts', '../renderer/hub', '../src/app/format.ts'] },
   },
   build: {
     // The latest two releases of each supported browser, as of 2026-10
