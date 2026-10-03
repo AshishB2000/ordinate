@@ -16,13 +16,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
+import * as appPaths from './paths';
 import { isValidId } from './ids';
 import { sanitizeSettings, sanitizeDecl, sanitizeSource, isCurrencyCode, cellDay, buildRates } from '../analysis/fx';
 import type { FxSettings, RateRow, RateTable } from '../analysis/fx';
 
 function fxFile(projectId: string): string {
-  return path.join(app.getPath('userData'), 'projects', projectId, 'fx.json');
+  return path.join(appPaths.userData(), 'projects', projectId, 'fx.json');
 }
 
 // ponytail: in-memory cache invalidated by this module's own writes; a second

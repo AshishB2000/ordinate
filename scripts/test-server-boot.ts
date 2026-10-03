@@ -155,6 +155,12 @@ M._resolveFilename = function (req, ...rest) {
     ok('boot: GET /healthz is 200', hz.status === 200, hz.status);
     const rz = await fetch(base + '/readyz');
     ok('boot: GET /readyz is 200 (DuckDB up, no Electron)', rz.status === 200, await rz.text());
+    // main.ts registered the Home handlers: their whole graph loaded without
+    // Electron, and dev auth ran this as org `default` under DATA_DIR.
+    const pl = await fetch(base + '/api/rpc/projects:list', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"args":[]}' });
+    const plBody = await pl.text();
+    ok('boot: POST /api/rpc/projects:list is 200 with a list', pl.status === 200 && Array.isArray(JSON.parse(plBody)), plBody);
+    ok('boot: …resolved under DATA_DIR/orgs/default', fs.existsSync(path.join(tmp, 'orgs', 'default', 'userData')));
     child.kill('SIGTERM');
     ok('boot: SIGTERM closes cleanly (exit 0)', (await exited) === 0, stderr);
   } else {
@@ -171,6 +177,11 @@ M._resolveFilename = function (req, ...rest) {
   const ours = errLines.filter((l) => l.startsWith('ordinate: '));
   ok('bad env: exactly one line on stderr, naming the variable', ours.length === 1 && ours[0].includes('ORDINATE_ENV'), bad.stderr);
   ok('bad env: no stack trace', !errLines.some((l) => /^\s+at /.test(l)), bad.stderr);
+
+  // ── prod with no sign-in configured refuses to start ──────────────────────
+  const prod = spawnSync(process.execPath, [MAIN], { env: childEnv({ ORDINATE_ENV: 'prod', DATA_DIR: tmp, PORT: '0' }), encoding: 'utf8', timeout: 20_000 });
+  const prodOurs = prod.stderr.split('\n').filter((l) => l.startsWith('ordinate: '));
+  ok('prod without auth: exits non-zero with one line naming sign-in', prod.status !== 0 && prod.status !== null && prodOurs.length === 1 && prodOurs[0].includes('sign-in'), prod.stderr);
 
   fs.rmSync(tmp, { recursive: true, force: true });
 })()

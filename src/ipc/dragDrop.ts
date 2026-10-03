@@ -14,7 +14,8 @@
 // written. Temp files live under <temp>/ordinate-drag/, cleared at launch.
 
 import * as path from 'path';
-import { app, clipboard, nativeImage } from 'electron';
+import { clipboard, nativeImage } from 'electron';
+import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
 import type { IpcMainEvent, NativeImage } from 'electron';
 import * as datasets from '../data/datasets';
@@ -38,7 +39,7 @@ const MAX_PNG_BYTES = 40 * 1024 * 1024;
 const MAX_PASTE_SIDE = 10_000;
 
 export function dragDir(): string {
-  return path.join(app.getPath('temp'), 'ordinate-drag');
+  return path.join(appPaths.temp(), 'ordinate-drag');
 }
 
 /** The image the OS shows under the pointer. Never empty — macOS refuses an empty icon. */

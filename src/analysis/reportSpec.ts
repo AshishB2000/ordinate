@@ -21,7 +21,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
+import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import { GRID_COLS } from './dashboards';
 import type { Card, Page } from './dashboards';
@@ -322,10 +322,8 @@ export function timeOfDayReached(now: number, at: string): boolean {
 
 // ── the store ────────────────────────────────────────────────────────────────
 
-let projectsBase: string | null = null;
 function getProjectsBase(): string {
-  if (!projectsBase) projectsBase = path.join(app.getPath('userData'), 'projects');
-  return projectsBase;
+  return path.join(appPaths.userData(), 'projects');
 }
 
 function reportsDir(projectId: string): string {

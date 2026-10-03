@@ -11,7 +11,8 @@
 // URL — never a path — so a renderer can show it, a report can embed it and
 // an export can carry it, all without file access.
 
-import { dialog, app } from 'electron';
+import { dialog } from 'electron';
+import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
 import * as fs from 'fs';
 
@@ -66,18 +67,18 @@ export function register(): void {
     } catch (_) {
       return { ok: false, error: 'That file could not be read.' };
     }
-    const saved = await saveLogo(app.getPath('userData'), s, buf);
+    const saved = await saveLogo(appPaths.userData(), s, buf);
     if (!saved.ok) return saved;
     if (s === 'workspace') {
       config.save({ branding: { ...config.get().branding, logo: saved.kind } });
       push();
     }
-    return { ok: true, dataUrl: await readLogoDataUrl(app.getPath('userData'), s) };
+    return { ok: true, dataUrl: await readLogoDataUrl(appPaths.userData(), s) };
   });
 
   ipcMain.handle('branding:clearLogo', async (_e, scope: unknown) => {
     const s = typeof scope === 'string' ? scope : 'workspace';
-    await removeLogo(app.getPath('userData'), s);
+    await removeLogo(appPaths.userData(), s);
     if (s === 'workspace') {
       config.save({ branding: { ...config.get().branding, logo: '' } });
       push();
@@ -87,6 +88,6 @@ export function register(): void {
 
   ipcMain.handle('branding:logo', async (_e, scope: unknown) => ({
     ok: true,
-    dataUrl: await readLogoDataUrl(app.getPath('userData'), typeof scope === 'string' ? scope : 'workspace'),
+    dataUrl: await readLogoDataUrl(appPaths.userData(), typeof scope === 'string' ? scope : 'workspace'),
   }));
 }

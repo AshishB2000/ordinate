@@ -15,7 +15,7 @@ import { createPool, ping, scrubbed } from './db/pool';
 import { handlers } from './rpc';
 import { fromWire, encode } from './wire';
 
-/** The `event` a handler receives over HTTP. `event.sender` arrives with T0.3/T0.5 (`ctx().client`). */
+/** The `event` a handler receives over HTTP. It has no `sender`: handlers ask `senderOf(e)` (./context). */
 const SERVER_EVENT = Object.freeze({});
 
 /** Field names whose values never reach a log line, matched at any depth below. */
@@ -40,13 +40,28 @@ export const REDACT_PATHS: readonly string[] = SECRET_KEYS.flatMap((k) => {
   return Array.from({ length: MAX_DEPTH + 1 }, (_, d) => '*.'.repeat(d) + leaf);
 });
 
-export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream): FastifyInstance {
+export function buildApp(
+  cfg: ServerEnv,
+  logStream?: NodeJS.WritableStream,
+  identify: Identify = identityFor(cfg),
+): FastifyInstance {
   const app = fastify({
     logger: {
       level: cfg.logLevel,
       redact: { paths: [...REDACT_PATHS], censor: '[redacted]' },
       ...(logStream ? { stream: logStream } : {}),
     },
+  });
+
+  // Every /api/ request runs inside its own context (./context.ts): who is
+  // asking, for which org. Callback-style on purpose — `als.run(store, done)`
+  // is what carries the store into the route handler and every await below it.
+  // The probes stay outside: Kubernetes never signs in.
+  app.addHook('onRequest', (req, reply, done) => {
+    if (!req.url.startsWith('/api/')) return done();
+    const who = identify(req.headers);
+    if (!who) return void reply.code(401).send({ error: 'not signed in' });
+    runInContext(who, String(req.id), done);
   });
 
   // Liveness: the process is up and serving. Checks nothing else on purpose —
@@ -125,15 +140,10 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream): Fas
 }
 
 /**
- * Registers the handler modules whose channels have contracts.
- *
- * NOT called by main.ts yet: these modules still reach Electron at load or
- * call time (ipc/projects imports `dialog`; src/app/* call `app.getPath`), and
- * the server must boot with no Electron at all (scripts/test-server-boot.ts).
- * T0.3 replaces `app.getPath` with src/app/paths.ts; then main.ts calls this
- * and the boot test covers it. Until then scripts/test-rpc.ts calls it under
- * the test-suite's Electron stub. The requires are lazy so loading app.ts
- * never loads a handler module.
+ * Registers the handler modules whose channels have contracts. main.ts calls
+ * it at boot, so scripts/test-server-boot.ts proves their whole import graph
+ * loads without Electron. The requires are lazy so loading app.ts never loads
+ * a handler module.
  */
 export function registerHandlers(): void {
   for (const mod of ['../ipc/projects', '../ipc/datasets', '../ipc/recent']) {

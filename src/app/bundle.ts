@@ -30,7 +30,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
 import * as projects from './projects';
 import { projectDir, projectsBase, isValidId } from './recordKinds';
 import { bundleThemesEntry, importBundleThemes } from './themeStore';
@@ -360,6 +359,8 @@ export async function exportProject(
   if (alerts) {
     try { counts.alerts = (JSON.parse(alerts.data.toString('utf8')).rules || []).length; } catch (_) { counts.alerts = 0; }
   }
+  // Lazy: the server's Home graph loads this module without Electron.
+  const { app } = require('electron') as typeof import('electron');
   const manifest: BundleManifest = {
     format: BUNDLE_FORMAT,
     formatVersion: BUNDLE_VERSION,

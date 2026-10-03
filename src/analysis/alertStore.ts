@@ -25,7 +25,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
+import * as appPaths from '../app/paths';
 
 import * as alerts from './alerts';
 import type { AlertEvent, AlertRule } from './alerts';
@@ -53,10 +53,8 @@ const EMPTY: AlertFile = { rules: [], events: [], digest: false };
 
 // ── Disk ─────────────────────────────────────────────────────────────────────
 
-let projectsBase: string | null = null;
 function baseDir(): string {
-  if (!projectsBase) projectsBase = path.join(app.getPath('userData'), 'projects');
-  return projectsBase;
+  return path.join(appPaths.userData(), 'projects');
 }
 
 function alertsFile(projectId: string): string {

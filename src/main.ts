@@ -1,14 +1,5 @@
-import {
-  app,
-  dialog,
-  globalShortcut,
-  ipcMain,
-  systemPreferences,
-  nativeTheme,
-  BrowserWindow,
-  NativeImage,
-  Display,
-} from 'electron';
+import { app, dialog, globalShortcut, ipcMain, systemPreferences, nativeTheme, BrowserWindow, NativeImage, Display } from 'electron';
+import * as appPaths from './app/paths';
 import { headlessMode } from './automation/argv';
 
 // Automation: `--cli <command>` / `--mcp` run this binary HEADLESS (no window,
@@ -618,10 +609,10 @@ require("./ipc/mosaic").register();
 // every launch for a feature they do not use — the exact laziness the comment
 // above is protecting.
 try {
-  const localDirs = require("./connectors/local").registeredDirs(app.getPath("userData"));
+  const localDirs = require("./connectors/local").registeredDirs(appPaths.userData());
   if (Array.isArray(localDirs) && localDirs.length) {
     require("./ipc/mosaic")
-      .hardenConnection([app.getPath("userData"), ...localDirs])
+      .hardenConnection([appPaths.userData(), ...localDirs])
       .catch(() => { /* best-effort: a failure costs a restart, never correctness */ });
   }
 } catch (_) { /* connector module absent or registry unreadable — stay lazy */ }

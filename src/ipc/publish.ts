@@ -1,5 +1,6 @@
-import { dialog, BrowserWindow } from 'electron';
+import { dialog } from 'electron';
 import { ipcMain } from './bus';
+import { windowOf } from '../server/context';
 import * as os from 'os';
 import * as path from 'path';
 import * as jobs from '../app/jobs';
@@ -85,7 +86,7 @@ export function register(deps: PlatformDeps): void {
   ipcMain.handle('publish:config', async (_e, { projectId }: any = {}) => ({ ok: true, config: await getStoredConfig(String(projectId || '')) }));
 
   ipcMain.handle('publish:pickFolder', async (e) => {
-    const win = BrowserWindow.fromWebContents(e.sender);
+    const win = windowOf(e);
     const opts = { title: 'Publish to folder', properties: ['openDirectory' as const, 'createDirectory' as const] };
     const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
     if (r.canceled || !r.filePaths[0]) return { ok: false, canceled: true };

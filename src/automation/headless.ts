@@ -23,6 +23,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { format } from 'util';
 import { app } from 'electron';
+import * as appPaths from '../app/paths';
 import { modeArgs } from './argv';
 import type { HeadlessMode } from './argv';
 import { LOG_NAME, appendJob } from './jobLog';
@@ -69,7 +70,7 @@ async function run(mode: HeadlessMode, argv: string[]): Promise<void> {
   config.load();
   await projects.init();
   // In memory only; every finished job goes to the log the GUI tails.
-  const logFile = path.join(app.getPath('userData'), LOG_NAME);
+  const logFile = path.join(appPaths.userData(), LOG_NAME);
   jobs.configure({ file: null });
   jobs.onFinish((job) => appendJob(logFile, job));
 

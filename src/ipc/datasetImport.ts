@@ -1,4 +1,3 @@
-import { dialog } from 'electron';
 import { ipcMain } from './bus';
 import * as path from 'path';
 import { parsePaste } from '../data/parse';
@@ -54,7 +53,8 @@ export function register(): void {
         if (!pickedPaths.has(filePath)) return { ok: false, error: 'File was not picked in this session' };
         chosenPath = filePath;
       } else {
-        const { canceled, filePaths } = await dialog.showOpenDialog({
+        // Lazy: the server loads this module without Electron (native dialogs are desktop-only).
+        const { canceled, filePaths } = await (require('electron') as typeof import('electron')).dialog.showOpenDialog({
           title: 'Import data file',
           properties: ['openFile'],
           filters: [

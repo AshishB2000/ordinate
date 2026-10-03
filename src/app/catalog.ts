@@ -29,7 +29,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
+import * as appPaths from './paths';
 import { isValidId } from './ids';
 
 // ── Kinds ────────────────────────────────────────────────────────────────────
@@ -211,10 +211,8 @@ export function sanitizeCatalog(raw: any): CatalogFile {
 
 // ── Disk ─────────────────────────────────────────────────────────────────────
 
-let projectsBase: string | null = null;
 function getProjectsBase(): string {
-  if (!projectsBase) projectsBase = path.join(app.getPath('userData'), 'projects');
-  return projectsBase;
+  return path.join(appPaths.userData(), 'projects');
 }
 
 function catalogPath(projectId: string): string {

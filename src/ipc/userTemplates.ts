@@ -1,5 +1,7 @@
-import { dialog, app, BrowserWindow } from 'electron';
+import { dialog } from 'electron';
+import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
+import { windowOf } from '../server/context';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
@@ -135,10 +137,10 @@ export function register(): void {
     const t = await store.getTemplate(a.id);
     if (!t) return { ok: false, error: 'That template could not be read.' };
     const safe = t.name.replace(/[^A-Za-z0-9 _.-]+/g, '').trim().slice(0, 80) || 'template';
-    const win = BrowserWindow.fromWebContents(e.sender);
+    const win = windowOf(e);
     const opts = {
       title: 'Export template',
-      defaultPath: path.join(app.getPath('downloads'), safe + '.ordinate-template'),
+      defaultPath: path.join(appPaths.downloads(), safe + '.ordinate-template'),
       filters: [{ name: 'Ordinate template', extensions: ['ordinate-template'] }],
     };
     const { filePath, canceled } = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
@@ -152,7 +154,7 @@ export function register(): void {
   });
 
   ipcMain.handle('utpl:import', async (e) => {
-    const win = BrowserWindow.fromWebContents(e.sender);
+    const win = windowOf(e);
     const opts = {
       title: 'Import template',
       properties: ['openFile' as const],

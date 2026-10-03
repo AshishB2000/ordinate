@@ -17,7 +17,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
+import * as appPaths from './paths';
 import * as jobs from './jobs';
 import * as bundle from './bundle';
 import * as datasets from '../data/datasets';
@@ -81,7 +81,7 @@ export async function classifyFile(file: string): Promise<Classified> {
  * typed by the importer's own rules, in file order, capped at the row limit.
  */
 async function readParquet(file: string): Promise<ParseResult> {
-  const stage = path.join(app.getPath('userData'), 'drop-stage');
+  const stage = path.join(appPaths.userData(), 'drop-stage');
   await fs.promises.mkdir(stage, { recursive: true });
   const copy = path.join(stage, randomUUID() + '.parquet');
   await fs.promises.copyFile(file, copy);
@@ -156,7 +156,7 @@ export async function handleDrop(
   paths: string[],
   importBundle: (file: string) => Promise<any>,
 ): Promise<DropResult[]> {
-  const userData = path.resolve(app.getPath('userData'));
+  const userData = path.resolve(appPaths.userData());
   return Promise.all(paths.slice(0, MAX_DROP_FILES).map(async (file): Promise<DropResult> => {
     const name = path.basename(file);
     // The app's own store is never a drop source — config.json holds secrets.

@@ -6,9 +6,9 @@
 // compared byte for byte with the wire encoding of the SAME handler called
 // directly, so the route can neither drop nor reshape a figure.
 //
-// Electron is stubbed (house pattern) because the Home handler modules still
-// call `app.getPath` — T0.3 replaces that with src/app/paths.ts, after which the
-// server registers them itself and this stub shrinks to nothing.
+// Electron is stubbed (house pattern): this suite runs the route in DESKTOP
+// mode, where src/app/paths.ts asks Electron. Server mode — per-org paths, no
+// Electron at all — is scripts/test-server-context.ts.
 //
 //   npm run build:ts && node scripts/test-rpc.js
 

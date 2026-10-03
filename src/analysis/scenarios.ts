@@ -10,7 +10,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
+import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import { sanitizeBaseMetricIds, sanitizeDrivers } from './scenarioModel';
 import type { Scenario } from './scenarioModel';
@@ -29,10 +29,8 @@ export interface ScenarioSummary {
 
 type ScenarioInput = { name?: unknown; baseMetricIds?: unknown; drivers?: unknown };
 
-let base: string | null = null;
 function projectsBase(): string {
-  if (!base) base = path.join(app.getPath('userData'), 'projects');
-  return base;
+  return path.join(appPaths.userData(), 'projects');
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

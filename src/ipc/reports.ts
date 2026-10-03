@@ -1,4 +1,5 @@
-import { dialog, shell, app } from 'electron';
+import { dialog, shell } from 'electron';
+import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -150,7 +151,7 @@ export function register() {
   ipcMain.handle('reports:pickFolder', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog({
       title: 'Choose a folder for scheduled reports',
-      defaultPath: app.getPath('documents'),
+      defaultPath: appPaths.documents(),
       properties: ['openDirectory', 'createDirectory'],
     });
     if (canceled || !filePaths || !filePaths[0]) return { ok: false, canceled: true };
@@ -224,7 +225,7 @@ export function register() {
     if (!buf) return { ok: false, error: 'Nothing to save.' };
     const { filePath, canceled } = await dialog.showSaveDialog({
       title: 'Save report',
-      defaultPath: path.join(app.getPath('downloads'), reportSpec.reportFilename(report.name, e)),
+      defaultPath: path.join(appPaths.downloads(), reportSpec.reportFilename(report.name, e)),
       filters: [{ name: e.toUpperCase(), extensions: [e] }],
     });
     if (canceled || !filePath) return { ok: false, canceled: true };

@@ -25,7 +25,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
+import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import type { ConnectorDef } from './types';
 
@@ -112,11 +112,9 @@ export interface PublicConnection {
   url?: string;
 }
 
-let projectsBase: string | null = null;
 
 function getProjectsBase(): string {
-  if (!projectsBase) projectsBase = path.join(app.getPath('userData'), 'projects');
-  return projectsBase;
+  return path.join(appPaths.userData(), 'projects');
 }
 
 // Ids arrive from the renderer over IPC. Validate the SHAPE before either id ever

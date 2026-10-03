@@ -27,9 +27,8 @@
 import * as path from 'path';
 import * as crypto from 'crypto';
 import * as fsp from 'fs/promises';
-import { spawn } from 'child_process';
-import type { ChildProcess } from 'child_process';
-import { app, nativeImage } from 'electron';
+import { spawn, type ChildProcess } from 'child_process';
+import * as appPaths from '../app/paths';
 import * as execConfig from '../app/execConfig';
 import { wrapCommand } from './disclaim';
 
@@ -120,7 +119,8 @@ function debugRaw(tag: string, raw: string | null | undefined): void {
 // Cap longest edge at 1568 (Claude's max useful size); fall back to JPEG q80
 // only if PNG still exceeds 2MB.
 function encodeImage(base64: string): { buf: Buffer; ext: string } {
-  let img = nativeImage.createFromBuffer(Buffer.from(base64, 'base64'));
+  // Lazy: loaded by the server's Home graph, which has no Electron.
+  let img = (require('electron') as typeof import('electron')).nativeImage.createFromBuffer(Buffer.from(base64, 'base64'));
   const { width, height } = img.getSize();
   const longest = Math.max(width, height);
   if (longest > MAX_DIMENSION) {
@@ -264,7 +264,7 @@ async function runClaude(systemPrompt: string, messages: CliMessage[]): Promise<
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { error: errProvider(CLAUDE_NAME, 'Claude Code not detected — rescan in Execution mode.') };
 
-  const dir = path.join(app.getPath('userData'), 'tmp', crypto.randomBytes(8).toString('hex'));
+  const dir = path.join(appPaths.userData(), 'tmp', crypto.randomBytes(8).toString('hex'));
   try {
     await fsp.mkdir(dir, { recursive: true });
 
@@ -335,7 +335,7 @@ async function runAntigravity(systemPrompt: string, messages: CliMessage[], opts
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { error: errProvider(AGY_NAME, 'Antigravity (Google) not detected — rescan in Execution mode.') };
 
-  const dir = path.join(app.getPath('userData'), 'tmp', crypto.randomBytes(8).toString('hex'));
+  const dir = path.join(appPaths.userData(), 'tmp', crypto.randomBytes(8).toString('hex'));
   try {
     await fsp.mkdir(dir, { recursive: true });
 
@@ -404,7 +404,7 @@ async function runCodex(systemPrompt: string, messages: CliMessage[], opts?: { p
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { error: errProvider(CODEX_NAME, 'Codex CLI not detected — rescan in Execution mode.') };
 
-  const dir = path.join(app.getPath('userData'), 'tmp', crypto.randomBytes(8).toString('hex'));
+  const dir = path.join(appPaths.userData(), 'tmp', crypto.randomBytes(8).toString('hex'));
   const lastMsgFile = path.join(dir, 'codex-last.txt');
   try {
     await fsp.mkdir(dir, { recursive: true });
@@ -493,7 +493,7 @@ async function runGrok(systemPrompt: string, messages: CliMessage[], opts?: { pr
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { error: errProvider(GROK_NAME, 'Grok CLI not detected — rescan in Execution mode.') };
 
-  const dir = path.join(app.getPath('userData'), 'tmp', crypto.randomBytes(8).toString('hex'));
+  const dir = path.join(appPaths.userData(), 'tmp', crypto.randomBytes(8).toString('hex'));
   try {
     await fsp.mkdir(dir, { recursive: true });
 
@@ -575,7 +575,7 @@ async function runOpenCode(systemPrompt: string, messages: CliMessage[], opts?: 
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { error: errProvider(OPENCODE_NAME, 'OpenCode not detected — rescan in Execution mode.') };
 
-  const dir = path.join(app.getPath('userData'), 'tmp', crypto.randomBytes(8).toString('hex'));
+  const dir = path.join(appPaths.userData(), 'tmp', crypto.randomBytes(8).toString('hex'));
   try {
     await fsp.mkdir(dir, { recursive: true });
 
@@ -663,7 +663,7 @@ async function runCursor(systemPrompt: string, messages: CliMessage[], opts?: { 
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { error: errProvider(CURSOR_NAME, 'Cursor Agent not detected — rescan in Execution mode.') };
 
-  const dir = path.join(app.getPath('userData'), 'tmp', crypto.randomBytes(8).toString('hex'));
+  const dir = path.join(appPaths.userData(), 'tmp', crypto.randomBytes(8).toString('hex'));
   try {
     await fsp.mkdir(dir, { recursive: true });
 
@@ -747,7 +747,7 @@ export async function listAntigravityModels(): Promise<ModelListResult> {
   const rec = execConfig.getLocalCliResult('antigravity');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { ok: false, models: [], reason: 'not_installed' };
-  const out = await runChild(bin, ['models'], app.getPath('userData'), '', AGY_MODELS_TIMEOUT_MS);
+  const out = await runChild(bin, ['models'], appPaths.userData(), '', AGY_MODELS_TIMEOUT_MS);
   if (out.spawnError || out.timedOut || out.code !== 0) return { ok: false, models: [], reason: emptyListReason(out) };
   const models = cleanCliOutput(out.stdout)
     .split('\n')
@@ -763,7 +763,7 @@ export async function listGrokModels(): Promise<ModelListResult> {
   const rec = execConfig.getLocalCliResult('grok');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { ok: false, models: [], reason: 'not_installed' };
-  const out = await runChild(bin, ['models'], app.getPath('userData'), '', AGY_MODELS_TIMEOUT_MS, process.env);
+  const out = await runChild(bin, ['models'], appPaths.userData(), '', AGY_MODELS_TIMEOUT_MS, process.env);
   if (out.spawnError || out.timedOut || out.code !== 0) return { ok: false, models: [], reason: emptyListReason(out) };
   const models = cleanCliOutput(out.stdout)
     .split('\n')
@@ -778,7 +778,7 @@ export async function listOpenCodeModels(): Promise<ModelListResult> {
   const rec = execConfig.getLocalCliResult('opencode');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { ok: false, models: [], reason: 'not_installed' };
-  const out = await runChild(bin, ['models'], app.getPath('userData'), '', AGY_MODELS_TIMEOUT_MS);
+  const out = await runChild(bin, ['models'], appPaths.userData(), '', AGY_MODELS_TIMEOUT_MS);
   if (out.spawnError || out.timedOut || out.code !== 0) return { ok: false, models: [], reason: emptyListReason(out) };
   const models = cleanCliOutput(out.stdout)
     .split('\n')
@@ -797,7 +797,7 @@ export async function listCursorModels(): Promise<ModelListResult> {
   const rec = execConfig.getLocalCliResult('cursor');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return { ok: false, models: [], reason: 'not_installed' };
-  const out = await runChild(bin, ['--list-models'], app.getPath('userData'), '', AGY_MODELS_TIMEOUT_MS, process.env);
+  const out = await runChild(bin, ['--list-models'], appPaths.userData(), '', AGY_MODELS_TIMEOUT_MS, process.env);
   // Cursor's --list-models needs auth, so a non-zero exit here is almost always
   // "not signed in" → 'auth' (Default is legit), not a failure to flag.
   if (out.spawnError || out.timedOut || out.code !== 0) return { ok: false, models: [], reason: emptyListReason(out) };

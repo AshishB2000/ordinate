@@ -1,6 +1,5 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { dialog } from 'electron';
 import { ipcMain } from './bus';
 import type { BrowserWindow } from 'electron';
 import * as projects from '../app/projects';
@@ -105,6 +104,8 @@ export function register({ onActive, getHubWindow }: {
       filters: [{ name: 'Ordinate project', extensions: ['ordinate'] }],
     };
     const win = parent();
+    // Lazy: the server loads this module without Electron (native dialogs are desktop-only).
+    const { dialog } = (require('electron') as typeof import('electron'));
     const { canceled, filePath } = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
     if (canceled || !filePath) return { ok: false, canceled: true };
     // A job (src/app/jobs.ts): the zip is deflated off the main thread, the
@@ -147,6 +148,7 @@ export function register({ onActive, getHubWindow }: {
       filters: [{ name: 'Ordinate project', extensions: ['ordinate'] }],
     };
     const win = parent();
+    const { dialog } = (require('electron') as typeof import('electron'));
     const { canceled, filePaths } = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
     if (canceled || !filePaths || !filePaths[0]) return { ok: false, canceled: true };
     return importBundleFile(filePaths[0], active);

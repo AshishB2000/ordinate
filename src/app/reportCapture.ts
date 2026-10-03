@@ -1,4 +1,5 @@
-import { BrowserWindow, app } from 'electron';
+import { BrowserWindow } from 'electron';
+import * as appPaths from './paths';
 import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -44,7 +45,7 @@ import * as path from 'path';
  * The temp file is removed in `finally`, whether or not the capture worked.
  */
 async function loadHtml(win: BrowserWindow, html: string): Promise<string> {
-  const file = path.join(app.getPath('temp'), 'ordinate-capture-' + randomUUID() + '.html');
+  const file = path.join(appPaths.temp(), 'ordinate-capture-' + randomUUID() + '.html');
   await fs.promises.writeFile(file, html, 'utf8');
   try {
     await win.loadFile(file);

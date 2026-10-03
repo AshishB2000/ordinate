@@ -8,7 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
+import * as appPaths from './paths';
 import { sanitizeColorMap } from '../analysis/colorMap';
 import type { ColorMap } from '../analysis/colorMap';
 
@@ -47,11 +47,9 @@ export interface Project {
 /** Enough for every card on every dataset in a project, several times over. */
 const MAX_DISMISSED = 500;
 
-let projectsDir: string | null = null;
 
 function getProjectsDir(): string {
-  if (!projectsDir) projectsDir = path.join(app.getPath('userData'), 'projects');
-  return projectsDir;
+  return path.join(appPaths.userData(), 'projects');
 }
 
 // A project id is always a generated UUID (createProject uses randomUUID()).

@@ -1,5 +1,7 @@
 import { app } from 'electron';
+import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
+import { senderOf } from '../server/context';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomBytes } from 'crypto';
@@ -125,7 +127,7 @@ function reconcile(): Promise<void> {
  * the CLI works whether or not the MCP server is enabled.
  */
 function tailJobLog(): void {
-  const file = path.join(app.getPath('userData'), LOG_NAME);
+  const file = path.join(appPaths.userData(), LOG_NAME);
   let offset = sizeOf(file);
   fs.watchFile(file, { interval: 1000, persistent: false }, () => {
     const next = readNewLines(file, offset);
@@ -138,7 +140,7 @@ function tailJobLog(): void {
 
 export function register(deps: PlatformDeps): void {
   // Both modes: a headless `reports run` answers through this too.
-  ipcMain.handle('automation:reportDone', (e, payload: unknown) => ({ ok: settleReport(e.sender.id, payload) }));
+  ipcMain.handle('automation:reportDone', (e, payload: unknown) => ({ ok: settleReport(senderOf(e).id, payload) }));
   if (deps.headless) return;
 
   tailJobLog();

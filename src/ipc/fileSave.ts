@@ -1,4 +1,4 @@
-import { app } from 'electron';
+import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
 
 // File-save dialogs — route image / PDF / PPTX / DOCX exports through the native
@@ -33,7 +33,7 @@ export function register() {
     // prompt. The app never writes to a user folder without this explicit pick.
     const { filePath: savePath, canceled } = await dialog.showSaveDialog({
       title: 'Save image',
-      defaultPath: path.join(app.getPath('downloads'), safe),
+      defaultPath: path.join(appPaths.downloads(), safe),
       filters: [{ name: 'PNG Image', extensions: ['png'] }],
     });
     if (canceled || !savePath) return { ok: false, canceled: true };
@@ -62,7 +62,7 @@ export function register() {
     const safe = (typeof defaultName === 'string' && /\.pdf$/i.test(defaultName)) ? defaultName : 'screenchart-report.pdf';
     const { filePath: savePath, canceled } = await dialog.showSaveDialog({
       title: 'Save report',
-      defaultPath: path.join(app.getPath('downloads'), safe),
+      defaultPath: path.join(appPaths.downloads(), safe),
       filters: [{ name: 'PDF Document', extensions: ['pdf'] }],
     });
     if (canceled || !savePath) return { ok: false, canceled: true };
@@ -89,7 +89,7 @@ export function register() {
     const safe = (typeof defaultName === 'string' && /\.pptx$/i.test(defaultName)) ? defaultName : 'screenchart-report.pptx';
     const { filePath: savePath, canceled } = await dialog.showSaveDialog({
       title: 'Save presentation',
-      defaultPath: path.join(app.getPath('downloads'), safe),
+      defaultPath: path.join(appPaths.downloads(), safe),
       filters: [{ name: 'PowerPoint Presentation', extensions: ['pptx'] }],
     });
     if (canceled || !savePath) return { ok: false, canceled: true };
@@ -115,7 +115,7 @@ export function register() {
     const safe = (typeof defaultName === 'string' && /\.docx$/i.test(defaultName)) ? defaultName : 'screenchart-report.docx';
     const { filePath: savePath, canceled } = await dialog.showSaveDialog({
       title: 'Save report',
-      defaultPath: path.join(app.getPath('downloads'), safe),
+      defaultPath: path.join(appPaths.downloads(), safe),
       filters: [{ name: 'Word Document', extensions: ['docx'] }],
     });
     if (canceled || !savePath) return { ok: false, canceled: true };
@@ -144,7 +144,7 @@ export function register() {
     const safe = (typeof defaultName === 'string' && /\.csv$/i.test(defaultName)) ? defaultName : 'ordinate-table.csv';
     const { filePath: savePath, canceled } = await dialog.showSaveDialog({
       title: 'Export CSV',
-      defaultPath: path.join(app.getPath('downloads'), safe),
+      defaultPath: path.join(appPaths.downloads(), safe),
       filters: [{ name: 'CSV', extensions: ['csv'] }],
     });
     if (canceled || !savePath) return { ok: false, canceled: true };

@@ -1,4 +1,5 @@
-import { app, dialog } from 'electron';
+import { dialog } from 'electron';
+import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -710,7 +711,7 @@ export function register() {
       const safe = csvFileName(name);
       const { filePath, canceled } = await dialog.showSaveDialog({
         title: 'Export these rows',
-        defaultPath: path.join(app.getPath('downloads'), safe),
+        defaultPath: path.join(appPaths.downloads(), safe),
         filters: [{ name: 'CSV', extensions: ['csv'] }],
       });
       if (canceled || !filePath) return { ok: false, canceled: true };

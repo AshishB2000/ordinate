@@ -1,4 +1,5 @@
 import { dialog, app, shell } from 'electron';
+import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -60,7 +61,7 @@ async function exportAsJob(
 ): Promise<{ ok: boolean; dest?: string; canceled?: boolean; error?: string }> {
   const { filePath, canceled } = await dialog.showSaveDialog({
     title: opts.title,
-    defaultPath: path.join(app.getPath('downloads'), opts.defaultName),
+    defaultPath: path.join(appPaths.downloads(), opts.defaultName),
     filters: [{ name: opts.filterName, extensions: [opts.ext] }],
   });
   if (canceled || !filePath) return { ok: false, canceled: true };
@@ -162,7 +163,7 @@ export function register() {
       if (typeof projectId !== 'string' || !UUID_RE.test(projectId)) {
         return { ok: false, error: 'Invalid project id' };
       }
-      const projectsBase = path.resolve(app.getPath('userData'), 'projects');
+      const projectsBase = path.resolve(appPaths.userData(), 'projects');
       const dir = path.resolve(projectsBase, projectId);
       // Defense-in-depth: the UUID gate already forbids separators/'..', so `dir` must
       // sit directly under projectsBase. Confirm it before revealing anything.
