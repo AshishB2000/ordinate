@@ -213,7 +213,10 @@ const quietLog = () => {
     if (!bases[0] || !bases[1]) return;
 
     const rowCount = async (): Promise<number> => Number((await pool.query<{ n: string }>('SELECT count(*) AS n FROM jobs')).rows[0].n);
-    ok('rows: both pods insert their schedules; each (org, kind) exists once (2 orgs × 3 kinds)', await until(async () => (await rowCount()) === 6, 5000) && (await rowCount()) === 6, await rowCount());
+    // An S3 STORAGE_URL in the environment (T5.2) gives every org a fourth kind, storage:gc.
+    const kinds = 3 + ((process.env.STORAGE_URL ?? '').startsWith('s3://') ? 1 : 0);
+    ok(`rows: both pods insert their schedules; each (org, kind) exists once (2 orgs × ${kinds} kinds)`,
+      await until(async () => (await rowCount()) === 2 * kinds, 5000) && (await rowCount()) === 2 * kinds, await rowCount());
     const first = await pool.query<{ due: boolean }>(`SELECT bool_and(next_run_at > now()) AS due FROM jobs`);
     ok('rows: a new schedule is first due one interval from now (no run at boot)', first.rows[0].due === true);
 

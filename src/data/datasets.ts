@@ -39,8 +39,10 @@ import type { InputBlock } from './inputTable/columns';
 // 800-line cap; the writers are re-exported so `datasets.markRefresh` etc. keep
 // working for every caller.
 import {
-  datasetsDir, datasetFilePath, parquetPath, sourceParquetPath, writeJsonAtomic, sanitizeAutoRefresh,
+  datasetsDir, datasetFilePath, parquetPath, sourceParquetPath, writeJsonAtomic, sanitizeAutoRefresh, tablePath, hasTable,
 } from './datasetRecord';
+import * as storage from '../engine/storage';
+import * as appPaths from '../app/paths';
 export { markRefresh, setAutoRefresh, writeQuality, writeIncremental } from './datasetRecord';
 import { sanitizeIncremental } from './incremental';
 import type { IncrementalSettings } from './incremental';
@@ -220,16 +222,25 @@ async function persistNow(projectId: string, dataset: Dataset, explicit: parquet
   // exists) is written second and reported as the last stretch.
   const hasSource = Boolean(dataset.source);
   const share = hasSource ? 0.5 : 1;
-  await parquetStore.writeTableAsync(parquetPath(projectId, dataset.id), dataset.columns, dataset.rows, {
+  // S3: a NEW version's objects, and the record's pointer below is the switch
+  // (src/engine/storage.ts). Otherwise the sibling files, temp-then-rename.
+  const version = storage.isS3() ? randomUUID() : null;
+  const stageDir = version ? appPaths.temp() : undefined;
+  const target = (source: boolean): Promise<string> | string => version
+    ? storage.newObject(projectId, dataset.id, version, source)
+    : (source ? sourceParquetPath : parquetPath)(projectId, dataset.id);
+  await parquetStore.writeTableAsync(await target(false), dataset.columns, dataset.rows, {
+    stageDir,
     checkCancelled: progress.checkCancelled,
     onProgress: progress.onProgress ? (f, note) => progress.onProgress!(f * share, note) : undefined,
   });
   if (dataset.source) {
     await parquetStore.writeTableAsync(
-      sourceParquetPath(projectId, dataset.id),
+      await target(true),
       dataset.source.columns,
       dataset.source.rows,
       {
+        stageDir,
         checkCancelled: progress.checkCancelled,
         onProgress: progress.onProgress ? (f, note) => progress.onProgress!(0.5 + f * 0.5, note) : undefined,
       },
@@ -248,8 +259,9 @@ async function persistNow(projectId: string, dataset: Dataset, explicit: parquet
   };
   delete meta.rows;
   if (!dataset.source) delete meta.source;
+  if (version) meta.storageVersion = version;
   await writeJsonAtomic(file, meta);
-  scheduleIndex({ parquetPath: parquetPath(projectId, dataset.id), columns: dataset.columns }); // save AND refresh land here
+  if (!version) scheduleIndex({ parquetPath: parquetPath(projectId, dataset.id), columns: dataset.columns }); // save AND refresh land here
 }
 
 // Load the tables for a v3 record. Returns false when the data cannot be read —
@@ -260,12 +272,12 @@ async function persistNow(projectId: string, dataset: Dataset, explicit: parquet
 // 1M-row hydrate (~1.8 s) no longer parks every window while it reads.
 async function hydrate(projectId: string, data: any): Promise<boolean> {
   if (Array.isArray(data.rows)) return true; // v2, already inline
-  const derived = await parquetStore.readTableAsync(parquetPath(projectId, data.id), data.columns);
+  const derived = await parquetStore.readTableAsync(tablePath(projectId, data.id, data.storageVersion), data.columns);
   if (!derived) return false;
   data.rows = derived.rows;
   if (data.source && Array.isArray(data.source.columns)) {
     const src = await parquetStore.readTableAsync(
-      sourceParquetPath(projectId, data.id),
+      tablePath(projectId, data.id, data.storageVersion, true),
       data.source.columns,
     );
     if (!src) return false;
@@ -402,6 +414,8 @@ export type DatasetMeta = Omit<Dataset, 'rows' | 'source'> & {
   sourceColumns?: ParsedColumn[];
   /** True when the table lives in a sibling .parquet (v3), i.e. resident-queryable. */
   resident: boolean;
+  /** The table version on S3 (src/engine/storage.ts), when the record has one. */
+  storageVersion?: string;
 };
 
 export async function getDatasetMeta(projectId: string, id: string): Promise<DatasetMeta | null> {
@@ -411,6 +425,7 @@ export async function getDatasetMeta(projectId: string, id: string): Promise<Dat
   try {
     const raw = await recordFs.readFile(datasetFilePath(projectId, id), 'utf8');
     const data = JSON.parse(raw);
+    const version: unknown = data?.storageVersion; // read before isValidDataset narrows `data` to Dataset
     if (!isValidDataset(data)) return null;
     // Deliberately does NOT hydrate and does NOT migrate. Migration is a write,
     // and a metadata read must stay a read — otherwise every column-picker open
@@ -419,8 +434,9 @@ export async function getDatasetMeta(projectId: string, id: string): Promise<Dat
     const meta: DatasetMeta = {
       ...ds,
       rowCount: typeof data.rowCount === 'number' ? data.rowCount : ds.rowCount,
-      resident: !Array.isArray(data.rows) && fs.existsSync(parquetPath(projectId, id)),
+      resident: !Array.isArray(data.rows) && hasTable(projectId, id, version),
     } as DatasetMeta;
+    if (isValidId(version)) meta.storageVersion = version;
     delete (meta as Partial<Dataset>).rows;
     delete (meta as Partial<Dataset>).source;
     if (data.source && Array.isArray(data.source.columns)) meta.sourceColumns = data.source.columns;
@@ -447,7 +463,7 @@ export async function residentSource(
   if (!parquetStore.isSupported()) return null;
   const meta = await getDatasetMeta(projectId, id);
   if (!meta || !meta.resident) return null;
-  return { parquetPath: parquetPath(projectId, id), columns: meta.columns };
+  return { parquetPath: tablePath(projectId, id, meta.storageVersion), columns: meta.columns };
 }
 
 export async function getDataset(projectId: string, id: string): Promise<Dataset | null> {
@@ -723,7 +739,7 @@ export async function updateSteps(
   // pipelines, and the fold gets the tables here (src/data/stepRefs.ts).
   const output =
     (residentReady
-      ? await runResidentPipeline(sourceParquetPath(projectId, id), source.columns, steps)
+      ? await runResidentPipeline(tablePath(projectId, id, (await getDatasetMeta(projectId, id))?.storageVersion, true), source.columns, steps)
       : null) ?? transforms.applyPipeline(source, steps, { salt: await saltForSteps(projectId, steps), ...(await loadStepRefs(projectId, id, steps)) });
 
   const updated: Dataset = {

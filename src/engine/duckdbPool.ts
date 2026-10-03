@@ -21,16 +21,18 @@
 // process-wide limitation the desktop's single connection has
 // (src/ipc/mosaic.ts `hardenConnection`).
 //
-// ── S3 (T5.2), designed for, not built ──────────────────────────────────────
-// `orgSetup()` is the one place a worker's lock is decided. T5.2 adds, BEFORE
+// ── S3 (T5.2) ────────────────────────────────────────────────────────────────
+// With STORAGE_URL=s3://…, `orgSetup()` first runs storage.workerSetup — BEFORE
 // `enable_external_access=false` (after it, LOAD is refused):
-//   LOAD httpfs;                                   -- shipped in the image, never INSTALLed at runtime
-//   CREATE SECRET (TYPE s3, PROVIDER credential_chain, SCOPE 's3://<bucket>/<prefix>/orgs/<org>/');
-// and appends 's3://<bucket>/<prefix>/orgs/<org>/' to allowed_directories —
-// DuckDB 1.5 accepts a URL prefix there (measured: the SET succeeds next to a
-// local path). The pod's IAM role is the credential; the secret's SCOPE and the
-// allow-list both name only the org's prefix. T5.2 must re-run this suite's
-// cross-org refusal against MinIO with an s3:// path.
+//   LOAD httpfs; LOAD aws;                         -- shipped in the image, never INSTALLed at runtime
+//   CREATE SECRET (TYPE s3, PROVIDER credential_chain, …, SCOPE 's3://<bucket>/<prefix>/orgs/<org>/');
+// and appends 's3://<bucket>/<prefix>/orgs/<org>/' to allowed_directories. The
+// pod's IAM role is the credential; the secret's SCOPE and the allow-list both
+// name only the org's prefix. Another org's prefix, a sibling `orgs/<org>x/` and
+// a `..` key are refused inside the worker (scripts/test-storageS3.ts, MinIO).
+// User SQL could CREATE another SECRET here (the lock does not cover secrets) —
+// it still reaches only allowed_directories, and src/engine/sqlGate.ts admits
+// a single read-only statement, so no user text gets that far.
 //
 // ── LIMITS ───────────────────────────────────────────────────────────────────
 // At most `maxWorkers` live workers. A new org beyond that evicts the least
@@ -55,6 +57,8 @@ import * as duck from './duckdb';
 import { DuckClient } from './duckdbClient';
 import { ORG_RE } from '../app/paths';
 import { ctx } from '../server/context';
+import type { S3Env } from '../server/env';
+import { orgUrl, workerSetup } from './storage';
 
 export interface PoolConfig {
   /** DATA_DIR: org roots are `<dataDir>/orgs/<org>/`. */
@@ -65,6 +69,8 @@ export interface PoolConfig {
   readonly threads: number;
   readonly queryTimeoutMs: number;
   readonly idleMs: number;
+  /** STORAGE_URL=s3://… (T5.2): each worker may also read its org's prefix there. */
+  readonly s3?: S3Env | null;
 }
 
 const STARTUP_TIMEOUT_MS = 20_000;
@@ -173,7 +179,8 @@ export class DuckPool {
         payload: new SharedArrayBuffer(1024),
         dbPath: ':memory:',
         maxBytes: MAX_RESULT_BYTES,
-        setup: org === PROBE_KEY ? lockedSetup(this.cfg, []) : orgSetup(this.cfg, org),
+        // The probe loads the S3 extensions too, so /readyz fails on an image without them.
+        setup: org === PROBE_KEY ? lockedSetup(this.cfg, [], undefined, this.cfg.s3 ? workerSetup(this.cfg.s3, null) : []) : orgSetup(this.cfg, org),
       },
     });
     const client = new DuckClient(worker, this.cfg.queryTimeoutMs);
@@ -234,18 +241,21 @@ export class DuckPool {
 }
 
 /** The statements that lock `org`'s worker — see ISOLATION above. Exported for the tests. */
-export function orgSetup(cfg: Pick<PoolConfig, 'dataDir' | 'memoryLimit' | 'threads'>, org: string): string[] {
+export function orgSetup(cfg: Pick<PoolConfig, 'dataDir' | 'memoryLimit' | 'threads' | 's3'>, org: string): string[] {
   if (!ORG_RE.test(org)) throw new Error('invalid org id');
   const root = path.join(cfg.dataDir, 'orgs', org);
   const spill = path.join(root, 'temp', 'duckdb');
   fs.mkdirSync(spill, { recursive: true });
   // DuckDB compares the canonical path (/var → /private/var on macOS).
   const real = fs.realpathSync(root);
-  return lockedSetup(cfg, [real + path.sep], path.join(real, 'temp', 'duckdb'));
+  const s3 = cfg.s3 ?? null;
+  const dirs = s3 ? [real + path.sep, orgUrl(s3, org)] : [real + path.sep];
+  return lockedSetup(cfg, dirs, path.join(real, 'temp', 'duckdb'), s3 ? workerSetup(s3, org) : []);
 }
 
-function lockedSetup(cfg: Pick<PoolConfig, 'memoryLimit' | 'threads'>, dirs: string[], spill?: string): string[] {
+function lockedSetup(cfg: Pick<PoolConfig, 'memoryLimit' | 'threads'>, dirs: string[], spill?: string, first: string[] = []): string[] {
   return [
+    ...first,
     `SET memory_limit=${sqlStr(cfg.memoryLimit)};`,
     `SET threads=${Math.max(1, Math.floor(cfg.threads))};`,
     ...(spill ? [`SET temp_directory=${sqlStr(spill)};`] : []),

@@ -7,6 +7,7 @@ import { enterServerMode, identityFor } from './context';
 import { env, type ServerEnv } from './env';
 import { forbidSyncOnMainThread } from '../engine/duckdb';
 import { routeByOrg } from '../engine/duckdbPool';
+import * as storage from '../engine/storage';
 
 let cfg: ServerEnv;
 try {
@@ -28,7 +29,10 @@ enterServerMode(cfg.dataDir);
 forbidSyncOnMainThread();
 // Every async DuckDB call runs in the caller's org worker, locked to that org's
 // directory (src/engine/duckdbPool.ts); the process-wide worker never starts.
-routeByOrg({ dataDir: cfg.dataDir, ...cfg.duckdb });
+// STORAGE_URL=s3://…: Parquet is versioned objects there, read through each
+// org worker's scoped httpfs secret and a local LRU cache (src/engine/storage.ts).
+storage.configure(cfg.dataDir, cfg.storage.s3, cfg.storage.cacheBytes);
+routeByOrg({ dataDir: cfg.dataDir, ...cfg.duckdb, s3: cfg.storage.s3 });
 registerHandlers();
 const app = buildApp(cfg);
 

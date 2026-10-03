@@ -50,10 +50,29 @@ jobs:
         # The whole tree is .ts (in-place sibling emit) — tsc strict is the
         # parse+type gate; there are no tracked runtime .js files left to check.
         run: npm run build:ts
+      # S3 storage (Phase 7, T5.2): MinIO for scripts/test-storageS3.ts and the
+      # S3 pass of test-serverModeResident (both skip without STORAGE_URL=s3://).
+      # A step rather than a `services:` entry because a service container cannot
+      # be given MinIO's `server /data` command. The suites create their bucket.
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio:latest server /data
+          for i in $(seq 1 30); do curl -fs http://localhost:9000/minio/health/live && break; sleep 1; done
+      # DuckDB reads S3 through httpfs + aws; the server only LOADs them, so
+      # they are installed once here (the Docker image bakes them in, T7.1).
+      - name: Install DuckDB extensions (httpfs, aws)
+        run: node scripts/duckdb-extensions.js
       - name: Run self-checks
         run: npm test
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/ordinate_test
+          STORAGE_URL: s3://ordinate-ci
+          S3_ENDPOINT: http://localhost:9000
+          AWS_ACCESS_KEY_ID: minioadmin
+          AWS_SECRET_ACCESS_KEY: minioadmin
+          DUCKDB_EXTENSION_DIR: ${{ github.workspace }}/.duckdb-extensions
 
   # The web app (Phase 7): build, initial-bundle budget, Vitest, then the
   # Playwright e2e (web/e2e/) against the BUILT server on a temp DATA_DIR seeded

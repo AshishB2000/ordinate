@@ -10,8 +10,10 @@
 // SECURITY: every writer validates BOTH ids as UUIDs before either reaches a
 // path, so a record path can never escape userData/projects/<projectId>/datasets.
 
+import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
+import * as storage from '../engine/storage';
 import * as appPaths from '../app/paths';
 import { isValidId } from '../app/ids';
 import { sanitizeOrigin } from './datasetOrigin';
@@ -42,6 +44,22 @@ export function parquetPath(projectId: string, id: string): string {
 
 export function sourceParquetPath(projectId: string, id: string): string {
   return path.join(datasetsDir(projectId), id + '.source.parquet');
+}
+
+/**
+ * Where to READ a dataset's table (or its prepare source) now. A record written
+ * on S3 names its `storageVersion` (src/engine/storage.ts): the cached copy or
+ * the s3:// URL. Otherwise — the desktop, DATA_DIR storage, or a record from
+ * before S3 was turned on (moved to S3 by its next write) — the sibling file.
+ */
+export function tablePath(projectId: string, id: string, version: unknown, source = false): string {
+  if (storage.isS3() && typeof version === 'string' && isValidId(version)) return storage.readPath(projectId, id, version, source);
+  return source ? sourceParquetPath(projectId, id) : parquetPath(projectId, id);
+}
+
+/** Has the record a table to read (S3 version, or the sibling Parquet)? */
+export function hasTable(projectId: string, id: string, version: unknown): boolean {
+  return (storage.isS3() && typeof version === 'string' && isValidId(version)) || fs.existsSync(parquetPath(projectId, id));
 }
 
 // Atomic JSON write: temp sibling then rename (atomic on same fs), so a crash
