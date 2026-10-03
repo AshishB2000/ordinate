@@ -28,6 +28,7 @@ export const pages: RouteObject[] = [
   ...(import.meta.env.DEV || import.meta.env.MODE === 'gallery'
     ? [page('/dev/ui', () => import('../ui/gallery/Gallery'))]
     : []),
+  page('/data/:projectId/:datasetId', () => import('../features/data/DatasetPage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.

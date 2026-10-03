@@ -122,28 +122,38 @@ export interface E2eOptions {
 }
 
 // One server and one browser per spec file (node:test runs each file in its
-// own process): importing this module registers the file's hooks.
-let server: Server | undefined;
+// own process): importing this module registers the file's hooks. The server
+// starts with the first session, not in `before` — a top-level hook runs as it
+// is registered, before the spec's own top-level code (withLargeDataset) has.
+let server: Promise<Server> | undefined;
 let browser: Browser | undefined;
+const seedOpts: { large?: boolean } = {};
+
+/** Call at a spec's top level: this file's server also gets the 1M-row dataset (server.sample.large). */
+export function withLargeDataset(): void {
+  seedOpts.large = true;
+}
+
 before(async () => {
-  server = await startServer();
   browser = await launchBrowser();
 });
 after(async () => {
   await browser?.close();
-  await server?.stop();
+  await (await server?.catch(() => undefined))?.stop();
 });
 
 /** Opens a fixture-wired page. Exported for negative controls; specs use `e2e()`. */
 export async function openSession(opts: E2eOptions = {}): Promise<Session & { close(): Promise<void> }> {
-  if (!server || !browser) throw new Error('openSession() before the suite started');
-  const context = await browser.newContext({ baseURL: server.base, viewport: { width: 1440, height: 900 } });
+  if (!browser) throw new Error('openSession() before the suite started');
+  server ??= startServer({}, { ...seedOpts });
+  const srv = await server;
+  const context = await browser.newContext({ baseURL: srv.base, viewport: { width: 1440, height: 900 } });
   const page = await context.newPage();
   const consoleProblems = await failOnConsoleError(page);
   const rpc = rpcBudget(page, opts.rpcBudget);
   return {
     page,
-    server,
+    server: srv,
     rpc,
     problems: () => [...consoleProblems(), ...rpc.problems()],
     close: () => context.close(),

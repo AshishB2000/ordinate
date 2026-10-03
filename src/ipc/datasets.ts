@@ -298,6 +298,14 @@ export function register() {
   ipcMain.handle('dataset:meta', async (_e, { projectId, id }: any = {}) =>
     datasets.getDatasetMeta(projectId, id));
 
+  // The data grid's header (web/src/ui/DataGrid): `dataset:meta` minus every
+  // field that says where the rows came from — an origin can hold a file path,
+  // a URL with a key in it or a SQL statement, none of which a grid draws.
+  ipcMain.handle('dataset:columns', async (_e, { projectId, id }: any = {}) => {
+    const meta = await datasets.getDatasetMeta(projectId, id);
+    return meta ? { id: meta.id, name: meta.name, rowCount: meta.rowCount, columns: meta.columns } : null;
+  });
+
   // A delete is a move to the Trash (src/app/trash.ts), taking the dataset's
   // visuals with it; `cascaded` says how many, for the toast.
   ipcMain.handle('dataset:delete', async (_e, { projectId, id }: any = {}) =>

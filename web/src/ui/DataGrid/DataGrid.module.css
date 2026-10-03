@@ -1,0 +1,229 @@
+/* The data grid — hub.css `.ds-table-scroll` / `.ds-th` / `.ds-td` and the
+   input grid's type marks. Every cell is absolutely placed (DataGrid.tsx sets
+   the transforms through the CSSOM, which the CSP allows); the row height is
+   DataGrid.tsx ROW_H (28) and the header HEAD_H (34) — one number, two
+   spellings, kept equal. */
+
+.frame {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  gap: var(--sp-8);
+}
+
+.scroll {
+  position: relative;
+  /* Basis 0: the sizer inside is millions of px tall, and must never be what
+     sizes the box — the host gives the grid its height. */
+  flex: 1 1 0;
+  min-height: 240px;
+  overflow: auto;
+  overflow-anchor: none;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+  outline: none;
+}
+.scroll:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  border-color: var(--accent-line);
+}
+
+.sizer {
+  position: relative;
+}
+
+/* The head: the card surface (opaque, so rows passing under it stay legible),
+   a hairline as its only edge, sticky over the body. */
+.head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 34px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+}
+.th {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  height: 34px;
+  padding: 0 var(--sp-12) 0 var(--sp-8);
+  font-weight: 600;
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+.thName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The resize handle: the column's right edge, a hairline that turns accent. */
+.resize {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  z-index: 1;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+}
+.resize::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 3px;
+  width: 1px;
+  background: var(--border);
+}
+.resize:hover::after,
+.resize:active::after {
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: var(--accent);
+}
+
+/* Type marks: icon + a short word, tinted per type (input grid / ds-type). */
+.type {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  height: 18px;
+  padding: 0 5px 0 4px;
+  border-radius: var(--r-full);
+  font-size: var(--t-11);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+.text {
+  background: var(--surface-3);
+  color: var(--text-dim);
+}
+.number {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.date {
+  background: color-mix(in srgb, var(--chart-4) 14%, transparent);
+  color: var(--chart-4);
+}
+.typeWord {
+  font-variant-numeric: normal;
+}
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.body {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 0;
+}
+.tr {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 28px;
+  width: 100%;
+}
+.tr:hover .td {
+  background: var(--surface-2);
+}
+.td {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 28px;
+  padding: 0 var(--sp-8);
+  line-height: 27px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--surface-1);
+}
+.num {
+  text-align: right;
+}
+
+/* The active cell: outlined whenever the grid has focus (spreadsheet
+   convention — it is where the next key lands), tinted otherwise. */
+.active {
+  background: var(--accent-soft);
+}
+.tr:hover .active {
+  background: var(--accent-soft);
+}
+.scroll:focus .active {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* A row whose block is still on its way: a bar per cell (plan §7 skeleton). */
+.sk {
+  display: block;
+  height: 10px;
+  margin-top: 9px;
+  width: 60%;
+  border-radius: var(--r-sm);
+  background-color: var(--surface-2);
+  background-image: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+}
+.num .sk {
+  margin-left: auto;
+  width: 45%;
+}
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.editor {
+  width: calc(100% + var(--sp-16));
+  height: 26px;
+  margin: 0 calc(-1 * var(--sp-8));
+  padding: 0 var(--sp-8);
+  border: 0;
+  background: var(--surface);
+  color: var(--text-strong);
+  font: inherit;
+  text-align: inherit;
+  outline: none;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-12);
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-md);
+  background: var(--error-soft);
+  color: var(--error);
+  font-weight: 500;
+}
