@@ -16,6 +16,7 @@ import { projectDir } from '../app/recordKinds';
 import { MAX_EVENTS, sanitizeEvent } from './events';
 import type { ProjectEvent } from './events';
 import { holidayEvents, sanitizeCalendars } from './holidays';
+import * as recordFs from '../app/recordFs';
 
 export interface EventFile { events: ProjectEvent[]; calendars: string[] }
 
@@ -30,7 +31,7 @@ export async function load(projectId: string): Promise<EventFile> {
   if (!file) return { events: [], calendars: [] };
   let raw: any; // any: parsed JSON, sanitized field by field below
   try {
-    raw = JSON.parse(await fs.promises.readFile(file, 'utf8'));
+    raw = JSON.parse(await recordFs.readFile(file, 'utf8'));
   } catch (_) {
     return { events: [], calendars: [] };
   }
@@ -50,8 +51,8 @@ export async function save(projectId: string, f: EventFile): Promise<boolean> {
     await fs.promises.mkdir(path.dirname(file), { recursive: true });
     const tmp = file + '.' + randomUUID() + '.tmp';
     const body = { events: f.events.slice(0, MAX_EVENTS), calendars: sanitizeCalendars(f.calendars) };
-    await fs.promises.writeFile(tmp, JSON.stringify(body, null, 2), 'utf8');
-    await fs.promises.rename(tmp, file);
+    await recordFs.writeFile(tmp, JSON.stringify(body, null, 2), 'utf8');
+    await recordFs.rename(tmp, file);
     return true;
   } catch (err: any) {
     console.error('[events] Could not write events.json:', err && err.message);

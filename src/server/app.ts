@@ -16,6 +16,7 @@ import { audit, targetIds, type Outcome } from './authz/audit';
 import { registerAuth } from './auth/index';
 import { migrate } from './db/migrate';
 import { createPool, ping, scrubbed } from './db/pool';
+import { useRecordDb } from '../app/recordFs';
 import { handlers } from './rpc';
 import { maskFileToken, registerFileRoutes } from './files';
 import { clientFor, registerEvents } from './sse';
@@ -118,6 +119,10 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       } catch (err) {
         throw scrubbed(err, dbUrl);
       }
+      // Records (projects, visuals, …) are rows from here on — in server mode
+      // only; recordFs ignores the pool under the desktop (T5.1). Before the
+      // runner: a job's handler reads records like a request does.
+      useRecordDb(pool);
       (require('./jobs/schedules') as typeof import('./jobs/schedules')).wireSchedules();
       bus = await (require('./jobs/bus') as typeof import('./jobs/bus')).startBus(pool, dbUrl, app.log);
       jobs = (require('./jobs/runner') as typeof import('./jobs/runner')).startRunner(pool, cfg.dataDir, app.log);
@@ -128,7 +133,10 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       await jobs?.stop();
       await bus?.stop();
     });
-    app.addHook('onClose', async () => pool.end());
+    app.addHook('onClose', async () => {
+      useRecordDb(null);
+      await pool.end();
+    });
   }
 
   // Sign-in routes (/api/auth/*) and how every other /api/ request is identified.

@@ -28,6 +28,7 @@ import type { TrashEntry } from './trashStore';
 import * as versions from './versions';
 import * as visuals from '../analysis/visuals';
 import * as alertStore from '../analysis/alertStore';
+import * as recordFs from './recordFs';
 
 export const RETENTION_DAYS = 30;
 const DAY_MS = 86_400_000;
@@ -66,17 +67,17 @@ function liveFile(projectId: string, type: FileRecordType, id: string): string {
 }
 
 async function exists(file: string): Promise<boolean> {
-  try { await fs.promises.access(file); return true; } catch (_) { return false; }
+  try { await recordFs.access(file); return true; } catch (_) { return false; }
 }
 
 /** rename, or copy + remove when rename cannot cross whatever it has to. */
 async function move(from: string, to: string): Promise<void> {
   if (!(await exists(from))) return;
   try {
-    await fs.promises.rename(from, to);
+    await recordFs.rename(from, to);
   } catch (_) {
-    await fs.promises.copyFile(from, to);
-    await fs.promises.rm(from, { force: true });
+    await recordFs.copyFile(from, to);
+    await recordFs.rm(from, { force: true });
   }
 }
 
@@ -85,7 +86,7 @@ async function moveToTrash(projectId: string, type: FileRecordType, id: string, 
   if (!file) return null;
   let rec: any; // ponytail: any stored record
   try {
-    rec = JSON.parse(await fs.promises.readFile(file, 'utf8'));
+    rec = JSON.parse(await recordFs.readFile(file, 'utf8'));
   } catch (_) {
     return null;
   }
@@ -94,7 +95,7 @@ async function moveToTrash(projectId: string, type: FileRecordType, id: string, 
     const dir = store.trashDir(projectId, 'dataset');
     for (const n of await store.datasetFiles(path.dirname(file), id)) await move(path.join(path.dirname(file), n), path.join(dir, n));
   }
-  await fs.promises.rm(file, { force: true });
+  await recordFs.rm(file, { force: true });
   return typeof rec.name === 'string' ? rec.name : '';
 }
 
@@ -145,9 +146,9 @@ async function moveBack(projectId: string, type: RecordType, id: string): Promis
     for (const n of await store.datasetFiles(dir, id)) await move(path.join(dir, n), path.join(path.dirname(file), n));
   }
   const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(live, null, 2), 'utf8');
-  await fs.promises.rename(tmp, file);
-  await fs.promises.rm(store.entryPath(projectId, type, id), { force: true });
+  await recordFs.writeFile(tmp, JSON.stringify(live, null, 2), 'utf8');
+  await recordFs.rename(tmp, file);
+  await recordFs.rm(store.entryPath(projectId, type, id), { force: true });
   return { type, id, name };
 }
 
@@ -222,7 +223,7 @@ export async function list(projectId: string, now = Date.now()): Promise<TrashIt
 export async function purgeExpired(now = Date.now()): Promise<number> {
   let ids: string[] = [];
   try {
-    ids = (await fs.promises.readdir(projectsBase())).filter((n) => isValidId(n));
+    ids = (await recordFs.readdir(projectsBase())).filter((n) => isValidId(n));
   } catch (_) {
     return 0;
   }

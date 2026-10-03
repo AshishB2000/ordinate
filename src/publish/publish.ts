@@ -41,6 +41,7 @@ import { readLogoDataUrl } from '../app/branding';
 import type { SiteAssets } from './siteHtml';
 import { listThemes } from '../app/themeStore';
 import { themeModel } from '../analysis/themeTokens';
+import * as recordFs from '../app/recordFs';
 
 export const SITE_FORMAT = 'ordinate-site';
 export const SITE_VERSION = 1;
@@ -140,7 +141,7 @@ function configFile(projectId: string): string {
 export async function getStoredConfig(projectId: string): Promise<(PublishConfig & { lastPublishedAt?: string; lastBytes?: number }) | null> {
   if (!isValidId(projectId)) return null;
   try {
-    const raw = JSON.parse(await fs.promises.readFile(configFile(projectId), 'utf8'));
+    const raw = JSON.parse(await recordFs.readFile(configFile(projectId), 'utf8'));
     const clean = sanitizePublishConfig({ ...raw, projectId });
     if ('error' in clean) return null;
     return {
@@ -165,8 +166,8 @@ export async function storeConfig(config: PublishConfig, result?: PublishResult)
     ...(result ? { lastPublishedAt: new Date().toISOString(), lastBytes: result.bytes } : {}),
   };
   const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(body, null, 2));
-  await fs.promises.rename(tmp, file);
+  await recordFs.writeFile(tmp, JSON.stringify(body, null, 2));
+  await recordFs.rename(tmp, file);
 }
 
 // ── The share policy ─────────────────────────────────────────────────────────
@@ -364,14 +365,14 @@ async function buildPages(config: PublishConfig, ctx: PublishProgress, outgoing?
 
 async function writeAtomic(file: string, data: string): Promise<void> {
   const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, data);
-  await fs.promises.rename(tmp, file);
+  await recordFs.writeFile(tmp, data);
+  await recordFs.rename(tmp, file);
 }
 
 /** Files a previous publish of OURS wrote here, by its manifest. */
 async function previousFiles(outDir: string): Promise<string[]> {
   try {
-    const m = JSON.parse(await fs.promises.readFile(path.join(outDir, 'manifest.json'), 'utf8'));
+    const m = JSON.parse(await recordFs.readFile(path.join(outDir, 'manifest.json'), 'utf8'));
     if (!m || m.format !== SITE_FORMAT || !Array.isArray(m.pages)) return [];
     return m.pages.map((p: { file?: unknown }) => p && p.file).filter((f: unknown) => typeof f === 'string' && /^[a-z0-9][a-z0-9-]*\.html$/.test(f));
   } catch (_) {
@@ -413,7 +414,7 @@ export async function publishSite(
   await writeAtomic(path.join(config.outDir, 'manifest.json'), manifestText);
   bytes += Buffer.byteLength(manifestText);
   for (const old of before) {
-    if (!files.includes(old)) await fs.promises.rm(path.join(config.outDir, old), { force: true });
+    if (!files.includes(old)) await recordFs.rm(path.join(config.outDir, old), { force: true });
   }
   if (ctx.progress) ctx.progress(1);
   return { outDir: config.outDir, files: ['index.html', ...files, 'manifest.json'], bytes, combos };

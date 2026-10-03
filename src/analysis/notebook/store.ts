@@ -18,6 +18,7 @@ import * as projects from '../../app/projects';
 import { projectDir, isValidId } from '../../app/recordKinds';
 import { excerptOf, sanitizeCells, starterCells } from './model';
 import type { NbCell, Notebook } from './model';
+import * as recordFs from '../../app/recordFs';
 
 export interface NotebookSummary {
   id: string;
@@ -38,8 +39,8 @@ function file(projectId: string, id: string): string {
 
 async function writeJsonAtomic(target: string, obj: unknown): Promise<void> {
   const tmp = target + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
-  await fs.promises.rename(tmp, target);
+  await recordFs.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
+  await recordFs.rename(tmp, target);
 }
 
 function cleanName(v: unknown): string {
@@ -62,7 +63,7 @@ function normalize(data: any, projectId: string): Notebook {
 export async function getNotebook(projectId: string, id: string): Promise<Notebook | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   try {
-    const data = JSON.parse(await fs.promises.readFile(file(projectId, id), 'utf8'));
+    const data = JSON.parse(await recordFs.readFile(file(projectId, id), 'utf8'));
     if (!data || data.id !== id) return null;
     return normalize(data, projectId);
   } catch (_) {
@@ -74,7 +75,7 @@ export async function listNotebooks(projectId: string): Promise<NotebookSummary[
   if (!isValidId(projectId)) return [];
   let names: string[];
   try {
-    names = await fs.promises.readdir(dir(projectId));
+    names = await recordFs.readdir(dir(projectId));
   } catch (_) {
     return [];
   }
@@ -132,7 +133,7 @@ export async function updateNotebook(projectId: string, id: string, patch: { nam
 export async function deleteNotebook(projectId: string, id: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
   try {
-    await fs.promises.rm(file(projectId, id), { force: true });
+    await recordFs.rm(file(projectId, id), { force: true });
     return true;
   } catch (_) {
     return false;

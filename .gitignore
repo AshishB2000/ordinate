@@ -1090,3 +1090,11 @@ scripts/**/*.js
 /src/server/jobs/schedules.js
 /scripts/jobsPodPreload.js
 /scripts/test-jobs-pods.js
+
+# web/t5.1-records
+/src/app/recordFs.js
+/src/server/importDesktop.js
+/scripts/recordsScenario.js
+/scripts/test-records.js
+/scripts/test-importDesktop.js
+/scripts/bench-records.js

@@ -33,6 +33,7 @@ import { randomUUID } from 'crypto';
 import * as projects from './projects';
 import { projectDir, projectsBase, isValidId } from './recordKinds';
 import { bundleThemesEntry, importBundleThemes } from './themeStore';
+import * as recordFs from './recordFs';
 import { bundleTemplatesEntry, importBundleTemplates } from './userTemplateStore'; // r7:templates
 
 export const BUNDLE_FORMAT = 'ordinate-project';
@@ -310,9 +311,9 @@ export async function peekManifest(file: string): Promise<BundleManifest | null>
 // ── Export ───────────────────────────────────────────────────────────────────
 
 async function walk(dir: string, rel = ''): Promise<string[]> {
-  let dirents: fs.Dirent[] = [];
+  let dirents: recordFs.Dirent[] = [];
   try {
-    dirents = await fs.promises.readdir(path.join(dir, rel), { withFileTypes: true });
+    dirents = await recordFs.readdir(path.join(dir, rel), { withFileTypes: true });
   } catch (_) {
     return [];
   }
@@ -347,7 +348,7 @@ export async function exportProject(
     const rule = ruleFor(rel);
     if (!rule || rel === 'manifest.json') continue; // the trash, copilot.json, temp files…
     if (opts.checkCancelled) opts.checkCancelled();
-    entries.push({ name: rel, data: await fs.promises.readFile(path.join(dir, rel)) });
+    entries.push({ name: rel, data: await recordFs.readFile(path.join(dir, rel)) });
     if (opts.onProgress) opts.onProgress(0.3 * ((i + 1) / files.length), 'Reading files');
     if (rule.count) counts[rule.count] = (counts[rule.count] || 0) + 1;
   }
@@ -383,14 +384,14 @@ export async function exportProject(
 async function idsInUse(): Promise<Set<string>> {
   const used = new Set<string>();
   let pids: string[] = [];
-  try { pids = (await fs.promises.readdir(projectsBase())).filter((n) => isValidId(n)); } catch (_) { pids = []; }
+  try { pids = (await recordFs.readdir(projectsBase())).filter((n) => isValidId(n)); } catch (_) { pids = []; }
   for (const pid of pids) {
     used.add(pid.toLowerCase());
     for (const rel of await walk(path.join(projectsBase(), pid))) {
       for (const m of rel.match(UUID_G) || []) used.add(m.toLowerCase());
     }
     try {
-      const a = JSON.parse(await fs.promises.readFile(path.join(projectsBase(), pid, 'alerts.json'), 'utf8'));
+      const a = JSON.parse(await recordFs.readFile(path.join(projectsBase(), pid, 'alerts.json'), 'utf8'));
       for (const r of a.rules || []) if (typeof r.id === 'string') used.add(r.id.toLowerCase());
     } catch (_) { /* no alerts */ }
   }
@@ -478,8 +479,8 @@ export async function importBundle(bytes: Buffer, opts: BundleProgress & { name?
       await fs.promises.mkdir(path.dirname(target), { recursive: true });
       const data = rel.endsWith('.json') ? Buffer.from(swap(e.data.toString('utf8')), 'utf8') : e.data;
       const tmp = target + '.' + randomUUID() + '.tmp';
-      await fs.promises.writeFile(tmp, data);
-      await fs.promises.rename(tmp, target);
+      await recordFs.writeFile(tmp, data);
+      await recordFs.rename(tmp, target);
     }
     // Carry the source project's dismissed insights and colours; everything else about the
     // project record (id, dates, archive state) belongs to the new one.

@@ -185,6 +185,9 @@ const quietLog = () => {
     const projects: typeof import('../src/app/projects') = require('../src/app/projects');
     const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
     context.enterServerMode(data);
+    // With DATABASE_URL a record is a row (T5.1): the fixture goes where the pods read it.
+    await mig.migrate(pool);
+    (require('../src/app/recordFs') as typeof import('../src/app/recordFs')).useRecordDb(pool);
     const csv = path.join(data, 'source.csv');
     fs.writeFileSync(csv, 'region,revenue\nnorth,10\n');
     const fixture = await context.runInContext(who('default', 'dev@local'), 'fixture', async () => {

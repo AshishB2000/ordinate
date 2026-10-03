@@ -15,6 +15,7 @@ import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import { sanitizeBlocks, starterBlocks } from './storyModel';
 import type { StoryBlock } from './storyModel';
+import * as recordFs from '../app/recordFs';
 
 export interface Story {
   id: string;
@@ -53,8 +54,8 @@ function storyFilePath(projectId: string, id: string): string {
 
 async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
   const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
-  await fs.promises.rename(tmp, file);
+  await recordFs.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
+  await recordFs.rename(tmp, file);
 }
 
 function cleanName(v: unknown): string {
@@ -90,7 +91,7 @@ export async function listStories(projectId: string): Promise<StorySummary[]> {
   if (!isValidId(projectId)) return [];
   let dirents;
   try {
-    dirents = await fs.promises.readdir(storiesDir(projectId), { withFileTypes: true });
+    dirents = await recordFs.readdir(storiesDir(projectId), { withFileTypes: true });
   } catch (_) {
     return [];
   }
@@ -100,7 +101,7 @@ export async function listStories(projectId: string): Promise<StorySummary[]> {
     const id = d.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue;
     try {
-      const data = JSON.parse(await fs.promises.readFile(storyFilePath(projectId, id), 'utf8'));
+      const data = JSON.parse(await recordFs.readFile(storyFilePath(projectId, id), 'utf8'));
       if (!data || typeof data.id !== 'string') continue;
       const s = normalize(data, projectId);
       out.push({ id: s.id, name: s.name, blockCount: s.blocks.length, excerpt: excerptOf(s.blocks), updatedAt: s.updatedAt });
@@ -115,7 +116,7 @@ export async function listStories(projectId: string): Promise<StorySummary[]> {
 export async function getStory(projectId: string, id: string): Promise<Story | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   try {
-    const data = JSON.parse(await fs.promises.readFile(storyFilePath(projectId, id), 'utf8'));
+    const data = JSON.parse(await recordFs.readFile(storyFilePath(projectId, id), 'utf8'));
     if (!data || typeof data.id !== 'string') return null;
     return normalize(data, projectId);
   } catch (_) {
@@ -161,7 +162,7 @@ export async function updateStory(projectId: string, id: string, patch: { name?:
 export async function deleteStory(projectId: string, id: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
   try {
-    await fs.promises.rm(storyFilePath(projectId, id), { force: true });
+    await recordFs.rm(storyFilePath(projectId, id), { force: true });
     return true;
   } catch (_) {
     return false;

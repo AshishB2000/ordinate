@@ -26,6 +26,7 @@ import { randomUUID } from 'crypto';
 import { projectDir, isValidId } from './recordKinds';
 import type { FileRecordType } from './recordKinds';
 import { contentOf, sameContent, summarize } from '../analysis/recordDiff';
+import * as recordFs from './recordFs';
 
 export const MAX_VERSIONS = 50;
 
@@ -64,7 +65,7 @@ function recordDir(projectId: string, type: string, recordId: string): string {
 /** The whole history tree of one record — Trash's permanent delete removes it. */
 export async function forget(projectId: string, type: string, recordId: string): Promise<void> {
   const dir = recordDir(projectId, type, recordId);
-  if (dir) await fs.promises.rm(dir, { recursive: true, force: true });
+  if (dir) await recordFs.rm(dir, { recursive: true, force: true });
 }
 
 function keyFor(iso: string): string {
@@ -74,7 +75,7 @@ function keyFor(iso: string): string {
 async function keys(dir: string): Promise<string[]> {
   let names: string[] = [];
   try {
-    names = await fs.promises.readdir(dir);
+    names = await recordFs.readdir(dir);
   } catch (_) {
     return [];
   }
@@ -86,7 +87,7 @@ async function keys(dir: string): Promise<string[]> {
 
 async function readVersion(dir: string, key: string): Promise<VersionFile | null> {
   try {
-    const data = JSON.parse(await fs.promises.readFile(path.join(dir, key + '.json'), 'utf8'));
+    const data = JSON.parse(await recordFs.readFile(path.join(dir, key + '.json'), 'utf8'));
     if (!data || typeof data !== 'object' || !data.record || typeof data.savedAt !== 'string') return null;
     return data as VersionFile;
   } catch (_) {
@@ -164,13 +165,13 @@ async function write(
     await fs.promises.mkdir(dir, { recursive: true });
     const target = path.join(dir, key + '.json');
     const tmp = target + '.' + randomUUID() + '.tmp';
-    await fs.promises.writeFile(tmp, JSON.stringify(file), 'utf8');
-    await fs.promises.rename(tmp, target);
+    await recordFs.writeFile(tmp, JSON.stringify(file), 'utf8');
+    await recordFs.rename(tmp, target);
 
     // Oldest first, so the prune is a slice off the front.
     const all = [...existing, key].sort();
     for (const old of all.slice(0, Math.max(0, all.length - MAX_VERSIONS))) {
-      await fs.promises.rm(path.join(dir, old + '.json'), { force: true });
+      await recordFs.rm(path.join(dir, old + '.json'), { force: true });
     }
     return toMeta(type, key, file);
   } catch (err: any) {

@@ -39,6 +39,7 @@ import { detectAnomaliesResident } from '../engine/anomaliesResident';
 import { distinctAllJs, distinctAllResident } from '../engine/distinctAll';
 import { periodPlan, orderPeriods } from './insightsAgg';
 import type { FilterStep } from '../data/transforms';
+import * as recordFs from '../app/recordFs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -65,8 +66,8 @@ async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
   // Unique temp per write: a fixed name lets two overlapping writes share one
   // path and interleave into a corrupt file. Same reasoning as projects.ts.
   const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
-  await fs.promises.rename(tmp, file);
+  await recordFs.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
+  await recordFs.rename(tmp, file);
 }
 
 /**
@@ -78,7 +79,7 @@ export async function load(projectId: string): Promise<AlertFile> {
   if (!UUID_RE.test(String(projectId || ''))) return { ...EMPTY };
   let raw: any;
   try {
-    raw = JSON.parse(await fs.promises.readFile(alertsFile(projectId), 'utf8'));
+    raw = JSON.parse(await recordFs.readFile(alertsFile(projectId), 'utf8'));
   } catch (_) {
     return { ...EMPTY }; // missing, unreadable or corrupt — never fatal
   }

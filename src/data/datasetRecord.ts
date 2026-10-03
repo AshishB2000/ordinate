@@ -10,7 +10,6 @@
 // SECURITY: every writer validates BOTH ids as UUIDs before either reaches a
 // path, so a record path can never escape userData/projects/<projectId>/datasets.
 
-import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as appPaths from '../app/paths';
@@ -22,6 +21,7 @@ import type { DatasetQuality } from '../analysis/qualityRules';
 import type { AutoRefresh, AutoRefreshEvery } from './datasets';
 import { sanitizeIncremental } from './incremental';
 import type { IncrementalSettings } from './incremental';
+import * as recordFs from '../app/recordFs';
 
 
 function getProjectsBase(): string {
@@ -51,8 +51,8 @@ export async function writeJsonAtomic(file: string, obj: unknown): Promise<void>
   // record share one temp path and interleave into a corrupt file (or ENOENT on
   // the second rename). A per-write suffix degrades the race to clean last-writer-wins.
   const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
-  await fs.promises.rename(tmp, file); // atomic on same fs
+  await recordFs.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
+  await recordFs.rename(tmp, file); // atomic on same fs
 }
 
 /**
@@ -97,7 +97,7 @@ export async function markRefresh(
   if (!isValidId(projectId) || !isValidId(id)) return false;
   const file = datasetFilePath(projectId, id);
   try {
-    const raw = JSON.parse(await fs.promises.readFile(file, 'utf8'));
+    const raw = JSON.parse(await recordFs.readFile(file, 'utf8'));
     if (!raw || typeof raw !== 'object') return false;
     raw.lastRefreshStatus = status;
     raw.lastRefreshError = error;
@@ -130,7 +130,7 @@ export async function setAutoRefresh(
   if (!isValidId(projectId) || !isValidId(id)) return false;
   const file = datasetFilePath(projectId, id);
   try {
-    const raw = JSON.parse(await fs.promises.readFile(file, 'utf8'));
+    const raw = JSON.parse(await recordFs.readFile(file, 'utf8'));
     if (!raw || typeof raw !== 'object') return false;
     if (patch.every === null) {
       delete raw.autoRefresh;
@@ -209,7 +209,7 @@ export function writeQuality(
 function serialized<T>(file: string, apply: (raw: Record<string, unknown>) => T): Promise<T | false> {
   const run = async (): Promise<T | false> => {
     try {
-      const raw = JSON.parse(await fs.promises.readFile(file, 'utf8'));
+      const raw = JSON.parse(await recordFs.readFile(file, 'utf8'));
       if (!raw || typeof raw !== 'object') return false;
       const next = apply(raw);
       await writeJsonAtomic(file, raw);

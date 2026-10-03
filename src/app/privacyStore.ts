@@ -30,6 +30,7 @@ import { detectSensitive } from '../data/sensitivity';
 import type { SensitivityProposal, SensitiveKind } from '../data/sensitivity';
 import type { ParsedColumn } from '../data/parse';
 import type { Cell, TransformStep } from '../data/transforms';
+import * as recordFs from './recordFs';
 
 export type ShareAction = 'mask' | 'drop' | 'include';
 export type SharePath = 'export' | 'report' | 'publish' | 'bundle';
@@ -51,13 +52,13 @@ function privacyDir(projectId: string): string {
 async function writeAtomic(file: string, data: string, mode?: number): Promise<void> {
   await fs.promises.mkdir(path.dirname(file), { recursive: true });
   const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, data, mode ? { encoding: 'utf8', mode } : 'utf8');
-  await fs.promises.rename(tmp, file);
+  await recordFs.writeFile(tmp, data, mode ? { encoding: 'utf8', mode } : 'utf8');
+  await recordFs.rename(tmp, file);
 }
 
 async function readJson(file: string): Promise<unknown> {
   try {
-    return JSON.parse(await fs.promises.readFile(file, 'utf8'));
+    return JSON.parse(await recordFs.readFile(file, 'utf8'));
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code !== 'ENOENT') console.error('[privacy] unreadable', path.basename(file), '— treating as empty');
@@ -81,6 +82,7 @@ async function serial<T>(key: string, fn: () => Promise<T>): Promise<T> {
 // ── The salt ─────────────────────────────────────────────────────────────────
 
 const SALT_RE = /^[0-9a-f]{64}$/;
+// Keyed by the salt's path, which carries the org: project ids repeat across orgs.
 const saltCache = new Map<string, string>();
 
 /** Where the salt lives. Exported for the tests that prove it stays there. */
@@ -95,16 +97,16 @@ export function saltPath(projectId: string): string {
  */
 export async function getSalt(projectId: string): Promise<string | null> {
   if (!isValidId(projectId)) return null;
-  const hit = saltCache.get(projectId);
+  const hit = saltCache.get(saltPath(projectId));
   if (hit) return hit;
   return serial('salt:' + projectId, async () => {
-    const again = saltCache.get(projectId);
+    const again = saltCache.get(saltPath(projectId));
     if (again) return again;
     const file = saltPath(projectId);
     try {
-      const s = (await fs.promises.readFile(file, 'utf8')).trim();
+      const s = (await recordFs.readFile(file, 'utf8')).trim();
       if (SALT_RE.test(s)) {
-        saltCache.set(projectId, s);
+        saltCache.set(saltPath(projectId), s);
         return s;
       }
       // A damaged key is NOT silently replaced: every token hashed under it
@@ -115,27 +117,27 @@ export async function getSalt(projectId: string): Promise<string | null> {
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') return null;
     }
     try {
-      await fs.promises.access(projectDir(projectId));
+      await recordFs.access(projectDir(projectId));
     } catch (_) {
       return null;
     }
     const salt = randomBytes(32).toString('hex');
     await fs.promises.mkdir(path.dirname(file), { recursive: true });
     const tmp = file + '.' + randomUUID() + '.tmp';
-    await fs.promises.writeFile(tmp, salt, { encoding: 'utf8', mode: 0o600 });
+    await recordFs.writeFile(tmp, salt, { encoding: 'utf8', mode: 0o600 });
     try {
       // link, not rename: it refuses to replace a key that appeared meanwhile.
       await fs.promises.link(tmp, file);
     } catch (_) {
-      await fs.promises.rm(tmp, { force: true });
-      saltCache.delete(projectId);
-      const s = (await fs.promises.readFile(file, 'utf8').catch(() => '')).trim();
+      await recordFs.rm(tmp, { force: true });
+      saltCache.delete(saltPath(projectId));
+      const s = (await recordFs.readFile(file, 'utf8').catch(() => '')).trim();
       if (!SALT_RE.test(s)) return null;
-      saltCache.set(projectId, s);
+      saltCache.set(saltPath(projectId), s);
       return s;
     }
-    await fs.promises.rm(tmp, { force: true });
-    saltCache.set(projectId, salt);
+    await recordFs.rm(tmp, { force: true });
+    saltCache.set(saltPath(projectId), salt);
     return salt;
   });
 }
@@ -172,7 +174,7 @@ export async function getPolicy(projectId: string): Promise<SharePolicy> {
 /** Merge the paths present in `patch`. Returns the stored policy, or null for a bad id. */
 export async function setPolicy(projectId: string, patch: unknown): Promise<SharePolicy | null> {
   if (!isValidId(projectId)) return null;
-  try { await fs.promises.access(projectDir(projectId)); } catch (_) { return null; }
+  try { await recordFs.access(projectDir(projectId)); } catch (_) { return null; }
   return serial('policy:' + projectId, async () => {
     const cur = await getPolicy(projectId);
     const next = sanitizePolicy({ ...cur, ...(patch && typeof patch === 'object' ? patch : {}) });

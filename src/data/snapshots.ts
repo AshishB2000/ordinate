@@ -20,13 +20,13 @@
 // SECURITY: both ids are UUID-checked before either reaches a path, and every
 // stamp is parsed back strictly before it is joined into one.
 
-import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { isValidId } from '../app/ids';
 import { datasetsDir, parquetPath, sourceParquetPath } from './datasetRecord';
 import * as names from './snapshotNames';
 import type { ParsedColumn } from './parse';
+import * as recordFs from '../app/recordFs';
 
 export interface SnapshotMeta {
   rowCount: number;
@@ -93,7 +93,7 @@ function indexPath(projectId: string, id: string): string {
 
 async function readIndex(projectId: string, id: string): Promise<Index> {
   try {
-    return sanitizeIndex(JSON.parse(await fs.promises.readFile(indexPath(projectId, id), 'utf8')));
+    return sanitizeIndex(JSON.parse(await recordFs.readFile(indexPath(projectId, id), 'utf8')));
   } catch (_) {
     return sanitizeIndex(null); // none yet, or corrupt: the default, never fatal
   }
@@ -102,8 +102,8 @@ async function readIndex(projectId: string, id: string): Promise<Index> {
 async function writeIndex(projectId: string, id: string, idx: Index): Promise<void> {
   const file = indexPath(projectId, id);
   const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(idx, null, 2), 'utf8');
-  await fs.promises.rename(tmp, file);
+  await recordFs.writeFile(tmp, JSON.stringify(idx, null, 2), 'utf8');
+  await recordFs.rename(tmp, file);
 }
 
 // Index writes for one dataset run one at a time: a keep landing while the
@@ -120,14 +120,14 @@ function serial<T>(key: string, fn: () => Promise<T>): Promise<T> {
 
 async function dirNames(projectId: string): Promise<string[]> {
   try {
-    return await fs.promises.readdir(datasetsDir(projectId));
+    return await recordFs.readdir(datasetsDir(projectId));
   } catch (_) {
     return [];
   }
 }
 
 async function exists(file: string): Promise<boolean> {
-  try { await fs.promises.access(file); return true; } catch (_) { return false; }
+  try { await recordFs.access(file); return true; } catch (_) { return false; }
 }
 
 // ── Prune ────────────────────────────────────────────────────────────────────
@@ -140,13 +140,13 @@ async function pruneLocked(projectId: string, id: string, idx: Index): Promise<s
   const gone = names.planPrune(mains, idx.keep);
   const dead = new Set(gone);
   for (const s of gone) {
-    await fs.promises.rm(path.join(dir, names.snapshotName(id, s)), { force: true });
-    await fs.promises.rm(path.join(dir, names.sourceName(id, s)), { force: true });
+    await recordFs.rm(path.join(dir, names.snapshotName(id, s)), { force: true });
+    await recordFs.rm(path.join(dir, names.sourceName(id, s)), { force: true });
   }
   // A source companion whose table is gone is half a snapshot: nothing reads it.
   for (const m of found) {
     if (m.source && (dead.has(m.stamp) || !mains.includes(m.stamp))) {
-      await fs.promises.rm(path.join(dir, names.sourceName(id, m.stamp)), { force: true });
+      await recordFs.rm(path.join(dir, names.sourceName(id, m.stamp)), { force: true });
     }
   }
   for (const s of Object.keys(idx.items)) if (dead.has(s) || !mains.includes(s)) delete idx.items[s];
@@ -195,11 +195,11 @@ async function begin(projectId: string, rec: Keepable): Promise<Pending | null> 
   const moves: Array<[string, string]> = [[path.join(dir, names.snapshotName(id, stamp)) + tag, path.join(dir, names.snapshotName(id, stamp))]];
   if (hasSource) moves.push([path.join(dir, names.sourceName(id, stamp)) + tag, path.join(dir, names.sourceName(id, stamp))]);
   const discard = async (): Promise<void> => {
-    for (const [tmp] of moves) await fs.promises.rm(tmp, { force: true }).catch(() => { /* best effort */ });
+    for (const [tmp] of moves) await recordFs.rm(tmp, { force: true }).catch(() => { /* best effort */ });
   };
   try {
-    await fs.promises.copyFile(main, moves[0][0]);
-    if (hasSource) await fs.promises.copyFile(src, moves[1][0]);
+    await recordFs.copyFile(main, moves[0][0]);
+    if (hasSource) await recordFs.copyFile(src, moves[1][0]);
   } catch (err) {
     await discard();
     throw err;
@@ -208,8 +208,8 @@ async function begin(projectId: string, rec: Keepable): Promise<Pending | null> 
   if (hasSource && rec.source) meta.sourceColumns = rec.source.columns.map((c) => ({ name: c.name, type: c.type }));
 
   const commit = (): Promise<void> => serial(projectId + '/' + id, async () => {
-    for (const [tmp, fin] of moves) await fs.promises.rename(tmp, fin);
-    if (!hasSource) await fs.promises.rm(path.join(dir, names.sourceName(id, stamp)), { force: true });
+    for (const [tmp, fin] of moves) await recordFs.rename(tmp, fin);
+    if (!hasSource) await recordFs.rm(path.join(dir, names.sourceName(id, stamp)), { force: true });
     const idx = await readIndex(projectId, id);
     idx.items[stamp] = meta;
     await pruneLocked(projectId, id, idx);
@@ -295,6 +295,6 @@ export async function removeAll(projectId: string, id: string): Promise<void> {
   if (!isValidId(projectId) || !isValidId(id)) return;
   const dir = datasetsDir(projectId);
   for (const n of names.snapshotFiles(id, await dirNames(projectId))) {
-    await fs.promises.rm(path.join(dir, n), { force: true });
+    await recordFs.rm(path.join(dir, n), { force: true });
   }
 }

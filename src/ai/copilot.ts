@@ -30,6 +30,7 @@ import * as projects from '../app/projects';
 import type { LedgerEntry } from './numberAudit';
 import { sanitizeStoredSpec } from './answerSpec';
 import type { AnswerSpec } from './answerSpec';
+import * as recordFs from '../app/recordFs';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -162,8 +163,8 @@ async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
   // record share one temp path and interleave into a corrupt file (or ENOENT on
   // the second rename). A per-write suffix degrades the race to clean last-writer-wins.
   const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
-  await fs.promises.rename(tmp, file); // atomic on same fs
+  await recordFs.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
+  await recordFs.rename(tmp, file); // atomic on same fs
 }
 
 const ROLES: ReadonlySet<string> = new Set(['user', 'assistant']);
@@ -284,7 +285,7 @@ export async function init(): Promise<void> {
 export async function loadThreads(projectId: string): Promise<CopilotThread[]> {
   if (!isValidId(projectId)) return [];
   try {
-    const rawText = await fs.promises.readFile(copilotFilePath(projectId), 'utf8');
+    const rawText = await recordFs.readFile(copilotFilePath(projectId), 'utf8');
     return normalize(JSON.parse(rawText));
   } catch (err: any) { // ponytail: fs errors carry .code, JSON errors don't
     if (err && err.code !== 'ENOENT') {
@@ -431,7 +432,7 @@ export async function appendTurn(
 export async function clearHistory(projectId: string): Promise<boolean> {
   if (!isValidId(projectId)) return false;
   try {
-    await fs.promises.rm(copilotFilePath(projectId), { force: true });
+    await recordFs.rm(copilotFilePath(projectId), { force: true });
     return true;
   } catch (_) {
     return false;

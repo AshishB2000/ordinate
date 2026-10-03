@@ -22,6 +22,7 @@ import { catalogResident, catalogJs, mergeCatalogs } from '../analysis/filterCat
 import { parseFilterText } from '../analysis/filterParse';
 import type { FilterCatalog } from '../analysis/filterParse';
 import { getCalendar, todayIso } from '../analysis/dateIntel';
+import { orgKey } from '../server/context';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CACHE_MS = 5000;
@@ -66,7 +67,7 @@ async function buildCatalog(projectId: string, dashboardId: string): Promise<Fil
 }
 
 export function dashboardCatalog(projectId: string, dashboardId: string): Promise<FilterCatalog | null> {
-  const key = projectId + '/' + dashboardId;
+  const key = orgKey(projectId + '/' + dashboardId);
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.catalog;
   const catalog = buildCatalog(projectId, dashboardId).catch(() => null);

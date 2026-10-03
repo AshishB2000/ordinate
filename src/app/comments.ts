@@ -35,6 +35,7 @@ import * as config from './config';
 import { projectDir } from './recordKinds';
 import * as model from './commentModel';
 import type { Comment } from './commentModel';
+import * as recordFs from './recordFs';
 
 const FILE = 'comments.json';
 
@@ -68,7 +69,7 @@ interface Read { state: 'ok' | 'missing' | 'corrupt'; comments: Comment[] }
 async function readFile(file: string): Promise<Read> {
   let text: string;
   try {
-    text = await fs.promises.readFile(file, 'utf8');
+    text = await recordFs.readFile(file, 'utf8');
   } catch (_) {
     return { state: 'missing', comments: [] };
   }
@@ -86,8 +87,8 @@ async function writeFile(file: string, comments: Comment[]): Promise<void> {
   const body: model.CommentFile = { schemaVersion: 1, comments: model.sanitizeComments(comments) };
   // A unique temp per write: two overlapping writes must never share a path.
   const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(body, null, 2), 'utf8');
-  await fs.promises.rename(tmp, file);
+  await recordFs.writeFile(tmp, JSON.stringify(body, null, 2), 'utf8');
+  await recordFs.rename(tmp, file);
 }
 
 const same = (a: Comment[], b: Comment[]): boolean => JSON.stringify(a) === JSON.stringify(b);
@@ -103,7 +104,7 @@ const ICLOUD = /^comments (?:[2-9]|\d{2,})\.json$/;
 async function conflictCopies(projectId: string): Promise<string[]> {
   const dir = projectDir(projectId);
   let names: string[] = [];
-  try { names = await fs.promises.readdir(dir); } catch (_) { return []; }
+  try { names = await recordFs.readdir(dir); } catch (_) { return []; }
   return names.filter((n) => DROPBOX.test(n) || ICLOUD.test(n)).sort().map((n) => path.join(dir, n));
 }
 
@@ -124,7 +125,7 @@ async function persist(projectId: string, mine: Comment[], onDisk: Comment[] | n
   }
   if (!onDisk || !same(merged, onDisk)) await writeFile(local, merged);
   for (const copy of folded) {
-    try { await fs.promises.rm(copy, { force: true }); } catch (_) { /* next read folds it again, harmlessly */ }
+    try { await recordFs.rm(copy, { force: true }); } catch (_) { /* next read folds it again, harmlessly */ }
   }
   return merged;
 }
@@ -134,7 +135,7 @@ async function loadLocal(projectId: string): Promise<Comment[]> {
   const read = await readFile(local);
   if (read.state === 'corrupt') {
     // Keep what cannot be read, out of the way, before anything overwrites it.
-    try { await fs.promises.rename(local, local + '.corrupt'); } catch (_) { /* best effort */ }
+    try { await recordFs.rename(local, local + '.corrupt'); } catch (_) { /* best effort */ }
   }
   return read.comments;
 }

@@ -189,6 +189,15 @@ const tmpDir = (tag: string): string => fs.mkdtempSync(path.join(os.tmpdir(), `o
     const again = await mig.migrate(pool, copy);
     ok('new file: applied once, then nothing', first.applied.join() === '9999_probe.sql' && again.applied.length === 0, JSON.stringify([first, again]));
     console.log(`     one-file apply in-process: ${first.ms.toFixed(1)} ms; no-op run: ${again.ms.toFixed(1)} ms`);
+    // A new file numbered BELOW one already applied (9999 now) is refused, nothing applied.
+    fs.writeFileSync(path.join(copy, '9000_late.sql'), 'CREATE TABLE t31_late (id int);');
+    try {
+      await mig.migrate(pool, copy);
+      ok('order: a new file numbered below an applied one is refused', false);
+    } catch (err) {
+      ok('order: a new file numbered below an applied one is refused, naming it', /9000_late\.sql is new but numbered below 9999/.test((err as Error).message), (err as Error).message);
+    }
+    ok('order: …and nothing of it ran', (await pool.query(`SELECT to_regclass('t31_late') AS t`)).rows[0].t === null);
     fs.rmSync(copy, { recursive: true, force: true });
 
     // ── The real server refuses to start on an edited migration ─────────────

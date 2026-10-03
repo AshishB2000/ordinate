@@ -31,6 +31,7 @@ import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as appPaths from './paths';
 import { isValidId } from './ids';
+import * as recordFs from './recordFs';
 
 // ── Kinds ────────────────────────────────────────────────────────────────────
 // A dashboard is stored as an Analysis record, so its kind is 'analysis' — the
@@ -221,15 +222,15 @@ function catalogPath(projectId: string): string {
 
 async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
   const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
-  await fs.promises.rename(tmp, file);
+  await recordFs.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
+  await recordFs.rename(tmp, file);
 }
 
 /** The whole file. Missing or corrupt → empty; never throws. */
 export async function load(projectId: string): Promise<CatalogFile> {
   if (!isValidId(projectId)) return emptyCatalog();
   try {
-    return sanitizeCatalog(JSON.parse(await fs.promises.readFile(catalogPath(projectId), 'utf8')));
+    return sanitizeCatalog(JSON.parse(await recordFs.readFile(catalogPath(projectId), 'utf8')));
   } catch (err: any) {
     if (err && err.code !== 'ENOENT') console.error('[catalog] unreadable catalog, treating as empty:', err.message);
     return emptyCatalog();

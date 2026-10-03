@@ -1,4 +1,3 @@
-import * as fs from 'fs';
 import * as path from 'path';
 import { ipcMain } from './bus';
 import type { BrowserWindow } from 'electron';
@@ -10,6 +9,7 @@ import * as config from '../app/config';
 import { projectDir } from '../app/recordKinds';
 import { syncedTarget } from '../app/syncFolder';
 import { safetyBackup } from './backups';
+import * as recordFs from '../app/recordFs';
 
 // Projects (workspace shell) IPC — list/create/rename/archive/open, the
 // switcher's overview, and the .ordinate bundle's export and import.
@@ -72,7 +72,7 @@ export function register({ onActive, getHubWindow }: {
     const sample = config.get().sample;
     const count = async (id: string, sub: string): Promise<number> => {
       try {
-        return (await fs.promises.readdir(path.join(projectDir(id), sub))).filter((n) => /^[0-9a-f-]{36}\.json$/i.test(n)).length;
+        return (await recordFs.readdir(path.join(projectDir(id), sub))).filter((n) => /^[0-9a-f-]{36}\.json$/i.test(n)).length;
       } catch (_) {
         return 0;
       }
@@ -89,7 +89,7 @@ export function register({ onActive, getHubWindow }: {
       // The badge lasts as long as the sample does: remove it, and this is
       // just the user's project again.
       sample: !!sample && sample.projectId === p.id
-        && fs.existsSync(path.join(projectDir(p.id), 'datasets', sample.datasetId + '.json')),
+        && (await recordFs.exists(path.join(projectDir(p.id), 'datasets', sample.datasetId + '.json'))),
       syncedTo: syncedTarget(p.id), // the real folder of a project in a sync folder, else null
     })));
   });
@@ -126,8 +126,8 @@ export function register({ onActive, getHubWindow }: {
         // and their datasets' raw prepare history left behind (app/sharePolicy.ts).
         const bytes = await sharePolicy.applyToBundle(project.id, out.bytes);
         const tmp = filePath + '.partial';
-        await fs.promises.writeFile(tmp, bytes);
-        await fs.promises.rename(tmp, filePath);
+        await recordFs.writeFile(tmp, bytes);
+        await recordFs.rename(tmp, filePath);
         return { path: filePath, counts: out.manifest.counts };
       },
       resultOf: (r) => ({ path: r.path }),
@@ -167,7 +167,7 @@ export async function importBundleFile(file: string, active: (id: unknown) => vo
     kind: 'bundle',
     label: `Import ${path.basename(file)}`,
     run: async (ctx) => {
-      const res = await bundle.importBundle(await fs.promises.readFile(file), {
+      const res = await bundle.importBundle(await recordFs.readFile(file), {
         onProgress: (p, note) => ctx.progress(p, note),
         checkCancelled: () => ctx.checkCancelled(),
       });

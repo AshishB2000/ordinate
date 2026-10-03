@@ -21,6 +21,7 @@ import { randomUUID } from 'crypto';
 import * as appPaths from './paths';
 import { themeModel } from '../analysis/themeTokens';
 import type { ThemeRecord } from '../analysis/themeTokens';
+import * as recordFs from './recordFs';
 
 export const MAX_THEMES = 200;
 
@@ -58,7 +59,7 @@ async function readState(): Promise<ThemeState> {
   const file = storeFile();
   let text: string;
   try {
-    text = await fs.promises.readFile(file, 'utf8');
+    text = await recordFs.readFile(file, 'utf8');
   } catch (_) {
     return { defaultId: '', themes: [] }; // no file yet — or unreadable, same answer
   }
@@ -66,7 +67,7 @@ async function readState(): Promise<ThemeState> {
     return sanitizeState(JSON.parse(text));
   } catch (_) {
     console.error('[themes] themes.json is not valid JSON — kept as themes.json.corrupt, reading as empty');
-    await fs.promises.copyFile(file, file + '.corrupt').catch(() => undefined);
+    await recordFs.copyFile(file, file + '.corrupt').catch(() => undefined);
     return { defaultId: '', themes: [] };
   }
 }
@@ -75,8 +76,8 @@ async function writeState(state: ThemeState): Promise<void> {
   const file = storeFile();
   await fs.promises.mkdir(path.dirname(file), { recursive: true });
   const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify({ version: 1, ...state }, null, 2), 'utf8');
-  await fs.promises.rename(tmp, file);
+  await recordFs.writeFile(tmp, JSON.stringify({ version: 1, ...state }, null, 2), 'utf8');
+  await recordFs.rename(tmp, file);
 }
 
 // Every read-modify-write goes through one chain: two quick saves from the

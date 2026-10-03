@@ -39,6 +39,7 @@ import { stableStringify } from '../../engine/queryCache';
 import { bindSqlParams, paramRefs } from '../params';
 import type { SqlParam } from '../params';
 import type { NbCell, ParamCell } from './model';
+import { ctx } from '../../server/context';
 
 export interface CellInfo {
   id: string;
@@ -206,6 +207,6 @@ export interface CacheKeyParts {
 export function cellCacheKey(p: CacheKeyParts): string {
   const datasets = (p.datasets || []).slice().sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return createHash('sha256')
-    .update(stableStringify({ kind: p.kind, text: p.text, params: p.params || {}, inputs: p.inputs || [], datasets }))
+    .update(stableStringify({ org: ctx().org.id, kind: p.kind, text: p.text, params: p.params || {}, inputs: p.inputs || [], datasets }))
     .digest('hex');
 }

@@ -27,6 +27,7 @@ import * as datasets from '../data/datasets';
 import { sanitizeSteps } from '../data/transforms';
 import type { FilterStep } from '../data/transforms';
 import type { MetricAggregation } from './metricValue';
+import * as recordFs from '../app/recordFs';
 
 export type { MetricAggregation };
 
@@ -132,8 +133,8 @@ const MAX_DESCRIPTION = 500;
 // visuals.ts, per-write tmp suffix and all.
 async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
   const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
-  await fs.promises.rename(tmp, file);
+  await recordFs.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
+  await recordFs.rename(tmp, file);
 }
 
 function trimTo(raw: unknown, max: number): string {
@@ -261,7 +262,7 @@ export async function listMetrics(projectId: string): Promise<MetricSummary[]> {
   if (!isValidId(projectId)) return [];
   let dirents;
   try {
-    dirents = await fs.promises.readdir(metricsDir(projectId), { withFileTypes: true });
+    dirents = await recordFs.readdir(metricsDir(projectId), { withFileTypes: true });
   } catch (_) {
     return []; // no metrics dir yet
   }
@@ -272,7 +273,7 @@ export async function listMetrics(projectId: string): Promise<MetricSummary[]> {
     const id = dirent.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue; // skip stray/tmp files
     try {
-      const raw = await fs.promises.readFile(metricFilePath(projectId, id), 'utf8');
+      const raw = await recordFs.readFile(metricFilePath(projectId, id), 'utf8');
       const data = JSON.parse(raw);
       if (!isValidMetric(data)) continue;
       out.push(toSummary(normalize(data, projectId)));
@@ -289,7 +290,7 @@ export async function listMetrics(projectId: string): Promise<MetricSummary[]> {
 export async function getMetric(projectId: string, id: string): Promise<Metric | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   try {
-    const raw = await fs.promises.readFile(metricFilePath(projectId, id), 'utf8');
+    const raw = await recordFs.readFile(metricFilePath(projectId, id), 'utf8');
     const data = JSON.parse(raw);
     if (!isValidMetric(data)) return null;
     return normalize(data, projectId);
@@ -423,7 +424,7 @@ export async function duplicateMetric(projectId: string, id: string): Promise<Me
 export async function deleteMetric(projectId: string, id: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
   try {
-    await fs.promises.rm(metricFilePath(projectId, id), { force: true });
+    await recordFs.rm(metricFilePath(projectId, id), { force: true });
     return true;
   } catch (_) {
     return false;
