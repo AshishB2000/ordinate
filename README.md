@@ -1,5 +1,9 @@
 <div align="center">
 
+<img src="assets/images/wip-banner.svg" alt="🚧 Work in progress — under active development. Expect rough edges and breaking changes." width="100%" />
+
+<br/><br/>
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/icons/ordinate-dark.svg" />
   <img src="assets/icons/ordinate.svg" alt="" width="104" height="104" />
