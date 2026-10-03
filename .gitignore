@@ -1042,7 +1042,7 @@ scripts/**/*.js
 /scripts/test-wire.js
 /scripts/test-rpc.js
 
-# web/t0.3-context
-/src/app/paths.js
-/src/server/context.js
-/scripts/test-server-context.js
+# web/t3.1-postgres
+/src/server/db/pool.js
+/src/server/db/migrate.js
+/scripts/test-db-migrate.js

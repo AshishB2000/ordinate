@@ -293,7 +293,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
 
 ## P3 — Identity and tenancy
 
-### [ ] T3.1 Postgres foundation
+### [x] T3.1 Postgres foundation
 - **Branch** `web/t3.1-postgres` · **Depends** T0.3 · **Scope** `src/server/db/`
 - `DATABASE_URL`; pool via `pg`; numbered `.sql` migrations in `src/server/db/migrations/`, applied
   in a transaction at startup with an advisory lock (safe with N pods); `/readyz` checks the DB.

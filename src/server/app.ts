@@ -10,7 +10,8 @@ import { fastify, type FastifyInstance } from 'fastify';
 import { isAvailable, shutdown } from '../engine/duckdb';
 import { contractFor } from '../api/index';
 import type { ServerEnv } from './env';
-import { identityFor, runInContext, type Identify } from './context';
+import { migrate } from './db/migrate';
+import { createPool, ping, scrubbed } from './db/pool';
 import { handlers } from './rpc';
 import { fromWire, encode } from './wire';
 
@@ -67,12 +68,32 @@ export function buildApp(
   // a failing dependency must not make Kubernetes restart a healthy pod.
   app.get('/healthz', async () => ({ ok: true }));
 
-  // Readiness: can this pod answer queries? DuckDB now; Postgres joins in T3.1.
-  // The first call starts the DuckDB worker (~115 ms, blocking) — later calls
-  // are a state check.
+  // Postgres, when DATABASE_URL is set: migrations run in `ready()` — before
+  // `listen()` binds — so a pod whose schema is not current never serves, and
+  // a failure (DB down, edited migration) rejects listen and exits main.ts 1.
+  const dbUrl = cfg.databaseUrl;
+  const pool = dbUrl ? createPool(dbUrl, (err) => app.log.warn({ err }, 'postgres idle client error')) : null;
+  if (pool && dbUrl) {
+    app.addHook('onReady', async () => {
+      try {
+        const r = await migrate(pool);
+        app.log.info({ applied: r.applied, total: r.total, ms: Math.round(r.ms) }, 'migrations current');
+      } catch (err) {
+        throw scrubbed(err, dbUrl);
+      }
+    });
+    app.addHook('onClose', async () => pool.end());
+  }
+
+  // Readiness: can this pod answer queries? DuckDB, plus Postgres when
+  // configured. The first call starts the DuckDB worker (~115 ms, blocking) —
+  // later calls are a state check.
   app.get('/readyz', async (_req, reply) => {
     const duckdb = isAvailable();
-    return reply.code(duckdb ? 200 : 503).send({ ok: duckdb, checks: { duckdb } });
+    const checks: Record<string, boolean> = { duckdb };
+    if (pool) checks.postgres = await ping(pool);
+    const ok = Object.values(checks).every(Boolean);
+    return reply.code(ok ? 200 : 503).send({ ok, checks });
   });
 
   // RPC: POST /api/rpc/<channel> with body `{"args":[payload?]}`, the whole

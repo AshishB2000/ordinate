@@ -47,29 +47,22 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
 - **Local infra:** Postgres 17 and MinIO installed via Homebrew as services (user's choice) so P3/P5
   tasks test locally; Compose/Helm verify in CI.
 
-## 2026-10-02 — T0.3 Request context, paths, dev auth
+## 2026-10-02 — T3.1 Postgres foundation
 
-- **Bulk edit (scripted, orchestrator):** 64 `app.getPath(...)` in 44 files → `appPaths.<name>()`
-  (`src/app/paths.ts`); `app` dropped from the electron import wherever nothing else used it; the
-  import is `appPaths` because some files have a local `paths`. Zero `getPath(` outside `paths.ts`.
-  One allowlisted file (`cli/localCliRun.ts`) would have grown by the split import; its two
-  `child_process` imports were merged instead of raising the ratchet.
-- **Tenant isolation bug found and fixed:** 14 modules cached the first caller's `userData()/projects`
-  (or `history`) path in a module variable — on the server org B would have read org A's records.
-  Caches removed (desktop re-asks Electron per call; cheap). The new concurrent-org test fails with
-  the old cache put back.
-- **Server mode** is explicit: `enterServerMode(dataDir)`, called only by `src/server/main.ts`.
-  Without it `ctx()` is a fixed desktop context; with it `ctx()` throws outside a request. Every
-  `/api/` request runs in `AsyncLocalStorage` with Fastify's `req.id`.
-- **Org layout:** `DATA_DIR/orgs/<orgId>/{userData,downloads,temp,documents}`, created on first use;
-  org id must match `^[a-z0-9][a-z0-9-]{0,62}$` before touching a path.
-- **Dev auth:** dev → `dev@local`, org `default`, admin. prod refuses to start with one line until
-  T3.2's `AUTH_MODE`.
-- **Senders:** `senderOf(e)` (desktop `e.sender`, server `ctx().client`, a no-op `send` until T0.5)
-  and `windowOf(e)` for dialog parents (null on the server). `dnd` OS drag-out stays desktop-only.
-- **Electron at load:** moved inside desktop-only functions in `ipc/projects`, `ipc/datasetImport`,
-  `ipc/backups`, `ai/analyze`, `ai/analyzeStream`, `cli/localCliRun`, `app/bundle`. `main.ts` now
-  calls `registerHandlers()`, so `test-server-boot` (Electron blocked) covers the whole Home graph.
-- **Open:** `src/app/sampleProject.ts` still imports Electron at load (T0.8 seeds the sample on the
-  server); `config.ts` format/calendar/language are process-wide — two orgs can race (`ponytail:`,
-  P5).
+- **Migrations:** numbered plain `.sql` in `src/server/db/migrations/`, all pending applied in ONE
+  transaction behind `pg_advisory_xact_lock(7310452291)`; sha256 per file (CRLF→LF) recorded in
+  `schema_migrations`; an edited applied migration refuses startup naming the file. Read from
+  `path.join(__dirname, 'migrations')` — the Docker image must `COPY src/` after `build:ts` (an empty
+  directory is refused, never booted on).
+- **Measured:** applying 0001 at startup 24–38 ms locally incl. connect + lock wait (180 ms under the
+  parallel `npm test` load); in-process apply 3.6 ms; no-op 1.0 ms.
+- **Proof:** two real server processes against one fresh DB → each migration recorded once, one pod
+  applied all, the other none, no duplicate-object error. Negative control: lock replaced by
+  `SELECT 1` → the test failed 3/3.
+- **Pool:** max 10, idle 30 s, connect timeout 3 s (a dead DB fails `/readyz` in 3 s),
+  `application_name=ordinate`. pg errors are rebuilt through `safeError` so the URL's password
+  (encoded or decoded) never reaches a log; proven with a canary.
+- **CI:** `postgres:17` service on the test job; `DATABASE_URL` set on the self-checks step. No
+  branch filter touched.
+- **Known:** a DB-recorded version with no file (image rollback) is ignored, not refused; no per-file
+  non-transactional migration (`CREATE INDEX CONCURRENTLY`) yet — `ponytail:` in `migrate.ts`.
