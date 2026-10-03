@@ -1,0 +1,187 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-32);
+  padding: var(--sp-24) var(--sp-32) var(--sp-48);
+}
+.head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-16);
+}
+.title {
+  font-size: var(--t-20);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tr-tighter);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.note {
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.prose {
+  color: var(--muted);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-12);
+  flex-wrap: wrap;
+  padding-bottom: var(--sp-8);
+  border-bottom: 1px solid var(--border-hairline);
+}
+.sectionTitle {
+  font-size: var(--t-15);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tr-tight);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--sp-12);
+}
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  min-width: 0;
+  padding: var(--sp-16);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+}
+.wide {
+  grid-column: 1 / -1;
+}
+.caption {
+  font-size: var(--t-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tr-label);
+  color: var(--muted);
+}
+.sample {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--sp-12);
+}
+.sample > * {
+  min-width: 0;
+}
+.sample > :where(div, fieldset) {
+  flex: 1 1 220px;
+}
+.row {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-8);
+}
+.blockDemo {
+  width: 100%;
+}
+
+/* Static stand-ins for :hover and :focus-visible, so both show in a screenshot. */
+.demoHover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.demoFocus,
+.demoSwitchFocus input {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.demoBoxHover {
+  border-color: var(--border-2);
+}
+.demoBoxFocus {
+  border-color: var(--accent-line);
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Room under the forced-open overlays so they cover only their own row. */
+.overlayHost {
+  padding-bottom: 300px;
+}
+.selectHost {
+  flex: 0 0 240px;
+}
+
+.ctxTarget {
+  display: grid;
+  place-items: center;
+  height: 72px;
+  width: 100%;
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-md);
+  color: var(--muted);
+}
+
+.chartHost {
+  height: 140px;
+  width: 100%;
+}
+.pageHost {
+  width: 100%;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+}
+
+.split {
+  display: flex;
+  height: 280px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--bg);
+}
+.splitMain {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--sp-16);
+}
+.splitSide {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.icons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.icon {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-8);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--t-11);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.icon:hover {
+  background: var(--surface-2);
+}
+.icon > svg {
+  flex: 0 0 auto;
+  color: var(--muted);
+}

@@ -2,7 +2,7 @@
 // never reorder or reformat, so parallel screen ports do not conflict here.
 // `bottom` pins an item to the foot of the rail, as Settings is on the desktop.
 
-import type { IconName } from './Icon';
+import type { IconName } from '../ui/icons/Icon';
 
 export interface NavItem {
   readonly to: string;

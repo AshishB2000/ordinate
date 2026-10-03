@@ -1,0 +1,16 @@
+.bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  min-width: 0;
+}
+.divider {
+  flex: 0 0 1px;
+  align-self: stretch;
+  margin: var(--sp-4) var(--sp-4);
+  background: var(--border-hairline);
+}
+.spacer {
+  flex: 1 1 auto;
+}

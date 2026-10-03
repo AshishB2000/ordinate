@@ -1,0 +1,41 @@
+/* The trigger is the field box (Field.module.css), so a select is the same
+   32px box as the input beside it — hub.css `.dd-trigger`, on the field floor. */
+
+.trigger {
+  composes: box from './Field.module.css';
+  justify-content: space-between;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+.trigger:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.trigger[aria-invalid='true'] {
+  border-color: var(--error);
+}
+.sm {
+  composes: sm from './Field.module.css';
+}
+
+.value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.placeholder {
+  color: var(--text-faint);
+}
+
+.chevron {
+  display: flex;
+  flex: 0 0 auto;
+  color: var(--text-dim);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.trigger[data-state='open'] .chevron {
+  transform: rotate(180deg);
+}

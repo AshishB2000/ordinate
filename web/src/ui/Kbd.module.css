@@ -1,0 +1,20 @@
+/* hub.css `.kbd`: mono, a 2px bottom edge so it reads as a key. */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px;
+  border: 1px solid var(--border-2);
+  border-bottom-width: 2px;
+  border-radius: var(--r-sm);
+  background: var(--surface-3);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  font-weight: 500;
+  line-height: var(--lh-body);
+  white-space: nowrap;
+}
+.kbd + .kbd {
+  margin-left: 2px;
+}

@@ -1,5 +1,6 @@
 /* The hub's chrome, ported from renderer/hub/hub.css: .win, .hub-topbar,
-   .hub-search, .app-sidebar, .as-nav-item, .as-bottom, .icon-btn. */
+   .hub-search, .app-sidebar, .as-nav-item, .as-bottom. Controls come from
+   web/src/ui. */
 
 .win {
   height: 100%;
@@ -117,47 +118,13 @@
   color: var(--text-faint);
 }
 
-.iconBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--ctl-md);
-  height: var(--ctl-md);
-  padding: 0;
-  border: none;
-  border-radius: var(--r-sm);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
-}
-.iconBtn:hover {
-  background: var(--surface-2);
-  color: var(--text);
-}
-
-/* ── user menu: a floating surface (shadow means "floating") ── */
-.menu {
-  inset: 44px var(--sp-12) auto auto;
-  margin: 0;
-  width: 248px;
-  padding: var(--menu-pad);
-  background: var(--surface-float);
-  color: var(--text);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--r-md);
-  box-shadow: var(--shadow-md);
-}
-.menuHead,
-.menuSection {
+/* ── user menu header: who is signed in (the Menu is web/src/ui/Menu) ── */
+.menuHead {
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: var(--sp-8);
-}
-.menuSection {
-  gap: var(--sp-8);
-  border-top: 1px solid var(--border-hairline);
+  max-width: 240px;
 }
 .menuName {
   font-weight: 600;
@@ -166,56 +133,6 @@
 .menuMeta {
   font-size: var(--t-12);
   color: var(--muted);
-}
-.menuLabel {
-  font-size: var(--t-11);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: var(--tr-label);
-  color: var(--muted);
-}
-.seg {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 2px;
-  padding: 2px;
-  border-radius: var(--r-sm);
-  background: var(--surface-2);
-}
-.segOpt {
-  height: var(--ctl-sm);
-  border: none;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--muted);
-  font-size: var(--t-12);
-  font-weight: 500;
-  cursor: pointer;
-}
-.segOpt:hover {
-  color: var(--text);
-}
-.segOpt[aria-pressed='true'] {
-  background: var(--surface-float);
-  color: var(--text-strong);
-  box-shadow: var(--shadow-sm);
-}
-.menuItem {
-  display: flex;
-  align-items: center;
-  gap: var(--ctl-gap);
-  height: var(--menu-row);
-  padding: 0 var(--sp-8);
-  border-top: 1px solid var(--border-hairline);
-  border-radius: var(--r-sm);
-  color: var(--text);
-  text-decoration: none;
-}
-.menuItem:hover {
-  background: var(--surface-2);
-}
-.menuItem:focus-visible {
-  outline-offset: -2px;
 }
 
 /* ── body: rail + stage ── */

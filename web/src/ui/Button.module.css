@@ -1,0 +1,150 @@
+/* hub.css "buttons": .btn, .btn-sm/-lg, .btn-primary/-ghost/-danger, .icon-btn. */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ctl-gap);
+  height: var(--ctl-md);
+  padding: 0 var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--t-13);
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.btn:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+.primary:hover:not(:disabled) {
+  background: var(--accent-2);
+}
+
+.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.ghost:hover:not(:disabled) {
+  color: var(--text);
+}
+
+/* Error TEXT at rest, error FILL under the pointer. */
+.danger {
+  background: transparent;
+  color: var(--error);
+}
+.danger:hover:not(:disabled) {
+  background: var(--error);
+  border-color: transparent;
+  color: #fff;
+}
+
+.sm {
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-8);
+  font-size: var(--t-12);
+  border-radius: var(--r-sm);
+}
+.lg {
+  height: var(--ctl-lg);
+  padding: 0 var(--sp-16);
+}
+
+.block {
+  width: 100%;
+}
+
+/* A busy button keeps its label and colour; only the cursor and the mark say so. */
+.loading:disabled {
+  opacity: 1;
+  cursor: progress;
+}
+.spinner {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: var(--r-full);
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── icon-only: square, the same three heights ── */
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ctl-md);
+  height: var(--ctl-md);
+  flex: 0 0 auto;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.iconBtn:hover:not(:disabled),
+.iconBtn[data-state='open'] {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.iconBtn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.iconBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.iconBtn.sm {
+  width: var(--ctl-sm);
+  height: var(--ctl-sm);
+  padding: 0;
+}
+.iconBtn.lg {
+  width: var(--ctl-lg);
+  height: var(--ctl-lg);
+  padding: 0;
+}
+.iconPrimary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.iconPrimary:hover:not(:disabled) {
+  background: var(--accent-2);
+  color: var(--accent-ink);
+}
