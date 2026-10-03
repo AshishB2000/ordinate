@@ -22,6 +22,8 @@ import { maskFileToken, registerFileRoutes } from './files';
 import { clientFor, registerEvents } from './sse';
 import { fromWire, encode } from './wire';
 import { registerStatic, WEB_DIST } from './static';
+import { uploadCapMb } from './admin/org';
+import { registerMcpRoute } from '../automation/serverMcp';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Pool } from 'pg';
@@ -40,6 +42,11 @@ const SECRET_KEYS = [
   'token',
   'secret',
   'key',
+  // T3.4: a personal API token under the names a handler would give it.
+  'apiToken',
+  'api_token',
+  'accessToken',
+  'bearer',
 ];
 
 // ponytail: pino matches exact names at fixed depths (`*.k` is ONE level), so
@@ -53,8 +60,9 @@ export const REDACT_PATHS: readonly string[] = SECRET_KEYS.flatMap((k) => {
 
 // ponytail: one pool per process (a pod builds one app); the sharing handlers
 // registered once by registerHandlers() read it per call. Tests building two
-// apps in one process must point both at the same database.
+// apps in one process must point both at the same database (and env).
 let dbPool: Pool | null = null;
+let appEnv: ServerEnv | null = null;
 
 /** The org role a non-RPC /api/ route needs: uploading stages data (write); the event stream is for any member. */
 function routeAccess(method: string, route: string | undefined): 'read' | 'write' | null {
@@ -106,6 +114,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   const dbUrl = cfg.databaseUrl;
   const pool = dbUrl ? createPool(dbUrl, (err) => app.log.warn({ err }, 'postgres idle client error')) : null;
   dbPool = pool;
+  appEnv = cfg;
   if (pool && dbUrl) {
     // Scheduled jobs and cross-pod events (./jobs/): started once the schema
     // is current, stopped on close after the job in flight finishes and
@@ -226,12 +235,13 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     // Authorization (./authz/): the caller's role on the project the input
     // names, or on the org, must reach the contract's access — else 403 and
     // the handler never runs. Writes, admin calls and audited reads leave an
-    // audit row: ids only, never an input value (./authz/audit.ts).
+    // audit row: ids only, never an input value (./authz/audit.ts). An admin
+    // screen's own lists (`audit: 'denials'`) leave one only when refused.
     const who = ctx();
-    const audited = contract.access !== 'read' || contract.audit === true;
+    const audited = contract.access !== 'read' || contract.audit !== undefined;
     const targets = audited ? targetIds(parsed.data) : [];
     const record = async (outcome: Outcome, projectId: string | null, extra: string[] = []): Promise<void> => {
-      if (!audited) return;
+      if (!audited || (contract.audit === 'denials' && outcome !== 'denied')) return;
       await audit(pool, {
         org: who.org.id, actor: who.user.email, action: 'rpc', channel, projectId,
         targets: [...targets, ...extra], outcome, requestId: who.requestId,
@@ -262,7 +272,11 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   });
 
   // Uploads and downloads (./files.ts) — the open and save dialogs' replacement.
-  registerFileRoutes(app, cfg.maxUploadMb);
+  // MAX_UPLOAD_MB is the ceiling; an org admin may set a lower cap (Admin → Settings).
+  registerFileRoutes(app, cfg.maxUploadMb, () => uploadCapMb(pool, ctx().org.id, cfg.maxUploadMb));
+
+  // MCP for programs, signed in with a personal API token (T3.4).
+  registerMcpRoute(app, () => pool);
 
   app.addHook('onClose', async () => shutdown());
 
@@ -284,4 +298,12 @@ export function registerHandlers(): void {
     (require(mod) as { register: () => void }).register();
   }
   (require('./authz/share') as typeof import('./authz/share')).register(() => dbPool);
+  // Admin and personal API tokens (T3.4). The env is read per call, like the pool.
+  const env = (): ServerEnv => {
+    if (!appEnv) throw new Error('no app built');
+    return appEnv;
+  };
+  (require('./admin/people') as typeof import('./admin/people')).register(() => dbPool, () => env().auth.allowedDomains);
+  (require('./admin/org') as typeof import('./admin/org')).register(() => dbPool, () => env().maxUploadMb);
+  (require('./auth/tokens') as typeof import('./auth/tokens')).register(() => dbPool);
 }

@@ -40,8 +40,9 @@ export function pick<T extends { id: string; name: string }>(list: readonly T[],
   throw new AutomationError('not_found', `No ${what} called "${r}".`);
 }
 
-export async function resolveProject(ref?: string): Promise<projects.Project> {
-  const list = await projects.listProjects();
+/** `canRead` (server): only the projects the caller may read exist for this lookup. */
+export async function resolveProject(ref?: string, canRead?: (projectId: string) => boolean): Promise<projects.Project> {
+  const list = (await projects.listProjects()).filter((p) => !canRead || canRead(p.id));
   if (ref && ref.trim()) return pick(list, ref, 'project');
   const p = defaultProject(list);
   if (!p) throw new AutomationError('not_found', 'There are no projects yet. Open Ordinate once, or name one with --project.');

@@ -1106,3 +1106,12 @@ scripts/**/*.js
 
 # web/t1.4-datagrid
 /scripts/test-datasetPageRpc.js
+
+# web/t3.4-admin
+/src/api/admin.js
+/src/api/tokens.js
+/src/server/admin/people.js
+/src/server/admin/org.js
+/src/server/auth/tokens.js
+/scripts/test-admin-db.js
+/scripts/test-tokens-db.js

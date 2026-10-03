@@ -1,0 +1,210 @@
+/* Admin and API tokens: dense tables on one card (Home's list language),
+   a toolbar row above each, and the small pieces the tabs share. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  padding-top: var(--sp-16);
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-8) var(--sp-12);
+}
+.barEnd {
+  margin-left: auto;
+  display: flex;
+  gap: var(--sp-8);
+}
+.search {
+  width: 260px;
+}
+.lead {
+  color: var(--muted);
+  max-width: 72ch;
+}
+
+/* ── Tables ─────────────────────────────────────────────────────────── */
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  overflow-x: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-13);
+}
+.table th {
+  height: 36px;
+  padding: 0 var(--sp-16);
+  text-align: left;
+  font-size: var(--t-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tr-label);
+  color: var(--muted);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-hairline);
+}
+.table td {
+  height: 44px;
+  padding: 0 var(--sp-16);
+  border-top: 1px solid var(--border-hairline);
+  vertical-align: middle;
+}
+.table tr:first-child td {
+  border-top: 0;
+}
+.table tbody tr:hover td {
+  background: var(--surface-2);
+}
+.table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.actions {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+}
+.strong {
+  font-weight: 500;
+  color: var(--text-strong);
+}
+.meta {
+  color: var(--muted);
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+}
+.cellRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.roleSelect {
+  width: 120px;
+}
+
+/* ── Teams ──────────────────────────────────────────────────────────── */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  padding: var(--sp-8) 0;
+}
+.chip {
+  padding: 2px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--t-12);
+}
+.checkList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* ── Audit ──────────────────────────────────────────────────────────── */
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--sp-12);
+  align-items: end;
+}
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-8);
+}
+
+/* ── Settings ───────────────────────────────────────────────────────── */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-24);
+  max-width: 640px;
+}
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-16);
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+}
+.groupTitle {
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.capField {
+  max-width: 200px;
+}
+
+/* ── Tokens ─────────────────────────────────────────────────────────── */
+.secret {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.secret code {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  color: var(--text-strong);
+}
+.warn {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: flex-start;
+  color: var(--warn);
+  font-size: var(--t-12);
+}
+.snippet {
+  margin: 0;
+  padding: var(--sp-12);
+  background: var(--inset);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+.dialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+
+/* Named for assistive tech, not drawn (an actions column's header). */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

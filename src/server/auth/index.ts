@@ -5,6 +5,10 @@
 //   oidc    browser session cookie → `sessions` row → user (./oidc.ts signs in)
 //   header  X-Forwarded-Email from a proxy (oauth2-proxy), believed ONLY when
 //           the TCP peer is inside TRUSTED_PROXY_CIDRS
+//   bearer  with Postgres, in every mode: `Authorization: Bearer ord_…` is a
+//           personal API token (./tokens.ts). A request that carries one is
+//           decided by it alone — a bad token is a 401, never a fall-through
+//           to the cookie or the proxy header.
 //
 // /api/auth/* is outside app.ts's 401 gate (you cannot need a session to get
 // one); `me` and `logout-everywhere` run `identify` themselves.
@@ -18,6 +22,7 @@ import { proxyList, type AuthEnv, type ServerEnv } from '../env';
 import { audit, type AuditAction } from '../authz/audit';
 import { cookieNames, cookieOpts, safeNext } from './cookies';
 import { registerOidc } from './oidc';
+import { hasBearer, tokenIdentity } from './tokens';
 import { endAllSessions, endSession, ensureOrg, member, normalEmail, provision, sessionIdentity } from './store';
 
 /**
@@ -76,6 +81,11 @@ export function registerAuth(app: FastifyInstance, cfg: ServerEnv, pool: Pool | 
     // Runs after app.ts's migration hook (registered first), so `orgs` exists.
     app.addHook('onReady', async () => ensureOrg(db, auth.org));
   }
+  if (pool && !override) {
+    const db = pool;
+    const byMode = identify;
+    identify = (headers, peer) => (hasBearer(headers.authorization) ? tokenIdentity(db, headers.authorization as string) : byMode(headers, peer));
+  }
 
   const who = (req: FastifyRequest) => identify(req.headers, req.socket.remoteAddress);
 
@@ -89,6 +99,8 @@ export function registerAuth(app: FastifyInstance, cfg: ServerEnv, pool: Pool | 
       mode: auth.mode,
       // Only a session can be ended here; header mode signs out at the proxy.
       canSignOut: auth.mode === 'oidc',
+      // Members, teams and API tokens live in Postgres: without it there is nothing to administer (T3.4).
+      accounts: pool !== null,
     };
   });
 

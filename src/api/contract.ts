@@ -26,8 +26,12 @@ export type Access = 'read' | 'write' | 'admin';
 interface Base<I extends z.ZodType> {
   readonly access: Access;
   readonly input: I;
-  /** Audit a `read` channel too (exports). `write` and `admin` are always audited. */
-  readonly audit?: true;
+  /**
+   * `true`: audit a `read` channel too (exports). `'denials'`: audit only
+   * refusals — for the lists an admin screen loads, so reading the audit log
+   * does not write to it. Otherwise `write` and `admin` are always audited.
+   */
+  readonly audit?: true | 'denials';
 }
 
 export interface ProjectScoped<I extends z.ZodType = z.ZodType> extends Base<I> {

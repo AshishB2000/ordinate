@@ -31,6 +31,8 @@ export type Role = 'admin' | 'editor' | 'viewer';
 export interface Identity {
   readonly user: { readonly email: string; readonly role: Role };
   readonly org: { readonly id: string };
+  /** Set when the request signed in with a personal API token (`Authorization: Bearer`, ./auth/tokens.ts). */
+  readonly via?: 'token';
 }
 
 export interface RequestContext extends Identity {

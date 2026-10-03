@@ -11,6 +11,8 @@ export interface Me {
   mode: 'dev' | 'oidc' | 'header';
   /** Only a session can be ended here; header mode signs out at the proxy. */
   canSignOut: boolean;
+  /** The server keeps members, teams and API tokens (it has Postgres). Absent from an older server. */
+  accounts?: boolean;
 }
 
 function isMe(v: unknown): v is Me {

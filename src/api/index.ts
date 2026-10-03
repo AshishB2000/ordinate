@@ -7,6 +7,8 @@ import { datasets } from './datasets';
 import { home } from './home';
 import { quality } from './quality';
 import { visuals } from './visuals';
+import { adminContracts } from './admin';
+import { tokens } from './tokens';
 
 export const contracts = {
   ...projects,
@@ -14,6 +16,8 @@ export const contracts = {
   ...home,
   ...quality,
   ...visuals,
+  ...adminContracts,
+  ...tokens,
 } as const;
 
 export type Channel = keyof typeof contracts;

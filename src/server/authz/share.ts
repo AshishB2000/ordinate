@@ -3,7 +3,8 @@
 // already checked the caller — read on the project for the list, project
 // admin for a change — so these only check that the grantee is a user or
 // team of the caller's org. The owner team's grant is not changed here
-// (ownership transfer is T3.4). Server only: they need Postgres.
+// (ownership moves in Admin → Projects, ../admin/org.ts). Server only: they
+// need Postgres.
 
 import type { Pool } from 'pg';
 import { ctx } from '../context';
