@@ -99,6 +99,17 @@ export async function migrate(pool: Pool, dir: string = MIGRATIONS_DIR): Promise
         );
       }
     }
+    // A NEW file numbered below one already applied would run out of order
+    // here (parallel branches each taking "the next" number) — and in order
+    // on a fresh database, so the two would disagree. Refuse it: renumber.
+    const highest = Math.max(0, ...done.keys());
+    const late = migrations.find((m) => !done.has(m.version) && m.version < highest);
+    if (late) {
+      throw new Error(
+        `migration ${late.name} is new but numbered below ${String(highest).padStart(4, '0')}, already applied here; ` +
+          `it would run out of order — renumber it above ${String(highest).padStart(4, '0')}`,
+      );
+    }
     for (const m of migrations) {
       if (done.has(m.version)) continue;
       await client.query(m.sql);

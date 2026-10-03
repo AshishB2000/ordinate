@@ -48,6 +48,7 @@ import type { IncrementalSettings } from './incremental';
 // as-of hooks (read a dataset as it was) — each one line at its call site.
 import { keepAround, removeAll as removeSnapshots } from './snapshots';
 import * as asOf from './asOf';
+import * as recordFs from '../app/recordFs';
 import { scheduleIndex, removeIndex } from '../engine/dataSearchResident'; // ⌘K's value index
 export type { DatasetOrigin } from './datasetOrigin';
 export type { DatasetSummary } from './datasetSummary';
@@ -359,7 +360,7 @@ export async function listDatasets(projectId: string): Promise<DatasetSummary[]>
   const dir = datasetsDir(projectId);
   let dirents;
   try {
-    dirents = await fs.promises.readdir(dir, { withFileTypes: true });
+    dirents = await recordFs.readdir(dir, { withFileTypes: true });
   } catch (_) {
     return []; // no datasets dir yet
   }
@@ -370,7 +371,7 @@ export async function listDatasets(projectId: string): Promise<DatasetSummary[]>
     const id = dirent.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue; // skip stray/tmp files
     try {
-      const raw = await fs.promises.readFile(datasetFilePath(projectId, id), 'utf8');
+      const raw = await recordFs.readFile(datasetFilePath(projectId, id), 'utf8');
       const data = JSON.parse(raw);
       if (!isValidDataset(data)) continue;
       out.push(summarize(normalize(data, projectId)));
@@ -408,7 +409,7 @@ export async function getDatasetMeta(projectId: string, id: string): Promise<Dat
   const past = await asOf.metaHook(projectId, id); // inside an as-of read: the snapshot's
   if (past !== undefined) return past;
   try {
-    const raw = await fs.promises.readFile(datasetFilePath(projectId, id), 'utf8');
+    const raw = await recordFs.readFile(datasetFilePath(projectId, id), 'utf8');
     const data = JSON.parse(raw);
     if (!isValidDataset(data)) return null;
     // Deliberately does NOT hydrate and does NOT migrate. Migration is a write,
@@ -454,7 +455,7 @@ export async function getDataset(projectId: string, id: string): Promise<Dataset
   const past = await asOf.datasetHook(projectId, id); // inside an as-of read: the snapshot's rows
   if (past !== undefined) return past;
   try {
-    const raw = await fs.promises.readFile(datasetFilePath(projectId, id), 'utf8');
+    const raw = await recordFs.readFile(datasetFilePath(projectId, id), 'utf8');
     const data = JSON.parse(raw);
     if (!isValidDataset(data)) return null;
     const wasInline = Array.isArray(data.rows);
@@ -749,9 +750,9 @@ export async function deleteDataset(projectId: string, id: string): Promise<bool
     // All three files, or a delete orphans the table data forever: listDatasets
     // filters on `.json`, so an abandoned .parquet is invisible but never
     // reclaimed. Both paths are built from ids already validated above.
-    await fs.promises.rm(datasetFilePath(projectId, id), { force: true });
-    await fs.promises.rm(parquetPath(projectId, id), { force: true });
-    await fs.promises.rm(sourceParquetPath(projectId, id), { force: true });
+    await recordFs.rm(datasetFilePath(projectId, id), { force: true });
+    await recordFs.rm(parquetPath(projectId, id), { force: true });
+    await recordFs.rm(sourceParquetPath(projectId, id), { force: true });
     await removeSnapshots(projectId, id);
     await removeIndex(parquetPath(projectId, id));
     return true;

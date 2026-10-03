@@ -19,6 +19,7 @@ import { randomUUID } from 'crypto';
 import * as appPaths from '../app/paths';
 import { isValidId } from '../app/ids';
 import * as queryCache from '../engine/queryCache';
+import * as recordFs from '../app/recordFs';
 
 export type Cardinality = 'many_to_one' | 'one_to_one';
 export const CARDINALITIES: readonly Cardinality[] = ['many_to_one', 'one_to_one'];
@@ -88,7 +89,7 @@ export async function listRelationships(projectId: string): Promise<Relationship
   if (!isValidId(projectId)) return [];
   let raw: any;
   try {
-    raw = JSON.parse(await fs.promises.readFile(modelFile(projectId), 'utf8'));
+    raw = JSON.parse(await recordFs.readFile(modelFile(projectId), 'utf8'));
   } catch (_) {
     return []; // missing, unreadable or corrupt — never fatal
   }
@@ -106,8 +107,8 @@ async function writeAll(projectId: string, list: Relationship[]): Promise<boolea
     const file = modelFile(projectId);
     await fs.promises.mkdir(path.dirname(file), { recursive: true });
     const tmp = file + '.' + randomUUID() + '.tmp';
-    await fs.promises.writeFile(tmp, JSON.stringify({ schemaVersion: 1, relationships: list }, null, 2), 'utf8');
-    await fs.promises.rename(tmp, file);
+    await recordFs.writeFile(tmp, JSON.stringify({ schemaVersion: 1, relationships: list }, null, 2), 'utf8');
+    await recordFs.rename(tmp, file);
     // A joined chart or KPI read through the old edges; drop the project's answers.
     queryCache.invalidateProject(projectId);
     return true;

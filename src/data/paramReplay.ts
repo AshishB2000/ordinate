@@ -21,6 +21,7 @@ import type { Cell } from './transforms';
 import type { ParsedColumn } from './parse';
 import { bindStepParams, stepsUseParams } from '../analysis/params';
 import type { ParamValues } from '../analysis/params';
+import { orgKey } from '../server/context';
 
 export interface ReplayedTable {
   columns: ParsedColumn[];
@@ -41,7 +42,7 @@ export async function paramTable(projectId: string, datasetId: string, values: P
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   if (!meta || !stepsUseParams(meta.steps)) return null;
   const key = JSON.stringify([meta.updatedAt, [...values.entries()]]);
-  const hit = memo.get(projectId + '/' + datasetId);
+  const hit = memo.get(orgKey(projectId + '/' + datasetId));
   if (hit && hit.key === key) return hit.table;
 
   const ds = await datasets.getDataset(projectId, datasetId);
@@ -49,7 +50,7 @@ export async function paramTable(projectId: string, datasetId: string, values: P
   const bound = bindStepParams(ds.steps || [], values);
   const out = applyPipeline(ds.source, bound.steps, { salt: await saltForSteps(projectId, bound.steps), ...(await loadStepRefs(projectId, datasetId, bound.steps)) });
   const table: ReplayedTable = { columns: out.columns, rows: out.rows, errors: bound.errors };
-  memo.set(projectId + '/' + datasetId, { key, table });
+  memo.set(orgKey(projectId + '/' + datasetId), { key, table });
   if (memo.size > MEMO_MAX) memo.delete(memo.keys().next().value as string);
   return table;
 }

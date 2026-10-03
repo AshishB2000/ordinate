@@ -84,6 +84,16 @@ export function ctx(): RequestContext {
   throw new Error('ctx() called outside a request');
 }
 
+/**
+ * `key` scoped to the caller's org. For a module-level cache keyed by record
+ * ids: on the server ids are unique within an org, not across orgs (an
+ * imported desktop install or a crafted bundle repeats them), so a cache keyed
+ * by id alone would hand org B what was computed for org A.
+ */
+export function orgKey(key: string): string {
+  return ctx().org.id + '\u0000' + key;
+}
+
 /** Runs `fn` as a request with this identity (app.ts's hook; tests), pushing to `client`'s stream. */
 export function runInContext<T>(identity: Identity, requestId: string, fn: () => T, client: Client = NO_CLIENT): T {
   return als.run({ ...identity, requestId, client }, fn);

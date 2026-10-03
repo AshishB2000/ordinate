@@ -7,6 +7,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as appPaths from './paths';
+import * as recordFs from './recordFs';
 
 function getHistoryDir(): string {
   return path.join(appPaths.userData(), 'history');
@@ -45,7 +46,7 @@ export async function saveCrop(id: string | number, dataUrl: string): Promise<st
   const base64 = dataUrl.replace(/^data:image\/[^;]+;base64,/, '');
   const buf = Buffer.from(base64, 'base64');
   const p = cropFilePath(id);
-  await fs.promises.writeFile(p, buf);
+  await recordFs.writeFile(p, buf);
   return p;
 }
 
@@ -60,8 +61,8 @@ export async function saveThread(thread: any): Promise<void> {
   // would then skip, silently dropping a prior capture).
   const file = threadFilePath(thread.id);
   const tmp = `${file}.${Date.now()}.tmp`;
-  await fs.promises.writeFile(tmp, JSON.stringify(thread, null, 2), 'utf8');
-  await fs.promises.rename(tmp, file);
+  await recordFs.writeFile(tmp, JSON.stringify(thread, null, 2), 'utf8');
+  await recordFs.rename(tmp, file);
 }
 
 export interface ThreadSummary {
@@ -79,7 +80,7 @@ async function readAllThreads(): Promise<any[]> {
   const dir = getHistoryDir();
   let dirents;
   try {
-    dirents = await fs.promises.readdir(dir, { withFileTypes: true });
+    dirents = await recordFs.readdir(dir, { withFileTypes: true });
   } catch (_) {
     return [];
   }
@@ -89,7 +90,7 @@ async function readAllThreads(): Promise<any[]> {
     if (!dirent.isDirectory()) continue;
     const id = dirent.name;
     try {
-      const raw = await fs.promises.readFile(threadFilePath(id), 'utf8');
+      const raw = await recordFs.readFile(threadFilePath(id), 'utf8');
       const data = JSON.parse(raw);
       if (!data.id) continue;
       threads.push(data);
@@ -171,7 +172,7 @@ export async function setDatasetId(id: string | number, datasetId: string): Prom
 export async function loadThread(id: string | number): Promise<any> {
   if (!isValidId(id)) return null;
   try {
-    const raw = await fs.promises.readFile(threadFilePath(id), 'utf8');
+    const raw = await recordFs.readFile(threadFilePath(id), 'utf8');
     return JSON.parse(raw);
   } catch (_) {
     return null;
@@ -182,7 +183,7 @@ export async function loadThread(id: string | number): Promise<any> {
 export async function deleteThread(id: string | number): Promise<boolean> {
   if (!isValidId(id)) return false;
   try {
-    await fs.promises.rm(threadDir(id), { recursive: true, force: true });
+    await recordFs.rm(threadDir(id), { recursive: true, force: true });
     return true;
   } catch (_) {
     return false;
@@ -194,6 +195,6 @@ export async function deleteThread(id: string | number): Promise<boolean> {
 // so the caller can report exactly what was removed.
 export async function clearAll(): Promise<string> {
   const dir = getHistoryDir();
-  await fs.promises.rm(dir, { recursive: true, force: true });
+  await recordFs.rm(dir, { recursive: true, force: true });
   return dir;
 }

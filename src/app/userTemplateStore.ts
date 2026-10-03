@@ -18,6 +18,7 @@ import { randomUUID } from 'crypto';
 import * as appPaths from './paths';
 import type { UserTemplate } from '../analysis/userTemplate';
 import { sanitizeUserTemplate } from '../analysis/userTemplateFile';
+import * as recordFs from './recordFs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const MAX_TEMPLATES = 500;
@@ -31,14 +32,14 @@ function fileOf(id: string): string { return path.join(dir(), id.toLowerCase() +
 async function writeAtomic(file: string, obj: unknown): Promise<void> {
   await fs.promises.mkdir(path.dirname(file), { recursive: true });
   const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
-  await fs.promises.rename(tmp, file);
+  await recordFs.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
+  await recordFs.rename(tmp, file);
 }
 
 /** Every template, newest first. */
 export async function listTemplates(): Promise<UserTemplate[]> {
   let names: string[] = [];
-  try { names = await fs.promises.readdir(dir()); } catch (_) { return []; }
+  try { names = await recordFs.readdir(dir()); } catch (_) { return []; }
   const out: UserTemplate[] = [];
   for (const n of names) {
     const id = n.endsWith('.json') ? n.slice(0, -5) : '';
@@ -52,7 +53,7 @@ export async function listTemplates(): Promise<UserTemplate[]> {
 export async function getTemplate(id: unknown): Promise<UserTemplate | null> {
   if (typeof id !== 'string' || !UUID_RE.test(id)) return null;
   try {
-    const t = sanitizeUserTemplate(JSON.parse(await fs.promises.readFile(fileOf(id), 'utf8')), () => id);
+    const t = sanitizeUserTemplate(JSON.parse(await recordFs.readFile(fileOf(id), 'utf8')), () => id);
     return t && t.id === id.toLowerCase() ? t : null;
   } catch (err: any) {
     if (err && err.code !== 'ENOENT') console.error('[templates] skipping unreadable template', id, err.message);
@@ -79,7 +80,7 @@ export async function updateTemplate(id: unknown, patch: { name?: unknown; descr
 
 export async function deleteTemplate(id: unknown): Promise<boolean> {
   if (typeof id !== 'string' || !UUID_RE.test(id)) return false;
-  try { await fs.promises.rm(fileOf(id), { force: true }); return true; } catch (_) { return false; }
+  try { await recordFs.rm(fileOf(id), { force: true }); return true; } catch (_) { return false; }
 }
 
 /** Add templates that are not here yet; one already here is left alone. */

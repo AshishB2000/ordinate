@@ -11,6 +11,7 @@ import { randomUUID } from 'crypto';
 import * as appPaths from './paths';
 import { sanitizeColorMap } from '../analysis/colorMap';
 import type { ColorMap } from '../analysis/colorMap';
+import * as recordFs from './recordFs';
 
 export interface Project {
   id: string;
@@ -77,8 +78,8 @@ async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
   // record share one temp path and interleave into a corrupt file (or ENOENT on
   // the second rename). A per-write suffix degrades the race to clean last-writer-wins.
   const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
-  await fs.promises.rename(tmp, file); // atomic on same fs
+  await recordFs.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
+  await recordFs.rename(tmp, file); // atomic on same fs
 }
 
 // Basic shape validation for a parsed project.json (skips corrupt files).
@@ -96,7 +97,7 @@ export async function listProjects(): Promise<Project[]> {
   const dir = getProjectsDir();
   let dirents;
   try {
-    dirents = await fs.promises.readdir(dir, { withFileTypes: true });
+    dirents = await recordFs.readdir(dir, { withFileTypes: true });
   } catch (_) {
     return [];
   }
@@ -108,7 +109,7 @@ export async function listProjects(): Promise<Project[]> {
     if (!dirent.isDirectory() && !dirent.isSymbolicLink()) continue;
     const id = dirent.name;
     try {
-      const raw = await fs.promises.readFile(projectFilePath(id), 'utf8');
+      const raw = await recordFs.readFile(projectFilePath(id), 'utf8');
       const data = JSON.parse(raw);
       if (!isValidProject(data)) continue;
       projects.push(normalize(data));
@@ -225,7 +226,7 @@ export async function setInsightDismissed(
 export async function getProject(id: string): Promise<Project | null> {
   if (!isValidId(id)) return null;
   try {
-    const raw = await fs.promises.readFile(projectFilePath(id), 'utf8');
+    const raw = await recordFs.readFile(projectFilePath(id), 'utf8');
     const data = JSON.parse(raw);
     if (!isValidProject(data)) return null;
     return normalize(data);
@@ -272,8 +273,8 @@ export async function deleteProject(id: string): Promise<boolean> {
   if (!isValidId(id)) return false;
   try {
     const st = await fs.promises.lstat(projectDir(id)).catch(() => null);
-    if (st && st.isSymbolicLink()) await fs.promises.unlink(projectDir(id));
-    else await fs.promises.rm(projectDir(id), { recursive: true, force: true });
+    if (st && st.isSymbolicLink()) await recordFs.unlink(projectDir(id));
+    else await recordFs.rm(projectDir(id), { recursive: true, force: true });
     return true;
   } catch (_) {
     return false;

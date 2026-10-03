@@ -42,6 +42,7 @@ import type { SavedView } from './savedViews';
 // modules — and so it stays visible that a sheet IS a dashboard Page.
 export type { Page, Card, CardLayout, CardMetric, CardType, CardControl, ControlValue, ControlKind, DashboardStyle } from './dashboards';
 import type { Page, DashboardStyle } from './dashboards';
+import * as recordFs from '../app/recordFs';
 
 export interface Analysis {
   /** Generated UUID — never derived from the name; it is a filesystem path. */
@@ -134,8 +135,8 @@ function analysisFilePath(projectId: string, id: string): string {
 // a corrupt file (or ENOENT on the second rename).
 async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
   const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
-  await fs.promises.rename(tmp, file); // atomic on same fs
+  await recordFs.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
+  await recordFs.rename(tmp, file); // atomic on same fs
 }
 
 // Basic shape validation for a parsed analysis JSON (skips corrupt files).
@@ -185,7 +186,7 @@ export async function listAnalyses(projectId: string): Promise<AnalysisSummary[]
   const dir = analysesDir(projectId);
   let dirents;
   try {
-    dirents = await fs.promises.readdir(dir, { withFileTypes: true });
+    dirents = await recordFs.readdir(dir, { withFileTypes: true });
   } catch (_) {
     return []; // no analyses dir yet
   }
@@ -196,7 +197,7 @@ export async function listAnalyses(projectId: string): Promise<AnalysisSummary[]
     const id = dirent.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue; // skip stray/tmp files
     try {
-      const raw = await fs.promises.readFile(analysisFilePath(projectId, id), 'utf8');
+      const raw = await recordFs.readFile(analysisFilePath(projectId, id), 'utf8');
       const data = JSON.parse(raw);
       if (!isValidAnalysis(data)) continue;
       const a = normalize(data, projectId);
@@ -223,7 +224,7 @@ export async function listAnalyses(projectId: string): Promise<AnalysisSummary[]
 export async function getAnalysis(projectId: string, id: string): Promise<Analysis | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   try {
-    const raw = await fs.promises.readFile(analysisFilePath(projectId, id), 'utf8');
+    const raw = await recordFs.readFile(analysisFilePath(projectId, id), 'utf8');
     const data = JSON.parse(raw);
     if (!isValidAnalysis(data)) return null;
     return normalize(data, projectId);
@@ -318,7 +319,7 @@ export async function updateAnalysis(
 export async function deleteAnalysis(projectId: string, id: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
   try {
-    await fs.promises.rm(analysisFilePath(projectId, id), { force: true });
+    await recordFs.rm(analysisFilePath(projectId, id), { force: true });
     return true;
   } catch (_) {
     return false;

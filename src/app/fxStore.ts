@@ -20,6 +20,7 @@ import * as appPaths from './paths';
 import { isValidId } from './ids';
 import { sanitizeSettings, sanitizeDecl, sanitizeSource, isCurrencyCode, cellDay, buildRates } from '../analysis/fx';
 import type { FxSettings, RateRow, RateTable } from '../analysis/fx';
+import * as recordFs from './recordFs';
 
 function fxFile(projectId: string): string {
   return path.join(appPaths.userData(), 'projects', projectId, 'fx.json');
@@ -32,16 +33,16 @@ const queues = new Map<string, Promise<unknown>>();
 
 export async function getFx(projectId: string): Promise<FxSettings> {
   if (!isValidId(projectId)) return sanitizeSettings(null);
-  const hit = cache.get(projectId);
+  const hit = cache.get(fxFile(projectId));
   if (hit) return hit;
   let raw: unknown = null;
   try {
-    raw = JSON.parse(await fs.promises.readFile(fxFile(projectId), 'utf8'));
+    raw = JSON.parse(await recordFs.readFile(fxFile(projectId), 'utf8'));
   } catch (_) {
     raw = null; // none yet, or unreadable: nothing declared
   }
   const s = sanitizeSettings(raw);
-  cache.set(projectId, s);
+  cache.set(fxFile(projectId), s);
   return s;
 }
 
@@ -54,14 +55,14 @@ function edit(projectId: string, fn: (s: FxSettings) => void): Promise<FxSetting
     const clean = sanitizeSettings(next);
     const file = fxFile(projectId);
     try {
-      await fs.promises.access(path.dirname(file));
+      await recordFs.access(path.dirname(file));
     } catch (_) {
       return null; // no such project
     }
     const tmp = file + '.' + randomUUID() + '.tmp';
-    await fs.promises.writeFile(tmp, JSON.stringify(clean, null, 2), 'utf8');
-    await fs.promises.rename(tmp, file);
-    cache.set(projectId, clean);
+    await recordFs.writeFile(tmp, JSON.stringify(clean, null, 2), 'utf8');
+    await recordFs.rename(tmp, file);
+    cache.set(file, clean);
     return clean;
   };
   const prev = queues.get(projectId) || Promise.resolve();

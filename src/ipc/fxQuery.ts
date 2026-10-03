@@ -42,6 +42,7 @@ import { paramTable } from '../data/paramReplay';
 import { isFaceted } from './visualsFacets';
 import { residentVizData } from './visualsResident';
 import type { VizDataReply } from './visuals';
+import { orgKey } from '../server/context';
 
 const als = new AsyncLocalStorage<string>();
 
@@ -108,7 +109,7 @@ const rateCache = new Map<string, fx.RateTable>();
 
 async function jsRates(projectId: string, ctx: FxCtx): Promise<{ table: fx.RateTable; sample: boolean }> {
   if (ctx.rates.kind === 'dataset') {
-    const k = projectId + '/' + ctx.rates.datasetId + '@' + ctx.rates.updatedAt + JSON.stringify(ctx.rates.map);
+    const k = orgKey(projectId) + '/' + ctx.rates.datasetId + '@' + ctx.rates.updatedAt + JSON.stringify(ctx.rates.map);
     const hit = rateCache.get(k);
     if (hit) return { table: hit, sample: false };
     const ds = await datasets.getDataset(projectId, ctx.rates.datasetId);

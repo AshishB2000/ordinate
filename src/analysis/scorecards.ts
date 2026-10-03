@@ -14,6 +14,7 @@ import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import { isScorePeriod, sanitizeRows } from './scorecardModel';
 import type { Scorecard, ScorePeriod } from './scorecardModel';
+import * as recordFs from '../app/recordFs';
 
 export type { Scorecard } from './scorecardModel';
 
@@ -45,8 +46,8 @@ function file(projectId: string, id: string): string {
 
 async function writeJsonAtomic(target: string, obj: unknown): Promise<void> {
   const tmp = target + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
-  await fs.promises.rename(tmp, target);
+  await recordFs.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
+  await recordFs.rename(tmp, target);
 }
 
 function cleanName(v: unknown): string {
@@ -85,7 +86,7 @@ export async function listScorecards(projectId: string): Promise<ScorecardSummar
   if (!isValidId(projectId)) return [];
   let dirents;
   try {
-    dirents = await fs.promises.readdir(dir(projectId), { withFileTypes: true });
+    dirents = await recordFs.readdir(dir(projectId), { withFileTypes: true });
   } catch (_) {
     return [];
   }
@@ -95,7 +96,7 @@ export async function listScorecards(projectId: string): Promise<ScorecardSummar
     const id = d.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue;
     try {
-      const data = JSON.parse(await fs.promises.readFile(file(projectId, id), 'utf8'));
+      const data = JSON.parse(await recordFs.readFile(file(projectId, id), 'utf8'));
       if (!data || typeof data.id !== 'string') continue;
       out.push(summaryOf(normalize(data, projectId)));
     } catch (err: any) {
@@ -109,7 +110,7 @@ export async function listScorecards(projectId: string): Promise<ScorecardSummar
 export async function getScorecard(projectId: string, id: string): Promise<Scorecard | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   try {
-    const data = JSON.parse(await fs.promises.readFile(file(projectId, id), 'utf8'));
+    const data = JSON.parse(await recordFs.readFile(file(projectId, id), 'utf8'));
     if (!data || typeof data.id !== 'string') return null;
     return normalize(data, projectId);
   } catch (_) {
@@ -157,7 +158,7 @@ export async function duplicateScorecard(projectId: string, id: string): Promise
 export async function deleteScorecard(projectId: string, id: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
   try {
-    await fs.promises.rm(file(projectId, id), { force: true });
+    await recordFs.rm(file(projectId, id), { force: true });
     return true;
   } catch (_) {
     return false;

@@ -20,6 +20,7 @@ import { randomUUID } from 'crypto';
 import { projectDir, isValidId, isRecordType } from './recordKinds';
 import type { RecordType } from './recordKinds';
 import { snapshotFiles } from '../data/snapshotNames';
+import * as recordFs from './recordFs';
 
 export interface TrashEntry {
   type: RecordType;
@@ -49,14 +50,14 @@ export function parquetNames(id: string): string[] {
 /** The table files plus its snapshots (strictly matched) found in `dir` — what travels with a dataset. */
 export async function datasetFiles(dir: string, id: string): Promise<string[]> {
   let names: string[] = [];
-  try { names = await fs.promises.readdir(dir); } catch (_) { /* no dir: just the tables */ }
+  try { names = await recordFs.readdir(dir); } catch (_) { /* no dir: just the tables */ }
   return parquetNames(id).concat(snapshotFiles(id, names));
 }
 
 async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
   const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
-  await fs.promises.rename(tmp, file);
+  await recordFs.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
+  await recordFs.rename(tmp, file);
 }
 
 /**
@@ -86,7 +87,7 @@ export async function readEntry(projectId: string, type: RecordType, id: string)
   const file = entryPath(projectId, type, id);
   if (!file) return null;
   try {
-    const data = JSON.parse(await fs.promises.readFile(file, 'utf8'));
+    const data = JSON.parse(await recordFs.readFile(file, 'utf8'));
     return data && typeof data === 'object' ? data : null;
   } catch (_) {
     return null;
@@ -97,9 +98,9 @@ export async function readEntry(projectId: string, type: RecordType, id: string)
 export async function removeEntry(projectId: string, type: RecordType, id: string): Promise<void> {
   const file = entryPath(projectId, type, id);
   if (!file) return;
-  await fs.promises.rm(file, { force: true });
+  await recordFs.rm(file, { force: true });
   if (type === 'dataset') {
-    for (const n of await datasetFiles(path.dirname(file), id)) await fs.promises.rm(path.join(path.dirname(file), n), { force: true });
+    for (const n of await datasetFiles(path.dirname(file), id)) await recordFs.rm(path.join(path.dirname(file), n), { force: true });
   }
 }
 
@@ -110,7 +111,7 @@ export async function listEntries(projectId: string): Promise<TrashEntry[]> {
   const out: TrashEntry[] = [];
   let types: string[] = [];
   try {
-    types = await fs.promises.readdir(root);
+    types = await recordFs.readdir(root);
   } catch (_) {
     return [];
   }
@@ -118,7 +119,7 @@ export async function listEntries(projectId: string): Promise<TrashEntry[]> {
     if (!isRecordType(type)) continue;
     let names: string[] = [];
     try {
-      names = await fs.promises.readdir(path.join(root, type));
+      names = await recordFs.readdir(path.join(root, type));
     } catch (_) {
       continue;
     }

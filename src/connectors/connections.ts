@@ -28,6 +28,7 @@ import { randomUUID } from 'crypto';
 import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import type { ConnectorDef } from './types';
+import * as recordFs from '../app/recordFs';
 
 /** v1's fixed union, kept ONLY so the migration can name what it reads. */
 export type LegacyConnectionKind = 'postgres' | 'url';
@@ -268,8 +269,8 @@ async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
   // record share one temp path and interleave into a corrupt file (or ENOENT on
   // the second rename). A per-write suffix degrades the race to clean last-writer-wins.
   const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
-  await fs.promises.rename(tmp, file); // atomic on same fs
+  await recordFs.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
+  await recordFs.rename(tmp, file); // atomic on same fs
 }
 
 // ── v1 → v2 migration ────────────────────────────────────────────────────────
@@ -436,7 +437,7 @@ export async function listConnections(projectId: string): Promise<Connection[]> 
   const dir = connectionsDir(projectId);
   let dirents;
   try {
-    dirents = await fs.promises.readdir(dir, { withFileTypes: true });
+    dirents = await recordFs.readdir(dir, { withFileTypes: true });
   } catch (_) {
     return []; // no connections dir yet
   }
@@ -447,7 +448,7 @@ export async function listConnections(projectId: string): Promise<Connection[]> 
     const id = dirent.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue; // skip stray/tmp files
     try {
-      const raw = await fs.promises.readFile(connectionFilePath(projectId, id), 'utf8');
+      const raw = await recordFs.readFile(connectionFilePath(projectId, id), 'utf8');
       const data = JSON.parse(raw);
       if (!isValidConnection(data)) continue;
       out.push(normalize(data, projectId));
@@ -467,7 +468,7 @@ export async function listConnections(projectId: string): Promise<Connection[]> 
 export async function getConnection(projectId: string, id: string): Promise<Connection | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   try {
-    const raw = await fs.promises.readFile(connectionFilePath(projectId, id), 'utf8');
+    const raw = await recordFs.readFile(connectionFilePath(projectId, id), 'utf8');
     const data = JSON.parse(raw);
     if (!isValidConnection(data)) return null;
     return normalize(data, projectId);
@@ -645,7 +646,7 @@ export async function deleteQuery(
 export async function deleteConnection(projectId: string, id: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
   try {
-    await fs.promises.rm(connectionFilePath(projectId, id), { force: true });
+    await recordFs.rm(connectionFilePath(projectId, id), { force: true });
     emitChange(projectId, id, null);
     return true;
   } catch (_) {

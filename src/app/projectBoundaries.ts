@@ -13,6 +13,7 @@ import { isValidId } from './ids';
 import { checkBoundaries, MAX_BOUNDARY_BYTES } from '../analysis/geojsonCheck';
 import type { BoundaryCheck } from '../analysis/geojsonCheck';
 import * as queryCache from '../engine/queryCache';
+import * as recordFs from './recordFs';
 
 export interface BoundaryMeta {
   id: string;
@@ -41,8 +42,8 @@ export async function importBoundaryText(projectId: string, name: string, text: 
   await fs.promises.mkdir(dir(projectId), { recursive: true });
   const file = path.join(dir(projectId), meta.id + '.json');
   const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify({ meta, collection: res.collection }), 'utf8');
-  await fs.promises.rename(tmp, file);
+  await recordFs.writeFile(tmp, JSON.stringify({ meta, collection: res.collection }), 'utf8');
+  await recordFs.rename(tmp, file);
   queryCache.invalidateProject(projectId); // a map may resolve regions through these
   return meta;
 }
@@ -52,13 +53,13 @@ export async function importBoundaryFile(projectId: string, file: string): Promi
   if (!stat || !stat.isFile()) return { error: 'That file could not be read.' };
   if (stat.size > MAX_BOUNDARY_BYTES) return { error: 'Boundary files up to 15 MB can be imported.' };
   const name = path.basename(file).replace(/\.(geo)?json$/i, '');
-  return importBoundaryText(projectId, name, await fs.promises.readFile(file, 'utf8'));
+  return importBoundaryText(projectId, name, await recordFs.readFile(file, 'utf8'));
 }
 
 async function readOne(projectId: string, id: string): Promise<any> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   try {
-    return JSON.parse(await fs.promises.readFile(path.join(dir(projectId), id + '.json'), 'utf8'));
+    return JSON.parse(await recordFs.readFile(path.join(dir(projectId), id + '.json'), 'utf8'));
   } catch (_) {
     return null;
   }
@@ -66,7 +67,7 @@ async function readOne(projectId: string, id: string): Promise<any> {
 
 export async function listBoundaries(projectId: string): Promise<BoundaryMeta[]> {
   if (!isValidId(projectId)) return [];
-  const names = await fs.promises.readdir(dir(projectId)).catch(() => [] as string[]);
+  const names = await recordFs.readdir(dir(projectId)).catch(() => [] as string[]);
   const out: BoundaryMeta[] = [];
   for (const n of names) {
     const id = n.replace(/\.json$/, '');

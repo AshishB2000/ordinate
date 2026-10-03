@@ -26,6 +26,7 @@ import * as projects from '../app/projects';
 import { GRID_COLS } from './dashboards';
 import type { Card, Page } from './dashboards';
 import { t } from '../app/i18n';
+import * as recordFs from '../app/recordFs';
 
 export type ReportFormat = 'pdf' | 'pptx' | 'docx';
 export type ReportPageKind = 'cover' | 'summary' | 'sheet' | 'tile' | 'notes' | 'narrative' | 'discussion' | 'scorecard';
@@ -339,8 +340,8 @@ function reportFilePath(projectId: string, id: string): string {
 // share a path and interleave into a corrupt file. Copied from analysis.ts.
 async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
   const tmp = file + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
-  await fs.promises.rename(tmp, file);
+  await recordFs.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
+  await recordFs.rename(tmp, file);
 }
 
 /** Coerce a parsed record into a well-formed Report. `projectId` is the
@@ -395,9 +396,9 @@ export async function listReports(projectId: string): Promise<ReportSummary[]> {
  *  summaries, and reading the dir twice is how the two drift. */
 export async function readAll(projectId: string): Promise<Report[]> {
   if (!isValidId(projectId)) return [];
-  let dirents: import('fs').Dirent[];
+  let dirents: recordFs.Dirent[];
   try {
-    dirents = await fs.promises.readdir(reportsDir(projectId), { withFileTypes: true });
+    dirents = await recordFs.readdir(reportsDir(projectId), { withFileTypes: true });
   } catch (_) {
     return []; // no reports dir yet is the normal case, not an error
   }
@@ -413,7 +414,7 @@ export async function readAll(projectId: string): Promise<Report[]> {
 export async function getReport(projectId: string, id: string): Promise<Report | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   try {
-    const data = JSON.parse(await fs.promises.readFile(reportFilePath(projectId, id), 'utf8'));
+    const data = JSON.parse(await recordFs.readFile(reportFilePath(projectId, id), 'utf8'));
     if (!data || typeof data.id !== 'string' || !data.id) return null;
     return normalize(data, projectId);
   } catch (_) {
@@ -487,7 +488,7 @@ export async function updateReport(
 export async function deleteReport(projectId: string, id: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
   try {
-    await fs.promises.rm(reportFilePath(projectId, id), { force: true });
+    await recordFs.rm(reportFilePath(projectId, id), { force: true });
     return true;
   } catch (_) {
     return false;

@@ -19,6 +19,7 @@ import { writeJsonAtomic } from '../data/datasetRecord';
 import { isValidTimeZone, parseCron } from './pipelineCron';
 import { sanitizePolicy } from './pipelines';
 import type { RetryPolicy, RunStatus } from './pipelines';
+import * as recordFs from './recordFs';
 
 export const MAX_RUNS = 50;
 const MAX_LOG = 20;
@@ -123,7 +124,7 @@ export async function load(projectId: string): Promise<PipelineState> {
   const f = file(projectId);
   if (!f) return empty();
   try {
-    return sanitizeState(JSON.parse(await fs.promises.readFile(f, 'utf8')));
+    return sanitizeState(JSON.parse(await recordFs.readFile(f, 'utf8')));
   } catch (_) {
     return empty(); // none yet, or corrupt: an empty pipeline state, never a failure
   }

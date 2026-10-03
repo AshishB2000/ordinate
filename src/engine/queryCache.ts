@@ -30,6 +30,7 @@
 
 import { createHash } from 'crypto';
 import * as trace from './residentTrace';
+import { ctx } from '../server/context';
 
 export type CacheOp = 'aggregate' | 'pivot' | 'metric' | 'insights';
 
@@ -70,7 +71,7 @@ export interface KeyParts {
 }
 
 export function cacheKey(op: CacheOp, parts: KeyParts, spec: unknown): string {
-  return [op, parts.datasetId, parts.updatedAt, parts.pipelineHash, stableStringify(spec)].join('\u0000');
+  return [ctx().org.id, op, parts.datasetId, parts.updatedAt, parts.pipelineHash, stableStringify(spec)].join('\u0000');
 }
 
 /** The cached answer, or undefined. Counts a hit or a miss under `cache:<op>`. */
