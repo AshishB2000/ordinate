@@ -425,3 +425,17 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   async with its differential tests.
 - `test-residentQuery` 859 → 533: the removed 326 were T4.1's sync-twin checks on the deleted
   `residentSync`; every JS-reference differential check is kept.
+
+## 2026-10-03 — Ticking T0.7 and T0.8; CI is unavailable
+
+- GitHub Actions refuses every job ("recent account payments have failed or your spending limit
+  needs to be increased") since 2026-10-03 02:22 UTC. The user decided not to fix billing now and to
+  merge on the orchestrator's local gate runs instead: build, `npm test` with and without
+  `DATABASE_URL`, lint, web build + Vitest, the e2e harness (Chromium 1243 via `E2E_CHROMIUM`), and
+  the Electron smokes the change touches — run at every step of each merge chain.
+- **T0.7:** the gallery screenshots (both themes + dialog/drawer/select) went to the user for review;
+  the user merged #199. **T0.8:** the CI job is defined but has never run on GitHub; it passes
+  locally (5/5 incl. the T3.2 auth spec). Its first real run happens when billing is restored —
+  re-check then.
+- **Merge order is a chain:** each PR's branch contains its predecessors, conflicts already resolved
+  with both sides kept; merge in the stated order with merge commits.
