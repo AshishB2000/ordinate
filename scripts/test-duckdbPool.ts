@@ -21,6 +21,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { withCsrf } from './csrfPair';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -245,7 +246,7 @@ async function main(): Promise<void> {
   const { port } = app.server.address() as import('net').AddressInfo;
   const gone = new AbortController();
   const slow = fetch(`http://127.0.0.1:${port}/api/rpc/test:slow`, {
-    method: 'POST', body: wire.encode({ args: [] }), headers: { 'content-type': 'application/json' }, signal: gone.signal,
+    method: 'POST', body: wire.encode({ args: [] }), headers: withCsrf({ 'content-type': 'application/json' }), signal: gone.signal,
   }).catch(() => null);
   await new Promise((r) => setTimeout(r, 300));
   gone.abort();

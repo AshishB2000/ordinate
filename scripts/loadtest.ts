@@ -19,6 +19,7 @@
 //    lag p99 ≥ 50 ms (T4.3's bar) or any request failed.
 
 export {}; // module scope — sibling scripts share top-level names
+import { withCsrf } from './csrfPair';
 
 if (process.env.ORDINATE_LOADTEST_PROBE === '1') installProbe();
 else if (require.main === module) {
@@ -94,7 +95,7 @@ async function main(): Promise<void> {
   const rpc = async (channel: string, payload: unknown): Promise<unknown> => {
     const res = await fetch(`${base}/api/rpc/${channel}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: withCsrf({ 'content-type': 'application/json' }),
       body: wire.encode({ args: [payload] }),
     });
     const text = await res.text();

@@ -7,7 +7,7 @@
 import { Suspense } from 'react';
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { nav } from '../api/client';
-import { signInPath, signOut, useMe, type Me } from '../features/auth/api';
+import { signInPath, signOut, signOutEverywhere, useMe, type Me } from '../features/auth/api';
 import { Icon } from '../ui/icons/Icon';
 import { IconButton } from '../ui/Button';
 import { Menu, type MenuEntry } from '../ui/Menu';
@@ -62,13 +62,25 @@ function onSignOut() {
   );
 }
 
+// Every session of this user ends — a lost laptop, a shared machine.
+function onSignOutEverywhere() {
+  signOutEverywhere().then(
+    () => nav.assign('/sign-in'),
+    () => toast('Signing out everywhere failed. Check your connection and try again.', { kind: 'error' }),
+  );
+}
+
 function UserMenu() {
   const [theme, setTheme] = useThemePref();
   const navigate = useNavigate();
   const me = useMe();
   // Only a session can be ended here: dev has none, header mode signs out at the proxy.
   const signOutItems: MenuEntry[] = me.data?.canSignOut
-    ? [{ kind: 'separator' }, { label: 'Sign out', icon: 'log-out', onSelect: onSignOut }]
+    ? [
+        { kind: 'separator' },
+        { label: 'Sign out', icon: 'log-out', onSelect: onSignOut },
+        { label: 'Sign out everywhere', icon: 'monitor', onSelect: onSignOutEverywhere },
+      ]
     : [];
   return (
     <Menu

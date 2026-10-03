@@ -26,6 +26,7 @@ import type { ProjectScoped } from '../api/contract';
 import { audit, type Outcome } from '../server/authz/audit';
 import { authorize, readable } from '../server/authz/index';
 import { ctx } from '../server/context';
+import { sameOrigin } from '../server/csrf';
 import { MAX_BODY } from './httpTransport';
 import { createHandler, RPC, rpcError } from './mcp';
 import * as registry from './registry';
@@ -33,15 +34,6 @@ import * as registry from './registry';
 /** Tools that draw through an Electron BrowserWindow (PDF/PNG capture, the report renderer). */
 const DESKTOP_ONLY = new Set(['export_dashboard', 'run_report']);
 export const SERVER_COMMANDS: readonly registry.Command[] = registry.COMMANDS.filter((c) => c.tool && !DESKTOP_ONLY.has(c.tool));
-
-/** Origin header → is it this server, by host (scheme and port as the browser saw them). */
-export function sameOrigin(origin: string, host: string | undefined): boolean {
-  try {
-    return !!host && new URL(origin).host.toLowerCase() === host.toLowerCase();
-  } catch {
-    return false; // includes the literal "null" origin of sandboxed and file: pages
-  }
-}
 
 const version = (): string => (require('../../package.json') as { version: string }).version;
 

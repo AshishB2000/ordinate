@@ -14,6 +14,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { withCsrf } from './csrfPair';
 import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -129,7 +130,7 @@ function importer(url: string): Promise<{ code: number; out: string }> {
     await app.ready();
     try {
       const post = async (channel: string, payload?: unknown): Promise<unknown> => {
-        const res = await app.inject({ method: 'POST', url: `/api/rpc/${channel}`, headers: { 'content-type': 'application/json' }, payload: wire.encode({ args: payload === undefined ? [] : [payload] }) });
+        const res = await app.inject({ method: 'POST', url: `/api/rpc/${channel}`, headers: withCsrf({ 'content-type': 'application/json' }), payload: wire.encode({ args: payload === undefined ? [] : [payload] }) });
         if (res.statusCode !== 200) throw new Error(`${channel}: ${res.statusCode} ${res.body}`);
         return wire.decode(res.body);
       };
@@ -159,7 +160,7 @@ function importer(url: string): Promise<{ code: number; out: string }> {
       }
       const other = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA, DATABASE_URL: url }), undefined, () => ({ ...who, org: { id: 'someone-else' } }));
       await other.ready();
-      const res = await other.inject({ method: 'POST', url: '/api/rpc/projects:list', headers: { 'content-type': 'application/json' }, payload: wire.encode({ args: [] }) });
+      const res = await other.inject({ method: 'POST', url: '/api/rpc/projects:list', headers: withCsrf({ 'content-type': 'application/json' }), payload: wire.encode({ args: [] }) });
       ok('rpc: another org lists nothing of it', res.statusCode === 200 && isDeepStrictEqual(wire.decode(res.body), []), res.body);
       await other.close();
     } finally {

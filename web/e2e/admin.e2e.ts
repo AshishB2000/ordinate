@@ -44,7 +44,10 @@ if (!adminUrl) {
   e2e('admin: invite, role change, team ownership, audit log, token create → use → revoke', async ({ page, server }) => {
     // Records live in Postgres here, so the file-seeded sample is not visible: make a project over RPC.
     const PROJECT = 'Quarterly KPIs';
-    const made = await page.request.post(`${server.base}/api/rpc/projects:create`, { data: { args: [{ name: PROJECT }] } });
+    // Any GET hands the context its CSRF cookie (T6.2); a non-GET repeats it in X-CSRF-Token, as the app does.
+    await page.request.get(`${server.base}/api/auth/me`);
+    const csrf = (await page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value ?? '';
+    const made = await page.request.post(`${server.base}/api/rpc/projects:create`, { headers: { 'x-csrf-token': csrf }, data: { args: [{ name: PROJECT }] } });
     assert.equal(made.status(), 200);
 
     // ── People ─────────────────────────────────────────────────────────

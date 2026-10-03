@@ -38,6 +38,34 @@ export class RpcError extends Error {
 /** This tab's id. The server routes SSE pushes to a tab by it (T0.5). */
 export const CLIENT_ID: string = crypto.randomUUID();
 
+/**
+ * The CSRF token (T6.2, src/server/csrf.ts): the server sets it as a cookie
+ * script can read (`ordinate_csrf`, `__Host-ordinate_csrf` behind https) and
+ * refuses any non-GET whose X-CSRF-Token header does not repeat it. Another
+ * site can make the browser send the cookie but cannot read it.
+ */
+export function csrfHeaders(): Record<string, string> {
+  const m = /(?:^|;\s*)(?:__Host-)?ordinate_csrf=([A-Za-z0-9_-]{43})(?:;|$)/.exec(document.cookie);
+  return m ? { 'X-CSRF-Token': m[1] } : {};
+}
+
+/**
+ * A non-GET to this server with the CSRF header. A 403 `csrf` (no cookie yet —
+ * the first call raced the page's own load — or it was cleared) carries a
+ * fresh cookie, so it is tried once more with it.
+ */
+export async function send(url: string, init: RequestInit): Promise<Response> {
+  const go = () =>
+    fetch(url, { ...init, credentials: 'same-origin', headers: { ...(init.headers as Record<string, string>), ...csrfHeaders() } });
+  const res = await go();
+  if (res.status !== 403) return res;
+  const again = await res
+    .clone()
+    .json()
+    .then((b: { error?: unknown }) => b?.error === 'csrf', () => false);
+  return again ? go() : res;
+}
+
 interface ErrorBody {
   error?: unknown;
   code?: unknown;
@@ -87,11 +115,10 @@ function toSignIn(): void {
 export async function rpc<C extends Channel>(channel: C, ...args: RpcArgs<C>): Promise<unknown> {
   let res: Response;
   try {
-    res = await fetch(`/api/rpc/${encodeURIComponent(channel)}`, {
+    res = await send(`/api/rpc/${encodeURIComponent(channel)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Ordinate-Client': CLIENT_ID },
       body: encode({ args }),
-      credentials: 'same-origin',
     });
   } catch {
     throw new RpcError(0, 'network', 'Could not reach the Ordinate server.');
@@ -100,4 +127,27 @@ export async function rpc<C extends Channel>(channel: C, ...args: RpcArgs<C>): P
   if (res.status === 401) toSignIn();
   if (!res.ok) throw toError(res.status, res.statusText, text);
   return decode(text);
+}
+
+/** What POST /api/files answers: the token an import channel takes instead of a path (T0.4). */
+export interface Uploaded {
+  fileToken: string;
+  name: string;
+  size: number;
+}
+
+/** Uploads one file (multipart, streamed by the server to the org's temp, capped at MAX_UPLOAD_MB). */
+export async function upload(file: Blob, name: string): Promise<Uploaded> {
+  const form = new FormData();
+  form.append('file', file, name);
+  let res: Response;
+  try {
+    res = await send('/api/files', { method: 'POST', body: form });
+  } catch {
+    throw new RpcError(0, 'network', 'Could not reach the Ordinate server.');
+  }
+  const text = await res.text();
+  if (res.status === 401) toSignIn();
+  if (!res.ok) throw toError(res.status, res.statusText, text);
+  return JSON.parse(text) as Uploaded; // the server's own reply shape (src/server/files.ts)
 }

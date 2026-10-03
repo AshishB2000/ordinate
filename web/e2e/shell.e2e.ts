@@ -52,6 +52,40 @@ e2e('every nav item is reachable and lands on its route', async (s) => {
   report(s);
 });
 
+// T6.2 in a real browser: the document carries the CSP and the other headers
+// as response headers, the app's own calls carry the CSRF token (Home loads its
+// projects with zero console errors), and the same browser's cookies WITHOUT
+// the header — what a forged request carries — are refused. The forged calls go
+// through page.request (the context's cookie jar), not page script: a 403 a
+// page fetches is itself a console error.
+e2e('security headers and CSRF in the browser', async (s) => {
+  const { page, server } = s;
+  const doc = await page.goto('/');
+  await settled(page);
+  const h = doc?.headers() ?? {};
+  assert.match(h['content-security-policy'] ?? '', /^default-src 'self'; script-src 'self'; style-src 'self';.*frame-ancestors 'none'$/);
+  assert.equal(h['x-frame-options'], 'DENY');
+  assert.equal(h['x-content-type-options'], 'nosniff');
+  assert.equal(h['cross-origin-opener-policy'], 'same-origin');
+  assert.equal(h['referrer-policy'], 'strict-origin-when-cross-origin');
+  assert.ok(h['permissions-policy']?.includes('camera=()'));
+  assert.equal(h['strict-transport-security'], undefined, 'no HSTS on a dev server');
+  await page.getByRole('region', { name: 'Projects' }).getByText(server.sample.projectName, { exact: true }).waitFor();
+
+  const token = (await page.context().cookies()).find((c) => c.name === 'ordinate_csrf');
+  assert.ok(token && /^[A-Za-z0-9_-]{43}$/.test(token.value) && !token.httpOnly && token.sameSite === 'Lax', JSON.stringify(token));
+  const post = (headers: Record<string, string>) =>
+    page.request.post('/api/rpc/projects:list', { headers: { 'content-type': 'application/json', ...headers }, data: '{"args":[]}' });
+  const forged = await post({});
+  assert.equal(forged.status(), 403);
+  assert.deepEqual(await forged.json(), { error: 'csrf' });
+  assert.equal((await post({ 'x-csrf-token': token.value })).status(), 200);
+  const crossSite = await post({ 'x-csrf-token': token.value, origin: 'https://evil.example' });
+  assert.equal(crossSite.status(), 403);
+  assert.deepEqual(await crossSite.json(), { error: 'origin' });
+  report(s);
+});
+
 void test('negative control: a page load over its RPC budget fails', async () => {
   const s = await openSession({ rpcBudget: 0 });
   try {

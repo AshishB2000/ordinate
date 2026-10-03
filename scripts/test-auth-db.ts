@@ -14,6 +14,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { withCsrf } from './csrfPair';
 import { Writable } from 'stream';
 import { Client, Pool } from 'pg';
 import type { FastifyInstance } from 'fastify';
@@ -83,7 +84,7 @@ const cookieOf = (r: Inject, name: string) => r.cookies.find((c) => c.name === n
       return r.json() as { user: { email: string; role: string } | null; org: string | null; mode: string };
     };
     const gate = async (id: string | undefined) =>
-      (await app.inject({ method: 'POST', url: '/api/rpc/no:such', headers: id ? { cookie: `ordinate_session=${id}` } : {} })).statusCode;
+      (await app.inject({ method: 'POST', url: '/api/rpc/no:such', headers: withCsrf(id ? { cookie: `ordinate_session=${id}` } : {}) })).statusCode;
 
     /** The whole browser dance, minus the browser: login → IdP → callback. */
     const signIn = async (email: string, o: { cookie?: string; next?: string; decision?: 'allow' | 'deny'; tamper?: boolean; noTx?: boolean } = {}) => {
@@ -104,7 +105,7 @@ const cookieOf = (r: Inject, name: string) => r.cookies.find((c) => c.name === n
     // T0.5's event stream and T0.4's file routes sit behind the same gate.
     const evNoAuth = await app.inject({ method: 'GET', url: '/api/events?client=6f1c2b7e-0d4a-4c1e-9a55-3b2f8e1d9c00' });
     ok('gate: GET /api/events signed out → 401', evNoAuth.statusCode === 401, evNoAuth.statusCode);
-    const upNoAuth = await app.inject({ method: 'POST', url: '/api/files', headers: { 'content-type': 'multipart/form-data; boundary=x' }, payload: '--x--\r\n' });
+    const upNoAuth = await app.inject({ method: 'POST', url: '/api/files', headers: withCsrf({ 'content-type': 'multipart/form-data; boundary=x' }), payload: '--x--\r\n' });
     ok('gate: POST /api/files signed out → 401', upNoAuth.statusCode === 401, upNoAuth.statusCode);
     ok('gate: GET /api/files/<token> signed out → 401', (await app.inject({ method: 'GET', url: '/api/files/abc' })).statusCode === 401);
     const anon = await me(undefined);
@@ -154,6 +155,13 @@ const cookieOf = (r: Inject, name: string) => r.cookies.find((c) => c.name === n
     secrets.add(planted);
     const a3 = await signIn('alice@acme.test', { cookie: planted });
     ok('fixation: a planted id is never the one that gets signed in', a3.id !== planted && (await me(planted)).user === null && (await me(a3.id)).user !== null);
+    // T6.2 re-check, the live variant: an attacker plants THEIR OWN valid
+    // session in the victim's browser, then the victim signs in over it.
+    const mal = await signIn('trudy@acme.test');
+    ok('fixation (live): precondition — the planted id is a live session of the attacker', (await me(mal.id)).user?.email === 'trudy@acme.test');
+    const victim = await signIn('victor@acme.test', { cookie: mal.id });
+    ok('fixation (live): the victim gets a NEW id, never the planted one', !!victim.id && victim.id !== mal.id && (await me(victim.id)).user?.email === 'victor@acme.test');
+    ok('fixation (live): the planted id is ended — it never becomes the victim, nor stays the attacker', (await me(mal.id)).user === null);
 
     // ── Idle and absolute expiry (DB clock) ────────────────────────────────
     const setRow = (id: string | undefined, sql: string) => pool.query(`UPDATE sessions SET ${sql} WHERE id_hash = $1`, [store.hashId(id ?? '')]);
@@ -172,7 +180,7 @@ const cookieOf = (r: Inject, name: string) => r.cookies.find((c) => c.name === n
     ok('sweep: sign-in deleted the dead sessions', (await pool.query('SELECT 1 FROM sessions WHERE id_hash = ANY($1)', [[a3.id, a4.id].map((x) => store.hashId(x ?? ''))])).rowCount === 0);
 
     // ── Logout and logout-everywhere ───────────────────────────────────────
-    const out = await app.inject({ method: 'POST', url: '/api/auth/logout', headers: { cookie: `ordinate_session=${exp.id}` } });
+    const out = await app.inject({ method: 'POST', url: '/api/auth/logout', headers: withCsrf({ cookie: `ordinate_session=${exp.id}` }) });
     const cleared = cookieOf(out, 'ordinate_session');
     ok('logout: 204 and the cookie is cleared', out.statusCode === 204 && cleared?.value === '' && (cleared.expires?.getTime() ?? 1) <= Date.now(), JSON.stringify(cleared));
     ok('logout: the row is deleted, the id is dead', (await me(exp.id)).user === null &&
@@ -180,11 +188,11 @@ const cookieOf = (r: Inject, name: string) => r.cookies.find((c) => c.name === n
     const laptop = await signIn('alice@acme.test');
     const phone = await signIn('alice@acme.test');
     const bob = await signIn('bob@acme.test');
-    const all = await app.inject({ method: 'POST', url: '/api/auth/logout-everywhere', headers: { cookie: `ordinate_session=${laptop.id}` } });
+    const all = await app.inject({ method: 'POST', url: '/api/auth/logout-everywhere', headers: withCsrf({ cookie: `ordinate_session=${laptop.id}` }) });
     ok('logout-everywhere: ends every session of that user', all.statusCode === 200 && (all.json() as { ended: number }).ended >= 2, all.body);
     ok('logout-everywhere: laptop and phone are both signed out', (await me(laptop.id)).user === null && (await me(phone.id)).user === null);
     ok('logout-everywhere: another user is untouched', (await me(bob.id)).user?.email === 'bob@acme.test');
-    ok('logout-everywhere: signed out → 401', (await app.inject({ method: 'POST', url: '/api/auth/logout-everywhere' })).statusCode === 401);
+    ok('logout-everywhere: signed out → 401', (await app.inject({ method: 'POST', url: '/api/auth/logout-everywhere', headers: withCsrf() })).statusCode === 401);
 
     // ── Refusals ───────────────────────────────────────────────────────────
     await pool.query(`UPDATE users SET disabled_at = now() WHERE email = 'bob@acme.test'`);
@@ -226,7 +234,7 @@ const cookieOf = (r: Inject, name: string) => r.cookies.find((c) => c.name === n
     apps.push(happ);
     await happ.ready();
     const hreq = async (remoteAddress: string, headers: Record<string, string>, url = '/api/rpc/no:such') =>
-      happ.inject({ method: url.includes('rpc') ? 'POST' : 'GET', url, remoteAddress, headers });
+      happ.inject({ method: url.includes('rpc') ? 'POST' : 'GET', url, remoteAddress, headers: withCsrf(headers) });
     const spoof = { 'x-forwarded-email': 'mallory@acme.test' };
     ok('header v4: spoofed X-Forwarded-Email from an untrusted peer → 401', (await hreq('203.0.113.9', spoof)).statusCode === 401);
     ok('header v4: …even claiming a trusted X-Forwarded-For / X-Real-IP', (await hreq('203.0.113.9', { ...spoof, 'x-forwarded-for': '10.0.0.1', 'x-real-ip': '10.0.0.1' })).statusCode === 401);
@@ -251,7 +259,7 @@ const cookieOf = (r: Inject, name: string) => r.cookies.find((c) => c.name === n
       apps.push(sapp);
       await sapp.listen({ port: 0, host: '::' });
       const port = (sapp.server.address() as import('net').AddressInfo).port;
-      const call = async (host: string) => (await fetch(`http://${host}:${port}/api/rpc/no:such`, { method: 'POST', headers: { 'x-forwarded-email': 'erin@acme.test', 'x-forwarded-for': okHost.replace(/[[\]]/g, '') } })).status;
+      const call = async (host: string) => (await fetch(`http://${host}:${port}/api/rpc/no:such`, { method: 'POST', headers: withCsrf({ 'x-forwarded-email': 'erin@acme.test', 'x-forwarded-for': okHost.replace(/[[\]]/g, '') }) })).status;
       ok(`socket: TRUSTED_PROXY_CIDRS=${cidr} accepts a real connection from ${okHost}`, (await call(okHost)) === 404);
       ok(`socket: …and rejects one from ${badHost}, whatever X-Forwarded-For says`, (await call(badHost)) === 401);
     }

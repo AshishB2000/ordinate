@@ -14,6 +14,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { withCsrf } from './csrfPair';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -71,7 +72,7 @@ const PID = '1b4e28ba-2fa1-11d2-883f-0016d3cca427';
   const post = (channel: string, body: unknown, raw = false) => app.inject({
     method: 'POST',
     url: `/api/rpc/${encodeURIComponent(channel)}`,
-    headers: { 'content-type': 'application/json' },
+    headers: withCsrf({ 'content-type': 'application/json' }),
     payload: raw ? (body as string) : wire.encode(body),
   });
   const direct = async (ch: string, ...args: unknown[]): Promise<string> => wire.encode(await rpc.handlers.get(ch)!(null, ...args));

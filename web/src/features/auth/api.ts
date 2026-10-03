@@ -3,6 +3,7 @@
 // cannot need a session to find out you have none.
 
 import { useQuery } from '@tanstack/react-query';
+import { send } from '../../api/client';
 
 export interface Me {
   /** null when signed out. */
@@ -42,8 +43,14 @@ export function useMe() {
 
 /** Ends this browser's session. The caller navigates to the sign-in page. */
 export async function signOut(): Promise<void> {
-  const res = await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+  const res = await send('/api/auth/logout', { method: 'POST' });
   if (!res.ok) throw new Error(`Sign out failed (${res.status}).`);
+}
+
+/** Ends every session of the signed-in user, on every device — this one included. */
+export async function signOutEverywhere(): Promise<void> {
+  const res = await send('/api/auth/logout-everywhere', { method: 'POST' });
+  if (!res.ok) throw new Error(`Sign out everywhere failed (${res.status}).`);
 }
 
 /** The sign-in page's address, coming back to `next` afterwards. */

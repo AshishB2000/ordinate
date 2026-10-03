@@ -35,6 +35,21 @@ export interface ServerEnv {
   readonly auth: AuthEnv;
   /** The per-org DuckDB worker pool (T4.3, src/engine/duckdbPool.ts). */
   readonly duckdb: DuckEnv;
+  /** Rate limits, the JSON body cap and the RPC time limit (T6.2, src/server/limits.ts). */
+  readonly limits: LimitsEnv;
+}
+
+export interface LimitsEnv {
+  /** RATE_LIMIT_LOGIN_PER_MINUTE: sign-in starts plus IdP callbacks, per client IP. */
+  readonly loginPerMinute: number;
+  /** RATE_LIMIT_RPC_PER_MINUTE: RPC calls per signed-in user (all their tabs and tokens). */
+  readonly rpcUserPerMinute: number;
+  /** RATE_LIMIT_RPC_IP_PER_MINUTE: RPC calls per client IP, whoever is signed in. */
+  readonly rpcIpPerMinute: number;
+  /** MAX_RPC_BODY_KB, in bytes: the cap on every JSON body. Files go through /api/files (MAX_UPLOAD_MB). */
+  readonly jsonBodyBytes: number;
+  /** RPC_TIMEOUT_SECONDS: a call running longer answers 504 and its DuckDB queries are interrupted. */
+  readonly rpcTimeoutMs: number;
 }
 
 export interface DuckEnv {
@@ -73,7 +88,7 @@ export interface AuthEnv {
   readonly sessionAbsoluteMs: number;
   /** Set when mode is oidc. */
   readonly oidc: OidcEnv | null;
-  /** CIDRs whose TCP peers may assert X-Forwarded-Email; set when mode is header. */
+  /** CIDRs of the proxies in front (TRUSTED_PROXY_CIDRS): in header mode they may assert X-Forwarded-Email; in every mode their X-Forwarded-For names the client for rate limits. */
   readonly trustedProxies: readonly string[];
 }
 
@@ -156,7 +171,14 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
 
   const auth = parseAuth(src, env, databaseUrl);
   const duckdb = parseDuck(src);
-  return Object.freeze({ port, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey, auth, duckdb });
+  const limits = Object.freeze({
+    loginPerMinute: positiveInt('RATE_LIMIT_LOGIN_PER_MINUTE', src.RATE_LIMIT_LOGIN_PER_MINUTE, 60),
+    rpcUserPerMinute: positiveInt('RATE_LIMIT_RPC_PER_MINUTE', src.RATE_LIMIT_RPC_PER_MINUTE, 1200),
+    rpcIpPerMinute: positiveInt('RATE_LIMIT_RPC_IP_PER_MINUTE', src.RATE_LIMIT_RPC_IP_PER_MINUTE, 3000),
+    jsonBodyBytes: positiveInt('MAX_RPC_BODY_KB', src.MAX_RPC_BODY_KB, 1024) * 1024,
+    rpcTimeoutMs: positiveInt('RPC_TIMEOUT_SECONDS', src.RPC_TIMEOUT_SECONDS, 60) * 1000,
+  });
+  return Object.freeze({ port, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey, auth, duckdb, limits });
 }
 
 // A DuckDB size literal. Validated here because it is written into a SET.
@@ -281,12 +303,13 @@ function parseAuth(src: Readonly<Record<string, string | undefined>>, env: Ordin
     });
   }
 
-  let trustedProxies: string[] = [];
-  if (mode === 'header') {
-    trustedProxies = csv(required(src, 'TRUSTED_PROXY_CIDRS', 'AUTH_MODE=header'));
-    if (trustedProxies.length === 0) throw new EnvError('TRUSTED_PROXY_CIDRS is required when AUTH_MODE=header');
-    proxyList(trustedProxies);
-  }
+  // Read in every mode: the rate limits (T6.2) take the client's address from
+  // X-Forwarded-For only when the TCP peer is one of these proxies. Header
+  // mode also believes their X-Forwarded-Email, so there it is required.
+  if (mode === 'header') required(src, 'TRUSTED_PROXY_CIDRS', 'AUTH_MODE=header');
+  const trustedProxies = csv(src.TRUSTED_PROXY_CIDRS);
+  if (mode === 'header' && trustedProxies.length === 0) throw new EnvError('TRUSTED_PROXY_CIDRS is required when AUTH_MODE=header');
+  proxyList(trustedProxies);
 
   return Object.freeze({
     mode,

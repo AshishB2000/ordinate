@@ -9,11 +9,15 @@
 import { fastify, type FastifyInstance, type FastifyRequest } from 'fastify';
 import { probe, shutdown } from '../engine/duckdb';
 import { contractFor } from '../api/index';
-import type { ServerEnv } from './env';
+import { proxyList, type ServerEnv } from './env';
 import { ctx, runInContext, type Identify } from './context';
 import { authorize, grantCreator, orgAllows, readable } from './authz/index';
 import { audit, targetIds, type Outcome } from './authz/audit';
 import { registerAuth } from './auth/index';
+import { cookieNames } from './auth/cookies';
+import { registerSecurityHeaders } from './headers';
+import { registerCsrf } from './csrf';
+import { registerLimits, RPC_ROUTE, RpcTimeout, untilAborted } from './limits';
 import { migrate } from './db/migrate';
 import { createPool, ping, scrubbed } from './db/pool';
 import { useRecordDb } from '../app/recordFs';
@@ -85,6 +89,8 @@ function isPageNavigation(method: string, path: string, accept: string | undefin
  */
 export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, identifyOverride?: Identify): FastifyInstance {
   const app = fastify({
+    // Every JSON body (RPC above all) — files have their own cap (MAX_UPLOAD_MB, ./files.ts). Over → 413.
+    bodyLimit: cfg.limits.jsonBodyBytes,
     logger: {
       level: cfg.logLevel,
       redact: { paths: [...REDACT_PATHS], censor: '[redacted]' },
@@ -104,6 +110,13 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       ...(logStream ? { stream: logStream } : {}),
     },
   });
+
+  // T6.2, in this order and before sign-in's hook below: security headers on
+  // every response, the CSRF check on every non-GET, the per-IP rate limits —
+  // all three refuse without a database query.
+  registerSecurityHeaders(app, cfg.env === 'prod');
+  registerCsrf(app, { cookie: cookieNames(cfg.env === 'prod').csrf, secure: cfg.env === 'prod', bearerDecides: !!cfg.databaseUrl && !identifyOverride });
+  const limits = registerLimits(app, cfg.limits, proxyList(cfg.auth.trustedProxies));
 
   // Liveness: the process is up and serving. Checks nothing else on purpose —
   // a failing dependency must not make Kubernetes restart a healthy pod.
@@ -182,8 +195,13 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         // A caller that goes away before its reply (a closed tab, an aborted
         // fetch) aborts the request's signal: its DuckDB queries are interrupted
         // in the org worker instead of running on for nobody (T4.3).
+        // An RPC also aborts it past RPC_TIMEOUT_SECONDS (the route answers 504).
         const ac = new AbortController();
-        reply.raw.once('close', () => { if (!reply.raw.writableFinished) ac.abort(); });
+        const limit = req.routeOptions.url === RPC_ROUTE ? setTimeout(() => ac.abort(new RpcTimeout()), cfg.limits.rpcTimeoutMs) : undefined;
+        reply.raw.once('close', () => {
+          clearTimeout(limit);
+          if (!reply.raw.writableFinished) ac.abort();
+        });
         runInContext(who, String(req.id), done, clientFor(req.headers['x-ordinate-client'], who) ?? undefined, ac.signal);
       },
       (err: unknown) => {
@@ -212,7 +230,8 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   // wire-encoded. A channel needs a contract (src/api/) — none → 404, even
   // when a handler is registered. A failing contract → 400 naming the paths
   // and zod codes only: an input value never comes back in an error.
-  app.post<{ Params: { channel: string } }>('/api/rpc/:channel', async (req, reply) => {
+  // Per-user rate limit first (./limits.ts), then the contract.
+  app.post<{ Params: { channel: string } }>(RPC_ROUTE, { onRequest: limits.perUser }, async (req, reply) => {
     const { channel } = req.params;
     const contract = contractFor(channel);
     if (!contract) return reply.code(404).send({ error: 'unknown channel' });
@@ -257,7 +276,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     const handler = handlers.get(channel);
     if (!handler) return reply.code(501).send({ error: 'channel not available on this server' });
     try {
-      let result: unknown = await handler(SERVER_EVENT, ...(args.length ? [parsed.data] : []));
+      // Raced against the request's signal: past RPC_TIMEOUT_SECONDS → 504, and
+      // the same signal has interrupted the handler's DuckDB queries (T4.3).
+      let result: unknown = await untilAborted(Promise.resolve(handler(SERVER_EVENT, ...(args.length ? [parsed.data] : []))), who.signal);
       const created = 'creates' in contract && contract.creates ? contract.creates(result) : undefined;
       if (created) await grantCreator(pool, who, created);
       if ('visible' in contract && contract.visible) result = contract.visible(result, await readable(pool, who));
@@ -265,6 +286,11 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       await record('ok', decision.projectId, created ? [created] : []);
       return reply.type('application/json').send(body);
     } catch (err) {
+      if (err instanceof RpcTimeout) {
+        req.log.warn({ channel, limitMs: cfg.limits.rpcTimeoutMs }, 'rpc timed out');
+        await record('error', decision.projectId);
+        return reply.code(504).send({ error: 'timeout' });
+      }
       // The message can carry a path or a value; it goes to the log, not the wire.
       req.log.error({ err, channel }, 'rpc handler failed');
       await record('error', decision.projectId);
