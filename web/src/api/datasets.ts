@@ -1,7 +1,11 @@
-import { useQuery } from '@tanstack/react-query';
+import { skipToken, useQuery } from '@tanstack/react-query';
 import { rpc } from './client';
 
-/** What `dataset:list` returns per dataset — the fields the web reads (src/data/datasetSummary.ts). */
+/**
+ * What `dataset:list` returns per dataset — the fields the web reads, mirrored
+ * from src/data/datasetSummary.ts `DatasetSummary` (narrowed by hand for the
+ * same reason as `Project` in ./projects.ts).
+ */
 export interface DatasetSummary {
   id: string;
   name: string;
@@ -15,7 +19,6 @@ export interface DatasetSummary {
 export function useDatasets(projectId: string | undefined) {
   return useQuery({
     queryKey: ['dataset:list', projectId],
-    queryFn: async () => (await rpc('dataset:list', { projectId })) as DatasetSummary[],
-    enabled: projectId !== undefined,
+    queryFn: projectId === undefined ? skipToken : async () => (await rpc('dataset:list', { projectId })) as DatasetSummary[],
   });
 }

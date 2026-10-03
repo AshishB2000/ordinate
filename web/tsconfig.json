@@ -10,9 +10,11 @@
     "jsx": "react-jsx",
     "types": ["vite/client"],
     "noEmit": true,
+    // The client imports the server's wire codec by its .ts path, so Vite never
+    // picks up the CommonJS sibling tsc emits next to it.
+    "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
-    "noUncheckedIndexedAccess": true,
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true

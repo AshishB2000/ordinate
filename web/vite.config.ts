@@ -32,6 +32,8 @@ export default defineConfig({
   server: {
     // `npm run server` listens on :8080 (src/server/env.ts default).
     proxy: { '/api': 'http://127.0.0.1:8080' },
+    // web/ plus the one server file the client shares: the wire codec.
+    fs: { allow: ['.', '../src/server/wire.ts'] },
   },
   build: {
     // The latest two releases of each supported browser, as of 2026-10

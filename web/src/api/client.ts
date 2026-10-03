@@ -2,15 +2,22 @@
 // POST /api/rpc/<channel>. Bodies go through the wire codec both ways, so a
 // NaN or a Date arrives as what the handler returned, not what JSON makes of it.
 
-// ── T0.2 seam ───────────────────────────────────────────────────────────────
-// TODO(T0.2): replace these three lines with the real contracts and codec:
-//   import type { Channel } from '../../../src/api';
-//   import { encode, decode } from '../../../src/server/wire';
-// and type `args` from the channel's contract input.
-type Channel = string;
-const encode = (x: unknown): string => JSON.stringify(x);
-const decode = (text: string): unknown => JSON.parse(text) as unknown;
-// ─────────────────────────────────────────────────────────────────────────────
+// The contracts are imported TYPE-ONLY: a renamed channel or a changed input
+// fails tsc here as well as on the server, and no zod reaches the bundle. The
+// codec is the server's own file (no Node imports), so both halves agree.
+import type { z } from 'zod';
+import type { Channel, contracts } from '../../../src/api/index.ts';
+import { decode, encode } from '../../../src/server/wire.ts';
+
+export type { Channel };
+
+/** The payload a channel's contract accepts. */
+export type RpcInput<C extends Channel> = z.input<(typeof contracts)[C]['input']>;
+
+/** At most one payload (the server rejects more); optional when the contract allows undefined. */
+export type RpcArgs<C extends Channel> = undefined extends RpcInput<C>
+  ? [payload?: RpcInput<C>]
+  : [payload: RpcInput<C>];
 
 /** A failed call. `status` 0 means the server was never reached. */
 export class RpcError extends Error {
@@ -55,7 +62,12 @@ function toError(status: number, statusText: string, text: string): RpcError {
   return new RpcError(status, code, message, paths);
 }
 
-export async function rpc(channel: Channel, ...args: unknown[]): Promise<unknown> {
+/**
+ * Calls a contracted channel. Contracts carry inputs only, so the result is
+ * `unknown` here; each hook in this folder narrows it to the shape its handler
+ * returns.
+ */
+export async function rpc<C extends Channel>(channel: C, ...args: RpcArgs<C>): Promise<unknown> {
   let res: Response;
   try {
     res = await fetch(`/api/rpc/${encodeURIComponent(channel)}`, {
